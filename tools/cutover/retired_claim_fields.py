@@ -15,7 +15,6 @@ from agent_comms.envelope_claim_transitions import AcquiringClaim, RecordedScope
 from agent_comms.errors import RelationViolationError
 from agent_comms.field_codec import FieldCodec, compile_decoder
 from agent_comms.goal_failure_observation import FailedTurnEvidence
-from agent_comms.installer.carry import ArchivedInputs
 from agent_comms.input_attempt import StoredInput
 from agent_comms.input_origin import HumanInputOrigin
 from agent_comms.historical_views import HistoryArchive
@@ -29,6 +28,8 @@ from agent_comms.selected_write_plan import SelectedWriteBinding, SelectedWriteI
 from agent_comms.thread_identity import ClaimedIdentity, TurnFence
 from agent_comms.turn_lease import ActiveTurn
 from agent_comms.typed_table import TypedTable, _identifier
+
+from .archived_roots import ArchivedCarry
 
 
 @dataclass(frozen=True)
@@ -61,7 +62,7 @@ RENAMED = (
 )
 
 
-class RetiredClaimFields(ArchivedInputs):
+class RetiredClaimFields(ArchivedCarry):
     opened_files = (SQLiteFile, JsonDocument, RegistryFile, HistoryArchive,
                     SelectedWritePlans, QueuedRestart)
     @classmethod

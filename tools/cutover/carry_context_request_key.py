@@ -28,7 +28,7 @@ class ContextRequestKey(Carry):
         if not self.path.exists():
             return Carried(0)
         with _store_lock(self.path), closing(
-            ContextStore.writer(self.path, isolation_level=None)
+            ContextStore.read_snapshot(self.path)
         ) as db:
             if not SQLiteSchemaObject.differences(
                 TypedTable.objects_of(db, (ContextRequest,)), ContextRequest.schema_objects()
@@ -37,6 +37,7 @@ class ContextRequestKey(Carry):
             (rows,) = db.execute(f'SELECT count(*) FROM "{ContextRequest.declared_name}"').fetchone()
             if not apply:
                 return Carried(1, {"context_requests": rows})
+        with _store_lock(self.path), closing(ContextStore.writer(self.path, isolation_level=None)) as db:
             ContextStore.schema_change(self.path).require()
             with SQLiteFile.write_transaction(db):
                 ContextRequest.rebuild(db)

@@ -293,6 +293,7 @@ class Rehearsal(DeclaredFamily, affix="Rehearsal"):
     """What a run tried before it touched the live bus."""
 
 
+@dataclass(frozen=True)
 class RehearsedFiles(Rehearsal, declared_name=None):
     """A rehearsal that names the files its live pass may rewrite."""
 
@@ -303,7 +304,6 @@ class RehearsedFiles(Rehearsal, declared_name=None):
 @dataclass(frozen=True)
 class CarriedRehearsal(CarriedPass, RehearsedFiles):
     copy: PracticeMeasurement
-    inputs: tuple[Annotated[Path, PathText], ...]
 
 
 @dataclass(frozen=True)
@@ -706,10 +706,8 @@ class TargetTree(AbstractContextManager):
 
 @dataclass(frozen=True)
 class PracticeBus:
-    """The one practice copy of an install. The carry steps' dry runs and the rehearsal
-    both run on it. Carries and writable store opens never touch the live bus before
-    maintenance holds it. Planned reconciliation uses only the declared read-only
-    SQLite snapshot; it cannot reconcile the live store as a side effect."""
+    """Pending selection reads source snapshots before copying. Apply runs use the
+    selected practice inputs, then the backed-up live root under maintenance."""
 
     scratch: Path
     copy: PracticeCopy
@@ -731,14 +729,10 @@ class PracticeBus:
 
     def pending(self, chain: CarryChain, staged: Stack,
                 tree: TargetTree) -> tuple[type[Carry], ...]:
-        """Seed each dry run from its declaration, then keep one pending-input union."""
-        def dry_run(step: type[Carry]) -> Carried:
-            self.copy.include(step(self.original_root, self.original_root,
-                                   self.spill_dir).input_files())
-            return staged.call_step(
-                step(self.copy.path, self.original_root, self.spill_dir), tree,
-                MigrateOperation(apply=False))
-        return chain.pending(dry_run)
+        """Read-only dry runs choose the pending steps before copying their inputs."""
+        return chain.pending(lambda step: staged.call_step(
+            step(self.original_root, self.original_root, self.spill_dir), tree,
+            MigrateOperation(apply=False)))
 
     def select(self, pending: tuple[Carry, ...], reconciled: tuple[Path, ...]) -> tuple[Path, ...]:
         # This is the one input union consumed by both rehearsal and live backup.

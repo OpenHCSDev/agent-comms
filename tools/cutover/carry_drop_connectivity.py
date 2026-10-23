@@ -31,7 +31,7 @@ class DropConnectivity(Carry):
         if not self.path.exists():
             return Carried(0)
         with _store_lock(self.path), closing(
-            CoordinationStore.writer(self.path, isolation_level=None)
+            CoordinationStore.read_snapshot(self.path)
         ) as db:
             if not db.execute(
                 "SELECT 1 FROM sqlite_master WHERE type='table' AND name=?", (TABLE,)
@@ -40,6 +40,7 @@ class DropConnectivity(Carry):
             (rows,) = db.execute(f'SELECT count(*) FROM "{TABLE}"').fetchone()
             if not apply:
                 return Carried(1, {TABLE: rows})
+        with _store_lock(self.path), closing(CoordinationStore.writer(self.path, isolation_level=None)) as db:
             CoordinationStore.schema_change(self.path).require()
             with SQLiteFile.write_transaction(db):
                 db.execute(f'DROP TABLE "{TABLE}"')

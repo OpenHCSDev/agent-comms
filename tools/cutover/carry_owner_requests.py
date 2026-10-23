@@ -42,7 +42,8 @@ from agent_comms.typed_table import (
     WriterOwnedFile,
 )
 
-from .carry_bus_history import ArchivedCarry, BusHistory, CarryCatalogSource
+from .archived_roots import ArchivedCarry, CarryCatalogSource
+from .carry_bus_history import BusHistory
 
 
 @dataclass(frozen=True)

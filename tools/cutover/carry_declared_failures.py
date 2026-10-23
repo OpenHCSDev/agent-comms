@@ -22,7 +22,7 @@ from agent_comms.locked_store import SQLiteFile
 from agent_comms.store_files import AtomicFile
 from agent_comms.typed_table import HeldBusFile, sql_literal
 
-from .carry_bus_history import CarryCatalogSource
+from .archived_roots import CarryCatalogSource
 from .carry_claim_fields import ClaimFields
 from .retired_claim_fields import RetiredClaimFields
 
@@ -47,12 +47,6 @@ class DeclaredFailures(RetiredClaimFields, Carry):
         "queued_input_start_missing": failures.QueuedInputMissing,
     }
 
-    def roots(self) -> tuple[Path, ...]:
-        return tuple(dict.fromkeys((
-            self.root,
-            *(source.mapped_root(self.root, self.original_root)
-              for source in CarryCatalogSource.read(self.root, self.original_root)),
-        )))
 
 
     def carry(self, *, apply: bool) -> Carried:

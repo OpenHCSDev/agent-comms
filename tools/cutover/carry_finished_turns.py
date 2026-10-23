@@ -17,7 +17,8 @@ from agent_comms.locked_store import RegistryFile
 from agent_comms.registry_store import RegistryStore
 from agent_comms.store_files import AtomicFile, _store_lock
 
-from .carry_bus_history import ArchivedCarry, BusHistory, CarryCatalogSource
+from .archived_roots import ArchivedCarry, CarryCatalogSource
+from .carry_bus_history import BusHistory
 from .carry_dead_turns import DeadTurns
 from .carry_owner_requests import OwnerRequests
 from .carry_turn_owner import TurnOwner
