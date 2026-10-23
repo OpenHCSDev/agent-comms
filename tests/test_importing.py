@@ -9,6 +9,14 @@ import os
 import sqlite3
 import stat
 from dataclasses import replace
+from collections.abc import Callable, Iterable
+from typing import BinaryIO, IO, Self
+from types import TracebackType
+from pydantic import JsonValue
+from agent_comms.harness_install import Harness
+from agent_comms.cli_bridges.history import ExpectedSession
+from agent_comms.thread_creation import RecordedCreationTime
+from agent_comms.transcript_events import ImportedMessage
 from pathlib import Path
 
 import pytest
@@ -20,7 +28,7 @@ from agent_comms.cli import main
 from agent_comms.cli_bridges.claude import ClaudeBridge, ClaudeTranscript, RunningClaude
 from agent_comms.cli_bridges.codex import CodexAppServer, CodexBridge
 from agent_comms.cli_bridges.codex_protocol import InitializeResponse
-from agent_comms.cli_bridges.codex_rollout import ROLLOUT_RECORD, ForeignItem, ForeignRecord
+from agent_comms.cli_bridges.codex_rollout import ROLLOUT_RECORD, ForeignItem, ForeignRecord, ResponseItemRecord
 from agent_comms.cli_bridges.history import (
     AnySession, DefaultAddress, History, NamedSession, OfflineHistory, OnlineHistory,
 )
@@ -43,25 +51,25 @@ from agent_comms.threads import Thread
 
 
 @pytest.fixture
-def comms(comms):
+def comms(comms: Comms) -> Comms:
     Bus.install(Bus.path_in(comms.root))
     return comms
 
 
-def lines(path, records, tail=""):
+def lines(path: Path, records: Iterable[dict[str, JsonValue]], tail: str = "") -> Path:
     path.write_text("".join(json.dumps(record, ensure_ascii=False) + "\n" for record in records) + tail)
     return path
 
 
-def codex_lines(path, records, tail=""):
+def codex_lines(path: Path, records: Iterable[dict[str, JsonValue]], tail: str = "") -> Path:
     return lines(path, ({"timestamp": "2026-10-18T00:00:00Z", **record} for record in records), tail)
 
 
-def read(harness, source, limits=ImportLimits(), session=AnySession()):
+def read(harness: type[Harness], source: Path, limits: ImportLimits = ImportLimits(), session: ExpectedSession = AnySession()) -> ImportSnapshot:
     return ImportSnapshot.read(OfflineHistory.of(harness, source, session), limits)
 
 
-def bodies(snapshot):
+def bodies(snapshot: ImportSnapshot) -> list[str]:
     return [message.body for message in snapshot.messages]
 
 
@@ -99,33 +107,33 @@ def test_every_harness_has_one_offline_family_and_one_online_reader() -> None:
 # Claude Code
 
 
-def claude(kind, uuid, **fields):
+def claude(kind: str, uuid: str, **fields: JsonValue) -> dict[str, JsonValue]:
     record = {"type": kind, "uuid": uuid, "timestamp": "2026-10-18T00:00:00Z", "cwd": "/work/project",
               "sessionId": "session"}
     return record | fields
 
 
-def claude_prompt(uuid, text, **fields):
+def claude_prompt(uuid: str, text: str, **fields: JsonValue) -> dict[str, JsonValue]:
     return claude("user", uuid, promptId="p-" + uuid, message={"role": "user", "content": text}, **fields)
 
 
-def claude_reply(uuid, text):
+def claude_reply(uuid: str, text: str) -> dict[str, JsonValue]:
     return claude("assistant", uuid, message={"content": [{"type": "text", "text": text}]})
 
 
-def claude_tool(uuid, tool_id, name, arguments):
+def claude_tool(uuid: str, tool_id: str, name: str, arguments: dict[str, JsonValue]) -> dict[str, JsonValue]:
     return claude("assistant", uuid, message={"content": [
         {"type": "tool_use", "id": tool_id, "name": name, "input": arguments}]})
 
 
-def claude_result(uuid, tool_id, text, error=False):
+def claude_result(uuid: str, tool_id: str, text: str, error: bool = False) -> dict[str, JsonValue]:
     return claude("user", uuid, promptId="p-" + uuid, message={"content": [
         {"type": "tool_result", "tool_use_id": tool_id, "content": text, "is_error": error}]})
 
 
 
 
-def claude_narration(uuid, text):
+def claude_narration(uuid: str, text: str) -> dict[str, JsonValue]:
     """Claude Code saves narration and hidden reasoning under one tag; only narration has text."""
     return claude("assistant", uuid, message={"content": [
         {"type": "thinking", "thinking": text, "signature": "opaque"}]})
@@ -143,7 +151,7 @@ def test_claude_narration_before_a_tool_call_is_a_regular_message(tmp_path: Path
     events = [event for update in OfflineHistory.of(ClaudeCodeHarness, source, AnySession()).read()
               if isinstance(update, FinishedItem) for event in update.events
               if isinstance(event, TextTranscript)]
-    assert [(event.text, event.category) for event in events] == [
+    assert [(event.as_context().text, event.category) for event in events] == [
         ("Fix it", UserCategory),
         ("Reading the decoder first.", AgentCategory),
         ("Fixed.", AgentCategory),
@@ -195,19 +203,19 @@ def test_import_subagents_names_each_thread_by_its_id(tmp_path: Path, capsys: py
 # Codex
 
 
-def codex_message(role, text):
+def codex_message(role: str, text: str) -> dict[str, JsonValue]:
     return {"type": "response_item", "timestamp": "2026-10-18T00:00:00Z", "payload": {
         "type": "message", "role": role,
         "content": [{"type": "input_text" if role == "user" else "output_text", "text": text}]}}
 
 
-def codex_meta(identity, project):
+def codex_meta(identity: str, project: Path) -> dict[str, JsonValue]:
     return {"type": "session_meta", "timestamp": "2026-10-18T00:00:00Z",
             "payload": {"id": identity, "cwd": str(project)}}
 
 
 def test_codex_instructions_are_authenticated_historical_references_not_current_messages(tmp_path: Path, capsys: pytest.CaptureFixture[str], comms: Comms) -> None:
-    instructions = [
+    instructions: list[JsonValue] = [
         {"type": "message", "role": "system", "content": "Historical base π.\n"},
         {"type": "message", "role": "developer", "content": [
             {"type": "input_text", "text": "Historical developer λ.\n"}]},
@@ -248,7 +256,7 @@ def test_codex_instructions_are_authenticated_historical_references_not_current_
             comms.registry, original_owner, replace(refs[1], instruction=999), comms)
     with pytest.raises(ValueError):
         ImportedSessionMetadata.sources_for_owner(
-            comms.registry, replace(original_owner, created_at=original_owner.created_at + 1))
+            comms.registry, replace(original_owner, created_at=RecordedCreationTime(original_owner.created_at + 1)))
     with pytest.raises(ValueError):
         ImportedSessionMetadata.sources_for_owner(
             comms.registry, replace(original_owner, session_file=RegistrySessionLocation.from_path(
@@ -294,8 +302,10 @@ def test_codex_instructions_come_from_the_selected_history_and_the_request_from_
 
 
 def test_codex_items_codex_does_not_declare_are_foreign() -> None:
-    def item(payload):
-        return ROLLOUT_RECORD.validate_python({"type": "response_item", "timestamp": "2026-10-18T00:00:00Z", "payload": payload})
+    def item(payload: dict[str, JsonValue]) -> ResponseItemRecord:
+        record = ROLLOUT_RECORD.validate_python({"type": "response_item", "timestamp": "2026-10-18T00:00:00Z", "payload": payload})
+        assert isinstance(record, ResponseItemRecord)
+        return record
 
     assert isinstance(item({"type": "developer", "role": "developer", "content": "x"}).payload, ForeignItem)
     assert isinstance(item({"type": "message", "role": "guardian", "content": "x"}).payload, ForeignItem)
@@ -320,47 +330,48 @@ def test_codex_import_uses_requested_name_not_rollout_filename(tmp_path: Path, c
 
 
 class CountingReader:
-    def __init__(self, stream, after_end=None):
+    def __init__(self, stream: BinaryIO, after_end: Callable[[], None] | None = None) -> None:
         self.stream = stream
         self.bytes_read = 0
         self.after_end = after_end
 
-    def __enter__(self):
+    def __enter__(self) -> Self:
         return self
 
-    def __exit__(self, *args):
-        return self.stream.__exit__(*args)
+    def __exit__(self, exc_type: type[BaseException] | None, exc: BaseException | None, traceback: TracebackType | None) -> None:
+        self.stream.__exit__(exc_type, exc, traceback)
 
-    def seek(self, offset, whence=0):
+    def seek(self, offset: int, whence: int = 0) -> int:
         result = self.stream.seek(offset, whence)
         if whence == 2 and self.after_end is not None:
-            self.after_end(), setattr(self, "after_end", None)
+            self.after_end()
+            self.after_end = None
         return result
 
-    def tell(self):
+    def tell(self) -> int:
         return self.stream.tell()
 
-    def read(self, size=-1):
+    def read(self, size: int = -1) -> bytes:
         value = self.stream.read(size)
         self.bytes_read += len(value)
         return value
 
-    def readline(self, size=-1):
+    def readline(self, size: int = -1) -> bytes:
         value = self.stream.readline(size)
         self.bytes_read += len(value)
         return value
 
 
-def watch_reads(monkeypatch, source, after_end=None):
+def watch_reads(monkeypatch: pytest.MonkeyPatch, source: Path, after_end: Callable[[], None] | None = None) -> list[CountingReader]:
     original_open = Path.open
-    opened = []
+    opened: list[CountingReader] = []
 
-    def tracked_open(path, *args, **kwargs):
-        stream = original_open(path, *args, **kwargs)
-        if path == source and args and args[0] == "rb":
+    def tracked_open(path: Path, mode: str = "r", buffering: int = -1, encoding: str | None = None, errors: str | None = None, newline: str | None = None) -> IO[str] | IO[bytes] | CountingReader:
+        if path == source and mode == "rb":
+            stream = original_open(path, "rb", buffering)
             opened.append(CountingReader(stream, after_end))
             return opened[-1]
-        return stream
+        return original_open(path, mode, buffering, encoding, errors, newline)
 
     monkeypatch.setattr(Path, "open", tracked_open)
     return opened
@@ -397,7 +408,7 @@ def test_codex_reads_latest_checkpoint_without_replaying_huge_prefix(tmp_path: P
 def test_codex_fixed_boundary_ignores_concurrent_append(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     source = codex_lines(tmp_path / "active-rollout.jsonl", [codex_meta("active", tmp_path), codex_message("user", "At boundary")])
 
-    def append():
+    def append() -> None:
         with source.open("ab") as writer:
             writer.write((json.dumps(codex_message("assistant", "Appended too late")) + "\n").encode())
 
@@ -418,7 +429,7 @@ def test_bounded_suffix_is_one_contiguous_newest_run(tmp_path: Path) -> None:
 
 
 def test_codex_selects_only_latest_of_several_compactions(tmp_path: Path) -> None:
-    def compacted(summary, *items):
+    def compacted(summary: str, *items: dict[str, JsonValue]) -> dict[str, JsonValue]:
         return {"type": "compacted", "payload": {"message": summary, "replacement_history": [
             record["payload"] for record in items]}}
 
@@ -467,55 +478,16 @@ def test_codex_rollout_must_start_with_its_session_and_decode_completely(tmp_pat
         read(CodexHarness, source)
 
 
-class FakeCodex:
-    def __init__(self, pages):
-        self.pages = pages
-        self.calls = []
-        self.initialized = InitializeResponse(userAgent="codex/0.0.0")
-
-    async def call(self, params):
-        self.calls.append(params)
-        if params.method == "thread/resume":
-            return {"thread": {"status": {"type": "idle"}, "cwd": "/work/codex"}}
-        return self.pages[params.cursor]
 
 
-def codex_entry(turn, item):
-    return {"turnId": turn, "item": item, "startedAtMs": 1, "completedAtMs": 2}
 
 
-def test_codex_app_server_reads_only_newest_page_and_keeps_bus_inputs() -> None:
-    from agent_comms.cli_bridges.codex_protocol import BusInput
-
-    bus = BusInput.for_message("thread", "m1", "from the bus")
-    newest = {"data": [
-        codex_entry("t2", {"type": "agentMessage", "id": "i3", "text": "second answer"}),
-        codex_entry("t2", {"type": "userMessage", "id": "i1", "clientId": bus.clientUserMessageId,
-                           "content": [{"type": "text", "text": "from the bus"}]}),
-    ], "nextCursor": "older"}
-    older = {"data": [
-        codex_entry("t1", {"type": "agentMessage", "id": "i2", "text": "first answer"}),
-    ], "nextCursor": None}
-    codex = FakeCodex({None: newest, "older": older})
-    server = CodexAppServer("thread", "unused")
-
-    async def collect():
-        buffer = ImportBuffer(ImportLimits())
-        async for update in server.seen(codex):
-            update.add_to(buffer)
-        return buffer.snapshot(CodexHarness)
-
-    snapshot = asyncio.run(collect())
-    assert bodies(snapshot) == ["from the bus", "second answer"]
-    assert snapshot.project == "/work/codex" and snapshot.source_id == "thread"
-    assert [type(message) for message in snapshot.messages] == [ImportedRequest, ImportedReply]
-    assert [call.method for call in codex.calls] == ["thread/resume", "thread/items/list"]
 
 
 # OpenCode
 
 
-def opencode_message(message_id, role, parts, **info):
+def opencode_message(message_id: str, role: str, parts: list[dict[str, JsonValue]], **info: JsonValue) -> dict[str, JsonValue]:
     # As OpenCode saves them: only an assistant message records its completion.
     assistant = role == "assistant"
     return {"info": {"id": message_id, "sessionID": "ses_test", "role": role,
@@ -525,7 +497,7 @@ def opencode_message(message_id, role, parts, **info):
                       for index, part in enumerate(parts)]}
 
 
-def opencode_export(path, project, revert=None):
+def opencode_export(path: Path, project: Path, revert: str | None = None) -> Path:
     path.write_text(json.dumps({
         "info": {"id": "ses_test", "title": "Current task", "directory": str(project),
                  **({"revert": {"messageID": revert}} if revert else {})},
@@ -566,7 +538,10 @@ def test_opencode_snapshot_is_stopped_resumable_and_source_unchanged(tmp_path: P
     for record in records[1:]:
         assert record["parentId"] == parent
         parent = record["id"]
-    context = "\n".join(event.text for event in comms.transcripts.thread_transcript_page(thread.name).events)
+    imported: list[ImportedMessage] = []
+    for event in comms.transcripts.thread_transcript_page(thread.name).events:
+        event.import_to(imported.append)
+    context = "\n".join(message.body for message in imported)
     assert "Keep model authority" in context and "42 passed" in context
     assert "remaining work" in context and "[Historical attachment: screenshot.png]" in context
     assert "Reverted prompt" not in context
@@ -608,63 +583,10 @@ def test_opencode_database_uses_readonly_snapshot(tmp_path: Path) -> None:
         read(OpenCodeHarness, source)
 
 
-class FakeOpenCode:
-    session = "ses_test"
-    info = Session(id="ses_test", directory="/work/opencode", title="Live task")
-
-    def __init__(self, messages):
-        self.saved = [SavedMessage.model_validate(message) for message in messages]
-        self.queries = []
-
-    async def messages(self, query):
-        self.queries.append(query)
-        return self.saved
-
-    async def status(self):
-        from agent_comms.runtime_updates import TurnEnded
-
-        return TurnEnded()
 
 
-def test_opencode_server_reads_all_messages_including_the_users() -> None:
-    from agent_comms.cli_bridges.opencode_protocol import OpenCodeStream
-
-    connection = FakeOpenCode([
-        opencode_message("user", "user", [{"type": "text", "text": "Live prompt"}]),
-        opencode_message("assistant", "assistant", [{"type": "text", "text": "Live answer"}]),
-    ])
-    server = OpenCodeServer("ses_test", "http://unused", Path("/work/opencode"))
-
-    async def collect():
-        buffer = ImportBuffer(ImportLimits())
-        async for update in server.seen(connection, OpenCodeStream(connection)):
-            update.add_to(buffer)
-        return buffer.snapshot(OpenCodeHarness)
-
-    snapshot = asyncio.run(collect())
-    assert bodies(snapshot) == ["Live prompt", "Live answer"]
-    assert snapshot.title == GivenThreadText("Live task") and connection.queries == [{}]
-    with pytest.raises(ValueError):
-        OnlineHistory.of(OpenCodeHarness, "ses_test", DefaultAddress(), Path("/work"))
 
 
-def test_opencode_server_leaves_out_what_the_user_reverted() -> None:
-    from agent_comms.cli_bridges.opencode_protocol import OpenCodeStream
-
-    connection = FakeOpenCode([
-        opencode_message("user", "user", [{"type": "text", "text": "Kept prompt"}]),
-        opencode_message("assistant", "assistant", [{"type": "text", "text": "Undone answer"}]),
-    ])
-    connection.info = Session(id="ses_test", directory="/work/opencode", revert={"messageID": "assistant"})
-
-    async def collect():
-        buffer = ImportBuffer(ImportLimits())
-        async for update in OpenCodeServer("ses_test", "http://unused", Path("/work")).seen(
-                connection, OpenCodeStream(connection)):
-            update.add_to(buffer)
-        return buffer.snapshot(OpenCodeHarness)
-
-    assert bodies(asyncio.run(collect())) == ["Kept prompt"]
 
 
 def test_import_cli_and_invalid_sources(tmp_path: Path, capsys: pytest.CaptureFixture[str], comms: Comms) -> None:

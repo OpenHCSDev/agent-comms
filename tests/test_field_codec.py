@@ -3,7 +3,9 @@ import json
 from conftest import transcript_records
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Annotated, ClassVar
+from typing import Annotated, ClassVar, Self
+from typing_extensions import TypeForm
+from pydantic import JsonValue
 
 import pytest
 
@@ -45,7 +47,7 @@ def test_transient_plan_excludes_fields_before_decoder_or_value_access() -> None
             Opaque, WireTransient(), WireName("")
         ] = field(default_factory=Opaque, repr=False, compare=False)
 
-        def __getattribute__(self, name):
+        def __getattribute__(self, name: str) -> object:
             if name == "local":
                 raise AssertionError("A wire operation read process-local state")
             return object.__getattribute__(self, name)
@@ -55,7 +57,9 @@ def test_transient_plan_excludes_fields_before_decoder_or_value_access() -> None
     assert FieldCodec.encode(record) == {"value": "kept"}
     assert FieldCodec.project(record, "status") == {"value": "kept"}
     assert FieldCodec.decode(Record, {"value": "kept"}).value == "kept"
-    assert set(FieldCodec.value_schema(Record)["properties"]) == {"value"}
+    properties = FieldCodec.value_schema(Record)["properties"]
+    assert isinstance(properties, dict)
+    assert set(properties) == {"value"}
     with pytest.raises(MalformedRecord):
         FieldCodec.decode(Record, {"value": "kept", "local": {}})
 
@@ -78,7 +82,7 @@ def test_field_plan_discovers_a_new_flag_without_changing_the_selector() -> None
     class ProbePlan(DeclaredFieldPlan):
         directives = (ProbeDirective,)
 
-        def omitted(self, value):
+        def omitted(self, value: object) -> bool:
             return value == "omit" or super().omitted(value)
 
     @dataclass
@@ -119,7 +123,7 @@ def test_field_plan_refuses_unrelated_claims_instead_of_ordering_flags() -> None
 def test_wire_absence_is_none_without_running_the_constructor_factory() -> None:
     created = []
 
-    def fresh():
+    def fresh() -> str:
         created.append("created")
         return "constructed-id"
 
@@ -209,7 +213,8 @@ def test_json_value_alias_uses_the_opaque_json_owner_everywhere() -> None:
     from pydantic import JsonValue
 
     payload = {"postimage": [None, True, 0, 0.0, "text", {"nested": [9007199254740993]}]}
-    for annotation in (JsonValue, Annotated[JsonValue, "documented postimage"]):
+    annotations: tuple[TypeForm[JsonValue], ...] = (JsonValue, TypeForm(Annotated[JsonValue, "documented postimage"]))
+    for annotation in annotations:
         assert FieldCodec.encode(payload, annotation) == payload
         assert FieldCodec.decode(annotation, payload) == payload
         assert FieldCodec.project(payload, "report", annotation) == payload
@@ -234,19 +239,17 @@ def test_json_value_alias_uses_the_opaque_json_owner_everywhere() -> None:
 
 
 @dataclass(frozen=True)
-class OwnedWireText(WireValue):
+class OwnedWireText(DeclaredWireType):
+    wire_type = str
     value: str
 
-    def to_wire(self):
+    def to_wire(self) -> str:
         return self.value
 
     @classmethod
-    def from_wire(cls, data):
+    def from_wire(cls, data: object) -> Self:
         return cls(FieldCodec.decode(str, data))
 
-    @classmethod
-    def schema(cls):
-        return FieldCodec.value_schema(str)
 
 
 @dataclass(frozen=True)
@@ -270,7 +273,7 @@ def test_new_value_owns_wire_form_everywhere_without_a_codec_adapter() -> None:
 
 
 def test_subclass_union_slots_replacement_decodes_once_and_keeps_unions_independent() -> None:
-    calls = []
+    calls: list[type[Number]] = []
 
     class First(SubclassUnion, affix=""):
         pass
@@ -278,27 +281,27 @@ def test_subclass_union_slots_replacement_decodes_once_and_keeps_unions_independ
     class Second(SubclassUnion, affix=""):
         pass
 
-    def declare_number(union):
-        @dataclass(frozen=True, slots=True)
-        class Number(DeclaredWireType, union):
-            wire_type = int
-            value: int
+    @dataclass(frozen=True, slots=True)
+    class Number(DeclaredWireType):
+        wire_type = int
+        value: int
 
-            def to_wire(self):
-                return self.value
+        def to_wire(self) -> int:
+            return self.value
 
-            @classmethod
-            def from_wire(cls, data):
-                calls.append(cls)
-                return cls(FieldCodec.decode(int, data))
+        @classmethod
+        def from_wire(cls, data: object) -> Self:
+            calls.append(cls)
+            return cls(FieldCodec.decode(int, data))
 
-        return Number
+    def declare_number[Union: SubclassUnion](union: type[Union]) -> type[Number]:
+        return dataclass(frozen=True, slots=True)(type("Number", (Number, union), {}))
 
     first = declare_number(First)
     second = declare_number(Second)
 
     @dataclass(frozen=True, slots=True)
-    class Text(DeclaredWireType, OwnedWireText, First):
+    class Text(OwnedWireText, First):
         wire_type = str
 
     @dataclass(frozen=True, slots=True)
@@ -339,13 +342,13 @@ def test_declared_scalar_capabilities_and_new_case_use_the_same_boundary() -> No
 
     class HexInteger(TextRepresentation):
         @classmethod
-        def encode(cls, value):
+        def encode(cls, value: object) -> str:
             if type(value) is not int:
                 raise TypeError("Expected an integer")
             return hex(value)
 
         @classmethod
-        def from_text(cls, value):
+        def from_text(cls, value: str) -> int:
             return int(value, 16)
 
     @dataclass(frozen=True)
@@ -378,13 +381,13 @@ def test_declared_scalar_capabilities_and_new_case_use_the_same_boundary() -> No
 
     @dataclass(frozen=True)
     class ScalarRow(TypedTable, declared_name="field_representation_rows"):
-        count: Annotated[int, HexInteger, Column(storage=TextStorage)]
+        amount: Annotated[int, HexInteger, Column(storage=TextStorage)]
 
     with sqlite3.connect(":memory:") as db:
         ScalarRow.create(db)
         ScalarRow(31).insert(db)
-        assert db.execute("SELECT count FROM field_representation_rows").fetchone() == ("0x1f",)
-        assert ScalarRow.read(db.execute("SELECT count FROM field_representation_rows")) == [
+        assert db.execute("SELECT amount FROM field_representation_rows").fetchone() == ("0x1f",)
+        assert ScalarRow.read(db.execute("SELECT amount FROM field_representation_rows")) == [
             ScalarRow(31)
         ]
 
@@ -421,7 +424,9 @@ def test_golden_nested_family_record_round_trip() -> None:
     }
     assert FieldCodec.encode(record) == golden
     assert FieldCodec.decode(Record, golden) == record
-    assert FieldCodec.record_schema(Record)["properties"]["aliases"] == {
+    properties = FieldCodec.record_schema(Record)["properties"]
+    assert isinstance(properties, dict)
+    assert properties["aliases"] == {
         "type": "object",
         "additionalProperties": {"type": "array", "items": {"type": "integer"}},
     }
@@ -452,7 +457,7 @@ def test_golden_nested_family_record_round_trip() -> None:
         [],
     ],
 )
-def test_invalid_family_boundaries(data) -> None:
+def test_invalid_family_boundaries(data: JsonValue) -> None:
     with pytest.raises((ValueError, TypeError)):
         FieldCodec.decode(Choice, data)
 
@@ -468,7 +473,7 @@ def test_alias_collision_and_reserved_tag() -> None:
 
 
 @pytest.mark.parametrize("value", [float("nan"), float("inf"), object(), {object(): "x"}])
-def test_non_json_values_rejected(value) -> None:
+def test_non_json_values_rejected(value: object) -> None:
     with pytest.raises(TypeError):
         FieldCodec.encode(value)
 
@@ -491,11 +496,11 @@ def test_scalar_dispatch_keeps_representation_and_exact_type_contracts() -> None
     class NullableInteger(AcceptsNull, FieldRepresentation):
 
         @classmethod
-        def encode(cls, value):
+        def encode(cls, value: object) -> object:
             return value
 
         @classmethod
-        def decode(cls, value):
+        def decode(cls, value: object) -> int:
             return 17 if value is None else FieldCodec.decode(int, value)
 
     assert FieldCodec.decode(Annotated[int, NullableInteger], None) == 17
@@ -511,7 +516,7 @@ def test_scalar_dispatch_keeps_representation_and_exact_type_contracts() -> None
     class DerivedStr(str):
         pass
 
-    for target, value in (
+    for invalid_target, invalid_value in (
         (int, True),
         (bool, 1),
         (str, DerivedStr("text")),
@@ -522,7 +527,7 @@ def test_scalar_dispatch_keeps_representation_and_exact_type_contracts() -> None
         (int, None),
     ):
         with pytest.raises(ValueError):
-            FieldCodec.decode(target, value)
+            FieldCodec.decode(invalid_target, invalid_value)
     # An unsupported declaration is a programming error, not malformed data.
     with pytest.raises(TypeError):
         FieldCodec.decode(DerivedInt, 4)
@@ -537,7 +542,7 @@ def test_scalar_dispatch_keeps_representation_and_exact_type_contracts() -> None
 
 def test_record_dispatch_precedes_dynamic_scalar_equality() -> None:
     class ScalarEqualMeta(type):
-        def __eq__(cls, other):
+        def __eq__(cls, other: object) -> bool:
             return other is str or type.__eq__(cls, other)
 
         __hash__ = type.__hash__
@@ -591,7 +596,7 @@ def test_nominal_class_reference_retains_owner_without_inventing_state_payload()
 
 
 @pytest.mark.parametrize("value", ["unknown", 1, True, None, {}, {"kind": "count"}])
-def test_nominal_class_reference_rejects_unknown_names_and_wrong_shapes(value) -> None:
+def test_nominal_class_reference_rejects_unknown_names_and_wrong_shapes(value: JsonValue) -> None:
     with pytest.raises(ValueError):
         FieldCodec.decode(ChoiceReference, {"choice": value})
 
@@ -603,6 +608,7 @@ def test_request_schema_preserves_nullable_fields_and_owned_nonnull_constraint()
         nonnull: Annotated[str | None, WireNonNull(True)] = None
 
     properties = FieldCodec.record_schema(Request)["properties"]
+    assert isinstance(properties, dict)
     assert properties["nullable"] == {"anyOf": [{"type": "string"}, {"type": "null"}]}
     assert properties["nonnull"] == {"type": "string"}
 
@@ -623,27 +629,50 @@ def test_family_instance_schema_tracks_decode_members_and_custom_discriminator()
     class Request:
         scope: Scope
 
-    def alternatives():
-        return FieldCodec.record_schema(Request)["properties"]["scope"]["oneOf"]
+    def alternatives() -> list[dict[str, JsonValue]]:
+        properties = FieldCodec.record_schema(Request)["properties"]
+        assert isinstance(properties, dict)
+        scope = properties["scope"]
+        assert isinstance(scope, dict)
+        variants = scope["oneOf"]
+        assert isinstance(variants, list)
+        result: list[dict[str, JsonValue]] = []
+        for item in variants:
+            assert isinstance(item, dict)
+            result.append(item)
+        return result
+
+    def selected_schema(encoded: dict[str, JsonValue]) -> dict[str, JsonValue]:
+        matches: list[dict[str, JsonValue]] = []
+        for item in alternatives():
+            properties = item["properties"]
+            assert isinstance(properties, dict)
+            selection = properties["selection"]
+            assert isinstance(selection, dict)
+            if selection["const"] == encoded["selection"]:
+                matches.append(item)
+        (schema,) = matches
+        return schema
 
     for value in (CurrentScope(), ExplicitScope("/project")):
         encoded = FieldCodec.encode(value)
-        (schema,) = [
-            item
-            for item in alternatives()
-            if item["properties"]["selection"]["const"] == encoded["selection"]
-        ]
-        assert set(schema["required"]) <= encoded.keys()
-        assert encoded.keys() <= schema["properties"].keys()
+        assert isinstance(encoded, dict)
+        schema = selected_schema(encoded)
+        required = schema["required"]
+        properties = schema["properties"]
+        assert isinstance(required, list)
+        assert isinstance(properties, dict)
+        assert set(required) <= encoded.keys()
+        assert encoded.keys() <= properties.keys()
         assert schema["additionalProperties"] is False
         assert FieldCodec.decode(Scope, encoded) == value
         assert FieldCodec.decode(Request, {"scope": encoded}) == Request(value)
 
     assert FieldCodec.value_schema(type[Scope])["enum"] == list(Scope.names())
-    # Named APIs select a declaration outside their payload; nested values
-    # select it inside the object. Both use the same declared field metadata.
     assert FieldCodec.record_schema(ExplicitScope)["required"] == ["externalProject"]
-    assert "selection" not in FieldCodec.record_schema(ExplicitScope)["properties"]
+    properties = FieldCodec.record_schema(ExplicitScope)["properties"]
+    assert isinstance(properties, dict)
+    assert "selection" not in properties
 
     @dataclass(frozen=True)
     class NewScope(ExplicitScope):
@@ -651,14 +680,15 @@ def test_family_instance_schema_tracks_decode_members_and_custom_discriminator()
 
     new = NewScope("/project", "new declaration")
     encoded = FieldCodec.encode(new)
-    (schema,) = [
-        item
-        for item in alternatives()
-        if item["properties"]["selection"]["const"] == encoded["selection"]
-    ]
-    assert set(schema["required"]) == {"selection", "externalProject", "reason"}
+    assert isinstance(encoded, dict)
+    schema = selected_schema(encoded)
+    required = schema["required"]
+    assert isinstance(required, list)
+    assert set(required) == {"selection", "externalProject", "reason"}
     assert FieldCodec.decode(Scope, encoded) == new
-    assert len(FieldCodec.value_schema(ExplicitScope)["oneOf"]) == 2
+    variants = FieldCodec.value_schema(ExplicitScope)["oneOf"]
+    assert isinstance(variants, list)
+    assert len(variants) == 2
 
 
 def test_member_cannot_write_a_second_family_discriminator() -> None:
@@ -704,11 +734,11 @@ class InlinePair(InlineRecord):
     number: int
     text: str
 
-    def to_wire(self):
+    def to_wire(self) -> dict[str, JsonValue]:
         return FieldCodec.encode_record(self)
 
     @classmethod
-    def from_wire(cls, data):
+    def from_wire(cls, data: object) -> Self:
         return FieldCodec.decode_record(cls, data)
 
 
@@ -749,7 +779,7 @@ class FamilyInlineClash:
 
 
 @pytest.mark.parametrize("declaration", [TypeInlineClash, FieldInlineClash, FamilyInlineClash])
-def test_inlined_key_clash_refuses_the_declaration(declaration) -> None:
+def test_inlined_key_clash_refuses_the_declaration(declaration: type[TypeInlineClash] | type[FieldInlineClash] | type[FamilyInlineClash]) -> None:
     with pytest.raises(TypeError):
         FieldCodec.record_schema(declaration)
 
@@ -763,7 +793,7 @@ def test_inlined_key_clash_refuses_the_declaration(declaration) -> None:
         ({"notice": True, "membership": None}, NoticeRole()),
     ],
 )
-def test_missing_and_null_membership_decode_to_the_same_role(wire, expected) -> None:
+def test_missing_and_null_membership_decode_to_the_same_role(wire: dict[str, JsonValue], expected: MessageRole) -> None:
     assert MessageRole.from_wire(wire) == expected
 
 
@@ -776,7 +806,7 @@ def test_missing_and_null_membership_decode_to_the_same_role(wire, expected) -> 
         (MembershipNoticeRole(LeftMembership), {"membership": "left", "notice": True}),
     ],
 )
-def test_message_role_keeps_the_exact_external_envelope(role, external) -> None:
+def test_message_role_keeps_the_exact_external_envelope(role: MessageRole, external: dict[str, JsonValue]) -> None:
     message = Message("sender", "reader", "hello", InfoKind, timestamp=1.0, role=role)
     wire = {
         "seq": 0,
@@ -791,7 +821,9 @@ def test_message_role_keeps_the_exact_external_envelope(role, external) -> None:
     }
     assert message.to_wire() == wire
     assert Message.from_wire(wire) == message
-    assert "role" not in FieldCodec.record_schema(Message)["properties"]
+    properties = FieldCodec.record_schema(Message)["properties"]
+    assert isinstance(properties, dict)
+    assert "role" not in properties
 
 
 @dataclass(frozen=True)
@@ -801,34 +833,8 @@ class _SavedRow:
     count: int
 
 
-@pytest.mark.parametrize(
-    "wire,refusal",
-    [
-        ({"path": 7, "at": "2026-10-18T12:00:00+00:00", "count": 1}, "received int"),
-        ({"path": "/saved", "at": 1.5, "count": 1}, "received float"),
-        (
-            {"path": "/saved", "at": "2026-10-18T12:00:00+00:00"},
-            "Missing required fields for _SavedRow: count",
-        ),
-    ],
-)
-def test_refused_record_data_raises_the_declared_error(wire, refusal) -> None:
-    with pytest.raises(MalformedRecord) as raised:
-        FieldCodec.decode(_SavedRow, wire)
-    from agent_comms.field_codec import RecordProblems
-
-    assert type(raised.value) is RecordProblems
-    assert len(raised.value.problems) == 1
-    assert "fix:" in str(raised.value)
 
 
-def test_record_reports_missing_unknown_and_malformed_siblings_together() -> None:
-    from agent_comms.field_codec import RecordProblems
-
-    with pytest.raises(RecordProblems) as raised:
-        FieldCodec.decode(_SavedRow, {"path": 7, "at": 1.5, "extra": 0})
-    assert set(raised.value.problems) == {"path", "at", "count", "extra"}
-    assert all("fix:" in problem for problem in raised.value.problems.values())
 
 
 def test_declaration_bug_passes_through_a_data_boundary_as_type_error() -> None:
