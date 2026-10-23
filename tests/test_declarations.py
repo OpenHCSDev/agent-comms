@@ -29,7 +29,7 @@ from agent_comms.private_registry_guard import PrivateRegistryGuard
 from agent_comms.registry_document import RegistryDocument
 from agent_comms.runtime_info import AgentRuntimeInfo, RuntimeInfoStore
 from agent_comms.shared_ledger import SharedLedger
-from agent_comms.thread_status import DeletingThreadStatus, RunningThreadStatus, StoppedThreadStatus
+from agent_comms.thread_status import DeletingThreadStatus, HeartbeatThreadStatus, RunningThreadStatus, StoppedThreadStatus
 from agent_comms.threads import current_thread
 from agent_comms.thread_text import ForkedParent, GivenThreadText
 from agent_comms.thread_model import DeclaredModel
@@ -187,7 +187,7 @@ class TestRegistration:
     def test_status_transitions(self, tmp_path: Path):
         registry = Registration(tmp_path / "registry.json")
         registry.register(Thread(name='a', tags=frozenset(), worktree='/wt'))
-        assert registry.status("a") == RunningThreadStatus()
+        assert registry.status("a") == HeartbeatThreadStatus()
         registry.unregister("a")
         assert registry.status("a") == StoppedThreadStatus()
         # Unregistering a stopped (but known) thread is idempotent.
