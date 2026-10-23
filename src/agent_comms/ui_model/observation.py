@@ -1017,6 +1017,9 @@ class SidebarUnreadable(SidebarResult):
 class ThreadReadResult(PublishState, ABC):
     """One thread's last read, including how to compare and display its answer."""
 
+    def same_as_presented(self, presented: ThreadPresented) -> bool:
+        return False
+
     @abstractmethod
     def status_row(self, name: str, owner: OpenThreadStatus) -> ThreadStatusModel: ...
 
@@ -1031,9 +1034,12 @@ class ThreadReadResult(PublishState, ABC):
 class ThreadPresented(ThreadReadResult):
     presentation: ThreadPresentation
 
-    def same_observation(self, previous: object) -> bool:
-        return isinstance(previous, ThreadPresented) and (
-            self.presentation is previous.presentation or self.presentation.same_observation(previous.presentation))
+    def same_observation(self, previous: ThreadReadResult) -> bool:
+        return previous.same_as_presented(self)
+
+    def same_as_presented(self, presented: ThreadPresented) -> bool:
+        return (presented.presentation is self.presentation
+                or presented.presentation.same_observation(self.presentation))
 
     def status_row(self, name: str, owner: OpenThreadStatus) -> ThreadStatusModel:
         return ThreadStatusModel.known(name, self.presentation)
