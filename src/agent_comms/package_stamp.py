@@ -16,7 +16,8 @@ class CheckoutStamp(CoreStamp):
         return Repo.git(self.value, "rev-parse", "HEAD").strip()
 
     def producer_digests(
-        self, declared: Mapping[str, Callable[[], str]], installed: Callable[[], dict[str, str]],
+        self,
+        declared: Mapping[str, Callable[[], str]],
     ) -> dict[str, str]:
         return {name: digest() for name, digest in declared.items()}
 

@@ -12,8 +12,14 @@ class CoreStamp(ABC):
 
     @abstractmethod
     def producer_digests(
-        self, declared: Mapping[str, Callable[[], str]], installed: Callable[[], dict[str, str]],
-    ) -> dict[str, str]: ...
+        self,
+        declared: Mapping[str, Callable[[], str]],
+    ) -> dict[str, str]:
+        """Available digests; a source stamp resolves the requested declarations.
+
+        A built stamp can return additional precomputed rows. Consumers select
+        their own rows from the result.
+        """
 
     def write(self, path: Path) -> None:
         """Generate one importable value using its declared concrete type."""
@@ -27,11 +33,13 @@ class CoreStamp(ABC):
 @dataclass(frozen=True)
 class WheelStamp(CoreStamp):
     value: str
+    digests: dict[str, str]
 
     def commit(self) -> str:
         return self.value
 
     def producer_digests(
-        self, declared: Mapping[str, Callable[[], str]], installed: Callable[[], dict[str, str]],
+        self,
+        declared: Mapping[str, Callable[[], str]],
     ) -> dict[str, str]:
-        return installed()
+        return self.digests
