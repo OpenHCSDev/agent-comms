@@ -180,7 +180,7 @@ async def test_watched_record_crosses_the_watch_line_as_its_envelope(root):
     for name in ("a", "b"):
         comms.registry.declare(Thread(name=name, tags=frozenset(), worktree='/wt'))
     sent = comms.messaging.send("a", "b", "crosses").message
-    async with aclosing(comms.bus.watch("b", acknowledgment=ExplicitWatchAcknowledgment)) as watched:
+    async with aclosing(comms.watch("b", acknowledgment=ExplicitWatchAcknowledgment)) as watched:
         async with asyncio.timeout(5):
             record = await anext(watched)
     line = WATCH_LINE.validate_json(ArrivedMessage(message=record).model_dump_json())
