@@ -14,6 +14,7 @@ from agent_comms.cohort_schema import CohortTable
 from agent_comms.coordination_errors import SchemaVersionError
 from agent_comms.coordination_tables.participants import Participants
 from agent_comms.coordinator import Coordination
+from agent_comms.coordination_database import CoordinationStore
 from agent_comms.private_runtime_schema import PrivateCoordinatorTable
 
 ROOT = "a" * 32
@@ -153,13 +154,14 @@ def test_selected_claims_follow_ordered_n_subsequence_not_only_set_membership(
         assert count == 0
 
 
-def test_schema_is_opt_in_declared_and_idempotent_on_reopen(tmp_path: Path) -> None:
-    path = tmp_path / "coordination.sqlite3"
+def test_schema_is_opt_in_declared_and_idempotent_on_reopen(tmp_path: Path, private_comms) -> None:
+    with Coordination(str(tmp_path / "coordination.sqlite3")) as public:
+        assert "claim_batch_receipts" not in _tables(public)
+        assert "cohort_delivery_receipts" not in _tables(public)
+    path = CoordinationStore.path_in(private_comms.root)
     with Coordination(str(path)) as store:
-        assert "claim_batch_receipts" not in _tables(store)
-        assert "cohort_delivery_receipts" not in _tables(store)
-        PrivateCoordinatorTable.install(store)
         before = set(_tables(store))
+        assert {"claim_batch_receipts", "cohort_delivery_receipts"} <= before
         PrivateCoordinatorTable.install(store)
         assert _tables(store) == before
     if os.name == "posix":
@@ -173,10 +175,9 @@ def test_schema_is_opt_in_declared_and_idempotent_on_reopen(tmp_path: Path) -> N
         assert not CohortTable.schema_differs(reopened.session._connection)
 
 
-def test_zero_member_zero_claim_cohort_is_durable_without_fabricated_claim(tmp_path: Path) -> None:
-    path = tmp_path / "coordination.sqlite3"
+def test_zero_member_zero_claim_cohort_is_durable_without_fabricated_claim(private_comms) -> None:
+    path = CoordinationStore.path_in(private_comms.root)
     with Coordination(str(path)) as store:
-        PrivateCoordinatorTable.install(store)
         with store.session.writing() as db:
             _receipt(db, n=0, k=0)
             _seal(db)
@@ -185,7 +186,6 @@ def test_zero_member_zero_claim_cohort_is_durable_without_fabricated_claim(tmp_p
         )
         assert store.session._connection.execute("SELECT COUNT(*) FROM wake_claims").fetchone()[0] == 0
     with Coordination(str(path)) as reopened:
-        PrivateCoordinatorTable.install(reopened)
         assert (
             reopened.session._connection.execute("SELECT COUNT(*) FROM claim_batch_receipts").fetchone()[0]
             == 1
