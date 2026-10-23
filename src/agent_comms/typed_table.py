@@ -1952,6 +1952,7 @@ class TypedTable(
             f"SELECT COUNT(*) FROM {_identifier(cls.declared_name)} WHERE {condition}", parameters))[0]
 
     @classmethod
+    @cache
     def _writable_fields(cls, columns: tuple[str, ...] | None = None) -> tuple[_Field, ...]:
         if columns is None:
             return tuple(item for item in cls._fields if item.column.writable)
@@ -1961,6 +1962,7 @@ class TypedTable(
         return selected
 
     @classmethod
+    @cache
     def insertion_statement(cls, columns: tuple[str, ...] = ()) -> str:
         writable = cls._writable_fields(columns or None)
         return (f"INSERT INTO {_identifier(cls.declared_name)} "
