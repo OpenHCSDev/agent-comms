@@ -91,7 +91,6 @@ from agent_comms.installer.interpreter_operation import (
     RetainedProgram,
     RunningOwnersProbe,
     RuntimeProbe,
-    SelectedRouteProbe,
     ServingProbe,
     TargetProgram,
 )
@@ -101,6 +100,7 @@ from agent_comms.installer.practice import (
     RehearsalHome,
     RuntimeHome,
 )
+from agent_comms.installer.publication import SelectedRouteProbe
 from agent_comms.installer.reporting import (
     RootWriter,
     RuntimeWriter,
