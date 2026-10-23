@@ -28,6 +28,19 @@ from .store_files import (
 T = TypeVar("T")
 
 
+@dataclass(frozen=True, slots=True)
+class DocumentChange[D, R]:
+    """A document's successor and the answer its change gives the caller."""
+
+    document: D
+    result: R
+
+    @classmethod
+    def to(cls, document: D) -> DocumentChange[D, D]:
+        """A change whose answer is the successor itself."""
+        return cls(document, document)
+
+
 class JsonDocument(ABC, Generic[T]):
     """Declared JSON codec and atomic file I/O; LockedStore owns transactions."""
 
@@ -585,13 +598,13 @@ class LockedStore(FileStore, StoreLockOwner, JsonDocument[T]):
         with self.reading() as value:
             return value
 
-    def update(self, change: Callable[[T], T]) -> T:
+    def update[R](self, change: Callable[[T], DocumentChange[T, R]]) -> R:
         with self.locked():
             original = self._read_unlocked()
             changed = change(original)
-            if changed is not original:
-                self._publish_unlocked(changed)
-            return changed
+            if changed.document is not original:
+                self._publish_unlocked(changed.document)
+            return changed.result
 
     def replace(self, value: T) -> None:
         """Publish a complete owned snapshot without reading the discarded one.

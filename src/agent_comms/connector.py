@@ -60,6 +60,7 @@ from .connector_store import (
     AuthorizationRequest, ClaudeCallback,
     ConnectorGrants, ConnectorStore, IssuedTokens, RegisteredClient, TrustedBrowser, digest,
 )
+from .locked_store import DocumentChange
 from .messages import QuestionKind
 from .commander.standing import UnownedOrderWatch
 from .commander_heartbeat import CommanderHeartbeat
@@ -918,9 +919,9 @@ class RevokeVerb(ConnectorVerb):
     help = "Revoke every issued token, code and trusted browser"
 
     def apply(self, ctx: ConnectorStore) -> int | str:
-        ctx.update(lambda grants: replace(
+        ctx.update(lambda grants: DocumentChange.to(replace(
             grants, requests={}, codes={}, access={}, refresh={}, trusted_browsers={}
-        ))
+        )))
         return 0
 
 

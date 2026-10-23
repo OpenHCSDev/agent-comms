@@ -39,6 +39,7 @@ from agent_comms.connector_store import (
     IssuedCode, TrustedBrowser, digest,
 )
 from agent_comms.coordinator import Coordination
+from agent_comms.locked_store import DocumentChange
 from agent_comms.message_bus import WatchPass
 from agent_comms.service_passes import ServicePassStore
 from agent_comms.standing_rules import ServicePassFailing
@@ -612,9 +613,9 @@ async def test_pending_authorizations_are_bounded(client, store, comms):
     )).status == 200
     assert len(comms.bus.inbox(owner.name)) == before
     held = store.read().requests[repeated.request_id]
-    store.update(lambda grants: replace(grants, requests=grants.requests | {
+    store.update(lambda grants: DocumentChange.to(replace(grants, requests=grants.requests | {
         repeated.request_id: replace(held, expires_at=time.time() - 1)
-    }))
+    })))
     assert (await client.get(
         "/authorize", params=FieldCodec.encode(blocked), allow_redirects=False
     )).status == 200
@@ -669,22 +670,22 @@ async def test_owner_browser_approval_lifecycle(client, store, comms):
     link = urlsplit(notices[-1].body.splitlines()[-1])
     assert (await client.get(link.path + "wrong", allow_redirects=False)).status == 400
     expired = replace(store.read().requests[query.request_id], expires_at=time.time() - 1)
-    store.update(lambda grants: replace(
+    store.update(lambda grants: DocumentChange.to(replace(
         grants, requests={query.request_id: expired},
         codes=grants.codes | {"expired-code": IssuedCode(
             query.client_id, query.code_challenge, expires_at=expired.expires_at
         )},
-    ))
+    )))
     assert (await client.get(link.path, allow_redirects=False)).status == 400
-    store.update(lambda grants: grants.issued(query.client_id)[0])
+    store.update(lambda grants: DocumentChange.to(grants.issued(query.client_id)[0]))
     assert not store.read().requests and "expired-code" not in store.read().codes
 
     waiting = await client.get("/authorize", params=FieldCodec.encode(query))
     assert waiting.status == 200
     held = store.read().requests[query.request_id]
-    store.update(lambda grants: replace(grants, requests={
+    store.update(lambda grants: DocumentChange.to(replace(grants, requests={
         query.request_id: replace(held, expires_at=time.time() - 1)
-    }))
+    })))
     fresh = replace(query, state="fresh-wait")
     assert (await client.get("/authorize", params=FieldCodec.encode(fresh))).status == 200
     assert query.request_id not in store.read().requests

@@ -397,24 +397,17 @@ async def test_killed_launcher_takes_its_child_and_leaves_its_resident(tmp_path:
 
 def test_detached_reserves_identity_before_child_can_execute(tmp_path: Path) -> None:
     acknowledgement = tmp_path / "started"
-    recorded = []
-
-    def reserve(identity: ProcessIdentity) -> None:
-        assert not acknowledgement.exists()
-        assert identity.alive()
-        recorded.append(identity)
-
-    child = SpawnedProcess.launch(
+    with SpawnedProcess.launching(
         (
             sys.executable,
             "-c",
             'import sys,time; open(sys.argv[1],"w").write("started"); time.sleep(60)',
             str(acknowledgement),
         ),
-        before_start=reserve,
-    )
+    ) as child:
+        assert not acknowledgement.exists()
+        assert child.identity.alive()
     try:
-        assert recorded == [child.identity]
         stale = ObservedProcess(replace(child.identity, start_time=child.identity.start_time + 1))
         with pytest.raises(IdentityMismatchError):
             stale.stop_sync()
@@ -428,20 +421,16 @@ def test_reservation_failure_never_executes_and_reaps_child(tmp_path: Path) -> N
     acknowledgement = tmp_path / "should-not-exist"
     captured = []
 
-    def reject(identity: ProcessIdentity) -> None:
-        captured.append(identity)
+    with pytest.raises(ValueError), SpawnedProcess.launching(
+        (
+            sys.executable,
+            "-c",
+            "import sys; open(sys.argv[1], 'w').write('wrong')",
+            str(acknowledgement),
+        ),
+    ) as child:
+        captured.append(child.identity)
         raise ValueError("reservation refused")
-
-    with pytest.raises(ValueError):
-        SpawnedProcess.launch(
-            (
-                sys.executable,
-                "-c",
-                "import sys; open(sys.argv[1], 'w').write('wrong')",
-                str(acknowledgement),
-            ),
-            before_start=reject,
-        )
     assert len(captured) == 1
     assert not captured[0].alive()
     assert not acknowledgement.exists()
