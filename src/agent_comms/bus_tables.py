@@ -75,10 +75,6 @@ class ReceivedSource(ParticipantSource):
     """The participant belongs to the frozen delivery audience."""
 
 
-class DirectReplySource(ReceivedSource):
-    """The record's declared reply policy starts a separate direct turn."""
-
-
 @dataclass(frozen=True)
 class MessageIdentitySource(MessageReference, TypedTable, BusProjectionTables):
     """A record's existing reference, searchable without recomputing its content hash."""

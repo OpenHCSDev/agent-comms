@@ -262,14 +262,23 @@ original. The retained 19,189-record replay and source census are recorded in
 the PR. This branch starts at accepted #2624 and excludes rejected #2629;
 removing this policy mirror does not establish generic projection freshness.
 
-The computed-policy family is still open: `Delivered.projections` also stores
-`DirectReplySource` membership computed by `Delivered.direct_for`.
-`Goals._goal_input_review` and `RecordedGoalWait.has_reply` consume
-that membership through `BusReader.received`. Their migration must preserve
-the recorded sender/recipient incarnations, UNKNOWN inputs and review cursor,
-and apply actual `direct_for` before the page limit. The control-plane owner
-keeps this repair; the MI worker owns the overlapping received/decode contract.
-The current installed pair remains independent of this draft.
+The next checkpoint deletes `DirectReplySource`, the other stored answer
+computed by `Delivered.direct_for`. `Goals._goal_input_review` and
+`RecordedGoalWait.has_reply` now consume `BusReader.direct_replies`, which
+checks actual delivery policy before counting the page limit. Frozen
+sender/recipient incarnations, UNKNOWN input selection and review cursors are
+preserved. The shared participant reader returns actual `Delivered` values
+through its existing checked decoder, closing the inaccurate `BusRecord`
+return contract used by `cohort_foreground`.
+
+This streaming candidate is not performance-qualified. All sixteen retained
+four-pair direct-reply selections match the stored table, but a 100-reply
+page requires 170–601 full delivery decodes and costs 101–988 milliseconds.
+The same 601 records cost 1,106 milliseconds as full deliveries versus 133
+milliseconds as complete `Message` values: frozen delivery capability decoding
+is the dominant term. The control-plane owner is repairing that query/decode
+boundary without another policy copy. The current installed pair remains
+independent of this draft.
 
 ### Phase 8: cutover
 
