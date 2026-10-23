@@ -67,7 +67,7 @@ def bodies(snapshot):
     (GivenThreadText("Authored title"), "Authored title", "Authored title"),
 ])
 def test_thread_display_title_is_inherited_without_copying_the_name(tmp_path, title, display, renamed_display, *, thread_registration):
-    thread = Thread('original', frozenset(), str(tmp_path), title=title)
+    thread = thread_registration.declare(Thread('original', frozenset(), str(tmp_path), title=title))
     captured = ThreadProvenance.capture(thread)
     assert thread.title == captured.title == title
     assert thread.display_title == captured.display_title == display
