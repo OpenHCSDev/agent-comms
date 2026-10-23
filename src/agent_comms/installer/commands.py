@@ -7,13 +7,24 @@ import sys
 import tempfile
 import time
 from collections.abc import Iterator, Mapping
-from contextlib import contextmanager
+from concurrent.futures import ThreadPoolExecutor
+from contextlib import ExitStack, contextmanager
 from dataclasses import dataclass, field
 from pathlib import Path
+from threading import Lock
+from typing import BinaryIO
 
+from agent_comms.child_process import SpawnedProcess
 from agent_comms.field_codec import FieldCodec
 from agent_comms.installer.backup import UpgradeRefused
-from agent_comms.installer.interpreter_operation import ProbeProgram, RuntimeProbe, SourceProgram
+from agent_comms.installer.interpreter_operation import (
+    ProbeProgram,
+    ProbeReply,
+    RuntimeProbe,
+    RuntimeProbeFailed,
+    SourceProgram,
+)
+from agent_comms.launch_runtime import RestoredRuntime
 
 
 @dataclass(frozen=True)
@@ -28,11 +39,102 @@ class TimedCommand:
 
 
 @dataclass(frozen=True)
+class InterpreterWorkerKey:
+    python: Path
+    program: tuple[str, ...]
+    cwd: Path
+    environment: tuple[tuple[str, str], ...]
+
+
+@dataclass
+class InterpreterWorker:
+    """One interpreter answering requests on its own pipes; stderr is kept for refusals."""
+
+    child: SpawnedProcess
+    requests: BinaryIO
+    answers: BinaryIO
+    diagnostics: BinaryIO
+    exchange_lock: Lock = field(default_factory=Lock)
+
+    @classmethod
+    def start(cls, key: InterpreterWorkerKey) -> InterpreterWorker:
+        with ExitStack() as owned:
+            diagnostics = owned.enter_context(tempfile.TemporaryFile())
+            request_read, request_write = os.pipe()
+            answer_read, answer_write = os.pipe()
+            requests = owned.enter_context(os.fdopen(request_write, "wb"))
+            answers = owned.enter_context(os.fdopen(answer_read, "rb"))
+            try:
+                child = SpawnedProcess.launch(
+                    (str(key.python), "-P", *key.program), cwd=key.cwd,
+                    env=dict(key.environment), runtime=RestoredRuntime(key.python),
+                    stdin=request_read, output=answer_write, stderr=diagnostics,
+                )
+            finally:
+                os.close(request_read)
+                os.close(answer_write)
+            worker = cls(child, requests, answers, diagnostics)
+            owned.pop_all()
+        return worker
+
+    def errors(self) -> str:
+        self.diagnostics.seek(0)
+        return self.diagnostics.read().decode(errors="replace").strip()
+
+    def exchange(self, encoded: str) -> ProbeReply:
+        with self.exchange_lock:
+            self.requests.write((encoded + "\n").encode())
+            self.requests.flush()
+            answer = self.answers.readline()
+            if not answer:
+                raise UpgradeRefused(
+                    f"Interpreter worker closed without an answer: {self.errors()}")
+            return FieldCodec.decode(ProbeReply, FieldCodec.parse(answer.decode()))
+
+    def close(self) -> None:
+        """Closing its requests ends the worker's loop; it is then reaped and its streams closed."""
+        with ExitStack() as closing:
+            closing.callback(self.diagnostics.close)
+            closing.callback(self.answers.close)
+            closing.callback(self.child.close)
+            self.requests.close()
+            self.child.reap()
+
+
+@dataclass
 class InstallCommands:
     """The commands one install runs. Its stacks and steps run every command through it,
     and the install's log and result both read what it ran."""
 
     ran: list[TimedCommand] = field(default_factory=list)
+    workers: dict[InterpreterWorkerKey, InterpreterWorker] = field(default_factory=dict, init=False)
+    worker_lock: Lock = field(default_factory=Lock, init=False)
+    launcher: ThreadPoolExecutor = field(
+        default_factory=lambda: ThreadPoolExecutor(
+            max_workers=1, thread_name_prefix="install-launch"),
+        init=False,
+    )
+
+    def __enter__(self) -> InstallCommands:
+        return self
+
+    def close_workers(self, keys: tuple[InterpreterWorkerKey, ...]) -> None:
+        """Every selected worker closes, even when another one's close raises."""
+        with self.worker_lock, ExitStack() as exits:
+            for key in keys:
+                exits.callback(self.workers.pop(key).close)
+
+    def close_runtime(self, python: Path) -> None:
+        self.close_workers(tuple(key for key in self.workers if key.python == python))
+
+    def close(self) -> None:
+        try:
+            self.close_workers(tuple(self.workers))
+        finally:
+            self.launcher.shutdown(wait=True)
+
+    def __exit__(self, *_: object) -> None:
+        self.close()
 
     @contextmanager
     def timing(self, command: str) -> Iterator[None]:
@@ -41,7 +143,7 @@ class InstallCommands:
         try:
             yield
         finally:
-            timed = TimedCommand(command, round(time.monotonic() - started, 1))
+            timed = TimedCommand(command, time.monotonic() - started)
             self.ran.append(timed)
             print("=", timed.line(), file=sys.stderr, flush=True)
 
@@ -66,8 +168,18 @@ class InstallCommands:
     def probe[Answer](self, probe: RuntimeProbe[Answer], python: Path, *,
                       cwd: Path = Path(), env: Mapping[str, str] = os.environ,
                       program: ProbeProgram = SourceProgram()) -> Answer:
-        with self.exchange(FieldCodec.compact(FieldCodec.encode(probe))) as (request, result):
-            self.run(*probe.command(python, request, result, program=program), cwd=cwd, env=env,
-                     label=f"{python} {type(probe).__name__}")
-            return probe.decode_answer(result.read_text())
+        key = InterpreterWorkerKey(python, tuple(map(str, program.entry())), cwd.absolute(),
+                                   tuple(sorted(env.items())))
+        with self.timing(f"{python} {type(probe).__name__}"):
+            with self.worker_lock:
+                if key not in self.workers:
+                    # Linux binds a child's lifetime to its launching thread. Keep that
+                    # thread until all workers close, including calls from short-lived pools.
+                    self.workers[key] = self.launcher.submit(InterpreterWorker.start, key).result()
+                worker = self.workers[key]
+            reply = worker.exchange(FieldCodec.compact(FieldCodec.encode(probe)))
+        try:
+            return probe.decode_answer(reply.answer())
+        except RuntimeProbeFailed as error:
+            raise UpgradeRefused(str(error)) from error
 
