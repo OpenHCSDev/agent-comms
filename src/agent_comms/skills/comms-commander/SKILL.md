@@ -72,7 +72,7 @@ The declaration supplies the ID and first-call times when omitted. A mechanical 
 
 ## The board
 
-Core's Todo store is the only record of fixes and their history; `order board` renders it. Orders, timers, owners, delivery and installed evidence change only through Core's Todo operations. A defect with no owner gets one the same tick.
+Core's Todo store is the only record of fixes and their history; `comms_hud` reads it beside plan phases, PRs and overload. Orders, timers, owners, delivery and installed evidence change only through Core's Todo operations. A defect with no owner gets one the same tick.
 
 Priority: the owner's latest message; a broken install, lost or replayed input, wrong messages, or a unit blocked on you; then the owner's plans, which are the default work. Slop found outside a plan goes into the plan's surface or a plan phase, never ahead of it.
 

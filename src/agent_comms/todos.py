@@ -511,6 +511,7 @@ class PullRequest(DeclaredFamily, affix="PullRequest"):
     orders: tuple[str, ...] = ()
     base: str = field(default=WorkBranches.main, kw_only=True)
     problems: tuple[str, ...] = field(default=(), kw_only=True)
+    draft: bool = field(default=False, kw_only=True)
 
     def belongs_to(self, todo: Todo) -> bool:
         return (todo.id in self.problems
@@ -563,10 +564,11 @@ class ListedPullRequest(DeclaredFamily, affix="ListedPullRequest"):
     head: str
     updated: str
     base: str
+    draft: bool = field(default=False, kw_only=True)
 
     def parsed(self, problems: tuple[str, ...], orders: tuple[str, ...]) -> PullRequest:
         return UnmergedPullRequest(self.number, self.branch, self.head, _github_time(self.updated),
-                                   orders, base=self.base, problems=problems)
+                                   orders, base=self.base, problems=problems, draft=self.draft)
 
 
 class UnmergedListedPullRequest(ListedPullRequest):
@@ -586,7 +588,7 @@ class MergedListedPullRequest(ListedPullRequest):
         return MergedPullRequest(self.number, self.branch, self.head, _github_time(self.updated),
                                  orders, base=self.base,
                                  merge=self.merge.oid, merged_at=_github_time(self.merged),
-                                 problems=problems)
+                                 problems=problems, draft=self.draft)
 
 
 class PullRequests:
@@ -625,7 +627,7 @@ class PullRequests:
             return ()
         selections = [
             f'p{number}: pullRequest(number: {number}) {{ number branch: headRefName '
-            'head: headRefOid base: baseRefName closed merge: mergeCommit { oid } '
+            'head: headRefOid base: baseRefName draft: isDraft closed merge: mergeCommit { oid } '
             'merged: mergedAt updated: updatedAt }' for number in linked]
         query = (f'query {{ repository(owner: {json.dumps(repo.owner)}, '
                  f'name: {json.dumps(repo.name)}) {{ {" ".join(selections)} }} }}')
@@ -640,16 +642,18 @@ class PullRequests:
             raise WorkBranchError(
                 listed.stderr.strip() or f"GitHub order lookup in {repo.to_wire()} failed.")
         rows = FieldCodec.decode(dict[str, ListedPullRequest], FieldCodec.parse(listed.stdout))
-        requests = tuple(row.parsed(
+        requests = tuple((row, row.parsed(
             tuple(candidate.id for candidate in linked[row.number]),
             tuple(dict.fromkeys(order.id for candidate in linked[row.number]
                                 for order in candidate.order_history
-                                if PullRequestLink(repo, row.number) in order.pull_requests)))
-            for row in rows.values() if isinstance(row, kind))
-        for candidate in problems.values():
-            self._read[repo, kind, candidate.id] = tuple(sorted(
-                (request for request in requests if request.belongs_to(candidate)),
-                key=lambda request: request.updated_at, reverse=True))
+                                if PullRequestLink(repo, row.number) in order.pull_requests))))
+            for row in rows.values())
+        for selection in dict.fromkeys((kind, *ListedPullRequest.members_with(ListedPullRequest))):
+            for candidate in problems.values():
+                self._read[repo, selection, candidate.id] = tuple(sorted(
+                    (request for row, request in requests
+                     if isinstance(row, selection) and request.belongs_to(candidate)),
+                    key=lambda request: request.updated_at, reverse=True))
         return self._read[repo, kind, todo.id]
 
 
@@ -1556,9 +1560,6 @@ class ProblemOrder(LifecycleCapability, DeclaredFamily, StorySource, affix="Prob
         """This order sent again at ``at`` to a new owner, its first-call window kept."""
         raise ValueError("Only an undelivered order can change owner.")
 
-    def board_cells(self, todo: Todo) -> str:
-        return f"{self.finding.place()} | unassigned | - | - | -"
-
     def checked(self) -> CheckedProblemOrder:
         raise ValueError("This problem has no checked order.")
 
@@ -1836,13 +1837,6 @@ class CheckedProblemOrder(ProblemOrder, declared_name=None):
         default_factory=NoOrderDeletion
     )
     serves: Annotated[type[OrderPhase], WireOmitDefault()] = UnplannedPhase
-
-    def board_cells(self, todo: Todo) -> str:
-        last = todo.released[-1:]
-        owner = todo.holder or (f"unassigned: released from {last[0].previous.owner}: "
-                                f"{last[0].reason.text}")
-        check = json.dumps(FieldCodec.encode(self.check)).replace("|", "&#124;")
-        return f"{self.owner.to_wire()} | {owner} | {self.id} | {todo.review_at.clock()} | {check}"
 
     @property
     def phase(self) -> type[OrderPhase]:
@@ -3856,9 +3850,15 @@ class TodoStore(OwnerRequestStore):
         """Held work whose review timer is up, with its round; merged work waits on install."""
         held = self.held_for_commander(commander)
         pulls = ProgressRead(held)
+        progress = {todo.id: OrderProgress.read(todo, registry, pulls) for todo in held}
+        return self.timers_up_in(held, now, progress)
+
+    @staticmethod
+    def timers_up_in(held: Sequence[Todo], now: float,
+                     progress: Mapping[str, OrderProgress]) -> tuple[tuple[Todo, RecordedEventTime], ...]:
+        """Review rounds from this read's orders and PR facts, excluding installation waits."""
         return tuple((todo, up) for todo in held for up in todo.timer_up(now)
-                     if not todo.order.waiting_on_install(
-                         todo, {todo.id: OrderProgress.read(todo, registry, pulls)}))
+                     if not todo.order.waiting_on_install(todo, progress))
 
     def held_for_commander(self, commander: ThreadIncarnation) -> tuple[Todo, ...]:
         return self._select("creator=? AND creator_created=? AND assignment IS NOT NULL",
