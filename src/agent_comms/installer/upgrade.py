@@ -76,6 +76,7 @@ from agent_comms.installer.carry import (
     Carry,
     CarryChain,
     CarryOperation,
+    CarryRequest,
     MigrateOperation,
     RetireInputsOperation,
 )
@@ -599,12 +600,10 @@ class Stack:
         stack's interpreter; each step's answer in step order."""
         if not steps:
             return ()
-        with tempfile.TemporaryDirectory() as scratch:
-            result = Path(scratch) / "result.json"
+        request = CarryRequest(operation, steps)
+        with self.commands.exchange(FieldCodec.compact(FieldCodec.encode(request))) as (request_path, result):
             self.commands.run(self.python, "-m", step_worker.__name__,
-                              json.dumps(FieldCodec.encode(operation)), result,
-                              json.dumps([[step.declared_name, FieldCodec.encode(step)]
-                                          for step in steps]),
+                              request_path, result,
                               cwd=tree.path, env=self.environment(*tree.source_paths()))
             return operation.decode_answers(result.read_text())
 
