@@ -133,12 +133,49 @@ Three audits, one per catalog rung group, each finding read in the code and chec
 - `RecoveryCondition` matching a lifecycle by `declared_name` string equality across two families (`recovery_states.py:21-26`): `issubclass`.
 
 **6.4 Rosters and registries beside families (MEMB-1/2/4, about 120).**
-- Five hand-rolled `__init_subclass__` registries: `Carry.declared` (`installer/carry.py:45-54`), `ThreadRename.kinds` (`thread_management.py:557-567`, gone with 4.1), `BirthlessIncarnation.members` (`thread_identity.py:185-192`), `CliToolArguments.types` (`tool_calls.py:89-95`), `_start_phases`/`_end_events` (`pi_events.py:59-93`): `DeclaredFamily` or attributes through the MRO.
+- Four remaining hand-rolled `__init_subclass__` registration owners: `Carry.declared` (`installer/carry.py:42-58`), `ThreadRename.kinds` (`thread_management.py`; still present, not removed by 4.1 at this integration base), `BirthlessIncarnation.members` (`thread_identity.py:214-226`), and `_start_phases`/`_end_events` (`pi_events.py:59-93`). Move registration through the existing nominal mechanisms or derive behavior through the MRO; preserve each boundary's actual keys and consumers. `CliToolArguments.types` and its private hook are removed by the CLI argument slice below.
 - Preserve the independent Pi producer ABI contract: `PI_0_85_1_EVENT_KINDS` in `pi_native_backend.py` declares the pinned runtime's emitted kinds, while `NativePiEvent.known_kinds()` declares converter coverage. `AgentBackend.require_event_family` compares these independent answers and reports missing or extra converters. Deriving the expected producer kinds from converters would erase this check. Refactor the internal `_start_phases`/`_end_events` registration lifecycle without weakening producer/converter coverage; removal of the external manifest is not a completion condition.
-- `THREAD_CAPABILITIES` plus `serves_threads`/`serves_new_threads` flags plus `validate_backends` probing with `getattr` (`agent_backend.py:358-466`): `ThreadServingBackend(AgentBackend, Steers, Compacts)` and `NewThreadBackend`; ABC instantiation enforces the roles.
+- Backend role slice #2623 is published and reviewed, awaiting integration: it removes `THREAD_CAPABILITIES`, the serving flags, `validate_backends` and copied `unstarted_type` declarations. `ThreadServingBackend(Steers, Compacts, AgentBackend)` puts capability bases first so `AgentBackend`'s concrete refusal method cannot hide the abstract turn obligation; `NewThreadBackend.selected` derives the unique default. Preserve the independent producer/converter event comparison.
 - Display names re-typed from class names in about 40 places (`tools.py` labels, `notification_progress.py:45-157`, `todos.py:1502/2012/2088/2605/2675`, `display_order.py:76-136`, `relationships.py:382/397`, `turn_phase.py:169/218`, `config_options.py:192-194`, `input_attempt.py:400/440/447` `public_status`): derived from the declared name, literal only where the text differs.
 - Sigils `#`/`@` spelled by hand at about 22 sites (`catalog_document.py:61-232`, `channels.py`, `channel_targets.py`, `goal_presentation.py:71-72`, `goal_actions.py:305/318`, …): owned by `Tag.channel` and `ThreadTarget.mention`.
 - Store and file names restated outside their class: `root / "wire"` in about 20 places across 17 modules (the virtual bus plan's done-grep for `_wire_lock_path` misses every `_store_lock(root / "wire")`; its grep gains that pattern), `~/.local/state/agent-comms` six times, bridge inbox dirs, `"registry.json"` at `installer/upgrade.py:566`, `".registry-owner-guard"` at `goal_history.py:208`, `active-route.json` five times, Pi `auth.json` in four modules: `X.path_in(root)` and one state-home owner.
+
+CLI argument slice (#2626, base `acb2ddd0e`, 2026-10-23): the existing
+`RegisteredWireMeta` now owns argument-model registration after Pydantic/ABC
+construction. Each concrete declaration supplies its genuine external
+`cli_names` tuple as the registry key; decode derives matching shapes from
+that registry without retaining another alias map. Both production consumers,
+Claude `ToolUse.call` and OpenCode `ToolState.call`, keep the shared decode
+entrypoint. The seven shapes retain all 13 case-sensitive external spellings,
+extra input, canonical previews and edit patches. Unknown names and invalid
+arguments remain the original call; validation refusal belongs to its runtime.
+Abstract specializations cannot overwrite concrete aliases. The existing
+registry rejects duplicate tuples at declaration; overlapping nonidentical
+tuples raise an explicit ambiguity at decode, before argument validation can
+turn the conflict into an ordinary refused call. Overlap is not checked at
+declaration. A new shape still needs only its class and alias declaration;
+the improvement is shared declaration lifecycle and collision behavior, not
+a claimed reduction from multiple authored rosters.
+
+NRA before/after source receipts cover Core/hooks/tests/tools, paired Toad and
+the installed metaclass-registry/Pydantic source: 1,643/1,644 modules,
+7,434/7,438 original classes, 7,144 projected classes in each, zero parse
+omissions. The 290/294 unprojected originals remain explicit; the four added
+classes are function-local declaration controls. Dynamic source projection
+does not prove their runtime behavior. The compact index also leaves the
+`AutoRegisterMeta` package re-export unresolved as a base of
+`RegisteredWireMeta`; source inspection and a fresh-process runtime MRO read
+confirm its composition with `ModelMetaclass`. Focused source checks pass 31 cases
+(0.63s), exercising real Claude/OpenCode models, edit presentation and actual
+fresh declaration lifecycles without patching registry state. The first run
+passed 26 and failed two new assertions that incorrectly put call identity on
+search preview records; identity is checked on its owning `ToolCall` and
+emitted transcript instead. Receipts remain in the owned
+`cli-tool-argument-family` scratch directory. Fresh CLI/UI-model import checks
+also pass (two cases, 3.73s). This slice is a published draft,
+not merged, installed or live-qualified. Shared phase proof belongs to its bus
+owner; the other registries and the remaining name/sigil/path work keep 6.4
+open.
 
 ### Wave 7: records where parameter lists and dicts stand in
 
