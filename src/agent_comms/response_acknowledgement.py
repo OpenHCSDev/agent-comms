@@ -13,10 +13,19 @@ from agent_comms.coordination_contracts import (
     MAX_IDENTIFIER_CHARS, require_bounded, require_nonempty, validate_execution_id,
 )
 from agent_comms.errors import RelationViolationError
-from agent_comms.field_codec import FieldCodec, MalformedRecord, NullMember, RecordMember, SubclassUnion
+from agent_comms.field_codec import (
+    FieldCodec,
+    MalformedRecord,
+    NullMember,
+    RecordMember,
+    SubclassUnion,
+)
+
 
 def _canonical(value: object) -> bytes:
-    return FieldCodec.compact(value, sort_keys=True, ensure_ascii=False, allow_nan=False).encode("utf-8")
+    return FieldCodec.compact(
+        value, sort_keys=True, ensure_ascii=False, allow_nan=False,
+    ).encode("utf-8")
 
 
 def public_envelope_digest(record: Mapping[str, object]) -> str:

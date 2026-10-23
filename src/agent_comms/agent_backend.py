@@ -136,7 +136,18 @@ class InputContent:
     contributions: tuple[InputContributionCoordinates, ...] = ()
 
 
-class TurnInbox(asyncio.Queue["TurnInboxItem"]):
+class TurnInboxItem(ABC):
+    """An inbox item carries its input identities; the forwarding owner dispatches it."""
+
+    @property
+    def carried_inputs(self) -> tuple[InputId, ...]:
+        return ()
+
+    def refuse(self, inputs, turn):
+        inputs.refuse(turn, self.carried_inputs)
+
+
+class TurnInbox(asyncio.Queue[TurnInboxItem]):
     """The live inbox parks its head until the existing observer sees READY."""
     def __init__(self):
         super().__init__()
@@ -164,17 +175,6 @@ class TurnInbox(asyncio.Queue["TurnInboxItem"]):
         # Park under the shared wire lock, before READY can be published.
         self.ready.clear()
         self.begin(item)
-
-
-class TurnInboxItem(ABC):
-    """An inbox item carries its input identities; the forwarding owner dispatches it."""
-
-    @property
-    def carried_inputs(self) -> tuple[InputId, ...]:
-        return ()
-
-    def refuse(self, inputs, turn):
-        inputs.refuse(turn, self.carried_inputs)
 
 
 @dataclass(frozen=True, kw_only=True)

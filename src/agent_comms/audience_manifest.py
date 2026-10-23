@@ -42,7 +42,9 @@ def _bounded_text(value: str, field: str, *, thread_name: bool = False) -> None:
 
 def _canonical_json(value: object, *, limit: int) -> bytes:
     try:
-        encoded = FieldCodec.compact(value, sort_keys=True, ensure_ascii=False, allow_nan=False).encode("utf-8")
+        encoded = FieldCodec.compact(
+            value, sort_keys=True, ensure_ascii=False, allow_nan=False,
+        ).encode("utf-8")
     except ValueError as error:  # NaN, or a lone surrogate the UTF-8 encoding refuses
         raise MalformedRecord("audience data cannot be canonically encoded") from error
     if len(encoded) > limit:
