@@ -14,6 +14,7 @@ from dataclasses import dataclass, field, fields, replace
 from functools import cached_property
 from typing import TYPE_CHECKING, Callable, ClassVar, Self, TypeVar, Annotated
 
+from metaclass_registry import AutoRegisterMeta, RegistryConfig
 
 from agent_comms.participant_identity import ParticipantIdentity
 from .agent_backend import AgentBackend, RuntimeLocation
@@ -211,19 +212,16 @@ class CommanderForkIdentity(RecordedThreadIncarnation):
         return self.authority
 
 
-class BirthlessIncarnation(ThreadIncarnation):
+class BirthlessIncarnation(ThreadIncarnation, metaclass=AutoRegisterMeta):
     """A member whose wire birth is a declared mark, not recorded evidence; never a lookup.
 
     Each member declares its mark in ``WIRE_BIRTH``; the record decodes a mark to its member."""
 
     WIRE_BIRTH: ClassVar[float]
-    members: ClassVar[dict[float, type[BirthlessIncarnation]]] = {}
-
-    def __init_subclass__(cls, **kwargs: object) -> None:
-        super().__init_subclass__(**kwargs)
-        if cls.WIRE_BIRTH in BirthlessIncarnation.members:
-            raise TypeError(f"Wire birth {cls.WIRE_BIRTH} is already declared")
-        BirthlessIncarnation.members[cls.WIRE_BIRTH] = cls
+    __registry_config__: ClassVar[RegistryConfig] = RegistryConfig(
+        registry_dict={}, key_attribute="WIRE_BIRTH", registry_name="birthless incarnation",
+    )
+    __registry__: ClassVar[dict[float, type[BirthlessIncarnation]]]
 
     @property
     def wire_birth(self) -> float:
@@ -357,8 +355,8 @@ class ThreadIncarnationRecord:
     created_at: float
 
     def incarnation(self) -> ThreadIncarnation:
-        if self.created_at in BirthlessIncarnation.members:
-            return BirthlessIncarnation.members[self.created_at].recorded_as(self.name)
+        if member := BirthlessIncarnation.__registry__.get(self.created_at):
+            return member.recorded_as(self.name)
         return RecordedThreadIncarnation(self.name, self.created_at)
 
     @classmethod
