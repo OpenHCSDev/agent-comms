@@ -71,13 +71,12 @@ from .cli_result import CliResult
 from .command import Command
 from .commander.config import (
     CommanderChoice,
-    CommanderConfigFile,
-    CommanderRecord,
     KeptCommander,
     KeptRepos,
     RepoChoice,
 )
 from .comms import Comms, client_wire
+from .registry_document import CommanderProject
 from .config_options import (
     ConfigOptions,
     ModelConfigOption,
@@ -683,7 +682,7 @@ class SubagentsImportedResult(CliResult):
 
 @dataclass(frozen=True)
 class InstallResult(CliResult):
-    config: CommanderConfigFile
+    config: CommanderProject
     registered: dict[str, tuple[str, ...]]
 
 
@@ -1718,8 +1717,10 @@ class InstallCliCommand(CliCommand):
     def apply(self, ctx: Comms) -> CliResult:
         """The install child's last step, on the bus it carried or created."""
         home = Path.home()
-        record = self.commander.configured(CommanderRecord.read(ctx.root), self.repos, ctx.root, home)
-        return InstallResult(record.write(home), {
+        snapshot = ctx.registry.snapshot()
+        project = self.commander.configured(snapshot.commander_project, self.repos, snapshot)
+        ctx.registry.set_commander_project(project)
+        return InstallResult(project, {
             type(harness).declared_name: harness.register(ctx, self.project)
             for harness in Harness.present(home)})
 

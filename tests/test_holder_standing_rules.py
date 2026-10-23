@@ -16,7 +16,6 @@ from agent_comms import agent_events as events
 from agent_comms.bus import Bus
 from agent_comms.bus_publication import AgentOrigin, HumanOrigin
 from agent_comms.child_process import ProcessIdentity
-from agent_comms.commander.config import CommanderConfig
 from agent_comms.commander.order import Commander, OrderFile, SayVerb, SendVerb
 from agent_comms.commander.questions import UnansweredBurst, UnansweredUnitAsks
 from agent_comms.commander.standing import (
@@ -555,7 +554,8 @@ def test_send_and_check_accept_a_deletion_check_on_fresh_main(
     local.write_text(source.main_source + '# Uncommitted user work\n')
     before = local.read_bytes()
     head = source.git(source.checkout, 'rev-parse', 'HEAD')
-    worktrees = configured_repository(held_bus, source).worktrees
+    configured_repository(held_bus, source)
+    worktrees = held_bus.registry.storage_rule.checkout_base
     original = held_bus.goals.todos.get('P1')
     check = OrderCheck(str(source.checkout), 'grep -c obsolete owner.py', CountCheckResult(0))
     order = replace(original.order.checked(), id='delete-obsolete', check=check,
@@ -568,7 +568,7 @@ def test_send_and_check_accept_a_deletion_check_on_fresh_main(
     order_file.write_text(json.dumps(FieldCodec.encode(document)))
 
     def cli(*arguments):
-        run = commander('--config', str(CommanderConfig.path(durable_home)), 'order', *arguments)
+        run = commander('--root', str(held_bus.root), 'order', *arguments)
         assert run.returncode == 0, run.stdout + run.stderr
         print(run.stdout)
 

@@ -284,18 +284,16 @@ def root(tmp_path: Path) -> Path:
 
 @pytest.fixture
 def configured_repository(durable_home):
-    """Own the temporary commander's config and its real plan-bearing checkout."""
-    from agent_comms.commander.config import CommanderConfig
+    """Declare the temporary commander on its bus and use its real plan-bearing checkout."""
+    from agent_comms.commander.order import Commander
     from agent_comms.repo import Repo
 
     repository = Repo.of(Path(__file__).resolve().parents[1])
 
-    def configure(bus: Comms, *check_repositories: Repo) -> CommanderConfig:
-        config = CommanderConfig.on_machine(
-            'lead', (*check_repositories, repository), bus.root, durable_home,
+    def configure(bus: Comms, *check_repositories: Repo) -> Commander:
+        return Commander.on_root(
+            'lead', (*check_repositories, repository), bus.root,
         )
-        config.write(durable_home)
-        return config
 
     return configure
 

@@ -13,14 +13,13 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass
+from pathlib import Path
 from typing import ClassVar
 
-from pydantic import ValidationError
-
 from agent_comms.behaviour_patterns import PostmortemFailure
-from agent_comms.commander.config import CommanderConfig
 from agent_comms.commander.package import CommanderPackage
 from agent_comms.commander.rule_file import RuleFile
+from agent_comms.registry_store import RegistryStore
 from agent_comms.todos import Slop
 from agent_comms_hooks import ClaudeHookProgram
 from agent_comms_hooks.reread import CommanderDeck
@@ -31,19 +30,16 @@ from agent_comms_hooks.watch import WatchClaim
 class CommanderStart(CommanderDeck):
     part_chars: ClassVar[int] = 60_000
     """The most characters one Read of a part returns in full."""
-    unreadable: ClassVar[tuple[type[Exception], ...]] = (
-        FileNotFoundError, PermissionError, IsADirectoryError, UnicodeError, ValidationError,
-    )
-    """How the installed commander configuration fails to read; the sources still go out."""
-
     def due(self) -> bool:
         """Every session the commander's bridge binding does not rule out: a session bound to
         another bus thread (a Claude unit) never gets the commander's sources."""
-        try:
-            commander = CommanderConfig.read(CommanderConfig.path()).commander
-        except self.unreadable:
-            return True
-        return WatchClaim(self.session_id).state().may_serve(commander)
+        for record in WatchClaim(self.session_id).state().bindings():
+            snapshot = RegistryStore.at(Path(record.root)).read_snapshot_unlocked()
+            subject = snapshot.require(record.bus)
+            if not any(thread.incarnation == subject.incarnation
+                       for thread in snapshot.commander_project.commanders(snapshot)):
+                return False
+        return True
 
     def take(self) -> tuple[str, ...]:
         """The order to read every part, once; the deck carries the sources after it."""
@@ -69,7 +65,7 @@ class CommanderStart(CommanderDeck):
             old.unlink()
         chunks: list[list[str]] = [[]]
         size = 0
-        for line in self.sources().splitlines(keepends=True):
+        for line in self.sources(self.notice()).splitlines(keepends=True):
             if size + len(line) > self.part_chars and chunks[-1]:
                 chunks.append([])
                 size = 0
@@ -106,10 +102,10 @@ class CommanderStart(CommanderDeck):
         return tuple(found)
 
     @classmethod
-    def sources(cls) -> str:
+    def sources(cls, notice: str = "Commander instructions.") -> str:
         return "\n\n".join(
             (
-                cls.notice(),
+                notice,
                 CommanderPackage.voice().read_text(encoding="utf-8", newline=""),
                 CommanderPackage.indictment().read_text(encoding="utf-8", newline=""),
                 "# Recorded failures\n\n" + PostmortemFailure.catalog(),
@@ -119,12 +115,13 @@ class CommanderStart(CommanderDeck):
             )
         )
 
-    @staticmethod
-    def notice() -> str:
-        try:
-            return f"Commander: {CommanderConfig.read(CommanderConfig.path()).commander}."
-        except CommanderStart.unreadable:
-            return "No commander is configured (installed configuration is missing or invalid)."
+    def notice(self) -> str:
+        names = []
+        for record in WatchClaim(self.session_id).state().bindings():
+            snapshot = RegistryStore.at(Path(record.root)).read_snapshot_unlocked()
+            names.extend(thread.name for thread in snapshot.commander_project.commanders(snapshot))
+        return ("Commander: " + ", ".join(names) + "." if names
+                else "No commander project is registered for this session.")
 
 
 class SkillText(ClaudeHookProgram):

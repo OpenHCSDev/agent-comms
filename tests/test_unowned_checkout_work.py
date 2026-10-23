@@ -13,7 +13,7 @@ import pytest
 from cli_command import core
 from order_scope_fixture import FIX_SCOPE
 from agent_comms.change_report import FileLine
-from agent_comms.commander.config import CommanderConfig
+from agent_comms.threads import ParkedThreadWorkState, ReadyThreadWorkState
 from agent_comms.commander.standing import (
     CheckoutHeldWheelSpin,
     ReassignedWheelSpin,
@@ -210,15 +210,14 @@ def test_dirty_then_unpushed_then_pushed_linked_checkout(checkout_bus: Comms, tm
             assert git(checkout, 'status', '--porcelain') == ''
             assert_retained(c)
             git(checkout, 'push', '-q', 'origin', 'worker-work')
-            config = CommanderConfig.read_root(root)
-            config.model_copy(update={'parked': frozenset({'idle'})}).write(tmp_path / 'copy-home')
+            c.registry.set_work_state('idle', ParkedThreadWorkState())
             waiting = UnownedWheelSpin.violations(c, 'lead')
             assert len(waiting) == 1
             assert isinstance(waiting[0], WaitingUnownedWheelSpin)
             UnownedOrderWatch().watch_pass(lambda: nullcontext(c))
             assert c.goals.todos.get('P2').holder is None
             beat()
-            config.write(tmp_path / 'copy-home')
+            c.registry.set_work_state('idle', ReadyThreadWorkState())
             available = UnownedWheelSpin.violations(c, 'lead')
             assert len(available) == 1
             assert isinstance(available[0], ReassignedWheelSpin)

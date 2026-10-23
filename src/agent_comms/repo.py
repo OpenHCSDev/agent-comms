@@ -4,19 +4,34 @@ from __future__ import annotations
 
 import shutil
 import subprocess
+from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Annotated, Self
 
 from pydantic import BaseModel, ConfigDict, InstanceOf, PlainSerializer, PlainValidator
 
+from .field_codec import FieldCodec, WireValue
 from .repository_name import RepositoryName
 
 if TYPE_CHECKING:
     from .todos import Todo
 
 
-class Repo(BaseModel):
+class RepositorySelection(ABC):
+    """A repository choice is applied by the native project it configures."""
+
+    @abstractmethod
+    def applied(self, recorded: tuple[Repo, ...]) -> tuple[Repo, ...]: ...
+
+    @abstractmethod
+    def founding(self, commander: str) -> tuple[Repo, ...]: ...
+
+    @abstractmethod
+    def without_commander(self) -> None: ...
+
+
+class Repo(BaseModel, WireValue):
     """A repository the fleet works on: its check checkout, its GitHub name and its source root."""
 
     model_config = ConfigDict(frozen=True)
@@ -30,6 +45,32 @@ class Repo(BaseModel):
         ]
     ]
     source: str = "src"
+
+    def to_wire(self) -> dict[str, object]:
+        return self.model_dump(mode="json")
+
+    @classmethod
+    def from_wire(cls, data: object) -> Self:
+        return cls.model_validate_json(FieldCodec.compact(data))
+
+    @classmethod
+    def selected(cls, repositories: tuple[Repo, ...], name: str) -> Repo:
+        for repository in repositories:
+            if repository.named(name):
+                return repository
+        configured = ", ".join(
+            f"{repository.github.to_wire()} ({repository.checkout})"
+            for repository in repositories
+        )
+        raise ValueError(f"Unknown repository {name!r}. Registered repositories: {configured}. "
+                         "Set repositories with agent-comms install --repos.")
+
+    @classmethod
+    def declaring(cls, repositories: tuple[Repo, ...], module: str) -> Repo:
+        for repository in repositories:
+            if (repository.checkout / repository.module_file(module)).is_file():
+                return repository
+        raise ValueError(f"No registered repository holds {module}")
 
     def module_file(self, module: str) -> Path:
         """Where the dotted ``module`` sits under this checkout's source root, relative to it."""

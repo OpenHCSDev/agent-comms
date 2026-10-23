@@ -9,7 +9,10 @@ import pytest
 from pathlib import Path
 
 from agent_comms.behaviour_patterns import PostmortemFailure
-from agent_comms.commander.config import CommanderConfig
+from agent_comms.comms import Comms
+from agent_comms.registry_document import RegisteredCommanderProject
+from agent_comms.thread_model import DeclaredModel
+from agent_comms_hooks.watch import WatchClaim, WatchRecord
 from agent_comms.commander.package import CommanderPackage
 from agent_comms.commander.rule_file import RuleFile
 from agent_comms.todos import Slop
@@ -18,28 +21,11 @@ from agent_comms_hooks.skill import CommanderStart
 
 
 @pytest.mark.parametrize("source", ["startup", "resume", "compact"])
-@pytest.mark.parametrize("configuration", ["configured", "missing", "invalid"])
-def test_session_start_reads_all_package_files_without_a_bus(tmp_path, source, configuration):
+def test_session_start_reads_all_package_files_without_a_bus(tmp_path, source):
     home = tmp_path / "home"
     home.mkdir()
     bus = tmp_path / "bus"
     bus.mkdir()
-    path = CommanderConfig.path(home)
-    if configuration != "missing":
-        path.parent.mkdir(parents=True)
-        if configuration == "invalid":
-            path.write_text("{invalid JSON")
-        else:
-            config = CommanderConfig(
-                commander="fresh-commander",
-                root=bus,
-                state=tmp_path / "state",
-                repos=(),
-                worktrees=tmp_path / "worktrees",
-                scratch=tmp_path / "scratch",
-                disk=tmp_path,
-            )
-            path.write_text(config.model_dump_json())
     transcript = tmp_path / "session.jsonl"
     transcript.write_text("")
     result = subprocess.run(
@@ -59,11 +45,7 @@ def test_session_start_reads_all_package_files_without_a_bus(tmp_path, source, c
     parts = [Path(line) for line in context.splitlines()[1:]]
     assert parts == sorted(transcript.with_suffix(".reread").iterdir())
     text = "".join(part.read_text() for part in parts)
-    expected_notice = (
-        "Commander: fresh-commander."
-        if configuration == "configured"
-        else "No commander is configured"
-    )
+    expected_notice = "No commander project is registered for this session."
     assert text.startswith(expected_notice)
     assert text.split("\n\n", 1)[1] == "\n\n".join((
         CommanderPackage.voice().read_text(),
@@ -157,36 +139,33 @@ def test_failure_catalog_numbers_every_evidenced_member_once():
 
 
 
-def test_a_session_bound_to_another_bus_thread_gets_no_commander_sources(tmp_path, monkeypatch):
-    from agent_comms_hooks.watch import WatchClaim, WatchRecord
+@pytest.fixture
+def commander_bus(tmp_path):
+    bus = Comms(tmp_path / "bus")
+    for name in ("claude-code", "unit-x"):
+        bus.registry.declare(bus.registry.new_thread(
+            name, frozenset(), str(tmp_path),
+            model=DeclaredModel("anthropic/claude-opus-4-6")))
+    bus.registry.set_commander_project(RegisteredCommanderProject(
+        bus.registry.require("claude-code").incarnation, ()))
+    return bus
 
+
+def test_a_session_bound_to_another_bus_thread_gets_no_commander_sources(
+        tmp_path, monkeypatch, commander_bus):
     monkeypatch.setenv("HOME", str(tmp_path / "home"))
-    config = CommanderConfig.path()
-    config.parent.mkdir(parents=True)
-    config.write_text(CommanderConfig(
-        commander="claude-code", root=tmp_path, state=tmp_path, repos=(),
-        worktrees=tmp_path / "worktrees", scratch=tmp_path / "scratch", disk=tmp_path,
-    ).model_dump_json())
     transcript = tmp_path / "session.jsonl"
     transcript.write_text("")
     record = {"hook_event_name": "SessionStart", "session_id": "s", "transcript_path": str(transcript)}
-    WatchClaim("s").enrol(WatchRecord("unit-x", str(tmp_path), ()))
+    WatchClaim("s").enrol(WatchRecord("unit-x", str(commander_bus.root), ()))
     assert CommanderStart.decode(record).take() == ()
     assert not CommanderStart.decode(record).parts.exists()
 
 
-def test_the_commander_session_gets_its_sources(tmp_path, monkeypatch):
-    from agent_comms_hooks.watch import WatchClaim, WatchRecord
-
+def test_the_commander_session_gets_its_sources(tmp_path, monkeypatch, commander_bus):
     monkeypatch.setenv("HOME", str(tmp_path / "home"))
-    config = CommanderConfig.path()
-    config.parent.mkdir(parents=True)
-    config.write_text(CommanderConfig(
-        commander="claude-code", root=tmp_path, state=tmp_path, repos=(),
-        worktrees=tmp_path / "worktrees", scratch=tmp_path / "scratch", disk=tmp_path,
-    ).model_dump_json())
     transcript = tmp_path / "session.jsonl"
     transcript.write_text("")
-    WatchClaim("s").enrol(WatchRecord("claude-code", str(tmp_path), ()))
+    WatchClaim("s").enrol(WatchRecord("claude-code", str(commander_bus.root), ()))
     assert CommanderStart.decode(
         {"hook_event_name": "SessionStart", "session_id": "s", "transcript_path": str(transcript)}).take()
