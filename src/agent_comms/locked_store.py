@@ -144,8 +144,9 @@ class RootFile:
 
     @classmethod
     def bus_root(cls, path: Path) -> Path:
-        """The bus root a file of this declaration at ``path`` lives under."""
-        return path.parents[len(Path(cls.root_directory).parts)]
+        """The bus root a file of this declaration at ``path`` lives under: one parent per
+        directory its declared location names, the filename's own directories included."""
+        return path.parents[len((Path(cls.root_directory) / cls.filename).parts) - 1]
 
     @classmethod
     def member_paths(cls, path: Path) -> frozenset[Path]:
