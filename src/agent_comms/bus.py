@@ -303,6 +303,12 @@ class BusReader(RouteCounts, ABC):
             descending=descending, sequences=sequences,
         )
 
+    def unanswered_references(
+        self, sequences: tuple[int, ...], responders: frozenset[str],
+    ) -> tuple[MessageReference, ...]:
+        with self.observing() as db:
+            return AnsweredSource.unanswered_references(db, sequences, responders)
+
     def unanswered_page(
         self, scope: RepliesDisplayScope, *,
         since: float, before: float, upper: int, limit: int = 100,

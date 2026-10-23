@@ -508,11 +508,9 @@ class GoalOrder(DeclaredFamily, affix="GoalOrder"):
         """Only a thread holding owner requests records an owner directive."""
         return goal
 
-    def directive_messages(self, goals: Goals) -> tuple[Message, ...]:
-        return ()
-
-    def overdue_directives(self, goal: Goal, goals: Goals, owner: ThreadIncarnation,
-                           now: float) -> tuple[tuple[RequestDirective, Message], ...]:
+    def directive_messages(
+        self, source: BusReader, responders: frozenset[str],
+    ) -> tuple[tuple[RequestDirective, Message], ...]:
         return ()
 
     @abstractmethod
@@ -583,27 +581,14 @@ class RequestGoalOrder(GoalOrder):
                 self, directives=(*self.directives, directive.directive())))
         return directive.request(goal, ctx)
 
-    def directive_messages(self, goals: Goals) -> tuple[Message, ...]:
-        """Every directive's original, read from one snapshot of the bus."""
-        source: BusReader
-        with goals.bus.bus.reading() as source:
-            return tuple(directive.original(source) for directive in self.directives)
-
-    def overdue_directives(self, goal: Goal, goals: Goals, owner: ThreadIncarnation,
-                           now: float) -> tuple[tuple[RequestDirective, Message], ...]:
-        """Each directive past its deadline that the owner has not answered, with its original;
-        the originals and every reply to them come from one snapshot of the bus."""
-        due = tuple(directive for directive in self.directives if directive.deadline < now)
-        if not due:
-            return ()
-        source: BusReader
-        with goals.bus.bus.reading() as source:
-            originals = tuple((directive, directive.original(source)) for directive in due)
-            answered = {answer for reply in source.replies(tuple(
-                message.reference for _, message in originals))
-                if reply.sender == owner.name for answer in reply.answers}
-        return tuple((directive, message) for directive, message in originals
-                     if message.reference not in answered)
+    def directive_messages(
+        self, source: BusReader, responders: frozenset[str],
+    ) -> tuple[tuple[RequestDirective, Message], ...]:
+        """Only still-unanswered directives load originals; replies stay in the index."""
+        unanswered = {reference.seq for reference in source.unanswered_references(
+            tuple(directive.seq for directive in self.directives), responders)}
+        return tuple((directive, directive.original(source)) for directive in self.directives
+                     if directive.seq in unanswered)
 
     def open_requests(
         self, goal: Goal, goals: Goals, owner: ThreadIncarnation

@@ -977,28 +977,26 @@ class DirectiveVerb(CommanderVerb):
         ),
     ] = ()
 
-    def named(self, ctx: Commander) -> tuple[Message, ...]:
-        """The named messages still open. A name that is no longer open (answered, or out of
-        the owed set since it was read) needs no answer and is dropped, never refused: the
-        owed set moves while the commander writes, and refusing the whole verb over a closed
-        name livelocked the gate while a chokehold held the fleet (2026-10-21 22:12). A name
-        that is wrong leaves its real message owed, and the gate below refuses that."""
-        return tuple(message for message in OwedAnswer.answerable(ctx.comms, self.who(ctx))
-                     if message.message_id in self.answers)
+    def run(self, ctx: Commander) -> None:
+        """Resolve names and uncovered debt once, then pass the exact references to the action.
 
-    def answer_references(self, ctx: Commander) -> tuple[MessageReference, ...]:
-        return tuple(message.reference for message in self.named(ctx))
-
-    def gate(self, ctx: Commander) -> None:
-        named = self.named(ctx)
-        owed = tuple(rule for rule in OwedAnswer.overdue(ctx.comms, self.who(ctx))
-                     if not rule.answered_by(named))
+        Closed or unknown names are dropped: a stale name must not livelock an otherwise
+        valid answer. A wrong name still leaves its real debt uncovered and refuses the action.
+        """
+        now = time.time()
+        opened = OwedAnswer.opened(ctx.comms, self.who(ctx))
+        named = tuple(rule.message for rule in opened
+                      if rule.message.message_id in self.answers)
+        owed = tuple(rule for rule in opened if rule.due(now) and not rule.answered_by(named))
         if owed:
             lines = '\n'.join(f'{rule.line()}: {rule.message.body[:80]}' for rule in owed)
             sys.exit('REFUSED, nothing recorded: messages owed an answer:\n' + lines
                      + '\nReply to the original message or use --answers MESSAGE_ID. An answer '
                      'that must wait is sent now: "waiting on X, owner Y".')
-        super().gate(ctx)
+        self.respond(ctx, tuple(dict.fromkeys(message.reference for message in named)))
+
+    @abstractmethod
+    def respond(self, ctx: Commander, references: tuple[MessageReference, ...]) -> None: ...
 
 
 class OrderVerb(CommanderVerb):
@@ -1042,10 +1040,10 @@ class SendVerb(OrderVerb, DirectiveVerb):
         ),
     ] = NoSourceReference()
 
-    def run(self, ctx: Commander) -> None:
+    def respond(self, ctx: Commander, references: tuple[MessageReference, ...]) -> None:
         ctx.send(self.unit, OrderFile.read(Path(self.body_file).read_text()), clean=self.clean,
              reassign=self.reassign, traced=self.traced,
-             disk=self.disk, answers=self.answer_references(ctx))
+             disk=self.disk, answers=references)
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -1068,10 +1066,10 @@ class StrikeVerb(OrderVerb, DirectiveVerb):
         ),
     ] = "review"
 
-    def run(self, ctx: Commander) -> None:
+    def respond(self, ctx: Commander, references: tuple[MessageReference, ...]) -> None:
         ctx.strike(self.unit, self.pid, self.why, self.caught,
                    evidence=(FileLine.from_wire(self.where),),
-                   answers=self.answer_references(ctx))
+                   answers=references)
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -1272,8 +1270,8 @@ class SayVerb(OrderVerb, DirectiveVerb):
         str, Argument(flags=("body_file",), options={"metavar": "BODYFILE"})
     ]
 
-    def run(self, ctx: Commander) -> None:
-        ctx.say(self.units, self.body_file, self.answer_references(ctx))
+    def respond(self, ctx: Commander, references: tuple[MessageReference, ...]) -> None:
+        ctx.say(self.units, self.body_file, references)
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -1300,9 +1298,9 @@ class ProblemVerb(OrderVerb, DirectiveVerb):
     ]
     disk: Annotated[bool, Argument(flags=("--disk",))] = False
 
-    def run(self, ctx: Commander) -> None:
+    def respond(self, ctx: Commander, references: tuple[MessageReference, ...]) -> None:
         ctx.problem(self.order, self.to, self.where, self.disk,
-                    self.answer_references(ctx))
+                    references)
 
 
 @dataclass(frozen=True, kw_only=True)

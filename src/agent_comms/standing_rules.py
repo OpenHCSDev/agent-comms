@@ -10,7 +10,7 @@ import logging
 import time
 from abc import abstractmethod
 from collections import Counter, defaultdict
-from collections.abc import Iterable, Sequence
+from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, ClassVar, Self
@@ -22,9 +22,11 @@ from agent_comms.repo import Repo
 from agent_comms.service_passes import ServicePassStore
 
 if TYPE_CHECKING:
+    from agent_comms.bus import BusReader
     from agent_comms.comms import Comms
     from agent_comms.goals import RequestDirective
     from agent_comms.messages import Message
+    from agent_comms.registry_document import RegistrySnapshot
     from agent_comms.storage_rules import MemoryUse, StorageRule
     from agent_comms.thread_identity import ThreadIncarnation
     from agent_comms.todos import Todo
@@ -169,24 +171,31 @@ class OwedAnswer(IndependentStandingRule, declared_name=None):
 
     @classmethod
     @abstractmethod
-    def open_messages(cls, comms: Comms, commander: str) -> tuple[Message, ...]:
-        """This member's messages an action may answer now, inside their window or past it."""
+    def read_open(cls, source: BusReader, snapshot: RegistrySnapshot,
+                  held: Mapping[ThreadIncarnation, Sequence[Todo]], commander: str) -> tuple[Self, ...]:
+        """This member's open debts, inside their window or past it, on one bus cut."""
+
+    def due(self, now: float) -> bool:
+        return True
 
     @classmethod
-    def overdue(cls, comms: Comms, commander: str) -> tuple[Self, ...]:
-        """The message gate reads message debt, without classifying checkouts or runtimes."""
-        return tuple(rule for member in cls.members_with(cls)
-                     for rule in member.violations(comms, commander))
+    def violations(cls, comms: Comms, commander: str) -> tuple[Self, ...]:
+        now = time.time()
+        return tuple(rule for rule in cls.opened(comms, commander) if rule.due(now))
+
+    @classmethod
+    def opened(cls, comms: Comms, commander: str) -> tuple[Self, ...]:
+        # Orders and goal directives name already-committed messages. Capture them
+        # before the bus cut so every recorded reference exists in that cut.
+        held = cls.holders(comms, commander)
+        snapshot = comms.registry.snapshot()
+        with comms.bus.bus.reading() as source:
+            return tuple(rule for member in cls.members_with(cls)
+                         for rule in member.read_open(source, snapshot, held, commander))
 
     def answered_by(self, named: tuple[Message, ...]) -> bool:
         """Whether an action naming these open messages answers this one."""
         return any(message.message_id == self.message.message_id for message in named)
-
-    @classmethod
-    def answerable(cls, comms: Comms, commander: str) -> tuple[Message, ...]:
-        """Every message an action may name with --answers, read from each member once."""
-        return tuple(message for member in cls.members_with(OwedAnswer)
-                     for message in member.open_messages(comms, commander))
 
 
 @dataclass(frozen=True)
@@ -323,20 +332,17 @@ class DirectiveUnacted(OwedAnswer, DatedStandingRule):
     directive: RequestDirective
 
     @classmethod
-    def violations(cls, comms: Comms, commander: str) -> tuple[Self, ...]:
-        thread, now = comms.registry.require(commander), time.time()
+    def read_open(cls, source: BusReader, snapshot: RegistrySnapshot,
+                  held: Mapping[ThreadIncarnation, Sequence[Todo]], commander: str) -> tuple[Self, ...]:
+        thread = snapshot.require(commander)
         return tuple(
             cls(original, goal.id, directive)
             for goal in thread.goal.active()
-            for directive, original in goal.order.overdue_directives(
-                goal, comms.goals, thread.incarnation, now
-            )
+            for directive, original in goal.order.directive_messages(source, snapshot.names_for(commander))
         )
 
-    @classmethod
-    def open_messages(cls, comms: Comms, commander: str) -> tuple[Message, ...]:
-        return tuple(message for goal in comms.registry.require(commander).goal.active()
-                     for message in goal.order.directive_messages(comms.goals))
+    def due(self, now: float) -> bool:
+        return self.directive.deadline < now
 
     def began(self) -> float:
         return self.directive.deadline

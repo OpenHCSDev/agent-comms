@@ -127,6 +127,31 @@ class AnsweredSource(TypedTable, BusProjectionTables):
     seq: Annotated[int, Column(primary_key=True)]
 
     @classmethod
+    def unanswered_references(
+        cls, db: sqlite3.Connection, sequences: tuple[int, ...], responders: frozenset[str],
+    ) -> tuple[MessageReference, ...]:
+        """Select recorded originals before loading any message or reply content."""
+        if not sequences:
+            return ()
+        for seq in sequences:
+            MessageIdentitySource.require(db, seq=seq)
+        asking = ",".join("?" for _ in sequences)
+        replying = ",".join("?" for _ in responders)
+        identity = MessageIdentitySource.declared_name
+        reference = MessageIdentitySource.reference_sql("asked")
+        rows = db.execute(
+            f'SELECT asked.seq, asked.message_id FROM "{identity}" AS asked '
+            f'WHERE asked.seq IN ({asking}) AND NOT EXISTS ('
+            f'SELECT 1 FROM "{cls.declared_name}" AS answered '
+            f'JOIN "{identity}" AS author ON author.seq=answered.seq '
+            + cls._sql(f'WHERE answered.{{original}}={reference} ')
+            + f'AND author.sender IN ({replying})) ORDER BY asked.seq',
+            (*sequences, *responders),
+        )
+        return tuple(MessageReference(FieldCodec.decode(int, row[0]),
+                                      FieldCodec.decode(str, row[1])) for row in rows)
+
+    @classmethod
     def unanswered(
         cls, db: sqlite3.Connection, scope: RepliesDisplayScope,
         since: float, before: float, upper: int, limit: int,

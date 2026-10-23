@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import time
-from collections.abc import Iterable, Sequence
+from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
 from typing import ClassVar, Self
 
@@ -23,6 +23,7 @@ from agent_comms.phase_evidence import PlanReading
 from agent_comms.plan_phases import PlanPhase
 from agent_comms.read_basis import NamedViewer, RepliesDisplayScope
 from agent_comms.recorded_time import RecordedEventTime
+from agent_comms.registry_document import RegistrySnapshot
 from agent_comms.standing_rules import (
     DatedStandingRule,
     IndependentStandingRule,
@@ -189,25 +190,16 @@ class UnitAskUnanswered(OwedAnswer, UndatedStandingRule):
         return tuple(cls(message, state.unit.name) for state in observed for message in state.owed)
 
     @classmethod
-    def asks(cls, comms: Comms, commander: str, before: float
-             ) -> dict[ThreadIncarnation, tuple[Message, ...]]:
-        with comms.bus.bus.reading() as source:
-            return UnansweredUnitAsks.for_orders(
-                source, comms.registry.snapshot(), commander, cls.holders(comms, commander), before,
-            )
-
-    @classmethod
-    def violations(cls, comms: Comms, commander: str) -> tuple[Self, ...]:
-        now = time.time()
+    def read_open(cls, source: BusReader, snapshot: RegistrySnapshot,
+                  held: Mapping[ThreadIncarnation, Sequence[Todo]], commander: str) -> tuple[Self, ...]:
         return tuple(cls(message, owner.name)
-                     for owner, questions in cls.asks(comms, commander, now).items()
-                     for message in questions
-                     if message.timestamp <= now - AwaitingCommander.seconds)
-
-    @classmethod
-    def open_messages(cls, comms: Comms, commander: str) -> tuple[Message, ...]:
-        return tuple(message for questions in cls.asks(comms, commander, time.time()).values()
+                     for owner, questions in UnansweredUnitAsks.for_orders(
+                         source, snapshot, commander, held, time.time(),
+                     ).items()
                      for message in questions)
+
+    def due(self, now: float) -> bool:
+        return self.message.timestamp <= now - AwaitingCommander.seconds
 
     def line(self) -> str:
         age = max(0, int((time.time() - self.message.timestamp) // 60))

@@ -384,9 +384,8 @@ def test_commander_say_answers_an_unanswered_unit_message(held_bus, target, body
     say.apply(ctx)
     assert unanswered(held_bus) == ()
     # A name that is not open needs no answer: it is dropped, never a refusal of the verb.
-    assert SayVerb(
-        units="worker", body_file="unused", answers=("not-a-message",)
-    ).answer_references(ctx) == ()
+    SayVerb(units="worker", body_file=str(reply), answers=("not-a-message",)).apply(ctx)
+    assert held_bus.bus.bus.lookup(held_bus.bus.bus.revision()).answers == ()
 
 
 def test_an_unanswered_unit_message_gates_send_and_say_until_answered(held_bus, tmp_path):
@@ -401,9 +400,8 @@ def test_an_unanswered_unit_message_gates_send_and_say_until_answered(held_bus, 
     SayVerb(units="worker", body_file=str(reply), answers=(question.message_id,)).apply(ctx)
     assert unanswered(held_bus) == ()
     # Naming it again after it was answered names nothing open, so it answers nothing.
-    assert SendVerb(
-        unit="worker", body_file="unused", answers=(question.message_id,)
-    ).answer_references(ctx) == ()
+    SayVerb(units="worker", body_file=str(reply), answers=(question.message_id,)).apply(ctx)
+    assert held_bus.bus.bus.lookup(held_bus.bus.bus.revision()).answers == ()
 
 
 def test_answering_one_owed_message_leaves_another_owed(held_bus, tmp_path):
@@ -435,6 +433,8 @@ def test_an_overdue_owner_directive_gates_until_answered(held_bus, tmp_path):
         SayVerb(units="#comms", body_file=str(reply)).apply(ctx)
     SayVerb(units="#comms", body_file=str(reply), answers=(directive.message_id,)).apply(ctx)
     SayVerb(units="#comms", body_file=str(reply)).apply(ctx)
+    SayVerb(units="#comms", body_file=str(reply), answers=(directive.message_id,)).apply(ctx)
+    assert held_bus.bus.bus.lookup(held_bus.bus.bus.revision()).answers == ()
 
 
 @pytest.mark.parametrize('body', ['@outsider This question is yours', 'The worker broadcasts its result'])
@@ -579,11 +579,11 @@ def test_one_answer_covers_an_escalation_burst_sent_before_it(held_bus):
     VibeCheckSender.register(held_bus.registry)
     now = time.time()
     burst = [publish(held_bus, VibeCheckSender.sender, "lead", now - 30 + line) for line in range(4)]
-    assert len(VibeCheckSender.unanswered(held_bus, "lead", time.time())) == 4
+    assert len(VibeCheckSender.unanswered(held_bus.bus.bus, held_bus.registry.snapshot(), "lead", time.time())) == 4
     publish(held_bus, "lead", VibeCheckSender.sender, now - 20, answers=(burst[0].reference,))
-    assert VibeCheckSender.unanswered(held_bus, "lead", time.time()) == ()
+    assert VibeCheckSender.unanswered(held_bus.bus.bus, held_bus.registry.snapshot(), "lead", time.time()) == ()
     later = publish(held_bus, VibeCheckSender.sender, "lead", now - 10)
-    assert [m.message_id for m in VibeCheckSender.unanswered(held_bus, "lead", time.time())] == [
+    assert [m.message_id for m in VibeCheckSender.unanswered(held_bus.bus.bus, held_bus.registry.snapshot(), "lead", time.time())] == [
         later.message_id]
 
 
@@ -636,13 +636,13 @@ def test_a_restarted_heartbeat_does_not_resend_an_escalation_burst(held_bus):
     first = "first escalation identity"
     VibeCheckSender.burst_once(held_bus, "lead", (first,), first)
     VibeCheckSender.burst_once(held_bus, "lead", (first,), first)
-    sent = VibeCheckSender.unanswered(held_bus, "lead", time.time())
+    sent = VibeCheckSender.unanswered(held_bus.bus.bus, held_bus.registry.snapshot(), "lead", time.time())
     assert len(sent) == 1
     publish(held_bus, "lead", VibeCheckSender.sender, time.time(), answers=(sent[0].reference,))
     assert VibeCheckSender.sent(held_bus, "lead", first)
     VibeCheckSender.burst_once(held_bus, "lead", (first,), first)
-    assert not VibeCheckSender.unanswered(held_bus, "lead", time.time())
+    assert not VibeCheckSender.unanswered(held_bus.bus.bus, held_bus.registry.snapshot(), "lead", time.time())
     second = "second escalation identity"
     VibeCheckSender.burst_once(held_bus, "lead", (second,), second)
     assert [message.body for message in VibeCheckSender.unanswered(
-        held_bus, "lead", time.time())] == [second]
+        held_bus.bus.bus, held_bus.registry.snapshot(), "lead", time.time())] == [second]

@@ -37,10 +37,11 @@ from agent_comms.messages import (
     Message,
     MessageRoleWire,
 )
+from agent_comms.message_reference import MessageReference
 from agent_comms.response_acknowledgement import (
     canonical_publication_key,
 )
-from agent_comms.typed_table import SQLiteTableName, TypedTable
+from agent_comms.typed_table import RowNotFoundError, SQLiteTableName, TypedTable
 from bus_record_fixture import publication_processes, record_from
 
 
@@ -275,6 +276,27 @@ def test_scoped_and_frozen_source_queries_are_sequence_bounded(bus):
     )
     selected = bus.selected_sequences("target=?", ("worker",), reply.seq)
     assert {row.seq for row in selected} == {notice.seq, reply.seq}
+
+
+def test_unanswered_reference_selection_requires_the_recorded_original_and_exact_owner_answer(bus):
+    original = bus.append(lambda seq, db: PublicRecord.from_message(
+        Message("owner", "lead", "Recorded directive", InfoKind, seq=seq)))
+    bus.append(lambda seq, db: PublicRecord.from_message(
+        Message("lead", "#comms", "Wrong original hash", InfoKind, seq=seq,
+                answers=(MessageReference(original.seq, "wrong-hash"),))))
+    bus.append(lambda seq, db: PublicRecord.from_message(
+        Message("another-unit", "#comms", "Someone else's answer", InfoKind, seq=seq,
+                answers=(original.reference,))))
+    assert bus.unanswered_references((original.seq,), frozenset({"lead"})) == (original.reference,)
+    with bus.reading() as before_reply:
+        bus.append(lambda seq, db: PublicRecord.from_message(
+            Message("renamed-lead", "#comms", "The owner's answer", InfoKind, seq=seq,
+                    answers=(original.reference,))))
+        assert before_reply.unanswered_references((original.seq,), frozenset({"lead", "renamed-lead"})) == (
+            original.reference,)
+    assert bus.unanswered_references((original.seq,), frozenset({"lead", "renamed-lead"})) == ()
+    with pytest.raises(RowNotFoundError):
+        bus.unanswered_references((original.seq, bus.revision() + 1), frozenset({"lead"}))
 
 
 def test_bulk_history_keeps_one_snapshot_across_pages(bus):

@@ -24,7 +24,8 @@ from .channel_targets import CommandTarget
 from .coordination_errors import DMPaintedBoundChanged, DMScopeChanged, HistoricalSourceChanged
 from .declared_family import DeclaredFamily
 from .errors import UnregisteredThreadError
-from .field_codec import NullMember, SingleFieldValue, SubclassUnion
+from .field_codec import FieldCodec, NullMember, SingleFieldValue, SubclassUnion
+from .mentions import ThreadMention
 from .message_reference import MessageReference
 from .private_path import FileObservation, MissingFile
 from .recorded_bus import RecordedBus, RecordedBusIdentity
@@ -1066,10 +1067,11 @@ class MemberActivityDisplayScope(AllTargetsDisplayScope):
     def index_predicate(self) -> tuple[str, tuple]:
         targets, names = tuple(self.targets), tuple(self.participant_names)
         target_marks, name_marks = ",".join("?" for _ in targets), ",".join("?" for _ in names)
+        mention_key = FieldCodec.field_plan(ThreadMention, "thread").key
         return (f"target IN ({target_marks}) OR sender IN ({name_marks}) OR "
                 f"(target NOT LIKE '#%' AND target IN ({name_marks})) OR "
-                f"EXISTS (SELECT 1 FROM json_each(mentions) WHERE json_extract(value,'$.thread') IN ({name_marks}))",
-                (*targets, *names, *names, *names))
+                f"EXISTS (SELECT 1 FROM json_each(mentions) WHERE json_extract(value,?) IN ({name_marks}))",
+                (*targets, *names, *names, f"$.{mention_key}", *names))
 
     def includes(self, message: Message) -> bool:
         return self._includes(message.sender, message.target,
