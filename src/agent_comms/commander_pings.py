@@ -9,16 +9,20 @@ from abc import abstractmethod
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, ClassVar, Self
 
+from agent_comms.declared_family import DeclaredFamily
 from agent_comms.errors import RelationViolationError
 from agent_comms.message_reference import MessageReference
 from agent_comms.messages import (
     ConversationRole, InfoKind, Message, MessageRole, NoticeRole,
 )
+from agent_comms.standing_rules import StandingRule
 from agent_comms.task_sources import TaskAttachment
+from agent_comms.text_digest import TextDigest
 from agent_comms.thread_identity import ThreadIncarnation
 from agent_comms.ui_model.unit_state import UnitState
 
 if TYPE_CHECKING:
+    from agent_comms.bus import BusReader
     from agent_comms.comms import Comms
     from agent_comms.registry_document import RegistrySnapshot
 
@@ -30,13 +34,39 @@ class OrderKey:
 
 
 @dataclass(frozen=True)
-class UnitPing:
+class Ping(DeclaredFamily, affix="Ping"):
+    text: str = field(compare=False, kw_only=True)
+
+    @property
+    @abstractmethod
+    def key(self) -> object: ...
+
+
+@dataclass(frozen=True)
+class RulePing(Ping):
+    observation: TextDigest
+
+    @property
+    def key(self) -> TextDigest:
+        return self.observation
+
+    @classmethod
+    def capture(cls, rule: StandingRule) -> Self:
+        return cls(rule.observation_key(), text=rule.line())
+
+
+@dataclass(frozen=True)
+class UnitPing(Ping):
     """One handled observation, not a separately writable current unit state."""
     unit: ThreadIncarnation
     state: type[UnitState]
     orders: tuple[OrderKey, ...]
     questions: tuple[MessageReference, ...]
-    text: str = field(compare=False)
+    observation: TextDigest
+
+    @property
+    def key(self) -> ThreadIncarnation:
+        return self.unit
 
     @classmethod
     def capture(cls, state: UnitState) -> Self:
@@ -45,23 +75,34 @@ class UnitPing:
             tuple(OrderKey(todo.id, todo.order.checked().id)
                   for todo in state.source.todos if todo.id in state.orders),
             tuple(message.reference for message in state.owed),
-            state.line(),
+            state.observation_key(), text=state.line(),
         )
 
 
 @dataclass(frozen=True)
 class CommanderUpdate(TaskAttachment, declared_name=None):
     commander: ThreadIncarnation
-    handled: tuple[UnitPing, ...]
+    handled: tuple[Ping, ...]
     role: ClassVar[MessageRole]
 
     @abstractmethod
-    def body(self) -> str: ...
+    def body(self, previous: CommanderUpdate | None) -> str: ...
 
-    def require_sender(self, sender: str) -> None:
+    def changed_lines(self, previous: CommanderUpdate | None,
+                      presented: tuple[Ping, ...] = ()) -> tuple[str, ...]:
+        prior = previous.handled if previous else ()
+        known = frozenset(prior)
+        current = frozenset(ping.key for ping in self.handled)
+        return (
+            *(ping.text for ping in self.handled if ping not in known and ping not in presented),
+            *(f"NO LONGER CURRENT: {ping.text}" for ping in prior if ping.key not in current),
+        )
+
+    def require_publication(self, sender: str, registry: RegistrySnapshot,
+                            original_source: BusReader) -> None:
         from agent_comms.commander_heartbeat import CommanderHeartbeat
 
-        if sender != CommanderHeartbeat.sender:
+        if registry.require(sender).incarnation != registry.require(CommanderHeartbeat.sender).incarnation:
             raise RelationViolationError("Only the commander heartbeat publishes its observations")
 
     def require_target(self, target: str, registry: RegistrySnapshot) -> None:
@@ -72,8 +113,9 @@ class CommanderUpdate(TaskAttachment, declared_name=None):
     def latest(cls, comms: Comms, commander: ThreadIncarnation) -> CommanderUpdate | None:
         from agent_comms.commander_heartbeat import CommanderHeartbeat
 
+        snapshot = comms.registry.snapshot()
         messages = comms.bus.bus.latest_addressed(
-            frozenset((CommanderHeartbeat.sender,)), frozenset((commander.name,)),
+            snapshot.names_for(CommanderHeartbeat.sender), snapshot.names_for(commander.name),
         )
         if not messages:
             return None
@@ -86,30 +128,31 @@ class CommanderUpdate(TaskAttachment, declared_name=None):
 
     @classmethod
     def derive(cls, commander: ThreadIncarnation, states: tuple[UnitState, ...],
+               rules: tuple[StandingRule, ...],
                previous: CommanderUpdate | None) -> CommanderUpdate | None:
-        known = {ping.unit: ping for ping in previous.handled} if previous else {}
-        current = tuple(UnitPing.capture(state) for state in states)
-        decisions = tuple(ping for state, ping in zip(states, current, strict=True)
-                          if state.attention() and known.get(ping.unit) != ping)[:5]
-        handled = tuple(
-            ping if not state.attention() or ping in decisions else known[ping.unit]
-            for state, ping in zip(states, current, strict=True)
-            if not state.attention() or ping in decisions or ping.unit in known
-        )
+        known = {ping.key: ping for ping in previous.handled} if previous else {}
+        quiet = tuple(UnitPing.capture(state) for state in states if not state.attention())
+        urgent = (*(UnitPing.capture(state) for state in states if state.attention()),
+                  *(RulePing.capture(rule) for rule in rules))
+        decisions = tuple(ping for ping in urgent if known.get(ping.key) != ping)[:5]
+        handled = (*quiet, *(
+            ping if ping in decisions else known[ping.key]
+            for ping in urgent if ping in decisions or ping.key in known
+        ))
         if decisions:
             return CommanderDecisions(commander, handled, decisions)
         if previous is None or handled != previous.handled:
             return CommanderNotice(commander, handled)
         return None
 
-    def send(self, comms: Comms) -> Message:
+    def send(self, comms: Comms, previous: CommanderUpdate | None) -> Message:
         from agent_comms.bus_publication import AgentOrigin
         from agent_comms.channel_targets import ThreadTarget
         from agent_comms.commander_heartbeat import CommanderHeartbeat
 
         message = Message(
             sender=CommanderHeartbeat.sender, target=self.commander.name,
-            body=self.body(), type=InfoKind, role=self.role, task=self,
+            body=self.body(previous), type=InfoKind, role=self.role, task=self,
         )
         return comms.bus.publisher.publish_ordinary(
             message, origin=AgentOrigin(), destination=ThreadTarget(self.commander.name),
@@ -120,14 +163,16 @@ class CommanderUpdate(TaskAttachment, declared_name=None):
 class CommanderNotice(CommanderUpdate):
     role = NoticeRole()
 
-    def body(self) -> str:
-        return "Commander observations updated; no new decision."
+    def body(self, previous: CommanderUpdate | None) -> str:
+        return "\n".join(("Commander observations updated; no new decision.",
+                          *self.changed_lines(previous)))
 
 
 @dataclass(frozen=True)
 class CommanderDecisions(CommanderUpdate):
-    decisions: tuple[UnitPing, ...]
+    decisions: tuple[Ping, ...]
     role = ConversationRole()
 
-    def body(self) -> str:
-        return "\n".join(ping.text for ping in self.decisions)
+    def body(self, previous: CommanderUpdate | None) -> str:
+        return "\n".join((*(ping.text for ping in self.decisions),
+                          *self.changed_lines(previous, self.decisions)))

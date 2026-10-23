@@ -437,4 +437,6 @@ def test_replay_raises_each_incident_once(fleet):
     assert refused.value.holding_holder == behind.incarnation
 
     second = built.observe()
-    assert StandingRule.heartbeat_changes(first.rules, second.rules) == ()
+    assert {rule.observation_key() for rule in first.rules} == {
+        rule.observation_key() for rule in second.rules
+    }

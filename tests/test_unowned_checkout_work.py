@@ -25,8 +25,8 @@ from agent_comms.commander.standing import (
 from agent_comms.commander_heartbeat import (
     CommanderHeartbeat,
     CommanderObservation,
-    CommanderReview,
 )
+from agent_comms.commander_pings import CommanderUpdate, RulePing
 from agent_comms.comms import Comms, wire
 from agent_comms.field_codec import FieldCodec
 from agent_comms.goals import OrderCheck
@@ -201,11 +201,9 @@ def test_dirty_then_unpushed_then_pushed_linked_checkout(checkout_bus: Comms, tm
     practice.include(tuple(RootFile.existing_in(practice.root)))
     (root, _measurement) = practice.path, practice.measurement
     c = wire(root)
-    review = CommanderReview(frozenset())
-
     def beat():
         frame = CommanderObservation.read(c, c.registry.require('lead'))
-        review.wake(c, CommanderHeartbeat.sender, frame.thread, frame.rules, frame.states)
+        CommanderHeartbeat().pass_body(c, (frame,))
 
     with LaunchRoot.from_path(root).selected():
         (checkout / 'work.py').write_text('# not yet published\n')
@@ -228,14 +226,16 @@ def test_dirty_then_unpushed_then_pushed_linked_checkout(checkout_bus: Comms, tm
         assert len(available) == 1
         assert isinstance(available[0], ReassignedWheelSpin)
         assert available[0].unit == 'idle'
-        assert set(available).isdisjoint(review.rules)
+        previous = CommanderUpdate.latest(c, c.registry.require('lead').incarnation)
+        assert previous is not None
+        assert set(map(RulePing.capture, available)).isdisjoint(previous.handled)
         UnownedOrderWatch().watch_pass(lambda: nullcontext(c))
         assigned = c.goals.todos.get('P2')
         assert assigned.holder == 'idle'
         assert c.registry.require('idle').goal.require().text
         beat()
     history = core('--root', str(root), 'history',
-                   '--target', '@commander-heartbeat', '--as', 'lead', '--limit', '10')
+                   '@commander-heartbeat', '--as', 'lead', '--limit', '10')
     assert history.returncode == 0, history.stderr
     assert f'WORK HELD: P2 worker retains work in {checkout}' in history.stdout
     assert f'NO LONGER CURRENT: WORK HELD: P2 worker retains work in {checkout}' in history.stdout

@@ -9,15 +9,17 @@ from __future__ import annotations
 import logging
 import time
 from abc import abstractmethod
-from collections import Counter, defaultdict
+from collections import Counter
 from collections.abc import Iterable, Mapping, Sequence
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, fields
 from pathlib import Path
 from itertools import combinations
 from typing import TYPE_CHECKING, ClassVar, Self
 
 from agent_comms.declared_family import DeclaredFamily
+from agent_comms.field_codec import FieldCodec
 from agent_comms.goals import GoalChangedError
+from agent_comms.text_digest import TextDigest
 from agent_comms.recorded_time import EventTime, RecordedEventTime
 from agent_comms.repo import Repo
 from agent_comms.repository_name import RepositoryName
@@ -104,37 +106,18 @@ class StandingRule(DeclaredFamily, affix="StandingRule", discovery_package="agen
                 rejected.add(rule)
         return frozenset(rejected)
 
-    def heartbeat_group(self) -> object:
-        """Ordinary violations each own one heartbeat line."""
-        return self
+    def comparison_values(self) -> tuple[object, ...]:
+        """The declaration's equality fields, excluding presentation and live readers."""
+        return tuple(getattr(self, item.name) for item in fields(self) if item.compare)
 
-    def heartbeat_line(self, current: Sequence[Self]) -> str:
-        return self.line()
+    def observation_key(self) -> TextDigest:
+        """Stable content identity of this occurrence, never a digest of age or wording.
 
-    def heartbeat_change(self, previous: Sequence[Self], current: Sequence[Self]) -> tuple[str, ...]:
-        prefix = "RULE" if current else "NO LONGER CURRENT:"
-        return (f"{prefix} {self.heartbeat_line(current or previous)}",)
-
-    @staticmethod
-    def _heartbeat_groups(rules: Iterable[StandingRule]) -> dict[object, list[StandingRule]]:
-        groups: dict[object, list[StandingRule]] = defaultdict(list)
-        for rule in rules:
-            groups[rule.heartbeat_group()].append(rule)
-        return groups
-
-    @classmethod
-    def heartbeat_changes(cls, previous: Iterable[StandingRule],
-                          current: Iterable[StandingRule]) -> tuple[str, ...]:
-        """Render changed groups through their owning rule, without replaying unchanged ones."""
-        before, after = cls._heartbeat_groups(previous), cls._heartbeat_groups(current)
-        lines = []
-        for group in dict.fromkeys((*after, *before)):
-            old, new = before.get(group, []), after.get(group, [])
-            if frozenset(old) == frozenset(new):
-                continue
-            rule = (new or old)[0]
-            lines.extend(rule.heartbeat_change(old, new))
-        return tuple(lines)
+        Python's hash changes across processes. The codec gives the comparison
+        values their declared encoding; the class's own name distinguishes siblings
+        even when they deliberately have no public StandingRule registration.
+        """
+        return TextDigest(FieldCodec.comparison_digest((type(self), self.comparison_values())))
 
     @staticmethod
     def todos(comms: Comms, commander: str) -> tuple[Todo, ...]:
@@ -206,9 +189,6 @@ class LostTools(UndatedStandingRule):
 
     def line(self) -> str:
         return f"{self.thread.name}: {'; '.join(self.changes)}"
-
-    def heartbeat_change(self, previous: Sequence[Self], current: Sequence[Self]) -> tuple[str, ...]:
-        return super().heartbeat_change(previous, current) if current else ()
 
 
 @dataclass(frozen=True)
@@ -584,19 +564,6 @@ class DirectiveUnacted(OwedAnswer, DatedStandingRule):
             f"DIRECTIVE UNACTED: owner directive {self.cited}"
             f" on request {self.request.value},"
             f" due {self.directive.due_time} -> order its next step or mark the request done"
-        )
-
-    def heartbeat_group(self) -> object:
-        return type(self), self.request
-
-    def heartbeat_line(self, current: Sequence[Self]) -> str:
-        oldest = min(current, key=lambda rule: rule.directive.seq).directive
-        newest = max(current, key=lambda rule: rule.directive.seq).directive
-        return (
-            f"DIRECTIVE UNACTED: request {self.request.value}: {len(current)} owner directives; "
-            f"oldest {oldest.seq} due {oldest.due_time}; "
-            f"newest {newest.seq} due {newest.due_time} "
-            "-> order the next step or mark the request done"
         )
 
 
