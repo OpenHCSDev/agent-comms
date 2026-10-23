@@ -35,7 +35,7 @@ from agent_comms.repo import Repo
 from agent_comms.problem_number import ProblemNumber
 from agent_comms.thread_execution import ExternalThreadExecution
 from agent_comms.thread_identity import RecordedThreadIncarnation
-from agent_comms.tools import CommsTodoListTool
+from agent_comms.tools import CommsCommanderLoadTool, CommsTodoListTool
 from agent_comms.thread_model import DeclaredModel
 from agent_comms.todos import (
     DeclarationDerivation, PendingProblemOrder, ProblemAllocation, ReleaseTodo,
@@ -149,7 +149,7 @@ def test_registered_fork_sends_parent_problem_with_fork_actor(fork_bus, tmp_path
     assert set(ctx.model_copy(deep=True).progress()) == {'P40'}
     assert ctx.held_orders() == (saved,)
     assert ctx.call(CommsTodoListTool(thread=ctx.commander)).todos == (saved,)
-    assert "unjudged edits" in command(comms, 'capacity').stdout
+    assert "unjudged edits" in str(ctx.call(CommsCommanderLoadTool(thread=ctx.commander)))
     refused = command(comms, 'order', 'send', 'worker', body, '--fork', 'fork-two')
     assert refused.returncode != 0 and 'worker is assigned by fork-one' in refused.stderr
     assert store.get('P40') == saved

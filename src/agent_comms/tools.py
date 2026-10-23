@@ -56,7 +56,7 @@ from .cli_commands import (
     ThreadStoppedResult,
 )
 from .cli_result import ToolCatalogResult
-from .commander.capacity import Load
+from .commander.vibe_check import OverloadDegradation
 from .coordination_tables.refusals import SendRefusal
 from .declared_family import DeclaredFamily
 from .display_order import ChannelSort, ThreadSort
@@ -976,10 +976,10 @@ class CommsUnjudgedTool(ThreadReadTool):
 @dataclass(frozen=True, kw_only=True)
 class CommsCommanderLoadTool(ThreadReadTool):
     label = "Measured commander load"
-    description = "Read canonical order/edit debt and receiving child commanders; never self-reported."
+    description = "Read open orders, review timers and unjudged edits used by the overload rule."
 
-    def apply(self, comms: Comms, caller: ToolCaller) -> Load:
-        return Load.of(comms, caller.subject(self.thread))
+    def apply(self, comms: Comms, caller: ToolCaller) -> OverloadDegradation:
+        return OverloadDegradation.of(comms, caller.subject(self.thread))
 
 
 @dataclass(frozen=True, kw_only=True)

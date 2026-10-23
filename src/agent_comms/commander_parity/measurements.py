@@ -3,13 +3,14 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from pathlib import Path
 from sys import monitoring
 from types import CodeType, MethodType
 
 from agent_comms.commander.config import CommanderConfig
 from agent_comms.commander_parity import ParityComparison, UnverifiedParity
-from agent_comms.commander_parity.load import LoadComparison, state_files
 from agent_comms.comms import Comms
+from agent_comms.private_path import FileRevision
 from agent_comms.standing_rules import DiskLow, StandingRule
 from agent_comms.storage_rules import StorageViolation
 from agent_comms.todos import ProgressRead
@@ -23,6 +24,14 @@ class RuleComparison(ParityComparison):
     native: tuple[str, ...]
     calls: int
     private_state_unchanged: bool
+
+    @staticmethod
+    def state_files(directory: Path) -> tuple[tuple[str, FileRevision], ...]:
+        return tuple(
+            (str(path.relative_to(directory)), FileRevision.from_stat(path.stat()))
+            for path in sorted(directory.rglob("*"))
+            if path.is_file()
+        )
 
     @property
     def passed(self) -> bool:
@@ -47,7 +56,7 @@ class RuleComparison(ParityComparison):
         config = CommanderConfig.read(CommanderConfig.path())
         comms = Comms(config.root)
         states = UnitState.current(comms, config.commander, ProgressRead())
-        before = state_files(config.state)
+        before = cls.state_files(config.state)
         observed: list[tuple[StandingRule, ...]] = []
 
         def observe(_code: CodeType, _offset: int, value: tuple[StandingRule, ...]) -> None:
@@ -73,7 +82,7 @@ class RuleComparison(ParityComparison):
             tuple(rule.line() for rule in current),
             tuple(rule.line() for rule in native),
             len(observed),
-            before == state_files(config.state),
+            before == cls.state_files(config.state),
         )
 
 
@@ -92,11 +101,3 @@ class StorageComparison(ParityComparison):
     @classmethod
     def read(cls) -> StorageComparison:
         return cls(RuleComparison.read(StorageViolation.scan_owner()), RuleComparison.read(DiskLow))
-
-
-def measured_load() -> ParityComparison:
-    observed = LoadComparison.read()
-    return UnverifiedParity(
-        f"Live Load comparison passed={observed.passed}: {observed.describe()}; "
-        "missing native self-report comparison owner"
-    )
