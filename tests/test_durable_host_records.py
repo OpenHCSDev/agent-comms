@@ -116,7 +116,8 @@ def test_native_and_durable_entries_keep_their_original_clock_owners():
         undated.events(TranscriptProjection(position=2))
 
 
-def test_real_host_context_and_request_error_remain_typed_and_live(tmp_path, thread_registration, durable_home):
+def test_real_host_context_and_request_error_remain_typed_and_live(tmp_path, thread_registration, durable_home,
+                                                                  durable_host_packages):
     async def journey():
         backend = PiDurableBackend()
         location = DurableDatabase(str(tmp_path / 'records.sqlite3'))
