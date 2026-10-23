@@ -2,13 +2,10 @@ import os
 
 import pytest
 
-from agent_comms.installer.backup import UpgradeRefused
+from agent_comms.installer.refusals import UpgradeRefused
 from agent_comms.installer.commands import InstallCommands
-from agent_comms.installer.interpreter_operation import (
-    InstalledPackagesProbe,
-    RetainedProgram,
-    SourceProgram,
-)
+from agent_comms.installer.probes.packages import InstalledPackagesProbe
+from agent_comms.installer.interpreter_operation import RetainedProgram, SourceProgram
 from agent_comms.installer.runtime_resolution import ResolvedLock, RuntimeResolution
 from agent_comms.launch_runtime import LaunchRuntime
 

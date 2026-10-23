@@ -17,7 +17,6 @@ from .native_package import VerifiedNativePackage
 from .native_startup import NativeStartup
 from .coordinator import Coordination
 from .pi_payloads import StateData
-from .session_fence import session_writer_fence
 from . import prompt_state
 
 if TYPE_CHECKING:
@@ -75,7 +74,7 @@ class NativeSessionPreparation(backend.NativeSession):
         ))
         preparation = cls(launch, native_session=persistent,
                           startup=NativeStartup.for_launch(launch))
-        async with session_writer_fence(launch.session.session_file):
+        async with launch.session.files(root).accept_input():
             async with aclosing(preparation.run()) as stream:
                 async for event in stream:
                     event.require_preparation_success()

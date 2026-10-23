@@ -23,7 +23,6 @@ from typing import ClassVar
 from agent_comms.coordination_database import CoordinationStore
 from agent_comms.locked_store import StoreBusy
 from agent_comms.coordination_errors import CoordinationError
-from agent_comms.coordination_schema import CoordinatorTable
 from agent_comms.coordination_tables.assignments import ExecutionAssignmentLink, WakeAssignment
 from agent_comms.coordination_tables.executions import ExecutionRecord
 from agent_comms.coordination_tables.participants import OwnerGenerations
@@ -294,7 +293,7 @@ class OptionalAwarenessProjection:
         owner: Thread,
         privacy: RegistryPrivacy,
     ) -> None:
-        CoordinatorTable.require_schema(db)
+        privacy.coordinator_schema().require_schema(db)
         CohortTable.require_installed(db)
         assert_optional_awareness_schema(db)
         people = _ParticipantOwner.read(

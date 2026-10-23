@@ -7,7 +7,7 @@ from abc import ABC, abstractmethod
 from contextlib import aclosing
 from dataclasses import dataclass, field, replace
 from functools import partial
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 from acp.schema import PromptResponse
 
@@ -28,7 +28,7 @@ from .comms import Comms
 from .coordination_cohort import next_sealed_assignment
 from .coordination_database import CoordinationStore
 from .coordinator import Coordination
-from .controller import UNBOUND_CONTROLLER
+from .controller import UNBOUND_CONTROLLER, SessionUpdateSink
 from .cursor_owner import CursorOwner
 from .drain_failures import (
     DEFERRED_DRAIN_ERRORS,
@@ -605,21 +605,24 @@ class InputDrain(InputObservation):
             tuple(state.queued.values()), tuple(state.restored.values()),
         ))
 
-    async def emit_queue_state(self, session_id: str, *, client: Any = None) -> None:
-        await (client or self.runtime).session_update(
+    async def emit_queue_state(
+        self, session_id: str, *, client: SessionUpdateSink | None = None,
+    ) -> None:
+        await (client or self.runtime).publish_update(
             session_id=session_id,
             update=(await self.queue_state(session_id)).acp_chunk(),
         )
 
     async def emit_input_disposition(
-        self, session_id: str, row: InputAttempt, client: Any = None
+        self, session_id: str, row: InputAttempt, client: SessionUpdateSink | None = None
     ) -> None:
         await self.emit_input_delivery_changed(session_id, public_id=row.public_id, client=client)
 
     async def emit_input_delivery_changed(
-        self, session_id: str, *, public_id: str | None = None, client: Any = None
+        self, session_id: str, *, public_id: str | None = None,
+        client: SessionUpdateSink | None = None,
     ) -> None:
-        await (client or self.runtime).session_update(
+        await (client or self.runtime).publish_update(
             session_id=session_id,
             update=InputDeliveryChangedUpdate(public_id).acp_chunk(),
         )

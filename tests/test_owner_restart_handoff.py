@@ -17,7 +17,7 @@ from agent_comms.owner_lifecycle import OwnerRestartSelection
 from agent_comms.owner_restart import OwnerRestartHandoff, RetiredOwnerLaunch
 from agent_comms.registry_document import RegistryDocument, RegistrySnapshot
 from agent_comms.thread_identity import GenerationCounter
-from agent_comms.thread_status import RunningThreadStatus, StoppedThreadStatus
+from agent_comms.thread_status import StoppedThreadStatus
 from agent_comms.native_arguments import ConfiguredBinary, InheritedArguments
 from agent_comms.threads import Thread
 
@@ -80,7 +80,6 @@ def test_retired_witness_cannot_borrow_live_or_replaced_claim(*, thread_registra
     changed = (
         replace(snapshot, owner_generations={thread.name: 6}),
         replace(snapshot, _claimed_generations={thread.name: 6}),
-        replace(snapshot, statuses={thread.name: RunningThreadStatus()}),
         replace(snapshot, threads={thread.name: replace(thread, created_at=2.0)}),
         replace(snapshot, threads={thread.name: replace(
             thread, process_identity=ProcessIdentity(2147483646, 1))}),

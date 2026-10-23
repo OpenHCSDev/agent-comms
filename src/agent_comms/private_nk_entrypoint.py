@@ -15,8 +15,6 @@ from typing import TYPE_CHECKING
 
 from agent_comms.coordination_errors import IdentityConflict, PublicationActivationBlocked
 
-from .coordination_database import CoordinationStore
-from .coordinator import Coordination
 from .native_arguments import NativeArguments
 from .native_package import (
     NativePackageError,
@@ -78,11 +76,6 @@ class RootLaunch(ABC):
             agent_bin = str(Path(shutil.which(agent_bin) or agent_bin).resolve(strict=True))
         root = self.child_root
         Registration(RegistryFile.path_in(root)).prepare_native_root()
-        with Coordination(str(CoordinationStore.path_in(root))) as store:
-            store.participants.register(
-                thread.incarnation.require_recorded().lookup,
-                committed=True,
-            )
         return agent_bin
 
     @abstractmethod

@@ -149,6 +149,10 @@ class TranscriptEvent(EventMerge, DeclaredFamily, affix="Transcript"):
     def before(self, at: float) -> bool:
         return self.timestamp < at
 
+    def selected_input(self, selected: tuple[TranscriptEvent, ...]) -> tuple[TranscriptEvent, ...]:
+        """Only the recorded input stands for the messages its wake selected."""
+        return (self,)
+
 
 @dataclass(frozen=True)
 class TranscriptCoverage:
@@ -233,6 +237,10 @@ class WireTextTranscript(MarkdownTranscript):
 
 @dataclass(frozen=True, kw_only=True)
 class IncomingTranscript(TextTranscript):
+    @classmethod
+    def of(cls, message: Message, *, reader: str) -> IncomingTranscript:
+        return cls(message=message.envelope, reader=reader)
+
     @property
     def category(self) -> type[MessageCategory]:
         return self.message.role.category
@@ -292,6 +300,9 @@ class UserTranscript(NativeTextTranscript):
 
     def import_to(self, accept: Callable[[ImportedMessage], None]) -> None:
         ImportedRequest(self.text).import_to(accept)
+
+    def selected_input(self, selected: tuple[TranscriptEvent, ...]) -> tuple[TranscriptEvent, ...]:
+        return selected
 
     def for_assigned_source(self, source, published: bool) -> tuple[TranscriptEvent, ...]:
         if not self.routed:
@@ -506,6 +517,12 @@ class TurnDigest:
 
     turn_id: str
     events: tuple[TranscriptEvent, ...]
+
+    def with_selected(self, selected: tuple[TranscriptEvent, ...]) -> TurnDigest:
+        """The selected messages stand where the frame rendered around them was recorded; the
+        stored frame stays the evidence of what the model saw."""
+        return replace(self, events=tuple(
+            kept for event in self.events for kept in event.selected_input(selected)))
 
     def before(self, at: float) -> bool:
         """The turn's last recorded event precedes ``at``; an empty turn is never before."""

@@ -59,7 +59,7 @@ def test_current_membership_cannot_create_an_unfrozen_delivery(tmp_path):
         Message("a", "#api", "public history is not input", InfoKind, seq=seq),
     ))
     target = CommandTarget.named("#api")
-    assert [message.seq for message in comms.bus.inbox("other", target)] == [addressed.seq]
+    assert [message.seq for message in comms.bus.inbox("other", target).page.messages] == [addressed.seq]
     assert comms.bus.pending_count("other", target) == 1
     assert comms.bus.pending_counts_all(("other",)) == {"other": 1}
     received = comms.bus.bus.received(comms.registry.require("other").incarnation.lookup)
@@ -98,7 +98,7 @@ def test_channel_metadata_round_trips_without_changing_routing(tmp_path):
     assert "#api" in observer.bus.channel_declarations()
 
     observer.messaging.send("other", "#api", "still routable").message.message_id
-    assert [message.body for message in observer.bus.inbox("a")] == ["still routable"]
+    assert [message.body for message in observer.bus.inbox("a").page.messages] == ["still routable"]
     with pytest.raises(ValueError):
         observer.channels.set_channel_metadata("ui", parent="#api", archived=False)
     assert observer.bus.require_channel("#ui").parent is None
@@ -470,8 +470,8 @@ def test_invalid_filters_and_reserved_channels(tmp_path):
 def test_none_membership_and_independent_channel_order(tmp_path):
     comms = setup_wire(tmp_path)
     comms.messaging.send("a", "#none", "for untagged agents").message.message_id
-    assert [message.body for message in comms.bus.inbox("other")] == ["for untagged agents"]
-    assert not comms.bus.inbox("b")
+    assert [message.body for message in comms.bus.inbox("other").page.messages] == ["for untagged agents"]
+    assert not comms.bus.inbox("b").page.messages
     comms.channels.set_channel_sort("#api", LastMessageThreadSort)
     comms.channels.set_channel_sort("#none", LastActivityThreadSort)
     views = {view.channel.name: view for view in wire(tmp_path).views.channel_views()}

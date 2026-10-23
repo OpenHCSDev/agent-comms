@@ -1,8 +1,8 @@
 """Pi's own compaction engine, seen through Core's turn path: pinned Pi + localhost provider."""
 
 from __future__ import annotations
+from agent_comms.controller import SessionUpdateSink
 
-from agent_comms.bus import Bus
 from agent_comms.lifecycle_capability import Unresolved
 from agent_comms.queued_input import InitialInput
 import asyncio
@@ -297,7 +297,6 @@ async def _acp_threshold(root, project, session, native_bin, native_args, child_
     for key, value in child_env.items():
         monkeypatch.setenv(key, value)
     comms = wire(root / "wire")
-    Bus.install(Bus.path_in(comms.root))
     monkeypatch.setenv("AGENT_COMMS_ROOT", str(comms.root))
     owner = CommsAgent(
         comms, agent_bin=GivenBinary(native_bin), agent_args=GivenArguments(tuple(native_args)), runtime_enabled=True,
@@ -306,13 +305,14 @@ async def _acp_threshold(root, project, session, native_bin, native_args, child_
     updates = []
     resumed_activity = []
 
-    class Client:
-        async def session_update(self, session_id, update):
+    class Client(SessionUpdateSink):
+        async def publish_update(self, session_id, update):
             updates.append(update)
             if any(isinstance(field, CompactionChangedUpdate)
                    and isinstance(field.event, ae.CompactionEnd)
                    for field in decode_updates(update.field_meta or {})):
                 resumed_activity.append(comms.agents.activity_of("project", snapshot=comms.registry.snapshot()))
+            return True
 
     owner.on_connect(Client())
     await owner.new_session(str(project))

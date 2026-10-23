@@ -1,6 +1,5 @@
 """Original-byte ownership survives appends and refuses altered proof/source."""
 
-from agent_comms.private_runtime_schema import PrivateCoordinatorTable
 import asyncio
 import json
 import os
@@ -16,6 +15,7 @@ from agent_comms.native_transcript import NativeTranscript
 from agent_comms.native_pi import NativeContextJournal, NativeContextProof, PrivateEvidenceRead
 from agent_comms.native_failures import NativePiUnavailable
 from agent_comms.coordinator import Coordination
+from agent_comms.coordination_database import CoordinationStore
 from agent_comms.store_files import StoreLockContention, _store_lock
 from test_native_pi import INPUT_ID, _evidence
 
@@ -160,15 +160,15 @@ def test_consumer_work_cannot_spend_physical_lock_resource(tmp_path):
 
 
 @pytest.mark.asyncio
-async def test_joined_worker_retains_original_evidence_and_owns_sqlite_until_cancelled_join(tmp_path):
+async def test_joined_worker_retains_original_evidence_and_owns_sqlite_until_cancelled_join(
+        tmp_path, private_comms):
     """Cancellation cannot retire borrowed source before its SQL worker closes."""
     files = _evidence(tmp_path)
     session = files.session
     _header, input_record = NativeTranscript(session).forward(0, session.stat().st_size)
     before = session.read_bytes(), files.input_proof.read_bytes()
-    path = tmp_path / 'coordination.sqlite3'
+    path = CoordinationStore.path_in(private_comms.root)
     with Coordination(str(path), clock_ms=lambda: 1234) as original:
-        PrivateCoordinatorTable.install(original)
         original.participants.register('original', committed=True)
         original_connection = original.session._connection
         entered, release = threading.Event(), threading.Event()

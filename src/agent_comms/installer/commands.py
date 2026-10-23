@@ -13,9 +13,8 @@ from pathlib import Path
 from threading import Lock
 from typing import BinaryIO
 
-from agent_comms.child_process import ChildOutcome, SpawnedProcess
+from agent_comms.child_process import SpawnedProcess
 from agent_comms.field_codec import FieldCodec
-from agent_comms.installer.backup import UpgradeRefused
 from agent_comms.installer.interpreter_operation import (
     ProbeProgram,
     ProbeRequest,
@@ -23,6 +22,7 @@ from agent_comms.installer.interpreter_operation import (
     SourceProgram,
 )
 from agent_comms.installer.interpreter_operation import CommandPhase, GitPhase, InstallClock, InstallPhase, PhaseTiming, WorkerClosePhase
+from agent_comms.installer.refusals import InterpreterWorkerDied, UpgradeRefused
 from agent_comms.launch_runtime import RestoredRuntime
 from agent_comms.maintenance_barrier import MaintenanceHolder
 from agent_comms.repo import Repo
@@ -36,14 +36,6 @@ class InterpreterWorkerKey:
     environment: tuple[tuple[str, str], ...]
 
 
-class InterpreterWorkerDied(UpgradeRefused):
-    """A worker ends only when an operation raised in it; its exit and its stderr, which
-    holds that traceback, are the failure."""
-
-    def __init__(self, outcome: ChildOutcome, errors: str) -> None:
-        super().__init__(f"Interpreter worker {outcome.summary} without an answer: {errors}")
-        self.outcome = outcome
-        self.errors = errors
 
 
 @dataclass
@@ -133,7 +125,8 @@ class InstallCommands:
                 worker.finish()
 
     def close_runtime(self, python: Path) -> None:
-        self.close_workers(tuple(key for key in self.workers if key.python == python))
+        with WorkerClosePhase(str(python)).running(self.clock):
+            self.close_workers(tuple(key for key in self.workers if key.python == python))
 
     def close(self) -> None:
         with WorkerClosePhase().running(self.clock):

@@ -29,11 +29,14 @@ from acp.schema import (
     DeniedOutcome,
     PermissionOption,
     RequestPermissionResponse,
+    SessionNotification,
     ToolCallUpdate,
 )
 
 from .jsonl_stream import JsonlStreamReader
-from .controller import ACP_PERMISSION_TIMEOUT_SECONDS, UNBOUND_CONTROLLER, Controller
+from .controller import (
+    ACP_PERMISSION_TIMEOUT_SECONDS, UNBOUND_CONTROLLER, Controller, SessionUpdateSink,
+)
 from .field_codec import MalformedRecord
 from .owner_protocol import (
     ClientPermissionResponse,
@@ -64,7 +67,12 @@ def socket_path(root: Path, pid: int) -> Path:
     return root / "runtime" / f"{pid}.sock"
 
 
-_UNBOUND_PUBLICATION_CLIENT = object()
+class UnboundClient(SessionUpdateSink):
+    async def publish_update(self, *, session_id: str, update: BaseModel) -> bool:
+        raise RuntimeError("An unbound client cannot publish session updates")
+
+
+_UNBOUND_PUBLICATION_CLIENT = UnboundClient()
 _LOG = logging.getLogger(__name__)
 
 
@@ -72,7 +80,7 @@ class SubscriberClosed(ConnectionError):
     """The attached reader left; the normal end of a subscription, not a failed request."""
 
 
-class SocketClient(Controller):
+class SocketClient(Controller, SessionUpdateSink):
     def __init__(self, writer: asyncio.StreamWriter):
         self.writer = writer
         transport = writer.transport
@@ -172,8 +180,9 @@ class SocketClient(Controller):
                 )
         self.pending.clear()
 
-    async def session_update(self, *, session_id: str, update: BaseModel) -> None:
+    async def publish_update(self, *, session_id: str, update: BaseModel) -> bool:
         await self.send(OwnerUpdate.of(update))
+        return True
 
 
 class OwnerIdentityChangedError(RuntimeError, ConnectionError):
@@ -201,7 +210,7 @@ class SessionClients(dict[str, set[SocketClient]]):
                 return
 
 
-class RuntimeServer:
+class RuntimeServer(SessionUpdateSink):
     def __init__(self, agent: CommsAgent):
         self.agent = agent
         self.server: asyncio.Server | None = None
@@ -246,12 +255,12 @@ class RuntimeServer:
             self._resources.close()
             raise
 
-    async def session_update(
+    async def publish_update(
         self,
         *,
         session_id: str,
         update: BaseModel,
-        _expected_client: Any = _UNBOUND_PUBLICATION_CLIENT,
+        _expected_client: SessionUpdateSink | None = _UNBOUND_PUBLICATION_CLIENT,
         _expected_thread: str | None = None,
         _expected_sockets: frozenset[SocketClient] | None = None,
     ) -> bool:
@@ -279,8 +288,7 @@ class RuntimeServer:
         delivered = False
         client = self.agent.sessions.client
         if client is not None:
-            await client.session_update(session_id=session_id, update=update)
-            delivered = True
+            delivered = await client.publish_update(session_id=session_id, update=update)
         # Do not re-resolve the recipient set after an awaited handoff. A
         # socket reattach has a new identity even with the same session ID.
         sockets = (
@@ -294,8 +302,9 @@ class RuntimeServer:
             if socket_client not in self.clients.get(session_id, ()):
                 continue
             try:
-                await socket_client.session_update(session_id=session_id, update=update)
-                delivered = True
+                delivered = await socket_client.publish_update(
+                    session_id=session_id, update=update,
+                ) or delivered
             except SubscriberClosed:
                 self.clients.disconnect(socket_client)
         return delivered
@@ -569,9 +578,10 @@ class RuntimeProxy(RuntimeConnection):
         )
         if self._closed or self.agent.sessions.client is not client:
             return
-        await client.session_update(
-            session_id=self.session_id, update={**line.update, "_meta": metadata}
-        )
+        notification = SessionNotification.model_validate({
+            "session_id": self.session_id, "update": {**line.update, "_meta": metadata},
+        })
+        await client.publish_update(session_id=notification.session_id, update=notification.update)
 
     def ask(self, request: OwnerPermissionRequest) -> None:
         if len(self._permission_tasks) >= 4 or request.id in self._permission_tasks:

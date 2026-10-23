@@ -1,7 +1,6 @@
 """Real send entrypoints wait through a private bus hold and publish once."""
 
 
-from agent_comms.bus import Bus
 import asyncio
 import os
 import sqlite3
@@ -55,10 +54,9 @@ def test_refusal_writer_keeps_registry_permission_until_its_sql_write_finishes(p
 @pytest.fixture
 def held_bus(tmp_path):
     comms = wire(tmp_path)
-    Bus.install(Bus.path_in(comms.root))
     for name in ('sender', 'recipient'):
         comms.registry.declare(Thread(name, frozenset(), str(tmp_path)))
-    assert comms.bus.inbox('recipient') == []
+    assert comms.bus.inbox('recipient').page.messages == ()
     barrier = comms.owners.maintenance
     hold = barrier.begin(MaintenanceOperator.current())
     try:
@@ -69,7 +67,7 @@ def held_bus(tmp_path):
 
 
 def assert_published_once(comms):
-    messages = comms.bus.inbox('recipient')
+    messages = comms.bus.inbox('recipient').page.messages
     assert len(messages) == 1
     assert messages[0].body == 'held publication'
     assert SendRefusal.recent(comms.root) == ()

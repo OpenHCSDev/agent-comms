@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 
-from agent_comms.private_runtime_schema import PrivateCoordinatorTable
 from bus_record_fixture import prepare_native_comms
 from agent_comms.lifecycle_capability import Executing
 
@@ -54,7 +53,6 @@ def _root(
         )
     root_id = comms.registry.prepare_native_root().namespace
     store = Coordination(str(root / "coordination.sqlite3"))
-    PrivateCoordinatorTable.install(store)
     return comms, store, WakeCandidateIndex(comms.bus.bus), root_id
 
 

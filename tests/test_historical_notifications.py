@@ -362,7 +362,7 @@ def test_live_cli_ack_does_not_become_archived_ack(archived_notification):
 
     old, live, source, messages, _root_id = archived_notification
     old.registry.declare(replace(old.registry.require("agent"), execution=ExternalThreadExecution))
-    unread = old.bus.inbox("agent")
+    unread = old.bus.inbox("agent").page.messages
     assert old.bus.mark_delivered(
         "agent", tuple(message.reference for message in unread)
     ) == 1

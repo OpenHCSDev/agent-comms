@@ -3,7 +3,6 @@
 from agent_comms.channel_targets import CommandTarget
 
 
-from agent_comms.private_runtime_schema import PrivateCoordinatorTable
 from bus_record_fixture import prepare_native_comms
 from conftest import installed_comms
 
@@ -50,7 +49,7 @@ def test_restore_keeps_live_owner_and_bus_while_importing_saved_stopped_identity
     assert after.aliases["former-name"] == "missing"
     assert current.bus.bus.revision() == bus
     assert old.bus.bus.revision() == old_bus
-    assert not current.bus.inbox("missing")
+    assert not current.bus.inbox("missing").page.messages
     first = current.registry.store.path.read_bytes()
     assert current.registry.restore_stopped(source, ("live", "missing")) == ()
     assert current.registry.store.path.read_bytes() == first
@@ -134,11 +133,11 @@ def test_private_restoration_allows_new_cohort_without_starting_old_subscribers(
     live = Thread('live', frozenset({'comms'}), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid()))
     missing = Thread('missing', frozenset({'comms'}), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid()))
     old.registry.declare(missing)
-    current.registry.declare(live)
+    # The registry assigns storage roots at declaration; restoration must leave that thread alone.
+    live = current.registry.declare(live)
     root_id = current.registry.prepare_native_root().namespace
     source = old.registry.snapshot()
     with Coordination(str(current.root / "coordination.sqlite3")) as store:
-        PrivateCoordinatorTable.install(store)
         live_before = store.participants.register(
             live.incarnation.lookup, committed=True
         ).value
@@ -152,7 +151,7 @@ def test_private_restoration_allows_new_cohort_without_starting_old_subscribers(
             else None
         )
         bus_before = current.bus.bus.revision() if message else None
-        current.threads.restore_stopped(source, (missing.name,))
+        current.registry.restore_stopped(source, (missing.name,))
         snapshot = current.registry.snapshot()
         assert snapshot.statuses[missing.name] == StoppedThreadStatus()
         assert snapshot.threads[missing.name].process_identity == NoProcess()
@@ -182,12 +181,15 @@ def test_private_restoration_allows_new_cohort_without_starting_old_subscribers(
             ).fetchall()
         ] == [(live.name, "full_pending")]
         snapshot = current.registry.snapshot()
-        assert current.threads.restore_stopped(source, (missing.name,)) == ()
+        assert current.registry.restore_stopped(source, (missing.name,)) == ()
         assert current.registry.snapshot() == snapshot
 
 
-def test_public_restoration_does_not_create_coordinator(tmp_path):
+def test_public_restoration_declares_participant_without_native_authority(tmp_path):
     old, current = wire(tmp_path / "old"), wire(tmp_path / "current")
     old.registry.declare(Thread('missing', frozenset({'comms'}), str(tmp_path)))
-    assert current.threads.restore_stopped(old.registry.snapshot(), ("missing",)) == ("missing",)
-    assert not (current.root / "coordination.sqlite3").exists()
+    assert current.registry.restore_stopped(old.registry.snapshot(), ("missing",)) == ("missing",)
+    from agent_comms.coordinator import Coordination
+    with Coordination(str(current.root / "coordination.sqlite3")) as store:
+        assert store.participants.get(current.registry.require("missing").incarnation.lookup).committed
+    assert not current.registry.store.guard_path.exists()

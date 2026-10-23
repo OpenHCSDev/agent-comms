@@ -196,7 +196,7 @@ class CursorPublication:
         if selected_status is None and delivery.already_published(observed):
             return
         try:
-            await self.runtime.session_update(
+            await self.runtime.publish_update(
                 session_id=session_id,
                 update=SessionInfoUpdate(
                     session_update="session_info_update",

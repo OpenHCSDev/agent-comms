@@ -116,6 +116,7 @@ from .field_codec import (
     boundary_decoder,
 )
 from .harness_install import Harness
+from agent_comms.installer.probes.harnesses import HarnessInstallation, InstallResult
 from .history_result import HistoryPageResult
 from .history_views import CallingThreadTarget, NamedThreadTarget, PollTarget
 from .importing import ImportedSessionMetadata, ImportLimits, ThreadImported
@@ -123,7 +124,7 @@ from .input_origin import InputProvenance
 from .install_choices import InstallerChoice, LiveMode, RehearsalMode, RunMode, UnnamedInstaller
 from .maintenance_barrier import MaintenanceHeldError
 from .message_page import PageBounds
-from .message_reference import FirstUnreadStart, InboxStart, MessageReference
+from .message_reference import FirstUnreadStart, InboxStart, MessageReference, NewestUnreadStart
 from .messages import (
     Message,
 )
@@ -565,11 +566,13 @@ class ConstraintDroppedResult(CliResult):
 
 
 @dataclass(frozen=True)
-class InboxResult(CliResult):
-    messages: tuple[Message, ...]
+class InboxResult(HistoryPageResult):
+    """The newest unread page, newest first, and how many unread messages there are in all."""
 
-    def to_wire(self) -> object:
-        return {"messages": [message.to_wire() for message in self.messages]}
+    pending: int
+
+    def to_wire(self) -> dict[str, object]:
+        return {**super().to_wire(), "pending": self.pending}
 
 
 @dataclass(frozen=True)
@@ -691,10 +694,6 @@ class SubagentsImportedResult(CliResult):
     imported: tuple[ThreadImported, ...]
 
 
-@dataclass(frozen=True)
-class InstallResult(CliResult):
-    config: CommanderProject
-    registered: dict[str, tuple[str, ...]]
 
 
 @dataclass(frozen=True)
@@ -1375,10 +1374,19 @@ class ExportRetainedCliCommand(CliCommand, declared_name="export-retained"):
 
 @dataclass(frozen=True, kw_only=True)
 class InboxCliCommand(ThreadArgument, CliCommand):
-    help = "Undelivered messages for a thread"
+    help = "Undelivered messages for a thread, newest first"
+    before: Annotated[
+        PageCursor,
+        Argument(
+            flags=("--before",),
+            options={"help": "Exclusive older-page cursor (JSON)", "type": json.loads},
+        ),
+    ] = NewestCursor()
 
     def apply(self, ctx: Comms) -> CliResult:
-        return InboxResult(tuple(ctx.bus.inbox(self.thread)))
+        inbox = ctx.bus.inbox(self.thread, after=NewestUnreadStart(self.before))
+        shown = tuple(reversed(inbox.page.messages))
+        return InboxResult(shown, inbox.page.has_older, len(shown) + inbox.remaining)
 
 
 @dataclass(frozen=True)
@@ -1442,7 +1450,7 @@ class AckCliCommand(ThreadArgument, CliCommand):
     help = "Mark inbox delivered"
 
     def apply(self, ctx: Comms) -> CliResult:
-        messages = ctx.bus.inbox(self.thread)
+        messages = ctx.bus.inbox(self.thread).page.messages
         return AcknowledgedResult(ctx.messaging.acknowledge(
             self.thread, tuple(message.reference for message in messages)))
 
@@ -1472,7 +1480,7 @@ class StatusCliCommand(CliCommand):
 class HistoryCliCommand(CliCommand):
     help = "Newest-first bounded history of a named target"
     target: Annotated[
-        str, Argument(flags=("--target",), options={"help": "#channel or @peer"})
+        str, Argument(flags=("target",), options={"nargs": "?", "help": "#channel, @peer or a peer's name"})
     ] = AnyChannel.address()
     me: Annotated[
         DisplayViewer,
@@ -1665,7 +1673,7 @@ class RegisterCliCommand(NameArgument, CliCommand):
 
 
 @dataclass(frozen=True, kw_only=True)
-class InstallCliCommand(CliCommand):
+class InstallCliCommand(HarnessInstallation, CliCommand):
     help = ("Upgrade this machine's bus, checkout and runtime to --to, then set up every coding "
             "harness to use the bus, with the commander skill and tools")
     checkout: Annotated[
@@ -1705,19 +1713,6 @@ class InstallCliCommand(CliCommand):
             options={"help": "Parent directory for live backups"},
         ),
     ] = dataclasses.field(default_factory=lambda: Path.home() / ".cache/agent-rehearsal")
-    project: Annotated[
-        Path,
-        AbsolutePathText,
-        Argument(flags=("--project",), options={"help": "The worktree harness threads register in"}),
-    ] = dataclasses.field(default_factory=Path.cwd)
-    repos: Annotated[
-        RepoChoice,
-        Argument(flags=("--repos",), options={"help": "Replace the commander's recorded repositories"}),
-    ] = KeptRepos()
-    commander: Annotated[
-        CommanderChoice,
-        Argument(flags=("--commander",), options={"help": "Record this thread as the bus's commander"}),
-    ] = KeptCommander()
 
     @classmethod
     def published_launch(cls) -> LaunchRoot:
@@ -1732,25 +1727,7 @@ class InstallCliCommand(CliCommand):
 
         return InstallRun.start(self, route.root).launch(output)
 
-    def apply(self, ctx: Comms) -> InstallResult:
-        """The install's last step, on the bus it carried or created, run by that bus's
-        runtime (HarnessesProbe)."""
-        home = Path.home()
-        snapshot = ctx.registry.snapshot()
-        project = self.commander.configured(snapshot.commander_project, self.repos, snapshot)
-        ctx.registry.set_commander_project(project)
-        return InstallResult(project, {
-            type(harness).declared_name: self.declare_bus_threads(ctx, harness)
-            for harness in Harness.present(home)})
 
-    def declare_bus_threads(self, ctx: Comms, harness: Harness) -> tuple[str, ...]:
-        """Declare the bus threads this harness needs and the registry does not hold yet."""
-        names = ctx.registry.snapshot()
-        registered = tuple(name for name in harness.bus_threads if not names.taken(name))
-        for name in registered:
-            ctx.registry.declare(Thread(name=name, tags=frozenset(), worktree=str(self.project),
-                                        execution=ExternalThreadExecution))
-        return registered
 
 
 @dataclass(frozen=True, kw_only=True)

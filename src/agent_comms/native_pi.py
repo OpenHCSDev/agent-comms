@@ -43,7 +43,7 @@ from .pi_vocabulary import NoThinkingOverride, PendingStopReason, ThinkingChoice
 from .private_path import (
     FileIdentity,
     FileRevision,
-    NativeSessionFileRole,
+    PrivateFileRole,
     TrustedAncestorRole,
 )
 from .typed_table import (
@@ -262,10 +262,10 @@ class NativeContextJournal(
         with ExitStack() as ownership:
             try:
                 held = ownership.enter_context(closing(
-                    os.fdopen(os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK), "rb")
+                    os.fdopen(PrivateFileRole.read(
+                        path, NativePiUnavailable("Native proof indexed evidence is unavailable")), "rb")
                 ))
                 before = os.fstat(held.fileno())
-                NativeSessionFileRole.require(before)
                 db = ownership.enter_context(closing(SQLiteFile.recovering_snapshot(path)))
                 if cls.schema_differs(db):
                     raise NativePiUnavailable("Native proof requires offline durable conversion")
@@ -661,7 +661,7 @@ class PrivateEvidenceRead:
     record, then decode only beyond their consumed position. No history is hashed.
     """
 
-    def __init__(self, path, stream):
+    def __init__(self, path: Path, stream):
         self.path, self.stream = path, stream
         self.identity = FileIdentity.from_stat(os.fstat(stream.fileno()))
         self.prefix = UnverifiedNativeEvidencePrefix()
@@ -672,13 +672,13 @@ class PrivateEvidenceRead:
         return self.prefix.size
 
     @classmethod
-    def _open_stream(cls, path):
+    def _open_stream(cls, path: Path):
         stream = None
         try:
             if path != path.resolve(strict=True):
                 raise NativePiUnavailable("Native Pi evidence session path is not canonical")
-            stream = os.fdopen(os.open(path, os.O_RDONLY | os.O_NOFOLLOW), "rb")
-            NativeSessionFileRole.require(os.fstat(stream.fileno()))
+            stream = os.fdopen(PrivateFileRole.read(
+                path, NativePiUnavailable("Native Pi evidence file is unavailable")), "rb")
             return stream
         except FileNotFoundError as error:
             if stream is not None:
@@ -691,7 +691,7 @@ class PrivateEvidenceRead:
 
     @classmethod
     @contextmanager
-    def open(cls, path):
+    def open(cls, path: Path):
         source = cls(path, cls._open_stream(path))
         try:
             yield source
@@ -852,14 +852,15 @@ class PrivateEvidenceRead:
         Each observation fences the next: growth seen on the descriptor cannot
         be hidden by shrinking the named file back.
         """
+        refusal = NativePiUnavailable("Native Pi evidence has an unsafe ancestor")
         try:
-            TrustedAncestorRole.require_path(self.path.parent)
-        except (OSError, ValueError) as error:
-            raise NativePiUnavailable("Native Pi evidence has an unsafe ancestor") from error
+            TrustedAncestorRole.require_path(self.path.parent, refusal)
+        except OSError as error:
+            raise refusal from error
         # Detect replacement before classifying the old descriptor's now-zero
         # links: observing a new named source takes the existing reverify path.
         for info in (self.path.lstat(), os.fstat(self.stream.fileno())):
-            NativeSessionFileRole.require(info)
+            PrivateFileRole.require(info, RelationViolationError("Native Pi evidence file is not private"))
             observed = FileRevision.from_stat(info)
             if observed.identity != self.identity or (
                 observed != revision and observed.size <= revision.size

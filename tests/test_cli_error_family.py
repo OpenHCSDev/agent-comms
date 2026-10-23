@@ -10,7 +10,8 @@ import pytest
 from pydantic import ValidationError
 
 from agent_comms.cli import _fail, main
-from agent_comms.cli_bridges.shared import Binding, DeliveryRow, StoredBinding
+from agent_comms.cli_bridges.shared import Binding, DeliveryRow, GivenBinding, StoredBinding
+from agent_comms.field_codec import RecordProblems
 from agent_comms.cli_protocol import (
     WATCH_LINE, FailedCoreError, UnavailableCoreError, UnconfirmedOutcome, DeliveredOutcome,
 )
@@ -162,3 +163,39 @@ def test_existing_binding_lookup_does_not_acquire_a_writer(tmp_path):
         assert not any(sql.startswith(('BEGIN', 'COMMIT', 'ROLLBACK')) for sql in statements)
 
 
+
+
+@pytest.mark.asyncio
+async def test_watched_record_crosses_the_watch_line_as_its_envelope(root):
+    """The bridge's watch child writes what bus.watch yields; the bridge decodes that same line."""
+    from contextlib import aclosing
+
+    from goal_owner_fixture import canonical_goal_wire
+
+    from agent_comms.cli_protocol import ArrivedMessage
+    from agent_comms.read_basis import ExplicitWatchAcknowledgment
+    from agent_comms.threads import Thread
+
+    comms = canonical_goal_wire(root)
+    for name in ("a", "b"):
+        comms.registry.declare(Thread(name=name, tags=frozenset(), worktree='/wt'))
+    sent = comms.messaging.send("a", "b", "crosses").message
+    async with aclosing(comms.bus.watch("b", acknowledgment=ExplicitWatchAcknowledgment)) as watched:
+        async with asyncio.timeout(5):
+            record = await anext(watched)
+    line = WATCH_LINE.validate_json(ArrivedMessage(message=record).model_dump_json())
+    assert isinstance(line, ArrivedMessage)
+    assert line.message.to_wire() == sent.to_wire() == record.to_wire()
+
+
+def test_given_binding_fields_override_the_stored_binding(tmp_path):
+    """A partial binding takes each missing field from the stored one; a field absent from
+    both is refused by name, and a changed field still claims another conversation."""
+    type_key = {Binding.family_discriminator: Binding.declared_name}
+    with Binding.open(tmp_path) as db:
+        with pytest.raises(RecordProblems, match='bus_thread'):
+            GivenBinding({**type_key, 'root': str(tmp_path)}).bind(db)
+        stored = Binding(str(tmp_path), 'viewer', 'external-session').bind(db)
+        assert GivenBinding({**type_key, 'root': str(tmp_path)}).bind(db) == stored
+        with pytest.raises(ValueError, match='another Core/CLI conversation'):
+            GivenBinding({**type_key, 'bus_thread': 'other-viewer'}).bind(db)

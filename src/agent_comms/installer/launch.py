@@ -22,15 +22,17 @@ from typing import Annotated, TextIO
 
 import agent_comms.installer
 from agent_comms.cli_bridges.shared import SessionBridgeResumes
-from agent_comms.cli_commands import InstallCliCommand, InstallResult
+from agent_comms.cli_commands import InstallCliCommand
+from agent_comms.installer.probes.harnesses import InstallResult
 from agent_comms.field_codec import FieldCodec, Id128Text, PathText
-from agent_comms.installer.backup import StoreBackup, UpgradeRefused
+from agent_comms.installer.backup import StoreBackup
+from agent_comms.installer.refusals import UpgradeRefused
 from agent_comms.installer.commands import InstallCommands
 from agent_comms.installer.interpreter_operation import InstallClock, InstallerProcessPhase, LauncherPhase, PhaseTiming, PreparePhase, PublicationPhase, TreeClosePhase
 from agent_comms.installer.reporting import (
     FinishedInstall, InstallOutcome, RootWriter, UnfinishedInstall, UnpostedWriter,
 )
-from agent_comms.installer.harness_probe import HarnessesProbe
+from agent_comms.installer.probes.harnesses import HarnessesProbe
 from agent_comms.installer.upgrade import (
     RehearsedUpgrade,
     Stack,
@@ -181,4 +183,4 @@ class InstallRun:
     def harnesses(self, stack: Stack) -> InstallResult:
         # The target runtime is published by now, and only its installed package
         # declares harness registration beside the operation family (``TargetProgram``).
-        return stack.probe(HarnessesProbe(self.root, self.command))
+        return stack.probe(HarnessesProbe(self.root, self.command.declared_part()))

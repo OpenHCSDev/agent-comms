@@ -25,7 +25,7 @@ from .thread_identity import GenerationCounter, TurnId
 from .thread_status import (
     ConnectedThreadStatus,
     NoBridgeThreadStatus,
-    RunningThreadStatus,
+    ProcessThreadStatus,
     ThreadStatus,
 )
 from .thread_text import ForkedParent
@@ -33,8 +33,10 @@ from .threads import Thread
 
 if TYPE_CHECKING:
     from .goal_management import Goals
+    from .selected_participant import SelectedParticipant
+    from .agent_backend import RuntimeLocation
 
-_RUNNING_STATUS = RunningThreadStatus()
+_DEFAULT_PRESENCE = ProcessThreadStatus()
 
 
 class ProjectThreadSelection:
@@ -75,7 +77,7 @@ class Registration:
     def register(
         self,
         thread: Thread,
-        status: ThreadStatus = _RUNNING_STATUS,
+        status: ThreadStatus = _DEFAULT_PRESENCE,
         *,
         new_owner: bool = False,
     ) -> None:
@@ -102,14 +104,14 @@ class Registration:
                 existing.execution.require_commander_fork()
                 if not existing.parent.named(parent.name):
                     raise RelationViolationError(f"Thread {name!r} is not a fork of {parent.name!r}.")
-                return self._declare_in(edit, existing, _RUNNING_STATUS)
+                return self._declare_in(edit, existing, _DEFAULT_PRESENCE)
             child = Thread(name, parent.tags, parent.worktree,
                 parent=ForkedParent(parent.name), model=parent.model,
                 thinking_level=parent.thinking_level, service_tier=parent.service_tier,
                 execution=CommanderForkExecution)
             text = ('\n'.join(goal.text for goal in parent.goal.active())
                     or f'Coordinate assigned work for {parent.name}.')
-            with self._preparing_declaration(edit, child, _RUNNING_STATUS) as change:
+            with self._preparing_declaration(edit, child, _DEFAULT_PRESENCE) as change:
                 goal = SetGoalAction(text=text).create(
                     GoalActionContext(goals, change.thread))
                 return self._commit_registration(edit, replace(
@@ -132,7 +134,7 @@ class Registration:
                 "Only visible agent threads can be started.")
             owned = replace(current.without_turn(), process_identity=process)
             change = self._commit_registration(edit, edit.document.prepare_registration(
-                owned, _RUNNING_STATUS, new_owner=True))
+                owned, _DEFAULT_PRESENCE, new_owner=True))
             return RegistryOwner(
                 thread=change.thread,
                 claimed_generation=edit.document.entry(change.thread.name).claimed_generation,
@@ -168,16 +170,40 @@ class Registration:
         Native session identity and context proof remain with their producers.
         """
         with self.store.editing() as edit:
-            change = edit.prepare_native_source(original, session_file)
-            change = self._commit_registration(edit, change)
-            # The document owns the next turn's selection. Publishing an
-            # observed source must not rewrite this authorized turn's settings.
-            observed = replace(change.thread,
-                worktree=original.thread.worktree, model=original.thread.model,
-                thinking_level=original.thread.thinking_level)
-            return replace(original, thread=observed)
+            return self._attach_native_session(edit, original, session_file)
 
-    def declare(self, thread: Thread, status: ThreadStatus = _RUNNING_STATUS) -> Thread:
+    def claim_fresh_session(self, participant: SelectedParticipant) -> RuntimeLocation:
+        """Create and record the first session while the registry owns its selection.
+
+        An execution captured before the first claim joins the recorded session;
+        its process, incarnation, claim and turn must still pass the source fence.
+        RuntimeLocation.new_location already retains saved locations and creates
+        only for UnstartedRuntime, so selection has no second absence test here.
+        """
+        original = participant.owner
+        with self.store.editing() as edit:
+            current = edit.document.require(original.thread.name)
+            joined = replace(original, thread=replace(
+                original.thread, session_file=original.thread.session_file.applied(current.session_file)))
+            current = joined.require_source_snapshot(edit.original.snapshot)
+            location = current.writable_runtime.new_location(
+                self.store.path.parent, original.thread.worktree)
+            participant.owner = self._attach_native_session(edit, joined, location.path)
+            return participant.owner.thread.writable_runtime
+
+    def _attach_native_session(
+        self, edit: RegistryEdit, original: RegistryOwner, session_file: str,
+    ) -> RegistryOwner:
+        change = edit.prepare_native_source(original, session_file)
+        change = self._commit_registration(edit, change)
+        # The document owns the next turn's selection. Publishing an
+        # observed source must not rewrite this authorized turn's settings.
+        observed = replace(change.thread,
+            worktree=original.thread.worktree, model=original.thread.model,
+            thinking_level=original.thread.thinking_level)
+        return replace(original, thread=observed)
+
+    def declare(self, thread: Thread, status: ThreadStatus = _DEFAULT_PRESENCE) -> Thread:
         """Operational declaration and channel provenance use one locked current owner.
 
         Internal register remains exact state replacement; worker/public declaration
@@ -186,7 +212,7 @@ class Registration:
         """
         return self._declare_unlocked(thread, status)
 
-    def _declare_unlocked(self, thread: Thread, status: ThreadStatus = _RUNNING_STATUS) -> Thread:
+    def _declare_unlocked(self, thread: Thread, status: ThreadStatus = _DEFAULT_PRESENCE) -> Thread:
         """Cross-store declarations share the registry's own edit transaction."""
         with self.store.editing() as edit:
             return self._declare_in(edit, thread, status)
@@ -195,7 +221,7 @@ class Registration:
         """The caller holds inbox authority; namespace allocation stays registry-owned."""
         with self.store.editing() as edit:
             requested = thread.for_claim(edit.document.claim_name(thread.name))
-            return self._declare_in(edit, requested, RunningThreadStatus())
+            return self._declare_in(edit, requested, _DEFAULT_PRESENCE)
 
     @staticmethod
     def _prepare_declaration(document, channels, thread: Thread, status: ThreadStatus):
@@ -206,7 +232,7 @@ class Registration:
         return change
 
     def require_declaration_available(
-        self, thread: Thread, status: ThreadStatus = _RUNNING_STATUS,
+        self, thread: Thread, status: ThreadStatus = _DEFAULT_PRESENCE,
     ) -> None:
         """Refuse a known-invalid declaration before its producer performs side effects."""
         catalog = ChannelCatalog.at(self.store.path.parent)
@@ -232,6 +258,7 @@ class Registration:
         # The registry write refuses during maintenance; refuse first, so the goal journal
         # never records an intent for a registration that cannot commit.
         self.store.require_maintenance_open()
+        change.prepare_participant(self.store.path.parent)
         thread = change.thread
         change = replace(change, thread=replace(
             thread, storage_roots=thread.storage_roots.assigned(self.storage_rule, thread.name)))
@@ -257,7 +284,12 @@ class Registration:
                 return result
         return change
 
-    restore_stopped = changing(RegistryDocument.restore_stopped)
+    def restore_stopped(self, source: RegistrySnapshot, names: Sequence[str]) -> tuple[str, ...]:
+        with self.store.editing() as edit:
+            restored = edit.restore_stopped(source, names)
+            edit.commit()
+            return restored
+
     rename = changing(RegistryDocument.rename)
     set_work_state = changing(RegistryDocument.set_work_state)
     observe_offered_tools = changing(RegistryDocument.observe_offered_tools)

@@ -69,7 +69,7 @@ class Repo(BaseModel, WireValue):
         Annotated[
             RepositoryName,
             PlainValidator(RepositoryName.from_wire, json_schema_input_type=str),
-            PlainSerializer(RepositoryName.to_wire),
+            PlainSerializer(lambda name: name.to_wire()),
         ]
     ]
     source: str = "src"
@@ -263,7 +263,12 @@ class Checkout:
     @classmethod
     def add(cls, repository: Path | str, path: Path | str, revision: str, *options: str) -> Self:
         Repo.git(repository, "worktree", "add", *options, str(path), revision)
-        checkout = cls(Path(path))
+        return cls.prepared(Path(path))
+
+    @classmethod
+    def prepared(cls, path: Path) -> Self:
+        """Prepare this checkout's pinned submodules before handing it to a consumer."""
+        checkout = cls(path)
         checkout.prepare()
         return checkout
 
@@ -296,30 +301,16 @@ class Checkout:
         """Changes outside the pinned submodules, which retiring the tree would lose."""
         return Repo.git(self.path, "status", "--porcelain", "--ignore-submodules=all")
 
-    def discard_generated(self) -> None:
-        """A persistent checkout has no run-owned changes to discard."""
-
     def retire(self) -> None:
-        """Retire a clean worktree after releasing its pinned submodules."""
+        """Remove this worktree. Git refuses any tree holding submodules without --force,
+        so this owner checks for held work itself and then forces."""
         held = self.held_work()
         if held:
             raise CheckoutHoldsWorkError(self.path, held)
         common = Path(
             Repo.git(self.path, "rev-parse", "--path-format=absolute", "--git-common-dir").strip()
         )
-        directory = Path(Repo.git(self.path, "rev-parse", "--absolute-git-dir").strip())
-        if directory == common:
-            raise ValueError(f"Cannot retire the primary checkout: {self.path}")
-        self.discard_generated()
-        if self.submodules():
-            Repo.git(self.path, "submodule", "deinit", "--all")
-            # Deinit empties the working directory but retains this worktree's
-            # module repositories. Git still refuses removal while they exist.
-            modules = directory / "modules"
-            if modules.exists():
-                shutil.rmtree(modules)
-        Repo.git(common.parent, "worktree", "remove", str(self.path))
-        Repo.git(common.parent, "worktree", "prune")
+        Repo.git(common.parent, "worktree", "remove", "--force", str(self.path))
 
 
 class ScratchCheckout(Checkout):
@@ -327,8 +318,3 @@ class ScratchCheckout(Checkout):
 
     def held_work(self) -> str:
         return ""
-
-    def discard_generated(self) -> None:
-        """Only a run-owned disposable tree may discard its generated build inputs."""
-        Repo.git(self.path, "restore", "--staged", "--worktree", "--", ".")
-        Repo.git(self.path, "clean", "-fd")

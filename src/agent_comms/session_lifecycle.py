@@ -6,58 +6,56 @@ import asyncio
 import os
 from functools import partial
 from pathlib import Path
-from typing import cast
+from typing import TYPE_CHECKING, cast
 
 from acp import RequestError
 from acp.schema import (
-    AcpMcpServer,
     AgentCapabilities,
-    CloseSessionResponse,
     ClientCapabilities,
-    HttpMcpServer,
+    CloseSessionResponse,
     Implementation,
     InitializeResponse,
+    LoadSessionRequest,
     LoadSessionResponse,
+    NewSessionRequest,
     NewSessionResponse,
-    McpServerStdio,
     PromptCapabilities,
-    SessionInfoUpdate,
     SessionCapabilities,
     SessionCloseCapabilities,
+    SessionInfoUpdate,
     TerminalAuthMethod,
-    SseMcpServer,
 )
 from pydantic import JsonValue
 
-from .field_codec import FieldCodec, MalformedRecord, boundary_decoder
 from . import agent_events as events
 from .acp_extension import (
     CoordinationChangedUpdate,
     GoalChangedUpdate,
     encode_updates,
 )
-from .comms import Comms
 from .child_process import join_retirement
-from .coordinator import Coordination
-from .controller import AcpController
-from .errors import RelationViolationError
+from .comms import Comms
 from .config_options import SessionConfigOptions
+from .coordinator import Coordination
+from .errors import RelationViolationError
+from .field_codec import FieldCodec, MalformedRecord, boundary_decoder
 from .native_arguments import NativeArguments
+from .owner_protocol import IncompatibleOwner, IncompatibleOwnerError
+from .registry_document import RegistryEntry
 from .runtime import RuntimeProxy, RuntimeServer
+from .runtime_requests import FreshSubscribeRuntimeRequest, SubscribeRuntimeRequest
 from .session_effects import SessionEffects
+from .session_load import ExistingSessionLoadPlan, FailedSessionLoadPlan, SessionLoadPlan
+from .thread_identity import AcpThreadRole
 from .thread_model import ThreadModel
 from .thread_status import ActiveThreadPresence
-from .threads import Thread
-from .thread_identity import AcpThreadRole
 from .thread_text import NoThreadText, ThreadText
-from .registry_document import RegistryEntry
+from .threads import Thread
 from .transcript_updates import TranscriptReplay
-from .owner_protocol import IncompatibleOwner, IncompatibleOwnerError
-from .session_load import SessionLoadPlan, ExistingSessionLoadPlan, FailedSessionLoadPlan
-from .runtime_requests import FreshSubscribeRuntimeRequest, SubscribeRuntimeRequest
 
 
-type SessionMcpServer = HttpMcpServer | SseMcpServer | AcpMcpServer | McpServerStdio
+if TYPE_CHECKING:
+    from .acp import SdkSessionConnection
 
 
 class SessionLifecycle:
@@ -76,7 +74,7 @@ class SessionLifecycle:
         # A launcher registers this process as the owner before it starts, so
         # this process owns that registration even if it never binds a session.
         self.launched_owners: set[str] = set()
-        self.client: AcpController | None = None
+        self.client: SdkSessionConnection | None = None
         self.titles: dict[str, str] = {}
         self.display_titles: dict[str, ThreadText] = {}
         self.worktrees: dict[str, str] = {}
@@ -144,8 +142,8 @@ class SessionLifecycle:
         })
 
     @staticmethod
-    def reject_foreign_mcp(mcp_servers: list[SessionMcpServer] | None) -> None:
-        if mcp_servers is not None and (type(mcp_servers) is not list or mcp_servers):
+    def reject_foreign_mcp(request: NewSessionRequest | LoadSessionRequest) -> None:
+        if request.mcp_servers:
             raise RequestError.invalid_params(
                 {
                     "reason": (
@@ -165,7 +163,7 @@ class SessionLifecycle:
             auto_title_pending=True,
             role=AcpThreadRole,
         )
-        self.comms.threads.restore_stopped(self.comms.registry.snapshot(), (thread.name,))
+        self.comms.registry.restore_stopped(self.comms.registry.snapshot(), (thread.name,))
         return self.acquire_declared_thread(thread)
 
     def acquire_declared_thread(self, thread: Thread) -> Thread:
@@ -190,26 +188,23 @@ class SessionLifecycle:
         if self.runtime_enabled:
             await self.runtime.start()
 
-    async def new_session(
-        self, cwd: str, mcp_servers: list[SessionMcpServer] | None = None, **kwargs: JsonValue
-    ) -> NewSessionResponse:
-        self.reject_foreign_mcp(mcp_servers)
+    async def new_session(self, request: NewSessionRequest) -> NewSessionResponse:
+        self.reject_foreign_mcp(request)
         await Coordination.run_worker(self.comms.owners.require_private_launch)
-        thread = await Coordination.run_worker(partial(self.declare_thread, cwd))
+        thread = await Coordination.run_worker(partial(self.declare_thread, request.cwd))
         await self.bind_owned(thread, thread.name)
         self.effects.inputs.ensure_live_drain(thread.name)
         response = NewSessionResponse(
             session_id=thread.name,
             field_meta=await self.metadata(thread.name, session_id=thread.name),
         )
-        self.config.start_menu(thread.name, self.client)
+        self.config.start_menu(thread.name, self.runtime)
         return response
 
-    async def load_session(
-        self, cwd: str, session_id: str, mcp_servers: list[SessionMcpServer] | None = None, **kwargs: JsonValue
-    ) -> LoadSessionResponse:
-        self.reject_foreign_mcp(mcp_servers)
-        thread = await self._acquire_loaded(cwd, session_id)
+    async def load_session(self, request: LoadSessionRequest) -> LoadSessionResponse:
+        self.reject_foreign_mcp(request)
+        session_id = request.session_id
+        thread = await self._acquire_loaded(request.cwd, request.session_id)
         if not thread.process_identity.runs_here():
             return await self.attach_owner(thread, session_id)
         await self._bind_loaded(thread, session_id)
@@ -218,7 +213,7 @@ class SessionLifecycle:
         response = LoadSessionResponse(
             field_meta=await self.metadata(thread.name, session_id=session_id),
         )
-        self.config.start_menu(session_id, self.client)
+        self.config.start_menu(session_id, self.runtime)
         return response
 
     async def start_owner(self, cwd: str, session_id: str) -> None:
@@ -323,7 +318,7 @@ class SessionLifecycle:
         self, session_id: str, *, title: ThreadText = NoThreadText(),
     ) -> None:
         """Encode the thread's title once for the ACP metadata boundary."""
-        await self.runtime.session_update(
+        await self.runtime.publish_update(
             session_id=session_id,
             update=SessionInfoUpdate(
                 session_update="session_info_update",
@@ -426,26 +421,31 @@ class AttachedSessionLifecycle(SessionLifecycle):
         """Leave the registered declaration for the load operation to check."""
         return thread
 
-    async def new_session(
-        self, cwd: str, mcp_servers: list[SessionMcpServer] | None = None, **kwargs: JsonValue
-    ) -> NewSessionResponse:
-        self.reject_foreign_mcp(mcp_servers)
-        thread = await Coordination.run_worker(partial(self.declare_thread, cwd))
+    async def new_session(self, request: NewSessionRequest) -> NewSessionResponse:
+        self.reject_foreign_mcp(request)
+        thread = await Coordination.run_worker(partial(self.declare_thread, request.cwd))
         loaded = await self._attach_requested_session(
-            thread, thread.name, kwargs.get("agentCommsLoad"), FreshSubscribeRuntimeRequest,
+            thread,
+            thread.name,
+            (request.field_meta or {}).get("agentCommsLoad"),
+            FreshSubscribeRuntimeRequest,
         )
         return NewSessionResponse(
             session_id=thread.name,
             field_meta=loaded.field_meta,
         )
 
-    async def load_session(
-        self, cwd: str, session_id: str, mcp_servers: list[SessionMcpServer] | None = None, **kwargs: JsonValue
-    ) -> LoadSessionResponse:
-        self.reject_foreign_mcp(mcp_servers)
-        thread = await Coordination.run_worker(partial(self.validated_thread, cwd, session_id))
+    async def load_session(self, request: LoadSessionRequest) -> LoadSessionResponse:
+        self.reject_foreign_mcp(request)
+        session_id = request.session_id
+        thread = await Coordination.run_worker(
+            partial(self.validated_thread, request.cwd, request.session_id)
+        )
         return await self._attach_requested_session(
-            thread, session_id, kwargs.get("agentCommsLoad"), SubscribeRuntimeRequest,
+            thread,
+            session_id,
+            (request.field_meta or {}).get("agentCommsLoad"),
+            SubscribeRuntimeRequest,
         )
 
     async def _attach_requested_session(

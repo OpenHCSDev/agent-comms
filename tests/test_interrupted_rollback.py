@@ -14,7 +14,7 @@ from agent_comms.comms import wire
 from agent_comms.active_route import active_route_path
 from agent_comms.install_choices import RehearsalMode, UnnamedInstaller
 from agent_comms.installer.backup import StoreBackup
-from agent_comms.installer.carry import Carried, Carry
+from agent_comms.installer.probes.carry import Carried, Carry
 from agent_comms.installer.launch import InstallReport
 from agent_comms.installer.upgrade import upgrade
 from agent_comms.locked_store import RegistryFile

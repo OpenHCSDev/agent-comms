@@ -74,7 +74,7 @@ from agent_comms.message_reference import MessageReference
 from agent_comms.messages import InfoKind, Message
 from agent_comms.tool_denial import SelectedToolDenied
 from agent_comms.order_runs import OrderRun
-from agent_comms.order_story import FleetEvent, ProblemStory, StoryEvent, StoryLine, StorySource
+from agent_comms.order_story import ProblemStory, StoryEvent, StoryLine, StorySource
 from agent_comms.owner_requests import (
     OpenRequestState,
     OwnerRequestId,
@@ -162,6 +162,23 @@ class FreshMainCheck:
 
     def check_base(self, repo: Path) -> str:
         return f"origin/{WorkBranches.main}"
+
+
+class BranchPointCheck:
+    """Delivered work is checked against the main commit it was built on, never main since:
+    once the fix merges, current main passes, which proves nothing about the check."""
+
+    @property
+    @abstractmethod
+    def work_commit(self) -> str: ...
+
+    def check_base(self, repo: Path) -> str:
+        main = f"origin/{WorkBranches.main}"
+        line = set(Repo.git(repo, "rev-list", "--first-parent", main).split())
+        for commit in Repo.git(repo, "rev-list", "--first-parent", f"{self.work_commit}^1").split():
+            if commit in line:
+                return commit
+        raise ValueError(f"{self.work_commit} was not built on {WorkBranches.main}.")
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -263,7 +280,7 @@ class CheckedDelivery(OrderDelivery, declared_name=None):
 
 
 @dataclass(frozen=True, kw_only=True)
-class RecordedCommitDelivery(CheckedDelivery, declared_name="commit"):
+class RecordedCommitDelivery(BranchPointCheck, CheckedDelivery, declared_name="commit"):
     """A delivery recorded before checked and delivered commits were told apart.
 
     Its one commit is both facts; Core refuses new deliveries of this kind."""
@@ -273,8 +290,9 @@ class RecordedCommitDelivery(CheckedDelivery, declared_name="commit"):
         GitCommitText.decode(self.commit)
         GitCommitText.decode(self.delivered)
 
-    def check_base(self, repo: Path) -> str:
-        return Repo.git(repo, "merge-base", self.delivered, WorkBranches.main).strip()
+    @property
+    def work_commit(self) -> str:
+        return self.delivered
 
     def done_claims(self, order: CheckedProblemOrder) -> tuple[ProgressClaim, ...]:
         super().done_claims(order)
@@ -329,11 +347,6 @@ class CommitDelivery(RecordedCommitDelivery, declared_name="delivered_commit"):
         if base.strip() != delivered:
             raise ValueError(
                 f"Delivered commit {self.delivered} is not in the checked commit {self.commit}.")
-        parents = await asyncio.to_thread(Repo.git, check.directory, "rev-list", "--parents",
-                                          "-n", "1", self.delivered)
-        if len(parents.split()) > 2:  # a main merge is never the unit's answer, only its arrival
-            raise ValueError(f"Delivered commit {self.delivered} is a merge; deliver the unit's "
-                             "first pushed commit that answers the order.")
 
     def required_claims(self, claims: tuple[ProgressClaim, ...]) -> tuple[ProgressClaim, ...]:
         return (*claims, MergedClaim(self.delivered))
@@ -524,6 +537,9 @@ class PullRequest(DeclaredFamily, affix="PullRequest"):
     def merged_commits(self, since: float) -> Iterator[str]:
         return iter(())
 
+    def delivery(self, repo: Path, evidence: DeliveryEvidence) -> CommitDelivery:
+        raise ValueError(f"Pull request {self.number} is not merged; done checks the merged tree.")
+
     async def delivery_merges(self, delivery: CommitDelivery,
                               check: OrderCheck) -> tuple[DeliveryMerge, ...]:
         return ()
@@ -541,6 +557,14 @@ class MergedPullRequest(PullRequest):
     def merged_commits(self, since: float) -> Iterator[str]:
         if self.merged_at >= since:
             yield self.merge
+
+    def delivery(self, repo: Path, evidence: DeliveryEvidence) -> CommitDelivery:
+        """The merged tree is the delivered tree; the request's first commit is the unit's work."""
+        Repo.git(repo, "fetch", "-q", "origin", self.base, f"refs/pull/{self.number}/head")
+        for first in Repo.git(repo, "rev-list", "--first-parent", "--reverse",
+                              f"{self.merge}^1..{self.head}").split():
+            return CommitDelivery(commit=self.merge, delivered_commit=first, evidence=evidence)
+        raise ValueError(f"Pull request {self.number} adds no commit to {self.base}.")
 
     async def delivery_merges(self, delivery: CommitDelivery,
                               check: OrderCheck) -> tuple[DeliveryMerge, ...]:
@@ -611,6 +635,13 @@ class PullRequests:
         for todo in todos:
             self._todos.setdefault(todo.repo, {})[todo.id] = todo
         return self
+
+    def merged_delivery(self, todo: Todo, repo: Path, evidence: DeliveryEvidence) -> CommitDelivery:
+        """The newest merged request linked to the order is what `order done` checks."""
+        for request in self.listed(todo.repo, MergedListedPullRequest, todo):
+            return request.delivery(repo, evidence)
+        raise ValueError(
+            f"{todo.id} has no merged pull request; link it with `order pr` and merge it.")
 
     def claimed_heads(self, todo: Todo) -> Iterator[tuple[OrderClaim, PullRequest]]:
         """Join the current claim to its open PR in this same GitHub read."""
@@ -1640,7 +1671,7 @@ class DeliverySource(DeclaredFamily, affix="DeliverySource"):
     """The command's decoded source, before a commit reference is resolved in its repository."""
 
     @abstractmethod
-    def delivery(self, repo: Path, evidence: DeliveryEvidence) -> CheckedDelivery: ...
+    def delivery(self, todo: Todo, repo: Path, evidence: DeliveryEvidence) -> CheckedDelivery: ...
 
     def require_report(self) -> None:
         raise ValueError("Triage returns --seen REPORT, not a commit or operation.")
@@ -1674,7 +1705,7 @@ class OrderScope[Delivery: OrderDelivery](DeclaredFamily, affix="Scope"):
     ) -> dict[ProgressClaim, tuple[str, ...]]: ...
 
     @abstractmethod
-    def delivery(self, repo: Path, source: DeliverySource,
+    def delivery(self, todo: Todo, repo: Path, source: DeliverySource,
                  screenshot: str, seen: str) -> Delivery: ...
 
     @abstractmethod
@@ -1682,7 +1713,7 @@ class OrderScope[Delivery: OrderDelivery](DeclaredFamily, affix="Scope"):
 
 
 class TriageScope(OrderScope[ReportDelivery]):
-    def delivery(self, repo: Path, source: DeliverySource,
+    def delivery(self, todo: Todo, repo: Path, source: DeliverySource,
                  screenshot: str, seen: str) -> ReportDelivery:
         source.require_report()
         if screenshot:
@@ -1710,11 +1741,11 @@ class TriageScope(OrderScope[ReportDelivery]):
 class FixScope(OrderScope[CheckedDelivery]):
     shape: FixShape
 
-    def delivery(self, repo: Path, source: DeliverySource,
+    def delivery(self, todo: Todo, repo: Path, source: DeliverySource,
                  screenshot: str, seen: str) -> CheckedDelivery:
         path = seen or screenshot
         evidence = FileDeliveryEvidence(path) if path else NoDeliveryEvidence()
-        return source.delivery(repo, evidence)
+        return source.delivery(todo, repo, evidence)
 
     def require_references(self, root: Path, revision: SourceRevision) -> None:
         self.shape.require_references(root, revision)
@@ -2243,9 +2274,17 @@ class OrderClaim:
 
 
 @dataclass(frozen=True, kw_only=True)
-class ClaimedProblemOrder(DeliverableProblemOrder):
+class ClaimedProblemOrder(BranchPointCheck, DeliverableProblemOrder):
     claim: OrderClaim
     line: ClassVar[str] = "Claimed by the unit, waiting on the commander's verdict"
+
+    @property
+    def work_commit(self) -> str:
+        return self.claim.head
+
+    def check_base(self, repo: Path) -> str:
+        Repo.git(repo, "fetch", "-q", "origin", f"refs/pull/{self.claim.pull_request.number}/head")
+        return super().check_base(repo)
 
     def require_reassignment(self, todo: Todo, proposed: Assignment) -> None:
         """A corrected order to the claimant replaces its claim; another owner is a transfer."""
@@ -2777,7 +2816,7 @@ class CitedStrike(TodoOperation, declared_name=None):
 
 
 @dataclass(frozen=True)
-class StrikeTodo(CitedStrike, FleetEvent):
+class StrikeTodo(CitedStrike, StoryEvent):
     actor: ThreadIncarnation
     previous: Assignment
     reason: str
@@ -3067,7 +3106,7 @@ class DroppedVerdict(ToolCallVerdict):
 
 
 @dataclass(frozen=True)
-class SendBackVerdict(ToolCallVerdict, CitedStrike, FleetEvent):
+class SendBackVerdict(ToolCallVerdict, CitedStrike, StoryEvent):
     """The tool call goes back; the same write strikes the holder and revises the order Goal."""
     reason: StrikeReason
 
@@ -3520,10 +3559,6 @@ class Todo(TodoStoreRows, TypedTable):
             key=lambda event: event.at.chronology(),
         ))
         return ProblemStory(self.id, self.order.line, events)
-
-    def fleet_story(self) -> tuple[StoryLine, ...]:
-        return tuple(StoryLine(event.at, f"{self.id}: {event.text}")
-                     for source in self.story_sources() for event in source.fleet_story())
 
     @property
     def review_window(self) -> float:

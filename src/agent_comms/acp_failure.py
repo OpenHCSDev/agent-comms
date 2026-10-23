@@ -15,6 +15,7 @@ from typing import TYPE_CHECKING, ClassVar, Literal, NoReturn, Annotated
 if TYPE_CHECKING:
     from acp import RequestError
 
+    from .controller import SessionUpdateSink
     from .agent_events import Done, Error
     from .input_disposition import InputDocument
     from .turn_failure import TurnFailure
@@ -258,7 +259,7 @@ class NativeTurnOutcome(ABC):
     """Resolved completion owns failure presentation and notification delivery."""
 
     @abstractmethod
-    async def publish(self, client, session_id: str) -> NativeTurnOutcome: ...
+    async def publish(self, client: SessionUpdateSink, session_id: str) -> NativeTurnOutcome: ...
 
     @abstractmethod
     def raise_if_failed(self) -> None: ...
@@ -271,7 +272,7 @@ class NativeTurnOutcome(ABC):
 
 @dataclass(frozen=True)
 class UnresolvedNativeTurnOutcome(NativeTurnOutcome):
-    async def publish(self, client, session_id: str) -> NativeTurnOutcome:
+    async def publish(self, client: SessionUpdateSink, session_id: str) -> NativeTurnOutcome:
         raise RuntimeError("Native completion has not been resolved at its input boundary")
 
     def raise_if_failed(self) -> None:
@@ -280,7 +281,7 @@ class UnresolvedNativeTurnOutcome(NativeTurnOutcome):
 
 @dataclass(frozen=True)
 class SuccessfulNativeTurnOutcome(NativeTurnOutcome):
-    async def publish(self, client, session_id: str) -> NativeTurnOutcome:
+    async def publish(self, client: SessionUpdateSink, session_id: str) -> NativeTurnOutcome:
         return self
 
     def raise_if_failed(self) -> None:
@@ -311,14 +312,14 @@ class FailedNativeTurnOutcome(NativeTurnOutcome):
                                if not document.all_started(original.notice_keys) else None),
         )
 
-    async def publish(self, client, session_id: str) -> NativeTurnOutcome:
+    async def publish(self, client: SessionUpdateSink, session_id: str) -> NativeTurnOutcome:
         from acp.schema import AgentMessageChunk, TextContentBlock
         from .acp_extension import (
             InputFailedUpdate, RequestFailedUpdate, TextRouteUpdate, encode_updates,
         )
 
         failure = self.request.failure
-        accepted = await client.session_update(
+        accepted = await client.publish_update(
             session_id=session_id,
             update=AgentMessageChunk(
                 session_update="agent_message_chunk",
@@ -330,9 +331,7 @@ class FailedNativeTurnOutcome(NativeTurnOutcome):
                 ),
             ),
         )
-        # ACP SDK clients return None after acknowledgement; Core's transport
-        # returns False when nobody accepted the notification.
-        return replace(self, request=replace(self.request, notification_published=accepted is not False))
+        return replace(self, request=replace(self.request, notification_published=accepted))
 
     def raise_fault(self, cause: Exception) -> NoReturn:
         raise NativeTurnError(self.request) from cause

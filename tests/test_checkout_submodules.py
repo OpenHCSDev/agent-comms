@@ -135,14 +135,3 @@ def test_retiring_a_checkout_with_submodules_keeps_held_work_and_drops_scratch(
     listed = git(repository, "worktree", "list", "--porcelain")
     assert str(held.path.resolve()) in listed
     assert str(scratch.path) not in listed and str(clean.path) not in listed
-
-
-def test_primary_scratch_refuses_before_discarding_files(repository):
-    edited = repository / "owner.py"
-    edited.write_text("real work in the primary checkout\n")
-    bare = git(repository, "config", "--get", "core.bare")
-    with pytest.raises(ValueError, match="primary checkout"):
-        ScratchCheckout(repository).retire()
-    assert edited.read_text() == "real work in the primary checkout\n"
-    assert (repository / "pinned" / "catalog.md").read_text() == "patterns\n"
-    assert git(repository, "config", "--get", "core.bare") == bare

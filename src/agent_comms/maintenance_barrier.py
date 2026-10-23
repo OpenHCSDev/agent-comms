@@ -10,7 +10,6 @@ from __future__ import annotations
 
 import json
 import os
-import stat
 from abc import ABC, abstractmethod
 from collections.abc import AsyncIterator, Callable, Iterator, Mapping
 from contextlib import AbstractAsyncContextManager, asynccontextmanager, contextmanager
@@ -18,7 +17,8 @@ from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Annotated, Literal, Self
 
-from .child_process import Platform, ProcessIdentity
+from .child_process import ProcessIdentity
+from .private_path import PrivateFileRole
 from .declared_family import DeclaredFamily
 from .errors import RelationViolationError, ToolRefusedError
 from .field_codec import (
@@ -421,19 +421,15 @@ class MaintenanceBarrier(MaintenanceIngress):
     @staticmethod
     def _read(path: Path, declaration):
         try:
-            descriptor = os.open(path, os.O_RDONLY | os.O_NOFOLLOW)
+            descriptor = PrivateFileRole.read(
+                path, RelationViolationError("Maintenance witness is not private and regular"))
         except FileNotFoundError:
             return None
         except OSError as error:
             raise RelationViolationError("Maintenance witness is inaccessible") from error
         try:
             info = os.fstat(descriptor)
-            if (
-                not stat.S_ISREG(info.st_mode)
-                or not Platform.current().is_private(info, 0o600)
-                or info.st_nlink != 1
-                or info.st_size > 4096
-            ):
+            if info.st_size > 4096:
                 raise RelationViolationError("Maintenance witness is not private and regular")
             with os.fdopen(descriptor, "rb") as stream:
                 descriptor = -1

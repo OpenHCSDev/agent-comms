@@ -16,7 +16,6 @@ import pytest
 from agent_comms.store_files import StoreLockContention
 
 from agent_comms import agent_events as events
-from agent_comms.bus import Bus
 from agent_comms.bus_publication import AgentOrigin, HumanOrigin
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.commander.order import Commander, OrderFile, SayVerb, SendVerb
@@ -36,7 +35,6 @@ from agent_comms.field_codec import FieldCodec
 from agent_comms.goal_actions import (
     CreateProblemGoalAction,
     ReissuedOrderGoalAction,
-    SetGoalAction,
 )
 from agent_comms.goal_presentation import RunnableExecution
 from agent_comms.goal_states import ActiveGoal
@@ -79,7 +77,6 @@ def held_bus(comms, tmp_path, source_repository, configured_repository):
     """One setup owner: real declarations, checked orders, UNKNOWN row, then a copy."""
     source = source_repository
     scope = source.scope()
-    Bus.install(Bus.path_in(comms.root))
     # Two order holders never share one worktree, so the outsider has its own checkout.
     outsider = tmp_path / 'outsider-checkout'
     source.git(source.checkout, 'worktree', 'add', '-q', '-b', 'outsider-work', str(outsider))
@@ -517,6 +514,19 @@ def test_answering_one_owed_message_leaves_another_owed(held_bus, tmp_path):
     SayVerb(units="worker", body_file=str(reply),
             answers=(first.message_id, second.message_id)).apply(ctx)
     assert unanswered(held_bus) == ()
+
+
+def test_an_answer_sent_to_another_unit_is_refused_and_leaves_the_ask_owed(held_bus, tmp_path):
+    question = publish(held_bus, "worker", "lead", time.time() - AwaitingCommander.seconds - 1)
+    ctx = Commander.read_root(held_bus.root)
+    reply = tmp_path / "reply.txt"
+    reply.write_text("Waiting on the merge queue, owner unit-goalblock")
+    revision = held_bus.bus.bus.revision()
+    with pytest.raises(SystemExit, match=(f"{question.message_id} was asked by worker; "
+                                          "answer it in a message to worker")):
+        SayVerb(units="outsider", body_file=str(reply), answers=(question.message_id,)).apply(ctx)
+    assert held_bus.bus.bus.revision() == revision
+    assert [owed.message.message_id for owed in unanswered(held_bus)] == [question.message_id]
 
 
 def test_an_overdue_owner_directive_gates_until_answered(held_bus, tmp_path):

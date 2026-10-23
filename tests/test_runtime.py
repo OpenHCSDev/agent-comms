@@ -1,6 +1,6 @@
 """Single-owner attachment and idle wakeup through real processes and sockets."""
+from agent_comms.controller import SessionUpdateSink
 
-from agent_comms.private_runtime_schema import PrivateCoordinatorTable
 import asyncio
 import json
 import os
@@ -8,6 +8,9 @@ from contextlib import ExitStack
 from dataclasses import replace
 
 import pytest
+from acp.schema import (
+    ConfigOptionUpdate, SessionConfigOptionSelect, SessionConfigSelectOption, SessionInfoUpdate,
+)
 
 from agent_comms.acp_extension import (
     CoordinationChangedUpdate,
@@ -106,19 +109,20 @@ def test_owner_cursor_scope_rebases_only_attachment_session_alias():
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("request_original", [False, True])
-async def test_subscription_replay_uses_requested_alias(tmp_path, request_original):
+async def test_subscription_replay_uses_requested_alias(tmp_path, request_original, private_comms):
     from agent_comms.coordinator import Coordination
     from agent_comms.launch_root import LaunchRoot
 
-    comms = wire(tmp_path / "wire")
+    comms = private_comms
     LaunchRoot.from_path(comms.root).install()
     owner = canonical_agent(comms, runtime_enabled=True, auto_wake=False)
     client = canonical_agent(comms, auto_wake=False)
     updates = []
 
     class Client:
-        async def session_update(self, session_id, update):
-            updates.append((session_id, update))
+        async def publish_update(self, session_id, update):
+            updates.append((session_id, update.model_dump(mode="json", by_alias=True, exclude_none=True)))
+            return True
 
     client.on_connect(Client())
     proxy = None
@@ -135,7 +139,6 @@ async def test_subscription_replay_uses_requested_alias(tmp_path, request_origin
         )))
         thread = comms.registry.require(original)
         with Coordination(str(comms.root / "coordination.sqlite3")) as store:
-            PrivateCoordinatorTable.install(store)
             store.participants.register(thread.incarnation.lookup, committed=True)
         comms.threads.attach_session(thread, str(journal), process=thread.process_identity)
         comms.threads.rename_managed_thread(original, "renamed", owner=ProcessIdentity.capture(os.getpid()))
@@ -183,9 +186,10 @@ async def test_existing_proxy_follows_renamed_owner_restart_and_resubscribes(
     client = canonical_agent(comms)
     updates = []
 
-    class Client:
-        async def session_update(self, *, session_id, update):
-            updates.append((session_id, update))
+    class Client(SessionUpdateSink):
+        async def publish_update(self, *, session_id, update):
+            updates.append((session_id, update.model_dump(mode="json", by_alias=True, exclude_none=True)))
+            return True
 
     client.on_connect(Client())
     old_path = socket_path(comms.root, old_pid)
@@ -193,6 +197,15 @@ async def test_existing_proxy_follows_renamed_owner_restart_and_resubscribes(
     old_path.parent.mkdir(parents=True, exist_ok=True)
     connections = []
     calls = []
+
+    def model_menu(owner):
+        return ConfigOptionUpdate(
+            session_update="config_option_update",
+            config_options=[SessionConfigOptionSelect(
+                type="select", id="model", name="Model", current_value=owner,
+                options=[SessionConfigSelectOption(value=owner, name=owner)],
+            )],
+        )
 
     def handler(owner):
         async def receive(reader, writer):
@@ -207,11 +220,11 @@ async def test_existing_proxy_follows_renamed_owner_restart_and_resubscribes(
                         controller_token="a" * 64,
                     ).wire()
                 )
-                writer.write(OwnerUpdate(update={
-                    'sessionUpdate': 'config_option_update',
-                    'configOptions': [{'id': 'model', 'currentValue': owner}],
-                }).wire())
-                writer.write(OwnerUpdate(update={"owner": owner}).wire())
+                writer.write(OwnerUpdate.of(model_menu(owner)).wire())
+                writer.write(OwnerUpdate.of(SessionInfoUpdate(
+                    session_update="session_info_update", title=owner,
+                    field_meta={"owner": owner},
+                )).wire())
                 await writer.drain()
                 await reader.read()
             else:
@@ -231,7 +244,7 @@ async def test_existing_proxy_follows_renamed_owner_restart_and_resubscribes(
         await proxy.subscribe()
         await until(
             lambda: any(
-                session == "worker" and data.get("owner") == "old" for session, data in updates
+                session == "worker" and data.get("_meta", {}).get("owner") == "old" for session, data in updates
             )
         )
         # Session metadata may be filled in after initial owner attachment.
@@ -253,7 +266,7 @@ async def test_existing_proxy_follows_renamed_owner_restart_and_resubscribes(
         assert await asyncio.wait_for(request, 3) == {"owner": "new"}
         await until(
             lambda: any(
-                session == "worker" and data.get("owner") == "new" for session, data in updates
+                session == "worker" and data.get("_meta", {}).get("owner") == "new" for session, data in updates
             )
         )
         await until(
@@ -261,8 +274,7 @@ async def test_existing_proxy_follows_renamed_owner_restart_and_resubscribes(
                 (
                     "worker",
                     {
-                        "sessionUpdate": "config_option_update",
-                        "configOptions": [{"id": "model", "currentValue": "new"}],
+                        **model_menu("new").model_dump(mode="json", by_alias=True, exclude_none=True),
                         "_meta": encode_updates(),
                     },
                 )

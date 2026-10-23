@@ -1,14 +1,6 @@
 """A published native reply automatically reaches the original channel sender."""
+from agent_comms.controller import SessionUpdateSink
 
-
-from bus_record_fixture import prepare_native_comms
-from bus_history import read_history
-from agent_comms.pi_vocabulary import OffThinkingLevel
-from agent_comms.native_arguments import NativeArguments
-from agent_comms.launch_runtime import RestoredRuntime
-from agent_comms.owner_restart import OwnerRestartRequest
-from agent_comms.owner_cutover import PreserveOwnerRuntime
-from acp.schema import SessionNotification
 
 import asyncio
 import json
@@ -22,9 +14,8 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 import pytest
-from agent_comms.lifecycle_capability import Executing
+from acp.schema import SessionNotification, TextContentBlock
 
-from agent_comms.native_input_record import TriageNativeExecution
 from agent_comms.acp import CommsClient
 from agent_comms.acp_extension import (
     CursorAdvancedUpdate,
@@ -33,9 +24,19 @@ from agent_comms.acp_extension import (
     decode_updates,
 )
 from agent_comms.comms import wire
-from test_coordinated_runtime import tmp_path as private_root_fixture
+from agent_comms.launch_runtime import RestoredRuntime
+from agent_comms.lifecycle_capability import Executing
+from agent_comms.native_arguments import NativeArguments
+from agent_comms.native_input_record import TriageNativeExecution
+from agent_comms.owner_cutover import PreserveOwnerRuntime
+from agent_comms.owner_restart import OwnerRestartRequest
+from agent_comms.pi_vocabulary import OffThinkingLevel
+from agent_comms.restart_scope import OwnersNamed
 from agent_comms.thread_model import DeclaredModel
 from agent_comms.threads import Thread
+from bus_history import read_history
+from bus_record_fixture import prepare_native_comms
+from test_coordinated_runtime import tmp_path as private_root_fixture
 
 # Reuse the existing isolated native-runtime fixture.
 tmp_path = private_root_fixture
@@ -109,7 +110,7 @@ async def test_native_channel_reply_automatically_reaches_original_sender(tmp_pa
                             assert len(pending) == 1
                             original = pending[0]
                             user = next(entry for entry in NativeTranscript(
-                                Path(original.runtime.read_key)
+                                Path(original.session_file)
                             ).tail() if entry.input_boundary).require_tracked_user()
                             assert user.input_id == original.input_id
                             is_triage = original.stage is TriageNativeExecution
@@ -242,10 +243,11 @@ async def test_native_channel_reply_automatically_reaches_original_sender(tmp_pa
     )
     facts = []
 
-    class Client:
-        async def session_update(self, **kwargs):
+    class Client(SessionUpdateSink):
+        async def publish_update(self, **kwargs):
             notification = SessionNotification.model_validate(kwargs)
             facts.extend(decode_updates(notification.update.field_meta))
+            return True
 
     attachment.on_connect(Client())
 
@@ -280,7 +282,9 @@ async def test_native_channel_reply_automatically_reaches_original_sender(tmp_pa
                 async with asyncio.timeout(35):
                     seed = await attachment.prompt(
                         session_id=name,
-                        prompt=[{"type": "text", "text": f"RETAINED_NATIVE_HISTORY_{name}"}],
+                        prompt=[
+                            TextContentBlock(type="text", text=f"RETAINED_NATIVE_HISTORY_{name}")
+                        ],
                     )
                 assert seed.stop_reason == "end_turn"
                 assert comms.registry.require(name).session_file
@@ -410,8 +414,8 @@ async def test_native_channel_reply_automatically_reaches_original_sender(tmp_pa
         # A rejected result adds a non-waking alert to the canonical source
         # prefix; injection still names the exact original reply.
         assert delivered[-1].covered_seq == reply.seq + reject_triage
-        assert delivered[-1].stage is TriageNativeExecution
-        assert delivered[-1].input_id in {row[0] for row in rows}
+        assert delivered[-1].reference_stage is TriageNativeExecution
+        assert delivered[-1].reference.require_recorded().input_id in {row[0] for row in rows}
         assert len(rows) == 2 and all(row[2] for row in rows)
         assert len({row[0] for row in rows}) == 2
         assert len({row[1] for row in rows}) == 2  # Two actual native owners/children.
@@ -422,8 +426,8 @@ async def test_native_channel_reply_automatically_reaches_original_sender(tmp_pa
             "Canonical reply and any rejected-result alert published",
         )
         if reject_triage:
-            from agent_comms.coordinator import Coordination
             from agent_comms.assignment_states import FailedAssignment
+            from agent_comms.coordinator import Coordination
             from agent_comms.historical_native_inputs import read_historical_native_inputs
 
             with Coordination(str(comms.root / "coordination.sqlite3")) as store:
@@ -451,7 +455,7 @@ async def test_native_channel_reply_automatically_reaches_original_sender(tmp_pa
             async with asyncio.timeout(35):
                 answer = await attachment.prompt(
                     session_id="questioner",
-                    prompt=[{"type": "text", "text": "CONTINUITY_HUMAN_INPUT"}],
+                    prompt=[TextContentBlock(type="text", text="CONTINUITY_HUMAN_INPUT")],
                 )
             assert answer.stop_reason == "end_turn" and len(requests) == 4
             assert "CONTINUITY_HUMAN_INPUT" in json.dumps(requests[-1])
@@ -467,10 +471,10 @@ async def test_native_channel_reply_automatically_reaches_original_sender(tmp_pa
             )
             before = comms.registry.snapshot()
             saved = {
-                name: Path(before.threads[name].session_file).read_bytes() for name in projects
+                name: Path(before.threads[name].runtime.read_key).read_bytes() for name in projects
             }
             await attachment.shutdown()
-            restart = OwnerRestartRequest(tuple(projects), launch_runtime=runtime)
+            restart = OwnerRestartRequest(OwnersNamed(tuple(projects)), launch_runtime=runtime)
             await asyncio.to_thread(PreserveOwnerRuntime().restart, comms.owners, restart)
             after = comms.registry.snapshot()
             for name in projects:
@@ -489,15 +493,15 @@ async def test_native_channel_reply_automatically_reaches_original_sender(tmp_pa
             async with asyncio.timeout(35):
                 answer = await attachment.prompt(
                     session_id="questioner",
-                    prompt=[{"type": "text", "text": "EXPLICIT_POST_RESTART_INPUT"}],
+                    prompt=[TextContentBlock(type="text", text="EXPLICIT_POST_RESTART_INPUT")],
                 )
             assert answer.stop_reason == "end_turn"
             assert len(requests) == seed_count + 3
             assert not failures, failures
-            entries = [json.loads(line) for line in Path(after.threads['questioner'].session_file).read_text().splitlines()]
+            entries = [json.loads(line) for line in Path(after.threads["questioner"].runtime.read_key).read_text().splitlines()]
             inputs = [row['message'] for row in entries if row['type'] == 'message' and row['message']['role'] == 'user']
             assert sum('EXPLICIT_POST_RESTART_INPUT' in json.dumps(row['content']) for row in inputs) == 1
-            assert Path(after.threads['questioner'].session_file).read_bytes().startswith(saved['questioner'])
+            assert Path(after.threads["questioner"].runtime.read_key).read_bytes().startswith(saved['questioner'])
     finally:
         await attachment.shutdown()
         for name in projects:

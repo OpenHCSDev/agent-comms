@@ -6,7 +6,6 @@ Ordinary conversation sends no longer acquire or manually release files.
 from __future__ import annotations
 
 
-from agent_comms.bus import Bus
 
 from bus_history import read_history
 import json
@@ -48,7 +47,6 @@ def _participants(tmp_path: Path) -> tuple[Comms, Path]:
             replace(owner, process_identity=ProcessIdentity.capture(os.getpid())),
             RunningThreadStatus(),
         )
-    Bus.install(Bus.path_in(comms.root))
     return comms, worktree
 
 
@@ -237,7 +235,6 @@ import os, signal, sys
 from pathlib import Path
 sys.path.insert(0, sys.argv[2])
 sys.path.insert(0, str(Path(sys.argv[2]).parent / 'tests'))
-from agent_comms.bus import Bus
 from agent_comms.comms import wire
 from test_envelope_bus_integration import acquire_message
 """ + kill + """

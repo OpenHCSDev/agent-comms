@@ -12,7 +12,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, ClassVar
 
 from agent_comms.declared_family import DeclaredFamily
-from agent_comms.installer.carry import Carry
+from agent_comms.installer.probes.carry import Carry
 from agent_comms.pi_events import PiEvent
 from agent_comms.thread_identity import BirthlessIncarnation
 from agent_comms.private_registry_guard import RegistryPrivacy
@@ -298,10 +298,13 @@ class BusHistoryReadersPhase(VirtualBusPhase):
 
 
 class BusCarryPhase(VirtualBusPhase):
-    """D: the one carry of the committed history into the bus database."""
+    """D: the one carry of the committed history into the bus database.
+
+    Done once the JSONL history writer the carry read from is gone: the bus database is
+    then the only store, and the finished carry is deleted rather than kept as evidence."""
 
     after = (BusWriterPhase,)
-    evidence = PatternPresent(r"bus\.sqlite3|Bus\.path_in", ("tools/cutover",))
+    evidence = PathsAbsent(("src/agent_comms/wire_log.py",))
 
 
 class BusWatchedPhase(VirtualBusPhase):

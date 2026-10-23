@@ -71,8 +71,7 @@ class TranscriptRecords:
         from agent_comms.pi_payloads import PiMessage
 
         entry = self.entry(MessageEntry, message=PiMessage.from_wire(payload), **coordinates)
-        encoded = FieldCodec.encode(entry)
-        assert isinstance(encoded, dict)
+        encoded = FieldCodec.decode(dict[str, JsonValue], entry.to_wire())
         return {**encoded, "message": payload}
 
     def session(self, **coordinates: JsonValue) -> SessionEntry:
@@ -358,7 +357,7 @@ def configured_repository(durable_home: Path) -> Callable[[Comms, *tuple[Repo, .
 @pytest.fixture
 def installed_runtime(durable_home: Path, tmp_path: Path) -> LaunchRuntime:
     """A temporary installation record, executable and pointer, never the real home."""
-    from agent_comms.installer.interpreter_operation import CommitRecord, GitRecord, PackageRecord
+    from agent_comms.installer.probes.packages import CommitRecord, GitRecord, PackageRecord
     from agent_comms.installer.runtime_resolution import RuntimePackage, RuntimeResolution
     from agent_comms.launch_runtime import LaunchRuntime
     from agent_comms.repo import Repo

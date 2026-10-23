@@ -45,7 +45,7 @@ class PrivateCoordinatorTable(SharedFileTables, DurableTables):
         from .cohort_schema import AwarenessTable
 
         with store.session.writing() as db:
-            CoordinatorTable.require_schema(db)
+            CoordinatorTable.require_schema(db, cls.schema_rows())
             if not cls.stored_schema(db):
                 cls.create_schema(db)
             cls.require_installed(db)

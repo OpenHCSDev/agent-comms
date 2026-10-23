@@ -142,14 +142,12 @@ class SelectedWritePlans(DurableFile, PatternFile):
         if not self._validate_dir():
             return None
         try:
-            fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW)
+            fd = PrivateFileRole.read(path, IdentityConflict("Selected write intent is not private"))
         except FileNotFoundError:
             return None
         try:
             info = os.fstat(fd)
-            if PrivateFileRole.violation(info) is not None:
-                raise IdentityConflict("Selected write intent is not private")
-            if info.st_nlink != 1 or info.st_size > 2 * _MAX_BYTES:
+            if info.st_size > 2 * _MAX_BYTES:
                 raise IdentityConflict("Selected write intent has unsafe identity")
             with os.fdopen(fd, "rb") as stream:
                 fd = -1
@@ -219,9 +217,8 @@ class SelectedWritePlans(DurableFile, PatternFile):
             )
             data = FieldCodec.compact(FieldCodec.encode(record), sort_keys=True).encode()
             try:
-                fd = os.open(
-                    record_path, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600
-                )
+                fd = PrivateFileRole.create(
+                    record_path, IdentityConflict("Selected write intent is not private"))
             except FileExistsError as error:
                 raise IdentityConflict(
                     "Selected write intent already accepted or UNKNOWN; never retry"

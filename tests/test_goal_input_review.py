@@ -1,6 +1,5 @@
 """Canonical inspection unblocks standby without fabricating native delivery."""
 
-from agent_comms.bus import Bus
 from agent_comms.lifecycle_capability import Unresolved
 from agent_comms.channel_targets import CommandTarget
 import os
@@ -36,7 +35,6 @@ def test_inspected_canonical_dependencies_allow_standby_without_replay(tmp_path,
         comms.registry.declare(
             Thread(name, frozenset(), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid()))
         )
-    Bus.install(Bus.path_in(comms.root))
     comms.agents.begin_turn("parent", "parent-delegation-in-flight")
     goal = comms.goals.update_goal("worker", SetGoalAction(text="Delegate and wait"))
     messages = [
@@ -68,7 +66,7 @@ def test_inspected_canonical_dependencies_allow_standby_without_replay(tmp_path,
     with pytest.raises(ValueError):
         report.invoke(comms, args, caller=ThreadCaller("worker"))
     before = ledger.path.read_bytes()
-    messages = comms.bus.inbox("worker")
+    messages = comms.bus.inbox("worker").page.messages
     comms.messaging.acknowledge("worker", tuple(message.reference for message in messages))
     result = inbox.invoke(comms, {"thread": "worker", "standby": {"goal_id": goal.id, "wait_for": ["parent"]}}, caller=ThreadCaller("worker"))
     assert result["messages"] == []  # Display ACK is not handling evidence.

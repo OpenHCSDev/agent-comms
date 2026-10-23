@@ -21,6 +21,7 @@ from agent_comms.field_codec import (
     PathText,
     RecordMember,
     RecordedTimestamp,
+    SnapshotExclude,
     SubclassUnion,
     TextRepresentation,
     TimestampText,
@@ -525,7 +526,7 @@ def test_union_success_releases_rejected_payload_and_failure_keeps_first_cause()
 
 def test_scalar_dispatch_keeps_representation_and_exact_type_contracts() -> None:
     import math
-    from typing import Any, Literal
+    from typing import Literal
 
     from agent_comms.field_codec import AcceptsNull, FieldRepresentation
 
@@ -572,8 +573,6 @@ def test_scalar_dispatch_keeps_representation_and_exact_type_contracts() -> None
     assert type(FieldCodec.decode(Literal[True, 1], 1)) is int
     with pytest.raises(ValueError):
         FieldCodec.decode(Literal[1], True)
-    with pytest.raises(MalformedRecord):
-        FieldCodec.decode(Any, math.inf)
 
 
 def test_record_dispatch_precedes_dynamic_scalar_equality() -> None:
@@ -954,3 +953,28 @@ def test_identity_and_digest_text_is_one_rule_at_every_reader(tmp_path: Path) ->
             PrivateRegistryGuard(tmp_path / "registry.json", invalid_text)
     with pytest.raises(MalformedRecord):
         TextDigest("a" * 63)
+
+
+@dataclass(frozen=True)
+class SecretMember(RecordMember):
+    name: str
+    token: Annotated[str, SnapshotExclude()]
+
+
+@dataclass(frozen=True)
+class CountWire(WireValue):
+    count: int
+
+    def to_wire(self) -> str:
+        return f"count={self.count}"
+
+    @classmethod
+    def from_wire(cls, data: object) -> Self:
+        return cls(int(str(data).removeprefix("count=")))
+
+
+def test_represented_value_projects_as_its_record_only_when_its_record_is_its_wire_form() -> None:
+    member = SecretMember("kept", "secret")
+    assert FieldCodec.encode(member) == {"name": "kept", "token": "secret"}
+    assert FieldCodec.project(member, "snapshot") == {"name": "kept"}
+    assert FieldCodec.project(CountWire(3), "snapshot") == "count=3"

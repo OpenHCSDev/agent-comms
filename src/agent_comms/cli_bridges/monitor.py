@@ -313,7 +313,7 @@ class InspectSession(SessionRequest[SessionInformation], declared_name='inspect'
             try:
                 return self.information(claim.socket_path)
             except (FileNotFoundError, ConnectionRefusedError) as absent:
-                claim.state().await_socket(absent)
+                claim.state().await_socket(claim, absent)
 
     async def handle(self, service: MonitorService, peer: MonitorPeer) -> SessionReply:
         return SessionInformation(
@@ -385,8 +385,9 @@ class MonitorService:
             path.unlink(missing_ok=True)
 
 
-async def read_monitor(claim: WatchClaim) -> None:
+async def read_monitor(claim: WatchClaim, announce: Callable[[WatchClaim], None]) -> None:
     session = await asyncio.to_thread(InspectSession().awaited, claim)
+    announced = False
     with claim.reader_held():
         while session.owner.alive():
             try:
@@ -399,13 +400,16 @@ async def read_monitor(claim: WatchClaim) -> None:
                     request = AttachMonitor()
                     await peer.write(FieldCodec.compact(FieldCodec.encode(request)))
                     request.decode_reply(await reader.readline())
+                    announced = False
                     async for line in reader:
                         sys.stdout.write(line.decode())
                         sys.stdout.flush()
                 finally:
                     await peer.close()
             except (FileNotFoundError, ConnectionRefusedError, ConnectionResetError):
-                pass
-            # Retirement drops the old connection; the same owner can publish a
-            # fresh endpoint. Keep the reader lease and require its fresh probe.
+                # Retirement drops the old connection; the same owner can publish a
+                # fresh endpoint, and this reader keeps its lease for it. A stopped
+                # bridge is still an outage, so the claim's state decides whether to say so.
+                announced = announced or claim.state().announce_absence(
+                    lambda: announce(claim))
             await asyncio.sleep(.05)

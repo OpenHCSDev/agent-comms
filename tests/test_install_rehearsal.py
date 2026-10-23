@@ -7,7 +7,6 @@ installer. These checks rehearse an already-current bus format through the CLI:
 launch, target tree, staged stack build, carried practice copy and the outgoing
 runtime's owner probe. The outgoing package uses this source; the isolated target
 records a distinct incoming revision while retaining every declared carry dependency.
-The predecessor-history carry has its own real-writer fixture in test_carry_bus_history.
 """
 from __future__ import annotations
 
@@ -26,6 +25,8 @@ from agent_comms.field_codec import FieldCodec
 from agent_comms.history_result import ChannelHistoryPageResult
 from agent_comms.installer.backup import bus_files
 from agent_comms.installer.commands import InstallCommands
+from agent_comms.installer.interpreter_operation import InstalledProgram
+from agent_comms.installer.probes.native import PrepareProducerDigestsProbe
 from agent_comms.installer.practice import TestHome
 from agent_comms.installer.upgrade import (
     CarriedRehearsal,
@@ -34,6 +35,7 @@ from agent_comms.installer.upgrade import (
     InstalledUpgrade,
     RehearsedUpgrade,
     Stack,
+    UncopiedRehearsal,
     Upgrade,
 )
 from agent_comms.launch_runtime import LaunchRuntime
@@ -64,7 +66,8 @@ def installed_home(tmp_path_factory) -> dict[str, str]:
     environment = {**os.environ, "HOME": str(home), "UV_CACHE_DIR": caches.stdout.strip(),
                    "npm_config_cache": str(Path.home() / ".npm")}
     environment.pop("PYTHONPATH", None)
-    outgoing = Stack.build(REPOSITORY, InstallCommands(), home)
+    outgoing = Stack.build(Checkout.prepared(REPOSITORY), InstallCommands(), home)
+    assert (outgoing.runtime.package_root / "__init__.py").is_file()
     (home / ".local/share/agent-comms/current").symlink_to(
         outgoing.runtime.prefix, target_is_directory=True)
     return environment
@@ -92,6 +95,52 @@ def install_checkout(tmp_path_factory) -> Path:
     return checkout
 
 
+def test_runtime_producer_digests_ignore_foreign_source(installed_home, tmp_path):
+    """A dirty review checkout may read through the runtime interpreter, never publish its digests."""
+    home = Path(installed_home["HOME"])
+    runtime = LaunchRuntime((home / ".local/share/agent-comms/current").resolve() / "bin/python")
+    foreign = tmp_path / "review"
+    subprocess.run(["git", "clone", "--shared", "-q", REPOSITORY, foreign], check=True)
+    Checkout(foreign).prepare()
+    source = foreign / "src/agent_comms/messages.py"
+    source.write_text(source.read_text().replace(
+        '"""Reverse lookups are derived from the record, in its append transaction."""',
+        '"""A dirty review changes this producer declaration."""', 1))
+    environment = {**installed_home, "PYTHONPATH": str(foreign / "src")}
+    with InstallCommands() as commands:
+        commands.probe(PrepareProducerDigestsProbe(), runtime.interpreter, cwd=home,
+                       env=runtime.environment(environment), program=InstalledProgram())
+        diagnostics = "\n".join(worker.errors() for worker in commands.workers.values())
+        assert f"install: producer digests from {runtime.package_root / '__init__.py'}" in diagnostics
+        print(diagnostics)
+    path = runtime.prefix / "agent-comms-producers.json"
+    original = path.read_bytes()
+    read = """
+import json
+import agent_comms
+from agent_comms import cli
+from agent_comms.messages import BusProjectionTables
+from agent_comms.package_stamp import STAMP
+from agent_comms.typed_table import ProjectionProducer
+rows = BusProjectionTables.projection_rows()
+print(json.dumps({'source': agent_comms.__file__, 'stamp': type(STAMP).__name__,
+                  'computed': {row.declared_name: row.producer_digest() for row in rows},
+                  'read': ProjectionProducer.digests_for(rows)}))
+"""
+    own = json.loads(subprocess.check_output(
+        [runtime.interpreter, "-I", "-c", read], env=installed_home, text=True))
+    assert own["stamp"] == "WheelStamp"
+    assert own["computed"] == own["read"] == json.loads(original)["digests"]
+    reviewed = json.loads(subprocess.check_output(
+        [runtime.interpreter, "-P", "-c", read], cwd=foreign, env=environment, text=True))
+    assert reviewed["stamp"] == "CheckoutStamp"
+    assert Path(reviewed["source"]).is_relative_to(foreign)
+    assert reviewed["computed"] == reviewed["read"]
+    assert reviewed["read"] != own["read"]
+    assert path.read_bytes() == original
+    print(json.dumps({"runtime": own, "review": reviewed, "file_unchanged": True}))
+
+
 def drop_one_index(root: Path) -> Path:
     """One declared store's schema drifts from both runtimes' declarations."""
     for path in sorted(ReconciledFile.existing_in(root)):
@@ -111,9 +160,8 @@ def drop_one_index(root: Path) -> Path:
 ), ids=("kept-repos-current-stores", "given-repos-drifted-store"))
 def test_install_rehearses_without_changing_the_bus(installed_comms, installed_home, install_checkout, tmp_path,
                                                     repos, drifted):
-    """Retained carry steps inspect a practice copy, even when no step is pending.
-
-    Only the deliberately drifted store is rewritten; neither case changes the bus.
+    """A rehearsal copies only what pending carries and the planned reconcile name;
+    with neither, nothing is copied. Neither case changes the bus.
     """
     comms = installed_comms
     declare_test_bus(comms, channels=("comms",), threads=(
@@ -131,9 +179,14 @@ def test_install_rehearses_without_changing_the_bus(installed_comms, installed_h
     assert installed.returncode == 0, installed.stderr
     result = FieldCodec.decode(Upgrade, FieldCodec.parse(installed.stdout))
     assert isinstance(result, RehearsedUpgrade)
-    assert isinstance(result.rehearsal, CarriedRehearsal)
     assert result.pending == ()
-    assert result.rehearsal.files.names == rewritten
+    if drifted:
+        assert isinstance(result.rehearsal, CarriedRehearsal)
+        assert result.rehearsal.files.names == rewritten
+    else:
+        assert isinstance(result.rehearsal, UncopiedRehearsal)
+        assert result.rehearsal.copy.bytes == 0
+        assert result.rehearsal.inputs == ()
     assert bus_files(comms.root) == before
 
 
@@ -176,7 +229,7 @@ def test_failed_live_migration_restores_data_checkout_and_runtime(
     current = subprocess.check_output(["git", "-C", checkout, "rev-parse", "HEAD"], text=True).strip()
     step = checkout / "tools/cutover/carry_fault.py"
     step.write_text('''from pathlib import Path
-from agent_comms.installer.carry import Carry, Carried
+from agent_comms.installer.probes.carry import Carry, Carried
 from agent_comms.locked_store import DurableFile
 class Saved(DurableFile):
     filename = "saved"
@@ -291,7 +344,7 @@ def test_installed_entry_reports_completion_after_target_source_retirement(
     result = FieldCodec.decode(Upgrade, FieldCodec.parse(completed.stdout))
     assert isinstance(result, InstalledUpgrade) and type(result.live) is live_kind
     # The bus now belongs to the installed runtime, so its own CLI reads it.
-    read = subprocess.run([outgoing, "--root", root, "history", "--target", "#comms"],
+    read = subprocess.run([outgoing, "--root", root, "history", "#comms"],
                           env=installed_home, capture_output=True, text=True, check=True, timeout=60)
     page = FieldCodec.parse(read.stdout)[ChannelHistoryPageResult.messages_key]
     history = tuple(reversed(FieldCodec.decode(tuple[Message, ...], page)))

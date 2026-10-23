@@ -1,7 +1,5 @@
 
 
-from agent_comms.private_runtime_schema import PrivateCoordinatorTable
-from agent_comms.bus import Bus
 from bus_record_fixture import prepare_native_comms
 
 import json
@@ -29,7 +27,7 @@ from agent_comms.private_registry_guard import PrivateRegistryGuard
 from agent_comms.registry_document import RegistryDocument
 from agent_comms.runtime_info import AgentRuntimeInfo, RuntimeInfoStore
 from agent_comms.shared_ledger import SharedLedger
-from agent_comms.thread_status import DeletingThreadStatus, RunningThreadStatus, StoppedThreadStatus
+from agent_comms.thread_status import DeletingThreadStatus, HeartbeatThreadStatus, RunningThreadStatus, StoppedThreadStatus
 from agent_comms.threads import current_thread
 from agent_comms.thread_text import ForkedParent, GivenThreadText
 from agent_comms.thread_model import DeclaredModel
@@ -48,7 +46,6 @@ def test_native_root_checks_relative_and_absolute_ancestor_permissions(
         candidate = wire(root)
         with pytest.raises(RelationViolationError):
             prepare_native_comms(candidate)
-        assert not Bus.path_in(root).exists()
         assert not candidate.registry.store.guard_path.exists()
     monkeypatch.chdir(tmp_path)
     safe = prepare_native_comms(wire(Path("safe-relative")))
@@ -187,7 +184,7 @@ class TestRegistration:
     def test_status_transitions(self, tmp_path: Path):
         registry = Registration(tmp_path / "registry.json")
         registry.register(Thread(name='a', tags=frozenset(), worktree='/wt'))
-        assert registry.status("a") == RunningThreadStatus()
+        assert registry.status("a") == HeartbeatThreadStatus()
         registry.unregister("a")
         assert registry.status("a") == StoppedThreadStatus()
         # Unregistering a stopped (but known) thread is idempotent.
@@ -390,17 +387,12 @@ class TestRegistration:
     def test_private_guard_rejects_disk_downgrade_even_with_cached_revision(
         self, tmp_path: Path, damage: str
     ) -> None:
-        from agent_comms.cohort_schema import CohortTable
-        from agent_comms.coordination_database import CoordinationStore
-        from agent_comms.coordinator import Coordination
 
         root = tmp_path / "guarded"
         comms = wire(root)
         comms.registry.declare(Thread(name='a', tags=frozenset(), worktree='/wt', process_identity=ProcessIdentity.capture(os.getpid())))
         prepare_native_comms(comms)
         # A native coordinator is retained evidence of private mode even if its guard vanishes.
-        with Coordination(str(CoordinationStore.path_in(root))) as store:
-            PrivateCoordinatorTable.install(store)
         cold = Registration(root / "registry.json")
         assert cold.require("a").name == "a"
         guard = root / ".registry-owner-guard"

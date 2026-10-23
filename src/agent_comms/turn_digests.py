@@ -16,12 +16,15 @@ from .thread_execution import ConversationPreparation
 from .thread_identity import ThreadIncarnation
 from .tool_declaration import EditCall
 from .tool_result import ToolResult
-from .transcript_events import TurnDigest
+from .bus import Bus
+from .context_store import ContextStore
+from .transcript_events import IncomingTranscript, TurnDigest
 
 if TYPE_CHECKING:
     from .comms import Comms
     from .registry_document import RegistrySnapshot
     from .threads import Thread
+    from .transcript_sources import TranscriptSource
     from .todos import Todo
 
 
@@ -138,7 +141,9 @@ class TranscriptRead[Result](ConversationPreparation):
 
     def native(self) -> Result:
         source = self.thread.runtime.history_source(self.root, self.thread.incarnation)
-        turns = source.turns(self.bound)
+        return self.from_native(source, source.turns(self.bound))
+
+    def from_native(self, source: TranscriptSource, turns: tuple[TurnDigest, ...]) -> Result:
         return self.from_turns(turns)
 
     def external(self) -> Result:
@@ -154,6 +159,24 @@ class TranscriptRead[Result](ConversationPreparation):
 
 class TurnDigestRead(TranscriptRead[ThreadTurns]):
     """Read this unit's own records, never its inherited conversation display."""
+
+    def from_native(self, source: TranscriptSource, turns: tuple[TurnDigest, ...]) -> ThreadTurns:
+        """A woken input reads as the messages its wake selected, from their bus records."""
+        recorded = source.recorded_contexts(
+            ContextStore(self.root), tuple(turn.turn_id for turn in turns))
+        selected = {turn_id: manifest.wire_sources() for turn_id, manifest in recorded.items()}
+        references = tuple(dict.fromkeys(ref for refs in selected.values() for ref in refs))
+        deliveries = (Bus(Bus.path_in(self.root)).deliveries_for_references(references)
+                      if references else ())
+        # The owner's own sent outcomes share the wake's provenance; their sender tells them apart.
+        incoming = {delivery.reference: IncomingTranscript.of(delivery, reader=self.thread.name)
+                    for delivery in deliveries
+                    if delivery.audience.sender_lookup != self.thread.incarnation.lookup}
+        return self.from_turns(tuple(
+            turn.with_selected(chosen) if (chosen := tuple(
+                incoming[ref] for ref in selected.get(turn.turn_id, ()) if ref in incoming))
+            else turn
+            for turn in turns))
 
     def from_turns(self, turns: tuple[TurnDigest, ...]) -> ThreadTurns:
         return ThreadTurns(self.thread.incarnation, turns, self.bound.older(turns))

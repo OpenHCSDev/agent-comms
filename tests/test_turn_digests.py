@@ -1,6 +1,7 @@
 """One query contract over the original native and external record owners."""
 
 import asyncio
+import hashlib
 from contextlib import aclosing, redirect_stdout, suppress
 from datetime import datetime, timedelta
 import io
@@ -14,6 +15,8 @@ from agent_comms.cli import main
 from agent_comms.cli_bridges.claude import ClaudeBridge
 from agent_comms.cli_bridges.shared import Binding, Options, Serve, Watch
 from agent_comms.comms import wire
+from agent_comms.context_segments.wake import SelectedWakeSegment
+from agent_comms.context_store import ContextEntry
 from agent_comms.errors import ToolRefusedError
 from agent_comms.external_transcript import NoEarlierPage
 from agent_comms.field_codec import FieldCodec
@@ -21,6 +24,7 @@ from agent_comms.runtime_updates import FinishedItem
 from agent_comms.thread_execution import ExternalThreadExecution
 from agent_comms.session_file import RegistrySessionLocation
 from agent_comms.transcript_events import AssistantTranscript, TurnDigest
+from agent_comms.turn_context import JournalProvenance, SegmentManifest, TranscriptSegment, WireProvenance
 from agent_comms.turn_digests import LastTurns, TurnBound, TurnsOlderThan, TurnsBefore, TurnsSince
 from agent_comms.bus import Bus
 from agent_comms.watched import FileSource
@@ -29,7 +33,6 @@ from agent_comms.threads import Thread
 
 def prepared(tmp_path):
     comms = wire(tmp_path)
-    Bus.install(Bus.path_in(comms.root))
     return comms
 
 
@@ -90,7 +93,7 @@ def test_native_turns_keep_original_calls_results_and_input_identity(tmp_path):
     comms = prepared(tmp_path)
     source = tmp_path / 'native.jsonl'
     rows = [
-        dict(type='session', id='source', version=3),
+        dict(type='session', id='source', version=3, timestamp='2026-10-16T12:00:00Z'),
         dict(type='message', id='u1', timestamp='2026-10-16T12:00:00Z',
              message=dict(role='user', content='old input')),
         dict(type='message', id='a1', parentId='u1', timestamp='2026-10-16T12:00:01Z', message=dict(
@@ -119,6 +122,37 @@ def test_native_turns_keep_original_calls_results_and_input_identity(tmp_path):
     assert [turn.turn_id for turn in comms.transcripts.turns('native', LastTurns(2)).turns] == ['u2', 'u1']
     older = FieldCodec.decode(TurnBound, answer['older'])
     assert [turn['turn_id'] for turn in endpoint(comms, 'native', older)['turns']] == ['u1']
+
+
+def test_woken_native_turn_reads_its_selected_messages_not_the_stored_frame(tmp_path):
+    comms = prepared(tmp_path)
+    source = tmp_path / 'native.jsonl'
+    frame = '── comms: 1 selected ──\nselected: [...]\n── reply relevance ──\nAnswer direct requests.'
+    rows = [
+        dict(type='session', id='source', version=3, timestamp='2026-10-16T12:00:00Z'),
+        dict(type='message', id='u1', timestamp='2026-10-16T12:00:00Z',
+             message=dict(role='user', content=frame)),
+        dict(type='message', id='a1', parentId='u1', timestamp='2026-10-16T12:00:01Z', message=dict(
+            role='assistant', content=[dict(type='text', text='None are left.')], stopReason='stop')),
+    ]
+    source.write_text(''.join(json.dumps(row) + '\n' for row in rows))
+    source.chmod(0o600)
+    comms.registry.declare(Thread('lead', frozenset(), str(tmp_path)))
+    comms.registry.declare(Thread('native', frozenset(), str(tmp_path), session_file=RegistrySessionLocation.from_path(str(source), comms.root)))
+    asked = comms.messaging.send('lead', 'native', 'How many opens are left?').message
+    sent_outcome = comms.messaging.send('native', 'lead', 'An earlier answer.').message
+    digest = hashlib.sha256(frame.encode()).hexdigest()
+    wake = SegmentManifest(SelectedWakeSegment, (
+        WireProvenance(asked.reference), WireProvenance(sent_outcome.reference)), digest, 1, 1)
+    entry = SegmentManifest(TranscriptSegment, (JournalProvenance(str(source), ('u1',)),),
+                            digest, len(frame), 1, contributors=(wake,))
+    with comms.contexts.writing() as db:
+        ContextEntry('source', str(source), 'u1', entry).insert_if_absent(db)
+    turn, = endpoint(comms, 'native', LastTurns(1))['turns']
+    assert [(event['kind'], event['message']['text'] if 'message' in event else event['text'])
+            for event in turn['events']] == [
+        ('incoming', 'How many opens are left?'), ('assistant', 'None are left.')]
+    assert json.loads(source.read_text().splitlines()[1])['message']['content'] == frame
 
 
 @pytest.fixture

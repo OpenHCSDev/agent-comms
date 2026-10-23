@@ -15,13 +15,18 @@ APPEND = (json.dumps({"type": "custom", "timestamp": "2026-10-01T00:00:00.000Z",
                       "customType": "isolated-evidence-check", "data": {}}) + "\n").encode()
 
 
+@pytest.fixture
+def session(tmp_path):
+    """The evidence fixture's private session transcript."""
+    return _evidence(tmp_path).path
+
+
 def append_to(path):
     with path.open("ab", buffering=0) as stream:
         stream.write(APPEND)
 
 
-def test_unchanged_verified_revision_reads_no_bytes(tmp_path, monkeypatch):
-    session = _evidence(tmp_path)
+def test_unchanged_verified_revision_reads_no_bytes(session, monkeypatch):
     with PrivateEvidenceRead.open(session) as source:
         assert len(tuple(source.rows())) == 2
 
@@ -32,8 +37,7 @@ def test_unchanged_verified_revision_reads_no_bytes(tmp_path, monkeypatch):
         assert tuple(source.rows()) == ()
 
 
-def test_append_checks_only_new_tail_byte(tmp_path, monkeypatch):
-    session = _evidence(tmp_path)
+def test_append_checks_only_new_tail_byte(session, monkeypatch):
     with PrivateEvidenceRead.open(session) as source:
         assert len(tuple(source.rows())) == 2
         append_to(session)
@@ -50,8 +54,7 @@ def test_append_checks_only_new_tail_byte(tmp_path, monkeypatch):
         assert read == [(source.size - 1, 1)]
 
 
-def test_non_growth_revision_change_reverifies_prefix(tmp_path):
-    session = _evidence(tmp_path)
+def test_non_growth_revision_change_reverifies_prefix(session):
     with PrivateEvidenceRead.open(session) as source:
         assert len(tuple(source.rows())) == 2
         session.write_bytes(session.read_bytes().replace(b"separate", b"changed!"))
@@ -60,15 +63,13 @@ def test_non_growth_revision_change_reverifies_prefix(tmp_path):
         assert source.stream.closed
 
 
-def test_decode_uses_buffered_reader(tmp_path):
-    session = _evidence(tmp_path)
+def test_decode_uses_buffered_reader(session):
     with PrivateEvidenceRead.open(session) as source:
         assert isinstance(source.stream, io.BufferedReader)
         assert len(tuple(source.rows())) == 2
 
 
-def test_next_decode_cannot_reuse_prefetched_bytes(tmp_path):
-    session = _evidence(tmp_path)
+def test_next_decode_cannot_reuse_prefetched_bytes(session):
     first, old, new = b'{"id":"first"}\n', b'{"id":"old"}\n', b'{"id":"new"}\n'
     session.write_bytes(first + old)
     with PrivateEvidenceRead.open(session) as source:
@@ -85,8 +86,7 @@ def test_next_decode_cannot_reuse_prefetched_bytes(tmp_path):
         assert tuple(source._decode_captured(len(first + new)))[0]["id"] == "new"
 
 
-def test_growth_during_tail_check_keeps_the_captured_entries(tmp_path, monkeypatch):
-    session = _evidence(tmp_path)
+def test_growth_during_tail_check_keeps_the_captured_entries(session, monkeypatch):
     with PrivateEvidenceRead.open(session) as source:
         pread = os.pread
         appended = False
@@ -104,8 +104,7 @@ def test_growth_during_tail_check_keeps_the_captured_entries(tmp_path, monkeypat
         assert tuple(source.rows())[0]["id"] == "concurrent-append"
 
 
-def test_append_during_decoding_is_read_on_the_next_observation(tmp_path):
-    session = _evidence(tmp_path)
+def test_append_during_decoding_is_read_on_the_next_observation(session):
     original = session.read_bytes()
     with PrivateEvidenceRead.open(session) as source:
         rows = source.rows()

@@ -1,4 +1,5 @@
 """Installed native 429 exhaustion reaches one completed user-visible failure."""
+from agent_comms.controller import SessionUpdateSink
 import asyncio
 import json
 from pathlib import Path
@@ -8,6 +9,7 @@ import pytest
 import agent_comms.native_pi as native_pi
 from agent_comms.acp_extension import RequestFailedUpdate, decode_updates
 from agent_comms.native_arguments import GivenArguments, GivenBinary
+from agent_comms.pi_native_backend import PiNativeBackend
 from agent_comms.acp_failure import (
     NativeMessageFailureSource,
     ProviderQuotaFailure,
@@ -48,7 +50,7 @@ class RateLimitedProvider:
 
 @pytest.mark.asyncio
 async def test_installed_429_exhaustion_publishes_one_retry_owned_failure(
-    private_comms, tmp_path, monkeypatch,
+    private_comms, tmp_path, monkeypatch, native_runtime_package,
 ):
     provider = RateLimitedProvider()
     server = await asyncio.start_server(provider.handle, "127.0.0.1", 0)
@@ -80,9 +82,10 @@ async def test_installed_429_exhaustion_publishes_one_retry_owned_failure(
     agent = canonical_agent(private_comms, agent_bin=GivenBinary(launcher), agent_args=GivenArguments(tuple(arguments)), runtime_enabled=True)
     updates = []
 
-    class Client:
-        async def session_update(self, session_id, update):
+    class Client(SessionUpdateSink):
+        async def publish_update(self, session_id, update):
             updates.append(update)
+            return True
 
     agent.sessions.client = Client()
     try:
@@ -111,7 +114,7 @@ async def test_installed_429_exhaustion_publishes_one_retry_owned_failure(
         assert provider.posts == 4
         assert not any(getattr(getattr(update, "content", None), "text", None)
                        for update in updates)
-        saved = Path(private_comms.registry.require("project").session_file)
+        saved = Path(private_comms.registry.require("project").session_file.location(PiNativeBackend).path)
         journal = [json.loads(line) for line in saved.read_text().splitlines()]
         users = [row for row in journal if row.get("type") == "message"
                  and row["message"]["role"] == "user"]

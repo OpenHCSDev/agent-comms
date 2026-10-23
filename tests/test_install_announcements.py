@@ -8,40 +8,25 @@ import pytest
 
 from agent_comms.channel_targets import CommsTag
 from agent_comms.cli import build_parser
-from agent_comms.cli_commands import BusReadBack, CliCommand, HistoryCliCommand, InstallResult
+from agent_comms.cli_commands import BusReadBack, CliCommand, HistoryCliCommand
+from agent_comms.installer.probes.harnesses import InstallResult
 from agent_comms.registry_document import NoCommanderProject
 from agent_comms.repo import GitCommandError
 from agent_comms.commander_heartbeat import CommanderHeartbeat
 from agent_comms.field_codec import FieldCodec
 from agent_comms.host_services import RestartedService
-from agent_comms.installer.backup import BackupReport, RestoreSpace, UpgradeRefused
-from agent_comms.installer.carry import Carried
+from agent_comms.installer.backup import BackupReport, RestoreSpace
+from agent_comms.installer.refusals import UpgradeRefused
+from agent_comms.installer.probes.carry import Carried
 from agent_comms.installer.launch import InstallReport
 from agent_comms.installer.commands import InstallCommands
 from agent_comms.installer.interpreter_operation import CommandPhase, PhaseTiming
-from agent_comms.installer.interpreter_operation import (
-    InstalledProgram, InstallReportProbe,
-)
+from agent_comms.installer.interpreter_operation import InstalledProgram
+from agent_comms.installer.probes.report import InstallReportProbe
 from agent_comms.installer.reporting import FinishedInstall, RuntimeWriter
-from agent_comms.installer.upgrade import (
-    CarriedPass,
-    CarriedRun,
-    CreatedRun,
-    FreshRehearsal,
-    InstalledUpgrade,
-    InstallRolledBack,
-    RefusedOwner,
-    RehearsalFiles,
-    RetiredRun,
-    StartedOwner,
-    StepRun,
-    Stack,
-    TargetTree,
-    UnchangedRun,
-    UnresumedUpgrade,
-    Upgrade,
-    upgrade,
-)
+from agent_comms.installer.upgrade import CarriedPass, CarriedRun, CreatedRun, FreshRehearsal, InstalledUpgrade, RehearsalFiles, RetiredRun, StepRun, Stack, TargetTree, UnchangedRun, UnresumedUpgrade, Upgrade, upgrade
+from agent_comms.installer.refusals import InstallRolledBack
+from agent_comms.installer.owner_starts import RefusedOwner, StartedOwner
 from agent_comms.install_choices import LiveMode, RehearsalMode, UnnamedInstaller
 from agent_comms.launch_runtime import LaunchRuntime, RestoredRuntime
 from agent_comms.thread_execution import ExternalThreadExecution
@@ -117,7 +102,9 @@ def test_typed_results_publish_as_installer_and_survive_history_read(private_com
     assert tuple(message.sender for message in messages) == ("installer", "installer")
     assert all(found.target[:12] in message.body for message in messages)
     assert all(line in messages[1].body for line in live.lines())
-    assert "Commands: 2 in 61.3s; slowest:\n61.2s uv sync\n0.1s git merge" in messages[1].body
+    assert "Phases: 2 in 61.3s; slowest:" in messages[1].body
+    assert "61.200s CommandPhase: uv sync (61.200s elapsed)" in messages[1].body
+    assert "0.100s CommandPhase: git merge (0.100s elapsed)" in messages[1].body
     sender = comms.registry.require("installer")
     assert sender.execution is ExternalThreadExecution
 
@@ -136,7 +123,7 @@ def test_rollback_and_refusal_are_published_from_their_error_types(private_comms
     assert all(line in messages[1].body for line in restored.lines())
     assert str(error) in messages[1].body
     assert str(runtime.prefix) in messages[1].body
-    completed = core("--root", str(comms.root), "history", "--target", "#comms")
+    completed = core("--root", str(comms.root), "history", "#comms")
     assert completed.returncode == 0, completed.stderr
     assert FieldCodec.parse(completed.stdout) == HistoryCliCommand(target="#comms").apply(comms).to_wire()
 

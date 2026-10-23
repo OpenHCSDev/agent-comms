@@ -1,4 +1,4 @@
-"""Real publication must register the entire audience, without test SQL setup."""
+"""Incarnation creation prepares an audience that publication only addresses."""
 
 
 from bus_record_fixture import prepare_native_comms
@@ -26,7 +26,9 @@ async def test_channel_with_unstarted_and_stopped_subscribers_delivers_whole_coh
     lookup = receiver.incarnation.lookup
     with Coordination(str(comms.root / "coordination.sqlite3")) as store:
         with store.session.read():
-            assert Participants.select(store.session._connection) == []
+            assert {row.participant_lookup for row in Participants.select(store.session._connection)} == {
+                thread.incarnation.lookup for thread in comms.registry.snapshot().threads.values()
+            }
         message = comms.messaging.send("sender", "#team", "Hello @receiver").message
         initial = comms.bus.bus.delivery(message.seq)
         assert {r.canonical_thread for r in initial.audience.recipients} == {

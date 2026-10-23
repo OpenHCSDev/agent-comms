@@ -18,28 +18,29 @@ from pathlib import Path
 from string import Formatter
 from typing import Annotated, ClassVar, Iterator, Self
 
-from agent_comms.child_process import Platform
 from agent_comms.active_route import (
-    ActiveRoute, RouteFile, RouteFileSelection, _route_directory, active_route_path, read_active_route, route_directory,
+    ActiveRoute,
+    RouteFile,
+    RouteFileSelection,
+    _route_directory,
+    active_route_path,
+    read_active_route,
+    route_directory,
 )
-from agent_comms.coordination_errors import CoordinationError
+from agent_comms.child_process import Platform
 from agent_comms.field_codec import FieldCodec, MalformedRecord, PathText
-from agent_comms.locked_store import DeclaredFile, LockedStore, RootFile, RuntimeFile, UndeclaredFile
+from agent_comms.installer.refusals import UpgradeRefused
+from agent_comms.locked_store import (
+    DeclaredFile,
+    LockedStore,
+    RootFile,
+    RuntimeFile,
+    UndeclaredFile,
+)
 from agent_comms.maintenance_barrier import MaintenanceBarrier, MaintenanceOperator
 from agent_comms.private_path import FileObservation, FileRevision, MissingFile
 from agent_comms.registry_store import RegistryStore
 from agent_comms.store_files import AtomicFile
-
-
-class UpgradeRefused(CoordinationError):
-    """The update stopped without permission to discard its original data."""
-    prefix: ClassVar[str] = "install: refused:"
-
-    def __str__(self) -> str:
-        return f"{self.prefix} {super().__str__()}"
-
-    def lines(self) -> tuple[str, ...]:
-        return (f"Install failed: {self}",)
 
 
 @dataclass(frozen=True)

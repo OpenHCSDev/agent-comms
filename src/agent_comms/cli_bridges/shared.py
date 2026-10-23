@@ -115,6 +115,19 @@ class StoredBinding(BindingRequest):
 
 
 @dataclass(frozen=True)
+class GivenBinding(BindingRequest):
+    """Some binding fields given: each overrides the stored binding's field, and a field
+    missing from both is refused by name when the merged fields decode."""
+
+    given: dict[str, str]
+
+    def bind(self, db: sqlite3.Connection) -> Binding:
+        stored = tuple(FieldCodec.encode(row) for row in Binding.select(db))
+        requested = FieldCodec.decode(Binding, {**(stored[0] if stored else {}), **self.given})
+        return requested.bind(db)
+
+
+@dataclass(frozen=True)
 class Binding(BridgeStateTable, TypedTable, BindingRequest):
     root: str
     bus: Annotated[str, field_codec.WireName("bus_thread")]
@@ -122,7 +135,8 @@ class Binding(BridgeStateTable, TypedTable, BindingRequest):
 
     @classmethod
     def add_arguments(cls, parser: argparse.ArgumentParser) -> None:
-        group = parser.add_argument_group('Core/CLI binding (all or none)')
+        group = parser.add_argument_group(
+            'Core/CLI binding (each given field overrides the stored binding)')
         for _, key in FieldCodec.record_fields(cls):
             group.add_argument('--' + key.replace('_', '-'))
 
@@ -130,7 +144,7 @@ class Binding(BridgeStateTable, TypedTable, BindingRequest):
     def from_arguments(cls, arguments: argparse.Namespace) -> BindingRequest:
         values = {key: vars(arguments)[key] for _, key in FieldCodec.record_fields(cls)
                   if vars(arguments)[key] is not None}
-        return FieldCodec.decode(cls, {cls.family_discriminator: cls.declared_name, **values}) if values else StoredBinding()
+        return GivenBinding({cls.family_discriminator: cls.declared_name, **values}) if values else StoredBinding()
 
     @classmethod
     @contextmanager
@@ -166,7 +180,9 @@ class Options:
         parser = argparse.ArgumentParser(description=description)
         commands = parser.add_subparsers(required=True)
         for operation in Operation.offered(bridge_type):
-            command = commands.add_parser(operation.__name__.lower(), parents=[common])
+            command = commands.add_parser(
+                operation.__name__.lower(), parents=[common],
+                help=operation.help, description=operation.help)
             operation.add_arguments(command)
             command.set_defaults(operation=operation)
         arguments = parser.parse_args(namespace=CliArguments())
@@ -270,6 +286,9 @@ OperationBridge = TypeVar("OperationBridge", bound="CliBridge")
 @dataclass(frozen=True)
 class Operation(DeclaredOptions, ABC, Generic[OperationBridge]):
     """A decoded CLI command owns its execution."""
+
+    help: ClassVar[str]
+    """The one line `--help` shows; every offered command declares it."""
 
     def binding(self, arguments: argparse.Namespace) -> BindingRequest:
         return Binding.from_arguments(arguments)
@@ -440,6 +459,7 @@ class Send(SendRequest, Operation[OperationBridge]):
 
 
 class Inbox(Operation[OperationBridge]):
+    help = "Deliver this binding's bus messages to its harness until stopped"
     @classmethod
     def serves(cls, bridge: type[CliBridge]) -> bool:
         """Delivery alone, without the transcript that confirms it on some bridges."""
@@ -460,6 +480,7 @@ class Inbox(Operation[OperationBridge]):
 
 
 class Watch(Inbox):
+    help = "Deliver this binding's bus messages and publish its harness transcript to the bus"
     @classmethod
     def serves(cls, bridge: type[CliBridge]) -> bool:
         return issubclass(bridge, PublishesTranscript)
@@ -474,6 +495,7 @@ class Watch(Inbox):
 
 @dataclass(frozen=True, kw_only=True)
 class Serve(Watch):
+    help = "The session bridge process that connect and the SessionStart hook launch; not run by hand"
     owner: Annotated[
         ProcessIdentity,
         field_codec.Argument(flags=("--owner",), options={"type": FieldCodec.parse}),
@@ -566,6 +588,8 @@ class Serve(Watch):
 @dataclass(frozen=True, kw_only=True)
 class ResumedServe(Serve):
     """A serve exec'd in place by an install: it adopts the claim its predecessor kept."""
+
+    help = "A session bridge an install resumes in place, adopting its predecessor's claim"
 
     claim: Annotated[int, field_codec.Argument(flags=("--claim",), options={"type": int})]
 
@@ -723,13 +747,21 @@ class PausedSessionBridge(ResumableBridge):
 
 
 class Enrol(Operation):
+    help = "Record this session's binding without starting its bridge; the next SessionStart starts it"
+    reported: ClassVar[str] = (
+        'Session binding enrolled; the next SessionStart starts the bridge. Monitor runs watch.')
+
     @classmethod
     def serves(cls, bridge: type[CliBridge]) -> bool:
         return issubclass(bridge, LineMonitorBridge)
 
     async def execute(self, bridge: LineMonitorBridge) -> None:
         WatchClaim(bridge.binding.thread).enrol(bridge.watch_record())
-        print('Session binding enrolled; SessionStart owns the bridge. Monitor runs watch.', flush=True)
+        self.begin(bridge)
+        print(self.reported, flush=True)
+
+    def begin(self, bridge: LineMonitorBridge) -> None:
+        """Enrolment alone starts nothing."""
 
 
 @dataclass(frozen=True)
@@ -921,14 +953,36 @@ class MonitorFrame(TaggedWire, ABC, affix=""):
     async def confirm(self, bridge: LineMonitorBridge, record: ObservedMonitor) -> None: ...
 
 
-class MonitorProbe(MonitorFrame, declared_name='probe'):
+class MonitorProtocolFrame(MonitorFrame, declared_name=None):
+    """A line the monitor writes itself; the transcript scan knows it by its protocol prefix."""
     protocol: Literal['agent-comms-monitor'] = 'agent-comms-monitor'
     wire_prefix: ClassVar[str] = '{"protocol":' + json.dumps(protocol) + ','
+
+
+class MonitorProbe(MonitorProtocolFrame, declared_name='probe'):
     session: str
     token: str
 
     async def confirm(self, bridge: LineMonitorBridge, record: ObservedMonitor) -> None:
         await bridge.confirm_probe(self)
+
+
+class MonitorBridgeStopped(MonitorProtocolFrame, declared_name='bridge-stopped'):
+    """The reader's notice that no bridge holds its claim, so nothing is delivered until one starts."""
+    notice: str
+
+    @classmethod
+    def announce(cls, claim: WatchClaim) -> None:
+        """One Monitor event: the bridge is gone, so nothing arrives until it starts again."""
+        stopped = cls(notice=(
+            'Comms bridge stopped: no messages are delivered until it starts again. '
+            f'{claim.path.with_suffix(".log")} names why; '
+            'agent-comms-claude-bridge connect restarts it and this Monitor resumes.'))
+        sys.stdout.write(stopped.model_dump_json() + '\n')
+        sys.stdout.flush()
+
+    async def confirm(self, bridge: LineMonitorBridge, record: ObservedMonitor) -> None:
+        """A notice carries no delivery to confirm."""
 
 
 class MonitorPart(MonitorFrame, declared_name='part'):
@@ -999,7 +1053,7 @@ class LineMonitorBridge(TranscriptConfirmsDelivery, TranscriptBridge[Options]):
         return WatchRecord(self.binding.bus, self.binding.root, command)
 
     async def watch_operation(self, operation: Watch) -> None:
-        await read_monitor(WatchClaim(self.binding.thread))
+        await read_monitor(WatchClaim(self.binding.thread), MonitorBridgeStopped.announce)
 
     async def accept(self, message: messages.Message) -> None:
         # Wait before recording an attempt. Detachment never creates

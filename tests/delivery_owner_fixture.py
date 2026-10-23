@@ -1,4 +1,5 @@
 """Canonical ACP owners sharing the production bus, SQL stores and owner socket."""
+from agent_comms.controller import SessionUpdateSink
 
 from bus_record_fixture import prepare_native_comms
 
@@ -8,9 +9,9 @@ from agent_comms.acp import CommsAgent
 from agent_comms.launch_root import LaunchRoot
 
 
-class FakeClient:
-    async def session_update(self, **kwargs):
-        pass
+class FakeClient(SessionUpdateSink):
+    async def publish_update(self, **kwargs):
+        return True
 
 
 @asynccontextmanager

@@ -1,7 +1,6 @@
 """Native stories use one copied Todo record, including a resent send-back."""
 
 
-from agent_comms.bus import Bus
 from agent_comms.repository_name import RepositoryName
 
 from dataclasses import replace
@@ -29,7 +28,6 @@ from agent_comms.threads import Thread
 
 def test_order_story_copied_bus_strike_and_send_back_once(comms, tmp_path):
     source = SourceRepository.create(tmp_path / 'source')
-    Bus.install(Bus.path_in(comms.root))
     for name in ("lead", "worker"):
         comms.registry.declare(Thread(name, frozenset({"comms"}), str(tmp_path)))
     request = comms.goals.todos.add_request(
@@ -90,11 +88,7 @@ def test_order_story_copied_bus_strike_and_send_back_once(comms, tmp_path):
     assert CommsOrderStoryTool.invoke(copied, {"order_id": "resent-order"}, caller=caller) == result
     fleet = FieldCodec.decode(FleetStory, CommsFleetStoryTool.invoke(
         copied, {"thread": "lead"}, caller=NoThreadCaller()))
-    assert len(fleet.lines) == 2
-    assert reason in fleet.lines[0] and standalone in fleet.lines[1]
-    assert "\n".join(fleet.lines).count(reason) == 1
-    assert "\n".join(fleet.lines).count(standalone) == 1
-    assert "accepted-call" not in "\n".join(fleet.lines)
+    assert fleet.lines == (f"P1 worker: {saved.order.line}",)
     assert copied.goals.todos.get("P1") == saved == comms.goals.todos.get("P1")
     assert copied.goals.todos.path.stat().st_mtime_ns == stored_at
     with copied.goals.todos.writing() as db:
@@ -109,7 +103,8 @@ def test_order_story_copied_bus_strike_and_send_back_once(comms, tmp_path):
     assert linked.line.count(reason) == linked.line.count(standalone) == 1
     linked_fleet = FieldCodec.decode(FleetStory, CommsFleetStoryTool.invoke(
         copied, {"thread": "lead"}, caller=caller))
-    assert linked_fleet == fleet
+    assert linked_fleet.lines == (
+        *fleet.lines, f"P2 worker: {copied.goals.todos.get('P2').order.line}")
     current = copied.goals.todos.get(saved.id)
     previous = current.held()
     released = copied.goals.todos.apply(current.id, ReleaseTodo(
@@ -122,6 +117,6 @@ def test_order_story_copied_bus_strike_and_send_back_once(comms, tmp_path):
     ))
     assert withdrawn.state is DoneTodoState
     assert FieldCodec.decode(FleetStory, CommsFleetStoryTool.invoke(
-        copied, {"thread": "lead"}, caller=caller)) == fleet
+        copied, {"thread": "lead"}, caller=caller)).lines == linked_fleet.lines[1:]
     with pytest.raises(TodoError):
         CommsOrderStoryTool.invoke(copied, {"order_id": "absent-order"}, caller=caller)

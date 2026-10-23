@@ -36,7 +36,6 @@ from .response_policy import CollectivePolicy, InformationalPolicy, ResponsePoli
 if TYPE_CHECKING:
     from .child_process import ProcessIdentity
     from .messages import Message
-    from .participant_store import ParticipantStore
     from .read_ledger import ReadDocument, ReadLedger
     from .registry_provenance import RegistryProvenance
     from .threads import Thread
@@ -604,11 +603,6 @@ class ThreadRole(DeclaredFamily, ProjectionSource, affix="ThreadRole"):
 
     @classmethod
     @abstractmethod
-    def register_sender(cls, participants: ParticipantStore, lookup: str, name: str) -> None:
-        """An executing sender is a participant; a human sender owns no turns to wake."""
-
-    @classmethod
-    @abstractmethod
     def require_executable(cls, refusal: Exception) -> None: ...
 
     @classmethod
@@ -671,10 +665,6 @@ class AgentThreadRole(ThreadRole):
     @classmethod
     def initial_delivery(cls, message: Message, target: str) -> tuple[Message, list[str]]:
         return message, [target]
-
-    @classmethod
-    def register_sender(cls, participants: ParticipantStore, lookup: str, name: str) -> None:
-        participants.register(lookup, committed=True)
 
     @classmethod
     def require_executable(cls, refusal: Exception) -> None:
@@ -742,10 +732,6 @@ class UserThreadRole(ThreadRole):
     @classmethod
     def initial_delivery(cls, message: Message, target: str) -> tuple[Message, list[str]]:
         return replace(message, role=message.role.as_notice()), []
-
-    @classmethod
-    def register_sender(cls, participants: ParticipantStore, lookup: str, name: str) -> None:
-        """A human sender owns no turns to wake."""
 
     @classmethod
     def require_executable(cls, refusal: Exception) -> None:
