@@ -334,7 +334,7 @@ class CommsAgent(SessionEffects, InputEffects, TurnEffects):
     def _require_compaction_text(request: PromptRequest) -> None:
         if len(request.prompt) != 1:
             raise RequestError.invalid_params({"reason": "/compact requires one text block."})
-        if request.prompt[0].type != "text":
+        if not isinstance(request.prompt[0], TextContentBlock):
             raise RequestError.invalid_params({"reason": "/compact requires text only."})
 
     async def emit_session_identity(self, session_id: str, name: str, client: Any = None) -> None:
