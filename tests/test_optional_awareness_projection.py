@@ -32,6 +32,7 @@ from agent_comms.selected_source_batch import SelectedSource
 from agent_comms.threads import Thread
 from agent_comms.wake_candidate_index import (
     WakeCandidateIndex,
+    ProjectionUnavailableError,
 )
 from agent_comms.thread_model import DeclaredModel
 
@@ -317,6 +318,18 @@ def test_normal_rename_does_not_inject_old_selected_claim_into_new_owner(
         selected = result.context()["selected"]
         assert [row["claim_id"] for row in selected] == [current_claim.assignment_id]
         assert old_claim.assignment_id not in result.render(32768)
+        captured = AwarenessClaimGenerations.one(
+            store.session._connection, claim_id=old_claim.assignment_id,
+        )
+        current_owner = store.participants.get(current_claim.recipient_lookup).owner_identity
+        # A supported rename preserves generation, but it does not make unrelated
+        # lookups or a capture from a future generation historical evidence.
+        for invalid in (
+            replace(captured, owner_lookup="unrelated-owner"),
+            replace(captured, owner_generation=current_owner.generation + 1),
+        ):
+            with pytest.raises(ProjectionUnavailableError):
+                invalid.current(current_owner)
     finally:
         store.close()
 

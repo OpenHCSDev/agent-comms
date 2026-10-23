@@ -315,14 +315,12 @@ class AwarenessClaimGenerations(
     owner_generation: Annotated[int, Column(check="owner_generation > 0")]
 
     def current(self, expected: OwnerGenerations) -> bool:
-        """A historical capture is omitted; a changed current owner refuses."""
+        """Old generations and pre-rename names are historical, never current context."""
         from .wake_candidate_index import ProjectionUnavailableError
 
-        if self.owner_generation < expected.generation:
-            return False
-        if self.owner_identity != expected:
+        if self.owner_lookup != expected.owner_lookup or self.owner_generation > expected.generation:
             raise ProjectionUnavailableError("captured participant owner changed")
-        return True
+        return self.owner_identity == expected
 
     def require_selection(self, assignment: WakeAssignment, acknowledgement: ClaimBatchAcknowledgements) -> None:
         """Verify this immutable acceptance capture against its original claim."""
