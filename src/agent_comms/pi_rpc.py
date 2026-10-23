@@ -94,6 +94,8 @@ class PiRpcChannel(JsonlStreamReader, Sealed):
             raise MalformedRecord("Native RPC record is incomplete")
         # Discovery skips lines that are not JSON; the native proof refuses them.
         data = FieldCodec.parse(raw) if strict else json.loads(raw.decode("utf-8"))
+        if not isinstance(data, dict):
+            raise MalformedRecord("Pi RPC record has wrong type")
         return event_type.from_wire(data)
 
     async def receive(

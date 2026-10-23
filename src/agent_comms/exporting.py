@@ -19,7 +19,6 @@ from .declared_family import DeclaredFamily
 from .field_codec import FieldCodec, NullMember, SingleFieldValue, SubclassUnion
 from .message_reference import MessageReference
 from .messages import Message
-from .mro_dispatch import MroDispatch, handles
 from .registration import Registration
 from .store_files import AtomicFile, ExclusiveAtomicFile
 
@@ -137,41 +136,18 @@ class ChannelScope(WireExportScope):
         return ResolvedExportScope(self, channel.history_scope().includes)
 
 
-class ParticipantName(MroDispatch):
-    @classmethod
-    def valid(cls, name: object) -> bool:
-        return cls.handler_for(type(name))(name)
-
-    @handles(str)
-    @staticmethod
-    def text(name: str) -> bool:
-        return bool(name)
-
-    @handles(object)
-    @staticmethod
-    def invalid(name: object) -> bool:
-        return False
-
-
 @dataclass(frozen=True, slots=True)
-class DmScope(WireExportScope, MroDispatch):
+class DmScope(WireExportScope):
     participants: tuple[str, str]
 
     def __post_init__(self) -> None:
-        next(self.handlers_for(self.participants))(self.participants)
-
-    @handles(tuple)
-    def pair(self, participants: tuple[str, str]) -> None:
         if (
-            len(participants) != 2
-            or not all(ParticipantName.valid(name) for name in participants)
-            or participants[0] == participants[1]
+            not isinstance(self.participants, tuple)
+            or len(self.participants) != 2
+            or any(not isinstance(name, str) or not name for name in self.participants)
+            or self.participants[0] == self.participants[1]
         ):
-            self.invalid(participants)
-
-    @handles(object)
-    def invalid(self, participants: object) -> None:
-        raise ValueError("A DM wire-export scope requires two distinct participants.")
+            raise ValueError("A DM wire-export scope requires two distinct participants.")
 
     def resolve(self, require_channel: Callable[[str], Channel], registry: Registration) -> ResolvedExportScope:
         first = registry.entry(self.participants[0]).entry
@@ -288,20 +264,12 @@ class FullLimit(WireExportLimit):
 
 
 @dataclass(frozen=True, slots=True)
-class MaxBytesLimit(WireExportLimit, MroDispatch):
+class MaxBytesLimit(WireExportLimit):
     value: int
 
     def __post_init__(self) -> None:
-        next(self.handlers_for(self.value))(self.value)
-
-    @handles(int)
-    def integer(self, value: int) -> None:
-        if value <= 0:
-            self.invalid(value)
-
-    @handles(bool, object)
-    def invalid(self, value: object) -> None:
-        raise ValueError("The wire-export byte ceiling must be a positive integer.")
+        if isinstance(self.value, bool) or not isinstance(self.value, int) or self.value <= 0:
+            raise ValueError("The wire-export byte ceiling must be a positive integer.")
 
     def byte_ceiling(self) -> int:
         return self.value
@@ -329,20 +297,19 @@ class MaxBytesLimit(WireExportLimit, MroDispatch):
 
 
 @dataclass(frozen=True, slots=True)
-class RecentLimit(FullLimit, MroDispatch):
+class RecentLimit(FullLimit):
     value: float
 
     def __post_init__(self) -> None:
-        next(self.handlers_for(self.value))(self.value)
-
-    @handles(int, float)
-    def timestamp(self, value: int | float) -> None:
-        if not math.isfinite(value) or value < 0:
-            self.invalid(value)
-
-    @handles(bool, object)
-    def invalid(self, value: object) -> None:
-        raise ValueError("The recent wire-export cutoff must be a finite non-negative timestamp.")
+        if (
+            isinstance(self.value, bool)
+            or not isinstance(self.value, (int, float))
+            or not math.isfinite(self.value)
+            or self.value < 0
+        ):
+            raise ValueError(
+                "The recent wire-export cutoff must be a finite non-negative timestamp."
+            )
 
     def time_cutoff(self) -> float:
         return self.value

@@ -15,7 +15,6 @@ from typing import BinaryIO, ClassVar
 from pydantic import Field, JsonValue, TypeAdapter, field_validator, model_validator
 
 from agent_comms.cli_protocol import OpenWire, TimestampedWire, WireHeader
-from agent_comms.mro_dispatch import MroDispatch, handles
 from agent_comms.runtime_updates import (
     FinishedItem,
     HistoryNotice,
@@ -142,30 +141,12 @@ class CustomToolCallItem(FunctionCallItem, declared_name='custom_tool_call'):
         return {'input': self.arguments}
 
 
-class ToolOutputText(MroDispatch):
-    """External tool results display text directly and other JSON as JSON."""
-
-    @classmethod
-    def of(cls, value: JsonValue) -> str:
-        return cls.handler_for(type(value))(value)
-
-    @handles(str)
-    @staticmethod
-    def text(value: str) -> str:
-        return value
-
-    @handles(object)
-    @staticmethod
-    def structured(value: JsonValue) -> str:
-        return json.dumps(value, ensure_ascii=False)
-
-
 class FunctionCallOutputItem(RolloutItem, declared_name='function_call_output'):
     call_id: str = ''
     output: JsonValue = ''
 
     def updates(self, state: RolloutState, position: int, timestamp: float) -> tuple[RuntimeUpdate, ...]:
-        text = ToolOutputText.of(self.output)
+        text = self.output if isinstance(self.output, str) else json.dumps(self.output, ensure_ascii=False)
         return (FinishedItem('', self.call_id + ':result', (ToolEndTranscript(
             position=position, timestamp=timestamp, tool_call_id=self.call_id, tool_name=state.tools.get(self.call_id, ''), text=text),)),)
 

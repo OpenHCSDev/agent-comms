@@ -519,8 +519,14 @@ class MessageEntry(NativeEntry):
         # Opaque display roles must not hide a tracked ID from proof readers.
         if message.get("inputId") is not None and not self.message.user:
             raise MalformedRecord("Tracked native input must belong to a user")
-        # Continued STARTED text matching must retain extended native fields.
-        return replace(self, message=self.message.preserve_evidence(message))
+        if self.message.user and isinstance(self.message.content, tuple):
+            # Continued STARTED text matching must retain extended native fields.
+            content = tuple(
+                part.preserve_evidence(raw_part)
+                for part, raw_part in zip(self.message.content, message["content"], strict=True)
+            )
+            return replace(self, message=replace(self.message, content=content))
+        return self
 
     @classmethod
     def input_evidence(cls, raw: dict) -> tuple[NativeEntry, ...]:

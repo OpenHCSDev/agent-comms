@@ -4,7 +4,6 @@ from acp import RequestError
 from acp.schema import PromptResponse
 
 from .acp_extension import (
-    AcpPromptContent,
     ClearQueueRequest,
     CompactRequest,
     PromptRequest,
@@ -30,7 +29,12 @@ class AcpRequestConsumer(MroDispatch):
         result = await self.agent.sessions.proxies[self.session_id].request(
             "prompt",
             meta=encode_request(request),
-            prompt=[AcpPromptContent.wire(block) for block in self.prompt],
+            prompt=[
+                block
+                if isinstance(block, dict)
+                else block.model_dump(by_alias=True, exclude_none=True)
+                for block in self.prompt
+            ],
         )
         return PromptResponse.model_validate(result)
 

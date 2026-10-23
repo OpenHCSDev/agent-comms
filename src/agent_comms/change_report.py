@@ -19,35 +19,16 @@ from pydantic import JsonValue
 from agent_comms.errors import ToolRefusedError
 
 from .field_codec import (
-    FieldCodec,
+    MalformedRecord,
     NullMember,
     RecordMember,
     SubclassUnion,
     WireValue,
 )
 from .repo import GitCommandError, Repo
-from .mro_dispatch import MroDispatch, handles
 
 if TYPE_CHECKING:
     from .todos import PullRequestLink
-
-
-class SourceClass(MroDispatch):
-    """AST class declarations expose their body and line; other nodes expose neither."""
-
-    @classmethod
-    def of(cls, node: ast.AST) -> tuple[ast.ClassDef, ...]:
-        return cls.handler_for(type(node))(node)
-
-    @handles(ast.ClassDef)
-    @staticmethod
-    def declaration(node: ast.ClassDef) -> tuple[ast.ClassDef, ...]:
-        return (node,)
-
-    @handles(ast.AST)
-    @staticmethod
-    def other(node: ast.AST) -> tuple[ast.ClassDef, ...]:
-        return ()
 
 
 class MissingSourceLine(ToolRefusedError):
@@ -173,8 +154,8 @@ class FileLine(WireValue, SourceReference):
         file = repository.module_file(declaration.__module__).as_posix()
         body = ast.parse('\n'.join(revision.lines(repository.checkout, file)), filename=file).body
         for name in declaration.__qualname__.split('.'):
-            for node in (declaration for item in body for declaration in SourceClass.of(item)):
-                if node.name == name:
+            for node in body:
+                if isinstance(node, ast.ClassDef) and node.name == name:
                     body = node.body
                     break
             else:
@@ -186,8 +167,8 @@ class FileLine(WireValue, SourceReference):
 
     def require_class(self, repository: Path, revision: SourceRevision) -> None:
         tree = ast.parse('\n'.join(revision.lines(repository, self.file)), filename=self.file)
-        if not any(node.lineno == self.line for item in ast.walk(tree)
-                   for node in SourceClass.of(item)):
+        if not any(isinstance(node, ast.ClassDef) and node.lineno == self.line
+                   for node in ast.walk(tree)):
             raise MissingSourceLine(
                 f"scope shape reference {self.to_wire()} must name a class declaration"
             )
@@ -197,7 +178,8 @@ class FileLine(WireValue, SourceReference):
 
     @classmethod
     def from_wire(cls, data: JsonValue) -> FileLine:
-        data = FieldCodec.decode(str, data)
+        if not isinstance(data, str):
+            raise MalformedRecord("Expected a 'file.py:line' string.")
         file, separator, line = data.rpartition(":")
         if not separator or not file or not line.isdigit():
             raise ValueError(f"Expected a 'file.py:line' reference, received {data!r}")

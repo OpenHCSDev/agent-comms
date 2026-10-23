@@ -20,7 +20,6 @@ from .field_codec import (
     FieldCodec, MalformedRecord, NullMember, RecordMember, SubclassUnion, Token256Text, WireName,
 )
 from .package_stamp import STAMP
-from .mro_dispatch import MroDispatch, handles
 
 if TYPE_CHECKING:
     from .runtime import RuntimeProxy, SocketClient
@@ -155,42 +154,8 @@ class NoRpcError(NullMember, RpcFailure):
         return RuntimeError(error)
 
 
-class RpcDetailText(MroDispatch):
-    @classmethod
-    def of(cls, value: object) -> str:
-        return cls.handler_for(type(value))(value)
-
-    @handles(str)
-    @staticmethod
-    def text(value: str) -> str:
-        return value
-
-    @handles(object)
-    @staticmethod
-    def absent(value: object) -> str:
-        return ""
-
-
-class RpcDetails(MroDispatch):
-    """An external RPC error may carry a human explanation in its opaque data."""
-
-    @classmethod
-    def of(cls, data: object) -> str:
-        return cls.handler_for(type(data))(data)
-
-    @handles(dict)
-    @staticmethod
-    def record(data: dict[str, object]) -> str:
-        return RpcDetailText.of(data.get("details") or data.get("reason"))
-
-    @handles(object)
-    @staticmethod
-    def absent(data: object) -> str:
-        return ""
-
-
 @dataclass(frozen=True, kw_only=True)
-class OwnerFailure(OwnerLine, MroDispatch):
+class OwnerFailure(OwnerLine):
     """A failed request. A JSON-RPC error raises again as itself on the client."""
 
     error: str
@@ -198,19 +163,13 @@ class OwnerFailure(OwnerLine, MroDispatch):
 
     @classmethod
     def of(cls, error: Exception) -> Self:
-        return cls.handler_for(type(error))(error)
-
-    @handles(Exception)
-    @classmethod
-    def ordinary(cls, error: Exception) -> Self:
-        return cls(error=str(error) or type(error).__name__)
-
-    @handles(RequestError)
-    @classmethod
-    def rpc(cls, error: RequestError) -> Self:
+        if not isinstance(error, RequestError):
+            return cls(error=str(error) or type(error).__name__)
+        data = error.data if isinstance(error.data, dict) else {}
+        reason = data.get("details") or data.get("reason")
         # The pi project extension shows the text; Core clients raise the RPC error.
         return cls(
-            error=RpcDetails.of(error.data) or str(error),
+            error=reason if isinstance(reason, str) and reason else str(error),
             rpc_error=OwnerRpcError(error.code, str(error), error.data),
         )
 

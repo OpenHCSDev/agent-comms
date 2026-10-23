@@ -48,7 +48,6 @@ from agent_comms.coordination_errors import IdentityConflict
 from agent_comms.coordinator import Coordination
 
 from .acp_extension import (
-    AcpPromptContent,
     CompactRequest,
     encode_updates,
 )
@@ -287,7 +286,8 @@ class CommsAgent(SessionEffects, InputEffects, TurnEffects):
     def _require_compaction_text(prompt: list[PromptBlock]) -> None:
         if len(prompt) != 1:
             raise RequestError.invalid_params({"reason": "/compact requires one text block."})
-        kind = AcpPromptContent.wire(prompt[0]).get("type")
+        block = prompt[0]
+        kind = block.get("type") if isinstance(block, dict) else getattr(block, "type", None)
         if kind != "text":
             raise RequestError.invalid_params({"reason": "/compact requires text only."})
 
@@ -428,7 +428,10 @@ class CommsAgent(SessionEffects, InputEffects, TurnEffects):
     def _prompt_text(prompt: list[PromptBlock]) -> str:
         chunks: list[str] = []
         for block in prompt:
-            chunks.append(str(AcpPromptContent.wire(block).get("text", "")))
+            if isinstance(block, dict):
+                chunks.append(str(block.get("text", "")))
+            else:
+                chunks.append(str(getattr(block, "text", "") or ""))
         return "\n".join(chunk for chunk in chunks if chunk)
 
 

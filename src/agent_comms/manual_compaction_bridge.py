@@ -63,6 +63,8 @@ async def compact_context(
     runner: TurnRunner, session_id: str, instructions: str | None = None
 ) -> CompactionOutcome:
     """Run the backend's own compaction now; called from a UI /compact only."""
+    if instructions is not None and not isinstance(instructions, str):
+        return FailedCompaction("Compaction instructions are invalid.")
     thread_name = await runner.sessions.sync_identity(session_id)
     lock = runner.turn_locks.setdefault(session_id, asyncio.Lock())
     if lock.locked() or await Coordination.run_worker(partial(runner.session_busy, session_id)):

@@ -27,7 +27,6 @@ from .registration_change import (
     UpdatedRegistration,
 )
 from .repo import Repo, RepositorySelection
-from .mro_dispatch import MroDispatch, handles
 from .registry_provenance import (
     DeletedThread,
     RegisteredRecipient,
@@ -243,7 +242,7 @@ class OwnRow(SnapshotValue[dict]):
 
 
 @dataclass(frozen=True)
-class ThreadSection(MroDispatch):
+class ThreadSection:
     """A document field holding one row per thread name. Its field plan owns both the
     wire key and the attribute, so a revision reuses unchanged rows without naming them."""
 
@@ -257,15 +256,9 @@ class ThreadSection(MroDispatch):
 
     def decoded(self, document: object) -> MutableMapping[str, object]:
         rows = self.plan.current(document)
-        return next(self.handlers_for(rows))(rows)
-
-    @handles(MutableMapping)
-    def mutable(self, rows: MutableMapping[str, object]) -> MutableMapping[str, object]:
+        if not isinstance(rows, MutableMapping):
+            raise TypeError(f"{self.plan.name} does not hold one row per thread")
         return rows
-
-    @handles(object)
-    def invalid(self, rows: object) -> MutableMapping[str, object]:
-        raise TypeError(f"{self.plan.name} does not hold one row per thread")
 
     def kept(self, raw: Mapping[str, object], earlier_raw: Mapping[str, object],
              earlier: object) -> frozenset[str]:
@@ -535,6 +528,8 @@ class RegistryDocument(RegistryPresence[dict[str, ThreadStatus]]):
                 document = FieldCodec.decode(cls, raw)
             else:
                 earlier_raw, decoded = earlier
+                if not isinstance(raw, dict):
+                    raise MalformedRecord("registry document must be an object")
                 kept = tuple(
                     (section, section.kept(raw, earlier_raw, decoded))
                     for section in cls.thread_sections()

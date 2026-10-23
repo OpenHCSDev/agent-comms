@@ -7,7 +7,7 @@ import subprocess
 from dataclasses import dataclass
 from typing import ClassVar
 
-from .field_codec import FieldCodec, WireValue
+from .field_codec import MalformedRecord, WireValue
 
 
 @dataclass(frozen=True, slots=True, eq=False)
@@ -48,7 +48,8 @@ class RepositoryName(WireValue):
 
     @classmethod
     def from_wire(cls, data: object) -> RepositoryName:
-        data = FieldCodec.decode(str, data)
+        if not isinstance(data, str):
+            raise MalformedRecord("Repo ID must be an owner/repo string.")
         owner, _, name = data.partition("/")
         return cls(owner, name)
 

@@ -11,7 +11,6 @@ from itertools import groupby
 from typing import TYPE_CHECKING, Annotated, AsyncIterator, ClassVar, NoReturn, Self, Union
 
 from pydantic import (
-    BaseModel,
     Discriminator,
     InstanceOf,
     PlainSerializer,
@@ -117,7 +116,7 @@ class WireDiscriminator(MroDispatch):
     def of(cls, value: object, family: type[TaggedWire]) -> str:
         return cls.handler_for(type(value))(value, family)
 
-    @handles(BaseModel)
+    @handles(TaggedWire)
     @staticmethod
     def declared(value: TaggedWire, family: type[TaggedWire]) -> str:
         return value.tag()

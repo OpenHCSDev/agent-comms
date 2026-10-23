@@ -50,12 +50,10 @@ from .field_codec import (
 )
 from .goals import GoalDeclaration
 from .lifecycle_capability import Successful
-from .mro_dispatch import MroDispatch, handles
 from .native_file_artifact import NativeFileArtifact
 from .native_session_reopen import NativeSessionIdentity
 from .pi_counts import NonnegativePiCount, PiCount, TotalPiCount, UnreportedCount
 from .pi_vocabulary import (
-    ExternalChoice,
     NoThinkingOverride,
     PiStopReason,
     ThinkingLevel,
@@ -312,8 +310,8 @@ class ProviderRetryOutcome(PiPayload, DeclaredFamily, affix="ProviderRetry"):
             ) from error
         if success:
             return SucceededProviderRetry
-        final_error = FieldCodec.decode(str, value.get("finalError"))
-        if not final_error.strip():
+        final_error = value.get("finalError")
+        if not isinstance(final_error, str) or not final_error.strip():
             raise MalformedRecord("Failed provider retry end requires finalError")
         return FailedProviderRetry
 
@@ -777,57 +775,11 @@ class UnknownDiagnostic(UnknownPayload, PiDiagnostic):
     pass
 
 
-class MessageParts(MroDispatch):
-    """Pi's text shorthand and content array have one parts view."""
-
-    @classmethod
-    def of(cls, content: tuple[PiContent, ...] | str | None) -> tuple[PiContent, ...]:
-        return cls.handler_for(type(content))(content)
-
-    @handles(str)
-    @staticmethod
-    def text(content: str) -> tuple[PiContent, ...]:
-        return (TextContent(content),)
-
-    @handles(tuple)
-    @staticmethod
-    def parts(content: tuple[PiContent, ...]) -> tuple[PiContent, ...]:
-        return content
-
-    @handles(type(None))
-    @staticmethod
-    def absent(content: None) -> tuple[PiContent, ...]:
-        return ()
-
-
-class MessageEvidence(MroDispatch):
-    """Only a native content array has per-part evidence to retain."""
-
-    @classmethod
-    def of(cls, content: tuple[PiContent, ...] | str | None, raw: object
-           ) -> tuple[PiContent, ...] | str | None:
-        return cls.handler_for(type(content))(content, raw)
-
-    @handles(tuple)
-    @staticmethod
-    def parts(content: tuple[PiContent, ...], raw: object) -> tuple[PiContent, ...]:
-        return tuple(part.preserve_evidence(original)
-                     for part, original in zip(content, raw, strict=True))
-
-    @handles(object)
-    @staticmethod
-    def unchanged(content: str | None, raw: object) -> str | None:
-        return content
-
-
 @dataclass(frozen=True)
 class PiMessage(WithheldAnnotations, ExternalNull, OpenPayload, affix="Message"):
     @property
     def parts(self) -> tuple[PiContent, ...]:
-        return MessageParts.of(self.content)
-
-    def preserve_evidence(self, raw: dict[str, object]) -> PiMessage:
-        return self
+        return (TextContent(self.content),) if isinstance(self.content, str) else self.content or ()
 
     @property
     def tool_calls(self) -> tuple[ToolCallContent, ...]:
@@ -864,7 +816,8 @@ class PiMessage(WithheldAnnotations, ExternalNull, OpenPayload, affix="Message")
     timestamp: Annotated[PiField[EventTime], EventMilliseconds] = UnrecordedEventTime()
 
     def __post_init__(self):
-        object.__setattr__(self, "stop_reason", ExternalChoice.of(self.stop_reason, PiStopReason))
+        if isinstance(self.stop_reason, str):
+            object.__setattr__(self, "stop_reason", PiStopReason.from_external(self.stop_reason))
 
     @property
     def measured_tokens(self) -> PiCount:
@@ -896,7 +849,11 @@ class PiMessage(WithheldAnnotations, ExternalNull, OpenPayload, affix="Message")
 
     @property
     def text(self) -> str:
-        return ("\n" if self.user else "").join(p.text for p in self.parts if p.text)
+        if self.content is None:
+            return ""
+        if isinstance(self.content, str):
+            return self.content
+        return ("\n" if self.user else "").join(p.text for p in self.content if p.text)
 
 
 class AbsentMessage(ExternalNullMember, PiMessage):
@@ -981,9 +938,6 @@ class AssistantMessage(PublicInstructionAnnotations, PiMessage):
 
 class UserMessage(PiMessage):
     user = True
-
-    def preserve_evidence(self, raw: dict[str, object]) -> PiMessage:
-        return replace(self, content=MessageEvidence.of(self.content, raw["content"]))
 
     def matches_input(self, text, native_id):
         # An omitted input id matches an omitted prompt id, as it always has.

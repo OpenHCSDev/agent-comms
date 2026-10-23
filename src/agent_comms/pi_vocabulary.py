@@ -16,29 +16,10 @@ from .field_codec import (
     FieldRepresentation,
 )
 from .lifecycle_capability import Failed, LifecycleCapability, Successful
-from .mro_dispatch import MroDispatch, handles
 from .pi_counts import PiCount, UnreportedCount
 
 if TYPE_CHECKING:
     from .backend import TurnSession
-
-
-class ExternalChoice(MroDispatch):
-    """An already selected declaration stays selected; raw names decode at the family."""
-
-    @classmethod
-    def of(cls, value: object, family: type[ExternalName]) -> type[ExternalName]:
-        return cls.handler_for(type(value))(value, family)
-
-    @handles(type)
-    @staticmethod
-    def declared(value: type[ExternalName], family: type[ExternalName]) -> type[ExternalName]:
-        return value
-
-    @handles(object)
-    @staticmethod
-    def external(value: object, family: type[ExternalName]) -> type[ExternalName]:
-        return family.from_external(value)
 
 
 class PiStopReason(LifecycleCapability, ExternalName, affix="StopReason"):
@@ -299,8 +280,10 @@ class ThinkingLevelValue(AcceptsNull, FieldRepresentation):
         return ThinkingLevel.member_named(FieldCodec.decode(str, value))
 
     @classmethod
-    def encode(cls, value: type[ThinkingChoice]) -> str | None:
-        return value.wire_value()
+    def encode(cls, value: object) -> str | None:
+        if isinstance(value, type) and issubclass(value, ThinkingChoice):
+            return value.wire_value()
+        raise ValueError("Thinking level requires a thinking choice declaration.")
 
     @classmethod
     def schema(cls) -> dict[str, object]:
