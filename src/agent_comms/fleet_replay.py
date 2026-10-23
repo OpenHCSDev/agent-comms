@@ -18,6 +18,11 @@ from .locked_store import RegistryFile, RootFile
 from .maintenance_barrier import MaintenanceBarrier
 from .root_runtime import RootRuntime
 from .storage_rules import StorageRule
+from .phase_evidence import MainTree
+from .repo import Repo
+from .repository_name import RepositoryName
+from .todos import ListedPullRequest, ProgressRead, PullRequest, Todo, UnmergedListedPullRequest
+from .work_branches import BranchComparison, BranchDifference, UnpushedHead, WorkBranchError
 
 
 @dataclass(frozen=True)
@@ -64,3 +69,139 @@ class FleetRootCopy:
         project = comms.registry.store.read().commander_project
         return tuple(CommanderObservation.read(comms, commander)
                      for commander in project.commanders(comms.registry.snapshot()))
+
+
+@dataclass(frozen=True)
+class GitReference:
+    name: str
+    head: str
+
+    def resolves(self, argument: str) -> bool:
+        return argument in (self.name, self.name.removeprefix("refs/remotes/"),
+                            self.name.removeprefix("refs/heads/"))
+
+
+@dataclass(frozen=True)
+class GitWorktree:
+    branch: str
+    paths: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class PullComparison:
+    base: str
+    head: str
+    compared: BranchComparison
+
+
+@dataclass(frozen=True)
+class FleetGitRead:
+    checkout: Annotated[Path, PathText]
+    difference: BranchDifference
+    unpublished: tuple[UnpushedHead, ...]
+    comparisons: tuple[PullComparison, ...]
+    references: tuple[GitReference, ...]
+    uncommitted: tuple[Annotated[Path, PathText], ...]
+    holds_work: bool
+    worktrees: tuple[GitWorktree, ...]
+
+    def arguments(self, arguments: tuple[str, ...]) -> tuple[str, ...]:
+        return tuple(next((reference.head for reference in self.references
+                           if reference.resolves(argument)), argument)
+                     for argument in arguments)
+
+
+@dataclass(frozen=True)
+class UnreadFleetGit:
+    checkout: Annotated[Path, PathText]
+    error: str
+
+
+@dataclass(frozen=True)
+class FleetPullRead:
+    repo: RepositoryName
+    selection: type[ListedPullRequest]
+    problem: str
+    requests: tuple[PullRequest, ...]
+
+
+@dataclass(frozen=True)
+class FleetInputs:
+    captured_at: float
+    git: tuple[FleetGitRead, ...]
+    unread_git: tuple[UnreadFleetGit, ...]
+    pulls: tuple[FleetPullRead, ...]
+    main_trees: tuple[MainTree, ...]
+
+    @classmethod
+    def capture(cls, copy: FleetRootCopy) -> FleetInputs:
+        """Capture the declared Git and forge answers; never manufacture incidents."""
+        comms = Comms(LocalRoute(copy.root))
+        snapshot = comms.registry.snapshot()
+        project = snapshot.commander_project.require()
+        commanders = project.commanders(snapshot)
+        todos = tuple(todo for commander in commanders
+                      for todo in comms.goals.todos.for_commander(commander.incarnation))
+        reader = ProgressRead(todos)
+        pulls = tuple(FleetPullRead(todo.repo, selection, todo.id,
+                                   reader.listed(todo.repo, selection, todo))
+                      for todo in todos
+                      for selection in ListedPullRequest.members_with(ListedPullRequest))
+        held = tuple(todo for commander in commanders
+                     for todo in comms.goals.todos.held_for_commander(commander.incarnation))
+        paths = {snapshot.require(todo.held().owner).project_path.resolve() for todo in held}
+        paths.update(path.resolve() for todo in held
+                     for path in comms.registry.storage_rule.checkout_paths(
+                         snapshot.require(todo.held().owner)))
+        paths.update(repo.checkout.resolve() for repo in project.repos)
+        paths.update(work.checkout.resolve() for todo in todos
+                     if not todo.holder_state.current_assignments()
+                     for work in comms.registry.storage_rule.work_for_problem(
+                         todo, comms.registry, comms.goals.todos))
+        git, unread = [], []
+        for path in sorted(paths):
+            try:
+                checkout = reader.checkout(path)
+                branches = checkout.branches
+                difference = reader.branch_difference(path)
+                requests = tuple(request for selection in pulls
+                                 if selection.selection is UnmergedListedPullRequest
+                                 and any(todo.id == selection.problem
+                                         and snapshot.require(todo.held().owner).project_path.resolve() == path
+                                         for todo in held)
+                                 for request in selection.requests)
+                comparisons = tuple(PullComparison(request.base, request.head,
+                    branches.pull_request_diff(request.base, request.head)) for request in requests)
+                references = tuple(GitReference(*line.split("\t")) for line in checkout.git(
+                    "for-each-ref", "--format=%(refname)%09%(objectname)").splitlines())
+                references = (*references, GitReference("HEAD", difference.head),
+                              GitReference(f"origin/{branches.main}", difference.main))
+                git.append(FleetGitRead(path, difference, branches.unpushed(difference), comparisons,
+                    references, branches.uncommitted(), branches.local_work,
+                    tuple(GitWorktree(branch, paths) for branch, paths in branches.worktrees().items())))
+            except (OSError, WorkBranchError) as error:
+                unread.append(UnreadFleetGit(path, str(error)))
+        return cls(time.time(), tuple(git), tuple(unread), pulls,
+                   tuple(MainTree.of(repo) for repo in project.repos))
+
+    def checkout(self, path: Path) -> FleetGitRead:
+        path = path.resolve()
+        for row in self.git:
+            if row.checkout == path:
+                return row
+        for row in self.unread_git:
+            if row.checkout == path:
+                raise WorkBranchError(row.error)
+        raise WorkBranchError(f"No captured Git input for {path}")
+
+    def listed(self, repo: RepositoryName, selection: type[ListedPullRequest],
+               todo: Todo) -> tuple[PullRequest, ...]:
+        return next(row.requests for row in self.pulls
+                    if (row.repo, row.selection, row.problem) == (repo, selection, todo.id))
+
+    def main_tree(self, repo: Repo) -> MainTree:
+        return next(tree for tree in self.main_trees if tree.repo.github == repo.github)
+
+    def comparison(self, path: Path, base: str, head: str) -> BranchComparison:
+        return next(row.compared for row in self.checkout(path).comparisons
+                    if (row.base, row.head) == (base, head))
