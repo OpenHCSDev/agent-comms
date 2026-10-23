@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING, Annotated
 
 
 from .bus_publication import HumanOrigin
+from .controller import UNBOUND_CONTROLLER
 from .declared_family import DeclaredFamily
 from .errors import RelationViolationError
 from .field_codec import Id128Text
@@ -145,8 +146,6 @@ class HumanInputOrigin(InputOrigin, ClaimScoped):
         return self.author.sender
 
     def require_ingress(self, comms, snapshot, claim_scope, controller):
-        from .runtime import UNBOUND_CONTROLLER
-
         if controller is None or controller is UNBOUND_CONTROLLER:
             raise RelationViolationError("User input origin requires its attached ACP controller")
         from .store_files import SharedLock
