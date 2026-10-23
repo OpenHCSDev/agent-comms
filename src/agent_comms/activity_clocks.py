@@ -5,8 +5,8 @@ from collections.abc import Iterable, Mapping
 from dataclasses import dataclass, field, fields
 from typing import TYPE_CHECKING, Self
 
-from .projection_source import ProjectionSource
 from .field_codec import FieldCodec
+from .projection_source import ProjectionSource
 from .typed_table import TypedRow
 
 if TYPE_CHECKING:

@@ -6,7 +6,6 @@ from abc import abstractmethod
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Annotated
 
-from .projection_source import ProjectionSource
 from .channel_targets import CommandTarget
 from .declared_family import DeclaredFamily
 from .errors import RelationViolationError
@@ -14,6 +13,7 @@ from .field_codec import FieldCodec, WireOmitDefault
 from .goals import GoalDeclaration, GoalRevision
 from .message_reference import MessageReference
 from .owner_requests import OwnerRequestId, RequestDirective
+from .projection_source import ProjectionSource
 from .thread_identity import (
     RecordedThreadIncarnation,
     ThreadIncarnation,

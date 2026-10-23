@@ -8,8 +8,8 @@ from dataclasses import dataclass
 from functools import cache
 from typing import TYPE_CHECKING
 
-from .projection_source import ProjectionSource
 from .declared_family import DeclaredFamily
+from .projection_source import ProjectionSource
 
 if TYPE_CHECKING:
     from .messages import Message

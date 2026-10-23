@@ -17,10 +17,10 @@ from typing import Final
 
 from agent_comms.coordination_contracts import MAX_IDENTIFIER_CHARS
 
-from .projection_source import ProjectionSource
 from .channel_targets import exact_stored_target
 from .field_codec import FieldCodec, MalformedRecord, Sha256Text
 from .messages import Message
+from .projection_source import ProjectionSource
 
 AUDIENCE_VERSION: Final = 1
 MAX_RECIPIENTS: Final = 4096

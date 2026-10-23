@@ -19,7 +19,6 @@ from itertools import product
 from pathlib import Path
 from typing import TYPE_CHECKING, ClassVar, Self, TextIO
 
-from .projection_source import ProjectionSource
 from .activity_clocks import ActivityClocks, ChannelActivity
 from .channel_targets import CommandTarget, ThreadTarget
 from .coordination_errors import DMPaintedBoundChanged, DMScopeChanged, HistoricalSourceChanged
@@ -29,6 +28,7 @@ from .field_codec import FieldCodec, NullMember, SingleFieldValue, SubclassUnion
 from .mentions import ThreadMention
 from .message_reference import MessageReference
 from .private_path import FileObservation, MissingFile
+from .projection_source import ProjectionSource
 from .recorded_bus import RecordedBus, RecordedBusIdentity
 from .store_files import SharedLock
 from .thread_identity import RecordedThreadIncarnation, ThreadIncarnation
