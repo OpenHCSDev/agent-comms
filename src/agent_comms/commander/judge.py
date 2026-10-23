@@ -33,17 +33,16 @@ from agent_comms.field_codec import Argument, FieldCodec
 from agent_comms.todos import (
     AcceptedVerdict,
     BluntText,
-    Derivation,
     DroppedVerdict,
     PeerAcceptedVerdict,
     ReviewedHeadVerdict,
     SendBackVerdict,
-    Slop,
     StrikeReason,
     SupersededVerdict,
     Todo,
     ToolCallVerdict,
 )
+from agent_comms.slop import Derivation, Slop
 from agent_comms.tools import CommsHeadVerdictTool, CommsUnjudgedTool, CommsVerdictTool
 from agent_comms.tool_caller import ThreadCaller
 from agent_comms.tool_declaration import EditCall, ReplacementEdit

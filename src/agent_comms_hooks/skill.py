@@ -20,7 +20,7 @@ from agent_comms.behaviour_patterns import PostmortemFailure
 from agent_comms.commander.package import CommanderPackage
 from agent_comms.commander.rule_file import RuleFile
 from agent_comms.registry_store import RegistryStore
-from agent_comms.todos import Slop
+from agent_comms.slop import Slop
 from agent_comms_hooks import ClaudeHookProgram
 from agent_comms_hooks.reread import CommanderDeck
 from agent_comms_hooks.watch import WatchClaim

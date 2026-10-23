@@ -35,9 +35,10 @@ from agent_comms.thread_execution import ExternalThreadExecution
 from agent_comms.thread_identity import RecordedThreadIncarnation
 from agent_comms.tools import CommsCommanderLoadTool, CommsHudTool, CommsTodoListTool
 from agent_comms.thread_model import DeclaredModel
+from agent_comms.slop import DeclarationDerivation, Slop
 from agent_comms.todos import (
-    DeclarationDerivation, PendingProblemOrder, ProblemAllocation, ReleaseTodo,
-    Slop, StrikeReason, SupersededVerdict, Todo, TodoError,
+    PendingProblemOrder, ProblemAllocation, ReleaseTodo,
+    StrikeReason, SupersededVerdict, Todo, TodoError,
 )
 
 
