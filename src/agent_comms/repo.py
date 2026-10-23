@@ -11,7 +11,7 @@ from typing import TYPE_CHECKING, Annotated, Self
 
 from pydantic import BaseModel, ConfigDict, InstanceOf, PlainSerializer, PlainValidator
 
-from .field_codec import WireValue
+from .field_codec import FieldCodec, WireValue
 from .repository_name import RepositoryName
 
 if TYPE_CHECKING:
@@ -51,7 +51,7 @@ class Repo(BaseModel, WireValue):
 
     @classmethod
     def from_wire(cls, data: object) -> Self:
-        return cls.model_validate(data)
+        return cls.model_validate_json(FieldCodec.compact(data))
 
     @classmethod
     def selected(cls, repositories: tuple[Repo, ...], name: str) -> Repo:
