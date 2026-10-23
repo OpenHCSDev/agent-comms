@@ -18,7 +18,7 @@ class ActivityMaximum(BusProjectionTables, declared_name=None):
 
     def insertion(self) -> tuple[str, tuple]:
         statement, values = self._insertion()
-        keys = tuple(item.name for item in self._fields() if item.column.primary_key)
+        keys = tuple(item.name for item in self._fields if item.column.primary_key)
         updates = tuple(item.wire_name for item in self._writable_fields()
                         if not item.column.primary_key)
         statement += f" ON CONFLICT ({self._column_list(keys)}) DO UPDATE SET "

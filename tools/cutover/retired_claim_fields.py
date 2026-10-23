@@ -83,7 +83,7 @@ class RetiredClaimFields(ArchivedCarry):
 
     @classmethod
     def retired_columns(cls, record: type[TypedTable], stored: tuple[str, ...]) -> dict[str, str]:
-        fields = record._fields()
+        fields = record._fields
         changed = {field.name: _identifier(old)
                    for field in fields if field.column.record_key
                    and (old := cls.retired_fields(record).get(field.name)) in stored}

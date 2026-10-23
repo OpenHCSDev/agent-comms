@@ -19,7 +19,7 @@ from collections.abc import Callable, Generator, Iterable, Iterator, Mapping, Se
 from contextlib import AbstractContextManager, ExitStack, closing, contextmanager
 from dataclasses import dataclass, field, replace
 from enum import Enum, IntEnum, IntFlag
-from functools import cache, lru_cache
+from functools import cache
 from inspect import getsource
 from pathlib import Path
 from typing import (
@@ -37,6 +37,7 @@ from typing import (
     overload,
 )
 
+from .class_fact import ClassFact
 from .declared_family import DeclaredFamily, declared_words
 from .errors import RelationViolationError
 from .field_codec import (
@@ -532,8 +533,7 @@ def sql_literal(value: str | None | type[DeclaredFamily]) -> str:
 class TypedRow(SqlProjection):
     """Typed query projection; also the shared decoder for stored row types."""
 
-    @classmethod
-    @lru_cache(maxsize=256)
+    @ClassFact
     def _fields(cls) -> tuple[_Field, ...]:
         if not cls.__dataclass_params__.frozen:
             raise TypeError("SQLite row declarations must be frozen dataclasses")
@@ -541,7 +541,7 @@ class TypedRow(SqlProjection):
 
     @classmethod
     def column_projection(cls) -> dict[str, str]:
-        return {item.name: item.wire_name for item in cls._fields()}
+        return {item.name: item.wire_name for item in cls._fields}
 
     @classmethod
     def columns(cls) -> tuple[str, ...]:
@@ -552,12 +552,12 @@ class TypedRow(SqlProjection):
         return ", ".join(
             (table._sql(item.column.generated) if not item.column.writable
              else table._column_list((item.name,))) + f" AS {_identifier(item.wire_name)}"
-            for item in cls._fields())
+            for item in cls._fields)
 
     @classmethod
     def _fields_named(cls, names: tuple[str, ...]) -> tuple[_Field, ...]:
         """Resolve a declared field subset, including an unfiltered query."""
-        declared = {item.name: item for item in cls._fields()}
+        declared = {item.name: item for item in cls._fields}
         if unknown := set(names).difference(declared):
             raise ValueError(f"Unknown fields for {cls.__name__}: {sorted(unknown)}")
         return tuple(declared[name] for name in names)
@@ -583,11 +583,11 @@ class TypedRow(SqlProjection):
     def _decode_row(
         cls, row: sqlite3.Row | tuple[object, ...], positions: Mapping[str, int]
     ) -> Self:
-        values = {item.name: item.decode(row[positions[item.name]]) for item in cls._fields()}
+        values = {item.name: item.decode(row[positions[item.name]]) for item in cls._fields}
         instance = FieldCodec.construct(
-            cls, {item.name: values[item.name] for item in cls._fields() if item.init}
+            cls, {item.name: values[item.name] for item in cls._fields if item.init}
         )
-        for item in cls._fields():
+        for item in cls._fields:
             if not item.init:
                 object.__setattr__(instance, item.name, values[item.name])
         return instance
@@ -992,7 +992,7 @@ class FrozenColumns(MutationCapability):
     @classmethod
     def immutable_columns(cls, row: type[TypedTable]) -> tuple[_Field, ...]:
         return tuple(
-            immutable for field in row._columns()
+            immutable for field in row._columns
             for immutable in field.column.immutable_fields(field)
         )
 
@@ -1323,7 +1323,7 @@ class ValidatedInserts(MutationCapability):
 
     @classmethod
     def mutation_guards(cls, row: type[TypedTable]) -> tuple[SQLiteSchemaObject, ...]:
-        arguments = ", ".join(f'NEW."{field.wire_name}"' for field in row._fields() if field.init)
+        arguments = ", ".join(f'NEW."{field.wire_name}"' for field in row._fields if field.init)
         return (RowMutation.INSERT.abort_trigger(
             row, when=f"{row.validator_function}({arguments}) != 1", suffix="_validation",
             message="Insert fails declared validation"),)
@@ -1448,12 +1448,6 @@ class ProducedRow(ABC):
     def producer_digest(cls) -> str: ...
 
 
-@lru_cache(maxsize=4)
-def _claimed_names(members: tuple[type[TypedTable], ...]) -> frozenset[str]:
-    """Every object name any row declares; keyed by the registry, so a new member refreshes it."""
-    return frozenset(name for row in members for name in row.schema_objects())
-
-
 @dataclass(frozen=True)
 class SQLiteForeignKeys(TypedRow):
     foreign_keys: bool
@@ -1505,12 +1499,11 @@ class TypedTable(
         # A method permits mutually referring row classes without string names.
         return ()
 
-    @classmethod
-    @lru_cache(maxsize=256)
+    @ClassFact
     def _columns(cls) -> tuple[_Field, ...]:
         """Every stored column: the record's fields, each generated column after the field
         declared before it."""
-        fields = cls._fields()
+        fields = cls._fields
         if any(not item.column.writable for item in fields):
             raise TypeError(f"{cls.__name__} must declare generated columns as ClassVar[Generated]")
         names = {item.name for item in fields}
@@ -1530,12 +1523,12 @@ class TypedTable(
 
     @classmethod
     def _computed_columns(cls) -> frozenset[str]:
-        return frozenset(item.wire_name for item in cls._columns() if not item.column.writable)
+        return frozenset(item.wire_name for item in cls._columns if not item.column.writable)
 
     @classmethod
     def _fields_named(cls, names: tuple[str, ...]) -> tuple[_Field, ...]:
         """Resolve declared columns, generated ones included, by their declared names."""
-        declared = {item.name: item for item in cls._columns()}
+        declared = {item.name: item for item in cls._columns}
         if unknown := set(names).difference(declared):
             raise ValueError(f"Unknown columns for {cls.__name__}: {sorted(unknown)}")
         return tuple(declared[name] for name in names)
@@ -1554,7 +1547,7 @@ class TypedTable(
     def _sql(cls, expression: str) -> str:
         """Durable files compare their stored DDL text with this rendering, so a change
         here is a schema change every retained root would need carried."""
-        for item in cls._columns():
+        for item in cls._columns:
             expression = expression.replace("{" + item.name + "}", item.wire_name)
         return expression
 
@@ -1562,7 +1555,7 @@ class TypedTable(
     def _table_sql(cls, *, if_not_exists: bool = False, columns: tuple[str, ...] = ()) -> str:
         existence = "IF NOT EXISTS " if if_not_exists else ""
         definitions = []
-        fields = cls._fields_named(columns) if columns else cls._columns()
+        fields = cls._fields_named(columns) if columns else cls._columns
         keys = tuple(item.name for item in fields if item.column.primary_key)
         auto_keys = tuple(item.name for item in fields if item.column.auto_increment)
         if auto_keys and (auto_keys != keys or len(keys) != 1 or cls.without_rowid):
@@ -1594,11 +1587,27 @@ class TypedTable(
         return (f"CREATE TABLE {existence}{table} ({', '.join(definitions)}) STRICT"
                 + (", WITHOUT ROWID" if cls.without_rowid else ""))
 
+    @ClassFact
+    def schema_names(cls) -> frozenset[str]:
+        """Every object this row declares, by name; overrides change only the SQL."""
+        return frozenset(cls.schema_objects())
+
+    @ClassFact
+    def claimed_names(cls) -> frozenset[str]:
+        """Every object name any row of the family declares. Read through ``TypedTable``;
+        each new row declaration forgets it, so it always covers the whole registry."""
+        return frozenset(name for row in TypedTable.members_with(TypedTable)
+                         for name in row.schema_names)
+
+    def __init_subclass__(cls, **kwargs: object) -> None:
+        super().__init_subclass__(**kwargs)
+        TypedTable.__dict__["claimed_names"].forget(TypedTable)
+
     @classmethod
     def schema_objects(cls, *, if_not_exists: bool = False) -> dict[str, str]:
         statements = {cls.declared_name: cls._table_sql(if_not_exists=if_not_exists)}
         indexes = cls.indexes + tuple(
-            Index((item.name,)) for item in cls._columns() if item.column.index
+            Index((item.name,)) for item in cls._columns if item.column.index
         )
         for index in indexes:
             if index.name(cls) in statements:
@@ -1680,7 +1689,7 @@ class TypedTable(
         Compare through the same DDL owner; do not maintain a second column schema.
         """
         stored = cls.stored_columns(db)
-        fields = cls._columns()
+        fields = cls._columns
         missing = tuple(item for item in fields if item.wire_name not in stored)
         if not stored or not missing:
             return
@@ -1857,9 +1866,9 @@ class TypedTable(
         attached to their tables that no row's declaration claims: a stray.
         """
         rows = tuple(rows)
-        declared = {name for row in rows for name in row.schema_objects()}
+        declared = {name for row in rows for name in row.schema_names}
         tables = tuple(row.declared_name for row in rows)
-        claimed = _claimed_names(TypedTable.members_with(TypedTable))
+        claimed = TypedTable.claimed_names
         stored = SQLiteSchemaObject.read(db.execute(
             "SELECT name,sql FROM sqlite_master WHERE sql IS NOT NULL AND (name IN ("
             + ",".join("?" for _ in declared) + ") OR tbl_name IN ("
@@ -1889,7 +1898,7 @@ class TypedTable(
     @classmethod
     def _writable_fields(cls, columns: tuple[str, ...] | None = None) -> tuple[_Field, ...]:
         if columns is None:
-            return tuple(item for item in cls._fields() if item.column.writable)
+            return tuple(item for item in cls._fields if item.column.writable)
         selected = cls._fields_named(columns)
         if any(not item.column.writable for item in selected):
             raise ValueError("Generated columns cannot be written")
@@ -1936,7 +1945,7 @@ class TypedTable(
     def upsert(self, db: sqlite3.Connection) -> sqlite3.Cursor:
         """Replace writable values on a declared primary-key conflict."""
         statement, values = self._insertion()
-        keys = tuple(item.name for item in self._fields() if item.column.primary_key)
+        keys = tuple(item.name for item in self._fields if item.column.primary_key)
         updates = tuple(
             item.wire_name
             for item in self._writable_fields()
