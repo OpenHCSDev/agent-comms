@@ -21,6 +21,7 @@ from agent_comms.field_codec import (
     PathText,
     RecordMember,
     RecordedTimestamp,
+    SnapshotExclude,
     SubclassUnion,
     TextRepresentation,
     TimestampText,
@@ -952,3 +953,28 @@ def test_identity_and_digest_text_is_one_rule_at_every_reader(tmp_path: Path) ->
             PrivateRegistryGuard(tmp_path / "registry.json", invalid_text)
     with pytest.raises(MalformedRecord):
         TextDigest("a" * 63)
+
+
+@dataclass(frozen=True)
+class SecretMember(RecordMember):
+    name: str
+    token: Annotated[str, SnapshotExclude()]
+
+
+@dataclass(frozen=True)
+class CountWire(WireValue):
+    count: int
+
+    def to_wire(self) -> str:
+        return f"count={self.count}"
+
+    @classmethod
+    def from_wire(cls, data: object) -> Self:
+        return cls(int(str(data).removeprefix("count=")))
+
+
+def test_represented_value_projects_as_its_record_only_when_its_record_is_its_wire_form() -> None:
+    member = SecretMember("kept", "secret")
+    assert FieldCodec.encode(member) == {"name": "kept", "token": "secret"}
+    assert FieldCodec.project(member, "snapshot") == {"name": "kept"}
+    assert FieldCodec.project(CountWire(3), "snapshot") == "count=3"
