@@ -129,7 +129,7 @@ class NativeEntry(RecordedEntry, DeclaredFamily, affix="Entry"):
 
     @classmethod
     def read(cls, raw: bytes) -> NativeEntry:
-        return cls.from_wire(json.loads(raw))
+        return cls.from_wire(FieldCodec.parse(raw))
 
     @classmethod
     def from_evidence(cls, raw: dict) -> NativeEntry:
@@ -234,7 +234,8 @@ class NativeEvidenceState(ABC):
 
 class UnreadNativeEvidence(NativeEvidenceState):
     def read(self, reader: NativeEvidenceRead) -> SessionEntry:
-        header = reader._accept_header((NativeEntry.from_evidence(reader.source.consume_header()),))
+        header = SessionEntry.from_wire(reader.source.consume_header())
+        header.require_header()
         reader.entries = (header,)
         reader.state = HeaderNativeEvidence()
         return header
@@ -347,12 +348,6 @@ class NativeEvidenceRead:
                         "ambiguous tracked user input: one input ID on two entries")
                 self.inputs[user.input_id] = position
 
-    def _accept_header(self, entries: tuple[NativeEntry, ...]) -> SessionEntry:
-        if not entries or not isinstance(entries[0], SessionEntry):
-            raise MalformedRecord('Native Pi session header is invalid')
-        entries[0].require_header()
-        return entries[0]
-
     def header(self) -> SessionEntry:
         """Read and decode record one without discarding an existing input index."""
         try:
@@ -407,7 +402,6 @@ class NativeEvidenceRead:
             appended = tuple(self.decode_rows(self.source.rows()))
             self.index(appended)
             entries = self.entries + appended
-            self._accept_header(entries)
         except NativeEvidencePrefixChanged:
             if reverified:
                 self.close()
