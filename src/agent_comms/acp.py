@@ -155,7 +155,6 @@ class CommsAgent(SessionEffects, InputEffects, TurnEffects):
         self._comms = comms
         if private_selected_tool_intent is not None:
             from .selected_tool_broker import SelectedToolIntent
-    from .selected_write_authority import AcpSelectedWriteAuthority
 
             if type(private_selected_tool_intent) is not SelectedToolIntent:
                 raise TypeError("private selected tool needs a nominal owner intent")
