@@ -108,7 +108,7 @@ class SelectedSession:
             thread = participant.owner.thread
             runtime = thread.runtime if path is None else thread.backend.location_type(str(path))
             return runtime.select_session(directory, execution, source_reads,
-                                          root=participant.comms.root, thread=thread)
+                                          participant=participant)
 
         with participant.cursor_delivery.measurements.operation("session_reopen"):
             async with participant.cursor_delivery.reading() as source_reads:
