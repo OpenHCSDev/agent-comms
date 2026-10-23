@@ -22,7 +22,7 @@ from agent_comms.coordination_errors import (
 )
 from agent_comms.field_codec import FieldCodec
 from agent_comms.errors import RelationViolationError, StoredHistoryUnreadable, ToolRefusedError
-from agent_comms.runtime import OwnerIdentityChangedError, OwnerReplyLostError
+from agent_comms.owner_connection import OwnerIdentityChangedError, OwnerReplyLostError
 from agent_comms.context_store import ContextRequest
 from agent_comms.presentation import WireRevision
 from agent_comms.ui_model.observation import (

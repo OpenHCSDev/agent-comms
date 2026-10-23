@@ -11,7 +11,6 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Annotated, Self, cast
 
 from agent_comms.coordination_errors import RequestRefused
-from acp.schema import DeniedOutcome, RequestPermissionResponse
 from pydantic import BaseModel
 
 
@@ -194,35 +193,6 @@ class ClientLine(SocketLine):
 
     def answer(self, client: SocketClient) -> None:
         raise MalformedRecord(f"The client sent {self.declared_name} to the owner.")
-
-
-@dataclass(frozen=True, kw_only=True)
-class ClientPermissionResponse(ClientLine):
-    """The controller's decision on one permission request."""
-
-    id: str
-    outcome: dict[str, object]
-
-    def __post_init__(self) -> None:
-        self.response()
-
-    @classmethod
-    def cancelled(cls, request_id: str) -> Self:
-        denied = RequestPermissionResponse(outcome=DeniedOutcome(outcome="cancelled"))
-        return cls.of(request_id, denied)
-
-    @classmethod
-    def of(cls, request_id: str, response: RequestPermissionResponse) -> Self:
-        outcome = response.outcome.model_dump(by_alias=True, exclude_none=True)
-        return cls(id=request_id, outcome=outcome)
-
-    def response(self) -> RequestPermissionResponse:
-        return RequestPermissionResponse.model_validate({"outcome": self.outcome})
-
-    def answer(self, client: SocketClient) -> None:
-        pending = client.pending.get(self.id)
-        if pending is not None and not pending.done():
-            pending.set_result(self.response())
 
 
 @dataclass(frozen=True, kw_only=True)

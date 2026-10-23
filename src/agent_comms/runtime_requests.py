@@ -30,6 +30,7 @@ from .field_codec import FieldCodec, NullMember, WireName, WireValue
 from .goal_actions import GoalAction
 from .goal_history import RecordedGoalRevision
 from .goals import Goal
+from .owner_connection import OwnerConnection
 from .owner_protocol import ClientLine, OwnerAnnouncement, OwnerLine, OwnerReady, OwnerResult
 from .thread_identity import ThreadIncarnation
 from .thread_presentation import LiveThreadOwnerBinding
@@ -88,8 +89,7 @@ class RuntimeRequest(
         cls, thread: str, controller_token: str | None, parameters: dict[str, object]
     ) -> dict[str, object]:
         # The owner decodes once; proxies preserve the owner's error envelope.
-        return {"action": FieldCodec.encode(cls), "thread": thread,
-                **FieldCodec.encode(parameters)}
+        return OwnerConnection.wire_request(FieldCodec.encode(cls), thread, parameters)
 
     def require_owner(self, entry):
         owner = entry.thread

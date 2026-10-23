@@ -13,7 +13,9 @@ from agent_comms.comms import Comms
 from agent_comms.field_codec import AbsolutePathText, Argument, PathText
 from agent_comms.harness_install import Harness
 from agent_comms.installer.interpreter_operation import RuntimeProbe
+from agent_comms.maintenance_barrier import MaintenanceBarrier, MaintenanceHolder
 from agent_comms.registry_document import CommanderProject
+from agent_comms.registry_store import RegistryStore
 from agent_comms.thread_execution import ExternalThreadExecution
 from agent_comms.threads import Thread
 
@@ -96,3 +98,15 @@ class HarnessesProbe(RuntimeProbe[InstallResult]):
 
         with client_wire(self.root) as comms:
             return self.install.apply(comms)
+
+
+@dataclass(frozen=True)
+class RetireHarnessConfigurationProbe(RuntimeProbe[tuple[Annotated[Path, PathText], ...]]):
+    root: Annotated[Path, PathText]
+
+    def run(self) -> tuple[Annotated[Path, PathText], ...]:
+        barrier = MaintenanceBarrier(RegistryStore.path_in(self.root))
+        barrier.read().require_held_by(
+            MaintenanceHolder.current().nonce, 'Retiring superseded harness configuration')
+        return tuple(path for harness in Harness.present(Path.home())
+                     for path in harness.retire_configuration())
