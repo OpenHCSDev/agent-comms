@@ -8,6 +8,7 @@ from pydantic import JsonValue
 
 from agent_comms.declared_family import DeclaredFamily
 from agent_comms.field_codec import FieldCodec
+from agent_comms.input_attempt import HistoricalInput, UnresolvedInput
 from agent_comms.input_disposition import DeliveryOverview
 from agent_comms.thread_presentation import ThreadPresentation, ThreadPresentationStatus
 
@@ -43,10 +44,10 @@ class InputDelivery:
     unconfirmed. Rows are the owner's public input records.
     """
 
-    inputs: tuple[dict[str, JsonValue], ...] = ()
+    inputs: tuple[UnresolvedInput, ...] = ()
     historical_count: int = 0
     dismissed_historical_count: int = 0
-    historical_inputs: tuple[dict[str, JsonValue], ...] = ()
+    historical_inputs: tuple[HistoricalInput, ...] = ()
     owner_queue: bool = False
     read_state: InputDeliveryReadState = LoadedInputDeliveryReadState()
 
@@ -66,14 +67,11 @@ class InputDelivery:
     @classmethod
     def from_wire(cls, overview: Mapping[str, JsonValue]) -> InputDelivery:
         decoded = FieldCodec.decode(DeliveryOverview, overview)
-        # Toad's current presentation API still consumes wire rows. The paired
-        # consumer migration follows the stabilization install; it must not be
-        # changed independently of that client.
         return cls(
-            tuple(FieldCodec.encode(row) for row in decoded.inputs),
+            decoded.inputs,
             decoded.historical_count,
             decoded.dismissed_historical_count,
-            tuple(FieldCodec.encode(row) for row in decoded.historical_inputs),
+            decoded.historical_inputs,
             decoded.current_scope.owner_queue,
         )
 

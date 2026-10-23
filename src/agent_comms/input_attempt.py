@@ -206,6 +206,10 @@ class UnresolvedInput:
         tuple[str, ...], WireName("reviewedForGoals"), WireOmitDefault()
     ] = ()
 
+    def record_text(self) -> str:
+        sequence = self.sequence if self.sequence is not None else "direct input"
+        return f"Sequence: {sequence} · Target: {self.target}\nInput: {self.input_id}\n{self.text}"
+
     @classmethod
     def of(cls, row: StoredInput) -> UnresolvedInput:
         return UnresolvedInput(
@@ -221,6 +225,9 @@ class HistoricalInput(UnresolvedInput):
     notice_dismissed: Annotated[bool, WireName("noticeDismissed")] = field(
         kw_only=True
     )
+
+    def record_text(self) -> str:
+        return super().record_text() + ("\nNotice cleared." if self.notice_dismissed else "")
 
     @classmethod
     def notice(cls, row: StoredInput, notice_dismissed: bool) -> HistoricalInput:
