@@ -12,11 +12,10 @@ from typing import TYPE_CHECKING, Annotated, ClassVar, Generic, Literal, TypeVar
 from pydantic import (
     Field,
     JsonValue,
-    TypeAdapter,
     ValidateAs,
 )
 
-from agent_comms.wire_models import DeclaredWireFamily, WireModel
+from agent_comms.wire_models import DeclaredWireFamily, WireAdapter, WireModel
 from agent_comms.cli_protocol import TaggedWire, TextWire
 from agent_comms.declared_family import UnknownFamilyMember
 from agent_comms.external_transcript import EarlierPage, NoEarlierPage
@@ -272,7 +271,7 @@ class RpcNotification(RpcReply):
         connection.pending.append(self)
 
 
-RPC_RESPONSE = TypeAdapter(RpcSuccess | RpcFailure | RpcNotification)
+RPC_RESPONSE = WireAdapter(RpcSuccess | RpcFailure | RpcNotification)
 
 
 class Item(TaggedWire, ABC, affix=""):

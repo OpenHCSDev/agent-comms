@@ -2,14 +2,11 @@
 
 from __future__ import annotations
 
-
 import base64
 import binascii
 from collections.abc import Sequence
 from dataclasses import dataclass, field
-from typing import Annotated, Literal
-from agent_comms.wire_models import WireAdapter
-from agent_comms import field_codec
+from typing import TYPE_CHECKING, Annotated, Literal
 from acp.schema import (
     BlobResourceContents,
     EmbeddedResourceContentBlock,
@@ -17,8 +14,13 @@ from acp.schema import (
     PromptRequest,
     TextResourceContents,
 )
-from pydantic import TypeAdapter
+
+from agent_comms import field_codec
+from agent_comms.wire_models import WireAdapter
 from .mro_dispatch import MroDispatch, handles
+
+if TYPE_CHECKING:
+    from pydantic import TypeAdapter
 
 IMAGE_MIME_TYPES = frozenset({"image/png", "image/jpeg", "image/gif", "image/webp"})
 MAX_IMAGE_BYTES = 4 * 1024 * 1024
