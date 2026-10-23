@@ -1500,7 +1500,7 @@ class DeclaredSchemaFacts:
 
     def __init_subclass__(cls) -> None:
         super().__init_subclass__()
-        FamilyFact.forget_declared(cls)
+        FamilyFact.forget_inherited(cls)
 
 
 class TypedTable(

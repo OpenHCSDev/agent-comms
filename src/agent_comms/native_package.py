@@ -24,7 +24,7 @@ from typing import Annotated, Literal
 
 from agent_comms.child_process import Platform
 from agent_comms.field_codec import FieldCodec, MalformedRecord, PathText, Sha256Text, WireName
-from agent_comms.native_build_inputs import INPUTS_PREFIX, NativeBuildInputs
+from agent_comms.native_build_inputs import INPUTS_PREFIX, NativeBuildInputs, built_tree_pin
 from agent_comms.native_failures import NativePiUnavailable
 from agent_comms.private_path import PrivateDirectoryRole, TrustedAncestorRole
 
@@ -63,15 +63,6 @@ UNIT_INSTRUCTIONS = _resource_root() / "UNIT_SYSTEM.md"
 
 
 PACKAGE_LAYOUT = "node_modules/@earendil-works/pi-coding-agent"
-
-
-def built_tree_pin(manifest: Path) -> str:
-    """Which built Pi tree this manifest pins: its file and tree commitments. The inputs
-    line records the recipe for ``require_pinned`` and never names the build, so a recipe
-    edit that builds the same bytes keeps its pin and its prepared copy."""
-    built = "".join(line for line in manifest.read_text().splitlines(keepends=True)
-                    if not line.startswith(INPUTS_PREFIX))
-    return hashlib.sha256(built.encode()).hexdigest()[:16]
 
 
 def pinned_package_for(manifest: Path) -> Path:

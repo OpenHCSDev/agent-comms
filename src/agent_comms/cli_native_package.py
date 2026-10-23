@@ -12,9 +12,7 @@ from agent_comms import field_codec
 from agent_comms.command import Command
 from agent_comms.declared_verb import DeclaredVerb
 from agent_comms.native_package import (
-    MANIFEST,
     VerifiedNativePackage,
-    built_tree_pin,
     install_declared_sources,
     package_tree_digest,
     pinned_native_package,
@@ -67,14 +65,6 @@ class VerifyVerb(QualifiedPackageVerb):
 
     def apply(self, ctx: None = None) -> None:
         self._native_package()
-
-
-@dataclass(frozen=True, kw_only=True)
-class BuildIdVerb(NativePackageVerb):
-    help = "Print which built tree this checkout's manifest pins"
-
-    def apply(self, ctx: None = None) -> None:
-        print(built_tree_pin(MANIFEST))
 
 
 @dataclass(frozen=True, kw_only=True)

@@ -181,14 +181,6 @@ class InstallCommands:
         with self.timing(f"git -C {checkout} {' '.join(args)}"):
             return Repo.git(checkout, *args)
 
-    @contextmanager
-    def exchange(self, encoded: str) -> Iterator[tuple[Path, Path]]:
-        """Keep one request and its answer alive until the caller reads the result."""
-        with tempfile.TemporaryDirectory() as scratch:
-            request = Path(scratch) / "request.json"
-            request.write_text(encoded)
-            yield request, Path(scratch) / "result.json"
-
     def probe[Answer](self, probe: RuntimeProbe[Answer], python: Path, *,
                       cwd: Path = Path(), env: Mapping[str, str] = os.environ,
                       program: ProbeProgram = SourceProgram()) -> Answer:
