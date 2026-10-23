@@ -332,7 +332,7 @@ def test_other_source_root_does_not_enter_report(repo: Repository) -> None:
 
 def test_builtin_handler_measure_uses_shared_collector_and_rejects_growth(repo: Repository) -> None:
     from tools.debt_ratchet import BuiltinHandlerTypeSwitch
-    from refactor_audit.handler_declarations import BuiltinHandlerDeclarations
+    from audit.handler_declarations import BuiltinHandlerDeclarations
 
     assert issubclass(BuiltinHandlerTypeSwitch, BuiltinHandlerDeclarations)
     source = """from .mro_dispatch import MroDispatch, handles as cases
@@ -376,7 +376,7 @@ def test_family_flattening_cannot_offset_another_file_or_admit_a_named_facade(
 ):
     repo = Repository(tmp_path, root)
     from tools.debt_ratchet import FamilyFlattened
-    from refactor_audit.measures import FamilyFlattened as AuditFamilyFlattened
+    from audit.measures import FamilyFlattened as AuditFamilyFlattened
 
     original = "def carry(value):\n    return (value.declared_name, value.family_name)\n"
     base = repo.commit({"first.py": original, "second.py": "value = 1\n"})
