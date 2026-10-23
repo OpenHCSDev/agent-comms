@@ -68,10 +68,12 @@ class CommanderObservation:
     states: tuple[UnitState, ...]
 
     @classmethod
-    def read(cls, comms: Comms, thread: Thread) -> CommanderObservation:
-        pulls = ProgressRead(StandingRule.todos(comms, thread.name))
+    def read(cls, comms: Comms, thread: Thread,
+             reading: type[ProgressRead] = ProgressRead) -> CommanderObservation:
+        """One frame's progress facts come from ``reading``; Core reads the live forge and Git."""
+        pulls = reading(StandingRule.todos(comms, thread.name))
         states = UnitState.current(comms, thread.name, pulls)
-        rules = StandingRule.broken(comms, thread.name, observed=states)
+        rules = StandingRule.broken(comms, thread.name, observed=states, pulls=pulls)
         merged = tuple(todo for state in states for todo in state.merged_orders(comms, pulls))
         return cls(thread, merged, rules, states)
 

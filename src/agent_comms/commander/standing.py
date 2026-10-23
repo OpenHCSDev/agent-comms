@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import time
+from abc import abstractmethod
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
 from typing import ClassVar, Self
@@ -34,7 +35,7 @@ from agent_comms.standing_rules import (
 from agent_comms.storage_rules import OrderCheckoutWork
 from agent_comms.thread_identity import ThreadIncarnation
 from agent_comms.threads import Thread
-from agent_comms.todos import OwnerRequest, Todo
+from agent_comms.todos import OwnerRequest, ProgressRead, Todo
 from agent_comms.turn_digests import OrderEditCountRead, TurnDigestRead, TurnsSince
 from agent_comms.ui_model.unit_state import AwaitingCommander, UnitState
 from agent_comms.work_dispatch import ReusedWorkDispatch, WorkDispatch
@@ -109,7 +110,21 @@ class AnswersTo(MessageReadRequest[tuple[Message, ...]]):
 
 
 class PlanRule(IndependentStandingRule, UndatedStandingRule, declared_name=None):
-    """A rule read from one look at the plans and the commander's orders."""
+    """Rules read from one look at the plans and the commander's orders. The family scans once,
+    so GitHub's rules for main are read once per heartbeat, never once per member."""
+
+    @classmethod
+    def scan_owner(cls) -> type[StandingRule]:
+        return PlanRule
+
+    @classmethod
+    def violations(cls, comms: Comms, commander: str) -> tuple[Self, ...]:
+        reading = cls.plan_reading(comms, commander)
+        return tuple(rule for member in cls.members_with(cls) for rule in member.found(reading))
+
+    @classmethod
+    @abstractmethod
+    def found(cls, reading: PlanReading) -> tuple[Self, ...]: ...
 
     @staticmethod
     def plan_reading(comms: Comms, commander: str) -> PlanReading:
@@ -129,8 +144,7 @@ class PlanIdle(PlanRule):
     reading: PlanReading = field(compare=False)
 
     @classmethod
-    def violations(cls, comms: Comms, commander: str) -> tuple[Self, ...]:
-        reading = cls.plan_reading(comms, commander)
+    def found(cls, reading: PlanReading) -> tuple[Self, ...]:
         return tuple(
             cls(phase, reading)
             for phase in PlanPhase.members_with(PlanPhase)
@@ -159,8 +173,8 @@ class PlanStalled(PlanRule):
     window: ClassVar[int] = 2 * 60 * 60
 
     @classmethod
-    def violations(cls, comms: Comms, commander: str) -> tuple[Self, ...]:
-        reading, now = cls.plan_reading(comms, commander), time.time()
+    def found(cls, reading: PlanReading) -> tuple[Self, ...]:
+        now = time.time()
         return tuple(
             cls(phase, since)
             for phase in PlanPhase.members_with(PlanPhase)
@@ -187,7 +201,7 @@ class UnitAskUnanswered(OwedAnswer, UndatedStandingRule):
 
     @classmethod
     def scan_observed(cls, comms: Comms, commander: str,
-                      observed: Sequence[UnitState]) -> tuple[Self, ...]:
+                      observed: Sequence[UnitState], pulls: ProgressRead) -> tuple[Self, ...]:
         return tuple(cls(message, state.unit.name) for state in observed for message in state.owed)
 
     @classmethod

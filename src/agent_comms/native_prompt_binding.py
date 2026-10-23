@@ -192,7 +192,7 @@ def _binding_wire_root(store: Coordination, assignment: WakeAssignment) -> str:
 
 @contextmanager
 def expected_prompt_bindings(
-    store: Coordination, input_ids, *, blocking: bool = True
+    store: Coordination, input_ids
 ) -> Iterator[dict[str, PromptBinding]]:
     """Keep one immutable binding snapshot open while validating input."""
     input_ids = tuple(input_ids)
@@ -202,7 +202,7 @@ def expected_prompt_bindings(
     if not input_ids or (not path.exists() and not path.is_symlink()):
         yield {}
         return
-    with sidecar_connection(path, PromptBinding, blocking=blocking, read_only=True) as db:
+    with sidecar_connection(path, PromptBinding, read_only=True) as db:
         yield {row.input_id: row for row in PromptBinding.select(
             db, where=f"input_id IN ({','.join('?' for _ in input_ids)})", parameters=input_ids,
         )}

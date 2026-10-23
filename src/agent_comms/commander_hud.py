@@ -96,8 +96,8 @@ class CommanderHud(ToolResult):
         store = comms.goals.todos
         history = store.history_for_commander(owner)
         held = tuple(todo for todo in history if todo.holder)
-        pulls = ProgressRead(held)
-        progress = {todo.id: OrderProgress.read(todo, comms.registry, pulls) for todo in held}
+        pulls = ProgressRead()
+        progress = pulls.progress(held, comms.registry)
         timers = store.timers_up_in(held, now, progress)
         edits = {
             read.todo.id: read.read()

@@ -370,12 +370,6 @@ class Platform(DeclaredFamily, affix="Platform"):
     def try_store_lock(self, descriptor: int, *, mode: LockMode) -> None:
         """One nonblocking native attempt; busy is BlockingIOError."""
 
-    def acquire_store_lock(self, descriptor: int, *, mode: LockMode, blocking: bool) -> None:
-        """Use the common physical wait driver when the platform needs polling."""
-        from .store_files import StoreLockContention
-
-        StoreLockContention.for_blocking(blocking).acquire(descriptor, self, mode=mode)
-
     def release_store_lock(self, descriptor: int) -> None:
         """POSIX locks end at last close, including inherited descriptors."""
 
@@ -455,11 +449,6 @@ class PosixPlatform(Platform):
     def make_private_descriptor(self, descriptor: int, permissions: int) -> None:
         if stat.S_IMODE(os.fstat(descriptor).st_mode) != permissions:
             os.fchmod(descriptor, permissions)
-
-    def acquire_store_lock(self, descriptor: int, *, mode: LockMode, blocking: bool) -> None:
-        import fcntl
-
-        fcntl.flock(descriptor, mode.flock() | (0 if blocking else fcntl.LOCK_NB))
 
     def try_store_lock(self, descriptor: int, *, mode: LockMode) -> None:
         import fcntl

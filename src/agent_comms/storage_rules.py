@@ -46,7 +46,7 @@ if TYPE_CHECKING:
     from agent_comms.registration import Registration
     from agent_comms.thread_identity import ThreadIncarnation
     from agent_comms.threads import Thread
-    from agent_comms.todos import Todo, TodoStore
+    from agent_comms.todos import ProgressRead, Todo, TodoStore
     from agent_comms.ui_model.unit_state import UnitState
 
 StoragePath = Annotated[Path, PathText]
@@ -397,7 +397,7 @@ class StorageViolation(UndatedStandingRule, declared_name=None):
 
     @classmethod
     def scan_observed(cls, comms: Comms, commander: str,
-                      observed: Sequence[UnitState]) -> tuple[Self, ...]:
+                      observed: Sequence[UnitState], pulls: ProgressRead) -> tuple[Self, ...]:
         # Storage reads the filesystem, not the git source an unreadable card failed on:
         # a unit whose declared home is gone is that card and a missing home.
         held = StandingRule.holders(comms, commander)

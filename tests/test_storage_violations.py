@@ -132,8 +132,9 @@ def test_storage_family_reads_once_and_renders_each_broken_fact(
         monitoring.set_local_events(
             monitoring.PROFILER_ID, UnitStorage.read.__func__.__code__, monitoring.events.PY_RETURN
         )
+        pulls = ProgressRead()
         found = StorageViolation.broken(
-            comms, "lead", observed=UnitState.current(comms, "lead", ProgressRead()))
+            comms, "lead", observed=UnitState.current(comms, "lead", pulls), pulls=pulls)
     finally:
         monitoring.free_tool_id(monitoring.PROFILER_ID)
     assert {type(violation) for violation in found} == expected

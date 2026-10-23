@@ -4,8 +4,9 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Self
+from typing import Annotated, Self
 
+from agent_comms.field_codec import PathText
 from agent_comms.standing_rules import HeldBranch, HeldBranchRule
 from agent_comms.thread_identity import ThreadIncarnation
 from agent_comms.todos import PullRequestLink, UnmergedListedPullRequest
@@ -17,7 +18,7 @@ class UnpushedBranch(HeldBranchRule):
     problem: str
     order: str
     holder: ThreadIncarnation
-    worktree: Path
+    worktree: Annotated[Path, PathText]
     unpublished: UnpushedHead
 
     @classmethod
