@@ -30,12 +30,9 @@ from agent_comms.tool_caller import ThreadCaller
 from agent_comms.tools import (
     CommsHistoryTool, CommsHudTool, CommsOrderDeliverTool, CommsVerdictTool, TodoChanged,
 )
-from test_held_problem_orders import (  # noqa: F401 - shared copied-bus fixture family
-    held_commander,
-    pr_commander,
-)
-from test_proof_build import proof_build_checkouts  # noqa: F401 - shared copied-bus fixture
 from test_todos import order, thread
+
+pytest_plugins = ("test_held_problem_orders",)
 
 
 def test_claim_verdict_family_on_retained_copy(held_commander):
