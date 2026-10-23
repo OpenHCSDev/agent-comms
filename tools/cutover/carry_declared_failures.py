@@ -19,12 +19,17 @@ from agent_comms.goal_failure_observation import FailedTurnEvidence, GoalLedgerT
 from agent_comms.installer.carry import Carried, Carry
 from agent_comms.locked_store import SQLiteFile
 from agent_comms.store_files import _atomic_write_text
-from agent_comms.typed_table import HeldBusFile, sql_literal
+from agent_comms.typed_table import HeldBusFile, _identifier, sql_literal
 
 from .carry_bus_history import CarryCatalogSource
+from .carry_claim_fields import ClaimFields, renames
 
 
 class DeclaredFailures(Carry):
+    # Both changes affect one table. Rebuild it once with both source columns;
+    # ClaimFields then observes the already-carried SQL claim field.
+    precedes = (ClaimFields,)
+
     old_names: ClassVar[dict[str, type[failures.TurnFailure]]] = {
         "backend_failed": failures.BackendFailed,
         "native_preflight_timeout": failures.NativePreflightTimeout,
@@ -89,7 +94,14 @@ class DeclaredFailures(Carry):
                         f"WHEN {sql_literal(old)} THEN {sql_literal(kind)}"
                         for old, kind in self.old_names.items()
                     )
-                    FailedTurnEvidence.rebuild(prepared, {"failure": f"CASE reason {cases} END"})
+                    replacements = {"failure": f"CASE reason {cases} END"}
+                    retired = renames(FailedTurnEvidence)
+                    replacements.update({
+                        field.name: _identifier(retired[field.name])
+                        for field in FailedTurnEvidence._fields()
+                        if field.name in retired and retired[field.name] in columns
+                    })
+                    FailedTurnEvidence.rebuild(prepared, replacements)
                     changed += 1
                 if AttemptRecord.stored_columns(prepared):
                     for old, kind in self.old_names.items():
