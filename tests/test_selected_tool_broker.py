@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 
-from agent_comms.private_runtime_schema import PrivateCoordinatorTable
 import asyncio
 import json
 import os
@@ -16,8 +15,8 @@ import pytest
 
 import agent_comms.selected_tool_broker as broker
 from agent_comms.channel_coding_tools import CodingToolSocket
-from agent_comms.comms import wire
 from agent_comms.coordinator import Coordination
+from agent_comms.coordination_database import CoordinationStore
 from agent_comms.envelope_claim_transitions import WakeClaim
 from agent_comms.native_tool_call import (
     DuplicateToolCallIdentity,
@@ -30,9 +29,8 @@ from agent_comms.native_runtime_input import AcknowledgedSlot, ConsumedSlot, Sel
 
 
 @pytest.fixture
-def slot_store(tmp_path):
-    with Coordination(str(tmp_path / "coordination.sqlite3")) as store:
-        PrivateCoordinatorTable.install(store)
+def slot_store(private_comms):
+    with Coordination(str(CoordinationStore.path_in(private_comms.root))) as store:
         yield store
 
 
@@ -98,13 +96,8 @@ def test_consumption_is_once_only_and_terminal_is_separate(slot_store) -> None:
 
 
 @pytest.mark.skipif(sys.platform != "linux", reason="selected tool storage requires POSIX dirfd")
-def test_owner_mode_denies_unreserved_input_before_consuming_ledger(tmp_path: Path) -> None:
-    tmp_path.chmod(0o700)
-    root = tmp_path / "wire"
-    root.mkdir(mode=0o700)
-    session_dir = tmp_path / "session"
-    session_dir.mkdir(mode=0o700)
-    comms = wire(root)
+def test_owner_mode_denies_unreserved_input_before_consuming_ledger(private_comms) -> None:
+    comms = private_comms
     claim_scope = WakeClaim(
         wire_root_id="a" * 32,
         source_seq=1,
@@ -119,8 +112,7 @@ def test_owner_mode_denies_unreserved_input_before_consuming_ledger(tmp_path: Pa
         participant_generation=1,
         attempt_ordinal=1,
     )
-    with Coordination(str(root / "coordination.sqlite3")) as store:
-        PrivateCoordinatorTable.install(store)
+    with Coordination(str(CoordinationStore.path_in(comms.root))) as store:
         input_id = secrets.token_hex(16)
         mode = broker.selected_tool_mode_for_owner(
             comms, store, claim_scope, "owner", input_id
@@ -231,7 +223,7 @@ async def test_listener_isolated_from_previous_turn_and_keeps_consumed_slot(
         observed.append(request)
 
     server = broker.SelectedToolSocket(tool_listener(tmp_path, token), accept, pid=os.getpid())
-    server.turn = SimpleNamespace(launch=SimpleNamespace(root=tmp_path))
+    server.turn = SimpleNamespace(launch=SimpleNamespace(root=Path(slot_store.session.path).parent))
     assert server.listener.path != previous.path
     assert server.listener.path.parent.stat().st_mode & 0o777 == 0o700
     await server.start()
