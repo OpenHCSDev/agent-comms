@@ -469,9 +469,12 @@ class ClaimProjection(Mapping[str, ClaimOwner]):
     _claims: dict[str, ClaimOwner] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
-        FieldCodec.require_fields(self)
+        # Each ClaimOwner held its own fields to their types when it was built; re-encoding
+        # every owner on every projection made a rebuild re-validate the whole claim table.
+        FieldCodec.require_fields(self, "last_seq")
         if any(
-            value.resource != key or value.seq > self.last_seq
+            not isinstance(value, ClaimOwner) or value.resource != key
+            or value.seq > self.last_seq
             for key, value in self._claims.items()
         ):
             raise ClaimTransitionError("Previous projection is malformed.")

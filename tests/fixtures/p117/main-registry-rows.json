@@ -18,8 +18,7 @@
     "role": "agent",
     "active_turn": null,
     "channel_scope_generation": 0,
-    "turn_generation": 0,
-    "last_finished_turn_id": null
+    "turn_generation": 0
   },
   {
     "name": "main-written-unstarted",
@@ -40,7 +39,6 @@
     "role": "agent",
     "active_turn": null,
     "channel_scope_generation": 0,
-    "turn_generation": 0,
-    "last_finished_turn_id": null
+    "turn_generation": 0
   }
 ]

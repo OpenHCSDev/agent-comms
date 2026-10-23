@@ -3,15 +3,20 @@
 from __future__ import annotations
 
 import re
-from abc import ABC, ABCMeta
-from collections.abc import Mapping
+from abc import ABC, ABCMeta, abstractmethod
+from collections.abc import Hashable, Iterable, Mapping
+from types import ModuleType
 from typing import Any, ClassVar, Self, cast
 
 from metaclass_registry import (
     AutoRegisterMeta,
+    DuplicateRegistryKeyError,
     LazyDiscoveryDict,
     RegistryConfig,
 )
+from metaclass_registry.discovery import discover_registry_classes
+from pydantic import BaseModel
+from pydantic._internal._model_construction import ModelMetaclass
 
 
 def declared_words(stem: str) -> str:
@@ -83,6 +88,15 @@ class _FamilyMeta(AutoRegisterMeta, ABCMeta):
         cls._family_root = cls if is_root else root
         return cast(_FamilyMeta, cls)
 
+    @staticmethod
+    def _register_class(
+        cls: type[DeclaredFamily], key: Hashable, config: RegistryConfig,
+        replaces: object = None,
+    ) -> type | None:
+        # Check constructed declarations; lazy discovery cannot run inside class construction.
+        cls.validate_selection(dict.values(config.registry_dict))
+        return AutoRegisterMeta._register_class(cls, key, config, replaces=replaces)
+
 
 class UnknownFamilyMember(ValueError):
     """The selected name is not a declared member of the requested family."""
@@ -132,6 +146,15 @@ class DeclaredFamily(ABC, metaclass=_FamilyMeta):
     def decodes_tagged_records(cls) -> bool:
         return True
 
+    @classmethod
+    def selection_key(cls) -> Hashable:
+        """The declaration's unique selector at its external boundary."""
+        return cls.declared_name
+
+    @classmethod
+    def validate_selection(cls, members: Iterable[type[DeclaredFamily]]) -> None:
+        """Named declarations use the registry's existing duplicate-name check."""
+
     def record_tag(self) -> dict[str, str]:
         """Derive the wire selector from the family's decoding behavior."""
         return {self.family_discriminator: self.declared_name} if self.decodes_tagged_records() else {}
@@ -157,6 +180,14 @@ class DeclaredFamily(ABC, metaclass=_FamilyMeta):
             return member
 
     @classmethod
+    def member_selected(cls, selector: Hashable) -> type[Self]:
+        """Resolve an external selector through the original member declarations."""
+        for member in cls.members_with(cls):
+            if member.selection_key() == selector:
+                return member
+        raise UnknownFamilyMember(f"Unknown {cls.__name__} selector: {selector!r}")
+
+    @classmethod
     def names(cls) -> tuple[str, ...]:
         return tuple(member.declared_name for member in cls.members_with(cls))
 
@@ -180,6 +211,12 @@ class DeclaredFamily(ABC, metaclass=_FamilyMeta):
         return tuple(cls.__registry__.values())
 
     @classmethod
+    def discover_members(cls, package: ModuleType, capability: type) -> tuple[type[Self], ...]:
+        """Acquire a producer package before deriving its declared capability members."""
+        discover_registry_classes(package.__path__, package.__name__ + ".", capability)
+        return cls.members_with(capability)
+
+    @classmethod
     def members_with(cls, capability: type) -> tuple[type[Self], ...]:
         return tuple(
             cast(type[Self], member)
@@ -191,3 +228,39 @@ class DeclaredFamily(ABC, metaclass=_FamilyMeta):
     def declared_position(cls) -> int:
         root = cast(type[DeclaredFamily], cls._family_root)
         return root.members_with(root).index(cls)
+
+
+class _WireFamilyMeta(_FamilyMeta, ModelMetaclass):
+    """Compose the family registry with Pydantic's model construction."""
+
+
+class DeclaredWireFamily(DeclaredFamily, BaseModel, metaclass=_WireFamilyMeta):
+    """A validated wire model whose family owns declaration discovery."""
+
+    declared_name: ClassVar[str]
+    family_discriminator: ClassVar[str]
+    _family_root: ClassVar[type[DeclaredFamily] | None]
+    _family_affix: ClassVar[str]
+    __registry__: ClassVar[dict[str, type[DeclaredFamily]]]
+
+
+class UniqueExternalSelector(ABC):
+    """An external selector has one concrete owner among the family's declarations."""
+
+    declared_name: ClassVar[str]
+
+    @classmethod
+    @abstractmethod
+    def selection_key(cls) -> Hashable: ...
+
+    @classmethod
+    def validate_selection(cls, members: Iterable[type[DeclaredFamily]]) -> None:
+        for member in members:
+            if (
+                member.declared_name != cls.declared_name
+                and member.selection_key() == cls.selection_key()
+            ):
+                raise DuplicateRegistryKeyError(
+                    f"{cls.__name__} and {member.__name__} declare the same "
+                    f"external selector {cls.selection_key()!r}"
+                )

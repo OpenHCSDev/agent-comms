@@ -191,8 +191,7 @@ class AttachedReader(UnreadyReader):
         return await bridge.deliver_to(self.attachment, message)
 
 
-class SessionReply(TaggedWire):
-    __registry_config__ = TaggedWire.family_registry()
+class SessionReply(TaggedWire, affix=""):
 
     def require(self) -> None:
         """Successful replies carry no refusal."""
@@ -208,8 +207,7 @@ class SessionReply(TaggedWire):
         return self
 
 
-class SessionReady(SessionReply):
-    wire_tag = "ready"
+class SessionReady(SessionReply, declared_name='ready'):
 
     def end_session(self, service: MonitorService) -> None:
         asyncio.get_running_loop().call_soon(service.stop)
@@ -223,24 +221,21 @@ class SessionReady(SessionReply):
         return PeerGone()
 
 
-class SessionInformation(SessionReply):
-    wire_tag = "information"
+class SessionInformation(SessionReply, declared_name='information'):
     owner: ProcessIdentity
     process: ProcessIdentity
     runtime: LaunchRuntime
     transcript: Path
 
 
-class SessionRefused(SessionReply):
-    wire_tag = "refused"
+class SessionRefused(SessionReply, declared_name='refused'):
     error: str
 
     def require(self) -> None:
         raise SessionRefusedError(self.error)
 
 
-class PeerGone(SessionReply):
-    wire_tag = "gone"
+class PeerGone(SessionReply, declared_name='gone'):
 
     async def publish(self, peer: MonitorPeer) -> None:
         """The stream already ended; there is no reply to send."""
@@ -249,8 +244,7 @@ class PeerGone(SessionReply):
 REPLIES = TypeAdapter(SessionReply.declared_union())
 
 
-class SessionRequest(TaggedWire):
-    __registry_config__ = TaggedWire.family_registry()
+class SessionRequest(TaggedWire, affix=""):
 
     @contextmanager
     def connection(self, endpoint: Path) -> Iterator[socket.socket]:
@@ -273,15 +267,13 @@ class SessionRequest(TaggedWire):
     async def handle(self, service: MonitorService, peer: MonitorPeer) -> SessionReply: ...
 
 
-class AttachMonitor(SessionRequest):
-    wire_tag = "attach"
+class AttachMonitor(SessionRequest, declared_name='attach'):
 
     async def handle(self, service: MonitorService, peer: MonitorPeer) -> SessionReply:
         return await service.bridge.reader.attach(service, peer)
 
 
-class VerifySession(SessionRequest):
-    wire_tag = "verify"
+class VerifySession(SessionRequest, declared_name='verify'):
     owner: ProcessIdentity
 
     async def handle(self, service: MonitorService, peer: MonitorPeer) -> SessionReply:
@@ -292,8 +284,7 @@ class VerifySession(SessionRequest):
         return SessionReady()
 
 
-class InspectSession(SessionRequest):
-    wire_tag = "inspect"
+class InspectSession(SessionRequest, declared_name='inspect'):
 
     def information(self, endpoint: Path) -> SessionInformation:
         reply = self.exchange(endpoint)
@@ -318,8 +309,7 @@ class InspectSession(SessionRequest):
         )
 
 
-class PauseSession(VerifySession):
-    wire_tag = "pause"
+class PauseSession(VerifySession, declared_name='pause'):
     process: ProcessIdentity
 
     async def handle(self, service: MonitorService, peer: MonitorPeer) -> SessionReply:
@@ -328,8 +318,7 @@ class PauseSession(VerifySession):
         return reply.pause_session(service, peer, self.process)
 
 
-class EndSession(VerifySession):
-    wire_tag = "end"
+class EndSession(VerifySession, declared_name='end'):
 
     async def handle(self, service: MonitorService, peer: MonitorPeer) -> SessionReply:
         reply = await super().handle(service, peer)
