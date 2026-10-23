@@ -223,7 +223,7 @@ def test_predecessor_publisher_history_round_trips_into_bus(tmp_path):
         assert requests.carry(apply=False).changed == 0
     # The pass crosses the installer's own worker, as the staged runtime runs it.
     with hold.holding(), InstallCommands() as commands:
-        staged = Stack(REPOSITORY, commands, home=tmp_path / "home",
+        staged = Stack(REPOSITORY, commands, home=tmp_path,
                        runtime=RestoredRuntime(LaunchRuntime.running().interpreter),
                        program=TargetProgram(REPOSITORY / "tools"))
         (result,) = staged.call_steps((request,), operation)

@@ -152,11 +152,13 @@ class ProbeRequest:
 def serve() -> None:
     """Answer declared operations from stdin, one encoded answer per request line, until it
     closes. An operation that raises ends the worker: its traceback goes to stderr, and the
-    caller reads the exit in place of an answer."""
+    caller reads the exit in place of an answer. The answers own stdout's descriptor; every
+    other write, an operation's exit handlers included, lands on stderr."""
+    answers = os.fdopen(os.dup(sys.stdout.fileno()), "w")
+    os.dup2(sys.stderr.fileno(), sys.stdout.fileno())
     for line in sys.stdin:
-        with redirect_stdout(sys.stderr):
-            answer = FieldCodec.decode(ProbeRequest, FieldCodec.parse(line)).answer()
-        print(answer, flush=True)
+        print(FieldCodec.decode(ProbeRequest, FieldCodec.parse(line)).answer(), file=answers,
+              flush=True)
 
 
 class ClientImportsProbe(RuntimeProbe[None]):

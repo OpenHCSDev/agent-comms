@@ -87,12 +87,12 @@ from agent_comms.installer.interpreter_operation import (
     PrepareNativeProbe,
     ProbeProgram,
     PublicationProbe,
+    RetainedProgram,
     RouteSelection,
     RunningOwnersProbe,
     RuntimeProbe,
     SelectedRouteProbe,
     ServingProbe,
-    SourceProgram,
     TargetProgram,
 )
 from agent_comms.installer.practice import (
@@ -108,7 +108,7 @@ from agent_comms.installer.reporting import (
 )
 from agent_comms.installer.runtime_resolution import RuntimeResolution, StackProject
 from agent_comms.launch_runtime import LaunchRuntime, RestartEnvironment
-from agent_comms.locked_store import BusFile, DeclaredFile, RootFile, UndeclaredFile
+from agent_comms.locked_store import BusFile, DeclaredFile, UndeclaredFile
 from agent_comms.maintenance_barrier import (
     MaintenanceBarrier,
     MaintenanceOperator,
@@ -445,9 +445,10 @@ class Stack:
     commands: InstallCommands
     home: Path = HOME
     runtime: LaunchRuntime = field(default_factory=LaunchRuntime.installed)
-    program: ProbeProgram = field(default_factory=SourceProgram)
+    program: ProbeProgram = field(default_factory=RetainedProgram.current)
     """How this runtime's worker reaches the operation family: the outgoing runtime runs
-    the target's source of it; a runtime built from the target declares it itself."""
+    the target's source of it, read once so reports outlive the tree; a runtime built
+    from the target declares it itself."""
 
     @property
     def python(self) -> Path:

@@ -140,7 +140,7 @@ class CarryProbe[Answer](RuntimeProbe[tuple[Answer, ...]]):
     """One pass of steps, in order, answered by the staged runtime's worker; the
     operation owns traversal and declares the answer."""
 
-    operation: CarryOperation[Answer]
+    operation: CarryOperation
     steps: tuple[Carry, ...]
 
     def answer_type(self) -> TypeForm[tuple[Answer, ...]]:
