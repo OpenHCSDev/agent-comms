@@ -34,6 +34,7 @@ from agent_comms.coordinator import Coordination
 from agent_comms.native_runtime_input import NativeRuntimeInput
 from agent_comms.thread_model import DeclaredModel
 from native_backend_fixture import native_backend_fixture
+from agent_comms.threads import Thread
 
 pytestmark = pytest.mark.skipif(
     sys.platform != "linux" or Path("/var").is_symlink() or Path("/var/tmp").is_symlink(),
@@ -51,10 +52,10 @@ async def test_second_pid_public_acp_owner_ipc_preplan(tmp_path, native_runtime_
         comms = prepare_native_comms(wire(root))
         sender_pid = os.getpid()
         comms.registry.declare(
-            comms.registry.new_thread('sender', frozenset(), str(work), process_identity=ProcessIdentity.capture(sender_pid), created_at=61001.0)
+            Thread('sender', frozenset(), str(work), process_identity=ProcessIdentity.capture(sender_pid), created_at=61001.0)
         )
         alpha = comms.registry.declare(
-            comms.registry.new_thread('alpha', frozenset({'team'}), str(work), process_identity=ProcessIdentity.capture(sender_pid), created_at=61002.0, model=DeclaredModel('response-local/fixture'))
+            Thread('alpha', frozenset({'team'}), str(work), process_identity=ProcessIdentity.capture(sender_pid), created_at=61002.0, model=DeclaredModel('response-local/fixture'))
         )
         root_id = comms.owners.require_private_launch().wire_root_id
         with Coordination(str(root / "coordination.sqlite3")) as store:
@@ -86,7 +87,7 @@ async def test_second_pid_public_acp_owner_ipc_preplan(tmp_path, native_runtime_
         try:
             assert process.pid != sender_pid
             beta = comms.registry.declare(
-                comms.registry.new_thread('beta', frozenset({'team'}), str(work), process_identity=ProcessIdentity.capture(process.pid), created_at=61003.0, model=DeclaredModel('response-local/fixture'))
+                Thread('beta', frozenset({'team'}), str(work), process_identity=ProcessIdentity.capture(process.pid), created_at=61003.0, model=DeclaredModel('response-local/fixture'))
             )
             with Coordination(str(root / "coordination.sqlite3")) as store:
                 store.participants.register(

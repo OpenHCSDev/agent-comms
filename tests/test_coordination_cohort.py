@@ -49,6 +49,7 @@ from agent_comms.thread_identity import UserThreadRole
 from agent_comms.thread_status import ArchivedThreadStatus
 from agent_comms.wake_policy import BoundedTriageWake, FullWake, MessageAudience
 from agent_comms.message_page import PageBounds
+from agent_comms.threads import Thread
 
 pytestmark = pytest.mark.skipif(
     sys.platform == "win32", reason="private initial bus requires POSIX owner/directory durability"
@@ -66,7 +67,7 @@ def _root(tmp_path: Path) -> tuple[Comms, Coordination, str, dict[str, str]]:
         "Charlie": (17004.0, {"other"}),
     }
     declare_test_bus(comms, channels=("team", "other"), threads=(
-        comms.registry.new_thread(name=name, worktree=str(root), created_at=created_at, tags=frozenset(tags))
+        Thread(name=name, worktree=str(root), created_at=created_at, tags=frozenset(tags))
         for name, (created_at, tags) in people.items()
     ))
     lookups = {
@@ -304,7 +305,7 @@ def test_all_channel_excludes_sender_and_nonexecutors(
 ) -> None:
     comms, store, root_id, lookups = _root(tmp_path)
     comms.registry.register(
-        comms.registry.new_thread(name='human', tags=frozenset(), worktree=str(tmp_path), role=UserThreadRole, created_at=17005.0)
+        Thread(name='human', tags=frozenset(), worktree=str(tmp_path), role=UserThreadRole, created_at=17005.0)
     )
     sent = publish_initial(comms, "sender", "#all", "ordinary")
     result = accept_delivery_cohort(comms.bus, root_id, sent.seq, store)
@@ -365,7 +366,7 @@ def test_private_issuer_rejects_untrusted_ancestor_and_collision(tmp_path: Path)
     # acquire another participant's claim identity or appear in an audience.
     with pytest.raises(RelationViolationError):
         comms.registry.register(
-            comms.registry.new_thread(name='duplicate', tags=frozenset({'other'}), worktree=str(tmp_path), created_at=17002.0)
+            Thread(name='duplicate', tags=frozenset({'other'}), worktree=str(tmp_path), created_at=17002.0)
         )
     assert comms.bus.bus.revision() == 0
 

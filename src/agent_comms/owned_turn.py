@@ -400,14 +400,9 @@ class OwnedTurn:
     async def run(self) -> None:
         async with AsyncExitStack() as resources:
             async with AsyncExitStack() as permit_cleanup:
-                try:
-                    if not await self.acquire(resources, permit_cleanup):
-                        return
-                    await self.run_native()
-                except asyncio.CancelledError as error:
-                    cancelled = TurnTerminal.from_cancellation(error)
-                    self.terminal = cancelled.interrupting(self.terminal)
-                    raise
+                if not await self.acquire(resources, permit_cleanup):
+                    return
+                await self.run_native()
 
     def settle_unbound(self):
         """Read the result of the input owner's exact retirement transaction."""

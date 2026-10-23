@@ -44,12 +44,12 @@ async def run_owner(comms: Comms) -> None:
         for sig in (signal.SIGTERM, signal.SIGINT):
             loop.add_signal_handler(sig, stopped.request)
         async with AsyncExitStack() as ownership:
-            ownership.push_async_callback(lambda: agent.shutdown(stopped.terminal))
+            ownership.push_async_callback(lambda: agent.shutdown())
             await agent.sessions.start_owner(thread.worktree, name)
             if key := ThreadLaunch.take_startup_input():
                 initial = asyncio.create_task(run_startup_input(agent, name, key))
                 ownership.push_async_callback(asyncio.gather, initial, return_exceptions=True)
-                ownership.callback(lambda: initial.cancel(stopped.terminal))
+                ownership.callback(lambda: initial.cancel())
             await stopped
 
 

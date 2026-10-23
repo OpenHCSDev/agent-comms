@@ -10,10 +10,13 @@ from pathlib import Path
 
 import pytest
 
+from agent_comms.session_file import RegistrySessionLocation
+
 from agent_comms.importing import ImportLimits
 from agent_comms.cli import main
 from agent_comms.cli_bridges.claude import ClaudeBridge, ClaudeTranscript, RunningClaude
 from agent_comms.cli_bridges.codex import CodexAppServer, CodexBridge
+from agent_comms.cli_bridges.codex_protocol import InitializeResponse
 from agent_comms.cli_bridges.codex_rollout import ROLLOUT_RECORD, ForeignItem, ForeignRecord
 from agent_comms.cli_bridges.history import (
     AnySession, DefaultAddress, History, NamedSession, OfflineHistory, OnlineHistory,
@@ -33,6 +36,7 @@ from agent_comms.transcript_events import ImportedReply, ImportedRequest, TextTr
 from agent_comms.ui_model.message_category import AgentCategory, UserCategory
 from agent_comms.turn_context import CodexRolloutProvenance
 from agent_comms.thread_text import GivenThreadText, NoThreadText
+from agent_comms.threads import Thread
 
 
 @pytest.fixture
@@ -63,7 +67,7 @@ def bodies(snapshot):
     (GivenThreadText("Authored title"), "Authored title", "Authored title"),
 ])
 def test_thread_display_title_is_inherited_without_copying_the_name(tmp_path, title, display, renamed_display, *, thread_registration):
-    thread = thread_registration.new_thread('original', frozenset(), str(tmp_path), title=title)
+    thread = thread_registration.declare(Thread('original', frozenset(), str(tmp_path), title=title))
     captured = ThreadProvenance.capture(thread)
     assert thread.title == captured.title == title
     assert thread.display_title == captured.display_title == display
@@ -299,7 +303,8 @@ def test_codex_instructions_are_authenticated_historical_references_not_current_
             comms.registry, replace(original_owner, created_at=original_owner.created_at + 1))
     with pytest.raises(ValueError):
         ImportedSessionMetadata.sources_for_owner(
-            comms.registry, replace(original_owner, session_file=str(tmp_path / "other.jsonl")))
+            comms.registry, replace(original_owner, session_file=RegistrySessionLocation.from_path(
+                str(tmp_path / "other.jsonl"), comms.root)))
     assert main(["--root", str(comms.root), "context", "historical", "--imported"]) == 0
     result = json.loads(capsys.readouterr().out)
     assert FieldCodec.decode(tuple[CodexRolloutProvenance, ...], result["sources"]) == refs
@@ -550,6 +555,7 @@ class FakeCodex:
     def __init__(self, pages):
         self.pages = pages
         self.calls = []
+        self.initialized = InitializeResponse(userAgent="codex/0.0.0")
 
     async def call(self, params):
         self.calls.append(params)

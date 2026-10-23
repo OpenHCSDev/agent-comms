@@ -36,7 +36,7 @@ from agent_comms.launch_root import LaunchRoot
 from agent_comms.order_runs import MechanicalOrderRun
 from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.repository_name import RepositoryName
-from agent_comms.storage_rules import StorageDenied, StorageRule, shell_storage_effects
+from agent_comms.storage_rules import StorageDenied, StorageProjection, StorageRule, shell_storage_effects
 from agent_comms.thread_execution import ExternalThreadExecution
 from agent_comms.thread_identity import CoreWatcherIncarnation
 from agent_comms.todos import PendingProblemOrder, ProgressRead, ReleaseTodo, StrikeReason
@@ -44,6 +44,7 @@ from agent_comms.transcript_events import AssistantTranscript
 from agent_comms.ui_model.unit_state import UnitState, Unreadable
 from agent_comms.work_branches import UnreadableCheckoutRead, WorkBranches
 from order_scope_fixture import FIX_SCOPE
+from agent_comms.threads import Thread
 
 
 def git(directory: Path, *arguments: str) -> str:
@@ -91,7 +92,7 @@ def test_a_second_repository_checkout_is_judged_by_its_source_before_it_exists(
     adding = f'git -C {other} worktree add -q -b worker-toad {lockstep}'
 
     def decide(command: str, cwd: Path) -> None:
-        checkout_bus.registry.decide_storage('worker', shell_storage_effects(command, cwd))
+        StorageProjection(checkout_bus.registry.storage_rule, checkout_bus.registry.require('worker')).check(shell_storage_effects(command, cwd))
 
     with pytest.raises(StorageDenied, match='is not a checkout of worker'):
         decide(f'git worktree add -q -b worker-wrong {lockstep}', tmp_path / 'declared-project')
@@ -99,7 +100,7 @@ def test_a_second_repository_checkout_is_judged_by_its_source_before_it_exists(
         decide(f'git -C {other} worktree add -q {lockstep.with_name("worker--P1--textual")}',
                tmp_path)
     with pytest.raises(StorageDenied, match='is not a checkout of idle'):
-        checkout_bus.registry.decide_storage('idle', shell_storage_effects(adding, tmp_path))
+        StorageProjection(checkout_bus.registry.storage_rule, checkout_bus.registry.require('idle')).check(shell_storage_effects(adding, tmp_path))
     assert not lockstep.exists()
     decide(adding, tmp_path)
     subprocess.run(adding.split(), check=True, capture_output=True, timeout=15)
@@ -134,7 +135,7 @@ def checkout_bus(tmp_path: Path, configured_repository, installed_runtime) -> Co
     spare = tmp_path / 'idle-project'
     git(home, 'worktree', 'add', '-q', '-b', 'idle-home', str(spare))
     for name, worktree in (('lead', home), ('worker', home), ('idle', spare)):
-        c.registry.declare(c.registry.new_thread(
+        c.registry.declare(Thread(
             name, frozenset(), str(worktree), execution=ExternalThreadExecution))
     request = c.goals.todos.add_request(
         c.registry.require('lead').incarnation, 'Keep changes with their author').id

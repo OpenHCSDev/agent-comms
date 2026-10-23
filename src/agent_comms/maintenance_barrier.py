@@ -37,6 +37,7 @@ from .send_outcome import GrantedSend, HeldSend
 from .store_files import (
     AtomicFile,
     SharedLock,
+    StoreLockContention,
     _async_store_lock,
     _store_lock,
 )
@@ -561,7 +562,10 @@ class MaintenanceBarrier(MaintenanceIngress):
     def allow_input(self, *, blocking: bool = True) -> Iterator[MaintenanceStatus]:
         """Check input permission under its registry authority, never around a Bus write."""
         self.current_unlocked()
-        with _store_lock(self.registry_path, mode=SharedLock(), blocking=blocking):
+        with _store_lock(
+            self.registry_path, mode=SharedLock(),
+            contention=StoreLockContention.for_blocking(blocking),
+        ):
             status = self._current_unlocked()
             status.require_open_to(MaintenanceHolder.current().nonce)
             yield status
@@ -584,8 +588,12 @@ class CarriedDocument[T](DurableFile, LockedStore[T], declared_name=None):
 
     __slots__ = ()
 
-    def _write_unlocked(self, text: str) -> None:
+    def require_maintenance_open(self) -> None:
+        """Refuse every writer but the maintenance holder."""
         MaintenanceBarrier(RegistryFile.path_in(self.bus_root(self.path))).assert_open_unlocked()
+
+    def _write_unlocked(self, text: str) -> None:
+        self.require_maintenance_open()
         self._replace_unlocked(text)
 
     def _replace_unlocked(self, text: str) -> None:

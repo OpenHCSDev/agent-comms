@@ -13,14 +13,13 @@ from .child_process import NoProcess, ProcessIdentity
 from .errors import RelationViolationError
 from .goal_actions import GoalActionContext, SetGoalAction
 from .goal_history import GoalHistoryEntry, GoalHistoryStore
-from .maintenance_barrier import MaintenanceBarrier
 from .native_input_owner import RegistryOwner
 from .private_registry_guard import PrivateRegistryGuard
 from .registration_change import RegistrationChange
 from .registry_document import RegistryDocument, RegistrySnapshot
 from .registry_store import RegistryEdit, RegistryEntryRevision, RegistryStore
 from .routing import TurnRouting
-from .storage_rules import StorageProjection, StorageRule
+from .storage_rules import StorageRule
 from .thread_execution import CommanderForkExecution
 from .thread_identity import GenerationCounter, TurnId
 from .thread_status import (
@@ -29,7 +28,7 @@ from .thread_status import (
     RunningThreadStatus,
     ThreadStatus,
 )
-from .thread_text import ForkedParent, NoThreadText, ThreadText
+from .thread_text import ForkedParent
 from .threads import Thread
 
 if TYPE_CHECKING:
@@ -104,7 +103,7 @@ class Registration:
                 if not existing.parent.named(parent.name):
                     raise RelationViolationError(f"Thread {name!r} is not a fork of {parent.name!r}.")
                 return self._declare_in(edit, existing, _RUNNING_STATUS)
-            child = self.new_thread(name, parent.tags, parent.worktree,
+            child = Thread(name, parent.tags, parent.worktree,
                 parent=ForkedParent(parent.name), model=parent.model,
                 thinking_level=parent.thinking_level, service_tier=parent.service_tier,
                 execution=CommanderForkExecution)
@@ -228,9 +227,14 @@ class Registration:
             channels.remember_tags(change.thread.tags)
 
     def _commit_registration(self, edit: RegistryEdit, change: RegistrationChange) -> RegistrationChange:
-        change.thread.role.require_maintenance_open(
-            MaintenanceBarrier(self.store.path), change.claims_owner
-        )
+        """Every registration commits here, after inheritance kept a redeclared thread's
+        roots; the registry assigns a new thread its storage roots in this one place."""
+        # The registry write refuses during maintenance; refuse first, so the goal journal
+        # never records an intent for a registration that cannot commit.
+        self.store.require_maintenance_open()
+        thread = change.thread
+        change = replace(change, thread=replace(
+            thread, storage_roots=thread.storage_roots.assigned(self.storage_rule, thread.name)))
         before = change.prior_goal
         history = None
         intent = None
@@ -242,20 +246,6 @@ class Registration:
         if history is not None and intent:
             history.commit(intent)
         return change
-
-    def new_thread(
-        self, name, tags, worktree, *, kind: type[Thread] = Thread,
-        task: ThreadText = NoThreadText(), title: ThreadText = NoThreadText(), **values,
-    ) -> Thread:
-        return kind(
-            name, tags, worktree, task=task, title=title,
-            storage_roots=self.storage_rule.initial_roots(name), **values,
-        )
-
-    def decide_storage(self, name, effects):
-        projection = StorageProjection(self.storage_rule, self.require(name))
-        for effect in effects:
-            effect.check(projection)
 
     @staticmethod
     def changing[**P, R](operation: Callable[Concatenate[RegistryDocument, P], R]) -> Callable[

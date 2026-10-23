@@ -78,8 +78,6 @@ class ProcessState(SubclassUnion, affix=""):
     def allows_owner_start(self) -> bool: ...
     @abstractmethod
     def allows_inactive_stop(self) -> bool: ...
-    @abstractmethod
-    def claims_owner(self) -> bool: ...
 
     @abstractmethod
     def require_held_by(self, role: type[ThreadRole]) -> None: ...
@@ -132,9 +130,6 @@ class NoProcess(NullMember, ProcessState):
 
     def allows_inactive_stop(self) -> bool:
         return True
-
-    def claims_owner(self) -> bool:
-        return False
 
     def require_held_by(self, role: type[ThreadRole]) -> None:
         """No process is held, so any role may declare it."""
@@ -205,9 +200,6 @@ class ProcessIdentity(RecordMember, ProcessState):
 
     def allows_inactive_stop(self) -> bool:
         return self.runs_here()
-
-    def claims_owner(self) -> bool:
-        return True
 
     def require_held_by(self, role: type[ThreadRole]) -> None:
         role.require_executable(
@@ -382,7 +374,7 @@ class Platform(DeclaredFamily, affix="Platform"):
         """Use the common physical wait driver when the platform needs polling."""
         from .store_files import StoreLockContention
 
-        StoreLockContention(math.inf if blocking else 0).acquire(descriptor, self, mode=mode)
+        StoreLockContention.for_blocking(blocking).acquire(descriptor, self, mode=mode)
 
     def release_store_lock(self, descriptor: int) -> None:
         """POSIX locks end at last close, including inherited descriptors."""

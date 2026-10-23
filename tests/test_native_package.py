@@ -16,6 +16,8 @@ from agent_comms.core_stamp import WheelStamp
 from agent_comms.native_build_inputs import INPUTS_PREFIX, NativeBuildInputs
 from agent_comms.native_failures import NativePiUnavailable
 from agent_comms.native_package import (
+    NativePackageError,
+    link_sealed_tree,
     package_tree_digest,
 )
 from agent_comms.package_stamp import STAMP
@@ -46,6 +48,22 @@ def test_pinned_inputs_refuse_changed_patch(tmp_path):
     patch.write_bytes(b"First patch byte\n")
     with pytest.raises(ValueError):
         inputs.require_pinned(manifest)
+
+
+def test_sealed_tree_is_published_by_sharing_its_inodes(tmp_path):
+    sealed = tmp_path / "sealed"
+    (sealed / "dist").mkdir(parents=True, mode=0o700)
+    resource = sealed / "dist/cli.js"
+    resource.write_text("console.log(1)\n")
+    resource.chmod(0o500)
+    published = tmp_path / "published"
+    link_sealed_tree(sealed, published)
+    assert (published / "dist/cli.js").stat().st_ino == resource.stat().st_ino
+    assert package_tree_digest(published) == package_tree_digest(sealed)
+
+    resource.chmod(0o700)
+    with pytest.raises(NativePackageError, match="writable"):
+        link_sealed_tree(sealed, tmp_path / "refused")
 
 
 def load_resource_module(path):

@@ -10,11 +10,12 @@ from agent_comms.goal_actions import GoalPrecondition, SetGoalAction, StandbyGoa
 from agent_comms.goal_presentation import GoalWaitTarget
 from goal_owner_fixture import canonical_goal_wire
 from agent_comms.goal_waits import NoGoalWait
+from agent_comms.threads import Thread
 
 
 def register(comms, name):
     comms.registry.declare(
-        comms.registry.new_thread(name, frozenset(), str(comms.root), process_identity=ProcessIdentity.capture(os.getpid()))
+        Thread(name, frozenset(), str(comms.root), process_identity=ProcessIdentity.capture(os.getpid()))
     )
     return comms.registry.require(name)
 

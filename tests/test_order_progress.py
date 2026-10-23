@@ -25,6 +25,7 @@ from agent_comms.tool_caller import ThreadCaller
 from agent_comms.tools import CommsTodoCreateTool
 from agent_comms.work_branches import WorkBranches
 from agent_comms.todos import EditingProgress, NoCommitProgress, OrderProgress, PresentCheckout
+from agent_comms.threads import Thread
 
 
 
@@ -123,7 +124,7 @@ def held(tmp_path):
     comms = wire(root)
     Bus.install(Bus.path_in(comms.root))
     for name in ('lead', 'worker'):
-        comms.registry.declare(comms.registry.new_thread(name, frozenset(), str(tmp_path)))
+        comms.registry.declare(Thread(name, frozenset(), str(tmp_path)))
     request = comms.goals.todos.add_request(
         comms.registry.require('lead').incarnation, 'Repair the worker').id
     ThreadCaller('lead').invoke(CommsTodoCreateTool(owner='worker', order=CreateProblemGoalAction(

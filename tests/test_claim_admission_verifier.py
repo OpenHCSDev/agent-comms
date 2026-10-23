@@ -34,6 +34,7 @@ from agent_comms.envelope_claim_transitions import ExistingFileClaim, WakeClaim
 from agent_comms.errors import RelationViolationError
 from agent_comms.owner_fence import prepare_fence_token
 from agent_comms.selected_source_batch import SelectedSource
+from agent_comms.threads import Thread
 
 pytestmark = pytest.mark.skipif(
     sys.platform != "linux", reason="private cohort claim_scope requires real /var/tmp"
@@ -56,7 +57,7 @@ def test_selected_wake_verifier_refuses_no_wake_and_stale_authority(
         comms.channels.create_tag("team")
         for name, created in (("sender", 17021.0), ("Alice", 17022.0), ("Bob", 17023.0)):
             comms.registry.declare(
-                comms.registry.new_thread(name, frozenset({'team'}), str(worktree), process_identity=ProcessIdentity.capture(os.getpid()), created_at=created)
+                Thread(name, frozenset({'team'}), str(worktree), process_identity=ProcessIdentity.capture(os.getpid()), created_at=created)
             )
         root_id = comms.registry.prepare_native_root().namespace
         message = publish_initial(comms, "sender", "#team", "@Alice investigate")

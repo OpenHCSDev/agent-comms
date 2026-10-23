@@ -30,6 +30,7 @@ from agent_comms.field_codec import FieldCodec
 from agent_comms.messages import InfoKind, Message
 from agent_comms.native_failures import NativePiUnavailable
 from agent_comms.selected_source_batch import SelectedSource, SelectedSourceBatch
+from agent_comms.threads import Thread
 
 pytestmark = pytest.mark.skipif(
     sys.platform != "linux", reason="private cohort claim_scope requires real /var/tmp"
@@ -44,7 +45,7 @@ def alice_batch(*sent: tuple[str, str]):
         root.mkdir(mode=0o700)
         comms = prepare_native_comms(wire(root))
         for name, created in (("sender", 17021.0), ("Alice", 17022.0)):
-            comms.registry.declare(comms.registry.new_thread(name, frozenset({'team'}), dirname, process_identity=ProcessIdentity.capture(os.getpid()), created_at=created))
+            comms.registry.declare(Thread(name, frozenset({'team'}), dirname, process_identity=ProcessIdentity.capture(os.getpid()), created_at=created))
         root_id = comms.registry.prepare_native_root().namespace
         messages = [publish_initial(comms, "sender", target, text) for target, text in sent]
         with Coordination(str(root / "coordination.sqlite3")) as store:

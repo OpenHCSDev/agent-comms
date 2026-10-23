@@ -1,10 +1,11 @@
 """Thread-list pending counts agree with current routing after a rename."""
 
 from agent_comms.channel_targets import CommandTarget
+from agent_comms.threads import Thread
 
 
 def test_rename_alias_and_real_thread_named_broadcast_match_existing_scope(wired):
-    wired.registry.declare(wired.registry.new_thread(
+    wired.registry.declare(Thread(
         name="broadcast", tags=frozenset(), worktree=str(wired.root / "broadcast"),
     ))
     wired.messaging.send("PR111", "broadcast", "direct message to the named thread")

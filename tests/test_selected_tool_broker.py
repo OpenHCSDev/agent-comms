@@ -22,8 +22,8 @@ from agent_comms.envelope_claim_transitions import WakeClaim
 from agent_comms.native_tool_call import (
     DuplicateToolCallIdentity,
     OwnerToolConnection,
-    SelectedToolDenied,
 )
+from agent_comms.tool_denial import SelectedToolDenied
 from agent_comms.pi_events import ToolExecutionEnd, ToolExecutionStart
 from agent_comms.pi_payloads import ToolCallContent
 from agent_comms.native_runtime_input import AcknowledgedSlot, ConsumedSlot, SelectedToolSlot

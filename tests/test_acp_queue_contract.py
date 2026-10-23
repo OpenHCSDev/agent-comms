@@ -31,16 +31,17 @@ from agent_comms.runtime import present_session
 from agent_comms.thread_identity import ClaimedIdentity
 from agent_comms.thread_identity import RecordedThreadIncarnation
 from stored_inputs import stored_inputs
+from agent_comms.threads import Thread
 
 
-def _owner(tmp_path: Path) -> tuple[Comms, CommsAgent, float, int]:
+def _owner(tmp_path: Path) -> tuple[Comms, CommsAgent, RecordedThreadIncarnation, int]:
     comms = prepare_native_comms(wire(tmp_path / "wire"))
-    thread = comms.registry.new_thread('beta', frozenset(), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid()))
+    thread = Thread('beta', frozenset(), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid()))
     comms.registry.declare(thread)
     agent = CommsAgent(comms)
     agent.sessions.bindings["beta"] = "beta"
     owner, claimed_generation = comms.registry.live_owner_with_claim("beta")
-    return comms, agent, owner.created_at, claimed_generation
+    return comms, agent, owner.incarnation.require_recorded(), claimed_generation
 
 
 async def test_real_acp_surrogate_queue_ingress_stays_unknown_and_attachable(tmp_path):
@@ -127,12 +128,12 @@ async def test_real_acp_rejects_nonstring_user_text_before_unknown_or_enqueue(tm
     ],
 )
 async def test_unavailable_projection_never_drops_or_replays_owned_rows(tmp_path, rows):
-    _, agent, created, generation = _owner(tmp_path)
+    _, agent, incarnation, generation = _owner(tmp_path)
     agent.inputs.state("beta").queued = {
         key: QueuedInput(
             text,
             True,
-            QueuedInputContext(ClaimedIdentity(RecordedThreadIncarnation("beta", created), generation)),
+            QueuedInputContext(ClaimedIdentity(incarnation, generation)),
             key,
             text,
         )
@@ -180,7 +181,7 @@ def test_attachment_routing_rename_preserves_exact_executor_fences():
 
 
 async def test_ending_a_drained_session_leaves_no_state_for_it(tmp_path):
-    comms, agent, _created, _generation = _owner(tmp_path)
+    comms, agent, _incarnation, _generation = _owner(tmp_path)
     await agent.inputs.queue_state("beta")
     agent.inputs.bind_native_turn("beta", comms.registry.require("beta"))
     agent.inputs.ensure_live_drain("beta")

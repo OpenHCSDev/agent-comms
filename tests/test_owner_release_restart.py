@@ -73,13 +73,16 @@ import json, os, sys
 from pathlib import Path
 from agent_comms.comms import wire
 from agent_comms.threads import Thread
+from agent_comms.session_file import RegistrySessionLocation
+from agent_comms.thread_model import DeclaredModel
 from agent_comms.goal_actions import SetGoalAction, BlockedGoalAction
 from agent_comms.field_codec import FieldCodec
 from agent_comms.launch_runtime import RestartEnvironment
 service = wire(Path(os.environ['AGENT_COMMS_ROOT']))
 name, project, session = sys.argv[1:4]
-service.registry.declare(service.registry.new_thread(name, frozenset(), project, session_file=session,
-    model='response-local/fixture'))
+service.registry.declare(Thread(name, frozenset(), project,
+    session_file=RegistrySessionLocation.from_path(session, service.root),
+    model=DeclaredModel('response-local/fixture')))
 service.threads.restore_stopped(service.registry.snapshot(), (name,))
 service.goals.update_goal(name, SetGoalAction(text='Preserve this blocked private task'))
 service.goals.update_goal(name, BlockedGoalAction(block_reason='Await original input disposition'))
@@ -114,7 +117,7 @@ print(json.dumps(FieldCodec.encode(result)), flush=True)
         target_environment = dict(environment)
         target_environment.update(PATH=str(Path(sys.executable).parent)+os.pathsep+os.defpath,
                                   VIRTUAL_ENV=str(Path(sys.executable).parent.parent))
-        results = await asyncio.to_thread(comms.owners.restart_owners, (name,),
+        results = await asyncio.to_thread(comms.owners.restart_owners, OwnersNamed((name,)),
             agent_bin=GivenBinary(str(Path(sys.executable).with_name('pi-comms-native'))),
             runtime=RestartEnvironment.inherit(target_environment), expected=selection)
         assert len(results) == 1 and results[0].previous_pid == original.require_process().pid
@@ -140,7 +143,8 @@ from agent_comms.comms import wire
 from agent_comms.errors import RelationViolationError
 from agent_comms.owner_lifecycle import OwnerRestartSelection
 from agent_comms.owner_restart import FencedOwnerBatch, StoppedOwnerFailure
-from agent_comms.store_files import _store_lock
+from agent_comms.store_files import StoreLockContention, _store_lock
+from agent_comms.threads import Thread
 
 
 def wait_for(path: Path) -> None:
@@ -189,7 +193,7 @@ def test_stop_before_first_worker_keeps_the_exact_owner_fence(tmp_path):
     from agent_comms.child_process import NoProcess, ProcessIdentity
 
     comms = wire(tmp_path / "wire")
-    declared = comms.registry.declare(comms.registry.new_thread('worker', frozenset(), str(tmp_path)))
+    declared = comms.registry.declare(Thread('worker', frozenset(), str(tmp_path)))
     generation = comms.registry.snapshot().claim_generation(declared.name)
     comms.owners.stop(declared.name)
     snapshot = comms.registry.snapshot()
@@ -197,7 +201,7 @@ def test_stop_before_first_worker_keeps_the_exact_owner_fence(tmp_path):
     assert snapshot.threads[declared.name].process_identity == NoProcess()
     assert comms.owners.releases.get(declared.name).current(snapshot, declared, generation)
 
-    waiting = comms.registry.declare(comms.registry.new_thread('waiting', frozenset(), str(tmp_path)))
+    waiting = comms.registry.declare(Thread('waiting', frozenset(), str(tmp_path)))
     before = comms.registry.snapshot().claim_generation(waiting.name)
     comms.registry.register(
         replace(waiting, process_identity=ProcessIdentity.capture(os.getpid())),
@@ -261,7 +265,7 @@ def test_voluntary_exit_during_grace_is_reaped_without_force(releasing_owner):
 def test_changed_owner_after_release_refuses_escalation_and_replacement(releasing_owner, change):
     comms, child = releasing_owner
     with ThreadPoolExecutor(max_workers=1) as pool:
-        stopping = pool.submit(comms.owners.restart_owners, ["worker"], agent_bin=GivenBinary(sys.executable))
+        stopping = pool.submit(comms.owners.restart_owners, OwnersNamed(("worker",)), agent_bin=GivenBinary(sys.executable))
         wait_for(comms.root / "released")
         current = comms.registry.require("worker")
         if change == "birth":
@@ -292,7 +296,7 @@ def test_changed_owner_after_release_refuses_escalation_and_replacement(releasin
     assert phase.launches[0].process == child.identity
     assert child.alive(), "Stale fence must not authorize forced retirement"
     assert comms.registry.require("worker").require_process().pid == child.identity.pid
-    with _store_lock(comms.bus.bus.path, blocking=False):
+    with _store_lock(comms.bus.bus.path, contention=StoreLockContention(0)):
         pass  # the failed restart released the wire itself
 
 

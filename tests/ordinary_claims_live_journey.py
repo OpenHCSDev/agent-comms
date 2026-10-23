@@ -29,6 +29,7 @@ from agent_comms.session_load import ExistingSessionLoadPlan
 from agent_comms.storage_rules import StorageRoots
 from agent_comms.native_arguments import GivenArguments, GivenBinary
 from agent_comms.thread_model import DeclaredModel
+from agent_comms.threads import Thread
 
 
 class Observer:
@@ -85,7 +86,7 @@ async def journey(arguments):
     comms = wire(root)
     Bus.install(Bus.path_in(comms.root))
     name = 'scratch-sleeper'
-    comms.registry.declare(replace(comms.registry.new_thread(
+    comms.registry.declare(replace(Thread(
         name, frozenset(), str(project), model=DeclaredModel(arguments.model), thinking_level=HighThinkingLevel),
         storage_roots=StorageRoots(scratch=stage)))
     agent = CommsAgent(comms, agent_bin=GivenBinary(arguments.native_launcher),
