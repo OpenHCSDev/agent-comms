@@ -110,16 +110,16 @@ class FamilyBases(MroDispatch):
 
     @handles(FamilyMeta)
     @staticmethod
-    def declared(base: type) -> tuple[type, ...]:
+    def declared(base: FamilyMeta) -> tuple[FamilyMeta, ...]:
         return (base,)
 
     @handles(type)
     @staticmethod
-    def plain(base: type) -> tuple[type, ...]:
+    def plain(base: type) -> tuple[FamilyMeta, ...]:
         return ()
 
     @classmethod
-    def of(cls, bases: tuple[type, ...]) -> tuple[type, ...]:
+    def of(cls, bases: tuple[type, ...]) -> tuple[FamilyMeta, ...]:
         return tuple(family for base in bases for family in cls.handler_for(type(base))(base))
 
 
