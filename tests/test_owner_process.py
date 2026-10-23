@@ -217,6 +217,10 @@ async def test_real_batch_retains_each_launch_and_busy_refuses_every_stop(tmp_pa
     try:
         for name, arguments, credential in settings:
             goal = Goal("Protected failed original", name + "-goal", published_seq=0, state=BlockedGoal("No replay"))
+            # The ledger owns the failed original: created by its writer, then failed, never registry-only.
+            goals = comms.goals.open_goal_store()
+            goals.create_goal(goal.id)
+            goals.reserve(goal.id, 1).fail(goals, "No replay")
             comms.registry.declare(Thread(name, frozenset({name}), str(tmp_path), model=DeclaredModel(model), thinking_level=thinking, goal=goal, task=GivenThreadText('retained task ' + name)))
             with monkeypatch.context() as patch:
                 patch.setenv("BATCH_OWNER_CREDENTIAL", credential)
