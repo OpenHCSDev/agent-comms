@@ -8,7 +8,7 @@ import sqlite3
 
 import pytest
 
-from agent_comms.thread_text import SavedSessionFile
+from agent_comms.session_file import SavedSessionFile
 from agent_comms.acp import CommsAgent
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.comms import wire

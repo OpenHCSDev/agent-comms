@@ -11,7 +11,7 @@ from agent_comms.runtime import socket_path
 from agent_comms.native_arguments import GivenBinary
 from agent_comms.restart_scope import OwnersNamed
 from agent_comms.thread_model import DeclaredModel
-from agent_comms.thread_text import SavedSessionFile
+from agent_comms.session_file import SavedSessionFile
 from native_backend_fixture import native_backend_fixture
 
 

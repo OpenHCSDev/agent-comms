@@ -575,20 +575,21 @@ class ClassFlagsAbsent(MainEvidence):
 
     pattern: str
     paths: tuple[str, ...] = ("src",)
-    class_names: tuple[str, ...] = ()
+    owners: tuple[type, ...] = ()
 
     def read(self, main: MainTree) -> bool:
         matched = main.matching_lines(self.pattern, self.paths)
+        class_names = frozenset(owner.__name__ for owner in self.owners)
         return not any(
             (path, statement.lineno) in matched
             for path in {path for path, _ in matched}
             for declared in Classes.of((main.module(path).tree,))
-            if not self.class_names or declared.name in self.class_names
+            if not class_names or declared.name in class_names
             for statement in declared.body
         )
 
     def describe(self) -> str:
-        owners = f" of {', '.join(self.class_names)}" if self.class_names else ""
+        owners = f" of {', '.join(owner.__name__ for owner in self.owners)}" if self.owners else ""
         return f"no class body line {self.pattern!r}{owners} in {' '.join(self.paths)} on main"
 
 

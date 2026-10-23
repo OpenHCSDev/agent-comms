@@ -25,7 +25,8 @@ from .native_entries import ImportedSessionWriter, NativeEntry
 from .read_basis import MemberActivityDisplayScope
 from .registry_document import RosterVisibility
 from .storage_rules import StorageRoots
-from .thread_text import NoThreadText, SavedSessionFile
+from .thread_text import NoThreadText
+from .session_file import SavedSessionFile
 from .threads import Thread
 from .transcript_routes import TranscriptRoutes
 

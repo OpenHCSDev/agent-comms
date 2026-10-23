@@ -32,7 +32,7 @@ from .registry_document import (
 from .routing import TurnRouting
 from .store_files import SharedLock
 from .thread_identity import TurnIdentity
-from .thread_text import SavedSessionFile
+from .session_file import SavedSessionFile
 from .threads import Thread
 from .turn_lease import ActiveTurn, RecordedGeneration, StoredTurnRecord
 

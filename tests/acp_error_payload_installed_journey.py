@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from agent_comms.bus import Bus
 
-from agent_comms.thread_text import SavedSessionFile
+from agent_comms.session_file import SavedSessionFile
 from agent_comms.pi_vocabulary import OffThinkingLevel
 import argparse
 import asyncio

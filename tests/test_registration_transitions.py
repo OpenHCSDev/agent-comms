@@ -5,7 +5,7 @@ from dataclasses import replace
 
 import pytest
 
-from agent_comms.thread_text import SavedSessionFile
+from agent_comms.session_file import SavedSessionFile
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.errors import RelationViolationError
 from agent_comms.registration import Registration

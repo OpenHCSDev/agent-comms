@@ -10,7 +10,7 @@ from multiprocessing import get_context
 
 import pytest
 
-from agent_comms.thread_text import SavedSessionFile
+from agent_comms.session_file import SavedSessionFile
 from agent_comms.comms import wire
 from conftest import installed_comms
 from agent_comms.private_path import FileRevision

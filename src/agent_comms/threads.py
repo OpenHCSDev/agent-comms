@@ -45,10 +45,11 @@ from .store_files import _atomic_write_text
 from .task_sources import TaskScope
 from .thread_execution import NativeThreadExecution, ThreadExecution
 from .thread_model import DeclaredModel, ThreadModel, UndeclaredModel
-from .thread_text import NoParent, NoSessionFile, NoThreadText, SessionFile, ThreadParent, ThreadText
+from .thread_text import NoParent, NoThreadText, ThreadParent, ThreadText
+from .session_file import NoSessionFile, SessionFile
+from .thread_provenance import ThreadProvenance
 from .thread_identity import (
     AgentThreadRole,
-    ThreadProvenance,
     ThreadRole,
     TurnFence,
     TurnId,

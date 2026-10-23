@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from agent_comms.thread_text import NoSessionFile, SavedSessionFile
+from agent_comms.session_file import NoSessionFile, SavedSessionFile
 from agent_comms.agent_backend import NewThreadBackend
 from agent_comms.field_codec import FieldCodec
 from agent_comms.turn_digests import LastTurns

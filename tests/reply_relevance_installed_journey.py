@@ -2,7 +2,7 @@
 
 from bus_record_fixture import prepare_native_comms
 from agent_comms.lifecycle_capability import Complete
-from agent_comms.thread_text import SavedSessionFile
+from agent_comms.session_file import SavedSessionFile
 from agent_comms.native_entries import NativeEvidenceScope
 import asyncio
 import hashlib

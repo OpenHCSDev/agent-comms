@@ -11,7 +11,7 @@ from agent_comms.child_process import ProcessIdentity
 from agent_comms.comms import Comms
 from conftest import installed_comms
 from agent_comms.coordination_errors import StaleFence
-from agent_comms.thread_text import SavedSessionFile
+from agent_comms.session_file import SavedSessionFile
 from agent_comms.goal_actions import SetGoalAction
 from agent_comms.native_input_owner import RegistryOwner
 from agent_comms.owned_turn import OwnedTurn

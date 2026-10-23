@@ -19,7 +19,7 @@ from agent_comms.pi_native_backend import PI_0_85_1_EVENT_KINDS, PiNativeBackend
 from agent_comms.threads import Thread
 from agent_comms.unstarted_runtime import UnstartedRuntime
 from agent_comms.thread_model import DeclaredModel
-from agent_comms.thread_text import NoSessionFile, SavedSessionFile
+from agent_comms.session_file import NoSessionFile, SavedSessionFile
 
 # -- registry ---------------------------------------------------------------
 

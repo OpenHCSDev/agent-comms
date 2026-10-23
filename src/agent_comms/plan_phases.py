@@ -12,6 +12,11 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, ClassVar
 
 from agent_comms.declared_family import DeclaredFamily
+from agent_comms.installer.carry import Carry
+from agent_comms.pi_turn_phase import PiTurnPhase
+from agent_comms.thread_identity import BirthlessIncarnation
+from agent_comms.thread_rename import ThreadRename
+from agent_comms.tool_calls import CliToolArguments
 from agent_comms.phase_evidence import (
     AllEvidence,
     BusStorageAbsent,
@@ -658,14 +663,14 @@ class RostersPhase(RemainingSlopPhase):
             PatternAbsent(r"^\s*THREAD_CAPABILITIES\s*[:=]"),
             ClassFlagsAbsent(r"^\s*serves_(new_)?threads\s*[:=]"),
             *(
-                ClassFlagsAbsent(r"^\s*" + attribute + r"\s*[:=]", class_names=(owner,))
+                ClassFlagsAbsent(r"^\s*" + attribute + r"\s*[:=]", owners=(owner,))
                 for owner, attribute in (
-                    ("Carry", "declared"),
-                    ("ThreadRename", "kinds"),
-                    ("BirthlessIncarnation", "members"),
-                    ("CliToolArguments", "types"),
-                    ("PiTurnPhase", "_start_phases"),
-                    ("PiTurnPhase", "_end_events"),
+                    (Carry, "declared"),
+                    (ThreadRename, "kinds"),
+                    (BirthlessIncarnation, "members"),
+                    (CliToolArguments, "types"),
+                    (PiTurnPhase, "_start_phases"),
+                    (PiTurnPhase, "_end_events"),
                 )
             ),
         )
