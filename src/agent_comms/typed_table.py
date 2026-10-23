@@ -15,7 +15,7 @@ import re
 import sqlite3
 import types
 from abc import ABC, abstractmethod
-from collections.abc import Callable, Generator, Iterable, Iterator, Mapping
+from collections.abc import Callable, Generator, Iterable, Iterator, Mapping, Sequence
 from contextlib import AbstractContextManager, ExitStack, closing, contextmanager
 from dataclasses import dataclass, field
 from enum import Enum, IntEnum, IntFlag
@@ -33,6 +33,7 @@ from typing import (
     cast,
     get_args,
     get_origin,
+    overload,
 )
 
 from .declared_family import DeclaredFamily, declared_words
@@ -50,8 +51,15 @@ from .field_codec import (
 )
 from .lifecycle import LifecycleState
 from .locked_store import (
-    DurableFile, FileStore, PublishedSQLiteFile, RegistryFile, RootFile, RuntimeFile,
-    SQLiteFile, StoreBusy, StoreCommittedError,
+    DurableFile,
+    FileStore,
+    PublishedSQLiteFile,
+    RegistryFile,
+    RootFile,
+    RuntimeFile,
+    SQLiteFile,
+    StoreBusy,
+    StoreCommittedError,
 )
 from .maintenance_barrier import HOLDER_NONCE, MaintenanceBarrier
 from .store_files import _store_lock
@@ -1649,6 +1657,22 @@ class TypedTable(
             parameters + ((limit,) if limit is not None else ()),
         ))
 
+    @overload
+    @classmethod
+    def select(
+        cls, db: sqlite3.Connection, *, row_type: type[RelatedRow], where: str = "1",
+        parameters: tuple = (), order_by: tuple[str, ...] = (), descending: bool = False,
+        limit: int | None = None, **key: object,
+    ) -> list[RelatedRow]: ...
+
+    @overload
+    @classmethod
+    def select(
+        cls, db: sqlite3.Connection, *, row_type: None = None, where: str = "1",
+        parameters: tuple = (), order_by: tuple[str, ...] = (), descending: bool = False,
+        limit: int | None = None, **key: object,
+    ) -> list[Self]: ...
+
     @classmethod
     def select(
         cls,
@@ -1660,8 +1684,24 @@ class TypedTable(
         descending: bool = False,
         row_type: type[RelatedRow] | None = None, limit: int | None = None,
         **key: object,
-    ) -> list[Self | RelatedRow]:
+    ) -> Sequence[Self | RelatedRow]:
         return list(cls._query(db, where, parameters, order_by, descending, key, row_type, limit))
+
+    @overload
+    @classmethod
+    def stream(
+        cls, db: sqlite3.Connection, *, row_type: type[RelatedRow], where: str = "1",
+        parameters: tuple = (), order_by: tuple[str, ...] = (), descending: bool = False,
+        limit: int | None = None, **key: object,
+    ) -> Generator[RelatedRow, None, None]: ...
+
+    @overload
+    @classmethod
+    def stream(
+        cls, db: sqlite3.Connection, *, row_type: None = None, where: str = "1",
+        parameters: tuple = (), order_by: tuple[str, ...] = (), descending: bool = False,
+        limit: int | None = None, **key: object,
+    ) -> Generator[Self, None, None]: ...
 
     @classmethod
     def stream(
