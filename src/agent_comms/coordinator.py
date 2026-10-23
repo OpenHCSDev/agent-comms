@@ -25,6 +25,7 @@ from .coordination_session import (
 )
 from .execution_store import ExecutionStore
 from .participant_store import ParticipantStore
+from .mro_dispatch import MroDispatch, handles
 from .store_files import StoreLock
 from .working_memory_annotations import WorkingMemoryAnnotations
 
@@ -34,6 +35,23 @@ if TYPE_CHECKING:
     from agent_comms.service_passes import ServicePassStore
 
 Result = TypeVar("Result")
+
+
+class WorkerPassResult(MroDispatch):
+    @classmethod
+    async def record(cls, outcome: object, name: str, passes: ServicePassStore) -> None:
+        await cls.handler_for(type(outcome))(outcome, name, passes)
+
+    @handles(Exception)
+    @staticmethod
+    async def failed(outcome: Exception, name: str, passes: ServicePassStore) -> None:
+        logging.error("Service worker pass failed: %s", name, exc_info=outcome)
+        await Coordination.run_worker(partial(passes.failed, name, outcome))
+
+    @handles(object)
+    @staticmethod
+    async def passed(outcome: object, name: str, passes: ServicePassStore) -> None:
+        await Coordination.run_worker(partial(passes.passed, name))
 
 
 class CoordinationRoute(ABC):
@@ -141,11 +159,7 @@ class Coordination(ExecutionStore, AttemptStore):
             (outcome,) = await asyncio.gather(
                 cls.run_worker(partial(watch.watch_pass, opened_wire)), return_exceptions=True,
             )
-            if isinstance(outcome, Exception):
-                logging.error("Service worker pass failed: %s", name, exc_info=outcome)
-                await cls.run_worker(partial(passes.failed, name, outcome))
-            else:
-                await cls.run_worker(partial(passes.passed, name))
+            await WorkerPassResult.record(outcome, name, passes)
             await asyncio.sleep(60)
 
     @classmethod

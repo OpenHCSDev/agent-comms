@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import secrets
 from dataclasses import dataclass
+from .mro_dispatch import MroDispatch, handles
 
 from agent_comms.coordination_contracts import (
     MAX_IDENTIFIER_CHARS,
@@ -38,7 +39,7 @@ class OwnerFence:
     def authority(self) -> AttemptAuthority:
         return AttemptAuthority(
             self.execution_id, self.attempt_ordinal, self.owner_lookup,
-            self.owner_generation, _digest(self.token),
+            self.owner_generation, FenceTokenDigest.of(self.token),
         )
 
     def __post_init__(self) -> None:
@@ -55,7 +56,19 @@ def prepare_fence_token() -> str:
     return secrets.token_hex(32)
 
 
-def _digest(token: str) -> str:
-    if not isinstance(token, str) or not 1 <= len(token) <= MAX_IDENTIFIER_CHARS:
+class FenceTokenDigest(MroDispatch):
+    @classmethod
+    def of(cls, token: str) -> str:
+        return cls.handler_for(type(token))(token)
+
+    @handles(str)
+    @staticmethod
+    def text(token: str) -> str:
+        if not 1 <= len(token) <= MAX_IDENTIFIER_CHARS:
+            raise ValueError("invalid retained fence token")
+        return hashlib.sha256(token.encode("utf-8")).hexdigest()
+
+    @handles(object)
+    @staticmethod
+    def invalid(token: object) -> str:
         raise ValueError("invalid retained fence token")
-    return hashlib.sha256(token.encode("utf-8")).hexdigest()

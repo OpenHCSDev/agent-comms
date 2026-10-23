@@ -20,6 +20,7 @@ from agent_comms.coordination_contracts import MAX_IDENTIFIER_CHARS
 from .channel_targets import exact_stored_target
 from .field_codec import FieldCodec, MalformedRecord, Sha256Text
 from .messages import Message
+from .mro_dispatch import MroDispatch, handles
 from .projection_source import ProjectionSource
 
 AUDIENCE_VERSION: Final = 1
@@ -32,13 +33,25 @@ _AUDIENCE_DOMAIN: Final = b"agent-comms:audience:v1\0"
 _NAME: Final = re.compile(r"[a-zA-Z0-9_-]+\Z")
 
 
-def _bounded_text(value: str, field: str, *, thread_name: bool = False) -> None:
-    if not isinstance(value, str) or not value or len(value) > MAX_IDENTIFIER_CHARS:
+class AudienceText(MroDispatch):
+    @classmethod
+    def require(cls, value: str, field: str, *, thread_name: bool = False) -> None:
+        cls.handler_for(type(value))(value, field, thread_name=thread_name)
+
+    @handles(str)
+    @staticmethod
+    def bounded(value: str, field: str, *, thread_name: bool = False) -> None:
+        if not value or len(value) > MAX_IDENTIFIER_CHARS:
+            raise MalformedRecord(f"{field} must be a bounded nonempty string")
+        if thread_name and _NAME.fullmatch(value) is None:
+            raise MalformedRecord(f"{field} must be a canonical thread name")
+        if not thread_name and not value.strip():
+            raise MalformedRecord(f"{field} must not be whitespace")
+
+    @handles(object)
+    @staticmethod
+    def invalid(value: object, field: str, *, thread_name: bool = False) -> None:
         raise MalformedRecord(f"{field} must be a bounded nonempty string")
-    if thread_name and _NAME.fullmatch(value) is None:
-        raise MalformedRecord(f"{field} must be a canonical thread name")
-    if not thread_name and not value.strip():
-        raise MalformedRecord(f"{field} must not be whitespace")
 
 
 def _canonical_json(value: object, *, limit: int) -> bytes:
@@ -65,8 +78,8 @@ class FrozenRecipient(ProjectionSource):
     canonical_thread: str
 
     def __post_init__(self) -> None:
-        _bounded_text(self.recipient_lookup, "recipient_lookup")
-        _bounded_text(self.canonical_thread, "canonical_thread", thread_name=True)
+        AudienceText.require(self.recipient_lookup, "recipient_lookup")
+        AudienceText.require(self.canonical_thread, "canonical_thread", thread_name=True)
 
 
 @dataclass(frozen=True, slots=True)
@@ -94,8 +107,8 @@ class FrozenAudience(ProjectionSource):
         if type(self.wire_seq) is not int or not 0 < self.wire_seq <= MAX_WIRE_SEQ:
             raise MalformedRecord("wire_seq must be a positive SQLite-range integer")
         for name in ("message_id", "exact_target", "sender_lookup", "source_revision"):
-            _bounded_text(getattr(self, name), name)
-        _bounded_text(self.sender_name, "sender_name", thread_name=True)
+            AudienceText.require(getattr(self, name), name)
+        AudienceText.require(self.sender_name, "sender_name", thread_name=True)
         if not exact_stored_target(self.exact_target):
             raise MalformedRecord("aggregate views are not exact stored targets")
         if type(self.recipients) is not tuple or len(self.recipients) > MAX_RECIPIENTS:
@@ -168,13 +181,13 @@ def freeze_audience(
         raise MalformedRecord("too many frozen recipients")
     if any(type(item) is not FrozenRecipient for item in externally_captured_recipients):
         raise TypeError("externally_captured_recipients must contain FrozenRecipient values")
-    _bounded_text(sender_lookup, "sender_lookup")
-    _bounded_text(sender_name, "sender_name", thread_name=True)
+    AudienceText.require(sender_lookup, "sender_lookup")
+    AudienceText.require(sender_name, "sender_name", thread_name=True)
     if prepared_message.sender != sender_name:
         raise MalformedRecord(
             "sender_name must be the externally captured canonical message sender"
         )
-    _bounded_text(source_revision, "source_revision")
+    AudienceText.require(source_revision, "source_revision")
     if not exact_stored_target(prepared_message.target):
         raise MalformedRecord("only exact stored routable targets may be frozen")
     if type(prepared_message.seq) is not int or not 0 < prepared_message.seq <= MAX_WIRE_SEQ:
