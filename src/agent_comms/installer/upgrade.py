@@ -842,7 +842,7 @@ class Install[Rehearsed: Rehearsal](ABC):
         backup = StoreBackup.take(self.root, active_route_path(), files, self.spill_dir)
         with route_directory(backup.route):
             backup.require_route_revision()
-            selected = self.installed.probe(SelectedRouteProbe())
+            selected = self.staged.probe(SelectedRouteProbe())
         return backup, selected
 
     def publish(self, backup: StoreBackup, selected: RouteSelection) -> str:

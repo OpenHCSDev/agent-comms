@@ -177,7 +177,7 @@ class PackageRootProbe(RuntimeProbe[Path]):
 
 
 class SelectedRouteProbe(RuntimeProbe[RouteSelection]):
-    """The outgoing reader validates its own published route before source changes."""
+    """The staged runtime reads the published route before source changes."""
 
     def run(self) -> RouteSelection:
         return RouteFile.read(active_route_path()).selection()
