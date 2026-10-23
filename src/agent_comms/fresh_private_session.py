@@ -34,10 +34,9 @@ def create_fresh_private_session(
     )
     encoded = FieldCodec.compact(header.to_wire(), allow_nan=False).encode() + b"\n"
     try:
-        descriptor = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600)
+        descriptor = PrivateFileRole.create(
+            path, NativePiUnavailable("Fresh-session creation durability UNKNOWN"))
         try:
-            info = os.fstat(descriptor)
-            PrivateFileRole.require(info, NativePiUnavailable("Fresh-session creation durability UNKNOWN"))
             pending = memoryview(encoded)
             while pending:
                 written = os.write(descriptor, pending)

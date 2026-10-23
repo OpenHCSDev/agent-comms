@@ -201,6 +201,8 @@ class FileRevision(RecordMember, FileObservation):
 
 
 class FilesystemRole(DeclaredFamily, affix="Role"):
+    kind_flags: ClassVar[int]
+
     @classmethod
     @abstractmethod
     def accepts_kind(cls, mode: int) -> bool: ...
@@ -228,6 +230,35 @@ class FilesystemRole(DeclaredFamily, affix="Role"):
         if failed is not None:
             raise refusal from RelationViolationError(f"{cls.declared_name}: {failed.declared_name}")
 
+    @classmethod
+    def _opened(
+        cls, path: str | Path, flags: int, refusal: Exception, *,
+        dir_fd: int | None = None, mode: int = 0o600,
+    ) -> int:
+        Platform.current().require_pinned_paths(refusal)
+        fd = os.open(path, flags | os.O_NOFOLLOW | cls.kind_flags, mode, dir_fd=dir_fd)
+        try:
+            cls.require(os.fstat(fd), refusal)
+        except BaseException:
+            os.close(fd)
+            raise
+        return fd
+
+    @classmethod
+    def read(cls, path: str | Path, refusal: Exception, *, dir_fd: int | None = None) -> int:
+        return cls._opened(path, os.O_RDONLY, refusal, dir_fd=dir_fd)
+
+    @classmethod
+    def update(cls, path: str | Path, refusal: Exception, *, dir_fd: int | None = None) -> int:
+        return cls._opened(path, os.O_RDWR, refusal, dir_fd=dir_fd)
+
+    @classmethod
+    def held(cls, fd: int, path: Path, refusal: Exception) -> None:
+        observed = os.fstat(fd)
+        cls.require(observed, refusal)
+        if FileIdentity.from_stat(observed) != FileIdentity.from_stat(path.lstat()):
+            raise refusal
+
 
 class PrivateRole(FilesystemRole):
     permissions: ClassVar[int]
@@ -235,6 +266,11 @@ class PrivateRole(FilesystemRole):
     @classmethod
     def accepts_permissions(cls, mode: int) -> bool:
         return stat.S_IMODE(mode) == cls.permissions
+
+    @classmethod
+    def create(cls, path: str | Path, refusal: Exception, *, dir_fd: int | None = None) -> int:
+        return cls._opened(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, refusal,
+                           dir_fd=dir_fd, mode=cls.permissions)
 
 
 class PrivateFileRole(PrivateRole):
@@ -277,16 +313,24 @@ class PrivateSocketRole(PrivateRole):
         for the same inode. No socket or acknowledgement moves into that directory.
         """
         path = Path(path).absolute()
-        observed = path.parent.lstat()
-        TrustedAncestorRole.require(observed, ValueError("Socket directory changed during acquisition"))
-        fd = os.open(path.parent, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+        refusal = ValueError("Socket directory changed during acquisition")
+        fd = TrustedAncestorRole.read(path.parent, refusal)
         try:
-            if not os.path.samestat(observed, os.fstat(fd)):
-                raise ValueError("Socket directory changed during acquisition")
+            TrustedAncestorRole.held(fd, path.parent, refusal)
             with Platform.current().socket_address(path, fd) as address:
                 yield address
         finally:
             os.close(fd)
+
+
+class OwnedDirectoryRole(FilesystemRole):
+    @classmethod
+    def accepts_kind(cls, mode: int) -> bool:
+        return stat.S_ISDIR(mode)
+
+    @classmethod
+    def accepts_permissions(cls, mode: int) -> bool:
+        return True
 
 
 class TrustedAncestorRole(FilesystemRole):

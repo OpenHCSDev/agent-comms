@@ -22,7 +22,7 @@ import sqlite3
 import stat
 import struct
 from abc import ABC, abstractmethod
-from collections.abc import Iterable, Sequence
+from collections.abc import Callable, Iterable, Sequence
 from pathlib import Path
 from typing import TYPE_CHECKING, NoReturn
 
@@ -34,6 +34,7 @@ from .errors import RelationViolationError
 from .field_codec import Id128Text, MalformedRecord
 from .locked_store import DurableFile, WireWakeFile
 from .native_runtime_input import NativeRuntimeInput, NativeRuntimeTable
+from .private_path import PrivateFileRole
 
 if TYPE_CHECKING:
     from .acp_extension import CursorAdvancedUpdate, CursorScope
@@ -63,18 +64,13 @@ def _reject(detail: str) -> NoReturn:
 def registry_digest(path: Path) -> bytes:
     """Hash the exact owned registry bytes, distinguishing absence from empty."""
     try:
-        fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW)
+        fd = PrivateFileRole.read(
+            path, RelationViolationError("Private registry guard registry is not a bounded owner-only regular file"))
     except FileNotFoundError:
         return _EMPTY
     try:
         info = os.fstat(fd)
-        if (
-            not stat.S_ISREG(info.st_mode)
-            or info.st_uid != os.geteuid()
-            or stat.S_IMODE(info.st_mode) != 0o600
-            or info.st_nlink != 1
-            or info.st_size > _MAX_REGISTRY
-        ):
+        if info.st_size > _MAX_REGISTRY:
             _reject("registry is not a bounded owner-only regular file")
         digest = hashlib.sha256(b"present\0")
         total = 0
@@ -286,7 +282,8 @@ class PrivateRegistryGuard(DurableFile, WireWakeFile, RegistryPrivacy):
     @classmethod
     def load(cls, registry_path: Path) -> PrivateRegistryGuard:
         """Read this guard's namespace; both slots and the registry must corroborate it."""
-        descriptor = os.open(cls.path_in(registry_path.parent), os.O_RDONLY | os.O_NOFOLLOW)
+        descriptor = PrivateFileRole.read(cls.path_in(registry_path.parent),
+            RelationViolationError("Private registry guard file is not a fixed owner-only regular file"))
         try:
             raw = os.pread(descriptor, _SIZE, 0)
         finally:
@@ -342,10 +339,8 @@ class PrivateRegistryGuard(DurableFile, WireWakeFile, RegistryPrivacy):
             raise error
 
     def _trusted_root(self) -> None:
-        if os.name != "posix" or not all(
-            hasattr(os, name) for name in ("O_DIRECTORY", "O_NOFOLLOW", "pread", "pwrite")
-        ):
-            _reject("requires POSIX directory and fixed-slot durability")
+        Platform.current().require_pinned_paths(RelationViolationError(
+            "Private registry guard requires POSIX directory and fixed-slot durability"))
         if ".." in self.registry_path.parts:
             _reject("has an ambiguous root path")
         root = self.registry_path.parent.absolute()
@@ -370,21 +365,15 @@ class PrivateRegistryGuard(DurableFile, WireWakeFile, RegistryPrivacy):
                 return
             cursor = cursor.parent
 
-    def _open(self, *, writable: bool = True) -> int:
+    def _open(self, opening: Callable[[str | Path, Exception], int]) -> int:
         self._trusted_root()
         try:
-            flags = os.O_RDWR if writable else os.O_RDONLY
-            fd = os.open(self.path, flags | os.O_NOFOLLOW)
+            fd = opening(self.path, RelationViolationError(
+                "Private registry guard file is not a fixed owner-only regular file"))
         except FileNotFoundError as error:
             _reject(f"file is missing: {error.__class__.__name__}")
         info = os.fstat(fd)
-        if (
-            not stat.S_ISREG(info.st_mode)
-            or info.st_uid != os.geteuid()
-            or stat.S_IMODE(info.st_mode) != 0o600
-            or info.st_nlink != 1
-            or info.st_size != 2 * _SIZE
-        ):
+        if info.st_size != 2 * _SIZE:
             os.close(fd)
             _reject("file is not a fixed owner-only regular file")
         return fd
@@ -429,7 +418,7 @@ class PrivateRegistryGuard(DurableFile, WireWakeFile, RegistryPrivacy):
     def verify(self) -> tuple[int, bytes]:
         # A read-only check must not emit IN_CLOSE_WRITE and wake the wire
         # watcher again; private ACP drains verify this guard on every wake.
-        fd = self._open(writable=False)
+        fd = self._open(PrivateFileRole.read)
         try:
             seq, digest, _ = self._authority(fd)
             return seq, digest
@@ -437,7 +426,7 @@ class PrivateRegistryGuard(DurableFile, WireWakeFile, RegistryPrivacy):
             os.close(fd)
 
     def prepare(self, new_digest: bytes) -> tuple[int, int]:
-        fd = self._open()
+        fd = self._open(PrivateFileRole.update)
         try:
             seq, _, index = self._authority(fd)
             if seq >= _MAX_SEQ:
@@ -448,7 +437,7 @@ class PrivateRegistryGuard(DurableFile, WireWakeFile, RegistryPrivacy):
             os.close(fd)
 
     def commit(self, seq: int, index: int, new_digest: bytes) -> None:
-        fd = self._open()
+        fd = self._open(PrivateFileRole.update)
         try:
             current = self._slots(fd)[index]
             if current != (seq, _PENDING, new_digest):
@@ -482,17 +471,15 @@ class PrivateRegistryGuard(DurableFile, WireWakeFile, RegistryPrivacy):
             _reject("already exists before initialization")
         digest = registry_digest(self.registry_path)
         if digest != _EMPTY:
-            registry_fd = os.open(self.registry_path, os.O_RDONLY | os.O_NOFOLLOW)
+            registry_fd = PrivateFileRole.read(self.registry_path, RelationViolationError(
+                "Private registry guard registry is not a bounded owner-only regular file"))
             try:
                 os.fsync(registry_fd)
             finally:
                 os.close(registry_fd)
         Platform.current().sync_directory(self.registry_path.parent)
-        fd = os.open(
-            self.path,
-            os.O_RDWR | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW,
-            0o600,
-        )
+        fd = PrivateFileRole.create(self.path, RelationViolationError(
+            "Private registry guard file is not a fixed owner-only regular file"))
         try:
             if os.pwrite(fd, _record(self.root_id, 0, _COMMITTED, digest) * 2, 0) != 2 * _SIZE:
                 _reject("initial slots were incomplete")
@@ -504,7 +491,7 @@ class PrivateRegistryGuard(DurableFile, WireWakeFile, RegistryPrivacy):
 
 
     def commit_initial(self) -> None:
-        fd = self._open()
+        fd = self._open(PrivateFileRole.update)
         try:
             first, second = self._slots(fd)
             if first != (0, _COMMITTED, registry_digest(self.registry_path)) or second != (

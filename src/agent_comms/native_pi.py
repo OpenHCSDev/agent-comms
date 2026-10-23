@@ -262,10 +262,10 @@ class NativeContextJournal(
         with ExitStack() as ownership:
             try:
                 held = ownership.enter_context(closing(
-                    os.fdopen(os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK), "rb")
+                    os.fdopen(PrivateFileRole.read(
+                        path, NativePiUnavailable("Native proof indexed evidence is unavailable")), "rb")
                 ))
                 before = os.fstat(held.fileno())
-                PrivateFileRole.require(before, NativePiUnavailable("Native proof file is not private"))
                 db = ownership.enter_context(closing(SQLiteFile.recovering_snapshot(path)))
                 if cls.schema_differs(db):
                     raise NativePiUnavailable("Native proof requires offline durable conversion")
@@ -677,9 +677,8 @@ class PrivateEvidenceRead:
         try:
             if path != path.resolve(strict=True):
                 raise NativePiUnavailable("Native Pi evidence session path is not canonical")
-            stream = os.fdopen(os.open(path, os.O_RDONLY | os.O_NOFOLLOW), "rb")
-            PrivateFileRole.require(
-                os.fstat(stream.fileno()), RelationViolationError("Native Pi evidence file is unavailable"))
+            stream = os.fdopen(PrivateFileRole.read(
+                path, NativePiUnavailable("Native Pi evidence file is unavailable")), "rb")
             return stream
         except FileNotFoundError as error:
             if stream is not None:
