@@ -9,6 +9,7 @@ from agent_comms.phase_evidence import (
     AllEvidence,
     ClassFlagsAbsent,
     ClassChecks,
+    ClassRostersAbsent,
     CommitMerged,
     MainEvidence,
     MainTree,
@@ -22,6 +23,7 @@ from agent_comms.phase_evidence import (
     PatternPresent,
     PhaseEvidence,
     PlanReading,
+    RestatedMembersAbsent,
     RulesetGates,
     UnreadableEvidenceError,
 )
@@ -269,6 +271,34 @@ def test_ruleset_requires_exact_review_context_without_bypass(
 
     assert Answered().holds(PlanReading((), main)) is expected
     assert HeadReview.context in RulesetGates().describe()
+
+
+def test_cleanup_evidence_counts_restated_members_and_class_rosters(tmp_path):
+    reading = main_of(tmp_path, {
+        "src/base.py": "from dataclasses import dataclass\n"
+                       "class Base:\n    kind = 'base'\n    __slots__ = ()\n"
+                       "    def answer(self):\n        return 1\n"
+                       "@dataclass\nclass Record:\n    items: tuple = ()\n"
+                       "class Plain:\n    items: tuple = ()\n",
+        "src/child.py": "from dataclasses import dataclass\nimport base\n"
+                        "class Child(base.Base):\n    kind = 'base'\n    __slots__ = ()\n"
+                        "    def answer(self):\n        return 1\n"
+                        "class Other(base.Base):\n    kind = 'other'\n"
+                        "    def answer(self):\n        return 2\n"
+                        "@dataclass\nclass Narrow(base.Record):\n    items: tuple = ()\n"
+                        "@dataclass\nclass Field(base.Plain):\n    items: tuple = ()\n"
+                        "ROSTER = (Child, Other)\nMIXED = (Child, int)\n"
+                        "class Phase:\n    after = (Child, Other)\n",
+    })
+    restated = RestatedMembersAbsent()
+    rosters = ClassRostersAbsent()
+
+    assert list(restated.restatements(reading.main)) == [
+        "src/child.py:4 Child.kind", "src/child.py:6 Child.answer", "src/child.py:14 Narrow.items",
+    ]
+    assert list(rosters.rosters(reading.main)) == ["src/child.py:18 ROSTER"]
+    assert not reading.holds(restated)
+    assert not reading.holds(rosters)
 
 
 def test_lifecycle_flags_count_class_bodies_not_locals(tmp_path):

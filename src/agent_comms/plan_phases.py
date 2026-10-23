@@ -21,6 +21,7 @@ from agent_comms.phase_evidence import (
     AllEvidence,
     BusStorageAbsent,
     ClassFlagsAbsent,
+    ClassRostersAbsent,
     CommitMerged,
     NoAbsenceProbes,
     NoExactCopies,
@@ -33,6 +34,7 @@ from agent_comms.phase_evidence import (
     PatternPresent,
     PhaseEvidence,
     PlanReading,
+    RestatedMembersAbsent,
     RulesetGates,
 )
 from agent_comms.phase_tasks import PhaseTask, UnspecifiedPhaseTask
@@ -332,31 +334,29 @@ class BusDeletionPhase(VirtualBusPhase):
 
 
 FLAG = r"(: ClassVar\[bool\])? = (True|False)$"
+LIFECYCLE_FLAGS = (
+    "terminal|failed|successful|pending|active|executing|unresolved|deferred|complete|completed"
+)
+CODEC_FLAGS = "accepts_null|opaque|external_json_shape|strict_fields|accepts_prompt"
+SMALL_FAMILY_FLAGS = "multiple_targets|preengagement_target|notification_changed|input_uncertain"
 
 
 class LifecycleFlagsPhase(MultipleInheritancePhase):
     """1A: flags declared on classes; a function's local named ``complete`` is not one."""
 
-    evidence = ClassFlagsAbsent(
-        r"^\s+(terminal|failed|successful|pending|active|executing"
-        r"|unresolved|deferred|complete|completed)" + FLAG
-    )
+    evidence = ClassFlagsAbsent(rf"^\s+({LIFECYCLE_FLAGS})" + FLAG)
 
 
 class CodecFlagsPhase(MultipleInheritancePhase):
     """1B."""
 
-    evidence = PatternAbsent(
-        r"^\s+(accepts_null|opaque|external_json_shape|strict_fields|accepts_prompt)" + FLAG
-    )
+    evidence = PatternAbsent(rf"^\s+({CODEC_FLAGS})" + FLAG)
 
 
 class SmallFamilyFlagsPhase(MultipleInheritancePhase):
     """1C. ``GoalDisplay.visible`` stays by the commander's decision, so ``visible`` is not read."""
 
-    evidence = PatternAbsent(
-        r"^\s+(multiple_targets|preengagement_target|notification_changed|input_uncertain)" + FLAG
-    )
+    evidence = PatternAbsent(rf"^\s+({SMALL_FAMILY_FLAGS})" + FLAG)
 
 
 class TriggersPhase(MultipleInheritancePhase):
@@ -466,10 +466,22 @@ class OwnTypeChecksPhase(MultipleInheritancePhase):
 
 
 class InheritanceCleanupPhase(MultipleInheritancePhase):
-    """Batch 4: no lifecycle capability is left with one member."""
+    """Batch 4, the deletion closure: no capability shell left with one member, no member
+    restating its base's answer, no probe for a batch 1 flag, and no literal roster of
+    classes."""
 
     after = (OwnTypeChecksPhase,)
-    evidence = ParentsShared(paths=("src/agent_comms/lifecycle_capability.py",))
+    evidence = AllEvidence(
+        (
+            ParentsShared(paths=("src/agent_comms/lifecycle_capability.py",)),
+            RestatedMembersAbsent(),
+            PatternAbsent(
+                rf"\b(getattr|hasattr)\([^,()]+, *[\"']"
+                rf"({LIFECYCLE_FLAGS}|{CODEC_FLAGS}|{SMALL_FAMILY_FLAGS})[\"']"
+            ),
+            ClassRostersAbsent(),
+        )
+    )
 
 
 class DeadModulesPhase(RemainingSlopPhase):

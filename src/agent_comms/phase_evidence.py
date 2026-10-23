@@ -93,7 +93,7 @@ class MainTree:
             if not absent:
                 yield self.module(path)
 
-    def modules(self, paths: tuple[str, ...]) -> Iterator[ast.Module]:
+    def modules(self, paths: tuple[str, ...]) -> Iterator[ParsedModule]:
         """Every Python module under ``paths``, read in one ``git cat-file --batch``."""
         listed = Repo.git(self.repo.checkout, "ls-tree", "-r", "--name-only", self.commit, "--",
                           *paths)
@@ -103,7 +103,8 @@ class MainTree:
         for name in names:
             header, _, batch = batch.partition(b"\n")
             size = int(header.rsplit(b" ", 1)[1])
-            yield ast.parse(batch[:size], filename=name)
+            source = batch[:size].decode()
+            yield ParsedModule(name, source, ast.parse(source, filename=name), name)
             batch = batch[size + 1 :]
 
     def contains(self, sha: str) -> bool:
@@ -271,8 +272,8 @@ class BusStorageAbsent(MainEvidence, ast.NodeVisitor):
 
     def read(self, main: MainTree) -> bool:
         scan = type(self)()
-        for tree in main.modules(("src",)):
-            scan.visit(tree)
+        for module in main.modules(("src",)):
+            scan.visit(module.tree)
         return not scan.found
 
     def describe(self) -> str:
@@ -701,7 +702,7 @@ class OwnClassChecksAbsent(MainEvidence):
     def read(self, main: MainTree) -> bool:
         checks = ClassChecks()
         for module in main.modules(("src",)):
-            checks.visit(module)
+            checks.visit(module.tree)
         return not checks.declared & checks.checked
 
     def describe(self) -> str:
@@ -728,7 +729,7 @@ class ParentsShared(MainEvidence):
         }
         members = Counter(
             base
-            for member in Classes.of(main.modules(("src",)))
+            for member in Classes.of(module.tree for module in main.modules(("src",)))
             for base in NamedClasses.of(member.bases) & declared
         )
         return all(members[name] >= 2 for name in declared)
@@ -736,3 +737,102 @@ class ParentsShared(MainEvidence):
     def describe(self) -> str:
         named = [*self.names, *self.paths]
         return "two members each for " + " ".join(named) + " on main"
+
+
+@dataclass(frozen=True)
+class RestatedMembersAbsent(MainEvidence):
+    """No class in ``paths`` restates a member its direct base in ``paths`` declares: a method
+    or class attribute equal to the base's, or a field equal to the base's when both are
+    dataclasses, so the field is already inherited. Python declares ``__slots__`` per class."""
+
+    paths: tuple[str, ...] = ("src",)
+
+    def read(self, main: MainTree) -> bool:
+        return not any(self.restatements(main))
+
+    def restatements(self, main: MainTree) -> Iterator[str]:
+        """Each restated member, as ``PATH:LINE Class.member``."""
+        named: dict[str, list[tuple[str, ast.ClassDef]]] = {}
+        for module in main.modules(self.paths):
+            for declared in Classes.of((module.tree,)):
+                named.setdefault(declared.name, []).append((module.path, declared))
+        for path, declared in (pair for pairs in named.values() for pair in pairs):
+            for parent in self.parents(named, path, declared):
+                inherited = self.answers(parent)
+                for name, (line, answer) in self.answers(declared).items():
+                    if name in inherited and inherited[name][1] == answer:
+                        yield f"{path}:{line} {declared.name}.{name}"
+
+    @staticmethod
+    def parents(
+        named: dict[str, list[tuple[str, ast.ClassDef]]], path: str, declared: ast.ClassDef
+    ) -> Iterator[ast.ClassDef]:
+        """Each base that names exactly one class: a bare name prefers its own module's class,
+        a dotted name another module's."""
+        for base in declared.bases:
+            match base:
+                case ast.Name(id=name):
+                    others = [pair for pair in named.get(name, []) if pair[1] is not declared]
+                    found = [pair for pair in others if pair[0] == path] or others
+                case ast.Attribute(attr=name):
+                    found = [pair for pair in named.get(name, []) if pair[0] != path]
+                case _:
+                    found = []
+            if len(found) == 1:
+                yield found[0][1]
+
+    @staticmethod
+    def answers(declared: ast.ClassDef) -> dict[str, tuple[int, str]]:
+        """Each member's line and its whole declaration; fields count only on a dataclass."""
+        fields = dataclass.__name__ in NamedClasses.of(
+            decorator.func if isinstance(decorator, ast.Call) else decorator
+            for decorator in declared.decorator_list
+        )
+        found: dict[str, tuple[int, str]] = {}
+        for member in declared.body:
+            match member:
+                case ast.FunctionDef(name=name) | ast.AsyncFunctionDef(name=name):
+                    found[name] = (member.lineno, ast.dump(member))
+                case ast.Assign(targets=[ast.Name(id=name)]) if name != "__slots__":
+                    found[name] = (member.lineno, ast.dump(member))
+                case ast.AnnAssign(target=ast.Name(id=name), value=ast.expr()) \
+                        if fields and name != "__slots__":
+                    found[name] = (member.lineno, ast.dump(member))
+        return found
+
+    def describe(self) -> str:
+        return f"no member restating its base's in {' '.join(self.paths)} on main"
+
+
+@dataclass(frozen=True)
+class ClassRostersAbsent(MainEvidence):
+    """No module in ``paths`` binds a literal collection of two or more classes ``paths``
+    declares: a family's members derive from its registry and their order from its
+    declarations."""
+
+    paths: tuple[str, ...] = ("src",)
+
+    def read(self, main: MainTree) -> bool:
+        return not any(self.rosters(main))
+
+    def rosters(self, main: MainTree) -> Iterator[str]:
+        """Each roster, as ``PATH:LINE NAME``."""
+        modules = tuple(main.modules(self.paths))
+        declared = {found.name for module in modules for found in Classes.of((module.tree,))}
+        for module in modules:
+            for statement in module.tree.body:
+                match statement:
+                    case ast.Assign(targets=[target], value=value) | ast.AnnAssign(
+                        target=target, value=ast.expr() as value
+                    ):
+                        match value:
+                            case ast.Call(args=[ast.Tuple() | ast.List() | ast.Set() as listed]) \
+                                    | (ast.Tuple() | ast.List() | ast.Set() as listed):
+                                if len(listed.elts) >= 2 and all(
+                                    isinstance(element, ast.Name) and element.id in declared
+                                    for element in listed.elts
+                                ):
+                                    yield f"{module.path}:{statement.lineno} {ast.unparse(target)}"
+
+    def describe(self) -> str:
+        return f"no literal roster of declared classes in {' '.join(self.paths)} on main"
