@@ -2084,7 +2084,7 @@ class OrderClaim:
             raise TodoError("A delivery claim needs its report text.")
 
     def original(self, source: BusReader) -> Message:
-        return replace(self.message, seq=source.message_reference(self.message.message_id).seq)
+        return Message.from_message(source.lookup_message(self.message.message_id).message)
 
     @staticmethod
     def originals[K](

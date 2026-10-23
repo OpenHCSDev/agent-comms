@@ -148,7 +148,7 @@ def state_cards(comms, member):
     ("rename", True),
 ])
 def test_order_claim_publishes_only_to_its_retained_commander_birth(
-    held_bus, monkeypatch, change, notification_fails,
+    held_bus, change, notification_fails,
 ):
     comms = held_bus
     todo = comms.goals.todos.get("P1")
@@ -158,7 +158,7 @@ def test_order_claim_publishes_only_to_its_retained_commander_birth(
     todo = comms.goals.todos.apply(
         todo.id, OrderMessage(todo.revision, lead, original.message_id))
     claim = OrderClaim.for_order(
-        todo, worker, 1, "a" * 40, "Review this published repair", original.reference)
+        todo, worker, 1, "a" * 40, "Review this published repair with @outsider", original.reference)
     if change == "rename":
         comms.registry.rename("lead", "renamed")
     elif change == "rename_holder":
@@ -172,29 +172,29 @@ def test_order_claim_publishes_only_to_its_retained_commander_birth(
     before = comms.bus.bus.revision()
     operation = ClaimOrder(todo.revision, worker, todo.held().generation, claim)
     if change in ("rename", "rename_holder"):
-        publish = comms.bus.publisher.publish_ordinary
+        def registry_cut_held():
+            try:
+                with comms.registry.store.locked(blocking=False):
+                    return False
+            except BlockingIOError:
+                return True
 
-        def attempted_rename():
-            with comms.registry.store.locked(blocking=False):
-                comms.registry.rename("renamed" if change == "rename" else "lead", "late")
-
-        def publish_with_late_rename(message, **options):
-            with ThreadPoolExecutor(max_workers=1) as pool:
-                with pytest.raises(BlockingIOError):
-                    pool.submit(attempted_rename).result(timeout=2)
-            return publish(message, **options)
-
-        monkeypatch.setattr(comms.bus.publisher, "publish_ordinary", publish_with_late_rename)
         if notification_fails:
             marker = comms.bus.bus.path.with_suffix(".changed")
             marker.unlink()
             marker.mkdir()
-            with pytest.raises(CommittedMessageError) as failed:
-                operation.record(comms.goals, todo.id)
-            changed = comms.goals.todos.get(todo.id)
-            assert failed.value.record.seq == before + 1
-        else:
-            changed = operation.record(comms.goals, todo.id)
+        with ThreadPoolExecutor(max_workers=1) as pool:
+            with comms.goals.todos.writing():
+                future = pool.submit(operation.record, comms.goals, todo.id)
+                asyncio.run(asyncio.wait_for(wait_for(registry_cut_held), timeout=2))
+                assert not future.done()
+            if notification_fails:
+                with pytest.raises(CommittedMessageError) as failed:
+                    future.result(timeout=5)
+                changed = comms.goals.todos.get(todo.id)
+                assert failed.value.record.seq == before + 1
+            else:
+                changed = future.result(timeout=5)
         delivery = comms.bus.bus.delivery(before + 1)
         recipient = "renamed" if change == "rename" else "lead"
         assert delivery.message.target == recipient
@@ -205,6 +205,7 @@ def test_order_claim_publishes_only_to_its_retained_commander_birth(
         with comms.bus.bus.reading() as source:
             retained = comms.goals.todos.get(todo.id).order.commander_claims()[0]
             assert retained.original(source) == Message.from_message(delivery.message)
+            assert retained.original(source).mentions
     else:
         with pytest.raises(HumanSendRefusedError):
             operation.record(comms.goals, todo.id)
