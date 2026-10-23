@@ -277,7 +277,7 @@ class TargetAction:
                 'bound_count': len(self.bound)}
 
 
-class TargetOutcome(LifecycleCapability):
+class TargetOutcome(LifecycleCapability, ABC):
     """One attempted selection member; failure never claims absence of effects."""
 
     @abstractmethod
