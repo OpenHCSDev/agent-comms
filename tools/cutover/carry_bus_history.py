@@ -44,7 +44,6 @@ from agent_comms.field_codec import (
     WireName,
     WireOmitDefault,
     WireOrder,
-    compile_decoder,
 )
 from agent_comms.historical_views import HistoryArchive, HistorySource
 from agent_comms.installer.carry import Carried, Carry
@@ -490,9 +489,9 @@ class HistoryClaim(SubclassUnion, ClaimIdentity, ABC, affix="HistoryClaim"):
     """Retired field-group order is part of the original envelope's physical form."""
 
     def current(self) -> ClaimTransition:
-        from .carry_claim_fields import WIRE_NAMES
+        from .carry_claim_fields import ClaimFields
 
-        raw = WIRE_NAMES.rewrite(compile_decoder(ClaimTransition), FieldCodec.encode(self))
+        raw = ClaimFields.convert(ClaimTransition, FieldCodec.encode(self))
         return ClaimTransition.from_wire(raw)
 
     def restored_wire(self, transition: ClaimTransition) -> dict[str, object]:

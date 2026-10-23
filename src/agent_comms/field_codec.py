@@ -48,6 +48,9 @@ if TYPE_CHECKING:
 
 T = TypeVar("T")
 
+type WireRecordChange = Callable[[type, dict[str, object]], dict[str, object]]
+type WireRecordFilter = Callable[[type], bool]
+
 
 class MalformedRecord(ValueError):  # noqa: N818 - names the refused data
     """Data that does not satisfy its declaration.
@@ -508,6 +511,18 @@ class FieldPlan:
     def encoded(self, value, *, key=None):
         return {key or self.key: value}
 
+    @property
+    def wire_children(self) -> tuple[ValueDecoder[object], ...]:
+        return (self.value,) if self.wire_keys else ()
+
+    def rewrite_wire(
+        self, data: dict[str, object], change: WireRecordChange, select: WireRecordFilter,
+    ) -> dict[str, object]:
+        if self.key not in data or not self.wire_keys:
+            return data
+        current = self.value.rewrite_records(data[self.key], change, select)
+        return data if current is data[self.key] else {**data, self.key: current}
+
     def schema_fields(self):
         annotation, declared = self.annotation, self.declared
         base = FieldCodec._representation(annotation)[0]
@@ -680,6 +695,11 @@ class InlineFieldPlan(DeclaredFieldPlan):
     def encoded(self, value, *, key=None):
         return value
 
+    def rewrite_wire(
+        self, data: dict[str, object], change: WireRecordChange, select: WireRecordFilter,
+    ) -> dict[str, object]:
+        return cast(dict[str, object], self.value.rewrite_records(data, change, select))
+
     def captured(self, data: object) -> dict[str, object]:
         if not isinstance(data, dict):
             raise MalformedRecord("Expected a record object.")
@@ -797,6 +817,11 @@ class FieldRepresentation(MroDispatch, ABC):
     field_plan: ClassVar[type[FieldPlan]] = DeclaredFieldPlan
 
     @classmethod
+    def wire_structure(cls, structural: ValueDecoder[object]) -> ValueDecoder[object]:
+        """A custom scalar form stays opaque; declared structural forms supply their plan."""
+        return structural
+
+    @classmethod
     def decode_field(cls, data: object, structural: ValueDecoder[object]) -> object:
         handler = getattr(cls, next(cls.handler_names_for(type(data))))
         with MalformedRecord.refusing(f"Invalid {cls.__name__}"):
@@ -894,6 +919,10 @@ class SingleValueEncoding(WireValue):
         entry, = FieldCodec._record_plan(cls).fields
         return entry
 
+    @classmethod
+    def wire_structure(cls, structural: ValueDecoder[object]) -> ValueDecoder[object]:
+        return cls.wire_field().value
+
     def to_wire(self):
         entry = self.wire_field()
         return FieldCodec.encode_document(getattr(self, entry.name), entry.annotation)
@@ -922,6 +951,10 @@ class SubclassUnion(DeclaredFamily, AcceptsNull, ExternalJsonShape, WireValue):
     @classmethod
     def decodes_tagged_records(cls) -> bool:
         return False
+
+    @classmethod
+    def wire_structure(cls, structural: ValueDecoder[object]) -> ValueDecoder[object]:
+        return ValueDecoder.for_members(cls.members_with(cls))
 
     @classmethod
     def from_wire(cls, data: object) -> Self:
@@ -963,6 +996,10 @@ class RecordMember(WireValue):
     """A wire union's record case uses the declared record codec."""
 
     @classmethod
+    def wire_structure(cls, structural: ValueDecoder[object]) -> ValueDecoder[object]:
+        return _member_decoder(cls)
+
+    @classmethod
     def from_wire(cls, data: object) -> Self:
         return FieldCodec.decode_record(cls, data)
 
@@ -982,6 +1019,10 @@ class InlineRecord(WireValue, ExternalJsonShape):
     @classmethod
     def wire_record(cls):
         return cls
+
+    @classmethod
+    def wire_structure(cls, structural: ValueDecoder[object]) -> ValueDecoder[object]:
+        return _member_decoder(cls.wire_record())
 
     @classmethod
     def schema(cls):
@@ -1736,6 +1777,46 @@ class ValueDecoder[T](ABC):
     @abstractmethod
     def encode(self, value: T) -> object: ...
 
+    @property
+    def wire_children(self) -> tuple[ValueDecoder[object], ...]:
+        return ()
+
+    def selects_record(self, select: WireRecordFilter) -> bool:
+        return False
+
+    @cache
+    def contains_records(
+        self, select: WireRecordFilter, seen: frozenset[object] = frozenset(),
+    ) -> bool:
+        """Whether this immutable plan reaches a selected declared record; no payload read."""
+        if self in seen:
+            return False
+        return self.selects_record(select) or any(
+            child.contains_records(select, seen | {self}) for child in self.wire_children
+        )
+
+    def rewrite_records(
+        self, data: object, change: WireRecordChange, select: WireRecordFilter,
+    ) -> object:
+        """Transform declared raw records without decoding opaque JSON or losing other keys.
+
+        The caller owns the record change. This decoder owns wire layout, child
+        membership and union selection. ``select`` is a pure declaration predicate.
+        """
+        if data is None or not self.contains_records(select):
+            return data
+        return self._rewrite_records(data, change, select)
+
+    def _rewrite_records(
+        self, data: object, change: WireRecordChange, select: WireRecordFilter,
+    ) -> object:
+        return data
+
+    def rewrite_document(
+        self, data: object, change: WireRecordChange, select: WireRecordFilter,
+    ) -> object:
+        return self.rewrite_records(data, change, select)
+
     def decode_external(self, data: object, record: Mapping[str, object]) -> T:
         for decode in self.external_decoders(data):
             return self.decode_resolved(cast(T, decode(data, record)))
@@ -1907,6 +1988,20 @@ class _RepresentedDecoder(ValueDecoder[Any]):
     representation: type[FieldRepresentation]
     structural: ValueDecoder[object]
 
+    @property
+    @cache
+    def wire_structure(self) -> ValueDecoder[object]:
+        return self.representation.wire_structure(self.structural)
+
+    @property
+    def wire_children(self) -> tuple[ValueDecoder[object], ...]:
+        return (self.wire_structure,)
+
+    def _rewrite_records(
+        self, data: object, change: WireRecordChange, select: WireRecordFilter,
+    ) -> object:
+        return self.wire_structure.rewrite_records(data, change, select)
+
     def external_decoders(self, data: object) -> Iterable[ExternalDecoder]:
         return FieldCodec.external_decoders(self.representation)
 
@@ -2056,6 +2151,28 @@ class UnionDecoder[T](_ContextDecoder[T]):
     origins = (Union, types.UnionType)
     alternatives: tuple[ValueDecoder[T], ...]
 
+    @property
+    def wire_children(self) -> tuple[ValueDecoder[object], ...]:
+        return self.alternatives
+
+    def _rewrite_records(
+        self, data: object, change: WireRecordChange, select: WireRecordFilter,
+    ) -> object:
+        answers = []
+        for alternative in self.alternatives:
+            try:
+                current = alternative.rewrite_records(data, change, select)
+                alternative.decode_bound(current, {})
+            except MalformedRecord:
+                continue
+            if current not in answers:
+                answers.append(current)
+        if len(answers) != 1:
+            raise MalformedRecord(
+                f"Record rewrite cannot select exactly one declared {self.target}: "
+                f"{len(answers)} different results")
+        return answers[0]
+
     @classmethod
     def from_annotation(cls, target, args):
         return cls(target, tuple(compile_decoder(item) for item in args))
@@ -2117,6 +2234,17 @@ class UnionDecoder[T](_ContextDecoder[T]):
 class _ArrayDecoder(ValueDecoder[Any]):
     container: ClassVar[type]
     items: tuple[ValueDecoder[object], ...]
+
+    @property
+    def wire_children(self) -> tuple[ValueDecoder[object], ...]:
+        return self.items
+
+    def _rewrite_records(
+        self, data: object, change: WireRecordChange, select: WireRecordFilter,
+    ) -> object:
+        if not isinstance(data, list):
+            raise MalformedRecord("Expected a JSON array.")
+        return [plan.rewrite_records(value, change, select) for plan, value in self.plan_items(data)]
 
     @classmethod
     def from_annotation(cls, target, args):
@@ -2223,6 +2351,23 @@ class _DictDecoder(ValueDecoder[Any]):
     value: ValueDecoder[object]
     origins = (dict,)
 
+    @property
+    def wire_children(self) -> tuple[ValueDecoder[object], ...]:
+        return self.key, self.value
+
+    @staticmethod
+    @abstractmethod
+    def wire_mapping(entries: Iterable[tuple[object, object]]) -> object: ...
+
+    def _rewrite_records(
+        self, data: object, change: WireRecordChange, select: WireRecordFilter,
+    ) -> object:
+        return self.wire_mapping(
+            (self.key.rewrite_records(key, change, select),
+             self.value.rewrite_records(value, change, select))
+            for key, value in self.entries(data)
+        )
+
     def argument_options(self) -> dict[str, object]:
         return {"type": FieldCodec.parse}
 
@@ -2269,8 +2414,12 @@ class _DictDecoder(ValueDecoder[Any]):
 class _StringKeyDictDecoder(_DictDecoder):
     entries = staticmethod(_object_entries)
 
+    @staticmethod
+    def wire_mapping(entries: Iterable[tuple[object, object]]) -> dict:
+        return dict(entries)
+
     def encode(self, value: dict[str, object]) -> dict[str, object]:
-        return {key: self.value.encode(item) for key, item in value.items()}
+        return self.wire_mapping((key, self.value.encode(item)) for key, item in value.items())
 
     def encode_document(self, value: dict[str, object]) -> dict[str, object]:
         return {key: self.value.encode_document(item) for key, item in value.items()}
@@ -2283,9 +2432,13 @@ class _StringKeyDictDecoder(_DictDecoder):
 class _PairKeyDictDecoder(_DictDecoder):
     entries = staticmethod(_object_or_pair_entries)
 
+    @staticmethod
+    def wire_mapping(entries: Iterable[tuple[object, object]]) -> list:
+        return [[key, value] for key, value in entries]
+
     def encode(self, value: dict[object, object]) -> list[list[object]]:
-        return [[self.key.encode(key), self.value.encode(item)]
-                for key, item in value.items()]
+        return self.wire_mapping((self.key.encode(key), self.value.encode(item))
+                                 for key, item in value.items())
 
 
 @dataclass(frozen=True, slots=True)
@@ -2293,6 +2446,16 @@ class _FamilyRecordDecoder[Member: DeclaredFamily](_ContextDecoder[Member]):
     """The encoded object carries its member's name under the family tag."""
 
     target: type[Member]
+
+    @property
+    def wire_children(self) -> tuple[ValueDecoder[object], ...]:
+        return tuple(_member_decoder(member) for member in self.target.members_with(self.target))
+
+    def _rewrite_records(
+        self, data: object, change: WireRecordChange, select: WireRecordFilter,
+    ) -> object:
+        member, _ = self.member(data)
+        return _member_decoder(member).rewrite_records(data, change, select)
 
     def encode(self, value: Member) -> dict[str, object]:
         return {**value.record_tag(), **_member_decoder(type(value)).encode(value)}
@@ -2336,6 +2499,11 @@ class _LeafDocumentDecoder(_FamilyRecordDecoder):
     def decode_document(self, data: object) -> object:
         return _member_decoder(self.target).decode_bound(data, {})
 
+    def rewrite_document(
+        self, data: object, change: WireRecordChange, select: WireRecordFilter,
+    ) -> object:
+        return _member_decoder(self.target).rewrite_records(data, change, select)
+
 
 @dataclass(frozen=True, slots=True)
 class _RecordDecoder(_ContextDecoder[Any]):
@@ -2343,6 +2511,24 @@ class _RecordDecoder(_ContextDecoder[Any]):
     record that contains itself compiles without recursion."""
 
     target: type
+
+    @property
+    def wire_children(self) -> tuple[ValueDecoder[object], ...]:
+        return tuple(child for entry in FieldCodec._record_plan(self.target).bindings
+                     for child in entry.wire_children)
+
+    def selects_record(self, select: WireRecordFilter) -> bool:
+        return select(self.target)
+
+    def _rewrite_records(
+        self, data: object, change: WireRecordChange, select: WireRecordFilter,
+    ) -> object:
+        if not isinstance(data, dict):
+            raise MalformedRecord(f"Expected {self.target.__name__} record")
+        result = change(self.target, data)
+        for entry in FieldCodec._record_plan(self.target).bindings:
+            result = entry.rewrite_wire(result, change, select)
+        return result
 
     def encode(self, value: object) -> dict[str, object]:
         result = FieldCodec._record_plan(type(value)).encoded(
