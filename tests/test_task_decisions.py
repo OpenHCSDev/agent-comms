@@ -4,7 +4,7 @@ from agent_comms.channel_targets import CommandTarget
 
 from agent_comms.bus import Bus
 
-from agent_comms.thread_text import SavedSessionFile
+from agent_comms.session_file import SavedSessionFile
 from agent_comms.bus_publication import AgentOrigin
 from agent_comms.messages import NoticeRole
 import os

@@ -10,11 +10,9 @@ from functools import cached_property
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from agent_comms.lifecycle_capability import Unresolved
-
 from .agent_activity import AgentActivity
 from .coordination_errors import StaleFence
-from .errors import RelationViolationError
+from .errors import RelationViolationError, UnregisteredThreadError
 from .goal_actions import (
     GoalAction,
     GoalActionContext,
@@ -27,6 +25,7 @@ from .goal_history import GoalHistoryEntry
 from .goal_waits import (
     GoalInputReview,
     GoalWait,
+    GoalWaitReview,
     GoalWaits,
     RecordedGoalWait,
     StandbyReview,
@@ -34,6 +33,7 @@ from .goal_waits import (
 from .native_input_owner import GoalLaunchOwner
 from .owner_requests import NewestOpenRequest, RequestDirective
 from .registration import Registration
+from .store_files import SharedLock
 
 if TYPE_CHECKING:
     from .agent_events import GoalChange
@@ -42,7 +42,6 @@ if TYPE_CHECKING:
     from .native_input_owner import RegistryOwner
     from .registry_document import RegistrySnapshot
     from .thread_identity import ThreadIncarnation
-from .bus_tables import DirectReplySource
 from .goal_presentation import (
     GoalExecution,
     GoalExecutionSource,
@@ -51,7 +50,7 @@ from .goal_presentation import (
     GoalWaitTarget,
     IdleGoalExecution,
 )
-from .goals import Goal, GoalDeclaration
+from .goals import GoalDeclaration
 from .input_attempt import (
     UNOBSERVED_DELIVERY_SCOPE,
     InputDeliveryScope,
@@ -172,23 +171,26 @@ class Goals:
     def _goal_input_review(
         self, thread: Thread, goal_id: str, wait_for: Sequence[str]
     ) -> GoalInputReview:
+        captured = GoalWaitReview.capture(self, thread.incarnation.require_recorded())
+        thread = captured.owner
+        snapshot = captured.snapshot
         goal = thread.goal.require().require_id(goal_id).require_active()
         if not wait_for:
             raise ValueError("Standby requires explicit wait_for thread names.")
-        resolved = tuple(self.registry.require(target.removeprefix("@")) for target in wait_for)
+        resolved = tuple(snapshot.require(target.removeprefix("@")) for target in wait_for)
         if any(target.incarnation == thread.incarnation for target in resolved):
             raise ValueError("A goal cannot wait for its own thread.")
         targets = tuple(
             dict.fromkeys(GoalWaitTarget(target.incarnation.require_recorded()) for target in resolved)
         )
-        snapshot = self.registry.snapshot()
-        owners = snapshot.names_for(thread.name)
+        owners = captured.owners
         dispositions = InputDispositions(self.root)
         unknown = {row.key: row for row in dispositions.unresolved(owners).unknown(owners)}
         eligible = set()
-        lookup = thread.incarnation.lookup
-        after_seq = self.goal_wait(thread.name).review_after_seq(
-            goal, thread.incarnation.require_recorded(), targets
+        incarnation = thread.incarnation.require_recorded()
+        lookup = incarnation.lookup
+        after_seq = captured.wait.review_after_seq(
+            goal, incarnation, targets
         )
         sequences = tuple({
             sequence for row in unknown.values()
@@ -197,46 +199,43 @@ class Goals:
         senders = tuple(target.incarnation.lookup for target in targets)
         replies: dict[str, Message] = {}
         with self.bus.bus.reading() as source:
+            through_seq = source.revision()
             # Preserve older UNKNOWN rows; new inputs begin at this wait's own cursor.
             # Both selections use the same frozen recipient and sender projections.
-            page = source.received(
+            page = source.direct_replies(
                 lookup, sequences=sequences, limit=len(sequences), descending=False,
-                sender_lookups=senders, source=DirectReplySource,
+                sender_lookups=senders,
             ) if sequences else ()
             while True:
                 replies.update({
                     InputDispositions.bus_key(original.message, thread): original.message
-                    for record in page for original in record.deliveries()
+                    for original in page
                 })
-                page = source.received(
+                page = source.direct_replies(
                     lookup, after=after_seq, limit=100, descending=False,
-                    sender_lookups=senders, source=DirectReplySource,
+                    sender_lookups=senders,
                 )
                 if not page:
                     break
                 after_seq = page[-1].seq
-        document = dispositions.read(tuple(replies))
-        for key, message in replies.items():
-            row = document.lookup(key)
-            if not row.exists:
-                # Read-only inspection of a canonical input. Only an
-                # explicit successful review persists this observation.
-                row = ReservedInput(
-                    key,
-                    message.seq,
-                    thread.name,
-                    snapshot.claim_generation(thread.name),
-                    message.target,
-                    message.body,
-                )
-            for pending in row.items_with(Unresolved, row):
-                if pending.owner in owners:
-                    unknown[key] = pending
-                    eligible.add(key)
+        # Pure document inspection; only explicit successful review persists it.
+        document = dispositions.read(tuple(replies)).record(*(
+            ReservedInput(
+                key, message.seq, thread.name, snapshot.claim_generation(thread.name),
+                message.target, message.body,
+            )
+            for key, message in replies.items()
+        ))
+        for pending in document.unknown(owners):
+            unknown[pending.key] = pending
+            eligible.add(pending.key)
         return GoalInputReview(
-            goal_id,
+            captured.snapshot,
+            thread,
+            captured.wait,
+            captured.turn,
+            through_seq,
             targets,
-            owners,
             tuple(sorted(unknown.values(), key=lambda row: row.order)),
             frozenset(eligible),
         )
@@ -252,106 +251,103 @@ class Goals:
         return self.waits.resolve(goal)
 
     def recover_closed_goal_wait(self, name: str) -> tuple[str, ...]:
-        """Release one stranded standby without replaying a dependency input.
-
-        This is an owner-side liveness check, not an agent turn. A subsequent
-        scheduler pass may continue the still-active goal only if its private
-        attempt ledger has a fresh READY grant.
-        """
-        with self.registry.store.locked():
-            snapshot = self.registry.snapshot()
-            canonical = snapshot.canonical_name(name)
-            owner = snapshot.threads.get(canonical)
-            if owner is None or self.agents.is_working(owner.incarnation, snapshot):
-                return ()
-            return tuple(member for goal in owner.goal.active()
-                         for member in self._recover_closed_wait(goal, owner, snapshot, canonical))
-
-    def _recover_closed_wait(self, goal: Goal, owner: Thread, snapshot: RegistrySnapshot,
-                             canonical: str) -> tuple[str, ...]:
-        waits = self.waits
-        rows = waits.read()
-        wait = rows.get(goal.id)
-        if wait is None or not wait.current_for(goal, owner.incarnation.require_recorded()):
+        """Read silence outside the registry, then release only the observed wait."""
+        try:
+            incarnation = self.registry.require(name).incarnation.require_recorded()
+            review = GoalWaitReview.capture(self, incarnation)
+        except UnregisteredThreadError:
             return ()
-        closed = GoalWaits.closed_wait_group(canonical, wait.targets, rows, snapshot, self.agents)
+        owner = review.owner
+        snapshot = review.snapshot
+        if self.agents.is_working(owner.incarnation, snapshot) or not any(
+            review.wait.current_for(goal, owner.incarnation.require_recorded())
+            for goal in owner.goal.active()
+        ):
+            return ()
+        closed = GoalWaits.closed_wait_group(
+            owner.name, review.wait.targets, self.waits.read(), snapshot, self.agents,
+        )
         if not closed:
             return ()
-        # An unreadable bus remains a drain diagnostic, never evidence of silence.
-        if wait.has_reply(self.bus.bus, owner.incarnation.require_recorded()):
+        # A failed read is a diagnostic, never evidence of silence.
+        with review.publishing_unanswered(self) as unchanged:
+            if not unchanged:
+                return ()
+            snapshot = self.registry.snapshot()
+            owner, = snapshot.threads_for(review.owner.incarnation.require_recorded())
+            if self.agents.is_working(owner.incarnation, snapshot):
+                return ()
+            closed = GoalWaits.closed_wait_group(
+                owner.name, review.wait.targets, self.waits.read(), snapshot, self.agents,
+            )
+            if not closed:
+                return ()
+            names = ", ".join(f"@{member}" for member in closed)
+            note = (
+                f"Dependency wait group ({names}) has no independent worker. "
+                "Standby was released; inspect dependencies and continue useful work."
+            )
+            return closed if self._release_reviewed_wait(review, note) else ()
+
+    def release_waits_after_terminal_turn(self, fence: TurnCompletion) -> tuple[str, ...]:
+        """A completed turn may release silence observed outside the registry lock."""
+        snapshot = self.registry.snapshot()
+        sources = fence.idle_sources(snapshot)
+        if not sources:
             return ()
-        names = ", ".join(f"@{member}" for member in closed)
-        note = (
-            f"Dependency wait group ({names}) has no independent worker. "
-            "Standby was released; inspect dependencies and continue useful work."
-        )
+        source, = sources
+        released: list[str] = []
+        for wait in self.waits.targeting(source.incarnation.require_recorded()):
+            for owner in snapshot.threads_for(wait.owner):
+                try:
+                    review = GoalWaitReview.capture(self, owner.incarnation.require_recorded())
+                except UnregisteredThreadError:
+                    continue
+                if review.wait == wait:
+                    released.extend(self._release_finished_wait(review, fence))
+        return tuple(released)
+
+    def _release_finished_wait(
+        self, review: GoalWaitReview, fence: TurnCompletion,
+    ) -> tuple[str, ...]:
+        wait, owner = review.wait, review.owner
+        if not any(wait.current_for(goal, owner.incarnation.require_recorded())
+                   for goal in owner.goal.active()):
+            return ()
+        if any(self.agents.is_working(target.incarnation, review.snapshot)
+               for target in wait.targets):
+            return ()
+        with review.publishing_unanswered(self) as unchanged:
+            if not unchanged:
+                return ()
+            current = self.registry.snapshot()
+            sources = fence.idle_sources(current)
+            if not sources or any(self.agents.is_working(target.incarnation, current)
+                                  for target in wait.targets):
+                return ()
+            actual_source, = sources
+            note = (
+                f"Declared dependency @{actual_source.name} finished without a qualifying direct "
+                "reply, and no declared dependency has an active turn. "
+                "Standby was released; inspect messages and UNKNOWN inputs, then "
+                "continue independent work or redelegate. No input was replayed."
+            )
+            if self._release_reviewed_wait(review, note):
+                actual_owner, = current.threads_for(owner.incarnation.require_recorded())
+                return (actual_owner.name,)
+        return ()
+
+    def _release_reviewed_wait(self, review: GoalWaitReview, note: str) -> bool:
+        """Publish a validated silent wait while its review owns the registry lock."""
+        snapshot = self.registry.snapshot()
+        owner, = snapshot.threads_for(review.owner.incarnation.require_recorded())
+        goal = owner.goal.require_active()
         progress = f"{goal.progress}\n\n{note}" if goal.progress else note
         self.registry.register(
             replace(owner, goal=replace(goal, progress=progress, revision=goal.revision + 1)),
-            snapshot.status(canonical),
+            snapshot.status(owner.name),
         )
-        if not waits.clear(goal.id, wait_id=wait.wait_id):
-            return ()
-        return closed
-
-    def release_waits_after_terminal_turn(self, fence: TurnCompletion) -> tuple[str, ...]:
-        """Release waits after the latest exact, still-idle child turn.
-
-        ACP invokes this after terminal publication, never at the earlier UI
-        `settled` event. A later turn (even already finished) invalidates the
-        old fence; a rename or unrelated metadata edit does not.
-        """
-        with self.registry.store.locked():
-            snapshot = self.registry.snapshot()
-            sources = fence.idle_sources(snapshot)
-            if not sources:
-                return ()
-            (source,) = sources
-            canonical = source.name
-            released: list[str] = []
-            for wait in self.waits.targeting(source.incarnation.require_recorded()):
-                for owner in snapshot.threads_for(wait.owner):
-                    if any(
-                        self._release_finished_wait(
-                            goal,
-                            owner,
-                            snapshot,
-                            canonical,
-                            wait.goal_id,
-                            wait,
-                        )
-                        for goal in owner.goal.active()
-                    ):
-                        released.append(owner.name)
-            return tuple(released)
-
-    def _release_finished_wait(
-        self,
-        goal: Goal,
-        owner: Thread,
-        snapshot: RegistrySnapshot,
-        canonical: str,
-        goal_id: str,
-        wait: RecordedGoalWait,
-    ) -> bool:
-        if goal.id != goal_id or not wait.current_for(goal, owner.incarnation.require_recorded()):
-            return False
-        if any(self.agents.is_working(target.incarnation, snapshot) for target in wait.targets):
-            return False
-        if wait.has_reply(self.bus.bus, owner.incarnation.require_recorded()):
-            return False
-        diagnostic = (
-            f"Declared dependency @{canonical} finished without a qualifying direct "
-            "reply, and no declared dependency has an active turn. "
-            "Standby was released; inspect messages and UNKNOWN inputs, then "
-            "continue independent work or redelegate. No input was replayed."
-        )
-        progress = f"{goal.progress}\n\n{diagnostic}" if goal.progress else diagnostic
-        # Persist the explanation before releasing the exact wait.
-        continued_goal = replace(goal, progress=progress, revision=goal.revision + 1)
-        self.registry.register(replace(owner, goal=continued_goal), snapshot.status(owner.name))
-        self.waits.clear(goal.id, wait_id=wait.wait_id)
-        return True
+        return review.wait.clear(self.waits)
 
     def goal_execution(self, name: str) -> GoalExecution:
         return self._goal_snapshot(name).execution
@@ -395,25 +391,23 @@ class Goals:
         return goal.clear_wait(self.waits, wait_id=wait_id)
 
     def consume_reply_wait(self, owner: RegistryOwner, reference: MessageReference) -> bool:
-        """A completed native input consumes only its original dependency wait.
-
-        Selected handling calls this after corroborated completion, never after
-        fetching, triage preparation or a failed/UNKNOWN native send.
-        """
-        with self.registry.store.locked():
+        """Read the exact completed delivery before checking its original owner fence."""
+        with self.registry.store.locked(mode=SharedLock()):
             owner.require_registry(self.registry)
-            current = self.registry.require(owner.thread.name)
-            goal = current.continuation_goal(owner.thread)
-            return any(self._consume_reply_wait(actual, current, reference) for actual in goal)
-
-    def _consume_reply_wait(self, goal: Goal, current: Thread, reference: MessageReference) -> bool:
-        wait = self.waits.for_goal(goal, self.waits.read())
-        if not wait.owner_matches(current.incarnation.require_recorded()):
+            review = GoalWaitReview.capture(self, owner.thread.incarnation.require_recorded())
+        current = review.owner
+        goal = current.continuation_goal(owner.thread)
+        if not review.wait.owner_matches(current.incarnation.require_recorded()):
             return False
         original, = self.bus.bus.deliveries_for_references((reference,))
-        if not wait.matches(original, current.incarnation.require_recorded()):
+        if not review.wait.matches(original, current.incarnation.require_recorded()):
             return False
-        return wait.consume_reply(self.waits, goal.id)
+        with self.registry.store.locked():
+            owner.require_registry(self.registry)
+            if not review.current_for(self):
+                return False
+            return any(review.wait.current_for(actual, current.incarnation.require_recorded())
+                       and review.wait.clear(self.waits) for actual in goal)
 
     def direct(self, name: str, message: Message) -> None:
         """A plain owner message directs the recipient's newest open request."""

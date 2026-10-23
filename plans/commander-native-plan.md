@@ -211,6 +211,42 @@ The fix is one derived model with four renderers. **Core is the engine, Toad is 
 
 **Done when** a commander runs a full session with no script process running, every signal the scripts raised appears from Core, and replaying one recorded hour of the live feed on a copy delivers to the commander only decision events, with no duplicates, and the same hour yields a `UnitTime` rollup whose classes add up to each unit's elapsed time.
 
+### Current control-plane work: heartbeat source identity (2026-10-23)
+
+Before this repair, `HeartbeatSilent.violations` read the newest row in the
+two-way DM conversation and then checked its sender. A commander reply after
+the last beat therefore hid a silent heartbeat. `BusReader.latest_addressed`
+now selects one candidate per exact service/commander alias pair through the
+existing typed table query, then decodes only the newest message. `Addressed`
+declares its compound sender/target/sequence index; registry provenance supplies
+the aliases. Ordinary DM display scopes retain their original contract.
+`CommanderHeartbeat.requested_by` derives
+live eligibility and the oldest open request from `OwnerRequestStore`; the shared
+silence scan derives its grace from that request and the latest actual beat.
+`HeartbeatNotStarted` and `MissedHeartbeat` own their distinct evidence and wording.
+A newer request, service registration, commander reply or rename cannot erase the
+older debt. No parallel timestamp, ping store or scheduler is added.
+
+### Reply eligibility: the message owns the answer
+
+`Message.role.response_policy` owns eligibility. SQL does not reimplement its
+recipient or response rules, and `MessageIdentitySource` does not retain a
+second policy identity. `Delivered.projections` materializes the direct-turn
+predicate once for each frozen recipient in `DirectReplySource`.
+`BusReader.direct_replies` uses that index with a bounded selection before
+loading deliveries. Installed Core commit stamps invalidate and rebuild these
+projections when their producing implementation changes.
+
+Reply pages retain exact original-reference matching, participant aliases and
+the original request's response eligibility. Latest reply sequence and greatest
+reply timestamp are separate selections. The query indexes must cover that
+existing scope before a SQL limit is applied; reading every original to decide
+eligibility is not the design.
+
+Schema-family carries preserve converter-owned `HistoryOffset` rows until
+`BusHistory.after_acceptance` retires them. Durable history is preserved;
+rebuildable projections follow their producing Core build.
+
 ### Phase 8: cutover
 
 **Changes.**

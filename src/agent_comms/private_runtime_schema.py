@@ -1,4 +1,4 @@
-"""Private coordinator declarations and the complete target's derived schema view."""
+"""Private coordinator declarations and the mandatory target's derived schema view."""
 
 from __future__ import annotations
 
@@ -57,4 +57,4 @@ class PrivateCoordinatorTable(SharedFileTables, DurableTables):
 
 
 class PrivateCoordinatorSchema(ComposedSchemas, CoordinatorTable, PrivateCoordinatorTable):
-    """The private file target, derived from its core and private row families."""
+    """Mandatory core/private families; optional awareness owns its separate view."""

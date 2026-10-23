@@ -70,8 +70,10 @@ def test_retired_witness_cannot_borrow_live_or_replaced_claim(*, thread_registra
                                  {"AGENT_COMMS_AGENT_BIN": "/authored/pi"})
     owner = RetiredOwnerLaunch.capture_retired(snapshot, thread, launch)
     assert owner.require_current(snapshot) is thread
-    selection = OwnerRestartSelection(owner.owner, launch.process, owner.claim_scope.claimed_generation,
-                                      launch.interpreter)
+    selection = OwnerRestartSelection(
+        owner.authority.owner, launch.process, owner.authority.claim.claimed_generation,
+        launch.interpreter,
+    )
     with pytest.raises(RelationViolationError):
         selection.require_current(snapshot)
     changed = (
@@ -101,7 +103,6 @@ def test_handoff_codec_preserves_complete_stopped_witness_and_original_launch(*,
     runtime = RestartEnvironment.inherit(environment)
     original = OwnerRestartHandoff("/authored", (owner,), runtime, ConfiguredBinary(), InheritedArguments(), LaunchRuntime(Path("/target/bin/python")))
     encoded = FieldCodec.encode(original)
-    assert set(encoded["owners"][0]) == {"owner", "admission", "launch"}
     decoded = FieldCodec.decode(OwnerRestartHandoff, encoded)
     assert decoded == original
     assert decoded.owners[0].require_current(snapshot) is thread

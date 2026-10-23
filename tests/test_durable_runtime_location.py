@@ -5,8 +5,8 @@ from pathlib import Path
 
 import pytest
 
-from agent_comms.thread_text import NoSessionFile, SavedSessionFile
-from agent_comms.agent_backend import AgentBackend
+from agent_comms.session_file import NoSessionFile, SavedSessionFile
+from agent_comms.agent_backend import NewThreadBackend
 from agent_comms.field_codec import FieldCodec
 from agent_comms.turn_digests import LastTurns
 from agent_comms.pi_durable_backend import DurableDatabase, PiDurableBackend, Inspect
@@ -23,7 +23,7 @@ def test_durable_thread_roundtrip_and_worker_selection(tmp_path, saved, *, threa
     restored = FieldCodec.decode(Thread, FieldCodec.encode(thread))
     assert restored.runtime == (location if saved else UnstartedRuntime(PiDurableBackend))
     assert restored.runtime.backend is PiDurableBackend
-    assert AgentBackend.for_new_threads() is PiNativeBackend
+    assert NewThreadBackend.selected() is PiNativeBackend
     assert not DurableDatabase.__abstractmethods__
     class Runner:
         persistent_backends = {}

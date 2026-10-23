@@ -23,6 +23,8 @@ from agent_comms.commander.order import Commander, OrderFile, SayVerb, SendVerb
 from agent_comms.commander.questions import UnansweredBurst, UnansweredUnitAsks
 from agent_comms.commander.standing import (
     HeartbeatSilent,
+    HeartbeatNotStarted,
+    MissedHeartbeat,
     AnswersTo,
     UnitAskUnanswered,
 )
@@ -376,6 +378,12 @@ def test_latest_answer_uses_the_complete_original_reference_and_time_cut(held_bu
     latest = publish(held_bus, "lead", "worker", since + 6, answers=(question.reference,))
     assert tuple(message.reference for message in AnswersTo(scope, since).read_opened(
         held_bus.bus.bus)) == (latest.reference,)
+    # Bus order and the producer's timestamp are independent answers.
+    backdated = publish(held_bus, "lead", "worker", since + 2.5, answers=(question.reference,))
+    unrelated = publish(held_bus, "worker", "outsider", since + 7)
+    publish(held_bus, "lead", "worker", since + 8, answers=(unrelated.reference,))
+    assert AnswersTo(scope, since).read_opened(held_bus.bus.bus) == (backdated,)
+    assert held_bus.bus.bus.answer_timestamp(scope, since=since) == latest.timestamp
 
 
 def test_unanswered_pages_match_the_complete_answer_reference(held_bus):
@@ -396,8 +404,11 @@ def test_answering_an_unrelated_peer_does_not_clear_the_commander_burst(held_bus
     now = time.time()
     owed = publish(held_bus, "worker", "lead", now - 30)
     unrelated = publish(held_bus, "worker", "outsider", now - 20)
-    publish(held_bus, "lead", "outsider", now - 10, answers=(unrelated.reference,))
     scope = RepliesDisplayScope(frozenset({"lead"}), frozenset({"worker"}))
+    assert held_bus.bus.bus.unanswered_page(
+        scope, since=now - 60, before=now, upper=unrelated.seq + 1, limit=1,
+    ) == (owed,)
+    publish(held_bus, "lead", "outsider", now - 10, answers=(unrelated.reference,))
     assert AnswersTo(scope, now - 60).read_opened(held_bus.bus.bus) == ()
     assert UnansweredBurst(scope, now - 60, now).read_opened(held_bus.bus.bus) == (owed,)
     reply = publish(held_bus, "lead", "worker", now - 5, answers=(owed.reference,))
@@ -424,11 +435,17 @@ def test_latest_answer_retains_the_original_response_eligibility(
     original = held_bus.bus.publisher.publish_ordinary(
         Message(sender, target, body, InfoKind, timestamp=now - 20, role=role), destination=CommandTarget.named(target), origin=origin,
     )
-    reply = publish(held_bus, "lead", sender, now - 10, answers=(original.reference,))
     scope = RepliesDisplayScope(frozenset({"lead"}), frozenset({sender}))
     assert scope.includes(original) is eligible
+    assert held_bus.bus.bus.unanswered_page(
+        scope, since=now - 60, before=now, upper=original.seq + 1, limit=1,
+    ) == ((original,) if eligible else ())
+    reply = publish(held_bus, "lead", sender, now - 10, answers=(original.reference,))
     found = AnswersTo(scope, now - 60).read_opened(held_bus.bus.bus)
     assert found == ((reply,) if eligible else ())
+    assert held_bus.bus.bus.unanswered_page(
+        scope, since=now - 60, before=now, upper=reply.seq + 1, limit=1,
+    ) == ()
 
 
 def test_latest_answer_retains_the_original_commander_alias(held_bus):
@@ -644,9 +661,55 @@ def test_every_pass_beats_and_a_stale_beat_is_heartbeat_silent(held_bus, monkeyp
     assert HeartbeatSilent.violations(held_bus, "lead") == ()
     later = unchanged.timestamp + HeartbeatSilent.seconds + 1
     monkeypatch.setattr(time, "time", lambda: later)
+    # Neither a commander reply nor a fresh beat sent to another commander proves
+    # this commander's heartbeat is alive.
+    held_bus.messaging.send("lead", CommanderHeartbeat.sender, "I read the last beat")
+    held_bus.messaging.send(CommanderHeartbeat.sender, "outsider", "Another commander is healthy")
     silent, = HeartbeatSilent.violations(held_bus, "lead")
     assert silent.beat == unchanged.seq
     assert silent.line().startswith(f"HEARTBEAT SILENT: no beat since seq {unchanged.seq}")
+
+
+def test_first_heartbeat_is_owed_from_the_oldest_open_request_then_survives_renames(
+        held_bus, monkeypatch):
+    commander = held_bus.registry.require("lead")
+    held_bus.registry.register(replace(commander, process_identity=ProcessIdentity.capture(os.getpid())))
+    request, = CommanderHeartbeat.requested_by(held_bus.registry.require("lead"), held_bus.goals)
+    assert HeartbeatSilent.violations(held_bus, "lead") == ()
+    due = request.created_at + HeartbeatSilent.seconds
+    monkeypatch.setattr(time, "time", lambda: due + 1)
+    never, = HeartbeatSilent.violations(held_bus, "lead")
+    assert isinstance(never, HeartbeatNotStarted)
+    assert never.request == request.id and never.since == due
+    assert "HEARTBEAT NOT STARTED" in never.line()
+    assert HeartbeatSilent.broken(held_bus, "lead", observed=()) == (never,)
+
+    # A newer request and mere service registration cannot reset older unpaid service.
+    held_bus.goals.todos.add_request(commander.incarnation, "A newer independent request")
+    CommanderHeartbeat.register(held_bus.registry)
+    assert HeartbeatSilent.violations(held_bus, "lead") == (never,)
+    fresh = held_bus.bus.publisher.publish_ordinary(Message(
+        sender=CommanderHeartbeat.sender, target="lead", body="The heartbeat is running now",
+        type=InfoKind, timestamp=due + 1,
+    ), destination=CommandTarget.named("lead"), origin=AgentOrigin())
+    assert HeartbeatSilent.violations(held_bus, "lead") == ()
+
+    held_bus.threads._rename_thread("lead", "renamed-lead")
+    held_bus.threads._rename_thread(CommanderHeartbeat.sender, "renamed-heartbeat")
+    monkeypatch.setattr(time, "time", lambda: fresh.timestamp + HeartbeatSilent.seconds + 1)
+    held_bus.messaging.send("renamed-lead", "renamed-heartbeat", "Read the earlier beat")
+    silent, = HeartbeatSilent.violations(held_bus, "renamed-lead")
+    assert isinstance(silent, MissedHeartbeat) and silent.beat == fresh.seq
+    assert silent.since == fresh.timestamp + HeartbeatSilent.seconds
+    newer = held_bus.bus.publisher.publish_ordinary(Message(
+        sender="renamed-heartbeat", target="renamed-lead", body="Heartbeat after both renames",
+        type=InfoKind, timestamp=time.time(),
+    ), destination=CommandTarget.named("renamed-lead"), origin=AgentOrigin())
+    assert HeartbeatSilent.violations(held_bus, "renamed-lead") == ()
+    monkeypatch.setattr(time, "time", lambda: newer.timestamp + HeartbeatSilent.seconds + 1)
+    held_bus.messaging.send("renamed-lead", "renamed-heartbeat", "Read the new beat too")
+    latest, = HeartbeatSilent.violations(held_bus, "renamed-lead")
+    assert isinstance(latest, MissedHeartbeat) and latest.beat == newer.seq
 
 
 def test_one_answer_covers_an_escalation_burst_sent_before_it(held_bus):

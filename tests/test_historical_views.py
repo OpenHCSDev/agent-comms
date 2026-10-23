@@ -27,7 +27,7 @@ from agent_comms.read_basis import (
 )
 from agent_comms.read_ledger import ReadLedger
 from agent_comms.routing import MessageRoute, TurnRouting
-from agent_comms.thread_text import SavedSessionFile
+from agent_comms.session_file import SavedSessionFile
 
 
 @pytest.mark.parametrize('exists', [False, True])
@@ -358,7 +358,7 @@ def test_historical_namespace_has_recorded_provenance_and_no_live_authority(migr
 
     from agent_comms.field_codec import FieldCodec
     from agent_comms.registry_provenance import RegistryProvenance
-    from agent_comms.thread_identity import ThreadProvenance
+    from agent_comms.thread_provenance import ThreadProvenance
 
     old, _, live, source = migrated
     recorded = source.provenance.require("alice")

@@ -23,14 +23,13 @@ from typing import TYPE_CHECKING, Any, ClassVar, Self
 from agent_comms.pi_payloads import PiOmitted
 
 from .agent_backend import (
-    AgentBackend,
     CompactionOutcome,
-    Compacts,
     FailedCompaction,
     Forks,
     InputContent,
     Interrupts,
     NothingToCompaction,
+    NewThreadBackend,
     PlacedCompaction,
     RuntimeLocation,
     TurnDelivery,
@@ -42,7 +41,6 @@ from agent_comms.native_session_files import NativeSessionLocks
 from .native_session_reopen import NativeSessionIdentity
 from .native_transcript import NativeTranscript
 from .selected_session import SavedSelectedSession
-from .unstarted_runtime import UnstartedRuntime
 
 if TYPE_CHECKING:
     from .agent_events import AgentEvent, AgentInfo
@@ -179,9 +177,8 @@ class PersistentPiSession:
 class PiNativeBackend(
     PersistentPiSession,
     Interrupts,
-    Compacts,
     Forks,
-    AgentBackend,
+    NewThreadBackend,
 ):
     """Pi 0.85.1 over RPC: one retained child per thread session in this worker.
 
@@ -191,8 +188,6 @@ class PiNativeBackend(
     """
 
     location_type: ClassVar[type[RuntimeLocation]] = PiSessionFile
-    unstarted_type: ClassVar[type[RuntimeLocation]] = UnstartedRuntime
-    serves_new_threads: ClassVar[bool] = True
     event_kinds: ClassVar[frozenset[str]] = PI_0_85_1_EVENT_KINDS
 
     def __init__(

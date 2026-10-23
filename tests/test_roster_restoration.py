@@ -9,7 +9,7 @@ from dataclasses import replace
 
 import pytest
 
-from agent_comms.thread_text import SavedSessionFile
+from agent_comms.session_file import SavedSessionFile
 from agent_comms.coordination_tables.executions import NoPointedExecution
 from agent_comms.thread_identity import RecordedThreadIncarnation
 from agent_comms.child_process import NoProcess, ProcessIdentity

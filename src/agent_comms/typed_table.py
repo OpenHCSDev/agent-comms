@@ -62,6 +62,7 @@ from .locked_store import (
     StoreCommittedError,
 )
 from .maintenance_barrier import HOLDER_NONCE, MaintenanceBarrier
+from .package_stamp import STAMP
 from .store_files import _store_lock
 
 if TYPE_CHECKING:
@@ -871,6 +872,15 @@ class ComposedSchemas:
         ))
 
     @classmethod
+    def schema_differs(cls, db: sqlite3.Connection) -> bool:
+        return any(family.schema_differs(db) for family in cls.schema_families())
+
+    @classmethod
+    def create_schema(cls, db: sqlite3.Connection) -> None:
+        for family in cls.schema_families():
+            family.create_schema(db)
+
+    @classmethod
     def carry_schema(cls, db: sqlite3.Connection) -> None:
         for family in cls.schema_families():
             family.carry_schema(db)
@@ -1331,8 +1341,25 @@ class DerivedTables(TableSchema):
     __slots__ = ()
 
     @classmethod
+    def projection_rows(cls) -> tuple[type[TypedTable], ...]:
+        return tuple(row for row in cls.schema_rows() if issubclass(row, ProducedRow))
+
+    @classmethod
+    def schema_differs(cls, db: sqlite3.Connection) -> bool:
+        return (super().schema_differs(db)
+                or not ProjectionProducer.matches(db, cls.projection_rows()))
+
+    @classmethod
+    def create_schema(cls, db: sqlite3.Connection) -> None:
+        super().create_schema(db)
+        for producer in ProjectionProducer.records_for(cls.projection_rows()):
+            producer.upsert(db)
+
+    @classmethod
     def reset_schema(cls, db: sqlite3.Connection) -> None:
         """Inside the caller's transaction: rebuild only this schema's derived tables."""
+        for row in cls.schema_rows():
+            row.take_previous_name(db)
         for stored in cls.stored_tables(db):
             stored.drop(db)
         cls.create_schema(db)
@@ -1352,6 +1379,14 @@ class DurableTables(TableSchema):
     @classmethod
     def carry_schema(cls, db: sqlite3.Connection) -> None:
         cls.derive_schema(db)
+
+
+class ProjectionProducerTables(SharedFileTables, DurableTables):
+    """The producer declaration last committed with each rebuilt projection."""
+
+
+class ProducedRow:
+    """Rows rebuilt whenever the installed Core build changes."""
 
 
 @lru_cache(maxsize=4)
@@ -1858,6 +1893,25 @@ class TypedTable(
             + f" WHERE {cls._sql(where)}",
             tuple(item.encode(changes[item.name]) for item in selected) + parameters,
         )
+
+
+@dataclass(frozen=True)
+class ProjectionProducer(TypedTable, ProjectionProducerTables):
+    projection: Annotated[str, Column(primary_key=True)]
+    commit: str
+
+    @classmethod
+    def records_for(cls, rows: tuple[type[TypedTable], ...]) -> tuple[Self, ...]:
+        return tuple(cls(row.declared_name, STAMP.commit()) for row in rows)
+
+    @classmethod
+    def matches(cls, db: sqlite3.Connection, rows: tuple[type[TypedTable], ...]) -> bool:
+        if not rows:
+            return True
+        if not cls.present(db):
+            return False
+        stored = {record.projection: record for record in cls.select(db)}
+        return all(stored.get(record.projection) == record for record in cls.records_for(rows))
 
 
 class StoreWriter(PublishedSQLiteFile, FileStore):

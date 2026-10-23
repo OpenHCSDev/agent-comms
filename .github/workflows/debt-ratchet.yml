@@ -3,18 +3,34 @@ name: Merge queue
 on:
   pull_request:
     branches: [main]
+    types: [opened, synchronize, reopened, ready_for_review]
   merge_group:
     types: [checks_requested]
 
 permissions:
   contents: read
 
+# A superseded push to a pull request stops its old run; queue groups never share a group.
+concurrency:
+  group: merge-queue-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 defaults:
   run:
     shell: bash .github/run-step.sh {0}
 
 jobs:
+  # Drafts cannot merge, so they hold no runner; every job needs this one.
+  ready:
+    if: github.event_name == 'merge_group' || !github.event.pull_request.draft
+    runs-on: ubuntu-latest
+    timeout-minutes: 1
+    steps:
+      - run: true
+        shell: bash
+
   smoke:
+    needs: ready
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -49,6 +65,7 @@ jobs:
 
   native-scripts:
     name: native-scripts
+    needs: ready
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
@@ -72,6 +89,7 @@ jobs:
 
   install-rehearsal:
     name: install-rehearsal
+    needs: ready
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -94,6 +112,7 @@ jobs:
 
   review-verdict:
     name: review-verdict
+    needs: ready
     runs-on: ubuntu-latest
     timeout-minutes: 2
     permissions:
@@ -118,6 +137,7 @@ jobs:
 
   ratchet:
     name: debt-${{ matrix.kind }}
+    needs: ready
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:
@@ -138,7 +158,10 @@ jobs:
           python-version-file: pyproject.toml
 
       - name: Install agent-comms
-        run: python -m pip install -e '.[dev]'
+        run: |
+          python -m pip install uv==0.12.0
+          uv sync --locked --all-extras
+          echo "$GITHUB_WORKSPACE/.venv/bin" >> "$GITHUB_PATH"
 
       - name: No new structural debt against the base
         env:

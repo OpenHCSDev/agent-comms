@@ -757,6 +757,19 @@ class ExternalNull(ExternalField, MroDispatch):
         return FieldCodec.decode_external(cls, value, {})
 
 
+class SingleExternalMember(ExternalNull):
+    """An untagged nullable family has exactly one provided external member."""
+
+    @classmethod
+    def wire_member(cls, value: object) -> type[Self]:
+        family = cast(type[DeclaredFamily], cls)
+        member, = (
+            member for member in family.members_with(family)
+            if not issubclass(member, ExternalNullMember)
+        )
+        return cast(type[Self], member)
+
+
 class DefaultExternalName:
     """The family member selected when an external name is absent or unrecognized."""
 

@@ -18,8 +18,8 @@ from agent_comms.bus_tables import (
     AnsweredSource,
     BusProjectionTables,
     BusRow,
+    BusSchema,
     BusTables,
-    DirectReplySource,
     MessageIdentitySource,
 )
 from agent_comms.coordination_tables.publications import PublicationIntents
@@ -36,12 +36,20 @@ from agent_comms.messages import (
     MembershipChange,
     Message,
     MessageRoleWire,
+    NoticeRole,
 )
 from agent_comms.message_reference import MessageReference
+from agent_comms.package_stamp import STAMP
 from agent_comms.response_acknowledgement import (
     canonical_publication_key,
 )
-from agent_comms.typed_table import RowNotFoundError, SQLiteTableName, TypedTable
+from agent_comms.typed_table import (
+    ProjectionProducer,
+    RowNotFoundError,
+    SQLiteTableName,
+    TypedTable,
+    WriterOwnedFile,
+)
 from bus_record_fixture import publication_processes, record_from
 
 
@@ -82,6 +90,41 @@ def test_install_refuses_existing_schema_changes_until_an_explicit_rebuild(bus):
         BusProjectionTables.reset_schema(db)
     Bus.install(bus.path)
     assert bus.page(3, 2) == (second, record)
+
+
+def test_projection_freshness_follows_the_installed_core_commit(bus):
+    record = bus.append(lambda seq, db: PublicRecord.from_message(
+        Message("author", "worker", "preserved source", InfoKind, seq=seq),
+    ))
+    current = STAMP.commit()
+    older = "0" * 40
+    assert older != current
+    with bus.writer_connection() as db:
+        before = db.total_changes
+        assert not BusSchema.schema_differs(db)
+        assert not BusSchema.reconcile_schema(db, WriterOwnedFile())
+        assert db.total_changes == before
+
+        ProjectionProducer.update(
+            db, where="{projection}=?", parameters=(MessageIdentitySource.declared_name,),
+            commit=older,
+        )
+        MessageIdentitySource.update(db, where="{seq}=?", parameters=(record.seq,), sender="stale")
+        assert BusSchema.schema_differs(db)
+        assert BusSchema.reconcile_schema(db, WriterOwnedFile())
+        assert MessageIdentitySource.require(db, seq=record.seq).sender == record.sender
+        assert all(row.commit == current for row in ProjectionProducer.select(db))
+
+        ProjectionProducer.drop(db)
+        MessageIdentitySource.update(db, where="{seq}=?", parameters=(record.seq,), sender="stale")
+        assert BusSchema.schema_differs(db)
+        assert BusSchema.reconcile_schema(db, WriterOwnedFile())
+        assert MessageIdentitySource.require(db, seq=record.seq).sender == record.sender
+        assert ProjectionProducer.select(db) == list(ProjectionProducer.records_for(
+            BusProjectionTables.projection_rows()))
+        assert db.execute("PRAGMA integrity_check").fetchone()[0] == "ok"
+        assert db.execute("PRAGMA foreign_key_check").fetchall() == []
+    assert bus.lookup(record.seq) == record
 
 
 @pytest.mark.parametrize("declaration", BusRecord.members_with(BusRecord))
@@ -265,9 +308,19 @@ def test_scoped_and_frozen_source_queries_are_sequence_bounded(bus):
     assert bus.scoped_page("target=?", ("worker",), kinds=(InfoKind,), limit=2) == (reply,)
     assert bus.conversation("b" * 32, limit=2) == (reply, notice)
     assert bus.sent("a" * 32, limit=1) == (reply,)
-    assert bus.received("b" * 32, after=original.seq, limit=1, descending=False,
-                        sender_lookups=("a" * 32,), source=DirectReplySource) == (reply,)
+    assert bus.direct_replies("b" * 32, after=original.seq, limit=1, descending=False,
+                              sender_lookups=("a" * 32,)) == (reply,)
     assert bus.received("b" * 32, sender_lookups=("f" * 32,)) == ()
+    assert bus.latest_addressed(frozenset({"author", "old-author"}),
+                                frozenset({"worker", "old-worker"})) == (reply,)
+    renamed = bus.append(lambda seq, db: PublicRecord.from_message(
+        Message("old-author", "old-worker", "newest across aliases", InfoKind, seq=seq)))
+    bus.append(lambda seq, db: PublicRecord.from_message(
+        Message("worker", "author", "later reverse reply", InfoKind, seq=seq)))
+    assert bus.latest_addressed(frozenset({"author", "old-author"}),
+                                frozenset({"worker", "old-worker"})) == (renamed,)
+    assert bus.latest_addressed(frozenset({"absent", "old-absent"}),
+                                frozenset({"worker", "old-worker"})) == ()
     assert bus.replies((original.reference,)) == (reply,)
     assert bus.deliveries_for_references((reply.reference,)) == (reply,)
     tips = bus.latest_conversations("target=?", ("worker",), notice.seq)
@@ -276,6 +329,21 @@ def test_scoped_and_frozen_source_queries_are_sequence_bounded(bus):
     )
     selected = bus.selected_sequences("target=?", ("worker",), reply.seq)
     assert {row.seq for row in selected} == {notice.seq, reply.seq}
+    assert bus.conversation("a" * 32, limit=1, descending=False) == (notice,)
+    assert bus.conversation(
+        "a" * 32, limit=1, descending=False, sequences=(reply.seq,),
+    ) == (reply,)
+    after = bus.revision()
+    for index in range(101):
+        bus.append(lambda seq, db, index=index: record_from(PrivateRecord, Message(
+            "author", "worker", f"notice {index}", InfoKind, seq=seq, role=NoticeRole(),
+        )))
+    accepted = bus.append(lambda seq, db: record_from(PrivateRecord, Message(
+        "author", "worker", "first eligible reply after notices", InfoKind, seq=seq,
+    )))
+    assert bus.direct_replies(
+        "b" * 32, after=after, limit=1, descending=False, sender_lookups=("a" * 32,),
+    ) == (accepted,)
 
 
 def test_unanswered_reference_selection_requires_the_recorded_original_and_exact_owner_answer(bus):

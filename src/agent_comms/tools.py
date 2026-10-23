@@ -156,7 +156,8 @@ from .thread_execution import (
     ThreadCommandAvailability,
 )
 from .thread_identity import ThreadIncarnation
-from .thread_management import InheritedTags, RenameThreadResult, TagChoice
+from .thread_management import InheritedTags, TagChoice
+from .thread_rename import RenameThreadResult
 from .thread_model import ThreadModel
 from .threads import NextTurnConfiguration
 from .tool_caller import NoThreadCaller, ThreadCaller, ThreadListing, ToolCaller

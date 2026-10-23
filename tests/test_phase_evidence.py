@@ -1,4 +1,5 @@
 import subprocess
+from pathlib import Path
 
 from agent_comms.field_codec import FieldCodec
 from agent_comms.head_review import HeadReview
@@ -27,7 +28,7 @@ from agent_comms.phase_evidence import (
     UnreadableEvidenceError,
 )
 from agent_comms.pinned_audit import GodFunction
-from agent_comms.plan_phases import FLAG, ExternalBoundariesPhase, PlanPhase
+from agent_comms.plan_phases import BusDeletionPhase, FLAG, ExternalBoundariesPhase, PlanPhase, RostersPhase
 from agent_comms.repo import Repo
 from agent_comms.repository_name import RepositoryName
 
@@ -98,6 +99,85 @@ def main_of(tmp_path, files):
     git(tmp_path, "update-ref", "refs/remotes/origin/main", git(tmp_path, "rev-parse", "HEAD"))
     return PlanReading((), MainTree.of(
         Repo(checkout=tmp_path, github=RepositoryName.from_wire("OpenHCSDev/agent-comms"))))
+
+
+def test_roster_evidence_keeps_external_abi_and_each_remaining_internal_registry(tmp_path):
+    source = Path(__file__).parents[1] / "src/agent_comms"
+    reading = main_of(tmp_path, {
+        "src/phase_evidence.py": (source / "phase_evidence.py").read_text(),
+        "src/plan_phases.py": (source / "plan_phases.py").read_text(),
+        "src/producer.py": "PI_0_85_1_EVENT_KINDS = frozenset({'alpha', 'beta'})\n"
+                           "class Runtime:\n    event_kinds = PI_0_85_1_EVENT_KINDS\n",
+        "src/unrelated.py": "class OtherOwner:\n    members = {}\n"
+                            "def local():\n    types = {}\n",
+    })
+    assert reading.holds(RostersPhase.evidence)
+    for remaining in (
+        "THREAD_CAPABILITIES: tuple[type, ...] = (Steers, Compacts)\n",
+        "class Backend:\n    serves_threads = True\n",
+        "class Backend:\n    serves_new_threads: ClassVar[bool] = True\n",
+        "class Carry:\n    declared: ClassVar[dict] = {}\n",
+        "class ThreadRename:\n    kinds = {}\n",
+        "class BirthlessIncarnation:\n    members = {}\n",
+        "class CliToolArguments:\n    types = {}\n",
+        "class PiTurnPhase:\n    _start_phases = {}\n",
+        "class PiTurnPhase:\n    _end_events = {}\n",
+    ):
+        (tmp_path / "src/remaining.py").write_text(remaining)
+        git(tmp_path, "add", ".")
+        git(tmp_path, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-qm", "registry")
+        git(tmp_path, "update-ref", "refs/remotes/origin/main", git(tmp_path, "rev-parse", "HEAD"))
+        changed = PlanReading((), MainTree.of(reading.main.repo))
+        assert not changed.holds(RostersPhase.evidence), remaining
+
+
+def test_main_tree_grep_uses_the_same_repository_tree_as_its_module_reader(tmp_path):
+    dependency = tmp_path / "dependency"
+    dependency.mkdir()
+    main_of(dependency, {"src/debt.py": "class Carry:\n    declared = {}\n"})
+    checkout = tmp_path / "owner"
+    checkout.mkdir()
+    reading = main_of(checkout, {"src/owner.py": "class OtherOwner:\n    members = {}\n"})
+    git(checkout, "-c", "protocol.file.allow=always", "submodule", "add", "-q",
+        str(dependency), "src/dependency")
+    git(checkout, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-qam", "dependency")
+    git(checkout, "update-ref", "refs/remotes/origin/main", git(checkout, "rev-parse", "HEAD"))
+    git(checkout, "config", "submodule.recurse", "true")
+    assert "src/dependency" in git(checkout, "grep", "--recurse-submodules", "-n",
+                                   "-e", "declared", "HEAD", "--", "src")
+    current = PlanReading((), MainTree.of(reading.main.repo))
+    assert current.holds(RostersPhase.evidence)
+    assert not current.main.matching_lines(r"declared", ("src",))
+    assert len(tuple(current.main.modules(("src",)))) == 1
+
+
+def test_bus_deletion_evidence_reads_uses_without_matching_its_own_declaration(tmp_path):
+    reading = main_of(tmp_path, {
+        "src/phase.py": "from agent_comms.phase_evidence import BusStorageAbsent\n"
+                        "evidence = BusStorageAbsent()\n"
+                        "# Delete bus.jsonl and bus_meta once the carry is accepted.\n"
+                        "def documentation():\n    'bus.jsonl'\n",
+    })
+    assert reading.holds(BusDeletionPhase.evidence)
+    # Every production spelling found during the owner trace must make the phase fail.
+    for source in (
+        "class WireLog:\n    pass\n",
+        "def has_private_wire_fields(value):\n    return False\n",
+        "from somewhere.wire_log import WireLog\n",
+        "from somewhere.wire_log import another_name\n",
+        "def use(owner):\n    return owner._wire_lock_path\n",
+        "def use(owner):\n    return owner / 'wire'\n",
+        "def use(owner):\n    return owner.with_name('wire')\n",
+        "def use(owner):\n    return owner.joinpath('wire')\n",
+        "def use(owner):\n    return owner / 'bus.jsonl'\n",
+        "def use(owner):\n    return owner / 'bus_meta.json'\n",
+    ):
+        (tmp_path / "src/uses.py").write_text(source)
+        git(tmp_path, "add", ".")
+        git(tmp_path, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-qm", "use")
+        git(tmp_path, "update-ref", "refs/remotes/origin/main", git(tmp_path, "rev-parse", "HEAD"))
+        changed = PlanReading((), MainTree.of(reading.main.repo))
+        assert not changed.holds(BusDeletionPhase.evidence), source
 
 
 def test_source_shape_evidence_reads_declarations_on_main(tmp_path):

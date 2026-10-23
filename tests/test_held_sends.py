@@ -3,16 +3,51 @@
 from agent_comms.bus import Bus
 import asyncio
 import os
+import sqlite3
 import sys
+import time
+from contextlib import closing
 from pathlib import Path
 
 import pytest
 
 from agent_comms.comms import Comms
 from agent_comms.coordination_tables.refusals import SendRefusal
+from agent_comms.coordination_database import CoordinationStore
+from agent_comms.errors import ToolRefusedError
 from agent_comms.maintenance_barrier import MaintenanceOperator
+from agent_comms.store_files import _store_lock
 from agent_comms.tool_caller import ThreadCaller
 from agent_comms.tools import invoke_tool
+from test_locked_store import event, process
+
+
+def record_refusal(root, started):
+    started.set()
+    SendRefusal.record(root, "sender", "recipient", ToolRefusedError("retained refusal"))
+
+
+def test_refusal_writer_keeps_registry_permission_until_its_sql_write_finishes(private_comms):
+    root = private_comms.root
+    started = event()
+    with closing(sqlite3.connect(CoordinationStore.path_in(root), isolation_level=None)) as writer:
+        writer.execute("BEGIN IMMEDIATE")
+        with process(record_refusal, root, started):
+            try:
+                assert started.wait(5)
+                deadline = time.monotonic() + 5
+                while time.monotonic() < deadline:
+                    try:
+                        with _store_lock(private_comms.registry.store.path, blocking=False):
+                            pass
+                    except BlockingIOError:
+                        break
+                    time.sleep(.01)
+                else:
+                    pytest.fail("The blocked refusal writer released its registry permission")
+            finally:
+                writer.execute("ROLLBACK")
+    assert tuple(row.reason for row in SendRefusal.recent(root)) == ("retained refusal",)
 
 
 @pytest.fixture

@@ -2,7 +2,7 @@
 
 from agent_comms.bus import Bus
 from conftest import publish_initial
-from agent_comms.thread_text import SavedSessionFile
+from agent_comms.session_file import SavedSessionFile
 from agent_comms.channel_targets import CommandTarget
 from agent_comms.read_basis import NamedViewer
 from agent_comms.presentation import ReadThrough

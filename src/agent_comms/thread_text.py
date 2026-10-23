@@ -7,10 +7,11 @@ from collections.abc import Collection
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, ClassVar
 
+
 from agent_comms.field_codec import NullMember, SingleFieldValue, SubclassUnion, boundary_decoder
 
 if TYPE_CHECKING:
-    from agent_comms.agent_backend import AgentBackend, RuntimeLocation
+    pass
 
 
 class TextChoice(ABC):
@@ -129,35 +130,3 @@ class NoParent(AbsentText, ThreadParent):
 
     def kept_in(self, names: Collection[str]) -> NoParent:
         return self
-
-
-class SessionFile(SubclassUnion, TextChoice, affix="SessionFile"):
-    """A thread's saved native session file, or null before its runtime first saves one."""
-
-    @abstractmethod
-    def location(self, backend: type[AgentBackend]) -> RuntimeLocation:
-        """The runtime this file binds under the thread's backend."""
-
-    @abstractmethod
-    def applied(self, previous: SessionFile) -> SessionFile:
-        """The file a redeclaration keeps: its own, or the previous one."""
-
-
-@dataclass(frozen=True, slots=True)
-class SavedSessionFile(GivenText, SessionFile):
-    text: str
-
-    def location(self, backend: type[AgentBackend]) -> RuntimeLocation:
-        return backend.location_type(self.text)
-
-    def applied(self, previous: SessionFile) -> SessionFile:
-        return self
-
-
-@dataclass(frozen=True, slots=True)
-class NoSessionFile(AbsentText, SessionFile):
-    def location(self, backend: type[AgentBackend]) -> RuntimeLocation:
-        return backend.unstarted_type(backend)
-
-    def applied(self, previous: SessionFile) -> SessionFile:
-        return previous

@@ -19,7 +19,7 @@ from agent_comms.external_transcript import NoEarlierPage
 from agent_comms.field_codec import FieldCodec
 from agent_comms.runtime_updates import FinishedItem
 from agent_comms.thread_execution import ExternalThreadExecution
-from agent_comms.thread_text import SavedSessionFile
+from agent_comms.session_file import SavedSessionFile
 from agent_comms.transcript_events import AssistantTranscript, TurnDigest
 from agent_comms.turn_digests import LastTurns, TurnBound, TurnsOlderThan, TurnsBefore, TurnsSince
 from agent_comms.bus import Bus

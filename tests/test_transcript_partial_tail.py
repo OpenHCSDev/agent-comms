@@ -3,7 +3,7 @@
 from agent_comms.private_runtime_schema import PrivateCoordinatorTable
 import json
 
-from agent_comms.thread_text import SavedSessionFile
+from agent_comms.session_file import SavedSessionFile
 from agent_comms.comms import wire
 from agent_comms.coordinator import Coordination
 

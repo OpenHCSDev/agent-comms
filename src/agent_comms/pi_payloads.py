@@ -33,6 +33,7 @@ from .field_codec import (
     MalformedRecord,
     NullMember,
     SingleFieldValue,
+    SingleExternalMember,
     TextRepresentation,
     ValidatedScalar,
     WireName,
@@ -1072,12 +1073,8 @@ class UnknownDelta(UnknownPayload, PiDelta):
 
 
 @dataclass(frozen=True)
-class PiModel(ExternalNull, PiPayload, DeclaredFamily, affix="Model"):
+class PiModel(SingleExternalMember, PiPayload, DeclaredFamily, affix="Model"):
     context_window: ClassVar[PiCount] = UnreportedCount()
-
-    @classmethod
-    def wire_member(cls, value):
-        return ReportedModel
 
     def thread_model(self) -> ThreadModel:
         return UndeclaredModel()
@@ -1309,11 +1306,7 @@ class UnknownData(Opaque, PiResponseData):
 
 
 @dataclass(frozen=True)
-class PiToolResult(ExternalNull, PiPayload, DeclaredFamily, affix="ToolResult"):
-    @classmethod
-    def wire_member(cls, value):
-        return ProvidedToolResult
-
+class PiToolResult(SingleExternalMember, PiPayload, DeclaredFamily, affix="ToolResult"):
     @abstractmethod
     def text(self, limit=4000): ...
 

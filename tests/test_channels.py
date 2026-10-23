@@ -1,4 +1,4 @@
-from agent_comms.thread_text import SavedSessionFile
+from agent_comms.session_file import SavedSessionFile
 from agent_comms.pi_vocabulary import HighThinkingLevel
 import os
 from dataclasses import replace

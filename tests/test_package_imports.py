@@ -15,13 +15,13 @@ import importlib, json, sys
 sys.path.insert(0, {str(source)!r})
 importlib.import_module({entrypoint!r})
 from agent_comms.threads import Thread
-from agent_comms.agent_backend import AgentBackend
+from agent_comms.agent_backend import AgentBackend, NewThreadBackend
 print(json.dumps({{
     'catalog_loaded': 'agent_comms.tools' in sys.modules,
     'sealed': AgentBackend._sealed,
     'native': AgentBackend.member_named('pi_native').declared_name,
     'durable': AgentBackend.member_named('pi_durable').declared_name,
-    'default': AgentBackend.for_new_threads().declared_name,
+    'default': NewThreadBackend.selected().declared_name,
 }}))
 """
     completed = subprocess.run(

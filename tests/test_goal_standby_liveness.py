@@ -115,7 +115,7 @@ def test_last_target_finishes_silently_releases_once_and_reopens(tmp_path):
     assert continued.id == goal.id and continued.state.declared_name == "active"
     assert continued.revision == goal.revision + 2
     assert "without a qualifying direct reply" in continued.progress
-    assert reopened.goals.goal_execution("owner").state.value == "runnable"
+    assert reopened.goals.goal_execution("owner").runnable()
     assert isinstance(reopened.goals.goal_wait("owner"), NoGoalWait)
     assert reopened.registry.require("owner").goal.state.pause_source is None
     assert reopened.goals.release_waits_after_terminal_turn(child_fence) == ()

@@ -17,7 +17,7 @@ from agent_comms.ui_model.unit_state import UnitState
 if TYPE_CHECKING:
     from agent_comms.comms import Comms
     from agent_comms.goal_management import Goals
-    from agent_comms.todos import Todo
+    from agent_comms.todos import OwnerRequest, Todo
 
 
 @dataclass
@@ -82,13 +82,18 @@ class CommanderHeartbeat(ServiceSender, WatchPass[tuple[CommanderObservation, ..
     reviews: dict[ThreadIncarnation, CommanderReview] = field(default_factory=dict)
 
     @classmethod
+    def requested_by(cls, thread: Thread, goals: Goals) -> tuple[OwnerRequest, ...]:
+        """The oldest open request makes a live holder owed service, even before its first beat."""
+        return (goals.todos.open_requests(thread.incarnation, limit=1, descending=False)
+                if thread.process_alive else ())
+
+    @classmethod
     def commanders(cls, registry: Registration, goals: Goals) -> tuple[Thread, ...]:
         """The live request holders whose current incarnation owns commander work."""
         return tuple(
             thread
             for thread in registry.all_threads().values()
-            if thread.process_alive
-            and goals.todos.open_requests(thread.incarnation, limit=1)
+            if cls.requested_by(thread, goals)
         )
 
     def observe(self, comms: Comms) -> tuple[CommanderObservation, ...]:

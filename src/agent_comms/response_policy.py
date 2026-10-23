@@ -9,8 +9,6 @@ from functools import cache
 from typing import TYPE_CHECKING
 
 from .declared_family import DeclaredFamily
-from .field_codec import FieldCodec
-from .mentions import ThreadMention
 
 if TYPE_CHECKING:
     from .messages import Message
@@ -21,6 +19,10 @@ if TYPE_CHECKING:
 class ResponsePolicy(DeclaredFamily, affix="Policy"):
     starts_turn = False
     separate_turn = False
+
+    @property
+    def starts_direct_turn(self) -> bool:
+        return self.starts_turn and self.separate_turn
 
     @classmethod
     @cache
@@ -35,11 +37,6 @@ class ResponsePolicy(DeclaredFamily, affix="Policy"):
         self, message: Message, audience: Sequence[str], *, aliases: Mapping[str, str] | None = None
     ) -> tuple[str, ...]:
         """Resolve this policy's channel recipients."""
-
-    @classmethod
-    @abstractmethod
-    def recipients_sql(cls, mentions: str, audience: Sequence[str]) -> tuple[str, tuple]:
-        """Select the same channel recipients from committed message fields."""
 
     @abstractmethod
     def guidance(self, message: Message, *, aliases: Mapping[str, str] | None = None) -> str:
@@ -60,10 +57,6 @@ class NoChannelRecipients:
         self, message: Message, audience: Sequence[str], *, aliases: Mapping[str, str] | None = None
     ) -> tuple[str, ...]:
         return ()
-
-    @classmethod
-    def recipients_sql(cls, mentions: str, audience: Sequence[str]) -> tuple[str, tuple]:
-        return "0", ()
 
     def validate_recipients(self, recipients: tuple[str, ...]) -> None:
         if recipients:
@@ -90,10 +83,6 @@ class DirectPolicy(NoChannelRecipients, ResponsePolicy):
 class CollectivePolicy(ResponsePolicy):
     starts_turn = True
 
-    @classmethod
-    def recipients_sql(cls, mentions: str, audience: Sequence[str]) -> tuple[str, tuple]:
-        return ("1" if audience else "0"), ()
-
     def recipients(
         self, message: Message, audience: Sequence[str], *, aliases: Mapping[str, str] | None = None
     ) -> tuple[str, ...]:
@@ -104,16 +93,6 @@ class CollectivePolicy(ResponsePolicy):
 
 
 class MentionedOnlyPolicy(ResponsePolicy):
-    @classmethod
-    def recipients_sql(cls, mentions: str, audience: Sequence[str]) -> tuple[str, tuple]:
-        key = FieldCodec.field_plan(ThreadMention, "thread").key
-        marks = ",".join("?" for _ in audience)
-        return (
-            f"EXISTS (SELECT 1 FROM json_each({mentions}) AS mention "
-            f"WHERE json_extract(mention.value, ?) IN ({marks}))",
-            (f"$.{key}", *audience),
-        )
-
     def recipients(
         self, message: Message, audience: Sequence[str], *, aliases: Mapping[str, str] | None = None
     ) -> tuple[str, ...]:

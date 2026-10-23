@@ -8,7 +8,7 @@ from pathlib import Path
 
 import pytest
 
-from agent_comms.thread_text import SavedSessionFile
+from agent_comms.session_file import SavedSessionFile
 from agent_comms.channel_targets import CommandTarget, PerTargetChannels
 from agent_comms.cli import main
 from agent_comms.threads import ChosenServiceTier, NextTurnConfiguration

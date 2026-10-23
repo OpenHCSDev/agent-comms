@@ -11,7 +11,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, ClassVar, Annotated
 
 
-from .agent_backend import AgentBackend
+from .agent_backend import AgentBackend, NewThreadBackend
 from .child_process import NoProcess, ProcessIdentity, ProcessState
 from .cli_result import ThreadToolCatalogResult
 from .context_segments.wake_values import WakeWorkContext
@@ -45,10 +45,11 @@ from .store_files import _atomic_write_text
 from .task_sources import TaskScope
 from .thread_execution import NativeThreadExecution, ThreadExecution
 from .thread_model import DeclaredModel, ThreadModel, UndeclaredModel
-from .thread_text import NoParent, NoSessionFile, NoThreadText, SessionFile, ThreadParent, ThreadText
+from .thread_text import NoParent, NoThreadText, ThreadParent, ThreadText
+from .session_file import NoSessionFile, SessionFile
+from .thread_provenance import ThreadProvenance
 from .thread_identity import (
     AgentThreadRole,
-    ThreadProvenance,
     ThreadRole,
     TurnFence,
     TurnId,
@@ -202,7 +203,7 @@ class Thread(DurableFile, PatternFile, ThreadProvenance):
         type[AgentBackend],
         WireOmitDefault(),
         RegistrationPolicy(InheritPrevious),
-    ] = field(default_factory=AgentBackend.for_new_threads, kw_only=True)
+    ] = field(default_factory=NewThreadBackend.selected, kw_only=True)
     turn_record: TurnRecord = field(default_factory=NoTurnRecord)
     channel_scope_generation: int = 0
     turn_generation: int = 0
@@ -397,6 +398,17 @@ class Thread(DurableFile, PatternFile, ThreadProvenance):
             return (thread.incarnation, thread.process_identity, thread.role, thread.runtime,
                     thread.worktree, thread.execution, thread.model, thread.thinking_level)
         return launch(self) == launch(other)
+
+    def same_turn(self, other: Thread) -> bool:
+        """Compare captured references and epochs, including captures made while idle.
+
+        Reading the mutable turn files again could make two revoked leases look
+        equal. The saved references and registry generations retain their fence.
+        """
+        return (
+            self.turn_record == other.turn_record
+            and self.turn_generation == other.turn_generation
+        )
 
     def without_turn(self) -> Thread:
         """Drop the reference; the registry transaction owns revoking the record."""
