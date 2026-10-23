@@ -30,6 +30,11 @@ from agent_comms.typed_table import HeldBusFile, SQLiteCatalogObject, SQLiteSche
 class UnfinishedOwnerRename(RootFile):
     filename = ".private-owner-rename.pending"
 
+    @classmethod
+    def matching_in(cls, root: Path) -> frozenset[Path]:
+        path = cls.path_in(root)
+        return frozenset((path,)) if path.exists() or path.is_symlink() else frozenset()
+
 
 class ThreadNameOwners(Carry):
     opened_files = (CoordinationStore, PromptBinding, UnfinishedOwnerRename)

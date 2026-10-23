@@ -6,8 +6,6 @@ import shutil
 import subprocess
 import time
 from abc import ABC, abstractmethod
-from collections.abc import Iterator
-from contextlib import contextmanager
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -132,11 +130,3 @@ class PracticeCopy:
     def measurement(self) -> PracticeMeasurement:
         return PracticeMeasurement.of(
             self.path, self.seconds, StorageRule.load(self.root).floor_gib * 2**30)
-
-
-@contextmanager
-def practice_copy(root: Path, into: Path, files: tuple[Path, ...]
-                  ) -> Iterator[tuple[Path, PracticeMeasurement]]:
-    copy = PracticeCopy(root, into)
-    copy.include(files)
-    yield into, copy.measurement
