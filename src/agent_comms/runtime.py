@@ -148,8 +148,12 @@ class SocketClient:
         await self.send(OwnerUpdate.of(update))
 
 
-class OwnerIdentityChangedError(RuntimeError):
-    """A saved attachment must not follow a reused thread name."""
+class OwnerIdentityChangedError(RuntimeError, ConnectionError):
+    """A saved attachment lost its root or thread identity and cannot reconnect."""
+
+
+class OwnerReplyLostError(RuntimeError, ConnectionError):
+    """The owner disconnected after dispatch; a mutating request remains uncertain."""
 
 
 class SessionClients(dict[str, set[SocketClient]]):
@@ -429,7 +433,7 @@ class RuntimeConnection:
             await writer.drain()
             line = await self._read_response(reader)
             if not line:
-                raise RuntimeError("Thread owner disconnected after request; outcome unknown.")
+                raise OwnerReplyLostError("Thread owner disconnected after request; outcome unknown.")
             return OwnerLine.read(line).reply()
         finally:
             try:
@@ -479,19 +483,23 @@ class RuntimeProxy(RuntimeConnection):
     def controller_token(self):
         return self._controller_token
 
-    async def subscribe(self) -> dict[str, object]:
-        attachment = await self._subscribe_once()
+    async def subscribe(
+        self, subscription: type[SubscribeRuntimeRequest] = SubscribeRuntimeRequest,
+    ) -> dict[str, object]:
+        attachment = await self._subscribe_once(subscription)
         self.task = asyncio.create_task(self.forward(attachment.reader))
         return attachment.presented
 
-    async def _subscribe_once(self) -> OwnerAttachment:
+    async def _subscribe_once(
+        self, subscription: type[SubscribeRuntimeRequest] = SubscribeRuntimeRequest,
+    ) -> OwnerAttachment:
         reader, writer = await self._connect_current()
         self.writer = writer
         try:
             writer.write(
                 (
                     json.dumps(
-                        SubscribeRuntimeRequest(
+                        subscription(
                             thread=self.session_id,
                         ).to_wire()
                     )

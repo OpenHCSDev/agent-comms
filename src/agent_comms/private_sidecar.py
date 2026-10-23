@@ -27,7 +27,7 @@ from functools import partial
 from pathlib import Path
 from typing import Annotated, Literal
 
-from agent_comms.coordination_database import CoordinationStore
+from agent_comms.locked_store import SQLiteFile
 from agent_comms.coordination_errors import IdentityConflict
 
 from .private_path import ObservedPath
@@ -35,6 +35,8 @@ from .store_files import StoreOwner
 from .typed_table import (
     AllObjectsTables,
     Column,
+    ImmutableRows,
+    SQLiteDatabase,
     SQLiteForeignKeys,
     SQLiteSchemaObject,
     TypedRow,
@@ -188,7 +190,7 @@ def _read_snapshot(directory: _PinnedDirectory, name: str) -> tuple[bytes, os.st
 
 
 def _connect(raw: bytes | None) -> sqlite3.Connection:
-    connection = CoordinationStore.writer(":memory:", isolation_level=None)
+    connection = SQLiteFile.writer(":memory:", isolation_level=None)
     try:
         if raw is not None:
             connection.deserialize(raw)
@@ -202,26 +204,9 @@ def _connect(raw: bytes | None) -> sqlite3.Connection:
 
 
 @dataclass(frozen=True)
-class SnapshotMeta(TypedTable):
+class SnapshotMeta(ImmutableRows, TypedTable):
     singleton: Annotated[Literal[1], Column(primary_key=True)]
     ddl_digest: str
-
-    @classmethod
-    def trigger_bodies(cls) -> dict[str, str]:
-        return {
-            f"{cls.declared_name}_{operation.lower()}_guard": " "
-            f"BEFORE {operation} ON {cls.declared_name} "
-            "BEGIN SELECT RAISE(ABORT,'snapshot schema is immutable'); END"
-            for operation in ("UPDATE", "DELETE")
-        }
-
-
-@dataclass(frozen=True)
-class _Database(TypedRow):
-    seq: int
-    name: str
-    file: str
-
 
 @dataclass(frozen=True)
 class _QuickCheck(TypedRow):
@@ -246,7 +231,7 @@ def _verify_schema(connection: sqlite3.Connection, row_type: type[TypedTable]) -
         raise IdentityConflict("Sidecar schema objects have drifted.")
     if SnapshotMeta.select(connection) != [SnapshotMeta(1, _digest(row_type))]:
         raise IdentityConflict("Sidecar schema declaration differs.")
-    databases = _Database.read(connection.execute("PRAGMA database_list"))
+    databases = SQLiteDatabase.read(connection.execute("PRAGMA database_list"))
     if not databases or any(
         row.name not in {"main", "temp"} or row.file != "" for row in databases
     ):

@@ -8,6 +8,7 @@ import json
 import pytest
 
 from agent_comms.comms import wire
+from conftest import installed_comms
 from agent_comms.thread_execution import ExternalThreadExecution
 from agent_comms.ui_model.unread import ReplyUnread
 from native_unread_fixture import completed_snapshot
@@ -22,7 +23,7 @@ def answer(path, text):
 
 
 def test_mark_read_clears_thread_dm_and_channel_views_without_agent_delivery(tmp_path):
-    comms = wire(tmp_path)
+    comms = installed_comms(tmp_path)
     source = tmp_path / "sender.jsonl"
     source.touch()
     answer(source, "Saved reply")
@@ -70,7 +71,7 @@ def test_mark_read_clears_thread_dm_and_channel_views_without_agent_delivery(tmp
 
 
 def test_sessionless_cli_painted_tail_and_explicit_inbox_read_share_bus_marks(tmp_path):
-    comms = wire(tmp_path)
+    comms = installed_comms(tmp_path)
     comms.registry.declare(comms.registry.new_thread(
         'cli', frozenset(), str(tmp_path), execution=ExternalThreadExecution,
     ))
@@ -93,7 +94,7 @@ def bytes_read() -> int:
 
 
 def test_mark_read_reads_the_marked_messages_not_the_whole_log(tmp_path):
-    comms = wire(tmp_path)
+    comms = installed_comms(tmp_path)
     comms.registry.declare(comms.registry.new_thread('sender', frozenset({'ci'}), str(tmp_path)))
     comms.registry.declare(comms.registry.new_thread('archivist', frozenset({'bulk'}), str(tmp_path)))
     viewer = comms.messaging.user_identity(str(tmp_path)).name
@@ -106,7 +107,7 @@ def test_mark_read_reads_the_marked_messages_not_the_whole_log(tmp_path):
     comms.views.presentation.channel_page("#ci", viewer=NamedViewer(viewer))
     comms.messaging.send("sender", viewer, "Later human DM").message.message_id
     comms.messaging.send("sender", "#ci", "Later channel message").message.message_id
-    log_size = comms.bus.log.path.stat().st_size
+    log_size = comms.bus.bus.path.stat().st_size
     assert log_size > 4_000_000
 
     for target in ("sender", "#ci"):

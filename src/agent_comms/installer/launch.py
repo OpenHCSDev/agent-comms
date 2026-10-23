@@ -6,49 +6,109 @@ rehearsal and harness setup are the target's, never the outgoing runtime's.
 """
 from __future__ import annotations
 
+import glob
 import json
 import os
+import shutil
 import subprocess
 import sys
 import tempfile
-from dataclasses import dataclass, replace
+from collections.abc import Iterator
+from contextlib import contextmanager
+from dataclasses import dataclass, field, replace
 from pathlib import Path
-from typing import Annotated, ClassVar, TextIO
+from traceback import extract_tb
+from typing import Annotated, TextIO
 
 import agent_comms.installer
+from agent_comms.cli_bridges.shared import SessionBridgeResumes
 from agent_comms.cli_commands import InstallCliCommand, InstallResult
 from agent_comms.comms import client_wire
-from agent_comms.bus_publication import AgentOrigin
 from agent_comms.field_codec import FieldCodec, Id128Text, PathText
-from agent_comms.installer.backup import UpgradeRefused
-from agent_comms.installer.upgrade import TargetTree, Upgrade, run, upgrade
-from agent_comms.messages import InfoKind, Message
-from agent_comms.service_sender import ServiceSender
+from agent_comms.installer.backup import StoreBackup, UpgradeRefused
+from agent_comms.installer.commands import InstallCommands
+from agent_comms.installer.reporting import (
+    FinishedInstall, InstallOutcome, RootWriter, UnfinishedInstall, UnpostedWriter,
+)
+from agent_comms.installer.upgrade import (
+    RehearsedUpgrade,
+    TargetTree,
+    Upgrade,
+    upgrade,
+)
+from agent_comms.mro_dispatch import MroDispatch, handles
 from agent_comms.storage_rules import StorageRule
 
 
-@dataclass(frozen=True)
-class InstallReport(ServiceSender):
-    """Publish the install's own typed result, never an interpretation of its logs."""
+@dataclass
+class InstallReport(MroDispatch):
+    """The operation owns one terminal report, after its resources have closed."""
 
-    sender: ClassVar[str] = "installer"
+    writer: RootWriter = field(default_factory=UnpostedWriter)
+    outcome: InstallOutcome = field(default_factory=UnfinishedInstall, init=False)
+    bridges: SessionBridgeResumes = field(default_factory=SessionBridgeResumes, init=False)
+
+    def complete(self, result: RehearsedUpgrade) -> RehearsedUpgrade:
+        self.outcome = FinishedInstall(result)
+        return result
+
+    def starting(self, writer: RootWriter, target: str) -> None:
+        self.writer = writer
+        self.writer.post(("Install starting", f"Target: {target[:12]}"))
+
+    @handles(UpgradeRefused)
+    def refused(self, error: UpgradeRefused) -> tuple[str, ...]:
+        return error.lines()
+
+    @handles(BaseException)
+    def crashed(self, error: BaseException) -> tuple[str, ...]:
+        frame = extract_tb(error.__traceback__)[-1]
+        return (f"Install failed: {type(error).__name__}: {error}",
+                f"{frame.filename}:{frame.lineno}")
+
+    @contextmanager
+    def running(self, tree: TargetTree) -> Iterator[None]:
+        try:
+            with tree:
+                yield
+            lines = self.outcome.lines()
+        except BaseException as error:
+            failure = (*next(self.handlers_for(error))(error), *self.bridges.lines())
+            try:
+                self.writer.post(failure)
+            except BaseException as publication_error:
+                error.add_note(f"Install failure report also failed: {publication_error}")
+                print(f"install: failure report also failed: {publication_error}", file=sys.stderr)
+            raise
+        else:
+            self.writer.post(lines)
+
+
+@dataclass(frozen=True)
+class InstallLogs:
+    """Each install's diagnostics beside the bus, kept as long as its data backups are."""
+
     root: Path
 
-    def post(self, lines: tuple[str, ...]) -> Message:
-        with client_wire(self.root) as comms:
-            self.register(comms.registry)
-            return comms.bus.publisher.publish_ordinary(
-                Message(sender=self.sender, target="#comms", body="\n".join(lines),
-                        type=InfoKind), origin=AgentOrigin())
+    @property
+    def prefix(self) -> str:
+        return f".{self.root.name}.installer-"
 
-    def starting(self, upgrade: Upgrade) -> Message:
-        return self.post(("Install starting", *upgrade.lines()))
+    def minted(self) -> Path:
+        """A new install's own directory; older ones past the backups' count are retired."""
+        logs = self.root.parent / f"{self.prefix}{Id128Text.mint()}"
+        logs.mkdir(mode=0o700)
+        self.retire()
+        return logs
 
-    def finished(self, upgrade: Upgrade) -> Message:
-        return self.post(("Install finished", *upgrade.lines()))
-
-    def failed(self, error: UpgradeRefused) -> Message:
-        return self.post(error.lines())
+    def retire(self) -> tuple[Path, ...]:
+        """The names carry no time, so age is each directory's own modification time."""
+        logs = sorted((path for path in self.root.parent.glob(f"{glob.escape(self.prefix)}*")
+                       if path.is_dir()), key=lambda path: path.stat().st_mtime)
+        retired = tuple(logs[:-StoreBackup.kept])
+        for path in retired:
+            shutil.rmtree(path)
+        return retired
 
 
 @dataclass(frozen=True)
@@ -61,8 +121,9 @@ class InstallRun:
     @classmethod
     def start(cls, command: InstallCliCommand, root: Path) -> InstallRun:
         checkout = command.checkout.resolve()
-        run("git", "-C", checkout, "fetch", "-q", "origin")
-        target = run("git", "-C", checkout, "rev-parse", "--verify",
+        commands = InstallCommands()
+        commands.run("git", "-C", checkout, "fetch", "-q", "origin")
+        target = commands.run("git", "-C", checkout, "rev-parse", "--verify",
                      f"{command.to}^{{commit}}").strip()
         parent = command.installer.scratch(StorageRule.load(root))
         parent.mkdir(mode=0o700, parents=True, exist_ok=True)
@@ -77,8 +138,7 @@ class InstallRun:
         """The install outlives its caller: a new session, its output in files beside the bus.
         Retiring the caller's process group must not cut an install short."""
         tree = TargetTree(self.command.checkout, self.scratch, self.target)
-        logs = self.root.parent / f".{self.root.name}.installer-{Id128Text.mint()}"
-        logs.mkdir(mode=0o700)
+        logs = InstallLogs(self.root).minted()
         result, errors = logs / "result.json", logs / "stderr.log"
         with result.open("xb") as stdout, errors.open("xb") as stderr:
             process = subprocess.Popen(
@@ -99,8 +159,8 @@ class InstallRun:
     def run(self) -> Upgrade:
         command = self.command
         return upgrade(command.checkout, self.root, self.target, command.installer,
-                       command.rehearse, command.retire, command.spill_dir, self.scratch,
-                       self.harnesses, InstallReport(self.root))
+                       command.mode, command.retire, command.spill_dir, self.scratch,
+                       self.harnesses, InstallReport())
 
     def harnesses(self) -> InstallResult:
         with client_wire(self.root) as comms:

@@ -6,8 +6,6 @@ publication. Verified package and send authority remain required for every turn.
 
 from __future__ import annotations
 
-from agent_comms.participant_identity import ParticipantIdentity
-
 import os
 import re
 import shutil
@@ -17,16 +15,24 @@ from collections.abc import Iterator
 from contextlib import ExitStack, closing, contextmanager
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Literal, Annotated
+from typing import TYPE_CHECKING, Annotated, Any, Literal
 
+from agent_comms.participant_identity import ParticipantIdentity
 
-from .coordination_database import CoordinationStore
+from .locked_store import SQLiteFile
 from .errors import RelationViolationError
-from .field_codec import FieldCodec, Id128Text, MalformedRecord, Sha256Text, WireName, boundary_decoder
-from .native_failures import NativeRequestFailure, NativePiUnavailable
+from .field_codec import (
+    FieldCodec,
+    Id128Text,
+    MalformedRecord,
+    Sha256Text,
+    WireName,
+    boundary_decoder,
+)
 from .launch_root import LaunchRoot
 from .launch_runtime import LaunchRuntime, RestartEnvironment, ThreadLaunch
 from .native_arguments import NativeArguments, SelectedModel
+from .native_failures import NativePiUnavailable, NativeRequestFailure
 from .native_input_record import NativeInputCommit, NativeInputLocation
 from .native_package import MANIFEST, UNIT_INSTRUCTIONS, VerifiedNativePackage
 from .native_session_files import NativeSessionFiles
@@ -38,7 +44,14 @@ from .private_path import (
     NativeSessionFileRole,
     TrustedAncestorRole,
 )
-from .typed_table import Column, DurableTables, Index, TypedTable
+from .typed_table import (
+    Column,
+    DurableTables,
+    GuardedInserts,
+    ImmutableRows,
+    Index,
+    TypedTable,
+)
 
 if TYPE_CHECKING:
     from . import pi_events as pi
@@ -201,32 +214,24 @@ class NativeContextRecord(NativeInputCommit):
 
 
 @dataclass(frozen=True, slots=True)
-class NativeContextJournal(NativeContextRecord, TypedTable, DurableTables):
+class NativeContextJournal(
+    GuardedInserts, ImmutableRows, NativeContextRecord, TypedTable, DurableTables
+):
     """One proof declaration owns wire facts and the indexed durable journal."""
+
+    insert_condition = """NEW.request_generation < COALESCE((SELECT MAX(request_generation)
+        FROM native_context_journal), 0) OR EXISTS(SELECT 1 FROM native_context_journal
+        WHERE request_generation=NEW.request_generation
+        AND (llm_context_digest != NEW.llm_context_digest
+        OR committed_at_ms != NEW.committed_at_ms)) OR NEW.session_id
+        != (SELECT session_id FROM native_context_journal ORDER BY session_id LIMIT 1)"""
+
 
     schema: Literal[2]
     type: Literal["context_committed"]
 
     without_rowid = True
     indexes = (Index(("request_generation",)), Index(("session_id",)))
-
-    @classmethod
-    def trigger_bodies(cls) -> dict[str, str]:
-        table = cls.declared_name
-        return {
-            f"{table}_append": f""" BEFORE INSERT ON {table}
-            WHEN NEW.request_generation < COALESCE((SELECT MAX(request_generation) FROM {table}), 0)
-              OR EXISTS(SELECT 1 FROM {table} WHERE request_generation=NEW.request_generation
-                        AND (llm_context_digest != NEW.llm_context_digest
-                             OR committed_at_ms != NEW.committed_at_ms))
-              OR NEW.session_id != (SELECT session_id FROM {table} ORDER BY session_id LIMIT 1)
-            BEGIN SELECT RAISE(ABORT,'native proof lineage differs'); END""",
-            **{
-                f"{table}_{action.lower()}": " "
-                f"BEFORE {action} ON {table} BEGIN SELECT RAISE(ABORT,'native proof is append only'); END"
-                for action in ("UPDATE", "DELETE")
-            },
-        }
 
     @classmethod
     def native_contract(cls) -> dict[str, Any]:
@@ -262,7 +267,7 @@ class NativeContextJournal(NativeContextRecord, TypedTable, DurableTables):
                 ))
                 before = os.fstat(held.fileno())
                 NativeSessionFileRole.require(before)
-                db = ownership.enter_context(closing(CoordinationStore.recovering_snapshot(path)))
+                db = ownership.enter_context(closing(SQLiteFile.recovering_snapshot(path)))
                 if cls.schema_differs(db):
                     raise NativePiUnavailable("Native proof requires offline durable conversion")
                 if FileIdentity.from_stat(before) != FileIdentity.from_stat(path.lstat()):
@@ -886,9 +891,9 @@ def read_tracked_input_commitment(
     """
     Id128Text.decode(input_id)
     session_file = Path(session_file).absolute()
-    from .native_entries import NativeInputEvidenceRead
+    from .native_entries import NativeEvidenceRead
 
-    with NativeInputEvidenceRead.borrow(session_file, evidence) as evidence:
+    with NativeEvidenceRead.borrow(session_file, evidence) as evidence:
         evidence.observe()
         try:
             return CommittedInput(evidence.tracked(input_id).message.input_digest.require())

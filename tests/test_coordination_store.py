@@ -36,14 +36,21 @@ from agent_comms.attempt_states import (
 from agent_comms.attempt_start import INITIAL_LEASE_DURATION_MS
 from agent_comms.coordination_errors import (
     IdentityConflict,
+    IntegrityViolationError,
     PublicationUncertain,
     RecoveryBlocked,
     StaleFence,
     StaleRevision,
 )
 from agent_comms.coordination_results import AlreadyApplied, Applied
+from agent_comms.coordination_snapshot import RecoverySnapshot
 from agent_comms.coordination_tables.assignments import WakeAssignment
-from agent_comms.coordination_tables.attempts import ReplayAssessments, ReplayFact
+from agent_comms.coordination_tables.attempts import ReplayFact
+from agent_comms.coordination_tables.executions import (
+    NoReplayAssessment,
+    ReplayAssessment,
+    ReplayAssessments,
+)
 from agent_comms.coordination_tables.executions import ExecutionOrigin
 from agent_comms.coordination_tables.publications import (
     PublicationIntents,
@@ -62,6 +69,7 @@ from agent_comms.field_codec import FieldCodec
 from agent_comms.messages import Message, InfoKind
 from agent_comms.owner_fence import prepare_fence_token
 from agent_comms.recovery_states import FailedRecovery, ModelStalledRecovery, RecoveredRecovery
+from agent_comms.recovery_reader import RecoveryReader
 from agent_comms.turn_failure import ProviderRetryExhausted
 from agent_comms.wake_policy import BoundedTriageWake, FullWake, MessageAudience, PassiveWake, WakePolicy
 
@@ -77,8 +85,7 @@ def store(path: Path) -> StandaloneCoordination:
 
 def wire_source(db, assignment_id: str, original: Message, mode: WakePolicy):
     from agent_comms.audience_manifest import FrozenRecipient, freeze_audience
-    from agent_comms.bus_publication import CommittedDelivery, decisions_digest, decisions_wire
-    from agent_comms.coordination_contracts import POLICY_VERSION, RESOLVER_VERSION
+    from agent_comms.bus import PrivateRecord
     from agent_comms.selected_source_batch import SelectedSource
     from agent_comms.wake_policy import WakeDecision
 
@@ -86,9 +93,8 @@ def wire_source(db, assignment_id: str, original: Message, mode: WakePolicy):
                                "0" * 64, sender_lookup="sender",
                                sender_name=original.sender)
     decisions = (WakeDecision("owner", MessageAudience.DIRECT, mode),)
-    delivery = CommittedDelivery("0" * 32, original, audience, decisions,
-                                 decisions_digest(decisions_wire(decisions)), "ordinary",
-                                 RESOLVER_VERSION, POLICY_VERSION)
+    delivery = PrivateRecord.from_message(
+        original, audience=audience, decisions=decisions, control="ordinary")
     return SelectedSource(assignment_id, db.assignments, delivery)
 
 
@@ -114,7 +120,7 @@ def ready(
             )
         )
         sources = (wire_source(db, "claim", original, FullWake()),)
-    db.executions.create(
+    db.create(
         "exec",
         origin,
         "owner",
@@ -122,13 +128,13 @@ def ready(
         max_attempts,
         sources=sources,
     )
-    db.executions.mark_pending("exec", expected_revision=1)
+    db.mark_pending("exec", expected_revision=1)
     return db
 
 
 def started(db: StandaloneCoordination) -> tuple[str, object]:
     token = prepare_fence_token()
-    result = db.attempts.start(
+    result = db.start(
         AttemptStart(
             "exec",
             1,
@@ -147,13 +153,13 @@ def final_evidence(db: StandaloneCoordination, fence: object, pointer_revision: 
     from agent_comms.owner_fence import OwnerFence
 
     assert isinstance(fence, OwnerFence)
-    result = db.attempts.advance(
+    result = db.advance(
         fence, PromptAcceptedAttempt, expected_pointer_revision=pointer_revision
     )
-    result = db.attempts.advance(
+    result = db.advance(
         result.value.fence, ModelRunningAttempt, expected_pointer_revision=pointer_revision
     )
-    result = db.attempts.advance(
+    result = db.advance(
         result.value.fence,
         SettlingAttempt,
         expected_pointer_revision=pointer_revision,
@@ -181,7 +187,7 @@ def _concurrent_start(
     try:
         with StandaloneCoordination(path, clock_ms=lambda: 1_000) as db:
             gate.wait(timeout=5)
-            result = db.attempts.start(
+            result = db.start(
                 AttemptStart(
                     "exec",
                     1,
@@ -195,6 +201,22 @@ def _concurrent_start(
             output.put(type(result).__name__)
     except Exception as exc:
         output.put(type(exc).__name__)
+
+
+def test_execution_and_attempt_queries_share_the_coordination_owner(db_path, monkeypatch):
+    readers = []
+    original = RecoveryReader.get
+
+    def observe(reader, execution_id):
+        readers.append(reader)
+        return original(reader, execution_id)
+
+    monkeypatch.setattr(RecoveryReader, "get", observe)
+    with ready(db_path) as db:
+        _, fence = started(db)
+        snapshot, _ = db.require_fence(fence)
+        assert snapshot.execution.execution_id == "exec"
+        assert readers and all(reader is db for reader in readers)
 
 
 def test_registration_complete_atomic_reopen_and_rename(db_path: Path) -> None:
@@ -219,12 +241,12 @@ def test_registration_complete_atomic_reopen_and_rename(db_path: Path) -> None:
         db.participants.advance_generation("owner", "thread", expected_generation=1)
     db.close()
     with store(db_path) as reopened:
-        assert reopened.participants.get("owner").participant_generation == 2
+        assert reopened.participants.get("owner").owner_identity.generation == 2
         assert reopened.participants.get("owner").committed
         assert reopened.participants.get("owner").aliases == ("owner", "Owner New")
         replay = reopened.participants.register("owner", "Owner", "thread", committed=False)
         assert isinstance(replay, AlreadyApplied)
-        assert replay.value.participant_generation == 2
+        assert replay.value.owner_identity.generation == 2
         assert replay.value.display_name == "Owner New"
 
 
@@ -250,13 +272,13 @@ def test_registration_transaction_rollback_on_alias_collision(db_path: Path) -> 
 
 def test_claim_execution_idempotency_and_rollback(db_path: Path) -> None:
     db = ready(db_path)
-    snap = db.snapshots.get("exec")
+    snap = db.get("exec")
     assert type(snap.execution.lifecycle) is PendingExecution
     assert type(snap.assignments[0].lifecycle) is EngagedAssignment
     assert snap.links[0].ordinal == 0
     assert len(snap.obligations) == 1
     original = Message("owner", "Owner", "Original request", InfoKind, timestamp=1.0, seq=1)
-    replay = db.executions.create(
+    replay = db.create(
         "exec",
         ExecutionOrigin.WIRE,
         "owner",
@@ -268,7 +290,7 @@ def test_claim_execution_idempotency_and_rollback(db_path: Path) -> None:
     different = Message("different", "Owner", "Original request", InfoKind,
                         timestamp=1.0, seq=1)
     with pytest.raises(IdentityConflict):
-        db.executions.create(
+        db.create(
             "exec",
             ExecutionOrigin.WIRE,
             "owner",
@@ -278,7 +300,7 @@ def test_claim_execution_idempotency_and_rollback(db_path: Path) -> None:
         )
     db.close()
     with store(db_path) as reopened:
-        assert reopened.snapshots.get("exec").links == snap.links
+        assert reopened.get("exec").links == snap.links
 
 
 def test_claim_acceptance_requires_initial_mode_decision(db_path: Path) -> None:
@@ -376,7 +398,7 @@ def test_claim_preengagement_and_mixed_engagement_rollback(db_path: Path) -> Non
         with pytest.raises(StaleRevision):
             db.assignments.transition_preengagement("1", FailedAssignment, expected_revision=1)
         with pytest.raises((IdentityConflict, sqlite3.IntegrityError)):
-            db.executions.create(
+            db.create(
                 "exec",
                 ExecutionOrigin.WIRE,
                 "owner",
@@ -394,7 +416,7 @@ def test_token_prepared_before_transaction_and_loss_replay_ignores_mutable(db_pa
         token = prepare_fence_token()
         assert len(token) == 64
         assert not db.session._connection.in_transaction
-        first = db.attempts.start(
+        first = db.start(
             AttemptStart(
                 "exec",
                 1,
@@ -415,7 +437,7 @@ def test_token_prepared_before_transaction_and_loss_replay_ignores_mutable(db_pa
         )
         assert token not in str(FieldCodec.project(first.value.snapshot, "snapshot"))
         assert token not in db_path.read_bytes().decode("latin1")
-        duplicate = db.attempts.start(
+        duplicate = db.start(
             AttemptStart(
                 "exec",
                 1,
@@ -427,15 +449,15 @@ def test_token_prepared_before_transaction_and_loss_replay_ignores_mutable(db_pa
             )
         )
         assert isinstance(duplicate, AlreadyApplied)
-        progressed = db.attempts.advance(
+        progressed = db.advance(
             first.value.fence, PromptAcceptedAttempt, expected_pointer_revision=1
         )
-        renewed = db.attempts.renew_lease(
+        renewed = db.renew_lease(
             progressed.value.fence, expected_pointer_revision=1, duration_ms=120_000
         )
         assert renewed.value.snapshot.attempt is not None
         assert renewed.value.snapshot.attempt.lifecycle.lease_expires_at_ms >= 121_000
-        duplicate = db.attempts.start(
+        duplicate = db.start(
             AttemptStart(
                 "exec",
                 1,
@@ -449,7 +471,7 @@ def test_token_prepared_before_transaction_and_loss_replay_ignores_mutable(db_pa
         assert isinstance(duplicate, AlreadyApplied)
         assert duplicate.value.snapshot.attempt == renewed.value.snapshot.attempt
         with pytest.raises(IdentityConflict):
-            db.attempts.start(
+            db.start(
                 AttemptStart(
                     "exec",
                     2,
@@ -461,9 +483,9 @@ def test_token_prepared_before_transaction_and_loss_replay_ignores_mutable(db_pa
                 )
             )
         with pytest.raises(StaleRevision):
-            db.attempts.advance(first.value.fence, ModelRunningAttempt, expected_pointer_revision=1)
+            db.advance(first.value.fence, ModelRunningAttempt, expected_pointer_revision=1)
     with store(db_path) as reopened:
-        duplicate = reopened.attempts.start(
+        duplicate = reopened.start(
             AttemptStart(
                 "exec",
                 1,
@@ -481,10 +503,10 @@ def test_token_digest_is_global_and_only_digest_persists(db_path: Path) -> None:
     with ready(db_path) as db:
         token, _ = started(db)
         db.participants.register("other", "Other", "other-thread", committed=True)
-        db.executions.create("other-exec", ExecutionOrigin.GOAL, "other", "other-thread", 1)
-        db.executions.mark_pending("other-exec", expected_revision=1)
+        db.create("other-exec", ExecutionOrigin.GOAL, "other", "other-thread", 1)
+        db.mark_pending("other-exec", expected_revision=1)
         with pytest.raises(IdentityConflict):
-            db.attempts.start(
+            db.start(
                 AttemptStart(
                     "other-exec",
                     1,
@@ -495,7 +517,7 @@ def test_token_digest_is_global_and_only_digest_persists(db_path: Path) -> None:
                     expected_pointer_revision=0,
                 )
             )
-        assert db.snapshots.get("other-exec").attempt is None
+        assert db.get("other-exec").attempt is None
         assert (
             db.session._connection.execute("SELECT owner_token_digest FROM attempts").fetchone()[0]
             == hashlib.sha256(token.encode()).hexdigest()
@@ -503,23 +525,22 @@ def test_token_digest_is_global_and_only_digest_persists(db_path: Path) -> None:
 
 
 def test_settled_snapshot_encodes_recovery_kind_separately_from_table(db_path: Path) -> None:
-    from agent_comms.coordination_snapshot import RecoverySnapshot
     from agent_comms.coordination_tables.recovery import RecoveryAudit
 
     with store(db_path) as db:
         db.participants.register("owner", "Owner", "thread", committed=True)
-        db.executions.create("exec", ExecutionOrigin.ACP, "owner", "thread", 1)
-        db.executions.mark_pending("exec", expected_revision=1)
+        db.create("exec", ExecutionOrigin.ACP, "owner", "thread", 1)
+        db.mark_pending("exec", expected_revision=1)
         _, fence = started(db)
         fence = final_evidence(db, fence)
-        settled = db.attempts.settle_nonpublication(
+        settled = db.settle_nonpublication(
             fence, expected_pointer_revision=1, outcome=AttemptFailedAttempt(),
             reason_code=GivenReasonCode("failed"))
         # Populate the original audit table for serialization, not owner-loss proof.
         with db.session.writing() as connection:
             RecoveryAudit(execution_id="exec", kind=FailedRecovery, reason_code=GivenReasonCode("failed"),
                 sanitized_detail=NoDetail(), attempt=1, elapsed_ms=0, observed_at_ms=1_000).insert(connection)
-        observed = db.snapshots.get("exec")
+        observed = db.get("exec")
         assert observed.execution == settled.value.execution
         encoded = FieldCodec.encode(observed)
         assert encoded["last_recovery"]["row"] == RecoveryAudit.declared_name
@@ -533,7 +554,7 @@ def test_nonpublication_claimless_atomic_settlement(db_path: Path) -> None:
     with ready(db_path, origin=ExecutionOrigin.ACP) as db:
         _, fence = started(db)
         fence = final_evidence(db, fence)
-        settled = db.attempts.settle_nonpublication(
+        settled = db.settle_nonpublication(
             fence, expected_pointer_revision=1, outcome=SucceededAttempt()
         )
         assert type(settled.value.execution.lifecycle) is CompletedExecution
@@ -544,13 +565,13 @@ def test_nonpublication_claimless_atomic_settlement(db_path: Path) -> None:
         assert not settled.value.is_current
         assert settled.value.pointer_revision == 2
     with store(db_path) as reopened:
-        assert type(reopened.snapshots.get("exec").execution.lifecycle) is CompletedExecution
+        assert type(reopened.get("exec").execution.lifecycle) is CompletedExecution
 
 
 def test_retry_partition_and_generation_fence(db_path: Path) -> None:
     with ready(db_path) as db:
         token, fence = started(db)
-        db.attempts.observe_replay(
+        db.observe_replay(
             fence,
             expected_pointer_revision=1,
             expected_replay_revision=None,
@@ -559,7 +580,7 @@ def test_retry_partition_and_generation_fence(db_path: Path) -> None:
             side_effects_possible=False,
         )
         fence = final_evidence(db, fence)
-        outcome = db.attempts.settle_nonpublication(
+        outcome = db.settle_nonpublication(
             fence,
             expected_pointer_revision=1,
             outcome=AttemptFailedAttempt(),
@@ -568,7 +589,7 @@ def test_retry_partition_and_generation_fence(db_path: Path) -> None:
         assert type(outcome.value.execution.lifecycle) is DeferredExecution
         assert outcome.value.can_retry
         with pytest.raises(StaleFence):
-            db.attempts.start(
+            db.start(
                 AttemptStart(
                     "exec",
                     2,
@@ -580,7 +601,7 @@ def test_retry_partition_and_generation_fence(db_path: Path) -> None:
                 )
             )
         db.participants.advance_generation("owner", "thread", expected_generation=1)
-        second = db.attempts.start(
+        second = db.start(
             AttemptStart(
                 "exec",
                 2,
@@ -594,9 +615,9 @@ def test_retry_partition_and_generation_fence(db_path: Path) -> None:
         assert second.value.snapshot.attempt is not None
         assert second.value.snapshot.attempt.attempt_ordinal == 2
         with pytest.raises(StaleFence):
-            db.attempts.advance(fence, ModelRunningAttempt, expected_pointer_revision=3)
+            db.advance(fence, ModelRunningAttempt, expected_pointer_revision=3)
         assert isinstance(
-            db.attempts.start(
+            db.start(
                 AttemptStart(
                     "exec",
                     1,
@@ -619,7 +640,7 @@ def test_provider_failure_after_tool_start_is_terminal(db_path: Path) -> None:
                 connection, "exec", ReplayFact.TOOL_CALL_STARTED
             )
         fence = final_evidence(db, fence)
-        outcome = db.attempts.settle_nonpublication(
+        outcome = db.settle_nonpublication(
             fence,
             expected_pointer_revision=1,
             outcome=AttemptFailedAttempt(),
@@ -628,9 +649,9 @@ def test_provider_failure_after_tool_start_is_terminal(db_path: Path) -> None:
         )
         assert type(outcome.value.execution.lifecycle) is FailedExecution
         assert not outcome.value.can_retry
-        assert outcome.value.replay is not None
-        assert outcome.value.replay.facts == ReplayFact.TOOL_CALL_STARTED
-        assert outcome.value.replay.side_effects_possible
+        replay = outcome.value.replay.require_assessment()
+        assert replay.facts == ReplayFact.TOOL_CALL_STARTED
+        assert replay.side_effects_possible
 
 
 @pytest.mark.parametrize("first_fact", ["process_dead", "backend_done"])
@@ -639,33 +660,33 @@ def test_final_backend_fact_blocks_later_phase_progress_and_dead_lease(
 ) -> None:
     with ready(db_path) as db:
         _, fence = started(db)
-        first = db.attempts.advance(
+        first = db.advance(
             fence,
             PromptStartingAttempt,
             expected_pointer_revision=1,
             **{first_fact: True},
         )
         fence = first.value.fence
-        before = db.snapshots.get("exec")
+        before = db.get("exec")
         for phase, progress in (
             (PromptAcceptedAttempt, False),
             (PromptStartingAttempt, True),
             (PromptStartingAttempt, False),
         ):
             with pytest.raises(RecoveryBlocked):
-                db.attempts.advance(fence, phase, expected_pointer_revision=1, progress=progress)
-            assert db.snapshots.get("exec") == before
+                db.advance(fence, phase, expected_pointer_revision=1, progress=progress)
+            assert db.get("exec") == before
         if first_fact == "process_dead":
             with pytest.raises(RecoveryBlocked):
-                db.attempts.renew_lease(fence, expected_pointer_revision=1, duration_ms=1_000)
-            assert db.snapshots.get("exec") == before
+                db.renew_lease(fence, expected_pointer_revision=1, duration_ms=1_000)
+            assert db.get("exec") == before
             second_fact = "backend_done"
         else:
             # A done-but-live child may still be waiting for verified exit.
-            renewed = db.attempts.renew_lease(fence, expected_pointer_revision=1, duration_ms=1_000)
+            renewed = db.renew_lease(fence, expected_pointer_revision=1, duration_ms=1_000)
             fence = renewed.value.fence
             second_fact = "process_dead"
-        final = db.attempts.advance(
+        final = db.advance(
             fence,
             PromptStartingAttempt,
             expected_pointer_revision=1,
@@ -676,8 +697,8 @@ def test_final_backend_fact_blocks_later_phase_progress_and_dead_lease(
         assert final.value.snapshot.attempt.lifecycle.backend_done
         assert final.value.snapshot.attempt.lifecycle.process_dead
         with pytest.raises(RecoveryBlocked):
-            db.attempts.advance(fence, PromptStartingAttempt, expected_pointer_revision=1)
-        outcome = db.attempts.settle_nonpublication(
+            db.advance(fence, PromptStartingAttempt, expected_pointer_revision=1)
+        outcome = db.settle_nonpublication(
             fence, expected_pointer_revision=1, outcome=AttemptFailedAttempt(), reason_code=GivenReasonCode("failed")
         )
         assert type(outcome.value.execution.lifecycle) is FailedExecution
@@ -692,17 +713,17 @@ def test_provider_proof_carries_until_later_attempt_records_output(
     with ready(db_path, max_attempts=3) as db:
         _, first = started(db)
         first = final_evidence(db, first)
-        deferred = db.attempts.settle_nonpublication(
+        deferred = db.settle_nonpublication(
             first,
             expected_pointer_revision=1,
             outcome=AttemptFailedAttempt(),
             reason_code=GivenReasonCode("provider_failed"),
             failure=ProviderRetryExhausted("controlled provider failure"),
         )
-        proof = deferred.value.replay
-        assert deferred.value.can_retry and proof is not None and proof.allows_retry
+        proof = deferred.value.replay.require_assessment()
+        assert deferred.value.can_retry and proof.allows_retry
         db.participants.advance_generation("owner", "thread", expected_generation=1)
-        second = db.attempts.start(
+        second = db.start(
             AttemptStart(
                 "exec",
                 2,
@@ -716,12 +737,11 @@ def test_provider_proof_carries_until_later_attempt_records_output(
         assert second.value.snapshot.replay == proof
         with db.session.writing() as connection:
             ReplayAssessments.accumulate(connection, "exec", fact)
-        revoked = db.snapshots.get("exec").replay
-        assert revoked is not None
+        revoked = db.get("exec").replay.require_assessment()
         assert revoked.facts == fact and not revoked.allows_retry
 
         second_fence = final_evidence(db, second.value.fence, pointer_revision=3)
-        outcome = db.attempts.settle_nonpublication(
+        outcome = db.settle_nonpublication(
             second_fence,
             expected_pointer_revision=3,
             outcome=AttemptFailedAttempt(),
@@ -733,18 +753,61 @@ def test_provider_proof_carries_until_later_attempt_records_output(
         assert outcome.value.replay == revoked
 
 
+def test_replay_states_own_presence_revision_and_retry_authorization(db_path: Path) -> None:
+    with ready(db_path) as store, store.session.writing() as connection:
+        absent = store.get("exec").replay
+        assert absent == NoReplayAssessment()
+        assert FieldCodec.encode(absent, ReplayAssessment) is None
+        assert FieldCodec.decode(ReplayAssessment, None) == absent
+        snapshot = store.get("exec")
+        encoded = FieldCodec.encode(snapshot)
+        assert encoded["replay"] is None
+        assert FieldCodec.decode(RecoverySnapshot, encoded) == snapshot
+        absent.require_revision(None)
+        assert not absent.allows_retry
+        with pytest.raises(IntegrityViolationError):
+            absent.require_assessment()
+        with pytest.raises(StaleRevision):
+            absent.require_revision(1)
+        absent.revoke_retry(connection)
+        assert ReplayAssessments.count(connection) == 0
+
+        absent.authorize_retry(connection, "exec")
+        recorded = ReplayAssessments.for_execution(connection, "exec").require_assessment()
+        assert recorded.allows_retry and recorded.revision == 1
+        assert FieldCodec.decode(ReplayAssessment, FieldCodec.encode(recorded)) == recorded
+        recorded.require_revision(1)
+        with pytest.raises(StaleRevision):
+            recorded.require_revision(None)
+        with pytest.raises(IntegrityViolationError):
+            recorded.require_execution("another-execution")
+        changes = connection.total_changes
+        ReplayAssessments.authorize_if_unobserved(connection, "exec")
+        assert not recorded.observe(
+            connection, "exec", facts=ReplayFact.NONE,
+            replay_safe=True, side_effects_possible=False,
+        )
+        assert connection.total_changes == changes
+        ReplayAssessments.revoke(connection, "exec")
+        revoked = ReplayAssessments.for_execution(connection, "exec").require_assessment()
+        assert not revoked.allows_retry and revoked.revision == 2
+        changes = connection.total_changes
+        ReplayAssessments.revoke(connection, "exec")
+        assert connection.total_changes == changes
+
+
 def test_repeated_replay_fact_does_not_rewrite_its_durable_assessment(db_path: Path) -> None:
     with ready(db_path) as db:
         connection = db.session._connection
         ReplayAssessments.accumulate(connection, "exec", ReplayFact.ASSISTANT_OUTPUT)
-        before = ReplayAssessments.one(connection, execution_id="exec")
+        before = ReplayAssessments.for_execution(connection, "exec").require_assessment()
         changes = connection.total_changes
         for _ in range(100):
             ReplayAssessments.accumulate(connection, "exec", ReplayFact.ASSISTANT_OUTPUT)
         assert connection.total_changes == changes
-        assert ReplayAssessments.one(connection, execution_id="exec") == before
+        assert ReplayAssessments.for_execution(connection, "exec") == before
         ReplayAssessments.accumulate(connection, "exec", ReplayFact.THINKING_OUTPUT)
-        after = ReplayAssessments.one(connection, execution_id="exec")
+        after = ReplayAssessments.for_execution(connection, "exec").require_assessment()
         assert after.facts == ReplayFact.ASSISTANT_OUTPUT | ReplayFact.THINKING_OUTPUT
         assert after.revision == before.revision + 1
         assert not after.allows_retry
@@ -754,7 +817,7 @@ def test_retry_start_rollback_restores_prior_replay_authorization(db_path: Path)
     with ready(db_path, max_attempts=3) as db:
         _, first = started(db)
         first = final_evidence(db, first)
-        deferred = db.attempts.settle_nonpublication(
+        deferred = db.settle_nonpublication(
             first,
             expected_pointer_revision=1,
             outcome=AttemptFailedAttempt(),
@@ -763,7 +826,7 @@ def test_retry_start_rollback_restores_prior_replay_authorization(db_path: Path)
         )
         assert deferred.value.can_retry
         db.participants.advance_generation("owner", "thread", expected_generation=1)
-        before = db.snapshots.get("exec")
+        before = db.get("exec")
         prepared = prepare_fence_token()
         db.session._connection.execute(
             (
@@ -773,7 +836,7 @@ def test_retry_start_rollback_restores_prior_replay_authorization(db_path: Path)
             )
         )
         with pytest.raises(sqlite3.IntegrityError):
-            db.attempts.start(
+            db.start(
                 AttemptStart(
                     "exec",
                     2,
@@ -784,11 +847,11 @@ def test_retry_start_rollback_restores_prior_replay_authorization(db_path: Path)
                     expected_pointer_revision=2,
                 )
             )
-        assert db.snapshots.get("exec") == before
+        assert db.get("exec") == before
         assert db.session._connection.execute("SELECT count(*) FROM attempts").fetchone()[0] == 1
         assert not db.session._connection.in_transaction
         db.session._connection.execute("DROP TRIGGER fail_retry_obligation")
-        second = db.attempts.start(
+        second = db.start(
             AttemptStart(
                 "exec",
                 2,
@@ -806,7 +869,7 @@ def test_retry_start_rollback_restores_prior_replay_authorization(db_path: Path)
 def test_ambiguity_forces_failed_partition(db_path: Path) -> None:
     with ready(db_path) as db:
         _, fence = started(db)
-        db.attempts.observe_replay(
+        db.observe_replay(
             fence,
             expected_pointer_revision=1,
             expected_replay_revision=None,
@@ -815,19 +878,18 @@ def test_ambiguity_forces_failed_partition(db_path: Path) -> None:
             side_effects_possible=True,
         )
         fence = final_evidence(db, fence)
-        settled = db.attempts.settle_nonpublication(
+        settled = db.settle_nonpublication(
             fence, expected_pointer_revision=1, outcome=AttemptFailedAttempt()
         )
         assert type(settled.value.execution.lifecycle) is FailedExecution
         assert not settled.value.can_retry
-        assert settled.value.replay is not None
-        assert settled.value.replay.facts == ReplayFact.TOOL_EXECUTED
+        assert settled.value.replay.require_assessment().facts == ReplayFact.TOOL_EXECUTED
 
 
 def test_fenced_connectivity_audit_and_monotone_replay(db_path: Path) -> None:
     with ready(db_path) as db:
         _, fence = started(db)
-        observed = db.attempts.observe_connectivity(
+        observed = db.observe_connectivity(
             fence,
             expected_pointer_revision=1,
             expected_revision=None,
@@ -837,7 +899,7 @@ def test_fenced_connectivity_audit_and_monotone_replay(db_path: Path) -> None:
         assert observed.value.connectivity is not None
         assert observed.value.connectivity.revision == 1
         with pytest.raises(StaleRevision):
-            db.attempts.observe_connectivity(
+            db.observe_connectivity(
                 fence,
                 expected_pointer_revision=1,
                 expected_revision=None,
@@ -845,15 +907,15 @@ def test_fenced_connectivity_audit_and_monotone_replay(db_path: Path) -> None:
                 acp_client=ACPClientConnectivity.DISCONNECTED,
             )
         with pytest.raises(IdentityConflict):
-            db.attempts.append_recovery_audit(
+            db.append_recovery_audit(
                 fence, expected_pointer_revision=1, kind=FailedRecovery, reason_code=GivenReasonCode("invented")
             )
-        accepted = db.attempts.advance(fence, PromptAcceptedAttempt, expected_pointer_revision=1)
-        stalled = db.attempts.advance(
+        accepted = db.advance(fence, PromptAcceptedAttempt, expected_pointer_revision=1)
+        stalled = db.advance(
             accepted.value.fence, ModelStalledAttempt, expected_pointer_revision=1
         )
         fence = stalled.value.fence
-        audited = db.attempts.append_recovery_audit(
+        audited = db.append_recovery_audit(
             fence,
             expected_pointer_revision=1,
             kind=ModelStalledRecovery,
@@ -863,7 +925,7 @@ def test_fenced_connectivity_audit_and_monotone_replay(db_path: Path) -> None:
         )
         assert audited.value.last_recovery is not None
         assert audited.value.last_recovery.attempt == 1
-        db.attempts.observe_replay(
+        db.observe_replay(
             fence,
             expected_pointer_revision=1,
             expected_replay_revision=None,
@@ -872,7 +934,7 @@ def test_fenced_connectivity_audit_and_monotone_replay(db_path: Path) -> None:
             side_effects_possible=True,
         )
         with pytest.raises(IdentityConflict):
-            db.attempts.observe_replay(
+            db.observe_replay(
                 fence,
                 expected_pointer_revision=1,
                 expected_replay_revision=1,
@@ -880,75 +942,75 @@ def test_fenced_connectivity_audit_and_monotone_replay(db_path: Path) -> None:
                 replay_safe=True,
                 side_effects_possible=False,
             )
-        assert db.snapshots.get("exec").replay.facts == ReplayFact.TOOL_EXECUTED
+        assert db.get("exec").replay.require_assessment().facts == ReplayFact.TOOL_EXECUTED
 
 
 def test_recovered_audit_requires_same_attempt_new_incident_and_resumption(db_path: Path) -> None:
     with ready(db_path) as db:
         _, fence = started(db)
-        accepted = db.attempts.advance(fence, PromptAcceptedAttempt, expected_pointer_revision=1)
-        stalled = db.attempts.advance(
+        accepted = db.advance(fence, PromptAcceptedAttempt, expected_pointer_revision=1)
+        stalled = db.advance(
             accepted.value.fence, ModelStalledAttempt, expected_pointer_revision=1
         )
         fence = stalled.value.fence
-        db.attempts.append_recovery_audit(
+        db.append_recovery_audit(
             fence,
             expected_pointer_revision=1,
             kind=ModelStalledRecovery,
             reason_code=GivenReasonCode("stalled"),
         )
         with pytest.raises(IdentityConflict):
-            db.attempts.append_recovery_audit(
+            db.append_recovery_audit(
                 fence,
                 expected_pointer_revision=1,
                 kind=RecoveredRecovery,
                 reason_code=GivenReasonCode("premature"),
             )
-        aborting = db.attempts.advance(fence, AbortingAttempt, expected_pointer_revision=1)
+        aborting = db.advance(fence, AbortingAttempt, expected_pointer_revision=1)
         with pytest.raises(IdentityConflict):
-            db.attempts.append_recovery_audit(
+            db.append_recovery_audit(
                 aborting.value.fence,
                 expected_pointer_revision=1,
                 kind=RecoveredRecovery,
                 reason_code=GivenReasonCode("still_aborting"),
             )
-        retrying = db.attempts.advance(
+        retrying = db.advance(
             aborting.value.fence, RetryingAttempt, expected_pointer_revision=1
         )
-        running = db.attempts.advance(
+        running = db.advance(
             retrying.value.fence, ModelRunningAttempt, expected_pointer_revision=1
         )
         fence = running.value.fence
-        db.attempts.append_recovery_audit(
+        db.append_recovery_audit(
             fence,
             expected_pointer_revision=1,
             kind=RecoveredRecovery,
             reason_code=GivenReasonCode("resumed"),
         )
         with pytest.raises(IdentityConflict):
-            db.attempts.append_recovery_audit(
+            db.append_recovery_audit(
                 fence,
                 expected_pointer_revision=1,
                 kind=RecoveredRecovery,
                 reason_code=GivenReasonCode("duplicate"),
             )
-        again = db.attempts.advance(fence, ModelStalledAttempt, expected_pointer_revision=1)
-        db.attempts.append_recovery_audit(
+        again = db.advance(fence, ModelStalledAttempt, expected_pointer_revision=1)
+        db.append_recovery_audit(
             again.value.fence,
             expected_pointer_revision=1,
             kind=ModelStalledRecovery,
             reason_code=GivenReasonCode("stalled_again"),
         )
-        aborting = db.attempts.advance(
+        aborting = db.advance(
             again.value.fence, AbortingAttempt, expected_pointer_revision=1
         )
-        retrying = db.attempts.advance(
+        retrying = db.advance(
             aborting.value.fence, RetryingAttempt, expected_pointer_revision=1
         )
-        running = db.attempts.advance(
+        running = db.advance(
             retrying.value.fence, ModelRunningAttempt, expected_pointer_revision=1
         )
-        db.attempts.append_recovery_audit(
+        db.append_recovery_audit(
             running.value.fence,
             expected_pointer_revision=1,
             kind=RecoveredRecovery,
@@ -959,17 +1021,17 @@ def test_recovered_audit_requires_same_attempt_new_incident_and_resumption(db_pa
 def test_recovered_audit_rejects_prior_attempt_incident_and_terminal(db_path: Path) -> None:
     with ready(db_path) as db:
         _, first = started(db)
-        accepted = db.attempts.advance(first, PromptAcceptedAttempt, expected_pointer_revision=1)
-        stalled = db.attempts.advance(
+        accepted = db.advance(first, PromptAcceptedAttempt, expected_pointer_revision=1)
+        stalled = db.advance(
             accepted.value.fence, ModelStalledAttempt, expected_pointer_revision=1
         )
-        db.attempts.append_recovery_audit(
+        db.append_recovery_audit(
             stalled.value.fence,
             expected_pointer_revision=1,
             kind=ModelStalledRecovery,
             reason_code=GivenReasonCode("stalled"),
         )
-        db.attempts.observe_replay(
+        db.observe_replay(
             stalled.value.fence,
             expected_pointer_revision=1,
             expected_replay_revision=None,
@@ -977,14 +1039,14 @@ def test_recovered_audit_rejects_prior_attempt_incident_and_terminal(db_path: Pa
             replay_safe=True,
             side_effects_possible=False,
         )
-        done = db.attempts.advance(
+        done = db.advance(
             stalled.value.fence,
             ModelStalledAttempt,
             expected_pointer_revision=1,
             backend_done=True,
             process_dead=True,
         )
-        deferred = db.attempts.settle_nonpublication(
+        deferred = db.settle_nonpublication(
             done.value.fence,
             expected_pointer_revision=1,
             outcome=AttemptFailedAttempt(),
@@ -992,14 +1054,14 @@ def test_recovered_audit_rejects_prior_attempt_incident_and_terminal(db_path: Pa
         )
         assert deferred.value.can_retry
         with pytest.raises(StaleFence):
-            db.attempts.append_recovery_audit(
+            db.append_recovery_audit(
                 done.value.fence,
                 expected_pointer_revision=2,
                 kind=RecoveredRecovery,
                 reason_code=GivenReasonCode("terminal"),
             )
         db.participants.advance_generation("owner", "thread", expected_generation=1)
-        second = db.attempts.start(
+        second = db.start(
             AttemptStart(
                 "exec",
                 2,
@@ -1010,14 +1072,14 @@ def test_recovered_audit_rejects_prior_attempt_incident_and_terminal(db_path: Pa
                 expected_pointer_revision=2,
             )
         )
-        accepted = db.attempts.advance(
+        accepted = db.advance(
             second.value.fence, PromptAcceptedAttempt, expected_pointer_revision=3
         )
-        running = db.attempts.advance(
+        running = db.advance(
             accepted.value.fence, ModelRunningAttempt, expected_pointer_revision=3
         )
         with pytest.raises(IdentityConflict):
-            db.attempts.append_recovery_audit(
+            db.append_recovery_audit(
                 running.value.fence,
                 expected_pointer_revision=3,
                 kind=RecoveredRecovery,
@@ -1027,7 +1089,7 @@ def test_recovered_audit_rejects_prior_attempt_incident_and_terminal(db_path: Pa
 
 def test_unstarted_failure_and_claim_requeue(db_path: Path) -> None:
     with ready(db_path) as db:
-        failed = db.executions.fail_unstarted(
+        failed = db.fail_unstarted(
             "exec", expected_revision=2, reason_code=GivenReasonCode("unavailable")
         )
         assert type(failed.value.execution.lifecycle) is FailedExecution
@@ -1036,7 +1098,7 @@ def test_unstarted_failure_and_claim_requeue(db_path: Path) -> None:
         assert len(failed.value.obligations) == 1
         assert failed.value.obligations[0].lifecycle.declared_name == "failed"
         with pytest.raises(IdentityConflict):
-            db.attempts.start(
+            db.start(
                 AttemptStart(
                     "exec",
                     1,
@@ -1048,7 +1110,7 @@ def test_unstarted_failure_and_claim_requeue(db_path: Path) -> None:
                 )
             )
     with store(db_path) as reopened:
-        assert type(reopened.snapshots.get("exec").execution.lifecycle) is FailedExecution
+        assert type(reopened.get("exec").execution.lifecycle) is FailedExecution
 
     with store(db_path.with_name("claim-only.sqlite3")) as db:
         db.participants.register("owner", "Owner", "thread", committed=True)
@@ -1098,11 +1160,11 @@ def test_frozen_v2_pre_attempt_deferred_execution_cannot_resume(db_path: Path) -
                     "ision=revision+1 WHERE assignment_id='claim'"
                 )
             )
-        before = db.snapshots.get("exec")
+        before = db.get("exec")
         assert type(before.execution.lifecycle) is DeferredExecution
         assert before.attempt is None
         with pytest.raises(RecoveryBlocked):
-            db.attempts.start(
+            db.start(
                 AttemptStart(
                     "exec",
                     1,
@@ -1113,9 +1175,9 @@ def test_frozen_v2_pre_attempt_deferred_execution_cannot_resume(db_path: Path) -
                     expected_pointer_revision=0,
                 )
             )
-        assert db.snapshots.get("exec") == before
+        assert db.get("exec") == before
     with store(db_path) as reopened:
-        assert type(reopened.snapshots.get("exec").execution.lifecycle) is DeferredExecution
+        assert type(reopened.get("exec").execution.lifecycle) is DeferredExecution
         assert (
             reopened.session._connection.execute("SELECT count(*) FROM attempts").fetchone()[0] == 0
         )
@@ -1123,15 +1185,15 @@ def test_frozen_v2_pre_attempt_deferred_execution_cannot_resume(db_path: Path) -
 
 def test_crash_reopen_pending_starts_once_after_owner_returns(db_path: Path) -> None:
     db = ready(db_path)
-    before = db.snapshots.get("exec")
+    before = db.get("exec")
     assert type(before.execution.lifecycle) is PendingExecution
     assert before.attempt is None
     db.close()  # Owner disappeared before the attempt began; PENDING remains durable.
     with store(db_path) as returned:
-        assert type(returned.snapshots.get("exec").execution.lifecycle) is PendingExecution
+        assert type(returned.get("exec").execution.lifecycle) is PendingExecution
         returned.participants.advance_generation("owner", "thread", expected_generation=1)
         token = prepare_fence_token()
-        applied = returned.attempts.start(
+        applied = returned.start(
             AttemptStart(
                 "exec",
                 1,
@@ -1146,7 +1208,7 @@ def test_crash_reopen_pending_starts_once_after_owner_returns(db_path: Path) -> 
     # Simulate a lost commit response: the owner has retained the secret but
     # no in-memory result, and must not create a second attempt.
     with store(db_path) as reopened:
-        replay = reopened.attempts.start(
+        replay = reopened.start(
             AttemptStart(
                 "exec",
                 1,
@@ -1160,7 +1222,7 @@ def test_crash_reopen_pending_starts_once_after_owner_returns(db_path: Path) -> 
         assert isinstance(replay, AlreadyApplied)
         assert replay.value.snapshot.is_current
         with pytest.raises(StaleRevision):
-            reopened.attempts.start(
+            reopened.start(
                 AttemptStart(
                     "exec",
                     1,
@@ -1203,25 +1265,25 @@ def test_frozen_publishing_snapshot_no_nonpublication_settlement(
                     "evision+1 WHERE execution_id='exec'"
                 )
             )
-        projected = db.snapshots.get("exec")
+        projected = db.get("exec")
         assert projected.publication_intents == (intent,)
         assert len(projected.obligations) == 1
         assert projected.obligations[0].lifecycle.declared_name == "publishing"
         with pytest.raises(PublicationUncertain):
-            db.attempts.fail_unknown(fence, expected_pointer_revision=1)
+            db.fail_unknown(fence, expected_pointer_revision=1)
         with pytest.raises(PublicationUncertain):
-            db.attempts.settle_nonpublication(
+            db.settle_nonpublication(
                 fence,
                 expected_pointer_revision=1,
                 outcome=AttemptFailedAttempt(),
                 reason_code=GivenReasonCode("no_receipt"),
             )
-        assert db.snapshots.get("exec").is_current
-        assert db.snapshots.get("exec").attempt is not None
-        assert not db.snapshots.get("exec").attempt.lifecycle.backend_done
-        assert db.snapshots.get("exec").publication_evidence == ()
+        assert db.get("exec").is_current
+        assert db.get("exec").attempt is not None
+        assert not db.get("exec").attempt.lifecycle.backend_done
+        assert db.get("exec").publication_evidence == ()
     with store(db_path) as reopened:
-        obligations = reopened.snapshots.get("exec").obligations
+        obligations = reopened.get("exec").obligations
         assert len(obligations) == 1 and obligations[0].lifecycle.declared_name == "publishing"
 
 
@@ -1246,7 +1308,7 @@ def test_concurrent_start_exactly_one_claims_pointer(db_path: Path) -> None:
         assert process.exitcode == 0
     assert sorted(results) == ["Applied", "StaleRevision"]
     with store(db_path) as reopened:
-        assert reopened.snapshots.get("exec").is_current
+        assert reopened.get("exec").is_current
         assert (
             reopened.session._connection.execute("SELECT count(*) FROM attempts").fetchone()[0] == 1
         )
@@ -1272,7 +1334,7 @@ def test_concurrent_same_prepared_token_replays_current_result(db_path: Path) ->
         assert process.exitcode == 0
     assert sorted(results) == ["AlreadyApplied", "Applied"]
     with store(db_path) as reopened:
-        assert reopened.snapshots.get("exec").attempt is not None
+        assert reopened.get("exec").attempt is not None
         assert (
             reopened.session._connection.execute("SELECT count(*) FROM attempts").fetchone()[0] == 1
         )
@@ -1296,7 +1358,7 @@ def test_concurrent_registration_one_writer_one_replay(db_path: Path) -> None:
         assert process.exitcode == 0
     assert sorted(results) == ["AlreadyApplied", "Applied"]
     with store(db_path) as db:
-        assert db.participants.get("owner").participant_generation == 1
+        assert db.participants.get("owner").owner_identity.generation == 1
         assert (
             db.session._connection.execute("SELECT count(*) FROM participants").fetchone()[0] == 1
         )
@@ -1381,8 +1443,8 @@ def test_public_snapshot_is_one_committed_revision_during_settlement(db_path: Pa
     observed = _read_while_other_store_waits(
         db_path,
         "executions",
-        lambda reader: reader.snapshots.get("exec"),
-        lambda writer: writer.attempts.settle_nonpublication(
+        lambda reader: reader.get("exec"),
+        lambda writer: writer.settle_nonpublication(
             fence,
             expected_pointer_revision=1,
             outcome=AttemptFailedAttempt(),
@@ -1394,7 +1456,7 @@ def test_public_snapshot_is_one_committed_revision_during_settlement(db_path: Pa
     assert type(observed.attempt.lifecycle) is SettlingAttempt
     assert observed.is_current
     with store(db_path) as db:
-        assert type(db.snapshots.get("exec").execution.lifecycle) is FailedExecution
+        assert type(db.get("exec").execution.lifecycle) is FailedExecution
 
 
 def test_public_participant_is_one_committed_revision_during_rename(db_path: Path) -> None:
@@ -1417,14 +1479,14 @@ def test_public_participant_is_one_committed_revision_during_rename(db_path: Pat
 def test_public_read_exception_releases_transaction_and_mutators_reuse_it(db_path: Path) -> None:
     with ready(db_path) as db:
         with pytest.raises(IdentityConflict):
-            db.snapshots.get("missing")
+            db.get("missing")
         assert not db.session._connection.in_transaction
         with pytest.raises(IdentityConflict):
             db.participants.get("missing")
         assert not db.session._connection.in_transaction
         with db.session.writing():
             assert db.session._connection.in_transaction
-            assert type(db.snapshots.get("exec").execution.lifecycle) is PendingExecution
+            assert type(db.get("exec").execution.lifecycle) is PendingExecution
             assert db.participants.get("owner").committed
             assert db.session._connection.in_transaction
         assert not db.session._connection.in_transaction
@@ -1464,10 +1526,10 @@ def test_nonterminal_settlement_cannot_silence_wire(db_path: Path, invalid: obje
     with ready(db_path) as db:
         _, fence = started(db)
         fence = final_evidence(db, fence)
-        before = db.snapshots.get("exec")
+        before = db.get("exec")
         with pytest.raises(ValueError):
-            db.attempts.settle_nonpublication(fence, expected_pointer_revision=1, outcome=invalid)
-        assert db.snapshots.get("exec") == before
+            db.settle_nonpublication(fence, expected_pointer_revision=1, outcome=invalid)
+        assert db.get("exec") == before
         assert not db.session._connection.in_transaction
 
 
@@ -1481,26 +1543,26 @@ def test_other_public_evidence_flags_require_exact_bool(db_path: Path, invalid: 
         )
     with ready(db_path) as db:
         _, fence = started(db)
-        before = db.snapshots.get("exec")
+        before = db.get("exec")
         for field in ("backend_done", "process_dead", "progress"):
             with pytest.raises(ValueError):
-                db.attempts.advance(
+                db.advance(
                     fence,
                     PromptAcceptedAttempt,
                     expected_pointer_revision=1,
                     **{field: invalid},
                 )
-            assert db.snapshots.get("exec") == before
+            assert db.get("exec") == before
         for field in ("replay_safe", "side_effects_possible"):
             flags = {"replay_safe": True, "side_effects_possible": False}
             flags[field] = invalid
             with pytest.raises(ValueError):
-                db.attempts.observe_replay(
+                db.observe_replay(
                     fence,
                     expected_pointer_revision=1,
                     expected_replay_revision=None,
                     facts=ReplayFact.NONE,
                     **flags,
                 )
-            assert db.snapshots.get("exec") == before
+            assert db.get("exec") == before
         assert not db.session._connection.in_transaction

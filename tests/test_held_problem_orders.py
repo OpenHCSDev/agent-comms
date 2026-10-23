@@ -17,7 +17,8 @@ from agent_comms.installer.practice import practice_copy
 from agent_comms.goals import OrderCheck
 from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.repo import Repo
-from agent_comms.todos import DeliveredProblemOrder, GoalRef, OrderMessage
+from agent_comms.todos import DeliveredProblemOrder, OrderMessage
+from agent_comms.owner_requests import NewestOpenRequest
 from agent_comms.tool_caller import ThreadCaller
 from agent_comms.tools import CommsChannelsTool
 
@@ -34,7 +35,8 @@ def held_commander(pr_commander):
     lead = source.comms.registry.require(source.commander)
     todo = source.comms.goals.todos.create(
         "P1", source.repos[0].github, "Repair the held workflow", creator=lead, assigner=lead.incarnation,
-        owner=worker, generation="initial-order", goal=GoalRef(lead.name, lead.created_at, lead.goal.require().id),
+        owner=worker, generation="initial-order",
+        request=NewestOpenRequest().for_order(source.comms.goals.todos, lead.incarnation),
         review_at=RecordedEventTime(time.time() + 1000), order=order(source.repos[0]),
     )
     published = source.comms.messaging.send(source.commander, worker.name, "Repair the held workflow through its existing declaration.")
@@ -94,7 +96,7 @@ def test_second_unplanned_order_is_refused_without_recording(held_commander):
     lead = ctx.comms.registry.require(ctx.commander)
     ctx.comms.goals.todos.create(
         "P2", ctx.repos[0].github, "Repair the second workflow", creator=lead, assigner=lead.incarnation, owner=lead,
-        generation="second-workflow", goal=GoalRef(lead.name, lead.created_at, lead.goal.require().id),
+        generation="second-workflow", request=original.request.require(),
         review_at=RecordedEventTime(time.time() + 1000), order=document.order,
     )
     path = ctx.root / "second-order.json"

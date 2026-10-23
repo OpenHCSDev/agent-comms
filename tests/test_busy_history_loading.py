@@ -1,5 +1,6 @@
 """Source contention retains a viewer read, never manufactures an input failure."""
 
+from agent_comms.private_runtime_schema import PrivateCoordinatorTable
 import asyncio
 import json
 import subprocess
@@ -28,7 +29,7 @@ def saved_history(tmp_path):
     )))
     comms.registry.declare(comms.registry.new_thread('saved', frozenset(), str(tmp_path), session_file=str(session)))
     with Coordination(str(comms.root / "coordination.sqlite3")) as store:
-        store.install_private_runtime()
+        PrivateCoordinatorTable.install(store)
     return comms, session
 
 

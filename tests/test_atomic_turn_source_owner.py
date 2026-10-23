@@ -9,6 +9,7 @@ from agent_comms.acp import CommsAgent
 from agent_comms.agent_events import AgentInfo
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.comms import Comms
+from conftest import installed_comms
 from agent_comms.coordination_errors import StaleFence
 from agent_comms.thread_text import SavedSessionFile
 from agent_comms.goal_actions import SetGoalAction
@@ -23,7 +24,7 @@ from agent_comms.turn_lease import NoTurnLease
 @pytest.mark.asyncio
 @pytest.mark.parametrize("goal_changed", [False, True])
 async def test_begin_callback_and_native_attachment_share_original_owner(tmp_path, goal_changed):
-    comms = Comms(tmp_path)
+    comms = installed_comms(tmp_path)
     comms.registry.declare(comms.registry.new_thread('owner', frozenset(), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid())))
     agent = CommsAgent(comms, auto_wake=False)
     turn = OwnedTurn(agent.turns, "owner-session", "owner", "new original input")

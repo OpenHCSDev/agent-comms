@@ -79,8 +79,7 @@ def test_viewer_selects_the_outcomes_of_a_delivery_window(tmp_path, viewer_of, s
     for name in ("sender", "peer-a", "peer-b"):
         comms.registry.declare(comms.registry.new_thread(name, frozenset({"ci"}), str(tmp_path)))
     sent = comms.messaging.send("sender", "#ci", "channel outcome").message
-    with comms.bus.log.checked_read() as source:
-        original = source.delivery(sent.seq)
+    original = comms.bus.bus.delivery(sent.seq)
     lookups = {name: thread.incarnation.lookup
                for name, thread in comms.registry.snapshot().threads.items()}
     window = MessageNotification.delivery_window(

@@ -12,7 +12,6 @@ from agent_comms import field_codec
 
 from .channel_targets import CommandTarget
 from .errors import RelationViolationError
-from .lifecycle_capability import Unresolved
 from .input_attempt import (
     UNOBSERVED_DELIVERY_SCOPE,
     GoalInputDecision,
@@ -26,6 +25,7 @@ from .input_attempt import (
     UnresolvedInput,
 )
 from .input_origin import InputOrigin, UnattributedInputOrigin
+from .lifecycle_capability import Unresolved
 from .message_reference import MessageReference
 from .messages import Message
 from .threads import Thread
@@ -33,7 +33,9 @@ from .tool_result import ToolResult
 from .typed_table import Column, DurableStore, Generated, Index, TypedTable, sql_literal
 
 if TYPE_CHECKING:
+    from .bus import BusReader
     from .channel_input_batch import SingleInputBatch
+    from .private_registry_guard import RegistryPrivacy
     from .registry_document import RegistrySnapshot
     from .thread_identity import TurnId
     from .turn_lease import TurnLeaseFence
@@ -130,17 +132,20 @@ class InputDocument:
         )
 
 
-    def answered_by(self, lease, source, snapshot, target: str) -> tuple[MessageReference, ...]:
+    def answered_by(
+        self, lease: TurnLeaseFence, source: BusReader, snapshot: RegistrySnapshot,
+        target: str, *, privacy: RegistryPrivacy,
+    ) -> tuple[MessageReference, ...]:
         """The bus messages the lease's turn took in that a message to target answers."""
         delivered = tuple(
             reference
             for row in sorted(self.rows.values(), key=lambda item: item.order)
-            for reference in row.delivered_in(lease, source.marker.root_id, snapshot).references()
+            for reference in row.delivered_in(lease, privacy.namespace, snapshot).references()
         )
         route = CommandTarget.named(target).canonical_name(snapshot.canonical_name)
         return tuple(
             original.message.reference
-            for original in source.references(delivered)
+            for original in source.messages_for_references(delivered)
             if original.message.exact_reply_target == route
         )
 

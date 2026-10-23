@@ -1,5 +1,7 @@
 """An order's progress is read from its unit's checkout and PRs; no clock strikes or releases it.
 The commander's review timer comes back every window until delivery, and the unit never sees it."""
+
+from agent_comms.bus import Bus
 import json
 import os
 import subprocess
@@ -11,8 +13,7 @@ from test_todos import order
 from source_revision_fixture import SourceRepository
 
 from agent_comms.comms import Comms
-from agent_comms.goal_actions import CreateProblemGoalAction, SetGoalAction
-from agent_comms.goals import RequestGoalOrder
+from agent_comms.goal_actions import CreateProblemGoalAction
 from agent_comms.native_tools import NativeRequestTools
 from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.repository_name import RepositoryName
@@ -72,7 +73,7 @@ class EditingSource(EmptySource):
 
     @property
     def edited_at(self):
-        return tuple(sorted(self.worktree.edits(), reverse=True)[:1])
+        return tuple(sorted(self.worktree.edits, reverse=True)[:1])
 
 
 @pytest.mark.parametrize('name', ['owner.py', 'new_module.py'])
@@ -90,7 +91,7 @@ def test_a_unit_editing_before_its_first_commit_is_moving_not_stalled(tmp_path, 
 def test_a_deleted_file_is_no_edit_time(tmp_path):
     worktree = unit_checkout(tmp_path / 'worker--P1')
     (worktree / 'owner.py').unlink()
-    assert tuple(PresentCheckout(worktree).edits()) == ()
+    assert tuple(PresentCheckout(worktree).edits) == ()
 
 
 def test_a_submodule_with_a_missing_git_directory_does_not_stop_reading_edits(tmp_path):
@@ -105,7 +106,7 @@ def test_a_submodule_with_a_missing_git_directory_does_not_stop_reading_edits(tm
     assert WorkBranches(worktree).uncommitted() == ()
     edited(worktree, 'owner.py', 700.0)
     assert WorkBranches(worktree).uncommitted() == (worktree / 'owner.py',)
-    assert tuple(PresentCheckout(worktree).edits()) == (700.0,)
+    assert tuple(PresentCheckout(worktree).edits) == (700.0,)
     assert WorkBranches(worktree).local_work
 
 
@@ -117,13 +118,13 @@ def held(tmp_path):
     source = SourceRepository.create(tmp_path / 'source')
     (root / 'storage.json').write_text(json.dumps({'checkout_base': str(tmp_path / 'wt')}))
     comms = Comms(root)
-    comms.messaging.initialize_private_initial_protocol()
+    Bus.install(Bus.path_in(comms.root))
     for name in ('lead', 'worker'):
         comms.registry.declare(comms.registry.new_thread(name, frozenset(), str(tmp_path)))
-    comms.goals.update_goal('lead', SetGoalAction(
-        text='Repair the worker', goal_id='request', order=RequestGoalOrder()))
+    request = comms.goals.todos.add_request(
+        comms.registry.require('lead').incarnation, 'Repair the worker').id
     ThreadCaller('lead').invoke(CommsTodoCreateTool(owner='worker', order=CreateProblemGoalAction(
-        problem='P1', order=order(source), request='request', review_at=RecordedEventTime(1000),
+        problem='P1', order=order(source), request=request, review_at=RecordedEventTime(1000),
         commander='lead', assigner=comms.registry.require('lead').incarnation,
         repo=RepositoryName.from_wire('org/repo'), text='Repair the worker')), comms)
     return comms, unit_checkout(tmp_path / 'wt' / 'worker--P1')

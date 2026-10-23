@@ -111,7 +111,7 @@ class FullSelectedTriage(SelectedTriage, declared_name="FULL"):
         from .coordination_tables.executions import ExecutionOrigin
 
         await participant.require_current()
-        created = participant.store.executions.create_after_triage(
+        created = participant.store.create_after_triage(
             participant.batch.execution_id, ExecutionOrigin.WIRE,
             participant.lookup, participant.owner.thread.name,
             execution.max_attempts,

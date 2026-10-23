@@ -4,6 +4,7 @@ No provider input, retry or live bus write. The fixture is a canonical saved
 manifest whose declaration name is intentionally unavailable in this reader.
 """
 
+
 from agent_comms.context_store import UNREAD_CONTEXT
 import asyncio
 import pickle
@@ -11,7 +12,6 @@ from dataclasses import dataclass
 
 import pytest
 
-from agent_comms.bus_route_counts import RouteIndexRebuilding
 from agent_comms.context_segments.response import SelectedResponseSegment
 from agent_comms.coordination_errors import (
     CoordinationReadUnavailable,
@@ -20,7 +20,8 @@ from agent_comms.coordination_errors import (
     TranscriptChanged,
 )
 from agent_comms.field_codec import FieldCodec
-from agent_comms.errors import StoredHistoryUnreadable
+from agent_comms.errors import RelationViolationError, StoredHistoryUnreadable, ToolRefusedError
+from agent_comms.runtime import OwnerIdentityChangedError, OwnerReplyLostError
 from agent_comms.context_store import ContextRequest
 from agent_comms.presentation import WireRevision
 from agent_comms.ui_model.observation import (
@@ -57,8 +58,6 @@ class ReadRecordedContext(ReadRequest):
 def saved_row(comms):
     owner = comms.registry.new_thread('saved', frozenset(), str(comms.root.parent), created_at=17003.0)
     comms.registry.declare(owner)
-    comms.messaging.initialize_private_initial_protocol()
-    comms.bus.log.path.touch(mode=0o600)
     comms.contexts.record_after(UNREAD_CONTEXT, manifest(owner))
     with comms.contexts.snapshot() as db:
         request, = ContextRequest.select(db)
@@ -98,7 +97,7 @@ def test_read_failure_and_thread_status_keep_the_explanation_across_the_pipe(com
 
 
 @pytest.mark.parametrize(
-    "error_type", [SchemaVersionError, CoordinationReadUnavailable, StaleRevision]
+    "error_type", [SchemaVersionError, CoordinationReadUnavailable, StaleRevision, RelationViolationError]
 )
 def test_store_read_only_retains_the_named_busy_state(comms, error_type):
     @dataclass(frozen=True)
@@ -140,10 +139,14 @@ def test_a_read_that_defers_staleness_answers_a_reload(comms, error, answered):
     assert isinstance(DeferringRead(str(comms.root)).answer(comms), answered)
 
 
-@pytest.mark.parametrize(
-    "error_type", [SchemaVersionError, CoordinationReadUnavailable, StaleRevision]
-)
-async def test_owner_reply_preserves_its_own_failure_type(comms, error_type):
+@pytest.mark.parametrize("error_type, refused", [
+    (SchemaVersionError, True), (CoordinationReadUnavailable, True), (StaleRevision, True),
+    (ToolRefusedError, True), (RelationViolationError, True),
+    (ConnectionError, True), (TimeoutError, True),
+    (OwnerIdentityChangedError, True), (OwnerReplyLostError, True),
+    (RuntimeError, False), (ValueError, False), (TypeError, False),
+])
+async def test_owner_reply_preserves_its_own_failure_type(comms, error_type, refused):
     @dataclass(frozen=True)
     class FailingOwnerRead(OwnerRead):
         async def read(self, owner):
@@ -153,9 +156,12 @@ async def test_owner_reply_preserves_its_own_failure_type(comms, error_type):
             raise error_type("original owner read explanation")
 
     saved_row(comms)
-    answer = await FailingOwnerRead(
-        str(comms.root), comms.registry.require("saved").incarnation
-    ).answer(comms)
+    request = FailingOwnerRead(str(comms.root), comms.registry.require("saved").incarnation)
+    if not refused:
+        with pytest.raises(error_type):
+            await request.answer(comms)
+        return
+    answer = await request.answer(comms)
     assert isinstance(answer, ReadRefused)
     assert isinstance(answer.error, error_type)
     assert not isinstance(answer.error, UnreadableHistory)
@@ -184,7 +190,6 @@ class PreparingStage(SidebarReadStage):
 @pytest.mark.parametrize("cause", [
     CoordinationReadUnavailable("original sidebar read deferred"),
     StaleRevision("source moved"),
-    RouteIndexRebuilding(1, 2),
 ])
 def test_sidebar_prepares_once_then_publishes_and_keeps_real_rows(comms, cause):
     request = ObserveSidebar(str(comms.root.parent), True, True)
@@ -209,11 +214,11 @@ def test_sidebar_prepares_once_then_publishes_and_keeps_real_rows(comms, cause):
     assert reading.published is completed[0]
 
 
-async def test_unknown_saved_member_does_not_kill_the_real_observation_process(comms):
+async def test_unknown_saved_member_does_not_kill_the_real_observation_process(comms, durable_home):
     saved_row(comms)
     corrupt_context_kind(comms, "saved", "unavailable_future_segment")
     original = comms.contexts.path.read_bytes()
-    original_bus = comms.bus.log.path.read_bytes()
+    original_bus = comms.bus.bus.path.read_bytes()
     process = ObservationProcess(comms.route)
     try:
         await readable(process)
@@ -228,7 +233,7 @@ async def test_unknown_saved_member_does_not_kill_the_real_observation_process(c
                 )
                 if sidebar is not None:
                     break
-        assert process.process.is_alive() and process.died is None
+        assert process.process.is_alive()
         process.request(ObserveThreads(frozenset({"saved"})))
         async with asyncio.timeout(30):
             while True:
@@ -262,8 +267,8 @@ async def test_unknown_saved_member_does_not_kill_the_real_observation_process(c
                 # An unchanged error no longer emits an unrelated extra wake.
                 await asyncio.sleep(0)
         assert await waiting == {}
-        assert process.process.is_alive() and process.died is None
+        assert process.process.is_alive()
         assert comms.contexts.path.read_bytes() == original
-        assert comms.bus.log.path.read_bytes() == original_bus
+        assert comms.bus.bus.path.read_bytes() == original_bus
     finally:
         process.close()

@@ -1,3 +1,5 @@
+
+from agent_comms.bus import Bus
 from agent_comms.field_codec import FieldCodec
 
 """External contracts and adding commands without editing any consumer catalog."""
@@ -141,15 +143,15 @@ def test_normal_history_cli_keeps_migrated_content_and_source_identity(
 ):
     old, live = Comms(tmp_path / "old"), Comms(tmp_path / "live")
     for comms in (old, live):
-        comms.messaging.initialize_private_initial_protocol()
+        Bus.install(Bus.path_in(comms.root))
         for name in ("alice", "bob"):
             comms.registry.declare(
                 old.registry.new_thread(name, frozenset({"team"}), str(tmp_path))
             )
         comms.messaging.send("alice", "#team", f"{comms.root.name} channel").message.message_id
         comms.messaging.send("alice", "bob", f"{comms.root.name} direct").message.message_id
-    source = live.views.attach_history(old.root)
-    live_bus = (live.root / "bus.jsonl").read_bytes()
+    live.views.attach_history(old.root)
+    live_bus = live.bus.bus.revision()
     assert main(["--root", str(live.root), *arguments]) == 0
     rows = json.loads(capsys.readouterr().out)[result_type.messages_key]
     historical = [row for row in rows if "history" in row]
@@ -157,9 +159,8 @@ def test_normal_history_cli_keeps_migrated_content_and_source_identity(
     assert len(historical) == len(current) == per_root
     assert all(row["text"].startswith("old ") for row in historical)
     assert all(row["history"]["source"] == str(old.root) for row in historical)
-    assert all(row["history"]["wire_root_id"] == source.wire_root_id for row in historical)
     assert all(
         row["history"]["sender_created_at"] == old.registry.require("alice").created_at
         for row in historical
     )
-    assert (live.root / "bus.jsonl").read_bytes() == live_bus
+    assert live.bus.bus.revision() == live_bus

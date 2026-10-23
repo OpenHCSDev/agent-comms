@@ -13,6 +13,7 @@ from typing import TYPE_CHECKING
 
 from agent_comms.thread_presentation import (
     IdleThreadPresentationStatus,
+    OtherRouteThread,
     SessionDisconnected,
     StatusPending,
     ThreadRetired,
@@ -64,13 +65,13 @@ class ThreadStatusModel:
             excerpt = " ".join(message.body.split())
             if len(excerpt) > NOTIFICATION_EXCERPT:
                 excerpt = excerpt[:NOTIFICATION_EXCERPT - 3] + "…"
-            excerpts.append(f"{message.target} · {message.sender}: {excerpt} — {acknowledgement.state}")
+            excerpts.append(f"{message.target} · {message.sender}: {excerpt} — {acknowledgement.label}")
         if excerpts:
             lines += ["Recent incoming messages:", *excerpts]
         summary = [presentation.summary.partition("\n")[0] or "Ready"]
         latest = next((acknowledgement for acknowledgement in presentation.notifications if acknowledgement.message is not None), None)
         if latest is not None:
-            summary.append(f"Latest inbound {latest.message.target} from @{latest.message.sender}: {latest.state}")
+            summary.append(f"Latest inbound {latest.message.target} from @{latest.message.sender}: {latest.label}")
         if len(presentation.notifications) > 1:
             summary.append(f"{len(presentation.notifications)} recent")
         return cls(name, True, tuple(lines), presentation,
@@ -83,6 +84,10 @@ class ThreadStatusModel:
     @classmethod
     def retired(cls, name: str) -> ThreadStatusModel:
         return cls.known(name, ThreadRetired().presentation(name))
+
+    @classmethod
+    def other_route(cls, name: str) -> ThreadStatusModel:
+        return cls.known(name, OtherRouteThread().presentation(name))
 
     @classmethod
     def unreadable(cls, name: str, error: UnreadableHistory) -> ThreadStatusModel:

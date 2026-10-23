@@ -63,6 +63,7 @@ agent-comms-commander-reread = "agent_comms_hooks.reread:main"
 agent-comms-commander-deferral-guard = "agent_comms_hooks.deferral:main"
 agent-comms-commander-bounded-waits = "agent_comms_hooks.bounded_waits:main"
 agent-comms-queue-bypass-guard = "agent_comms_hooks.queue_bypass:main"
+agent-comms-test-ceremony-guard = "agent_comms_hooks.test_ceremony:main"
 agent-comms-claude-session-started = "agent_comms_hooks.session:started"
 agent-comms-claude-session-ended = "agent_comms_hooks.session:ended"
 agent-comms-connector = "agent_comms.connector:main"
@@ -90,6 +91,9 @@ include = [
 
 [tool.hatch.version]
 path = "src/agent_comms/__init__.py"
+
+[tool.uv]
+cache-keys = [{ file = "pyproject.toml" }, { git = { commit = true } }]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

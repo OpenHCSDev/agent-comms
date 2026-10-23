@@ -1,12 +1,10 @@
 """The update owner's snapshots: whole buses or declared store files."""
 from __future__ import annotations
 
-import hashlib
 import json
 import os
 import re
 import shutil
-import sqlite3
 import stat
 import subprocess
 import sys
@@ -14,7 +12,7 @@ import tempfile
 import time
 from abc import ABC, abstractmethod
 from collections.abc import Collection, Iterable
-from contextlib import closing, contextmanager
+from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import datetime
 from functools import cache
@@ -22,23 +20,12 @@ from pathlib import Path
 from string import Formatter
 from typing import ClassVar, Iterator, Self
 
-from agent_comms.coordination_database import CoordinationStore
 from agent_comms.coordination_errors import CoordinationError
 from agent_comms.external_transcript import ExternalTranscript
 from agent_comms.field_codec import FieldCodec
-from agent_comms.locked_store import LockedStore, RuntimeFile
+from agent_comms.installer.interpreter_operation import HoldTranscriptsProbe
+from agent_comms.locked_store import LockedStore, RootFile, RuntimeFile, SQLiteFile
 from agent_comms.store_files import _atomic_write_text
-
-HOLD_TRANSCRIPTS = """import sys
-from contextlib import closing
-from agent_comms.coordination_database import CoordinationStore
-with closing(CoordinationStore.writer(sys.argv[1], isolation_level=None)) as writer:
-    writer.execute("BEGIN IMMEDIATE")
-    with open(int(sys.argv[2]), "wb") as held:
-        held.write(b"held")
-    sys.stdin.read()
-    writer.execute("ROLLBACK")
-"""
 
 
 class UpgradeRefused(CoordinationError):
@@ -50,13 +37,6 @@ class UpgradeRefused(CoordinationError):
 
     def lines(self) -> tuple[str, ...]:
         return (f"Install failed: {self}",)
-
-    @classmethod
-    def public_message(cls, output: str) -> str:
-        for line in reversed(output.splitlines()):
-            if line.startswith(cls.prefix):
-                return line
-        return "Installer failed without a declared refusal; private traceback retained on host"
 
 
 @dataclass(frozen=True)
@@ -131,17 +111,20 @@ def transcripts_held(root: Path) -> Iterator[None]:
         yield
         return
     ready, held = os.pipe()
-    holder = subprocess.Popen([sys.executable, "-c", HOLD_TRANSCRIPTS, path, str(held)],
-                              stdin=subprocess.PIPE, pass_fds=(held,),
-                              env={**os.environ, "PYTHONPATH": os.pathsep.join(sys.path)})
-    os.close(held)
-    try:
-        with open(ready, "rb") as holding:
-            if not holding.read():
-                raise UpgradeRefused(f"Could not hold the transcript store {path}")
-        yield
-    finally:
-        holder.communicate()
+    with tempfile.TemporaryDirectory() as scratch:
+        holder = subprocess.Popen(
+            HoldTranscriptsProbe(path, held).command(
+                Path(sys.executable), Path(scratch) / "result.json"),
+            stdin=subprocess.PIPE, pass_fds=(held,),
+            env={**os.environ, "PYTHONPATH": os.pathsep.join(sys.path)})
+        os.close(held)
+        try:
+            with open(ready, "rb") as holding:
+                if not holding.read():
+                    raise UpgradeRefused(f"Could not hold the transcript store {path}")
+            yield
+        finally:
+            holder.communicate()
 
 
 @dataclass(frozen=True, order=True)
@@ -196,6 +179,10 @@ class ResourceBackup(ABC):
     @abstractmethod
     def retain(self, spill_dir: Path) -> tuple[Path, ...]: ...
 
+    @abstractmethod
+    def spill_directory(self, configured: Path) -> Path:
+        """Carry originals share the snapshot's retention; no snapshot creates nothing."""
+
 
 @dataclass
 class StoreBackup(ResourceBackup):
@@ -204,6 +191,9 @@ class StoreBackup(ResourceBackup):
     route: Path
     path: Path
     kept: ClassVar[int] = 2
+
+    def spill_directory(self, configured: Path) -> Path:
+        return self.path
 
     def files(self) -> dict[str, str]:
         return FieldCodec.decode(dict[str, str],
@@ -268,20 +258,14 @@ class StoreBackup(ResourceBackup):
 
     @staticmethod
     def digest(path: Path) -> str:
-        return (CoordinationStore.digest(path) if CoordinationStore.is_database(path)
-                else hashlib.sha256(path.read_bytes()).hexdigest())
+        return RootFile.content_owner(path).digest(path)
 
     @staticmethod
     def copy_file(source: str | Path, target: str | Path) -> Path:
         """Copy one store through its SQLite snapshot, never through live WAL bytes."""
         source, target = Path(source), Path(target)
-        if CoordinationStore.is_database(source):
-            with closing(CoordinationStore.read_snapshot(source)) as reader:
-                with closing(sqlite3.connect(target)) as writer:
-                    reader.backup(writer)
-            shutil.copystat(source, target)
-        else:
-            shutil.copy2(source, target)
+        owner = RootFile.content_owner(source)
+        owner.copy_file(source, target)
         return target
 
     @classmethod
@@ -299,14 +283,9 @@ class StoreBackup(ResourceBackup):
                     continue
                 if stat.S_ISSOCK(path.lstat().st_mode):
                     omitted.add(name)
-                elif (
-                    path.is_file()
-                    and not path.is_symlink()
-                    and CoordinationStore.is_database(path)
-                ):
-                    omitted.update(
-                        companion.name for companion in CoordinationStore.files(path)[1:]
-                    )
+                elif path.is_file() and not path.is_symlink():
+                    owner = RootFile.content_owner(path)
+                    omitted.update(companion.name for companion in owner.files(path)[1:])
             return omitted
 
         shutil.copytree(
@@ -332,22 +311,25 @@ class StoreBackup(ResourceBackup):
                 os.close(directory)
         return contents
 
+    def file_original(self, name: str, saved: dict[str, str]) -> bool:
+        """An unchanged selected file keeps its identity as well as its contents."""
+        target = self.root / name
+        if name not in saved:
+            return not target.exists()
+        return target.exists() and self.digest(target) == saved[name]
+
     def original(self) -> bool:
         if not (self.path / 'files.json').exists():
             return False
         saved = self.files()
-        for name in json.loads((self.path / 'selected.json').read_text()):
-            target = self.root / name
-            if name not in saved:
-                if target.exists():
-                    return False
-            elif not target.exists() or self.digest(target) != saved[name]:
-                return False
-        return True
+        return all(self.file_original(name, saved)
+                   for name in json.loads((self.path / 'selected.json').read_text()))
 
     def restore(self) -> None:
         saved = self.files()
         for name in json.loads((self.path / 'selected.json').read_text()):
+            if self.file_original(name, saved):
+                continue
             target = self.root / name
             if name in saved:
                 descriptor, temporary = tempfile.mkstemp(prefix='.restore-', dir=target.parent)
@@ -362,7 +344,7 @@ class StoreBackup(ResourceBackup):
                     stage.unlink(missing_ok=True)
             else:
                 target.unlink(missing_ok=True)
-            for companion in CoordinationStore.files(target)[1:]:
+            for companion in SQLiteFile.files(target)[1:]:
                 companion.unlink(missing_ok=True)
         directory = os.open(self.root, os.O_RDONLY | os.O_DIRECTORY)
         try:
@@ -376,6 +358,9 @@ class StoreBackup(ResourceBackup):
 
 class NoBackup(ResourceBackup):
     """A runtime-only install owns no files, paths or snapshot operations."""
+
+    def spill_directory(self, configured: Path) -> Path:
+        return configured
 
     def retain(self, spill_dir: Path) -> tuple[Path, ...]:
         return ()

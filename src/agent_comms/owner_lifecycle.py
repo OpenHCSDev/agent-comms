@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 import os
 from abc import ABC, abstractmethod
-from collections.abc import Iterator, Mapping, Sequence
+from collections.abc import Mapping, Sequence
 from contextlib import closing, contextmanager
 from dataclasses import dataclass, field, replace
 from functools import cached_property, partial
@@ -31,6 +31,7 @@ from .commander_heartbeat import CommanderHeartbeat
 from .diagnostics import owner_process_output
 from .errors import RelationViolationError
 from .launch_root import LaunchRoot
+from .input_disposition import InputDispositions
 from .launch_runtime import LaunchRuntime, RestartEnvironment, SetVariable, ThreadLaunch
 from .maintenance_barrier import MaintenanceBarrier
 from .message_bus import MessageBus
@@ -49,13 +50,11 @@ from .restart_refusals import (
     OwnerSelectionChangedRefusal,
 )
 from .restart_scope import AllOwners, RestartScope
-from .store_files import StoreLock, _store_lock
 from .thread_identity import ClaimedIdentity, OwnerIdentity, ThreadIncarnationRecord
 from .thread_owned_state import ThreadOwnedState
 from .thread_text import GivenThreadText, NoThreadText, ThreadText
 from .threads import Thread
 from .tool_result import ToolResult
-from .turn_lease import NoTurnRecord
 from .typed_table import Column, DurableStore, JsonStorage, TypedTable
 
 if TYPE_CHECKING:
@@ -224,8 +223,9 @@ class OwnerReleaseEvidence(ReleasedOwner, OwnerRelease, TypedTable):
         process = self.require_process()
         if process.alive():
             raise RelationViolationError("Released native owner process is still alive")
-        if snapshot.status(current.name).active and self.matches(current):
-            raise RelationViolationError("Released native process is still the registry owner")
+        if self.matches(current):
+            snapshot.status(current.name).require_inactive(
+                "Released native process is still the registry owner")
         actual = snapshot.claimed_identity(current.name)
         released = ClaimedIdentity(self.incarnation(), self.after)
         if not actual.includes(released):
@@ -278,40 +278,35 @@ class OwnerLifecycle:
         self.bus = bus
         self.goals = goals
         self.messaging = messaging
-        self._wire_lock_path = root / "wire"
         self.maintenance = MaintenanceBarrier(registry.store.path)
         self.releases = OwnerReleaseStore(root)
-
-    @contextmanager
-    def restart_wire(self) -> Iterator[int]:
-        """Borrow this declaration's wire lock as the inherited integer OFD.
-
-        StoreLock continues to own current durability resources. Restart phases
-        transport only its descriptor; the context retains the original lock.
-        """
-        with _store_lock(self._wire_lock_path) as lock:
-            yield lock.descriptor
 
     def acquire_thread(self, name: str, *, owner_pid: int) -> Thread:
         """Bind only this calling process; stored birth time is signal authority."""
         if owner_pid != os.getpid():
             raise RelationViolationError("An owner may acquire only its own process identity.")
         identity = ProcessIdentity.capture(owner_pid)
-        with _store_lock(self._wire_lock_path):
-            self.maintenance.assert_open_unlocked()
-            thread = self.registry.require(name)
-            thread.execution.require_native()
-            thread.role.require_executable(
-                RelationViolationError("A human participant cannot become an executor.")
-            )
-            if thread.process_alive:
-                return thread
-            return self._register_owner_unlocked(thread, identity)
+        self.maintenance.assert_open_unlocked()
+        thread = self.registry.require(name)
+        thread.execution.require_native()
+        thread.role.require_executable(
+            RelationViolationError("A human participant cannot become an executor.")
+        )
+        if thread.process_alive:
+            return thread
+        return self._register_owner(thread, identity)
 
-    def _register_owner_unlocked(self, previous: Thread, identity: ProcessIdentity) -> Thread:
-        """Commit one owner start, then announce its existing work exactly at that event."""
-        owned = replace(previous, process_identity=identity, turn_record=NoTurnRecord())
-        self.registry.register(owned, new_owner=True)
+    def _register_owner(
+        self, previous: Thread, identity: ProcessIdentity,
+        initial_input: LaunchInput = LaunchInput(),
+    ) -> Thread:
+        """Reserve one owner and its first input before releasing the child's start gate."""
+        owner = self.registry.reserve_owner(previous, identity)
+        owned = owner.thread
+        initial_input.record_first_input(partial(
+            InputDispositions(self.root).record, owner=owned.name, target=owned.name,
+            claim_scope=owner.claimed_generation,
+        ))
         if previous.process_identity.offline():
             orders = tuple(
                 todo
@@ -323,13 +318,11 @@ class OwnerLifecycle:
                 identities = ", ".join(sorted({
                     order.id for todo in orders for order in todo.order.declarations
                 }))
-                # All start paths borrow the outer lock's existing release lifetime,
-                # including retained handoffs and parent reservation before child acquire.
-                StoreLock.current_release().callback(self._announce_restart, owned.name, identities)
+                self._announce_restart(owned.name, identities)
         return owned
 
     def _announce_restart(self, name: str, identities: str) -> None:
-        """Publish once after the outer physical locks and their borrowed scopes end."""
+        """Publish once after the registry's process reservation commits."""
         CommanderHeartbeat.register(self.registry)
         self.messaging.send(CommanderHeartbeat.sender, name,
             f"Restarted holding {identities}; continue them from your branch")
@@ -338,19 +331,17 @@ class OwnerLifecycle:
         self, name: str, *, agent_bin: str = NativeArguments.default_binary,
         agent_args: LaunchArguments = InheritedArguments(),
     ) -> Thread:
-        with (self.registry.storage_rule.room_for_start(self.registry.require(name), self.root),
-              _store_lock(self._wire_lock_path)):
+        with self.registry.storage_rule.room_for_start(self.registry.require(name), self.root):
             self.maintenance.assert_open_unlocked()
             thread = self.registry.require(name)
             thread.execution.require_native()
             refusal = RelationViolationError("Explicit start is required for a stopped agent.")
             thread.role.require_executable(refusal)
-            if not self.registry.status(thread.name).active:
-                raise refusal
+            self.registry.status(thread.name).require_active(str(refusal))
             return (
                 thread
                 if thread.process_alive
-                else self._launch_owner_unlocked(thread, agent_bin, agent_args,
+                else self._launch_owner(thread, agent_bin, agent_args,
                                                  launch_runtime=LaunchRuntime.running())
             )
 
@@ -358,8 +349,7 @@ class OwnerLifecycle:
         self, name: str, *, agent_bin: LaunchBinary = ConfiguredBinary(),
         agent_args: LaunchArguments = InheritedArguments(),
     ) -> OwnerStartResult:
-        with (self.registry.storage_rule.room_for_start(self.registry.require(name), self.root),
-              _store_lock(self._wire_lock_path)):
+        with self.registry.storage_rule.room_for_start(self.registry.require(name), self.root):
             self.maintenance.assert_open_unlocked()
             thread = self.registry.require(name)
             thread.execution.require_native()
@@ -368,10 +358,9 @@ class OwnerLifecycle:
             thread.role.require_executable(refusal)
             status.require_visible(str(refusal))
             if thread.process_alive:
-                if not status.active:
-                    raise RelationViolationError("Stopped owner has not exited yet.")
+                status.require_active("Stopped owner has not exited yet.")
                 return OwnerStartResult(thread.name, thread.require_process().pid, False)
-            owner = self._launch_owner_unlocked(
+            owner = self._launch_owner(
                 thread, agent_bin.configured(), agent_args,
                 launch_runtime=LaunchRuntime.running(),
             )
@@ -410,8 +399,8 @@ class OwnerLifecycle:
     ) -> tuple[OwnerRestartResult, ...]:
         """Retain one batch through stop, optional quiet maintenance and launch.
 
-        The declared update runs under the wire input lock after every
-        original exits and before any replacement launches. It owns its writer
+        The declared update runs after every original exits and before any
+        replacement launches. It owns its writer
         proof and operation; failure leaves the fenced batch stopped for review.
         """
         from .owner_restart import OwnerRestartRequest
@@ -421,7 +410,7 @@ class OwnerLifecycle:
 
     @contextmanager
     def _signal_guard(self, thread: Thread, claimed_generation: int):
-        with _store_lock(self._wire_lock_path):
+        with self.registry.store.locked():
             self._require_same_stop_owner(thread, claimed_generation)
             yield
 
@@ -441,29 +430,24 @@ class OwnerLifecycle:
 
     def _stop_selection(self, name: str) -> tuple[Thread, int] | None:
         """Settle an owner that needs no signal, or capture the one that does."""
-        with _store_lock(self._wire_lock_path):
+        with self.registry.store.locked():
             snapshot = self.registry.snapshot()
             thread = self.registry.require(name)
             thread.role.require_executable(
                 RelationViolationError("Only agent threads can be stopped.")
             )
-            if not snapshot.status(thread.name).active and (
-                thread.process_identity.allows_inactive_stop()
-            ):
-                return None
-            if (
-                snapshot.status(thread.name).active
-                and thread.process_identity.runs_here()
-            ):
-                if ThreadLaunch.called_by(
-                    thread.name,
-                    canonicalize=lambda caller: self.registry.require(caller).name,
-                ):
-                    self._release_current_owner_unlocked(thread.name)
-                else:
-                    self.registry.unregister(thread.name)
+            if snapshot.status(thread.name).settle_local_stop(self, thread):
                 return None
             return thread, snapshot.claim_generation(thread.name)
+
+    def _settle_local_owner(self, thread: Thread) -> None:
+        """Settle this process under the caller's existing stop-selection lock."""
+        if ThreadLaunch.called_by(
+            thread.name, canonicalize=lambda caller: self.registry.require(caller).name,
+        ):
+            self._release_current_owner_unlocked(thread.name)
+        else:
+            self.registry.unregister(thread.name)
 
     def stop(self, *names: str) -> None:
         owners = tuple(owner for name in dict.fromkeys(names)
@@ -485,13 +469,13 @@ class OwnerLifecycle:
     def require_launch_authority(self) -> RootLaunch:
         """Check this lifecycle's launch authority without reserving a process.
 
-        Callers hold the wire lock. A preserving restart can check before
-        fencing; every actual launch rechecks the same owner after cutover.
+        A preserving restart can check before fencing; each actual process
+        reservation rechecks the same declaration after cutover.
         """
         self.launch_authority.check()
         return self.launch_authority
 
-    def _launch_owner_unlocked(
+    def _launch_owner(
         self,
         thread: Thread,
         agent_bin: str,
@@ -504,7 +488,6 @@ class OwnerLifecycle:
         # Retire the predecessor while its released declaration is still stopped.
         # Reserving the replacement PID first destroys that observation.
         RecoveryMonitorCapability.recover_owner(self.root, thread)
-        # Callers hold the wire lock; a phase change takes wire then registry.
         self.maintenance.assert_open_unlocked()
         env = dict(os.environ if environment is None else environment)
         launch_runtime.require_available()
@@ -517,7 +500,7 @@ class OwnerLifecycle:
 
         def reserve(identity: ProcessIdentity) -> None:
             nonlocal owned
-            owned = self._register_owner_unlocked(thread, identity)
+            owned = self._register_owner(thread, identity, initial_input)
 
         with owner_process_output(self.root, thread) as output:
             SpawnedProcess.launch(
@@ -548,7 +531,7 @@ class OwnerLifecycle:
             ) from error
 
     def _finish_stopped_owner(self, thread: Thread, claimed_generation: int) -> None:
-        with _store_lock(self._wire_lock_path):
+        with self.registry.store.locked():
             snapshot = self.registry.snapshot()
             if self.releases.get(thread.name).current(snapshot, thread, claimed_generation):
                 return  # An exact, durably attested release of the signaled owner.
@@ -558,7 +541,7 @@ class OwnerLifecycle:
     def release(self, name: str) -> None:
         """Let the calling participant mark itself stopped without signalling."""
         caller = ThreadLaunch.current().name
-        with _store_lock(self._wire_lock_path):
+        with self.registry.store.locked():
             canonical = self.registry.require(name).name
             if self.registry.require(caller).name != canonical:
                 raise RelationViolationError(f"Thread {caller!r} cannot release {canonical!r}.")

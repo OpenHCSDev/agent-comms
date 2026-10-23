@@ -13,19 +13,20 @@ from typing import TYPE_CHECKING, Annotated
 
 from agent_comms.coordination_tables.executions import ExecutionRecord
 from agent_comms.coordination_tables.participants import Participants
-from agent_comms.private_runtime_schema import PrivateRuntimeSchema
+from agent_comms.private_runtime_schema import PrivateCoordinatorTable
 
 from .coordination_errors import IdentityConflict, PublicationActivationBlocked, StaleFence
 from .field_codec import FieldCodec, MalformedRecord, NativeContext, WireName
 from .native_claim_epoch import NativeClaimEpoch, UnrecordedNativeClaim
 from .native_input_record import (
+    NativeColumn,
     NativeInputContext,
     NativeInputExecution,
     NativeInputLocation,
     NativeInputPosition,
-    NativeStageStorage,
     NativeInputRecord,
-    NativeColumn,
+    TriageNativeExecution,
+    NativeStageStorage,
     NumberNativeColumn,
     RecordedNativePosition,
     TextNativeColumn,
@@ -40,11 +41,20 @@ from .selected_triage import (
 from .typed_table import (
     Column,
     DurableTables,
+    FinalizedColumn,
+    FrozenColumn,
     IntegerStorage,
+    MonotoneColumns,
+    NoDelete,
+    NonDecreasing,
+    RequiredUpdateColumns,
     SharedFileTables,
+    StableReferenceColumns,
     TextStorage,
     TypedRow,
     TypedTable,
+    WriteOnceColumns,
+    sql_literal,
 )
 
 if TYPE_CHECKING:
@@ -52,24 +62,11 @@ if TYPE_CHECKING:
     from .native_session_reopen import NativeSessionIdentity
 
 
-class NativeRuntimeTable(SharedFileTables, DurableTables, PrivateRuntimeSchema):
+class NativeRuntimeTable(PrivateCoordinatorTable):
     """Capability identifying the native-runtime schema's declared tables."""
 
     __slots__ = ()
     schema_error = PublicationActivationBlocked
-
-    @classmethod
-    def install(cls, store) -> None:
-        from .coordinated_runtime_schema import install_native_runtime_schema
-
-        install_native_runtime_schema(store)
-
-    @classmethod
-    def schema_rows(cls) -> tuple[type[TypedTable], ...]:
-        # Importing it declares the family's last table.
-        from . import triage_native_sources  # noqa: F401
-
-        return super().schema_rows()
 
 
 @dataclass(frozen=True)
@@ -81,7 +78,40 @@ class PublishedReplyRevision(TypedRow):
 
 
 @dataclass(frozen=True)
-class NativeRuntimeInput(NativeInputRecord, NativeInputContext, NativeRuntimeTable, TypedTable):
+class NativeRuntimeInput(
+    WriteOnceColumns,
+    FinalizedColumn,
+    RequiredUpdateColumns,
+    NoDelete,
+    NativeInputRecord,
+    NativeInputContext,
+    NativeRuntimeTable,
+    TypedTable,
+):
+    @classmethod
+    def notification_context_sql(cls) -> str:
+        """Native context evidence for the caller's bounded assignment window ``w``."""
+        triage_stage = sql_literal(TriageNativeExecution)
+        return (
+            "WITH member AS MATERIALIZED (SELECT m.input_id,m.assignment_id,m.ordinal "
+            f"FROM ({cls.source_membership_sql()}) m "
+            "WHERE m.assignment_id IN (SELECT assignment_id FROM w)) "
+            "SELECT w.assignment_id,"
+            f"EXISTS (SELECT 1 FROM {cls.declared_name} n "
+            "JOIN member ON member.input_id=n.input_id "
+            "WHERE member.assignment_id=w.assignment_id "
+            f"AND n.stage={triage_stage} AND n.session_entry_id IS NULL) AS triage_inflight,"
+            f"(SELECT n.committed_at_ms FROM {cls.declared_name} n "
+            "JOIN member ON member.input_id=n.input_id "
+            "WHERE member.assignment_id=w.assignment_id AND n.session_entry_id IS NOT NULL "
+            f"ORDER BY CASE n.stage WHEN {triage_stage} THEN 0 ELSE 1 END,"
+            "member.ordinal,n.input_id LIMIT 1) AS context_committed_at_ms FROM w"
+        )
+
+    write_once_columns = ('sent_owner_claimed_generation', 'session_id', 'session_file')
+    finalized_column = 'session_entry_id'
+    required_update_columns = ('sent_owner_claimed_generation',)
+
     @classmethod
     def source_membership_sql(cls) -> str:
         return " UNION ALL ".join(
@@ -214,20 +244,24 @@ class NativeRuntimeInput(NativeInputRecord, NativeInputContext, NativeRuntimeTab
 
     input_id: Annotated[
         str,
-        Column(primary_key=True, check="length(input_id)=32 AND input_id NOT GLOB '*[^0-9a-f]*'"),
+        FrozenColumn(
+            primary_key=True, check="length(input_id)=32 AND input_id NOT GLOB '*[^0-9a-f]*'"
+        ),
     ]
     stage: Annotated[
-        type[NativeInputExecution], Column(check=NativeInputExecution.sql_constraint("stage"))
+        type[NativeInputExecution], FrozenColumn(check=NativeInputExecution.sql_constraint("stage"))
     ]
     execution_id: Annotated[
         NativeColumn,
-        Column(references=(ExecutionRecord, "execution_id"), storage=TextStorage, nullable=True),
+        FrozenColumn(
+            references=(ExecutionRecord, "execution_id"), storage=TextStorage, nullable=True
+        ),
     ]
-    attempt_ordinal: Annotated[NativeColumn, Column(storage=IntegerStorage, nullable=True)]
-    owner_lookup: Annotated[str, Column(references=(Participants, "participant_lookup"))]
-    owner_thread: str
-    owner_generation: Annotated[int, Column(check="owner_generation>0")]
-    owner_token_digest: Annotated[str, Column(check="length(owner_token_digest)=64")]
+    attempt_ordinal: Annotated[NativeColumn, FrozenColumn(storage=IntegerStorage, nullable=True)]
+    owner_lookup: Annotated[str, FrozenColumn(references=(Participants, "participant_lookup"))]
+    owner_thread: Annotated[str, FrozenColumn()]
+    owner_generation: Annotated[int, FrozenColumn(check="owner_generation>0")]
+    owner_token_digest: Annotated[str, FrozenColumn(check="length(owner_token_digest)=64")]
     sent_owner_claimed_generation: Annotated[
         NativeClaimEpoch,
         WireName("sent_owner_admission_generation"),
@@ -301,56 +335,39 @@ class NativeRuntimeInput(NativeInputRecord, NativeInputContext, NativeRuntimeTab
         if updated.rowcount != 1:
             raise StaleFence("native proof was previously committed")
 
-    @classmethod
-    def trigger_bodies(cls) -> dict[str, str]:
-        name = cls.declared_name
-        return {
-            f"{name}_identity_guard": f"""
-            BEFORE UPDATE ON {name}
-            WHEN NEW.input_id IS NOT OLD.input_id OR NEW.stage IS NOT OLD.stage
-                OR NEW.execution_id IS NOT OLD.execution_id
-                OR NEW.attempt_ordinal IS NOT OLD.attempt_ordinal
-                OR NEW.owner_lookup IS NOT OLD.owner_lookup
-                OR NEW.owner_thread IS NOT OLD.owner_thread
-                OR NEW.owner_generation IS NOT OLD.owner_generation
-                OR NEW.owner_token_digest IS NOT OLD.owner_token_digest
-                OR (OLD.{{sent_owner_claimed_generation}}
-                    IS NOT NULL
-                    AND NEW.{{sent_owner_claimed_generation}}
-                        IS NOT OLD.{{sent_owner_claimed_generation}})
-                OR (NEW.{{sent_owner_claimed_generation}} IS NULL AND NEW.session_id IS NOT NULL)
-                OR (OLD.session_id IS NOT NULL AND
-                    (NEW.session_id IS NOT OLD.session_id OR NEW.session_file IS NOT OLD.session_file))
-                OR OLD.session_entry_id IS NOT NULL
-                OR (NEW.session_id IS NULL AND NEW.{{sent_owner_claimed_generation}} IS NULL)
-            BEGIN SELECT RAISE(ABORT,'native runtime input identity is frozen'); END""",
-            f"{name}_delete_guard": f" BEFORE DELETE ON {name} "
-            "BEGIN SELECT RAISE(ABORT,'native runtime input cannot be deleted'); END",
-        }
-
-
 @dataclass(frozen=True)
-class CurrentNativeCursor(NativeInputContext, NativeRuntimeTable, TypedTable):
+class CurrentNativeCursor(
+    MonotoneColumns,
+    StableReferenceColumns,
+    NoDelete,
+    NativeInputContext,
+    NativeRuntimeTable,
+    TypedTable,
+):
+    column_orders = (NonDecreasing(("covered_seq", "injected_seq")),)
+    reference_column = 'injected_seq'
+    stable_reference_columns = ('input_id',)
+
     @property
     def context_anchor(self) -> NativeColumn:
         return self.session_id
 
     wire_root_id: Annotated[
         str,
-        Column(
+        FrozenColumn(
             primary_key=True,
             check="length(wire_root_id)=32 AND wire_root_id NOT GLOB '*[^0-9a-f]*'",
         ),
     ]
     recipient_lookup: Annotated[
-        str, Column(primary_key=True, references=(Participants, "participant_lookup"))
+        str, FrozenColumn(primary_key=True, references=(Participants, "participant_lookup"))
     ]
-    owner_thread: Annotated[str, Column(check="owner_thread<>''")]
-    owner_generation: Annotated[int, Column(primary_key=True, check="owner_generation>0")]
+    owner_thread: Annotated[str, FrozenColumn(check="owner_thread<>''")]
+    owner_generation: Annotated[int, FrozenColumn(primary_key=True, check="owner_generation>0")]
     owner_claimed_generation: Annotated[
         int,
         WireName("owner_admission_generation"),
-        Column(record_key=True, primary_key=True, check="{owner_claimed_generation}>0"),
+        FrozenColumn(record_key=True, primary_key=True, check="{owner_claimed_generation}>0"),
     ]
 
     @property
@@ -386,20 +403,3 @@ class CurrentNativeCursor(NativeInputContext, NativeRuntimeTable, TypedTable):
         "AND stage IS NOT NULL "
         "AND session_id IS NOT NULL AND request_generation>0)",
     )
-
-    @classmethod
-    def trigger_bodies(cls) -> dict[str, str]:
-        name = cls.declared_name
-        return {
-            f"{name}_update_guard": f""" BEFORE UPDATE ON {name}
-            WHEN NEW.wire_root_id IS NOT OLD.wire_root_id
-                OR NEW.recipient_lookup IS NOT OLD.recipient_lookup
-                OR NEW.owner_thread IS NOT OLD.owner_thread
-                OR NEW.owner_generation IS NOT OLD.owner_generation
-                OR NEW.{{owner_claimed_generation}} IS NOT OLD.{{owner_claimed_generation}}
-                OR NEW.covered_seq < OLD.covered_seq OR NEW.injected_seq < OLD.injected_seq
-                OR (NEW.injected_seq = OLD.injected_seq AND NEW.input_id IS NOT OLD.input_id)
-            BEGIN SELECT RAISE(ABORT,'native source cursor cannot regress'); END""",
-            f"{name}_delete_guard": f" BEFORE DELETE ON {name} "
-            "BEGIN SELECT RAISE(ABORT,'native source cursor cannot be deleted'); END",
-        }

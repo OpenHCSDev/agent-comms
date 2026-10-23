@@ -28,7 +28,6 @@ from .native_failures import NativeRequestFailure
 from .coordinator import Coordination
 from .routing import MessageRoute, ScheduledTurn, TurnRouting
 from .runtime import UNBOUND_CONTROLLER
-from .store_files import _store_lock
 from .thread_identity import TurnId
 from .turn_goal_account import TurnGoalAccount
 from .turn_goal_permission import (
@@ -160,9 +159,9 @@ class OwnedTurn:
         self.input_cleanup.push_async_callback(Coordination.run_worker, self.settle_unbound)
         self.bus_origins = tuple(origin for origin in self.origins if origin.seq > 0)
         if self.bus_origins:
-            with _store_lock(self.runner.comms._wire_lock_path):
+            with self.runner.comms.registry.store.locked():
+                privacy = self.runner.comms.registry.store.private_guard_unlocked()
                 snapshot = self.runner.comms.registry.snapshot()
-                metadata = self.runner.comms.bus.log.read_metadata_unlocked()
                 originals = tuple(
                     ReservedInput(
                         key=self.runner.inputs.dispositions.bus_key(origin, self.thread),
@@ -174,7 +173,7 @@ class OwnedTurn:
                             origin, aliases=snapshot.aliases
                         ).prompt,
                         origin=WireInputOrigin(
-                            metadata.root_id,
+                            privacy.namespace,
                             origin.reference,
                         ),
                     )
@@ -265,7 +264,7 @@ class OwnedTurn:
             ),
             batch=batch,
         )
-        with _store_lock(self.runner.comms._wire_lock_path), ExitStack() as reservation:
+        with ExitStack() as reservation:
             self.original = original.reserve(
                 self.runner.inputs.dispositions,
                 self.thread,
@@ -409,10 +408,9 @@ class OwnedTurn:
                     raise
 
     def settle_unbound(self):
-        """Close the actual input batch and observe its result under one wire cut."""
-        with _store_lock(self.runner.comms._wire_lock_path):
-            document = self.runner.inputs.dispositions.settle_unbound(self.original_keys)
-            return document.shared_state(self.original_keys)
+        """Read the result of the input owner's exact retirement transaction."""
+        document = self.runner.inputs.dispositions.settle_unbound(self.original_keys)
+        return document.shared_state(self.original_keys)
 
     async def fail(self, failure: Exception, cause: Exception) -> NoReturn:
         """Settle and report once, retaining the exception that actually failed the turn."""

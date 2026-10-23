@@ -1,4 +1,5 @@
 """Physical locking, not fake store objects: nesting must keep outsiders out."""
+
 import asyncio
 from contextvars import copy_context
 import fcntl
@@ -8,7 +9,6 @@ import sys
 
 import pytest
 
-from agent_comms.comms import wire
 from agent_comms.errors import RelationViolationError
 from agent_comms.store_files import (
     BoundedStoreReadBudget, SharedLock, StoreLockContention,
@@ -105,20 +105,4 @@ def test_async_and_sync_nest_but_independent_tasks_and_threads_do_not(tmp_path):
             await asyncio.to_thread(thread_reader)
             assert not probe(path)
         assert probe(path, shared=False)
-    asyncio.run(run())
-
-
-def test_checked_async_worker_explicitly_borrows_the_original_acquisition(tmp_path):
-    comms = wire(tmp_path)
-    comms.messaging.initialize_private_initial_protocol()
-    async def run():
-        with comms.bus.log.locked() as outer:
-            def read(source):
-                # The joined worker may itself nest a normal source acquisition.
-                with comms.bus.log.locked(mode=SharedLock()) as inner:
-                    assert inner.descriptor == outer.descriptor
-                return source.witness.through_seq
-            assert await comms.bus.log.read_checked_async(read) == 0
-            assert not probe(comms.bus.log.path)
-        assert probe(comms.bus.log.path, shared=False)
     asyncio.run(run())

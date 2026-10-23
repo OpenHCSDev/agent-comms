@@ -97,16 +97,6 @@ class TranscriptChangedUpdate(AgentCommsUpdate):
     cursor: TranscriptCursor | None
 
 
-@dataclass(frozen=True)
-class UnknownDeliveryFailure(BackendDeliveryFailure):
-    wire_root_id: str
-    wire_seq: int
-    message_id: str
-
-    def present(self, receiver, body: str) -> None:
-        receiver.delivery_unknown(self, body)
-
-
 class ClaimBlockedFailure(BackendDeliveryFailure):
     def present(self, receiver, body: str) -> None:
         receiver.delivery_blocked(self.description, body)

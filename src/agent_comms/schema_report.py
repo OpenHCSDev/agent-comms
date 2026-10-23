@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from .cli_result import CliResult
-from .coordination_database import CoordinationStore
+from .locked_store import SQLiteFile
 from .declared_family import UnknownFamilyMember
 from .field_codec import FieldCodec
 from .typed_table import SQLiteSchemaDifference, SQLiteSchemaObject, SQLiteTableName, TypedTable
@@ -40,7 +40,7 @@ class StoreSchemaReport:
 
     @classmethod
     def observe(cls, path: Path) -> StoreSchemaReport:
-        with closing(CoordinationStore.read_snapshot(path)) as db:
+        with closing(SQLiteFile.read_snapshot(path)) as db:
             return cls.read(db, path)
 
     @classmethod

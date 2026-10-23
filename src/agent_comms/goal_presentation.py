@@ -18,7 +18,7 @@ from .thread_presentation import ThreadPresentation
 
 if TYPE_CHECKING:
     from .agent_activity import AgentActivity
-    from .bus_publication import CommittedDelivery
+    from .bus_publication import Delivered
     from .goal_actions import GoalAction
     from .goal_attempts import Generation
     from .goal_failure_observation import GoalFailureEvidence
@@ -32,7 +32,7 @@ if TYPE_CHECKING:
 class GoalWaitTarget(WireValue):
     incarnation: RecordedThreadIncarnation
 
-    def sent(self, original: CommittedDelivery) -> bool:
+    def sent(self, original: Delivered) -> bool:
         return original.audience.sender_lookup == self.incarnation.lookup
 
     def to_wire(self) -> dict[str, str | float]:
@@ -79,6 +79,9 @@ class GoalExecution(DeclaredFamily, affix="Execution"):
 
     def waiting_presentation(self, ordinary: ThreadPresentation) -> ThreadPresentation:
         return ordinary
+
+    def runnable(self) -> bool:
+        return False
 
     def standby(self) -> bool:
         return False
@@ -161,6 +164,9 @@ class RetryableExecution(ControlledExecution, declared_name=None):
 @dataclass(frozen=True)
 class RunnableExecution(ActiveExecution):
     label = "Active"
+
+    def runnable(self) -> bool:
+        return True
 
 
 @dataclass(frozen=True)

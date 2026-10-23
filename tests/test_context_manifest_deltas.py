@@ -18,7 +18,7 @@ from agent_comms.turn_context import (
     RecordedContextTurn,
     SegmentManifest, SystemLayerSegment, ToolCatalogSegment, TranscriptSegment,
 )
-from test_private_bus_checkpoint import _root
+from bus_record_fixture import context_comms
 
 
 def context(owner, path, count, turn):
@@ -41,7 +41,7 @@ def context(owner, path, count, turn):
 
 
 def test_context_deltas_restore_original_text_and_incremental_membership(tmp_path):
-    comms, _ = _root(tmp_path)
+    comms = context_comms(tmp_path)
     owner = comms.registry.require('Alice')
     first = context(owner, tmp_path, 328, 1)
     second = context(owner, tmp_path, 330, 2)
@@ -69,7 +69,7 @@ def test_context_deltas_restore_original_text_and_incremental_membership(tmp_pat
 
 
 def test_changed_text_and_replaced_transcript_do_not_reuse_old_values(tmp_path):
-    comms, _ = _root(tmp_path)
+    comms = context_comms(tmp_path)
     owner = comms.registry.require('Alice')
     first = context(owner, tmp_path, 3, 1)
     comms.contexts.record_after(UNREAD_CONTEXT, first)
@@ -83,7 +83,7 @@ def test_changed_text_and_replaced_transcript_do_not_reuse_old_values(tmp_path):
 
 
 def test_newly_captured_text_is_not_replaced_by_an_empty_predecessor(tmp_path):
-    comms, _ = _root(tmp_path)
+    comms = context_comms(tmp_path)
     owner = comms.registry.require('Alice')
     first = context(owner, tmp_path, 1, 1)
     first = replace(first, segments=(replace(first.segments[0], captured_text=()),
@@ -96,7 +96,7 @@ def test_newly_captured_text_is_not_replaced_by_an_empty_predecessor(tmp_path):
 
 
 def test_request_provenance_does_not_change_immutable_entry_membership(tmp_path):
-    comms, _ = _root(tmp_path)
+    comms = context_comms(tmp_path)
     owner = comms.registry.require('Alice')
     first = context(owner, tmp_path, 328, 1)
     comms.contexts.record_after(UNREAD_CONTEXT, first)
@@ -120,7 +120,7 @@ def test_request_provenance_does_not_change_immutable_entry_membership(tmp_path)
 
 
 def test_forty_turns_use_direct_sources_and_fixed_transcript_keyframes(tmp_path):
-    comms, _ = _root(tmp_path)
+    comms = context_comms(tmp_path)
     owner = comms.registry.require('Alice')
     expected = [context(owner, tmp_path, 328 + 2 * turn, turn + 1) for turn in range(40)]
     for manifest in expected:
@@ -160,7 +160,7 @@ def test_missing_store_identity_refuses_reads_and_further_records(tmp_path):
     from agent_comms.context_store import ContextStoreInfo
     from agent_comms.errors import RelationViolationError
 
-    comms, _ = _root(tmp_path)
+    comms = context_comms(tmp_path)
     owner = comms.registry.require('Alice')
     original = context(owner, tmp_path, 2, 1)
     comms.contexts.record_after(UNREAD_CONTEXT, original)
@@ -179,7 +179,7 @@ def test_threads_record_concurrently_and_a_superseded_prior_is_refused(tmp_path)
     from concurrent.futures import ThreadPoolExecutor
     from agent_comms.context_store import ContextPriorSupersededError
 
-    comms, _ = _root(tmp_path)
+    comms = context_comms(tmp_path)
     owners = [comms.registry.require(name) for name in ('Alice', 'Bob')]
     priors = [comms.contexts.prior(owner.incarnation) for owner in owners]
     with ThreadPoolExecutor(2) as pool:

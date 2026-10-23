@@ -40,6 +40,7 @@ from aiohttp.web_urldispatcher import AbstractResource, ResourceRoute, SystemRou
 from pydantic import JsonValue
 
 
+from .bus_publication import DirectorOrigin
 from .cli_bridges.shared import DeclaredVerb
 from .cli_protocol import CoreError
 from .command import Command
@@ -51,14 +52,15 @@ from .field_codec import (
     Argument, FieldCodec, GitCommitText, MalformedRecord, PathText, WireName, WireOmitDefault,
     boundary_decoder,
 )
-from .goal_actions import DirectiveGoalAction
+from agent_comms.channel_targets import NamedTarget
+from agent_comms.owner_requests import NewestOpenRequest, RequestSelection
 from .host_services import HostService, SystemdUserService
 from .connector_store import (
     CODE_SECONDS, ApprovalQueueFull, ApprovalRefused, AuthorizationQuery,
     AuthorizationRequest, ClaudeCallback,
     ConnectorGrants, ConnectorStore, IssuedTokens, RegisteredClient, TrustedBrowser, digest,
 )
-from .messages import Message, QuestionKind
+from .messages import QuestionKind
 from .commander.standing import UnownedOrderWatch
 from .commander_heartbeat import CommanderHeartbeat
 from .coordinator import Coordination
@@ -67,9 +69,11 @@ from .head_review import HeadReview, PullRequestHead
 from .repository_name import RepositoryName
 from .todos import DirectiveText, ReviewedHeadVerdict
 from .tool_result import ToolResult
-from .tool_caller import ThreadCaller
+from .task_sources import OwnerRequestAttachment
+from .tool_caller import ThreadCaller, ToolCaller
 from .tools import (
-    CommsVerdictTool, ReadTool, TodoChanged, ToolRequest, tool_field,
+    CommsSendTool, CommsVerdictTool, MessagePublished, ReadTool, SendTool,
+    TodoChanged, ToolRequest, tool_field,
 )
 
 LOOPBACK = "127.0.0.1"
@@ -78,24 +82,32 @@ PORT = 18766
 
 @dataclass(frozen=True)
 class DirectorCaller(ThreadCaller):
-    """claude-ai speaks for the owner: each message it sends a thread is a directive, recorded as a
-    request when that thread holds owner requests."""
+    """claude-ai speaks for the owner, so its sends carry the director origin, which records each
+    message to a thread as a directive like the owner's own."""
 
     def require_directive(self, comms: Comms, body: str) -> None:
         """A directive passes DirectiveText. claude-ai directs the commanders, so the
         commander rules review does not gate it."""
         DirectiveText.require(body)
 
-    def sent(self, comms: Comms, message: Message) -> None:
-        if message.target in comms.registry:  # a channel holds no requests
-            comms.goals.update_goal(
-                message.target,
-                DirectiveGoalAction(text=message.body, seq=message.seq, at=message.timestamp),
-            )
+    def origin(self) -> DirectorOrigin:
+        return DirectorOrigin()
 
 
 class ConnectorTool(ToolRequest[DirectorCaller], affix="ConnectorTool"):
     """Connector-only declarations are absent from the native/CLI tool registry."""
+
+
+@dataclass(frozen=True, kw_only=True)
+class ConnectorSendTool(SendTool, ConnectorTool, declared_name=CommsSendTool.declared_name):
+    request: Annotated[
+        RequestSelection,
+        *tool_field("Owner request ID; omitted selects the recipient's newest open request"),
+    ] = NewestOpenRequest()
+
+    def attachment(self, comms: Comms, target: NamedTarget) -> OwnerRequestAttachment:
+        requests = self.request.for_message(comms.goals.todos, target, comms.registry)
+        return OwnerRequestAttachment(tuple(request.id for request in requests))
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -561,7 +573,7 @@ class Connector:
         Waiting with a client route borrowed would hold up its replacement. The
         pass inherits the bus's hold wait; requests retain client_wire's fast refusal.
         """
-        yield Comms.blocking_reads(self.root)
+        yield Comms(self.root)
 
     def invoke(
         self, tool: type[ToolRequest] | type[ConnectorTool], arguments: Mapping[str, object]

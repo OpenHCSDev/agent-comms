@@ -9,18 +9,13 @@ from contextlib import ExitStack, contextmanager, nullcontext
 from functools import cached_property
 from typing import TYPE_CHECKING
 
-from agent_comms.coordination_database import (
-    DEFAULT_STORE_CONTENTION,
-    CoordinationStore,
-    StoreContention,
-)
+from agent_comms.coordination_database import CoordinationStore
 from agent_comms.coordination_errors import (
     CoordinationReadUnavailable,
     IntegrityViolationError,
 )
-from agent_comms.locked_store import RegistryFile
+from agent_comms.locked_store import DEFAULT_STORE_CONTENTION, RegistryFile, StoreContention
 from agent_comms.store_files import StoreLockContention
-from agent_comms.wire_log import CurrentSnapshotOpening, WireLog
 
 if TYPE_CHECKING:
     from .message_bus import MessageBus
@@ -80,7 +75,7 @@ class CoordinationSession(CoordinationStore):
 
 
 class NativeBoundary(ExitStack):
-    """Publication locks ordered by their namespace, log and registry owners."""
+    """Borrow the registry's own read lock for a publication decision."""
 
     def __init__(self, bus, *, blocking=True, contention=None, measurements=None):
         super().__init__()
@@ -92,18 +87,16 @@ class NativeBoundary(ExitStack):
         self.measurements = measurements if measurements is not None else PublicationMeasurements()
 
     def __enter__(self):
-        from .store_files import ExclusiveLock, SharedLock, StoreLock
+        from .store_files import SharedLock, _store_lock
 
         try:
-            self.activity = self.enter_context(
-                self.bus.opened_activity(CurrentSnapshotOpening(self.contention)))
+            self.activity = self.enter_context(self.bus.opened_activity())
             with self.measurements.operation("file_exclusion"):
-                locks = self.enter_context(StoreLock.ordered(
-                    {self.bus: SharedLock(), self.bus.log: ExclusiveLock(),
-                     self.bus._registry.store: SharedLock()},
+                self.enter_context(_store_lock(
+                    self.bus._registry.store.path, mode=SharedLock(),
                     contention=self.contention))
-            self.bus_lock = locks[self.bus.log]
             with self.measurements.operation("registry_snapshot"):
+                self.privacy = self.bus._registry.store.private_guard_unlocked()
                 self.registry = self.bus._registry.store.read_snapshot_unlocked()
             return self
         except BaseException:
@@ -120,14 +113,14 @@ class NativeCoordinationSession(CoordinationSession):
         from . import message_bus, publisher, registration
 
         return message_bus.MessageBus(
-            WireLog.path_in(self.path.parent),
+            self.path.parent,
             registration.Registration(RegistryFile.path_in(self.path.parent)),
             publisher.ClaimWrites,
         )
 
     def boundary(self, bus=None, **options):
         selected = self.bus if bus is None else bus
-        if selected.log.path.parent.resolve() != self.path.parent.resolve():
+        if selected.bus.path.parent.resolve() != self.path.parent.resolve():
             raise IntegrityViolationError("native boundary belongs to another coordinator")
         return NativeBoundary(selected, **options)
 
@@ -137,7 +130,7 @@ class NativeCoordinationSession(CoordinationSession):
     ) -> Iterator[NativeBoundary]:
         """Acquire a native boundary, or borrow the caller's already held one."""
         with self.boundary() if boundary is None else nullcontext(boundary) as acquired:
-            if acquired.bus.log.path.parent.resolve() != self.path.parent.resolve():
+            if acquired.bus.bus.path.parent.resolve() != self.path.parent.resolve():
                 raise IntegrityViolationError("settlement boundary belongs to another coordinator")
             with self.writing():
                 yield acquired

@@ -28,7 +28,8 @@ from agent_comms.coordination_errors import (
 )
 from agent_comms.coordination_results import Applied
 from agent_comms.coordination_snapshot import RecoverySnapshot
-from agent_comms.coordination_tables.attempts import AttemptRecord, ReplayAssessments, ReplayFact
+from agent_comms.coordination_tables.attempts import AttemptRecord, ReplayFact
+from agent_comms.coordination_tables.executions import ReplayAssessments
 from agent_comms.coordination_tables.executions import CurrentExecutions
 from agent_comms.coordination_tables.recovery import (
     RecoveryAudit,
@@ -79,15 +80,15 @@ class VerifiedOwnerLoss(ABC):
         input still settles UNKNOWN, never unsent or safe to replay.
         """
         from agent_comms.comms import Comms
-        from agent_comms.coordinated_runtime_schema import assert_native_runtime_schema
+        from agent_comms.native_runtime_input import NativeRuntimeTable
 
         if store.session.path.name != CoordinationStore.filename:
             raise RecoveryBlocked("native recovery requires the canonical coordination store")
         comms = Comms(store.session.path.parent)
         with store.session.boundary(comms.bus) as boundary:
             registry = boundary.registry
-            assert_native_runtime_schema(store.session._connection)
-            snapshot = store.snapshots.get(execution_id)
+            NativeRuntimeTable.require_installed(store.session._connection)
+            snapshot = store.get(execution_id)
             attempt = snapshot.attempt
             if attempt is None or not snapshot.is_current:
                 raise RecoveryBlocked("native recovery requires the current attempted execution")
@@ -322,7 +323,7 @@ class RecoveryMonitorCapability:
         from .pi_vocabulary import PendingStopReason
         from .private_path import FileRevision, MissingFile
 
-        snapshot = store.snapshots.get(execution_id)
+        snapshot = store.get(execution_id)
         attempt = snapshot.require_current_attempt()
         source = NativeRuntimeInput.one(
             store.session._connection,
@@ -362,7 +363,7 @@ class RecoveryMonitorCapability:
             for kept in revision.revisions():
                 if FileRevision.capture(session.path) != kept:
                     raise StaleRevision("native journal changed during recovery")
-            current = store.snapshots.get(execution_id)
+            current = store.get(execution_id)
             attempt = current.require_current_attempt()
             outcome, replay_facts = terminal.unpublished_attempt()
             return cls(store, _grant=_MONITOR_GRANT).terminalize_dead_attempt(
@@ -398,7 +399,7 @@ class RecoveryMonitorCapability:
         while its UNKNOWN input and all evidence remain untouched.
         """
         with VerifiedOwnerLoss.observe_native_release(store, execution_id) as loss:
-            snapshot = store.snapshots.get(execution_id)
+            snapshot = store.get(execution_id)
             attempt = snapshot.attempt
             assert attempt is not None  # Required by the release observer.
             if bool(snapshot.publication_intents):
@@ -441,7 +442,7 @@ class RecoveryMonitorCapability:
         )
 
         with VerifiedOwnerLoss.observe_native_release(store, execution_id) as loss:
-            snapshot = store.snapshots.get(execution_id)
+            snapshot = store.get(execution_id)
             attempt = snapshot.attempt
             assert attempt is not None  # The release observer requires an attempt.
             if bool(snapshot.publication_intents):
@@ -518,7 +519,7 @@ class RecoveryMonitorCapability:
             raise RecoveryBlocked("monitor requires an observed release of this exact owner")
         with store.session.settlement(owner_loss.boundary) as boundary:
             db = store.session._connection
-            snapshot = store.snapshots.get(execution_id)
+            snapshot = store.get(execution_id)
             attempt = snapshot.attempt
             if (
                 not snapshot.is_current
@@ -554,10 +555,10 @@ class RecoveryMonitorCapability:
             )
             unresolved = bool(snapshot.publication_intents)
             if (attempt.lifecycle.backend_done or evidence.backend_done) and not unresolved:
-                store.snapshots.get(execution_id).settle(
+                store.get(execution_id).settle(
                     store.session, evidence.outcome, evidence.reason_code, boundary
                 )
-                settled = store.snapshots.get(execution_id)
+                settled = store.get(execution_id)
                 kind = DeferredRecovery if settled.execution.lifecycle.retry else FailedRecovery
                 RecoveryAudit(
                     execution_id=execution_id,
@@ -568,7 +569,7 @@ class RecoveryMonitorCapability:
                     elapsed_ms=0,
                     observed_at_ms=now,
                 ).insert(db)
-                return Applied(store.snapshots.get(execution_id))
+                return Applied(store.get(execution_id))
             # Death and genuinely observed backend completion commit even when
             # publication remains unresolved.  Neither state clears the pointer.
         if unresolved and (attempt.lifecycle.backend_done or evidence.backend_done):

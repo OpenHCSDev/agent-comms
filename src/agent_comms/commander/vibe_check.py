@@ -10,13 +10,15 @@ from __future__ import annotations
 import math
 import time
 from abc import abstractmethod
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from typing import ClassVar, Self
 
 from agent_comms.commander.capacity import Load
+from agent_comms.bus import BusReader
 from agent_comms.commander.config import CommanderConfig
-from agent_comms.commander.standing import AnswersTo, PlanStalled, SenderMessages, UnansweredBurst
+from agent_comms.commander.questions import SenderMessages, UnansweredBurst
+from agent_comms.commander.standing import AnswersTo, PlanStalled
 from agent_comms.comms import Comms
 from agent_comms.declared_family import DeclaredFamily
 from agent_comms.goal_actions import (
@@ -26,8 +28,16 @@ from agent_comms.goal_actions import (
 )
 from agent_comms.messages import Message
 from agent_comms.read_basis import RepliesDisplayScope
+from agent_comms.registry_document import RegistrySnapshot
+from agent_comms.thread_identity import ThreadIncarnation
+from agent_comms.todos import OwnerRequest, Todo
 from agent_comms.service_sender import ServiceSender
-from agent_comms.standing_rules import OwedAnswer, StandingRule, UndatedStandingRule
+from agent_comms.standing_rules import (
+    IndependentStandingRule,
+    OwedAnswer,
+    StandingRule,
+    UndatedStandingRule,
+)
 
 
 class EscalationSender(ServiceSender):
@@ -56,24 +66,23 @@ class EscalationSender(ServiceSender):
     @classmethod
     def sent(cls, comms: Comms, commander: str, line: str) -> bool:
         snapshot = comms.registry.snapshot()
-        return any(message.body == line for message in comms.bus.log.read_page(SenderMessages(
+        messages = SenderMessages(
             RepliesDisplayScope(snapshot.names_for(commander), snapshot.names_for(cls.sender)),
             time.time() - cls.horizon,
             time.time(),
-        )))
+        ).read_opened(comms.bus.bus)
+        return any(message.body == line for message in messages)
 
     @classmethod
-    def unanswered(cls, comms: Comms, commander: str, before: float) -> tuple[Message, ...]:
+    def unanswered(cls, source: BusReader, snapshot: RegistrySnapshot, commander: str,
+                   before: float) -> tuple[Message, ...]:
         """This sender's messages to the commander, sent by ``before`` and after the newest
         answer to any of them: one answer covers the burst it lands after."""
-        snapshot = comms.registry.snapshot()
-        return comms.bus.log.read_page(
-            UnansweredBurst(
-                RepliesDisplayScope(snapshot.names_for(commander), snapshot.names_for(cls.sender)),
-                time.time() - cls.horizon,
-                before,
-            )
-        )
+        return UnansweredBurst(
+            RepliesDisplayScope(snapshot.names_for(commander), snapshot.names_for(cls.sender)),
+            time.time() - cls.horizon,
+            before,
+        ).read_opened(source)
 
     horizon: ClassVar[int] = 6 * 60 * 60
 
@@ -140,7 +149,7 @@ class AnswersOwedDegradation(Degradation, BlocksRelease):
     def found(cls, comms: Comms, commander: str) -> tuple[Sign, ...]:
         return tuple(
             Sign(cls, (rule.cited,), rule.line())
-            for rule in OwedAnswer.broken(comms, commander)
+            for rule in OwedAnswer.violations(comms, commander)
             if not isinstance(rule, Escalation)
         )
 
@@ -180,7 +189,7 @@ class OverloadDegradation(Degradation, BlocksRelease):
 
 
 @dataclass(frozen=True)
-class VibeCheck(UndatedStandingRule):
+class VibeCheck(IndependentStandingRule, UndatedStandingRule):
     """Each degraded sign breaks it once: the heartbeat enforces a rule when it newly breaks, so a
     sign that persists stops the commander once, and a new message, a newly stalled phase or a
     doubled stall stops it again. Pings are decisions, each once."""
@@ -228,19 +237,15 @@ class VibeCheckUnanswered(Escalation, OwedAnswer, UndatedStandingRule):
 
     seconds: ClassVar[int] = 5 * 60
 
-    @staticmethod
-    def checks(comms: Comms, commander: str, before: float) -> tuple[Message, ...]:
-        return VibeCheckSender.unanswered(comms, commander, before)
-
     @classmethod
-    def violations(cls, comms: Comms, commander: str) -> tuple[Self, ...]:
-        return tuple(
-            cls(message) for message in cls.checks(comms, commander, time.time() - cls.seconds)
-        )
+    def read_open(cls, source: BusReader, snapshot: RegistrySnapshot,
+                  held: Mapping[ThreadIncarnation, Sequence[Todo]], commander: str,
+                  requests: Sequence[OwnerRequest]) -> tuple[Self, ...]:
+        return tuple(cls(message) for message in
+                     VibeCheckSender.unanswered(source, snapshot, commander, time.time()))
 
-    @classmethod
-    def open_messages(cls, comms: Comms, commander: str) -> tuple[Message, ...]:
-        return cls.checks(comms, commander, time.time())
+    def due(self, now: float) -> bool:
+        return self.message.timestamp <= now - self.seconds
 
     def line(self) -> str:
         age = max(0, int((time.time() - self.message.timestamp) // 60))
@@ -267,7 +272,7 @@ class Indictment:
 
 
 @dataclass(frozen=True)
-class Chokehold(UndatedStandingRule):
+class Chokehold(IndependentStandingRule, UndatedStandingRule):
     """A vibe check ignored past its window: every unit under the commander is paused and the
     commander is told, in a burst it cannot skim, what brings them back."""
 
@@ -276,7 +281,9 @@ class Chokehold(UndatedStandingRule):
 
     @classmethod
     def violations(cls, comms: Comms, commander: str) -> tuple[Self, ...]:
-        ignored = VibeCheckSender.unanswered(comms, commander, time.time() - cls.after)
+        snapshot = comms.registry.snapshot()
+        with comms.bus.bus.reading() as source:
+            ignored = VibeCheckSender.unanswered(source, snapshot, commander, time.time() - cls.after)
         return tuple(cls(message) for message in ignored[:1])
 
     def enforce(self, comms: Comms, commander: str) -> None:
@@ -320,36 +327,34 @@ class ChokeholdUnanswered(Escalation, OwedAnswer, UndatedStandingRule):
     """Every chokehold message gates the commander from the moment it lands."""
 
     @classmethod
-    def violations(cls, comms: Comms, commander: str) -> tuple[Self, ...]:
-        return tuple(cls(message) for message in cls.open_messages(comms, commander))
-
-    @classmethod
-    def open_messages(cls, comms: Comms, commander: str) -> tuple[Message, ...]:
-        return ChokeholdSender.unanswered(comms, commander, time.time())
+    def read_open(cls, source: BusReader, snapshot: RegistrySnapshot,
+                  held: Mapping[ThreadIncarnation, Sequence[Todo]], commander: str,
+                  requests: Sequence[OwnerRequest]) -> tuple[Self, ...]:
+        return tuple(cls(message) for message in
+                     ChokeholdSender.unanswered(source, snapshot, commander, time.time()))
 
     def line(self) -> str:
         return f"CHOKEHOLD UNANSWERED: message {self.cited} -> answer it by the protocol"
 
 
 @dataclass(frozen=True)
-class ChokeholdAnswer(UndatedStandingRule, declared_name=None):
+class ChokeholdAnswer(IndependentStandingRule, UndatedStandingRule, declared_name=None):
     """The commander's newest answer to a chokehold, once every chokehold message is answered."""
 
     answer: Message
 
     @staticmethod
     def newest(comms: Comms, commander: str) -> tuple[Message, ...]:
-        if ChokeholdSender.unanswered(comms, commander, time.time()):
-            return ()
         snapshot = comms.registry.snapshot()
-        return comms.bus.log.read_page(
-            AnswersTo(
+        with comms.bus.bus.reading() as source:
+            if ChokeholdSender.unanswered(source, snapshot, commander, time.time()):
+                return ()
+            return AnswersTo(
                 RepliesDisplayScope(
                     snapshot.names_for(commander), snapshot.names_for(ChokeholdSender.sender)
                 ),
                 time.time() - ChokeholdSender.horizon,
-            )
-        )[:1]
+            ).read_opened(source)
 
     @staticmethod
     def blocking(comms: Comms, commander: str) -> tuple[Sign, ...]:

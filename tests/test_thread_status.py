@@ -11,6 +11,8 @@ import pytest
 from agent_comms.thread_text import SavedSessionFile
 from agent_comms.activity import Activity, ActivityState
 from agent_comms.comms import wire
+from conftest import installed_comms
+from agent_comms.cli_commands import ConfigureCliCommand
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.errors import RelationViolationError, UnregisteredThreadError
 from agent_comms.field_codec import FieldCodec
@@ -28,6 +30,7 @@ from agent_comms.thread_status import (
     ThreadStatus,
 )
 from agent_comms.thread_text import GivenThreadText
+from agent_comms.tool_caller import NoThreadCaller, ThreadCaller
 
 
 def test_captured_owner_presentation_survives_exit_until_fresh_acquisition(tmp_path):
@@ -56,7 +59,7 @@ def test_captured_owner_presentation_survives_exit_until_fresh_acquisition(tmp_p
 
 @pytest.mark.parametrize("status", [member() for member in ThreadStatus.members_with(ThreadStatus)])
 def test_saved_presence_roundtrip_and_wire_views_preserve_data(tmp_path, status):
-    comms = wire(tmp_path)
+    comms = installed_comms(tmp_path)
     child = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(30)"])
     try:
         thread = comms.registry.new_thread('owner', frozenset({'team'}), str(tmp_path), process_identity=ProcessIdentity.capture(child.pid), title=GivenThreadText('Retained title'), session_file=SavedSessionFile('/retained/session.jsonl'), created_at=12.5)
@@ -183,6 +186,32 @@ def test_presence_owns_roster_membership_and_self_rename(status, listed, rename)
     else:
         with pytest.raises(RelationViolationError, match="Only a running thread"):
             status.require_self_rename()
+
+
+@pytest.mark.parametrize(("status", "allows_other_caller"), [
+    (RunningThreadStatus(), False),
+    (IdleThreadStatus(), False),
+    (StoppedThreadStatus(), True),
+    (ArchivedThreadStatus(), True),
+])
+def test_reconfiguration_keeps_caller_authority_across_renaming(tmp_path, status, allows_other_caller):
+    comms = wire(tmp_path)
+    comms.registry.declare(comms.registry.new_thread("subject", frozenset(), str(tmp_path)))
+    comms.registry.declare(comms.registry.new_thread("other", frozenset(), str(tmp_path)))
+    comms.registry.rename("subject", "renamed")
+    comms.registry.register(comms.registry.require("renamed"), status)
+    assert ThreadCaller("subject").may_reconfigure(comms, "renamed")
+    assert ThreadCaller("renamed").may_reconfigure(comms, "subject")
+    assert NoThreadCaller().may_reconfigure(comms, "subject") == allows_other_caller
+    assert ThreadCaller("other").may_reconfigure(comms, "renamed") == allows_other_caller
+
+
+@pytest.mark.parametrize("status", [RunningThreadStatus(), IdleThreadStatus()])
+def test_configure_command_keeps_active_configuration_in_its_session(tmp_path, status):
+    comms = wire(tmp_path)
+    comms.registry.register(comms.registry.new_thread("subject", frozenset(), str(tmp_path)), status)
+    with pytest.raises(RelationViolationError, match="change its settings through its session"):
+        ConfigureCliCommand(name="subject").apply(comms)
 
 
 def test_roster_and_controls_keep_archived_threads_dormant():

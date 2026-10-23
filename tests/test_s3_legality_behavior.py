@@ -11,7 +11,8 @@ from agent_comms.attempt_states import AttemptState, LiveAttempt
 from agent_comms.lifecycle_capability import Complete, Failed, Successful, Terminal, Active
 from agent_comms.coordination_errors import IntegrityViolationError
 from agent_comms.coordination_snapshot import RecoverySnapshot
-from agent_comms.coordination_tables.attempts import ReplayAssessments, ReplayFact
+from agent_comms.coordination_tables.attempts import ReplayFact
+from agent_comms.coordination_tables.executions import ReplayAssessments
 from agent_comms.coordination_tables.executions import ExecutionOrigin
 from agent_comms.coordination_tables.publications import (
     PublicationIntents,
@@ -39,7 +40,7 @@ def members(family, capability=object):
 @pytest.fixture
 def pending(tmp_path):
     with ready(tmp_path / "rules.sqlite3") as store:
-        value = store.snapshots.get("exec")
+        value = store.get("exec")
         assert FieldCodec.decode(RecoverySnapshot, FieldCodec.encode(value)) == value
         yield value
 
@@ -48,7 +49,7 @@ def pending(tmp_path):
 def active(tmp_path):
     with ready(tmp_path / "active.sqlite3") as store:
         started(store)
-        value = store.snapshots.get("exec")
+        value = store.get("exec")
         assert value.is_current
         yield value
 

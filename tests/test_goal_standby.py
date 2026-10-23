@@ -291,16 +291,3 @@ def test_standby_refuses_canonical_reply_that_arrived_before_wait(tmp_path, ackn
     assert isinstance(comms.goals.goal_wait("parent"), NoGoalWait)
     assert comms.registry.require("parent").goal == goal
     assert not (tmp_path / "input_dispositions.sqlite3").exists()
-
-
-def test_an_open_owner_request_takes_a_new_wording_and_keeps_its_identity(tmp_path):
-    from agent_comms.goals import RequestGoalOrder
-
-    comms = canonical_goal_wire(tmp_path)
-    comms.registry.declare(comms.registry.new_thread('lead', frozenset(), str(tmp_path)))
-    opened = comms.goals.update_goal('lead', SetGoalAction(
-        text='Commander native in Core', goal_id='request', order=RequestGoalOrder()))
-    edited = comms.goals.update_goal('lead', EditGoalAction(text="Tristan's plans, in order"))
-    assert (edited.id, edited.order, edited.text) == (opened.id, opened.order, "Tristan's plans, in order")
-    with pytest.raises(ValueError, match="still open"):
-        comms.goals.update_goal('lead', SetGoalAction(text='Another request', order=RequestGoalOrder()))

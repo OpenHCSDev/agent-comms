@@ -23,6 +23,12 @@ def test_the_connector_is_a_declared_service():
     assert SystemdConnectorService in HostService.members_with(HostService)
 
 
+def test_a_private_home_does_not_discover_the_real_user_service(tmp_path, monkeypatch):
+    monkeypatch.setenv("HOME", str(tmp_path))
+    assert not SystemdConnectorService.unit_file().exists()
+    assert SystemdConnectorService.running() == ()
+
+
 @pytest.fixture
 def connector_service(comms, tmp_path, monkeypatch):
     """A real supervisor on a copied bus; only systemd's process control is replaced."""
@@ -82,7 +88,9 @@ def connector_service(comms, tmp_path, monkeypatch):
 def test_restart_proves_a_healthy_connector_on_its_installed_runtime(connector_service, capsys):
     service = connector_service
     result = service.restart_onto(Path(sys.executable))
-    assert str(Path(sys.executable)) in result
+    assert result.runtime == Path(sys.executable)
+    assert result.line() == (f"Connector on port {service.port} for {service.launch.path} "
+                             f"restarted onto {sys.executable}")
     assert service.result.round_trip in capsys.readouterr().err
     assert not service.store.read().access  # Its one short-lived proof grant was revoked.
 

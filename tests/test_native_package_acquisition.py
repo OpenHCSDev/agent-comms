@@ -1,17 +1,12 @@
 """Build qualification and runtime acquisition have different trust boundaries."""
 
-import json
-import os
-import subprocess
 from pathlib import Path
 
 import pytest
 
 import agent_comms.native_package as native_package
-from agent_comms.field_codec import FieldCodec
-from agent_comms.launch_runtime import LaunchRuntime
 from agent_comms.private_path import PrivateDirectoryRole
-from native_package_acquisition_fixture import AcquisitionSample, PackageTrace
+from native_package_acquisition_fixture import PackageTrace
 from test_native_package import launcher as launcher
 from test_native_package import load_resource_module
 
@@ -54,9 +49,10 @@ def test_qualification_refuses_changed_content(launcher):
         owner.qualify(package)
 
 
-def test_acquisition_refuses_package_outside_running_runtime(launcher):
+def test_acquisition_refuses_package_outside_this_codes_native_resources(launcher):
     _, package = launcher
-    with pytest.raises(native_package.NativePackageError, match="outside the running runtime prefix"):
+    with pytest.raises(native_package.NativePackageError,
+                       match="outside this code's native resources"):
         native_package.VerifiedNativePackage.acquire(package)
 
 
@@ -78,19 +74,11 @@ async def test_private_bus_agent_construction_does_not_acquire_native_package(pr
     assert trace.tree_hash_calls == 0
 
 
-def test_actual_runtime_acquisition_reads_no_content():
-    runtime = LaunchRuntime.installed()
-    fixture = Path(__file__).with_name("native_package_acquisition_fixture.py")
-    result = subprocess.run(
-        (str(runtime.interpreter), str(fixture), native_package.__file__),
-        env=runtime.environment(os.environ),
-        capture_output=True,
-        text=True,
-        timeout=30,
-        check=True,
-    )
-    sample = FieldCodec.decode(AcquisitionSample, json.loads(result.stdout))
-    assert sample.path.is_relative_to(runtime.prefix)
-    assert sample.tree_hash_calls == 0
-    assert sample.content_reads == 0
-    print(f"Installed-prefix acquisition: {sample.seconds:.6f}s; no hashing or content reads")
+def test_acquisition_reads_no_content(native_runtime_package):
+    """Acquiring this code's own qualified package hashes nothing and reads no content."""
+    trace = PackageTrace(native_package.package_tree_digest.__code__)
+    with trace.active():
+        package = native_package.VerifiedNativePackage.acquire(native_runtime_package.path)
+    assert package.path == native_runtime_package.path
+    assert trace.tree_hash_calls == 0
+    assert trace.content_reads == 0

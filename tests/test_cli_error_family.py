@@ -9,20 +9,18 @@ from contextlib import closing
 import pytest
 from pydantic import ValidationError
 
-from agent_comms.bus_route_counts import RouteIndexRebuilding
 from agent_comms.cli import _fail, main
 from agent_comms.cli_bridges.shared import Binding, DeliveryRow, StoredBinding
 from agent_comms.cli_protocol import (
     WATCH_LINE, FailedCoreError, UnavailableCoreError, UnconfirmedOutcome, DeliveredOutcome,
 )
-from agent_comms.coordination_database import CoordinationStore
+from agent_comms.locked_store import SQLiteFile
 from agent_comms.coordination_errors import CoordinationReadUnavailable
 from agent_comms.messages import InfoKind, Message
 
 
 @pytest.mark.parametrize('error,expected', [
     (CoordinationReadUnavailable('wording does not decide recovery'), UnavailableCoreError),
-    (RouteIndexRebuilding(12, 4096), UnavailableCoreError),
     (RuntimeError('database is locked'), FailedCoreError),
     (ValueError('first\nsecond'), FailedCoreError),
 ])
@@ -157,7 +155,7 @@ def test_existing_binding_lookup_does_not_acquire_a_writer(tmp_path):
         assert binding.bind(db) == binding
         statements = []
         db.set_trace_callback(statements.append)
-        with closing(CoordinationStore.writer(tmp_path / 'delivery.sqlite3')) as writer:
+        with closing(SQLiteFile.writer(tmp_path / 'delivery.sqlite3')) as writer:
             writer.execute('BEGIN IMMEDIATE')
             assert StoredBinding().bind(db) == binding
             assert writer.in_transaction

@@ -144,3 +144,39 @@ class ClaudeToolHookProgram(ClaudeHookProgram, ABC):
     @classmethod
     def entry(cls) -> dict[str, object]:
         return {**super().entry(), "matcher": cls.tool}
+
+
+@dataclass(frozen=True)
+class Bash(HookRecord):
+    """The Bash tool's input: one shell command line."""
+
+    command: str
+
+
+class BashRefusal(ClaudeToolHookProgram, ABC):
+    """A program that refuses a Bash command before it runs, for every reason it finds;
+    each member says only what it refuses and why."""
+
+    events = ("PreToolUse",)
+    tool = Bash.__name__
+    headline: ClassVar[str]
+    advice: ClassVar[str] = ""
+
+    @classmethod
+    @abstractmethod
+    def reasons(cls, command: str) -> tuple[str, ...]:
+        """Why this command line is refused; empty when it may run."""
+
+    @classmethod
+    def command(cls) -> str:
+        return cls.console_script(f"{cls.__module__}:main")
+
+    @classmethod
+    def main(cls) -> None:
+        hook = ClaudeToolHook.read()
+        reasons = cls.reasons(Bash.decode(hook.tool_input).command)
+        if reasons:
+            hook.respond(
+                permissionDecision="deny",
+                permissionDecisionReason=f"{cls.headline}: {'; '.join(reasons)}{cls.advice}",
+            )

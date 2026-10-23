@@ -53,17 +53,17 @@ def test_terminal_successors_cannot_resume(family):
 def test_terminal_attempts_refuse_nonatomic_advance_at_the_store(tmp_path):
     with ready(tmp_path / "coordination.sqlite3") as store:
         _, fence = started(store)
-        before = store.snapshots.get("exec")
+        before = store.get("exec")
         for member in AttemptState.members_with(Terminal):
             with pytest.raises(IdentityConflict, match="atomic settlement"):
-                store.attempts.advance(fence, member, expected_pointer_revision=1)
-        assert store.snapshots.get("exec") == before
+                store.advance(fence, member, expected_pointer_revision=1)
+        assert store.get("exec") == before
 
 
 def test_deferred_responses_resume_atomically_in_the_store(tmp_path):
     for member in ResponseState.members_with(Deferred):
         with ready(tmp_path / f"{member.declared_name}.sqlite3") as store:
-            original, = store.snapshots.get("exec").obligations
+            original, = store.get("exec").obligations
             with store.session.writing() as db:
                 ResponseObligation.update(
                     db, where="execution_id=? AND exact_target=?",
@@ -74,6 +74,6 @@ def test_deferred_responses_resume_atomically_in_the_store(tmp_path):
                     db, execution_id=original.execution_id, exact_target=original.exact_target
                 )
                 deferred.lifecycle.resume_response(store.session, deferred, original.execution_id)
-            resumed, = store.snapshots.get("exec").obligations
+            resumed, = store.get("exec").obligations
             assert resumed.lifecycle == PendingResponse()
             assert resumed.revision == deferred.revision + 1

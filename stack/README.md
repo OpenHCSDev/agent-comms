@@ -42,10 +42,7 @@ coding, installed sidebar and saved-history checks. Repeated compaction and
 queued-input acceptance are recorded in
 `s7-integration` and
 `input-drain`. These are specific measured paths, not
-a claim that every historical issue or performance limit is resolved. PR176 adds lossless existing-root installation of PR94's scalable private
-checkpoint and enables it for fresh managed roots. The current live bus has
-completed this migration; see checkpoint-live acceptance
-and the [installation procedure](private-checkpoint-install.md).
+a claim that every historical issue or performance limit is resolved.
 
 `prepare-pi-native` installs the Pi release named in `pi-native.sha256` from
 its published package and its own `npm-shrinkwrap.json`, then builds a pinned

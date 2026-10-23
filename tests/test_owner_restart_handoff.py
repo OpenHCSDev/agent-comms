@@ -15,7 +15,8 @@ from agent_comms.owner_launch import RetainedOwnerLaunch
 from agent_comms.launch_runtime import LaunchRuntime, RestartEnvironment, SetVariable, UnsetVariable
 from agent_comms.owner_lifecycle import OwnerRestartSelection
 from agent_comms.owner_restart import OwnerRestartHandoff, RetiredOwnerLaunch
-from agent_comms.registry_document import RegistrySnapshot
+from agent_comms.registry_document import RegistryDocument, RegistrySnapshot
+from agent_comms.thread_identity import GenerationCounter
 from agent_comms.thread_status import RunningThreadStatus, StoppedThreadStatus
 from agent_comms.native_arguments import ConfiguredBinary, InheritedArguments
 
@@ -54,12 +55,12 @@ def stopped(registry):
     # A declared absent synthetic process, never a borrowed original identity.
     thread = registry.new_thread("authored", frozenset(), "/authored",
                     process_identity=ProcessIdentity(2147483647, 1), created_at=1.0)
-    snapshot = RegistrySnapshot(
+    snapshot = RegistrySnapshot.capture(RegistryDocument(
         threads={thread.name: thread}, statuses={thread.name: StoppedThreadStatus()},
-        last_seen={thread.name: 1.0}, aliases={},
-        owner_generations={thread.name: 4}, _claimed_generations={thread.name: 5},
-        by_lookup={thread.incarnation.lookup: thread},
-    )
+        last_seen={thread.name: 1.0},
+        owners=GenerationCounter(4, {thread.name: 4}),
+        claims=GenerationCounter(5, {thread.name: 5}),
+    ))
     return thread, snapshot
 
 

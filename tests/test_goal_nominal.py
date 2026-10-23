@@ -23,11 +23,12 @@ from agent_comms.goal_states import (
     OwnerPause,
     PausedGoal,
 )
+from conftest import installed_comms
 
 
 @pytest.fixture
 def owner(tmp_path):
-    comms = wire(tmp_path)
+    comms = installed_comms(tmp_path)
     comms.registry.declare(comms.registry.new_thread(name='worker', tags=frozenset(), worktree=str(tmp_path)))
     goal = comms.goals.update_goal("worker", SetGoalAction(text="Keep the durable objective"))
     return comms, goal

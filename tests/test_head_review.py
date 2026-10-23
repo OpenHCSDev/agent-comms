@@ -4,7 +4,7 @@ import subprocess
 
 import pytest
 
-from agent_comms import head_review
+from agent_comms import repository_name
 from agent_comms.errors import ToolRefusedError
 from agent_comms.head_review import AcceptedHeadReview, PullRequestHead
 from agent_comms.repository_name import RepositoryName
@@ -27,7 +27,7 @@ class Gh:
 @pytest.fixture
 def gh(monkeypatch) -> Gh:
     stub = Gh()
-    monkeypatch.setattr(head_review.subprocess, "run", stub)
+    monkeypatch.setattr(repository_name.subprocess, "run", stub)
     return stub
 
 

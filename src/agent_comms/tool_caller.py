@@ -5,6 +5,7 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Annotated, NoReturn
 
+from .bus_publication import AgentOrigin
 from .cli_result import ThreadToolCatalogResult, ToolCatalogResult
 from .errors import ToolRefusedError
 from .field_codec import WireForm
@@ -16,7 +17,7 @@ from .tool_result import ToolResult
 
 if TYPE_CHECKING:
     from .comms import Comms
-    from .messages import Message
+    from .registration import Registration
     from .threads import Thread
     from .tools import ToolRequest
 
@@ -66,16 +67,19 @@ class ToolCaller(ABC):
     @abstractmethod
     def as_thread(self, commander: str) -> ThreadCaller: ...
 
-    @abstractmethod
-    def may_reconfigure(self, comms: Comms, name: str) -> bool: ...
+    def matches_thread(self, registry: Registration, name: str) -> bool:
+        return False
+
+    def may_reconfigure(self, comms: Comms, name: str) -> bool:
+        return comms.registry.status(name).permits_reconfiguration(self, comms.registry, name)
 
     @abstractmethod
     def require_directive(self, comms: Comms, body: str) -> None:
         """A caller whose sends direct units refuses a body its directive checks refuse."""
 
-    @abstractmethod
-    def sent(self, comms: Comms, message: Message) -> None:
-        """What a message this caller sent records beyond the bus."""
+    def origin(self) -> AgentOrigin:
+        """Who this caller's sends speak for; an agent speaks only for itself."""
+        return AgentOrigin()
 
 
 @dataclass(frozen=True)
@@ -104,14 +108,8 @@ class NoThreadCaller(ToolCaller):
     def own_thread(self) -> NoReturn:
         return self.refuse_thread()
 
-    def may_reconfigure(self, comms: Comms, name: str) -> bool:
-        return not comms.registry.status(name).active
-
     def require_directive(self, comms: Comms, body: str) -> None:
         """A caller with no thread gives no directive."""
-
-    def sent(self, comms: Comms, message: Message) -> None:
-        """A message sent without a calling thread records nothing more."""
 
 
 @dataclass(frozen=True)
@@ -150,15 +148,11 @@ class ThreadCaller(ToolCaller):
     def own_thread(self) -> str:
         return self.name
 
-    def may_reconfigure(self, comms: Comms, name: str) -> bool:
-        return (not comms.registry.status(name).active
-                or comms.registry.canonical_name(name) == comms.registry.canonical_name(self.name))
+    def matches_thread(self, registry: Registration, name: str) -> bool:
+        return registry.canonical_name(name) == registry.canonical_name(self.name)
 
     def require_directive(self, comms: Comms, body: str) -> None:
         """A unit's or a script's send is a message, not a directive."""
-
-    def sent(self, comms: Comms, message: Message) -> None:
-        """An agent's message is only the bus record."""
 
 
 @dataclass(frozen=True)

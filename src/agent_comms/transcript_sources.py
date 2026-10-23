@@ -12,21 +12,22 @@ from contextlib import closing, contextmanager
 from dataclasses import dataclass, field, replace
 from functools import partial
 from pathlib import Path
-from typing import TYPE_CHECKING, ClassVar
+from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from .native_transcript import NativeRecord
-    from .sent_message import PublishedSentMessage
     from .transcript_events import TranscriptEvent
     from .turn_digests import TurnBound
 
-from .bus_publication import CommittedDelivery
+from .bus import Bus
+from .bus_publication import Delivered
 from .coordination_errors import StaleRevision, TranscriptChanged
 from .declared_family import DeclaredFamily
 from .field_codec import MalformedRecord
 from .native_runtime_input import NativeRuntimeInput, PublishedReplyRevision
 from .recorded_time import EventTime, UnrecordedEventTime
-from .routing import MessageRoute, TurnRouting
+from .routing import TurnRouting
+from .sent_message import PublishedSentMessage
 from .thread_identity import RecordedThreadIncarnation, ThreadIncarnation
 from .transcript_events import (
     AssistantTranscript,
@@ -36,7 +37,6 @@ from .transcript_events import (
     UserTranscript,
 )
 from .typed_table import StoreWriter
-from .wire_log import ConversationSourceWindowRequest, WireLog
 
 
 @dataclass(frozen=True)
@@ -56,7 +56,7 @@ class AssignedSourceIdentity:
 class WireFrontier(DeclaredFamily, affix="WireFrontier"):
     """The wire coordinate owns cursor construction, bounds and source authority."""
 
-    sequence: ClassVar[int] = 0
+    sequence: int
 
     def cursor(self, session_file, offset):
         from .transcripts import NativeTranscriptCursor
@@ -92,7 +92,7 @@ class WireFrontier(DeclaredFamily, affix="WireFrontier"):
 
 @dataclass(frozen=True)
 class NoWireFrontier(WireFrontier):
-    pass
+    sequence = 0
 
 
 @dataclass(frozen=True)
@@ -132,8 +132,8 @@ class AssignedSourceWindow:
     """Conversation and sent sources captured with one acknowledgement frontier."""
 
     cursor: WireFrontier
-    sources: tuple[CommittedDelivery, ...]
-    sent_sources: tuple[CommittedDelivery, ...]
+    sources: tuple[Delivered, ...]
+    sent_sources: tuple[Delivered, ...]
 
 
 class TranscriptTraversal(ABC):
@@ -141,7 +141,7 @@ class TranscriptTraversal(ABC):
     def native(self, reader, cursor, through): ...
 
     @abstractmethod
-    def predicate(self, sequence, through): ...
+    def source_rows(self, source, sequence, through, limit): ...
 
     @abstractmethod
     def chooses_native(self, native_time, receipt_time): ...
@@ -205,8 +205,8 @@ class TranscriptTraversal(ABC):
                     or self.chooses_native(native_time, message.message.timestamp)
                 )
                 batch = events if choose_native else sources.events(message)
-                cost = record.size if choose_native else sum(event.text_size for event in batch)
-                if records and (len(records) >= max_messages or used + cost > max_bytes):
+                cost = record.size if choose_native else 0
+                if records and (len(records) >= max_messages or (choose_native and used + cost > max_bytes)):
                     if not open_rounds or round_grace >= self.round_grace_limit:
                         break
                     round_grace += 1
@@ -243,8 +243,8 @@ class EarlierTranscript(TranscriptTraversal):
     def native(self, reader, cursor, through):
         return reader.reverse(cursor.offset)
 
-    def predicate(self, sequence, through):
-        return "w.seq<=?", (sequence,)
+    def source_rows(self, source, sequence, through, limit):
+        return source.rows(before=sequence + 1, limit=limit)
 
     def chooses_native(self, native_time, receipt_time):
         return native_time is None or native_time >= receipt_time
@@ -272,8 +272,9 @@ class LaterTranscript(TranscriptTraversal):
     def native(self, reader, cursor, through):
         return reader.forward(cursor.offset, through.offset)
 
-    def predicate(self, sequence, through):
-        return "w.seq>? AND w.seq<=?", (sequence, through.wire.sequence)
+    def source_rows(self, source, sequence, through, limit):
+        return source.rows(after=sequence, before=through.wire.sequence + 1,
+                           ascending=True, limit=limit)
 
     def chooses_native(self, native_time, receipt_time):
         return native_time is None or native_time <= receipt_time
@@ -364,9 +365,11 @@ class TranscriptSource:
         pending: list[NativeRecord] = []
         for record in records:
             pending.append(record)
-            if record.project(lambda original: original.entry.input_boundary):
-                yield TurnDigest(record.entry.require_entry_id(), tuple(
-                    event for original in reversed(pending) for event in original.events))
+            for digest in record.project(lambda original: (
+                TurnDigest(original.entry.require_entry_id(), tuple(
+                    event for source in reversed(pending) for event in source.events)),
+            ) if original.entry.input_boundary else ()):
+                yield digest
                 pending.clear()
 
     def current_draft(self, root: Path, incarnation: ThreadIncarnation) -> TranscriptDraft:
@@ -428,18 +431,18 @@ class TranscriptSource:
 class AssignedTranscriptSource(TranscriptSource):
     root: Path
     recipient: RecordedThreadIncarnation
-    log: WireLog
+    bus: Bus
 
     @classmethod
-    def for_thread(cls, root, thread, log):
-        return cls(root, thread.incarnation.require_recorded(), log)
+    def for_thread(cls, root, thread, bus):
+        return cls(root, thread.incarnation.require_recorded(), bus)
 
     @classmethod
     def open(cls, identity: AssignedSourceIdentity):
         """Open only the recorded wire, without current registry or SQL authority."""
         root = Path(identity.root)
         return identity.recipient.recorded_or(
-            lambda recorded: cls(root, recorded, WireLog(WireLog.path_in(root))),
+            lambda recorded: cls(root, recorded, Bus(Bus.path_in(root))),
             TranscriptSource,
         )
 
@@ -463,15 +466,11 @@ class AssignedTranscriptSource(TranscriptSource):
         sender's frozen assignments supply its reference, body, time and route.
         Missing births cannot select an assignment, even if a name matches.
         """
-        from .sent_message import PublishedSentMessage
-
         messages = tuple(messages)
         originals = self.sent_messages(message.source for message in messages)
         scope = AssignedSourceIdentity(str(self.root), self.recipient)
         return tuple(
-            PublishedSentMessage(message, scope)
-            if (original := originals.get(message.source)) is not None
-            and message.matches(original) else message
+            PublishedSentMessage.from_originals(message, scope, originals)
             for message in messages
         )
 
@@ -479,49 +478,45 @@ class AssignedTranscriptSource(TranscriptSource):
         cursor.wire.require_source(AssignedSourceIdentity(str(self.root), self.recipient))
 
     @classmethod
-    def for_recorded(cls, root, thread, log, records):
+    def for_recorded(cls, root, thread, bus, records):
         """Only the original recorded birth can select frozen assignments."""
         return thread.incarnation.recorded_or(
-            lambda recorded: cls(root, recorded, log), lambda: records
+            lambda recorded: cls(root, recorded, bus), lambda: records
         )
 
     def rows(
-        self, predicate="1", parameters=(), *, limit=1, ascending=False,
-        sequences: tuple[int, ...] = (),
-    ) -> Iterator[CommittedDelivery]:
-        request = ConversationSourceWindowRequest(
-            predicate=predicate, parameters=parameters, limit=limit, ascending=ascending,
-            sequences=sequences,
+        self, *, before: int | None = None, after: int = 0, limit: int = 1,
+        ascending: bool = False, sequences: tuple[int, ...] = (),
+    ) -> tuple[Delivered, ...]:
+        return tuple(
+            delivery for record in self.bus.conversation(
+                self.recipient.lookup, before=before, after=after, limit=limit,
+                descending=not ascending, sequences=sequences,
+            ) for delivery in record.deliveries()
         )
-        return request.capture_many(self.log, self.recipient.lookup, (request,))[0]
 
     @property
     def frontier(self):
-        lookup = self.recipient.lookup
+        rows = self.rows(limit=1)
         return AssignedSourceCursor(
-            str(self.root), self.recipient,
-            ConversationSourceWindowRequest.frontier(self.log, lookup),
+            str(self.root), self.recipient, rows[0].seq if rows else 0,
         )
 
     def window(self, *, limit=1, sent_limit=0) -> AssignedSourceWindow:
-        """Read conversation messages, sent messages and their end position together."""
-        lookup = self.recipient.lookup
-        conversation_request = ConversationSourceWindowRequest(limit=limit, ascending=False)
-        sent_request = ConversationSourceWindowRequest(
-            predicate="w.sender_lookup=?", parameters=(lookup,), limit=sent_limit, ascending=False,
+        """The same sequence cut bounds both conversation and sender pages."""
+        before = self.bus.revision() + 1
+        rows = self.rows(before=before, limit=limit)
+        sent = tuple(
+            delivery for record in self.bus.sent(
+                self.recipient.lookup, before=before, limit=sent_limit,
+            ) for delivery in record.deliveries()
         )
-        conversation, sent = conversation_request.capture_many(
-            self.log, lookup, (conversation_request, sent_request)
-        )
-        rows = tuple(conversation)
-        cursor = AssignedSourceCursor(
-            str(self.root), self.recipient, rows[0].message.seq if rows else 0
-        )
-        return AssignedSourceWindow(cursor, rows, tuple(sent))
+        newest = max((row.seq for row in (*rows, *sent)), default=0)
+        cursor = AssignedSourceCursor(str(self.root), self.recipient, newest)
+        return AssignedSourceWindow(cursor, rows, sent)
 
     def page_rows(self, traversal, sequence, through, *, limit):
-        predicate, parameters = traversal.predicate(sequence, through)
-        return self.rows(predicate, parameters, ascending=traversal.ascending, limit=limit)
+        return iter(traversal.source_rows(self, sequence, through, limit))
 
     def native_events(self, record, routes, project_events, references):
         entry = record.entry
