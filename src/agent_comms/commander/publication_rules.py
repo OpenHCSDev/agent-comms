@@ -35,9 +35,9 @@ class UnpushedBranch(UndatedStandingRule):
 
     def line(self) -> str:
         return (f"UNPUSHED: {self.order} ({self.problem}), holder {self.holder.name}, "
-                f"{self.worktree}: {self.unpublished.commits} unpushed commits at "
+                f"{self.worktree}: unpushed commits: {self.unpublished.commits}, HEAD "
                 f"{self.unpublished.head}; upstream {self.unpublished.upstream or 'not configured'}"
-                " -> commit and push the held work")
+                " -> publish this HEAD and set its upstream")
 
 
 @dataclass(frozen=True)
