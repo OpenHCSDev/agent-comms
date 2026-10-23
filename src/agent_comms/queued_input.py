@@ -23,6 +23,7 @@ from .coordination_database import CoordinationStore
 from .coordination_errors import IdentityConflict, StaleRevision
 from .coordination_session import ReadNativeCoordinationSession
 from .coordinator import Coordination
+from .controller import Controller
 from .errors import RelationViolationError
 from .field_codec import Id128Text
 from .goals import GoalDeclaration, NoGoal
@@ -87,7 +88,7 @@ class QueuedInput:
     input_id: str
     prompt: str
     images: tuple[ImageInput, ...] = ()
-    controller: Any = None
+    controller: Controller | None = None
 
     @property
     def key(self) -> str:
@@ -116,7 +117,7 @@ class QueuedInput:
         prompt: str,
         echo: bool,
         images: tuple[ImageInput, ...],
-        controller: Any,
+        controller: Controller | None,
         ownership: ExitStack,
         input_id: str | None = None,
         origin: InputOrigin = UnattributedInputOrigin(),
@@ -164,7 +165,7 @@ class QueuedInput:
     @asynccontextmanager
     async def reserve(
         cls, inputs: InputDrain, session_id: str, name: str, *, text: str, prompt: str,
-        echo: bool, images: tuple[ImageInput, ...], controller: Any,
+        echo: bool, images: tuple[ImageInput, ...], controller: Controller | None,
         input_id: str | None = None,
         origin: InputOrigin = UnattributedInputOrigin(),
     ) -> AsyncIterator[InputReservation[Self]]:
