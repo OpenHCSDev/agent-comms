@@ -6,6 +6,7 @@ import pytest
 
 from agent_comms.errors import RouteChangedError, UnregisteredThreadError
 from agent_comms.field_codec import FieldCodec
+from agent_comms.input_attempt import UnresolvedInput
 from agent_comms.notification_progress import SendingProgress
 from agent_comms.thread_presentation import (
     IdleThreadPresentationStatus, NoThreadPresentation, OtherRouteThread, SessionDisconnected,
@@ -105,7 +106,9 @@ def test_idle_attention_is_carried_once_through_idle_presentation(replacement):
 def test_input_delivery_keeps_its_explanation_and_original_work(working):
     status = WorkingThreadPresentationStatus() if working else IdleThreadPresentationStatus()
     ordinary = status.activity_presentation("worker", "thinking", "Actual work")
-    delivery = InputDelivery(inputs=({"input_id": "unconfirmed"},))
+    delivery = InputDelivery(inputs=(UnresolvedInput(
+        sequence=None, target="worker", text="Unconfirmed input", input_id="unconfirmed", status="unknown",
+    ),))
     shown = delivery.presentation(ordinary)
     assert shown.status.details == (delivery.summary,)
     assert shown.summary == (ordinary.summary if working else delivery.summary)
