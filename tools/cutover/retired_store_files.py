@@ -1,16 +1,20 @@
-"""File declarations required to snapshot and restore superseded store artifacts.
+"""Declarations of the superseded store files that carry_retired_stores.py deletes.
 
-The cutover tool deletes these resources. Their declarations remain available to
-cold backup recovery while retained snapshots still name them.
+Delete with carry_retired_stores.py.
 """
 
 from pathlib import Path
 
-from agent_comms.locked_store import DurableFile, PatternFile, PublishedSQLiteFile, RootFile, SQLiteFile
+from agent_comms.locked_store import (
+    DurableFile,
+    PatternFile,
+    PublishedSQLiteFile,
+    SQLiteFile,
+)
 
 
 class RetiredRootFile(DurableFile, PatternFile):
-    """An obsolete resource remains declared until its carry and rollback finish."""
+    """An obsolete resource the retirement carry deletes."""
 
     @classmethod
     def retirement_paths(cls, path: Path) -> tuple[Path, ...]:
@@ -18,19 +22,10 @@ class RetiredRootFile(DurableFile, PatternFile):
 
 
 class RetiredSQLiteStore(SQLiteFile, RetiredRootFile):
-    """Declared SQLite snapshot behavior remains available throughout rollback."""
+    """An obsolete SQLite store and its -wal and -shm members."""
 
 
 class RetiredPublishedSQLiteStore(PublishedSQLiteFile, RetiredSQLiteStore):
-    @classmethod
-    def copy_group(cls, source: Path, target: Path) -> frozenset[Path]:
-        copied = set(super().copy_group(source, target))
-        for original, destination in zip(cls._source_paths(source), cls._source_paths(target), strict=True):
-            if original.exists():
-                RootFile.copy_file(original, destination)
-                copied.add(original)
-        return frozenset(copied)
-
     @classmethod
     def retirement_paths(cls, path: Path) -> tuple[Path, ...]:
         return (*super().retirement_paths(path), *cls._source_paths(path))

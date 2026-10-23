@@ -12,6 +12,7 @@ from agent_comms.coordination_database import (
 )
 from agent_comms.coordination_errors import CoordinationReadUnavailable
 from agent_comms.coordination_tables.refusals import SendRefusal
+from agent_comms.external_transcript import ExternalTranscript
 from agent_comms.locked_store import SQLiteFile, StoreBusy
 
 
@@ -104,10 +105,7 @@ def test_observation_classifies_missing_foreign_and_busy_files_without_inventing
 def test_tree_copy_keeps_committed_wal_rows(tmp_path):
     root = tmp_path / 'source'
     root.mkdir()
-    class TranscriptStore(SQLiteFile):
-        filename = 'transcripts.sqlite3'
-
-    store = TranscriptStore.path_in(root)
+    store = ExternalTranscript.path_in(root)
     with sqlite3.connect(store) as writer:
         writer.execute('PRAGMA journal_mode=WAL')
         writer.execute('CREATE TABLE events (body TEXT)')
@@ -130,10 +128,7 @@ def test_tree_copy_keeps_committed_wal_rows(tmp_path):
 def test_store_backup_restores_wal_rows_and_removes_new_files(tmp_path):
     root = tmp_path / 'wire'
     root.mkdir()
-    class TranscriptStore(SQLiteFile):
-        filename = 'transcripts.sqlite3'
-
-    store = TranscriptStore.path_in(root)
+    store = ExternalTranscript.path_in(root)
     route = tmp_path / 'route.json'
     route.write_text('original route')
     created = root / 'created.json'
