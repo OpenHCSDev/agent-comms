@@ -39,7 +39,7 @@ from typing import TYPE_CHECKING, Annotated, ClassVar, Self
 
 from pydantic import TypeAdapter
 
-from agent_comms.active_route import ActiveRoute, active_route_path, route_directory
+from agent_comms.active_route import ActiveRoute, RouteFile, active_route_path, route_directory
 from agent_comms.bus import Bus
 from agent_comms.cli_bridges.shared import BridgeResume, Serve, SessionBridgeResumes
 from agent_comms.cli_commands import (
@@ -103,7 +103,7 @@ from agent_comms.installer.practice import (
     RuntimeHome,
 )
 from agent_comms.installer.reporting import (
-    OutgoingWriter, RootWriter, RuntimeWriter, UnpostedWriter,
+    RootWriter, RuntimeWriter, UnpostedWriter,
 )
 from agent_comms.installer.runtime_resolution import RuntimeResolution, StackProject
 from agent_comms.launch_runtime import LaunchRuntime, RestartEnvironment, SpecifiedImportPath
@@ -791,7 +791,7 @@ def upgrade(checkout: Path, root: Path, target: str, installer: InstallerChoice,
         if not installed.python.exists():
             raise UpgradeRefused(f"No installed stack at {installed.python}")
         staged = Stack.build(tree.path, commands)
-        report.starting(mode.destination(member.initial_writer(root, installed, staged)), target)
+        report.starting(mode.destination(member.initial_writer(root, installed)), target)
         install, rehearsal = member.rehearsed(checkout, root, current, target, chain,
                                               installed, staged, tree, installer, spill_dir)
         result = report.complete(mode.finish(install, rehearsal, bridges, harnesses, report))
@@ -816,10 +816,11 @@ class Install[Rehearsed: Rehearsal](ABC):
     spill_dir: Path
 
     @staticmethod
-    def initial_writer(root: Path, installed: Stack, staged: Stack) -> RootWriter:
-        """The outgoing runtime is asked nothing before the target's runtime has routed to
-        this bus, which only the target's source can do."""
-        return OutgoingWriter(root, installed, RetainedProgram.current(), staged)
+    def initial_writer(root: Path, installed: Stack) -> RootWriter:
+        """The outgoing runtime posts until the target's runtime takes the bus over, unless
+        the route file refuses it as a borrower; install's own route step replaces that file."""
+        return RouteFile.read(active_route_path()).outgoing_writer(
+            RuntimeWriter(root, installed, RetainedProgram.current()), UnpostedWriter())
 
     def backed_up(self, files: tuple[Path, ...]) -> tuple[StoreBackup, RouteSelection]:
         backup = StoreBackup.take(self.root, active_route_path(), files, self.spill_dir)
@@ -1124,7 +1125,7 @@ class FreshInstall(Install[FreshRehearsal]):
         return install, install.rehearsal()
 
     @staticmethod
-    def initial_writer(root: Path, installed: Stack, staged: Stack) -> RootWriter:
+    def initial_writer(root: Path, installed: Stack) -> RootWriter:
         """A fresh bus has nowhere to publish a start message yet."""
         return UnpostedWriter()
 
