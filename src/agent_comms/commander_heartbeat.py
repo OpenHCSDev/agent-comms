@@ -2,15 +2,15 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
+from agent_comms.commander_pings import CommanderUpdate
 from agent_comms.heartbeat_frame import HeartbeatFrame
 from agent_comms.message_bus import WatchPass
 from agent_comms.registration import Registration
 from agent_comms.service_sender import ServiceSender
 from agent_comms.standing_rules import StandingRule
-from agent_comms.thread_identity import ThreadIncarnation
 from agent_comms.threads import Thread
 from agent_comms.todos import ProgressRead
 from agent_comms.ui_model.unit_state import UnitState
@@ -19,46 +19,6 @@ if TYPE_CHECKING:
     from agent_comms.comms import Comms
     from agent_comms.goal_management import Goals
     from agent_comms.todos import OwnerRequest, Todo
-
-
-@dataclass
-class CommanderReview:
-    """One commander's handled observations and its last changed beat.
-
-    Seq 0 precedes every published message: no changed beat has been sent yet.
-    """
-
-    rules: frozenset[StandingRule]
-    states: frozenset[UnitState] = frozenset()
-    changed: int = 0
-
-    def wake(self, comms: Comms, sender: str, commander: Thread,
-             rules: tuple[StandingRule, ...], states: tuple[UnitState, ...]) -> None:
-        """Every pass beats, so silence is a failure; an unchanged beat is one short line."""
-        found_rules, found_states = frozenset(rules), frozenset(states)
-        actionable = (*rules, *(state for state in states if state.attention()))
-        old_rules = self.rules
-        previous = self.rules | self.states
-        if found_rules == self.rules and found_states == self.states and self.changed:
-            comms.messaging.send(sender, commander.name,
-                                 f"COMMANDER HEARTBEAT: unchanged since seq {self.changed},"
-                                 f" {len(actionable)} violations.")
-            return
-        # Mark the observation before any effect; an uncertain publication is not replayed.
-        self.rules, self.states = found_rules, found_states
-        rejected = StandingRule.enforce_all(
-            comms, commander.name, (rule for rule in actionable if rule not in previous)
-        )
-        # A checked rejection has no effects and must not suppress a fresh observation.
-        self.rules -= rejected
-        self.states -= rejected
-        lines = ["COMMANDER HEARTBEAT: unit states and standing rules changed."]
-        lines.extend(state.line() for state in states)
-        lines.extend(StandingRule.heartbeat_changes(old_rules, self.rules))
-        lines.extend(rule.rejected_line() for rule in actionable if rule in rejected)
-        if not actionable:
-            lines.append("Standing rules clear.")
-        self.changed = comms.messaging.send(sender, commander.name, "\n".join(lines)).message.seq
 
 
 @dataclass(frozen=True)
@@ -80,10 +40,8 @@ class CommanderObservation:
         return cls(thread, merged, rules, states)
 
 
-@dataclass
 class CommanderHeartbeat(ServiceSender, WatchPass[tuple[CommanderObservation, ...]]):
     sender = "commander-heartbeat"
-    reviews: dict[ThreadIncarnation, CommanderReview] = field(default_factory=dict)
 
     @classmethod
     def requested_by(cls, thread: Thread, goals: Goals) -> tuple[OwnerRequest, ...]:
@@ -107,13 +65,18 @@ class CommanderHeartbeat(ServiceSender, WatchPass[tuple[CommanderObservation, ..
         )
 
     def pass_body(self, comms: Comms, observed: tuple[CommanderObservation, ...]) -> None:
-        """Inactive commanders retire their review after the pass enters the bus."""
+        """The committed packet survives connector replacement; local memory owns nothing."""
         self.register(comms.registry)
-        live = {item.thread.incarnation for item in observed}
-        self.reviews = {
-            owner: review for owner, review in self.reviews.items() if owner in live
-        }
         for item in observed:
             comms.goals.todos.record_merges(item.merged)
-            review = self.reviews.setdefault(item.thread.incarnation, CommanderReview(frozenset()))
-            review.wake(comms, self.sender, item.thread, item.rules, item.states)
+            rejected = StandingRule.enforce_all(
+                comms, item.thread.name,
+                (*item.rules, *(state for state in item.states if state.attention())),
+            )
+            previous = CommanderUpdate.latest(comms, item.thread.incarnation)
+            update = CommanderUpdate.derive(
+                item.thread.incarnation,
+                tuple(state for state in item.states if state not in rejected), previous,
+            )
+            if update is not None:
+                update.send(comms)
