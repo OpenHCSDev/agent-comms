@@ -49,21 +49,27 @@ from .registration_inheritance import (
     InheritPrevious,
 )
 from .session_file import NoSessionFile, SessionFile
-from .storage_rules import StoragePath, StorageRule, ThreadStorage, UnassignedThreadStorage
+from .storage_rules import (
+    AssignedStorageRoots,
+    StoragePath,
+    StorageRule,
+    ThreadStorage,
+    UnassignedThreadStorage,
+)
 from .store_files import AtomicFile
 from .task_sources import TaskScope
-from .thread_execution import NativeThreadExecution, ThreadExecution
 from .thread_creation import CreationSeconds, CreationTime, GeneratedCreationTime
+from .thread_execution import NativeThreadExecution, ThreadExecution
 from .thread_identity import (
     AgentThreadRole,
     OfferedTools,
-    UnobservedTools,
     ThreadIncarnation,
     ThreadIncarnationRecord,
     ThreadRole,
     TurnFence,
     TurnId,
     TurnIdentity,
+    UnobservedTools,
 )
 from .thread_model import DeclaredModel, ThreadModel, UndeclaredModel
 from .thread_text import NoParent, NoThreadText, ThreadParent, ThreadText
@@ -273,7 +279,7 @@ class Thread(ThreadProvenance):
         default_factory=GeneratedCreationTime.now, kw_only=True
     )
     storage_roots: Annotated[
-        ThreadStorage, RegistrationPolicy(InheritPrevious)
+        ThreadStorage, AssignedStorageRoots, RegistrationPolicy(InheritPrevious), WireRequired()
     ] = field(default_factory=UnassignedThreadStorage, kw_only=True)
     # Projects this conversation ran in before its current one: a saved session
     # resumes from them and a started turn finishes in one of them.

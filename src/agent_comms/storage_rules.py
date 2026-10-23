@@ -13,10 +13,21 @@ from dataclasses import dataclass, field, replace
 from enum import StrEnum
 from functools import cached_property
 from pathlib import Path
-from typing import TYPE_CHECKING, Annotated, ClassVar, Self
+from typing import TYPE_CHECKING, Annotated, ClassVar, Self, cast
 
-from agent_comms.field_codec import FieldCodec, NullMember, PathText, RecordMember, SubclassUnion
+from pydantic import JsonValue
+
+from agent_comms.errors import RelationViolationError
+from agent_comms.field_codec import (
+    FieldCodec,
+    FieldRepresentation,
+    NullMember,
+    PathText,
+    RecordMember,
+    SubclassUnion,
+)
 from agent_comms.locked_store import DurableFile
+from agent_comms.mro_dispatch import handles
 from agent_comms.native_tool_call import SelectedToolDenied
 from agent_comms.problem_number import ProblemNumber
 from agent_comms.repo import Repo
@@ -49,6 +60,10 @@ class ThreadStorage(SubclassUnion, affix="ThreadStorage"):
     def assigned(self, rule: StorageRule, name: str) -> StorageRoots:
         """The roots thread ``name`` holds under ``rule``."""
 
+    @abstractmethod
+    def stored(self) -> StorageRoots:
+        """The roots a registry row records."""
+
 
 @dataclass(frozen=True, slots=True)
 class StorageRoots(RecordMember, ThreadStorage):
@@ -61,6 +76,9 @@ class StorageRoots(RecordMember, ThreadStorage):
     def assigned(self, rule: StorageRule, name: str) -> StorageRoots:
         return self
 
+    def stored(self) -> StorageRoots:
+        return self
+
 
 @dataclass(frozen=True, slots=True)
 class UnassignedThreadStorage(NullMember, ThreadStorage):
@@ -68,6 +86,33 @@ class UnassignedThreadStorage(NullMember, ThreadStorage):
 
     def assigned(self, rule: StorageRule, name: str) -> StorageRoots:
         return rule.initial_roots(name)
+
+    def stored(self) -> StorageRoots:
+        raise RelationViolationError(
+            "A thread is stored only after its registry assigned its storage roots."
+        )
+
+
+class AssignedStorageRoots(FieldRepresentation):
+    """A stored thread holds the roots its registry assigned at registration, so its
+    stored form is StorageRoots; only an unregistered thread in memory has none."""
+
+    @handles(type(None))
+    @classmethod
+    def decode_null(cls, data: object, structural: object) -> StorageRoots:
+        return cls.decode(data)
+
+    @classmethod
+    def decode(cls, value: object) -> StorageRoots:
+        return FieldCodec.decode(StorageRoots, value)
+
+    @classmethod
+    def encode(cls, value: object) -> object:
+        return FieldCodec.encode(cast(ThreadStorage, value).stored())
+
+    @classmethod
+    def schema(cls) -> dict[str, JsonValue]:
+        return FieldCodec.record_schema(StorageRoots)
 
 
 @dataclass(frozen=True)
