@@ -309,7 +309,12 @@ class CarriedRehearsal(CarriedPass, RehearsedFiles):
 
 
 @dataclass(frozen=True)
-class UncopiedRehearsal(RehearsedFiles):
+class UncopiedPractice:
+    copy: PracticeMeasurement = PracticeMeasurement(0, 0.0)
+
+
+@dataclass(frozen=True)
+class UncopiedRehearsal(RehearsedFiles, UncopiedPractice):
     """A read of the live root found no carry pending and no store to reconcile, so no
     practice copy was taken and the live pass may rewrite nothing. Its own planned
     reconcile, under the hold, still refuses before any write if it names a file."""
@@ -319,7 +324,7 @@ class UncopiedRehearsal(RehearsedFiles):
 
 
 @dataclass(frozen=True)
-class UnchangedRehearsal(Rehearsal):
+class UnchangedRehearsal(Rehearsal, UncopiedPractice):
     """Nothing to rehearse: the checkout and lock are already the target's."""
 
 
@@ -920,22 +925,22 @@ class ExistingBusInstall[Rehearsed: Rehearsal](Install[Rehearsed]):
     def rehearsed(cls, checkout: Path, root: Path, current: str, target: str,
                   chain: CarryChain, installed: Stack, staged: Stack, tree: TargetTree,
                   installer: InstallerChoice, spill_dir: Path) -> tuple[Install, Rehearsal]:
-        if chain.steps or staged.cli(root, PlannedReconcileCliCommand).rewritten:
-            with PracticeBus.of(root, installer, spill_dir) as practice:
-                install = cls.of(checkout, root, current, target,
-                                 practice.pending(chain, staged),
-                                 installed, staged, tree, installer, spill_dir)
-                return install, install.rehearsal(practice)
-        install = cls.of(checkout, root, current, target, (), installed, staged, tree,
-                         installer, spill_dir)
-        return install, install.uncopied()
+        with PracticeBus.of(root, installer, spill_dir) as practice:
+            pending = practice.pending(chain, staged)
+            reconciled = staged.cli(root, PlannedReconcileCliCommand).rewritten
+            install = cls.of(checkout, root, current, target, pending, reconciled,
+                             installed, staged, tree, installer, spill_dir)
+            if pending or reconciled:
+                return install, install.rehearsal(practice, reconciled)
+            return install, install.uncopied()
 
     @classmethod
     def of(cls, checkout: Path, root: Path, current: str, target: str,
-           pending: tuple[type[Carry], ...], installed: Stack, staged: Stack, tree: TargetTree,
+           pending: tuple[type[Carry], ...], reconciled: tuple[Path, ...],
+           installed: Stack, staged: Stack, tree: TargetTree,
            installer: InstallerChoice, spill_dir: Path) -> ExistingBusInstall:
         """A bus already carried, on the target, built from the installed lock needs nothing."""
-        unchanged = not pending and current == target and RuntimeResolution.installed().matches(
+        unchanged = not pending and not reconciled and current == target and RuntimeResolution.installed().matches(
             staged.lock, staged, target)
         member = (ChangedInstall, UnchangedInstall)[unchanged]
         steps = tuple(step(root, root, spill_dir) for step in pending)
@@ -943,7 +948,7 @@ class ExistingBusInstall[Rehearsed: Rehearsal](Install[Rehearsed]):
                       tree, installer, spill_dir)
 
     @abstractmethod
-    def rehearsal(self, practice: PracticeBus) -> Rehearsed: ...
+    def rehearsal(self, practice: PracticeBus, reconciled: tuple[Path, ...]) -> Rehearsed: ...
 
     @abstractmethod
     def uncopied(self) -> Rehearsed:
@@ -994,7 +999,7 @@ class BackedUpMigration(PreparedMigration):
 
 
 class ChangedInstall(ExistingBusInstall[RehearsedFiles]):
-    def rehearsal(self, practice: PracticeBus) -> CarriedRehearsal:
+    def rehearsal(self, practice: PracticeBus, reconciled: tuple[Path, ...]) -> CarriedRehearsal:
         copied = practice.copy.path
         home = practice.scratch / "home"
         RehearsalHome(home).prepare()
@@ -1002,8 +1007,7 @@ class ChangedInstall(ExistingBusInstall[RehearsedFiles]):
         stack = replace(self.staged, home=home)
         pending = tuple(replace(step, root=copied, spill_dir=practice.spill_dir)
                         for step in self.pending)
-        planned = self.staged.cli(self.root, PlannedReconcileCliCommand)
-        inputs = practice.select(self.pending, planned.rewritten)
+        inputs = practice.select(self.pending, reconciled)
         self.installed.running_owners(copied)
         maintenance = MaintenanceBarrier(RegistryStore.at(copied).path)
         hold = maintenance.retarget(maintenance.begin(MaintenanceOperator.current()), stack.runtime)
@@ -1114,7 +1118,7 @@ class UnchangedInstall(ExistingBusInstall[UnchangedRehearsal]):
     """The checkout already sits at the target and the relocked lock is the installed one:
     nothing to rehearse, hold or restart."""
 
-    def rehearsal(self, practice: PracticeBus) -> UnchangedRehearsal:
+    def rehearsal(self, practice: PracticeBus, reconciled: tuple[Path, ...]) -> UnchangedRehearsal:
         return UnchangedRehearsal()
 
     def uncopied(self) -> UnchangedRehearsal:
