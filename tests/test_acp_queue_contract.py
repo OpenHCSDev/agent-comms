@@ -2,19 +2,19 @@
 
 from __future__ import annotations
 
-
 import os
 from pathlib import Path
 
 import pytest
 from acp import RequestError
+from acp.schema import TextContentBlock
 
 from agent_comms.acp import CommsAgent
 from agent_comms.acp_extension import (
     InputDeliveryChangedUpdate,
-    QueueChangedUpdate,
     LiveCursorScope,
     LiveQueueScope,
+    QueueChangedUpdate,
     QueuePromptRequest,
     SteerPromptRequest,
     UnavailableQueueProjection,
@@ -23,16 +23,14 @@ from agent_comms.acp_extension import (
     encode_updates,
 )
 from agent_comms.child_process import ProcessIdentity
-from agent_comms.errors import RelationViolationError
 from agent_comms.comms import Comms, wire
-from bus_record_fixture import prepare_native_comms
+from agent_comms.errors import RelationViolationError
 from agent_comms.queued_input import QueuedInput, QueuedInputContext
 from agent_comms.runtime import present_session
-from agent_comms.thread_identity import ClaimedIdentity
-from agent_comms.thread_identity import RecordedThreadIncarnation
-from stored_inputs import stored_inputs
+from agent_comms.thread_identity import ClaimedIdentity, RecordedThreadIncarnation
 from agent_comms.threads import Thread
-
+from bus_record_fixture import prepare_native_comms
+from stored_inputs import stored_inputs
 
 def _owner(tmp_path: Path) -> tuple[Comms, CommsAgent, RecordedThreadIncarnation, int]:
     comms = prepare_native_comms(wire(tmp_path / "wire"))
@@ -50,7 +48,7 @@ async def test_real_acp_surrogate_queue_ingress_stays_unknown_and_attachable(tmp
     inbox = agent.inputs.state('beta').open_inbox()
     response = await agent.prompt(
         "beta",
-        [{"type": "text", "text": "valid task"}],
+        [TextContentBlock(type="text", text="valid task")],
         field_meta=encode_request(QueuePromptRequest("\ud800", True)),
     )
     exact = inbox.get_nowait().input_id.value
@@ -76,7 +74,7 @@ async def test_request_identity_tracks_equal_queue_and_immediate_inputs_without_
     requests = [QueuePromptRequest("same"), SteerPromptRequest("same")]
     for request in requests:
         response = await agent.prompt(
-            "beta", [{"type": "text", "text": "same"}], field_meta=encode_request(request)
+            "beta", [TextContentBlock(type="text", text="same")], field_meta=encode_request(request)
         )
         acknowledgement = next(f for f in decode_updates(response.field_meta) if isinstance(f, InputDeliveryChangedUpdate))
         assert acknowledgement.input_id == request.input_id
@@ -87,7 +85,9 @@ async def test_request_identity_tracks_equal_queue_and_immediate_inputs_without_
     before = inbox.qsize()
     with pytest.raises(RelationViolationError):
         await agent.prompt(
-            "beta", [{"type": "text", "text": "same"}], field_meta=encode_request(requests[0])
+            "beta",
+            [TextContentBlock(type="text", text="same")],
+            field_meta=encode_request(requests[0]),
         )
     assert inbox.qsize() == before
     assert len(stored_inputs(agent.inputs.dispositions.root).rows) == 2
@@ -113,7 +113,9 @@ async def test_real_acp_rejects_nonstring_user_text_before_unknown_or_enqueue(tm
     metadata = encode_request(QueuePromptRequest("valid", True))
     metadata["agentComms"]["request"]["user_text"] = user_text
     with pytest.raises(RequestError) as error:
-        await agent.prompt("beta", [{"type": "text", "text": "valid task"}], field_meta=metadata)
+        await agent.prompt(
+            "beta", [TextContentBlock(type="text", text="valid task")], field_meta=metadata
+        )
     assert error.value.code == -32602
     assert inbox.empty()
     assert not agent.inputs.state("beta").queued
