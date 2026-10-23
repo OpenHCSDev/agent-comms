@@ -14,7 +14,6 @@ import pytest
 
 from agent_comms.session_file import RegistrySessionLocation
 from agent_comms.coordination_tables.executions import NoPointedExecution
-from agent_comms.thread_identity import RecordedThreadIncarnation
 from agent_comms.child_process import NoProcess, ProcessIdentity
 from agent_comms.comms import wire
 from agent_comms.display_order import LastActivityThreadSort
@@ -140,7 +139,7 @@ def test_private_restoration_allows_new_cohort_without_starting_old_subscribers(
     with Coordination(str(current.root / "coordination.sqlite3")) as store:
         PrivateCoordinatorTable.install(store)
         live_before = store.participants.register(
-            RecordedThreadIncarnation("fixture", live.created_at).lookup, committed=True
+            live.incarnation.lookup, committed=True
         ).value
         if repair_existing:
             current.registry.restore_stopped(source, (missing.name,))
@@ -157,9 +156,9 @@ def test_private_restoration_allows_new_cohort_without_starting_old_subscribers(
         assert snapshot.statuses[missing.name] == StoppedThreadStatus()
         assert snapshot.threads[missing.name].process_identity == NoProcess()
         assert snapshot.threads[live.name] == live
-        assert store.participants.get(RecordedThreadIncarnation("fixture", live.created_at).lookup) == live_before
+        assert store.participants.get(live.incarnation.lookup) == live_before
         assert (
-            store.participants.get(RecordedThreadIncarnation("fixture", missing.created_at).lookup).pointer.execution_id == NoPointedExecution()
+            store.participants.get(missing.incarnation.lookup).pointer.execution_id == NoPointedExecution()
         )
         if bus_before is not None:
             assert current.bus.bus.revision() == bus_before
