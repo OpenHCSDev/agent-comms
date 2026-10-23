@@ -28,6 +28,7 @@ from .comms import Comms
 from .coordination_cohort import next_sealed_assignment
 from .coordination_database import CoordinationStore
 from .coordinator import Coordination
+from .controller import UNBOUND_CONTROLLER
 from .cursor_owner import CursorOwner
 from .drain_failures import (
     DEFERRED_DRAIN_ERRORS,
@@ -52,7 +53,7 @@ from .queued_input import DeliveredInput, InputHandoffRefused, QueuedInput
 from .registry_document import RegistryEntry
 from .registry_store import RegistryEntryRevision
 from .routing import ScheduledTurn
-from .runtime import UNBOUND_CONTROLLER, RuntimeServer
+from .runtime import RuntimeServer
 from .schedule_rules import ProjectResumeCheck, WakeOutcome, WakeScheduleCheck
 from .session_lifecycle import SessionLifecycle
 from .thread_identity import ClaimedIdentity

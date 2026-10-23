@@ -31,6 +31,7 @@ from acp.schema import (
 )
 
 from .jsonl_stream import JsonlStreamReader
+from .controller import ACP_PERMISSION_TIMEOUT_SECONDS, UNBOUND_CONTROLLER, Controller
 from .field_codec import MalformedRecord
 from .owner_protocol import (
     ClientPermissionResponse,
@@ -47,7 +48,7 @@ from .registry_document import RegistryEntry
 from .child_process import ProcessIdentity
 from .thread_identity import OwnerIdentity
 from .errors import RelationViolationError, UnregisteredThreadError
-from .coordination_errors import CoordinationError
+from .coordination_errors import CoordinationError, IdentityConflict
 from .native_failures import NativeRequestFailure
 from .private_path import PrivateSocketRole
 
@@ -56,9 +57,7 @@ def socket_path(root: Path, pid: int) -> Path:
     return root / "runtime" / f"{pid}.sock"
 
 
-UNBOUND_CONTROLLER = object()
 _UNBOUND_PUBLICATION_CLIENT = object()
-ACP_PERMISSION_TIMEOUT_SECONDS = 14.0
 _LOG = logging.getLogger(__name__)
 
 
@@ -66,7 +65,7 @@ class SubscriberClosed(ConnectionError):
     """The attached reader left; the normal end of a subscription, not a failed request."""
 
 
-class SocketClient:
+class SocketClient(Controller):
     def __init__(self, writer: asyncio.StreamWriter):
         self.writer = writer
         transport = writer.transport
@@ -78,6 +77,28 @@ class SocketClient:
         transport.set_write_buffer_limits(high=max(high_water, send_bytes), low=low_water)
         self.token = secrets.token_hex(32)
         self.pending: dict[str, asyncio.Future[RequestPermissionResponse]] = {}
+
+    def require_current(self, authority, session_id: str) -> None:
+        if not authority.agent._runtime.is_controller(session_id, self):
+            raise IdentityConflict("Selected write controller disconnected")
+
+    async def request_ui_permission(
+        self, runner, session_id: str,
+        request: tuple[ToolCallUpdate, list[PermissionOption]],
+    ) -> dict[str, object] | None:
+        tool_call, options = request
+        reply = await runner.runtime.request_permission(
+            session_id,
+            self,
+            tool_call.model_dump(by_alias=True, exclude_none=True),
+            [option.model_dump(by_alias=True, exclude_none=True) for option in options],
+        )
+        if reply is None:
+            return None
+        return reply.outcome.model_dump(by_alias=True, exclude_none=True)
+
+    def departed(self, runtime, session_id: str) -> bool:
+        return not runtime.is_controller(session_id, self)
 
     async def send(self, line: OwnerLine) -> None:
         """Bound this subscriber's output without borrowing the owner turn."""
@@ -180,7 +201,7 @@ class RuntimeServer:
         self.clients = SessionClients(self)
         # Set only while handling a prompt on this particular attachment.
         # Never publish this bearer to ACP metadata, the transcript or other sockets.
-        self.controller: ContextVar[SocketClient | None | object] = ContextVar(
+        self.controller: ContextVar[Controller | None] = ContextVar(
             "runtime_permission_controller", default=UNBOUND_CONTROLLER
         )
         self.path = socket_path(agent._comms.root, os.getpid())
