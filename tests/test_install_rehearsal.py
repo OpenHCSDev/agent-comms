@@ -12,6 +12,7 @@ The predecessor-history carry has its own real-writer fixture in test_carry_bus_
 from __future__ import annotations
 
 import os
+import json
 import sqlite3
 import subprocess
 import sys
@@ -21,11 +22,16 @@ from pathlib import Path
 import pytest
 
 from agent_comms.field_codec import FieldCodec
+from agent_comms.cli_commands import HistoryCliCommand
+from agent_comms.comms import Comms
 from agent_comms.installer.backup import bus_files
 from agent_comms.installer.commands import InstallCommands
 from agent_comms.installer.practice import TestHome
 from agent_comms.installer.upgrade import (
     CarriedRehearsal,
+    CarriedRun,
+    CreatedRun,
+    InstalledUpgrade,
     RehearsedUpgrade,
     Stack,
     UncopiedRehearsal,
@@ -34,6 +40,7 @@ from agent_comms.installer.upgrade import (
 from agent_comms.maintenance_barrier import MaintenanceBarrier
 from agent_comms.registry_store import RegistryStore
 from agent_comms.repo import Checkout, ScratchCheckout
+from agent_comms.storage_rules import StorageRule
 from agent_comms.typed_table import ReconciledFile
 from conftest import declare_test_bus, publish_initial
 
@@ -172,3 +179,37 @@ class Fault(Carry):
     assert subprocess.check_output(["git", "-C", checkout, "rev-parse", "HEAD"], text=True).strip() == current
     MaintenanceBarrier(RegistryStore.at(comms.root).path).read().phase.new_sends.require_open()
     assert comms.registry.require("worker").name == "worker"
+
+
+@pytest.mark.timeout(280)
+@pytest.mark.parametrize("fresh, live_kind", ((False, CarriedRun), (True, CreatedRun)),
+                         ids=("retained-bus", "fresh-bus"))
+def test_installed_entry_reports_completion_after_target_source_retirement(
+        private_comms, installed_home, install_checkout, tmp_path, fresh, live_kind):
+    root = tmp_path / "new-bus" if fresh else private_comms.root
+    if not fresh:
+        declare_test_bus(private_comms, channels=("comms",))
+    scratch = tmp_path / "install-scratch"
+    root.mkdir(parents=True, exist_ok=True)
+    StorageRule.path_in(root).write_text(json.dumps(FieldCodec.encode(
+        StorageRule(scratch_base=scratch, floor_gib=10))))
+    home = Path(installed_home["HOME"])
+    outgoing = home / ".local/share/agent-comms/current/bin/agent-comms"
+    # The caller and terminal publisher import installed packages. Only InstallRun's
+    # existing target-source child borrows its temporary tree during the operation.
+    completed = subprocess.run(
+        [outgoing, "--root", root, "install", "--checkout", install_checkout,
+         "--to", "HEAD", "--project", install_checkout,
+         "--spill-dir", tmp_path / "backups"],
+        cwd=install_checkout, env=installed_home, capture_output=True, text=True, timeout=270,
+    )
+    assert completed.returncode == 0, completed.stderr
+    result = FieldCodec.decode(Upgrade, FieldCodec.parse(completed.stdout))
+    assert isinstance(result, InstalledUpgrade) and type(result.live) is live_kind
+    history = tuple(reversed(HistoryCliCommand(target="#comms").apply(Comms(root)).messages))
+    assert len(history) == (1 if fresh else 2)
+    assert history[-1].sender == "installer"
+    assert history[-1].body.startswith("Install finished")
+    if not fresh:
+        assert history[0].body.startswith("Install starting")
+    assert scratch.is_dir() and not tuple(scratch.iterdir())

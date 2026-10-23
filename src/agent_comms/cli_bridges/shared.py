@@ -558,7 +558,7 @@ class Serve(Watch):
         deadline = time.monotonic() + 30
         while child.alive() and time.monotonic() < deadline:
             try:
-                request.exchange(claim)
+                request.exchange(claim.socket_path)
                 return
             except (FileNotFoundError, ConnectionRefusedError):
                 time.sleep(.05)
@@ -569,18 +569,18 @@ class Serve(Watch):
 
     @staticmethod
     def running(home: Path) -> tuple[SessionBridge, ...]:
-        claims = set()
-        for state in sorted(WatchClaim.directory(home).parent.glob('*-bridge-*')):
-            journal = state / BridgeStateTable.filename
-            if not journal.is_file():
+        bridges = []
+        for endpoint in WatchClaim.endpoints(home):
+            try:
+                observed = InspectSession().information(endpoint)
+            except (FileNotFoundError, ConnectionRefusedError):
+                # A bridge may exit after enumeration, leaving its old socket behind.
                 continue
-            with closing(SQLiteFile.read_snapshot(journal)) as db:
-                bindings = Binding.select(db)
-            for binding in bindings:
-                claim = WatchClaim(binding.thread, home)
-                claims.update(claim.state().serving_claims())
-        return tuple(SessionBridge(claim, InspectSession().information(claim))
-                     for claim in sorted(claims, key=lambda claim: claim.thread))
+            claim = WatchClaim(observed.transcript.stem, home)
+            if claim.socket_path != endpoint:
+                raise ValueError('Session endpoint reported a different claim identity')
+            bridges.append(SessionBridge(claim, observed))
+        return tuple(sorted(bridges, key=lambda bridge: bridge.claim.thread))
 
     def retired(self, bridge: LineMonitorBridge) -> None:
         bridge.retirement.finish(self, bridge.watch_record())
@@ -625,7 +625,7 @@ class SessionBridge:
             return ()
         self.observed.owner.require_alive()
         peer = resources.enter_context(PauseSession(
-            owner=self.observed.owner, process=self.observed.process).connection(self.claim))
+            owner=self.observed.owner, process=self.observed.process).connection(self.claim.socket_path))
         stream = resources.enter_context(peer.makefile('rb'))
         REPLIES.validate_json(stream.readline(4096)).require()
         return (PausedSessionBridge(self, peer),)
@@ -681,7 +681,7 @@ class PausedSessionBridge:
         deadline = time.monotonic() + 30
         while observed.process.alive() and time.monotonic() < deadline:
             try:
-                current = InspectSession().information(self.bridge.claim)
+                current = InspectSession().information(self.bridge.claim.socket_path)
             except (FileNotFoundError, ConnectionRefusedError):
                 time.sleep(.05)
                 continue
