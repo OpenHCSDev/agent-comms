@@ -111,7 +111,7 @@ class AnsweredSource(messages.BusProjectionTables):
         primary_key=True, references=TableReference(MessageIdentitySource, ("seq",)),
     )]
     seq: Annotated[int, Column(primary_key=True)]
-    indexes = (Index(("original",)),)
+    indexes = (Index(("original",)), Index(("seq", "original")))
 
     @classmethod
     def unanswered_references(
