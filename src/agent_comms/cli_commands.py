@@ -455,7 +455,7 @@ class AppliedTogether:
 
 
 @dataclass(frozen=True)
-class TargetEdit(Command):
+class TargetEdit(Command[Comms, CliResult]):
     """Accepted editor values use the declared field and current bound command."""
     declaration: type[CliCommand]
     target: TargetSelection
@@ -746,7 +746,7 @@ class NativeContextInspection(CliResult):
     native_source_spans: tuple[NativeSourceSpans, ...]
 
 
-class CliExecution(Command):
+class CliExecution[Answer: CliResult = CliResult](Command[Comms, Answer]):
     """The dispatcher contract, including methods selected through multiple inheritance."""
 
     @abstractmethod
@@ -801,7 +801,7 @@ class WorktreeArgument:
 class CliCommand[Answer: CliResult = CliResult](
     DeclaredFamily,
     DeclaredOptions,
-    CliExecution,
+    CliExecution[Answer],
     affix="CliCommand",
     discovery_package="agent_comms.tools",
 ):

@@ -6,13 +6,15 @@ supplies its own imports even when it predates this file.
 
 from __future__ import annotations
 
-
 import inspect
 import json
 import sys
+import traceback
 from abc import ABC, abstractmethod
+from contextlib import redirect_stdout
 from dataclasses import dataclass
 from importlib import import_module
+from io import StringIO
 from pathlib import Path
 from typing import Annotated, ClassVar, Self, cast
 
@@ -20,6 +22,7 @@ from pydantic import BaseModel, RootModel
 from pydantic.json_schema import DEFAULT_REF_TEMPLATE
 from typing_extensions import TypeForm
 
+import agent_comms
 from agent_comms.active_route import ActiveRoute, RouteFile, SelectingRoute, active_route_path
 from agent_comms.declared_family import DeclaredFamily
 from agent_comms.field_codec import FieldCodec, PathText, WireValue
@@ -46,53 +49,110 @@ class ProbeProgram(ABC):
     """Where an operation's declaration is executable by the selected interpreter."""
 
     @abstractmethod
-    def entry(self, probe: RuntimeProbe) -> tuple[str | Path, ...]: ...
+    def entry(self) -> tuple[str | Path, ...]: ...
 
 
 class SourceProgram(ProbeProgram):
     """The target's file can run against a predecessor that does not declare it yet."""
 
-    def entry(self, probe: RuntimeProbe) -> tuple[Path]:
-        return (Path(inspect.getfile(type(probe))),)
+    def entry(self) -> tuple[str, str]:
+        return RetainedProgram.current().entry()
 
 
 class InstalledProgram(ProbeProgram):
     """A published runtime owns its declaration after the target tree is retired."""
 
-    def entry(self, probe: RuntimeProbe) -> tuple[str, str]:
-        return "-m", type(probe).__module__
+    def entry(self) -> tuple[str, str]:
+        return "-c", f"from {__name__} import serve; serve()"
 
 
 @dataclass(frozen=True)
 class RetainedProgram(ProbeProgram):
-    """A source operation that must finish after its owning checkout closes."""
+    """A source operation that must finish after its owning checkout closes. It runs as the
+    interpreter's main module, so the selected runtime's own imports keep its declarations."""
 
-    path: Path
     source: str
 
     @classmethod
-    def of(cls, declaration: type[RuntimeProbe]) -> RetainedProgram:
-        path = Path(inspect.getfile(declaration))
-        return cls(path, path.read_text())
-
-    def entry(self, probe: RuntimeProbe) -> tuple[str, str]:
-        return "-c", (
-            f"__file__ = {str(self.path)!r}\n" f"exec(compile({self.source!r}, __file__, 'exec'))"
+    def current(cls) -> RetainedProgram:
+        """The operation family and its worker loop, as this checkout holds them now."""
+        path = Path(inspect.getfile(RuntimeProbe))
+        return cls(
+            f"__file__ = {str(path)!r}\n"
+            f"exec(compile({path.read_text()!r}, __file__, 'exec'))\n"
+            "serve()\n"
         )
+
+    def entry(self) -> tuple[str, str]:
+        return "-c", self.source
 
 
 @dataclass(frozen=True)
-class RuntimeProbe[Answer](InterpreterOperation[Answer], DeclaredFamily, affix="Probe"):
-    def command(
-        self, python: Path, request: Path, result: Path, *, program: ProbeProgram = SourceProgram()
-    ) -> tuple[str | Path, ...]:
-        return (python, "-P", *program.entry(self), request, result)
+class RuntimeProbe[Answer](
+    InterpreterOperation[Answer],
+    DeclaredFamily,
+    affix="Probe",
+    discovery_package="agent_comms.installer",
+):
+    """A declared operation handled by the install's selected interpreter worker."""
 
-    @classmethod
-    def main(cls) -> None:
-        request, result = sys.argv[1:]
-        probe = FieldCodec.decode(cls, FieldCodec.parse(Path(request).read_text()))
-        Path(result).write_text(probe.encode_answer(probe.run()))
+
+class RuntimeProbeFailed(RuntimeError):
+    """An operation raised in its interpreter; the message is its child traceback."""
+
+
+class ProbeReply(DeclaredFamily, affix="Reply"):
+    @abstractmethod
+    def answer(self) -> str: ...
+
+
+@dataclass(frozen=True)
+class CompletedProbeReply(ProbeReply):
+    encoded: str
+
+    def answer(self) -> str:
+        return self.encoded
+
+
+@dataclass(frozen=True)
+class FailedProbeReply(ProbeReply):
+    traceback: str
+
+    def answer(self) -> str:
+        raise RuntimeProbeFailed(self.traceback)
+
+
+@dataclass(frozen=True)
+class CliOutput:
+    returncode: int
+    stdout: str
+
+
+@dataclass(frozen=True)
+class CliCommandProbe(RuntimeProbe[CliOutput]):
+    """One command-line call, answered by the selected runtime's own command line."""
+
+    arguments: tuple[str, ...]
+
+    def run(self) -> CliOutput:
+        from agent_comms import cli
+
+        with StringIO() as output, redirect_stdout(output):
+            returncode = cli.main(self.arguments)
+            return CliOutput(returncode, output.getvalue())
+
+
+def serve() -> None:
+    """Answer declared operations from stdin, one encoded request per line, until it closes."""
+    for line in sys.stdin:
+        reply: ProbeReply
+        try:
+            with redirect_stdout(sys.stderr):
+                probe = FieldCodec.decode(RuntimeProbe, FieldCodec.parse(line))
+                reply = CompletedProbeReply(probe.encode_answer(probe.run()))
+        except Exception as error:
+            reply = FailedProbeReply("".join(traceback.format_exception(error)))
+        print(json.dumps(FieldCodec.encode(reply)), flush=True)
 
 
 class ClientImportsProbe(RuntimeProbe[None]):
@@ -103,8 +163,6 @@ class ClientImportsProbe(RuntimeProbe[None]):
 
 class PackageRootProbe(RuntimeProbe[Path]):
     def run(self) -> Annotated[Path, PathText]:
-        import agent_comms
-
         return Path(agent_comms.__file__).parent
 
 
@@ -279,7 +337,6 @@ class InstalledPackagesProbe(RuntimeProbe[dict[str, PackageRecord]]):
 
         from packaging.utils import canonicalize_name
 
-        import agent_comms
         from agent_comms.package_stamp import STAMP
 
         if not Path(agent_comms.__file__).resolve().is_relative_to(Path(sys.prefix).resolve()):
@@ -303,7 +360,3 @@ class InstalledPackagesProbe(RuntimeProbe[dict[str, PackageRecord]]):
             )
             for dist in distributions()
         }
-
-
-if __name__ == "__main__":
-    RuntimeProbe.main()

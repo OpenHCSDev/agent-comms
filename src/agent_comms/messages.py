@@ -72,10 +72,15 @@ class BusProjectionTables(ProducedTable, SharedFileTables, DerivedTables, declar
     """Reverse lookups are derived from the record, in its append transaction."""
 
     @classmethod
+    def producer_capabilities(cls) -> tuple[tuple[type[DeclaredFamily], type], ...]:
+        return ((BusRecord, BusCapability), (ClaimTransition, ClaimTransition))
+
+    @classmethod
     def producer_classes(cls) -> tuple[type[DeclaredFamily], ...]:
-        return (
-            *BusRecord.discover_members(agent_comms, BusCapability),
-            *ClaimTransition.discover_members(agent_comms, ClaimTransition),
+        return tuple(
+            member
+            for family, capability in cls.producer_capabilities()
+            for member in family.discover_members(agent_comms, capability)
         )
 
     @classmethod

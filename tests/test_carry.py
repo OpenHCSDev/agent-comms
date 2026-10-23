@@ -184,8 +184,9 @@ def test_a_store_compares_by_its_rows_and_not_by_its_companion_files(tmp_path):
 @pytest.fixture
 def stack(tmp_path):
     """CLI children keep the test's source path rather than an editable install's checkout."""
-    return Stack(REPO, InstallCommands(), home=tmp_path,
-                 runtime=RestoredRuntime(LaunchRuntime.running().interpreter))
+    with InstallCommands() as commands:
+        yield Stack(REPO, commands, home=tmp_path,
+                    runtime=RestoredRuntime(LaunchRuntime.running().interpreter))
 
 
 @pytest.fixture(scope="module")
