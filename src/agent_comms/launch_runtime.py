@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 import sys
+import sysconfig
 from abc import ABC, abstractmethod
 from collections.abc import Callable, Iterator, Mapping, MutableMapping
 from dataclasses import dataclass, field, replace
@@ -97,6 +98,16 @@ class LaunchRuntime:
     @property
     def prefix(self) -> Path:
         return self.interpreter.parent.parent.resolve()
+
+    @property
+    def package_root(self) -> Path:
+        """The Core package installed in this runtime's purelib directory."""
+        purelib = Path(sysconfig.get_path("purelib", vars={"base": str(self.prefix)}))
+        root = purelib / "agent_comms"
+        initializer = root / "__init__.py"
+        if not initializer.is_file():
+            raise FileNotFoundError(f"Installed Core package is missing: {initializer}")
+        return root
 
     @property
     def native_entrypoint(self) -> str:

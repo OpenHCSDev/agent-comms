@@ -1,12 +1,12 @@
 """Declared owner commands at the ACP boundary; shared behavior is inherited."""
 
 from acp import RequestError
-from acp.schema import PromptResponse
+from acp.schema import PromptRequest, PromptResponse
 
+from . import acp_extension
 from .acp_extension import (
     ClearQueueRequest,
     CompactRequest,
-    PromptRequest,
     SelectedWriteRequest,
     SendNowRequest,
     encode_request,
@@ -15,8 +15,9 @@ from .mro_dispatch import MroDispatch, handles
 
 
 class AcpRequestConsumer(MroDispatch):
-    def __init__(self, agent, session_id, prompt):
-        self.agent, self.session_id, self.prompt = agent, session_id, prompt
+
+    def __init__(self, agent, request: PromptRequest):
+        self.agent, self.request = agent, request
         self.response = None
 
     async def run(self, request):
@@ -26,55 +27,53 @@ class AcpRequestConsumer(MroDispatch):
         return self.response
 
     async def forward(self, request):
-        result = await self.agent.sessions.proxies[self.session_id].request(
-            "prompt",
-            meta=encode_request(request),
-            prompt=[
-                block
-                if isinstance(block, dict)
-                else block.model_dump(by_alias=True, exclude_none=True)
-                for block in self.prompt
-            ],
+        forwarded = self.request.model_copy(
+            update={"field_meta": {**(self.request.field_meta or {}), **encode_request(request)}}
+        )
+        result = await self.agent.sessions.proxies[self.request.session_id].request(
+            "prompt", request=forwarded
         )
         return PromptResponse.model_validate(result)
 
-    @handles(PromptRequest)
+    @handles(acp_extension.PromptRequest)
     async def prompt_request(self, request):
-        if self.session_id in self.agent.sessions.proxies:
+        if self.request.session_id in self.agent.sessions.proxies:
             self.response = await self.forward(request)
             return
-        self.response = await self.agent._prompt_request(self.session_id, self.prompt, request)
+        self.response = await self.agent._prompt_request(self.request, request)
 
     @handles(CompactRequest)
     async def compact(self, request):
-        self.agent._require_compaction_text(self.prompt)
-        if self.agent._prompt_text(self.prompt).strip() and not self.agent._prompt_text(
-            self.prompt
+        self.agent._require_compaction_text(self.request)
+        if self.agent._prompt_text(self.request).strip() and not self.agent._prompt_text(
+            self.request
         ).strip().startswith("/compact"):
             raise RequestError.invalid_params({"reason": "Compaction metadata requires blank text"})
-        self.response = await self.agent._compact_request(self.session_id, request.instructions)
+        self.response = await self.agent._compact_request(
+            self.request.session_id, request.instructions
+        )
 
     @handles(SelectedWriteRequest)
     async def selected_write(self, request):
-        if self.prompt:
+        if self.request.prompt:
             raise RequestError.invalid_params({"reason": "Selected write requires no prompt"})
-        if self.session_id in self.agent.sessions.proxies:
+        if self.request.session_id in self.agent.sessions.proxies:
             self.response = await self.forward(request)
             return
-        self.response = await self.agent._selected_write_request(self.session_id, request)
+        self.response = await self.agent._selected_write_request(self.request.session_id, request)
 
     @handles(ClearQueueRequest)
     async def clear(self, request):
-        if self.session_id in self.agent.sessions.proxies:
-            await self.agent.sessions.proxies[self.session_id].request("clear_queue")
+        if self.request.session_id in self.agent.sessions.proxies:
+            await self.agent.sessions.proxies[self.request.session_id].request("clear_queue")
         else:
-            await self.agent.inputs.clear_queued_inputs(self.session_id)
+            await self.agent.inputs.clear_queued_inputs(self.request.session_id)
         self.response = PromptResponse(stop_reason="end_turn")
 
     @handles(SendNowRequest)
     async def send_now(self, request):
-        if self.session_id in self.agent.sessions.proxies:
+        if self.request.session_id in self.agent.sessions.proxies:
             self.response = await self.forward(request)
             return
-        await self.agent.inputs.send_now(self.session_id)
+        await self.agent.inputs.send_now(self.request.session_id)
         self.response = PromptResponse(stop_reason="end_turn")

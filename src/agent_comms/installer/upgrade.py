@@ -84,7 +84,6 @@ from agent_comms.installer.declared_uv import DeclaredUv
 from agent_comms.installer.interpreter_operation import (
     CliCommandProbe,
     ClientImportsProbe,
-    PackageRootProbe,
     PrepareNativeProbe,
     PrepareProducerDigestsProbe,
     ProbeProgram,
@@ -587,7 +586,7 @@ class Stack:
         """Copy this pin's staged native package into the interpreter; qualifying the copy
         checks it against the pin."""
         native, layout = self.stage_native()
-        package = self.probe(PackageRootProbe())
+        package = self.runtime.package_root
         destination = package / "_native" / layout
         destination.parents[2].mkdir(mode=0o700, parents=True)
         link_sealed_tree(native, destination)
