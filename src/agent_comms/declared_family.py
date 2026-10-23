@@ -87,8 +87,9 @@ class FamilyMeta(AutoRegisterMeta, ABCMeta):
         )
         if is_root:
             cls._family_root = cls
-        elif root is not None:
-            cls._family_root = root
+        else:
+            for family_root in roots:
+                cls._family_root = family_root
         return cast(FamilyMeta, cls)
 
     @staticmethod
