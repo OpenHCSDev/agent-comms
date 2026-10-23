@@ -14,13 +14,13 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from typing import ClassVar, Self
 
-from agent_comms.commander.capacity import Load
 from agent_comms.bus import BusReader
 from agent_comms.commander.config import CommanderConfig
 from agent_comms.commander.questions import SenderMessages, UnansweredBurst
 from agent_comms.commander.standing import AnswersTo, PlanStalled
 from agent_comms.comms import Comms
 from agent_comms.declared_family import DeclaredFamily
+from agent_comms.field_codec import projected
 from agent_comms.goal_actions import (
     ChokeholdPausedGoalAction,
     CompliedGoalAction,
@@ -29,15 +29,18 @@ from agent_comms.goal_actions import (
 from agent_comms.messages import Message
 from agent_comms.read_basis import RepliesDisplayScope
 from agent_comms.registry_document import RegistrySnapshot
-from agent_comms.thread_identity import ThreadIncarnation
-from agent_comms.todos import OwnerRequest, Todo
 from agent_comms.service_sender import ServiceSender
 from agent_comms.standing_rules import (
     IndependentStandingRule,
     OwedAnswer,
+    ReviewTimerUp,
     StandingRule,
     UndatedStandingRule,
 )
+from agent_comms.thread_identity import ThreadIncarnation
+from agent_comms.todos import OwnerRequest, Todo
+from agent_comms.tool_result import ToolResult
+from agent_comms.turn_digests import OrderEditCountRead
 
 
 class EscalationSender(ServiceSender):
@@ -171,7 +174,8 @@ class PlanStalledDegradation(Degradation):
         return int(math.log2(max(held, PlanStalled.window) / PlanStalled.window))
 
 
-class OverloadDegradation(Degradation, BlocksRelease):
+@dataclass(frozen=True)
+class OverloadDegradation(Degradation, BlocksRelease, ToolResult):
     """More owed orders, expired timers and unjudged edits than one commander keeps up with.
     Forks relieve it by judging and ordering, which lowers the debt; load moves every beat, so
     it stops the commander once per round while it stays over."""
@@ -179,9 +183,31 @@ class OverloadDegradation(Degradation, BlocksRelease):
     ceiling: ClassVar[float] = 100.0
     round_seconds: ClassVar[int] = 30 * 60
 
+    owed: int
+    timers_up: int
+    unjudged: int
+
+    @classmethod
+    def of(cls, comms: Comms, commander: str) -> Self:
+        return cls(
+            len(StandingRule.pending_todos(comms, commander)),
+            len(ReviewTimerUp.violations(comms, commander)),
+            OrderEditCountRead.count(comms, commander),
+        )
+
+    @projected(view="wire")
+    def total(self) -> float:
+        return self.owed + 2 * self.timers_up + self.unjudged / 10
+
+    def __str__(self) -> str:
+        return (
+            f"load {self.total:.0f} ({self.owed} open orders, "
+            f"{self.timers_up} review timers up, {self.unjudged} unjudged edits)"
+        )
+
     @classmethod
     def found(cls, comms: Comms, commander: str) -> tuple[Sign, ...]:
-        load = Load.of(comms, commander)
+        load = cls.of(comms, commander)
         if load.total < cls.ceiling:
             return ()
         return (Sign(cls, (int(time.time() // cls.round_seconds),),

@@ -115,14 +115,9 @@ class RuleFile(DeclaredFamily, affix="RuleFile"):
         """The reminder hook's one-line tells, one declared by each packaged rule."""
         return tuple(rule.drift for rule in cls.packaged())
 
-    @abstractmethod
-    def review_rules(self) -> tuple[str, ...]: ...
-
 
 class FeedbackRuleFile(RuleFile):
-
-    def review_rules(self) -> tuple[str, ...]:
-        return (self.summary,)
+    """A rule that supplies feedback in the commander's instructions."""
 
 
 class HardRuleFile(FeedbackRuleFile, declared_name="hard-rule"):
@@ -130,6 +125,4 @@ class HardRuleFile(FeedbackRuleFile, declared_name="hard-rule"):
 
 
 class ReferenceRuleFile(RuleFile):
-
-    def review_rules(self) -> tuple[str, ...]:
-        return ()
+    """Supporting instructions read alongside the feedback rules."""
