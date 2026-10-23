@@ -153,6 +153,13 @@ class UnpushedHead:
 
 
 @dataclass(frozen=True)
+class BranchComparison:
+    base: str
+    head: str
+    paths: tuple[Path, ...]
+
+
+@dataclass(frozen=True)
 class WorkBranches:
     """One repository's branches with commits that main does not have."""
 
@@ -229,7 +236,23 @@ query($owner: String!, $name: String!, $after: String) {
         missing = tuple(line.removesuffix(" missing") for line in listed.splitlines()
                         if line.endswith(" missing"))
         if missing:
-            self._run("git", "fetch", "--quiet", "--no-tags", remote, *missing)
+            self._run("git", "fetch", "--quiet", "--no-tags", "--", remote, *missing)
+
+    def remote_heads(self, remote: str, reference: str) -> tuple[str, ...]:
+        return tuple(line.split()[0] for line in self._run(
+            "git", "ls-remote", "--refs", remote, reference,
+        ).splitlines())
+
+    def pull_request_diff(self, base: str, head: str) -> BranchComparison:
+        published = self.remote_heads("origin", f"refs/heads/{base}")
+        if not published:
+            raise WorkBranchError(f"Origin has no pull request base {base!r} in {self.checkout}")
+        base_head, = published
+        self.require_commits("origin", base_head, head)
+        paths = tuple(Path(name) for name in self._run(
+            "git", "diff", "--name-only", "-z", f"{base_head}...{head}", "--",
+        ).split("\0") if name)
+        return BranchComparison(base_head, head, paths)
 
     def unpushed(self) -> tuple[UnpushedHead, ...]:
         """Compare this HEAD with its actual upstream, without trusting a stale tracking ref."""
@@ -241,9 +264,9 @@ query($owner: String!, $name: String!, $after: String) {
                 "git", "for-each-ref", "--format=%(upstream:remotename) %(upstream:remoteref)",
                 reference,
             ).split()
-            published = self._run("git", "ls-remote", "--refs", remote, remote_ref).split()
+            published = self.remote_heads(remote, remote_ref)
             if published:
-                remote_head, _ = published
+                remote_head, = published
                 self.require_commits(remote, remote_head)
                 count = int(self._run("git", "rev-list", "--count", f"{remote_head}..{head}"))
                 return (UnpushedHead(head, count, upstream),) if count else ()
