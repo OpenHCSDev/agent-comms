@@ -20,7 +20,7 @@ def unfinished_todo(db):
     defaults = {item.name: item.default if item.default_factory is MISSING else item.default_factory()
                 for item in fields(Todo) if (item.default, item.default_factory) != (MISSING, MISSING)}
     row = {item.wire_name: named[item.name] if item.name in named else item.encode(defaults[item.name])
-           for item in Todo._fields() if item.name in named or item.name in defaults}
+           for item in Todo._fields if item.name in named or item.name in defaults}
     columns = ", ".join(f'"{name}"' for name in row)
     db.execute(f"INSERT INTO todo ({columns}) VALUES ({', '.join('?' * len(row))})", tuple(row.values()))
 
@@ -29,7 +29,7 @@ def _old_todo(path):
     """A store created before the selector CHECKs were declared."""
     target = Todo.schema_objects()[Todo.declared_name]
     original = target
-    for item in Todo._fields():
+    for item in Todo._fields:
         for constraint in item.storage.family_constraints(item.name, item.annotation):
             original = original.replace(f" CHECK ({constraint})", "", 1)
     assert original != target
