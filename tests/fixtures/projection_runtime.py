@@ -20,7 +20,7 @@ class MessageProducerSource(importlib.abc.MetaPathFinder):
             return importlib.util.spec_from_file_location(fullname, self.source)
 
 
-def main(source: Path, database: Path) -> None:
+def main(source: Path, database: Path, after_import_source: Path | None = None) -> None:
     sys.dont_write_bytecode = True
     sys.meta_path.insert(0, MessageProducerSource(source))
 
@@ -30,6 +30,8 @@ def main(source: Path, database: Path) -> None:
     from agent_comms.messages import InfoKind, Message
     from agent_comms.typed_table import ProjectionProducer, WriterOwnedFile
 
+    if after_import_source is not None:
+        source.write_bytes(after_import_source.read_bytes())
     created = not database.exists()
     bus = Bus.install(database) if created else Bus(database)
     if created:

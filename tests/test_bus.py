@@ -88,32 +88,40 @@ def test_install_refuses_existing_schema_changes_until_an_explicit_rebuild(bus):
     assert bus.page(3, 2) == (second, record)
 
 
-def test_changed_message_producer_rebuilds_real_projection_with_identical_ddl(tmp_path):
+@pytest.mark.parametrize("edit_after_import", (False, True), ids=("fresh-import", "edited-after-import"))
+def test_changed_message_producer_rebuilds_real_projection_with_identical_ddl(tmp_path, edit_after_import):
     source = Path(__file__).parents[1] / "src/agent_comms/messages.py"
     producer = tmp_path / "messages.py"
     original = source.read_text()
     producer.write_text(original)
+    producing_call = "CommandTarget.named(message.target).response_policy(message)"
+    assert original.count(producing_call) == 1
+    replacement = tmp_path / "changed.py"
+    replacement.write_text(original.replace(producing_call, "InformationalPolicy.instance()"))
     database = tmp_path / "bus.sqlite3"
     runtime = Path(__file__).parent / "fixtures/projection_runtime.py"
 
-    def replay():
+    def replay(after_import_source=None):
+        arguments = (sys.executable, str(runtime), str(producer), str(database))
+        if after_import_source is not None:
+            arguments += (str(after_import_source),)
         result = subprocess.run(
-            (sys.executable, str(runtime), str(producer), str(database)),
+            arguments,
             capture_output=True, text=True, timeout=30, check=True,
         )
         return json.loads(result.stdout)
 
-    built = replay()
-    unchanged = replay()
+    built = replay(replacement if edit_after_import else None)
     assert built["policy"] == "DirectPolicy"
-    assert not unchanged["reconciled"] and unchanged["row_writes"] == 0
-    assert not unchanged["planned"]
-    producing_call = "CommandTarget.named(message.target).response_policy(message)"
-    assert original.count(producing_call) == 1
+    if not edit_after_import:
+        unchanged = replay()
+        assert not unchanged["reconciled"] and unchanged["row_writes"] == 0
+        assert not unchanged["planned"]
+        assert unchanged["ddl"] == built["ddl"] and unchanged["source"] == built["source"]
     producer.write_text(original.replace(producing_call, "InformationalPolicy.instance()"))
     changed = replay()
-    assert changed["ddl"] == built["ddl"] == unchanged["ddl"]
-    assert changed["source"] == built["source"] == unchanged["source"]
+    assert changed["ddl"] == built["ddl"]
+    assert changed["source"] == built["source"]
     assert changed["source_rows"] == built["source_rows"] == 1
     assert changed["producer"] != built["producer"]
     assert changed["reconciled"] and changed["row_writes"] > 0
