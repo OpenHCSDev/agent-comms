@@ -412,7 +412,8 @@ class NativeSession(MroDispatch, ABC):
         abort_deadline = self.loop.time() + max(0.0, self.rpc_abort_grace)
         try:
             remaining = max(0.0, abort_deadline - self.loop.time())
-            self.native.send(commands.Abort(id=RequestId("agent-comms-watchdog")))
+            abort = commands.Abort(id=RequestId("agent-comms-watchdog"))
+            self.native.send(abort)
             await asyncio.wait_for(self.native.drain(), timeout=remaining)
             while remaining := max(0.0, abort_deadline - self.loop.time()):
                 response = await asyncio.wait_for(
@@ -425,10 +426,7 @@ class NativeSession(MroDispatch, ABC):
                 except (json.JSONDecodeError, UnicodeDecodeError, MalformedRecord):
                     continue
                 abort_payload.observe_abort(self)
-                if (
-                    isinstance(abort_payload, pi.Response)
-                    and abort_payload.command is commands.Abort
-                ):
+                if abort_payload.responds_to(abort):
                     break
         except (TimeoutError, BrokenPipeError):
             pass

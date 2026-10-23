@@ -26,7 +26,7 @@ from .native_tool_call import (
     SelectedToolDenied,
     ToolOutcomeUnknown,
 )
-from .pi_payloads import PiContent, ToolCallContent
+from .pi_payloads import PiContent
 from .private_path import PrivateDirectoryRole, PrivateSocketRole
 
 if TYPE_CHECKING:
@@ -99,13 +99,13 @@ class NativeToolRound(Generic[Call]):
         declared: list[Call] = []
         seen: set[str] = set()
         for item in content:
-            if isinstance(item, ToolCallContent):
-                call = decode_call(item.id, item.name, item.arguments)
+            for tool_call in item.tool_calls():
+                call = decode_call(tool_call.id, tool_call.name, tool_call.arguments)
                 if call.call_id in seen:
                     raise DuplicateToolCallIdentity(call.call_id)
                 seen.add(call.call_id)
                 declared.append(call)
-            elif not item.tool_round_allowed:
+            if not item.tool_round_allowed:
                 raise SelectedToolDenied("Invalid native tool content")
         if not declared:
             raise SelectedToolDenied("Native tool round has no declared call")

@@ -364,15 +364,10 @@ def publish_active_route(route: ActiveRoute, path: Path | None = None) -> None:
         _publish_active_route_locked(route, path, directory)
 
 
-def replace_unreadable_active_route(route: ActiveRoute, path: Path | None = None) -> Path:
-    """The owner's explicit repair of a route file that selects no bus. The old file is kept
-    beside the new one under a backup name, so a live route is still only ever installed once."""
-    with _route_directory(route, path) as (path, directory):
-        return RouteFile.read(path).replace(route, path, directory)
-
-
 def route_new_bus(route: ActiveRoute, path: Path) -> str:
-    """Install's route to a bus it just created."""
+    """Route to this bus unless the file already selects one: install's answer and the
+    owner's repair. A replaced file is kept beside the new one under a backup name, so a
+    live route is still only ever installed once."""
     with _route_directory(route, path) as (path, directory):
         return RouteFile.read(path).route_new_bus(route, path, directory)
 
@@ -417,9 +412,6 @@ class ReplaceableRoute(RouteFile):
 
 
 class AbsentRoute(RouteFile):
-    def replace(self, route: ActiveRoute, path: Path, directory: int) -> Path:
-        raise ValueError(f"active comms route {path} is absent; nothing to replace")
-
     def route_new_bus(self, route: ActiveRoute, path: Path, directory: int) -> str:
         _publish_active_route_locked(route, path, directory)
         return f"published {path}"
@@ -433,10 +425,6 @@ class SelectingRoute(RouteFile):
 
     def launch_root(self) -> Path:
         return self.current.root
-
-    def replace(self, route: ActiveRoute, path: Path, directory: int) -> Path:
-        raise ValueError(f"active comms route {path} is readable and selects "
-                         f"{self.current.root}; it is not replaced")
 
     def route_new_bus(self, route: ActiveRoute, path: Path, directory: int) -> str:
         return f"kept {path}: it selects {self.current.root}"

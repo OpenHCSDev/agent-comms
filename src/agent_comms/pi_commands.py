@@ -98,17 +98,13 @@ class PiCommand(DeclaredFamily):
             future.cancel()
 
     async def exchange(self, child, *, strict=False, max_bytes=None, on_event=lambda event: None):
-        from .pi_events import Response
         channel = child.reader
         async with self.pending_response(child) as future:
             while not future.done():
                 event = await channel.receive(strict=strict, max_bytes=max_bytes)
                 if event is None:
                     raise EOFError('Pi RPC ended before the requested response')
-                if isinstance(event, Response):
-                    channel.correlate(event)
-                else:
-                    on_event(event)
+                event.correlate_or_deliver(channel, on_event)
             return future.result()
 
     def to_rpc(self) -> dict[str, Any]:
