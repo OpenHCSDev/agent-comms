@@ -145,8 +145,10 @@ def test_registered_fork_sends_parent_problem_with_fork_actor(fork_bus, tmp_path
         store.require_unit_in(db, saved.held().owner_identity, reissuer)
     print(f'Core send actor: {saved.held().parent}; problem commander: {saved.creator}')
     ctx = CommanderContext.read_root(comms.root).model_copy(update={'actor': CommanderForkCaller(fork.name)})
-    assert ctx.call(CommsHudTool(thread=ctx.commander)) == Commander.read_root(comms.root).call(
-        CommsHudTool(thread=ctx.commander))
+    hud = ctx.call(CommsHudTool(thread=ctx.commander))
+    assert hud.commander == parent.incarnation
+    assert [(unit.unit, tuple(order.problem for order in unit.orders))
+            for unit in hud.units] == [(saved.held().owner_identity, ('P40',))]
     assert set(ctx.model_copy(deep=True).progress()) == {'P40'}
     assert ctx.held_orders() == (saved,)
     assert ctx.call(CommsTodoListTool(thread=ctx.commander)).todos == (saved,)

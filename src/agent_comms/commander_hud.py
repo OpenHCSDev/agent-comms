@@ -28,6 +28,7 @@ class CommanderOrder:
     text: str
     order: str
     state: str
+    progress: OrderProgress
     review_timers_up: tuple[RecordedEventTime, ...]
     strikes: int
     unjudged_edits: int
@@ -44,7 +45,9 @@ class CommanderUnit:
     draft_prs: tuple[PullRequest, ...]
 
     def line(self) -> str:
-        orders = "; ".join(f"{order.problem}: {order.state}" for order in self.orders)
+        orders = "; ".join(
+            f"{order.problem}: {order.state}; {order.progress.line}" for order in self.orders
+        )
         return (
             f"{self.unit.name}: orders={orders} "
             f"review timers={sum(len(order.review_timers_up) for order in self.orders)} "
@@ -112,7 +115,7 @@ class CommanderHud(ToolResult):
             units.append(CommanderUnit(
                 unit,
                 tuple(CommanderOrder(
-                    todo.id, todo.text, todo.order.checked().id, todo.order.line,
+                    todo.id, todo.text, todo.order.checked().id, todo.order.line, progress[todo.id],
                     tuple(at for due, at in timers if due.id == todo.id),
                     todo.strike_count, edits[todo.id],
                 ) for todo in orders),
