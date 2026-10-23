@@ -13,6 +13,7 @@ from agent_comms.coordination_database import (
 )
 from agent_comms.coordination_errors import CoordinationReadUnavailable
 from agent_comms.coordination_tables.refusals import SendRefusal
+from agent_comms.external_transcript import ExternalTranscript
 from agent_comms.locked_store import SQLiteFile, StoreBusy
 
 
