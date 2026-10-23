@@ -18,7 +18,7 @@ from typing import TYPE_CHECKING, ClassVar, Self
 from agent_comms.commander.questions import UnansweredUnitAsks
 from agent_comms.field_codec import MalformedRecord
 from agent_comms.goal_presentation import GoalSnapshot
-from agent_comms.goals import GitCommandFailed
+from agent_comms.repo import GitCommandFailed
 from agent_comms.messages import Message
 from agent_comms.native_failures import NativePiUnavailable
 from agent_comms.standing_rules import StandingRule, UndatedStandingRule

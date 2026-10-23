@@ -349,9 +349,10 @@ class StorageViolation(UndatedStandingRule, declared_name=None):
     @classmethod
     def scan_observed(cls, comms: Comms, commander: str,
                       observed: Sequence[UnitState]) -> tuple[Self, ...]:
+        # Storage reads the filesystem, not the git source an unreadable card failed on:
+        # a unit whose declared home is gone is that card and a missing home.
         held = StandingRule.holders(comms, commander)
-        return cls.for_units(comms, (unit for state in observed
-                                    for unit in state.readable_units() if unit in held))
+        return cls.for_units(comms, (state.unit for state in observed if state.unit in held))
 
     @classmethod
     def for_units(cls, comms: Comms, units: Iterable[ThreadIncarnation]) -> tuple[Self, ...]:

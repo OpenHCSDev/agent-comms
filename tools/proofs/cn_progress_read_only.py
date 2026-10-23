@@ -10,6 +10,7 @@ from proofs.cn_phase3_record import CHECKOUT, ROOT, cli, create_order
 from agent_comms.comms import wire
 from agent_comms.field_codec import FieldCodec
 from agent_comms.goals import CheckedCommit, CountCheckResult, OrderCheck
+from agent_comms.repo import Repo
 from agent_comms.todos import CorrectCheckTodo, DistanceReadings, PushedProgress, Todo
 from agent_comms.tools import CommsChangeProblemTool, CommsTodoListTool, TodoList
 
@@ -62,7 +63,7 @@ def verify() -> None:
     try:
         assert not board(todo).readings
         assert not MARKER.exists()
-        sha = CheckedCommit.git(str(checkout), "rev-parse", "HEAD").strip()
+        sha = Repo.git(checkout, "rev-parse", "HEAD").strip()
         assert not check.recorded(sha, str(checkout))
         check.at(sha, str(checkout), comms.registry.storage_rule.checkout_base)
         assert MARKER.read_bytes() == MARKER_CONTENT

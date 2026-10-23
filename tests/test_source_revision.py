@@ -9,7 +9,7 @@ from test_todos import order
 from agent_comms.change_report import FileLine, MainRevision, MissingSourceLine, PullRequestHeadRevision
 from agent_comms.field_codec import MalformedRecord
 from agent_comms.goal_actions import OrderGoalAction
-from agent_comms.goals import GitCommandFailed
+from agent_comms.repo import GitCommandFailed
 from agent_comms.owner_requests import OwnerRequestId
 from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.thread_identity import RecordedThreadIncarnation

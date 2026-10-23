@@ -70,7 +70,8 @@ from agent_comms.field_codec import (
     WireValue,
     boundary_decoder,
 )
-from agent_comms.goals import CheckedCommit, GitCommandFailed, OrderCheck, ProblemGoalOrder
+from agent_comms.goals import CheckedCommit, OrderCheck, ProblemGoalOrder
+from agent_comms.repo import GitCommandFailed
 from agent_comms.head_review import AcceptedHeadReview
 from agent_comms.lifecycle_capability import LifecycleCapability, Pending
 from agent_comms.message_reference import MessageReference
@@ -863,7 +864,7 @@ class PresentCheckout(ProgressCheckout):
         return (self.default_reference,) if self.default_reference in self.git_refs else ()
 
     def git(self, *args: str) -> str:
-        return CheckedCommit.git(str(self.path), *args)
+        return Repo.git(self.path, *args)
 
     def require_read(self) -> None:
         self.git("rev-parse", "--git-dir")
