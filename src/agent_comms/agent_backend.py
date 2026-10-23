@@ -22,7 +22,7 @@ from abc import ABC, abstractmethod
 from collections.abc import AsyncIterator, Awaitable, Callable
 from dataclasses import dataclass
 from types import MappingProxyType
-from typing import TYPE_CHECKING, Any, ClassVar, Protocol, Self
+from typing import TYPE_CHECKING, Any, ClassVar, Self
 
 from .declared_family import DeclaredFamily
 from .pi_counts import PiCount
@@ -157,23 +157,25 @@ class InputContent:
     contributions: tuple[InputContributionCoordinates, ...] = ()
 
 
-class TurnInboxReceiver(Protocol):
-    """What a running turn does with each record its inbox carries."""
+class TurnInboxItem(ABC):
+    """An inbox item carries its input identities; the forwarding owner dispatches it."""
 
-    def place(self, turn: object, item: InputRequest) -> Awaitable[bool]: ...
-    def send_now(self, turn: object, item: SendNow) -> Awaitable[bool]: ...
-    def use_settings(self, turn: object, item: UseSettings) -> Awaitable[bool]: ...
-    def clear_queue(self, turn: object, item: ClearQueue) -> Awaitable[bool]: ...
+    @property
+    def carried_inputs(self) -> tuple[InputId, ...]:
+        return ()
+
+    def refuse(self, inputs, turn):
+        inputs.refuse(turn, self.carried_inputs)
 
 
-class TurnInbox(asyncio.Queue):
+class TurnInbox(asyncio.Queue[TurnInboxItem]):
     """The live inbox parks its head until the existing observer sees READY."""
     def __init__(self):
         super().__init__()
         self.ready = asyncio.Event()
         self.ready.set()
 
-    async def get(self):
+    async def get(self) -> TurnInboxItem:
         await self.ready.wait()
         return await super().get()
 
@@ -186,28 +188,14 @@ class TurnInbox(asyncio.Queue):
     def all_written_started(self):
         return not any(item.carried_inputs for item in self._queue)
 
-    def begin(self, item):
+    def begin(self, item: TurnInboxItem) -> None:
         self._queue.appendleft(item)
         self._wakeup_next(self._getters)
 
-    def hold(self, item):
+    def hold(self, item: TurnInboxItem) -> None:
         # Park under the shared wire lock, before READY can be published.
         self.ready.clear()
         self.begin(item)
-
-
-class TurnInboxItem(ABC):
-    """An inbox item owns its carried inputs and delivery to a running turn."""
-
-    @property
-    def carried_inputs(self) -> tuple[InputId, ...]:
-        return ()
-
-    def refuse(self, inputs, turn):
-        inputs.refuse(turn, self.carried_inputs)
-
-    @abstractmethod
-    def deliver_to(self, receiver: TurnInboxReceiver, turn: object) -> Awaitable[bool]: ...
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -225,9 +213,6 @@ class InputRequest(TurnInboxItem):
     def carried_inputs(self) -> tuple[InputId, ...]:
         return (self.input_id,)
 
-    def deliver_to(self, receiver: TurnInboxReceiver, turn: object) -> Awaitable[bool]:
-        """Hand this input to the running turn's receiver; False ends forwarding."""
-        return receiver.place(turn, self)
 
 
 @dataclass(frozen=True)
@@ -239,8 +224,6 @@ class SendNow(TurnInboxItem):
 
     input_ids: tuple[InputId, ...]
 
-    def deliver_to(self, receiver: TurnInboxReceiver, turn: object) -> Awaitable[bool]:
-        return receiver.send_now(turn, self)
 
 
 @dataclass(frozen=True)
@@ -254,8 +237,6 @@ class UseSettings(TurnInboxItem):
     model: ThreadModel
     thinking_level: ThinkingLevelField
 
-    def deliver_to(self, receiver: TurnInboxReceiver, turn: object) -> Awaitable[bool]:
-        return receiver.use_settings(turn, self)
 
 
 @dataclass(frozen=True)
@@ -264,8 +245,6 @@ class ClearQueue(TurnInboxItem):
 
     input_ids: tuple[InputId, ...]
 
-    def deliver_to(self, receiver: TurnInboxReceiver, turn: object) -> Awaitable[bool]:
-        return receiver.clear_queue(turn, self)
 
 
 class CompactionOutcome(DeclaredFamily, DeclaredReply, affix="Compaction"):

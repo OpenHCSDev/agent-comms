@@ -8,7 +8,6 @@ has no bus/registry/SQLite reads, inbox cursor, or model-launch operation.
 
 from __future__ import annotations
 
-import json
 from dataclasses import dataclass
 
 from agent_comms.coordination_tables.assignments import WakeAssignment
@@ -94,16 +93,8 @@ class SelectedWakeSegment(InstructionSegment):
                     "body": initial.message.body,
                 }
             )
-        selected_line = json.dumps(
-            selected,
-            ensure_ascii=True,
-            separators=(",", ":"),
-        )
-        work_context = json.dumps(
-            FieldCodec.encode(self.work_context),
-            ensure_ascii=True,
-            separators=(",", ":"),
-        )
+        selected_line = FieldCodec.compact(selected, ensure_ascii=True)
+        work_context = FieldCodec.compact(FieldCodec.encode(self.work_context), ensure_ascii=True)
         sent_values = []
         for outcome in self.sent_outcomes:
             message, reference = outcome.message, outcome.answer
@@ -117,11 +108,7 @@ class SelectedWakeSegment(InstructionSegment):
                     FieldCodec.encode(reference) if reference is not None else None
                 ),
             })
-        sent_outcomes = json.dumps(
-            sent_values,
-            ensure_ascii=True,
-            separators=(",", ":"),
-        )
+        sent_outcomes = FieldCodec.compact(sent_values, ensure_ascii=True)
         return dict(
             count=len(selected),
             selected=selected_line,
@@ -148,15 +135,13 @@ class DeliveredMessageSegment(InstructionSegment):
         self.assignment.require_selected_source(self.source, self.owner)
         message = self.source.message
         return dict(
-            message=json.dumps(
+            message=FieldCodec.compact(
                 {
                     "source_seq": self.assignment.wire_seq,
                     "sender": message.sender,
                     "target": message.target,
                     "audience": self.assignment.audience.value,
                     "body": message.body,
-                },
-                ensure_ascii=True,
-                separators=(",", ":"),
+                }, ensure_ascii=True,
             )
         )

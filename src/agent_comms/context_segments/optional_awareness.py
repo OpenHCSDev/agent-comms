@@ -179,7 +179,7 @@ class CompleteAwareness(Complete, ContextSegment, OptionalAwarenessResult):
         }
 
     def require_resource_budget(self, max_text_bytes: int) -> None:
-        text = json.dumps(FieldCodec.encode(self.context()), ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+        text = FieldCodec.compact(FieldCodec.encode(self.context()), ensure_ascii=False, sort_keys=True)
         if len(text.encode("utf-8")) > max_text_bytes:
             raise ProjectionUnavailableError("binding awareness exceeds the byte budget")
 

@@ -16,7 +16,7 @@ from agent_comms.coordination_tables.participants import Participants
 from agent_comms.private_runtime_schema import PrivateCoordinatorTable
 
 from .coordination_errors import IdentityConflict, PublicationActivationBlocked, StaleFence
-from .field_codec import FieldCodec, MalformedRecord, NativeContext, WireName
+from .field_codec import FieldCodec, MalformedRecord, NativeContext
 from .native_claim_epoch import NativeClaimEpoch, UnrecordedNativeClaim
 from .native_input_record import (
     NativeColumn,
@@ -41,7 +41,6 @@ from .selected_triage import (
 from .typed_table import (
     TableReference,
     Column,
-    DurableTables,
     FinalizedColumn,
     FrozenColumn,
     IntegerStorage,
@@ -49,11 +48,10 @@ from .typed_table import (
     NoDelete,
     NonDecreasing,
     RequiredUpdateColumns,
-    SharedFileTables,
     StableReferenceColumns,
     TextStorage,
     TypedRow,
-    TypedTable,
+    WithoutRowid,
     WriteOnceColumns,
     sql_literal,
 )
@@ -87,7 +85,7 @@ class NativeRuntimeInput(
     NativeInputRecord,
     NativeInputContext,
     NativeRuntimeTable,
-    TypedTable,
+    WithoutRowid,
 ):
     @classmethod
     def notification_context_sql(cls) -> str:
@@ -264,7 +262,6 @@ class NativeRuntimeInput(
     owner_token_digest: Annotated[str, FrozenColumn(check="length(owner_token_digest)=64")]
     sent_owner_claimed_generation: Annotated[
         NativeClaimEpoch,
-        WireName("sent_owner_admission_generation"),
         Column(
             record_key=True,
             check="{sent_owner_claimed_generation}>0",
@@ -288,7 +285,6 @@ class NativeRuntimeInput(
         Column(check=RecordedTriageText.sql_constraint("verdict"), storage=TextStorage, nullable=True),
     ] = AbsentTriageDecisionRecord()
 
-    without_rowid = True
     unique = (("execution_id", "attempt_ordinal"),)
     checks = (
         "(stage='triage' AND execution_id IS NULL AND attempt_ordinal IS NULL) OR "
@@ -342,7 +338,7 @@ class CurrentNativeCursor(
     NoDelete,
     NativeInputContext,
     NativeRuntimeTable,
-    TypedTable,
+    WithoutRowid,
 ):
     column_orders = (NonDecreasing(("covered_seq", "injected_seq")),)
     reference_column = 'injected_seq'
@@ -365,7 +361,6 @@ class CurrentNativeCursor(
     owner_generation: Annotated[int, FrozenColumn(primary_key=True, check="owner_generation>0")]
     owner_claimed_generation: Annotated[
         int,
-        WireName("owner_admission_generation"),
         FrozenColumn(record_key=True, primary_key=True, check="{owner_claimed_generation}>0"),
     ]
 
@@ -394,7 +389,6 @@ class CurrentNativeCursor(
     session_id: Annotated[NativeColumn, NativeContext(str), Column(storage=TextStorage, nullable=True)]
     request_generation: Annotated[NativeColumn, NativeContext(int), Column(storage=IntegerStorage, nullable=True)]
 
-    without_rowid = True
     checks = (
         "(injected_seq=0 AND input_id IS NULL AND stage IS NULL "
         "AND session_id IS NULL AND request_generation IS NULL) OR "

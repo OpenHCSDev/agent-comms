@@ -54,9 +54,10 @@ class ThreadNameOwners(Carry):
                     db = lifetime.enter_context(closing(_connect(raw)))
                 else:
                     lifetime.enter_context(_store_lock(path))
-                    source = lifetime.enter_context(closing(SQLiteFile.read_snapshot(path)))
                     db = lifetime.enter_context(closing(SQLiteFile.writer(":memory:", isolation_level=None)))
-                    source.backup(db)
+                    # The snapshot answers one copy; held longer, it blocks the write-back below.
+                    with closing(SQLiteFile.read_snapshot(path)) as source:
+                        source.backup(db)
                 tables = (
                     (Participants, OwnerGenerations, ExecutionRecord, AttemptRecord,
                      NativeRuntimeInput, CurrentNativeCursor, AwarenessClaimGenerations)

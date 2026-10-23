@@ -57,4 +57,4 @@ class PartnerActivitySegment(InstructionSegment):
         return (super().capture((OwnerProvenance(owner.incarnation, revision),), changes=changes),)
 
     def values(self):
-        return {"changes": json.dumps(FieldCodec.encode(self.changes), separators=(",", ":"))}
+        return {"changes": FieldCodec.compact(FieldCodec.encode(self.changes))}
