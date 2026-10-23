@@ -43,7 +43,7 @@ from .errors import (
 from .mentions import ThreadMention
 from .private_path import FileRevision
 from .registry_document import DEFAULT_ROSTER, RegistrySnapshot
-from .wake import ControlClassification, resolve_wake_cohort
+from .wake import OrdinaryControl, resolve_wake_cohort
 
 if TYPE_CHECKING:
     from .coordination_session import NativeBoundary
@@ -217,7 +217,7 @@ class InitialWrites(Publisher):
             with Coordination(str(CoordinationStore.path_in(self.bus.path.parent))) as store:
                 sender_thread.role.register_sender(store.participants, sender_lookup, sender)
                 for thread, lookup in zip(selected, lookups, strict=True):
-                    store.participants.register(lookup, thread.name, thread.name, committed=True)
+                    store.participants.register(lookup, committed=True)
 
             def build(seq: int, db: sqlite3.Connection) -> PrivateRecord:
                 source = BusSnapshot.from_connection(db)
@@ -241,11 +241,11 @@ class InitialWrites(Publisher):
                     revision, sender_lookup=sender_lookup, sender_name=sender,
                 )
                 decisions = resolve_wake_cohort(
-                    stored, frozen_audience=audience, control=ControlClassification.ORDINARY,
+                    stored, frozen_audience=audience, control=OrdinaryControl,
                 )
                 return PrivateRecord.from_message(
                     stored, audience=audience, decisions=decisions,
-                    control=ControlClassification.ORDINARY.value,
+                    control=OrdinaryControl.declared_name,
                 )
 
             return origin.append(self.bus, build)

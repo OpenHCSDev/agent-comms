@@ -31,7 +31,7 @@ from .envelope_claim_transitions import (
 )
 from .errors import RelationViolationError
 from .native_input_owner import RegistryOwner
-from .private_registry_guard import RegistryPrivacy, _require_no_private_owner_rename
+from .private_registry_guard import RegistryPrivacy
 from .registry_document import RegistrySnapshot
 from .store_files import SharedLock
 from .threads import Thread
@@ -82,7 +82,6 @@ def _verify_selected_wake_state(
             raise IdentityConflict("Wake assignment binding changed")
         expected_owner = OwnerGenerations(
             owner_lookup=claim_scope.recipient_lookup,
-            owner_thread=owner.name,
             generation=claim_scope.participant_generation,
         )
         if not participant.committed or participant.owner_identity != expected_owner:
@@ -96,11 +95,11 @@ def _verify_selected_wake_state(
             or attempt.attempt_ordinal != claim_scope.attempt_ordinal
         ):
             raise IdentityConflict("Wake selected attempt owner changed")
-        if snapshot.execution.owner_thread != owner.name:
+        if snapshot.execution.owner_lookup != expected_owner.owner_lookup:
             raise IdentityConflict("Wake execution owner changed")
         if not attempt.lifecycle.tool_claim_open:
             raise IdentityConflict("Wake execution is not the current selected attempt")
-        if assignment not in snapshot.assignments or assignment.recipient != owner.name:
+        if assignment not in snapshot.assignments or assignment.recipient_lookup != expected_owner.owner_lookup:
             raise IdentityConflict("Wake assignment is not a member of this owner's execution")
 
 
@@ -139,7 +138,6 @@ def _selected_claim_boundary(
         except StaleFence as error:
             raise IdentityConflict("Selected wake owner stopped or changed") from error
         owner, generation = captured.thread, captured.claimed_generation
-        _require_no_private_owner_rename(comms.root)
         privacy = comms.registry.store.private_guard_unlocked()
         privacy.require_root(
             claim_scope.wire_root_id, IdentityConflict("Selected wake belongs to another namespace"))

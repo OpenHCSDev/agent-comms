@@ -33,7 +33,7 @@ from agent_comms.messages import (
     Claimed,
     ClaimHistoryKind,
     InfoKind,
-    MembershipChange,
+    MembershipTransition,
     Message,
     MessageRoleWire,
     NoticeRole,
@@ -132,7 +132,7 @@ def test_projection_freshness_follows_the_installed_core_commit(bus):
     "role",
     tuple(
         MessageRoleWire(change=change, notice=notice).role()
-        for change in (MessageRoleWire().change, *MembershipChange)
+        for change in (MessageRoleWire().change, *MembershipTransition.members_with(MembershipTransition))
         for notice in (False, True)
     ),
 )

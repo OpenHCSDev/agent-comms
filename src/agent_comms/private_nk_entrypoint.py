@@ -82,7 +82,7 @@ class RootLaunch(ABC):
         Registration(RegistryFile.path_in(root)).prepare_native_root()
         with Coordination(str(CoordinationStore.path_in(root))) as store:
             store.participants.register(
-                thread.incarnation.require_recorded().lookup, thread.name, thread.name,
+                thread.incarnation.require_recorded().lookup,
                 committed=True,
             )
         return agent_bin

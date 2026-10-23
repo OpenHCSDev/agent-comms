@@ -312,7 +312,7 @@ def _session_lines(path: Path) -> None:
 
 def test_inbox_records_say_which_inputs_they_carry():
     request = ab.InputRequest(
-        input_id=ab.InputId("q1"), content=ab.InputContent(text="t"), when_busy=ab.WhenBusy.STEER,
+        input_id=ab.InputId("q1"), content=ab.InputContent(text="t"), when_busy=ab.SteerInputPolicy,
     )
     assert request.carried_inputs == (ab.InputId("q1"),)
     assert ab.SendNow((ab.InputId("q1"),)).carried_inputs == ()

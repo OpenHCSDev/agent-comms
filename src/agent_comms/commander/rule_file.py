@@ -9,7 +9,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import ClassVar, Self
 
-from agent_comms.commander.config import CommanderConfig
+from agent_comms.commander.package import CommanderPackage
 from agent_comms.declared_family import DeclaredFamily
 from agent_comms.field_codec import FieldCodec, boundary_decoder
 
@@ -89,7 +89,7 @@ class RuleFile(DeclaredFamily, affix="RuleFile"):
     def packaged(cls) -> tuple[Self, ...]:
         return tuple(
             sorted(
-                (cls.read(path) for path in CommanderConfig.packaged_rules_files()),
+                (cls.read(path) for path in CommanderPackage.rules_files()),
                 key=lambda rule: (cls.kinds().index(type(rule)), rule.name),
             )
         )

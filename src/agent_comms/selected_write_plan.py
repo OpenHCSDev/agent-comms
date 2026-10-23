@@ -205,7 +205,7 @@ class SelectedWritePlans(DurableFile, PatternFile):
                     for assignment in assignments
                     for pending in assignment.lifecycle.writable_pending_assignments(assignment)
                     if pending.source == MessageReference(source_seq, source_message_id)
-                    and pending.recipient == owner.name
+                    and pending.recipient_lookup == lookup
                 ]
                 if len(selected) != 1:
                     raise IdentityConflict("Selected write has no one pending FULL selected claim")

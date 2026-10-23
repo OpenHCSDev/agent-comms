@@ -265,6 +265,23 @@ rebuildable projections follow their producing Core build.
 
 **Done when** the skill names no script.
 
+### Phase 10: fleet awareness (after the four plans)
+
+**Why.** On 2026-10-23 the bus was down for the installer route fix (#2633). Eight Codex threads were coordinated through `codex queue` and one handoff file, and the commander kept the map by hand-run scripts: a git overlap scan and a thread rotation reader. Every finding below came from those scripts or from Tristan noticing. Each finding is a fact Core can derive from git, its order records or turn records, so a commander that has to remember it is a defect. Tristan, 2026-10-23: "i can't wait to have all the infra together so i don't need to manually remember this shit". This phase starts after the virtual bus, multiple inheritance, harness and this plan's phase 9 are done. Its `PlanPhase` declaration in `plan_phases.py` is the first edit of its first order.
+
+**Changes.** Each line names the fact, its owner, and the 2026-10-23 incident it would have caught.
+- **One holder per file, refused at order time.** `CommsOrderTool` refuses an order whose scope's files overlap a file already held by another open order or by another open branch's diff. The refusal names both holders. Incident: two threads wrote the same route fix in `installer/backup.py` until Tristan reassigned it by hand.
+- **Drift and overlap as standing rules.** Two `StandingRule` members are derived from git on read. A held branch more than 30 commits behind `main`. Two open branches whose `src` diffs share a file. Each line names the holders and the files. Incident: `bus_tables.py` was edited on four branches at once, and five branches sat 66 to 90 commits behind `main`.
+- **Spinning as a `UnitState` member.** Derived from turn records: patches without a commit, test reruns with no source change between them, and minutes since the last push while holding an order. It extends phase 7's `UnitTime` instead of adding a second clock. Incident: the commander sampled tool calls per 15 minutes by hand to tell work from wheel-spinning.
+- **Unpushed work as a standing rule.** `comms_work_branches` gains local branches with no remote alongside unlinked remote branches, and a `StandingRule` member reports both. Incident: the lock fix and the projection producer fix lived only in local worktrees.
+- **Empty PRs as a standing rule.** An open PR with no commit ahead of `main` is a line whose disposition is closing it. Incident: #2618, #2619, #2621 and #2625.
+- **Review is triggered by delivery.** A delivery recorded at a commit (`comms_order_deliver`) enqueues phase 4's review of that commit. A reviewer never reviews a head nobody delivered. Incident: #2633 was reviewed and failed at 8af8f95, a head that did not yet contain the fix, and a rehearsal was ordered against the same stale head.
+- **Lost tools are a bus fact.** Each thread's turn records the tool set it was offered. A turn offered fewer tools than the previous one raises a fact for the commander, naming the missing tools and the runtime version. Incident: the Codex 0.164.0 upgrade removed `send_message_to_thread` and `read_thread` from every thread after restart, and only Tristan noticed.
+
+**Deletes:** the hand-run overlap and rotation scripts the commander keeps until this phase lands (`fleet_check.py` in the commander's scratch, outside `src`).
+
+**Done when** replaying the 2026-10-23 fleet state on a copy raises each incident above from Core alone, once each, with no script running.
+
 ## Parity gate (before phase 8)
 
 1. **Every row of the matrix** names a native owner that is on `main`.

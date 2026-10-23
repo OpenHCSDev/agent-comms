@@ -11,7 +11,7 @@ import os
 import tempfile
 from pathlib import Path
 
-from agent_comms.commander.config import CommanderConfig
+from agent_comms.commander.package import CommanderPackage
 from agent_comms.commander.rule_file import RuleFile
 from agent_comms.native_package import OWNER_INSTRUCTIONS, UNIT_INSTRUCTIONS
 from agent_comms.todos import Slop
@@ -24,7 +24,7 @@ class UnitInstructions:
     def render() -> str:
         sections = (
             OWNER_INSTRUCTIONS.read_text(encoding="utf-8"),
-            CommanderConfig.packaged_indictment().read_text(encoding="utf-8"),
+            CommanderPackage.indictment().read_text(encoding="utf-8"),
             "# Rules every unit follows\n\n"
             + "\n\n".join(text for rule in RuleFile.packaged() for text in rule.unit_rules()),
             (Slop.catalog() / "README.md").read_text(encoding="utf-8"),

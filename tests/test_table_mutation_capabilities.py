@@ -343,8 +343,8 @@ def test_declared_insert_validator_receives_the_field_values(db):
 def test_owner_counter_refuses_skipping_a_generation():
     with closing(SQLiteFile.writer(":memory:", isolation_level=None)) as connection:
         CoordinatorTable.create_schema(connection)
-        Participants(participant_lookup="owner", display_name="owner", committed=True).insert(connection)
-        OwnerGenerations(owner_lookup="owner", owner_thread="owner", generation=1).insert(connection)
+        Participants(participant_lookup="owner", committed=True).insert(connection)
+        OwnerGenerations(owner_lookup="owner",  generation=1).insert(connection)
         with pytest.raises(sqlite3.IntegrityError):
             OwnerGenerations.update(connection, where="owner_lookup='owner'", generation=3)
         OwnerGenerations.update(connection, where="owner_lookup='owner'", generation=2)
@@ -354,7 +354,7 @@ def test_normal_writer_replaces_old_guards_without_rewriting_rows(tmp_path):
     path = tmp_path / CoordinationStore.filename
     with closing(CoordinationStore(path)) as store:
         connection = store._connection
-        Participants(participant_lookup="owner", display_name="owner", committed=True).insert(
+        Participants(participant_lookup="owner", committed=True).insert(
             connection
         )
         before = Participants.select(connection)

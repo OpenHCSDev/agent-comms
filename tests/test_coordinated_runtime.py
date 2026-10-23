@@ -67,8 +67,6 @@ def _root(
         for recipient in initial.audience.recipients:
             store.participants.register(
                 recipient.recipient_lookup,
-                recipient.canonical_thread,
-                recipient.canonical_thread,
                 committed=True,
             )
         accepted = accept_delivery_cohort(comms.bus, root_id, message.seq, store)
@@ -184,5 +182,3 @@ async def test_untrusted_pi_fails_before_any_bus_or_sql_mutation(tmp_path: Path,
         ).run()
     assert isinstance(failure.value.__cause__, NativePiUnavailable)
     assert not list(root.iterdir())
-
-

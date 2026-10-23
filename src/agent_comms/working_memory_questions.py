@@ -4,6 +4,7 @@ from __future__ import annotations
 from abc import abstractmethod
 from typing import ClassVar
 
+from .annotation_disclosure import PublicInstructionDisclosure
 from .declared_family import DeclaredFamily
 
 
@@ -147,8 +148,6 @@ class RelationToOwnerRulesQuestion(SpanQuestion):
 
     @classmethod
     def disclosed_owner_rules(cls, rules: tuple[str, ...]) -> tuple[str, ...]:
-        from .working_memory_disclosure import PublicInstructionDisclosure
-
         policy = PublicInstructionDisclosure()
         return tuple(policy.require_text(rule) for rule in rules)
 

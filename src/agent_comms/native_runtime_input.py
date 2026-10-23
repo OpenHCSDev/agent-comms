@@ -260,7 +260,6 @@ class NativeRuntimeInput(
     ]
     attempt_ordinal: Annotated[NativeColumn, FrozenColumn(storage=IntegerStorage, nullable=True)]
     owner_lookup: Annotated[str, FrozenColumn(references=TableReference(Participants, ("participant_lookup",)))]
-    owner_thread: Annotated[str, FrozenColumn()]
     owner_generation: Annotated[int, FrozenColumn(check="owner_generation>0")]
     owner_token_digest: Annotated[str, FrozenColumn(check="length(owner_token_digest)=64")]
     sent_owner_claimed_generation: Annotated[
@@ -363,7 +362,6 @@ class CurrentNativeCursor(
     recipient_lookup: Annotated[
         str, FrozenColumn(primary_key=True, references=TableReference(Participants, ("participant_lookup",)))
     ]
-    owner_thread: Annotated[str, FrozenColumn(check="owner_thread<>''")]
     owner_generation: Annotated[int, FrozenColumn(primary_key=True, check="owner_generation>0")]
     owner_claimed_generation: Annotated[
         int,
@@ -375,7 +373,7 @@ class CurrentNativeCursor(
     def owner_identity(self):
         from .coordination_tables.participants import OwnerGenerations
 
-        return OwnerGenerations(owner_lookup=self.recipient_lookup, owner_thread=self.owner_thread, generation=self.owner_generation)
+        return OwnerGenerations(owner_lookup=self.recipient_lookup,  generation=self.owner_generation)
 
     covered_seq: Annotated[int, Column(check="covered_seq>=0")]
     injected_seq: Annotated[

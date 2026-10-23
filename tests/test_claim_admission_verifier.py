@@ -27,7 +27,7 @@ from agent_comms.selected_claim import (
 from agent_comms.comms import Comms
 from agent_comms.coordination_cohort import accept_delivery_cohort, sealed_cohort_assignments
 from agent_comms.coordination_errors import IdentityConflict
-from agent_comms.coordination_tables.executions import ExecutionOrigin
+from agent_comms.coordination_tables.executions import ExecutionProvenance, WireOrigin
 from agent_comms.coordinator import Coordination
 from agent_comms.envelope_claim_transitions import ExistingFileClaim, WakeClaim
 from agent_comms.errors import RelationViolationError
@@ -65,8 +65,6 @@ def test_selected_wake_verifier_refuses_no_wake_and_stale_authority(
             for recipient in initial.audience.recipients:
                 store.participants.register(
                     recipient.recipient_lookup,
-                    recipient.canonical_thread,
-                    recipient.canonical_thread,
                     committed=True,
                 )
             accept_delivery_cohort(comms.bus, root_id, message.seq, store)
@@ -83,9 +81,8 @@ def test_selected_wake_verifier_refuses_no_wake_and_stale_authority(
             execution_id = "verifier-execution"
             store.create(
                 execution_id,
-                ExecutionOrigin.WIRE,
+                WireOrigin,
                 alice_lookup,
-                owner.name,
                 1,
                 sources=(SelectedSource(assignment.assignment_id, store.assignments, initial),),
             )
@@ -96,7 +93,7 @@ def test_selected_wake_verifier_refuses_no_wake_and_stale_authority(
             started = store.start(AttemptStart(
                 execution_id,
                 1,
-                owner.name,
+                alice_lookup,
                 person.owner_identity.generation,
                 prepare_fence_token(),
                 expected_execution_revision=snapshot.execution.revision,
@@ -140,25 +137,6 @@ def test_selected_wake_verifier_refuses_no_wake_and_stale_authority(
                 == selected_owner
             )
             assert len(comms.bus.bus.scoped_page("1", (), limit=100)) == 2
-            # Simulate a crash after the durable rename intent but before SQL
-            # owner CAS: an already selected attempt and exact resource claim
-            # must not admit a new claim or touch the existing file.
-            intent = root / ".private-owner-rename.pending"
-            intent.write_text("pending owner transition")
-            with intent.open("rb") as stream:
-                os.fsync(stream.fileno())
-            with pytest.raises(IdentityConflict):
-                verify_selected_wake(comms, store, claim_scope, "Alice")
-            with pytest.raises(RelationViolationError):
-                publish_selected_resource_claim(
-                    comms, store, claim_scope, "Alice", ExistingFileClaim(Path(resource))
-                )
-            with pytest.raises(RelationViolationError):
-                write_selected_claimed_file(
-                    comms, store, claim_scope, "Alice", selected_owner, b"forbidden\n"
-                )
-            assert resource.read_bytes() == b"value = 1\n"
-            intent.unlink()  # Fixture-only return to the positive pre-rename case.
             outside = Path(dirname) / "outside"
             outside.mkdir(mode=0o700)
             external = outside / "module.py"

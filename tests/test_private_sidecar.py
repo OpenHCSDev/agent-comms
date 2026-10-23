@@ -41,7 +41,6 @@ def _insert(db, key="1"):
         execution_id=UnrecordedNativeColumn(),
         attempt_ordinal=UnrecordedNativeColumn(),
         owner_lookup="2" * 32,
-        owner_thread="owner",
         owner_generation=1,
         wire_root_id="3" * 32,
         expected_prompt_digest="a" * 64,
@@ -112,7 +111,7 @@ def test_symlink_ancestor_refused(path):
     [
         "CREATE TRIGGER unrelated_insert_suppressor BEFORE INSERT ON prompt_binding "
         "BEGIN SELECT RAISE(IGNORE); END",
-        "CREATE INDEX unrelated_index ON prompt_binding(owner_thread)",
+        "CREATE INDEX unrelated_index ON prompt_binding(owner_lookup)",
         "CREATE VIEW unrelated_view AS SELECT * FROM prompt_binding",
         "CREATE TABLE unrelated_table (x)",
         *(f'DROP TRIGGER "{name}"' for name in PromptBinding.triggers()),
@@ -220,7 +219,7 @@ if len(sys.argv) > 2:
     with s.sidecar_connection(p, PromptBinding) as db:
         PromptBinding(input_id='1'*32,stage=TriageNativeExecution,
             execution_id=UnrecordedNativeColumn(),attempt_ordinal=UnrecordedNativeColumn(),owner_lookup='2'*32,
-            owner_thread='owner',owner_generation=1,wire_root_id='3'*32,
+            owner_generation=1,wire_root_id='3'*32,
             expected_prompt_digest='a'*64,
             bound_at_ms=1).insert(db)
 print('OK', flush=True)

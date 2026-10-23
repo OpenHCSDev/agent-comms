@@ -24,7 +24,7 @@ from agent_comms.coordination_errors import IdentityConflict
 from agent_comms.coordination_tables.assignments import WakeAssignment
 from agent_comms.assignment_states import EngagedAssignment
 from agent_comms.wake_policy import FullWake
-from agent_comms.coordination_tables.executions import ExecutionOrigin
+from agent_comms.coordination_tables.executions import ExecutionProvenance, WireOrigin
 from agent_comms.coordinator import Coordination
 from agent_comms.optional_awareness_projection import OptionalAwarenessProjection
 from agent_comms.registration import Registration
@@ -66,8 +66,6 @@ def _accepted(
     for recipient in initial.audience.recipients:
         store.participants.register(
             recipient.recipient_lookup,
-            recipient.canonical_thread,
-            recipient.canonical_thread,
             committed=True,
         )
     acknowledgement = accept_delivery_cohort(comms.bus, root_id, message.seq, store).value
@@ -115,9 +113,8 @@ def test_selected_decision_and_open_obligation_are_both_source_cited(tmp_path: P
         owner = _owner(comms, "member000")
         store.create(
             "reply000",
-            ExecutionOrigin.WIRE,
+            WireOrigin,
             assignment.recipient_lookup,
-            owner.name,
             1,
             sources=(SelectedSource(assignment.assignment_id, store.assignments, initial),),
         )
@@ -169,9 +166,8 @@ def test_open_obligation_budget_cannot_be_hidden_by_selected_cursor(tmp_path: Pa
         for number, (assignment, delivery) in enumerate(((old_claim, older), (new_claim, newer))):
             store.create(
                 f"reply{number}",
-                ExecutionOrigin.WIRE,
+                WireOrigin,
                 assignment.recipient_lookup,
-                owner.name,
                 1,
                 sources=(SelectedSource(assignment.assignment_id, store.assignments, delivery),),
             )
@@ -195,7 +191,7 @@ def test_captured_owner_sql_generation_advance_omits(tmp_path: Path) -> None:
         builder = _projection(index, store, owner, 0, initial.message.seq)
         assert builder(initial, assignment, owner).context()["selected"]
         store.participants.advance_generation(
-            assignment.recipient_lookup, owner.name, expected_generation=1
+            assignment.recipient_lookup, expected_generation=1
         )
         stale = builder(initial, assignment, owner)
         assert 'Optional awareness omitted' in stale.render(32768)
@@ -210,7 +206,7 @@ def test_new_snapshot_after_same_name_generation_bump_omits_old_claim(
     try:
         initial, assignment = _accepted(comms, store, root_id, "member000", "old pending")
         store.participants.advance_generation(
-            assignment.recipient_lookup, "member000", expected_generation=1
+            assignment.recipient_lookup, expected_generation=1
         )
         owner = _owner(comms, "member000")
         # Even a newly captured SQL gen2+registry turn cannot assign a gen1
@@ -229,14 +225,13 @@ def test_fresh_gen2_selected_and_old_pending_obligation_are_scoped(tmp_path: Pat
         old, old_claim = _accepted(comms, store, root_id, "member000", "old pending")
         store.create(
             "old-reply",
-            ExecutionOrigin.WIRE,
+            WireOrigin,
             old_claim.recipient_lookup,
-            "member000",
             1,
             sources=(SelectedSource(old_claim.assignment_id, store.assignments, old),),
         )
         store.participants.advance_generation(
-            old_claim.recipient_lookup, "member000", expected_generation=1
+            old_claim.recipient_lookup, expected_generation=1
         )
         current, assignment = _accepted(comms, store, root_id, "member000", "new pending")
         owner = _owner(comms, "member000")
@@ -259,8 +254,8 @@ def test_fresh_gen2_only_selected_is_available(tmp_path: Path) -> None:
     comms, store, index, root_id = _root(tmp_path)
     try:
         lookup = RecordedThreadIncarnation("fixture", comms.registry.require("member000").created_at).lookup
-        store.participants.register(lookup, "member000", "member000", committed=True)
-        store.participants.advance_generation(lookup, "member000", expected_generation=1)
+        store.participants.register(lookup, committed=True)
+        store.participants.advance_generation(lookup, expected_generation=1)
         initial, assignment = _accepted(comms, store, root_id, "member000", "fresh")
         owner = _owner(comms, "member000")
         result = _projection(index, store, owner, 0, initial.message.seq)(
@@ -296,7 +291,7 @@ def test_older_receipt_message_id_mismatch_omits_entire_context(tmp_path: Path) 
         store.close()
 
 
-def test_normal_rename_does_not_inject_old_selected_claim_into_new_owner(
+def test_normal_rename_preserves_selected_claims_for_the_same_owner(
     tmp_path: Path,
 ) -> None:
     comms, store, index, root_id = _root(tmp_path)
@@ -314,10 +309,10 @@ def test_normal_rename_does_not_inject_old_selected_claim_into_new_owner(
         )
         assert old_claim.recipient == "member000" and current_claim.recipient == "gamma"
         assert old.message.seq < current.message.seq
-        assert result.omitted_count == 1
+        assert result.omitted_count == 0
         selected = result.context()["selected"]
-        assert [row["claim_id"] for row in selected] == [current_claim.assignment_id]
-        assert old_claim.assignment_id not in result.render(32768)
+        assert [row["claim_id"] for row in selected] == [old_claim.assignment_id, current_claim.assignment_id]
+        assert old_claim.assignment_id in result.render(32768)
         captured = AwarenessClaimGenerations.one(
             store.session._connection, claim_id=old_claim.assignment_id,
         )
@@ -399,7 +394,7 @@ def test_saved_wire_awareness_preserves_passive_authority_and_rejects_incomplete
     comms, store, index, root_id = _root(tmp_path)
     try:
         initial, assignment = _accepted(comms, store, root_id, "#team", "@member000 act")
-        notice = publish_initial(comms, 
+        notice = publish_initial(comms,
             "sender", "member000", "Passive retained context", role=NoticeRole()
         )
         passive = accept_delivery_cohort(comms.bus, root_id, notice.seq, store).value.assignments[0]
@@ -415,9 +410,8 @@ def test_saved_wire_awareness_preserves_passive_authority_and_rejects_incomplete
         owner = _owner(comms, "member000")
         store.create(
             "wire-awareness-reply",
-            ExecutionOrigin.WIRE,
+            WireOrigin,
             assignment.recipient_lookup,
-            owner.name,
             1,
             sources=(SelectedSource(assignment.assignment_id, store.assignments, initial),),
         )

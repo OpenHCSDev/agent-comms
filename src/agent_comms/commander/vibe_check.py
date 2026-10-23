@@ -15,7 +15,7 @@ from dataclasses import dataclass, field
 from typing import ClassVar, Self
 
 from agent_comms.bus import BusReader
-from agent_comms.commander.config import CommanderConfig
+from agent_comms.commander.package import CommanderPackage
 from agent_comms.commander.questions import SenderMessages, UnansweredBurst
 from agent_comms.commander.standing import AnswersTo, PlanStalled
 from agent_comms.comms import Comms
@@ -254,7 +254,7 @@ class VibeCheck(IndependentStandingRule, UndatedStandingRule):
         return (
             f"VIBE CHECK ({self.sign.mark}). This is about you, right now, not the units.",
             self.sign.line,
-            f"Stop. Reread {CommanderConfig.packaged_indictment()} in full. You are doing what it"
+            f"Stop. Reread {CommanderPackage.indictment()} in full. You are doing what it"
             " describes, this hour.",
             "Answer this burst once, naming any one of its messages with --answers: which failure"
             " in the indictment is you right now, why, and the one structural change you make"
@@ -294,7 +294,7 @@ class Indictment:
 
     @staticmethod
     def text() -> str:
-        return " ".join(CommanderConfig.packaged_indictment().read_text(encoding="utf-8").split())
+        return " ".join(CommanderPackage.indictment().read_text(encoding="utf-8").split())
 
     @classmethod
     def quoted(cls, body: str) -> bool:

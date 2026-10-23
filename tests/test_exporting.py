@@ -7,7 +7,7 @@ from dataclasses import replace
 
 import pytest
 
-from agent_comms.channels import AnyOfMatch, SavedView, ViewKind, ViewPredicate
+from agent_comms.channels import AnyOfMatch, ViewPredicate, ParticipantsView
 from agent_comms.cli import main
 from agent_comms.comms import Comms
 from agent_comms.errors import RelationViolationError
@@ -325,11 +325,7 @@ def test_comms_export_uses_target_owned_channel_and_alias_aware_dm_scopes(tmp_pa
     assert dm_receipt.scope.participants == ("renamed", "bob")
 
     comms.channels.set_saved_view(
-        SavedView(
-            "projection",
-            ViewKind.PARTICIPANTS,
-            ViewPredicate(AnyOfMatch, frozenset({"team"})),
-        )
+        ParticipantsView('projection', ViewPredicate(AnyOfMatch, frozenset({'team'})))
     )
     with pytest.raises(RelationViolationError):
         comms.views.export_wire(

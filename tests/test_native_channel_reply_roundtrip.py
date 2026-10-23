@@ -90,10 +90,10 @@ async def test_native_channel_reply_automatically_reaches_original_sender(tmp_pa
                         pending = NativeRuntimeInput.select(
                             store.session._connection,
                             where=(
-                                "owner_thread=? AND session_entry_id IS NULL"
+                                "owner_lookup=? AND session_entry_id IS NULL"
                                 if broadcast else "session_entry_id IS NULL"
                             ),
-                            parameters=((request["model"],) if broadcast else ()),
+                            parameters=((comms.registry.require(request["model"]).incarnation.lookup,) if broadcast else ()),
                         )
                         if not pending:
                             assert not broadcast
@@ -124,7 +124,7 @@ async def test_native_channel_reply_automatically_reaches_original_sender(tmp_pa
                     assert original is not None
                     request_inputs.append({"input_id": original.input_id,
                                            "stage": original.stage.declared_name,
-                                           "owner": original.owner_thread})
+                                           "owner": comms.registry.snapshot().by_lookup[original.owner_lookup].name})
                 if broadcast and len(requests) <= 2:
                     # Both actual owners must reach the endpoint while the
                     # first request is still open. No model turn may retain
@@ -526,5 +526,3 @@ async def test_native_channel_reply_automatically_reaches_original_sender(tmp_pa
                 "server_thread_alive": serving.is_alive(),
                 "bus_seq": comms.bus.bus.revision(),
             }, indent=2) + "\n")
-
-

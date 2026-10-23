@@ -46,7 +46,6 @@ class HistoricalNativeInput(NativeInputRecord, DeclaredFamily, affix="Historical
     execution: NativeInputExecution
     input_id: str
     owner_lookup: str
-    owner_thread: str
     owner_generation: int
     context: NativeContextProof
     native_reference: NativeInputReference
@@ -201,7 +200,6 @@ def read_historical_native_inputs(
                     assignment_id=source.assignment_id,
                     input_id=row.input_id,
                     owner_lookup=row.owner_lookup,
-                    owner_thread=row.owner_thread,
                     owner_generation=row.owner_generation,
                     context=recorded,
                     native_reference=row.reference,

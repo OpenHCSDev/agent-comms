@@ -25,10 +25,15 @@ from contextlib import ExitStack, contextmanager
 from dataclasses import dataclass
 from functools import partial
 from pathlib import Path
-from typing import Annotated, Literal
+from typing import Annotated, Literal, TYPE_CHECKING
 
 from agent_comms.locked_store import SQLiteFile
 from agent_comms.coordination_errors import IdentityConflict
+
+from .field_codec import FieldCodec
+
+if TYPE_CHECKING:
+    from .agent_backend import StreamingInputPolicy
 
 from .private_path import ObservedPath
 from .store_files import StoreOwner
@@ -365,14 +370,14 @@ def sidecar_connection(
             connection.close()
 
 
-def encode_request(text: str, *, streaming_behavior: str | None = None) -> str:
+def encode_request(text: str, *, streaming_behavior: type[StreamingInputPolicy] | None = None) -> str:
     """JSON-encode like the pinned native ``_claimNativeInput`` request."""
     return json.dumps(
         {
             "kind": "prompt",
             "text": text,
             "images": None,
-            "streamingBehavior": streaming_behavior,
+            "streamingBehavior": FieldCodec.encode(streaming_behavior),
             "expandPromptTemplates": True,
             "source": "rpc",
         },
@@ -381,7 +386,7 @@ def encode_request(text: str, *, streaming_behavior: str | None = None) -> str:
     )
 
 
-def native_request_digest(text: str, *, streaming_behavior: str | None = None) -> str:
+def native_request_digest(text: str, *, streaming_behavior: type[StreamingInputPolicy] | None = None) -> str:
     """sha256 over the pinned native request envelope, not the bare text."""
     return hashlib.sha256(
         ("pi-input-request-v1\n" + encode_request(text, streaming_behavior=streaming_behavior)).encode("utf-8")

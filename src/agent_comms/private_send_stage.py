@@ -102,7 +102,6 @@ class NativeSendStage(ABC):
                 stage=type(self.execution),
                 **self.execution.binding_fields(),
                 owner_lookup=self.recipient_lookup,
-                owner_thread=owner.thread.name,
                 owner_generation=owner.generation,
                 owner_token_digest=token_digest,
             ).insert(db)

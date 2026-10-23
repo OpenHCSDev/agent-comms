@@ -21,7 +21,6 @@ import asyncio
 from abc import ABC, abstractmethod
 from collections.abc import AsyncIterator, Awaitable, Callable
 from dataclasses import dataclass
-from enum import Enum
 from types import MappingProxyType
 from typing import TYPE_CHECKING, Any, ClassVar, Protocol, Self
 
@@ -119,12 +118,34 @@ class InputId:
             raise ValueError("An input ID must be a nonempty string")
 
 
-class WhenBusy(Enum):
+class BusyInputPolicy(DeclaredFamily, affix="InputPolicy"):
     """What the backend does with an input that arrives while a run is going."""
 
-    FOLLOW_UP = "follow_up"  # run it after the current run ends
-    STEER = "steer"  # place it at the next boundary of the current run
-    REJECT = "reject"  # refuse it
+    @classmethod
+    @abstractmethod
+    def streaming(cls) -> type[StreamingInputPolicy]: ...
+
+
+class StreamingInputPolicy(BusyInputPolicy, declared_name=None):
+    """The busy policies Pi's streamingBehavior protocol accepts."""
+
+    @classmethod
+    def streaming(cls) -> type[StreamingInputPolicy]:
+        return cls
+
+
+class FollowUpInputPolicy(StreamingInputPolicy, declared_name="followUp"):
+    """Run after the current run ends; preserve Pi's exact followUp spelling."""
+
+
+class SteerInputPolicy(StreamingInputPolicy):
+    """Place the input at the next boundary of the current run."""
+
+
+class RejectInputPolicy(BusyInputPolicy):
+    @classmethod
+    def streaming(cls) -> type[StreamingInputPolicy]:
+        raise ValueError("Pi cannot reject a prompt through streamingBehavior.")
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -198,7 +219,7 @@ class InputRequest(TurnInboxItem):
 
     input_id: InputId
     content: InputContent
-    when_busy: WhenBusy
+    when_busy: type[BusyInputPolicy]
 
     @property
     def carried_inputs(self) -> tuple[InputId, ...]:
@@ -328,7 +349,7 @@ class RunsTurns(ABC):
 
 
 class Steers(RunsTurns):
-    """Accepts :class:`InputRequest` with ``WhenBusy.STEER`` while a run is going."""
+    """Accepts :class:`InputRequest` with ``SteerInputPolicy`` while a run is going."""
 
 
 class Interrupts(Steers):
