@@ -1426,23 +1426,39 @@ class DerivedTables(TableSchema):
     def schema_differs(
         cls, db: sqlite3.Connection, sharing: tuple[type[TypedTable], ...] = (),
     ) -> bool:
-        return (super().schema_differs(db, sharing)
-                or not ProjectionProducer.matches(db, cls.projection_rows()))
+        return bool(cls.changed_rows(db, sharing))
 
     @classmethod
-    def create_schema(cls, db: sqlite3.Connection) -> None:
-        super().create_schema(db)
-        for producer in ProjectionProducer.records_for(cls.projection_rows()):
+    def changed_rows(
+        cls, db: sqlite3.Connection, sharing: tuple[type[TypedTable], ...] = (),
+    ) -> tuple[type[TypedTable], ...]:
+        projections = cls.projection_rows()
+        return tuple(row for row in cls.schema_rows() if SQLiteSchemaObject.differences(
+            TypedTable.objects_of(db, (row,), sharing), row.schema_objects(),
+        ) or (row in projections and not ProjectionProducer.matches(db, (row,))))
+
+    @classmethod
+    def create_schema(
+        cls, db: sqlite3.Connection, rows: tuple[type[TypedTable], ...] | None = None,
+    ) -> None:
+        selected = cls.schema_rows() if rows is None else rows
+        for row in selected:
+            row.create(db)
+        projections = tuple(row for row in cls.projection_rows() if row in selected)
+        for producer in ProjectionProducer.records_for(projections):
             producer.upsert(db)
 
     @classmethod
     def reset_schema(cls, db: sqlite3.Connection) -> None:
         """Inside the caller's transaction: rebuild only this schema's derived tables."""
-        for row in cls.schema_rows():
+        changed = cls.changed_rows(db)
+        for row in changed:
             row.take_previous_name(db)
+        names = frozenset(row.declared_name for row in changed)
         for stored in cls.stored_tables(db):
-            stored.drop(db)
-        cls.create_schema(db)
+            if stored.name in names:
+                stored.drop(db)
+        cls.create_schema(db, changed)
 
     @classmethod
     def carry_schema(
