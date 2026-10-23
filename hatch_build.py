@@ -47,7 +47,11 @@ class CoreBuildHook(BuildHookInterface):
         build_data["force_include"][str(path)] = destination
 
     def producer_digests(self, root):
-        """Import the bus's declared schema once while building its immutable wheel."""
+        """Import the bus's declared schema once while building its immutable wheel.
+
+        The custom hook requires the project's runtime dependencies in pyproject.toml;
+        hatchling alone cannot import the application in an isolated build.
+        """
         return json.loads(
             subprocess.check_output(
                 (
