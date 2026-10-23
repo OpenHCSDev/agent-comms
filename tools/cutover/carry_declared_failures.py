@@ -18,7 +18,7 @@ from agent_comms.goal_attempts import AttemptRecord, GoalAttemptStore
 from agent_comms.goal_failure_observation import FailedTurnEvidence, GoalLedgerTable
 from agent_comms.installer.carry import Carried, Carry
 from agent_comms.locked_store import SQLiteFile
-from agent_comms.store_files import _atomic_write_text
+from agent_comms.store_files import AtomicFile
 from agent_comms.typed_table import HeldBusFile, sql_literal
 
 from .carry_bus_history import CarryCatalogSource
@@ -118,7 +118,7 @@ class DeclaredFailures(Carry):
             old = document.pop("reason")
             document["failure"] = self.old_names[old].declared_name
             if apply:
-                _atomic_write_text(diagnostic, json.dumps(document, indent=2) + "\n")
+                AtomicFile(diagnostic).write_text(json.dumps(document, indent=2) + "\n")
                 rewritten.append(str(diagnostic.relative_to(self.root)))
             changed += 1
         return Carried(changed, rewritten=tuple(rewritten))
