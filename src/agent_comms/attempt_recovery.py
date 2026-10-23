@@ -32,7 +32,6 @@ from agent_comms.coordination_snapshot import RecoverySnapshot
 from agent_comms.coordination_tables.attempts import AttemptRecord, ReplayFact
 from agent_comms.coordination_tables.executions import ReplayAssessments
 from agent_comms.coordination_tables.executions import CurrentExecutions
-from agent_comms.coordination_tables.assignments import WakeAssignment
 from agent_comms.coordination_tables.recovery import (
     RecoveryAudit,
 )
@@ -50,6 +49,7 @@ from .field_codec import MalformedRecord
 from .input_disposition import InputDispositions
 from .locked_store import RegistryFile
 from .registration import Registration
+from .threads import Thread
 
 if TYPE_CHECKING:
     from agent_comms.coordination_session import NativeBoundary
@@ -100,12 +100,14 @@ class VerifiedOwnerLoss(ABC):
 
     @classmethod
     @contextmanager
-    def observe_owner_release(cls, store: Coordination, owner) -> Iterator[ReleasedOwnerLoss]:
+    def observe_owner_release(cls, store: Coordination, owner: Thread) -> Iterator[ReleasedOwnerLoss]:
         with cls._observing(store) as (releases, boundary):
             identity = store.participants.get(owner.incarnation.lookup).owner_identity
             release = cls._released(releases, boundary, identity.owner_lookup)
             if not release.matches(owner):
                 raise RecoveryBlocked("triage recovery requires this exact released owner")
+            if not release.matches(boundary.registry.require(release.name)):
+                raise RecoveryBlocked("triage recovery must precede a successor's registration")
             release = release.require_owner_loss(boundary.registry, identity)
             proof = ReleasedOwnerLoss(release, store, boundary)
             with proof.observed():
@@ -360,7 +362,7 @@ class RecoveryMonitorCapability:
                 loss.settle(cls, store, execution_id, owner)
 
     @classmethod
-    def recover_released_triage(cls, store: Coordination, owner) -> None:
+    def recover_released_triage(cls, store: Coordination, owner: Thread) -> None:
         identity = store.participants.get(owner.incarnation.lookup).owner_identity
         inputs = NativeRuntimeInput.select(
             store.session._connection,
@@ -377,7 +379,10 @@ class RecoveryMonitorCapability:
             return
         with VerifiedOwnerLoss.observe_owner_release(store, owner) as loss:
             for source, stage in pending:
-                loss.require_input_loss(source)
+                current = NativeRuntimeInput.require(store.session._connection, input_id=source.input_id)
+                if current.reference.recorded:
+                    continue
+                loss.require_input_loss(current)
                 with store.session.writing() as db:
                     stage.fail_claims(store, db)
 
