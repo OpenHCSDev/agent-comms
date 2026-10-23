@@ -189,13 +189,9 @@ class PrepareProducerDigestsProbe(RuntimeProbe[None]):
         rows = ProducedTable.members_with(ProducedTable)
         built = BuiltDigests({row.declared_name: row.producer_digest() for row in rows})
         destination = BuildProducerDigests.current().path
+        print(f"install: producer digests from {agent_comms.__file__}", file=sys.stderr)
         AtomicFile(destination).write_text(
             FieldCodec.compact(FieldCodec.encode(built), sort_keys=True) + "\n")
-        previous = Path(sys.prefix) / "agent-comms-producers"
-        for path in previous.glob("*.json"):
-            path.unlink()
-        if previous.is_dir():
-            previous.rmdir()
 
 
 @dataclass(frozen=True)
