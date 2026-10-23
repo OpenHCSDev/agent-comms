@@ -13,6 +13,8 @@ from uuid import uuid4
 
 import pytest
 
+from agent_comms.store_files import StoreLockContention
+
 from agent_comms import agent_events as events
 from agent_comms.bus import Bus
 from agent_comms.bus_publication import AgentOrigin, HumanOrigin
@@ -68,6 +70,7 @@ from cli_command import commander
 from conftest import declare_test_bus
 from native_backend_fixture import native_backend_fixture, wait_for
 from test_goal_execution import turn_on
+from agent_comms.threads import Thread
 
 
 @pytest.fixture
@@ -80,7 +83,7 @@ def held_bus(comms, tmp_path, source_repository, configured_repository):
     outsider = tmp_path / 'outsider-checkout'
     source.git(source.checkout, 'worktree', 'add', '-q', '-b', 'outsider-work', str(outsider))
     declare_test_bus(comms, channels=('comms',), threads=tuple(
-        comms.registry.new_thread(name=name, tags=frozenset({'comms'}), worktree=str(worktree))
+        Thread(name=name, tags=frozenset({'comms'}), worktree=str(worktree))
         for name, worktree in (('lead', source.checkout), ('worker', source.checkout),
                                ('outsider', outsider))
     ))
@@ -174,13 +177,13 @@ def test_order_claim_publishes_only_to_its_retained_commander_birth(
         comms.registry.unregister("lead")
         comms.registry.remove("lead")
         if change == "recreate":
-            comms.registry.declare(comms.registry.new_thread("lead", frozenset({"comms"}), worktree))
+            comms.registry.declare(Thread("lead", frozenset({"comms"}), worktree))
     before = comms.bus.bus.revision()
     operation = ClaimOrder(todo.revision, worker, todo.held().generation, claim)
     if change in ("rename", "rename_holder"):
         def registry_cut_held():
             try:
-                with comms.registry.store.locked(blocking=False):
+                with comms.registry.store.locked(contention=StoreLockContention(0)):
                     return False
             except BlockingIOError:
                 return True
@@ -220,8 +223,9 @@ def test_order_claim_publishes_only_to_its_retained_commander_birth(
 
 
 def unanswered(comms):
+    pulls = ProgressRead()
     return UnitAskUnanswered.broken(
-        comms, "lead", observed=UnitState.current(comms, "lead", ProgressRead()))
+        comms, "lead", observed=UnitState.current(comms, "lead", pulls), pulls=pulls)
 
 
 def blocked_holder(comms):
@@ -614,9 +618,10 @@ def test_one_state_per_unit_even_when_blocked_and_detached(held_bus, installed_r
     assert detached.unit.name == "worker" and set(detached.orders) == {"P1", "P2"}
     blocked_holder(held_bus)
     blocked, = state_cards(held_bus, Blocked)
-    states = UnitState.current(held_bus, "lead", ProgressRead())
+    pulls = ProgressRead()
+    states = UnitState.current(held_bus, "lead", pulls)
     assert tuple(state for state in states if state.unit == blocked.unit) == (blocked,)
-    assert blocked not in StandingRule.broken(held_bus, "lead", observed=states)
+    assert blocked not in StandingRule.broken(held_bus, "lead", observed=states, pulls=pulls)
 
 
 def test_startup_heartbeat_enforces_and_publishes_both_new_rule_lines(held_bus, installed_runtime):
@@ -684,7 +689,8 @@ def test_first_heartbeat_is_owed_from_the_oldest_open_request_then_survives_rena
     assert isinstance(never, HeartbeatNotStarted)
     assert never.request == request.id and never.since == due
     assert "HEARTBEAT NOT STARTED" in never.line()
-    assert HeartbeatSilent.broken(held_bus, "lead", observed=()) == (never,)
+    assert HeartbeatSilent.broken(
+        held_bus, "lead", observed=(), pulls=ProgressRead()) == (never,)
 
     # A newer request and mere service registration cannot reset older unpaid service.
     held_bus.goals.todos.add_request(commander.incarnation, "A newer independent request")

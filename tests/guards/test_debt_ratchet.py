@@ -15,6 +15,7 @@ import pytest
 
 from agent_comms.child_process import ObservedProcess, SpawnedProcess
 from agent_comms.field_codec import FieldCodec
+from fixture_git import IDENTITY
 from process_tree_fixture import TREE, identities
 
 from tools.debt_ratchet import (
@@ -130,12 +131,10 @@ class Repository:
         self.root = root
         self.ratchet = ratchet
         self.git("init", "-q")
-        self.git("config", "user.email", "ratchet@example.invalid")
-        self.git("config", "user.name", "Ratchet test")
 
     def git(self, *args: str) -> str:
         return subprocess.check_output(
-            ["git", "-C", str(self.path), *args], text=True, timeout=10
+            ["git", *IDENTITY, "-C", str(self.path), *args], text=True, timeout=10
         ).strip()
 
     def commit(self, files: dict[str, str | None]) -> str:
@@ -147,7 +146,7 @@ class Repository:
                 path.parent.mkdir(parents=True, exist_ok=True)
                 path.write_text(source)
         self.git("add", "--all")
-        self.git("-c", "commit.gpgsign=false", "commit", "-qm", "test", "--allow-empty")
+        self.git("commit", "-qm", "test", "--allow-empty")
         return self.git("rev-parse", "HEAD")
 
     def arguments(self, base: str, head: str) -> tuple[str, ...]:
@@ -919,14 +918,18 @@ def test_stating_a_type_lowers_the_any_count_and_passes(repo: Repository) -> Non
 
 
 @pytest.mark.parametrize(
-    ("measure", "source"),
+    ("measure", "deleted", "source"),
     [
-        (FrozenFieldWrite, 'object.__setattr__(self, "value", 1)\n'),
-        (BannedVocabulary, "pending_receipt = 1\n"),
+        (FrozenFieldWrite, 'object.__setattr__(self, "old", 1)\n',
+         'object.__setattr__(self, "value", 1)\n'),
+        (BannedVocabulary, "old_receipt = 1\n", "pending_receipt = 1\n"),
     ],
 )
-def test_clean_changed_lines_cannot_be_offset_with_a_deletion(repo, measure, source):
-    base = repo.commit({"old.py": source, "new.py": ""})
+def test_clean_changed_lines_cannot_be_offset_with_a_deletion(repo, measure, deleted, source):
+    """Deleting one occurrence never pays for writing a different one; the same occurrence
+    leaving one module for another is a move
+    (test_an_absence_moved_with_its_class_to_another_module_is_not_written)."""
+    base = repo.commit({"old.py": deleted, "new.py": ""})
     head = repo.commit({"old.py": None, "new.py": source})
     status, report = repo.compare(base, head)
     identity = f"{measure.__name__}:{repo.root}/new.py"

@@ -28,6 +28,7 @@ from .launch_root import LaunchRoot
 from .private_nk_entrypoint import PrivateNkLaunch, RootLaunch
 from .private_path import ObservedPath
 from .recorded_bus import RecordedBusIdentity
+from .store_files import UNBOUNDED_CONTENTION, SharedLock, StoreLockContention
 
 if TYPE_CHECKING:
     from .installer.reporting import RootWriter
@@ -61,7 +62,7 @@ class CommsRoute(ABC):
         """
         current_root = RouteFile.read(active_route_path()).launch_root()
         if self.root.resolve() == current_root.resolve():
-            with guard_default_route_write(self.root, blocking=False):
+            with guard_default_route_write(self.root, StoreLockContention(0)):
                 yield
         else:
             yield
@@ -185,7 +186,7 @@ def guard_original_root_write(root: Path) -> Iterator[None]:
     """Fence a cooperating write through the historical root after migration."""
     original_root = LocalRoute.default().root
     if root.expanduser().resolve() == original_root.resolve():
-        with guard_default_route_write(original_root):
+        with guard_default_route_write(original_root, UNBOUNDED_CONTENTION):
             yield
     else:
         yield
@@ -239,7 +240,9 @@ def read_active_route(path: Path | None = None) -> ActiveRoute | None:
 
 
 @contextmanager
-def guard_default_route_write(expected_root: Path, *, blocking: bool = True) -> Iterator[None]:
+def guard_default_route_write(
+    expected_root: Path, contention: StoreLockContention,
+) -> Iterator[None]:
     """Keep a default-root write on its selected root through publication.
 
     Callers must enter this guard before the mutating operation, including any
@@ -250,7 +253,7 @@ def guard_default_route_write(expected_root: Path, *, blocking: bool = True) -> 
     path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
     directory = os.open(path.parent, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
     try:
-        fcntl.flock(directory, fcntl.LOCK_SH | (0 if blocking else fcntl.LOCK_NB))
+        contention.acquire(directory, Platform.current(), mode=SharedLock())
         info = os.fstat(directory)
         parent = path.parent.lstat()
         if (

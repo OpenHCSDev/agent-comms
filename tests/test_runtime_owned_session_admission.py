@@ -78,7 +78,7 @@ async def test_cli_registration_refuses_unbound_then_uses_original_owned_session
         assert not (root / "native-sessions").exists()
         assert not (root / "input_dispositions.sqlite3").exists()
 
-        retired = comms.registry.new_thread('retired-owner', frozenset(), str(project), process_identity=ProcessIdentity.capture(os.getpid()))
+        retired = Thread('retired-owner', frozenset(), str(project), process_identity=ProcessIdentity.capture(os.getpid()))
         comms.registry.declare(retired)
         await owner.sessions.bind_owned(retired, "retired-acp-session")
         comms.registry.remove(retired.name)

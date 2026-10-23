@@ -24,7 +24,7 @@ from .envelope_claim_transitions import (
 from .field_codec import FieldCodec, MalformedRecord
 from .lifecycle_capability import Executing
 from .native_arguments import NativeArguments
-from .native_tool_call import CodingCall, NativeToolMode, SelectedToolDenied, ToolNotExecuting
+from .native_tool_call import CodingCall, NativeToolMode, ToolNotExecuting
 from .native_tool_transport import ToolListener, ToolTransport, UnboundToolTransport
 from .native_tools import NativeToolDeclaration
 from .pi_payloads import StorageDenialToolDetails
@@ -38,6 +38,7 @@ from .selected_tool_broker import (
 )
 from .storage_room import NoRoomNeeded, RoomReservation
 from .storage_rules import StorageDenied
+from .tool_denial import SelectedToolDenied
 from .turn_goal_permission import TurnGoalPermission
 
 if TYPE_CHECKING:
@@ -58,7 +59,7 @@ class CodingToolOwner(ABC):
     async def reserve_room(self, call: CodingCall) -> RoomReservation:
         registry = self.comms.registry
         thread = registry.require(self.owner_name)
-        effects = await asyncio.to_thread(call.decide_storage, registry, thread.name)
+        effects = await asyncio.to_thread(call.decide_storage, registry.storage_rule, thread)
         work = tuple(dict.fromkeys(kind for effect in effects for kind in effect.work))
         if work:
             return await registry.storage_rule.wait_for_room(

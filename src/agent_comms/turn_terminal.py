@@ -26,15 +26,6 @@ class TurnInterruption(ABC):
 class TurnTerminal(TurnInterruption):
     """Own interruption and settlement policy, never a nullable result flag."""
 
-    @staticmethod
-    def from_cancellation(error: asyncio.CancelledError) -> TurnTerminal:
-        # asyncio's cancellation-message boundary: our stop paths send the
-        # terminal itself; a bare cancellation has no reported backend result.
-        (terminal,) = error.args or (EndedWithoutResult(),)
-        if not isinstance(terminal, TurnTerminal):
-            raise TypeError("Turn cancellation requires a declared terminal")
-        return terminal
-
     def interrupting(self, prior: TurnTerminal) -> TurnTerminal:
         return prior
 
@@ -111,9 +102,6 @@ class OperatorStopped(TurnTerminal):
     def settle_origin(self, account, permit, store, goal_id, current) -> None:
         if any(current.matching(goal_id).active()):
             permit.stop(store)
-
-    async def prepare_publication(self, progress: TurnProgress) -> Done:
-        raise asyncio.CancelledError(self)
 
 
 class OwnerStop(asyncio.Future[TurnTerminal], TurnInterruption):

@@ -10,13 +10,14 @@ from agent_comms.errors import RelationViolationError
 from agent_comms.registry_store import RegistryStore
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.comms import wire
+from agent_comms.threads import Thread
 
 
 def test_copied_registry_resolves_turn_from_its_new_location(tmp_path):
     source = tmp_path / 'source'
     copied = tmp_path / 'copied'
     comms = wire(source)
-    comms.registry.declare(comms.registry.new_thread(
+    comms.registry.declare(Thread(
         'worker', frozenset(), str(source),
         process_identity=ProcessIdentity.capture(os.getpid()),
     ))

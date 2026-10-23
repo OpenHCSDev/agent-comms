@@ -59,3 +59,44 @@ def test_activity_rolls_back_with_its_original_append(bus):
             raise ValueError("rollback")
     assert bus.activity_clocks() == before
     assert bus.revision() == 1
+
+
+def test_read_boundary_defers_instead_of_waiting_on_a_held_bus(private_comms):
+    """A read that cannot wait out another writer raises BlockingIOError from the
+    activity attach, so its caller defers instead of waiting with no end."""
+    import threading
+
+    from agent_comms.coordination_session import ReadNativeCoordinationSession
+    from agent_comms.coordinator import Coordination
+    from agent_comms.locked_store import StoreBusy
+    from agent_comms.store_files import _store_lock
+
+    held, release, outcome = threading.Event(), threading.Event(), []
+
+    def hold():
+        with _store_lock(private_comms.bus.bus.path):
+            held.set()
+            release.wait(10)
+
+    def read():
+        try:
+            with Coordination(
+                str(private_comms.root / "coordination.sqlite3"), contention=StoreBusy(),
+                session_type=ReadNativeCoordinationSession,
+            ) as store, store.session.boundary(store.session.bus):
+                outcome.append("entered")
+        except BlockingIOError as error:
+            outcome.append(error)
+
+    holder = threading.Thread(target=hold)
+    holder.start()
+    assert held.wait(5)
+    reader = threading.Thread(target=read, daemon=True)
+    reader.start()
+    reader.join(5)
+    deferred = not reader.is_alive()
+    release.set()
+    holder.join()
+    reader.join(5)
+    assert deferred
+    assert isinstance(outcome[0], BlockingIOError)

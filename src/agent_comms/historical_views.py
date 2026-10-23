@@ -18,7 +18,7 @@ from .channels import Channel
 from .coordination_errors import HistoricalSourceChanged
 from .errors import UnregisteredThreadError
 from .field_codec import FieldCodec
-from .locked_store import DurableFile, RegistryFile, RootFile
+from .locked_store import DurableFile, LockedFile, RegistryFile, RootFile
 from .message_page import (
     NEWEST_PAGE,
     ConversationMessagePageRequest,
@@ -47,7 +47,7 @@ from .recorded_bus import RecordedBusIdentity
 from .registration import Registration
 from .registry_provenance import RegistryProvenance
 from .revision_views import BusSourceView
-from .store_files import AtomicFile, _store_lock
+from .store_files import AtomicFile
 from .thread_identity import UnrecordedThreadIncarnation
 from .threads import ThreadProvenance
 
@@ -398,7 +398,7 @@ class HistoricalThread:
     thread: ThreadProvenance
 
 
-class HistoryArchive(DurableFile):
+class HistoryArchive(DurableFile, LockedFile):
     """Ordered immutable source snapshots; never a delivery/launch authority."""
 
     filename = "history_sources.json"
@@ -469,7 +469,7 @@ class HistoryArchive(DurableFile):
         source_root = source_root.resolve()
         if source_root == self.bus_path.parent.resolve():
             raise ValueError("The live bus cannot be its own history source")
-        with _store_lock(self.path):
+        with self.locked():
             sources = self.sources()
             existing = next((s for s in sources if s.original_root == str(source_root)), None)
             if existing is not None:

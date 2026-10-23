@@ -39,7 +39,7 @@ from agent_comms.standing_rules import (
     UndatedStandingRule,
 )
 from agent_comms.thread_identity import ThreadIncarnation
-from agent_comms.todos import OwnerRequest, Todo
+from agent_comms.todos import OwnerRequest, ProgressRead, Todo
 from agent_comms.tool_result import ToolResult
 from agent_comms.turn_digests import OrderEditCountRead
 
@@ -147,9 +147,10 @@ class OverloadDegradation(Degradation, BlocksRelease, ToolResult):
 
     @classmethod
     def of(cls, comms: Comms, commander: str) -> Self:
+        orders = StandingRule.todos(comms, commander)
         return cls.from_orders(
-            StandingRule.todos(comms, commander),
-            len(ReviewTimerUp.violations(comms, commander)),
+            orders,
+            len(ReviewTimerUp.scan_observed(comms, commander, (), ProgressRead(orders))),
             OrderEditCountRead.count(comms, commander),
         )
 

@@ -14,17 +14,18 @@ from pathlib import Path
 from threading import Lock
 from typing import BinaryIO
 
-from agent_comms.child_process import SpawnedProcess
+from agent_comms.child_process import ChildOutcome, SpawnedProcess
 from agent_comms.field_codec import FieldCodec
 from agent_comms.installer.backup import UpgradeRefused
 from agent_comms.installer.interpreter_operation import (
     ProbeProgram,
-    ProbeReply,
+    ProbeRequest,
     RuntimeProbe,
-    RuntimeProbeFailed,
     SourceProgram,
 )
 from agent_comms.launch_runtime import RestoredRuntime
+from agent_comms.maintenance_barrier import MaintenanceHolder
+from agent_comms.repo import Repo
 
 
 @dataclass(frozen=True)
@@ -44,6 +45,16 @@ class InterpreterWorkerKey:
     program: tuple[str, ...]
     cwd: Path
     environment: tuple[tuple[str, str], ...]
+
+
+class InterpreterWorkerDied(UpgradeRefused):
+    """A worker ends only when an operation raised in it; its exit and its stderr, which
+    holds that traceback, are the failure."""
+
+    def __init__(self, outcome: ChildOutcome, errors: str) -> None:
+        super().__init__(f"Interpreter worker {outcome.summary} without an answer: {errors}")
+        self.outcome = outcome
+        self.errors = errors
 
 
 @dataclass
@@ -81,23 +92,26 @@ class InterpreterWorker:
         self.diagnostics.seek(0)
         return self.diagnostics.read().decode(errors="replace").strip()
 
-    def exchange(self, encoded: str) -> ProbeReply:
+    def exchange(self, encoded: str) -> str:
         with self.exchange_lock:
             self.requests.write((encoded + "\n").encode())
             self.requests.flush()
             answer = self.answers.readline()
             if not answer:
-                raise UpgradeRefused(
-                    f"Interpreter worker closed without an answer: {self.errors()}")
-            return FieldCodec.decode(ProbeReply, FieldCodec.parse(answer.decode()))
+                raise InterpreterWorkerDied(self.child.reap(), self.errors())
+            return answer.decode()
+
+    def finish(self) -> None:
+        """Closing its requests ends the worker's loop, so its interpreter starts exiting."""
+        self.requests.close()
 
     def close(self) -> None:
-        """Closing its requests ends the worker's loop; it is then reaped and its streams closed."""
+        """A finished worker is reaped and its streams closed."""
         with ExitStack() as closing:
             closing.callback(self.diagnostics.close)
             closing.callback(self.answers.close)
             closing.callback(self.child.close)
-            self.requests.close()
+            self.finish()
             self.child.reap()
 
 
@@ -119,10 +133,15 @@ class InstallCommands:
         return self
 
     def close_workers(self, keys: tuple[InterpreterWorkerKey, ...]) -> None:
-        """Every selected worker closes, even when another one's close raises."""
+        """Every selected worker closes, even when another one's close raises. All of them
+        finish before the first is reaped, so their interpreters exit together and the
+        close waits for the slowest exit, not the sum of them."""
         with self.worker_lock, ExitStack() as exits:
-            for key in keys:
-                exits.callback(self.workers.pop(key).close)
+            closing = tuple(self.workers.pop(key) for key in keys)
+            for worker in closing:
+                exits.callback(worker.close)
+            for worker in closing:
+                worker.finish()
 
     def close_runtime(self, python: Path) -> None:
         self.close_workers(tuple(key for key in self.workers if key.python == python))
@@ -157,6 +176,11 @@ class InstallCommands:
                                  f"{completed.stderr.strip()}")
         return completed.stdout
 
+    def git(self, checkout: Path, *args: str) -> str:
+        """Git through the one runner (``Repo.git``), timed like every install command."""
+        with self.timing(f"git -C {checkout} {' '.join(args)}"):
+            return Repo.git(checkout, *args)
+
     @contextmanager
     def exchange(self, encoded: str) -> Iterator[tuple[Path, Path]]:
         """Keep one request and its answer alive until the caller reads the result."""
@@ -169,7 +193,7 @@ class InstallCommands:
                       cwd: Path = Path(), env: Mapping[str, str] = os.environ,
                       program: ProbeProgram = SourceProgram()) -> Answer:
         key = InterpreterWorkerKey(python, tuple(map(str, program.entry())), cwd.absolute(),
-                                   tuple(sorted(env.items())))
+                                   tuple(sorted(MaintenanceHolder.outside(env).items())))
         with self.timing(f"{python} {type(probe).__name__}"):
             with self.worker_lock:
                 if key not in self.workers:
@@ -177,9 +201,11 @@ class InstallCommands:
                     # thread until all workers close, including calls from short-lived pools.
                     self.workers[key] = self.launcher.submit(InterpreterWorker.start, key).result()
                 worker = self.workers[key]
-            reply = worker.exchange(FieldCodec.compact(FieldCodec.encode(probe)))
-        try:
-            return probe.decode_answer(reply.answer())
-        except RuntimeProbeFailed as error:
-            raise UpgradeRefused(str(error)) from error
+            try:
+                answer = worker.exchange(FieldCodec.compact(FieldCodec.encode(
+                    ProbeRequest(probe, MaintenanceHolder.current().nonce))))
+            except InterpreterWorkerDied:
+                self.close_workers((key,))
+                raise
+        return probe.decode_answer(answer)
 

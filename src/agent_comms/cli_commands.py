@@ -13,7 +13,6 @@ import json
 import os
 import re
 import shlex
-import subprocess
 import time
 from abc import ABC, abstractmethod
 from collections.abc import AsyncIterator, Iterator, Mapping
@@ -26,9 +25,8 @@ from pathlib import Path
 from types import get_original_bases
 from typing import Annotated, ClassVar, Literal, Self, TextIO, cast, get_args, get_origin
 
-from pydantic import JsonValue
-
 from acp.exceptions import RequestError
+from pydantic import JsonValue
 
 from agent_comms.errors import ToolRefusedError
 from agent_comms.launch_root import LaunchRoot
@@ -68,7 +66,7 @@ from .cli_bridges.history import (
     OfflineHistory,
     OnlineHistory,
 )
-from .cli_bridges.shared import ChoiceTargetField, DeclaredOptions, SendRequest, TargetField
+from .cli_bridges.shared import ChoiceTargetField, SendRequest, TargetField
 from .cli_protocol import ArrivedMessage, EarlierItems
 from .cli_result import CliResult
 from .command import Command
@@ -87,7 +85,7 @@ from .config_options import (
 from .context_store import LATEST_CONTEXT, ContextManifestCursor
 from .coordination_database import CoordinationStore
 from .declared_family import DeclaredFamily
-from .errors import RelationViolationError
+from .declared_verb import DeclaredCommand
 from .exporting import (
     EverythingScope,
     FullLimit,
@@ -145,6 +143,7 @@ from .read_basis import (
 from .recorded_bus import RecordedBusIdentity
 from .registry_document import CommanderProject, RegistrySnapshot
 from .registry_store import RegistryStore
+from .repo import GitCommandError, Repo
 from .restart_scope import AllOwners, OneOwner, RestartTarget
 from .runtime import RuntimeConnection, socket_path
 from .schema_report import StoreSchemaReport, StoreSchemaReports
@@ -799,8 +798,7 @@ class WorktreeArgument:
 
 @dataclass(frozen=True, kw_only=True)
 class CliCommand[Answer: CliResult = CliResult](
-    DeclaredFamily,
-    DeclaredOptions,
+    DeclaredCommand,
     CliExecution[Answer],
     affix="CliCommand",
     discovery_package="agent_comms.tools",
@@ -1653,7 +1651,7 @@ class RegisterCliCommand(NameArgument, CliCommand):
 
     def apply(self, ctx: Comms) -> CliResult:
 
-        thread = ctx.registry.new_thread(
+        thread = Thread(
             name=self.name,
             tags=self.tags,
             worktree=self.worktree,
@@ -1742,8 +1740,17 @@ class InstallCliCommand(CliCommand):
         project = self.commander.configured(snapshot.commander_project, self.repos, snapshot)
         ctx.registry.set_commander_project(project)
         return InstallResult(project, {
-            type(harness).declared_name: harness.register(ctx, self.project)
+            type(harness).declared_name: self.declare_bus_threads(ctx, harness)
             for harness in Harness.present(home)})
+
+    def declare_bus_threads(self, ctx: Comms, harness: Harness) -> tuple[str, ...]:
+        """Declare the bus threads this harness needs and the registry does not hold yet."""
+        names = ctx.registry.snapshot()
+        registered = tuple(name for name in harness.bus_threads if not names.taken(name))
+        for name in registered:
+            ctx.registry.declare(Thread(name=name, tags=frozenset(), worktree=str(self.project),
+                                        execution=ExternalThreadExecution))
+        return registered
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -1873,34 +1880,33 @@ class CheckpointCliCommand(NameArgument, CliCommand, declared_name="checkpoint")
     def apply(self, ctx: Comms) -> CliResult:
         worktree = Path(ctx.registry.require(self.name).worktree).resolve()
         branch = f"checkpoint/{self.name}"
-        # Git requires an absolute ceiling. Stop before entering the declared
-        # worktree's parent, never checkpoint an ancestor repository.
-        environment = {**os.environ, "GIT_CEILING_DIRECTORIES": str(worktree.parent)}
-
-        def git(*arguments: str, timeout: int = 60):
-            done = subprocess.run(["git", "-C", str(worktree), *arguments],
-                                  capture_output=True, text=True, timeout=timeout,
-                                  env=environment)
-            return done.returncode, done.stdout, done.stderr
-
-        code, out, _ = git("rev-parse", "--is-inside-work-tree")
-        if code != 0 or out.strip() != "true":
-            return RefusedCheckpoint(
-                self.name, branch, "the thread declaration's worktree is not a git worktree")
-        if not git("status", "--porcelain")[1].strip():
+        # Only the declared worktree's own repository; never checkpoint an ancestor's.
+        refused = RefusedCheckpoint(
+            self.name, branch, "the thread declaration's worktree is not a git worktree")
+        try:
+            top = Path(Repo.git(worktree, "rev-parse", "--show-toplevel").strip()).resolve()
+        except GitCommandError:
+            return refused
+        if top != worktree:
+            return refused
+        if not Repo.git(worktree, "status", "--porcelain").strip():
             return CleanCheckpoint(self.name, branch)
-        git("add", "-A")
-        code, out, err = git("commit", "-m", f"Checkpoint {self.name} before compaction")
-        if code != 0 and "nothing to commit" in (out + err):
-            return CleanCheckpoint(self.name, branch)
-        if code != 0:
-            return FailedCheckpoint(self.name, branch, (err.strip() or out.strip())[:400])
+        try:
+            Repo.git(worktree, "add", "-A")
+            if Repo.answers(worktree, "diff", "--cached", "--quiet"):
+                return CleanCheckpoint(self.name, branch)
+            Repo.git(worktree, "commit", "-m", f"Checkpoint {self.name} before compaction")
+        except GitCommandError as error:
+            return FailedCheckpoint(self.name, branch, str(error)[:400])
         # The transport can fail mid-flight; the named state is what survives,
         # never a silent skip and never a block on compaction.
-        code, out, err = git("push", "--force", "origin", f"HEAD:refs/heads/{branch}", timeout=120)
-        if code != 0:
-            return PushUnknownCheckpoint(self.name, branch, (err.strip() or out.strip())[:400])
-        return PushedCheckpoint(self.name, branch, git("rev-parse", "--short", "HEAD")[1].strip())
+        try:
+            Repo.git(worktree, "push", "--force", "origin", f"HEAD:refs/heads/{branch}",
+                     timeout=120)
+        except GitCommandError as error:
+            return PushUnknownCheckpoint(self.name, branch, str(error)[:400])
+        return PushedCheckpoint(self.name, branch,
+                                Repo.git(worktree, "rev-parse", "--short", "HEAD").strip())
 
 
 @dataclass(frozen=True, kw_only=True)

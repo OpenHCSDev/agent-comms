@@ -16,9 +16,10 @@ from agent_comms.thread_model import DeclaredModel
 from agent_comms_hooks.watch import WatchClaim, WatchRecord
 from agent_comms.commander.package import CommanderPackage
 from agent_comms.commander.rule_file import RuleFile
-from agent_comms.todos import Slop
+from agent_comms.slop import Slop
 from agent_comms_hooks.reread import SliceReminder
 from agent_comms_hooks.skill import CommanderStart
+from agent_comms.threads import Thread
 
 
 @pytest.mark.parametrize("source", ["startup", "resume", "compact"])
@@ -144,7 +145,7 @@ def test_failure_catalog_numbers_every_evidenced_member_once():
 def commander_bus(tmp_path):
     bus = wire(tmp_path / "bus")
     for name in ("claude-code", "unit-x"):
-        bus.registry.declare(bus.registry.new_thread(
+        bus.registry.declare(Thread(
             name, frozenset(), str(tmp_path),
             model=DeclaredModel("anthropic/claude-opus-4-6")))
     bus.registry.set_commander_project(RegisteredCommanderProject(

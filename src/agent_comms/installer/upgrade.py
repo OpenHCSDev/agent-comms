@@ -21,10 +21,8 @@ start and result through the bus's ordinary publisher.
 from __future__ import annotations
 
 import hashlib
-import json
 import os
 import shutil
-import subprocess
 import sys
 import tempfile
 import time
@@ -81,6 +79,7 @@ from agent_comms.installer.carry import (
     RetireInputsOperation,
 )
 from agent_comms.installer.commands import InstallCommands, TimedCommand
+from agent_comms.installer.declared_uv import DeclaredUv
 from agent_comms.installer.interpreter_operation import (
     CliCommandProbe,
     ClientImportsProbe,
@@ -103,23 +102,25 @@ from agent_comms.installer.practice import (
     RuntimeHome,
 )
 from agent_comms.installer.reporting import (
-    RootWriter, RuntimeWriter, UnpostedWriter,
+    RootWriter,
+    RuntimeWriter,
+    UnpostedWriter,
 )
 from agent_comms.installer.runtime_resolution import RuntimeResolution, StackProject
 from agent_comms.launch_runtime import LaunchRuntime, RestartEnvironment, SpecifiedImportPath
 from agent_comms.locked_store import BusFile, DeclaredFile, RootFile, UndeclaredFile
-from agent_comms.native_build_inputs import NativeBuildInputs
-from agent_comms.native_package import pinned_package_for
-from agent_comms.root_runtime import RootRuntime, RootRuntimeStore
-from agent_comms.runtime_processes import RuntimeProcesses
 from agent_comms.maintenance_barrier import (
     MaintenanceBarrier,
     MaintenanceOperator,
     MaintenanceState,
 )
+from agent_comms.native_build_inputs import NativeBuildInputs
+from agent_comms.native_package import link_sealed_tree, pinned_package_for
 from agent_comms.recorded_bus import RecordedBusIdentity
 from agent_comms.registry_store import RegistryStore
-from agent_comms.repo import Checkout, ScratchCheckout
+from agent_comms.repo import Checkout, Repo, ScratchCheckout
+from agent_comms.root_runtime import RootRuntime, RootRuntimeStore
+from agent_comms.runtime_processes import RuntimeProcesses
 from agent_comms.storage_rules import StorageRule
 
 if TYPE_CHECKING:
@@ -460,8 +461,21 @@ class Stack:
         return RuntimeHome.uv_path(self.home)
 
     def require_uv(self) -> None:
+        """The installer runs only the uv its checkout declares; a different one installs the
+        declared uv in its own place before any lock is written."""
         if not os.access(self.uv, os.X_OK):
             raise UpgradeRefused(f"No uv executable at {self.uv}; the installer runs only that uv")
+        declared = DeclaredUv.of(self.checkout / "pyproject.toml", self.uv)
+        if declared.accepts(self.commands.run(self.uv, "--version")):
+            return
+        with tempfile.TemporaryDirectory(dir=self.uv.parent, prefix=".uv-") as staging:
+            self.commands.run(self.uv, "pip", "install", "--quiet", "--target", staging,
+                              "--python", self.python, str(declared.requirement))
+            fetched = Path(staging) / "bin/uv"
+            reported = self.commands.run(fetched, "--version")
+            if not declared.accepts(reported):
+                raise UpgradeRefused(f"Fetched {reported.strip()}; {declared.requirement} declared")
+            os.replace(fetched, self.uv)
 
     def resolve(self) -> None:
         """Refresh declared source packages while retaining the committed release pins."""
@@ -479,12 +493,12 @@ class Stack:
         source = cls(checkout, commands, home, runtime=LaunchRuntime.running())
         source.require_uv()
         source.resolve()
-        core = commands.run("git", "-C", checkout, "rev-parse", "HEAD").strip()
+        core = commands.git(checkout, "rev-parse", "HEAD").strip()
         resolution = hashlib.sha256(source.lock.read_bytes()).hexdigest()[:16]
         prefix = home / ".local/share/agent-comms/runtimes" / f"core-{core[:9]}-lock-{resolution}"
         built = replace(source, runtime=LaunchRuntime(prefix / "bin/python"))
         if prefix.exists():
-            if not RuntimeResolution.at(prefix).matches(source.lock, built.python, core, commands):
+            if not RuntimeResolution.at(prefix).matches(source.lock, built, core):
                 raise UpgradeRefused("Existing built runtime differs from its resolved inputs")
             built.stage_native()
             built.prepare_native()
@@ -496,7 +510,7 @@ class Stack:
                          "--no-editable", cwd=checkout,
                          env={**built.environment(), "UV_PROJECT_ENVIRONMENT": str(prefix)})
             built.install_native()
-            RuntimeResolution.capture(built.python, core, commands).save(prefix)
+            RuntimeResolution.capture(built, core).save(prefix)
             built.imports()
         except BaseException:
             shutil.rmtree(prefix)
@@ -508,7 +522,7 @@ class Stack:
         self.commands.run(self.uv, "pip", "install", "--python", self.python,
                           "-r", "pyproject.toml", "--extra", "dev", cwd=self.checkout,
                           env=self.environment())
-        core = self.commands.run("git", "-C", self.checkout, "rev-parse", "HEAD").strip()
+        core = self.commands.git(self.checkout, "rev-parse", "HEAD").strip()
         scratch = StorageRule().scratch_base
         scratch.mkdir(mode=0o700, parents=True, exist_ok=True)
         with tempfile.TemporaryDirectory(dir=scratch, prefix=f"tests-{core[:12]}-") as temporary:
@@ -550,7 +564,7 @@ class Stack:
             return native, layout
         if prepared.is_dir():
             native.parents[2].mkdir(mode=0o700)
-            shutil.copytree(prepared, native)
+            link_sealed_tree(prepared, native)
         else:
             self.commands.run(self.checkout / "stack/bin/prepare-pi-native", "--python",
                               self.python, cwd=self.checkout,
@@ -565,7 +579,7 @@ class Stack:
         package = self.probe(PackageRootProbe())
         destination = package / "_native" / layout
         destination.parents[2].mkdir(mode=0o700, parents=True)
-        shutil.copytree(native, destination)
+        link_sealed_tree(native, destination)
         self.prepare_native()
 
     def keep_native(self, native: Path, layout: Path) -> None:
@@ -574,7 +588,7 @@ class Stack:
         self.prepared_natives.mkdir(mode=0o700, parents=True, exist_ok=True)
         stage = Path(tempfile.mkdtemp(dir=self.prepared_natives, prefix=".stage-"))
         try:
-            shutil.copytree(native, stage / layout)
+            link_sealed_tree(native, stage / layout)
             for retired in self.prepared_natives.glob(".pi-native-*"):
                 shutil.rmtree(retired)
             stage.joinpath(layout.parts[0]).rename(self.prepared_natives / layout.parts[0])
@@ -628,14 +642,16 @@ class Stack:
     def call_steps[Answer](self, steps: tuple[Carry, ...], tree: TargetTree,
                            operation: CarryOperation[Answer]) -> tuple[Answer, ...]:
         """Run one pass of steps, in order, in one worker in the target tree with this
-        stack's interpreter; the operation owns traversal and its answer tuple."""
+        stack's interpreter; the operation owns traversal and its answer tuple. Every
+        caller passes the staged stack, built from this tree, so Core comes from its
+        compiled installation and only the steps come from the tree."""
         if not steps:
             return ()
         request = CarryRequest(operation, steps)
         with self.commands.exchange(FieldCodec.compact(FieldCodec.encode(request))) as (request_path, result):
             self.commands.run(self.python, "-m", step_worker.__name__,
                               request_path, result,
-                              cwd=tree.path, env=self.environment(*tree.source_paths()))
+                              cwd=tree.path, env=self.environment(tree.steps_package))
             return operation.decode_answer(result.read_text())
 
     def running_owners(self, root: Path) -> list[str]:
@@ -689,9 +705,15 @@ class TargetTree(AbstractContextManager):
     def path(self) -> Path:
         return self.scratch / f"tree-{self.revision[:12]}"
 
+    @property
+    def steps_package(self) -> Path:
+        """Where the tree's carry steps import from; they ship in no runtime."""
+        return self.path / STEPS.parent
+
     def source_paths(self) -> tuple[Path, Path]:
-        """What the install imports from: the tree's ``src``, then its carry steps' package."""
-        return self.path / "src", self.path / STEPS.parent
+        """What the installer imports from when an older runtime runs it: the tree's
+        ``src``, then its carry steps' package."""
+        return self.path / "src", self.steps_package
 
     def add(self) -> None:
         ScratchCheckout.add(self.repo, self.path, self.revision, "--detach", "-q")
@@ -773,13 +795,12 @@ def upgrade(checkout: Path, root: Path, target: str, installer: InstallerChoice,
     with commands, report.running(tree):
         StoreBackup.complete_interrupted(root, spill_dir)
         installed = Stack(tree.path, commands)
-        current = commands.run("git", "-C", checkout, "rev-parse", "HEAD").strip()
-        ancestry = ["git", "-C", str(checkout), "merge-base", "--is-ancestor", current, target]
-        with commands.timing(" ".join(ancestry)):
-            answer = subprocess.run(ancestry)
-        if answer.returncode:
+        current = commands.git(checkout, "rev-parse", "HEAD").strip()
+        with commands.timing(f"git merge-base --is-ancestor {current} {target}"):
+            follows = Repo.descends(checkout, current, target)
+        if not follows:
             raise UpgradeRefused(f"{target[:12]} does not follow the checkout's {current[:12]}")
-        if commands.run("git", "-C", checkout, "status", "--porcelain",
+        if commands.git(checkout, "status", "--porcelain",
                         "--untracked-files=no").strip():
             raise UpgradeRefused("The checkout has local changes")
         try:
@@ -920,7 +941,7 @@ class ExistingBusInstall[Rehearsed: Rehearsal](Install[Rehearsed]):
            installer: InstallerChoice, spill_dir: Path) -> ExistingBusInstall:
         """A bus already carried, on the target, built from the installed lock needs nothing."""
         unchanged = not pending and current == target and RuntimeResolution.installed().matches(
-            staged.lock, staged.python, target, staged.commands)
+            staged.lock, staged, target)
         member = (ChangedInstall, UnchangedInstall)[unchanged]
         steps = tuple(step(root, root, spill_dir) for step in pending)
         return member(checkout, root, current, target, steps, installed, staged,
@@ -1038,7 +1059,7 @@ class ChangedInstall(ExistingBusInstall[RehearsedFiles]):
                       f"maintenance cleared; owners: {started}", file=sys.stderr)
                 raise
             try:
-                self.staged.commands.run("git", "-C", self.checkout, "merge", "--ff-only", "-q", self.target)
+                self.staged.commands.git(self.checkout, "merge", "--ff-only", "-q", self.target)
                 Checkout(self.checkout).prepare()
                 passed = migration.carry(self.pending, self.staged, self.tree)
                 passed.files.require_rehearsal(rehearsal.files)
@@ -1062,9 +1083,9 @@ class ChangedInstall(ExistingBusInstall[RehearsedFiles]):
                     maintenance, restored, MaintenanceOperator.current())
                 holder.close()
                 holder.enter_context(restored_hold.holding())
-                head = self.installed.commands.run("git", "-C", self.checkout, "rev-parse", "HEAD").strip()
+                head = self.installed.commands.git(self.checkout, "rev-parse", "HEAD").strip()
                 if head != self.current:
-                    self.installed.commands.run("git", "-C", self.checkout, "reset", "-q", "--keep", self.current)
+                    self.installed.commands.git(self.checkout, "reset", "-q", "--keep", self.current)
                     Checkout(self.checkout).prepare()
                 self.installed.publish(self.root)
                 holder.close()
@@ -1133,7 +1154,7 @@ class FreshInstall(Install[FreshRehearsal]):
         return FreshRehearsal()
 
     def live(self, rehearsal: FreshRehearsal, report: InstallReport) -> CreatedRun:
-        self.staged.commands.run("git", "-C", self.checkout, "merge", "--ff-only", "-q",
+        self.staged.commands.git(self.checkout, "merge", "--ff-only", "-q",
                                  self.target)
         Checkout(self.checkout).prepare()
         self.root.mkdir(mode=0o700, parents=True, exist_ok=True)

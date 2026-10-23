@@ -43,6 +43,7 @@ from agent_comms.tool_caller import ThreadCaller
 from agent_comms.tools import CommsOrderDoneTool, CommsTodoCreateTool
 from connector_readiness import ConnectorReadiness
 from order_scope_fixture import FIX_SCOPE
+from agent_comms.threads import Thread
 
 
 def seed(root: Path, project: Path) -> None:
@@ -50,7 +51,7 @@ def seed(root: Path, project: Path) -> None:
     comms = wire(root)
     for name in ("claude-ai", "worker", "archivable"):
         comms.registry.declare(
-            comms.registry.new_thread(name, frozenset({"probe"}), str(project)),
+            Thread(name, frozenset({"probe"}), str(project)),
             status=StoppedThreadStatus(),
         )
     Bus.install(Bus.path_in(comms.root))

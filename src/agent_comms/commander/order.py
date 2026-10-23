@@ -34,7 +34,7 @@ from pydantic import BaseModel, ConfigDict, Field, InstanceOf, PrivateAttr
 
 from agent_comms.change_report import FileLine, MainRevision, NoSourceReference
 from agent_comms.channel_targets import CommsTag
-from agent_comms.cli_bridges.shared import DeclaredVerb
+from agent_comms.declared_verb import DeclaredVerb
 from agent_comms.commander.standing import UnownedWheelSpin
 from agent_comms.comms import Comms, wire
 from agent_comms.declared_family import DeclaredFamily
@@ -53,7 +53,7 @@ from agent_comms.goal_actions import CreateProblemGoalAction, OrderGoalAction
 from agent_comms.goals import OrderCheck
 from agent_comms.message_reference import MessageReference
 from agent_comms.messages import Message
-from agent_comms.native_tool_call import SelectedToolDenied
+from agent_comms.tool_denial import SelectedToolDenied
 from agent_comms.owner_requests import NewestOpenRequest, OwnerRequestId, RequestSelection
 from agent_comms.phase_evidence import MainTree, PlanReading
 from agent_comms.plan_phases import OrderPhase, PlanPhase
@@ -84,7 +84,6 @@ from agent_comms.todos import (
     ProblemFinding,
     PullRequestLink,
     RecordPullRequest,
-    Slop,
     StrikeReason,
     StrikeTodo,
     Successor,
@@ -94,6 +93,7 @@ from agent_comms.todos import (
     VoidStrikeTodo,
     WithdrawTodo,
 )
+from agent_comms.slop import Slop
 from agent_comms.tool_caller import CommanderForkCaller, NoThreadCaller
 from agent_comms.tools import (
     CommsChangeProblemTool,

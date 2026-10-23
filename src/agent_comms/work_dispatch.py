@@ -8,7 +8,6 @@ acceptance check. Failed startup state stays retained for explicit disposition.
 from __future__ import annotations
 
 import math
-import subprocess
 import time
 from dataclasses import dataclass, replace
 from pathlib import Path
@@ -25,17 +24,18 @@ from agent_comms.owner_requests import NewestOpenRequest
 from .native_settings import NativeThreadDefaults
 from .phase_tasks import PhaseTask
 from .recorded_time import RecordedEventTime
-from .repo import Checkout
+from .repo import Checkout, Repo
 from .repository_name import RepositoryName
 from .storage_rules import CheckoutStorageEffect, StorageProjection
 from .thread_status import StoppedThreadStatus
 from .session_file import RegistrySessionLocation
 
+from .threads import Thread
+
 if TYPE_CHECKING:
     from .comms import Comms
     from .phase_evidence import PlanReading
     from .plan_phases import PlanPhase
-    from .threads import Thread
     from .todos import PendingProblemOrder
 
 
@@ -61,7 +61,7 @@ class WorkDispatch:
         name = self.name
         storage = comms.registry.storage_rule
         checkout = storage.order_checkout(name, self.action.problem)
-        candidate = comms.registry.new_thread(
+        candidate = Thread(
             name,
             frozenset(),
             str(checkout),
@@ -73,13 +73,7 @@ class WorkDispatch:
         CheckoutStorageEffect(checkout, Path(self.action.order.check.directory)).check(
             StorageProjection(storage, candidate)
         )
-        subprocess.run(
-            ("git", "-C", self.action.order.check.directory, "fetch", "origin", "main"),
-            check=True,
-            capture_output=True,
-            text=True,
-            timeout=60,
-        )
+        Repo.git(self.action.order.check.directory, "fetch", "origin", "main")
         Checkout.add(
             self.action.order.check.directory, checkout, "origin/main", "-b", f"auto/{name}"
         )

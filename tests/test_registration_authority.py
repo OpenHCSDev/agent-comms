@@ -13,11 +13,12 @@ from agent_comms.thread_identity import UserThreadRole
 from agent_comms.thread_text import GivenThreadText
 from agent_comms.turn_lease import RecordedGeneration
 from agent_comms.turn_phase import PreparingPhase
+from agent_comms.threads import Thread
 
 
 def registered(root):
     comms = wire(root)
-    comms.registry.register(comms.registry.new_thread('owner', frozenset({'team'}), str(root), process_identity=ProcessIdentity.capture(os.getpid()), goal=Goal('task', 'g', published_seq=0)))
+    comms.registry.register(Thread('owner', frozenset({'team'}), str(root), process_identity=ProcessIdentity.capture(os.getpid()), goal=Goal('task', 'g', published_seq=0)))
     return comms.registry
 
 

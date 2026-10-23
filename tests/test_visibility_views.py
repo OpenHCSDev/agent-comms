@@ -8,6 +8,7 @@ from agent_comms.comms import wire
 from agent_comms.registry_document import RosterVisibility
 from agent_comms.thread_identity import UserThreadRole
 from agent_comms.thread_status import ArchivedThreadStatus, StoppedThreadStatus
+from agent_comms.threads import Thread
 
 
 @pytest.mark.parametrize(("visibility", "shown"), [
@@ -20,11 +21,11 @@ def test_roster_visibility_selects_threads_and_channel_members(tmp_path, visibil
     comms = wire(tmp_path)
     Bus.install(Bus.path_in(comms.root))
     for name in ("active", "stopped", "archived"):
-        comms.registry.declare(comms.registry.new_thread(name, frozenset({'team'}), str(tmp_path)))
+        comms.registry.declare(Thread(name, frozenset({'team'}), str(tmp_path)))
     comms.owners.stop("stopped")
     comms.owners.stop("archived")
     comms.threads.archive("archived")
-    comms.registry.declare(comms.registry.new_thread('human', frozenset({'team'}), str(tmp_path), role=UserThreadRole))
+    comms.registry.declare(Thread('human', frozenset({'team'}), str(tmp_path), role=UserThreadRole))
     assert comms.registry.status("stopped") == StoppedThreadStatus()
     assert comms.registry.status("archived") == ArchivedThreadStatus()
 

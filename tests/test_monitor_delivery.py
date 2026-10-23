@@ -26,12 +26,13 @@ from agent_comms.errors import MessageAcknowledgmentError
 from agent_comms.cli_protocol import UnconfirmedOutcome, EmittedOutcome, DeliveredOutcome
 from agent_comms.messages import InfoKind, Message
 from agent_comms.read_basis import ExplicitWatchAcknowledgment
+from agent_comms.threads import Thread
 
 
 @pytest.fixture
 def bridge(comms, tmp_path):
     declare_test_bus(comms, threads=tuple(
-        comms.registry.new_thread(name, frozenset(), str(tmp_path))
+        Thread(name, frozenset(), str(tmp_path))
         for name in ('claude-code', 'viewer', 'peer')
     ))
     practice = PracticeCopy(comms.root, tmp_path / 'copied-bus')

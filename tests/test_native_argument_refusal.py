@@ -9,7 +9,7 @@ from types import SimpleNamespace
 import pytest
 
 from agent_comms.native_tool_call import ArgumentRefusal, CodingCall
-from agent_comms.native_tool_call import SelectedToolDenied
+from agent_comms.tool_denial import SelectedToolDenied
 from agent_comms.pi_events import ToolExecutionEnd, ToolExecutionStart
 from agent_comms.channel_coding_tools import CodingToolSocket
 from agent_comms.pi_payloads import ToolCallContent

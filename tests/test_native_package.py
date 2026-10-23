@@ -2,23 +2,36 @@
 
 import hashlib
 import importlib.util
-import sys
 import json
 import os
 import shutil
 import subprocess
+import sys
 from pathlib import Path
 
 import pytest
 
 import agent_comms.native_package as native_package
-from agent_comms.core_stamp import CheckoutStamp
+from agent_comms.core_stamp import WheelStamp
 from agent_comms.native_build_inputs import INPUTS_PREFIX, NativeBuildInputs
+from agent_comms.native_failures import NativePiUnavailable
 from agent_comms.native_package import (
+    NativePackageError,
+    link_sealed_tree,
     package_tree_digest,
 )
+from agent_comms.package_stamp import STAMP
 
 pytestmark = pytest.mark.skipif(os.name != "posix", reason="POSIX native package filesystem")
+
+
+def test_unbuilt_pin_is_native_pi_unavailable_and_names_its_preparation(tmp_path, monkeypatch):
+    manifest = tmp_path / "stack/pi-native.sha256"
+    manifest.parent.mkdir()
+    manifest.write_text(f"{'0' * 64}  dist/cli.js\n")
+    monkeypatch.setattr(native_package, "MANIFEST", manifest)
+    with pytest.raises(NativePiUnavailable, match="run .*/stack/bin/prepare-pi-native first"):
+        native_package.pinned_native_package()
 
 
 def test_pinned_inputs_refuse_changed_patch(tmp_path):
@@ -35,6 +48,22 @@ def test_pinned_inputs_refuse_changed_patch(tmp_path):
     patch.write_bytes(b"First patch byte\n")
     with pytest.raises(ValueError):
         inputs.require_pinned(manifest)
+
+
+def test_sealed_tree_is_published_by_sharing_its_inodes(tmp_path):
+    sealed = tmp_path / "sealed"
+    (sealed / "dist").mkdir(parents=True, mode=0o700)
+    resource = sealed / "dist/cli.js"
+    resource.write_text("console.log(1)\n")
+    resource.chmod(0o500)
+    published = tmp_path / "published"
+    link_sealed_tree(sealed, published)
+    assert (published / "dist/cli.js").stat().st_ino == resource.stat().st_ino
+    assert package_tree_digest(published) == package_tree_digest(sealed)
+
+    resource.chmod(0o700)
+    with pytest.raises(NativePackageError, match="writable"):
+        link_sealed_tree(sealed, tmp_path / "refused")
 
 
 def load_resource_module(path):
@@ -88,7 +117,7 @@ def launcher(tmp_path):
     source.mkdir(parents=True)
     shutil.copytree(repo / 'src/agent_comms', source, dirs_exist_ok=True,
                     ignore=shutil.ignore_patterns('__pycache__'))
-    CheckoutStamp(str(repo)).write(source / 'package_stamp.py')
+    WheelStamp(STAMP.commit()).write(source / 'package_stamp.py')
     # The environment `uv sync --project stack` installs: this checkout's agent_comms, editable,
     # with its dependencies.
     interpreter = stack / ".venv/bin/python"
@@ -122,8 +151,7 @@ def launcher(tmp_path):
         + "\n"
     )
     (stack / "pi-native.sha256").write_text(manifest)
-    build = hashlib.sha256(manifest.encode()).hexdigest()[:16]
-    package = stack / f".pi-native-{build}/node_modules/@earendil-works/pi-coding-agent"
+    package = native_package.pinned_package_for(stack / "pi-native.sha256")
     package.parent.mkdir(parents=True)
     staged.rename(package)
     return stack, package
@@ -184,8 +212,8 @@ def test_publication_installs_declared_source_with_one_link(launcher, tmp_path):
         + "\n"
     )
     (stack / "pi-native.sha256").write_text(pin)
-    build = hashlib.sha256(pin.encode()).hexdigest()[:16]
-    prepared = stack / f".pi-native-{build}"
+    build = native_package.built_tree_pin(stack / "pi-native.sha256")
+    prepared = native_package.pinned_package_for(stack / "pi-native.sha256").parents[2]
     package.parents[2].rename(prepared)
     deployments = tmp_path / "deployments"
     launch = [str(stack / "bin/prepare-pi-native"), "--publish", str(deployments)]
@@ -213,7 +241,12 @@ def test_publication_installs_declared_source_with_one_link(launcher, tmp_path):
 
 
 def test_prepare_imports_agent_comms_with_the_stack_interpreter_not_path_python3(launcher, tmp_path):
-    stack, _ = launcher
+    stack, package = launcher
+    stale = [stack / ".pi-native-0123456789abcdef", stack / ".pi-native-fedcba9876543210"]
+    for build in stale:
+        (build / "node_modules").mkdir(parents=True)
+    running_stage = stack / ".pi-native.stage.running"
+    running_stage.mkdir()
     bare = tmp_path / "bare"
     bare.mkdir()
     (bare / "python3").write_text(f'#!/bin/sh\nexec {sys.base_prefix}/bin/python3 -S "$@"\n')
@@ -225,11 +258,16 @@ def test_prepare_imports_agent_comms_with_the_stack_interpreter_not_path_python3
                             capture_output=True, text=True, timeout=15)
     assert result.returncode == 0, result.stderr
     assert result.stdout == f"PI_NATIVE_BIN={stack}/bin/pi-native\n"
+    # Accepting the pinned build retires every other pin's build, never a stage in use.
+    assert not any(build.exists() for build in stale)
+    assert package.is_dir() and running_stage.is_dir()
 
 
 def test_publication_refuses_unlisted_dependency_drift(launcher, tmp_path):
     stack, package = launcher
     (package / "dependency.js").write_text("// unpinned dependency change\n")
+    other = stack / ".pi-native-0123456789abcdef"
+    other.mkdir()
     deployments = tmp_path / "deployments"
     result = subprocess.run(
         [str(stack / "bin/prepare-pi-native"), "--publish", str(deployments)],
@@ -241,3 +279,4 @@ def test_publication_refuses_unlisted_dependency_drift(launcher, tmp_path):
     assert not result.stdout
     assert b"differs from pinned artifact" in result.stderr
     assert (package / "dependency.js").read_text() == "// unpinned dependency change\n"
+    assert other.is_dir()  # a refused build retires nothing

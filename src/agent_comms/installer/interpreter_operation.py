@@ -8,8 +8,8 @@ from __future__ import annotations
 
 import inspect
 import json
+import os
 import sys
-import traceback
 from abc import ABC, abstractmethod
 from contextlib import redirect_stdout
 from dataclasses import dataclass
@@ -26,6 +26,7 @@ import agent_comms
 from agent_comms.active_route import ActiveRoute, RouteFile, SelectingRoute, active_route_path
 from agent_comms.declared_family import DeclaredFamily
 from agent_comms.field_codec import FieldCodec, PathText, WireValue
+from agent_comms.maintenance_barrier import HOLDER_NONCE
 from agent_comms.service_sender import ServiceSender
 
 
@@ -97,31 +98,6 @@ class RuntimeProbe[Answer](
     """A declared operation handled by the install's selected interpreter worker."""
 
 
-class RuntimeProbeFailed(RuntimeError):
-    """An operation raised in its interpreter; the message is its child traceback."""
-
-
-class ProbeReply(DeclaredFamily, affix="Reply"):
-    @abstractmethod
-    def answer(self) -> str: ...
-
-
-@dataclass(frozen=True)
-class CompletedProbeReply(ProbeReply):
-    encoded: str
-
-    def answer(self) -> str:
-        return self.encoded
-
-
-@dataclass(frozen=True)
-class FailedProbeReply(ProbeReply):
-    traceback: str
-
-    def answer(self) -> str:
-        raise RuntimeProbeFailed(self.traceback)
-
-
 @dataclass(frozen=True)
 class CliOutput:
     returncode: int
@@ -142,17 +118,30 @@ class CliCommandProbe(RuntimeProbe[CliOutput]):
             return CliOutput(returncode, output.getvalue())
 
 
+@dataclass(frozen=True)
+class ProbeRequest:
+    """One operation and the maintenance hold its caller acts under. A worker outlives holds,
+    so the holder travels with each request and never with the worker's launch."""
+
+    probe: RuntimeProbe
+    holder: str
+
+    def answer(self) -> str:
+        """The worker acts as its caller's holder for this request. Its runtime may predate
+        ``MaintenanceHolder``, so this sets the variable that owner reads; every request
+        sets it, so no earlier request's holder remains."""
+        os.environ[HOLDER_NONCE] = self.holder
+        return self.probe.encode_answer(self.probe.run())
+
+
 def serve() -> None:
-    """Answer declared operations from stdin, one encoded request per line, until it closes."""
+    """Answer declared operations from stdin, one encoded answer per request line, until it
+    closes. An operation that raises ends the worker: its traceback goes to stderr, and the
+    caller reads the exit in place of an answer."""
     for line in sys.stdin:
-        reply: ProbeReply
-        try:
-            with redirect_stdout(sys.stderr):
-                probe = FieldCodec.decode(RuntimeProbe, FieldCodec.parse(line))
-                reply = CompletedProbeReply(probe.encode_answer(probe.run()))
-        except Exception as error:
-            reply = FailedProbeReply("".join(traceback.format_exception(error)))
-        print(json.dumps(FieldCodec.encode(reply)), flush=True)
+        with redirect_stdout(sys.stderr):
+            answer = FieldCodec.decode(ProbeRequest, FieldCodec.parse(line)).answer()
+        print(answer, flush=True)
 
 
 class ClientImportsProbe(RuntimeProbe[None]):

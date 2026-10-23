@@ -29,6 +29,7 @@ from agent_comms.pi_durable_backend import (
 from agent_comms.pi_events import PiEvent, UnknownPiEvent
 from agent_comms.pi_payloads import PiContextUsage, ReportedContextUsage
 from agent_comms.pi_rpc import PiRpcChannel
+from agent_comms.threads import Thread
 
 
 def decode(wire):
@@ -116,11 +117,12 @@ def test_native_and_durable_entries_keep_their_original_clock_owners():
         undated.events(TranscriptProjection(position=2))
 
 
-def test_real_host_context_and_request_error_remain_typed_and_live(tmp_path, thread_registration, durable_home):
+def test_real_host_context_and_request_error_remain_typed_and_live(tmp_path, thread_registration, durable_home,
+                                                                  durable_host_packages):
     async def journey():
         backend = PiDurableBackend()
         location = DurableDatabase(str(tmp_path / 'records.sqlite3'))
-        thread = thread_registration.new_thread('records', frozenset(), str(tmp_path), backend=PiDurableBackend,
+        thread = Thread('records', frozenset(), str(tmp_path), backend=PiDurableBackend,
                         session_file=RegistrySessionLocation.from_path(location.path, tmp_path))
         try:
             outcome = await backend.compact(thread, 'retain the empty plan')

@@ -31,7 +31,6 @@ from .native_tool_call import (
     CoordinationBusy,
     NativeToolCall,
     NativeToolMode,
-    SelectedToolDenied,
 )
 from .native_tool_transport import (
     NativeToolRound,
@@ -41,6 +40,7 @@ from .native_tool_transport import (
 )
 from .selected_actions import SelectedAction
 from .selected_claim import publish_selected_resource_claim, write_selected_claimed_file
+from .tool_denial import SelectedToolDenied
 from .turn_context import InstructionFile
 
 # Stay well below the existing native RPC record cap (1 MiB, including JSON).

@@ -19,8 +19,7 @@ from abc import ABC, abstractmethod
 from collections.abc import Callable, Iterator, Mapping, Sequence
 from contextlib import contextmanager
 from dataclasses import dataclass, field, fields, replace
-from functools import cache, cached_property, partial
-from importlib.resources import files
+from functools import cached_property, partial
 from math import ceil
 from pathlib import Path
 from statistics import median
@@ -28,7 +27,6 @@ from types import get_original_bases
 from typing import TYPE_CHECKING, Annotated, ClassVar, Self, get_args, get_origin
 from uuid import uuid4
 
-from agent_comms import skills
 from agent_comms.active_route import guard_original_root_write
 from agent_comms.build_identity import (
     BuildIdentity,
@@ -47,10 +45,8 @@ from agent_comms.change_report import (
 )
 from agent_comms.channel_targets import CommandTarget, CommsTag, IncarnationThreadTarget, NamedTarget
 from agent_comms.child_process import (
-    BoundedRun,
     CheckPrinted,
     ChildResult,
-    ExitedOutcome,
     NoIntegerPrinted,
     OrderCheckFailedError,
 )
@@ -76,7 +72,7 @@ from agent_comms.head_review import AcceptedHeadReview
 from agent_comms.lifecycle_capability import LifecycleCapability, Pending
 from agent_comms.message_reference import MessageReference
 from agent_comms.messages import InfoKind, Message
-from agent_comms.native_tool_call import SelectedToolDenied
+from agent_comms.tool_denial import SelectedToolDenied
 from agent_comms.order_runs import OrderRun
 from agent_comms.order_story import FleetEvent, ProblemStory, StoryEvent, StoryLine, StorySource
 from agent_comms.owner_requests import (
@@ -100,6 +96,7 @@ from agent_comms.recorded_time import (
 from agent_comms.registry_store import RegistryStore
 from agent_comms.repo import Repo
 from agent_comms.repository_name import RepositoryName
+from agent_comms.slop import Slop
 from agent_comms.storage_rules import StorageRule
 from agent_comms.store_files import SharedLock
 from agent_comms.thread_identity import (
@@ -238,12 +235,6 @@ class CheckedDelivery(OrderDelivery, declared_name=None):
     def installation_build(self) -> BuildIdentity:
         return self.proof_build
 
-    async def run(self, check, *command):
-        result = await BoundedRun.run(tuple(command), cwd=check.directory, timeout=120)
-        if result.outcome != ExitedOutcome(0):
-            raise ValueError(result.stderr.decode(errors="replace") or "Delivery source check failed.")
-        return result.stdout.decode(errors="replace")
-
     def required_claims(self, claims: tuple[ProgressClaim, ...]) -> tuple[ProgressClaim, ...]:
         return claims
 
@@ -316,7 +307,8 @@ class RecordedCommitDelivery(CheckedDelivery, declared_name="commit"):
 
     async def delivery_time(self, check: OrderCheck) -> EventTime:
         return EventTime.capture(float(
-            await self.run(check, "git", "show", "-s", "--format=%ct", self.delivered)))
+            await asyncio.to_thread(Repo.git, check.directory, "show", "-s", "--format=%ct",
+                                    self.delivered)))
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -329,13 +321,15 @@ class CommitDelivery(RecordedCommitDelivery, declared_name="delivered_commit"):
         return self.delivered_commit
 
     async def require_source(self, check: OrderCheck) -> None:
-        delivered = (await self.run(
-            check, "git", "rev-parse", f"{self.delivered}^{{commit}}")).strip()
-        base = await self.run(check, "git", "merge-base", self.delivered, self.commit)
+        delivered = (await asyncio.to_thread(
+            Repo.git, check.directory, "rev-parse", f"{self.delivered}^{{commit}}")).strip()
+        base = await asyncio.to_thread(Repo.git, check.directory, "merge-base", self.delivered,
+                                       self.commit)
         if base.strip() != delivered:
             raise ValueError(
                 f"Delivered commit {self.delivered} is not in the checked commit {self.commit}.")
-        parents = await self.run(check, "git", "rev-list", "--parents", "-n", "1", self.delivered)
+        parents = await asyncio.to_thread(Repo.git, check.directory, "rev-list", "--parents",
+                                          "-n", "1", self.delivered)
         if len(parents.split()) > 2:  # a main merge is never the unit's answer, only its arrival
             raise ValueError(f"Delivered commit {self.delivered} is a merge; deliver the unit's "
                              "first pushed commit that answers the order.")
@@ -384,13 +378,7 @@ class CommitDelivery(RecordedCommitDelivery, declared_name="delivered_commit"):
     async def contains(self, check: OrderCheck, head: str) -> bool:
         if head == self.delivered:
             return True
-        result = await BoundedRun.run(
-            ("git", "merge-base", "--is-ancestor", self.delivered, head),
-            cwd=check.directory, timeout=120)
-        if result.outcome not in (ExitedOutcome(0), ExitedOutcome(1)):
-            raise ValueError(result.stderr.decode(errors="replace") or
-                             "Could not check the delivered commit against its PR head.")
-        return result.outcome == ExitedOutcome(0)
+        return await asyncio.to_thread(Repo.descends, check.directory, self.delivered, head)
 
 
 class DeliveryMerge(DeclaredFamily, affix="DeliveryMerge"):
@@ -652,12 +640,29 @@ class PullRequests:
             for candidate in problems.values():
                 self._read[repo, kind, candidate.id] = ()
             return ()
+        requests = tuple((row, row.parsed(
+            tuple(candidate.id for candidate in linked[row.number]),
+            tuple(dict.fromkeys(order.id for candidate in linked[row.number]
+                                for order in candidate.order_history
+                                if PullRequestLink(repo, row.number) in order.pull_requests))))
+            for row in self.query(repo, tuple(linked)))
+        for selection in dict.fromkeys((kind, *ListedPullRequest.members_with(ListedPullRequest))):
+            for candidate in problems.values():
+                self._read[repo, selection, candidate.id] = tuple(sorted(
+                    (request for row, request in requests
+                     if isinstance(row, selection) and request.belongs_to(candidate)),
+                    key=lambda request: request.updated_at, reverse=True))
+        return self._read[repo, kind, todo.id]
+
+    def query(self, repo: RepositoryName,
+              numbers: tuple[int, ...]) -> tuple[ListedPullRequest, ...]:
+        """GitHub's rows for these numbers: the one forge read in this frame."""
         selections = [
             f'p{number}: pullRequest(number: {number}) {{ number branch: headRefName '
             'head: headRefOid base: baseRefName draft: isDraft closed merge: mergeCommit { oid } '
             'merged: mergedAt updated: updatedAt '
             'head_statuses: commits(last: 1) { nodes { commit { status { contexts { context } } } } } }'
-            for number in linked]
+            for number in numbers]
         query = (f'query {{ repository(owner: {json.dumps(repo.owner)}, '
                  f'name: {json.dumps(repo.name)}) {{ {" ".join(selections)} }} }}')
         listed = repo.api(
@@ -672,20 +677,8 @@ class PullRequests:
         if listed.returncode:
             raise WorkBranchError(
                 listed.stderr.strip() or f"GitHub order lookup in {repo.to_wire()} failed.")
-        rows = FieldCodec.decode(dict[str, ListedPullRequest], FieldCodec.parse(listed.stdout))
-        requests = tuple((row, row.parsed(
-            tuple(candidate.id for candidate in linked[row.number]),
-            tuple(dict.fromkeys(order.id for candidate in linked[row.number]
-                                for order in candidate.order_history
-                                if PullRequestLink(repo, row.number) in order.pull_requests))))
-            for row in rows.values())
-        for selection in dict.fromkeys((kind, *ListedPullRequest.members_with(ListedPullRequest))):
-            for candidate in problems.values():
-                self._read[repo, selection, candidate.id] = tuple(sorted(
-                    (request for row, request in requests
-                     if isinstance(row, selection) and request.belongs_to(candidate)),
-                    key=lambda request: request.updated_at, reverse=True))
-        return self._read[repo, kind, todo.id]
+        return tuple(FieldCodec.decode(
+            dict[str, ListedPullRequest], FieldCodec.parse(listed.stdout)).values())
 
 
 @dataclass(frozen=True)
@@ -1004,6 +997,11 @@ class ProgressRead(PullRequests, CheckoutReads):
     def __init__(self, todos: Sequence[Todo] = ()) -> None:
         CheckoutReads.__init__(self)
         PullRequests.__init__(self, todos)
+
+    def progress(self, held: Sequence[Todo], registry: Registration) -> dict[str, OrderProgress]:
+        """Each held order's progress, read through this frame's one reader."""
+        self.register(held)
+        return {todo.id: OrderProgress.read(todo, registry, self) for todo in held}
 
 
 @dataclass(frozen=True)
@@ -1375,86 +1373,6 @@ class HierarchyText(OrderWords):
     REFUSED = re.compile(r"(leave|keep|retain|preserve)[^.\n]{0,60}\bforward|forwarders? (stay|remain)|reach(es|ing)? through", re.I)
     refusal = ("{1} keeps a forwarder or bans fixing the hierarchy: fold the false owner into the real one or compose "
                "providers as parents, and delete every route.")
-
-
-class Derivation(DeclaredFamily, affix="Derivation"):
-    sentence: ClassVar[str]
-
-    @classmethod
-    def declaration_elsewhere(cls, by: FileLine, where: FileLine, root: Path) -> bool:
-        return False
-
-
-class DeclarationDerivation(Derivation):
-    sentence = "the declaration derives it"
-
-    @classmethod
-    def declaration_elsewhere(cls, by: FileLine, where: FileLine, root: Path) -> bool:
-        return not by.same_file(where, root)
-
-
-class NominalKeyDerivation(Derivation, declared_name="nominal-key"):
-    sentence = "the nominal key identifies it"
-
-
-class SubclassDerivation(DeclarationDerivation):
-    sentence = "the subclass derives it"
-
-
-class MixinDerivation(DeclarationDerivation):
-    sentence = "the mixed-in capability derives it"
-
-
-class BaseMethodDerivation(DeclarationDerivation, declared_name="base-method"):
-    sentence = "the base method derives it"
-
-
-class InitSubclassDerivation(DeclarationDerivation, declared_name="init-subclass"):
-    sentence = "subclass initialization derives it"
-
-
-class MetaclassDerivation(DeclarationDerivation):
-    sentence = "the metaclass derives it"
-
-
-class DeleteCopyDerivation(Derivation, declared_name="delete-copy"):
-    sentence = "deleting the copy leaves its original declaration"
-
-
-@dataclass(frozen=True)
-class Slop:
-    pattern: str
-    fact: str
-    at: FileLine
-    derive: type[Derivation]
-    by: FileLine
-
-    PATTERN_ENTRY: ClassVar[re.Pattern] = re.compile(r'^## ([A-Z]+-\d+)\s+\S', re.M)
-
-    @staticmethod
-    def catalog() -> Path:
-        """The pinned refactor-audit pattern catalog that slop citations name."""
-        return Path(str(files(skills) / 'refactor-audit' / 'references' / 'patterns'))
-
-    @classmethod
-    @cache
-    def patterns(cls) -> frozenset[str]:
-        return frozenset(found[1] for source in cls.catalog().glob('*.md')
-                         for found in cls.PATTERN_ENTRY.finditer(source.read_text(encoding='utf-8')))
-
-    def __post_init__(self):
-        problems = []
-        if self.pattern not in self.patterns():
-            problems.append(f'Unknown refactor-audit pattern ID {self.pattern!r}; '
-                            'fix: use an ID from the packaged pattern catalog.')
-        if len(self.fact.split()) < 4:
-            problems.append('fact: fix: describe the duplicated fact in at least four words')
-        if problems:
-            raise ValueError('\n'.join(problems))
-
-    def render(self):
-        return (f'{self.at.to_wire()} restates {self.pattern}: {self.fact}. '
-                f'{self.by.to_wire()} owns it; {self.derive.sentence}, so the copy is deleted.')
 
 
 class DirectiveText:
@@ -3120,28 +3038,19 @@ class DroppedVerdict(ToolCallVerdict):
         target = Path(self.path)
         if target.is_file() and all(line in target.read_text(errors="replace") for line in lines):
             self.refuse(str(target))
-        refs = self.git(checkout, "for-each-ref", "--format=%(objectname)",
-                        "refs/heads", "refs/remotes")
+        refs = Repo.git(checkout, "for-each-ref", "--format=%(objectname)",
+                        "refs/heads", "refs/remotes").splitlines()
         heads = [entry.removeprefix("HEAD ")
-                 for entry in self.git(checkout, "worktree", "list", "--porcelain")
+                 for entry in Repo.git(checkout, "worktree", "list", "--porcelain").splitlines()
                  if entry.startswith("HEAD ")]
         patterns = [arg for line in lines for arg in ("-e", line)]
-        found = self.git(checkout, "grep", "-F", "-l", "--all-match", *patterns,
-                         *sorted({*refs, *heads}), "--", f":(glob)**/{target.name}",
-                         allowed=(0, 1))
+        found = Repo.grep(checkout, "-l", "-F", "--all-match", *patterns,
+                                *sorted({*refs, *heads}), "--", f":(glob)**/{target.name}")
         if found:
             self.refuse(found[0].split(":", 1)[0])
 
     def refuse(self, holder: str) -> None:
         raise TodoError(f"Edit {self.tool_call_id} is still on {holder}; judge it ok or back.")
-
-    @staticmethod
-    def git(checkout: Path, *args: str, allowed: tuple[int, ...] = (0,)) -> list[str]:
-        ran = subprocess.run(("git", "-C", str(checkout), *args),
-                             capture_output=True, text=True, timeout=120)
-        if ran.returncode not in allowed:
-            raise TodoError(ran.stderr.strip() or f"git {args[0]} failed in {checkout}.")
-        return ran.stdout.splitlines()
 
     def judged(self, current: Todo) -> Todo:
         return current
@@ -4112,14 +4021,6 @@ class TodoStore(OwnerRequestStore):
         return self._select("creator=? AND creator_created=?",
                             (commander.name, commander.wire_birth), reader=self._open)
 
-    def timers_up_for_commander(self, commander: ThreadIncarnation, registry: Registration,
-                                now: float) -> tuple[tuple[Todo, RecordedEventTime], ...]:
-        """Held work whose review timer is up, with its round; merged work waits on install."""
-        held = self.held_for_commander(commander)
-        pulls = ProgressRead(held)
-        progress = {todo.id: OrderProgress.read(todo, registry, pulls) for todo in held}
-        return self.timers_up_in(held, now, progress)
-
     @staticmethod
     def timers_up_in(held: Sequence[Todo], now: float,
                      progress: Mapping[str, OrderProgress]) -> tuple[tuple[Todo, RecordedEventTime], ...]:
@@ -4132,11 +4033,11 @@ class TodoStore(OwnerRequestStore):
             (commander.name, commander.wire_birth), reader=self._open)
 
     def claimed_heads_for_commander(
-        self, commander: ThreadIncarnation, pulls: PullRequests | None = None,
+        self, commander: ThreadIncarnation, pulls: PullRequests,
     ) -> Iterator[tuple[Todo, OrderClaim, PullRequest]]:
         """Recorded delivery claims survive a missing or stopped unit observation."""
         held = self.held_for_commander(commander)
-        reader = PullRequests(held) if pulls is None else pulls.register(held)
+        reader = pulls.register(held)
         for todo in held:
             for claim, request in reader.claimed_heads(todo):
                 yield todo, claim, request

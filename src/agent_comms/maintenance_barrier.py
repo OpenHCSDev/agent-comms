@@ -12,7 +12,7 @@ import json
 import os
 import stat
 from abc import ABC, abstractmethod
-from collections.abc import AsyncIterator, Callable, Iterator
+from collections.abc import AsyncIterator, Callable, Iterator, Mapping
 from contextlib import AbstractAsyncContextManager, asynccontextmanager, contextmanager
 from dataclasses import dataclass, field, replace
 from pathlib import Path
@@ -213,6 +213,37 @@ class DeadHolderReleasedPhase(ReadyPhase):
 HOLDER_NONCE = "AGENT_COMMS_MAINTENANCE_HOLDER"
 
 
+@dataclass(frozen=True)
+class MaintenanceHolder:
+    """The hold a process acts under; an empty nonce holds nothing. It travels in
+    ``HOLDER_NONCE`` to every child the process starts."""
+
+    nonce: str
+
+    @classmethod
+    def current(cls) -> MaintenanceHolder:
+        return cls(os.environ.get(HOLDER_NONCE, ""))
+
+    @staticmethod
+    def outside(environment: Mapping[str, str]) -> dict[str, str]:
+        """``environment`` as a child that outlives holds starts with it: it takes each
+        request's holder from the request, never from its launch."""
+        child = dict(environment)
+        child.pop(HOLDER_NONCE, None)
+        return child
+
+    @contextmanager
+    def acting(self) -> Iterator[Self]:
+        """This process, and every child it starts, acts as this holder while the block
+        lasts, restoring its previous holder afterward."""
+        previous = MaintenanceHolder.current()
+        os.environ[HOLDER_NONCE] = self.nonce
+        try:
+            yield self
+        finally:
+            os.environ[HOLDER_NONCE] = previous.nonce
+
+
 class MaintenanceStatus:
     """Absent witness is READY; stored phases derive from their record."""
 
@@ -308,16 +339,9 @@ class MaintenanceState(MaintenanceMarker, MaintenanceStatus):
     @contextmanager
     def holding(self) -> Iterator[Self]:
         """This process, and every child it starts, acts as this hold's holder while the
-        block lasts, restoring its previous holder afterward."""
-        previous = os.environ.get(HOLDER_NONCE)
-        os.environ[HOLDER_NONCE] = self.nonce
-        try:
+        block lasts."""
+        with MaintenanceHolder(self.nonce).acting():
             yield self
-        finally:
-            if previous is None:
-                os.environ.pop(HOLDER_NONCE, None)
-            else:
-                os.environ[HOLDER_NONCE] = previous
 
     def successor(self, phase: type[MaintenancePhase], nonce: str) -> MaintenanceState:
         if not self.phase().may_become(phase()):
@@ -462,7 +486,7 @@ class MaintenanceBarrier(MaintenanceIngress):
 
     def assert_open_unlocked(self) -> MaintenanceStatus:
         hold = self.current_unlocked()
-        hold.require_open_to(os.environ.get(HOLDER_NONCE, ""))
+        hold.require_open_to(MaintenanceHolder.current().nonce)
         return hold
 
     def read(self) -> MaintenanceStatus:
@@ -534,12 +558,12 @@ class MaintenanceBarrier(MaintenanceIngress):
             )
 
     @contextmanager
-    def allow_input(self, *, blocking: bool = True) -> Iterator[MaintenanceStatus]:
+    def allow_input(self) -> Iterator[MaintenanceStatus]:
         """Check input permission under its registry authority, never around a Bus write."""
         self.current_unlocked()
-        with _store_lock(self.registry_path, mode=SharedLock(), blocking=blocking):
+        with _store_lock(self.registry_path, mode=SharedLock()):
             status = self._current_unlocked()
-            status.require_open_to(os.environ.get(HOLDER_NONCE, ""))
+            status.require_open_to(MaintenanceHolder.current().nonce)
             yield status
 
     @asynccontextmanager
@@ -560,8 +584,12 @@ class CarriedDocument[T](DurableFile, LockedStore[T], declared_name=None):
 
     __slots__ = ()
 
-    def _write_unlocked(self, text: str) -> None:
+    def require_maintenance_open(self) -> None:
+        """Refuse every writer but the maintenance holder."""
         MaintenanceBarrier(RegistryFile.path_in(self.bus_root(self.path))).assert_open_unlocked()
+
+    def _write_unlocked(self, text: str) -> None:
+        self.require_maintenance_open()
         self._replace_unlocked(text)
 
     def _replace_unlocked(self, text: str) -> None:

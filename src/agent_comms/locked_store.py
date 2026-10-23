@@ -29,6 +29,7 @@ from .store_files import (
     AtomicFile,
     SharedLock,
     StoreLock,
+    StoreLockContention,
     StoreLockOwner,
     StoreOwner,
     _store_lock,
@@ -116,9 +117,9 @@ class RootFile:
 
     @classmethod
     def copy_group(cls, source: Path, target: Path) -> frozenset[Path]:
-        """Copy this owner's consistent file cut and name the source files included."""
-        with _store_lock(source, mode=SharedLock()):
-            cls.copy_file(source, target)
+        """Copy this owner's file cut and name the source files included. A file no writer
+        locks is copied as it is: locking it would create a lock inode beside it."""
+        cls.copy_file(source, target)
         return frozenset((source,))
 
     @staticmethod
@@ -319,6 +320,17 @@ class UndeclaredFile(RootFile):
     path: Path
 
 
+class LockedFile(RootFile, StoreLockOwner, declared_name=None):
+    """A declared file whose writers hold its store lock, so its copy shares that lock."""
+
+    __slots__ = ()
+
+    @classmethod
+    def copy_group(cls, source: Path, target: Path) -> frozenset[Path]:
+        with _store_lock(source, mode=SharedLock()):
+            return super().copy_group(source, target)
+
+
 class FileStore(RootFile, ABC):
     """Construction belongs only to owners whose initializer takes a file."""
 
@@ -438,6 +450,10 @@ class StoreContention(ABC):
         self, path: str | os.PathLike[str], options: dict[str, object]
     ) -> sqlite3.Connection:
         return sqlite3.connect(path, timeout=self.timeout, **options)
+
+    def lock_budget(self) -> StoreLockContention:
+        """The same wait spent on the store's file locks: one fresh budget per operation."""
+        return StoreLockContention(self.timeout)
 
 
 @dataclass(frozen=True)
@@ -672,14 +688,14 @@ class PublishedSQLiteFile(SQLiteFile):
 
 
 @dataclass(frozen=True, slots=True)
-class LockedStore(FileStore, StoreLockOwner, JsonDocument[T], declared_name=None):
+class LockedStore(FileStore, LockedFile, JsonDocument[T], declared_name=None):
     """Ordered document transactions; callbacks never mutate or reenter."""
 
     path: Path
     @contextmanager
-    def reading(self, *sources, blocking: bool = True) -> Iterator[T]:
+    def reading(self, *sources) -> Iterator[T]:
         """Retain dependent source owners before this document's shared lock."""
-        with StoreLock.ordered(dict.fromkeys((*sources, self), SharedLock()), blocking=blocking):
+        with StoreLock.ordered(dict.fromkeys((*sources, self), SharedLock())):
             yield self._read_unlocked()
 
     def read(self) -> T:

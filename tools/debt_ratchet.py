@@ -523,8 +523,14 @@ class Unformatted(CheckedRevision):
     finding = re.compile(r"^would reformat (.+)$", re.MULTILINE)
 
     @staticmethod
+    def black(*arguments: str) -> list[str]:
+        """Black's arguments after `python -m`. Every Black run here is already one of the
+        ratchet's pool workers, so Black starts no process pool of its own."""
+        return ["black", "--workers", "1", *arguments]
+
+    @staticmethod
     def batches(selected: list[str]) -> list[list[str]]:
-        # One process per file runs the files at once without Black starting its own workers.
+        # One run per file spreads the files across the ratchet's pool.
         return [[path] for path in selected]
 
     @staticmethod
@@ -536,7 +542,7 @@ class Unformatted(CheckedRevision):
 
     @staticmethod
     def command(tree: Path, selected: list[str], side: Side) -> list[str]:
-        return ["black", "--check", *selected]
+        return Unformatted.black("--check", *selected)
 
     @classmethod
     def inputs(cls, repo: Path, ref: str, head: str, root: str, selected: list[str]) -> str:
@@ -1639,8 +1645,12 @@ class GodClassExcess(InventoryMeasure[dict[str, int]]):
             Unformatted.extract(repo, ref, tree, paths)
             if git(repo, "ls-tree", "--name-only", ref, "--", "pyproject.toml"):
                 (tree / "pyproject.toml").write_bytes(git(repo, "show", f"{ref}:pyproject.toml"))
-            subprocess.run((sys.executable, "-m", "black", "-q", *paths), cwd=tree, check=True,
-                           timeout=600)
+            subprocess.run(
+                (sys.executable, "-m", *Unformatted.black("-q", *paths)),
+                cwd=tree,
+                check=True,
+                timeout=600,
+            )
             return {path: cls.reading(path, (tree / path).read_bytes()) for path in paths}
 
     @classmethod

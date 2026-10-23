@@ -45,13 +45,13 @@ from agent_comms.thread_identity import RecordedThreadIncarnation
 from agent_comms.transcripts import NativeTranscriptCursor, TranscriptPage
 from agent_comms.turn_lease import ActiveTurn, TurnState
 from agent_comms.turn_context import ContextManifest, NextContextTurn
+from agent_comms.threads import Thread
 
 
 def test_declared_family_roundtrip_and_strict_boundary(tmp_path):
-    from agent_comms.threads import Thread
     from conftest import installed_comms
     comms = installed_comms(tmp_path)
-    comms.registry.declare(comms.registry.new_thread('pilot', frozenset(), str(tmp_path)))
+    comms.registry.declare(Thread('pilot', frozenset(), str(tmp_path)))
     read = comms.transcripts.capture_page_read("pilot")
     owner = ClaimedIdentity(RecordedThreadIncarnation("pilot", 1.0), 1)
     queue_scope = LiveQueueScope(

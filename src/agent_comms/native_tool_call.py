@@ -16,6 +16,8 @@ from pathlib import Path
 from typing import TYPE_CHECKING, ClassVar, Never
 
 from .lifecycle_capability import Complete, Executing, LifecycleCapability
+from .storage_rules import StorageProjection, StorageRule
+from .tool_denial import SelectedToolDenied
 
 
 
@@ -23,14 +25,10 @@ if TYPE_CHECKING:
     from .native_tool_transport import UnboundToolTransport
     from .envelope_claim_transitions import FileClaimPath
     from .storage_room import RoomReservation
-    from .registration import Registration
+    from .threads import Thread
     from .storage_rules import StorageEffect
     from .pi_payloads import PiToolResult
     from .turn_goal_permission import TurnGoalPermission
-
-
-class SelectedToolDenied(ValueError):  # noqa: N818 - nominal fail-closed outcome
-    """A rejected request, including duplicate or uncertain prior consumption."""
 
 
 class ToolNotExecuting(SelectedToolDenied):
@@ -259,11 +257,10 @@ class CodingCall(NativeToolCall):
         """A call without executable effects needs no room."""
         return ()
 
-    def decide_storage(self, registry: Registration, thread: str) -> tuple[StorageEffect, ...]:
+    def decide_storage(self, rule: StorageRule, thread: Thread) -> tuple[StorageEffect, ...]:
         """Judge this call's declared effects once, shared by execution and observation."""
-        effects = self.storage_effects(Path(registry.require(thread).worktree))
-        if effects:
-            registry.decide_storage(thread, effects)
+        effects = self.storage_effects(Path(thread.worktree))
+        StorageProjection(rule, thread).check(effects)
         return effects
 
     def commit_terminal(

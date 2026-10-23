@@ -16,13 +16,13 @@ from agent_comms.locked_store import DocumentChange, LockedStore
 from agent_comms.registration import Registration
 from agent_comms.registry_document import RegistryDocument, ThreadSlice
 from agent_comms.registry_store import RegistryStore, UncachedRegistry
-from agent_comms.store_files import SharedLock
+from agent_comms.store_files import SharedLock, StoreLockContention
 from agent_comms.threads import Thread
 from agent_comms.thread_text import GivenThreadText
 
 
 def owner(path, registry):
-    return registry.new_thread("owner", frozenset(), str(path), process_identity=ProcessIdentity.capture(os.getpid()), created_at=10.0)
+    return Thread("owner", frozenset(), str(path), process_identity=ProcessIdentity.capture(os.getpid()), created_at=10.0)
 
 
 def test_edit_owns_turn_and_document_owns_later_changes(tmp_path, *, thread_registration):
@@ -105,7 +105,7 @@ def test_new_thread_field_has_no_second_registry_decoder_roster(tmp_path, *, thr
     class ExtendedThread(Thread):
         external_reference: str = "default"
 
-    raw = FieldCodec.encode(owner(tmp_path, registry=thread_registration)) | {"external_reference": "declared here"}
+    raw = FieldCodec.encode(thread_registration.declare(owner(tmp_path, registry=thread_registration))) | {"external_reference": "declared here"}
     loaded = FieldCodec.decode(ExtendedThread, raw)
     assert loaded.external_reference == "declared here"
     assert loaded.to_wire()["external_reference"] == "declared here"
@@ -118,10 +118,10 @@ def test_registry_readers_share_lock_and_exclude_writer(tmp_path):
     registry.register(owner(tmp_path, registry=registry))
     other = RegistryStore(registry.store.path)
     with registry.store.reading():
-        with other.locked(mode=SharedLock(), blocking=False):
+        with other.locked(mode=SharedLock(), contention=StoreLockContention(0)):
             assert other._read_unlocked().threads["owner"].name == "owner"
         assert_writer_excluded(other.path)
-    with other.locked(blocking=False):
+    with other.locked(contention=StoreLockContention(0)):
         assert other._read_unlocked().threads["owner"].name == "owner"
 
 
@@ -149,8 +149,8 @@ def capture():
         if turn is not None: turn['started_at'] = '<clock>'
     assert Registration(r.store.path).snapshot() == r.snapshot()
     steps.append(row)
-r.register(r.new_thread('owner', frozenset({'team'}), str(root), process_identity=ProcessIdentity.capture(os.getpid()), created_at=10.0));capture()
-r.register(r.new_thread('child', frozenset(), str(root), parent=ForkedParent('owner'), created_at=20.0));capture()
+r.register(Thread('owner', frozenset({'team'}), str(root), process_identity=ProcessIdentity.capture(os.getpid()), created_at=10.0));capture()
+r.register(Thread('child', frozenset(), str(root), parent=ForkedParent('owner'), created_at=20.0));capture()
 r.register(replace(r.require('owner'), title=GivenThreadText('metadata')));capture()
 r.lease_local_turn('owner','first');capture()
 r.release_turn(r.require('owner').turn_lease);capture()

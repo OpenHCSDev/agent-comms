@@ -9,27 +9,32 @@ from __future__ import annotations
 import hashlib
 import math
 from abc import ABC, abstractmethod
-from collections.abc import Iterable
+from collections.abc import Callable, Iterable
 from dataclasses import dataclass, field, replace
 from functools import cached_property
-from typing import TYPE_CHECKING, Callable, ClassVar, Self, TypeVar
-
+from typing import TYPE_CHECKING, Annotated, ClassVar, Self, TypeVar
 
 from agent_comms.participant_identity import ParticipantIdentity
-from .projection_source import ProjectionSource
+
 from .cli_options import JsonFlagRecord
-from .declared_family import DeclaredFamily, UniqueExternalSelector, UnknownFamilyMember, declared_words
+from .declared_family import (
+    DeclaredFamily,
+    UniqueExternalSelector,
+    UnknownFamilyMember,
+    declared_words,
+)
 from .errors import RelationViolationError
 from .field_codec import (
     FieldCodec,
     SingleFieldValue,
+    WireName,
     WireValue,
 )
+from .projection_source import ProjectionSource
 from .response_policy import CollectivePolicy, InformationalPolicy, ResponsePolicy
 
 if TYPE_CHECKING:
     from .child_process import ProcessIdentity
-    from .maintenance_barrier import MaintenanceBarrier
     from .messages import Message
     from .participant_store import ParticipantStore
     from .read_ledger import ReadDocument, ReadLedger
@@ -106,8 +111,11 @@ class ObservedTools(OfferedTools, declared_name=None):
     version: str
 
     def unreported_change(self, version: str) -> tuple[str, ...]:
-        return ((f"runtime {self.version} -> {version}, tool set unreported",)
-                if self.version != version else ())
+        return (
+            (f"runtime {self.version} -> {version}, tool set unreported",)
+            if self.version != version
+            else ()
+        )
 
     def before_unreported(self, current: UnreportedTools) -> tuple[str, ...]:
         return self.unreported_change(current.version)
@@ -130,15 +138,22 @@ class ObservedTools(OfferedTools, declared_name=None):
 
 @dataclass(frozen=True)
 class ReportedTools(ObservedTools):
-    names: frozenset[ToolName]
+    # Not ``names``: dataclass would take the inherited DeclaredFamily.names as its default.
+    tools: Annotated[frozenset[ToolName], WireName("names")]
 
     def changes_from(self, previous: OfferedTools) -> tuple[str, ...]:
         return previous.before_reported(self)
 
     def before_reported(self, current: ReportedTools) -> tuple[str, ...]:
-        missing = self.names - current.names
-        return ((f"missing tools {', '.join(sorted(name.value for name in missing))}; "
-                 f"runtime {current.version}",) if missing else ())
+        missing = self.tools - current.tools
+        return (
+            (
+                f"missing tools {', '.join(sorted(name.value for name in missing))}; "
+                f"runtime {current.version}",
+            )
+            if missing
+            else ()
+        )
 
 
 class UnreportedTools(ObservedTools):
@@ -239,9 +254,14 @@ class ThreadIncarnation(JsonFlagRecord, WireValue, ABC):
     def recorded_names(self, snapshot: RegistryProvenance) -> tuple[ThreadIncarnation, ...]:
         """Original names retained for this exact current incarnation."""
         canonical = self.resolved(snapshot)
-        return (canonical, *(canonical.renamed(alias)
-                             for alias, name in snapshot.aliases.items()
-                             if name == canonical.name))
+        return (
+            canonical,
+            *(
+                canonical.renamed(alias)
+                for alias, name in snapshot.aliases.items()
+                if name == canonical.name
+            ),
+        )
 
 
 @dataclass(frozen=True, eq=False)
@@ -319,7 +339,9 @@ class CommanderForkIdentity(RecordedThreadIncarnation):
         return self.authority
 
 
-class BirthlessIncarnation(ThreadIncarnation, UniqueExternalSelector, DeclaredFamily, affix="Incarnation"):
+class BirthlessIncarnation(
+    ThreadIncarnation, UniqueExternalSelector, DeclaredFamily, affix="Incarnation"
+):
     """A member whose wire birth is a declared mark, not recorded evidence; never a lookup.
 
     Each member declares its mark in ``WIRE_BIRTH``; the record decodes a mark to its member."""
@@ -400,8 +422,6 @@ class CoreWatcherIncarnation(BirthlessIncarnation):
         return "Core's watcher"
 
 
-
-
 @dataclass(frozen=True, slots=True)
 class ThreadIncarnationRecord:
     """The single exact external name/birth record; members own its meaning."""
@@ -468,7 +488,10 @@ class ClaimedIdentity:
 
     def includes(self, previous: ClaimedIdentity) -> bool:
         """Compare order only within this registry's input-generation counter."""
-        return self.incarnation == previous.incarnation and self.claimed_generation >= previous.claimed_generation
+        return (
+            self.incarnation == previous.incarnation
+            and self.claimed_generation >= previous.claimed_generation
+        )
 
 
 @dataclass(frozen=True)
@@ -506,13 +529,19 @@ class TurnFence:
 
     def renamed(self, name: str) -> Self:
         """Registry alias resolution changes the name, never incarnation or epochs."""
-        return replace(self, identity=replace(
-            self.identity, incarnation=replace(self.identity.incarnation, name=name)
-        ))
+        return replace(
+            self,
+            identity=replace(
+                self.identity, incarnation=replace(self.identity.incarnation, name=name)
+            ),
+        )
 
     def can_attest(self, claim_scope: int) -> bool:
-        return (self.identity.generation > 0 and self.claimed_generation > 0
-                and self.claimed_generation == claim_scope)
+        return (
+            self.identity.generation > 0
+            and self.claimed_generation > 0
+            and self.claimed_generation == claim_scope
+        )
 
     def __eq__(self, other: object) -> bool:
         """Lease and finished observations share the same turn identity."""
@@ -598,19 +627,18 @@ class ThreadRole(DeclaredFamily, ProjectionSource, affix="ThreadRole"):
 
     @classmethod
     @abstractmethod
-    def require_maintenance_open(cls, barrier: MaintenanceBarrier, claims_owner: bool) -> None:
-        """An owner claim waits for open maintenance; a human claims no owner."""
-
-    @classmethod
-    @abstractmethod
     def unread_since(cls, since: float | None, recorded_delivery: bool) -> float | None:
         """A routed display's unread boundary, never permission to start an input."""
 
     @classmethod
     @abstractmethod
     def displayed_recipient_effect(
-        cls, reads: ReadLedger, message: Message, thread: Thread,
-        snapshot: RegistryProvenance, document: ReadDocument | None,
+        cls,
+        reads: ReadLedger,
+        message: Message,
+        thread: Thread,
+        snapshot: RegistryProvenance,
+        document: ReadDocument | None,
     ) -> object:
         """Only a human recipient's display records a read."""
 
@@ -665,18 +693,17 @@ class AgentThreadRole(ThreadRole):
         return ()
 
     @classmethod
-    def require_maintenance_open(cls, barrier: MaintenanceBarrier, claims_owner: bool) -> None:
-        if claims_owner:
-            barrier.assert_open_unlocked()
-
-    @classmethod
     def unread_since(cls, since: float | None, recorded_delivery: bool) -> float | None:
         return since if recorded_delivery else None
 
     @classmethod
     def displayed_recipient_effect(
-        cls, reads: ReadLedger, message: Message, thread: Thread,
-        snapshot: RegistryProvenance, document: ReadDocument | None,
+        cls,
+        reads: ReadLedger,
+        message: Message,
+        thread: Thread,
+        snapshot: RegistryProvenance,
+        document: ReadDocument | None,
     ) -> object:
         return ()
 
@@ -737,17 +764,17 @@ class UserThreadRole(ThreadRole):
         return (item,)
 
     @classmethod
-    def require_maintenance_open(cls, barrier: MaintenanceBarrier, claims_owner: bool) -> None:
-        """A human claims no owner, so maintenance never gates its registration."""
-
-    @classmethod
     def unread_since(cls, since: float | None, recorded_delivery: bool) -> float | None:
         return since
 
     @classmethod
     def displayed_recipient_effect(
-        cls, reads: ReadLedger, message: Message, thread: Thread,
-        snapshot: RegistryProvenance, document: ReadDocument | None,
+        cls,
+        reads: ReadLedger,
+        message: Message,
+        thread: Thread,
+        snapshot: RegistryProvenance,
+        document: ReadDocument | None,
     ) -> object:
         return reads.displayed_incarnation(message, thread.incarnation, snapshot, document=document)
 

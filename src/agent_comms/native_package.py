@@ -14,6 +14,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import shutil
 import stat
 import tempfile
 from _hashlib import HASH
@@ -24,6 +25,7 @@ from typing import Annotated, Literal
 from agent_comms.child_process import Platform
 from agent_comms.field_codec import FieldCodec, MalformedRecord, PathText, Sha256Text, WireName
 from agent_comms.native_build_inputs import INPUTS_PREFIX, NativeBuildInputs
+from agent_comms.native_failures import NativePiUnavailable
 from agent_comms.private_path import PrivateDirectoryRole, TrustedAncestorRole
 
 from .store_files import AtomicFile
@@ -36,6 +38,10 @@ MAX_DEPTH = 32
 
 class NativePackageError(ValueError):
     """Package bytes or filesystem shape are not the pinned native artifact."""
+
+
+class NativePackageMissing(NativePackageError, NativePiUnavailable):  # noqa: N818 - nominal outcome
+    """No build of this manifest's pin exists yet: native Pi is unavailable until it is prepared."""
 
 
 def _resource_root() -> Path:
@@ -59,10 +65,18 @@ UNIT_INSTRUCTIONS = _resource_root() / "UNIT_SYSTEM.md"
 PACKAGE_LAYOUT = "node_modules/@earendil-works/pi-coding-agent"
 
 
+def built_tree_pin(manifest: Path) -> str:
+    """Which built Pi tree this manifest pins: its file and tree commitments. The inputs
+    line records the recipe for ``require_pinned`` and never names the build, so a recipe
+    edit that builds the same bytes keeps its pin and its prepared copy."""
+    built = "".join(line for line in manifest.read_text().splitlines(keepends=True)
+                    if not line.startswith(INPUTS_PREFIX))
+    return hashlib.sha256(built.encode()).hexdigest()[:16]
+
+
 def pinned_package_for(manifest: Path) -> Path:
     """The package location derived from this manifest, beside the manifest itself."""
-    pin = hashlib.sha256(manifest.read_bytes()).hexdigest()[:16]
-    return manifest.parent / f".pi-native-{pin}" / PACKAGE_LAYOUT
+    return manifest.parent / f".pi-native-{built_tree_pin(manifest)}" / PACKAGE_LAYOUT
 
 
 def pinned_location() -> Path:
@@ -71,7 +85,8 @@ def pinned_location() -> Path:
 
 def pinned_native_package() -> Path:
     if not (package := pinned_location()).is_dir():
-        raise NativePackageError(f"Pinned native package directory is missing: {package}")
+        raise NativePackageMissing(f"Pinned native package directory is missing: {package}; "
+                                   f"run {MANIFEST.parent / 'bin/prepare-pi-native'} first")
     return package
 
 
@@ -219,6 +234,22 @@ def share_native_resources(root: Path, deployments: Path) -> dict[str, int]:
     package_tree_digest(root)
     return {"shared_files": shared_files, "shared_content_bytes": shared_bytes}
 
+
+def link_sealed_tree(source: Path, destination: Path) -> None:
+    """Publish a sealed build at another path by sharing its file inodes.
+
+    A sealed build never changes in place: every regular file is read-only, and a declared
+    source replaces its own inode (``install_declared_sources``). So each copy of a build
+    holds the same bytes, and sharing the inodes is the copy. A writable file would become a
+    mutable shared resource, which the package inventory refuses, so it is refused here first.
+    """
+
+    def link(original: str, copy: str) -> None:
+        if os.lstat(original).st_mode & 0o222:
+            raise NativePackageError(f"Native package resource is writable: {original}")
+        os.link(original, copy, follow_symlinks=False)
+
+    shutil.copytree(source, destination, symlinks=True, copy_function=link)
 
 def write_native_manifest(root: Path) -> None:
     """Commit an assembled package through the existing diagnostic/tree format.

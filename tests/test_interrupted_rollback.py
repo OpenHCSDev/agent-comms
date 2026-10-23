@@ -13,14 +13,16 @@ import pytest
 from agent_comms.comms import wire
 from agent_comms.active_route import active_route_path
 from agent_comms.install_choices import RehearsalMode, UnnamedInstaller
-from agent_comms.installer.backup import StoreBackup, UpgradeRefused
+from agent_comms.installer.backup import StoreBackup
 from agent_comms.installer.carry import Carried, Carry
 from agent_comms.installer.launch import InstallReport
 from agent_comms.installer.upgrade import upgrade
 from agent_comms.locked_store import RegistryFile
+from agent_comms.repo import GitCommandError
 from agent_comms.registry_store import RegistryStore
 from agent_comms.thread_text import GivenThreadText
 from bus_record_fixture import prepare_native_comms
+from agent_comms.threads import Thread
 
 
 class RegistryTitleCarry(Carry):
@@ -64,7 +66,7 @@ def test_next_install_completes_a_killed_registry_restore(tmp_path, installed_ru
     # The temporary installation's HOME selects only this test's route and runtime.
     # Neither process can replace the developer's route.
     comms = prepare_native_comms(wire(tmp_path / "wire"))
-    comms.registry.declare(comms.registry.new_thread("worker", frozenset(), str(tmp_path)))
+    comms.registry.declare(Thread("worker", frozenset(), str(tmp_path)))
     registry = RegistryStore.at(comms.root)
     route = active_route_path()
     route.parent.mkdir(mode=0o700, parents=True)
@@ -81,7 +83,7 @@ def test_next_install_completes_a_killed_registry_restore(tmp_path, installed_ru
     assert killed.returncode == -signal.SIGKILL, killed.stdout + killed.stderr
     # Enter the real installer. Its next Git command deliberately fails: rollback
     # recovery must finish even before the checkout can be inspected or a stack built.
-    with pytest.raises(UpgradeRefused, match="git failed"):
+    with pytest.raises(GitCommandError):
         upgrade(
             tmp_path / "missing-checkout", comms.root, "HEAD", UnnamedInstaller(), RehearsalMode(),
             False, spill, tmp_path / "install-scratch", lambda: None, InstallReport(),
@@ -95,7 +97,7 @@ def test_next_install_leaves_a_completed_installs_backup_alone(tmp_path, install
     # it carried. Differing is not a restore that began, so the next install must neither
     # roll the bus back to it nor take the maintenance hold.
     comms = prepare_native_comms(wire(tmp_path / "wire"))
-    comms.registry.declare(comms.registry.new_thread("worker", frozenset(), str(tmp_path)))
+    comms.registry.declare(Thread("worker", frozenset(), str(tmp_path)))
     registry = RegistryStore.at(comms.root)
     route = active_route_path()
     route.parent.mkdir(mode=0o700, parents=True)
@@ -104,7 +106,7 @@ def test_next_install_leaves_a_completed_installs_backup_alone(tmp_path, install
     RegistryTitleCarry(comms.root, comms.root, spill).carry(apply=True)
     carried = {path: RegistryStore.digest(path) for path in registry.written}
     assert not backup.original()
-    with pytest.raises(UpgradeRefused, match="git failed"):
+    with pytest.raises(GitCommandError):
         upgrade(
             tmp_path / "missing-checkout", comms.root, "HEAD", UnnamedInstaller(), RehearsalMode(),
             False, spill, tmp_path / "install-scratch", lambda: None, InstallReport(),

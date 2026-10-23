@@ -34,7 +34,7 @@ from agent_comms.launch_runtime import LaunchRuntime
 from agent_comms.order_runs import ApplicationOrderRun, MechanicalOrderRun
 from agent_comms.progress_claims import WorkingClaim
 from agent_comms.recorded_time import RecordedEventTime
-from agent_comms.repo import Repo
+from agent_comms.repo import GitCommandError, Repo
 from agent_comms.repository_name import RepositoryName
 from agent_comms.standing_rules import StandingRule
 from agent_comms.todos import (
@@ -48,8 +48,10 @@ from agent_comms.todos import (
 )
 from agent_comms.tool_caller import ThreadCaller
 from agent_comms.tools import CommsOrderDoneTool, CommsProblemCloseTool, CommsTodoCreateTool
+from fixture_git import IDENTITY
 from order_scope_fixture import FIX_SCOPE
 from source_revision_fixture import SourceRepository
+from agent_comms.threads import Thread
 
 
 @dataclass(frozen=True)
@@ -78,12 +80,7 @@ def proof_build_checkouts(
             subprocess.run(
                 (
                     "git",
-                    "-c",
-                    "user.name=Proof Build",
-                    "-c",
-                    "user.email=proof@example.invalid",
-                    "-c",
-                    "commit.gpgsign=false",
+                    *IDENTITY,
                     "commit",
                     "--allow-empty",
                     "-m",
@@ -233,7 +230,7 @@ def test_installed_proof_closes_and_older_build_is_refused_on_copied_bus(
     Bus.install(Bus.path_in(source.root))
     for number, name in enumerate(("lead", "worker"), 1):
         source.registry.declare(
-            source.registry.new_thread(
+            Thread(
                 name, frozenset({"comms"}), str(tmp_path), created_at=float(number)
             )
         )
@@ -326,7 +323,7 @@ def test_installed_proof_closes_and_older_build_is_refused_on_copied_bus(
 
 def test_build_containment_does_not_turn_git_failure_into_absence_or_success(proof_build_checkouts):
     graph = proof_build_checkouts[0]
-    with pytest.raises(subprocess.CalledProcessError):
+    with pytest.raises(GitCommandError):
         RecordedBuildIdentity.installed().contains("0" * 40, graph.repository.checkout)
 
 
@@ -351,7 +348,7 @@ def test_install_due_compares_fetched_main_to_installed_build(
     Repo.git(checkout, "update-ref", "refs/remotes/origin/main", graph.oldest)
     before = Repo.git(checkout, "rev-parse", "HEAD")
     bus = wire(tmp_path / "bus")
-    bus.registry.declare(bus.registry.new_thread("lead", frozenset(), str(checkout)))
+    bus.registry.declare(Thread("lead", frozenset(), str(checkout)))
     Commander.on_root("lead", (graph.repository,), bus.root)
 
     due = InstallDue.violations(bus, "lead")
@@ -391,7 +388,7 @@ def test_install_waits_for_merges_to_settle_into_one_batch(
     Repo.git(checkout, "remote", "set-url", "origin", str(origin))
     Repo.git(checkout, "push", "origin", f"{graph.newer}:refs/heads/main")
     bus = wire(tmp_path / "bus")
-    bus.registry.declare(bus.registry.new_thread("lead", frozenset(), str(checkout)))
+    bus.registry.declare(Thread("lead", frozenset(), str(checkout)))
     Commander.on_root("lead", (graph.repository,), bus.root)
     merged = int(Repo.git(checkout, "log", "-1", "--format=%ct", graph.newer))
 

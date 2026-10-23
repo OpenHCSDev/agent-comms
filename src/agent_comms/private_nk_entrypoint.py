@@ -19,12 +19,10 @@ from .coordination_database import CoordinationStore
 from .coordinator import Coordination
 from .native_arguments import NativeArguments
 from .native_package import (
-    MANIFEST,
     NativePackageError,
     VerifiedNativePackage,
     pinned_native_package,
 )
-from .native_failures import NativePiUnavailable
 from agent_comms.native_session_files import NativeSessionFiles
 from .store_files import SharedLock
 
@@ -88,8 +86,9 @@ class RootLaunch(ABC):
         return agent_bin
 
     @abstractmethod
-    def package_for(self, command: str) -> VerifiedNativePackage:
-        """The reviewed package a native execution of ``command`` runs."""
+    def launched_package(self) -> VerifiedNativePackage:
+        """The reviewed package every native execution from this root runs. Which commands
+        may start it is NativePiRpcLaunch._command_selection's, for every root alike."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -109,10 +108,7 @@ class SharedRootLaunch(RootLaunch):
     def check(self) -> None:
         pass
 
-    def package_for(self, command: str) -> VerifiedNativePackage:
-        stack_launcher = MANIFEST.parent / "bin/pi-native"
-        if Path(shutil.which(command) or command).resolve() != stack_launcher.resolve():
-            raise NativePiUnavailable("Native owner requires a configured pinned package")
+    def launched_package(self) -> VerifiedNativePackage:
         return VerifiedNativePackage.acquire(pinned_native_package())
 
 
@@ -133,7 +129,7 @@ class PrivateNkLaunch(RootLaunch):
     def check(self) -> None:
         self.validate()
 
-    def package_for(self, command: str) -> VerifiedNativePackage:
+    def launched_package(self) -> VerifiedNativePackage:
         return self.validate()
 
     @classmethod

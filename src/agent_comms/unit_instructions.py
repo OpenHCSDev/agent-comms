@@ -14,7 +14,7 @@ from pathlib import Path
 from agent_comms.commander.package import CommanderPackage
 from agent_comms.commander.rule_file import RuleFile
 from agent_comms.native_package import OWNER_INSTRUCTIONS, UNIT_INSTRUCTIONS
-from agent_comms.todos import Slop
+from agent_comms.slop import Slop
 
 
 class UnitInstructions:

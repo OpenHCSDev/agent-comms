@@ -9,15 +9,16 @@ from agent_comms.envelope_claim_transitions import (
 )
 from agent_comms.field_codec import FieldCodec, MalformedRecord
 from agent_comms.thread_status import RunningThreadStatus
+from agent_comms.threads import Thread
 
 G1, G2 = "a" * 32, "b" * 32
 
 
 def test_unscoped_history_row_decodes_projects_never_live_and_releases(tmp_path):
     comms = wire(tmp_path / "wire")
-    comms.registry.declare(comms.registry.new_thread("owner", frozenset(), str(tmp_path)))
+    comms.registry.declare(Thread("owner", frozenset(), str(tmp_path)))
     comms.registry.register(comms.registry.require("owner"), RunningThreadStatus())
-    comms.registry.declare(comms.registry.new_thread("peer", frozenset(), str(tmp_path)))
+    comms.registry.declare(Thread("peer", frozenset(), str(tmp_path)))
     owner = comms.registry.require("owner")
     resource = str(tmp_path / "held.py")
     # The row exactly as the writer before native claim scopes stored it.

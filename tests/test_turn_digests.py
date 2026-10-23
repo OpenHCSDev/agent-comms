@@ -24,6 +24,7 @@ from agent_comms.transcript_events import AssistantTranscript, TurnDigest
 from agent_comms.turn_digests import LastTurns, TurnBound, TurnsOlderThan, TurnsBefore, TurnsSince
 from agent_comms.bus import Bus
 from agent_comms.watched import FileSource
+from agent_comms.threads import Thread
 
 
 def prepared(tmp_path):
@@ -64,7 +65,7 @@ def paged_answers(comms, name):
 
 def test_external_turns_preserve_interleaving_and_the_whole_selected_turn(tmp_path):
     comms = prepared(tmp_path)
-    comms.registry.declare(comms.registry.new_thread('cli', frozenset(), str(tmp_path), execution=ExternalThreadExecution))
+    comms.registry.declare(Thread('cli', frozenset(), str(tmp_path), execution=ExternalThreadExecution))
     source = comms.transcripts.external('cli')
     for at, (turn, item, text) in enumerate([
             ('old', 'a', 'older'), ('one', 'b', 'first'),
@@ -107,7 +108,7 @@ def test_native_turns_keep_original_calls_results_and_input_identity(tmp_path):
     ]
     source.write_text(''.join(json.dumps(row) + '\n' for row in rows))
     source.chmod(0o600)
-    comms.registry.declare(comms.registry.new_thread('native', frozenset(), str(tmp_path), session_file=RegistrySessionLocation.from_path(str(source), comms.root)))
+    comms.registry.declare(Thread('native', frozenset(), str(tmp_path), session_file=RegistrySessionLocation.from_path(str(source), comms.root)))
     answer = endpoint(comms, 'native', LastTurns(1))
     turn, = answer['turns']
     assert turn['turn_id'] == 'u2'
@@ -148,7 +149,7 @@ def test_recorded_claude_transcript_pages_through_tool_without_loss(tmp_path, mo
     path, final = recorded_claude_transcript
     monkeypatch.setenv('HOME', str(tmp_path / 'home'))
     comms = prepared(tmp_path / 'wire')
-    comms.registry.declare(comms.registry.new_thread('claude', frozenset(), str(tmp_path), execution=ExternalThreadExecution))
+    comms.registry.declare(Thread('claude', frozenset(), str(tmp_path), execution=ExternalThreadExecution))
     state = tmp_path / 'state'
     store = Binding.open(state)
     db = store.__enter__()
@@ -181,7 +182,7 @@ def test_recorded_claude_transcript_pages_through_tool_without_loss(tmp_path, mo
     # Keep the original bridge recording intact. Publish its real recorded events to
     # a second isolated transcript with one eventless harness item at the page edge.
     recorded = comms.transcripts.external('claude').turns(LastTurns(300))
-    comms.registry.declare(comms.registry.new_thread('paged', frozenset(), str(tmp_path), execution=ExternalThreadExecution))
+    comms.registry.declare(Thread('paged', frozenset(), str(tmp_path), execution=ExternalThreadExecution))
     items = [FinishedItem(turn.turn_id, turn.turn_id, turn.events) for turn in reversed(recorded)]
     items.insert(empty_index, FinishedItem('undated-edge', 'undated-edge', ()))
     comms.transcripts.external('paged').publish_page(items, NoEarlierPage())
@@ -207,7 +208,7 @@ def test_recorded_claude_transcript_pages_through_tool_without_loss(tmp_path, mo
 
 def test_missing_native_session_is_empty_and_nonpositive_count_is_rejected(tmp_path):
     comms = prepared(tmp_path)
-    comms.registry.declare(comms.registry.new_thread('new', frozenset(), str(tmp_path)))
+    comms.registry.declare(Thread('new', frozenset(), str(tmp_path)))
     for window in (LastTurns(), TurnsBefore(at=1.0, count=100), TurnsSince(1.0)):
         answer = comms.transcripts.turns('new', window)
         assert not answer.turns
@@ -222,7 +223,7 @@ def test_missing_native_session_is_empty_and_nonpositive_count_is_rejected(tmp_p
 @pytest.mark.parametrize('events', ((), (AssistantTranscript('same time', position=1, timestamp=1.0),)))
 def test_undated_and_equal_time_transcripts_page_without_timestamp_assumptions(tmp_path, events):
     comms = prepared(tmp_path)
-    comms.registry.declare(comms.registry.new_thread('undated', frozenset(), str(tmp_path), execution=ExternalThreadExecution))
+    comms.registry.declare(Thread('undated', frozenset(), str(tmp_path), execution=ExternalThreadExecution))
     items = tuple(FinishedItem(f'undated-{index}', f'item-{index}', events) for index in range(251))
     comms.transcripts.external('undated').publish_page(items, NoEarlierPage())
     pages = list(paged_answers(comms, 'undated'))

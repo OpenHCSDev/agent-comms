@@ -4,12 +4,13 @@ from agent_comms.read_basis import NamedViewer
 import pytest
 
 from agent_comms.routing import DeliveryScope
+from agent_comms.threads import Thread
 
 
 @pytest.mark.parametrize('rebound', [False, True])
 def test_discovery_ignores_retired_source_history(tmp_path, rebound, comms):
     c = comms
-    c.registry.declare(c.registry.new_thread('sender', frozenset(), str(tmp_path)))
+    c.registry.declare(Thread('sender', frozenset(), str(tmp_path)))
     viewer = c.messaging.user_identity(str(tmp_path)).name
     original = c.messaging.send('sender', viewer, 'current source').message
 
@@ -37,7 +38,7 @@ def test_discovery_ignores_retired_source_history(tmp_path, rebound, comms):
             if rebound:
                 c.registry.unregister(name)
                 c.registry.remove(name)
-            c.registry.declare(c.registry.new_thread(name, frozenset(), str(tmp_path)))
+            c.registry.declare(Thread(name, frozenset(), str(tmp_path)))
             published = c.messaging.send(name, viewer, 'current source').message
             if rebound:
                 original = published

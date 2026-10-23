@@ -15,12 +15,13 @@ from agent_comms.storage_room import (
 )
 from agent_comms.storage_rules import StorageRule, shell_storage_effects
 from agent_comms.thread_status import RunningThreadStatus
+from agent_comms.threads import Thread
 
 
 def copied_root(tmp_path):
     original = wire(tmp_path / 'original')
     for name in ('gate-one', 'gate-two'):
-        original.registry.declare(original.registry.new_thread(name, frozenset(), str(tmp_path),
+        original.registry.declare(Thread(name, frozenset(), str(tmp_path),
             process_identity=ProcessIdentity.capture(os.getpid())), RunningThreadStatus())
     root = tmp_path / 'copied'
     shutil.copytree(original.root, root)
