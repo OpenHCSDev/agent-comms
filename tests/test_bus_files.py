@@ -14,7 +14,7 @@ from agent_comms.native_session_files import NativeInputProof
 from agent_comms.comms import Comms, wire
 from agent_comms.coordination_session import NativeBoundary
 from agent_comms.envelope_claim_transitions import ExistingFileClaim, NativeClaim
-from agent_comms.locked_store import DurableFile, RootFile, RuntimeFile, SQLiteFile
+from agent_comms.locked_store import DeclaredFile, DurableFile, RootFile, RuntimeFile, SQLiteFile
 from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.repository_name import RepositoryName
 from agent_comms.todos import TodoStore
@@ -81,7 +81,7 @@ def test_parameterized_sqlite_resources_follow_their_file_owner(tmp_path: Path, 
         actual = {path for path in tmp_path.rglob("*") if path.is_file()}
         assert len(actual) > 1  # The real SQLite writer has an open journal/WAL.
         assert actual <= NativeInputProof.files_in(tmp_path)
-        assert str(proof.relative_to(tmp_path)) in bus_files(tmp_path)
+        assert DeclaredFile(NativeInputProof, proof.relative_to(tmp_path)) in bus_files(tmp_path)
 
 
 def test_installer_reconciles_a_native_proof_journal_onto_its_declaration(tmp_path: Path) -> None:

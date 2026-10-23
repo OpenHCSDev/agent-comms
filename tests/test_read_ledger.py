@@ -7,7 +7,7 @@ from dataclasses import replace
 import pytest
 
 from agent_comms.bus import Bus
-from agent_comms.channel_targets import CommandTarget
+from agent_comms.channel_targets import CommandTarget, ThreadTarget
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.comms import wire
 from agent_comms.coordination_errors import DMPaintedBoundChanged, StaleRevision
@@ -189,10 +189,10 @@ def test_turn_lease_and_unrelated_registry_changes_do_not_invalidate_dm(tmp_path
     comms.registry.register(replace(peer, process_identity=ProcessIdentity.capture(os.getpid())))
     viewer = comms.messaging.user_identity(str(tmp_path)).name
     comms.messaging.send("alice", viewer, "painted").message.message_id
-    page = comms.views.dm_display_page("alice", worktree=str(tmp_path))
+    page = comms.views.dm_display_page(ThreadTarget("alice"), worktree=str(tmp_path))
     assert page.selection.basis.peer_identity == peer.incarnation
     comms.registry.lease_local_turn("alice", "ordinary-turn")
-    fresh = comms.views.dm_display_page("alice", worktree=str(tmp_path))
+    fresh = comms.views.dm_display_page(ThreadTarget("alice"), worktree=str(tmp_path))
     assert fresh.selection.basis.peer_identity == page.selection.basis.peer_identity
     comms.registry.register(comms.registry.new_thread('unrelated', frozenset(), str(tmp_path)))
     comms.views.mark_page_read(page, worktree=str(tmp_path))
@@ -211,9 +211,10 @@ def test_dm_ack_survives_process_exit_and_rebind_does_not_inherit_reads(tmp_path
             sys.executable,
             "-c",
             "import os, sys\n"
+            "from agent_comms.channel_targets import ThreadTarget\n"
             "from agent_comms.comms import wire\n"
             "comms = wire(sys.argv[1])\n"
-            "page = comms.views.dm_display_page('alice', worktree=sys.argv[1])\n"
+            "page = comms.views.dm_display_page(ThreadTarget('alice'), worktree=sys.argv[1])\n"
             "comms.views.mark_page_read(page, worktree=sys.argv[1])\n"
             "os._exit(9)\n",
             str(tmp_path),
@@ -353,7 +354,7 @@ def test_recorded_bus_identity_is_one_member(tmp_path):
     assert not ledger.read().bus_identity.matches(ObservedPath.at(comms.bus.bus.path))
     assert comms.views.viewer_snapshot(str(tmp_path)).unread["alice"].count == 1
 
-    page = comms.views.dm_display_page("alice", worktree=str(tmp_path))
+    page = comms.views.dm_display_page(ThreadTarget("alice"), worktree=str(tmp_path))
     comms.views.mark_page_read(page, worktree=str(tmp_path))
     recorded = RecordedBus(FileIdentity.from_stat(comms.bus.bus.path.stat()))
     assert ledger.read().bus_identity == recorded == page.selection.basis.bus_identity
@@ -374,7 +375,7 @@ def test_recorded_bus_identity_is_one_member(tmp_path):
     assert reopened.views.viewer_snapshot(str(tmp_path)).unread["alice"].count == 1
     with pytest.raises(DMScopeChanged):
         reopened.views.mark_page_read(page, worktree=str(tmp_path))
-    fresh = reopened.views.dm_display_page("alice", worktree=str(tmp_path))
+    fresh = reopened.views.dm_display_page(ThreadTarget("alice"), worktree=str(tmp_path))
     reopened.views.mark_page_read(fresh, worktree=str(tmp_path))
     assert reopened.views.viewer_snapshot(str(tmp_path)).unread["alice"].count == 0
 
@@ -447,7 +448,7 @@ def test_read_property_includes_dm_rebind_stale_paints_and_abrupt_reopen(tmp_pat
             comms.channels.set_channel_any_mode("#team", rng.choice([True, False]))
         elif operation == "display":
             if rng.choice([True, False]):
-                page = comms.views.dm_display_page("alice", worktree=str(tmp_path), bounds=PageBounds(limit=3))
+                page = comms.views.dm_display_page(ThreadTarget("alice"), worktree=str(tmp_path), bounds=PageBounds(limit=3))
                 basis = page.selection.basis.displayed
                 kind, target = "dm", "alice"
                 proof = page.selection.basis

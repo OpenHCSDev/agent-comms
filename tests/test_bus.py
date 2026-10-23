@@ -145,6 +145,16 @@ def test_projection_digest_ignores_infrastructure_source(
             "for record in BusCapability.history(db):",
             "for record in reversed(tuple(BusCapability.history(db))):",
         ),
+        (
+            "messages.py",
+            "yield MessageIdentitySource(self.seq, self.message_id, self.sender)",
+            "yield MessageIdentitySource(self.seq, self.message_id, self.target)",
+        ),
+        (
+            "messages.py",
+            "HeldResources.apply(db, self.claim_transition, projected, holders)",
+            "HeldResources.apply(db, self.claim_transition, projected, holders)\n        del projected",
+        ),
     ),
 )
 def test_projection_digest_tracks_producing_source(
