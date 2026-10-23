@@ -22,7 +22,7 @@ def test_missing_registry_version_is_rejected_without_rewriting_the_file(tmp_pat
     path.write_text(json.dumps(raw))
     before = path.read_bytes()
     with pytest.raises(RelationViolationError, match="version"):
-        Registration(path)
+        Registration(path).snapshot()
     assert path.read_bytes() == before
 
 

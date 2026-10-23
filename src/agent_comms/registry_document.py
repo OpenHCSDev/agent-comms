@@ -266,6 +266,11 @@ class MappingRowsSlice(OwnRow[MutableMapping]):
         changed.update(merged)
 
 
+class InvalidRegistryDocument(RelationViolationError):
+    def __init__(self, error: Exception) -> None:
+        super().__init__(f"Invalid registry document: {error}")
+
+
 class ThreadRows(ExternalJsonShape, WireValue, MutableMapping[str, Thread]):
     """A revision's thread rows, decoded and bound only when read."""
 
@@ -284,8 +289,15 @@ class ThreadRows(ExternalJsonShape, WireValue, MutableMapping[str, Thread]):
 
     def __getitem__(self, name: str) -> Thread:
         if name not in self._decoded:
-            self._decoded[name] = self._binding(FieldCodec.decode(Thread, self._raw[name]))
+            self._decoded[name] = self.decode_row(self._raw[name])
         return self._decoded[name]
+
+    def decode_row(self, row: object) -> Thread:
+        try:
+            thread = FieldCodec.decode(Thread, row)
+        except ValueError as error:
+            raise InvalidRegistryDocument(error) from error
+        return self._binding(thread)
 
     def __iter__(self) -> Iterator[str]:
         return iter(dict.fromkeys((*self._raw, *self._decoded)))
@@ -634,7 +646,7 @@ class RegistryDocument(RegistryPresence[dict[str, ThreadStatus]]):
                     canonical = kind.canonical(raw[key], canonical)
             restricted = {key: kind.cut(raw[key], canonical) for kind, key in keyed if key in raw}
         except (AttributeError, KeyError, TypeError) as error:
-            raise RelationViolationError(f"Invalid registry document: {error!r}") from error
+            raise InvalidRegistryDocument(error) from error
         return cls.from_wire(restricted).entry(name)
 
     @classmethod
@@ -687,7 +699,7 @@ class RegistryDocument(RegistryPresence[dict[str, ThreadStatus]]):
                 raise MalformedRecord("alias has no exclusive retained owner")
             return document
         except MalformedRecord as error:
-            raise RelationViolationError(f"Invalid registry document: {error}") from error
+            raise InvalidRegistryDocument(error) from error
 
     def observe_offered_tools(self, identity: ThreadIncarnation, offered: OfferedTools) -> Thread:
         current = self.require(identity.name)
