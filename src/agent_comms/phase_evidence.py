@@ -18,6 +18,7 @@ from dataclasses import dataclass, field
 from pathlib import Path, PurePosixPath
 from typing import TYPE_CHECKING, ClassVar, get_args, get_origin, get_type_hints
 
+from agent_comms.declared_family import DeclaredFamily
 from agent_comms.field_codec import FieldCodec
 from agent_comms.head_review import HeadReview
 from agent_comms.pinned_audit import ForeignAbsenceProbe, GodFunction, ParsedModule
@@ -955,60 +956,43 @@ class DeclaredScopes:
 
 
 @dataclass(frozen=True)
-class DeclarationEvidence(MainEvidence):
-    """Whether ``paths`` on main declare a class or function called ``name``, read from the
-    walk of their import roots. The name is a string because it is the declared target of a
-    declaration the phase's work may not have written yet."""
+class DeclarationEvidence(MainEvidence, DeclaredFamily, affix="Declared"):
+    """Whether ``paths`` on main declare a member's kind of declaration called ``name``, read
+    from the walk of their import roots; each member's declared name is the kind it reads. The
+    name is a string because it is the declared target of a declaration the phase's work may
+    not have written yet."""
 
-    kind: ClassVar[str]
     name: str
     paths: tuple[str, ...] = ("src",)
 
     def read(self, main: MainTree) -> bool:
         roots = tuple(dict.fromkeys(PurePosixPath(path).parts[0] for path in self.paths))
-        declarations = self.declarations(DeclaredScopes.of(main, roots))
-        return self.satisfied(any(
+        return any(
             qualified.name == self.name and declared.under(self.paths)
-            for qualified, declared in declarations.items()
-        ))
+            for qualified, declared in self.declarations(DeclaredScopes.of(main, roots)).items()
+        )
 
     @abstractmethod
     def declarations(self, scopes: DeclaredScopes) -> Mapping[QualifiedName, Declaration]: ...
 
-    @abstractmethod
-    def satisfied(self, found: bool) -> bool: ...
+    def describe(self) -> str:
+        return f"{self.declared_name} {self.name} declared in {' '.join(self.paths)} on main"
 
 
-class ClassDeclarationEvidence(DeclarationEvidence):
-    kind: ClassVar[str] = "class"
+@dataclass(frozen=True)
+class ClassDeclared(DeclarationEvidence):
+    """A class ``name`` declared under ``paths``."""
 
     def declarations(self, scopes: DeclaredScopes) -> Mapping[QualifiedName, Declaration]:
         return scopes.classes
 
 
-class FunctionDeclarationEvidence(DeclarationEvidence):
-    kind: ClassVar[str] = "function"
+@dataclass(frozen=True)
+class FunctionDeclared(DeclarationEvidence):
+    """A function or method ``name`` declared under ``paths``."""
 
     def declarations(self, scopes: DeclaredScopes) -> Mapping[QualifiedName, Declaration]:
         return scopes.functions
-
-
-class Declared(DeclarationEvidence):
-    def satisfied(self, found: bool) -> bool:
-        return found
-
-    def describe(self) -> str:
-        return f"{self.kind} {self.name} declared in {' '.join(self.paths)} on main"
-
-
-@dataclass(frozen=True)
-class ClassDeclared(Declared, ClassDeclarationEvidence):
-    """A class ``name`` declared under ``paths``."""
-
-
-@dataclass(frozen=True)
-class FunctionDeclared(Declared, FunctionDeclarationEvidence):
-    """A function or method ``name`` declared under ``paths``."""
 
 
 class DecoratorNames(NamedClasses):
