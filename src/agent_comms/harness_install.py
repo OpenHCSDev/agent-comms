@@ -70,6 +70,10 @@ class Harness(DeclaredFamily, affix="Harness"):
     def configure(self) -> tuple[Path, ...]:
         """Write this harness's own config in its own format; returns the files written."""
 
+    def retire_configuration(self) -> tuple[Path, ...]:
+        """Remove superseded configuration during installer maintenance."""
+        return ()
+
     @classmethod
     def published_links(cls, home: Path) -> dict[Path, Path]:
         """Refresh present harnesses and retain links of previously installed harnesses."""
@@ -109,6 +113,13 @@ class CodexHarness(Harness):
 
     executable: ClassVar[str] = 'codex'
     skills_dir: ClassVar[str] = '.codex/skills'
+
+    def retire_configuration(self) -> tuple[Path, ...]:
+        unit = self.home / '.config/systemd/user/codex-comms-inbox.service'
+        if not unit.exists():
+            return ()
+        unit.unlink()
+        return (unit,)
 
     def configure(self) -> tuple[Path, ...]:
         unit = self.home / '.config/systemd/user/codex-comms-inbox@.service'
