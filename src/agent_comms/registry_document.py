@@ -4,11 +4,14 @@ from __future__ import annotations
 
 import time
 from abc import ABC, abstractmethod
+from collections import ChainMap
 from collections.abc import Callable, Iterable, Iterator, Mapping, MutableMapping, Sequence
 from dataclasses import dataclass, field, replace
 from functools import cached_property
 from types import MappingProxyType
 from typing import TYPE_CHECKING, Literal, Annotated, Self
+
+from pydantic import JsonValue
 
 
 from .child_process import NoProcess, ProcessIdentity
@@ -267,7 +270,7 @@ class ThreadRows(ExternalJsonShape, WireValue, MutableMapping[str, Thread]):
     """A revision's thread rows, decoded and bound only when read."""
 
     def __init__(self) -> None:
-        self._raw: dict[str, object] = {}
+        self._raw: dict[str, JsonValue] = {}
         self._decoded: dict[str, Thread] = {}
         self._binding: Callable[[Thread], Thread] = self.unbound
 
@@ -305,19 +308,23 @@ class ThreadRows(ExternalJsonShape, WireValue, MutableMapping[str, Thread]):
         self._raw.pop(name, None)
         self._decoded.pop(name, None)
 
-    def to_wire(self) -> dict[str, object]:
+    def to_wire(self) -> dict[str, JsonValue]:
         return {**self._raw, **{name: FieldCodec.encode(thread)
                                for name, thread in self._decoded.items()}}
 
     @classmethod
-    def from_wire(cls, raw: object) -> Self:
+    def checked_rows(cls, raw: object) -> dict[str, JsonValue]:
         if not isinstance(raw, dict):
             raise MalformedRecord("registry threads must be an object")
         for name, row in raw.items():
             if not isinstance(name, str) or not isinstance(row, dict) or row.get("name") != name:
                 raise MalformedRecord("thread name differs from its declaration")
+        return dict(raw)
+
+    @classmethod
+    def from_wire(cls, raw: object) -> Self:
         result = cls()
-        result._raw = dict(raw)
+        result._raw = cls.checked_rows(raw)
         return result
 
     @classmethod
@@ -341,7 +348,7 @@ class ThreadRows(ExternalJsonShape, WireValue, MutableMapping[str, Thread]):
         return result
 
     def reuse(self, rows: Mapping[str, object], kept: frozenset[str], earlier: ThreadRows) -> None:
-        self._raw = dict(rows)
+        self._raw = self.checked_rows(rows)
         self._decoded = {name: earlier._decoded[name] for name in kept if name in earlier._decoded}
         self._binding = earlier._binding
 
@@ -762,7 +769,7 @@ class RegistryDocument(RegistryPresence[dict[str, ThreadStatus]]):
             identities[thread.created_at] = name
             additions.append(replace(thread.without_turn(), process_identity=NoProcess()))
         restored = {thread.name: thread for thread in additions}
-        available = self.threads | restored
+        available = ChainMap(restored, self.threads)
         aliases = source.restorable_aliases(available, self.aliases)
         for thread in additions:
             self.threads[thread.name] = thread
