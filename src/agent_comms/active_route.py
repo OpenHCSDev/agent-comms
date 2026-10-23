@@ -17,7 +17,7 @@ from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import TYPE_CHECKING, Annotated, ClassVar
 
-from .child_process import Platform
+from .child_process import Platform, ProcessIdentity
 from .coordination_errors import CoordinationError
 from .declared_family import DeclaredFamily
 from .errors import RelationViolationError
@@ -294,11 +294,6 @@ class ExitedLockHolder(IdentifiedLockHolder):
         return "process exited"
 
 
-class EmptyCommandLockHolder(IdentifiedLockHolder):
-    def detail(self) -> str:
-        return "empty command"
-
-
 class UnidentifiedLockHolder(RouteLockHolder):
     def describe(self) -> str:
         return "kernel did not identify the owner"
@@ -323,11 +318,11 @@ def route_lock_holders(directory: int) -> tuple[RouteLockHolder, ...]:
                 holders.append(UnidentifiedLockHolder())
                 continue
             try:
-                command = Path(f'/proc/{pid}/cmdline').read_bytes().replace(b'\0', b' ').decode('utf-8', 'replace').strip()
-            except FileNotFoundError:
+                command = " ".join(ProcessIdentity.capture(pid).arguments())
+            except ProcessLookupError:
                 holders.append(ExitedLockHolder(pid))
             else:
-                holders.append(RunningLockHolder(pid, command) if command else EmptyCommandLockHolder(pid))
+                holders.append(RunningLockHolder(pid, command))
     return tuple(holders)
 
 

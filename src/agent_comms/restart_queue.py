@@ -292,8 +292,9 @@ class RestartQueue:
 
 def enqueue(comms: Comms, selection: OwnerRestartSelection, *,
             launch_runtime: LaunchRuntime) -> QueuedRestart:
-    if sys.platform != "linux":
-        raise ValueError("Queued restarts require Linux inotify and /proc")
+    Platform.current().require_watched_procfs(
+        ValueError("Queued restarts require Linux inotify and /proc")
+    )
     queue = RestartQueue(comms.root / DIRECTORY)
     snapshot = comms.registry.snapshot()
     owner = selection.require_current(snapshot)
@@ -389,8 +390,9 @@ def step(comms: Comms) -> None:
 
 
 async def run(comms: Comms) -> None:
-    if sys.platform != "linux":
-        raise ValueError("Queued restarts require Linux inotify and /proc")
+    Platform.current().require_watched_procfs(
+        ValueError("Queued restarts require Linux inotify and /proc")
+    )
     queue = RestartQueue(comms.root / DIRECTORY)
     lock = os.open(queue.directory / "watcher.lock", os.O_CREAT | os.O_RDWR, 0o600)
     try:

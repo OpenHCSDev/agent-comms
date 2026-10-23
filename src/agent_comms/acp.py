@@ -440,11 +440,6 @@ class CommsAgent(SessionEffects, InputEffects, TurnEffects):
         lookup = owner.incarnation.require_recorded().lookup
         bus = MessageBus(self._comms.root, self._comms.registry, ResponseWrites)
         delivery = self.cursors.delivery(session_id)
-        async with delivery.reading() as source_reads:
-            state = await CursorOwner.read_async(
-                bus, wire_root_id=wire_root_id, owner_name=thread_name, source_reads=source_reads,
-            )
-        after_seq = state.covered_seq
         store_path = CoordinationStore.path_in(self._comms.root)
         # One execution owns this wake's package acquisition: acceptance of new
         # originals and the selected launch share it instead of verifying twice.
@@ -461,9 +456,23 @@ class CommsAgent(SessionEffects, InputEffects, TurnEffects):
         )
         with execution.cursor_delivery.measurements.operation("accept_deliveries"):
             await _accept_visible_deliveries(
-                bus, wire_root_id, store_path, lookup, after_seq,
-                owner_name=owner.name, acquire_package=execution.validate,
+                bus,
+                wire_root_id,
+                store_path,
+                lookup,
+                owner_name=owner.name,
+                acquire_package=execution.validate,
             )
+        # Acceptance visited the originals; pending work still starts at what
+        # the native history proves consumed, including work below the frontier.
+        async with delivery.reading() as source_reads:
+            state = await CursorOwner.read_async(
+                bus,
+                wire_root_id=wire_root_id,
+                owner_name=thread_name,
+                source_reads=source_reads,
+            )
+        after_seq = state.covered_seq
         if self.inputs.owns_execution(session_id, owner):
             # A running turn takes its owner's pending messages as inputs;
             # whatever it cannot take wakes this owner once the turn ends.

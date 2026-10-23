@@ -661,6 +661,14 @@ class SQLiteSchemaObject(TypedRow):
 
 
 @dataclass(frozen=True)
+class SQLiteColumnNullability(TypedRow):
+    """SQLite's column names and NOT NULL declarations, read without parsing DDL."""
+
+    name: str
+    notnull: bool
+
+
+@dataclass(frozen=True)
 class SQLiteTableName(TypedRow):
     """One table SQLite's catalog holds, whether or not a row declaration names it."""
 
@@ -878,6 +886,7 @@ class TableSchema(ABC):
         for row in cls.schema_rows():
             row.take_previous_name(db)
             row.derive_nullable_fields(db)
+            row.derive_relaxed_fields(db)
         SQLiteCatalogObject.carry(db, cls.declared_schema(),
                                   frozenset(item.name for item in cls.stored_schema(db, sharing)))
         cls.require_schema(db, sharing)
@@ -1593,7 +1602,10 @@ class TypedTable(
         return expression
 
     @classmethod
-    def _table_sql(cls, *, if_not_exists: bool = False, columns: tuple[str, ...] = ()) -> str:
+    def _table_sql(
+        cls, *, if_not_exists: bool = False, columns: tuple[str, ...] = (),
+        required: frozenset[str] = frozenset(),
+    ) -> str:
         existence = "IF NOT EXISTS " if if_not_exists else ""
         definitions = []
         fields = cls._fields_named(columns) if columns else cls._columns
@@ -1607,7 +1619,7 @@ class TypedTable(
             if column.auto_increment:
                 sql += " PRIMARY KEY AUTOINCREMENT"
             sql += cls._sql(column.generated_sql)
-            if not item.nullable or column.primary_key:
+            if not item.nullable or column.primary_key or item.name in required:
                 sql += " NOT NULL"
             if column.unique:
                 sql += " UNIQUE"
@@ -1725,6 +1737,32 @@ class TypedTable(
         )
         actual = {item.name: item.sql for item in cls.stored_objects(db)}
         if actual.get(cls.declared_name) == previous:
+            cls.rebuild(db)
+
+    @classmethod
+    def derive_relaxed_fields(cls, db: sqlite3.Connection) -> None:
+        """Only an exact earlier declaration requiring now-nullable fields can relax rows.
+
+        Column additions, removals and other table differences still require a data conversion.
+        Compare through the same DDL owner; only writable non-key fields may widen.
+        """
+        stored = SQLiteColumnNullability.read(db.execute(
+            'SELECT name, "notnull" FROM pragma_table_info(?)', (cls.declared_name,),
+        ))
+        if tuple(column.name for column in stored) != tuple(
+            item.wire_name for item in cls._columns
+        ):
+            return
+        nonnull = frozenset(column.name for column in stored if column.notnull)
+        required = frozenset(
+            item.name for item in cls._columns
+            if item.nullable and item.column.writable and not item.column.primary_key
+            and item.wire_name in nonnull
+        )
+        if not required:
+            return
+        actual = {item.name: item.sql for item in cls.stored_objects(db)}
+        if actual.get(cls.declared_name) == cls._table_sql(required=required):
             cls.rebuild(db)
 
     @classmethod
