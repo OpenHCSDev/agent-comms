@@ -7,7 +7,7 @@ from abc import ABC, abstractmethod
 from typing import TYPE_CHECKING
 
 from acp.agent.connection import AgentSideConnection
-from acp.schema import PermissionOption, RequestPermissionResponse, ToolCallUpdate
+from acp.schema import AgentMessageChunk, PermissionOption, RequestPermissionResponse, ToolCallUpdate
 
 from .coordination_errors import IdentityConflict
 
@@ -17,6 +17,11 @@ if TYPE_CHECKING:
     from .turn_runner import TurnRunner
 
 ACP_PERMISSION_TIMEOUT_SECONDS = 14.0
+
+
+class SessionUpdateSink(ABC):
+    @abstractmethod
+    async def session_update(self, *, session_id: str, update: AgentMessageChunk) -> bool: ...
 
 
 class Controller(ABC):
@@ -33,7 +38,7 @@ class Controller(ABC):
     def departed(self, runtime: RuntimeServer, session_id: str) -> bool: ...
 
 
-class AcpController(AgentSideConnection, Controller):
+class AcpController(AgentSideConnection, Controller, SessionUpdateSink):
     def require_current(self, authority: AcpSelectedWriteAuthority, session_id: str) -> None:
         if self is not authority.agent.sessions.client:
             raise IdentityConflict("Selected write ACP controller changed")

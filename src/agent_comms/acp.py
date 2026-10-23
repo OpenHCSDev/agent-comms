@@ -56,7 +56,7 @@ from .acp_failure import NativeTurnError
 from .channel_targets import NamedTarget
 from .cohort_foreground import _accept_visible_deliveries
 from .comms import Comms, wire
-from .controller import AcpController, Controller, UNBOUND_CONTROLLER
+from .controller import AcpController, Controller, SessionUpdateSink, UNBOUND_CONTROLLER
 from .coordination_cohort import next_sealed_assignment
 from .coordination_database import CoordinationStore
 from .cursor_owner import CursorOwner
@@ -72,7 +72,6 @@ from .queued_input import DeliveredInput
 from .runtime import (
     RuntimeProxy,
     RuntimeServer,
-    SessionUpdateSink,
     socket_path,
 )
 from .schedule_rules import SelectedWakeCheck

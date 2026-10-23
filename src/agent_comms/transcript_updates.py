@@ -25,7 +25,8 @@ if TYPE_CHECKING:
 
     from .acp_extension import TranscriptSnapshotUpdate
     from .comms import Comms
-    from .runtime import RuntimeServer, SessionUpdateSink, SocketClient
+    from .controller import SessionUpdateSink
+    from .runtime import RuntimeServer, SocketClient
 
 
 @dataclass(frozen=True, kw_only=True)

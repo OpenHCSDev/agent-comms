@@ -15,7 +15,6 @@ import logging
 import os
 import secrets
 import socket
-from abc import ABC, abstractmethod
 from collections.abc import Coroutine
 from contextlib import ExitStack, suppress
 from contextvars import ContextVar
@@ -26,7 +25,9 @@ from typing import TYPE_CHECKING, Any, ClassVar
 from pydantic import BaseModel
 
 from acp.exceptions import RequestError
+from acp.agent.connection import AgentSideConnection
 from acp.schema import (
+    AgentMessageChunk,
     DeniedOutcome,
     PermissionOption,
     RequestPermissionResponse,
@@ -34,7 +35,9 @@ from acp.schema import (
 )
 
 from .jsonl_stream import JsonlStreamReader
-from .controller import ACP_PERMISSION_TIMEOUT_SECONDS, UNBOUND_CONTROLLER, Controller
+from .controller import (
+    ACP_PERMISSION_TIMEOUT_SECONDS, UNBOUND_CONTROLLER, Controller, SessionUpdateSink,
+)
 from .field_codec import MalformedRecord
 from .owner_protocol import (
     ClientPermissionResponse,
@@ -65,17 +68,17 @@ def socket_path(root: Path, pid: int) -> Path:
     return root / "runtime" / f"{pid}.sock"
 
 
-_UNBOUND_PUBLICATION_CLIENT = object()
+class UnboundClient(SessionUpdateSink):
+    async def session_update(self, *, session_id: str, update: AgentMessageChunk) -> bool:
+        raise RuntimeError("An unbound client cannot publish session updates")
+
+
+_UNBOUND_PUBLICATION_CLIENT = UnboundClient()
 _LOG = logging.getLogger(__name__)
 
 
 class SubscriberClosed(ConnectionError):
     """The attached reader left; the normal end of a subscription, not a failed request."""
-
-
-class SessionUpdateSink(ABC):
-    @abstractmethod
-    async def session_update(self, *, session_id: str, update: BaseModel) -> None: ...
 
 
 class SocketClient(Controller, SessionUpdateSink):
@@ -178,8 +181,9 @@ class SocketClient(Controller, SessionUpdateSink):
                 )
         self.pending.clear()
 
-    async def session_update(self, *, session_id: str, update: BaseModel) -> None:
+    async def session_update(self, *, session_id: str, update: BaseModel) -> bool:
         await self.send(OwnerUpdate.of(update))
+        return True
 
 
 class OwnerIdentityChangedError(RuntimeError, ConnectionError):
@@ -207,7 +211,7 @@ class SessionClients(dict[str, set[SocketClient]]):
                 return
 
 
-class RuntimeServer:
+class RuntimeServer(SessionUpdateSink):
     def __init__(self, agent: CommsAgent):
         self.agent = agent
         self.server: asyncio.Server | None = None
@@ -257,7 +261,7 @@ class RuntimeServer:
         *,
         session_id: str,
         update: BaseModel,
-        _expected_client: Any = _UNBOUND_PUBLICATION_CLIENT,
+        _expected_client: SessionUpdateSink | AgentSideConnection | None = _UNBOUND_PUBLICATION_CLIENT,
         _expected_thread: str | None = None,
         _expected_sockets: frozenset[SocketClient] | None = None,
     ) -> bool:
