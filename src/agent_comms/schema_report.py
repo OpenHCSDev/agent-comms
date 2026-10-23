@@ -47,7 +47,7 @@ class StoreSchemaReport:
     def read(cls, db: sqlite3.Connection, path: Path) -> StoreSchemaReport:
         """Decode the caller's already-open snapshot; never acquire another one."""
         expected: dict[str, str] = {}
-        stored: list[SQLiteSchemaObject] = []
+        owners: list[type[TypedTable]] = []
         unknown = []
         for table in SQLiteTableName.stored(db):
             try:
@@ -56,9 +56,10 @@ class StoreSchemaReport:
                 unknown.append(table.name)
                 continue
             expected.update(owner.schema_objects())
-            # Extra triggers or indexes attached to a known table also differ.
-            stored.extend(owner.stored_objects(db))
-        changes = SQLiteSchemaObject.differences(stored, expected)
+            owners.append(owner)
+        # Extra triggers or indexes attached to a known table also differ; an object
+        # another stored table's row declares there is that row's, not a stray.
+        changes = SQLiteSchemaObject.differences(TypedTable.objects_of(db, owners), expected)
         return cls(str(path), changes, tuple(sorted(unknown)))
 
 

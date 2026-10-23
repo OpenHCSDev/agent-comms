@@ -38,7 +38,7 @@ from typing import (
     overload,
 )
 
-from .class_fact import ClassFact, FamilyFact
+from .class_fact import ClassFact
 from .declared_family import DeclaredFamily, declared_words
 from .errors import RelationViolationError
 from .field_codec import (
@@ -815,11 +815,15 @@ class TableSchema(ABC):
         return {name: sql for row in cls.schema_rows() for name, sql in row.schema_objects().items()}
 
     @classmethod
-    def stored_schema(cls, db: sqlite3.Connection) -> list[SQLiteSchemaObject]:
+    def stored_schema(
+        cls, db: sqlite3.Connection, sharing: tuple[type[TypedTable], ...] = (),
+    ) -> list[SQLiteSchemaObject]:
         """The objects this file's kind compares: by default every object the file owns.
 
         SQLite's own sqlite_sequence for AUTOINCREMENT is not one. A file kind with a
-        different scope overrides this read and nothing else.
+        different scope overrides this read and nothing else. ``sharing`` names the rows
+        of the other families composed into the same file: what they declare on this
+        schema's tables is theirs, not a stray.
         """
         return SQLiteSchemaObject.read(db.execute(
             "SELECT name,sql FROM sqlite_master "
@@ -831,8 +835,11 @@ class TableSchema(ABC):
         return SQLiteTableName.stored(db)
 
     @classmethod
-    def schema_differs(cls, db: sqlite3.Connection) -> bool:
-        return bool(SQLiteSchemaObject.differences(cls.stored_schema(db), cls.declared_schema()))
+    def schema_differs(
+        cls, db: sqlite3.Connection, sharing: tuple[type[TypedTable], ...] = (),
+    ) -> bool:
+        return bool(SQLiteSchemaObject.differences(
+            cls.stored_schema(db, sharing), cls.declared_schema()))
 
     @classmethod
     def reconcile_writes(cls, db: sqlite3.Connection) -> bool:
@@ -841,9 +848,11 @@ class TableSchema(ABC):
         return cls.schema_differs(db)
 
     @classmethod
-    def require_schema(cls, db: sqlite3.Connection) -> None:
+    def require_schema(
+        cls, db: sqlite3.Connection, sharing: tuple[type[TypedTable], ...] = (),
+    ) -> None:
         """Readers use only the declared schema, whichever kind of file this is."""
-        if cls.schema_differs(db):
+        if cls.schema_differs(db, sharing):
             raise cls.schema_error(f"{cls.__name__} differs from its declaration")
 
     @classmethod
@@ -859,7 +868,9 @@ class TableSchema(ABC):
             row.create(db)
 
     @classmethod
-    def derive_schema(cls, db: sqlite3.Connection) -> None:
+    def derive_schema(
+        cls, db: sqlite3.Connection, sharing: tuple[type[TypedTable], ...] = (),
+    ) -> None:
         """Inside the caller's write transaction, the stored schema onto the declaration
         wherever the declaration says how: a row's declared earlier table name, missing
         nullable fields, an index, trigger or view rebuilt from its SQL, or a missing object.
@@ -868,8 +879,8 @@ class TableSchema(ABC):
             row.take_previous_name(db)
             row.derive_nullable_fields(db)
         SQLiteCatalogObject.carry(db, cls.declared_schema(),
-                                  frozenset(item.name for item in cls.stored_schema(db)))
-        cls.require_schema(db)
+                                  frozenset(item.name for item in cls.stored_schema(db, sharing)))
+        cls.require_schema(db, sharing)
 
     @classmethod
     def reconcile_schema(cls, db: sqlite3.Connection, change: SchemaChange) -> bool:
@@ -896,12 +907,17 @@ class TableSchema(ABC):
 
     @classmethod
     @abstractmethod
-    def carry_schema(cls, db: sqlite3.Connection) -> None:
+    def carry_schema(
+        cls, db: sqlite3.Connection, sharing: tuple[type[TypedTable], ...] = (),
+    ) -> None:
         """Inside the reconcile's transaction: this kind of file's way onto its declaration."""
 
 
 class ComposedSchemas:
-    """One file derives its rows and carry policy from its nominal schema parents."""
+    """One file derives its rows and carry policy from its nominal schema parents.
+
+    Each family keeps its own carry policy, and judges strays on its tables against
+    every row the file composes: an object a sibling family declares is not a stray."""
 
     @classmethod
     def schema_families(cls) -> tuple[type[TableSchema], ...]:
@@ -914,8 +930,11 @@ class ComposedSchemas:
         ))
 
     @classmethod
-    def schema_differs(cls, db: sqlite3.Connection) -> bool:
-        return any(family.schema_differs(db) for family in cls.schema_families())
+    def schema_differs(
+        cls, db: sqlite3.Connection, sharing: tuple[type[TypedTable], ...] = (),
+    ) -> bool:
+        rows = (*cls.schema_rows(), *sharing)
+        return any(family.schema_differs(db, rows) for family in cls.schema_families())
 
     @classmethod
     def create_schema(cls, db: sqlite3.Connection) -> None:
@@ -923,10 +942,13 @@ class ComposedSchemas:
             family.create_schema(db)
 
     @classmethod
-    def carry_schema(cls, db: sqlite3.Connection) -> None:
+    def carry_schema(
+        cls, db: sqlite3.Connection, sharing: tuple[type[TypedTable], ...] = (),
+    ) -> None:
+        rows = (*cls.schema_rows(), *sharing)
         for family in cls.schema_families():
-            if family.schema_differs(db):
-                family.carry_schema(db)
+            if family.schema_differs(db, rows):
+                family.carry_schema(db, rows)
 
 
 class RowMutation(Enum):
@@ -1358,8 +1380,10 @@ class SharedFileTables(TableSchema):
     __slots__ = ()
 
     @classmethod
-    def stored_schema(cls, db: sqlite3.Connection) -> list[SQLiteSchemaObject]:
-        return TypedTable.objects_of(db, cls.schema_rows())
+    def stored_schema(
+        cls, db: sqlite3.Connection, sharing: tuple[type[TypedTable], ...] = (),
+    ) -> list[SQLiteSchemaObject]:
+        return TypedTable.objects_of(db, cls.schema_rows(), sharing)
 
     @classmethod
     def stored_tables(cls, db: sqlite3.Connection) -> list[SQLiteTableName]:
@@ -1373,7 +1397,9 @@ class AllObjectsTables(TableSchema):
     __slots__ = ()
 
     @classmethod
-    def stored_schema(cls, db: sqlite3.Connection) -> list[SQLiteSchemaObject]:
+    def stored_schema(
+        cls, db: sqlite3.Connection, sharing: tuple[type[TypedTable], ...] = (),
+    ) -> list[SQLiteSchemaObject]:
         return SQLiteSchemaObject.read(db.execute(
             "SELECT name,sql FROM sqlite_master WHERE sql IS NOT NULL"))
 
@@ -1388,8 +1414,10 @@ class DerivedTables(TableSchema):
         return tuple(row for row in cls.schema_rows() if issubclass(row, ProducedTable))
 
     @classmethod
-    def schema_differs(cls, db: sqlite3.Connection) -> bool:
-        return (super().schema_differs(db)
+    def schema_differs(
+        cls, db: sqlite3.Connection, sharing: tuple[type[TypedTable], ...] = (),
+    ) -> bool:
+        return (super().schema_differs(db, sharing)
                 or not ProjectionProducer.matches(db, cls.projection_rows()))
 
     @classmethod
@@ -1408,7 +1436,9 @@ class DerivedTables(TableSchema):
         cls.create_schema(db)
 
     @classmethod
-    def carry_schema(cls, db: sqlite3.Connection) -> None:
+    def carry_schema(
+        cls, db: sqlite3.Connection, sharing: tuple[type[TypedTable], ...] = (),
+    ) -> None:
         cls.reset_schema(db)
 
 
@@ -1420,8 +1450,10 @@ class DurableTables(TableSchema):
     __slots__ = ()
 
     @classmethod
-    def carry_schema(cls, db: sqlite3.Connection) -> None:
-        cls.derive_schema(db)
+    def carry_schema(
+        cls, db: sqlite3.Connection, sharing: tuple[type[TypedTable], ...] = (),
+    ) -> None:
+        cls.derive_schema(db, sharing)
 
 
 class ProjectionProducerTables(SharedFileTables, DerivedTables):
@@ -1491,18 +1523,6 @@ class DeclaredSchemaFacts:
     def schema_names(cls: type[TypedTable]) -> frozenset[str]:
         """Every object this row declares, by name; overrides change only the SQL."""
         return frozenset(cls.schema_objects())
-
-    @FamilyFact
-    @staticmethod
-    def claimed_names(cls: type[TypedTable]) -> frozenset[str]:
-        """Every object name any row of the reading row's family declares, held once on
-        this class; each new row declaration forgets it, so it covers the whole registry."""
-        root = cast(type[TypedTable], cls.family_root())
-        return frozenset(name for row in root.members_with(root) for name in row.schema_names)
-
-    def __init_subclass__(cls) -> None:
-        super().__init_subclass__()
-        FamilyFact.forget_inherited(cls)
 
 
 class TypedTable(
@@ -1864,16 +1884,20 @@ class TypedTable(
         return TypedTable.objects_of(db, (cls,))
 
     @staticmethod
-    def objects_of(db: sqlite3.Connection, rows: Iterable[type[TypedTable]]) -> list[SQLiteSchemaObject]:
+    def objects_of(
+        db: sqlite3.Connection, rows: Iterable[type[TypedTable]],
+        sharing: Iterable[type[TypedTable]] = (),
+    ) -> list[SQLiteSchemaObject]:
         """The rows' own stored objects, in one catalog read.
 
         Every object they declare, whichever table a trigger guards, and any object
-        attached to their tables that no row's declaration claims: a stray.
+        attached to their tables that neither they nor the rows ``sharing`` their file
+        declare: a stray.
         """
         rows = tuple(rows)
         declared = {name for row in rows for name in row.schema_names}
         tables = tuple(row.declared_name for row in rows)
-        claimed = TypedTable.claimed_names
+        claimed = declared | {name for row in sharing for name in row.schema_names}
         stored = SQLiteSchemaObject.read(db.execute(
             "SELECT name,sql FROM sqlite_master WHERE sql IS NOT NULL AND (name IN ("
             + ",".join("?" for _ in declared) + ") OR tbl_name IN ("
