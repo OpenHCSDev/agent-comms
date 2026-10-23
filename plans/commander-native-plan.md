@@ -253,11 +253,15 @@ conversion with unchanged projection schema, changed projection tables and
 explicit content repair. Two existing held-CLI cases confirm both composed
 schemas reconcile through the actual installer command path.
 
-The automatic carry has no witness for decoder/projector behavior changes with
-identical stored DDL, as before; those still require explicit conversion/reset.
-This repair adds no version stamp or second dependency registry. The earlier
-heartbeat checkpoint remains independently reviewable; installed qualification
-of both changes belongs to the integration owner.
+An open invalidation defect remains: installed decoder/projector behavior changes
+with identical stored DDL can silently retain stale projections. No production
+path guarantees the explicit reset that the earlier wording assumed. Planned
+reconciliation checks DDL only; recorded build identity has no projection
+invalidation consumer. Current explicit reset callers are schema carry and
+tests, not an installation step for behavior changes. The schema-repair owner
+retains this defect; complete automatic freshness is not delivered by #2629.
+The earlier heartbeat checkpoint remains independently reviewable; installed
+qualification belongs to the integration owner.
 
 ### Phase 8: cutover
 
