@@ -69,7 +69,9 @@ async def test_unconfigured_acp_attach_refuses_before_creating_owner(tmp_path):
     not os.environ.get("AC_NATIVE_COPIED_PACKAGE"),
     reason="Prepared native package required; no provider request",
 )
-async def test_configured_acp_new_and_retained_attach_use_same_checked_root(tmp_path):
+async def test_configured_acp_new_and_retained_attach_use_same_checked_root(
+    tmp_path, native_runtime_package
+):
     comms = prepare_native_comms(wire(tmp_path / "wire"))
     agent = CommsAgent(comms, auto_wake=False)
     try:
