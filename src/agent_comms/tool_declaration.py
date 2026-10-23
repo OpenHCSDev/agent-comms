@@ -71,7 +71,7 @@ class ToolDeclaration(DeclaredFamily, affix="Tool"):
     label: ClassVar[str]
 
     @classmethod
-    def action(cls) -> type[ToolAction]:
+    def declared_action(cls) -> type[ToolAction]:
         """The first action capability in the tool's C3 MRO."""
         return next(
             (action for base in cls.__mro__ for action in ToolAction.members if base is action),

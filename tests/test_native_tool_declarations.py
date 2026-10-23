@@ -59,7 +59,7 @@ async def test_new_tool_declaration_drives_presentation_without_coding_permissio
         call = type(tool).from_call(tool.declared_name, tool.arguments, call_id="case")
         assert type(call) is type(tool)
         event = events.ToolStart.from_call("case", tool.declared_name, call.arguments)
-        assert event.kind is tool.action() and event.args == tool.arguments
+        assert event.kind is tool.declared_action() and event.args == tool.arguments
         assert call.call_id == "case" and call.arguments == tool.arguments and tool.reads() in event.title
     unknown = events.ToolStart.from_call("unknown", "external_extension", {"private": "preserved"})
     assert (unknown.title, unknown.kind, unknown.args) == (

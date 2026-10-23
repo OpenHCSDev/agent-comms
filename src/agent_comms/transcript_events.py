@@ -420,7 +420,7 @@ class ToolTranscript(SilentTranscript, RecordedTranscript):
 
     @property
     def kind(self) -> type[tool_declaration.ToolAction]:
-        return tool_declaration.ToolDeclaration.for_name(self.tool_name).action()
+        return tool_declaration.ToolDeclaration.for_name(self.tool_name).declared_action()
 
 
 @dataclass(frozen=True, kw_only=True)
