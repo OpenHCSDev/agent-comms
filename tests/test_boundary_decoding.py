@@ -12,7 +12,7 @@ from agent_comms.input_attempt import (
 )
 from agent_comms.input_disposition import DeliveryOverview
 from agent_comms.native_package import NativeSourceDeclaration
-from agent_comms.native_tool_call import SelectedToolDenied
+from agent_comms.tool_denial import SelectedToolDenied
 from agent_comms.ui_model.delivery import InputDelivery
 
 

@@ -72,7 +72,7 @@ from agent_comms.head_review import AcceptedHeadReview
 from agent_comms.lifecycle_capability import LifecycleCapability, Pending
 from agent_comms.message_reference import MessageReference
 from agent_comms.messages import InfoKind, Message
-from agent_comms.native_tool_call import SelectedToolDenied
+from agent_comms.tool_denial import SelectedToolDenied
 from agent_comms.order_runs import OrderRun
 from agent_comms.order_story import FleetEvent, ProblemStory, StoryEvent, StoryLine, StorySource
 from agent_comms.owner_requests import (
