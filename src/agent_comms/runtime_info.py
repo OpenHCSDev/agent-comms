@@ -29,9 +29,10 @@ class RuntimeInfo(DeclaredFamily, affix="RuntimeInfo"):
     @abstractmethod
     def context_reading(self) -> ContextReading: ...
 
-    @abstractmethod
-    def model_or(self, default: str) -> str: ...
+    def model_or(self, default: str) -> str:
+        return self.model.otherwise(default)
 
+    model: ThreadModel
     context_used: PiCount
     context_size: PiCount
 
@@ -43,10 +44,8 @@ class UnobservedRuntimeInfo(RuntimeInfo):
     def context_reading(self) -> ContextReading:
         return UnmeasuredContext()
 
+    model = UndeclaredModel()
     context_used = context_size = UnreportedCount()
-
-    def model_or(self, default: str) -> str:
-        return default
 
 
 @dataclass(frozen=True, slots=True)
@@ -69,8 +68,6 @@ class AgentRuntimeInfo(RuntimeInfo):
     def context_reading(self) -> ContextReading:
         return self.context_size.reading(self.context_used)
 
-    def model_or(self, default: str) -> str:
-        return self.model.otherwise(default)
 
 
 @dataclass(frozen=True, slots=True)
