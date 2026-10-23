@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import subprocess
 from abc import abstractmethod
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, ClassVar
@@ -148,8 +148,8 @@ class ForgeQuery[Repository](ForgeAnswer):
 @dataclass(frozen=True)
 class UnpushedHead:
     head: str
-    commits: int
-    upstream: str
+    commits: int = field(compare=False)
+    upstream: str = field(compare=False)
 
 
 @dataclass(frozen=True)

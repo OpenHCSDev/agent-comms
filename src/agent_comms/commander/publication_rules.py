@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Self
 
@@ -45,7 +45,7 @@ class EmptyPullRequest(UndatedStandingRule):
     order: str
     holder: ThreadIncarnation
     pull_request: PullRequestLink
-    base: str
+    base: str = field(compare=False)
     head: str
 
     @classmethod
