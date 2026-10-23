@@ -7,6 +7,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Annotated, ClassVar, Self
 
+from acp.schema import ToolKind
 
 from .declared_family import DeclaredFamily, UnknownFamilyMember
 from .field_codec import FieldCodec, MalformedRecord, NullMember, WireName
@@ -37,7 +38,7 @@ class EditCall:
 
 class ToolDeclaration(DeclaredFamily, affix="Tool"):
     family_discriminator: ClassVar[str] = "tool"
-    acp_kind: ClassVar[str] = "other"
+    acp_kind: ClassVar[ToolKind] = "other"
     label: ClassVar[str]
 
     @classmethod

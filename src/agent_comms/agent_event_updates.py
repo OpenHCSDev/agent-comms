@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, replace
 from functools import partial
-from typing import TYPE_CHECKING, Any, cast
+from typing import TYPE_CHECKING
 
 from acp.schema import (
     AgentMessageChunk,
@@ -72,7 +72,7 @@ class AcpEventConsumer(MroDispatch):
             session_update="tool_call",
             tool_call_id=event.id,
             title=event.title or event.name or "tool",
-            kind=cast(Any, event.kind),
+            kind=event.kind,
             status="in_progress",
         )
         if event.args is not None:
