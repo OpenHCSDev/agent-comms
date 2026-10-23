@@ -79,6 +79,7 @@ from agent_comms.installer.carry import (
     RetireInputsOperation,
 )
 from agent_comms.installer.commands import InstallCommands, TimedCommand
+from agent_comms.installer.declared_uv import DeclaredUv
 from agent_comms.installer.interpreter_operation import (
     CliCommandProbe,
     ClientImportsProbe,
@@ -107,14 +108,14 @@ from agent_comms.installer.reporting import (
 )
 from agent_comms.installer.runtime_resolution import RuntimeResolution, StackProject
 from agent_comms.launch_runtime import LaunchRuntime, RestartEnvironment, SpecifiedImportPath
-from agent_comms.locked_store import BusFile, DeclaredFile, UndeclaredFile
+from agent_comms.locked_store import BusFile, DeclaredFile, RootFile, UndeclaredFile
 from agent_comms.maintenance_barrier import (
     MaintenanceBarrier,
     MaintenanceOperator,
     MaintenanceState,
 )
 from agent_comms.native_build_inputs import NativeBuildInputs
-from agent_comms.native_package import pinned_package_for
+from agent_comms.native_package import link_sealed_tree, pinned_package_for
 from agent_comms.recorded_bus import RecordedBusIdentity
 from agent_comms.registry_store import RegistryStore
 from agent_comms.repo import Checkout, Repo, ScratchCheckout
@@ -460,8 +461,21 @@ class Stack:
         return RuntimeHome.uv_path(self.home)
 
     def require_uv(self) -> None:
+        """The installer runs only the uv its checkout declares; a different one installs the
+        declared uv in its own place before any lock is written."""
         if not os.access(self.uv, os.X_OK):
             raise UpgradeRefused(f"No uv executable at {self.uv}; the installer runs only that uv")
+        declared = DeclaredUv.of(self.checkout / "pyproject.toml", self.uv)
+        if declared.accepts(self.commands.run(self.uv, "--version")):
+            return
+        with tempfile.TemporaryDirectory(dir=self.uv.parent, prefix=".uv-") as staging:
+            self.commands.run(self.uv, "pip", "install", "--quiet", "--target", staging,
+                              "--python", self.python, str(declared.requirement))
+            fetched = Path(staging) / "bin/uv"
+            reported = self.commands.run(fetched, "--version")
+            if not declared.accepts(reported):
+                raise UpgradeRefused(f"Fetched {reported.strip()}; {declared.requirement} declared")
+            os.replace(fetched, self.uv)
 
     def resolve(self) -> None:
         """Refresh declared source packages while retaining the committed release pins."""
@@ -550,7 +564,7 @@ class Stack:
             return native, layout
         if prepared.is_dir():
             native.parents[2].mkdir(mode=0o700)
-            shutil.copytree(prepared, native)
+            link_sealed_tree(prepared, native)
         else:
             self.commands.run(self.checkout / "stack/bin/prepare-pi-native", "--python",
                               self.python, cwd=self.checkout,
@@ -565,7 +579,7 @@ class Stack:
         package = self.probe(PackageRootProbe())
         destination = package / "_native" / layout
         destination.parents[2].mkdir(mode=0o700, parents=True)
-        shutil.copytree(native, destination)
+        link_sealed_tree(native, destination)
         self.prepare_native()
 
     def keep_native(self, native: Path, layout: Path) -> None:
@@ -574,7 +588,7 @@ class Stack:
         self.prepared_natives.mkdir(mode=0o700, parents=True, exist_ok=True)
         stage = Path(tempfile.mkdtemp(dir=self.prepared_natives, prefix=".stage-"))
         try:
-            shutil.copytree(native, stage / layout)
+            link_sealed_tree(native, stage / layout)
             for retired in self.prepared_natives.glob(".pi-native-*"):
                 shutil.rmtree(retired)
             stage.joinpath(layout.parts[0]).rename(self.prepared_natives / layout.parts[0])

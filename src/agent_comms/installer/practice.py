@@ -11,6 +11,7 @@ from pathlib import Path
 
 from agent_comms.field_codec import boundary_decoder
 from agent_comms.installer.backup import UpgradeRefused
+from agent_comms.installer.declared_uv import DeclaredUv
 from agent_comms.launch_runtime import LaunchRuntime
 from agent_comms.locked_store import RegistryFile, RootFile
 from agent_comms.maintenance_barrier import MaintenanceBarrier
@@ -41,7 +42,7 @@ class RuntimeHome(ABC):
 
     @staticmethod
     def uv_path(home: Path) -> Path:
-        return home / ".local/state/agent-comms/upgrade-bus/uv"
+        return home / DeclaredUv.installed
 
     @property
     @abstractmethod
