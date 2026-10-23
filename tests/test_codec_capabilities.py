@@ -416,6 +416,6 @@ def test_text_wire_is_inherited_by_real_external_part_decoders(family, record):
     assert decoded.text == "visible"
     assert decoded.model_dump()["type"] == record["type"]
     assert any(not issubclass(member, TextWire)
-               for member in family.__registry_config__.registry_dict.values())
+               for member in family.members_with(family))
     with pytest.raises(ValueError):
         adapter.validate_python({**record, "type": "unrecognized"})

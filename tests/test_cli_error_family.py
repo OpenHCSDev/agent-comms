@@ -31,7 +31,7 @@ def test_exception_declaration_encodes_one_line(error, expected, capsys):
     decoded = WATCH_LINE.validate_json(output)
     assert type(decoded) is expected
     assert decoded.error == str(error)
-    assert json.loads(output)['type'] == expected.wire_tag
+    assert json.loads(output)['type'] == expected.declared_name
 
 
 def test_error_keeps_cause_without_using_cause_text_as_policy(capsys):

@@ -14,11 +14,10 @@ from dataclasses import dataclass, field, replace
 from functools import cached_property
 from typing import TYPE_CHECKING, Callable, ClassVar, Self, TypeVar, Annotated
 
-from metaclass_registry import AutoRegisterMeta, RegistryConfig
 
 from agent_comms.participant_identity import ParticipantIdentity
 from .cli_options import JsonFlagRecord
-from .declared_family import DeclaredFamily, declared_words
+from .declared_family import DeclaredFamily, UniqueExternalSelector, UnknownFamilyMember, declared_words
 from .errors import RelationViolationError
 from .field_codec import (
     FieldCodec,
@@ -207,16 +206,16 @@ class CommanderForkIdentity(RecordedThreadIncarnation):
         return self.authority
 
 
-class BirthlessIncarnation(ThreadIncarnation, metaclass=AutoRegisterMeta):
+class BirthlessIncarnation(ThreadIncarnation, UniqueExternalSelector, DeclaredFamily, affix="Incarnation"):
     """A member whose wire birth is a declared mark, not recorded evidence; never a lookup.
 
     Each member declares its mark in ``WIRE_BIRTH``; the record decodes a mark to its member."""
 
     WIRE_BIRTH: ClassVar[float]
-    __registry_config__: ClassVar[RegistryConfig] = RegistryConfig(
-        registry_dict={}, key_attribute="WIRE_BIRTH", registry_name="birthless incarnation",
-    )
-    __registry__: ClassVar[dict[float, type[BirthlessIncarnation]]]
+
+    @classmethod
+    def selection_key(cls) -> float:
+        return cls.WIRE_BIRTH
 
     @property
     def wire_birth(self) -> float:
@@ -298,9 +297,11 @@ class ThreadIncarnationRecord:
     created_at: float
 
     def incarnation(self) -> ThreadIncarnation:
-        if member := BirthlessIncarnation.__registry__.get(self.created_at):
-            return member.recorded_as(self.name)
-        return RecordedThreadIncarnation(self.name, self.created_at)
+        try:
+            member = BirthlessIncarnation.member_selected(self.created_at)
+        except UnknownFamilyMember:
+            return RecordedThreadIncarnation(self.name, self.created_at)
+        return member.recorded_as(self.name)
 
     @classmethod
     def decode(cls, name: str, birth: float) -> ThreadIncarnation:

@@ -9,7 +9,6 @@ import json
 from abc import ABC, abstractmethod
 from typing import TYPE_CHECKING, Annotated, ClassVar, Generic, Literal, TypeVar
 
-from metaclass_registry import RegistryConfig
 from pydantic import (
     Field,
     JsonValue,
@@ -17,7 +16,8 @@ from pydantic import (
     ValidateAs,
 )
 
-from agent_comms.cli_protocol import RegisteredWireMeta, TaggedWire, TextWire, WireModel
+from agent_comms.cli_protocol import TaggedWire, TextWire, WireModel
+from agent_comms.declared_family import DeclaredWireFamily, UnknownFamilyMember
 from agent_comms.external_transcript import EarlierPage, NoEarlierPage
 from agent_comms.native_tools import FilePatchTool
 from agent_comms.recorded_time import EventTime, UnrecordedEventTime
@@ -52,10 +52,7 @@ from agent_comms.transcript_events import (
 from agent_comms.turn_phase import CompactionPhase, ModelWaitPhase, ToolRunningPhase, TurnPhase
 
 
-class UserInput(TaggedWire, ABC):
-    __registry_config__: ClassVar[RegistryConfig] = RegistryConfig(
-        registry_dict={}, key_attribute='wire_tag', skip_if_no_key=True,
-    )
+class UserInput(TaggedWire, ABC, affix=""):
 
     @property
     @abstractmethod
@@ -70,20 +67,18 @@ class TextDisplay(WireModel):
         return self.text
 
 
-class TextInput(TextWire, TextDisplay, UserInput):
+class TextInput(TextWire, TextDisplay, UserInput, declared_name='text'):
     pass
 
 
-class ImageInput(UserInput):
-    wire_tag = 'image'
+class ImageInput(UserInput, declared_name='image'):
 
     @property
     def display(self) -> str:
         return 'Image'
 
 
-class LocalImageInput(UserInput):
-    wire_tag = 'localImage'
+class LocalImageInput(UserInput, declared_name='localImage'):
     path: str
 
     @property
@@ -91,8 +86,7 @@ class LocalImageInput(UserInput):
         return f'Image: {self.path}'
 
 
-class AudioInput(UserInput):
-    wire_tag = 'audio'
+class AudioInput(UserInput, declared_name='audio'):
     url: str
 
     @property
@@ -100,8 +94,7 @@ class AudioInput(UserInput):
         return 'Audio'
 
 
-class LocalAudioInput(UserInput):
-    wire_tag = 'localAudio'
+class LocalAudioInput(UserInput, declared_name='localAudio'):
     path: str
 
     @property
@@ -109,8 +102,7 @@ class LocalAudioInput(UserInput):
         return f'Audio: {self.path}'
 
 
-class SkillInput(UserInput):
-    wire_tag = 'skill'
+class SkillInput(UserInput, declared_name='skill'):
     name: str
     path: str
 
@@ -119,8 +111,7 @@ class SkillInput(UserInput):
         return f'Skill: {self.name}'
 
 
-class MentionInput(UserInput):
-    wire_tag = 'mention'
+class MentionInput(UserInput, declared_name='mention'):
     name: str
     path: str
 
@@ -136,8 +127,7 @@ class RequestParams(WireModel):
     method: ClassVar[str]
 
 
-class TurnInput(RequestParams):
-    method = 'turn/start'
+class TurnInput(RequestParams, declared_name='turn/start'):
     threadId: str
     clientUserMessageId: str
 
@@ -182,42 +172,36 @@ class Capabilities(WireModel):
     optOutNotificationMethods: tuple[str, ...] = ()
 
 
-class Initialize(RequestParams):
-    method = 'initialize'
+class Initialize(RequestParams, declared_name='initialize'):
     clientInfo: ClientInfo = Field(default_factory=ClientInfo)
     capabilities: Capabilities = Field(default_factory=Capabilities)
 
 
-class ResumeThread(RequestParams):
-    method = 'thread/resume'
+class ResumeThread(RequestParams, declared_name='thread/resume'):
     threadId: str
     excludeTurns: bool = True
 
 
-class ThreadStatus(TaggedWire, ABC):
+class ThreadStatus(TaggedWire, ABC, affix=""):
     """What Codex says its thread is doing; the bridge reports it on attaching."""
-    __registry_config__: ClassVar[RegistryConfig] = RegistryConfig(
-        registry_dict={}, key_attribute='wire_tag', skip_if_no_key=True,
-    )
 
     def update(self) -> RuntimeUpdate:
         return TurnEnded()
 
 
-class NotLoadedStatus(ThreadStatus):
-    wire_tag = 'notLoaded'
+class NotLoadedStatus(ThreadStatus, declared_name='notLoaded'):
+    pass
 
 
-class IdleStatus(ThreadStatus):
-    wire_tag = 'idle'
+class IdleStatus(ThreadStatus, declared_name='idle'):
+    pass
 
 
-class SystemErrorStatus(ThreadStatus):
-    wire_tag = 'systemError'
+class SystemErrorStatus(ThreadStatus, declared_name='systemError'):
+    pass
 
 
-class ActiveStatus(ThreadStatus):
-    wire_tag = 'active'
+class ActiveStatus(ThreadStatus, declared_name='active'):
 
     def update(self) -> RuntimeUpdate:
         return TurnStarted()
@@ -287,11 +271,11 @@ class RpcNotification(RpcReply):
 RPC_RESPONSE = TypeAdapter(RpcSuccess | RpcFailure | RpcNotification)
 
 
-class Item(TaggedWire, ABC):
-    __registry_config__: ClassVar[RegistryConfig] = RegistryConfig(
-        registry_dict={}, key_attribute='__name__',
-        skip_if_no_key=True,
-    )
+class Item(TaggedWire, ABC, affix=""):
+    @classmethod
+    def tag(cls) -> str:
+        return cls.wire_tag
+
     id: str
     # What the CLI is doing while it produces this item.
     doing: ClassVar[str] = ''
@@ -421,22 +405,18 @@ class CommandItem(ToolItem):
         return self.status == 'completed' and self.exitCode == 0
 
 
-class ToolContentPart(TaggedWire, ABC):
-    __registry_config__: ClassVar[RegistryConfig] = RegistryConfig(
-        registry_dict={}, key_attribute='wire_tag', skip_if_no_key=True,
-    )
+class ToolContentPart(TaggedWire, ABC, affix=""):
 
     @property
     @abstractmethod
     def display(self) -> str: ...
 
 
-class ToolText(TextDisplay, ToolContentPart):
-    wire_tag = 'inputText'
+class ToolText(TextDisplay, ToolContentPart, declared_name='inputText'):
+    pass
 
 
-class ToolImage(ToolContentPart):
-    wire_tag = 'inputImage'
+class ToolImage(ToolContentPart, declared_name='inputImage'):
     imageUrl: str
 
     @property
@@ -444,8 +424,7 @@ class ToolImage(ToolContentPart):
         return '[Image output]'
 
 
-class ToolAudio(ToolContentPart):
-    wire_tag = 'inputAudio'
+class ToolAudio(ToolContentPart, declared_name='inputAudio'):
     audioUrl: str
 
     @property
@@ -620,30 +599,25 @@ class WebSearchItem(Item):
         return ToolRunningPhase(tools=((self.id, f'Searching: {self.query}'),))
 
 
-class PatchChange(TaggedWire, ABC):
-    __registry_config__: ClassVar[RegistryConfig] = RegistryConfig(
-        registry_dict={}, key_attribute='wire_tag', skip_if_no_key=True)
+class PatchChange(TaggedWire, ABC, affix=""):
 
     @abstractmethod
     def patch(self, path: str, content: str) -> ToolDiff | NoToolDiff: ...
 
 
-class AddedFile(PatchChange):
-    wire_tag = 'add'
+class AddedFile(PatchChange, declared_name='add'):
 
     def patch(self, path: str, content: str) -> ToolDiff | NoToolDiff:
         return ToolDiff.between('/dev/null', path, '', content)
 
 
-class DeletedFile(PatchChange):
-    wire_tag = 'delete'
+class DeletedFile(PatchChange, declared_name='delete'):
 
     def patch(self, path: str, content: str) -> ToolDiff | NoToolDiff:
         return ToolDiff.between(path, '/dev/null', content, '')
 
 
-class UpdatedFile(PatchChange):
-    wire_tag = 'update'
+class UpdatedFile(PatchChange, declared_name='update'):
     move_path: str | None = None
 
     def patch(self, path: str, content: str) -> ToolDiff:
@@ -721,8 +695,7 @@ class AgentActivityItem(Item):
 CodexItem = Item.declared_union()
 
 
-class ItemsList(RequestParams):
-    method = 'thread/items/list'
+class ItemsList(RequestParams, declared_name='thread/items/list'):
     threadId: str
     limit: int = 20
     sortDirection: Literal['desc'] = 'desc'
@@ -771,10 +744,7 @@ class ItemsPage(WireModel):
                                    for entry in reversed(self.data) if entry.completed), earlier)
 
 
-class TranscriptNotification(WireModel, ABC, metaclass=RegisteredWireMeta):
-    __registry_config__: ClassVar[RegistryConfig] = RegistryConfig(
-        registry_dict={}, key_attribute='method', skip_if_no_key=True)
-    method: ClassVar[str]
+class TranscriptNotification(DeclaredWireFamily, WireModel, ABC, affix=""):
     threadId: str
 
     @abstractmethod
@@ -785,16 +755,14 @@ class TurnHeader(WireModel):
     id: str
 
 
-class TurnBegan(TranscriptNotification):
-    method = 'turn/started'
+class TurnBegan(TranscriptNotification, declared_name='turn/started'):
     turn: TurnHeader
 
     def apply(self, stream: ItemStream) -> RuntimeUpdate:
         return TurnStarted()
 
 
-class TurnFinished(TranscriptNotification):
-    method = 'turn/completed'
+class TurnFinished(TranscriptNotification, declared_name='turn/completed'):
     turn: TurnHeader
 
     def apply(self, stream: ItemStream) -> RuntimeUpdate:
@@ -805,8 +773,7 @@ class ItemNotification(TranscriptNotification, ABC):
     turnId: str
 
 
-class Started(ItemNotification):
-    method = 'item/started'
+class Started(ItemNotification, declared_name='item/started'):
     item: CodexItem
     startedAtMs: int
 
@@ -815,8 +782,7 @@ class Started(ItemNotification):
                            self.item.accumulator(EventTime.capture(self.startedAtMs / 1000)))
 
 
-class Completed(ItemNotification):
-    method = 'item/completed'
+class Completed(ItemNotification, declared_name='item/completed'):
     item: CodexItem
     completedAtMs: int
 
@@ -836,12 +802,11 @@ class TextDelta(ItemNotification, ABC):
         return AppendDraftItem(self.turnId, self.itemId, self.delta, self.section())
 
 
-class AssistantDelta(TextDelta):
-    method = 'item/agentMessage/delta'
+class AssistantDelta(TextDelta, declared_name='item/agentMessage/delta'):
+    pass
 
 
-class ReasoningDelta(TextDelta):
-    method = 'item/reasoning/summaryTextDelta'
+class ReasoningDelta(TextDelta, declared_name='item/reasoning/summaryTextDelta'):
     summaryIndex: int = Field(ge=0)
 
     def section(self) -> int:
@@ -855,12 +820,13 @@ class ItemStream:
         self.thread = thread
 
     def receive(self, notification: RpcNotification) -> tuple[RuntimeUpdate, ...]:
-        declarations = TranscriptNotification.__registry_config__.registry_dict
-        if notification.method not in declarations:
+        try:
+            declaration = TranscriptNotification.member_named(notification.method)
+        except UnknownFamilyMember:
             # Usage, account, raw/private reasoning and other control
             # events are not transcript content. Known methods declare a type.
             return ()
-        event = declarations[notification.method].model_validate(notification.params)
+        event = declaration.model_validate(notification.params)
         if event.threadId != self.thread:
             return ()
         return (event.apply(self),)
