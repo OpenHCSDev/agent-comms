@@ -11,6 +11,7 @@ from contextlib import contextmanager
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from agent_comms.field_codec import FieldCodec
 from agent_comms.installer.backup import UpgradeRefused
 from agent_comms.installer.interpreter_operation import ProbeProgram, RuntimeProbe, SourceProgram
 
@@ -54,12 +55,19 @@ class InstallCommands:
                                  f"{completed.stderr.strip()}")
         return completed.stdout
 
+    @contextmanager
+    def exchange(self, encoded: str) -> Iterator[tuple[Path, Path]]:
+        """Keep one request and its answer alive until the caller reads the result."""
+        with tempfile.TemporaryDirectory() as scratch:
+            request = Path(scratch) / "request.json"
+            request.write_text(encoded)
+            yield request, Path(scratch) / "result.json"
+
     def probe[Answer](self, probe: RuntimeProbe[Answer], python: Path, *,
                       cwd: Path = Path(), env: Mapping[str, str] = os.environ,
                       program: ProbeProgram = SourceProgram()) -> Answer:
-        with tempfile.TemporaryDirectory() as scratch:
-            result = Path(scratch) / "result.json"
-            self.run(*probe.command(python, result, program=program), cwd=cwd, env=env,
+        with self.exchange(FieldCodec.compact(FieldCodec.encode(probe))) as (request, result):
+            self.run(*probe.command(python, request, result, program=program), cwd=cwd, env=env,
                      label=f"{python} {type(probe).__name__}")
             return probe.decode_answer(result.read_text())
 
