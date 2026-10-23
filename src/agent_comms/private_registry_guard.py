@@ -29,13 +29,13 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Annotated, NoReturn
 
 from . import store_files
+from .child_process import Platform
 from .coordination_database import CoordinationStore
 from .coordinator import Coordination
 from .errors import RelationViolationError
 from .field_codec import FieldCodec, Id128Text, MalformedRecord, WireName
 from .locked_store import DurableFile, WireWakeFile
 from .native_runtime_input import NativeRuntimeInput, NativeRuntimeTable
-from .private_path import fsync_directory
 
 if TYPE_CHECKING:
     from .acp_extension import CursorAdvancedUpdate, CursorScope
@@ -210,7 +210,7 @@ class PublicRegistry(RegistryPrivacy):
         _reject("native namespace requires the original registry guard")
 
     def write(self, registry_path: Path, text: str) -> None:
-        store_files._atomic_write_text(registry_path, text, fsync_parent=True)
+        store_files._atomic_write_text(registry_path, text)
 
     def register_restored(self, threads: Iterable[Thread]) -> None:
         """A public bus has no coordinator identities for restored threads."""
@@ -446,7 +446,7 @@ class PrivateRegistryGuard(DurableFile, WireWakeFile, RegistryPrivacy):
         # A pending guard after any failed write MUST remain fail-closed.
         digest = hashlib.sha256(b"present\0" + text.encode("utf-8")).digest()
         sequence, slot = self.prepare(digest)
-        store_files._atomic_write_text(registry_path, text, fsync_parent=True)
+        store_files._atomic_write_text(registry_path, text)
         self.commit(sequence, slot, digest)
 
     def register_restored(self, threads: Iterable[Thread]) -> None:
@@ -530,7 +530,7 @@ class PrivateOwnerRenameIntent(DurableFile):
 
     def write(self, root: Path) -> None:
         store_files._atomic_write_text(self.path_in(root),
-                           json.dumps(FieldCodec.encode(self), sort_keys=True), fsync_parent=True)
+                           json.dumps(FieldCodec.encode(self), sort_keys=True))
 
     @classmethod
     def complete(cls, root: Path) -> None:
@@ -538,7 +538,7 @@ class PrivateOwnerRenameIntent(DurableFile):
         intent = cls.path_in(root)
         replace(FieldCodec.decode(cls, json.loads(intent.read_text())), completed=True).write(root)
         intent.unlink()
-        fsync_directory(root)
+        Platform.current().sync_directory(root)
 
 
 def _require_no_private_owner_rename(root: Path) -> None:

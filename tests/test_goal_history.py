@@ -3,11 +3,12 @@
 from __future__ import annotations
 
 import json
+import os
 from dataclasses import replace
 
 import pytest
 
-import agent_comms.store_files as store_files
+from agent_comms.child_process import Platform
 from agent_comms.comms import Comms
 from conftest import installed_comms
 from agent_comms.goal_actions import (
@@ -34,7 +35,7 @@ def test_history_file_fsync_reopens_with_supported_platform_flags(tmp_path):
     path = tmp_path / "history.sqlite3"
     path.write_bytes(b"journal bytes")
     # Windows' os.fsync delegates to the CRT, which rejects O_RDONLY fds.
-    GoalHistoryStore._sync_file(path)
+    Platform.current().sync_file(path)
     assert path.read_bytes() == b"journal bytes"
 
 
@@ -105,15 +106,15 @@ def test_existing_goal_seeds_only_current_observed_baseline(tmp_path):
 def test_crash_before_registry_write_does_not_expose_history_intent(tmp_path, monkeypatch):
     comms = _wire(tmp_path)
     current = comms.goals.update_goal("worker", SetGoalAction(text="Keep current"))
-    original_write = store_files._atomic_write_text
+    original_replace = os.replace
 
-    def failed_registry_write(path, text, *, fsync_parent=False):
-        if path == comms.registry.store.path:
+    def failed_registry_write(source, destination, **directories):
+        if destination == comms.registry.store.path:
             raise OSError("simulated registry write failure")
-        return original_write(path, text, fsync_parent=fsync_parent)
+        return original_replace(source, destination, **directories)
 
     with monkeypatch.context() as patch:
-        patch.setattr(store_files, "_atomic_write_text", failed_registry_write)
+        patch.setattr(os, "replace", failed_registry_write)
         with pytest.raises(OSError):
             comms.goals.update_goal(
                 "worker", PausedGoalAction(expect=GoalPrecondition(goal_id=current.id))

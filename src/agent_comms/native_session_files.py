@@ -8,13 +8,14 @@ from dataclasses import dataclass, fields
 from pathlib import Path
 from typing import Self
 
+from .child_process import Platform
 from .errors import RelationViolationError
 from .native_failures import NativePiUnavailable
 from agent_comms.locked_store import DurableFile, PatternFile, SQLiteFile
 from agent_comms.field_codec import Id128Text
 from agent_comms.participant_identity import ParticipantIdentity
 from agent_comms.native_session_reopen import NativeSessionIdentity
-from agent_comms.private_path import PrivateDirectoryRole, TrustedAncestorRole, fsync_directory
+from agent_comms.private_path import PrivateDirectoryRole, TrustedAncestorRole
 
 
 class SessionFiles:
@@ -94,11 +95,7 @@ class SessionFiles:
             freed += path.lstat().st_size
             path.unlink()
         if self.session.parent.is_dir():
-            directory = os.open(self.session.parent, os.O_RDONLY | os.O_DIRECTORY)
-            try:
-                os.fsync(directory)
-            finally:
-                os.close(directory)
+            Platform.current().sync_directory(self.session.parent)
         return freed
 
 
@@ -175,11 +172,11 @@ class NativeSessionFiles(NativeSessionIdentity, NativeTranscriptFiles):
             for path in reversed(missing):
                 path.mkdir(mode=0o700, exist_ok=True)
                 cls.require_private_directory(path)
-                fsync_directory(path.parent)
+                Platform.current().sync_directory(path.parent)
             cls.require_private_directory(directory)
             parent = directory.parent
             while True:
-                fsync_directory(parent)
+                Platform.current().sync_directory(parent)
                 if parent == parent.parent:
                     break
                 try:

@@ -406,8 +406,8 @@ class MaintenanceBarrier(MaintenanceIngress):
         marker_text = json.dumps(FieldCodec.encode(marker), sort_keys=True)
         state_text = json.dumps(FieldCodec.encode(hold), sort_keys=True)
         # The marker leads so an interrupted replacement still holds new turns.
-        _atomic_write_text(self.marker_path, marker_text, fsync_parent=True)
-        _atomic_write_text(self.state_path, state_text, fsync_parent=True)
+        _atomic_write_text(self.marker_path, marker_text)
+        _atomic_write_text(self.state_path, state_text)
 
     def begin(self, operator: MaintenanceOperator) -> MaintenanceState:
         """Hold new turns before fleet drain; an uncertain write stays closed."""
