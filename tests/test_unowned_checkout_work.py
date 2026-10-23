@@ -3,15 +3,14 @@
 from agent_comms.bus import Bus
 
 import json
-import os
 import subprocess
-import sys
 import time
 from contextlib import nullcontext
 from pathlib import Path
 
 import pytest
 
+from cli_command import core
 from order_scope_fixture import FIX_SCOPE
 from agent_comms.change_report import FileLine
 from agent_comms.threads import ParkedThreadWorkState, ReadyThreadWorkState
@@ -229,10 +228,9 @@ def test_dirty_then_unpushed_then_pushed_linked_checkout(checkout_bus: Comms, tm
             assert assigned.holder == 'idle'
             assert c.registry.require('idle').goal.require().text
             beat()
-        history = subprocess.run(
-            (sys.executable, '-m', 'agent_comms.cli', '--root', str(root), 'history',
-             '--target', '@commander-heartbeat', '--as', 'lead', '--limit', '10'),
-            env=os.environ.copy(), capture_output=True, text=True, timeout=30, check=True)
+        history = core('--root', str(root), 'history',
+                       '--target', '@commander-heartbeat', '--as', 'lead', '--limit', '10')
+        assert history.returncode == 0, history.stderr
         assert f'WORK HELD: P2 worker retains work in {checkout}' in history.stdout
         assert f'NO LONGER CURRENT: WORK HELD: P2 worker retains work in {checkout}' in history.stdout
         print('PRIVATE HEARTBEAT', history.stdout)
