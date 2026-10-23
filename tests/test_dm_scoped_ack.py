@@ -55,7 +55,7 @@ def test_peer_delete_same_name_rebind_rejects_stale_page_without_read_ack(tmp_pa
     assert page.newest_seq == 5 and isinstance(page.selection, DMSelection)
     comms.registry.unregister("peer")
     comms.registry.remove("peer")
-    comms.threads.rename_managed_thread("other", "peer", owner_pid=os.getpid())
+    comms.threads.rename_managed_thread("other", "peer", owner=ProcessIdentity.capture(os.getpid()))
     before = comms.bus.pending_count(viewer, CommandTarget.named("peer"))
     marker_path = tmp_path / "read_ledger.json"
     markers_before = marker_path.read_bytes() if marker_path.exists() else None

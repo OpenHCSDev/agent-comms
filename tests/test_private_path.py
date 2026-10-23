@@ -6,6 +6,7 @@ from pathlib import Path
 
 import pytest
 
+from agent_comms.child_process import Platform
 from agent_comms.private_path import (
     FileIdentity,
     FileRevision,
@@ -14,6 +15,30 @@ from agent_comms.private_path import (
     PrivateSocketRole,
     TrustedAncestorRole,
 )
+
+
+@pytest.mark.skipif(os.name != "posix", reason="POSIX modes and no-follow directory opens")
+def test_platform_privacy_and_durability_follow_actual_nodes(tmp_path):
+    platform = Platform.current()
+    file = tmp_path / "data"
+    file.write_bytes(b"durable bytes")
+    directory = tmp_path / "private"
+    directory.mkdir()
+    for path, private_mode, public_mode in (
+        (file, 0o600, 0o644), (directory, 0o700, 0o755),
+    ):
+        path.chmod(public_mode)
+        assert not platform.is_private(path.stat(), private_mode)
+        platform.make_private(path, private_mode)
+        assert platform.is_private(path.stat(), private_mode)
+    platform.make_private(tmp_path / "retired", 0o600)
+    platform.sync_file(file)
+    platform.sync_directory(directory)
+    assert file.read_bytes() == b"durable bytes"
+    redirected = tmp_path / "redirected"
+    redirected.symlink_to(directory, target_is_directory=True)
+    with pytest.raises(OSError):
+        platform.sync_directory(redirected)
 
 
 def test_private_roles_and_revisions_follow_original_native_nodes(tmp_path: Path):

@@ -31,7 +31,7 @@ def test_sort_metadata_survives_selection_heartbeat_and_rename(tmp_path, monkeyp
     ).message_id
     with comms.bus.opened_activity() as clocks:
         assert comms.views.last_sent_timestamps(clocks.sent.items(), registry=comms.registry.snapshot()) == {"alpha": 400, "beta": 500}
-    comms.owners.acquire_thread("alpha", owner_pid=os.getpid())
+    comms.owners.acquire_thread("alpha")
     comms.threads.heartbeat("alpha")
     comms.registry.declare(comms.registry.new_thread(name='alpha', tags=frozenset(), worktree=str(tmp_path)))
     people = {person.thread.name: person.to_wire() for person in comms.views.presence()}

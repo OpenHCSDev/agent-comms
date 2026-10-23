@@ -433,10 +433,10 @@ def _async_store_lock(
 
 
 def _atomic_write_text(
-    path: Path, text: str, *, fsync_parent: bool = False,
+    path: Path, text: str, *,
     mode: int = PrivateFileRole.permissions,
 ) -> None:
-    """Replace a snapshot; private guarded writes also durably sync its name."""
+    """Replace a snapshot and durably sync its name."""
     path.parent.mkdir(parents=True, exist_ok=True)
     fd, temporary_path = StoreOwner.stage_file(path)
     try:
@@ -446,12 +446,7 @@ def _atomic_write_text(
             output.flush()
             os.fsync(output.fileno())
         os.replace(temporary_path, path)
-        if fsync_parent:
-            directory_fd = os.open(path.parent, os.O_RDONLY | os.O_DIRECTORY)
-            try:
-                os.fsync(directory_fd)
-            finally:
-                os.close(directory_fd)
+        Platform.current().sync_directory(path.parent)
     finally:
         temporary_path.unlink(missing_ok=True)
 

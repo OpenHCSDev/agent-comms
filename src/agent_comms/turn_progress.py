@@ -222,7 +222,7 @@ class TurnProgress(events.AgentEventConsumer):
             LiveQueueScope(self.session_id, ClaimedIdentity(
                 self.turn_lease.identity.incarnation,
                 self.turn_lease.claimed_generation,
-            ), self.thread.require_process().pid),
+            ), self.thread.require_process()),
         )
 
     async def before_native_metadata(self, event: events.NativeMetadataObservation) -> None:

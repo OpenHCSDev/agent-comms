@@ -111,10 +111,13 @@ class StoryCase(LifecycleCase):
             ),
             ("strike reason once", bool(orders) and orders[-1].line.count(cls.strike_reason) == 1),
             ("send-back reason once", bool(orders) and orders[-1].line.count(cls.back_reason) == 1),
-            ("one fleet line per open order", bool(fleets) and len(fleets[-1].lines) == 1),
+            ("one fleet line per public event", bool(fleets) and len(fleets[-1].lines) == 2),
             (
-                "fleet agrees with order read",
-                bool(fleets and orders) and fleets[-1].lines == (orders[-1].line,),
+                "fleet retains each original reason once",
+                bool(fleets) and all(
+                    "\n".join(fleets[-1].lines).count(reason) == 1
+                    for reason in (cls.strike_reason, cls.back_reason)
+                ),
             ),
             ("actual output printed", bool(orders) and orders[-1].line in output),
         )

@@ -22,6 +22,7 @@ from typing import Annotated, Literal
 from agent_comms.field_codec import WireOmitDefault
 from agent_comms.owner_requests import NoRequestRevision, RequestAtRevision, RequestRevision
 
+from .child_process import Platform
 from .field_codec import FieldCodec, MalformedRecord, HistoryExclude
 from .goals import GoalDeclaration, NoGoal
 from .locked_store import DurableFile
@@ -145,8 +146,7 @@ class GoalHistoryStore(DurableFile, ReconciledFile):
         path = cls.path_in(registry_path.parent)
         try:
             before = path.lstat()
-            if (not stat.S_ISREG(before.st_mode) or before.st_uid != os.geteuid()
-                    or stat.S_IMODE(before.st_mode) != 0o600):
+            if not stat.S_ISREG(before.st_mode) or not Platform.current().is_private(before, 0o600):
                 raise GoalHistoryError("Original goal history must be a private regular file.")
             with closing(cls.read_snapshot(path)) as connection:
                 GoalHistoryEntry.require_schema(connection)
@@ -169,27 +169,9 @@ class GoalHistoryStore(DurableFile, ReconciledFile):
             raise GoalHistoryError("Goal history database is unavailable.") from error
 
     def _sync(self) -> None:
-        self._sync_file(self.path)
-        if os.name == "posix":
-            self._sync_directory(self.path.parent)
-
-    @staticmethod
-    def _sync_file(path: Path) -> None:
-        # Windows' CRT _commit (used by os.fsync) rejects a read-only fd.
-        # Retain the existing read-only POSIX reopen semantics.
-        descriptor = os.open(path, os.O_RDWR if os.name == "nt" else os.O_RDONLY)
-        try:
-            os.fsync(descriptor)
-        finally:
-            os.close(descriptor)
-
-    @staticmethod
-    def _sync_directory(path: Path) -> None:
-        descriptor = os.open(path, os.O_RDONLY | os.O_DIRECTORY)
-        try:
-            os.fsync(descriptor)
-        finally:
-            os.close(descriptor)
+        platform = Platform.current()
+        platform.sync_file(self.path)
+        platform.sync_directory(self.path.parent)
 
     def _initialize(self) -> None:
         try:
@@ -200,7 +182,7 @@ class GoalHistoryStore(DurableFile, ReconciledFile):
             raise GoalHistoryError("Cannot create goal history database.") from error
         else:
             os.close(descriptor)
-        if os.name == "posix" and stat.S_IMODE(self.path.stat().st_mode) != 0o600:
+        if not Platform.current().is_private(self.path.stat(), 0o600):
             raise GoalHistoryError("Goal history database must be owner-only.")
         try:
             with closing(self._connect()) as connection:
@@ -261,10 +243,10 @@ class GoalHistoryStore(DurableFile, ReconciledFile):
         if guard.exists():
             targets.append(guard)
         try:
+            platform = Platform.current()
             for target in targets:
-                self._sync_file(target)
-            if os.name == "posix":
-                self._sync_directory(self.registry_path.parent)
+                platform.sync_file(target)
+            platform.sync_directory(self.registry_path.parent)
         except OSError as error:
             raise GoalHistoryError("Cannot sync visible goal authority.") from error
 

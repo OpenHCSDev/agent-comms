@@ -1,6 +1,7 @@
 """The installer publishes and undoes its own route, leaving other publishers alone."""
 
 import errno
+import fcntl
 import json
 import os
 import subprocess
@@ -10,6 +11,7 @@ import pytest
 from agent_comms.active_route import (
     ActiveRoute,
     RoutePublicationUnknownError,
+    RouteReadersHold,
     read_active_route,
     route_new_bus,
 )
@@ -208,3 +210,15 @@ def test_failure_after_backup_link_restores_a_single_private_route(tmp_path, rou
     assert backup.original()
     assert path.read_bytes() == original
     assert path.stat().st_nlink == 1
+
+
+def test_route_change_refuses_a_live_reader_instead_of_waiting(tmp_path, route_bus):
+    path = tmp_path / "state" / "active-route.json"
+    route_new_bus(route_bus, path)
+    reader = os.open(path.parent, os.O_RDONLY | os.O_DIRECTORY)
+    try:
+        fcntl.flock(reader, fcntl.LOCK_SH)
+        with pytest.raises(RouteReadersHold, match=f"PID {os.getpid()}: .*close them"):
+            StoreBackup.take(route_bus.root, path, (), tmp_path / "spill")
+    finally:
+        os.close(reader)
