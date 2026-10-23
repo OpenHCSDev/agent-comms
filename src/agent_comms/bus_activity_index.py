@@ -59,6 +59,13 @@ class ActivityClocks:
 class ActivityMaximum(TypedTable, BusProjectionTables, declared_name=None):
     """The declared non-key values are maxima, not independently writable clocks."""
 
+    @classmethod
+    def producer_classes(cls, row) -> tuple[type, ...]:
+        from .messages import Message, MessageRole
+        from .thread_identity import ThreadRole
+
+        return (Message, MessageRole, ThreadRole, ChannelActivity)
+
     def insert(self, db: sqlite3.Connection) -> sqlite3.Cursor:
         statement, values = self._insertion()
         keys = tuple(item.name for item in self._fields() if item.column.primary_key)

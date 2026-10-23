@@ -1,8 +1,12 @@
 import os
+import json
 import signal
 import sqlite3
+import subprocess
+import sys
 from contextlib import closing, contextmanager
 from dataclasses import replace
+from pathlib import Path
 
 import pytest
 
@@ -82,6 +86,42 @@ def test_install_refuses_existing_schema_changes_until_an_explicit_rebuild(bus):
         BusProjectionTables.reset_schema(db)
     Bus.install(bus.path)
     assert bus.page(3, 2) == (second, record)
+
+
+def test_changed_message_producer_rebuilds_real_projection_with_identical_ddl(tmp_path):
+    source = Path(__file__).parents[1] / "src/agent_comms/messages.py"
+    producer = tmp_path / "messages.py"
+    original = source.read_text()
+    producer.write_text(original)
+    database = tmp_path / "bus.sqlite3"
+    runtime = Path(__file__).parent / "fixtures/projection_runtime.py"
+
+    def replay():
+        result = subprocess.run(
+            (sys.executable, str(runtime), str(producer), str(database)),
+            capture_output=True, text=True, timeout=30, check=True,
+        )
+        return json.loads(result.stdout)
+
+    built = replay()
+    unchanged = replay()
+    assert built["policy"] == "DirectPolicy"
+    assert not unchanged["reconciled"] and unchanged["row_writes"] == 0
+    producing_call = "CommandTarget.named(message.target).response_policy(message)"
+    assert original.count(producing_call) == 1
+    producer.write_text(original.replace(producing_call, "InformationalPolicy.instance()"))
+    changed = replay()
+    assert changed["ddl"] == built["ddl"] == unchanged["ddl"]
+    assert changed["source"] == built["source"] == unchanged["source"]
+    assert changed["source_rows"] == built["source_rows"] == 1
+    assert changed["producer"] != built["producer"]
+    assert changed["reconciled"] and changed["row_writes"] > 0
+    assert changed["policy"] == "InformationalPolicy"
+    assert changed["fresh"] and changed["integrity"] == "ok"
+    assert changed["foreign_keys"] == []
+    repeated = replay()
+    assert repeated["policy"] == "InformationalPolicy"
+    assert not repeated["reconciled"] and repeated["row_writes"] == 0
 
 
 @pytest.mark.parametrize("declaration", BusRecord.members_with(BusRecord))

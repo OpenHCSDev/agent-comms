@@ -13,6 +13,7 @@ import json
 import os
 import re
 import sqlite3
+import sys
 import types
 from abc import ABC, abstractmethod
 from collections.abc import Callable, Generator, Iterable, Iterator, Mapping, Sequence
@@ -871,6 +872,15 @@ class ComposedSchemas:
         ))
 
     @classmethod
+    def schema_differs(cls, db: sqlite3.Connection) -> bool:
+        return any(family.schema_differs(db) for family in cls.schema_families())
+
+    @classmethod
+    def create_schema(cls, db: sqlite3.Connection) -> None:
+        for family in cls.schema_families():
+            family.create_schema(db)
+
+    @classmethod
     def carry_schema(cls, db: sqlite3.Connection) -> None:
         for family in cls.schema_families():
             family.carry_schema(db)
@@ -1331,6 +1341,21 @@ class DerivedTables(TableSchema):
     __slots__ = ()
 
     @classmethod
+    def projection_rows(cls) -> tuple[type[ProducedRow], ...]:
+        return tuple(row for row in cls.schema_rows() if issubclass(row, ProducedRow))
+
+    @classmethod
+    def schema_differs(cls, db: sqlite3.Connection) -> bool:
+        return (super().schema_differs(db)
+                or not ProjectionProducer.matches(db, cls.projection_rows()))
+
+    @classmethod
+    def create_schema(cls, db: sqlite3.Connection) -> None:
+        super().create_schema(db)
+        for row in cls.projection_rows():
+            ProjectionProducer.of(row).upsert(db)
+
+    @classmethod
     def reset_schema(cls, db: sqlite3.Connection) -> None:
         """Inside the caller's transaction: rebuild only this schema's derived tables."""
         for stored in cls.stored_tables(db):
@@ -1352,6 +1377,58 @@ class DurableTables(TableSchema):
     @classmethod
     def carry_schema(cls, db: sqlite3.Connection) -> None:
         cls.derive_schema(db)
+
+
+class ProjectionProducerTables(SharedFileTables, DurableTables):
+    """The producer declaration last committed with each rebuilt projection."""
+
+
+class ProducedRow(ABC):
+    """Each projection capability declares the classes that produce its rows."""
+
+    @classmethod
+    @abstractmethod
+    def producer_classes(cls, row: type[TypedTable]) -> tuple[type, ...]: ...
+
+    @classmethod
+    def producer_identity(cls) -> str:
+        roots = (cls, *(producer for capability in cls.__mro__
+                       if issubclass(capability, ProducedRow)
+                       and capability is not ProducedRow
+                       and "producer_classes" in vars(capability)
+                       for producer in capability.producer_classes(cls)))
+        pending, family = list(roots), set()
+        while pending:
+            producer = pending.pop()
+            if producer not in family:
+                family.add(producer)
+                pending.extend(producer.__subclasses__())
+        declarations = tuple(sorted(
+            {base for producer in family for base in producer.__mro__},
+            key=lambda owner: (owner.__module__, owner.__qualname__),
+        ))
+        return _producer_identity(declarations)
+
+
+@lru_cache(maxsize=128)
+def _producer_module_identity(module: types.ModuleType) -> str:
+    """Hash the declaring artifact, including helpers outside a producer's body."""
+    filename = vars(module).get("__file__")
+    if filename is None:
+        if module.__spec__ is None or module.__spec__.origin != "built-in":
+            raise TypeError(f"Producer module {module.__name__} has no source artifact")
+        return sys.version
+    return hashlib.sha256(Path(filename).read_bytes()).hexdigest()
+
+
+@lru_cache(maxsize=128)
+def _producer_identity(declarations: tuple[type, ...]) -> str:
+    identities = sorted({(
+        owner.__module__, owner.__qualname__,
+        tuple((base.__module__, base.__qualname__) for base in owner.__bases__),
+        _producer_module_identity(sys.modules[owner.__module__]),
+    ) for owner in declarations})
+    return hashlib.sha256(json.dumps(identities).encode()).hexdigest()
 
 
 @lru_cache(maxsize=4)
@@ -1858,6 +1935,25 @@ class TypedTable(
             + f" WHERE {cls._sql(where)}",
             tuple(item.encode(changes[item.name]) for item in selected) + parameters,
         )
+
+
+@dataclass(frozen=True)
+class ProjectionProducer(TypedTable, ProjectionProducerTables):
+    projection: Annotated[str, Column(primary_key=True)]
+    identity: str
+
+    @classmethod
+    def of(cls, row: type[ProducedRow]) -> Self:
+        return cls(row.declared_name, row.producer_identity())
+
+    @classmethod
+    def matches(cls, db: sqlite3.Connection, rows: tuple[type[ProducedRow], ...]) -> bool:
+        if not rows:
+            return True
+        if not cls.present(db):
+            return False
+        stored = {record.projection: record for record in cls.select(db)}
+        return all(stored.get(row.declared_name) == cls.of(row) for row in rows)
 
 
 class StoreWriter(PublishedSQLiteFile, FileStore):
