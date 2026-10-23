@@ -40,7 +40,7 @@ from .errors import RelationViolationError
 from .field_codec import (
     FieldCodec,
     InlineRecord,
-    MessageIdText,
+    MessageId,
     NullMember,
     PublicationExclude,
     WireName,
@@ -949,7 +949,7 @@ class Message(Addressed, BusCapability, TurnOrigin):
 
     @projected(view="wire", name="id")
     def message_id(self) -> str:
-        return MessageIdText.mint(f"{self.sender}:{self.target}:{self.timestamp}:{self.body}")
+        return MessageId.mint(f"{self.sender}:{self.target}:{self.timestamp}:{self.body}")
 
     @property
     def history_source(self) -> HistorySource | None:

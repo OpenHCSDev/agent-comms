@@ -20,7 +20,7 @@ from .coordination_errors import IdentityConflict, RetryScheduled, StaleFence
 from .coordination_tables.assignments import WakeAssignment
 from .coordinator import Coordination
 from .durable_turn import DurableTurn
-from .field_codec import Id128Text
+from .field_codec import InputId
 from .private_send_rules import (
     NativeBindingCheck,
     NativeClaimCheck,
@@ -92,7 +92,7 @@ class NativeSendStage(ABC):
         await Coordination.run_worker(lambda: owner.require_registry(bus._registry))
 
     def reserve(self, store: Coordination, owner: ParticipantOwner, token_digest: str) -> str:
-        input_id = Id128Text.mint()
+        input_id = InputId.mint()
         with store.session.writing() as db:
             NativeRuntimeTable.require_installed(db)
             owner.require(store, self.recipient_lookup)

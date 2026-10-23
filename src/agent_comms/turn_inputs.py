@@ -23,7 +23,7 @@ from .agent_backend import (
     TurnInboxItem,
     UseSettings,
 )
-from .field_codec import Id128Text
+from . import field_codec
 from .locked_store import RegistryFile
 from .maintenance_barrier import MaintenanceBarrier
 from .mro_dispatch import MroDispatch, handles
@@ -196,7 +196,7 @@ class InputForwarding(MroDispatch):
     @handles(InputRequest)
     async def place(self, item: InputRequest, session: TurnSession) -> bool:
         public_id = item.input_id.value
-        native_id = Id128Text.mint()
+        native_id = field_codec.InputId.mint()
         text = item.content.text
         command = commands.Prompt(
             id=RequestId(public_id),

@@ -33,7 +33,7 @@ from .child_process import Platform
 from .coordination_cohort import sealed_cohort_assignments
 from .declared_family import DeclaredFamily
 from .envelope_claim_transitions import ExistingFileClaim
-from .field_codec import FieldCodec, Id128Text, MalformedRecord
+from .field_codec import ClaimId, FieldCodec, Id128Text, MalformedRecord
 from .message_reference import MessageReference
 from .private_path import PrivateDirectoryRole, PrivateFileRole
 from .thread_identity import ClaimedIdentity, ClaimScoped, RecordedThreadIncarnation
@@ -207,7 +207,7 @@ class SelectedWritePlans(DurableFile, PatternFile):
             path = ExistingFileClaim(Path(resource)).normalized(Path(owner.worktree))
             self._prepare_dir()
             record_path = self.path_in(self.directory, source_seq=str(source_seq), lookup=lookup)
-            operation_id = Id128Text.mint()
+            operation_id = ClaimId.mint()
             record = AcceptedWriteIntent(
                 schema=1, root_id=self.root_id, source_seq=source_seq,
                 source_message_id=source_message_id, claim_id=selected[0].assignment_id,

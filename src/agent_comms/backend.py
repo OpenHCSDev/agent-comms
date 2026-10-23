@@ -46,7 +46,7 @@ from .acp_failure import UnrecordedFailureSource
 from .agent_backend import TurnInbox
 from .coordinator import Coordination
 from .extension_ui import ExtensionUiSession
-from .field_codec import Id128Text, MalformedRecord, boundary_decoder
+from .field_codec import InputId, MalformedRecord, boundary_decoder
 from .image_input import ImageInput
 from .mro_dispatch import MroDispatch, handles
 from .native_attestation import AttestationError
@@ -162,7 +162,7 @@ async def stream_agent_events(
                     launch,
                     partial(commands.Prompt,
                         id=RequestId(f"agent-comms-prompt-{secrets.token_hex(16)}"),
-                        input_id=Id128Text.mint(), message=task, images=tuple(images),
+                        input_id=InputId.mint(), message=task, images=tuple(images),
                         context_contributions=context_contributions,
                     ),
                     tool_mode=tool_mode,

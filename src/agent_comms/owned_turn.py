@@ -19,7 +19,7 @@ from .agent_backend import InputContent, TurnDelivery
 from .channel_input_batch import InputBatch
 from .controller import UNBOUND_CONTROLLER
 from .coordinator import Coordination
-from .field_codec import Id128Text
+from . import field_codec
 from .goals import Goal
 from .image_input import ImageInput
 from .input_attempt import ReservedInput
@@ -132,7 +132,7 @@ class OwnedTurn:
         return True
 
     def begin(self, resources: AsyncExitStack, permits: ExitStack) -> bool:
-        self.turn_id = Id128Text.mint()
+        self.turn_id = field_codec.TurnId.mint()
         self.routing = TurnRouting(
             tuple(origin.reference for origin in self.origins),
             MessageRoute(self.thread_name, self.reply_targets) if self.reply_targets else None,

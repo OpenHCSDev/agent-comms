@@ -13,7 +13,7 @@ from agent_comms.agent_backend import InputContent
 from agent_comms.channel_input_batch import InputBatch
 from agent_comms.child_process import ProcessIdentity
 from conftest import installed_comms
-from agent_comms.field_codec import Id128Text
+from agent_comms.field_codec import TurnId
 from agent_comms.goal_actions import (
     BlockedGoalAction, CreateProblemGoalAction, OrderGoalAction,
 )
@@ -149,7 +149,7 @@ async def test_goal_published_during_preparation_is_current_at_reservation(tmp_p
     current = OwnedTurn(agent.turns, 'worker-session', 'worker', 'next input',
                         original_owner_input=True, original_goal_id=replaced.id)
     assert current.authorize()
-    current.turn_id = Id128Text.mint()
+    current.turn_id = TurnId.mint()
     async with AsyncExitStack() as resources:
         current.registry_owner = agent.turns.acquire_turn(
             resources, current.session_id, current.thread_name, current.turn_id, current.task,

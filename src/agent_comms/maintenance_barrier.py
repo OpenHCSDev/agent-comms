@@ -23,6 +23,7 @@ from .declared_family import DeclaredFamily
 from .errors import RelationViolationError, ToolRefusedError
 from .field_codec import (
     FieldCodec,
+    ClaimId,
     Id128Text,
     MalformedRecord,
     NullMember,
@@ -464,7 +465,7 @@ class MaintenanceBarrier(MaintenanceIngress):
         current = self._current_unlocked()
         if current != expected:
             return current
-        self._write_unlocked(expected.in_phase(DeadHolderReleasedPhase, Id128Text.mint()))
+        self._write_unlocked(expected.in_phase(DeadHolderReleasedPhase, ClaimId.mint()))
         raise MaintenanceHeldError(
             f"Maintenance released dead holder pid={expected.operator.pid} "
             f"start_time={expected.operator.start_time}; ingress reopened"
@@ -515,7 +516,7 @@ class MaintenanceBarrier(MaintenanceIngress):
                 current.require_open()
             hold = MaintenanceState(version=2, root=str(self.registry_path.parent.resolve()),
                                     generation=current.generation + 1, operator=operator,
-                                    nonce=Id128Text.mint(), phase=DrainingPhase)
+                                    nonce=ClaimId.mint(), phase=DrainingPhase)
             self._write_unlocked(hold)
             return hold
 
@@ -523,7 +524,7 @@ class MaintenanceBarrier(MaintenanceIngress):
         """Transfer a drained hold after its outgoing readers have stopped."""
         with _store_lock(self.registry_path):
             self.require_draining_unlocked(expected)
-            hold = expected.advanced(Id128Text.mint(), target=TargetRuntime(runtime.interpreter))
+            hold = expected.advanced(ClaimId.mint(), target=TargetRuntime(runtime.interpreter))
             self._write_unlocked(hold)
             return hold
 
@@ -531,7 +532,7 @@ class MaintenanceBarrier(MaintenanceIngress):
                           phase: type[MaintenancePhase]) -> MaintenanceState:
         if self.current_unlocked() != expected:
             raise RelationViolationError('Maintenance generation/operator changed')
-        hold = expected.successor(phase, Id128Text.mint())
+        hold = expected.successor(phase, ClaimId.mint())
         self._write_unlocked(hold)
         return hold
 

@@ -33,7 +33,7 @@ from .cohort_schema import AcceptanceFrontier
 from .coordination_tables.participants import Participants
 from .coordinator import Coordination
 from .errors import RelationViolationError
-from .field_codec import Id128Text, MalformedRecord
+from .field_codec import Id128Text, MalformedRecord, RootId
 from .locked_store import DurableFile, WireWakeFile
 from .native_runtime_input import NativeRuntimeInput, NativeRuntimeTable
 from .private_path import PrivateFileRole
@@ -228,7 +228,7 @@ class PublicRegistry(RegistryPrivacy):
         return SharedRootLaunch(root)
 
     def prepare_native(self, registry_path: Path) -> PrivateRegistryGuard:
-        guard = PrivateRegistryGuard(registry_path, Id128Text.mint())
+        guard = PrivateRegistryGuard(registry_path, RootId.mint())
         guard._trusted_root()
         # Install the new private capabilities while the existing public schema
         # still owns opening this file, before publishing the private guard.

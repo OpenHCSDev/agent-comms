@@ -23,7 +23,7 @@ from .coordination_errors import IdentityConflict, RequestRefused, StaleRevision
 from .coordination_session import ReadNativeCoordinationSession
 from .coordinator import Coordination
 from .errors import RelationViolationError
-from .field_codec import Id128Text
+from . import field_codec
 from .goals import GoalDeclaration, NoGoal
 from .image_input import ImageInput
 from .input_attempt import InputAttempt, ReservedInput
@@ -133,7 +133,7 @@ class QueuedInput:
             text or prompt or "[image prompt]",
             echo,
             context,
-            Id128Text.mint() if input_id is None else input_id,
+            field_codec.InputId.mint() if input_id is None else input_id,
             prompt,
             images,
             controller,
@@ -375,7 +375,7 @@ class DeliveredInput(QueuedInput):
                         reserved.append((
                             cls(
                                 text=row.source_text, echo=False, context=context,
-                                input_id=Id128Text.mint(), prompt=rendered.text,
+                                input_id=field_codec.InputId.mint(), prompt=rendered.text,
                                 bus_key=key, message=message, assignment=paused,
                             ),
                             InputContent(text=rendered.text, contributions=rendered.contributions),

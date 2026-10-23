@@ -1326,6 +1326,36 @@ class SpelledText(TextRepresentation[str], ValidatedScalar):
         return {"type": "string", "pattern": f"^(?:{cls.spelling.pattern})$"}
 
 
+class NominalText(str):
+    """Text whose declared class carries its identity."""
+
+    __slots__ = ()
+    spelling: ClassVar[type[NominalSpelling]]
+
+
+class NominalSpelling[V: NominalText](SpelledText):
+    """One spelling declared for a nominal value and inherited by its kinds."""
+
+    value_type: type[V]
+
+    def __init_subclass__(cls, **options: object) -> None:
+        super().__init_subclass__(**options)
+        cls.value_type = next(
+            get_args(base)[0]
+            for base in types.get_original_bases(cls)
+            if get_origin(base) is NominalSpelling
+        )
+        cls.value_type.spelling = cls
+
+    @classmethod
+    def from_text(cls, value: str) -> V:
+        return cls.value_type(super().from_text(value))
+
+    @classmethod
+    def encode(cls, value: object) -> str:
+        return str(cls.decode(value))
+
+
 class PathText(TextRepresentation[Path]):
     @classmethod
     def encode(cls, value: object) -> str:
@@ -1427,28 +1457,52 @@ class TimestampText(TextRepresentation[RecordedTimestamp]):
         return recorded
 
 
-class Id128Text(SpelledText):
+class Id128(NominalText):
+    """A 128-bit identity; subclasses declare the kind it belongs to."""
+
+    @classmethod
+    def mint(cls) -> Self:
+        return cls(uuid4().hex)
+
+
+class ClaimId(Id128):
+    pass
+
+
+class TurnId(Id128):
+    pass
+
+
+class GoalId(Id128):
+    pass
+
+
+class RootId(Id128):
+    pass
+
+
+class InputId(Id128):
+    pass
+
+
+class Id128Text(NominalSpelling[Id128]):
     """A 128-bit identity: an input, turn, bus root, recipient lookup or claim generation."""
 
     spelling = re.compile("[0-9a-f]{32}")
 
+class MessageId(NominalText):
     @classmethod
-    def mint(cls) -> str:
-        return uuid4().hex
+    def mint(cls, text: str) -> Self:
+        return cls(hashlib.sha256(text.encode()).hexdigest()[:MessageIdText.digits])
 
 
-class MessageIdText(SpelledText):
+class MessageIdText(NominalSpelling[MessageId]):
     """A bus message's content identity, the first twelve hex digits of the SHA-256
     of sender, target, timestamp and body.
     """
 
     digits: ClassVar[int] = 12
     spelling = re.compile(f"[0-9a-f]{{{digits}}}")
-
-    @classmethod
-    def mint(cls, text: str) -> str:
-        return hashlib.sha256(text.encode()).hexdigest()[:cls.digits]
-
 
 class Hex256Text(SpelledText):
     """256 bits written as 64 lowercase hex digits."""
@@ -1553,8 +1607,14 @@ class FieldCodec(MroDispatch, Sealed):
             return target, representations[0]
         if target is object:
             return object, _JsonValueRepresentation
-        if isinstance(target, type) and issubclass(target, WireValue):
-            return target, target
+        if isinstance(target, type):
+            if issubclass(target, NominalText):
+                return target, next(
+                    vars(owner)["spelling"] for owner in target.__mro__
+                    if "spelling" in vars(owner)
+                )
+            if issubclass(target, WireValue):
+                return target, target
         return target, None
 
     @classmethod
@@ -2042,7 +2102,9 @@ class ValueDecoder[T](DecoderPlan):
         cls, annotation: object, target: object, args: tuple[object, ...],
         representation: type[FieldRepresentation],
     ) -> ValueDecoder[T]:
-        return _RepresentedDecoder(
+        decoder = (_NominalTextDecoder if issubclass(representation, NominalSpelling)
+                   else _RepresentedDecoder)
+        return decoder(
             annotation, representation,
             cast(ValueDecoder[object], cls.representation_plan(target, args, representation)),
         )
@@ -2204,6 +2266,13 @@ class _TextDecoder(_ExactScalarDecoder[str]):
     __slots__ = ()
     annotations = (str,)
 
+    def accepts(self, data: object) -> TypeGuard[str]:
+        # RedecodesDeletedPhase removes nominal values from plain str fields.
+        return super().accepts(data) or isinstance(data, NominalText)
+
+    def encode(self, value: str) -> str:
+        return str(super().encode(value))
+
     def encode_editor(self, value):
         return value
 
@@ -2296,6 +2365,19 @@ class _RepresentedDecoder[T](ValueDecoder[T]):
     @boundary_decoder
     def decode(self, data: object) -> T:
         return self.representation.decode_field(data, self.structural)
+
+
+class _NominalTextDecoder[T](_RepresentedDecoder[T]):
+    """The field owns the decoded kind; its inherited spelling owns wire text."""
+
+    def decode(self, data: object) -> T:
+        return self.structural.target(super().decode(data))
+
+    def encode(self, value: T) -> object:
+        target = self.structural.target
+        if target is not str and type(value) is not target:
+            raise TypeError(f"Expected {target}, received {type(value).__name__}")
+        return self.representation.encode(value)
 
 
 class _JsonValueRepresentation(FieldRepresentation[JsonValue]):
