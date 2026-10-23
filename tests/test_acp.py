@@ -162,9 +162,9 @@ class TestHandlers:
         agent._comms.registry.declare(Thread(name='peer', tags=frozenset(), worktree='/wt'))
         agent._comms.messaging.send("peer", "#all", "old message").message.message_id
         response = await agent.new_session(cwd="/wt/proj", mcp_servers=[])
-        assert agent._comms.bus.inbox(response.session_id) == []
+        assert agent._comms.bus.inbox(response.session_id).page.messages == ()
         agent._comms.messaging.send("peer", "#all", "new message").message.message_id
-        assert [message.body for message in agent._comms.bus.inbox(response.session_id)] == [
+        assert [message.body for message in agent._comms.bus.inbox(response.session_id).page.messages] == [
             "new message"
         ]
 

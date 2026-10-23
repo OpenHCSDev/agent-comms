@@ -21,6 +21,6 @@ def test_rename_alias_and_real_thread_named_broadcast_match_existing_scope(wired
     consistent()
     references = tuple(message.reference for message in wired.bus.inbox(
         "broadcast", CommandTarget.named("PR111"),
-    ))
+    ).page.messages)
     wired.messaging.acknowledge("broadcast", references)
     consistent()

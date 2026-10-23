@@ -61,7 +61,7 @@ class TestMessaging:
 
     def test_ack_clears_inbox(self, wired: Comms) -> None:
         wired.messaging.send("PR111", "fixer", "hello").message.message_id
-        messages = wired.bus.inbox("fixer")
+        messages = wired.bus.inbox("fixer").page.messages
         references = tuple(message.reference for message in messages)
         assert wired.messaging.acknowledge("fixer", references) == 1
         assert wired.bus.pending_count("fixer") == 0
@@ -79,7 +79,7 @@ class TestMessaging:
         assert caught.value.recipient == "fixer"
         assert caught.value.references == (outgoing.reference,)
         assert wired.bus.reads.read() == before
-        assert [message.reference for message in wired.bus.inbox("fixer")] == [incoming.reference]
+        assert [message.reference for message in wired.bus.inbox("fixer").page.messages] == [incoming.reference]
 
     def test_ack_names_an_invalid_original_reference(self, wired: Comms) -> None:
         incoming = wired.messaging.send("PR111", "fixer", "incoming").message
@@ -87,13 +87,13 @@ class TestMessaging:
         with pytest.raises(MessageAcknowledgmentError) as caught:
             wired.messaging.acknowledge("fixer", (invalid,))
         assert caught.value.references == (invalid,)
-        assert [message.reference for message in wired.bus.inbox("fixer")] == [incoming.reference]
+        assert [message.reference for message in wired.bus.inbox("fixer").page.messages] == [incoming.reference]
 
     def test_scoped_ack_only_clears_selected_conversation(self, wired: Comms) -> None:
         wired.messaging.send("PR111", "fixer", "direct").message.message_id
         wired.messaging.send("PR111", "#all", "global").message.message_id
 
-        references = tuple(message.reference for message in wired.bus.inbox("fixer", CommandTarget.named("PR111")))
+        references = tuple(message.reference for message in wired.bus.inbox("fixer", CommandTarget.named("PR111")).page.messages)
         assert wired.messaging.acknowledge("fixer", references) == 1
         assert wired.bus.pending_count("fixer", CommandTarget.named("PR111")) == 0
         assert wired.bus.pending_count("fixer", CommandTarget.named("#all")) == 1
@@ -106,14 +106,14 @@ class TestMessaging:
         expected = {AnyChannel.target(): {"direct", "global"}, ThreadTarget("PR111"): {"direct"},
                     ChannelTarget("#all"): {"global"}}
         for target, bodies in expected.items():
-            assert {message.body for message in wired.bus.inbox("fixer", target)} == bodies
+            assert {message.body for message in wired.bus.inbox("fixer", target).page.messages} == bodies
             assert wired.bus.pending_count("fixer", target) == len(bodies)
 
     def test_scoped_channel_ack_does_not_clear_dm(self, wired: Comms) -> None:
         wired.messaging.send("PR111", "fixer", "direct").message.message_id
         wired.messaging.send("PR111", "#all", "global").message.message_id
 
-        references = tuple(message.reference for message in wired.bus.inbox("fixer", CommandTarget.named("#all")))
+        references = tuple(message.reference for message in wired.bus.inbox("fixer", CommandTarget.named("#all")).page.messages)
         assert wired.messaging.acknowledge("fixer", references) == 1
         assert wired.bus.pending_count("fixer", CommandTarget.named("#all")) == 0
         assert wired.bus.pending_count("fixer", CommandTarget.named("PR111")) == 1
@@ -122,7 +122,7 @@ class TestMessaging:
     def test_inbox_order_follows_seq(self, wired: Comms) -> None:
         for i in range(5):
             wired.messaging.send("PR111", "fixer", f"m{i}").message.message_id
-        bodies = [m.body for m in wired.bus.inbox("fixer")]
+        bodies = [m.body for m in wired.bus.inbox("fixer").page.messages]
         assert bodies == [f"m{i}" for i in range(5)]
 
     def test_opened_pending_counts_groups_all_conversations_in_one_result(self, wired: Comms) -> None:
@@ -132,7 +132,7 @@ class TestMessaging:
 
         with wired.bus.snapshot(viewer=NamedViewer("fixer")) as (basis, source):
             assert wired.bus.pending_counts_opened(source, basis) == {"PR111": 2, "#all": 1}
-        references = tuple(message.reference for message in wired.bus.inbox("fixer", CommandTarget.named("PR111")))
+        references = tuple(message.reference for message in wired.bus.inbox("fixer", CommandTarget.named("PR111")).page.messages)
         wired.messaging.acknowledge("fixer", references)
         with wired.bus.snapshot(viewer=NamedViewer("fixer")) as (basis, source):
             assert wired.bus.pending_counts_opened(source, basis) == {"#all": 1}
@@ -228,9 +228,9 @@ class TestThreadOps:
             tags=frozenset({"acp"}),
             worktree="/tmp/project",
         )
-        assert wired.bus.inbox(claimed.name) == []
+        assert wired.bus.inbox(claimed.name).page.messages == ()
         wired.messaging.send("PR111", "#all", "after claim").message.message_id
-        assert [message.body for message in wired.bus.inbox(claimed.name)] == ["after claim"]
+        assert [message.body for message in wired.bus.inbox(claimed.name).page.messages] == ["after claim"]
 
     def test_presence_uses_configured_model_with_runtime_context(self, wired: Comms) -> None:
         wired.threads.set_thread_configuration(
@@ -283,10 +283,10 @@ class TestThreadOps:
         rows = {
             "detail": views.thread_detail(
                 "fixer", CountedRead() if counted else UncountedRead()).to_wire(),
-            "roster": next(row.to_wire() for row in (views.who() if counted else views.presence())
-                           if row.thread.name == "fixer"),
             **({"list": next(row.to_wire() for row in views.list_threads() if row.thread.name == "fixer")}
-               if counted else {}),
+               if counted else {
+                   reader: next(row.to_wire() for row in rows() if row.thread.name == "fixer")
+                   for reader, rows in (("who", views.who), ("presence", views.presence))}),
         }
         records = {name: FieldCodec.decode(dict[str, JsonValue], row) for name, row in rows.items()}
         record = records["detail"]
@@ -358,7 +358,7 @@ class TestThreadOps:
 
     def test_rename_self_preserves_routing_history_and_state(self, wired: Comms, monkeypatch: pytest.MonkeyPatch) -> None:
         wired.messaging.send("fixer", "PR111", "before rename").message.message_id
-        references = tuple(message.reference for message in wired.bus.inbox("PR111", CommandTarget.named("fixer")))
+        references = tuple(message.reference for message in wired.bus.inbox("PR111", CommandTarget.named("fixer")).page.messages)
         assert wired.messaging.acknowledge("PR111", references) == 1
         wired.agents.set_activity("PR111", ActivityState.WORKING, "renaming")
         wired.agents.observe_runtime_info("PR111", AgentInfo(model=DeclaredModel('test/model')))
@@ -382,7 +382,7 @@ class TestThreadOps:
 
         wired.messaging.send("fixer", "PR111", "old alias routes").message.message_id
         wired.messaging.send("PR111", "fixer", "old process sends canonically").message.message_id
-        assert [message.body for message in wired.bus.inbox("planner", CommandTarget.named("fixer"))] == [
+        assert [message.body for message in wired.bus.inbox("planner", CommandTarget.named("fixer")).page.messages] == [
             "old alias routes"
         ]
         history = list(wired.views.history_page(CommandTarget.named("fixer"), viewer=NamedViewer("PR111")).messages)

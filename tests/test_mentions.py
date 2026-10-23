@@ -28,8 +28,8 @@ def test_mentions_are_addressees_without_changing_channel_delivery(tmp_path):
     assert message.target == "#team"
     assert [item.thread for item in message.mentions] == ["alpha", "beta"]
     assert [message.body[item.start : item.end] for item in message.mentions] == ["@alpha", "@beta"]
-    assert [item.message_id for item in comms.bus.inbox("alpha")] == [message.message_id]
-    assert [item.message_id for item in comms.bus.inbox("beta")] == [message.message_id]
+    assert [item.message_id for item in comms.bus.inbox("alpha").page.messages] == [message.message_id]
+    assert [item.message_id for item in comms.bus.inbox("beta").page.messages] == [message.message_id]
     assert read_history(wire(tmp_path), "#team")[0].mentions == message.mentions
     assert Message.from_wire(message.to_wire()) == message.envelope
     scheduled = ScheduledTurn.incoming(message)

@@ -72,7 +72,7 @@ def test_real_route_counts_and_inbox_use_each_conversation(tmp_path):
     seed_prefix(comms, "reader", messages[2].seq)
     assert comms.bus.pending_count("reader", CommandTarget.named("#a")) == 0
     assert comms.bus.pending_count("reader", CommandTarget.named("#b")) == 2
-    assert [m.seq for m in comms.bus.inbox("reader")] == [messages[1].seq, messages[3].seq]
+    assert [m.seq for m in comms.bus.inbox("reader").page.messages] == [messages[1].seq, messages[3].seq]
     basis = comms.bus.delivered("reader", tuple(m.reference for m in messages))
     assert tuple(seq for item in basis.conversations for seq in item.sequences) == (
         messages[1].seq, messages[3].seq,
