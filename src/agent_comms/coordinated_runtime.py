@@ -170,7 +170,8 @@ class SelectedExecution(NativeExecution):
                         await participant.fail_before_send(self.max_attempts)
                         raise SessionSetupFailed(f"Native session acquisition failed: {error}") from error
                     try:
-                        return await SelectedConsideration(participant).run(self, session)
+                        async with session.files(self.root).accept_input():
+                            return await SelectedConsideration(participant).run(self, session)
                     except RetryScheduled:
                         # Leaving the selection closes this turn lease. The next
                         # iteration acquires the newer generation required by retry.

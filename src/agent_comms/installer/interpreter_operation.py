@@ -24,7 +24,6 @@ from pydantic.json_schema import DEFAULT_REF_TEMPLATE
 from typing_extensions import TypeForm
 
 import agent_comms
-from agent_comms.active_route import RouteFile, RouteFileSelection, active_route_path
 from agent_comms.declared_family import DeclaredFamily
 from agent_comms.field_codec import FieldCodec, PathText, WireValue
 from agent_comms.maintenance_barrier import HOLDER_NONCE
@@ -176,11 +175,6 @@ class PackageRootProbe(RuntimeProbe[Path]):
         return Path(agent_comms.__file__).parent
 
 
-class SelectedRouteProbe(RuntimeProbe[RouteFileSelection]):
-    """The staged runtime reads the published route before source changes."""
-
-    def run(self) -> RouteFileSelection:
-        return RouteFile.read(active_route_path()).selection()
 
 
 class PrepareNativeProbe(RuntimeProbe[None]):

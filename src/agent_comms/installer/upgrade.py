@@ -91,7 +91,6 @@ from agent_comms.installer.interpreter_operation import (
     RetainedProgram,
     RunningOwnersProbe,
     RuntimeProbe,
-    SelectedRouteProbe,
     ServingProbe,
     TargetProgram,
 )
@@ -101,6 +100,7 @@ from agent_comms.installer.practice import (
     RehearsalHome,
     RuntimeHome,
 )
+from agent_comms.installer.publication import SelectedRouteProbe
 from agent_comms.installer.reporting import (
     RootWriter,
     RuntimeWriter,
@@ -1158,7 +1158,6 @@ class FreshInstall(Install[FreshRehearsal]):
         Checkout(self.checkout).prepare()
         self.root.mkdir(mode=0o700, parents=True, exist_ok=True)
         wire(self.root).registry.prepare_native_root()
-        Bus.install(Bus.path_in(self.root))
         report.writer = RuntimeWriter(self.root, self.staged)
         backup, selected_route = self.backed_up(())
         try:
