@@ -235,7 +235,7 @@ class SelectedResponseNotification:
         sender_lookup: str,
         *,
         observation: RecipientActivity,
-        activity: AssignmentActivity | None = None,
+        activity: AssignmentActivity,
         updated_at_ms: int = 0,
         triage_inflight: bool = False,
     ) -> MessageNotification:
@@ -396,7 +396,7 @@ class CompletedAssignment(Complete, Terminal, BoundAssignment):
         sender_lookup: str,
         *,
         observation: RecipientActivity,
-        activity: AssignmentActivity | None,
+        activity: AssignmentActivity,
         updated_at_ms: int = 0,
         triage_inflight: bool = False,
     ) -> MessageNotification:
@@ -474,7 +474,7 @@ class DeliveredAssignment(
         sender_lookup: str,
         *,
         observation: RecipientActivity,
-        activity: AssignmentActivity | None,
+        activity: AssignmentActivity,
         updated_at_ms: int = 0,
         triage_inflight: bool = False,
     ) -> MessageNotification:
