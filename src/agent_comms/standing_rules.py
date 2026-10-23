@@ -429,13 +429,9 @@ class ReviewTimerUp(HeldOrderDue):
     @classmethod
     def conditions(cls, comms: Comms, commander: str,
                    pulls: ProgressRead) -> Iterable[tuple[Todo, EventTime]]:
-        from agent_comms.todos import OrderProgress
-
         todos = comms.goals.todos
         held = todos.held_for_commander(comms.registry.require(commander).incarnation)
-        pulls.register(held)
-        progress = {todo.id: OrderProgress.read(todo, comms.registry, pulls) for todo in held}
-        return todos.timers_up_in(held, time.time(), progress)
+        return todos.timers_up_in(held, time.time(), pulls.progress(held, comms.registry))
 
     def line(self) -> str:
         return (f"TIMER UP: {self.holder.name} {self.problem} at {self.since.clock()}, "

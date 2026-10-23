@@ -998,6 +998,11 @@ class ProgressRead(PullRequests, CheckoutReads):
         CheckoutReads.__init__(self)
         PullRequests.__init__(self, todos)
 
+    def progress(self, held: Sequence[Todo], registry: Registration) -> dict[str, OrderProgress]:
+        """Each held order's progress, read through this frame's one reader."""
+        self.register(held)
+        return {todo.id: OrderProgress.read(todo, registry, self) for todo in held}
+
 
 @dataclass(frozen=True)
 class ProgressSource:
