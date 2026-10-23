@@ -17,7 +17,7 @@ from agent_comms.child_process import ProcessIdentity
 from agent_comms.cli_bridges.monitor import InspectSession, PauseSession
 from agent_comms.cli_bridges import claude
 from agent_comms.cli_bridges.shared import (
-    MONITOR_FRAME, Binding, MonitorBridgeStopped, MonitorProbe, Serve, SessionBridgeResumes,
+    MONITOR_FRAME, Binding, MonitorBridgeStopped, MonitorBridgeSwapping, MonitorProbe, Serve, SessionBridgeResumes,
 )
 from agent_comms.comms import wire
 from agent_comms.field_codec import FieldCodec
@@ -100,9 +100,10 @@ def test_real_monitor_survives_bridge_retirement_and_requires_a_fresh_probe(tmp_
             monitor = subprocess.Popen(
                 (sys.executable, '-c',
                  'import asyncio; from agent_comms.cli_bridges.monitor import read_monitor; '
-                 'from agent_comms.cli_bridges.shared import MonitorBridgeStopped; '
+                 'from agent_comms.cli_bridges.shared import MonitorBridgeStopped, MonitorBridgeSwapping; '
                  'from agent_comms_hooks.watch import WatchClaim; '
-                 'asyncio.run(read_monitor(WatchClaim("copied-session"), MonitorBridgeStopped.announce))'),
+                 'asyncio.run(read_monitor(WatchClaim("copied-session"), '
+                 'MonitorBridgeStopped.announce, MonitorBridgeSwapping.announce))'),
                 env=env, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
             )
             cleanup.callback(stop, monitor)
@@ -250,13 +251,19 @@ def test_install_swap_keeps_the_claim_and_resumes_the_same_process_on_the_new_ru
                 monitor = subprocess.Popen(
                     (sys.executable, '-c',
                      'import asyncio; from agent_comms.cli_bridges.monitor import read_monitor; '
-                     'from agent_comms.cli_bridges.shared import MonitorBridgeStopped; '
+                     'from agent_comms.cli_bridges.shared import MonitorBridgeStopped, MonitorBridgeSwapping; '
                      'from agent_comms_hooks.watch import WatchClaim; '
                      f'asyncio.run(read_monitor(WatchClaim({claim.thread!r}), '
-                     'MonitorBridgeStopped.announce))'),
+                     'MonitorBridgeStopped.announce, MonitorBridgeSwapping.announce))'),
                     env=env, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
                 )
                 cleanup.callback(stop, monitor)
+                swapping = frame(monitor)
+                assert isinstance(swapping, MonitorBridgeSwapping)
+                assert swapping.notice == (
+                    f'Waiting for the session bridge of {claim.thread}: '
+                    'an install holds its claim and is replacing it.'
+                )
             bridges.require_resumed()
             assert bridges.failures == ()
             resumed = InspectSession().information(claim.socket_path)
@@ -267,5 +274,6 @@ def test_install_swap_keeps_the_claim_and_resumes_the_same_process_on_the_new_ru
             assert isinstance(state, LiveWatch)
             assert Path(state.record.command[0]).resolve() == new.script(claude.main).resolve()
             assert bridges_serving(home / '.local/state/agent-comms/claude-bridge-copy') == [child.pid]
+            # The next frame must be the probe, so a second swapping frame fails here.
             assert probe(monitor).session == claim.thread
             assert child.poll() is None, log.read_text()

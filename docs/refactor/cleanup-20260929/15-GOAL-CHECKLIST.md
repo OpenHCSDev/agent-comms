@@ -1711,7 +1711,7 @@ persistent objective. A source merge, historical receipt or staged launch does
 not establish current live usability. Checked PR dispositions below were fetched
 from GitHub during this checkpoint; merge ancestry was checked against Core7fcf826a
 and Toad43949ee. Historical acceptance remains in
-`plans/integration-live-completion-20260928.md` and each code-bearing PR's receipts.
+[the pinned integration plan](https://github.com/OpenHCSDev/agent-comms/blob/fae239936/plans/integration-live-completion-20260928.md) and each code-bearing PR's receipts.
 
 ## Latest publication checkpoint — 2026-10-05
 

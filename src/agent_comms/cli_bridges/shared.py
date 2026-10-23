@@ -540,20 +540,30 @@ class Serve(Watch):
         runtime = LaunchRuntime.installed()
         command = self.command(record, runtime)
         log = claim.path.with_suffix('.log')
+        offset = log.stat().st_size if log.exists() else 0
         with log.open('ab') as output:
             child = SpawnedProcess.launch(
                 command, env=runtime.environment(os.environ), output=output, runtime=runtime,
                 lifetime=OutlivesLauncherLifetime)
-        deadline = time.monotonic() + 30
-        while child.alive() and time.monotonic() < deadline:
+        announced = False
+        while child.alive():
             try:
                 request.exchange(claim.socket_path)
                 return
             except (FileNotFoundError, ConnectionRefusedError):
+                if not announced:
+                    print(
+                        f'Waiting for session bridge PID {child.pid} to answer; log {log}',
+                        file=sys.stderr, flush=True,
+                    )
+                    announced = True
                 time.sleep(.05)
+        summary = child.reap().summary()
+        with log.open('rb') as recorded:
+            recorded.seek(offset)
+            appended = recorded.read().decode(errors='replace').strip()
         raise RuntimeError(
-            f'Session bridge startup not observed (PID {child.pid}); inspect {log}. '
-            'No launch retry.'
+            f'Session bridge PID {child.pid} exited before answering ({summary}): {appended}'
         )
 
     @staticmethod
@@ -958,6 +968,10 @@ class MonitorProtocolFrame(MonitorFrame, declared_name=None):
     protocol: Literal['agent-comms-monitor'] = 'agent-comms-monitor'
     wire_prefix: ClassVar[str] = '{"protocol":' + json.dumps(protocol) + ','
 
+    def emit(self) -> None:
+        sys.stdout.write(self.model_dump_json() + '\n')
+        sys.stdout.flush()
+
 
 class MonitorProbe(MonitorProtocolFrame, declared_name='probe'):
     session: str
@@ -978,8 +992,21 @@ class MonitorBridgeStopped(MonitorProtocolFrame, declared_name='bridge-stopped')
             'Comms bridge stopped: no messages are delivered until it starts again. '
             f'{claim.path.with_suffix(".log")} names why; '
             'agent-comms-claude-bridge connect restarts it and this Monitor resumes.'))
-        sys.stdout.write(stopped.model_dump_json() + '\n')
-        sys.stdout.flush()
+        stopped.emit()
+
+    async def confirm(self, bridge: LineMonitorBridge, record: ObservedMonitor) -> None:
+        """A notice carries no delivery to confirm."""
+
+
+class MonitorBridgeSwapping(MonitorProtocolFrame, declared_name='bridge-swapping'):
+    notice: str
+
+    @classmethod
+    def announce(cls, claim: WatchClaim) -> None:
+        cls(notice=(
+            f'Waiting for the session bridge of {claim.thread}: '
+            'an install holds its claim and is replacing it.'
+        )).emit()
 
     async def confirm(self, bridge: LineMonitorBridge, record: ObservedMonitor) -> None:
         """A notice carries no delivery to confirm."""
@@ -1053,7 +1080,10 @@ class LineMonitorBridge(TranscriptConfirmsDelivery, TranscriptBridge[Options]):
         return WatchRecord(self.binding.bus, self.binding.root, command)
 
     async def watch_operation(self, operation: Watch) -> None:
-        await read_monitor(WatchClaim(self.binding.thread), MonitorBridgeStopped.announce)
+        await read_monitor(
+            WatchClaim(self.binding.thread), MonitorBridgeStopped.announce,
+            MonitorBridgeSwapping.announce,
+        )
 
     async def accept(self, message: messages.Message) -> None:
         # Wait before recording an attempt. Detachment never creates
