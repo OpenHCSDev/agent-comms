@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import shutil
 import subprocess
 from abc import ABC, abstractmethod
@@ -29,6 +30,28 @@ class RepositorySelection(ABC):
 
     @abstractmethod
     def without_commander(self) -> None: ...
+
+
+class GitCommandError(RuntimeError):
+    """A Git operation failure, not malformed order data to aggregate and continue past."""
+
+    def __init__(self, repository: str, run: subprocess.CompletedProcess[str]):
+        self.run = run
+        detail = run.stderr.strip() or f"git failed with exit {run.returncode}"
+        super().__init__(f"Git in {repository}: {detail}")
+
+    def source_path_absent(self, sha: str, file: str) -> bool:
+        """Only Git's missing-path result, never a failed fetch or corrupt repository."""
+        return self.run.returncode == 128 and self.run.stderr in (
+            f"fatal: path '{file}' does not exist in '{sha}'\n",
+            f"fatal: path '{file}' exists on disk, but not in '{sha}'\n",
+        )
+
+    def no_check_ran_on(self, sha: str) -> bool:
+        """Git's absent-note reply, not a corrupt repository or an invalid revision."""
+        return self.run.returncode == 1 and self.run.stderr in (
+            "", f"error: no note found for object {sha}.\n",
+        )
 
 
 class Repo(BaseModel, WireValue):
@@ -95,10 +118,11 @@ class Repo(BaseModel, WireValue):
         result = subprocess.run(
             ("git", "-C", str(self.checkout), "merge-base", "--is-ancestor", sha, revision),
             capture_output=True,
+            text=True,
             timeout=60,
         )
         if result.returncode not in (0, 1):
-            result.check_returncode()
+            raise GitCommandError(str(self.checkout), result)
         return result.returncode == 0
 
     def has_commit(self, sha: str) -> bool:
@@ -112,14 +136,13 @@ class Repo(BaseModel, WireValue):
         )
 
     @staticmethod
-    def git(checkout: Path, *args: str) -> str:
-        return subprocess.run(
-            ["git", "-C", str(checkout), *args],
-            capture_output=True,
-            text=True,
-            check=True,
-            timeout=30,
-        ).stdout
+    def git(checkout: Path | str, *args: str) -> str:
+        """The one Git runner: C-locale output, and every failure a GitCommandError."""
+        run = subprocess.run(("git", "-C", str(checkout), *args), capture_output=True, text=True,
+                             timeout=60, env=os.environ | {"LC_ALL": "C"})
+        if run.returncode:
+            raise GitCommandError(str(checkout), run)
+        return run.stdout
 
     @classmethod
     def of(cls, checkout: Path) -> Repo:

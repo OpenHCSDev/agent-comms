@@ -2170,6 +2170,26 @@ class WalStore(StoreWriter):
             yield connection
 
     @contextmanager
+    def committed_or_empty(
+        self,
+        schema: type[TableSchema],
+        opening: Callable[[], AbstractContextManager[sqlite3.Connection]],
+    ) -> Iterator[sqlite3.Connection]:
+        """Read the committed file, or its declared empty schema before its first write.
+
+        An absent file is established absence: a reader sees every declared table empty
+        and creates no storage."""
+        if self.path.exists():
+            with self._attached(opening) as connection:
+                yield connection
+            return
+        with closing(self.writer(":memory:", isolation_level=None)) as connection:
+            schema.create_schema(connection)
+            self._configure_reader(connection)
+            self.begin_snapshot(connection)
+            yield connection
+
+    @contextmanager
     def _open_writer(self, *, check_same_thread: bool = True) -> Iterator[sqlite3.Connection]:
         """Open one private writer and apply the file's declared WAL policy."""
         # Never open/close an extra descriptor for an existing SQLite inode:
@@ -2261,16 +2281,9 @@ class TypedStore(WalStore, TableSchema):
     @contextmanager
     def snapshot(self) -> Iterator[sqlite3.Connection]:
         """Read a committed store, or its declared empty schema before its first write."""
-        with ExitStack() as lifetime:
-            if self.path.exists():
-                connection = lifetime.enter_context(self._attached(
-                    lambda: self.observing(self.path, StoreBusy())))
-            else:
-                connection = lifetime.enter_context(closing(
-                    self.writer(":memory:", isolation_level=None)))
-                self.create_schema(connection)
-                self._configure_reader(connection)
-                self.begin_snapshot(connection)
+        with self.committed_or_empty(
+            type(self), lambda: self.observing(self.path, StoreBusy())
+        ) as connection:
             self.require_schema(connection)
             yield connection
 

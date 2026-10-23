@@ -26,10 +26,9 @@ from .field_codec import (
     SubclassUnion,
     WireValue,
 )
-from .goals import CheckedCommit, GitCommandFailed
+from .repo import GitCommandError, Repo
 
 if TYPE_CHECKING:
-    from .repo import Repo
     from .todos import PullRequestLink
 
 
@@ -55,17 +54,17 @@ class SourceRevision(ABC):
 
     def lines(self, repository: Path, file: str) -> tuple[str, ...]:
         if repository not in self._commits:
-            CheckedCommit.git(str(repository), 'fetch', 'origin', self.fetch_refspec)
-            self._commits[repository] = CheckedCommit.git(
-                str(repository), 'rev-parse', '--verify', f'{self.reference}^{{commit}}'
+            Repo.git(repository, 'fetch', 'origin', self.fetch_refspec)
+            self._commits[repository] = Repo.git(
+                repository, 'rev-parse', '--verify', f'{self.reference}^{{commit}}'
             ).strip()
         commit = self._commits[repository]
         root = repository.absolute()
         path = (root / file).relative_to(root).as_posix()
         try:
-            text = CheckedCommit.git(str(repository), 'show', f'{commit}:{path}')
+            text = Repo.git(repository, 'show', f'{commit}:{path}')
             return tuple(text.splitlines())
-        except GitCommandFailed as error:
+        except GitCommandError as error:
             if error.source_path_absent(commit, path):
                 raise MissingSourceLine(
                     f'Source file {file} does not exist at {commit}.'

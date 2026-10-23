@@ -460,8 +460,11 @@ class Bus(BusReader, ReconciledFile, WalStore, CarriedWriter, BusFile, Watched):
 
     @contextmanager
     def observing(self) -> Iterator[sqlite3.Connection]:
-        """Borrow one existing read-only snapshot, including for an archived bus."""
-        with self._attached(lambda: SQLiteFile.observing(self.path)) as db:
+        """Borrow one read-only snapshot, including for an archived bus; a bus before its
+        first write reads as its declared empty tables."""
+        with self.committed_or_empty(
+            self.table_schema(), lambda: SQLiteFile.observing(self.path)
+        ) as db:
             yield db
 
     def backup(self, destination: Path) -> None:

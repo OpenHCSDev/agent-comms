@@ -137,6 +137,20 @@ def publish_initial(comms, sender, target, body, type=InfoKind, *, role=Conversa
         destination=CommandTarget.named(target), origin=AgentOrigin(),
     )
 
+def _without_caller_repository() -> None:
+    """A caller's git selects no repository for any test git call.
+
+    ``git bisect run`` from a linked worktree exports GIT_DIR, and a fixture's
+    ``git -C tmp init`` then re-initialised the caller's checkout as bare instead of
+    creating its own. Removed at import, before session start's own git call and before
+    xdist workers inherit the environment."""
+    for name in tuple(name for name in os.environ if name.startswith("GIT_")):
+        del os.environ[name]
+
+
+_without_caller_repository()
+
+
 def pytest_sessionstart(session):
     """The controller populates this checkout's pinned submodules before any worker runs,
     as every tree of ours is (Checkout). Collection loads declarations only."""
