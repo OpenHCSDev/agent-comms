@@ -108,6 +108,18 @@ def test_checkout_resources_remain_owned_by_stack_when_build_artifacts_exist(tmp
     assert namespace["UNIT_INSTRUCTIONS"] == tmp_path / "stack/UNIT_SYSTEM.md"
 
 
+def stamp_prepared(stack, env):
+    manifest = stack / "pi-native.sha256"
+    stamp = NativeBuildInputs(stack.parent).preparation_digest(
+        manifest,
+        subprocess.check_output(["node", "--version"], env=env, text=True).strip(),
+        subprocess.check_output(["npm", "--version"], env=env, text=True).strip(),
+        env.get("PI_MCP_DEPENDENCY_PACKAGE", ""),
+    )
+    prepared = native_package.pinned_package_for(manifest).parents[2]
+    (prepared / ".prepared-inputs.sha256").write_text(stamp + "\n")
+
+
 @pytest.fixture
 def launcher(tmp_path):
     repo = Path(__file__).resolve().parents[1]
@@ -154,6 +166,7 @@ def launcher(tmp_path):
     package = native_package.pinned_package_for(stack / "pi-native.sha256")
     package.parent.mkdir(parents=True)
     staged.rename(package)
+    stamp_prepared(stack, dict(os.environ))
     return stack, package
 
 
@@ -224,6 +237,7 @@ def test_publication_installs_declared_source_with_one_link(launcher, tmp_path):
     (interpreter / "node").write_text("#!/bin/sh\nexit 0\n")
     (interpreter / "node").chmod(0o755)
     env = dict(os.environ, PATH=f"{interpreter}:{os.environ['PATH']}")
+    stamp_prepared(stack, env)
 
     def run():
         result = subprocess.run(launch, capture_output=True, text=True, timeout=15, env=env)
