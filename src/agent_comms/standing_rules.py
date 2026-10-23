@@ -21,7 +21,7 @@ from agent_comms.goals import GoalChangedError
 from agent_comms.recorded_time import EventTime, RecordedEventTime
 from agent_comms.repo import Repo
 from agent_comms.repository_name import RepositoryName
-from agent_comms.thread_identity import OfferedTools, ThreadIncarnation
+from agent_comms.thread_identity import ThreadIncarnation
 from agent_comms.work_branches import BranchDifference
 from agent_comms.service_passes import ServicePassStore
 
@@ -189,19 +189,21 @@ class UndatedStandingRule(StandingRule, declared_name=None):
 @dataclass(frozen=True)
 class LostTools(UndatedStandingRule):
     thread: ThreadIncarnation
-    current: OfferedTools
-    previous: OfferedTools
+    changes: tuple[str, ...]
 
     @classmethod
     def scan_observed(cls, comms: Comms, commander: str,
                       observed: Sequence[UnitState]) -> tuple[Self, ...]:
-        return tuple(cls(unit.source.thread.incarnation, current, previous)
-                     for unit in observed
-                     if unit.source.thread.lost_tools()
-                     for current, previous in (unit.source.thread.offered_tools,))
+        found = []
+        for unit in observed:
+            thread = unit.source.thread
+            changes = thread.lost_tools()
+            if changes:
+                found.append(cls(thread.incarnation, changes))
+        return tuple(found)
 
     def line(self) -> str:
-        return f"{self.thread.name}: {'; '.join(self.current.changes_from(self.previous))}"
+        return f"{self.thread.name}: {'; '.join(self.changes)}"
 
     def heartbeat_change(self, previous: Sequence[Self], current: Sequence[Self]) -> tuple[str, ...]:
         return super().heartbeat_change(previous, current) if current else ()

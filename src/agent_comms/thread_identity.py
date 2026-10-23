@@ -46,11 +46,8 @@ class ToolName(SingleFieldValue):
     value: str
 
 
-@dataclass(frozen=True)
 class OfferedTools(DeclaredFamily, affix="OfferedTools"):
-    """A runtime reports its catalogue, or explicitly does not report it."""
-
-    version: str
+    """No observation, a reported catalogue, or an explicitly unreported catalogue."""
 
     @abstractmethod
     def changes_from(self, previous: OfferedTools) -> tuple[str, ...]: ...
@@ -58,19 +55,71 @@ class OfferedTools(DeclaredFamily, affix="OfferedTools"):
     @abstractmethod
     def before_reported(self, current: ReportedTools) -> tuple[str, ...]: ...
 
-    def before_unreported(self, version: str) -> tuple[str, ...]:
-        return self.unreported_change(version)
+    @abstractmethod
+    def before_unreported(self, current: UnreportedTools) -> tuple[str, ...]: ...
 
-    def unreported_change(self, version: str) -> tuple[str, ...]:
-        return ((f"runtime {self.version} -> {version}, tool set unreported",)
-                if self.version != version else ())
+    @abstractmethod
+    def on_version(self, version: str) -> tuple[OfferedTools, ...]: ...
+
+    def on_catalogue(self, names: frozenset[ToolName]) -> tuple[OfferedTools, ...]:
+        return ()
+
+    def without_catalogue(self) -> tuple[OfferedTools, ...]:
+        return ()
+
+    def fills_version(self, version: str) -> bool:
+        return False
 
     def filled_by(self, current: OfferedTools) -> bool:
         return False
 
 
 @dataclass(frozen=True)
-class ReportedTools(OfferedTools):
+class UnobservedTools(OfferedTools):
+    """No runtime has reported yet; this member never produces a publication."""
+
+    def changes_from(self, previous: OfferedTools) -> tuple[str, ...]:
+        return ()
+
+    def before_reported(self, current: ReportedTools) -> tuple[str, ...]:
+        return ()
+
+    def before_unreported(self, current: UnreportedTools) -> tuple[str, ...]:
+        return ()
+
+    def on_version(self, version: str) -> tuple[OfferedTools, ...]:
+        return (UnreportedTools(version),)
+
+    def filled_by(self, current: OfferedTools) -> bool:
+        return True
+
+
+@dataclass(frozen=True)
+class ObservedTools(OfferedTools, declared_name=None):
+    version: str
+
+    def unreported_change(self, version: str) -> tuple[str, ...]:
+        return ((f"runtime {self.version} -> {version}, tool set unreported",)
+                if self.version != version else ())
+
+    def before_unreported(self, current: UnreportedTools) -> tuple[str, ...]:
+        return self.unreported_change(current.version)
+
+    def on_version(self, version: str) -> tuple[OfferedTools, ...]:
+        return (UnreportedTools(version),) if self.version != version else ()
+
+    def on_catalogue(self, names: frozenset[ToolName]) -> tuple[OfferedTools, ...]:
+        return (ReportedTools(self.version, names),)
+
+    def without_catalogue(self) -> tuple[OfferedTools, ...]:
+        return (UnreportedTools(self.version),)
+
+    def fills_version(self, version: str) -> bool:
+        return self.version == version
+
+
+@dataclass(frozen=True)
+class ReportedTools(ObservedTools):
     names: frozenset[ToolName]
 
     def changes_from(self, previous: OfferedTools) -> tuple[str, ...]:
@@ -82,12 +131,12 @@ class ReportedTools(OfferedTools):
                  f"runtime {current.version}",) if missing else ())
 
 
-class UnreportedTools(OfferedTools):
+class UnreportedTools(ObservedTools):
     def filled_by(self, current: OfferedTools) -> bool:
-        return self.version == current.version
+        return current.fills_version(self.version)
 
     def changes_from(self, previous: OfferedTools) -> tuple[str, ...]:
-        return previous.before_unreported(self.version)
+        return previous.before_unreported(self)
 
     def before_reported(self, current: ReportedTools) -> tuple[str, ...]:
         return self.unreported_change(current.version)

@@ -57,6 +57,7 @@ from .thread_creation import CreationSeconds, CreationTime, GeneratedCreationTim
 from .thread_identity import (
     AgentThreadRole,
     OfferedTools,
+    UnobservedTools,
     ThreadIncarnation,
     ThreadIncarnationRecord,
     ThreadRole,
@@ -288,23 +289,21 @@ class Thread(DurableFile, PatternFile, ThreadProvenance):
     turn_record: TurnRecord = field(default_factory=NoTurnRecord)
     channel_scope_generation: int = 0
     turn_generation: int = 0
-    offered_tools: Annotated[
-        tuple[OfferedTools, ...], WireOmitDefault()
-    ] = field(default=(), kw_only=True)
+    offered: Annotated[OfferedTools, WireOmitDefault()] = field(
+        default_factory=UnobservedTools, kw_only=True
+    )
+    offered_before_restart: Annotated[OfferedTools, WireOmitDefault()] = field(
+        default_factory=UnobservedTools, kw_only=True
+    )
 
     def observing_tools(self, offered: OfferedTools) -> Thread:
-        """Keep two distinct runtime observations in the original thread record."""
-        if self.offered_tools and self.offered_tools[0] == offered:
+        """Fill this incarnation; observations cannot manufacture a restart."""
+        if self.offered == offered or not self.offered.filled_by(offered):
             return self
-        if self.offered_tools and self.offered_tools[0].filled_by(offered):
-            return replace(self, offered_tools=(offered, *self.offered_tools[1:]))
-        return replace(self, offered_tools=(offered, *self.offered_tools[:1]))
+        return replace(self, offered=offered)
 
     def lost_tools(self) -> tuple[str, ...]:
-        if len(self.offered_tools) != 2:
-            return ()
-        current, previous = self.offered_tools
-        return current.changes_from(previous)
+        return self.offered.changes_from(self.offered_before_restart)
 
     def require_commander(self) -> None:
         """The thread's declared provider owns eligibility to command."""
@@ -510,7 +509,7 @@ class Thread(DurableFile, PatternFile, ThreadProvenance):
         """Drop the reference; the registry transaction owns revoking the record."""
         return replace(self, turn_record=self.turn_record.released())
 
-    def preserve_registration_history(self, previous: Thread) -> Thread:
+    def preserve_registration_history(self, previous: Thread, *, restarting: bool) -> Thread:
         """Metadata writers cannot forge channel scope or reset a finished turn."""
         scope = previous.channel_scope_generation
         if self.tags != previous.tags:
@@ -518,7 +517,11 @@ class Thread(DurableFile, PatternFile, ThreadProvenance):
                 raise RelationViolationError("Channel scope generation exhausted")
             scope += 1
         result = replace(self, created_at=previous.created_at, channel_scope_generation=scope,
-                         offered_tools=previous.offered_tools)
+                         offered=previous.offered,
+                         offered_before_restart=previous.offered_before_restart)
+        if restarting:
+            result = replace(result, offered=UnobservedTools(),
+                             offered_before_restart=previous.offered)
         if self.turn_generation != previous.turn_generation:
             result = replace(
                 result, turn_generation=previous.turn_generation, turn_record=previous.turn_record,

@@ -42,7 +42,7 @@ from agent_comms.transcript_events import (
     UserTranscript,
 )
 from agent_comms.thread_text import ThreadText
-from agent_comms.thread_identity import OfferedTools, ReportedTools, ToolName, UnreportedTools
+from agent_comms.thread_identity import OfferedTools, ToolName, UnobservedTools
 from agent_comms.turn_phase import ModelWaitPhase, ToolRunningPhase, TurnPhase
 
 from .shared import (
@@ -139,9 +139,7 @@ class ClaudeReaderPhase(ReadingPhase):
 @dataclass
 class CatchUp(ClaudeReaderPhase):
     pending: tuple[StatusUpdate, ...] = ()
-    latest_tools: tuple[OfferedToolsObserved, ...] = (
-        OfferedToolsObserved(UnreportedTools('unreported')),
-    )
+    latest_tools: tuple[OfferedToolsObserved, ...] = ()
 
     def offered(self, update: OfferedToolsObserved) -> tuple[RuntimeUpdate, ...]:
         self.latest_tools = (update,)
@@ -242,12 +240,13 @@ class ClaudeSession:
     tools: dict[str, ClaudeToolDraft] = field(default_factory=dict)
     phase: ClaudeReaderPhase = field(default_factory=CatchUp)
     project: str = ''
-    offered_tools: OfferedTools = UnreportedTools('unreported')
+    offered_tools: OfferedTools = field(default_factory=UnobservedTools)
 
     def version_reported(self, version: str | None) -> tuple[RuntimeUpdate, ...]:
-        if version is None or version == self.offered_tools.version:
+        if version is None:
             return ()
-        return self.offered(UnreportedTools(version))
+        return tuple(update for offered in self.offered_tools.on_version(version)
+                     for update in self.offered(offered))
 
     def offered(self, offered: OfferedTools) -> tuple[RuntimeUpdate, ...]:
         self.offered_tools = offered
@@ -793,10 +792,10 @@ class OfferedClaudeTool(WireModel):
 class ClaudeRequestShape(WireModel):
     tools: list[OfferedClaudeTool] | None = None
 
-    def offered(self, version: str) -> OfferedTools:
+    def offered(self, previous: OfferedTools) -> tuple[OfferedTools, ...]:
         if self.tools is None:
-            return UnreportedTools(version)
-        return ReportedTools(version, frozenset(ToolName(tool.name) for tool in self.tools))
+            return previous.without_catalogue()
+        return previous.on_catalogue(frozenset(ToolName(tool.name) for tool in self.tools))
 
 
 class ApiRequestShape(MetadataRecord, declared_name='api-request-shape'):
@@ -804,7 +803,8 @@ class ApiRequestShape(MetadataRecord, declared_name='api-request-shape'):
 
     shape: ClaudeRequestShape
     def updates(self, session: ClaudeSession) -> tuple[RuntimeUpdate, ...]:
-        return session.offered(self.shape.offered(self.version or session.offered_tools.version))
+        return tuple(update for offered in self.shape.offered(session.offered_tools)
+                     for update in session.offered(offered))
 
 
 class ApiRequestBlob(MetadataRecord, declared_name='api-request-blob'):
