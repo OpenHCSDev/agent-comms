@@ -242,7 +242,7 @@ class ExternalEventRow(ExternalTranscriptRows, TypedTable):
             cls(thread, seq, ordinal, event).insert(connection)
 
     @classmethod
-    def unjudged_query(cls, thread, todo):
+    def unjudged_query(cls, thread, todo, since):
         from .native_tools import MutatingPathTool
         from .tool_declaration import ToolDeclaration
         from .transcript_events import ToolStartTranscript
@@ -250,7 +250,6 @@ class ExternalEventRow(ExternalTranscriptRows, TypedTable):
         tools = tuple(tool.declared_name for tool in ToolDeclaration.members_with(MutatingPathTool))
         judged = todo.judged_calls
         placeholders = lambda values: ",".join("?" for _ in values)
-        since = todo.unjudged_since
         where = (f'e.thread=? AND e.kind=? AND e.tool IN ({placeholders(tools)}) '
                  'AND (e.timestamp>=? OR e.timestamp IS NULL)')
         parameters = (thread, ToolStartTranscript.declared_name, *tools, since)
@@ -414,8 +413,8 @@ class StoreRead(TranscriptSource):
              FieldCodec.encode(ToolStartTranscript), since),
         ).fetchone()[0]
 
-    def unjudged(self, todo):
-        where, parameters = ExternalEventRow.unjudged_query(self.transcript.lookup, todo)
+    def unjudged(self, todo, since):
+        where, parameters = ExternalEventRow.unjudged_query(self.transcript.lookup, todo, since)
         with closing(self.connection.execute(
             'SELECT timestamp,call_id,json_extract(event,\'$.tool\') FROM '
             '(SELECT e.event, e.timestamp, e.call_id, e.seq, e.ordinal, '
@@ -429,8 +428,8 @@ class StoreRead(TranscriptSource):
                 yield from tool.edit_calls(identity, GeneratedTimestamp.decode(timestamp),
                                            todo.held().owner, todo.id)
 
-    def unjudged_count(self, todo) -> int:
-        where, parameters = ExternalEventRow.unjudged_query(self.transcript.lookup, todo)
+    def unjudged_count(self, todo, since) -> int:
+        where, parameters = ExternalEventRow.unjudged_query(self.transcript.lookup, todo, since)
         return self.connection.execute(
             f'SELECT count(DISTINCT e.call_id) FROM "{ExternalEventRow.declared_name}" e WHERE {where}',
             parameters).fetchone()[0]

@@ -73,7 +73,7 @@ from agent_comms.todos import (
 from agent_comms.work_branches import WorkBranches
 from source_revision_fixture import SourceRepository
 
-pytest_plugins = ("test_holder_standing_rules", "test_unowned_checkout_work", "test_proof_build")
+pytest_plugins = ("test_holder_standing_rules", "test_unowned_checkout_work", "test_proof_build", "github_fixture")
 
 
 def thread(name: str, root: Path, created: float) -> Thread:
@@ -272,7 +272,7 @@ def test_merged_order_keeps_its_checked_fields(tmp_path: Path, source_repository
 
 
 @pytest.fixture
-def pr_commander(tmp_path, monkeypatch, proof_build_checkouts, durable_home):
+def pr_commander(tmp_path, monkeypatch, proof_build_checkouts, durable_home, github_cli):
     """One cited source, its real bare remote and installed history; only GitHub is synthetic."""
     graph = next(graph for graph in proof_build_checkouts
                  if graph.repository.github == CorePackage.repository)
@@ -290,7 +290,7 @@ def pr_commander(tmp_path, monkeypatch, proof_build_checkouts, durable_home):
     for number in (1, 2):
         source.git(source.checkout, 'push', 'origin', f'{merged}:refs/pull/{number}/head')
     common = dict(branch="feature/orders", head=merged, updated="2026-10-20T12:00:00Z",
-                  base=WorkBranches.main)
+                  base=WorkBranches.main, reviewable_times=("2026-10-20T12:00:00Z",))
     requests = (
         (MergedListedPullRequest(number=1, merge=PullRequestCommit(merged),
                                  merged="2026-10-20T12:00:00Z", **common), "No order metadata."),
@@ -298,15 +298,9 @@ def pr_commander(tmp_path, monkeypatch, proof_build_checkouts, durable_home):
                                  merged="2026-10-20T12:00:00Z", **common), "## P343\n\n## P344"),
         (ClosedListedPullRequest(number=3, **common), "Closed without merging."),
     )
-    binaries = tmp_path / "bin"
-    binaries.mkdir()
-    (binaries / "gh").symlink_to(Path(__file__).with_name("github_cli_stub.py"))
-    (binaries / "pull_requests.json").write_text(json.dumps({
-        "repo": source.github.to_wire(),
-        "requests": {str(row.number): {"body": body, "listed": FieldCodec.encode(row)}
-                     for row, body in requests},
-    }))
-    monkeypatch.setenv("PATH", os.pathsep.join((str(binaries), os.environ["PATH"])))
+    github_cli.configure(source.github)
+    for row, body in requests:
+        github_cli.put(source.github, row, body)
     Bus.install(Bus.path_in(tmp_path))
     lead = Thread(
         'lead', frozenset(), str(source.checkout), created_at=1.0)

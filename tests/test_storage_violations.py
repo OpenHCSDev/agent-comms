@@ -167,4 +167,4 @@ def test_storage_family_reads_once_and_renders_each_broken_fact(
     assert str(home) in text
     assert str(comms.registry.storage_rule.order_checkout(worker.name, "P<n>")) in text
     assert str(worker.storage_roots.scratch) in text
-    print("\n".join(StandingRule.heartbeat_changes((), found)))
+    print("\n".join(rule.line() for rule in found))

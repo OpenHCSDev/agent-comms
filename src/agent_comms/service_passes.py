@@ -1,13 +1,15 @@
-"""Each Core service watch whose newest pass failed, readable from every process on the bus."""
+"""Original completion times and current failures of Core's service watches."""
 
 from __future__ import annotations
 
 import time
+from collections.abc import Iterable
 from dataclasses import dataclass, field, replace
 from typing import ClassVar
 
-from .locked_store import DocumentChange, LockedStore, RuntimeFile
+from .locked_store import DocumentChange, DurableFile, LockedStore
 from .store_files import DependentStateTier
+from .thread_identity import RecordedThreadIncarnation, ThreadIncarnation
 
 
 @dataclass(frozen=True)
@@ -21,10 +23,12 @@ class FailingPass:
 @dataclass(frozen=True)
 class ServicePasses:
     failing: dict[str, FailingPass] = field(default_factory=dict)
+    commander_completed: dict[RecordedThreadIncarnation, float] = field(default_factory=dict)
+    """Last observation completed for each commander, including quiet observations."""
 
 
 @dataclass(frozen=True, slots=True)
-class ServicePassStore(RuntimeFile, LockedStore[ServicePasses], DependentStateTier):
+class ServicePassStore(DurableFile, LockedStore[ServicePasses], DependentStateTier):
     """The connector's log reaches nobody; the commander's standing rules read this file."""
 
     filename: ClassVar[str] = "service_passes.json"
@@ -47,8 +51,22 @@ class ServicePassStore(RuntimeFile, LockedStore[ServicePasses], DependentStateTi
             self.update(
                 lambda passes: DocumentChange.to(replace(
                     passes,
-                    failing={
-                        name: failing for name, failing in passes.failing.items() if name != watch
-                    },
+                    failing={name: failure for name, failure in passes.failing.items() if name != watch},
                 ))
             )
+
+    def heartbeat_passed(self, commanders: Iterable[ThreadIncarnation],
+                         observed: Iterable[ThreadIncarnation]) -> None:
+        current = frozenset(observed)
+        completed = {owner.require_recorded(): time.time() for owner in commanders}
+
+        def change(passes: ServicePasses) -> DocumentChange[ServicePasses, ServicePasses]:
+            retained = {owner: at for owner, at in passes.commander_completed.items()
+                        if owner in current}
+            updated = retained | completed
+            return DocumentChange.to(
+                passes if updated == passes.commander_completed
+                else replace(passes, commander_completed=updated)
+            )
+
+        self.update(change)

@@ -7,10 +7,11 @@ from __future__ import annotations
 
 from abc import abstractmethod
 from dataclasses import dataclass
-from typing import ClassVar
+from typing import Annotated, ClassVar
 
 from .declared_family import DeclaredFamily
 from .errors import ToolRefusedError
+from .field_codec import FieldCodec, GitCommitText
 from .repository_name import RepositoryName
 
 
@@ -20,14 +21,19 @@ class PullRequestHead:
 
     repo: RepositoryName
     pr: int
-    head: str
+    head: Annotated[str, GitCommitText]
+
+    def __post_init__(self) -> None:
+        if FieldCodec.decode(int, self.pr) <= 0:
+            raise ValueError("A pull request number must be positive.")
+        GitCommitText.decode(self.head)
 
     def current(self) -> str:
         """The PR's full head commit, refused unless the reviewed head is still it."""
         read = self.repo.rest(f"pulls/{self.pr}", "--jq", ".head.sha")
         if read.returncode:
             raise ToolRefusedError(read.stderr.strip() or f"#{self.pr} could not be read.")
-        current = read.stdout.strip()
+        current = GitCommitText.decode(read.stdout.strip())
         if not current.startswith(self.head):
             raise ToolRefusedError(
                 f"#{self.pr} moved to {current[:9]} since {self.head} was reviewed; review again."
@@ -59,26 +65,3 @@ class HeadReview(DeclaredFamily, affix="HeadReview"):
         )
         if posted.returncode:
             raise ToolRefusedError(posted.stderr.strip() or f"Review status on {head} failed.")
-
-
-@dataclass(frozen=True)
-class AcceptedHeadReview(HeadReview):
-    state = "success"
-
-    def description(self, reviewer: str, subject: str) -> str:
-        return f"Accepted by {reviewer} on {subject}"
-
-
-@dataclass(frozen=True)
-class SentBackHeadReview(HeadReview):
-    """The head goes back; the reason names the defect, the PR's review comment the detail."""
-
-    reason: str
-    state = "failure"
-
-    def __post_init__(self) -> None:
-        if len(self.reason.split()) < 4:
-            raise ValueError("Say what is wrong with the head in 4+ words.")
-
-    def description(self, reviewer: str, subject: str) -> str:
-        return f"Sent back by {reviewer} on {subject}: {self.reason}"

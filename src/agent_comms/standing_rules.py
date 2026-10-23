@@ -9,18 +9,21 @@ from __future__ import annotations
 import logging
 import time
 from abc import abstractmethod
-from collections import Counter, defaultdict
+from collections import Counter
 from collections.abc import Iterable, Mapping, Sequence
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, fields
 from pathlib import Path
 from itertools import combinations
 from typing import TYPE_CHECKING, ClassVar, Self
 
 from agent_comms.declared_family import DeclaredFamily
+from agent_comms.field_codec import FieldCodec
 from agent_comms.goals import GoalChangedError
+from agent_comms.text_digest import TextDigest
 from agent_comms.recorded_time import EventTime, RecordedEventTime
 from agent_comms.repo import Repo
 from agent_comms.repository_name import RepositoryName
+from agent_comms.head_review import PullRequestHead
 from agent_comms.thread_identity import ThreadIncarnation
 from agent_comms.work_branches import BranchDifference
 from agent_comms.service_passes import ServicePassStore
@@ -33,7 +36,8 @@ if TYPE_CHECKING:
     from agent_comms.messages import Message
     from agent_comms.registry_document import RegistrySnapshot
     from agent_comms.storage_rules import MemoryUse, StorageRule
-    from agent_comms.todos import OrderClaim, OwnerRequest, PullRequest, Todo
+    from agent_comms.todos import OrderClaim, OwnerRequest, ProgressRead, PullRequest, Todo
+    from agent_comms.goal_management import Goals
     from agent_comms.ui_model.unit_state import UnitObservation, UnitState
 
 
@@ -124,37 +128,18 @@ class StandingRule(DeclaredFamily, affix="StandingRule", discovery_package="agen
                 rejected.add(rule)
         return frozenset(rejected)
 
-    def heartbeat_group(self) -> object:
-        """Ordinary violations each own one heartbeat line."""
-        return self
+    def comparison_values(self) -> tuple[object, ...]:
+        """The declaration's equality fields, excluding presentation and live readers."""
+        return tuple(getattr(self, item.name) for item in fields(self) if item.compare)
 
-    def heartbeat_line(self, current: Sequence[Self]) -> str:
-        return self.line()
+    def observation_key(self) -> TextDigest:
+        """Stable content identity of this occurrence, never a digest of age or wording.
 
-    def heartbeat_change(self, previous: Sequence[Self], current: Sequence[Self]) -> tuple[str, ...]:
-        prefix = "RULE" if current else "NO LONGER CURRENT:"
-        return (f"{prefix} {self.heartbeat_line(current or previous)}",)
-
-    @staticmethod
-    def _heartbeat_groups(rules: Iterable[StandingRule]) -> dict[object, list[StandingRule]]:
-        groups: dict[object, list[StandingRule]] = defaultdict(list)
-        for rule in rules:
-            groups[rule.heartbeat_group()].append(rule)
-        return groups
-
-    @classmethod
-    def heartbeat_changes(cls, previous: Iterable[StandingRule],
-                          current: Iterable[StandingRule]) -> tuple[str, ...]:
-        """Render changed groups through their owning rule, without replaying unchanged ones."""
-        before, after = cls._heartbeat_groups(previous), cls._heartbeat_groups(current)
-        lines = []
-        for group in dict.fromkeys((*after, *before)):
-            old, new = before.get(group, []), after.get(group, [])
-            if frozenset(old) == frozenset(new):
-                continue
-            rule = (new or old)[0]
-            lines.extend(rule.heartbeat_change(old, new))
-        return tuple(lines)
+        Python's hash changes across processes. The codec gives the comparison
+        values their declared encoding; the class's own name distinguishes siblings
+        even when they deliberately have no public StandingRule registration.
+        """
+        return TextDigest(FieldCodec.comparison_digest((type(self), self.comparison_values())))
 
     @classmethod
     def scan_owner(cls) -> type[StandingRule]:
@@ -170,6 +155,28 @@ class StandingRule(DeclaredFamily, affix="StandingRule", discovery_package="agen
         return tuple(rule for owner in owners
                      for rule in owner.scan_observed(comms, commander, observed, frame)
                      if isinstance(rule, cls) and rule.attention() and rule.broke_after(after))
+
+
+class OrderRefusingStandingRule(StandingRule, declared_name=None):
+    """An overdue review prevents new orders, through the same backend admission path."""
+
+    @classmethod
+    @abstractmethod
+    def scan_reviews(cls, goals: Goals, commander: str, pulls: ProgressRead) -> tuple[Self, ...]: ...
+
+    @classmethod
+    def scan_observed(cls, comms: Comms, commander: str,
+                      observed: Sequence[UnitState], frame: HeartbeatFrame) -> tuple[Self, ...]:
+        return cls.scan_reviews(comms.goals, commander, frame.pulls)
+
+    @classmethod
+    def refusals(cls, goals: Goals, commander: str) -> tuple[str, ...]:
+        from agent_comms.todos import ProgressRead
+
+        pulls = ProgressRead(goals.todos.held_for_commander(goals.registry.require(commander).incarnation))
+        owners = dict.fromkeys(member.scan_owner() for member in cls.members_with(cls))
+        return tuple(rule.line() for owner in owners
+                     for rule in owner.scan_reviews(goals, commander, pulls))
 
 
 class IndependentStandingRule(StandingRule, declared_name=None):
@@ -210,9 +217,6 @@ class LostTools(UndatedStandingRule):
 
     def line(self) -> str:
         return f"{self.thread.name}: {'; '.join(self.changes)}"
-
-    def heartbeat_change(self, previous: Sequence[Self], current: Sequence[Self]) -> tuple[str, ...]:
-        return super().heartbeat_change(previous, current) if current else ()
 
 
 @dataclass(frozen=True)
@@ -546,6 +550,34 @@ class DeliveredHeadReview(DatedStandingRule):
 
 
 @dataclass(frozen=True)
+class UnreviewedHead(OrderRefusingStandingRule, DatedStandingRule):
+    """One ready head, including an orderless PR, waiting too long for a recorded verdict."""
+    request: PullRequestHead
+    due_at: float
+    seconds: ClassVar[int] = 10 * 60
+
+    @classmethod
+    def scan_reviews(cls, goals: Goals, commander: str, pulls: ProgressRead) -> tuple[Self, ...]:
+        now = time.time()
+        return tuple(
+            cls(request, due)
+            for repo in goals.registry.snapshot().commander_project.repository_names()
+            for row in pulls.open(repo)
+            for due in row.review_due(now, cls.seconds)
+            for request in (PullRequestHead(repo, row.number, row.head),)
+            if not goals.todos.head_reviews(request)
+        )
+
+    def began(self) -> float:
+        return self.due_at
+
+    def line(self) -> str:
+        return (f"UNREVIEWED HEAD: {self.request.repo.to_wire()}#{self.request.pr} "
+                f"head {self.request.head} -> judge ok/back --pr {self.request.pr} "
+                f"--head {self.request.head}")
+
+
+@dataclass(frozen=True)
 class HuntDue(ReasonedStandingRule, DatedStandingRule):
     since: float
     seconds: ClassVar[int] = 900
@@ -640,19 +672,6 @@ class DirectiveUnacted(OwedAnswer, DatedStandingRule):
             f"DIRECTIVE UNACTED: owner directive {self.cited}"
             f" on request {self.request.value},"
             f" due {self.directive.due_time} -> order its next step or mark the request done"
-        )
-
-    def heartbeat_group(self) -> object:
-        return type(self), self.request
-
-    def heartbeat_line(self, current: Sequence[Self]) -> str:
-        oldest = min(current, key=lambda rule: rule.directive.seq).directive
-        newest = max(current, key=lambda rule: rule.directive.seq).directive
-        return (
-            f"DIRECTIVE UNACTED: request {self.request.value}: {len(current)} owner directives; "
-            f"oldest {oldest.seq} due {oldest.due_time}; "
-            f"newest {newest.seq} due {newest.due_time} "
-            "-> order the next step or mark the request done"
         )
 
 
