@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from .activity_clocks import ChannelActivity
 from abc import ABC, abstractmethod
 from collections import OrderedDict
 from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
@@ -14,8 +13,8 @@ from typing import TYPE_CHECKING, Annotated, ClassVar
 
 from . import relationships
 from .activity import Activity, ActivityData, ActivityState, ObservedActivity
+from .activity_clocks import ChannelActivity
 from .audience_manifest import FrozenRecipient
-from .bus import Bus, BusSnapshot
 from .channel_targets import CommandTarget
 from .channels import Channel, ChannelMemberIndex, Channels
 from .cli_result import CliResult
@@ -50,7 +49,6 @@ from .message_page import (
 from .message_reference import MessageReference
 from .messages import Message
 from .notification_progress import DeliveryProgress, HumanReadProgress, ReadDelivery
-from .pi_counts import PiCount
 from .private_path import FileRevision
 from .read_basis import (
     AnonymousViewer,
@@ -75,7 +73,6 @@ from .revision_views import (
 from .runtime_info import RuntimeInfo
 from .storage_room import RoomLedger
 from .thread_identity import ThreadIncarnation
-from .threads import ThreadProvenance
 from .thread_presentation import (
     ThreadOwnerBinding,
     ThreadPresentation,
@@ -88,6 +85,7 @@ from .ui_model.unread import ExactUnread, IndexingUnread, UnobservedUnread, Unre
 
 if TYPE_CHECKING:
     from .agent_activity import AgentActivity, RecipientActivity
+    from .bus import Bus, BusSnapshot
     from .bus_publication import Delivered
     from .catalog_document import CatalogDocument
     from .catalog_store import ChannelCatalog
@@ -97,10 +95,12 @@ if TYPE_CHECKING:
     from .message_bus import MessageBus
     from .messages import Message
     from .notification_assignment import NotificationAssignmentRead
+    from .pi_counts import PiCount
     from .read_ledger import ReadLedger
     from .registration import Registration
     from .registry_document import RegistrySnapshot
     from .registry_provenance import DeletedThread, RegistryProvenance
+    from .threads import ThreadProvenance
     from .ui_model.observation import ThreadsObserved
 
 

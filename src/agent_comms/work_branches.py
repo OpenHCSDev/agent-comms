@@ -19,11 +19,11 @@ from typing import TYPE_CHECKING, ClassVar
 from pydantic import ConfigDict
 from pydantic.alias_generators import to_camel
 
-from .cli_protocol import WireModel
 from .declared_family import DeclaredFamily
 from .field_codec import projected
 from .repo import Repo
 from .repository_name import RepositoryName
+from .wire_models import WireModel
 
 if TYPE_CHECKING:
     from .registry_document import RegistrySnapshot
