@@ -43,8 +43,13 @@ class MainTree:
         return self.git("cat-file", "-e", f"{self.commit}:{path}").returncode == 0
 
     def grep(self, *options: str, pattern: str, paths: tuple[str, ...]) -> list[str]:
-        """``git grep -E`` rows under ``paths``; git pathspecs such as ``:!file`` exclude."""
-        run = self.git("grep", *options, "-E", "-e", pattern, self.commit, "--", *paths)
+        """``git grep -E`` rows in this tree, like ``module`` and ``modules``.
+
+        A submodule is another repository's tree, regardless of local recurse settings.
+        Git pathspecs such as ``:!file`` exclude.
+        """
+        run = self.git("grep", "--no-recurse-submodules", *options,
+                       "-E", "-e", pattern, self.commit, "--", *paths)
         if run.returncode not in (0, 1):
             run.check_returncode()
         return run.stdout.splitlines()

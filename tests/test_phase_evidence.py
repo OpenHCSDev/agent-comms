@@ -131,6 +131,26 @@ def test_roster_evidence_keeps_external_abi_and_each_remaining_internal_registry
         assert not changed.holds(RostersPhase.evidence), remaining
 
 
+def test_main_tree_grep_uses_the_same_repository_tree_as_its_module_reader(tmp_path):
+    dependency = tmp_path / "dependency"
+    dependency.mkdir()
+    main_of(dependency, {"src/debt.py": "class Carry:\n    declared = {}\n"})
+    checkout = tmp_path / "owner"
+    checkout.mkdir()
+    reading = main_of(checkout, {"src/owner.py": "class OtherOwner:\n    members = {}\n"})
+    git(checkout, "-c", "protocol.file.allow=always", "submodule", "add", "-q",
+        str(dependency), "src/dependency")
+    git(checkout, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-qam", "dependency")
+    git(checkout, "update-ref", "refs/remotes/origin/main", git(checkout, "rev-parse", "HEAD"))
+    git(checkout, "config", "submodule.recurse", "true")
+    assert "src/dependency" in git(checkout, "grep", "--recurse-submodules", "-n",
+                                   "-e", "declared", "HEAD", "--", "src")
+    current = PlanReading((), MainTree.of(reading.main.repo))
+    assert current.holds(RostersPhase.evidence)
+    assert not current.main.matching_lines(r"declared", ("src",))
+    assert len(tuple(current.main.modules(("src",)))) == 1
+
+
 def test_source_shape_evidence_reads_declarations_on_main(tmp_path):
     copy = "    def __init__(self, path):\n        self.path = path\n"
     reading = main_of(tmp_path, {
