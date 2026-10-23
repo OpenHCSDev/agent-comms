@@ -15,7 +15,7 @@ from __future__ import annotations
 import inspect
 import json
 import subprocess
-from abc import ABC, abstractmethod
+from abc import abstractmethod
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from graphlib import TopologicalSorter
@@ -43,25 +43,15 @@ class Carried:
 
 
 @dataclass(frozen=True)
-class Carry(ABC):
+class Carry(DeclaredFamily):
     """One migration's decoded source, destination and retirement location."""
 
     root: Annotated[Path, PathText]
     original_root: Annotated[Path, PathText]
     spill_dir: Annotated[Path, PathText]
 
-    declared: ClassVar[dict[str, type[Carry]]] = {}
     precedes: ClassVar[tuple[type[Carry], ...]] = ()
     """Steps whose decoders require this step's output, regardless of addition date."""
-    """Every step imported so far, by its module name."""
-
-    def __init_subclass__(cls, **kwargs: object) -> None:
-        super().__init_subclass__(**kwargs)
-        if inspect.isabstract(cls):
-            return
-        if cls.name() in Carry.declared and Carry.declared[cls.name()] is not cls:
-            raise TypeError(f"{cls.name()} declares a second carry step")
-        Carry.declared[cls.name()] = cls
 
     @classmethod
     def module(cls) -> Path:
@@ -135,7 +125,7 @@ class CarryChain:
         directory = (tree / STEPS).resolve()
         for path in sorted(directory.glob("*.py")):
             import_module(f"{directory.name}.{path.stem}")
-        steps = [step for step in Carry.declared.values() if step.module().parent == directory]
+        steps = [step for step in Carry.members_with(Carry) if step.module().parent == directory]
         log = subprocess.check_output(
             ["git", "-C", str(tree), "log", "-m", "--first-parent", "--no-renames",
              "--diff-filter=A", "--reverse", "--name-only", "--format=", "HEAD", "--",

@@ -22,7 +22,8 @@ def main() -> None:
     steps = []
     for name, encoded_step in FieldCodec.parse(encoded_steps):
         import_module(f"{STEPS.name}.{name}")
-        steps.append(FieldCodec.decode(Carry.declared[name], encoded_step))
+        step_type, = (step for step in Carry.members_with(Carry) if step.name() == name)
+        steps.append(FieldCodec.decode(step_type, encoded_step))
     Path(result_path).write_text(operation.encode_answers(
         tuple(operation.run(step) for step in steps)))
 
