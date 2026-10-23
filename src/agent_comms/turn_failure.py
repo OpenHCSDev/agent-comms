@@ -53,7 +53,6 @@ class InputIdUnavailable(TurnFailure):
         return self.with_text(self.text + "\nBackend startup reported:\n" + stderr)
 
 
-
 class NativePreflightTimeout(InputIdUnavailable):
     """Input-ID preflight expired before the native child attested."""
 

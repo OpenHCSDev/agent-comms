@@ -15,11 +15,11 @@ def test_terminal_diagnostic_excludes_untrusted_payloads(tmp_path):
         sequences=(6943,),
         failure=NativePreflightTimeout,
         measurements={
-                "wait_ms": 5000,
-                "session_bytes": 88255627,
-                "exit_code": -15,
-                "token": "SECRET",
-                "spawn_ms": "SECRET",
+            "wait_ms": 5000,
+            "session_bytes": 88255627,
+            "exit_code": -15,
+            "token": "SECRET",
+            "spawn_ms": "SECRET",
         },
     )
     raw = path.read_text()

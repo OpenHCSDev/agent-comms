@@ -14,8 +14,8 @@ from typing import ClassVar
 from agent_comms import turn_failure as failures
 from agent_comms.diagnostics import DiagnosticDocument
 from agent_comms.errors import RelationViolationError
-from agent_comms.goal_attempts import AttemptRecord, GoalAttemptStore, GoalLedgerTable
-from agent_comms.goal_failure_observation import FailedTurnEvidence
+from agent_comms.goal_attempts import AttemptRecord, GoalAttemptStore
+from agent_comms.goal_failure_observation import FailedTurnEvidence, GoalLedgerTable
 from agent_comms.installer.carry import Carried, Carry
 from agent_comms.locked_store import SQLiteFile
 from agent_comms.store_files import _atomic_write_text

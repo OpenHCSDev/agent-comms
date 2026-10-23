@@ -194,15 +194,13 @@ def read_active_route(path: Path | None = None) -> ActiveRoute | None:
         parent = path.parent.lstat()
         if (
             not stat.S_ISDIR(parent.st_mode)
-            or parent.st_uid != os.geteuid()
-            or stat.S_IMODE(parent.st_mode) != 0o700
+            or not Platform.current().is_private(parent, 0o700)
         ):
             raise ValueError("active comms route directory must be owner-only")
         info = os.fstat(fd)
         if (
             not stat.S_ISREG(info.st_mode)
-            or not Platform.current().is_owned(info)
-            or stat.S_IMODE(info.st_mode) != 0o600
+            or not Platform.current().is_private(info, 0o600)
             or info.st_nlink != 1
             or not 0 < info.st_size <= 4096
         ):
@@ -245,7 +243,7 @@ def guard_default_route_write(expected_root: Path, *, blocking: bool = True) -> 
         parent = path.parent.lstat()
         if (
             not stat.S_ISDIR(info.st_mode)
-            or info.st_uid != os.geteuid()
+            or not Platform.current().is_owned(info)
             or (parent.st_dev, parent.st_ino) != (info.st_dev, info.st_ino)
         ):
             raise ValueError("active comms route directory changed or is not owned")
