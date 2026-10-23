@@ -34,7 +34,7 @@ class TestOrderCompletion:
     ):
         ctx = held_commander
         repo = ctx.repos[0]
-        graph = next(graph for graph in proof_build_checkouts if graph.repository == repo)
+        graph = next(graph for graph in proof_build_checkouts if graph.repository.github == repo.github)
         original = ctx.comms.goals.todos.get('P1').order
         merged = replace(original, check=OrderCheck(
             str(repo.checkout), 'printf 1', CountCheckResult(0)))
@@ -61,7 +61,7 @@ class TestOrderCompletion:
         main(['check', 'P1', '--check', f'{repo.checkout} :: printf 1 -> 0',
               '--why', 'The original check counted source outside the declared fix family'], ctx)
         corrected = ctx.comms.goals.todos.get('P1')
-        assert corrected.order.check_base(repo.checkout) == WorkBranches.main
+        assert corrected.order.check_base(repo.checkout) == f"origin/{WorkBranches.main}"
         assert corrected.order.check.command == 'printf 1'
         assert (corrected.order.id, corrected.assignment,
                 corrected.review_at, corrected.strikes) == (
@@ -101,7 +101,8 @@ class TestOrderCompletion:
         self, held_commander, proof_build_checkouts,
     ):
         ctx = held_commander
-        graph = next(graph for graph in proof_build_checkouts if graph.repository == ctx.repos[0])
+        graph = next(graph for graph in proof_build_checkouts
+                     if graph.repository.github == ctx.repos[0].github)
         works = 'Open retained workflow and confirm its report stays visible'
         original = ctx.comms.goals.todos.get('P1').order
         self.record(ctx, replace(original, run=ApplicationOrderRun(works)).merged(graph.installed))

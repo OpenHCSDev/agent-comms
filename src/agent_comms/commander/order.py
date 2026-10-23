@@ -84,7 +84,6 @@ from agent_comms.todos import (
     ProblemFinding,
     PullRequestLink,
     RecordPullRequest,
-    Slop,
     StrikeReason,
     StrikeTodo,
     Successor,
@@ -94,6 +93,7 @@ from agent_comms.todos import (
     VoidStrikeTodo,
     WithdrawTodo,
 )
+from agent_comms.slop import Slop
 from agent_comms.tool_caller import CommanderForkCaller, NoThreadCaller
 from agent_comms.tools import (
     CommsChangeProblemTool,
