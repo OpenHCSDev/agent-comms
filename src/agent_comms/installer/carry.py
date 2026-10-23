@@ -54,7 +54,6 @@ class Carry(DeclaredFamily, affix="", discovery_package="cutover"):
     """Steps whose decoders require this step's output, regardless of addition date."""
 
     opened_files: ClassVar[tuple[type[RootFile] | type[JsonDocument], ...]]
-    pending_files: ClassVar[tuple[type[RootFile] | type[JsonDocument], ...]]
 
     def roots(self) -> tuple[Path, ...]:
         return (self.root,)
@@ -113,10 +112,8 @@ class BackupFilesOperation(CarryOperation[tuple[Annotated[Path, PathText], ...]]
 
 @dataclass(frozen=True)
 class InputFilesOperation(CarryOperation[tuple[Annotated[Path, PathText], ...]]):
-    pending: bool
-
     def run(self, step: Carry) -> tuple[Annotated[Path, PathText], ...]:
-        return step.input_files(step.pending_files if self.pending else step.opened_files)
+        return step.input_files(step.opened_files)
 
 
 @dataclass(frozen=True)
