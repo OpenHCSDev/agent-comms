@@ -67,6 +67,9 @@ class AgentEvent(ABC):
     def require_preparation_success(self) -> None:
         pass
 
+    def retain_terminal(self, turn) -> None:
+        pass
+
 
 class GoalChange(ABC):
     """A goal observation publishes its own change, including no change."""
@@ -271,6 +274,9 @@ class Done(AgentEvent, FailedGoalTurn):
     def require_preparation_success(self) -> None:
         if not self.ok:
             raise NativePiUnavailable(self.text)
+
+    def retain_terminal(self, turn) -> None:
+        turn.terminal = self
 
     def resolve(
         self, error: Error | None, document: InputDocument, original: OriginalTurnInput,
