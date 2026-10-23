@@ -38,7 +38,7 @@ def test_independent_requests_orders_and_directives(comms: Comms, durable_home, 
     commander = comms.registry.require("commander")
     worker = comms.registry.require("worker")
     store = comms.goals.todos
-    ctx = Commander.on_machine("commander", (repository,), comms.root, durable_home)
+    ctx = Commander.on_root("commander", (repository,), comms.root)
     request_main(["add", "commander native in Core"], ctx)
     first_id = capsys.readouterr().out.strip()
     request_main(["add", "virtual bus"], ctx)
