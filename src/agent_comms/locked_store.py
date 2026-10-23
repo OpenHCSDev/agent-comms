@@ -146,6 +146,12 @@ class RootFile:
         return Path(root) / cls.filename.format(**parts)
 
     @classmethod
+    def directory_in(cls, root: Path | str) -> Path:
+        """The directory this declaration's files live in under the bus root ``root``;
+        ``bus_root`` is its inverse."""
+        return Path(root) / cls.root_directory
+
+    @classmethod
     def bus_root(cls, path: Path) -> Path:
         """The bus root a file of this declaration at ``path`` lives under: one parent per
         directory its declared location names, the filename's own directories included."""
@@ -213,7 +219,7 @@ class RootFile:
             visited.add(family)
             pending.extend(family.__subclasses__())
             if "filename" in vars(family):
-                yield family, root / family.root_directory
+                yield family, family.directory_in(root)
 
     @classmethod
     def existing_in(cls, root: Path) -> dict[Path, type[Self]]:
