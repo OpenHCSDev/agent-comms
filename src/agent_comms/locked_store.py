@@ -59,7 +59,7 @@ class RootFile:
     filename: ClassVar[str]
     root_directory: ClassVar[str] = "."
 
-    def __init_subclass__(cls, **kwargs) -> None:
+    def __init_subclass__(cls, **kwargs: object) -> None:
         """A declared file is either retained across installations or rewritten by its
         running owner; a declaration that is neither has no install behaviour at all."""
         super().__init_subclass__(**kwargs)
