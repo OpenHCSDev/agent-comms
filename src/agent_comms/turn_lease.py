@@ -577,7 +577,11 @@ class StoredTurnRecord(Executing, DurableFile, PatternFile, JsonDocument[ActiveT
     def _turn_effects(
         self, lease: TurnLeaseFence, observe: Callable[[TurnState], Iterable[TurnState]],
     ) -> tuple[TurnState, ...]:
+        from .registry_store import RegistryStore
+
         with _store_lock(self.registry_path):
+            if not RegistryStore(self.registry_path).read_snapshot_unlocked().holds_turn(self.identity):
+                return ()
             active = self.read()
             if not active.held_by(lease):
                 return ()

@@ -141,6 +141,8 @@ class RegistryEdit:
     store: RegistryStore
     document: RegistryDocument
     original: RegistryRevision
+    superseded: list[StoredTurnRecord] = field(default_factory=list)
+    """Turn files a lease in this edit replaced; deleted once the registry stops naming them."""
 
     def prepare_native_source(self, owner: RegistryOwner, session_file: str) -> NativeSourcePublication:
         current = owner.require_source_snapshot(self.original.snapshot)
@@ -173,6 +175,8 @@ class RegistryEdit:
             project_resume_due=False,
             turn_record=StoredTurnRecord.begin(self.store.path, identity, turn),
         )
+        if current.turn_generation:
+            self.superseded.append(StoredTurnRecord.for_identity(self.store.path, current.turn_identity))
         self.document.threads[current.name] = leased
         self.document.last_seen[current.name] = time.time()
         return leased, self.document.owners.generations[current.name]
@@ -181,6 +185,9 @@ class RegistryEdit:
         if self.document != self.original.document:
             self.store.save_unlocked(self.document)
             self.original = self.store.read_revision_unlocked()
+        for record in self.superseded:
+            record.path.unlink()
+        self.superseded.clear()
 
 
 @dataclass(frozen=True, slots=True)
@@ -278,7 +285,7 @@ class RegistryStore(RegistryFile, CarriedDocument[RegistryDocument]):
 
     def _bind_thread(self, thread: Thread) -> Thread:
         record = thread.turn_record
-        bound = record.bound_to(self.path, TurnIdentity(thread.incarnation, thread.turn_generation))
+        bound = record.bound_to(self.path, thread.turn_identity)
         return thread if bound is record else replace(thread, turn_record=bound)
 
     def _bind_document(self, document: RegistryDocument) -> RegistryDocument:

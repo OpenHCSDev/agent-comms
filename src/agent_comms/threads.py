@@ -471,12 +471,17 @@ class Thread(DurableFile, PatternFile, ThreadProvenance):
             idle=identity.generation == self.turn_generation
             and self.turn_record == FinishedTurn(turn.value))
 
+    @property
+    def turn_identity(self) -> TurnIdentity:
+        """The turn generation this thread's registry entry currently names."""
+        return TurnIdentity(self.incarnation, self.turn_generation)
+
     def observed_turn(self, claim_scope: int) -> TurnFence | None:
         """Passive current/last-completed witness; never a begin-turn grant."""
         turn_id = self.turn_state.observed_id()
         if turn_id is None:
             return None
-        return TurnFence(TurnIdentity(self.incarnation, self.turn_generation), turn_id, claim_scope)
+        return TurnFence(self.turn_identity, turn_id, claim_scope)
 
     def latest_idle_turn(self, fence: TurnFence, claim_scope: int) -> bool:
         """Only the exact latest completed turn can release a dependency."""
