@@ -43,11 +43,8 @@ class TurnOwner(Carry):
                     f"{path} names PID {stored['owner_pid']}, which {thread.name!r} "
                     "never recorded as its process."
                 )
-            carried = {
-                ("owner" if key == "owner_pid" else key):
-                    (FieldCodec.encode(owner, ProcessIdentity) if key == "owner_pid" else value)
-                for key, value in stored.items()
-            }
+            del stored["owner_pid"]
+            carried = stored | {"owner": FieldCodec.encode(owner, ProcessIdentity)}
             FieldCodec.decode(ActiveTurn, carried)
             if apply:
                 _atomic_write_text(path, json.dumps(carried))
