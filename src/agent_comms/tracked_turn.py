@@ -407,16 +407,15 @@ class TrackedTurnSession(TurnSession):
         return event
 
     async def send(self, command: commands.PiCommand) -> None:
-        payload = self.native.reader.encode(command)
         try:
             async with self.ingress.ingress_async() as status:
                 status.require_open()
-                self.write(command, payload)
+                self.write(command)
         except RelationViolationError as error:
             raise NativePiUnavailable("Maintenance closed before Pi capability preflight") from error
         wait = self.watchdog.wait_for(self)
         with wait.charge(self.watchdog.clock):
-            await asyncio.wait_for(self.native.proc.stdin.drain(), timeout=wait.timeout())
+            await asyncio.wait_for(self.native.drain(), timeout=wait.timeout())
 
     async def attest(self) -> None:
         self.native.attestation = self.launch.session.tracked_attestation(
@@ -449,10 +448,10 @@ class TrackedTurnSession(TurnSession):
         with self.startup.measurements.operation("attestation_publication"):
             await self.observe_event(observed)
 
-    def write(self, command: commands.PiCommand, payload: bytes) -> None:
+    def write(self, command: commands.PiCommand) -> None:
         if command is self.command:
             self.grant_prompt()
-        self.native.proc.stdin.write(payload)
+        self.native.send(command)
 
     async def send_prompt(self) -> None:
         await self.prompt_send_boundary.send_prompt(self)

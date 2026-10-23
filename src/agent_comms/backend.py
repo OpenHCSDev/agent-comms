@@ -395,9 +395,7 @@ class NativeSession(MroDispatch, ABC):
         return self.started_input and self.accepts_output and self.output.matches_message(text)
 
     def ensure_input_forwarding(self):
-        if self.native.proc.stdin is not None:
-            self.stdin = self.native.proc.stdin
-            self.native.forward_input(partial(self.inputs.forward, self))
+        self.native.forward_input(partial(self.inputs.forward, self))
 
     def observe_input_during_abort(self, event):
         if self.accepts_output:
@@ -413,32 +411,29 @@ class NativeSession(MroDispatch, ABC):
 
     async def abort_stalled_rpc(self) -> None:
         await self.native.finish_input()
-        if self.native.proc.stdin is not None and self.native.proc.returncode is None:
-            abort_deadline = self.loop.time() + max(0.0, self.rpc_abort_grace)
-            try:
-                self.native.proc.stdin.write(
-                    self.native.reader.encode(commands.Abort(id=RequestId("agent-comms-watchdog")))
+        abort_deadline = self.loop.time() + max(0.0, self.rpc_abort_grace)
+        try:
+            remaining = max(0.0, abort_deadline - self.loop.time())
+            self.native.send(commands.Abort(id=RequestId("agent-comms-watchdog")))
+            await asyncio.wait_for(self.native.drain(), timeout=remaining)
+            while remaining := max(0.0, abort_deadline - self.loop.time()):
+                response = await asyncio.wait_for(
+                    self.native.reader.readline(), timeout=remaining
                 )
-                remaining = max(0.0, abort_deadline - self.loop.time())
-                await asyncio.wait_for(self.native.proc.stdin.drain(), timeout=remaining)
-                while remaining := max(0.0, abort_deadline - self.loop.time()):
-                    response = await asyncio.wait_for(
-                        self.native.reader.readline(), timeout=remaining
-                    )
-                    if not response:
-                        break
-                    try:
-                        abort_payload = PiRpcChannel.decode_record(response)
-                    except (json.JSONDecodeError, UnicodeDecodeError, MalformedRecord):
-                        continue
-                    abort_payload.observe_abort(self)
-                    if (
-                        isinstance(abort_payload, pi.Response)
-                        and abort_payload.command is commands.Abort
-                    ):
-                        break
-            except TimeoutError:
-                pass
+                if not response:
+                    break
+                try:
+                    abort_payload = PiRpcChannel.decode_record(response)
+                except (json.JSONDecodeError, UnicodeDecodeError, MalformedRecord):
+                    continue
+                abort_payload.observe_abort(self)
+                if (
+                    isinstance(abort_payload, pi.Response)
+                    and abort_payload.command is commands.Abort
+                ):
+                    break
+        except (TimeoutError, BrokenPipeError):
+            pass
         await self.native.shutdown()
 
     def context_info(self) -> events.ContextInfo:
@@ -490,12 +485,11 @@ class NativeSession(MroDispatch, ABC):
                 )
                 async with self.native.failures():
                     self.output.sensitive |= self.native.sensitive_diagnostics
-                    if self.native.proc.stdin is not None:
-                        try:
-                            self.native.proc.stdin.write(self.native.reader.encode(self.native.attestation.request))
-                            await self.native.proc.stdin.drain()
-                        except (BrokenPipeError, ConnectionResetError):
-                            pass
+                    try:
+                        self.native.send(self.native.attestation.request)
+                        await self.native.drain()
+                    except (BrokenPipeError, ConnectionResetError):
+                        pass
                     await self.initialize_rpc()
                     while True:
                         self.skip = False

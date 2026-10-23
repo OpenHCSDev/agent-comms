@@ -91,8 +91,21 @@ class PiChild:
     forwarding: InputForwarder = field(default_factory=NoInputForwarder, init=False, repr=False)
     _close_job: asyncio.Task[ChildOutcome | BaseException] | None = field(default=None, init=False, repr=False)
 
+    def send(self, command) -> asyncio.Future:
+        future = self.reader.track(command)
+        self.proc.send(self.reader.command_bytes(command))
+        return future
+
+    async def drain(self) -> None:
+        await self.proc.drain()
+
+    async def send_fenced(self, command, boundary, *, measurements) -> None:
+        self.reader.track(command)
+        await self.proc.send_fenced(self.reader.command_bytes(command), boundary, measurements=measurements)
+
     async def reply_ui(self, response) -> None:
-        await asyncio.wait_for(self.proc.write(self.reader.encode(response)), timeout=2)
+        self.send(response)
+        await asyncio.wait_for(self.drain(), timeout=2)
 
     @classmethod
     async def start_command(cls, argv, *, cwd, env=INHERITED_ENVIRONMENT, pass_fds=(),
@@ -104,7 +117,7 @@ class PiChild:
         if self.retired:
             raise RuntimeError('Pi child has retired')
         async with self.failures():
-            response = await self.reader.request(command, self.proc.stdin)
+            response = await self.reader.request(command, self)
         if not response.succeeded:
             raise RuntimeError(response.error.value_or("Pi gave no error text"))
         return response.data.require_payload()
@@ -302,7 +315,7 @@ class BorrowedNative(SuccessorNative):
     async def inspect(self, persistent, prepare, request):
         # The active TurnSession owns receive/correlation. Borrow its original
         # pending response instead of starting a competing reader.
-        async with request.pending_response(self.child.reader, self.child.proc.stdin) as response:
+        async with request.pending_response(self.child) as response:
             return (await response).data.require_payload()
 
 @dataclass
