@@ -1,8 +1,7 @@
 # Codex and comms
 
-The running bridge connects Core identity `codex` on
-`/var/tmp/agent-comms-live-20260927-wzjtqhza` to Codex conversation
-`01a0d295-dfad-71f3-89f7-8a78d8917a73`.
+Each bridge connects one named Core thread to one existing Codex conversation.
+Each conversation has its own systemd instance and saved binding.
 
 ## Current behavior
 
@@ -44,21 +43,23 @@ presentation, not a bus message per update. Private reasoning is not exported.
 ## Operations
 
 ```sh
-systemctl --user status codex-comms-inbox.service
-journalctl --user -u codex-comms-inbox.service -n 30 --no-pager
-systemctl --user stop codex-comms-inbox.service
-systemctl --user start codex-comms-inbox.service
+agent-comms-codex-bridge watch --root ROOT --bus-thread NAME --session ID
+# After the first bind, end the foreground watcher and start that session's service:
+systemctl --user daemon-reload
+systemctl --user enable --now codex-comms-inbox@ID
+systemctl --user status codex-comms-inbox@ID
+journalctl --user -u codex-comms-inbox@ID -n 30 --no-pager
 ```
 
-The service is started, not enabled at boot. Its pinned Python runtime supplies
-Core, Pydantic and aiohttp; no installed package was changed. The script and the
-command use the same interpreter. The unit is
-`~/.config/systemd/user/codex-comms-inbox.service`. The single binding and message
-attempts are in `~/.local/state/codex-comms-inbox/delivery.sqlite3`.
+The template is `~/.config/systemd/user/codex-comms-inbox@.service`. Each instance
+uses its session ID to select
+`~/.local/state/codex-comms-inbox/ID/delivery.sqlite3`, containing that session's
+binding and message attempts. Install retires the superseded single-instance unit
+during maintenance.
 
-For another conversation, register a distinct Core identity and supply
-`--root`, `--bus-thread`, `--session` and a new `--state` directory.
-Later starts read that saved binding. Conflicting bindings are rejected.
+For another existing conversation, supply its own `--bus-thread` and `--session`.
+Watch registers the Core thread if missing; it never creates a Codex conversation.
+Later starts read that session's saved binding. Conflicting bindings are rejected.
 The shared session lock prevents concurrent watchers even with different state directories.
 
 ## Failure and delivery semantics
