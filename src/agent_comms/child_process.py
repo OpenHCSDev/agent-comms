@@ -423,6 +423,10 @@ class Platform(DeclaredFamily, affix="Platform"):
     @abstractmethod
     def identity(self, pid: int) -> ProcessIdentity: ...
 
+    def started_at(self, identity: ProcessIdentity) -> float:
+        """This recorded process's birth on the monotonic clock."""
+        raise NotImplementedError("This platform does not expose process elapsed time")
+
     @abstractmethod
     def arguments(self, process: ProcessIdentity) -> tuple[str, ...]: ...
 
@@ -574,6 +578,11 @@ class LinuxPlatform(PidfdHandles, PosixPlatform):
 
     def identity(self, pid: int) -> ProcessIdentity:
         return self._stat(pid).identity
+
+    def started_at(self, identity: ProcessIdentity) -> float:
+        started = identity.start_time / os.sysconf("SC_CLK_TCK")
+        age = time.clock_gettime(time.CLOCK_BOOTTIME) - started
+        return time.monotonic() - age
 
     def arguments(self, process: ProcessIdentity) -> tuple[str, ...]:
         try:
@@ -728,6 +737,9 @@ class DarwinPlatform(PosixPlatform):
             pid, info.start_seconds * 1_000_000 + info.start_microseconds, info.pgid,
         )
 
+    def started_at(self, identity: ProcessIdentity) -> float:
+        return time.monotonic() - (time.time() - identity.start_time / 1_000_000)
+
     def arguments(self, process: ProcessIdentity) -> tuple[str, ...]:
         raise NotImplementedError(f"{type(self).__name__} does not read process arguments")
 
@@ -873,6 +885,7 @@ class Win32Platform(Platform):
         self._api("OpenProcess", handle, dword, ctypes.c_int, dword)
         self._api("CloseHandle", ctypes.c_int, handle)
         self._api("GetProcessTimes", ctypes.c_int, handle, pointer, pointer, pointer, pointer)
+        self._api("GetSystemTimeAsFileTime", None, pointer)
         self._api("WaitForSingleObject", dword, handle, dword)
         self.wait_callback_type = ctypes.WINFUNCTYPE(None, pointer, ctypes.c_ubyte)
         self._api("CreateEventW", handle, pointer, ctypes.c_int, ctypes.c_int, ctypes.c_wchar_p)
@@ -933,6 +946,11 @@ class Win32Platform(Platform):
     def identity(self, pid: int) -> ProcessIdentity:
         with self.process_handle(pid) as handle:
             return self._identity(pid, handle)
+
+    def started_at(self, identity: ProcessIdentity) -> float:
+        current = ctypes.c_uint64()
+        self.kernel.GetSystemTimeAsFileTime(ctypes.byref(current))
+        return time.monotonic() - (current.value - identity.start_time) / 10_000_000
 
     def arguments(self, process: ProcessIdentity) -> tuple[str, ...]:
         raise NotImplementedError(f"{type(self).__name__} does not read process arguments")

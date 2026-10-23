@@ -5,7 +5,6 @@ import os
 import subprocess
 import sys
 import tempfile
-import time
 from collections.abc import Iterator, Mapping
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import ExitStack, contextmanager
@@ -17,26 +16,22 @@ from typing import BinaryIO
 from agent_comms.child_process import SpawnedProcess
 from agent_comms.field_codec import FieldCodec
 from agent_comms.installer.interpreter_operation import (
+    CommandPhase,
+    GitPhase,
+    InstallClock,
+    InstallPhase,
+    PhaseTiming,
     ProbeProgram,
+    ProbeReply,
     ProbeRequest,
     RuntimeProbe,
     SourceProgram,
+    WorkerClosePhase,
 )
 from agent_comms.installer.refusals import InterpreterWorkerDied, UpgradeRefused
 from agent_comms.launch_runtime import RestoredRuntime
 from agent_comms.maintenance_barrier import MaintenanceHolder
 from agent_comms.repo import Repo
-
-
-@dataclass(frozen=True)
-class TimedCommand:
-    """One command an install ran and how long it took."""
-
-    command: str
-    seconds: float
-
-    def line(self) -> str:
-        return f"{self.seconds:.1f}s {self.command}"
 
 
 @dataclass(frozen=True)
@@ -112,7 +107,7 @@ class InstallCommands:
     """The commands one install runs. Its stacks and steps run every command through it,
     and the install's log and result both read what it ran."""
 
-    ran: list[TimedCommand] = field(default_factory=list)
+    clock: InstallClock = field(default_factory=InstallClock)
     workers: dict[InterpreterWorkerKey, InterpreterWorker] = field(default_factory=dict, init=False)
     worker_lock: Lock = field(default_factory=Lock, init=False)
     launcher: ThreadPoolExecutor = field(
@@ -136,31 +131,29 @@ class InstallCommands:
                 worker.finish()
 
     def close_runtime(self, python: Path) -> None:
-        self.close_workers(tuple(key for key in self.workers if key.python == python))
+        with WorkerClosePhase(str(python)).running(self.clock):
+            self.close_workers(tuple(key for key in self.workers if key.python == python))
 
     def close(self) -> None:
-        try:
-            self.close_workers(tuple(self.workers))
-        finally:
-            self.launcher.shutdown(wait=True)
+        with WorkerClosePhase().running(self.clock):
+            try:
+                self.close_workers(tuple(self.workers))
+            finally:
+                self.launcher.shutdown(wait=True)
 
     def __exit__(self, *_: object) -> None:
         self.close()
 
     @contextmanager
-    def timing(self, command: str) -> Iterator[None]:
-        print("+", command, file=sys.stderr, flush=True)
-        started = time.monotonic()
-        try:
-            yield
-        finally:
-            timed = TimedCommand(command, time.monotonic() - started)
-            self.ran.append(timed)
-            print("=", timed.line(), file=sys.stderr, flush=True)
+    def timing(self, phase: InstallPhase) -> Iterator[PhaseTiming]:
+        print("+", phase.label(), file=sys.stderr, flush=True)
+        with phase.running(self.clock) as measured:
+            yield measured
+        print("=", measured.line(), file=sys.stderr, flush=True)
 
     def run(self, *command: str | Path, cwd: Path = Path(),
             env: Mapping[str, str] = os.environ, label: str = "") -> str:
-        with self.timing(label or " ".join(map(str, command))):
+        with self.timing(CommandPhase(label or " ".join(map(str, command)))):
             completed = subprocess.run([str(part) for part in command], cwd=cwd, env=env,
                                        capture_output=True, text=True)
         if completed.returncode:
@@ -170,7 +163,7 @@ class InstallCommands:
 
     def git(self, checkout: Path, *args: str) -> str:
         """Git through the one runner (``Repo.git``), timed like every install command."""
-        with self.timing(f"git -C {checkout} {' '.join(args)}"):
+        with self.timing(GitPhase(f"git -C {checkout} {' '.join(args)}")):
             return Repo.git(checkout, *args)
 
     def probe[Answer](self, probe: RuntimeProbe[Answer], python: Path, *,
@@ -178,7 +171,7 @@ class InstallCommands:
                       program: ProbeProgram = SourceProgram()) -> Answer:
         key = InterpreterWorkerKey(python, tuple(map(str, program.entry())), cwd.absolute(),
                                    tuple(sorted(MaintenanceHolder.outside(env).items())))
-        with self.timing(f"{python} {type(probe).__name__}"):
+        with self.timing(probe.install_phase()) as measured:
             with self.worker_lock:
                 if key not in self.workers:
                     # Linux binds a child's lifetime to its launching thread. Keep that
@@ -191,5 +184,7 @@ class InstallCommands:
             except InterpreterWorkerDied:
                 self.close_workers((key,))
                 raise
-        return probe.decode_answer(answer)
+            reply = FieldCodec.decode(ProbeReply, FieldCodec.parse(answer))
+            self.clock.include(reply.phases, measured)
+            return FieldCodec.decode(probe.answer_type(), reply.answer)
 
