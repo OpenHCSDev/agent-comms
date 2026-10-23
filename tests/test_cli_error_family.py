@@ -162,3 +162,26 @@ def test_existing_binding_lookup_does_not_acquire_a_writer(tmp_path):
         assert not any(sql.startswith(('BEGIN', 'COMMIT', 'ROLLBACK')) for sql in statements)
 
 
+
+
+@pytest.mark.asyncio
+async def test_watched_record_crosses_the_watch_line_as_its_envelope(root):
+    """The bridge's watch child writes what bus.watch yields; the bridge decodes that same line."""
+    from contextlib import aclosing
+
+    from goal_owner_fixture import canonical_goal_wire
+
+    from agent_comms.cli_protocol import ArrivedMessage
+    from agent_comms.read_basis import ExplicitWatchAcknowledgment
+    from agent_comms.threads import Thread
+
+    comms = canonical_goal_wire(root)
+    for name in ("a", "b"):
+        comms.registry.declare(Thread(name=name, tags=frozenset(), worktree='/wt'))
+    sent = comms.messaging.send("a", "b", "crosses").message
+    async with aclosing(comms.bus.watch("b", acknowledgment=ExplicitWatchAcknowledgment)) as watched:
+        async with asyncio.timeout(5):
+            record = await anext(watched)
+    line = WATCH_LINE.validate_json(ArrivedMessage(message=record).model_dump_json())
+    assert isinstance(line, ArrivedMessage)
+    assert line.message.to_wire() == sent.to_wire() == record.to_wire()

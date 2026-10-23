@@ -52,7 +52,7 @@ from .shared import (
     MonitorIncomingFrame,
     MonitorObservation,
     MonitorPart,
-    MonitorProbe,
+    MonitorProtocolFrame,
     ObservedMonitor,
 )
 
@@ -97,7 +97,7 @@ class ClaudeMonitorFrame(MonitorIncomingFrame):
 
     @classmethod
     def decode_line(cls, line: str) -> MonitorFrame:
-        if line.startswith(MonitorProbe.wire_prefix):
+        if line.startswith(MonitorProtocolFrame.wire_prefix):
             return MONITOR_FRAME.validate_json(line)
         # Classify the external header before decoding its JSON string. Old or
         # unrelated monitor text, including truncated text, is a named foreign frame.

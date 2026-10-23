@@ -1,7 +1,6 @@
 """Native stories use one copied Todo record, including a resent send-back."""
 
 
-from agent_comms.bus import Bus
 from agent_comms.repository_name import RepositoryName
 
 from dataclasses import replace
@@ -29,7 +28,6 @@ from agent_comms.threads import Thread
 
 def test_order_story_copied_bus_strike_and_send_back_once(comms, tmp_path):
     source = SourceRepository.create(tmp_path / 'source')
-    Bus.install(Bus.path_in(comms.root))
     for name in ("lead", "worker"):
         comms.registry.declare(Thread(name, frozenset({"comms"}), str(tmp_path)))
     request = comms.goals.todos.add_request(

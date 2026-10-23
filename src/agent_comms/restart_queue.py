@@ -211,7 +211,8 @@ class RestartQueue:
     def __post_init__(self) -> None:
         for path in (self.directory, self.active_directory, self.directory / 'settled'):
             path.mkdir(mode=0o700, exist_ok=True)
-            PrivateDirectoryRole.require(path.lstat())
+            PrivateDirectoryRole.require(
+                path.lstat(), RelationViolationError("Restart queue directory must be private"))
 
     @property
     def active_directory(self) -> Path:
@@ -237,7 +238,8 @@ class RestartQueue:
         owner = record.selection.identity.incarnation.require_recorded()
         directory = self.directory / 'settled' / owner.lookup
         directory.mkdir(mode=0o700, exist_ok=True)
-        PrivateDirectoryRole.require(directory.lstat())
+        PrivateDirectoryRole.require(
+            directory.lstat(), RelationViolationError("Settled restart directory must be private"))
         return directory / f'{uuid.UUID(record.id).hex}.json'
 
     def read(self, path: Path) -> QueuedRestart:

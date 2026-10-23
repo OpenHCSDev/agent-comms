@@ -1,7 +1,6 @@
 """Commander forks use registered identity and the original Todo assignment."""
 
 
-from agent_comms.bus import Bus
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import replace
 import json
@@ -51,7 +50,6 @@ def fork_bus(tmp_path):
     source.git(source.checkout, 'commit', '-qm', 'Declare shared assignment owner')
     source.git(source.checkout, 'push', 'origin', 'main')
     comms = wire(tmp_path / 'saved-bus')
-    Bus.install(Bus.path_in(comms.root))
     comms.channels.create_tag('comms')
     # Two order holders never share one worktree, so each unit has its own checkout.
     units = tuple((name, tmp_path / f'{name}-checkout') for name in ('worker', 'other', 'retained'))

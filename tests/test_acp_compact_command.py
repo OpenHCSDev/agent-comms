@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import pytest
 from acp import RequestError
-from acp.schema import PromptResponse, TextContentBlock
+from acp.schema import ImageContentBlock, PromptResponse, TextContentBlock
 
 from agent_comms.acp_extension import (
     CompactionCommittedUpdate,
@@ -56,7 +56,13 @@ async def test_compact_rejects_multimodal_and_overlong_without_bridge_or_model(t
     session = (await agent.new_session(cwd=str(tmp_path / "work"))).session_id
     try:
         with pytest.raises(RequestError) as multimodal:
-            await agent.prompt(session, [block("/compact"), {"type": "image", "data": "abc"}])
+            await agent.prompt(
+                session,
+                [
+                    block("/compact"),
+                    ImageContentBlock(type="image", data="abc", mime_type="image/png"),
+                ],
+            )
         assert multimodal.value.data == {"reason": "/compact requires one text block."}
         with pytest.raises(ValueError) as oversized:
             await agent.prompt(session, [block("/compact " + "x" * 2001)])

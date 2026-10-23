@@ -11,7 +11,6 @@ from multiprocessing.queues import Queue
 from multiprocessing.synchronize import Event
 from pathlib import Path
 
-from agent_comms.bus import Bus
 from agent_comms.cli_bridges.claude import ClaudeTranscript
 from agent_comms.comms import wire
 from agent_comms.storage_rules import StorageRoots
@@ -65,7 +64,6 @@ def main() -> None:
     root = args.root.resolve()
     root.mkdir(mode=0o700, parents=True, exist_ok=True)
     comms = wire(root)
-    Bus.install(Bus.path_in(comms.root))
     event = dict(
         timestamp="2026-10-19T00:00:00Z",
         cwd=str(root),

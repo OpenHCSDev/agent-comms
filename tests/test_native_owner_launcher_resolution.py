@@ -1,7 +1,6 @@
 """Native launcher identity, route and acquired package remain independent."""
 
 
-from agent_comms.bus import Bus
 import shlex
 import sys
 from pathlib import Path
@@ -21,7 +20,6 @@ async def test_fork_runs_selected_python_before_copying_saved_history(tmp_path, 
 
     package = VerifiedNativePackage.acquire(pinned_native)
     comms = wire(tmp_path / "wire")
-    Bus.install(Bus.path_in(comms.root))
     LaunchRoot.from_path(comms.root).install()
     selected = tmp_path / "selected-core"
     (selected / "bin").mkdir(parents=True)
