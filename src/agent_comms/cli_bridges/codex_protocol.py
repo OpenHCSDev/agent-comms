@@ -179,6 +179,10 @@ class Initialize(RequestParams):
     capabilities: Capabilities = Field(default_factory=Capabilities)
 
 
+class InitializeResponse(WireModel):
+    userAgent: str
+
+
 class ResumeThread(RequestParams):
     method = 'thread/resume'
     threadId: str

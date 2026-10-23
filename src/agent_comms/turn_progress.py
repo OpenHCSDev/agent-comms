@@ -114,6 +114,10 @@ class TurnProgress(events.AgentEventConsumer):
 
     @handles(events.ContextObserved)
     async def observe_context(self, event):
+        await Coordination.run_worker(partial(
+            self.comms.registry.observe_offered_tools,
+            self.thread.incarnation, event.context.offered_tools,
+        ))
         self.context_prior = await event.context.record(
             self.comms.contexts, self.context_prior, self.thread, self.turn_lease
         )

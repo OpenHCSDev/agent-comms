@@ -56,6 +56,8 @@ from .thread_execution import NativeThreadExecution, ThreadExecution
 from .thread_creation import CreationSeconds, CreationTime, GeneratedCreationTime
 from .thread_identity import (
     AgentThreadRole,
+    OfferedTools,
+    UnobservedTools,
     ThreadIncarnation,
     ThreadIncarnationRecord,
     ThreadRole,
@@ -287,6 +289,26 @@ class Thread(DurableFile, PatternFile, ThreadProvenance):
     turn_record: TurnRecord = field(default_factory=NoTurnRecord)
     channel_scope_generation: int = 0
     turn_generation: int = 0
+    offered: Annotated[OfferedTools, WireOmitDefault()] = field(
+        default_factory=UnobservedTools, kw_only=True
+    )
+    offered_before_restart: Annotated[OfferedTools, WireOmitDefault()] = field(
+        default_factory=UnobservedTools, kw_only=True
+    )
+
+    def observing_tools(self, offered: OfferedTools) -> Thread:
+        """Fill this incarnation; observations cannot manufacture a restart."""
+        if self.offered == offered or not self.offered.filled_by(offered):
+            return self
+        return replace(self, offered=offered)
+
+    def lost_tools(self) -> tuple[str, ...]:
+        return self.offered.changes_from(self.offered_before_restart)
+
+    def restarted_tools(self) -> Thread:
+        """A new owner incarnation starts unobserved over the last real record."""
+        return replace(self, offered=UnobservedTools(),
+                       offered_before_restart=self.offered.restarted_over(self.offered_before_restart))
 
     def require_commander(self) -> None:
         """The thread's declared provider owns eligibility to command."""
@@ -499,7 +521,9 @@ class Thread(DurableFile, PatternFile, ThreadProvenance):
             if scope >= (1 << 63) - 1:
                 raise RelationViolationError("Channel scope generation exhausted")
             scope += 1
-        result = replace(self, created_at=previous.created_at, channel_scope_generation=scope)
+        result = replace(self, created_at=previous.created_at, channel_scope_generation=scope,
+                         offered=previous.offered,
+                         offered_before_restart=previous.offered_before_restart)
         if self.turn_generation != previous.turn_generation:
             result = replace(
                 result, turn_generation=previous.turn_generation, turn_record=previous.turn_record,

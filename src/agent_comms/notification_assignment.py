@@ -7,7 +7,7 @@ from abc import abstractmethod
 from collections.abc import Iterable, Iterator, Sequence
 from dataclasses import dataclass, replace
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, NoReturn
 
 from .audience_manifest import FrozenRecipient
 from .coordination_schema import CoordinatorTable
@@ -26,10 +26,14 @@ from .notification_progress import (
 from .typed_table import BooleanStorage, TypedRow
 
 if TYPE_CHECKING:
-    from .private_registry_guard import RegistryPrivacy
+    from collections.abc import Mapping
+    from typing import Self
+
     from .agent_activity import RecipientActivity
     from .bus_publication import Delivered
+    from .coordination_database import InvalidStore, MissingStore
     from .presentation import MessageNotification
+    from .private_registry_guard import RegistryPrivacy
     from .wake_policy import RecipientDecision
 
 
@@ -47,7 +51,7 @@ class AssignmentContextEvidence(DeclaredFamily, affix="ContextEvidence"):
 
 
 class NotShownContextEvidence(AssignmentContextEvidence):
-    def progress(self, *, pending_at_ms, queued):
+    def progress(self, *, pending_at_ms: int, queued: bool) -> AssignmentProgress:
         progress = QueuedProgress if queued else SentProgress
         return progress(pending_at_ms)
 
@@ -58,13 +62,13 @@ class ShownContextEvidence(AssignmentContextEvidence):
 
     committed_at_ms: int
 
-    def progress(self, *, pending_at_ms, queued):
+    def progress(self, *, pending_at_ms: int, queued: bool) -> AssignmentProgress:
         return ShownToModelProgress(self.committed_at_ms)
 
 
 @dataclass(frozen=True)
 class AssignmentResponse(DeclaredFamily, affix="Response"):
-    def recorded(self, message) -> AssignmentResponse:
+    def recorded(self, message: Delivered) -> AssignmentResponse:
         return self
 
     @classmethod
@@ -92,15 +96,15 @@ class AssignmentResponse(DeclaredFamily, affix="Response"):
 
 
 class UnansweredResponse(AssignmentResponse):
-    def recorded(self, message):
+    def recorded(self, message: Delivered) -> AssignmentResponse:
         return AnsweredResponse(
             message.reference, int(message.timestamp * 1000)
         )
 
-    def completed_notification(self, progress, notification):
+    def completed_notification(self, progress: AssignmentProgress, notification: MessageNotification) -> MessageNotification:
         return progress.read_notification(notification)
 
-    def delivered_notification(self, notification, delivered_at_ms):
+    def delivered_notification(self, notification: MessageNotification, delivered_at_ms: int) -> MessageNotification:
         return replace(
             notification,
             state=ShownToModelProgress(delivered_at_ms),
@@ -113,12 +117,12 @@ class AnsweredResponse(AssignmentResponse):
     reference: MessageReference
     received_at_ms: int
 
-    def completed_notification(self, progress, notification):
+    def completed_notification(self, progress: AssignmentProgress, notification: MessageNotification) -> MessageNotification:
         return progress.answered_notification(
             notification, self.reference, self.received_at_ms
         )
 
-    def delivered_notification(self, notification, delivered_at_ms):
+    def delivered_notification(self, notification: MessageNotification, delivered_at_ms: int) -> MessageNotification:
         return replace(
             notification,
             state=AnsweredProgress(ShownToModelProgress(delivered_at_ms)),
@@ -134,16 +138,16 @@ class AssignmentActivity:
     progress: AssignmentProgress
     response: AssignmentResponse
 
-    def pending_notification(self, notification, queued_at_ms):
+    def pending_notification(self, notification: MessageNotification, queued_at_ms: int) -> MessageNotification:
         return self.progress.selected_notification(notification, busy=False)
 
-    def completed_notification(self, notification):
+    def completed_notification(self, notification: MessageNotification) -> MessageNotification:
         return self.response.completed_notification(self.progress, notification)
 
-    def delivered_notification(self, notification, delivered_at_ms):
+    def delivered_notification(self, notification: MessageNotification, delivered_at_ms: int) -> MessageNotification:
         return self.response.delivered_notification(notification, delivered_at_ms)
 
-    def recorded_response(self, message):
+    def recorded_response(self, message: Delivered) -> Self:
         return replace(self, response=self.response.recorded(message))
 
 
@@ -168,8 +172,8 @@ class AssignmentActivityEvidence(TypedRow):
         }
 
     @classmethod
-    def _decode_row(cls, row, positions) -> AssignmentActivityEvidence:
-        def column(name):
+    def _decode_row(cls, row, positions: Mapping[str, int]) -> AssignmentActivityEvidence:
+        def column(name: str):
             return row[positions[name]]
 
         return cls(
@@ -206,7 +210,7 @@ class UnrecordedNotificationSource(NotificationSource):
     recipient: FrozenRecipient
     decision: RecipientDecision
 
-    def project(self, observation: RecipientActivity, sender_lookup: str):
+    def project(self, observation: RecipientActivity, sender_lookup: str) -> MessageNotification:
         return self.decision.initial_notification(
             self.recipient, sender_lookup, observation=observation)
 
@@ -344,11 +348,15 @@ class NotificationAssignment(NotificationSource):
             return result
 
     @classmethod
-    def missing_store(cls, store, sources, privacy):
+    def missing_store(
+        cls, store: MissingStore, sources: Sequence[Delivered], privacy: RegistryPrivacy,
+    ) -> NotificationAssignmentRead:
         return privacy.missing_notification_assignments(sources)
 
     @classmethod
-    def invalid_store(cls, store, sources, privacy):
+    def invalid_store(
+        cls, store: InvalidStore, sources: Sequence[Delivered], privacy: RegistryPrivacy,
+    ) -> NoReturn:
         raise ValueError(f"Channel notification status unavailable: {store.failure_reason}")
 
     @property

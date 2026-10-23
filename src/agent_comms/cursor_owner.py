@@ -8,6 +8,7 @@ from functools import partial
 from typing import TYPE_CHECKING
 
 from agent_comms.native_runtime_input import NativeRuntimeTable
+
 from .acp_extension import CursorObservation, EmptyCursorObservation, VerifiedCursorObservation
 from .agent_backend import InputId
 from .coordination_database import CoordinationStore
@@ -23,8 +24,12 @@ from .registry_document import RegistrySnapshot
 from .thread_identity import GenerationCounter
 
 if TYPE_CHECKING:
+    from sqlite3 import Connection
+
+    from .coordination_tables.participants import OwnerGenerations
     from .historical_native_inputs import HistoricalNativeInput
     from .native_entries import NativeEvidenceScope
+    from .proven_source_coverage import CoverageInput, NoInjectedInput, ProvenSourceCoverage
 
 
 @dataclass(frozen=True)
@@ -48,7 +53,7 @@ class CursorOwner(RegistryOwner):
         )
 
     @classmethod
-    def _read_owned(cls, bus, root_id, owner_name, source_reads, store) -> CursorState:
+    def _read_owned(cls, bus: MessageBus, root_id: str, owner_name: str, source_reads: NativeEvidenceScope, store: Coordination) -> CursorState:
         with store.session.boundary(bus) as boundary:
             reason = "Current native cursor has no matching live owner"
             bus._registry.store.private_guard_unlocked().require_root(root_id, StaleFence(reason))
@@ -96,14 +101,14 @@ class CursorOwner(RegistryOwner):
         )
 
     @classmethod
-    def _refresh_owned(cls, bus, root_id, owner_name, source_reads, store) -> CursorState:
+    def _refresh_owned(cls, bus: MessageBus, root_id: str, owner_name: str, source_reads: NativeEvidenceScope, store: Coordination) -> CursorState:
         thread, generation = bus._registry.live_owner_with_claim(owner_name)
         person = store.participants.get(thread.incarnation.require_recorded().lookup)
         owner = cls(thread=thread, claimed_generation=generation, wire_root_id=root_id,
                     generation=person.owner_identity.generation)
         return owner._advance_owned(bus, source_reads, store)
 
-    def _advance_owned(self, bus, source_reads, store) -> CursorState:
+    def _advance_owned(self, bus: MessageBus, source_reads: NativeEvidenceScope, store: Coordination) -> CursorState:
         with source_reads.borrow():
             sources = SourceCoverage(bus, store, wire_root_id=self.wire_root_id,
                                      recipient_lookup=self.lookup)
@@ -126,7 +131,7 @@ class CursorOwner(RegistryOwner):
                 return state
 
     @property
-    def participant_identity(self):
+    def participant_identity(self) -> OwnerGenerations:
         return ParticipantOwner(self.thread, self.generation).coordinator_identity(self.lookup)
 
     @property
@@ -157,19 +162,19 @@ class CursorOwner(RegistryOwner):
         self.require_recorded_input(db, row)
         return RecordedCursor(row)
 
-    def _matches_input(self, row, reference) -> bool:
+    def _matches_input(self, row: NativeRuntimeInput | None, reference: NativeInputReference) -> bool:
         return (row is not None and row.owner_identity == self.participant_identity
                 and row.sent_owner_claimed_generation.matches(self.claimed_generation)
                 and row.reference == reference)
 
-    def matches_prefix(self, db, evidence) -> bool:
+    def matches_prefix(self, db: Connection, evidence: tuple[HistoricalNativeInput, ...]) -> bool:
         return all(self._matches_input(NativeRuntimeInput.one(db, input_id=item.input_id), item.reference)
                    for item in evidence)
 
-    def require_recorded_input(self, db, cursor) -> None:
+    def require_recorded_input(self, db: Connection, cursor: CurrentNativeCursor) -> None:
         cursor.reference.require_recorded_input(self, db)
 
-    def require_coverage(self, db, cursor, coverage) -> None:
+    def require_coverage(self, db: Connection, cursor: CurrentNativeCursor, coverage: ProvenSourceCoverage) -> None:
         if cursor.owner_identity != self.participant_identity:
             raise IdentityConflict("current native cursor owner identity differs")
         if cursor.covered_seq > coverage.covered_seq:
@@ -178,7 +183,7 @@ class CursorOwner(RegistryOwner):
             raise IdentityConflict("current cursor borrows historical owner source proof")
         self.require_recorded_input(db, cursor)
 
-    def require_recorded_reference(self, db, reference: NativeInputReference) -> None:
+    def require_recorded_reference(self, db: Connection, reference: NativeInputReference) -> None:
         row = NativeRuntimeInput.one(db, input_id=reference.input_id)
         if row is None or not row.sent_owner_claimed_generation.matches(self.claimed_generation):
             raise IdentityConflict("current cursor input claim_scope differs")
@@ -212,9 +217,9 @@ class CursorState(ABC):
     def injected_seq(self) -> int: ...
 
     @abstractmethod
-    def without_input(self, proof, owner, coverage): ...
+    def without_input(self, proof: NoInjectedInput, owner: CursorOwner, coverage: ProvenSourceCoverage) -> CurrentNativeCursor: ...
 
-    def require_progress(self, owner, coverage, injected) -> None:
+    def require_progress(self, owner: CursorOwner, coverage: ProvenSourceCoverage, injected: int) -> None:
         if coverage.covered_seq < self.covered_seq:
             raise IdentityConflict("current cursor would regress")
 
@@ -231,24 +236,24 @@ class CursorState(ABC):
     def claim_mismatch(self, injected_seq: int) -> bool: ...
 
     @abstractmethod
-    def publish(self, db, owner, coverage, proof) -> CursorState: ...
+    def publish(self, db: Connection, owner: CursorOwner, coverage: ProvenSourceCoverage, proof: CoverageInput) -> CursorState: ...
 
     @abstractmethod
-    def require_coverage(self, owner, db, coverage, proof) -> None: ...
+    def require_coverage(self, owner: CursorOwner, db: Connection, coverage: ProvenSourceCoverage, proof: CoverageInput) -> None: ...
 
 
 @dataclass(frozen=True)
 class UnstartedCursor(CursorState):
     @property
-    def covered_seq(self):
+    def covered_seq(self) -> int:
         return 0
 
     @property
-    def cursor(self):
+    def cursor(self) -> CurrentNativeCursor | None:
         return None
 
     @property
-    def injected_seq(self):
+    def injected_seq(self) -> int:
         return 0  # No injected native input; cursor presence is this state's type.
 
     def proves_input(self, input_id: str) -> bool:
@@ -260,20 +265,20 @@ class UnstartedCursor(CursorState):
     def claim_mismatch(self, injected_seq: int) -> bool:
         return False
 
-    def without_input(self, proof, owner, coverage):
+    def without_input(self, proof: NoInjectedInput, owner: CursorOwner, coverage: ProvenSourceCoverage) -> CurrentNativeCursor:
         return proof.build(owner, coverage.covered_seq)
 
-    def observation(self):
+    def observation(self) -> CursorObservation:
         return EmptyCursorObservation()
 
-    def publish(self, db, owner, coverage, proof):
+    def publish(self, db: Connection, owner: CursorOwner, coverage: ProvenSourceCoverage, proof: CoverageInput) -> CursorState:
         if coverage.covered_seq <= self.covered_seq:
             return self  # A blocked first source has not established a cursor.
         cursor = proof.candidate(self, owner, coverage)
         cursor.insert(db)
         return RecordedCursor(cursor)
 
-    def require_coverage(self, owner, db, coverage, proof):
+    def require_coverage(self, owner: CursorOwner, db: Connection, coverage: ProvenSourceCoverage, proof: CoverageInput) -> None:
         pass  # No durable cursor exists to assert coverage.
 
 
@@ -282,27 +287,27 @@ class RecordedCursor(CursorState):
     row: CurrentNativeCursor
 
     @property
-    def covered_seq(self):
+    def covered_seq(self) -> int:
         return self.row.covered_seq
 
     @property
-    def cursor(self):
+    def cursor(self) -> CurrentNativeCursor | None:
         return self.row
 
     @property
-    def injected_seq(self):
+    def injected_seq(self) -> int:
         return self.row.injected_seq
 
-    def without_input(self, proof, owner, coverage):
+    def without_input(self, proof: NoInjectedInput, owner: CursorOwner, coverage: ProvenSourceCoverage) -> CurrentNativeCursor:
         return replace(self.row, covered_seq=coverage.covered_seq)
 
-    def observation(self):
+    def observation(self) -> CursorObservation:
         return VerifiedCursorObservation(self.row)
 
     def proves_input(self, input_id: str) -> bool:
         return self.row.input_id.holds(input_id)
 
-    def require_progress(self, owner, coverage, injected):
+    def require_progress(self, owner: CursorOwner, coverage: ProvenSourceCoverage, injected: int) -> None:
         super().require_progress(owner, coverage, injected)
         if (self.row.owner_identity != owner.participant_identity
                 or injected < self.row.injected_seq):
@@ -317,7 +322,7 @@ class RecordedCursor(CursorState):
             return False
         raise IdentityConflict("current cursor input claim_scope differs")
 
-    def publish(self, db, owner, coverage, proof):
+    def publish(self, db: Connection, owner: CursorOwner, coverage: ProvenSourceCoverage, proof: CoverageInput) -> CursorState:
         cursor = proof.candidate(self, owner, coverage)
         if cursor.covered_seq == self.row.covered_seq and cursor.injected_seq == self.row.injected_seq:
             return self
@@ -334,6 +339,6 @@ class RecordedCursor(CursorState):
             raise StaleFence("current cursor monotonic update lost its fence")
         return RecordedCursor(cursor)
 
-    def require_coverage(self, owner, db, coverage, proof):
+    def require_coverage(self, owner: CursorOwner, db: Connection, coverage: ProvenSourceCoverage, proof: CoverageInput) -> None:
         owner.require_coverage(db, self.row, coverage)
         proof.require_reference(owner, self.row)
