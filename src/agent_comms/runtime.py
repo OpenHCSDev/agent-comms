@@ -326,11 +326,9 @@ class RuntimeServer(SessionUpdateSink):
 
     async def handle(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:
         client = SocketClient(writer)
-        session_id = None
         try:
             request = RuntimeRequest.from_wire(json.loads(await reader.readline()))
             context = await request.bind(self, reader, client)
-            session_id = context.session_id
             await request.apply(context)
         except SubscriberClosed:
             pass
