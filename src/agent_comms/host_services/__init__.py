@@ -67,10 +67,6 @@ class HostService(DeclaredFamily, affix="Service", discovery_package=__name__):
         """This service's instances on this host; none when the host does not run it."""
 
     @abstractmethod
-    def restart(self) -> None:
-        """Stop this instance and start it again from its own launcher."""
-
-    @abstractmethod
     def stop(self) -> None:
         """Stop this instance; its launcher stays installed."""
 
@@ -98,21 +94,12 @@ class HostService(DeclaredFamily, affix="Service", discovery_package=__name__):
         return tuple(instance for member in cls.members_with(cls) for instance in member.running())
 
     @classmethod
-    def restart_running(cls, installed: Path) -> tuple[RestartedService, ...]:
-        """Restart every declared service running on this host onto ``installed``."""
-        return tuple(instance.restart_onto(installed) for instance in cls.instances())
-
-    @classmethod
     def stop_running(cls) -> tuple[HostService, ...]:
         """Stop every running service, so nothing writes the root while it is restored."""
         stopped = cls.instances()
         for instance in stopped:
             instance.stop()
         return stopped
-
-    def restart_onto(self, installed: Path) -> RestartedService:
-        self.restart()
-        return self.running_on(installed)
 
     def start_onto(self, installed: Path) -> RestartedService:
         self.start()
@@ -205,9 +192,6 @@ class SystemdUserService(HostService, declared_name=None):
 
     def runtime(self) -> Path:
         return Path(self.running_arguments(self.pid())[0])
-
-    def restart(self) -> None:
-        subprocess.run(("systemctl", "--user", "restart", self.unit), check=True)
 
     def stop(self) -> None:
         subprocess.run(("systemctl", "--user", "stop", self.unit), check=True)

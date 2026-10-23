@@ -22,7 +22,7 @@ import sys
 import threading
 import time
 from abc import ABC, abstractmethod
-from collections.abc import Callable, Generator, Mapping
+from collections.abc import Callable, Generator, Iterator, Mapping
 from concurrent.futures import Future, ProcessPoolExecutor
 from contextlib import (
     AbstractContextManager,
@@ -266,15 +266,22 @@ class ProcessIdentity(RecordMember, ProcessState):
     def signal(self, signum: int) -> None:
         Platform.current().send(self, signum)
 
+    def lineage(self) -> Iterator[ProcessIdentity]:
+        """This incarnation and its exact ancestors, ending at PID 1."""
+        platform = Platform.current()
+        current = self
+        while True:
+            yield current
+            if current.pid == 1:
+                return
+            current = platform.parent_identity(current.pid)
+
     def require_ancestor_of(self, pid: int) -> None:
         """A supplied process is authority only for its actual descendant."""
         platform = Platform.current()
         platform.require(self)
-        current = platform.identity(pid)
-        while current.pid > 1:
-            if current == self:
-                return
-            current = platform.parent_identity(current.pid)
+        if self in platform.identity(pid).lineage():
+            return
         raise IdentityMismatchError('The declared process is not an ancestor of this hook')
 
     async def wait_exited(self) -> None:
@@ -469,6 +476,9 @@ class Platform(DeclaredFamily, affix="Platform"):
     @abstractmethod
     def environment(self, process: ProcessIdentity) -> dict[str, str]: ...
 
+    @abstractmethod
+    def process_name(self, pid: int) -> str: ...
+
     def lock_holders(self, descriptor: int) -> tuple[LockHolder, ...]:
         return (UnidentifiedLockHolder(),)
 
@@ -640,6 +650,12 @@ class LinuxPlatform(PidfdHandles, PosixPlatform):
         values = (item.split(b"=", 1) for item in raw.split(b"\0") if b"=" in item)
         return {os.fsdecode(key): os.fsdecode(value) for key, value in values}
 
+    def process_name(self, pid: int) -> str:
+        try:
+            return Path(f"/proc/{pid}/comm").read_text().strip()
+        except FileNotFoundError:
+            raise ProcessLookupError(pid) from None
+
     def lock_holders(self, descriptor: int) -> tuple[LockHolder, ...]:
         """Identify actual flock owners of this opened file, not merely open FDs.
 
@@ -810,6 +826,9 @@ class DarwinPlatform(PosixPlatform):
 
     def environment(self, process: ProcessIdentity) -> dict[str, str]:
         raise NotImplementedError(f"{type(self).__name__} does not read process environment")
+
+    def process_name(self, pid: int) -> str:
+        raise NotImplementedError(f"{type(self).__name__} does not read process names")
 
     def members_of_group(self, pgid: int) -> tuple[ProcessIdentity, ...]:
         # proc_listpids returns bytes. Grow until one query fits; never mistake
@@ -1022,6 +1041,9 @@ class Win32Platform(Platform):
 
     def environment(self, process: ProcessIdentity) -> dict[str, str]:
         raise NotImplementedError(f"{type(self).__name__} does not read process environment")
+
+    def process_name(self, pid: int) -> str:
+        raise NotImplementedError(f"{type(self).__name__} does not read process names")
 
     def wait_any_exited(
         self, identities: tuple[ProcessIdentity, ...], timeout: float,
@@ -1554,6 +1576,9 @@ class ChildOutcome(DeclaredFamily, affix="Outcome"):
     def report_shutdown(self, report_timeout: Callable[[], None]) -> None:
         pass
 
+    def report_forced(self, report: Callable[[str], None]) -> None:
+        pass
+
     def fork_failure(self, interrupted_consequence: Callable[[], str]) -> str:
         return ""
 
@@ -1642,6 +1667,9 @@ class GracefulStopOutcome(ChildOutcome):
 @dataclass(frozen=True)
 class ForcedStopOutcome(GracefulStopOutcome):
     """At least one member required the forced stage, even if leader exited."""
+
+    def report_forced(self, report: Callable[[str], None]) -> None:
+        report(self.summary)
 
 
 @dataclass(frozen=True)

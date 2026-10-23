@@ -18,7 +18,6 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Annotated, ClassVar
 
 from .child_process import Platform
-from .coordination_errors import CoordinationError
 from .declared_family import DeclaredFamily
 from .errors import RelationViolationError
 from .field_codec import FieldCodec, MalformedRecord, PathText
@@ -263,20 +262,9 @@ def guard_default_route_write(
         os.close(directory)
 
 
-class RouteReadersHold(CoordinationError):
-    """In-flight client calls exceeded the route publication's contention budget."""
-
-
 def acquire_exclusive_route_lock(directory: int) -> None:
-    """Wait up to ten seconds for in-flight calls, then name the remaining holders."""
-    try:
-        StoreLockContention(10).acquire(directory, Platform.current(), mode=ExclusiveLock())
-    except BlockingIOError as error:
-        detail = '; '.join(holder.describe() for holder in Platform.current().lock_holders(directory))
-        raise RouteReadersHold(
-            f'default-route readers hold the route: '
-            f'{detail or "unknown (lock changed during inspection)"}; close them and rerun'
-        ) from error
+    """Wait for in-flight operations to finish before publishing the route."""
+    UNBOUNDED_CONTENTION.acquire(directory, Platform.current(), mode=ExclusiveLock())
 
 
 def publish_active_route(route: ActiveRoute, path: Path | None = None) -> None:

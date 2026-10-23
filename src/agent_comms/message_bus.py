@@ -7,7 +7,6 @@ import asyncio
 import inspect
 from abc import ABC, abstractmethod
 from collections.abc import (
-    AsyncIterator,
     Awaitable,
     Callable,
     Iterable,
@@ -24,12 +23,10 @@ from agent_comms.bus import Bus, BusSnapshot
 from agent_comms.channel_targets import NamedTarget
 from agent_comms.channels import AnyChannel
 from agent_comms.coordinator import Coordination
-from agent_comms.errors import UnregisteredThreadError
 from agent_comms.historical_views import HistoryArchive
 from agent_comms.maintenance_barrier import MaintenanceBarrier, MaintenanceHeldError
 from agent_comms.message_page import InboxPage, MessagePage, MessagePageRequest, PageBounds
 from agent_comms.message_reference import (
-    AfterMessageStart,
     FirstUnreadStart,
     NewestUnreadStart,
     InboxStart,
@@ -45,7 +42,6 @@ from agent_comms.read_basis import (
     DisplayViewer,
     ListedDeliveries,
     NamedViewer,
-    WatchAcknowledgment,
 )
 from agent_comms.routing import DeliveryScope
 from agent_comms.store_files import UNBOUNDED_CONTENTION, StoreLockContention
@@ -150,29 +146,6 @@ class MessageBus[Writes: Publisher]:
             listed, PageBounds(traversal, bounds.limit),
         ).displayed(self.reads, document, delivery.actor, snapshot, snapshot, self.bus)
         return InboxPage(result.page, result.displayed, total - len(result.page.messages))
-
-    async def watch(
-        self, name: str, *, acknowledgment: type[WatchAcknowledgment],
-        after: InboxStart = FirstUnreadStart(),
-    ) -> AsyncIterator[Message]:
-        from .watched import FileSource
-
-        reader = self._registry.require(name).incarnation
-        maintenance = MaintenanceBarrier(self._registry.store.path)
-        async with aclosing(self.bus.watch(FileSource(maintenance.state_path))) as changes:
-            async for _ in changes:
-                maintenance.read().require_open()
-                snapshot = self._registry.snapshot()
-                while True:
-                    batch = await asyncio.to_thread(self.inbox_at, name, snapshot, after=after)
-                    if not reader.current(self._registry.snapshot()):
-                        raise UnregisteredThreadError("Watched thread was removed or replaced")
-                    for message in batch.page.messages:
-                        yield message
-                        acknowledgment.taken(self.reads, batch.displayed.through(message.seq))
-                        after = AfterMessageStart(message.reference)
-                    if not batch.remaining:
-                        break
 
     async def when_open[Result](self, operation: Callable[[], Result | Awaitable[Result]]) -> Result:
         maintenance = MaintenanceBarrier(self._registry.store.path)
