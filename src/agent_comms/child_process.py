@@ -710,6 +710,12 @@ class DarwinPlatform(PosixPlatform):
             pid, info.start_seconds * 1_000_000 + info.start_microseconds, info.pgid,
         )
 
+    def arguments(self, process: ProcessIdentity) -> tuple[str, ...]:
+        raise NotImplementedError(f"{type(self).__name__} does not read process arguments")
+
+    def environment(self, process: ProcessIdentity) -> dict[str, str]:
+        raise NotImplementedError(f"{type(self).__name__} does not read process environment")
+
     def members_of_group(self, pgid: int) -> tuple[ProcessIdentity, ...]:
         # proc_listpids returns bytes. Grow until one query fits; never mistake
         # a full buffer for a complete process-group observation.
@@ -901,6 +907,12 @@ class Win32Platform(Platform):
     def identity(self, pid: int) -> ProcessIdentity:
         with self.process_handle(pid) as handle:
             return self._identity(pid, handle)
+
+    def arguments(self, process: ProcessIdentity) -> tuple[str, ...]:
+        raise NotImplementedError(f"{type(self).__name__} does not read process arguments")
+
+    def environment(self, process: ProcessIdentity) -> dict[str, str]:
+        raise NotImplementedError(f"{type(self).__name__} does not read process environment")
 
     def wait_any_exited(
         self, identities: tuple[ProcessIdentity, ...], timeout: float,

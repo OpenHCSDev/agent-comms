@@ -19,8 +19,8 @@ from typing import Annotated, ClassVar, Self
 
 from aiohttp.web import TCPSite
 
-from ..declared_family import DeclaredFamily
 from ..child_process import ProcessIdentity
+from ..declared_family import DeclaredFamily
 from ..field_codec import PathText
 from ..launch_runtime import LaunchRuntime
 
