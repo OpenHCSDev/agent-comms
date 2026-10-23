@@ -114,6 +114,13 @@ class NativeEntry(RecordedEntry, DeclaredFamily, affix="Entry"):
     def imported_sources(self):
         return ()
 
+    def require_failed_terminal(self, parent_id: str) -> None:
+        raise ValueError("Native recovery requires an unambiguous failed terminal")
+
+    @property
+    def stop_reason(self):
+        return PendingStopReason
+
     @classmethod
     def wire_member(cls, value):
         try:
@@ -372,9 +379,7 @@ class NativeEvidenceRead:
             if entry.parent_id != last.id:
                 return PendingStopReason
             last = entry
-        if isinstance(last, MessageEntry) and last.assistant_message:
-            return last.message.stop_reason
-        return PendingStopReason
+        return last.stop_reason
 
     def _reverify(self):
         acquired = self.state
@@ -570,6 +575,10 @@ class MessageEntry(NativeEntry):
         if self.parent_id != parent_id:
             raise ValueError("Native recovery requires an unambiguous failed terminal")
         self.message.require_failed_terminal()
+
+    @property
+    def stop_reason(self):
+        return self.message.stop_reason if self.assistant_message else PendingStopReason
 
     @property
     def unread_reply(self) -> bool:

@@ -610,8 +610,8 @@ class Transcripts:
         return tuple(
             event for parent in thread.parent.names() for event in (
                 ForkOriginTranscript(f"Forked from @{parent}. This thread started with:",
-                                     timestamp=thread.created_at),
-                *(ForkTaskTranscript(task, timestamp=thread.created_at)
+                                     timestamp=thread.incarnation.wire_birth),
+                *(ForkTaskTranscript(task, timestamp=thread.incarnation.wire_birth)
                   for task in thread.task.texts()),
             )
         )

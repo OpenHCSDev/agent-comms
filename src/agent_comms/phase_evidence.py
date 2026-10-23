@@ -590,6 +590,71 @@ class NamedClasses(ast.NodeVisitor):
         return named.names
 
 
+class ScopeBindings(ast.NodeVisitor):
+    """Names bound by one lexical scope, without borrowing a nested scope's locals."""
+
+    def __init__(self) -> None:
+        self.names: set[str] = set()
+
+    def visit_Name(self, node: ast.Name) -> None:
+        if isinstance(node.ctx, (ast.Store, ast.Del)):
+            self.names.add(node.id)
+
+    def visit_arg(self, node: ast.arg) -> None:
+        self.names.add(node.arg)
+
+    def visit_alias(self, node: ast.alias) -> None:
+        self.names.add(node.asname or node.name.split(".")[0])
+
+    def visit_FunctionDef(self, node: ast.FunctionDef) -> None:
+        self.names.add(node.name)
+        for value in (*node.decorator_list, *node.args.defaults,
+                      *(default for default in node.args.kw_defaults if default is not None)):
+            self.visit(value)
+
+    visit_AsyncFunctionDef = visit_FunctionDef
+
+    def visit_ClassDef(self, node: ast.ClassDef) -> None:
+        self.names.add(node.name)
+        for value in (*node.decorator_list, *node.bases, *node.keywords):
+            self.visit(value)
+
+    def visit_Lambda(self, node: ast.Lambda) -> None:
+        """A lambda's locals do not bind names in its enclosing scope."""
+
+    def visit_ExceptHandler(self, node: ast.ExceptHandler) -> None:
+        if node.name is not None:
+            self.names.add(node.name)
+        self.generic_visit(node)
+
+    def visit_MatchAs(self, node: ast.MatchAs) -> None:
+        if node.name is not None:
+            self.names.add(node.name)
+        self.generic_visit(node)
+
+    def visit_MatchStar(self, node: ast.MatchStar) -> None:
+        if node.name is not None:
+            self.names.add(node.name)
+
+    def visit_MatchMapping(self, node: ast.MatchMapping) -> None:
+        if node.rest is not None:
+            self.names.add(node.rest)
+        self.generic_visit(node)
+
+    def visit_Global(self, node: ast.Global) -> None:
+        self.names.update(node.names)
+
+    def visit_Nonlocal(self, node: ast.Nonlocal) -> None:
+        self.names.update(node.names)
+
+    @classmethod
+    def of(cls, nodes: Iterable[ast.AST]) -> set[str]:
+        bindings = cls()
+        for node in nodes:
+            bindings.visit(node)
+        return bindings.names
+
+
 class ClassChecks(ast.NodeVisitor):
     """The classes the visited modules declare and the classes their ``isinstance`` calls
     name."""
@@ -597,14 +662,52 @@ class ClassChecks(ast.NodeVisitor):
     def __init__(self) -> None:
         self.declared: set[str] = set()
         self.checked: set[str] = set()
+        self._scopes: list[set[str]] = []
+        self._methods: set[ast.FunctionDef | ast.AsyncFunctionDef] = set()
+        self._comparison_guards: set[ast.Call] = set()
+
+    def visit_Module(self, node: ast.Module) -> None:
+        self._scopes.append(ScopeBindings.of(node.body))
+        self.generic_visit(node)
+        self._scopes.pop()
 
     def visit_ClassDef(self, node: ast.ClassDef) -> None:
         self.declared.add(node.name)
+        self._methods.update(member for member in node.body
+                             if isinstance(member, (ast.FunctionDef, ast.AsyncFunctionDef)))
         self.generic_visit(node)
+
+    def visit_FunctionDef(self, node: ast.FunctionDef) -> None:
+        self._scopes.append(ScopeBindings.of((node.args, *node.body)))
+        arguments = (*node.args.posonlyargs, *node.args.args)
+        if (node in self._methods and not node.decorator_list
+            and node.name in ("__eq__", "__ne__", "__lt__", "__le__", "__gt__", "__ge__")
+            and len(arguments) == 2 and node.args.vararg is None and node.args.kwarg is None
+            and not node.args.kwonlyargs
+            and not any({"isinstance", "NotImplemented", "*"} & scope for scope in self._scopes)):
+            for statement in node.body:
+                match statement:
+                    case ast.If(
+                        test=ast.UnaryOp(op=ast.Not(), operand=ast.Call(
+                            func=ast.Name(id="isinstance"),
+                            args=[ast.Name(id=foreign), _], keywords=[],
+                        ) as check),
+                        body=[ast.Return(value=ast.Name(id="NotImplemented"))], orelse=[],
+                    ) if foreign == arguments[1].arg:
+                        self._comparison_guards.add(check)
+        self.generic_visit(node)
+        self._scopes.pop()
+
+    def visit_AsyncFunctionDef(self, node: ast.AsyncFunctionDef) -> None:
+        # Async special methods do not return Python's comparison result.
+        self._scopes.append(ScopeBindings.of((node.args, *node.body)))
+        self.generic_visit(node)
+        self._scopes.pop()
 
     def visit_Call(self, node: ast.Call) -> None:
         match node:
-            case ast.Call(func=ast.Name(id=isinstance.__name__), args=[_, target]):
+            case ast.Call(func=ast.Name(id=isinstance.__name__), args=[_, target]) \
+                    if node not in self._comparison_guards:
                 self.checked |= NamedClasses.of((target,))
         self.generic_visit(node)
 

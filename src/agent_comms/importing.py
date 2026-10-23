@@ -17,7 +17,7 @@ from .cli_result import CliResult
 from .field_codec import FieldCodec, WireName
 from .harness_install import Harness
 from .thread_text import NoThreadText, ThreadText
-from .transcript_events import TRUNCATED, ImportedInput, ImportedMessage, ImportedRequest
+from .transcript_events import ImportedInput, ImportedMessage, NoRetainedRequest
 from .turn_context import CodexRolloutProvenance, ContextSourceText
 
 if TYPE_CHECKING:
@@ -130,11 +130,9 @@ class ImportSnapshot:
 
     @property
     def retains_latest_request(self) -> bool:
-        retained = next((message for message in reversed(self.messages)
-                         if isinstance(message, ImportedRequest)), None)
-        return retained is not None and (
-            retained.body == self.latest_request
-            or (retained.truncated and self.latest_request.startswith(retained.body.removesuffix(TRUNCATED))))
+        retained = next((request for message in reversed(self.messages)
+                         for request in message.retained_request().present()), NoRetainedRequest())
+        return retained.matches(self.latest_request)
 
 
 @dataclass

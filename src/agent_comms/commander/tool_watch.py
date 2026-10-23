@@ -4,7 +4,7 @@ import os, time, glob, collections
 from ..native_tool_call import CodingCall
 from ..lifecycle_capability import Successful
 from ..native_entries import NativeEntry
-from ..pi_payloads import PiMessage, StorageDenialToolDetails, TextContent
+from ..pi_payloads import PiMessage, StorageDenialToolDetails
 from ..tool_declaration import one_line
 from ..registration import Registration
 from ..selected_triage import SelectedTriage
@@ -56,7 +56,7 @@ def walk(ctx: Commander, turns: dict[str, list[str]], thread: str,
         if len(turns[thread]) >= 25:
             emit(turns, thread)
     if message.stop_reason.items_with(Successful, message):
-        text = ''.join(part.text for part in message.parts if isinstance(part, TextContent))
+        text = ''.join(text for part in message.parts for text in part.text_parts())
         emit(turns, thread, text)
 
 

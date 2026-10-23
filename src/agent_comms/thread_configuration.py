@@ -8,7 +8,6 @@ from pathlib import Path
 from .acp_extension import CoordinationChangedUpdate
 from .child_process import ProcessIdentity
 from .registration import Registration
-from .thread_identity import RecordedThreadIncarnation
 from .thread_management import ThreadManagement
 from .agent_activity import AgentActivity
 
@@ -24,7 +23,7 @@ class ThreadConfiguration:
         thread = self.registry.require(name)
         info = self.agents.agent_info_of(thread.name)
         return CoordinationChangedUpdate(
-            RecordedThreadIncarnation(thread.name, thread.created_at),
+            thread.incarnation.require_recorded(),
             str(self.root.resolve()),
             ProcessIdentity.capture(os.getpid()),
             thread.worktree,

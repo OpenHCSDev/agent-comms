@@ -66,7 +66,7 @@ def bind_goal_mentions(
                         ResolvedMentionBinding(
                             token=token,
                             peer_name=executor.name,
-                            peer_created_at=executor.created_at,
+                            peer_created_at=executor.incarnation.wire_birth,
                         )
                         for executor in peer.role.executor(peer)
                     ),
@@ -78,6 +78,6 @@ def bind_goal_mentions(
         revision,
         hashlib.sha256(text.encode("utf-8")).hexdigest(),
         owner.name,
-        owner.created_at,
+        owner.incarnation.wire_birth,
         tuple(bindings),
     )
