@@ -153,7 +153,7 @@ class PublicationIntents(
             FieldCodec.construct(cls, {
                 item.name: item.decode(value)
                 for item, value in zip(
-                    (item for item in cls._fields() if item.init), values, strict=True
+                    (item for item in cls._fields if item.init), values, strict=True
                 )
             })
         except (MalformedRecord, CoordinationError):

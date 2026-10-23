@@ -15,7 +15,6 @@ import os
 
 import pytest
 
-from agent_comms.thread_identity import RecordedThreadIncarnation
 from agent_comms.acp import CommsAgent
 from agent_comms.acp_extension import (
     CursorAdvancedUpdate,
@@ -23,9 +22,8 @@ from agent_comms.acp_extension import (
 )
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.comms import wire
-from agent_comms.coordination_errors import ParticipantNotRegistered, PublicationActivationBlocked, StaleRevision
+from agent_comms.coordination_errors import ParticipantNotRegistered, PublicationActivationBlocked
 from agent_comms.coordinator import Coordination
-from agent_comms.errors import RelationViolationError
 from test_coordinated_runtime import tmp_path as private_root_fixture
 from agent_comms.thread_model import DeclaredModel
 
@@ -43,7 +41,7 @@ def _private_comms(tmp_path):
     root_id = comms.registry.prepare_native_root().namespace
     with Coordination(str(root / "coordination.sqlite3")) as store:
         store.participants.register(
-            RecordedThreadIncarnation("fixture", owner.created_at).lookup, committed=True
+            owner.incarnation.lookup, committed=True
         )
         PrivateCoordinatorTable.install(store)
     return comms, root_id
@@ -75,12 +73,12 @@ def cursor_envelope(metadata):
 def test_private_owner_rename_during_active_attempt_can_complete(tmp_path, managed):
     from agent_comms.attempt_start import AttemptStart
     from agent_comms.attempt_states import SucceededAttempt
-    from agent_comms.coordination_tables.executions import ExecutionProvenance, AcpOrigin
+    from agent_comms.coordination_tables.executions import AcpOrigin
     from agent_comms.owner_fence import prepare_fence_token
     from test_coordination_store import final_evidence
 
     comms, _ = _private_comms(tmp_path)
-    lookup = RecordedThreadIncarnation("fixture", comms.registry.require("beta").created_at).lookup
+    lookup = comms.registry.require("beta").incarnation.lookup
     with Coordination(str(comms.root / "coordination.sqlite3")) as store:
         before = store.participants.get(lookup)
         store.create("rename-active", AcpOrigin, lookup, 1)
@@ -110,7 +108,7 @@ def test_private_owner_rename_during_active_attempt_can_complete(tmp_path, manag
 
 def test_private_rename_preserves_independent_sql_generation(tmp_path):
     comms, _ = _private_comms(tmp_path)
-    lookup = RecordedThreadIncarnation("fixture", comms.registry.require("beta").created_at).lookup
+    lookup = comms.registry.require("beta").incarnation.lookup
     with Coordination(str(comms.root / "coordination.sqlite3")) as store:
         store.participants.advance_generation(lookup, expected_generation=1)
     comms.threads._rename_thread("beta", "gamma")
@@ -122,7 +120,7 @@ def test_private_rename_preserves_independent_sql_generation(tmp_path):
 
 def test_private_rename_of_unregistered_participant_takes_the_plain_path(tmp_path):
     comms, _ = _private_comms(tmp_path)
-    lookup = RecordedThreadIncarnation("fixture", comms.registry.require("sender").created_at).lookup
+    lookup = comms.registry.require("sender").incarnation.lookup
     renamed = comms.threads._rename_thread("sender", "courier")
     assert (renamed.previous, renamed.current) == ("sender", "courier")
     assert comms.registry.require("sender").name == "courier"

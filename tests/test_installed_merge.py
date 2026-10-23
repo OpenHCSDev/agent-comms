@@ -16,9 +16,9 @@ def test_a_merge_made_after_the_last_fetch_is_fetched_then_answered(tmp_path):
     origin, installed = tmp_path / 'origin', tmp_path / 'installed'
     origin.mkdir()
     git(origin, 'init', '-q', '-b', 'main')
-    git(origin, '-c', 'user.name=t', '-c', 'user.email=t@t', 'commit', '-q', '--allow-empty', '-m', 'base')
+    git(origin, 'commit', '-q', '--allow-empty', '-m', 'base')
     git(tmp_path, 'clone', '-q', str(origin), str(installed))
-    git(origin, '-c', 'user.name=t', '-c', 'user.email=t@t', 'commit', '-q', '--allow-empty', '-m', 'merged later')
+    git(origin, 'commit', '-q', '--allow-empty', '-m', 'merged later')
     sha = git(origin, 'rev-parse', 'HEAD')
     repo = Repo(checkout=installed, github=RepositoryName.from_wire('test/repo'))
 
