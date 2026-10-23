@@ -275,6 +275,34 @@ class BranchBehindMain(HeldBranchRule):
 
 
 @dataclass(frozen=True)
+class BranchGrowth(HeldBranchRule):
+    """A held branch's source growth needs an explanation in its verdict."""
+
+    problem: str
+    holder: ThreadIncarnation
+    repository: RepositoryName
+    branch: str
+    growth: int = field(compare=False)
+    limit: ClassVar[int] = 40
+
+    @classmethod
+    def derive(cls, branches: tuple[HeldBranch, ...]) -> tuple[Self, ...]:
+        return tuple(
+            cls(held.problem, held.holder, held.difference.repository,
+                held.difference.branch, held.difference.code_growth)
+            for held in branches if held.difference.code_growth > cls.limit
+        )
+
+    def line(self) -> str:
+        return (
+            f"SOURCE GROWTH: {self.problem} {self.holder.name} "
+            f"{self.repository.to_wire()}:{self.branch} grows src by {self.growth} code lines "
+            f"(limit {self.limit}) -> the verdict states why the growth is necessary, "
+            "or the slop is deleted"
+        )
+
+
+@dataclass(frozen=True)
 class SharedFileBranches(HeldBranchRule):
     """Different held branches touch the same repository-relative file."""
 
