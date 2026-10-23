@@ -151,9 +151,13 @@ def test_predecessor_publisher_history_round_trips_into_bus(tmp_path):
     from agent_comms.registry_store import RegistryStore
     from agent_comms.todos import TodoStore
     from cutover.carry_owner_requests import OwnerRequests
+    from cutover.carry_reply_policy import ReplyPolicy, StoredDirectReply
+    from agent_comms.bus_tables import MessageIdentitySource
+    from conftest import maintenance_held
 
     chain = CarryChain.at(REPOSITORY)
     assert chain.steps.index(OwnerRequests) < chain.steps.index(BusHistory)
+    assert chain.steps.index(OwnerRequests) < chain.steps.index(ReplyPolicy) < chain.steps.index(BusHistory)
 
     generated = predecessor_history(tmp_path)
     original = generated / "destination"
@@ -171,6 +175,9 @@ def test_predecessor_publisher_history_round_trips_into_bus(tmp_path):
     modes = {relative: (root / relative / BusHistory.filename).stat().st_mode
              for relative in relatives}
     request = BusHistory(root, original, spill)
+    policy = ReplyPolicy(root, original, spill)
+    # No SQLite destination exists yet; the later history writer uses current declarations.
+    assert policy.carry(apply=False) == Carried(0)
     pending = request.carry(apply=False)
     assert pending.changed > 0
     assert pending.detail == dict(rows=8, continuous=8, round_tripped=8)
@@ -187,6 +194,7 @@ def test_predecessor_publisher_history_round_trips_into_bus(tmp_path):
         request_result = requests.carry(apply=True)
         assert request_result.detail == request_dry_run.detail
         assert requests.carry(apply=False).changed == 0
+        assert policy.carry(apply=True) == Carried(0)
     result_path = tmp_path / "carried.json"
     with hold.holding():
         completed = subprocess.run(
@@ -250,6 +258,30 @@ def test_predecessor_publisher_history_round_trips_into_bus(tmp_path):
         assert ReadLedger.at(directory).read() == replace(
             before[relative], bus_identity=RecordedBusIdentity.capture(bus.path))
         assert BusHistory.rebind_reads(directory, before[relative].bus_identity).changed == 0
+    # Exercise a retained conversion map together with the actual retired policy shape.
+    for relative in relatives:
+        with Bus(Bus.path_in(root / relative)).writing() as db:
+            StoredDirectReply.create(db)
+            StoredDirectReply("retained-recipient", 1).insert(db)
+            db.execute('ALTER TABLE "message_identity_source" ADD COLUMN response_policy TEXT')
+    policy_pending = policy.carry(apply=False)
+    assert policy_pending.changed == len(relatives)
+    with maintenance_held(root):
+        assert policy.carry(apply=True) == policy_pending
+        assert policy.carry(apply=True) == Carried(0)
+    for relative in relatives:
+        directory = root / relative
+        bus = Bus(Bus.path_in(directory))
+        source = directory / BusHistory.filename
+        metadata = HistoryMetadata.read(directory)
+        with bus.observing() as db:
+            assert not StoredDirectReply.present(db)
+            assert MessageIdentitySource.stored_columns(db) == ("seq", "message_id", "sender")
+            assert HistoryOffset.count(db) == 4
+            assert all(HistoryOffset.select(db, offset=line.offset) == [
+                HistoryOffset(line.offset, line.row.seq)]
+                for line in HistoryLine.rows(source, metadata))
+        assert BusHistory.transfer(source, bus, metadata).changed == 0
     converted, = HistoryArchive(Bus.path_in(root)).sources()
     converted.validate()
     assert converted.root == str(root / archived.relative_to(original))

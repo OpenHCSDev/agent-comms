@@ -42,14 +42,12 @@ class Delivered(BusRecord, declared_name=None):
         return self.audience.sender_lookup
 
     def projections(self):
-        from .bus_tables import DirectReplySource, ReceivedSource, SentSource
+        from .bus_tables import ReceivedSource, SentSource
 
         yield from super().projections()
         yield SentSource(self.audience.sender_lookup, self.seq)
         for recipient in self.audience.recipients:
             yield ReceivedSource(recipient.recipient_lookup, self.seq)
-            if self.direct_for(recipient.recipient_lookup):
-                yield DirectReplySource(recipient.recipient_lookup, self.seq)
 
     def deliveries(self) -> tuple[Self, ...]:
         return (self,)
@@ -57,7 +55,7 @@ class Delivered(BusRecord, declared_name=None):
     def direct_for(self, recipient_lookup: str) -> bool:
         """Direct reply semantics and the committed addressed incarnation agree."""
         policy = self.message.role.response_policy(self.message)
-        return (policy.starts_turn and policy.separate_turn
+        return (policy.starts_direct_turn
                 and self.audience.includes_lookup(recipient_lookup))
 
     def compaction_messages_for(self, recipient_lookup: str) -> tuple[Message, ...]:

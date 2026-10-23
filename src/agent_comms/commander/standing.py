@@ -9,18 +9,18 @@ from typing import ClassVar, Self
 
 from agent_comms.build_identity import RecordedBuildIdentity
 from agent_comms.bus import BusReader
-from agent_comms.channel_targets import ThreadTarget
 from agent_comms.commander.config import CommanderConfig
 from agent_comms.commander.questions import UnansweredUnitAsks
 from agent_comms.commander_heartbeat import CommanderHeartbeat
 from agent_comms.comms import Comms
 from agent_comms.goal_actions import ReissuedOrderGoalAction
 from agent_comms.message_bus import WatchPass
-from agent_comms.message_page import MessageReadRequest, PageBounds
+from agent_comms.message_page import MessageReadRequest
 from agent_comms.messages import Message
+from agent_comms.owner_requests import OwnerRequestId
 from agent_comms.phase_evidence import PlanReading
 from agent_comms.plan_phases import PlanPhase
-from agent_comms.read_basis import NamedViewer, RepliesDisplayScope
+from agent_comms.read_basis import RepliesDisplayScope
 from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.registry_document import RegistrySnapshot
 from agent_comms.standing_rules import (
@@ -337,37 +337,63 @@ class WaitingUnownedWheelSpin(UnownedWheelSpin, declared_name=None):
 
 
 @dataclass(frozen=True)
-class HeartbeatSilent(IndependentStandingRule, DatedStandingRule):
-    """A commander the heartbeat serves whose newest beat is older than the cadence allows.
+class HeartbeatSilent(IndependentStandingRule, DatedStandingRule, declared_name=None):
+    """Missing or stale heartbeat service for the commander's current open requests.
 
     The heartbeat beats on every pass, so its silence is the failure; this rule reads the
     bus in the commander's own tool process, where a dead heartbeat cannot hide it.
     """
 
     seconds: ClassVar[int] = 180
-    beat: int
     since: float
 
     @classmethod
+    def scan_owner(cls) -> type[StandingRule]:
+        return HeartbeatSilent
+
+    @classmethod
     def violations(cls, comms: Comms, commander: str) -> tuple[Self, ...]:
-        served = {thread.incarnation
-                  for thread in CommanderHeartbeat.commanders(comms.registry, comms.goals)}
-        if CommanderHeartbeat.sender not in comms.registry or (
-                comms.registry.require(commander).incarnation not in served):
+        snapshot = comms.registry.snapshot()
+        thread = snapshot.require(commander)
+        requests = CommanderHeartbeat.requested_by(thread, comms.goals)
+        if not requests:
             return ()
-        page = comms.views.history_page(ThreadTarget(CommanderHeartbeat.sender),
-                                        PageBounds(limit=1), viewer=NamedViewer(commander))
-        return tuple(cls(beat.seq, beat.timestamp + cls.seconds) for beat in page.messages[-1:]
-                     if beat.sender == CommanderHeartbeat.sender
-                     and beat.timestamp + cls.seconds < time.time())
+        request, = requests
+        beats = ()
+        if snapshot.canonical_name(CommanderHeartbeat.sender) in snapshot.threads:
+            beats = comms.bus.bus.latest_addressed(
+                snapshot.names_for(CommanderHeartbeat.sender), snapshot.names_for(thread.name),
+            )
+        found = (tuple(MissedHeartbeat(
+            since=max(request.created_at, beat.timestamp) + cls.seconds, beat=beat.seq,
+        ) for beat in beats) if beats else (
+            HeartbeatNotStarted(since=request.created_at + cls.seconds, request=request.id),
+        ))
+        now = time.time()
+        return tuple(rule for rule in found if isinstance(rule, cls) and rule.since < now)
 
     def began(self) -> float:
         return self.since
+
+
+@dataclass(frozen=True)
+class MissedHeartbeat(HeartbeatSilent):
+    beat: int
 
     def line(self) -> str:
         return (f"HEARTBEAT SILENT: no beat since seq {self.beat}, silent past "
                 f"{RecordedEventTime(self.since).clock()}"
                 " -> read the connector journal for the failing pass and fix its owner")
+
+
+@dataclass(frozen=True)
+class HeartbeatNotStarted(HeartbeatSilent):
+    request: OwnerRequestId
+
+    def line(self) -> str:
+        return (f"HEARTBEAT NOT STARTED: no beat for request {self.request.value}, overdue since "
+                f"{RecordedEventTime(self.since).clock()}"
+                " -> start the connector heartbeat and fix its failing pass")
 
 @dataclass(frozen=True)
 class Unjudged(ReasonedStandingRule, UndatedStandingRule):

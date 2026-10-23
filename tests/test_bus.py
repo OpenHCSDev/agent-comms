@@ -23,7 +23,6 @@ from agent_comms.bus_tables import (
     BusProjectionTables,
     BusRow,
     BusTables,
-    DirectReplySource,
     MessageIdentitySource,
 )
 from agent_comms.coordination_tables.publications import PublicationIntents
@@ -329,9 +328,19 @@ def test_scoped_and_frozen_source_queries_are_sequence_bounded(bus):
     assert bus.scoped_page("target=?", ("worker",), kinds=(InfoKind,), limit=2) == (reply,)
     assert bus.conversation("b" * 32, limit=2) == (reply, notice)
     assert bus.sent("a" * 32, limit=1) == (reply,)
-    assert bus.received("b" * 32, after=original.seq, limit=1, descending=False,
-                        sender_lookups=("a" * 32,), source=DirectReplySource) == (reply,)
+    assert bus.direct_replies("b" * 32, after=original.seq, limit=1, descending=False,
+                              sender_lookups=("a" * 32,)) == (reply,)
     assert bus.received("b" * 32, sender_lookups=("f" * 32,)) == ()
+    assert bus.latest_addressed(frozenset({"author", "old-author"}),
+                                frozenset({"worker", "old-worker"})) == (reply,)
+    renamed = bus.append(lambda seq, db: PublicRecord.from_message(
+        Message("old-author", "old-worker", "newest across aliases", InfoKind, seq=seq)))
+    bus.append(lambda seq, db: PublicRecord.from_message(
+        Message("worker", "author", "later reverse reply", InfoKind, seq=seq)))
+    assert bus.latest_addressed(frozenset({"author", "old-author"}),
+                                frozenset({"worker", "old-worker"})) == (renamed,)
+    assert bus.latest_addressed(frozenset({"absent", "old-absent"}),
+                                frozenset({"worker", "old-worker"})) == ()
     assert bus.replies((original.reference,)) == (reply,)
     assert bus.deliveries_for_references((reply.reference,)) == (reply,)
     tips = bus.latest_conversations("target=?", ("worker",), notice.seq)
@@ -340,6 +349,10 @@ def test_scoped_and_frozen_source_queries_are_sequence_bounded(bus):
     )
     selected = bus.selected_sequences("target=?", ("worker",), reply.seq)
     assert {row.seq for row in selected} == {notice.seq, reply.seq}
+    assert bus.conversation("a" * 32, limit=1, descending=False) == (notice,)
+    assert bus.conversation(
+        "a" * 32, limit=1, descending=False, sequences=(reply.seq,),
+    ) == (reply,)
 
 
 def test_unanswered_reference_selection_requires_the_recorded_original_and_exact_owner_answer(bus):

@@ -11,7 +11,8 @@ from conftest import publish_initial
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.comms import wire
 from conftest import installed_comms
-from agent_comms.field_codec import MalformedRecord
+from agent_comms.field_codec import FieldCodec, MalformedRecord
+from agent_comms.goal_presentation import GoalExecution
 from agent_comms.goal_actions import (
     ActiveGoalAction,
     GoalPrecondition,
@@ -94,10 +95,8 @@ def test_inspected_canonical_dependencies_allow_standby_without_replay(tmp_path,
     assert list(scoped.reviewed_inputs) == keys and len(scoped.excluded_inputs) == 2
     with pytest.raises(ValueError):
         report.invoke(comms, {**args, "reviewed_inputs": [*keys, f"bus:{unrelated.seq}"]}, caller=ThreadCaller("worker"))
-    assert (
-        report.invoke(comms, {**args, "reviewed_inputs": keys}, caller=ThreadCaller("worker"))["goal_execution"]["state"]
-        == "standby"
-    )
+    result = report.invoke(comms, {**args, "reviewed_inputs": keys}, caller=ThreadCaller("worker"))
+    assert FieldCodec.decode(GoalExecution, result["goal_execution"]).standby()
     again = comms.goals.goal_input_review("worker", goal.id, ["parent"])
     assert again.reviewed_inputs == ()
     assert [row.input_id for row in again.already_reviewed_inputs] == keys
