@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, ClassVar
 
 from agent_comms.message_reference import MessageReference
 
@@ -91,3 +91,17 @@ class HumanClaimBlockedError(HumanSendError):
 
 class CheckpointNeedsRepairError(Exception):
     """A shared source requires exclusive checkpoint repair before it can open."""
+
+
+class GoalAttemptError(RuntimeError):
+    """A goal attempt cannot proceed as requested."""
+
+    diagnostic_text: ClassVar[str] = "Goal launch grant unavailable; explicit Retry required."
+
+    def diagnostic(self) -> str:
+        return self.diagnostic_text
+
+
+class StaleAttemptError(GoalAttemptError):
+    """A late outcome cannot modify the current goal generation."""
+

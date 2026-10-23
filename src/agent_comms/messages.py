@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from .turn_origin import TurnOrigin
 import builtins
 import hashlib
 import re
@@ -44,7 +45,6 @@ from .field_codec import (
 from .mentions import ThreadMention
 from .message_reference import MessageReference
 from .page_traversal import LiveCursor, PageCursor
-from .routing import TurnOrigin
 from .task_sources import Decision, NoTaskAttachment, TaskAttachment
 from .thread_identity import AgentThreadRole, ThreadRole
 from .ui_model.message_category import InboundCategory, MessageCategory, OtherCategory

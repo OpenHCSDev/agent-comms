@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from .activity_clocks import ActivityClocks
 import hashlib
 import sqlite3
 from collections.abc import Callable, Sequence
@@ -23,7 +24,6 @@ from agent_comms.messages import BusRecord, ClaimNoticeKind, Message
 from agent_comms.response_acknowledgement import canonical_publication_key
 
 from .active_route import guard_original_root_write
-from .bus_activity_index import ActivityClocks
 from .channel_targets import CommandTarget, NamedTarget
 from .coordination_database import CoordinationStore
 from .coordinator import Coordination

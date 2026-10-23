@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from agent_comms.activity_clocks import ActivityClocks, ChannelActivity
 import json
 import sqlite3
 from abc import ABC, abstractmethod
@@ -13,7 +14,7 @@ from itertools import islice, product
 from pathlib import Path
 from typing import TYPE_CHECKING, Self
 
-from agent_comms.bus_activity_index import ActivityClocks, BusActivityIndex, ChannelActivity
+from agent_comms.bus_activity_index import BusActivityIndex
 from agent_comms.bus_display_index import BusDisplayIndex
 from agent_comms.bus_publication import Delivered, KeyedPublication
 from agent_comms.bus_route_counts import RouteCounts
