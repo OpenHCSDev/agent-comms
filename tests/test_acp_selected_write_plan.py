@@ -120,7 +120,7 @@ async def test_second_pid_public_acp_owner_ipc_preplan(tmp_path, native_runtime_
             bus = responder(root, comms.registry)
             with Coordination(str(root / "coordination.sqlite3")) as store:
                 await _accept_visible_deliveries(
-                    bus, root_id, store.session.path, beta.incarnation.lookup, 0, owner_name="beta"
+                    bus, root_id, store.session.path, beta.incarnation.lookup, owner_name="beta"
                 )
             options = encode_request(
                 SelectedWriteRequest(

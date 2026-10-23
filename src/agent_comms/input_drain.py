@@ -21,6 +21,7 @@ from .acp_extension import (
     encode_updates,
 )
 from .activity import FailedWakeDiagnostic
+from .cohort_schema import AcceptanceFrontier
 from .agent_backend import ClearQueue, InputContent, InputId, SendNow, TurnInbox, TurnInboxItem
 from .bus import Bus
 from .child_process import join_retirement
@@ -267,6 +268,10 @@ class InputObservation(ABC):
             pending = next_sealed_assignment(
                 store, participant.lookup, after_seq=cursor.covered_seq,
             )
+            frontier = AcceptanceFrontier.require(
+                store.session._connection, wire_root_id=root_id,
+                recipient_lookup=participant.lookup,
+            )
             original = store.session.path.stat()
         observation = PrivateObservation
         if (
@@ -285,6 +290,7 @@ class InputObservation(ABC):
             participant,
             pending,
             cursor,
+            frontier,
             (original.st_dev, original.st_ino),
             maintenance.phase, maintenance.generation,
         ))

@@ -52,6 +52,65 @@ class AcceptedCohort:
     accepted_at_ms: int
     assignments: Annotated[tuple[WakeAssignment, ...], WireName("claims")]
 
+    @classmethod
+    def record(
+        cls,
+        initial: Delivered,
+        privacy: RegistryPrivacy,
+        store: Coordination,
+        db: sqlite3.Connection,
+    ) -> Applied[AcceptedCohort] | AlreadyApplied[AcceptedCohort]:
+        """Record one bus original inside the caller's acceptance transaction."""
+        CohortTable.require_installed(db)
+        acknowledgement = ClaimBatchAcknowledgements.one(
+            db, wire_root_id=privacy.namespace, wire_seq=initial.message.seq
+        )
+        if acknowledgement is not None:
+            return AlreadyApplied(_claim_record(db, initial, privacy))
+        if WakeAssignment.select(db, where="wire_seq=?", parameters=(initial.message.seq,)):
+            raise IdentityConflict("singleton claim cannot be adopted by a cohort")
+        if ClaimBatchAcknowledgements.select(
+            db, where="wire_seq=?", parameters=(initial.message.seq,)
+        ):
+            raise IdentityConflict("wire sequence already belongs to another cohort root")
+        for recipient in initial.audience.recipients:
+            if Participants.one(db, participant_lookup=recipient.recipient_lookup) is None:
+                raise IdentityConflict("frozen recipient has no durable participant identity")
+        accepted_at = store.session.now()
+        expected = _expected_assignments(initial, accepted_at, privacy)
+        ClaimBatchAcknowledgements.for_delivery(initial, privacy, accepted_at).insert(db)
+        for ordinal, assignment in enumerate(expected):
+            assignment.insert(db)
+            ClaimBatchMembers(
+                wire_root_id=privacy.namespace,
+                wire_seq=initial.message.seq,
+                ordinal=ordinal,
+                claim_id=assignment.assignment_id,
+                recipient_lookup=assignment.recipient_lookup,
+            ).insert(db)
+        selected = {
+            assignment.recipient_lookup: assignment.assignment_id for assignment in expected
+        }
+        for ordinal, recipient in enumerate(initial.audience.recipients):
+            assignment_id = selected.get(recipient.recipient_lookup)
+            CohortDeliveries(
+                wire_root_id=privacy.namespace,
+                wire_seq=initial.message.seq,
+                ordinal=ordinal,
+                recipient_lookup=recipient.recipient_lookup,
+                canonical_thread=recipient.canonical_thread,
+                kind="selected" if assignment_id is not None else "unmentioned_observer",
+                claim_id=assignment_id,
+            ).insert(db)
+        _record_optional_owner_generations(db, expected, privacy.namespace, initial.message.seq)
+        ClaimBatchAcknowledgements.update(
+            db,
+            where="wire_root_id=? AND wire_seq=?",
+            parameters=(privacy.namespace, initial.message.seq),
+            sealed=True,
+        )
+        return Applied(_claim_record(db, initial, privacy))
+
 
 def _assignment_id(root: str, seq: int, lookup: str) -> str:
     identity = f"agent-comms:cohort-claim:v1\0{root}:{seq}:{lookup}".encode()
@@ -195,51 +254,7 @@ def accept_delivery_cohort(
     with NativeBoundary(bus) as boundary, bus.bus.reading() as source, store.session.writing() as db:
         boundary.privacy.require_root(wire_root_id, IdentityConflict("cohort native namespace changed"))
         initial = source.delivery(wire_seq)
-        CohortTable.require_installed(db)
-        acknowledgement = ClaimBatchAcknowledgements.one(db, wire_root_id=wire_root_id, wire_seq=wire_seq)
-        if acknowledgement is not None:
-            return AlreadyApplied(_claim_record(db, initial, boundary.privacy))
-        if WakeAssignment.select(db, where="wire_seq=?", parameters=(wire_seq,)):
-            raise IdentityConflict("singleton claim cannot be adopted by a cohort")
-        if ClaimBatchAcknowledgements.select(db, where="wire_seq=?", parameters=(wire_seq,)):
-            raise IdentityConflict("wire sequence already belongs to another cohort root")
-        for recipient in initial.audience.recipients:
-            if Participants.one(db, participant_lookup=recipient.recipient_lookup) is None:
-                raise IdentityConflict("frozen recipient has no durable participant identity")
-        accepted_at = store.session.now()
-        expected = _expected_assignments(initial, accepted_at, boundary.privacy)
-        ClaimBatchAcknowledgements.for_delivery(initial, boundary.privacy, accepted_at).insert(db)
-        for ordinal, assignment in enumerate(expected):
-            assignment.insert(db)
-            ClaimBatchMembers(
-                wire_root_id=wire_root_id,
-                wire_seq=wire_seq,
-                ordinal=ordinal,
-                claim_id=assignment.assignment_id,
-                recipient_lookup=assignment.recipient_lookup,
-            ).insert(db)
-        selected = {
-            assignment.recipient_lookup: assignment.assignment_id for assignment in expected
-        }
-        for ordinal, recipient in enumerate(initial.audience.recipients):
-            assignment_id = selected.get(recipient.recipient_lookup)
-            CohortDeliveries(
-                wire_root_id=wire_root_id,
-                wire_seq=wire_seq,
-                ordinal=ordinal,
-                recipient_lookup=recipient.recipient_lookup,
-                canonical_thread=recipient.canonical_thread,
-                kind="selected" if assignment_id is not None else "unmentioned_observer",
-                claim_id=assignment_id,
-            ).insert(db)
-        _record_optional_owner_generations(db, expected, wire_root_id, wire_seq)
-        ClaimBatchAcknowledgements.update(
-            db,
-            where="wire_root_id=? AND wire_seq=?",
-            parameters=(wire_root_id, wire_seq),
-            sealed=True,
-        )
-        return Applied(_claim_record(db, initial, boundary.privacy))
+        return AcceptedCohort.record(initial, boundary.privacy, store, db)
 
 
 def next_sealed_assignment(
@@ -250,10 +265,16 @@ def next_sealed_assignment(
 ) -> WakeAssignment | None:
     """Choose pending work with a saved acknowledgement for display or execution.
 
-    Skip completed pages to find later work. Displaying work does not start a
-    turn; executing it still requires checking the process and stored message.
+    Filter pending states in SQL and read one row. Displaying work does not
+    start a turn; execution still checks the process and stored message.
     """
-    pending = pending_sealed_assignments(store, recipient_lookup, after_seq=after_seq)
+    pending = sealed_cohort_assignments(
+        store,
+        recipient_lookup,
+        after_seq=after_seq,
+        limit=1,
+        state_capability=PendingNotification,
+    )
     return next(iter(pending), None)
 
 
