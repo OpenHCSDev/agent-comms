@@ -15,8 +15,7 @@ from agent_comms.change_report import FileLine, MissingSourceLine, PullRequestHe
 from agent_comms.check_root import CheckRoot
 from agent_comms.commander.order import OrderFile
 from agent_comms.field_codec import FieldCodec, MalformedRecord
-from agent_comms.goal_actions import CreateProblemGoalAction, SetGoalAction
-from agent_comms.goals import RequestGoalOrder
+from agent_comms.goal_actions import CreateProblemGoalAction
 from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.repository_name import RepositoryName
 from agent_comms.tool_caller import ThreadCaller
@@ -62,12 +61,11 @@ def assigned(comms, scope, source, problem='P1'):
 
 
 def requested(comms, scope, source, problem='P1'):
-    comms.goals.update_goal('lead', SetGoalAction(
-        text='Classify the failing source or fix its declared parent', goal_id='request',
-        order=RequestGoalOrder()))
+    request = comms.goals.todos.add_request(comms.registry.require('lead').incarnation,
+        'Classify the failing source or fix its declared parent').id
     caller = ThreadCaller('lead')
     CommsTodoCreateTool(owner='worker', order=CreateProblemGoalAction(
-        problem=problem, order=replace(order(source), scope=scope), request='request',
+        problem=problem, order=replace(order(source), scope=scope), request=request,
         review_at=RecordedEventTime(1000), commander='lead',
         assigner=comms.registry.require('lead').incarnation,
         repo=RepositoryName.from_wire('OpenHCSDev/agent-comms'),
@@ -121,4 +119,3 @@ def test_report_returns_through_the_real_cli_on_a_selected_history_copy(comms, t
         assert report in result.stdout
         assert copied.goals.todos.get(current.id).state is DoneTodoState
     assert comms.goals.todos.get('P1').pending
-

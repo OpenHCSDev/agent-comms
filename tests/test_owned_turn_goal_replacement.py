@@ -15,10 +15,9 @@ from agent_comms.child_process import ProcessIdentity
 from conftest import installed_comms
 from agent_comms.field_codec import Id128Text
 from agent_comms.goal_actions import (
-    BlockedGoalAction, CreateProblemGoalAction, OrderGoalAction, SetGoalAction,
+    BlockedGoalAction, CreateProblemGoalAction, OrderGoalAction,
 )
 from agent_comms.goal_states import ActiveGoal
-from agent_comms.goals import RequestGoalOrder
 from agent_comms.owned_send import OwnedSend
 from agent_comms.owned_turn import OwnedTurn
 from agent_comms.queued_input import InitialInput, QueuedInput
@@ -55,11 +54,10 @@ async def test_turn_after_order_replacement_is_allowed(tmp_path, native_runtime_
                 'lead', frozenset(), str(saved.project),
                 process_identity=ProcessIdentity.capture(os.getpid()),
             ))
-            comms.goals.update_goal('lead', SetGoalAction(
-                text='Repair following input', goal_id='request', order=RequestGoalOrder(),
-            ))
+            request = comms.goals.todos.add_request(
+                comms.registry.require('lead').incarnation, 'Repair following input').id
             comms.goals.update_goal(worker, CreateProblemGoalAction(
-                problem='P1', order=order(source), request='request',
+                problem='P1', order=order(source), request=request,
                 review_at=RecordedEventTime(1000), commander='lead',
                 assigner=comms.registry.require('lead').incarnation,
                 repo=RepositoryName.from_wire('org/repo'), text='Repair following input',
@@ -79,7 +77,7 @@ async def test_turn_after_order_replacement_is_allowed(tmp_path, native_runtime_
                 replaced = comms.goals.update_goal(worker, OrderGoalAction(
                     problem='P1', expected_revision=todo.revision,
                     assigner=comms.registry.require('lead').incarnation,
-                    commander='lead', request='request', review_at=RecordedEventTime(2000),
+                    commander='lead', request=request, review_at=RecordedEventTime(2000),
                     order=replace(order(source), id='replacement'),
                 ))
                 # A replaced order keeps the running turn's authority; only following input waits.
@@ -122,11 +120,10 @@ async def test_goal_published_during_preparation_is_current_at_reservation(tmp_p
             name, frozenset(), str(tmp_path),
             process_identity=ProcessIdentity.capture(os.getpid()),
         ))
-    comms.goals.update_goal('lead', SetGoalAction(
-        text='Repair the turn owner', goal_id='request', order=RequestGoalOrder(),
-    ))
+    request = comms.goals.todos.add_request(
+        comms.registry.require('lead').incarnation, 'Repair the turn owner').id
     initial = comms.goals.update_goal('worker', CreateProblemGoalAction(
-        problem='P1', order=order(source), request='request',
+        problem='P1', order=order(source), request=request,
         review_at=RecordedEventTime(1000), commander='lead',
         assigner=comms.registry.require('lead').incarnation,
         repo=RepositoryName.from_wire('org/repo'), text='Repair the turn owner',
@@ -141,7 +138,7 @@ async def test_goal_published_during_preparation_is_current_at_reservation(tmp_p
         todo = comms.goals.todos.get('P1')
         replaced = comms.goals.update_goal('worker', OrderGoalAction(
             problem='P1', expected_revision=todo.revision, assigner=actor,
-            commander='lead', request='request', review_at=RecordedEventTime(2000),
+            commander='lead', request=request, review_at=RecordedEventTime(2000),
             order=replace(order(source), id='replacement'),
         ))
         old.original.goal_permission.require_current(replaced)
@@ -162,7 +159,7 @@ async def test_goal_published_during_preparation_is_current_at_reservation(tmp_p
         todo = comms.goals.todos.get('P1')
         latest = comms.goals.update_goal('worker', OrderGoalAction(
             problem='P1', expected_revision=todo.revision, assigner=actor,
-            commander='lead', request='request', review_at=RecordedEventTime(3000),
+            commander='lead', request=request, review_at=RecordedEventTime(3000),
             order=replace(order(source), id='replacement-during-preparation'),
         ))
         assert current.thread.goal == replaced != latest
@@ -187,11 +184,10 @@ async def test_order_reactivating_a_blocked_goal_keeps_the_running_turn(tmp_path
             name, frozenset(), str(tmp_path),
             process_identity=ProcessIdentity.capture(os.getpid()),
         ))
-    comms.goals.update_goal('lead', SetGoalAction(
-        text='Repair the blocked unit', goal_id='request', order=RequestGoalOrder(),
-    ))
+    request = comms.goals.todos.add_request(
+        comms.registry.require('lead').incarnation, 'Repair the blocked unit').id
     comms.goals.update_goal('worker', CreateProblemGoalAction(
-        problem='P1', order=order(source), request='request',
+        problem='P1', order=order(source), request=request,
         review_at=RecordedEventTime(1000), commander='lead',
         assigner=comms.registry.require('lead').incarnation,
         repo=RepositoryName.from_wire('org/repo'), text='Repair the blocked unit',
@@ -210,7 +206,7 @@ async def test_order_reactivating_a_blocked_goal_keeps_the_running_turn(tmp_path
         todo = comms.goals.todos.get('P1')
         retried = comms.goals.update_goal('worker', OrderGoalAction(
             problem='P1', expected_revision=todo.revision, assigner=actor,
-            commander='lead', request='request', review_at=RecordedEventTime(2000),
+            commander='lead', request=request, review_at=RecordedEventTime(2000),
             order=replace(order(source), id='retry'),
         ))
         assert retried.state == ActiveGoal()

@@ -52,6 +52,8 @@ from .field_codec import (
     Argument, FieldCodec, GitCommitText, MalformedRecord, PathText, WireName, WireOmitDefault,
     boundary_decoder,
 )
+from agent_comms.channel_targets import NamedTarget
+from agent_comms.owner_requests import NewestOpenRequest, RequestSelection
 from .host_services import HostService, SystemdUserService
 from .connector_store import (
     CODE_SECONDS, ApprovalQueueFull, ApprovalRefused, AuthorizationQuery,
@@ -67,9 +69,11 @@ from .head_review import HeadReview, PullRequestHead
 from .repository_name import RepositoryName
 from .todos import DirectiveText, ReviewedHeadVerdict
 from .tool_result import ToolResult
-from .tool_caller import ThreadCaller
+from .task_sources import OwnerRequestAttachment
+from .tool_caller import ThreadCaller, ToolCaller
 from .tools import (
-    CommsVerdictTool, ReadTool, TodoChanged, ToolRequest, tool_field,
+    CommsSendTool, CommsVerdictTool, MessagePublished, ReadTool, SendTool,
+    TodoChanged, ToolRequest, tool_field,
 )
 
 LOOPBACK = "127.0.0.1"
@@ -92,6 +96,18 @@ class DirectorCaller(ThreadCaller):
 
 class ConnectorTool(ToolRequest[DirectorCaller], affix="ConnectorTool"):
     """Connector-only declarations are absent from the native/CLI tool registry."""
+
+
+@dataclass(frozen=True, kw_only=True)
+class ConnectorSendTool(SendTool, ConnectorTool, declared_name=CommsSendTool.declared_name):
+    request: Annotated[
+        RequestSelection,
+        *tool_field("Owner request ID; omitted selects the recipient's newest open request"),
+    ] = NewestOpenRequest()
+
+    def attachment(self, comms: Comms, target: NamedTarget) -> OwnerRequestAttachment:
+        requests = self.request.for_message(comms.goals.todos, target, comms.registry)
+        return OwnerRequestAttachment(tuple(request.id for request in requests))
 
 
 @dataclass(frozen=True, kw_only=True)

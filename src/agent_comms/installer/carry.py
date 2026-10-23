@@ -17,6 +17,7 @@ from abc import ABC, abstractmethod
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from importlib import import_module
+from graphlib import TopologicalSorter
 from pathlib import Path
 from typing import Annotated, ClassVar
 
@@ -47,6 +48,8 @@ class Carry(ABC):
     spill_dir: Annotated[Path, PathText]
 
     declared: ClassVar[dict[str, type[Carry]]] = {}
+    precedes: ClassVar[tuple[type[Carry], ...]] = ()
+    """Steps whose decoders require this step's output, regardless of addition date."""
     """Every step imported so far, by its module name."""
 
     def __init_subclass__(cls, **kwargs: object) -> None:
@@ -130,7 +133,13 @@ class CarryChain:
         unordered = sorted(step.name() for step in steps if step.name() not in added)
         if unordered:
             raise ValueError(f"{unordered} are not on the main line, so nothing orders them")
-        return cls(tuple(sorted(steps, key=lambda step: added[step.name()])))
+        ordered = sorted(steps, key=lambda step: added[step.name()])
+        dependencies = {step: set() for step in ordered}
+        for step in ordered:
+            for later in step.precedes:
+                if later in dependencies:
+                    dependencies[later].add(step)
+        return cls(tuple(TopologicalSorter(dependencies).static_order()))
 
     def pending(self, dry_run: Callable[[type[Carry]], Carried]) -> tuple[type[Carry], ...]:
         """Every step from the first whose dry run reports a change. A later step's dry run

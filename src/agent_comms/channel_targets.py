@@ -146,7 +146,11 @@ class NamedTarget(CommandTarget):
     name: str
     sigil: ClassVar[str]
     batchable = False
-    direct_names = ()
+
+    @property
+    def direct_names(self) -> tuple[str, ...]:
+        return ()
+
     guidance_scope = ""
     default_audience = MessageAudience.DIRECT
 
@@ -241,7 +245,7 @@ class ThreadTarget(NamedTarget):
         message.role.require_recipients(self, audience)
 
     @property
-    def direct_names(self):
+    def direct_names(self) -> tuple[str, ...]:
         return self.names
 
     def canonical_name(self, canonical):

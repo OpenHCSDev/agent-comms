@@ -16,7 +16,6 @@ from .agent_activity import AgentActivity
 from .coordination_errors import StaleFence
 from .errors import RelationViolationError
 from .goal_actions import (
-    DirectiveGoalAction,
     GoalAction,
     GoalActionContext,
     GoalPrecondition,
@@ -33,6 +32,7 @@ from .goal_waits import (
     StandbyReview,
 )
 from .native_input_owner import GoalLaunchOwner
+from .owner_requests import NewestOpenRequest, RequestDirective
 from .registration import Registration
 
 if TYPE_CHECKING:
@@ -416,9 +416,11 @@ class Goals:
         return wait.consume_reply(self.waits, goal.id)
 
     def direct(self, name: str, message: Message) -> None:
-        """The owner's plain message to ``name`` becomes a directive on its goal."""
-        self.update_goal(name, DirectiveGoalAction(
-            text=message.body, seq=message.seq, at=message.timestamp))
+        """A plain owner message directs the recipient's newest open request."""
+        owner = self.registry.require(name).incarnation
+        directive = RequestDirective.from_message(message)
+        for request in NewestOpenRequest().select(self.todos, owner):
+            self.todos.record_directive(request.id, directive)
 
     def update_goal[Result: GoalDeclaration](
         self,
