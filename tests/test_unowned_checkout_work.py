@@ -130,9 +130,12 @@ def checkout_bus(tmp_path: Path, configured_repository, installed_runtime) -> Co
     Bus.install(Bus.path_in(root))
     c = wire(root)
     Bus.install(Bus.path_in(c.root))
-    for name in ('lead', 'worker', 'idle'):
+    # Two order holders never share one worktree, so the unit taking the work has its own.
+    spare = tmp_path / 'idle-project'
+    git(home, 'worktree', 'add', '-q', '-b', 'idle-home', str(spare))
+    for name, worktree in (('lead', home), ('worker', home), ('idle', spare)):
         c.registry.declare(c.registry.new_thread(
-            name, frozenset(), str(home), execution=ExternalThreadExecution))
+            name, frozenset(), str(worktree), execution=ExternalThreadExecution))
     request = c.goals.todos.add_request(
         c.registry.require('lead').incarnation, 'Keep changes with their author').id
     lead, worker = c.registry.require('lead'), c.registry.require('worker')

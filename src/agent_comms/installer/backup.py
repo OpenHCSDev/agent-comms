@@ -347,10 +347,15 @@ class StoreBackup(ResourceBackup):
         omitted.update(member for path, owner in owners.items()
                        for member in owner.files(path) if member != path)
 
+        def passes(path: Path) -> bool:
+            """Directories and links pass through; a file passes only with its owner, so one
+            written after the owners were read, or a socket, is never copied."""
+            listed = path in owners or stat.S_ISDIR(path.lstat().st_mode) or path.is_symlink()
+            return listed and path not in omitted
+
         def transient(directory: str, names: list[str]) -> set[str]:
             return {path.name for path in (Path(directory) / name for name in names)
-                    if path in omitted or LockedStore.is_staging(path)
-                    or stat.S_ISSOCK(path.lstat().st_mode)}
+                    if LockedStore.is_staging(path) or not passes(path)}
 
         def copy_file(original: str, destination: str) -> Path:
             return owners[Path(original)].copy_file(original, destination)

@@ -270,7 +270,7 @@ def test_merged_order_keeps_its_checked_fields(tmp_path: Path, source_repository
 
 
 @pytest.fixture
-def pr_commander(tmp_path, monkeypatch, proof_build_checkouts, configured_repository):
+def pr_commander(tmp_path, monkeypatch, proof_build_checkouts, durable_home):
     """One cited source, its real bare remote and installed history; only GitHub is synthetic."""
     graph = next(graph for graph in proof_build_checkouts
                  if graph.repository.github == CorePackage.repository)
@@ -311,7 +311,9 @@ def pr_commander(tmp_path, monkeypatch, proof_build_checkouts, configured_reposi
     rule = StorageRule(checkout_base=source.checkout.parent)
     (tmp_path / "storage.json").write_text(json.dumps(FieldCodec.encode(rule)))
     Registration(tmp_path / "registry.json").register(lead)
-    configured_repository(wire(tmp_path), source)
+    # The source carries the copied plans; a second checkout of its repository would
+    # be compared against the source's installed commit, which it never holds.
+    Commander.on_root('lead', (source,), tmp_path)
     bus = wire(tmp_path)
     bus.goals.todos.add_request(lead.incarnation, "Repair the copied order workflow")
     return Commander.read_root(tmp_path)

@@ -10,7 +10,7 @@ import subprocess
 import time
 from abc import abstractmethod
 from collections.abc import Iterable, Iterator, Sequence
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 from enum import StrEnum
 from functools import cached_property
 from pathlib import Path
@@ -84,9 +84,11 @@ class StorageRule(RoomAllocation, DurableFile):
     shown: ClassVar[int] = 5  # holders named in each list
     scratch_cap_gib: float = 3.0  # one unit's scratch together with its checkouts
     max_checkouts: int = 2
-    volume: StoragePath = Path.home()
-    scratch_base: StoragePath = Path.home() / '.cache' / 'agent-scratch'
-    checkout_base: StoragePath = Path.home() / 'wt'
+    # Home paths are read when the rule is built, never frozen at import.
+    volume: StoragePath = field(default_factory=Path.home)
+    scratch_base: StoragePath = field(
+        default_factory=lambda: Path.home() / '.cache' / 'agent-scratch')
+    checkout_base: StoragePath = field(default_factory=lambda: Path.home() / 'wt')
 
     def __post_init__(self):
         limits = (self.floor_gib, self.cleanup_gib, self.scratch_cap_gib)
