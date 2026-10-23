@@ -2029,10 +2029,11 @@ class ProducedTable(ProducedRow, TypedTable, ProjectionSource, declared_name=Non
         An ancestor declaring other outputs owns those outputs alone; unscoped
         inherited machinery still follows the writer that uses it.
         """
-        owners = set(cls.shared_producers)
+        owners = {*cls.shared_producers, cls}
         owners.update(parent for parent in cls.__mro__
                       if parent.__module__.partition(".")[0] == __package__)
         writers = ProjectionSource.writers_for(cls)
+        owners.update(writers)
         for writer in writers:
             owners.update(
                 parent for parent in writer.__mro__
