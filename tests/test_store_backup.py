@@ -129,6 +129,7 @@ def test_store_backup_restores_wal_rows_and_removes_new_files(tmp_path):
     root.mkdir()
     store = root / 'transcripts.sqlite3'
     route = tmp_path / 'route.json'
+    route.touch(mode=0o600)  # The route's owner writes it private.
     route.write_text('original route')
     created = root / 'created.json'
     with sqlite3.connect(store) as writer:
@@ -222,6 +223,7 @@ def test_route_only_backup_preserves_a_concurrent_change(tmp_path, had_route):
     root.mkdir()
     route = tmp_path / 'route.json'
     if had_route:
+        route.touch(mode=0o600)  # The route's owner writes it private.
         route.write_text('original route')
     spill_dir = tmp_path / 'spill'
     backup = StoreBackup.take(root, route, (), spill_dir)

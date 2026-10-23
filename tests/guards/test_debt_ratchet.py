@@ -429,6 +429,14 @@ def owner(name: str, lines: int, indent: str = "") -> str:
     )
 
 
+def module(*owners: str) -> str:
+    """The owners as one module in Black's form, so the formatting ratchet counts nothing and
+    each comparison measures only the classes."""
+    import black
+
+    return black.format_str("".join(owners), mode=black.Mode())
+
+
 @pytest.mark.parametrize("root", ["src/agent_comms", "src/toad", "src/textual"])
 def test_family_flattening_cannot_offset_another_file_or_admit_a_named_facade(
     tmp_path: Path, root: str, ratchet
@@ -512,7 +520,7 @@ def test_family_name_owner_reads_and_codec_detours(source: str, expected: int):
 
 def test_small_owners_stay_within_the_class_threshold(repo: Repository) -> None:
     base = repo.commit({"owners.py": owner("Small", 2)})
-    head = repo.commit({"owners.py": owner("Small", 500) + owner("New", 500)})
+    head = repo.commit({"owners.py": module(owner("Small", 500), owner("New", 500))})
     status, report = repo.compare(base, head)
     assert status == 0
     assert report["delta"][f"GodClassExcess:{repo.root}/owners.py::Small"] == 0
@@ -520,8 +528,8 @@ def test_small_owners_stay_within_the_class_threshold(repo: Repository) -> None:
 
 
 def test_class_growth_cannot_be_cancelled_by_another_class(repo: Repository) -> None:
-    base = repo.commit({"classes.py": owner("Growing", 501) + owner("Shrinking", 600)})
-    head = repo.commit({"classes.py": owner("Growing", 502) + owner("Shrinking", 500)})
+    base = repo.commit({"classes.py": module(owner("Growing", 501), owner("Shrinking", 600))})
+    head = repo.commit({"classes.py": module(owner("Growing", 502), owner("Shrinking", 500))})
     status, report = repo.compare(base, head)
     assert status == 1
     assert report["delta"][f"GodClassExcess:{repo.root}/classes.py::Growing"] == 1
@@ -540,13 +548,13 @@ def test_new_or_crossing_god_class_is_refused(repo: Repository, before: int) -> 
 
 def test_class_move_keeps_baseline_and_new_small_owner_has_no_class_debt(repo: Repository) -> None:
     base = repo.commit({"old.py": owner("Existing", 501)})
-    moved = repo.commit({"old.py": None, "new.py": owner("Existing", 501) + owner("NewOwner", 25)})
+    moved = repo.commit({"old.py": None, "new.py": module(owner("Existing", 501), owner("NewOwner", 25))})
     status, report = repo.compare(base, moved)
     assert status == 0
     assert report["base"][f"GodClassExcess:{repo.root}/new.py::Existing"] == 1
     assert report["delta"][f"GodClassExcess:{repo.root}/new.py::Existing"] == 0
     assert report["delta"][f"GodClassExcess:{repo.root}/new.py::NewOwner"] == 0
-    grown = repo.commit({"new.py": owner("Existing", 502) + owner("NewOwner", 26)})
+    grown = repo.commit({"new.py": module(owner("Existing", 502), owner("NewOwner", 26))})
     assert repo.compare(moved, grown)[0] == 1
 
 
