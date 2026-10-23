@@ -37,7 +37,7 @@ from .native_arguments import NativeArguments, SelectedModel
 from .native_failures import NativePiUnavailable, NativeRequestFailure
 from .native_input_record import NativeInputCommit, NativeInputLocation
 from .native_package import MANIFEST, UNIT_INSTRUCTIONS, VerifiedNativePackage
-from .native_session_files import NativeSessionFiles
+from .native_session_files import NativeAgentSettings, NativeSessionFiles
 from .native_tool_call import NativeToolMode
 from .pi_vocabulary import NoThinkingOverride, PendingStopReason, ThinkingChoice
 from .private_path import (
@@ -591,8 +591,7 @@ class NativePiRpcLaunch:
             raise NativePiUnavailable("Native Pi worktree is unavailable")
         # Native SettingsManager and AgentSession own tracked retry/compaction
         # policy. This directory isolates writable resources, not policy copies.
-        agent_dir = session_dir / ".native-pi-agent"
-        NativeSessionFiles.prepare_private_directory(agent_dir)
+        agent_dir = NativeAgentSettings.prepare_directory(session_dir)
         tool_arguments = selected_tool_mode.launch_arguments(package.path)
         arguments = [
             "--mode",
