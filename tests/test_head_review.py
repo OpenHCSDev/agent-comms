@@ -6,7 +6,9 @@ from datetime import UTC, datetime
 
 import pytest
 
-from agent_comms.field_codec import FieldCodec
+from pathlib import Path
+
+from agent_comms.commander import judge, order
 from agent_comms.goal_actions import CreateProblemGoalAction
 from agent_comms.head_review import PullRequestHead
 from agent_comms.recorded_time import RecordedEventTime
@@ -57,6 +59,24 @@ def test_orderless_head_family_persists_both_outcomes_and_posts_each_exact_head(
     posts = tuple(call for call in github.calls() if f"statuses/{HEAD}" in call[1])
     assert len(posts) == 2
     assert "state=success" in posts[0] and "state=failure" in posts[1]
+
+
+def test_judge_ok_and_back_dispatch_orderless_prs_without_positional_edit_ids(head_bus):
+    comms, github, request = head_bus
+    context = order.Commander.read_root(comms.root)
+    why = "The existing class owns this behavior without another copy"
+    common = ["--pr", str(request.pr), "--head", request.head, "--why", why]
+    judge.main(["ok", *common], context)
+    assert isinstance(comms.goals.todos.head_reviews(request)[0].verdict, ReviewedHeadVerdict)
+    todo = comms.goals.todos.get("P2")
+    location = f"{Path(todo.order.check.directory) / todo.order.owner.file}:{todo.order.owner.line}"
+    judge.main(["back", *common,
+                "--roast", "This is stupid because the same decision is written twice instead of belonging to its existing class.",
+                "--fix", "Put the shared behavior on the existing parent and delete both copies.",
+                "--slop", "IMPL-5", "--fact", "the same decision is written twice",
+                "--at", location, "--derive", "base-method", "--by", location], context)
+    assert isinstance(comms.goals.todos.head_reviews(request)[0].verdict, RejectedHeadVerdict)
+    assert len(tuple(call for call in github.calls() if f"statuses/{HEAD}" in call[1])) == 2
 
 
 def test_moved_head_posts_and_records_nothing(head_bus):

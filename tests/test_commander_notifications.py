@@ -14,9 +14,9 @@ from agent_comms.message_page import MessagePageRequest
 from agent_comms.read_basis import DMDisplayScope
 from agent_comms.service_passes import ServicePassStore
 from agent_comms.standing_rules import ServicePassFailing
-from agent_comms.todos import ProgressRead
 from agent_comms.ui_model.unit_state import UnitState
 from agent_comms.wake_policy import PassiveWake
+from test_holder_standing_rules import state_cards
 
 pytest_plugins = ("test_holder_standing_rules",)
 
@@ -62,12 +62,12 @@ def test_quiet_completion_is_per_commander_even_when_a_later_recipient_fails(not
 
 def test_recreated_watcher_reads_original_committed_unit_observation(notification_bus):
     comms = notification_bus
-    states = UnitState.current(comms, "lead", ProgressRead())
+    states = state_cards(comms, UnitState)
     beat(comms, states=states)
     first, = notifications(comms)
     assert all(state.line() in first.body for state in states)
     assert CommanderUpdate.latest(comms, comms.registry.require("lead").incarnation) == first.task
-    beat(comms, states=UnitState.current(comms, "lead", ProgressRead()))
+    beat(comms, states=state_cards(comms, UnitState))
     unchanged, = notifications(comms)
     assert unchanged.reference == first.reference
 

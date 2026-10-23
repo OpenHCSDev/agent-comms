@@ -194,7 +194,7 @@ class ReviewSubject(DeclaredFamily):
     def from_options(cls, options: HeadVerdictVerb, ctx: order.Commander) -> ReviewSubject:
         matches = tuple(member for member in cls.members_with(cls) if member.selected(options))
         if len(matches) != 1:
-            sys.exit('Refused: select exactly one of --ids or --pr')
+            sys.exit('Refused: select either edit IDs or --pr')
         member, = matches
         return member.decode_options(options, ctx)
 
@@ -221,12 +221,12 @@ class EditReview(ReviewSubject):
     @classmethod
     def decode_options(cls, options: HeadVerdictVerb, ctx: order.Commander) -> EditReview:
         if options.head or options.repo:
-            sys.exit('Refused: --head and --repo belong to --pr, not --ids')
+            sys.exit('Refused: --head and --repo belong to --pr, not edit IDs')
         return cls(options.ids)
 
     def run(self, options: VerdictVerb, ctx: order.Commander) -> None:
         if not self.ids:
-            sys.exit('Refused: select at least one --ids ID:CODE')
+            sys.exit('Refused: select at least one edit ID:CODE')
         orders = {todo.id: todo for todo in ctx.held_orders()
                   if not options.problem or todo.id == options.problem}
         edits = {edit.id: edit for edit in Edit.unjudged(ctx.comms, ctx.commander)
@@ -282,7 +282,7 @@ class VerdictVerb(JudgeVerb):
 
     ids: Annotated[
         tuple[str, ...],
-        Argument(flags=("ids",), options={"nargs": "+", "metavar": "ID:CODE"}),
+        Argument(flags=("ids",), options={"nargs": "*", "metavar": "ID:CODE"}),
     ] = ()
     why: str
     problem: Annotated[
@@ -432,6 +432,12 @@ class BackVerb(HeadVerdictVerb):
 
     @cached_property
     def rejection_reason(self) -> StrikeReason:
+        if len(self.roast.split()) < 12 or not re.search(r'\bbecause\b', self.roast):
+            sys.exit('Refused: --roast needs 12+ words with because, naming the duplicated fact and its owner')
+        if len(self.fix.split()) < 8:
+            sys.exit('Refused: --fix needs 8+ words naming the owner and replacing shape')
+        order.refuse(self.roast, BluntText)
+        order.refuse(' '.join((self.why, self.roast, self.fix)), *DirectiveText.checks())
         return StrikeReason("\n".join((
             self.why, self.roast,
             *(f"    {line.strip()}" for line in self.lines),
@@ -450,13 +456,7 @@ class BackVerb(HeadVerdictVerb):
                                evidence=self.head_evidence())
 
     def check_edits(self, edits: list[Edit]) -> None:
-        if len(self.roast.split()) < 12 or not re.search(r'\bbecause\b', self.roast):
-            sys.exit('Refused: --roast needs 12+ words with because, naming the duplicated fact and its owner')
-        if len(self.fix.split()) < 8:
-            sys.exit('Refused: --fix needs 8+ words naming the owner and replacing shape')
-        _ = self.slop
-        order.refuse(self.roast, BluntText)
-        order.refuse(' '.join((self.why, self.roast, self.fix)), *DirectiveText.checks())
+        _ = self.rejection_reason
 
 def main(args, ctx):
     JudgeVerb.parse(args or ['show']).apply(ctx)
