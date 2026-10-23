@@ -74,7 +74,7 @@ class RuntimeRequest(
 
     @classmethod
     def from_wire(cls, payload: object) -> Self:
-        values = FieldCodec.decode(dict[str, object], payload)
+        values = FieldCodec.decode(dict[str, JsonValue], payload)
         if "kind" in values:
             raise ValueError("Unknown runtime request field: kind")
         values["kind"] = values.pop("action", None)
