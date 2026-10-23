@@ -809,6 +809,13 @@ class DirectiveVerb(CommanderVerb):
         opened = OwedAnswer.opened(ctx.comms, self.who(ctx))
         named = tuple(rule.message for rule in opened
                       if rule.message.message_id in self.answers)
+        snapshot = ctx.comms.registry.snapshot()
+        reached = frozenset(snapshot.canonical_name(name) for name in self.addressed)
+        misaddressed = tuple(reason for rule in opened
+                             if (reason := rule.misaddressed(named, reached)))
+        if misaddressed:
+            sys.exit('REFUSED, nothing recorded: --answers names a message this action never'
+                     ' reaches:\n' + '\n'.join(misaddressed))
         owed = tuple(rule for rule in opened if rule.due(now) and not rule.answered_by(named))
         if owed:
             lines = '\n'.join(f'{rule.line()}: {rule.message.body[:80]}' for rule in owed)
@@ -816,6 +823,11 @@ class DirectiveVerb(CommanderVerb):
                      + '\nReply to the original message or use --answers MESSAGE_ID. An answer '
                      'that must wait is sent now: "waiting on X, owner Y".')
         self.respond(ctx, tuple(dict.fromkeys(message.reference for message in named)))
+
+    @property
+    @abstractmethod
+    def addressed(self) -> tuple[str, ...]:
+        """The threads this action's message is for; only their asks can it answer."""
 
     @abstractmethod
     def respond(self, ctx: Commander, references: tuple[MessageReference, ...]) -> None: ...
@@ -870,6 +882,10 @@ class SendVerb(RequestedOrderVerb):
         ),
     ] = NoSourceReference()
 
+    @property
+    def addressed(self) -> tuple[str, ...]:
+        return (self.unit,)
+
     def respond(self, ctx: Commander, references: tuple[MessageReference, ...]) -> None:
         ctx.send(self.unit, OrderFile.read(Path(self.body_file).read_text()), clean=self.clean,
              reassign=self.reassign, traced=self.traced,
@@ -895,6 +911,10 @@ class StrikeVerb(OrderVerb, DirectiveVerb):
             options={"help": '"WHO at STAGE"; stage is review/install/live/user'},
         ),
     ] = "review"
+
+    @property
+    def addressed(self) -> tuple[str, ...]:
+        return (self.unit,)
 
     def respond(self, ctx: Commander, references: tuple[MessageReference, ...]) -> None:
         ctx.strike(self.unit, self.pid, self.why, self.caught,
@@ -1101,6 +1121,10 @@ class SayVerb(OrderVerb, DirectiveVerb):
         str, Argument(flags=("body_file",), options={"metavar": "BODYFILE"})
     ]
 
+    @property
+    def addressed(self) -> tuple[str, ...]:
+        return VerdictAudience(tuple(self.units.split(','))).threads
+
     def respond(self, ctx: Commander, references: tuple[MessageReference, ...]) -> None:
         ctx.say(self.units, self.body_file, references)
 
@@ -1128,6 +1152,10 @@ class ProblemVerb(RequestedOrderVerb):
         ),
     ]
     disk: Annotated[bool, Argument(flags=("--disk",))] = False
+
+    @property
+    def addressed(self) -> tuple[str, ...]:
+        return (self.to,)
 
     def respond(self, ctx: Commander, references: tuple[MessageReference, ...]) -> None:
         document = OrderFile.read(Path(self.order).read_text())
