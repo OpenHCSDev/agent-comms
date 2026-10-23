@@ -2028,9 +2028,6 @@ class ValueDecoder[T](DecoderPlan):
             return self.decode_resolved(cast(T, decode(data, record)))
         return self.decode_bound(data, record)
 
-    def external_decoders(self, data: object) -> Iterable[ExternalDecoder]:
-        return ()
-
     def decode_resolved(self, value: T) -> T:
         if not self.accepts_value(value):
             raise MalformedRecord(f"Resolved value does not match {self.target}")
