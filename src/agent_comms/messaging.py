@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING
 from .active_route import guard_original_root_write
 from .bus_publication import AgentOrigin, HumanOrigin, InitialOrigin
 from .change_report import NoChangeReport, ReportEvidence
+from .channel_targets import CommandTarget, IncarnationThreadTarget, NamedTarget
 from .coordination_session import NativeBoundary
 from .errors import (
     CommittedMessageError, MessageAcknowledgmentError, RelationViolationError,
@@ -45,12 +46,14 @@ class Messaging:
         self.bus = bus
         self.goals = goals
 
-    def _publish(self, message: Message, origin: InitialOrigin) -> Message:
+    def _publish(self, message: Message, origin: InitialOrigin,
+                 *, destination: NamedTarget) -> Message:
         """Record the meaning of a committed ordinary send beyond its bus transaction."""
         committed: Message | None = None
         try:
             try:
-                committed = self.bus.publisher.publish_ordinary(message, origin=origin)
+                committed = self.bus.publisher.publish_ordinary(
+                    message, origin=origin, destination=destination)
             except CommittedMessageError as error:
                 committed = error.record.message
                 raise
@@ -98,7 +101,7 @@ class Messaging:
                 report=report,
                 answers=tuple(dict.fromkeys((*answers, *self._answered_by(owner, target)))),
             )
-            committed = self._publish(message, origin)
+            committed = self._publish(message, origin, destination=CommandTarget.named(target))
         try:
             todos.correct(owner.incarnation, committed.message_id, body)
         except TodoError as error:
@@ -132,7 +135,7 @@ class Messaging:
         with guard_original_root_write(self.root), self.registry.store.locked():
             return self.registry.user_thread().or_create(lambda: self._register_user(worktree))
 
-    def send_user_message(self, target: str, body: str, *, worktree: str,
+    def send_user_message(self, target: str | NamedTarget, body: str, *, worktree: str,
                           task: TaskAttachment = NoTaskAttachment()) -> Message:
         """Cooperative local UI send, not cryptographic same-UID authentication."""
         # The historical root write fence precedes identity creation and
@@ -171,13 +174,14 @@ class Messaging:
                                source_user=user.incarnation, recipient=owner.incarnation,
                                change=change, **declaration_options)
             return self._publish_user(
-                user, owner.name, "Pinned constraint from its original source",
+                user, IncarnationThreadTarget(owner.incarnation), "Pinned constraint from its original source",
                 task, role=NoticeRole())
 
     def _publish_user(self, user, target, body, task, *, role=ConversationRole()):
+        destination = CommandTarget.named(target)
         return self._publish(
-            Message(user.name, target, body, InfoKind, task=task, role=role),
-            HumanOrigin.of(user),
+            Message(user.name, destination.name, body, InfoKind, task=task, role=role),
+            HumanOrigin.of(user), destination=destination,
         )
 
     def acknowledge(
