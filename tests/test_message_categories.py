@@ -61,3 +61,5 @@ def test_incoming_history_carries_the_public_envelope(declaration):
     assert Message.from_wire(FieldCodec.encode(event)["message"]) == original.envelope
     assert IncomingTranscript.of(original, reader="bob") == event
     assert IncomingTranscript.of(message, reader="bob").message is message
+    with pytest.raises(TypeError):
+        IncomingTranscript(message=original, reader="bob")
