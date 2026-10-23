@@ -1,7 +1,6 @@
 """A stopped registry incarnation loses every claim at the next original transition."""
 
 
-from agent_comms.bus import Bus
 
 import os
 from dataclasses import replace
@@ -17,7 +16,6 @@ from agent_comms.threads import Thread
 
 
 def test_stopped_incarnation_claims_expire_on_next_transition(comms, tmp_path):
-    Bus.install(Bus.path_in(comms.root))
     for name in ("old", "next"):
         thread = Thread(name, frozenset(), str(tmp_path))
         comms.registry.declare(

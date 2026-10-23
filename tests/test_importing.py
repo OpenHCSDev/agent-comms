@@ -2,7 +2,6 @@
 from agent_comms.comms import Comms
 from agent_comms.registration import Registration
 from agent_comms.thread_text import ThreadText
-from agent_comms.bus import Bus
 import asyncio
 import json
 import os
@@ -48,12 +47,6 @@ from agent_comms.ui_model.message_category import AgentCategory, UserCategory
 from agent_comms.turn_context import CodexRolloutProvenance
 from agent_comms.thread_text import GivenThreadText, NoThreadText
 from agent_comms.threads import Thread
-
-
-@pytest.fixture
-def comms(comms: Comms) -> Comms:
-    Bus.install(Bus.path_in(comms.root))
-    return comms
 
 
 def lines(path: Path, records: Iterable[dict[str, JsonValue]], tail: str = "") -> Path:

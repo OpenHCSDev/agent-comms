@@ -11,7 +11,6 @@ from acp.schema import TextContentBlock
 
 import agent_comms.agent_events as events
 from agent_comms.acp_extension import CoordinationChangedUpdate, decode_updates
-from agent_comms.bus import Bus
 from agent_comms.child_process import BoundedRun
 from agent_comms.launch_root import LaunchRoot
 from agent_comms.threads import Thread
@@ -56,7 +55,6 @@ async def test_headless_uses_existing_owner_runtime_and_owner_project(tmp_path, 
         project.mkdir()
         caller_project.mkdir()
         comms = wire(base / "wire")
-        Bus.install(Bus.path_in(comms.root))
         comms.registry.declare(Thread('headless', frozenset(), str(project)))
         env = dict(
             os.environ,
