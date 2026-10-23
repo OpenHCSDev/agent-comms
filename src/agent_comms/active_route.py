@@ -138,11 +138,12 @@ class ActiveRoute(CommsRoute):
 
     @classmethod
     def from_record(cls, value: object, path: Path) -> ActiveRoute:
+        value = FieldCodec.decode(dict[str, object], value)
         match value:
             case {"version": int(found), **record} if found == cls.version:
                 pass
             case _:
-                stamped = value.get("version") if isinstance(value, dict) else None
+                stamped = value.get("version")
                 raise MalformedRecord(
                     f"active comms route {path} is version {stamped!r}; "
                     f"this installation reads version {cls.version}. "
