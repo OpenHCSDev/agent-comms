@@ -86,8 +86,6 @@ class Carry(DeclaredFamily, affix="", discovery_package="cutover"):
 class ArchivedInputs:
     """Apply one carry input declaration to its retained snapshot roots as well."""
 
-    root: Path
-
     @abstractmethod
     def roots(self) -> tuple[Path, ...]: ...
 

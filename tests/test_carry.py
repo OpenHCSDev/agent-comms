@@ -23,8 +23,11 @@ from agent_comms.installer.carry import (
     Carried,
     Carry,
     CarryChain,
+    CarryRequest,
+    FirstPendingOperation,
     MigrateOperation,
 )
+from agent_comms.field_codec import FieldCodec
 from agent_comms.installer.commands import InstallCommands
 from agent_comms.installer.practice import PracticeCopy
 from agent_comms.installer.upgrade import (
@@ -81,6 +84,15 @@ class Repository:
             self.git("add", "--all")
             self.git("commit", "-qm", f"step {name}")
         return self.git("rev-parse", "HEAD")
+
+
+def test_every_declared_step_crosses_to_the_worker(tmp_path):
+    """Pending encodes the whole chain in one request; a step whose fields the codec
+    cannot spell stops every install before its first dry run."""
+    steps = tuple(step(tmp_path, tmp_path, tmp_path / "spill")
+                  for step in CarryChain.at(REPO).steps)
+    request = CarryRequest(FirstPendingOperation(), steps)
+    assert FieldCodec.decode(CarryRequest, FieldCodec.encode(request)) == request
 
 
 @pytest.mark.parametrize("pending", (False, True))
