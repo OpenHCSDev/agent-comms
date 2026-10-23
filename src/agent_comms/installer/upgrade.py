@@ -616,7 +616,6 @@ class Stack:
                 started.append(StartedOwner(outcome.target))
         return tuple(started)
 
-
     def start_services(self, stopped: tuple[HostService, ...]) -> tuple[RestartedService, ...]:
         with ServicesPhase("start").running(self.commands.clock):
             services = tuple(service.start_onto(self.python) for service in stopped)
