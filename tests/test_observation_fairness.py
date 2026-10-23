@@ -4,11 +4,11 @@ from itertools import count
 from multiprocessing import Pipe
 
 from agent_comms.ui_model.observation import (
-    ReadingObservation,
     ObservationPending,
     ObservationService,
     ObserveSidebar,
     ObserveThreads,
+    ReadingObservation,
     SidebarObserved,
     SidebarPreparing,
     SidebarReading,
