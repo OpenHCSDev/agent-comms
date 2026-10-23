@@ -21,7 +21,6 @@ from pathlib import Path
 from typing import (
     TYPE_CHECKING,
     Annotated,
-    Any,
     ClassVar,
     Literal,
     Protocol,
@@ -99,7 +98,7 @@ class MalformedRecord(ValueError):  # noqa: N818 - names the refused data
 
     @classmethod
     def refusing(cls, subject: str) -> MalformedRecord._Refusal:
-        """Any check that refuses decoded data with ValueError refuses a malformed record.
+        """Each check that refuses decoded data with ValueError refuses a malformed record.
 
         A domain error raised by the record's own checks stays the cause.
         """
@@ -358,34 +357,31 @@ class ArgumentDefault(ABC):
     """One declared parser-default policy; constructor defaults stay with the field."""
 
     @abstractmethod
-    def apply(self, options: dict[str, object], plan: FieldPlan) -> None: ...
+    def options(self, plan: FieldPlan) -> Mapping[str, object]: ...
 
 
 @dataclass(frozen=True)
 class InferredArgumentDefault(ArgumentDefault):
     """An absent optional argument stays absent, so the field's own default applies."""
 
-    def apply(self, options: dict[str, object], plan: FieldPlan) -> None:
-        if plan.constructor_required:
-            options["required"] = True
-        else:
-            options["default"] = argparse.SUPPRESS
+    def options(self, plan: FieldPlan) -> Mapping[str, object]:
+        return {"required": True} if plan.constructor_required else {"default": argparse.SUPPRESS}
 
 
 @dataclass(frozen=True)
 class GivenArgumentDefault(ArgumentDefault):
     value: object
 
-    def apply(self, options: dict[str, object], plan: FieldPlan) -> None:
-        options["default"] = self.value
+    def options(self, plan: FieldPlan) -> Mapping[str, object]:
+        return {"default": self.value}
 
 
 @dataclass(frozen=True)
 class FactoryArgumentDefault(ArgumentDefault):
     factory: Callable[[], object]
 
-    def apply(self, options: dict[str, object], plan: FieldPlan) -> None:
-        options["default"] = self.factory()
+    def options(self, plan: FieldPlan) -> Mapping[str, object]:
+        return {"default": self.factory()}
 
 
 class ArgumentGroup:
@@ -438,16 +434,16 @@ class Argument(FieldDirective):
     ) -> None:
         owner = self.group.owner(parser, groups)
         # argparse actions own an extensible keyword protocol, not a closed Core record.
-        options: dict[str, Any] = {
+        options: Mapping[str, object] = {
             **({} if "action" in self.options else plan.value.argument_options()),
             **self.options,
+            **self.default.options(plan),
         }
-        self.default.apply(options, plan)
         flags = self.flags_for(plan.name)
         if any(flag.startswith("-") for flag in flags):
-            options["dest"] = plan.key
+            options = {**options, "dest": plan.key}
         else:
-            options.pop("required", None)
+            options = {key: value for key, value in options.items() if key != "required"}
         owner.add_argument(*flags, **options)
 
 
@@ -575,7 +571,7 @@ class FieldPlan:
         return {key or self.key: value}
 
     @property
-    def wire_children(self) -> tuple[ValueDecoder[object], ...]:
+    def wire_children(self) -> tuple[DecoderPlan, ...]:
         return (self.value,) if self.wire_keys else ()
 
     def rewrite_wire(
@@ -884,7 +880,7 @@ class ExternalName(ExternalField, DeclaredFamily):
         return cls.from_external(value)
 
 
-class FieldRepresentation(MroDispatch, ABC):
+class FieldRepresentation[T](MroDispatch, ABC):
     """A field capability, declared as ``Annotated[ValueType, Representation]``.
 
     Private transports can declare captures without permitting those objects in
@@ -894,33 +890,33 @@ class FieldRepresentation(MroDispatch, ABC):
     field_plan: ClassVar[type[FieldPlan]] = DeclaredFieldPlan
 
     @classmethod
-    def wire_structure(cls, structural: ValueDecoder[object]) -> ValueDecoder[object]:
+    def wire_structure(cls, structural: DecoderPlan) -> DecoderPlan:
         """A custom scalar form stays opaque; declared structural forms supply their plan."""
         return structural
 
     @classmethod
-    def decode_field(cls, data: object, structural: ValueDecoder[object]) -> object:
-        handler = cls.handler_for(type(data))
+    def decode_field(cls, data: object, structural: ValueDecoder[T]) -> T:
+        handler: Callable[[object, ValueDecoder[T]], T] = cls.handler_for(type(data))
         with MalformedRecord.refusing(f"Invalid {cls.__name__}"):
-            return cast(object, handler(data, structural))
+            return handler(data, structural)
 
     @handles(type(None))
     @classmethod
-    def decode_null(cls, data: object, structural: ValueDecoder[object]) -> object:
+    def decode_null(cls, data: object, structural: ValueDecoder[T]) -> T:
         return structural.decode_bound(data, {})
 
     @handles(object)
     @classmethod
-    def decode_value(cls, data: object, structural: ValueDecoder[object]) -> object:
+    def decode_value(cls, data: object, structural: ValueDecoder[T]) -> T:
         return cls.decode(data)
 
     @classmethod
     @abstractmethod
-    def encode(cls, value: object) -> object: ...
+    def encode(cls, value: T) -> object: ...
 
     @classmethod
     @abstractmethod
-    def decode(cls, value: object) -> object: ...
+    def decode(cls, value: object) -> T: ...
 
     @classmethod
     def schema(cls) -> dict[str, JsonValue]:
@@ -932,12 +928,12 @@ class FieldRepresentation(MroDispatch, ABC):
         return {}
 
 
-class AcceptsNull(FieldRepresentation):
+class AcceptsNull[T](FieldRepresentation[T]):
     """Null is this representation's input, not the structural target's."""
 
     @handles(type(None))
     @classmethod
-    def decode_null(cls, data: object, structural: ValueDecoder[object]) -> object:
+    def decode_null(cls, data: object, structural: ValueDecoder[T]) -> T:
         return cls.decode_value(data, structural)
 
 
@@ -975,17 +971,17 @@ class WireValue(WireForm):
         return cls.from_wire(value)
 
 
-class ExternalJsonShape(FieldRepresentation):
+class ExternalJsonShape[T](FieldRepresentation[T]):
     """Decode the external shape directly, without revalidating each subtree."""
 
     @handles(object)
     @classmethod
-    def decode_value(cls, data: object, structural: ValueDecoder[object]) -> object:
+    def decode_value(cls, data: object, structural: ValueDecoder[T]) -> T:
         return cls.from_wire(data)
 
     @classmethod
     @abstractmethod
-    def from_wire(cls, data: object) -> object: ...
+    def from_wire(cls, data: object) -> T: ...
 
 
 class SingleValueEncoding(WireValue):
@@ -1005,7 +1001,7 @@ class SingleFieldValue(ExternalJsonShape, SingleValueEncoding):
     """One declared field is the whole wire value, not an object envelope."""
 
     @classmethod
-    def wire_structure(cls, structural: ValueDecoder[object]) -> ValueDecoder[object]:
+    def wire_structure(cls, structural: DecoderPlan) -> DecoderPlan:
         return cls.wire_field().value
 
     @classmethod
@@ -1030,7 +1026,7 @@ class DeclaredWireType(ExternalJsonShape, WireValue):
     wire_type: ClassVar[object]
 
     @classmethod
-    def wire_structure(cls, structural: ValueDecoder[object]) -> ValueDecoder[object]:
+    def wire_structure(cls, structural: DecoderPlan) -> DecoderPlan:
         return compile_decoder(cls.wire_type)
 
     @classmethod
@@ -1046,7 +1042,7 @@ class SubclassUnion(DeclaredFamily, AcceptsNull, ExternalJsonShape, WireValue):
         return False
 
     @classmethod
-    def wire_structure(cls, structural: ValueDecoder[object]) -> ValueDecoder[object]:
+    def wire_structure(cls, structural: DecoderPlan) -> DecoderPlan:
         return ValueDecoder.for_members(cls.members_with(cls))
 
     @classmethod
@@ -1079,7 +1075,7 @@ class NullMember(ExternalField, AcceptsNull, WireValue):
         return ()
 
     @classmethod
-    def wire_structure(cls, structural: ValueDecoder[object]) -> ValueDecoder[object]:
+    def wire_structure(cls, structural: DecoderPlan) -> DecoderPlan:
         return compile_decoder(type(None))
 
     @classmethod
@@ -1139,7 +1135,7 @@ class RecordMember(WireValue):
     """A wire union's record case uses the declared record codec."""
 
     @classmethod
-    def wire_structure(cls, structural: ValueDecoder[object]) -> ValueDecoder[object]:
+    def wire_structure(cls, structural: DecoderPlan) -> DecoderPlan:
         return _member_decoder(cls)
 
     @classmethod
@@ -1164,7 +1160,7 @@ class InlineRecord(WireValue, ExternalJsonShape):
         return cls
 
     @classmethod
-    def wire_structure(cls, structural: ValueDecoder[object]) -> ValueDecoder[object]:
+    def wire_structure(cls, structural: DecoderPlan) -> DecoderPlan:
         return _member_decoder(cls.wire_record())
 
     @classmethod
@@ -1241,7 +1237,7 @@ class JsonShapeFamily(AcceptsNull, ExternalJsonShape, SingleValueEncoding):
         return result
 
     @classmethod
-    def wire_structure(cls, structural: ValueDecoder[object]) -> ValueDecoder[object]:
+    def wire_structure(cls, structural: DecoderPlan) -> DecoderPlan:
         """The wire value is one owned member's value; a member owns only its own."""
         return compile_decoder(Union[tuple(annotation for _, annotation in cls._json_owners.values())])
 
@@ -1252,7 +1248,7 @@ class JsonShapeFamily(AcceptsNull, ExternalJsonShape, SingleValueEncoding):
         return FieldCodec.alternatives_schema("anyOf", alternatives)
 
 
-class TextRepresentation[V](FieldRepresentation):
+class TextRepresentation[V](FieldRepresentation[V]):
     """External text scalars share strict decoding at the canonical boundary.
 
     Its schema names the representation, so text with no declared spelling never shares a stored
@@ -1260,7 +1256,7 @@ class TextRepresentation[V](FieldRepresentation):
     """
 
     @classmethod
-    def wire_structure(cls, structural: ValueDecoder[object]) -> ValueDecoder[object]:
+    def wire_structure(cls, structural: DecoderPlan) -> DecoderPlan:
         return compile_decoder(str)
 
     @classmethod
@@ -1497,7 +1493,7 @@ class FieldCodec(MroDispatch, Sealed):
         if annotation is None:
             return None, None
         if annotation is object:
-            return Any, _JsonValueRepresentation
+            return object, _JsonValueRepresentation
         if get_origin(annotation) is Annotated:
             target, *metadata = get_args(annotation)
         else:
@@ -1510,13 +1506,11 @@ class FieldCodec(MroDispatch, Sealed):
             raise TypeError("A field must have one representation")
         if isinstance(target, TypeAliasType):
             if target is JsonValue:
-                return Any, representations[0] if representations else _JsonValueRepresentation
+                return object, representations[0] if representations else _JsonValueRepresentation
         if representations:
             return target, representations[0]
         if target is object:
-            return Any, _JsonValueRepresentation
-        if target is Any:
-            return target, _AnyDecoder
+            return object, _JsonValueRepresentation
         if isinstance(target, type) and issubclass(target, WireValue):
             return target, target
         return target, None
@@ -1910,10 +1904,72 @@ class FieldCodec(MroDispatch, Sealed):
 
 
 @dataclass(frozen=True, slots=True)
-class ValueDecoder[T](ABC):
-    """One annotation owns its wire conversion, draft projection and choice domain."""
+class DecoderPlan(ABC):
+    """Wire shape and record traversal, independent of the decoded value type."""
 
     target: object
+
+    @property
+    def wire_children(self) -> tuple[DecoderPlan, ...]:
+        return ()
+
+    def fits_wire(self, data: object) -> bool:
+        """Check outer wire shape without decoding nested values.
+
+        This may pass a value decoding rejects, but must never reject one decoding accepts.
+        """
+        return True
+
+    def shape_refusal(self, data: object) -> MalformedRecord:
+        """Why fits_wire refused data; it states a refusal and never decides one."""
+        return MalformedRecord(f"Expected {self.target}, received {type(data).__name__}")
+
+    def fits_external(self, data: object) -> bool:
+        """A sibling-aware external reader may accept more than the stored wire shape."""
+        return any(self.external_decoders(data)) or self.fits_wire(data)
+
+    def external_decoders(self, data: object) -> Iterable[ExternalDecoder]:
+        return ()
+
+    def selects_record(self, select: WireRecordFilter) -> bool:
+        return False
+
+    def contains_records(
+        self, select: WireRecordFilter, seen: frozenset[object] = frozenset(),
+    ) -> bool:
+        """Whether this immutable plan reaches a selected declared record; no payload read."""
+        if self in seen:
+            return False
+        return self.selects_record(select) or any(
+            child.contains_records(select, seen | {self}) for child in self.wire_children
+        )
+
+    def rewrite_records(
+        self, data: object, change: WireRecordChange, select: WireRecordFilter,
+    ) -> object:
+        """Transform declared raw records without decoding opaque JSON or losing other keys.
+
+        The caller owns the record change. This decoder owns wire layout, child
+        membership and union selection. ``select`` is a pure declaration predicate.
+        """
+        if data is None or not self.contains_records(select):
+            return data
+        return self._rewrite_records(data, change, select)
+
+    def _rewrite_records(
+        self, data: object, change: WireRecordChange, select: WireRecordFilter,
+    ) -> object:
+        return data
+
+    def rewrite_document(
+        self, data: object, change: WireRecordChange, select: WireRecordFilter,
+    ) -> object:
+        return self.rewrite_records(data, change, select)
+
+@dataclass(frozen=True, slots=True)
+class ValueDecoder[T](DecoderPlan):
+    """One annotation owns its wire conversion, draft projection and choice domain."""
+
     _by_origin: ClassVar[dict[object, type[ValueDecoder[object]]]] = {}
     _by_annotation: ClassVar[dict[object, type[ValueDecoder[object]]]] = {}
 
@@ -1967,67 +2023,10 @@ class ValueDecoder[T](ABC):
     @abstractmethod
     def encode(self, value: T) -> object: ...
 
-    @property
-    def wire_children(self) -> tuple[ValueDecoder[object], ...]:
-        return ()
-
-    def fits_wire(self, data: object) -> bool:
-        """Check outer wire shape without decoding nested values.
-
-        This may pass a value decoding rejects, but must never reject one decoding accepts.
-        """
-        return True
-
-    def shape_refusal(self, data: object) -> MalformedRecord:
-        """Why fits_wire refused data; it states a refusal and never decides one."""
-        return MalformedRecord(f"Expected {self.target}, received {type(data).__name__}")
-
-    def fits_external(self, data: object) -> bool:
-        """A sibling-aware external reader may accept more than the stored wire shape."""
-        return any(self.external_decoders(data)) or self.fits_wire(data)
-
-    def selects_record(self, select: WireRecordFilter) -> bool:
-        return False
-
-    def contains_records(
-        self, select: WireRecordFilter, seen: frozenset[object] = frozenset(),
-    ) -> bool:
-        """Whether this immutable plan reaches a selected declared record; no payload read."""
-        if self in seen:
-            return False
-        return self.selects_record(select) or any(
-            child.contains_records(select, seen | {self}) for child in self.wire_children
-        )
-
-    def rewrite_records(
-        self, data: object, change: WireRecordChange, select: WireRecordFilter,
-    ) -> object:
-        """Transform declared raw records without decoding opaque JSON or losing other keys.
-
-        The caller owns the record change. This decoder owns wire layout, child
-        membership and union selection. ``select`` is a pure declaration predicate.
-        """
-        if data is None or not self.contains_records(select):
-            return data
-        return self._rewrite_records(data, change, select)
-
-    def _rewrite_records(
-        self, data: object, change: WireRecordChange, select: WireRecordFilter,
-    ) -> object:
-        return data
-
-    def rewrite_document(
-        self, data: object, change: WireRecordChange, select: WireRecordFilter,
-    ) -> object:
-        return self.rewrite_records(data, change, select)
-
     def decode_external(self, data: object, record: Mapping[str, object]) -> T:
         for decode in self.external_decoders(data):
             return self.decode_resolved(cast(T, decode(data, record)))
         return self.decode_bound(data, record)
-
-    def external_decoders(self, data: object) -> Iterable[ExternalDecoder]:
-        return ()
 
     def decode_resolved(self, value: T) -> T:
         if not self.accepts_value(value):
@@ -2112,28 +2111,27 @@ class _ChoiceDecoder[T](ValueDecoder[T]):
 
 
 @dataclass(frozen=True, slots=True)
-class _ScalarDecoder(ValueDecoder[Any]):
+class _ScalarDecoder[T](ValueDecoder[T]):
     """A plain target accepts no wire value unless a scalar below declares it."""
 
-    def decode(self, data):
+    def decode(self, data: object) -> T:
         if self.accepts(data):
             return data
         raise MalformedRecord(f"Expected {self.target}, received {type(data).__name__}")
 
-    def accepts(self, data: object) -> bool:
+    def accepts(self, data: object) -> TypeGuard[T]:
         return False
 
-    def encode(self, value: object) -> object:
+    def encode(self, value: T) -> object:
         raise TypeError(f"Unsupported JSON value: {type(value).__name__}")
 
 
-class _ExactScalarDecoder(_ScalarDecoder):
+class _ExactScalarDecoder[T](_ScalarDecoder[T]):
     """A JSON scalar decoded only from its own type."""
 
     __slots__ = ()
-    annotations = (type(None),)
 
-    def accepts(self, data: object) -> bool:
+    def accepts(self, data: object) -> TypeGuard[T]:
         return type(data) is self.target
 
     def fits_wire(self, data: object) -> bool:
@@ -2145,13 +2143,18 @@ class _ExactScalarDecoder(_ScalarDecoder):
     def accepts_external_value(self, value: object) -> bool:
         return self.accepts(value)
 
-    def encode(self, value: object) -> object:
+    def encode(self, value: T) -> T:
         if not self.accepts(value):
             raise TypeError(f"Expected {self.target}, received {type(value).__name__}")
         return value
 
 
-class _TextDecoder(_ExactScalarDecoder):
+class _NullDecoder(_ExactScalarDecoder[None]):
+    __slots__ = ()
+    annotations = (type(None),)
+
+
+class _TextDecoder(_ExactScalarDecoder[str]):
     __slots__ = ()
     annotations = (str,)
 
@@ -2162,7 +2165,7 @@ class _TextDecoder(_ExactScalarDecoder):
         return value
 
 
-class _FlagDecoder(_ExactScalarDecoder):
+class _FlagDecoder(_ExactScalarDecoder[bool]):
     __slots__ = ()
     annotations = (bool,)
 
@@ -2170,40 +2173,44 @@ class _FlagDecoder(_ExactScalarDecoder):
         return {"action": "store_true"}
 
 
-class _NumberDecoder(_ExactScalarDecoder):
+class _NumberDecoder[T: (int, float)](_ExactScalarDecoder[T]):
     __slots__ = ()
-    annotations = (int,)
 
     def argument_options(self) -> dict[str, object]:
         return {"type": self.target}
 
 
-class _RealDecoder(_NumberDecoder):
+class _IntegerDecoder(_NumberDecoder[int]):
+    __slots__ = ()
+    annotations = (int,)
+
+
+class _RealDecoder(_NumberDecoder[float]):
     """A finite number; an integer is a real number on the wire."""
 
     __slots__ = ()
     annotations = (float,)
 
-    def fits_wire(self, data: object) -> bool:
+    def fits_wire(self, data: object) -> TypeGuard[int | float]:
         return type(data) in (int, float)
 
-    def accepts(self, data: object) -> bool:
-        return self.fits_wire(data) and math.isfinite(cast(float, data))
+    def accepts(self, data: object) -> TypeGuard[float]:
+        return self.fits_wire(data) and math.isfinite(data)
 
 
 @dataclass(frozen=True, slots=True)
-class _RepresentedDecoder(ValueDecoder[Any]):
+class _RepresentedDecoder[T](ValueDecoder[T]):
     """A declared representation capability; null without one decodes structurally."""
 
-    representation: type[FieldRepresentation]
-    structural: ValueDecoder[object]
+    representation: type[FieldRepresentation[T]]
+    structural: ValueDecoder[T]
 
     @property
-    def wire_structure(self) -> ValueDecoder[object]:
+    def wire_structure(self) -> DecoderPlan:
         return self.representation.wire_structure(self.structural)
 
     @property
-    def wire_children(self) -> tuple[ValueDecoder[object], ...]:
+    def wire_children(self) -> tuple[DecoderPlan, ...]:
         return (self.wire_structure,)
 
     @boundary_decoder
@@ -2234,18 +2241,18 @@ class _RepresentedDecoder(ValueDecoder[Any]):
     def argument_options(self) -> dict[str, object]:
         return self.representation.argument_options()
 
-    def encode(self, value: object) -> object:
+    def encode(self, value: T) -> object:
         return None if value is None else self.representation.encode(value)
 
     def accepts_value(self, value: object) -> bool:
         return self.structural.accepts_value(value)
 
     @boundary_decoder
-    def decode(self, data):
+    def decode(self, data: object) -> T:
         return self.representation.decode_field(data, self.structural)
 
 
-class _JsonValueRepresentation(FieldRepresentation):
+class _JsonValueRepresentation(FieldRepresentation[JsonValue]):
     """An opaque JSON declaration validates JSON, not Python object representations."""
 
     @staticmethod
@@ -2274,10 +2281,10 @@ class _JsonValueRepresentation(FieldRepresentation):
 
 
 @dataclass(frozen=True, slots=True)
-class _AnyDecoder(_JsonValueRepresentation, ValueDecoder[JsonValue]):
+class _UndeclaredDecoder(_JsonValueRepresentation, ValueDecoder[JsonValue]):
     """Only an undeclared value needs runtime representation selection."""
 
-    annotations = (Any, None)
+    annotations = (object, None)
 
     def accepts_value(self, value: object) -> bool:
         return True
@@ -2304,20 +2311,20 @@ def _declared_member[Family: DeclaredFamily](
 
 
 @dataclass(frozen=True, slots=True)
-class _TypeDecoder(_ScalarDecoder):
+class _TypeDecoder(_ScalarDecoder[type[DeclaredFamily]]):
     origins = (type,)
-    bound: type
+    bound: type[DeclaredFamily]
 
     @classmethod
-    def from_annotation(cls, target: object, args: tuple[object, ...]) -> ValueDecoder[object]:
+    def from_annotation(cls, target: object, args: tuple[object, ...]) -> ValueDecoder[type[DeclaredFamily]]:
         if args and issubclass(cast(type, args[0]), DeclaredFamily):
             return _FamilyNameDecoder(target, cast(type[DeclaredFamily], args[0]))
-        return _member_decoder(target)
+        raise TypeError(f"Unsupported JSON type: {target}")
 
     @classmethod
     def representation_plan(
         cls, target: object, args: tuple[object, ...], representation: type[FieldRepresentation],
-    ) -> ValueDecoder[object]:
+    ) -> ValueDecoder[type[DeclaredFamily]]:
         return cls(target, cast(type, args[0]))
 
     def external_decoders(self, data: object) -> Iterable[ExternalDecoder]:
@@ -2327,7 +2334,7 @@ class _TypeDecoder(_ScalarDecoder):
         return isinstance(value, type) and issubclass(value, self.bound)
 
 
-class _FamilyNameDecoder(_TypeDecoder, _ChoiceDecoder[Any]):
+class _FamilyNameDecoder(_TypeDecoder, _ChoiceDecoder[type[DeclaredFamily]]):
     def fits_wire(self, data: object) -> bool:
         return type(data) is str
 
@@ -2344,22 +2351,22 @@ class _FamilyNameDecoder(_TypeDecoder, _ChoiceDecoder[Any]):
 
 
 @dataclass(frozen=True, slots=True)
-class _LiteralDecoder(_ChoiceDecoder[Any]):
+class _LiteralDecoder[T](_ChoiceDecoder[T]):
     origins = (Literal,)
-    values: tuple[object, ...]
+    values: tuple[T, ...]
     value_plans: tuple[ValueDecoder[object], ...]
 
     @classmethod
     def from_annotation(cls, target, args):
         return cls(target, args, tuple(compile_decoder(type(value)) for value in args))
 
-    def accepts_value(self, value: object) -> bool:
+    def accepts_value(self, value: object) -> TypeGuard[T]:
         return any(type(value) is type(item) and value == item for item in self.values)
 
     def fits_wire(self, data: object) -> bool:
         return any(plan.fits_wire(data) for plan in self.value_plans)
 
-    def encode(self, value: object) -> object:
+    def encode(self, value: T) -> object:
         for item, plan in zip(self.values, self.value_plans, strict=True):
             if type(value) is type(item) and value == item:
                 return plan.encode(value)
@@ -2368,8 +2375,8 @@ class _LiteralDecoder(_ChoiceDecoder[Any]):
     def editor_choices(self):
         return tuple((str(value), value) for value in self.values)
 
-    def decode(self, data):
-        if any(type(data) is type(value) and data == value for value in self.values):
+    def decode(self, data: object) -> T:
+        if self.accepts_value(data):
             return data
         raise MalformedRecord(f"Value does not match {self.target}")
 
@@ -2380,7 +2387,7 @@ class UnionDecoder[T](_ContextDecoder[T]):
     alternatives: tuple[ValueDecoder[T], ...]
 
     @property
-    def wire_children(self) -> tuple[ValueDecoder[object], ...]:
+    def wire_children(self) -> tuple[DecoderPlan, ...]:
         return self.alternatives
 
     def fits_wire(self, data: object) -> bool:
@@ -2481,12 +2488,12 @@ class UnionDecoder[T](_ContextDecoder[T]):
 
 
 @dataclass(frozen=True, slots=True)
-class _ArrayDecoder(ValueDecoder[Any]):
+class _ArrayDecoder[T: Iterable[object]](ValueDecoder[T]):
     container: ClassVar[type]
     items: tuple[ValueDecoder[object], ...]
 
     @property
-    def wire_children(self) -> tuple[ValueDecoder[object], ...]:
+    def wire_children(self) -> tuple[DecoderPlan, ...]:
         return self.items
 
     def fits_wire(self, data: object) -> bool:
@@ -2504,15 +2511,15 @@ class _ArrayDecoder(ValueDecoder[Any]):
 
     @classmethod
     def from_annotation(cls, target, args):
-        return cls(target, tuple(compile_decoder(item) for item in (args or (Any,))))
+        return cls(target, tuple(compile_decoder(item) for item in (args or (None,))))
 
     @classmethod
     def representation_plan(
         cls, target: object, args: tuple[object, ...], representation: type[FieldRepresentation],
-    ) -> ValueDecoder[object]:
-        return _ScalarDecoder(cls.container)
+    ) -> ValueDecoder[T]:
+        return _ScalarDecoder[T](cls.container)
 
-    def decode_external(self, data: object, record: Mapping[str, object]) -> object:
+    def decode_external(self, data: object, record: Mapping[str, object]) -> T:
         return self.decode_resolved(self.decode_items(
             data, lambda plan, value: plan.decode_external(value, record),
         ))
@@ -2520,10 +2527,10 @@ class _ArrayDecoder(ValueDecoder[Any]):
     def accepts_value(self, value: object) -> bool:
         return isinstance(value, self.container)
 
-    def encode(self, value: Iterable[object]) -> list[object]:
+    def encode(self, value: T) -> list[object]:
         return self.encode_items(value)
 
-    def decode(self, data):
+    def decode(self, data: object) -> T:
         return self.decode_items(data, lambda plan, value: plan.decode_bound(value, {}))
 
     def encode_items(self, items: Iterable[object]) -> list[object]:
@@ -2531,46 +2538,47 @@ class _ArrayDecoder(ValueDecoder[Any]):
 
     def decode_items(
         self, data: object, read: Callable[[ValueDecoder[object], object], object],
-    ) -> object:
+    ) -> T:
         if not isinstance(data, list):
             raise _ArrayDecoder.shape_refusal(self, data)
-        return self.container(read(plan, value) for plan, value in self.plan_items(data))
+        construct: Callable[[Iterable[object]], T] = self.container
+        return construct(read(plan, value) for plan, value in self.plan_items(data))
 
     def plan_items(self, data: list[object]) -> Iterable[tuple[ValueDecoder[object], object]]:
         return ((self.items[0], value) for value in data)
 
 
-class _FrozenSetDecoder(_ArrayDecoder):
+class _FrozenSetDecoder[E](_ArrayDecoder[frozenset[E]]):
     origins = (frozenset,)
     container = frozenset
 
-    def encode(self, value: frozenset[object]) -> list[object]:
+    def encode(self, value: frozenset[E]) -> list[object]:
         return self.encode_items(sorted(value))
 
 
-class _ListDecoder(_ArrayDecoder):
+class _ListDecoder[E](_ArrayDecoder[list[E]]):
     origins = (list,)
     container = list
 
 
-class _TupleDecoder(_ArrayDecoder):
+class _TupleDecoder[E](_ArrayDecoder[tuple[E, ...]]):
     origins = (tuple,)
     container = tuple
 
     @classmethod
     def from_annotation(cls, target, args):
         if target is tuple:
-            return _VariadicTupleDecoder(target, (compile_decoder(Any),))
+            return _VariadicTupleDecoder(target, (compile_decoder(None),))
         if len(args) == 2 and args[1] is Ellipsis:
             return _VariadicTupleDecoder(target, (compile_decoder(args[0]),))
         return _FixedTupleDecoder(target, tuple(compile_decoder(item) for item in args))
 
 
-class _VariadicTupleDecoder(_TupleDecoder):
+class _VariadicTupleDecoder[E](_TupleDecoder[E]):
     """The inherited item decoder applies to every tuple element."""
 
 
-class _FixedTupleDecoder(_TupleDecoder):
+class _FixedTupleDecoder[E](_TupleDecoder[E]):
     def fits_wire(self, data: object) -> bool:
         return super().fits_wire(data) and len(cast(list[object], data)) == len(self.items)
 
@@ -2611,13 +2619,13 @@ def _object_or_pair_entries(data: object) -> Iterable[tuple[object, object]]:
 
 
 @dataclass(frozen=True, slots=True)
-class _DictDecoder(ValueDecoder[Any]):
-    key: ValueDecoder[object]
-    value: ValueDecoder[object]
+class _DictDecoder[K, V](ValueDecoder[dict[K, V]]):
+    key: ValueDecoder[K]
+    value: ValueDecoder[V]
     origins = (dict,)
 
     @property
-    def wire_children(self) -> tuple[ValueDecoder[object], ...]:
+    def wire_children(self) -> tuple[DecoderPlan, ...]:
         return self.key, self.value
 
     @staticmethod
@@ -2638,25 +2646,29 @@ class _DictDecoder(ValueDecoder[Any]):
 
     @classmethod
     def from_annotation(cls, target, args):
-        key, value = args or (str, Any)
+        key, value = args or (str, None)
         plan = _StringKeyDictDecoder if key is str else _PairKeyDictDecoder
         return plan(target, compile_decoder(key), compile_decoder(value))
 
     @classmethod
     def representation_plan(
         cls, target: object, args: tuple[object, ...], representation: type[FieldRepresentation],
-    ) -> ValueDecoder[object]:
-        return _ScalarDecoder(dict)
+    ) -> ValueDecoder[dict[K, V]]:
+        return _ScalarDecoder[dict[K, V]](dict)
 
     def accepts_value(self, value: object) -> bool:
         return isinstance(value, dict)
 
-    def decode(self, data):
-        return self.decode_entries(data, lambda plan, value: plan.decode_bound(value, {}))
+    def decode(self, data: object) -> dict[K, V]:
+        return self.decode_entries(
+            data, lambda key: self.key.decode_bound(key, {}),
+            lambda value: self.value.decode_bound(value, {}),
+        )
 
-    def decode_external(self, data: object, record: Mapping[str, object]) -> object:
+    def decode_external(self, data: object, record: Mapping[str, object]) -> dict[K, V]:
         return self.decode_resolved(self.decode_entries(
-            data, lambda plan, value: plan.decode_external(value, record),
+            data, lambda key: self.key.decode_external(key, record),
+            lambda value: self.value.decode_external(value, record),
         ))
 
     @staticmethod
@@ -2665,9 +2677,9 @@ class _DictDecoder(ValueDecoder[Any]):
         """The wire entries, as the key kind spells them: an object or a list of pairs."""
 
     def decode_entries(
-        self, data: object, read: Callable[[ValueDecoder[object], object], object],
-    ) -> dict[object, object]:
-        return {read(self.key, key): read(self.value, value) for key, value in self.entries(data)}
+        self, data: object, read_key: Callable[[object], K], read_value: Callable[[object], V],
+    ) -> dict[K, V]:
+        return {read_key(key): read_value(value) for key, value in self.entries(data)}
 
     def decode_keys(self, data, keys, selections):
         encoded = tuple(FieldCodec.encode(key) for key in keys)
@@ -2676,7 +2688,7 @@ class _DictDecoder(ValueDecoder[Any]):
                 for key, value in self.entries(data) if key in encoded}
 
 
-class _StringKeyDictDecoder(_DictDecoder):
+class _StringKeyDictDecoder[V](_DictDecoder[str, V]):
     entries = staticmethod(_object_entries)
 
     def fits_wire(self, data: object) -> bool:
@@ -2686,18 +2698,18 @@ class _StringKeyDictDecoder(_DictDecoder):
     def wire_mapping(entries: Iterable[tuple[object, object]]) -> dict:
         return dict(entries)
 
-    def encode(self, value: dict[str, object]) -> dict[str, object]:
+    def encode(self, value: dict[str, V]) -> dict[str, object]:
         return self.wire_mapping((key, self.value.encode(item)) for key, item in value.items())
 
-    def encode_document(self, value: dict[str, object]) -> dict[str, object]:
+    def encode_document(self, value: dict[str, V]) -> dict[str, object]:
         return {key: self.value.encode_document(item) for key, item in value.items()}
 
-    def decode_document(self, data: object) -> dict[str, object]:
+    def decode_document(self, data: object) -> dict[str, V]:
         return {self.key.decode_bound(key, {}): self.value.decode_document(value)
                 for key, value in self.entries(data)}
 
 
-class _PairKeyDictDecoder(_DictDecoder):
+class _PairKeyDictDecoder[K, V](_DictDecoder[K, V]):
     entries = staticmethod(_object_or_pair_entries)
 
     def fits_wire(self, data: object) -> bool:
@@ -2707,7 +2719,7 @@ class _PairKeyDictDecoder(_DictDecoder):
     def wire_mapping(entries: Iterable[tuple[object, object]]) -> list:
         return [[key, value] for key, value in entries]
 
-    def encode(self, value: dict[object, object]) -> list[list[object]]:
+    def encode(self, value: dict[K, V]) -> list[list[object]]:
         return self.wire_mapping((self.key.encode(key), self.value.encode(item))
                                  for key, item in value.items())
 
@@ -2726,7 +2738,7 @@ class _FamilyRecordDecoder[Member: DeclaredFamily](_ContextDecoder[Member]):
         return self.tagged(data)
 
     @property
-    def wire_children(self) -> tuple[ValueDecoder[object], ...]:
+    def wire_children(self) -> tuple[DecoderPlan, ...]:
         return tuple(_member_decoder(member) for member in self.target.members_with(self.target))
 
     def _rewrite_records(
@@ -2798,21 +2810,25 @@ class _LeafDocumentDecoder(_FamilyRecordDecoder):
 
 
 @dataclass(frozen=True, slots=True)
-class _RecordDecoder(_ContextDecoder[Any]):
+class _RecordDecoder[T](_ContextDecoder[T]):
     """A dataclass record. Its plan is looked up at decode time, so a
     record that contains itself compiles without recursion."""
 
-    target: type
+    target: type[T]
+
+    @property
+    def plan(self) -> FieldCodec._RecordPlan:
+        return FieldCodec._record_plan(self.target)
 
     def fits_wire(self, data: object) -> TypeGuard[dict[str, object]]:
         if not isinstance(data, dict):
             return False
-        plan = FieldCodec._record_plan(self.target)
+        plan = self.plan
         return plan.required_wire_keys <= data.keys() <= plan.accepted_keys
 
     @property
-    def wire_children(self) -> tuple[ValueDecoder[object], ...]:
-        return tuple(child for entry in FieldCodec._record_plan(self.target).bindings
+    def wire_children(self) -> tuple[DecoderPlan, ...]:
+        return tuple(child for entry in self.plan.bindings
                      for child in entry.wire_children)
 
     def selects_record(self, select: WireRecordFilter) -> bool:
@@ -2824,7 +2840,7 @@ class _RecordDecoder(_ContextDecoder[Any]):
         if not isinstance(data, dict):
             raise MalformedRecord(f"Expected {self.target.__name__} record")
         result = change(self.target, data)
-        for entry in FieldCodec._record_plan(self.target).bindings:
+        for entry in self.plan.bindings:
             result = entry.rewrite_wire(result, change, select)
         return result
 
@@ -2839,7 +2855,7 @@ class _RecordDecoder(_ContextDecoder[Any]):
         return result
 
     def problems(self, data: dict) -> dict[str, str]:
-        plan = FieldCodec._record_plan(self.target)
+        plan = self.plan
         missing = plan.required_wire_keys.difference(data)
         # A data refusal needs the declared keys, not an expansion of every
         # reachable schema. Recursive records are valid decode declarations.
@@ -2861,19 +2877,22 @@ class _RecordDecoder(_ContextDecoder[Any]):
 
     @property
     def field_names(self) -> tuple[str, ...]:
-        return tuple(entry.name for entry in FieldCodec._record_plan(self.target).bindings)
+        return tuple(entry.name for entry in self.plan.bindings)
 
-    def decode_bound(self, data: object, context: Mapping[str, object]) -> Any:
+    def decode_bound(self, data: object, context: Mapping[str, object]) -> T:
         return self.decode_selected(data, {}, fields=self.field_names, context=context)
 
-    def decode_selected(self, data, selections, *, fields: tuple[str, ...], context={},
-                        field_types=types.MappingProxyType({})):
+    def decode_selected(
+        self, data: object, selections: Mapping[tuple[type, str], object], *,
+        fields: tuple[str, ...], context: Mapping[str, object] = {},
+        field_types: Mapping[str, type[object]] = types.MappingProxyType({}),
+    ) -> T:
         if not isinstance(data, dict):
             raise MalformedRecord("Expected a record object; fix: supply a JSON object.")
         problems = self.problems(data)
         target = self.target
         values = {}
-        for entry in FieldCodec._record_plan(target).bindings:
+        for entry in self.plan.bindings:
             if entry.name not in fields:
                 continue
             key = (target, entry.name)
