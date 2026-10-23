@@ -15,6 +15,7 @@ import pytest
 # This fixture needs the removed writer, not a copy of its implementation.
 # The commit is an ancestor of this migration and is retired with the carry test.
 PREDECESSOR = "196582f6d"
+OUTGOING_V2 = "d9ce9cd95954a9846bc703129d55a4327f55674d"
 REPOSITORY = Path(__file__).resolve().parents[1]
 
 
@@ -24,9 +25,9 @@ def publish_predecessor_history(directory: Path) -> None:
     from agent_comms.comms import Comms
     from agent_comms.coordination_tables.publications import PublicationIntents
     from agent_comms.coordination_tables.responses import ResponseObligation
-    from agent_comms.historical_views import HistoryArchive
     from agent_comms.goal_actions import SetGoalAction
     from agent_comms.goals import RequestGoalOrder
+    from agent_comms.historical_views import HistoryArchive
     from agent_comms.installer.backup import StoreBackup
     from agent_comms.messages import InfoKind, Message
     from agent_comms.obligation_states import PublishingResponse
@@ -98,21 +99,36 @@ def publish_predecessor_history(directory: Path) -> None:
     empty.messaging.initialize_private_initial_protocol(history=())
 
 
-def predecessor_history(tmp_path: Path) -> Path:
-    """Create the original bus through its real publisher, shared by carry/rehearsal proof."""
-    from agent_comms.core_stamp import WheelStamp
-
-    archive = tmp_path / "publisher.tar"
+def extract_revision(repository: Path, revision: str, destination: Path) -> None:
+    archive = destination.with_name(destination.name + ".tar")
     with archive.open("wb") as stream:
-        subprocess.run(["git", "archive", PREDECESSOR], cwd=REPOSITORY, stdout=stream, check=True)
-    predecessor = tmp_path / "publisher"
-    predecessor.mkdir()
+        subprocess.run(["git", "-C", repository, "archive", revision], stdout=stream, check=True)
+    destination.mkdir(parents=True, exist_ok=True)
     with tarfile.open(archive) as tree:
-        tree.extractall(predecessor, filter="data")
+        tree.extractall(destination, filter="data")
     archive.unlink()
+
+
+def outgoing_source(destination: Path, revision: str) -> Path:
+    """One outgoing tree owns its source, revision-pinned dependencies and wheel stamp."""
+    from agent_comms.core_stamp import WheelStamp
+    from agent_comms.repo import Checkout
+
+    extract_revision(REPOSITORY, revision, destination)
+    for module in Checkout(destination).submodules():
+        relative = module.path.relative_to(destination)
+        pin = subprocess.check_output(
+            ["git", "-C", REPOSITORY, "ls-tree", revision, relative], text=True).split()[2]
+        extract_revision(REPOSITORY / relative, pin, module.path)
     commit = subprocess.check_output(
-        ["git", "rev-parse", PREDECESSOR], cwd=REPOSITORY, text=True).strip()
-    WheelStamp(commit).write(predecessor / "src" / "agent_comms" / "package_stamp.py")
+        ["git", "-C", REPOSITORY, "rev-parse", revision], text=True).strip()
+    WheelStamp(commit).write(destination / "src" / "agent_comms" / "package_stamp.py")
+    return destination
+
+
+def predecessor_history(tmp_path: Path, revision: str = PREDECESSOR) -> Path:
+    """Create the original bus through its real publisher, shared by carry/rehearsal proof."""
+    predecessor = outgoing_source(tmp_path / "publisher", revision)
     generated = tmp_path / "generated"
     runner = predecessor / Path(__file__).name
     shutil.copyfile(__file__, runner)
@@ -135,22 +151,21 @@ def test_predecessor_publisher_history_round_trips_into_bus(tmp_path):
         HistoryMetadata,
         HistoryOffset,
     )
+    from cutover.carry_owner_requests import OwnerRequests
 
     from agent_comms.bus import Bus, ClaimRecord, PublicRecord
     from agent_comms.errors import RelationViolationError, UnclaimedError
     from agent_comms.field_codec import FieldCodec
     from agent_comms.historical_views import HistoryArchive
     from agent_comms.installer.backup import StoreBackup, bus_files
-    from agent_comms.installer.carry import Carried, MigrateOperation
-    from agent_comms.installer.carry import CarryChain
+    from agent_comms.installer.carry import Carried, CarryChain, MigrateOperation
     from agent_comms.installer.upgrade import RehearsalFiles, StepRun, carried
+    from agent_comms.maintenance_barrier import MaintenanceBarrier, MaintenanceOperator
     from agent_comms.messages import BusRecord
     from agent_comms.read_ledger import ReadLedger
     from agent_comms.recorded_bus import RecordedBusIdentity
-    from agent_comms.maintenance_barrier import MaintenanceBarrier, MaintenanceOperator
     from agent_comms.registry_store import RegistryStore
     from agent_comms.todos import TodoStore
-    from cutover.carry_owner_requests import OwnerRequests
     from cutover.carry_reply_policy import ReplyPolicy, StoredDirectReply
     from agent_comms.bus_tables import MessageIdentitySource
     from conftest import maintenance_held

@@ -19,6 +19,7 @@ from pydantic import BaseModel, RootModel
 from pydantic.json_schema import DEFAULT_REF_TEMPLATE
 from typing_extensions import TypeForm
 
+from agent_comms.active_route import ActiveRoute, RouteFile, SelectingRoute, active_route_path
 from agent_comms.declared_family import DeclaredFamily
 from agent_comms.field_codec import FieldCodec, PathText, WireValue
 from agent_comms.service_sender import ServiceSender
@@ -111,6 +112,38 @@ class PackageRootProbe(RuntimeProbe[Path]):
         import agent_comms
 
         return Path(agent_comms.__file__).parent
+
+
+class RouteSelection(DeclaredFamily, affix="Selection", declared_name=None):
+    """The outgoing reader's validated choice owns whether this bus may be published."""
+
+    def publish(self, route: ActiveRoute, path: Path, directory: int) -> str:
+        return RouteFile.read(path).route_new_bus(route, path, directory)
+
+
+@dataclass(frozen=True)
+class NoRouteSelection(RouteSelection):
+    """No route selects an existing bus; the installer may publish this one."""
+
+
+@dataclass(frozen=True)
+class PublishedRouteSelection(RouteSelection):
+    root: Annotated[Path, PathText]
+
+    def publish(self, route: ActiveRoute, path: Path, directory: int) -> str:
+        if self.root.resolve() != route.root.resolve():
+            return f"kept {path}: it selects {self.root}"
+        return super().publish(route, path, directory)
+
+
+class SelectedRouteProbe(RuntimeProbe[RouteSelection]):
+    """The outgoing reader validates its own published route before source changes."""
+
+    def run(self) -> RouteSelection:
+        route = RouteFile.read(active_route_path())
+        if isinstance(route, SelectingRoute):
+            return PublishedRouteSelection(route.current.observe_root())
+        return NoRouteSelection()
 
 
 class PrepareNativeProbe(RuntimeProbe[None]):
