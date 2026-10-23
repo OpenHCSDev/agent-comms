@@ -211,6 +211,16 @@ The fix is one derived model with four renderers. **Core is the engine, Toad is 
 
 **Done when** a commander runs a full session with no script process running, every signal the scripts raised appears from Core, and replaying one recorded hour of the live feed on a copy delivers to the commander only decision events, with no duplicates, and the same hour yields a `UnitTime` rollup whose classes add up to each unit's elapsed time.
 
+### Current control-plane work: heartbeat source identity (2026-10-23)
+
+`HeartbeatSilent.violations` currently reads the newest row in the two-way DM
+conversation and then checks its sender. A commander reply after the last beat
+therefore hides a silent heartbeat. The existing display-scope family will own
+the one-way service-to-commander predicate, applied before the bounded SQL page.
+The bus remains the liveness authority; no parallel timestamp, ping store or
+scheduler is added. The complete phase and its installed-session/parity evidence
+remain open. Source census and the copied-bus check accompany the delivery PR.
+
 ### Phase 8: cutover
 
 **Changes.**
