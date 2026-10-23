@@ -28,6 +28,7 @@ from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import TYPE_CHECKING, Annotated, NoReturn
 
+from .child_process import Platform
 from . import store_files
 from .coordination_database import CoordinationStore
 from .coordinator import Coordination
@@ -35,7 +36,6 @@ from .errors import RelationViolationError
 from .field_codec import FieldCodec, Id128Text, MalformedRecord, WireName
 from .locked_store import DurableFile, WireWakeFile
 from .native_runtime_input import NativeRuntimeInput, NativeRuntimeTable
-from .private_path import fsync_directory
 
 if TYPE_CHECKING:
     from .acp_extension import CursorAdvancedUpdate, CursorScope
@@ -470,7 +470,7 @@ class PrivateRegistryGuard(DurableFile, WireWakeFile, RegistryPrivacy):
                 os.fsync(registry_fd)
             finally:
                 os.close(registry_fd)
-        fsync_directory(self.registry_path.parent)
+        Platform.current().fsync_directory(self.registry_path.parent)
         fd = os.open(
             self.path,
             os.O_RDWR | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW,
@@ -480,7 +480,7 @@ class PrivateRegistryGuard(DurableFile, WireWakeFile, RegistryPrivacy):
             if os.pwrite(fd, _record(self.root_id, 0, _COMMITTED, digest) * 2, 0) != 2 * _SIZE:
                 _reject("initial slots were incomplete")
             os.fsync(fd)
-            fsync_directory(self.registry_path.parent)
+            Platform.current().fsync_directory(self.registry_path.parent)
             self._write(fd, 1, _record(self.root_id, 1, _PENDING, digest))
         finally:
             os.close(fd)
@@ -525,7 +525,7 @@ class PrivateOwnerRenameIntent(DurableFile):
         intent = cls.path_in(root)
         replace(FieldCodec.decode(cls, json.loads(intent.read_text())), completed=True).write(root)
         intent.unlink()
-        fsync_directory(root)
+        Platform.current().fsync_directory(root)
 
 
 def _require_no_private_owner_rename(root: Path) -> None:

@@ -19,9 +19,10 @@ from pathlib import Path
 from pkgutil import walk_packages
 from typing import Any, ClassVar, Generic, Self, TypeVar
 
+from .child_process import Platform
 from .coordination_errors import CoordinationReadUnavailable
 from .field_codec import FieldCodec, MalformedRecord
-from .private_path import PrivateFileRole, fsync_directory
+from .private_path import PrivateFileRole
 from .store_files import (
     AtomicFile,
     SharedLock,
@@ -108,10 +109,10 @@ class JsonDocument(ABC, Generic[T]):
                 if backup.exists():
                     if not self.path.exists() or not self.path.samefile(backup):
                         os.replace(backup, self.path)
-                        fsync_directory(self.path.parent)
+                        Platform.current().fsync_directory(self.path.parent)
                 else:
                     self.path.unlink(missing_ok=True)
-                    fsync_directory(self.path.parent)
+                    Platform.current().fsync_directory(self.path.parent)
                 raise
         finally:
             # A failed restore leaves the last original inode for recovery.

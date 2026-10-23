@@ -20,9 +20,10 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Annotated, Literal
 
+from agent_comms.child_process import Platform
 from agent_comms.field_codec import FieldCodec, MalformedRecord, PathText, Sha256Text, WireName
 from agent_comms.native_build_inputs import INPUTS_PREFIX, NativeBuildInputs
-from agent_comms.private_path import PrivateDirectoryRole, TrustedAncestorRole, fsync_directory
+from agent_comms.private_path import PrivateDirectoryRole, TrustedAncestorRole
 
 from .store_files import AtomicFile
 
@@ -361,7 +362,7 @@ def install_declared_sources(root: Path, snapshot_root: Path) -> None:
         for source in sources:
             source.verify_installed()
         for parent in {source.destination.parent for source in sources}:
-            fsync_directory(parent)
+            Platform.current().fsync_directory(parent)
     except OSError as error:
         raise NativePackageError("Native extension source could not be installed") from error
     finally:

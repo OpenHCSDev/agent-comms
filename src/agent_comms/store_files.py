@@ -29,7 +29,7 @@ from typing import BinaryIO, ClassVar
 from .child_process import Platform
 from .declared_family import DeclaredFamily
 from .errors import RelationViolationError
-from .private_path import FileIdentity, PrivateFileRole, fsync_directory
+from .private_path import FileIdentity, PrivateFileRole
 
 with suppress(ModuleNotFoundError):  # Windows; Win32Platform never asks a mode for its flock.
     import fcntl
@@ -462,23 +462,21 @@ class AtomicFile:
 
     def replace(self, staged: Path) -> None:
         """Publish an independently prepared file after syncing its data."""
-        with staged.open("rb") as source:
-            os.fsync(source.fileno())
+        Platform.current().fsync_file(staged)
         self._publish(staged)
 
     def _publish(self, staged: Path) -> None:
         self._install(staged)
-        fsync_directory(self.path.parent)
+        Platform.current().fsync_directory(self.path.parent)
 
     def _install(self, staged: Path) -> None:
         os.replace(staged, self.path)
 
     def sync(self) -> None:
         """Sync an existing file without replacing an open database's inode."""
-        # Windows' CRT needs a writable handle; these files are owned writes.
-        with self.path.open("rb+") as source:
-            os.fsync(source.fileno())
-        fsync_directory(self.path.parent)
+        platform = Platform.current()
+        platform.fsync_file(self.path)
+        platform.fsync_directory(self.path.parent)
 
 
 class ExclusiveAtomicFile(AtomicFile):

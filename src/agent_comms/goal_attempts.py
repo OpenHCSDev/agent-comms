@@ -28,8 +28,8 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Annotated, ClassVar, TypeVar
 from uuid import uuid4
 
+from agent_comms.child_process import Platform
 from agent_comms.goal_turn_permit import GoalTurnPermit
-from agent_comms.private_path import fsync_directory
 
 from .declared_family import DeclaredFamily
 from .field_codec import MalformedRecord
@@ -717,7 +717,7 @@ class GoalAttemptStore(DurableFile, PublishedSQLiteFile, WireWakeFile):
             # The staging descriptor is closed before its inode becomes shared.
             with suppress(FileExistsError):
                 os.link(staging, path, follow_symlinks=False)
-            fsync_directory(directory)
+            Platform.current().fsync_directory(directory)
         except (sqlite3.Error, OSError) as error:
             raise StorageUncertainError("Goal attempt initialization is uncertain.") from error
         finally:

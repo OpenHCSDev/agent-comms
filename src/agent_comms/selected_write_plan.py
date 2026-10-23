@@ -17,6 +17,7 @@ from dataclasses import dataclass, fields
 from pathlib import Path
 from typing import TYPE_CHECKING, Annotated, Literal
 
+from agent_comms.child_process import Platform
 from .coordination_database import CoordinationStore
 from .locked_store import DurableFile, PatternFile
 from .store_files import AtomicFile
@@ -34,7 +35,7 @@ from .declared_family import DeclaredFamily
 from .envelope_claim_transitions import ExistingFileClaim
 from .field_codec import FieldCodec, Id128Text, MalformedRecord, WireName
 from .message_reference import MessageReference
-from .private_path import PrivateDirectoryRole, PrivateFileRole, fsync_directory
+from .private_path import PrivateDirectoryRole, PrivateFileRole
 from .thread_identity import ClaimedIdentity, RecordedThreadIncarnation
 from .threads import Thread
 
@@ -128,7 +129,7 @@ class SelectedWritePlans(DurableFile, PatternFile):
         # Also on an existing directory: a previous mkdir may have survived
         # while its parent fsync failed. Do not acknowledge a later intent
         # until the directory entry itself is known durable.
-        fsync_directory(self.comms.root)
+        Platform.current().fsync_directory(self.comms.root)
 
     def _validate_dir(self) -> bool:
         try:
@@ -232,7 +233,7 @@ class SelectedWritePlans(DurableFile, PatternFile):
                     stream.write(data)
                     stream.flush()
                     os.fsync(stream.fileno())
-                fsync_directory(self.directory)
+                Platform.current().fsync_directory(self.directory)
             except BaseException:
                 # The visible file may have committed despite the error. Keep
                 # it as an UNKNOWN barrier; never unlink/retry the operation.

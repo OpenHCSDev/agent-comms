@@ -14,8 +14,8 @@ from traceback import TracebackException
 from typing import TYPE_CHECKING, Literal
 from uuid import uuid4
 
-from agent_comms.private_path import fsync_directory
 
+from .child_process import Platform
 from .field_codec import FieldCodec, Id128Text, MalformedRecord
 from .locked_store import DurableFile, PatternFile
 from .store_files import AtomicFile
@@ -278,6 +278,6 @@ class DiagnosticDocument(DurableFile, PatternFile):
         path = cls.path_in(root, name=name)
         path.parent.mkdir(mode=0o700, exist_ok=True)
         if os.name == "posix":
-            fsync_directory(root)
+            Platform.current().fsync_directory(root)
         AtomicFile(path).write_text(json.dumps(document, indent=2) + "\n")
         return path.resolve()

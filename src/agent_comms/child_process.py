@@ -36,7 +36,7 @@ from contextlib import (
 from dataclasses import dataclass
 from functools import partial
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, ClassVar, NoReturn
+from typing import TYPE_CHECKING, Any, BinaryIO, ClassVar, NoReturn
 
 from .declared_family import DeclaredFamily
 from .errors import RelationViolationError
@@ -414,6 +414,18 @@ class Platform(DeclaredFamily, affix="Platform"):
         return cls.member_named(sys.platform)()
 
     @abstractmethod
+    def fsync_directory(self, path: Path) -> None:
+        """Finish publication using this platform's directory durability contract."""
+
+    @abstractmethod
+    def open_for_sync(self, path: Path) -> BinaryIO:
+        """Open an existing file with the access required by the native flush."""
+
+    def fsync_file(self, path: Path) -> None:
+        with self.open_for_sync(path) as source:
+            os.fsync(source.fileno())
+
+    @abstractmethod
     def try_store_lock(self, descriptor: int, *, mode: LockMode) -> None:
         """One nonblocking native attempt; busy is BlockingIOError."""
 
@@ -481,6 +493,16 @@ class Platform(DeclaredFamily, affix="Platform"):
 
 
 class PosixPlatform(Platform):
+    def fsync_directory(self, path: Path) -> None:
+        descriptor = os.open(path, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+        try:
+            os.fsync(descriptor)
+        finally:
+            os.close(descriptor)
+
+    def open_for_sync(self, path: Path) -> BinaryIO:
+        return path.open("rb")
+
     def acquire_store_lock(self, descriptor: int, *, mode: LockMode, blocking: bool) -> None:
         import fcntl
 
@@ -684,6 +706,13 @@ class Win32Platform(Platform):
     """Kernel creation times and named job objects bind the complete child tree."""
 
     store_lock_interval = 0.01
+
+    def fsync_directory(self, path: Path) -> None:
+        """NTFS journals the rename; there is no POSIX directory flush."""
+
+    def open_for_sync(self, path: Path) -> BinaryIO:
+        # The Windows CRT's fsync requires a writable descriptor.
+        return path.open("rb+")
 
     def try_store_lock(self, descriptor: int, *, mode: LockMode) -> None:
         import errno

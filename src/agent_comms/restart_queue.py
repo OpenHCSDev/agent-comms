@@ -19,9 +19,8 @@ from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import TYPE_CHECKING, Annotated
 
-from agent_comms.private_path import fsync_directory
 
-from .child_process import OutlivesLauncherLifetime, ProcessIdentity, SpawnedProcess
+from .child_process import OutlivesLauncherLifetime, Platform, ProcessIdentity, SpawnedProcess
 from .comms import Comms, wire
 from .coordination_errors import CoordinationError
 from .coordinator import Coordination
@@ -242,7 +241,7 @@ class RestartQueue:
             raise FileExistsError(destination)
         os.rename(path, destination)
         for parent in (path.parent, destination.parent):
-            fsync_directory(parent)
+            Platform.current().fsync_directory(parent)
 
     def save(self, record: QueuedRestart) -> None:
         path = self.active_path(record.selection.identity.incarnation.require_recorded())
