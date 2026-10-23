@@ -1960,7 +1960,11 @@ class TypedTable(
 
 
 class ProducedTable(ProducedRow, TypedTable, declared_name=None):
-    """A named table whose producing family owns one source commitment."""
+    """A named table whose producing family owns one source commitment.
+
+    The first install after this change rebuilds bus projections once because the digest
+    format changed.
+    """
 
     @classmethod
     def producer_digest(cls) -> str:
