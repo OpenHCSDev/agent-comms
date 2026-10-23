@@ -3,9 +3,11 @@
 0765a002c broke every ``agent-comms install`` without ``--repos``, and install 21
 refused because the target's owner probe asked the outgoing runtime for a method it no
 longer had (fixed in #2419); every required check passed both, because nothing ran the
-installer. This rehearses a real bus through the CLI under test, with the merge base's
-build installed as the outgoing runtime: launch, target tree, staged stack build,
-carried practice copy and the outgoing runtime's owner probe.
+installer. These checks rehearse an already-current bus format through the CLI:
+launch, target tree, staged stack build, carried practice copy and the outgoing
+runtime's owner probe. The outgoing package uses this source, and an empty commit
+on the isolated target creates a real revision transition without changing formats.
+The predecessor-history carry has its own real-writer fixture in test_carry_bus_history.
 """
 from __future__ import annotations
 
@@ -46,7 +48,7 @@ def git(*arguments: str) -> str:
 @pytest.fixture(scope="module")
 def installed_home(tmp_path_factory) -> dict[str, str]:
     """A home holding what an installed machine has: the installer's uv, and as the
-    installed runtime a build of the merge base this change lands on. Both cases share
+    installed runtime a build of this source. Both cases share
     it, so the second reuses the staged runtime the first built, as a second install
     would. Package caches stay shared."""
     home = tmp_path_factory.mktemp("installed-home")
@@ -58,8 +60,7 @@ def installed_home(tmp_path_factory) -> dict[str, str]:
                    "npm_config_cache": str(Path.home() / ".npm")}
     environment.pop("PYTHONPATH", None)
     # The checkout owner adds the tree with its pinned submodules; `git archive` drops them.
-    base = ScratchCheckout.add(REPOSITORY, home / "outgoing-source",
-                               git("merge-base", "HEAD", "origin/main"), "--detach")
+    base = ScratchCheckout.add(REPOSITORY, home / "outgoing-source", git("rev-parse", "HEAD"), "--detach")
     try:
         outgoing = Stack.build(base.path, InstallCommands(), home)
     finally:
@@ -74,6 +75,9 @@ def install_checkout(tmp_path) -> Path:
     checkout = tmp_path / "checkout"
     subprocess.run(["git", "clone", "--shared", "-q", REPOSITORY, checkout], check=True)
     Checkout(checkout).prepare()
+    subprocess.run(["git", "-C", checkout, "-c", "user.name=Installer test",
+                    "-c", "user.email=installer@example.invalid", "commit", "--allow-empty",
+                    "-qm", "Distinct target revision with the same bus declarations"], check=True)
     return checkout
 
 
