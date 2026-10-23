@@ -19,6 +19,7 @@ from .field_codec import (
     MalformedRecord,
     FieldPlan,
     SlicePolicy,
+    WireOmitDefault,
     WireRequired,
 )
 from .registration_change import (
@@ -26,6 +27,7 @@ from .registration_change import (
     RegistrationChange,
     UpdatedRegistration,
 )
+from .repo import Repo, RepositorySelection
 from .registry_provenance import (
     DeletedThread,
     RegisteredRecipient,
@@ -43,6 +45,7 @@ from .thread_identity import (
     GenerationCounter,
     OwnerIdentity,
     RecordedThreadIncarnation,
+    ThreadIncarnation,
     ThreadAuthority,
     TurnIdentity,
 )
@@ -54,7 +57,7 @@ from .thread_status import (
     ThreadStatus,
 )
 from .thread_text import ForkedParent, NoParent
-from .threads import Thread
+from .threads import Thread, ThreadWorkState
 from .turn_lease import FinishedTurn, FinishedTurnFence, NoFinishedTurn, TurnCompletion, TurnLeaseFence
 
 if TYPE_CHECKING:
@@ -297,6 +300,62 @@ class HistoricalRootPurpose(RootPurpose):
         raise RelationViolationError("Historical roots are read-only")
 
 
+@dataclass(frozen=True)
+class CommanderProject(DeclaredFamily, affix="CommanderProject"):
+    """This bus's commander declaration; identity resolves through the registry lookup."""
+
+    @abstractmethod
+    def commanders(self, snapshot: RegistrySnapshot) -> tuple[Thread, ...]: ...
+
+    @abstractmethod
+    def require(self) -> RegisteredCommanderProject: ...
+
+    @abstractmethod
+    def named(self, commander: ThreadIncarnation,
+              repositories: RepositorySelection) -> RegisteredCommanderProject: ...
+
+    @abstractmethod
+    def reconfigured(self, repositories: RepositorySelection) -> CommanderProject: ...
+
+
+class NoCommanderProject(CommanderProject):
+    def commanders(self, snapshot: RegistrySnapshot) -> tuple[Thread, ...]:
+        return ()
+
+    def require(self) -> RegisteredCommanderProject:
+        raise RelationViolationError("This bus has no registered commander project.")
+
+    def named(self, commander: ThreadIncarnation,
+              repositories: RepositorySelection) -> RegisteredCommanderProject:
+        return RegisteredCommanderProject(commander, repositories.founding(commander.name))
+
+    def reconfigured(self, repositories: RepositorySelection) -> CommanderProject:
+        repositories.without_commander()
+        return self
+
+
+@dataclass(frozen=True)
+class RegisteredCommanderProject(CommanderProject):
+    commander: ThreadIncarnation
+    repos: tuple[Repo, ...]
+
+    def commanders(self, snapshot: RegistrySnapshot) -> tuple[Thread, ...]:
+        selected = snapshot.threads_for(self.commander.require_recorded())
+        if not selected:
+            raise RelationViolationError("The registered commander thread no longer exists.")
+        return selected
+
+    def require(self) -> RegisteredCommanderProject:
+        return self
+
+    def named(self, commander: ThreadIncarnation,
+              repositories: RepositorySelection) -> RegisteredCommanderProject:
+        return RegisteredCommanderProject(commander, repositories.applied(self.repos))
+
+    def reconfigured(self, repositories: RepositorySelection) -> CommanderProject:
+        return replace(self, repos=repositories.applied(self.repos))
+
+
 @ThreadSlice.required
 @dataclass(slots=True)
 class RegistryDocument(RegistryPresence[dict[str, ThreadStatus]]):
@@ -306,6 +365,9 @@ class RegistryDocument(RegistryPresence[dict[str, ThreadStatus]]):
     purpose: Annotated[RootPurpose, SlicePolicy(WholeDocumentValue)] = field(
         default_factory=WorkingRootPurpose
     )
+    commander_project: Annotated[
+        CommanderProject, SlicePolicy(WholeDocumentValue), WireOmitDefault()
+    ] = field(default_factory=NoCommanderProject)
     threads: Annotated[dict[str, Thread], SlicePolicy(OwnRow)] = field(
         default_factory=dict
     )
@@ -393,8 +455,9 @@ class RegistryDocument(RegistryPresence[dict[str, ThreadStatus]]):
             ]
             canonical = name
             for kind, key in keyed:
-                canonical = kind.canonical(raw[key], canonical)
-            restricted = {key: kind.cut(raw[key], canonical) for kind, key in keyed}
+                if key in raw:
+                    canonical = kind.canonical(raw[key], canonical)
+            restricted = {key: kind.cut(raw[key], canonical) for kind, key in keyed if key in raw}
         except (AttributeError, KeyError, TypeError) as error:
             raise RelationViolationError(f"Invalid registry document: {error!r}") from error
         return cls.from_wire(restricted).entry(name)
@@ -467,6 +530,22 @@ class RegistryDocument(RegistryPresence[dict[str, ThreadStatus]]):
             return document
         except MalformedRecord as error:
             raise RelationViolationError(f"Invalid registry document: {error}") from error
+
+    def set_work_state(self, name: str, state: ThreadWorkState) -> Thread:
+        """Change order availability without replacing the thread's owner or presence."""
+        current = self.require(name)
+        if not current.work_state.may_become(state):
+            raise RelationViolationError("Invalid thread work-state transition.")
+        updated = replace(current, work_state=state)
+        self.threads[current.name] = updated
+        return updated
+
+    def set_commander_project(self, project: CommanderProject) -> CommanderProject:
+        """Publish a project only for its current registered commander identity."""
+        for thread in project.commanders(RegistrySnapshot.capture(self)):
+            thread.require_commander()
+        self.commander_project = project
+        return project
 
     def prepare_declaration(self, thread: Thread, status: ThreadStatus) -> RegistrationChange:
         canonical = self.canonical_name(thread.name)
@@ -751,6 +830,9 @@ class RegistrySnapshot(RegistryPresence[Mapping[str, ThreadStatus]], RegistryPro
     aliases: Annotated[Mapping[str, str], SlicePolicy(OwnRow)]
     owner_generations: Annotated[Mapping[str, int], SlicePolicy(OwnRow)]
     _claimed_generations: Annotated[Mapping[str, int], SlicePolicy(OwnRow)] = field(repr=False)
+    commander_project: Annotated[CommanderProject, SlicePolicy(WholeDocumentValue)] = field(
+        default_factory=NoCommanderProject
+    )
     by_lookup: Mapping[str, Thread] = field(init=False, repr=False, compare=False)
 
     def __post_init__(self) -> None:
@@ -816,6 +898,7 @@ class RegistrySnapshot(RegistryPresence[Mapping[str, ThreadStatus]], RegistryPro
             aliases=document.aliases,
             owner_generations=document.owners.generations,
             _claimed_generations=document.claims.generations,
+            commander_project=document.commander_project,
         )
 
     def observed_activity(

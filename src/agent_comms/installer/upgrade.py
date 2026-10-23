@@ -471,6 +471,7 @@ class Stack:
         if prefix.exists():
             if not RuntimeResolution.at(prefix).matches(source.lock, built.python, core, commands):
                 raise UpgradeRefused("Existing built runtime differs from its resolved inputs")
+            built.stage_native()
             built.prepare_native()
             return built
         prefix.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
@@ -517,21 +518,34 @@ class Stack:
         pin, so a runtime whose pin was already built copies it instead of rebuilding it."""
         return self.home / ".local/share/agent-comms/native"
 
-    def install_native(self) -> None:
-        """Copy this pin's built native package into the interpreter, building it only when
-        no runtime has built this pin yet; qualifying the copy checks it against the pin."""
+    def stage_native(self) -> tuple[Path, Path]:
+        """The checkout's ``stack/`` holds this pin's build, because the checkout's own source
+        acquires its pin there (the installer runs that source and validates the route it
+        publishes with it). Copied from the prepared build, or built when no install has
+        built this pin yet. Answers the staged build and its layout under ``stack/``."""
         native = self.probe(PinnedLocationProbe(), source=(self.checkout / "src",))
         layout = native.relative_to(self.checkout / "stack")
         prepared = self.prepared_natives / layout
-        if not prepared.is_dir():
+        if native.is_dir():
+            return native, layout
+        if prepared.is_dir():
+            native.parents[2].mkdir(mode=0o700)
+            shutil.copytree(prepared, native)
+        else:
             self.commands.run(self.checkout / "stack/bin/prepare-pi-native", "--python",
                               self.python, cwd=self.checkout,
                               env=self.environment(self.checkout / "src"))
             self.keep_native(native, layout)
+        return native, layout
+
+    def install_native(self) -> None:
+        """Copy this pin's staged native package into the interpreter; qualifying the copy
+        checks it against the pin."""
+        native, layout = self.stage_native()
         package = self.probe(PackageRootProbe())
         destination = package / "_native" / layout
         destination.parents[2].mkdir(mode=0o700, parents=True)
-        shutil.copytree(prepared, destination)
+        shutil.copytree(native, destination)
         self.prepare_native()
 
     def keep_native(self, native: Path, layout: Path) -> None:
