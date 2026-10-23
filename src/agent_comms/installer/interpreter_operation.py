@@ -29,6 +29,7 @@ from pydantic.json_schema import DEFAULT_REF_TEMPLATE
 from typing_extensions import TypeForm
 
 import agent_comms
+from agent_comms.child_process import Platform
 from agent_comms.active_route import ActiveRoute, RouteFile, SelectingRoute, active_route_path
 from agent_comms.declared_family import DeclaredFamily
 from agent_comms.field_codec import FieldCodec, PathText, WireValue
@@ -45,11 +46,15 @@ class InstallPhase(DeclaredFamily, affix="Phase"):
     def label(self) -> str:
         return f"{type(self).__name__}: {self.detail}" if self.detail else type(self).__name__
 
+    def started_at(self, now: float) -> float:
+        return now
+
     @contextmanager
     def running(self, clock: InstallClock) -> Iterator[PhaseTiming]:
         with clock.lock:
-            started = clock.advance()
-            measured = PhaseTiming(self)
+            now = clock.advance()
+            started = self.started_at(now)
+            measured = PhaseTiming(self, seconds=now - started)
             clock.phases.append(measured)
             clock.active.append(measured)
         try:
@@ -66,6 +71,14 @@ class InstallRunPhase(InstallPhase):
 
 class InstallerProcessPhase(InstallPhase):
     """Launch the target interpreter, collect its answer and reap it."""
+
+
+class LauncherPhase(InstallPhase):
+    """The launcher's real lifetime starts before Python imports its CLI."""
+
+    def started_at(self, now: float) -> float:
+        platform = Platform.current()
+        return platform.started_at(platform.identity(os.getpid()))
 
 
 class PreparePhase(InstallPhase):

@@ -26,7 +26,7 @@ from agent_comms.cli_commands import InstallCliCommand, InstallResult
 from agent_comms.field_codec import FieldCodec, Id128Text, PathText
 from agent_comms.installer.backup import StoreBackup, UpgradeRefused
 from agent_comms.installer.commands import InstallCommands
-from agent_comms.installer.interpreter_operation import InstallClock, InstallerProcessPhase, PhaseTiming, PreparePhase, PublicationPhase, TreeClosePhase
+from agent_comms.installer.interpreter_operation import InstallClock, InstallerProcessPhase, LauncherPhase, PhaseTiming, PreparePhase, PublicationPhase, TreeClosePhase
 from agent_comms.installer.reporting import (
     FinishedInstall, InstallOutcome, RootWriter, UnfinishedInstall, UnpostedWriter,
 )
@@ -132,7 +132,7 @@ class InstallRun:
     @classmethod
     def start(cls, command: InstallCliCommand, root: Path) -> InstallRun:
         checkout = command.checkout
-        with InstallCommands() as commands, PreparePhase("launcher").running(commands.clock):
+        with InstallCommands() as commands, LauncherPhase().running(commands.clock):
             commands.git(checkout, "fetch", "-q", "origin")
             target = commands.git(checkout, "rev-parse", "--verify",
                                   f"{command.to}^{{commit}}").strip()
