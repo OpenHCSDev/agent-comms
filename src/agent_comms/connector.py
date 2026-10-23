@@ -54,7 +54,7 @@ from .field_codec import (
 )
 from agent_comms.channel_targets import NamedTarget
 from agent_comms.owner_requests import NewestOpenRequest, RequestSelection
-from .host_services import HostService, SystemdUserService
+from .host_services import HostService, SystemdSite
 from .connector_store import (
     CODE_SECONDS, ApprovalQueueFull, ApprovalRefused, AuthorizationQuery,
     AuthorizationRequest, ClaudeCallback,
@@ -898,8 +898,7 @@ class ServeVerb(ConnectorOptions):
         for signum in (signal.SIGINT, signal.SIGTERM):
             loop.add_signal_handler(signum, stopped.set)
         try:
-            await web.TCPSite(runner, LOOPBACK, self.port).start()
-            SystemdUserService.ready()
+            await SystemdSite(runner, LOOPBACK, self.port).start()
             await stopped.wait()
         finally:
             await runner.cleanup()
