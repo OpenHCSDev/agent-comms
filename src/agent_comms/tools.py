@@ -1225,13 +1225,11 @@ class CommsOrderStoryTool(ReadTool, ToolRequest):
 @dataclass(frozen=True, kw_only=True)
 class CommsFleetStoryTool(ThreadReadTool):
     label = "Fleet story"
-    description = ("Read one story line for every pending order of this commander, "
-                   "including linked problems.")
+    description = "Read this commander's strikes and send-backs, newest first, from their records."
 
     def apply(self, comms: Comms, caller: ToolCaller) -> FleetStory:
         actor = comms.registry.require(caller.subject(self.thread)).incarnation
-        todos = (todo for todo in comms.goals.todos.for_commander(actor) if todo.pending)
-        return FleetStory(tuple(story.line for story in OrderStory.collect(todos)))
+        return FleetStory.collect(comms.goals.todos.history_for_commander(actor))
 
 
 @dataclass(frozen=True, kw_only=True)
