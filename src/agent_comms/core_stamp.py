@@ -45,14 +45,16 @@ class WheelStamp(CoreStamp):
 
         The custom hook requires the project's runtime dependencies in pyproject.toml;
         hatchling alone cannot import the application in an isolated build.
+        The child keeps the build environment's import path behind the source root.
         """
+        path = os.pathsep.join(filter(None, (str(src), os.environ.get("PYTHONPATH"))))
         return cls(
             commit,
             json.loads(
                 subprocess.check_output(
                     (sys.executable, "-m", "agent_comms.producer_stamp"),
                     cwd=src.parent,
-                    env={**os.environ, "PYTHONPATH": str(src)},
+                    env={**os.environ, "PYTHONPATH": path},
                     text=True,
                 )
             ),
