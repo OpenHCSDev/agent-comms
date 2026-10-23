@@ -61,6 +61,9 @@ class OfferedTools(DeclaredFamily, affix="OfferedTools"):
     @abstractmethod
     def on_version(self, version: str) -> tuple[OfferedTools, ...]: ...
 
+    @abstractmethod
+    def restarted_over(self, before: OfferedTools) -> OfferedTools: ...
+
     def on_catalogue(self, names: frozenset[ToolName]) -> tuple[OfferedTools, ...]:
         return ()
 
@@ -90,6 +93,9 @@ class UnobservedTools(OfferedTools):
     def on_version(self, version: str) -> tuple[OfferedTools, ...]:
         return (UnreportedTools(version),)
 
+    def restarted_over(self, before: OfferedTools) -> OfferedTools:
+        return before  # Nothing observed: the last real record stays the comparison.
+
     def filled_by(self, current: OfferedTools) -> bool:
         return True
 
@@ -116,6 +122,9 @@ class ObservedTools(OfferedTools, declared_name=None):
 
     def fills_version(self, version: str) -> bool:
         return self.version == version
+
+    def restarted_over(self, before: OfferedTools) -> OfferedTools:
+        return self
 
 
 @dataclass(frozen=True)

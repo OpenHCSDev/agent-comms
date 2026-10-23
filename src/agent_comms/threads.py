@@ -305,6 +305,11 @@ class Thread(DurableFile, PatternFile, ThreadProvenance):
     def lost_tools(self) -> tuple[str, ...]:
         return self.offered.changes_from(self.offered_before_restart)
 
+    def restarted_tools(self) -> Thread:
+        """A new owner incarnation starts unobserved over the last real record."""
+        return replace(self, offered=UnobservedTools(),
+                       offered_before_restart=self.offered.restarted_over(self.offered_before_restart))
+
     def require_commander(self) -> None:
         """The thread's declared provider owns eligibility to command."""
         if not self.model.native(NativeArguments(())).provider_type.may_command:
@@ -509,7 +514,7 @@ class Thread(DurableFile, PatternFile, ThreadProvenance):
         """Drop the reference; the registry transaction owns revoking the record."""
         return replace(self, turn_record=self.turn_record.released())
 
-    def preserve_registration_history(self, previous: Thread, *, restarting: bool) -> Thread:
+    def preserve_registration_history(self, previous: Thread) -> Thread:
         """Metadata writers cannot forge channel scope or reset a finished turn."""
         scope = previous.channel_scope_generation
         if self.tags != previous.tags:
@@ -519,9 +524,6 @@ class Thread(DurableFile, PatternFile, ThreadProvenance):
         result = replace(self, created_at=previous.created_at, channel_scope_generation=scope,
                          offered=previous.offered,
                          offered_before_restart=previous.offered_before_restart)
-        if restarting:
-            result = replace(result, offered=UnobservedTools(),
-                             offered_before_restart=previous.offered)
         if self.turn_generation != previous.turn_generation:
             result = replace(
                 result, turn_generation=previous.turn_generation, turn_record=previous.turn_record,
