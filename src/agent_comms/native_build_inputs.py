@@ -8,18 +8,21 @@ from dataclasses import dataclass
 from pathlib import Path
 
 INPUTS_PREFIX = "# agent-comms-native-inputs-v1 "
+PREPARATION_SCHEME = "sealed-native-store-v1"
 
 
 def built_tree_pin(manifest: Path) -> str:
-    """Which built Pi tree this manifest pins: its file and tree commitments. The inputs
-    line records the recipe for ``require_pinned`` and never names the build, so a recipe
-    edit that builds the same bytes keeps its pin and its prepared copy."""
+    """Name the prepared artifact by its scheme and committed file/tree contents.
+
+    Recipe-only edits retain an artifact; a new preparation scheme cannot borrow one
+    prepared under the old scheme, even when its content commitment is unchanged.
+    """
     built = "".join(
         line
         for line in manifest.read_text().splitlines(keepends=True)
         if not line.startswith(INPUTS_PREFIX)
     )
-    return hashlib.sha256(built.encode()).hexdigest()[:16]
+    return hashlib.sha256((PREPARATION_SCHEME + "\n" + built).encode()).hexdigest()[:16]
 
 
 @dataclass(frozen=True)
@@ -82,6 +85,7 @@ class NativeBuildInputs:
         digest = hashlib.sha256()
         for value in (
             self.digest(manifest),
+            built_tree_pin(manifest),
             manifest.read_text(),
             node,
             npm,

@@ -362,6 +362,11 @@ class OwedAnswer(IndependentStandingRule, declared_name=None):
         """Whether an action naming these open messages answers this one."""
         return any(message.message_id == self.message.message_id for message in named)
 
+    def misaddressed(self, named: tuple[Message, ...], reached: frozenset[str]) -> str:
+        """Why naming this debt in an action that reaches only these threads would record an
+        answer its asker never receives; empty when it would not."""
+        return ""
+
 
 class AnswersOwedDegradation(Degradation, BlocksRelease):
     """Messages to the commander are waiting past their window; each message is one sign."""

@@ -88,7 +88,9 @@ from agent_comms.maintenance_barrier import (
     MaintenanceState,
 )
 from agent_comms.native_build_inputs import NativeBuildInputs
-from agent_comms.native_package import link_sealed_tree, pinned_package_for
+from agent_comms.native_package import (
+    NativePackageStore, pinned_package_for,
+)
 from agent_comms.recorded_bus import RecordedBusIdentity
 from agent_comms.registry_store import RegistryStore
 from agent_comms.repo import Checkout, Repo, ScratchCheckout
@@ -479,59 +481,28 @@ class Stack:
     def imports(self) -> None:
         self.probe(ClientImportsProbe())
 
-    @property
-    def prepared_natives(self) -> Path:
-        """Every runtime's built native package, laid out as ``stack/`` is and keyed by the
-        pin, so a runtime whose pin was already built copies it instead of rebuilding it."""
-        return self.home / ".local/share/agent-comms/native"
-
     def stage_native(self) -> tuple[Path, Path]:
-        """The checkout's ``stack/`` holds this pin's build, because the checkout's own source
-        acquires its pin there (the installer runs that source and validates the route it
-        publishes with it). Copied from the prepared build, or built when no install has
-        built this pin yet. Answers the staged build and its layout under ``stack/``."""
+        """Prepare a missing artifact once; the checkout holds only its store link."""
         manifest = self.checkout / "stack/pi-native.sha256"
         try:
             NativeBuildInputs(self.checkout).require_pinned(manifest)
         except ValueError as error:
             raise UpgradeRefused(str(error)) from None
-        native = pinned_package_for(manifest)
-        layout = native.relative_to(manifest.parent)
-        prepared = self.prepared_natives / layout
-        if native.is_dir():
-            return native, layout
-        if prepared.is_dir():
-            native.parents[2].mkdir(mode=0o700)
-            link_sealed_tree(prepared, native)
-        else:
+        store = NativePackageStore.at_home(self.home)
+        native = store.package_for(manifest)
+        if not native.is_dir():
             self.commands.run(self.checkout / "stack/bin/prepare-pi-native", "--python",
                               self.python, cwd=self.checkout,
                               env=self.environment(self.checkout / "src"))
-            self.keep_native(native, layout)
-        return native, layout
+        store.link(manifest, manifest.parent)
+        return native, pinned_package_for(manifest).relative_to(manifest.parent)
 
     def install_native(self) -> None:
-        """Copy this pin's staged native package into the interpreter; qualifying the copy
-        checks it against the pin."""
-        native, layout = self.stage_native()
-        package = self.runtime.package_root
-        destination = package / "_native" / layout
-        destination.parents[2].mkdir(mode=0o700, parents=True)
-        link_sealed_tree(native, destination)
+        """Interpreters bind the store artifact; disposable trees contain only links."""
+        self.stage_native()
+        NativePackageStore.at_home(self.home).link(
+            self.checkout / "stack/pi-native.sha256", self.runtime.package_root / "_native")
         self.prepare_runtime()
-
-    def keep_native(self, native: Path, layout: Path) -> None:
-        """Publish a fresh build under its pin whole, and retire other pins' builds: each
-        runtime holds its own copy, so only the next runtime reads this one."""
-        self.prepared_natives.mkdir(mode=0o700, parents=True, exist_ok=True)
-        stage = Path(tempfile.mkdtemp(dir=self.prepared_natives, prefix=".stage-"))
-        try:
-            link_sealed_tree(native, stage / layout)
-            for retired in self.prepared_natives.glob(".pi-native-*"):
-                shutil.rmtree(retired)
-            stage.joinpath(layout.parts[0]).rename(self.prepared_natives / layout.parts[0])
-        finally:
-            shutil.rmtree(stage, ignore_errors=True)
 
     def prepare_runtime(self) -> None:
         self.probe(PrepareProducerDigestsProbe())
