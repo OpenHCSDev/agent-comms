@@ -51,7 +51,7 @@ def ancestor_probe(
     package: Path, root: Path, env: dict[str, str], deny: Callable[[], None]
 ) -> dict:
     """Admit real PR77, then reach a committed ws entry's optional ancestor require."""
-    assert package.is_relative_to(root), "Owned fixture package required"
+    assert package.resolve().is_relative_to(root.resolve()), "Owned fixture package required"
     ancestor = package.parent.parent / "bufferutil"
     ancestor.mkdir(mode=0o700)  # Exclusive: never replace an existing dependency.
     marker = root / "ancestor-executed"
@@ -340,6 +340,9 @@ if __name__ == "__main__":
     with tempfile.TemporaryDirectory(prefix="native-import-rpc-") as directory:
         root = Path(directory)
         prepared = pinned_native_package()
-        native_root = root / prepared.parents[2].name
-        native_root.symlink_to(prepared.parents[2], target_is_directory=True)
-        main(VerifiedNativePackage.qualify(native_root / PACKAGE_LAYOUT), root)
+        # Node resolves modules by realpath, so a link would put every ancestor of the
+        # probed ws entry back in the shared store; only an owned copy has owned ancestors.
+        package = root / prepared.parents[2].name / PACKAGE_LAYOUT
+        package.parent.mkdir(parents=True, mode=0o700)
+        shutil.copytree(prepared, package)
+        main(VerifiedNativePackage.qualify(package), root)
