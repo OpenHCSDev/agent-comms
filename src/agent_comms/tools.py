@@ -1054,9 +1054,8 @@ class CommsStandingRulesTool(ThreadToolRequest):
     ] = 0.0
 
     def apply(self, comms: Comms, caller: ThreadCaller) -> StandingRulesRead:
-        pulls = ProgressRead()
-        states = UnitState.current(comms, caller.name, pulls)
-        frame = HeartbeatFrame.read(comms, caller.name, pulls)
+        frame = HeartbeatFrame.read(comms, caller.name, ProgressRead())
+        states = UnitState.current(comms, caller.name, frame)
         broken = (*StandingRule.broken(comms, caller.name, observed=states, frame=frame),
                   *(state for state in states if state.attention()))
         rejected = StandingRule.enforce_all(comms, caller.name, broken)
