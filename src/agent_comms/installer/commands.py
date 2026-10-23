@@ -45,8 +45,8 @@ class InstallCommands:
             print("=", timed.line(), file=sys.stderr, flush=True)
 
     def run(self, *command: str | Path, cwd: Path = Path(),
-            env: Mapping[str, str] = os.environ) -> str:
-        with self.timing(" ".join(map(str, command))):
+            env: Mapping[str, str] = os.environ, label: str = "") -> str:
+        with self.timing(label or " ".join(map(str, command))):
             completed = subprocess.run([str(part) for part in command], cwd=cwd, env=env,
                                        capture_output=True, text=True)
         if completed.returncode:
@@ -59,6 +59,7 @@ class InstallCommands:
                       program: ProbeProgram = SourceProgram()) -> Answer:
         with tempfile.TemporaryDirectory() as scratch:
             result = Path(scratch) / "result.json"
-            self.run(*probe.command(python, result, program=program), cwd=cwd, env=env)
+            self.run(*probe.command(python, result, program=program), cwd=cwd, env=env,
+                     label=f"{python} {type(probe).__name__}")
             return probe.decode_answer(result.read_text())
 

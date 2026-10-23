@@ -190,7 +190,7 @@ def test_installed_entry_reports_completion_after_target_source_retirement(
     if not fresh:
         declare_test_bus(private_comms, channels=("comms",))
     scratch = tmp_path / "install-scratch"
-    root.mkdir(parents=True, exist_ok=True)
+    root.mkdir(mode=0o700, parents=True, exist_ok=True)
     StorageRule.path_in(root).write_text(json.dumps(FieldCodec.encode(
         StorageRule(scratch_base=scratch, floor_gib=10))))
     home = Path(installed_home["HOME"])
