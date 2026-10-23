@@ -11,7 +11,6 @@ import re
 import types
 from abc import ABC, abstractmethod
 from collections.abc import Callable, Iterable, Iterator, Mapping
-from contextlib import contextmanager
 from dataclasses import MISSING, Field, dataclass, field, fields, is_dataclass
 from datetime import datetime
 from enum import Enum
@@ -63,19 +62,35 @@ class MalformedRecord(ValueError):  # noqa: N818 - names the refused data
     def located(self, name: str, fix: str) -> dict[str, str]:
         return {name: f"{self}; fix: {fix}"}
 
+    class _Refusal:
+        """Convert refused values using the error class and its boundary subject."""
+
+        __slots__ = ("error_cls", "subject")
+
+        def __init__(self, error_cls: type[MalformedRecord], subject: str) -> None:
+            self.error_cls = error_cls
+            self.subject = subject
+
+        def __enter__(self) -> None:
+            return None
+
+        def __exit__(
+            self, _exc_type: type[BaseException] | None, exc: BaseException | None,
+            _traceback: types.TracebackType | None,
+        ) -> Literal[False]:
+            if exc is None or isinstance(exc, self.error_cls):
+                return False
+            if isinstance(exc, ValueError):
+                raise self.error_cls(f"{self.subject}: {exc}") from exc
+            return False
+
     @classmethod
-    @contextmanager
-    def refusing(cls, subject: str) -> Iterator[None]:
+    def refusing(cls, subject: str) -> MalformedRecord._Refusal:
         """Any check that refuses decoded data with ValueError refuses a malformed record.
 
         A domain error raised by the record's own checks stays the cause.
         """
-        try:
-            yield
-        except cls:
-            raise
-        except ValueError as error:
-            raise cls(f"{subject}: {error}") from error
+        return cls._Refusal(cls, subject)
 
 
 class RecordProblems(MalformedRecord):
@@ -139,22 +154,11 @@ class FlagDirective(ValueDirective[bool]):
 
 
 class ViewName(ValueDirective[str], DeclaredFamily, affix="Name"):
-    @classmethod
-    def key_in(cls, annotation: object, view: str, default: str) -> str:
-        for directive in cls.on(annotation):
-            if type(directive).declared_name == view:
-                return directive.value
-        return default
+    """A field's declared key in one encoded view."""
 
 
 class ViewExclusion(FlagDirective, DeclaredFamily, affix="Exclude"):
-    @classmethod
-    def excluded_in(cls, annotation: object, view: str) -> bool:
-        return any(
-            directive.value
-            for directive in cls.on(annotation)
-            if type(directive).declared_name == view
-        )
+    """Whether a field is absent from one encoded view."""
 
 
 class WireName(ViewName):
@@ -457,15 +461,43 @@ class FieldPlan:
     def key(self) -> str:
         return WireName.read(self.annotation, self.name)
 
-    @property
+    @cached_property
     def required(self) -> bool:
         return WireRequired.read(self.annotation, False)
 
-    @property
+    @cached_property
     def reject_null(self) -> bool:
         return any(
             policy.rejects_null(self.declared) for policy in NullPolicy.single(self.annotation)
         )
+
+    @cached_property
+    def choices(self) -> tuple[str, ...] | None:
+        for choices in WireChoices.single(self.annotation):
+            return tuple(choices.value())
+        return None
+
+    @cached_property
+    def omit_default(self) -> bool:
+        return WireOmitDefault.read(self.annotation, False)
+
+    @cached_property
+    def view_names(self) -> tuple[ViewName, ...]:
+        return ViewName.on(self.annotation)
+
+    @cached_property
+    def view_exclusions(self) -> tuple[ViewExclusion, ...]:
+        return ViewExclusion.on(self.annotation)
+
+    def key_in(self, view: str) -> str:
+        for directive in self.view_names:
+            if type(directive).declared_name == view:
+                return directive.value
+        return self.key
+
+    def excluded_in(self, view: str) -> bool:
+        return any(directive.value for directive in self.view_exclusions
+                   if type(directive).declared_name == view)
 
     @cached_property
     def value(self) -> ValueDecoder[object]:
@@ -481,16 +513,26 @@ class FieldPlan:
     def current(self, record: object) -> object:
         return cast(object, getattr(record, self.name))
 
+    @cached_property
+    def argument_normalizer(self) -> Callable[[object], object]:
+        return self.setting(Normalize, self.value.argument_payload)
+
+    @cached_property
+    def editor_normalizer(self) -> Callable[[object], object]:
+        return self.setting(Normalize, self.value.decode_editor)
+
+    @cached_property
+    def editor_formatter(self) -> Callable[[object], object]:
+        return self.setting(EditorFormat, self.value.encode_editor)
+
     def argument_payload(self, value: object) -> object:
-        convert: Callable[[object], object] = self.setting(Normalize, self.value.argument_payload)
-        return convert(value)
+        return self.argument_normalizer(value)
 
     def editor_payload(self, value: object) -> object:
-        convert: Callable[[object], object] = self.setting(Normalize, self.value.decode_editor)
-        return convert(value)
+        return self.editor_normalizer(value)
 
     def editor_default(self, value: object) -> object:
-        return self.setting(EditorFormat, self.value.encode_editor)(value)
+        return self.editor_formatter(value)
 
     @property
     def description(self) -> str:
@@ -546,7 +588,7 @@ class FieldPlan:
         )
 
     def omitted(self, value: object) -> bool:
-        return bool(WireOmitDefault.read(self.annotation, False) and value == self.default())
+        return bool(self.omit_default and value == self.default())
 
     def captured(self, data: object) -> dict[str, object]:
         if not isinstance(data, dict):
@@ -578,10 +620,9 @@ class FieldPlan:
         value = captured[self.name]
         if self.reject_null and value is None:
             raise MalformedRecord(f"Null field {self.key}")
-        for choices in WireChoices.single(self.annotation):
-            if value not in choices.value():
-                raise MalformedRecord(
-                    f"Field {self.key} must be one of: {', '.join(choices.value())}")
+        if self.choices is not None and value not in self.choices:
+            raise MalformedRecord(
+                f"Field {self.key} must be one of: {', '.join(self.choices)}")
         return {self.name: decode(value)}
 
     def read(self, data: object) -> object:
@@ -661,10 +702,14 @@ class BoundFieldPlan(DeclaredFieldPlan):
 
     directives = (WireBind,)
 
+    @cached_property
+    def bound_sources(self) -> Mapping[str, str]:
+        return WireBind.read(self.annotation, {})
+
     def decoded_bound(
         self, data: dict[str, object], context: Mapping[str, object]
     ) -> dict[str, object]:
-        bound = {name: data[source] for name, source in WireBind.read(self.annotation, {}).items()}
+        bound = {name: data[source] for name, source in self.bound_sources.items()}
         return self.decoded_using(data, lambda raw: self.value.decode_bound(raw, bound))
 
 
@@ -1705,13 +1750,13 @@ class FieldCodec(MroDispatch, Sealed):
             result: dict[str, object] = {}
             for entry in self.bindings:
                 current = entry.current(value)
-                if not ViewExclusion.excluded_in(entry.annotation, view) and not entry.omitted(
+                if not entry.excluded_in(view) and not entry.omitted(
                     current
                 ):
                     result.update(
                         entry.encoded(
                             encode_value(entry, current),
-                            key=ViewName.key_in(entry.annotation, view, entry.key),
+                            key=entry.key_in(view),
                         )
                     )
             return result
