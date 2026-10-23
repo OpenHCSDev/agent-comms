@@ -181,7 +181,7 @@ class TextStorage(SqlStorage):
 
     @classmethod
     def accepts(cls, annotation: object) -> bool:
-        return annotation is str
+        return isinstance(annotation, type) and issubclass(annotation, str)
 
 
 class IntegerStorage(SqlStorage):
@@ -2112,7 +2112,7 @@ class ProducedTable(ProducedRow, TypedTable, ProjectionSource, declared_name=Non
                     continue
                 for parent in owner.__mro__:
                     if parent.__module__ == object.__module__:
-                        break
+                        continue
                     owners.add(parent)
                     if parent is FieldRepresentation:
                         break
