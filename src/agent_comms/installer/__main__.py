@@ -6,7 +6,7 @@ import signal
 import sys
 
 from agent_comms.field_codec import FieldCodec
-from agent_comms.installer.backup import UpgradeRefused
+from agent_comms.installer.refusals import UpgradeRefused
 from agent_comms.installer.launch import InstallRun
 from agent_comms.launch_root import LaunchRoot
 
