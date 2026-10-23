@@ -107,7 +107,7 @@ from agent_comms.installer.reporting import (
     UnpostedWriter,
 )
 from agent_comms.installer.runtime_resolution import RuntimeResolution, StackProject
-from agent_comms.launch_runtime import LaunchRuntime, RestartEnvironment, SpecifiedImportPath
+from agent_comms.launch_runtime import LaunchRuntime, RestartEnvironment
 from agent_comms.locked_store import BusFile, DeclaredFile, RootFile, UndeclaredFile
 from agent_comms.maintenance_barrier import (
     MaintenanceBarrier,
@@ -609,14 +609,13 @@ class Stack:
         RootRuntime.publish(root, self.runtime)
 
     def environment(self, *paths: Path) -> dict:
-        """Use the artifact's packages; carry steps also select the target tree's source."""
+        """Use the artifact's packages; ``paths`` are searched first, in order (the target
+        tree's carry steps, or its source for a native build)."""
         environment = {**self.runtime.environment(os.environ), "HOME": str(self.home)}
-        if paths:
-            imports = SpecifiedImportPath(os.pathsep.join(map(str, paths)))
-            configuration: RestartEnvironment = replace(
-                RestartEnvironment.inherit(environment), pythonpath=imports)
-            return configuration.apply_runtime(environment)
-        return environment
+        configuration = RestartEnvironment.inherit(environment)
+        for path in reversed(paths):
+            configuration = configuration.with_import_root(path)
+        return configuration.apply_runtime(environment)
 
     def cli[Answer: CliResult](self, root: Path, command: type[CliCommand[Answer]],
                                *arguments: str) -> Answer:
