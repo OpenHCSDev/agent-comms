@@ -1,4 +1,5 @@
 """A manual /compact runs Pi's own engine in the retained child, which keeps serving."""
+from agent_comms.controller import SessionUpdateSink
 
 from agent_comms.queued_input import InitialInput
 import asyncio
@@ -198,9 +199,10 @@ async def test_manual_compaction_keeps_the_retained_child_serving(monkeypatch):
         )
         updates = []
 
-        class Client:
-            async def session_update(self, **kwargs):
+        class Client(SessionUpdateSink):
+            async def publish_update(self, **kwargs):
                 updates.append(kwargs["update"].model_dump(by_alias=True))
+                return True
 
         owner.on_connect(Client())
         attachment = CommsClient(
@@ -210,9 +212,10 @@ async def test_manual_compaction_keeps_the_retained_child_serving(monkeypatch):
         )
         attached_facts = []
 
-        class AttachedClient:
-            async def session_update(self, **kwargs):
+        class AttachedClient(SessionUpdateSink):
+            async def publish_update(self, **kwargs):
                 attached_facts.extend(decode_updates(kwargs["update"].get("_meta")))
+                return True
 
         attachment.on_connect(AttachedClient())
         retained = resumed = None

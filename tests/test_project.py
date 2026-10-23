@@ -1,4 +1,5 @@
 """Project changes preserve thread/session identity and synchronize executing owners."""
+from agent_comms.controller import SessionUpdateSink
 
 import asyncio
 import json
@@ -29,8 +30,9 @@ async def test_project_update_is_published_and_old_saved_cwd_can_resume(tmp_path
     updates = []
 
     class Client:
-        async def session_update(self, **kwargs):
+        async def publish_update(self, **kwargs):
             updates.append(kwargs["update"])
+            return True
 
     agent.on_connect(Client())
     comms.threads.set_project(session, str(new))
@@ -70,12 +72,13 @@ async def test_project_changes_reach_all_subscribed_clients(tmp_path):
     session = (await owner.new_session(str(old))).session_id
     proxies, updates = [], [[], []]
 
-    class Client:
+    class Client(SessionUpdateSink):
         def __init__(self, values):
             self.values = values
 
-        async def session_update(self, session_id, update):
+        async def publish_update(self, session_id, update):
             self.values.append(update)
+            return True
 
     try:
         for values in updates:

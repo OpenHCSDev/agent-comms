@@ -1,4 +1,5 @@
 """A published native reply automatically reaches the original channel sender."""
+from agent_comms.controller import SessionUpdateSink
 
 
 from bus_record_fixture import prepare_native_comms
@@ -242,10 +243,11 @@ async def test_native_channel_reply_automatically_reaches_original_sender(tmp_pa
     )
     facts = []
 
-    class Client:
-        async def session_update(self, **kwargs):
+    class Client(SessionUpdateSink):
+        async def publish_update(self, **kwargs):
             notification = SessionNotification.model_validate(kwargs)
             facts.extend(decode_updates(notification.update.field_meta))
+            return True
 
     attachment.on_connect(Client())
 

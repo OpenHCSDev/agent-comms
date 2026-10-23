@@ -1,4 +1,5 @@
 """Real SDK/stdio session setup preserves new-ID admission and known-ID replay order."""
+from agent_comms.controller import SessionUpdateSink
 
 
 import asyncio
@@ -15,7 +16,7 @@ from agent_comms.launch_root import LaunchRoot
 from bus_record_fixture import prepare_native_comms
 
 
-class SessionPackets:
+class SessionPackets(SessionUpdateSink):
     def __init__(self):
         self.frames: list[StreamEvent] = []
         self.snapshot_received = asyncio.Event()
@@ -23,10 +24,11 @@ class SessionPackets:
     def record(self, event: StreamEvent) -> None:
         self.frames.append(event)
 
-    async def session_update(self, session_id, update, **kwargs):
+    async def publish_update(self, session_id, update, **kwargs):
         if any(isinstance(fact, TranscriptSnapshotUpdate)
                for fact in decode_updates(update.field_meta)):
             self.snapshot_received.set()
+        return True
 
     def response_position(self, method: str) -> int:
         request, = (event.message for event in self.frames

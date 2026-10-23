@@ -3,6 +3,7 @@
 Exercises the agent the way real clients (Toad, Zed) do: through
 Core's ACP connection over real stdio pipes, plus direct handler-level tests.
 """
+from agent_comms.controller import SessionUpdateSink
 
 from agent_comms.bus import Bus
 
@@ -144,9 +145,10 @@ class TestHandlers:
             agent._comms.threads.rename_managed_thread("proj", "renamed", owner=ProcessIdentity.capture(os.getpid()))
         sent = []
 
-        class Client:
-            async def session_update(self, **kwargs):
+        class Client(SessionUpdateSink):
+            async def publish_update(self, **kwargs):
                 sent.append(kwargs["update"])
+                return True
 
         try:
             await agent.sessions.transcript.replay("proj", client=Client())
@@ -237,12 +239,13 @@ class TestHandlers:
         assert first._comms.registry.status("proj").declared_name == "stopped"
         second = self._agent(tmp_path)
 
-        class FakeClient:
+        class FakeClient(SessionUpdateSink):
             def __init__(self):
                 self.updates = []
 
-            async def session_update(self, session_id=None, update=None, **kwargs):
+            async def publish_update(self, session_id=None, update=None, **kwargs):
                 self.updates.append(update)
+                return True
 
         client = FakeClient()
         second.sessions.client = client

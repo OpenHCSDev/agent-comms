@@ -1,4 +1,5 @@
 """Installed native 429 exhaustion reaches one completed user-visible failure."""
+from agent_comms.controller import SessionUpdateSink
 import asyncio
 import json
 from pathlib import Path
@@ -80,9 +81,10 @@ async def test_installed_429_exhaustion_publishes_one_retry_owned_failure(
     agent = canonical_agent(private_comms, agent_bin=GivenBinary(launcher), agent_args=GivenArguments(tuple(arguments)), runtime_enabled=True)
     updates = []
 
-    class Client:
-        async def session_update(self, session_id, update):
+    class Client(SessionUpdateSink):
+        async def publish_update(self, session_id, update):
             updates.append(update)
+            return True
 
     agent.sessions.client = Client()
     try:

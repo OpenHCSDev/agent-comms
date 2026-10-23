@@ -1,6 +1,7 @@
 """Pi's own compaction engine, seen through Core's turn path: pinned Pi + localhost provider."""
 
 from __future__ import annotations
+from agent_comms.controller import SessionUpdateSink
 
 from agent_comms.bus import Bus
 from agent_comms.lifecycle_capability import Unresolved
@@ -306,13 +307,14 @@ async def _acp_threshold(root, project, session, native_bin, native_args, child_
     updates = []
     resumed_activity = []
 
-    class Client:
-        async def session_update(self, session_id, update):
+    class Client(SessionUpdateSink):
+        async def publish_update(self, session_id, update):
             updates.append(update)
             if any(isinstance(field, CompactionChangedUpdate)
                    and isinstance(field.event, ae.CompactionEnd)
                    for field in decode_updates(update.field_meta or {})):
                 resumed_activity.append(comms.agents.activity_of("project", snapshot=comms.registry.snapshot()))
+            return True
 
     owner.on_connect(Client())
     await owner.new_session(str(project))

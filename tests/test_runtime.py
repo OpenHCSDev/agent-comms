@@ -1,4 +1,5 @@
 """Single-owner attachment and idle wakeup through real processes and sockets."""
+from agent_comms.controller import SessionUpdateSink
 
 from agent_comms.private_runtime_schema import PrivateCoordinatorTable
 import asyncio
@@ -117,8 +118,9 @@ async def test_subscription_replay_uses_requested_alias(tmp_path, request_origin
     updates = []
 
     class Client:
-        async def session_update(self, session_id, update):
+        async def publish_update(self, session_id, update):
             updates.append((session_id, update))
+            return True
 
     client.on_connect(Client())
     proxy = None
@@ -183,9 +185,10 @@ async def test_existing_proxy_follows_renamed_owner_restart_and_resubscribes(
     client = canonical_agent(comms)
     updates = []
 
-    class Client:
-        async def session_update(self, *, session_id, update):
+    class Client(SessionUpdateSink):
+        async def publish_update(self, *, session_id, update):
             updates.append((session_id, update))
+            return True
 
     client.on_connect(Client())
     old_path = socket_path(comms.root, old_pid)
