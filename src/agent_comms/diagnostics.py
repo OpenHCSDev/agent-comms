@@ -17,7 +17,7 @@ from uuid import uuid4
 
 from .child_process import Platform
 from .field_codec import FieldCodec, Id128Text
-from .locked_store import DurableFile, PatternFile
+from .locked_store import PatternFile, RuntimeFile
 from .native_failures import NativeRequestFailure
 from .mro_dispatch import MroDispatch, handles
 from .store_files import AtomicFile
@@ -29,7 +29,7 @@ if TYPE_CHECKING:
     from .threads import Thread
 
 
-class OwnerProcessOutput(DurableFile, PatternFile):
+class OwnerProcessOutput(RuntimeFile, PatternFile):
     """Startup output retained by the owner launcher."""
 
     filename = "diagnostics/owner-{lookup}-{id}.log"
@@ -114,7 +114,7 @@ def record_acquisition_progress(root, lease, input_id, measurements):
     })
 
 
-class RequestObservations(DurableFile, PatternFile):
+class RequestObservations(RuntimeFile, PatternFile):
     """The original append-only request diagnostic stream and its publication."""
 
     filename = "diagnostics/{turn_id}.requests.jsonl"
@@ -201,7 +201,7 @@ def record_drain_failure(
     return path.resolve()
 
 
-class DiagnosticDocument(DurableFile, PatternFile, MroDispatch):
+class DiagnosticDocument(RuntimeFile, PatternFile, MroDispatch):
     """Publish diagnostic documents through their single declared location."""
 
     filename = "diagnostics/{name}.json"
