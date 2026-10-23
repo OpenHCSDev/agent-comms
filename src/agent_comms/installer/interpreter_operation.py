@@ -90,7 +90,7 @@ class RetainedProgram(ProbeProgram):
         output = BytesIO()
         with ZipFile(output, "w", compression=ZIP_DEFLATED) as archive:
             for path in sorted(directory.rglob("*.py")):
-                archive.writestr(str(path.relative_to(directory.parent.parent)), path.read_bytes())
+                archive.write(path, str(path.relative_to(directory.parent.parent)))
         payload = base64.b85encode(output.getvalue()).decode("ascii")
         return cls(
             "import base64\n"
