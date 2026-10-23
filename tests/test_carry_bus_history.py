@@ -231,7 +231,7 @@ def test_predecessor_publisher_history_round_trips_into_bus(tmp_path):
             capture_output=True, text=True, timeout=60,
         )
         assert completed.returncode == 0, completed.stdout + completed.stderr
-        (result,) = operation.decode_answers(result_path.read_text())
+        (result,) = operation.decode_answer(result_path.read_text())
     steps = (StepRun(requests.declared_name, request_result), StepRun(request.declared_name, result))
     carried(root, saved, steps, RehearsalFiles.declared(steps))
     maintenance.clear(hold)

@@ -19,9 +19,6 @@ coverage.xml
 # Packaged Node host dependencies are installed from package-lock.json
 node_modules
 
-# The stack resolves to the latest OpenHCSDev mains on every install (stack/README.md)
-stack/uv.lock
-
 # venvs
 .venv/
 .venv_juno/

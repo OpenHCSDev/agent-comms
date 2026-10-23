@@ -115,6 +115,28 @@ class LocalPackage(LockedPackage):
     source: EditableSource | VirtualSource
 
 
+class ProjectGitSource(BaseModel):
+    git: str
+    branch: str
+
+
+class ProjectPathSource(BaseModel):
+    path: Path
+    editable: bool
+
+
+class UvProject(BaseModel):
+    sources: dict[str, ProjectGitSource | ProjectPathSource]
+
+
+class ProjectTools(BaseModel):
+    uv: UvProject
+
+
+class StackProject(BaseModel):
+    tool: ProjectTools
+
+
 class ResolvedLock(BaseModel):
     package: list[VersionedPackage | LocalPackage]
 

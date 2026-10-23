@@ -2,20 +2,23 @@
 
 This uv project installs agent-comms editable from the main checkout alongside
 Toad, Textual and ui-theme from their `main` branches. It requires Python 3.14.
-`pyproject.toml` owns source selection. The lock is not committed: each install
-resolves the latest mains, and only PyPI releases and stock Pi
-(`pi-native.sha256`) are pinned. Development belongs in isolated worktrees,
+`pyproject.toml` owns source selection. The committed `uv.lock` pins PyPI
+releases. The installer refreshes only the packages declared in
+`[tool.uv.sources]`, retaining the other locked releases. Stock Pi is pinned by
+`pi-native.sha256`. Development belongs in isolated worktrees,
 never in the live installation.
 
 From the repository root:
 
 ```sh
-uv lock --project stack --upgrade --python 3.14
 uv sync --project stack --locked --python 3.14
 uv run --project stack --locked agent-comms --help
 uv run --project stack --locked toad
 stack/bin/prepare-pi-native
 ```
+
+`agent-comms install` updates the declared source packages before syncing the
+stack. A plain locked sync uses the committed resolution.
 
 `stack/bin/toad-comms [THREAD]` opens the Toad workspace, where you can create
 a new agent. Supplying a thread attaches to that existing owner without sending
