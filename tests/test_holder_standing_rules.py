@@ -516,6 +516,19 @@ def test_answering_one_owed_message_leaves_another_owed(held_bus, tmp_path):
     assert unanswered(held_bus) == ()
 
 
+def test_an_answer_sent_to_another_unit_is_refused_and_leaves_the_ask_owed(held_bus, tmp_path):
+    question = publish(held_bus, "worker", "lead", time.time() - AwaitingCommander.seconds - 1)
+    ctx = Commander.read_root(held_bus.root)
+    reply = tmp_path / "reply.txt"
+    reply.write_text("Waiting on the merge queue, owner unit-goalblock")
+    revision = held_bus.bus.bus.revision()
+    with pytest.raises(SystemExit, match=(f"{question.message_id} was asked by worker; "
+                                          "answer it in a message to worker")):
+        SayVerb(units="outsider", body_file=str(reply), answers=(question.message_id,)).apply(ctx)
+    assert held_bus.bus.bus.revision() == revision
+    assert [owed.message.message_id for owed in unanswered(held_bus)] == [question.message_id]
+
+
 def test_an_overdue_owner_directive_gates_until_answered(held_bus, tmp_path):
     directive = held_bus.bus.publisher.publish_ordinary(
         Message(sender="outsider", target="lead", type=InfoKind, body="Ship the install now",
