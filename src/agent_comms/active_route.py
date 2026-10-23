@@ -19,6 +19,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Annotated, ClassVar
 
+from .child_process import Platform
 from .coordination_errors import CoordinationError
 from .declared_family import DeclaredFamily
 from .errors import RelationViolationError
@@ -200,7 +201,7 @@ def read_active_route(path: Path | None = None) -> ActiveRoute | None:
         info = os.fstat(fd)
         if (
             not stat.S_ISREG(info.st_mode)
-            or info.st_uid != os.geteuid()
+            or not Platform.current().is_owned(info)
             or stat.S_IMODE(info.st_mode) != 0o600
             or info.st_nlink != 1
             or not 0 < info.st_size <= 4096
@@ -248,8 +249,7 @@ def guard_default_route_write(expected_root: Path, *, blocking: bool = True) -> 
             or (parent.st_dev, parent.st_ino) != (info.st_dev, info.st_ino)
         ):
             raise ValueError("active comms route directory changed or is not owned")
-        if stat.S_IMODE(info.st_mode) != 0o700:
-            os.fchmod(directory, 0o700)
+        Platform.current().make_private_descriptor(directory, 0o700)
         route = CommsRoute.current(path)
         # Local roots may be created under this guard. ActiveRoute owns the
         # stronger observation of an already published root and its identity.
@@ -451,10 +451,10 @@ def route_directory(path: Path) -> Iterator[int]:
         acquire_exclusive_route_lock(directory)
         info = os.fstat(directory)
         parent = path.parent.lstat()
-        if (not stat.S_ISDIR(info.st_mode) or info.st_uid != os.geteuid()
+        if (not stat.S_ISDIR(info.st_mode) or not Platform.current().is_owned(info)
                 or (parent.st_dev, parent.st_ino) != (info.st_dev, info.st_ino)):
             raise ValueError("active comms route directory changed or is not owned")
-        os.fchmod(directory, 0o700)
+        Platform.current().make_private_descriptor(directory, 0o700)
         yield directory
     finally:
         os.close(directory)
@@ -475,12 +475,12 @@ def _publish_active_route_locked(
         parent = path.parent.lstat()
         if (
             not stat.S_ISDIR(info.st_mode)
-            or info.st_uid != os.geteuid()
+            or not Platform.current().is_owned(info)
             or parent.st_dev != info.st_dev
             or parent.st_ino != info.st_ino
         ):
             raise ValueError("active comms route directory changed or is not owned")
-        os.fchmod(directory, 0o700)
+        Platform.current().make_private_descriptor(directory, 0o700)
         if backup is None and read_active_route(path) is not None:
             raise ValueError("active comms route is already installed")
         payload = (json.dumps(route.to_record(), sort_keys=True) + "\n").encode()
