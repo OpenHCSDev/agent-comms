@@ -88,11 +88,13 @@ def test_async_and_sync_nest_but_independent_tasks_and_threads_do_not(tmp_path):
     path = tmp_path / 'wire'
     async def independent():
         with pytest.raises(BlockingIOError):
-            async with _async_store_lock(path, mode=SharedLock(), blocking=False):
+            async with _async_store_lock(
+                path, mode=SharedLock(), contention=StoreLockContention(0)
+            ):
                 pytest.fail('another task borrowed an exclusive transaction')
     def thread_reader():
         with pytest.raises(BlockingIOError):
-            with _store_lock(path, mode=SharedLock(), blocking=False):
+            with _store_lock(path, mode=SharedLock(), contention=StoreLockContention(0)):
                 pytest.fail('another thread borrowed an exclusive transaction')
     async def run():
         async with _async_store_lock(path) as outer:
