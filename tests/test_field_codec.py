@@ -268,7 +268,7 @@ def test_new_value_owns_wire_form_everywhere_without_a_codec_adapter() -> None:
     assert FieldCodec.decode(OwnedWireRecord, {**encoded, "value": None}).value is None
     with pytest.raises(ValueError):
         FieldCodec.decode(OwnedWireRecord, {**encoded, "value": 42})
-    with pytest.raises(TypeError):
+    with pytest.raises(MalformedRecord):
         FieldCodec.decode(OwnedWireText, object())
 
 
