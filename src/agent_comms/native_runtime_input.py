@@ -389,9 +389,10 @@ class SelectedToolSlot(NativeRuntimeTable, WithoutRowid):
     def acknowledge(self, db: sqlite3.Connection, call_id: str) -> None:
         self.require_call(call_id)
         state = self.state.acknowledge()
-        if self.update(db, where="input_id=? AND state=?", parameters=(
-            self.input_id, self.state.declared_name,
-        ), state=state).rowcount != 1:
+        where, parameters = self._condition(
+            "1", (), {"input_id": self.input_id, "state": self.state},
+        )
+        if self.update(db, where=where, parameters=parameters, state=state).rowcount != 1:
             raise SelectedToolDenied("Selected tool terminal changed; outcome UNKNOWN; no retry")
 
     def verify(self, call_id: str) -> None:

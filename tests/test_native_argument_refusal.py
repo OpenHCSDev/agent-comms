@@ -32,7 +32,7 @@ async def test_refused_arguments_complete_without_an_owner_callback(tmp_path, re
             raise AssertionError("invalid arguments must never acquire authority")
 
     socket = CodingToolSocket(tool_listener(tmp_path, "a" * 64), Owner(), pid=os.getpid())
-    socket.turn = SimpleNamespace(launch=SimpleNamespace(session=SimpleNamespace(root=tmp_path)))
+    socket.turn = SimpleNamespace(launch=SimpleNamespace(root=tmp_path))
     args = {"command": False}
     raw = (json.dumps({"token": socket.listener.token, "call_id": "bad", "name": "bash",
                        "arguments": {"command": "false"}}) + "\n").encode()

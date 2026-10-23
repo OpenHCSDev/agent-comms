@@ -224,7 +224,7 @@ async def test_tool_error_while_check_waits_cannot_receive_late_permission(tmp_p
 
     owner = Owner()
     socket = CodingToolSocket(tool_listener(tmp_path, secrets.token_hex(32)), owner, pid=os.getpid())
-    socket.turn = SimpleNamespace(launch=SimpleNamespace(session=SimpleNamespace(root=tmp_path)))
+    socket.turn = SimpleNamespace(launch=SimpleNamespace(root=tmp_path))
     socket.announce((ToolCallContent(id="late", name="read", arguments={"path": "a"}),))
     socket.tool_started(ToolExecutionStart(
         tool_call_id=ReportedText("late"), tool_name=ReportedText("read"), args={"path": "a"}

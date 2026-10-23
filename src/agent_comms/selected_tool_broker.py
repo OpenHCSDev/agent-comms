@@ -18,17 +18,15 @@ from functools import partial
 from pathlib import Path
 from typing import ClassVar
 
-from agent_comms.coordinator import Coordination
-from .coordination_session import ReadNativeCoordinationSession
-
 from .comms import Comms
-from agent_comms.native_runtime_input import NativeRuntimeTable
 from .coordination_errors import CoordinationReadUnavailable
+from .coordination_session import ReadNativeCoordinationSession
 from .coordination_tables.participants import OwnerGenerations
+from .coordinator import Coordination
 from .envelope_claim_transitions import ExistingFileClaim, WakeClaim
 from .field_codec import FieldCodec, Id128Text, MalformedRecord
 from .native_input_record import FullNativeExecution, NativeInputIdentity
-from .native_runtime_input import NativeRuntimeInput, SelectedToolSlot
+from .native_runtime_input import NativeRuntimeInput, NativeRuntimeTable, SelectedToolSlot
 from .native_tool_call import (
     CoordinationBusy,
     NativeToolCall,
@@ -189,7 +187,7 @@ def consume_selected_slot(store: Coordination, input_id: str, call_id: str) -> N
 def record_selected_terminal(coordination_path: Path, input_id: str, call_id: str) -> None:
     """Only a committed terminal acknowledgement lets the tool return success."""
     try:
-        with Coordination(coordination_path) as store, store.session.writing() as db:
+        with Coordination(str(coordination_path)) as store, store.session.writing() as db:
             SelectedToolSlot.require(db, input_id=input_id).acknowledge(db, call_id)
     except sqlite3.Error as error:
         raise SelectedToolDenied("Selected tool terminal acknowledgement UNKNOWN; no retry") from error

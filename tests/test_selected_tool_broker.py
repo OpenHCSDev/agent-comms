@@ -230,7 +230,7 @@ async def test_listener_isolated_from_previous_turn_and_keeps_consumed_slot(
         observed.append(request)
 
     server = broker.SelectedToolSocket(tool_listener(tmp_path, token), accept, pid=os.getpid())
-    server.turn = SimpleNamespace(launch=SimpleNamespace(session=SimpleNamespace(root=tmp_path)))
+    server.turn = SimpleNamespace(launch=SimpleNamespace(root=tmp_path))
     assert server.listener.path != previous.path
     assert server.listener.path.parent.stat().st_mode & 0o777 == 0o700
     await server.start()
