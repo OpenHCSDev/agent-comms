@@ -70,7 +70,7 @@ class PatternSource(ABC):
     @abstractmethod
     def cite(self) -> str: ...
 
-    def cites_failure(self, failure: PostmortemFailure) -> bool:
+    def cites_failure(self, failure: type[PostmortemFailure]) -> bool:
         return False
 
 
@@ -81,7 +81,7 @@ class PostmortemFailure(PatternSource, DeclaredFamily, affix="Failure"):
     title: ClassVar[str]
     evidence: ClassVar[str]
 
-    def cites_failure(self, failure: PostmortemFailure) -> bool:
+    def cites_failure(self, failure: type[PostmortemFailure]) -> bool:
         return self.number == failure.number
 
     def cite(self) -> str:
@@ -444,7 +444,7 @@ class BehaviourPattern(DeclaredFamily, affix="Pattern"):
                 ", ".join(
                     f"`{member.declared_name}`"
                     for member in members
-                    if any(source.cites_failure(failure()) for source in member.sources)
+                    if any(source.cites_failure(failure) for source in member.sources)
                 )
                 or "no pattern cites it yet"
             )

@@ -39,19 +39,25 @@ Result = TypeVar("Result")
 
 class WorkerPassResult(MroDispatch):
     @classmethod
-    async def record(cls, outcome: object, name: str, passes: ServicePassStore) -> None:
-        await cls.handler_for(type(outcome))(outcome, name, passes)
+    async def record(
+        cls, outcome: object, name: str, passes: ServicePassStore, worker: type[Coordination],
+    ) -> None:
+        await cls.handler_for(type(outcome))(outcome, name, passes, worker)
 
     @handles(Exception)
     @staticmethod
-    async def failed(outcome: Exception, name: str, passes: ServicePassStore) -> None:
+    async def failed(
+        outcome: Exception, name: str, passes: ServicePassStore, worker: type[Coordination],
+    ) -> None:
         logging.error("Service worker pass failed: %s", name, exc_info=outcome)
-        await Coordination.run_worker(partial(passes.failed, name, outcome))
+        await worker.run_worker(partial(passes.failed, name, outcome))
 
     @handles(object)
     @staticmethod
-    async def passed(outcome: object, name: str, passes: ServicePassStore) -> None:
-        await Coordination.run_worker(partial(passes.passed, name))
+    async def passed(
+        outcome: object, name: str, passes: ServicePassStore, worker: type[Coordination],
+    ) -> None:
+        await worker.run_worker(partial(passes.passed, name))
 
 
 class CoordinationRoute(ABC):
@@ -159,7 +165,7 @@ class Coordination(ExecutionStore, AttemptStore):
             (outcome,) = await asyncio.gather(
                 cls.run_worker(partial(watch.watch_pass, opened_wire)), return_exceptions=True,
             )
-            await WorkerPassResult.record(outcome, name, passes)
+            await WorkerPassResult.record(outcome, name, passes, cls)
             await asyncio.sleep(60)
 
     @classmethod
