@@ -64,7 +64,7 @@ if TYPE_CHECKING:
     from .threads import Thread
 
 
-class BusTables(SharedFileTables, DurableTables, AppendOnlyTables):
+class BusTables(TypedTable, AppendOnlyTables, SharedFileTables, DurableTables, declared_name=None):
     """Bus history cannot be rebuilt from another source."""
 
 
@@ -89,7 +89,7 @@ class BusProjectionTables(ProducedTable, SharedFileTables, DerivedTables, declar
 
 
 @dataclass(frozen=True)
-class BusRow(TypedTable, BusTables):
+class BusRow(BusTables):
     seq: Annotated[int, Column(primary_key=True, auto_increment=True)]
     kind: type[BusRecord]
     at: float
@@ -263,7 +263,7 @@ class ReplayedHolders(ClaimHolders):
 
 
 @dataclass(frozen=True)
-class CapabilityRow(TypedTable, BusTables, declared_name=None):
+class CapabilityRow(BusTables, declared_name=None):
     """Every generated capability row belongs to one original bus sequence."""
 
     seq: Annotated[int, Column(primary_key=True, references=TableReference(BusRow, ("seq",)))]

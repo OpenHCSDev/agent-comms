@@ -22,7 +22,8 @@ if TYPE_CHECKING:
     from .read_basis import RepliesDisplayScope
 
 
-class BusSchema(ComposedSchemas, messages.BusTables, ProjectionProducerTables, messages.BusProjectionTables):
+class BusSchema(ComposedSchemas, messages.BusTables, ProjectionProducerTables, messages.BusProjectionTables,
+                declared_name=None):
     """One file reconciles its declared families using each family's carry policy."""
 
 
