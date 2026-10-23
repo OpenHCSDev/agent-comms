@@ -167,7 +167,7 @@ class OwnedTurn:
                         key=self.runner.inputs.dispositions.bus_key(origin, self.thread),
                         sequence=origin.seq,
                         owner=self.thread_name,
-                        claim_scope=snapshot.claim_generation(self.thread_name),
+                        claim_generation=snapshot.claim_generation(self.thread_name),
                         target=origin.target,
                         source_text=ScheduledTurn.incoming(
                             origin, aliases=snapshot.aliases
@@ -345,7 +345,7 @@ class OwnedTurn:
             session_id=self.session_id,
             thread=self.thread,
             turn=TurnId(self.turn_id),
-            claim_scope=self.turn_lease.claimed_generation,
+            claim_generation=self.turn_lease.claimed_generation,
             goal_permit=self.goal_permit,
             original=replace(self.original, prompt=rendered.text),
         )

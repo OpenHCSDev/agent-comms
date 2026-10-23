@@ -1,6 +1,5 @@
 """Bounded sequence references to the canonical bus, never delivery authority."""
 
-import json
 from dataclasses import dataclass
 
 from ..field_codec import FieldCodec
@@ -20,9 +19,9 @@ class AwarenessSegment(InstructionSegment):
                                bus=str(path), sources=sources)
 
     def values(self):
-        return {"pointers": json.dumps({
+        return {"pointers": FieldCodec.compact({
             "bus": self.bus, "sources": [FieldCodec.encode(source) for source in self.sources],
-        }, ensure_ascii=True, separators=(",", ":"))}
+        }, ensure_ascii=True)}
 
 
 @dataclass(frozen=True, kw_only=True)

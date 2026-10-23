@@ -18,40 +18,15 @@ from .native_startup import NativeStartup
 from .coordinator import Coordination
 from .pi_payloads import StateData
 from .session_fence import session_writer_fence
-from .prompt_state import UnwrittenPrompt
+from . import prompt_state
 
 if TYPE_CHECKING:
     from .pi_native_backend import PersistentPiSession
-    from .following_inputs import FollowingInputs
-
-
-class PreparedSession(UnwrittenPrompt):
-    acknowledged = False
-
-    def permits_retention(self, session: backend.NativeSession) -> bool:
-        return session.output.clean
-
-    async def deliver_to(
-        self, inputs: FollowingInputs, session: backend.NativeSession,
-    ) -> bool:
-        session.native.forget_context()
-        state = session.native.attestation.require_state()
-        identity = session.native.attestation.require_identity()
-        session.launch.session.attest(identity)
-        if (
-            state.is_streaming.value_or(True)
-            or state.is_compacting.value_or(True)
-            or not state.pending_message_count.matches(0)
-        ):
-            raise NativePiUnavailable("Native preparation did not attest the idle saved session")
-        session.active_session_file = identity.session_file
-        await session.stats.request(session)
-        return True
 
 
 class NativeSessionPreparation(backend.NativeSession):
     """Share native launch/attestation with turns; retain an idle child, send no prompt."""
-    prompt_type = PreparedSession
+    prompt_type = prompt_state.PreparedSession
 
     def finish_result(self) -> Iterable[events.AgentEvent]:
         if not self.native_session.child_state.retained:

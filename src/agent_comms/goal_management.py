@@ -395,18 +395,19 @@ class Goals:
         with self.registry.store.locked(mode=SharedLock()):
             owner.require_registry(self.registry)
             review = GoalWaitReview.capture(self, owner.thread.incarnation.require_recorded())
-        current = review.owner
-        goal = current.continuation_goal(owner.thread)
-        if not review.wait.owner_matches(current.incarnation.require_recorded()):
+        incarnation = review.owner.incarnation.require_recorded()
+        if not review.wait.owner_matches(incarnation):
             return False
         original, = self.bus.bus.deliveries_for_references((reference,))
-        if not review.wait.matches(original, current.incarnation.require_recorded()):
+        if not review.wait.matches(original, incarnation):
             return False
         with self.registry.store.locked():
             owner.require_registry(self.registry)
             if not review.current_for(self):
                 return False
-            return any(review.wait.current_for(actual, current.incarnation.require_recorded())
+            current, = self.registry.snapshot().threads_for(incarnation)
+            goal = current.continuation_goal(owner.thread)
+            return any(review.wait.current_for(actual, incarnation)
                        and review.wait.clear(self.waits) for actual in goal)
 
     def direct(self, name: str, message: Message) -> None:

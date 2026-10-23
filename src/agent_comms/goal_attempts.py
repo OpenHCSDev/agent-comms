@@ -31,7 +31,7 @@ from agent_comms.goal_turn_permit import GoalTurnPermit
 
 from .child_process import Platform
 from .declared_family import DeclaredFamily
-from .field_codec import MalformedRecord
+from .field_codec import FieldCodec, MalformedRecord
 from .goal_attempt_identity import FailureNotObserved, GoalAttemptIdentity
 from .goal_attempt_phase import (
     ClaimedAttempt,
@@ -598,7 +598,7 @@ class LaunchPermit(GoalTurnPermit):
         """Attribute one provider response to its claimed goal attempt exactly once."""
         if not response_id:
             raise ValueError("Provider response ID is required.")
-        raw = json.dumps(usage.to_wire(), sort_keys=True, separators=(",", ":"), allow_nan=False)
+        raw = FieldCodec.compact(usage.to_wire(), sort_keys=True, allow_nan=False)
         reservation = self.reservation
 
         def write(conn: sqlite3.Connection) -> str:

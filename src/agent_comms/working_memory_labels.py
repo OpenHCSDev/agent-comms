@@ -44,9 +44,11 @@ class QuestionVersion:
     def current(cls, question: type[SpanQuestion], owner_rules: tuple[str, ...] = ()):
         # A relation to authored rules is a different question when that original
         # rule set changes. Other questions discard that unrelated input.
-        raw = json.dumps({"definition": question.declaration(),
-                          "owner_rules": question.disclosed_owner_rules(owner_rules)},
-                         sort_keys=True, separators=(",", ":")).encode()
+        raw = FieldCodec.compact(
+            {"definition": question.declaration(),
+             "owner_rules": question.disclosed_owner_rules(owner_rules)},
+            sort_keys=True,
+        ).encode()
         return cls(question, hashlib.sha256(raw).hexdigest())
 
 

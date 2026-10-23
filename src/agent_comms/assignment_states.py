@@ -2,13 +2,13 @@
 
 from __future__ import annotations
 
-import json
 from abc import abstractmethod
 from dataclasses import dataclass, replace
 from typing import TYPE_CHECKING, ClassVar
 
 from .coordination_errors import IdentityConflict, IntegrityViolationError
 from .declared_family import DeclaredFamily
+from .field_codec import FieldCodec
 from .lifecycle import LifecycleState
 from .lifecycle_capability import Active, Complete, Deferred, Failed, Pending, Terminal
 from .notification_progress import (
@@ -363,14 +363,12 @@ class EngagedAssignment(SelectedResponseNotification, BoundAssignment):
             source.exact_reply_target,
         ):
             raise IdentityConflict("full wake frame requires the current response obligation")
-        return self.mode.full_expectation(), "you owe a response: " + json.dumps(
+        return self.mode.full_expectation(), "you owe a response: " + FieldCodec.compact(
             {
                 "target": obligation.exact_target,
                 "source_seq": source.seq,
                 "execution_id": obligation.execution_id,
-            },
-            ensure_ascii=True,
-            separators=(",", ":"),
+            }, ensure_ascii=True,
         )
 
     def require_engagement(self) -> Engagement:

@@ -106,7 +106,7 @@ def test_inspected_canonical_dependencies_allow_standby_without_replay(tmp_path,
         assert row.accepts_reservation
         assert not hasattr(row, "native_id") and not hasattr(row, "turn_id")
         assert row.source_text == message.body and not hasattr(row, "sent_text")
-        assert row.claim_scope == claim_scope and row.reviewed_for_goal(goal.id)
+        assert row.claim_generation == claim_scope and row.reviewed_for_goal(goal.id)
     assert not stored_inputs(ledger.root).rows["acp:owner-input"].goal_reviews
     generation = comms.goals.open_goal_store().snapshot(goal.id)
     assert generation is not None and generation.lifecycle.ready
