@@ -25,12 +25,11 @@ from typing import TYPE_CHECKING, Any, ClassVar
 from pydantic import BaseModel
 
 from acp.exceptions import RequestError
-from acp.agent.connection import AgentSideConnection
 from acp.schema import (
-    AgentMessageChunk,
     DeniedOutcome,
     PermissionOption,
     RequestPermissionResponse,
+    SessionNotification,
     ToolCallUpdate,
 )
 
@@ -69,7 +68,7 @@ def socket_path(root: Path, pid: int) -> Path:
 
 
 class UnboundClient(SessionUpdateSink):
-    async def session_update(self, *, session_id: str, update: AgentMessageChunk) -> bool:
+    async def publish_update(self, *, session_id: str, update: BaseModel) -> bool:
         raise RuntimeError("An unbound client cannot publish session updates")
 
 
@@ -181,7 +180,7 @@ class SocketClient(Controller, SessionUpdateSink):
                 )
         self.pending.clear()
 
-    async def session_update(self, *, session_id: str, update: BaseModel) -> bool:
+    async def publish_update(self, *, session_id: str, update: BaseModel) -> bool:
         await self.send(OwnerUpdate.of(update))
         return True
 
@@ -256,12 +255,12 @@ class RuntimeServer(SessionUpdateSink):
             self._resources.close()
             raise
 
-    async def session_update(
+    async def publish_update(
         self,
         *,
         session_id: str,
         update: BaseModel,
-        _expected_client: SessionUpdateSink | AgentSideConnection | None = _UNBOUND_PUBLICATION_CLIENT,
+        _expected_client: SessionUpdateSink | None = _UNBOUND_PUBLICATION_CLIENT,
         _expected_thread: str | None = None,
         _expected_sockets: frozenset[SocketClient] | None = None,
     ) -> bool:
@@ -289,8 +288,7 @@ class RuntimeServer(SessionUpdateSink):
         delivered = False
         client = self.agent.sessions.client
         if client is not None:
-            await client.session_update(session_id=session_id, update=update)
-            delivered = True
+            delivered = await client.publish_update(session_id=session_id, update=update)
         # Do not re-resolve the recipient set after an awaited handoff. A
         # socket reattach has a new identity even with the same session ID.
         sockets = (
@@ -304,8 +302,9 @@ class RuntimeServer(SessionUpdateSink):
             if socket_client not in self.clients.get(session_id, ()):
                 continue
             try:
-                await socket_client.session_update(session_id=session_id, update=update)
-                delivered = True
+                delivered = await socket_client.publish_update(
+                    session_id=session_id, update=update,
+                ) or delivered
             except SubscriberClosed:
                 self.clients.disconnect(socket_client)
         return delivered
@@ -579,9 +578,10 @@ class RuntimeProxy(RuntimeConnection):
         )
         if self._closed or self.agent.sessions.client is not client:
             return
-        await client.session_update(
-            session_id=self.session_id, update={**line.update, "_meta": metadata}
-        )
+        notification = SessionNotification.model_validate({
+            "session_id": self.session_id, "update": {**line.update, "_meta": metadata},
+        })
+        await client.publish_update(session_id=notification.session_id, update=notification.update)
 
     def ask(self, request: OwnerPermissionRequest) -> None:
         if len(self._permission_tasks) >= 4 or request.id in self._permission_tasks:

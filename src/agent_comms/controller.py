@@ -7,7 +7,8 @@ from abc import ABC, abstractmethod
 from typing import TYPE_CHECKING
 
 from acp.agent.connection import AgentSideConnection
-from acp.schema import AgentMessageChunk, PermissionOption, RequestPermissionResponse, ToolCallUpdate
+from acp.schema import PermissionOption, RequestPermissionResponse, ToolCallUpdate
+from pydantic import BaseModel
 
 from .coordination_errors import IdentityConflict
 
@@ -21,7 +22,8 @@ ACP_PERMISSION_TIMEOUT_SECONDS = 14.0
 
 class SessionUpdateSink(ABC):
     @abstractmethod
-    async def session_update(self, *, session_id: str, update: AgentMessageChunk) -> bool: ...
+    async def publish_update(self, *, session_id: str, update: BaseModel) -> bool:
+        """True when someone accepted the update."""
 
 
 class Controller(ABC):
@@ -38,7 +40,7 @@ class Controller(ABC):
     def departed(self, runtime: RuntimeServer, session_id: str) -> bool: ...
 
 
-class AcpController(AgentSideConnection, Controller, SessionUpdateSink):
+class AcpController(AgentSideConnection, Controller):
     def require_current(self, authority: AcpSelectedWriteAuthority, session_id: str) -> None:
         if self is not authority.agent.sessions.client:
             raise IdentityConflict("Selected write ACP controller changed")

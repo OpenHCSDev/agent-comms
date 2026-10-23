@@ -6,7 +6,7 @@ import asyncio
 import os
 from functools import partial
 from pathlib import Path
-from typing import cast
+from typing import TYPE_CHECKING, cast
 
 from acp import RequestError
 from acp.schema import (
@@ -39,7 +39,6 @@ from .acp_extension import (
 from .comms import Comms
 from .child_process import join_retirement
 from .coordinator import Coordination
-from .controller import AcpController
 from .errors import RelationViolationError
 from .config_options import SessionConfigOptions
 from .native_arguments import NativeArguments
@@ -55,6 +54,10 @@ from .transcript_updates import TranscriptReplay
 from .owner_protocol import IncompatibleOwner, IncompatibleOwnerError
 from .session_load import SessionLoadPlan, ExistingSessionLoadPlan, FailedSessionLoadPlan
 from .runtime_requests import FreshSubscribeRuntimeRequest, SubscribeRuntimeRequest
+
+
+if TYPE_CHECKING:
+    from .acp import SdkSessionConnection
 
 
 type SessionMcpServer = HttpMcpServer | SseMcpServer | AcpMcpServer | McpServerStdio
@@ -76,7 +79,7 @@ class SessionLifecycle:
         # A launcher registers this process as the owner before it starts, so
         # this process owns that registration even if it never binds a session.
         self.launched_owners: set[str] = set()
-        self.client: AcpController | None = None
+        self.client: SdkSessionConnection | None = None
         self.titles: dict[str, str] = {}
         self.display_titles: dict[str, ThreadText] = {}
         self.worktrees: dict[str, str] = {}
@@ -323,7 +326,7 @@ class SessionLifecycle:
         self, session_id: str, *, title: ThreadText = NoThreadText(),
     ) -> None:
         """Encode the thread's title once for the ACP metadata boundary."""
-        await self.runtime.session_update(
+        await self.runtime.publish_update(
             session_id=session_id,
             update=SessionInfoUpdate(
                 session_update="session_info_update",

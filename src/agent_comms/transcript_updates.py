@@ -21,19 +21,16 @@ from .turn_lease import TurnState
 from .ui_model.observation import ObservationProcess, ReadTranscript, SubscribeTranscript
 
 if TYPE_CHECKING:
-    from acp.agent.connection import AgentSideConnection
-
     from .acp_extension import TranscriptSnapshotUpdate
     from .comms import Comms
     from .controller import SessionUpdateSink
-    from .runtime import RuntimeServer, SocketClient
 
 
 @dataclass(frozen=True, kw_only=True)
 class TranscriptUpdate(DeclaredFamily, affix="TranscriptUpdate"):
     @abstractmethod
     async def publish(
-        self, session_id: str, client: SessionUpdateSink | AgentSideConnection,
+        self, session_id: str, client: SessionUpdateSink,
     ) -> None: ...
 
 
@@ -42,9 +39,9 @@ class TurnTranscriptUpdate(TranscriptUpdate):
     state: TurnState
 
     async def publish(
-        self, session_id: str, client: SessionUpdateSink | AgentSideConnection,
+        self, session_id: str, client: SessionUpdateSink,
     ) -> None:
-        await client.session_update(
+        await client.publish_update(
             session_id=session_id,
             update=AgentMessageChunk(
                 session_update="agent_message_chunk",
@@ -76,13 +73,13 @@ class TranscriptReplay:
             if not self._subscriptions:
                 reads.close()
 
-    async def replay(self, session_id: str, client: RuntimeServer | SocketClient) -> None:
+    async def replay(self, session_id: str, client: SessionUpdateSink) -> None:
         with self.observing() as reads:
             snapshot = await reads.read(ReadTranscript(str(self.comms.root), session_id))
             await self._publish(session_id, snapshot, client)
 
     @asynccontextmanager
-    async def subscribe(self, session_id: str, client: SocketClient) -> AsyncIterator[None]:
+    async def subscribe(self, session_id: str, client: SessionUpdateSink) -> AsyncIterator[None]:
         with self.observing() as reads:
             snapshot = await reads.read(SubscribeTranscript(str(self.comms.root), session_id))
             await self._publish(session_id, snapshot, client)
@@ -92,10 +89,10 @@ class TranscriptReplay:
         self,
         session_id: str,
         snapshot: TranscriptSnapshotUpdate,
-        destination: RuntimeServer | SocketClient,
+        destination: SessionUpdateSink,
     ) -> None:
         metadata = await Coordination.run_worker(partial(encode_updates, snapshot))
-        await destination.session_update(
+        await destination.publish_update(
             session_id=session_id,
             update=AgentMessageChunk(
                 session_update="agent_message_chunk",

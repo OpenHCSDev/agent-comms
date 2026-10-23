@@ -318,7 +318,7 @@ class FailedNativeTurnOutcome(NativeTurnOutcome):
         )
 
         failure = self.request.failure
-        accepted = await client.session_update(
+        accepted = await client.publish_update(
             session_id=session_id,
             update=AgentMessageChunk(
                 session_update="agent_message_chunk",
@@ -330,9 +330,7 @@ class FailedNativeTurnOutcome(NativeTurnOutcome):
                 ),
             ),
         )
-        # ACP SDK clients return None after acknowledgement; Core's transport
-        # returns False when nobody accepted the notification.
-        return replace(self, request=replace(self.request, notification_published=accepted is not False))
+        return replace(self, request=replace(self.request, notification_published=accepted))
 
     def raise_fault(self, cause: Exception) -> NoReturn:
         raise NativeTurnError(self.request) from cause

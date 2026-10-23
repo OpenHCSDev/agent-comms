@@ -28,7 +28,6 @@ from functools import partial
 from typing import TYPE_CHECKING
 
 from acp import RequestError
-from acp.agent.connection import AgentSideConnection
 from acp.connection import StreamEvent
 from acp.core import DEFAULT_STDIO_BUFFER_LIMIT_BYTES
 from acp.stdio import stdio_streams
@@ -40,10 +39,11 @@ from acp.schema import (
     LoadSessionResponse,
     NewSessionResponse,
     PromptResponse,
+    SessionNotification,
     SetSessionConfigOptionResponse,
     TextContentBlock,
 )
-from pydantic import JsonValue
+from pydantic import BaseModel, JsonValue
 
 from agent_comms.coordination_errors import IdentityConflict
 from agent_comms.coordinator import Coordination
@@ -87,6 +87,17 @@ if TYPE_CHECKING:
 
 from .native_arguments import ConfiguredBinary, InheritedArguments, LaunchArguments, LaunchBinary
 from .turn_runner import RELAY_PREFIX
+
+
+class SdkSessionConnection(AcpController, SessionUpdateSink):
+    """The SDK connection and controller publish one Core acceptance answer."""
+
+    async def publish_update(self, *, session_id: str, update: BaseModel) -> bool:
+        notification = SessionNotification.model_validate({
+            "session_id": session_id, "update": update,
+        })
+        await self.session_update(session_id=notification.session_id, update=notification.update)
+        return True
 
 
 class CommsAgent(SessionEffects, InputEffects, TurnEffects):
@@ -151,7 +162,7 @@ class CommsAgent(SessionEffects, InputEffects, TurnEffects):
     # Private attachment ABI consumed by runtime/compaction. State exists only
     # on its component; in-process consumers use that owner directly.
 
-    def on_connect(self, client: AcpController) -> None:
+    def on_connect(self, client: SdkSessionConnection) -> None:
         """Called by AgentSideConnection with the client-facing connection."""
         self.sessions.client = client
 
@@ -293,10 +304,10 @@ class CommsAgent(SessionEffects, InputEffects, TurnEffects):
             raise RequestError.invalid_params({"reason": "/compact requires text only."})
 
     async def emit_session_identity(
-        self, session_id: str, name: str, client: SessionUpdateSink | AgentSideConnection,
+        self, session_id: str, name: str, client: SessionUpdateSink,
     ) -> None:
         """Let a subscriber identify its owner before potentially long replay."""
-        await client.session_update(
+        await client.publish_update(
             session_id=session_id,
             update=AgentMessageChunk(
                 session_update="agent_message_chunk",
@@ -503,7 +514,7 @@ def main() -> int:
                 output_stream, input_stream = await stdio_streams(
                     limit=DEFAULT_STDIO_BUFFER_LIMIT_BYTES
                 )
-                connection = AcpController(
+                connection = SdkSessionConnection(
                     agent, input_stream, output_stream, listening=False,
                     use_unstable_protocol=agent.use_unstable_protocol,
                     observers=[observe] if os.environ.get("AGENT_COMMS_DEBUG_LOG") else None,

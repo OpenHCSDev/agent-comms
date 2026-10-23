@@ -606,7 +606,7 @@ class InputDrain(InputObservation):
         ))
 
     async def emit_queue_state(self, session_id: str, *, client: Any = None) -> None:
-        await (client or self.runtime).session_update(
+        await (client or self.runtime).publish_update(
             session_id=session_id,
             update=(await self.queue_state(session_id)).acp_chunk(),
         )
@@ -619,7 +619,7 @@ class InputDrain(InputObservation):
     async def emit_input_delivery_changed(
         self, session_id: str, *, public_id: str | None = None, client: Any = None
     ) -> None:
-        await (client or self.runtime).session_update(
+        await (client or self.runtime).publish_update(
             session_id=session_id,
             update=InputDeliveryChangedUpdate(public_id).acp_chunk(),
         )
