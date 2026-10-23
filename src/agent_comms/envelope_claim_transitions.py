@@ -11,6 +11,7 @@ from types import MappingProxyType
 from typing import TYPE_CHECKING, Annotated, ClassVar, Literal
 
 
+from .projection_source import ProjectionSource
 from .coordination_errors import IdentityConflict
 from .field_codec import (
     BoundedText,
@@ -115,7 +116,7 @@ class WritableFileClaim(FileClaimPath):
 
 
 @dataclass(frozen=True, slots=True)
-class AssignmentBinding:
+class AssignmentBinding(ProjectionSource):
     """The selected claim's revision and source, used for permission checks and its SQL row."""
 
     assignment_id: Annotated[str, BoundedText]
@@ -135,7 +136,7 @@ class AssignmentBinding:
 
 
 @dataclass(frozen=True)
-class ClaimScope(SubclassUnion, ABC, affix=""):
+class ClaimScope(SubclassUnion, ABC, ProjectionSource, affix=""):
     """What one acquisition belongs to; its member answers reuse, liveness and operation use."""
 
     def reuses(self, other: RecordedScope) -> bool:
@@ -253,7 +254,7 @@ class WakeClaim(RecordMember, RecordedScope):
 
 
 @dataclass(frozen=True, slots=True)
-class ClaimRelease:
+class ClaimRelease(ProjectionSource):
     resource: Annotated[str, ResourcePathText]
     generation: Annotated[str, Id128Text]
 
@@ -276,7 +277,7 @@ class AcquiringClaim(ClaimIdentity):
 
 
 @dataclass(frozen=True)
-class ClaimTransition(ClaimIdentity, SubclassUnion, ABC, affix=""):
+class ClaimTransition(ClaimIdentity, SubclassUnion, ABC, ProjectionSource, affix=""):
     """One original resource transition; its member declares what it changes."""
 
     max_resources: ClassVar[int] = 32
@@ -459,7 +460,7 @@ class ClaimOwner(AcquiringClaim, ResourceClaim):
 
 
 @dataclass(frozen=True, slots=True)
-class ClaimProjection(Mapping[str, ClaimOwner]):
+class ClaimProjection(Mapping[str, ClaimOwner], ProjectionSource):
     """Immutable sorted claim table plus the last processed envelope sequence."""
 
     last_seq: Annotated[int, ProjectionSequence] = 0

@@ -137,9 +137,9 @@ class ResolvedMentionBinding(GoalMentionBinding):
         contacts = tuple(
             GoalDerivedContact(
                 owner.name,
-                owner.created_at,
+                owner.incarnation.wire_birth,
                 executor.name,
-                executor.created_at,
+                executor.incarnation.wire_birth,
                 goal.id,
                 source.text_revision,
             )

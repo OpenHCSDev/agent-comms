@@ -5,7 +5,7 @@ from agent_comms.channel_targets import CommandTarget
 
 from agent_comms.bus import Bus
 
-from agent_comms.session_file import SavedSessionFile
+from agent_comms.session_file import RegistrySessionLocation
 from agent_comms.bus_publication import AgentOrigin
 from agent_comms.messages import NoticeRole
 import os
@@ -391,7 +391,7 @@ def test_cross_audience_corrections_capture_only_eligible_owned_lineage(comms, m
         owner = admit(comms, name)
         saved = comms.root / f"{name}-source.jsonl"
         saved_source(saved)
-        comms.registry.register(replace(owner, session_file=SavedSessionFile(str(saved))))
+        comms.registry.register(replace(owner, session_file=RegistrySessionLocation.from_path(str(saved), comms.root)))
     owner = comms.registry.require("alpha")
     monkeypatch.setenv("AGENT_COMMS_THREAD", "alpha")
     request = {"chosen": "PRIVATE_ORIGINAL_CHOICE", "rejected": ["PRIVATE_ALTERNATIVE"], "to": "beta"}

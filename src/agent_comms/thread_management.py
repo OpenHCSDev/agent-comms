@@ -43,7 +43,7 @@ from .private_registry_guard import (
 )
 from .registry_document import RegistrySnapshot
 from .registry_provenance import RegistryNames
-from .session_file import SavedSessionFile
+from .session_file import RegistrySessionLocation
 from .store_files import AtomicFile
 from .thread_identity import AgentThreadRole, ThreadRole
 from .thread_model import DeclaredModel, ThreadModel, UndeclaredModel
@@ -160,7 +160,8 @@ class NewThreadSpec:
         threads.registry.require_declaration_available(thread)
         location = thread.runtime.new_location(threads.root, project)
         with threads.registry.store.locked():
-            yield replace(thread, session_file=SavedSessionFile(location.read_key))
+            saved = RegistrySessionLocation.from_path(location.read_key, threads.root)
+            yield replace(thread, session_file=saved)
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
@@ -175,16 +176,17 @@ class ForkSpec(NewThreadSpec):
         parent.runtime.require_forkable()
         return parent
 
-    def child(self, parent: Thread, runtime: RuntimeLocation, registry: Registration) -> Thread:
-        return replace(self.declaration(self.project, registry), parent=ForkedParent(parent.name),
-                       tags=self.tags.for_child(parent.tags),
-                       backend=parent.backend, session_file=SavedSessionFile(runtime.read_key))
+    def child(self, parent: Thread, runtime: RuntimeLocation, threads: ThreadManagement) -> Thread:
+        saved = RegistrySessionLocation.from_path(runtime.read_key, threads.root)
+        return replace(self.declaration(self.project, threads.registry),
+                       parent=ForkedParent(parent.name), tags=self.tags.for_child(parent.tags),
+                       backend=parent.backend, session_file=saved)
 
     @contextmanager
     def prepared(self, threads: ThreadManagement, pi_bin: str, runtime: LaunchRuntime) -> Iterator[Thread]:
         # Copy saved history before locking the registry for its declaration.
         parent = self._parent(threads)
-        threads.registry.require_declaration_available(self.child(parent, parent.runtime, threads.registry))
+        threads.registry.require_declaration_available(self.child(parent, parent.runtime, threads))
         location = asyncio.run(parent.backend.fork(parent, pi_bin, runtime))
         with threads.registry.store.locked():
             current = self._parent(threads)
@@ -193,7 +195,7 @@ class ForkSpec(NewThreadSpec):
                     f"Parent thread {self.parent!r} changed its saved session during the fork; "
                     f"the created fork {location} was not registered."
                 )
-            yield self.child(current, location, threads.registry)
+            yield self.child(current, location, threads)
 
 
 @dataclass(frozen=True, slots=True)
@@ -246,7 +248,7 @@ class ThreadManagement:
             name,
             tags,
             str(project),
-            session_file=SavedSessionFile(str(session_path)),
+            session_file=RegistrySessionLocation.from_path(session_path, self.root),
             title=snapshot.title,
         ))
         with self.registry.store.locked():
@@ -455,7 +457,7 @@ class ThreadManagement:
                     model=saved_model, thinking_level=NoThinkingOverride,
                 ),
                 process_identity=process,
-                session_file=SavedSessionFile(location.read_key),
+                session_file=RegistrySessionLocation.from_path(location.read_key, self.root),
             )
             self.registry.register(attached)
             return attached

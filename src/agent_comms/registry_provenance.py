@@ -6,8 +6,9 @@ import json
 import re
 from abc import ABC, abstractmethod
 from collections.abc import Iterator, Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from functools import cached_property, partial
+from pathlib import Path
 from types import MappingProxyType
 from typing import TYPE_CHECKING, Generic, TypeVar
 
@@ -170,6 +171,15 @@ class RegistryProvenance(RegistryNames[ThreadProvenance]):
             raise RelationViolationError("Provenance name differs from its original declaration")
         if any(target not in names or alias in names for alias, target in self.aliases.items()):
             raise RelationViolationError("Provenance alias has no exclusive retained owner")
+
+    def bound_to(self, root: Path) -> RegistryProvenance:
+        """Recorded transcripts resolve under the root this namespace was captured from."""
+        threads = {name: replace(thread, session_file=thread.session_file.bound_to(root))
+                   for name, thread in self.threads.items()}
+        if all(threads[name].session_file is thread.session_file
+               for name, thread in self.threads.items()):
+            return self
+        return replace(self, threads=threads)
 
     @cached_property
     def sender_bindings(self) -> Mapping[str, str]:

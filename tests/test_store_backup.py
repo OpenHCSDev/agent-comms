@@ -151,6 +151,7 @@ def test_store_backup_restores_wal_rows_and_removes_new_files(tmp_path):
     assert not backup.original()
     backup.restore()
     assert backup.stores_original()
+    assert not backup.restoring.exists()
     assert not created.exists()
     assert route.read_text() == 'changed route'
     with sqlite3.connect(store) as reader:

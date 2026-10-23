@@ -76,9 +76,13 @@ def held_bus(comms, tmp_path, source_repository, configured_repository):
     source = source_repository
     scope = source.scope()
     Bus.install(Bus.path_in(comms.root))
+    # Two order holders never share one worktree, so the outsider has its own checkout.
+    outsider = tmp_path / 'outsider-checkout'
+    source.git(source.checkout, 'worktree', 'add', '-q', '-b', 'outsider-work', str(outsider))
     declare_test_bus(comms, channels=('comms',), threads=tuple(
-        comms.registry.new_thread(name=name, tags=frozenset({'comms'}), worktree=str(source.checkout))
-        for name in ('lead', 'worker', 'outsider')
+        comms.registry.new_thread(name=name, tags=frozenset({'comms'}), worktree=str(worktree))
+        for name, worktree in (('lead', source.checkout), ('worker', source.checkout),
+                               ('outsider', outsider))
     ))
     request = comms.goals.todos.add_request(
         comms.registry.require('lead').incarnation, 'Repair the held work').id

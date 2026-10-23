@@ -15,7 +15,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Annotated, ClassVar, Literal, TextIO, cast
 
 from .locked_store import DurableFile
-from .native_session_files import SavedSessionFile
+from .native_session_files import BusTranscriptFile
 
 if TYPE_CHECKING:
     from .native_pi import NativeContextProof
@@ -189,7 +189,7 @@ class NativeEntry(RecordedEntry, DeclaredFamily, affix="Entry"):
 
 
 @dataclass
-class ImportedSessionWriter(DurableFile, SavedSessionFile):
+class ImportedSessionWriter(DurableFile, BusTranscriptFile):
     filename = "imported_sessions/{session_id}.jsonl"
     stream: TextIO
     parent: NativeEntry

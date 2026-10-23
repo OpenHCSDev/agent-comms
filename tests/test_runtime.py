@@ -23,7 +23,7 @@ from agent_comms.runtime import (
 )
 from agent_comms.private_path import PrivateSocketRole
 from agent_comms.thread_identity import RecordedThreadIncarnation
-from agent_comms.session_file import SavedSessionFile
+from agent_comms.session_file import RegistrySessionLocation
 from agent_comms.native_arguments import GivenBinary
 from delivery_owner_fixture import canonical_agent
 
@@ -235,7 +235,7 @@ async def test_existing_proxy_follows_renamed_owner_restart_and_resubscribes(
         )
         # Session metadata may be filled in after initial owner attachment.
         comms.registry.register(
-            replace(comms.registry.require("worker"), session_file=SavedSessionFile(str(tmp_path / "session.jsonl")))
+            replace(comms.registry.require("worker"), session_file=RegistrySessionLocation.from_path(str(tmp_path / "session.jsonl"), comms.root))
         )
         assert await proxy.request("cancel") == {"owner": "old"}
         comms.threads.rename_managed_thread("worker", "renamed", owner=old)

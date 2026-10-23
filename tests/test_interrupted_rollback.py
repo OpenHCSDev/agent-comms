@@ -88,3 +88,27 @@ def test_next_install_completes_a_killed_registry_restore(tmp_path, installed_ru
         )
     assert {path: RegistryStore.digest(path) for path in registry.written} == expected
     assert comms.registry.require("worker").title != GivenThreadText("Carried title")
+
+
+def test_next_install_leaves_a_completed_installs_backup_alone(tmp_path, installed_runtime):
+    # Install 24: every completed install leaves a backup that differs from the live root
+    # it carried. Differing is not a restore that began, so the next install must neither
+    # roll the bus back to it nor take the maintenance hold.
+    comms = prepare_native_comms(wire(tmp_path / "wire"))
+    comms.registry.declare(comms.registry.new_thread("worker", frozenset(), str(tmp_path)))
+    registry = RegistryStore.at(comms.root)
+    route = active_route_path()
+    route.parent.mkdir(mode=0o700, parents=True)
+    spill = tmp_path / "backups"
+    backup = StoreBackup.take(comms.root, route, registry.written, spill)
+    RegistryTitleCarry(comms.root, comms.root, spill).carry(apply=True)
+    carried = {path: RegistryStore.digest(path) for path in registry.written}
+    assert not backup.original()
+    with pytest.raises(UpgradeRefused, match="git failed"):
+        upgrade(
+            tmp_path / "missing-checkout", comms.root, "HEAD", UnnamedInstaller(), RehearsalMode(),
+            False, spill, tmp_path / "install-scratch", lambda: None, InstallReport(),
+        )
+    assert {path: RegistryStore.digest(path) for path in registry.written} == carried
+    assert comms.registry.require("worker").title == GivenThreadText("Carried title")
+    assert backup.path.exists()

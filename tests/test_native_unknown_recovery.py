@@ -24,7 +24,7 @@ from agent_comms.native_arguments import GivenBinary
 from agent_comms.launch_root import LaunchRoot
 from agent_comms.runtime import socket_path
 from agent_comms.thread_model import DeclaredModel
-from agent_comms.session_file import SavedSessionFile
+from agent_comms.session_file import RegistrySessionLocation
 from functools import partial
 from native_backend_fixture import native_backend_fixture
 from agent_comms.child_process import ProcessIdentity
@@ -155,7 +155,7 @@ def test_undispatched_owner_loss_refuses_a_live_native_child(released_starting, 
     directory = released_starting / "native-sessions" / owner.incarnation.lookup
     session = directory / "undispatched.jsonl"
     comms.registry.register(
-        replace(owner, session_file=SavedSessionFile(str(session))),
+        replace(owner, session_file=RegistrySessionLocation.from_path(str(session), comms.root)),
         status=comms.registry.status(owner.name),
     )
     selected = session if argument == "--session" else directory

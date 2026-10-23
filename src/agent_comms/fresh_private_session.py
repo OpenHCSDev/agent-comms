@@ -12,13 +12,13 @@ from .field_codec import FieldCodec, RecordedTimestamp
 from .native_entries import SessionEntry
 from .native_failures import NativePiUnavailable
 from agent_comms.native_session_files import NativeSessionFiles
-from .native_session_files import PrivateSession, SavedSessionFile
+from .native_session_files import PrivateSession, BusTranscriptFile
 from .native_session_reopen import NativeSessionIdentity
 from .private_path import NativeSessionFileRole
 
 
 def create_fresh_private_session(
-    root: Path, *, worktree: Path, location: type[SavedSessionFile] = PrivateSession, **parts: str
+    root: Path, *, worktree: Path, location: type[BusTranscriptFile] = PrivateSession, **parts: str
 ) -> NativeSessionIdentity:
     """Exclusively create and sync the SDK header; never reuse an uncertain file."""
     worktree = Path(worktree).absolute()
