@@ -10,6 +10,7 @@ import pytest
 from agent_comms.check_root import CheckRoot
 from agent_comms.cli import main
 from agent_comms.comms import wire
+from agent_comms.errors import RelationViolationError
 from agent_comms.external_transcript import ExternalTranscript
 from agent_comms.transcript_events import AssistantTranscript, NoticeTranscript, UserTranscript
 from agent_comms.native_entries import NativeEntry
@@ -72,6 +73,34 @@ def test_wrapped_nonzero_exit_removes_root_and_is_the_cli_exit(source, scratch_r
                    "import pathlib,sys; assert pathlib.Path(sys.argv[1]).is_dir(); sys.exit(7)", "{root}"])
     assert status == 7
     assert json.loads(capsys.readouterr().out)["return_code"] == 7
+    assert not root.exists()
+
+
+def test_bounded_check_history_keeps_the_original_answered_before_its_tail(source, scratch_root):
+    original = source.bus.bus.lookup(1)
+    for index in range(CheckRoot.max_records - 1):
+        source.messaging.send("A", "B", f"Recent context {index}")
+    reply = source.messaging.send("B", "A", "Answer the older question", answers=(original.reference,)).message
+    root = scratch_root / "linked-window"
+    with CheckRoot(source, ("B",), root).open() as copied:
+        assert len(tuple(copied.bus.bus.message_history())) == CheckRoot.max_records
+        assert copied.bus.bus.lookup(original.seq).reference == original.reference
+        assert copied.bus.bus.lookup(reply.seq).answers == (original.reference,)
+        assert tuple(message.reference for message in copied.bus.bus.replies(
+            (original.reference,),
+        )) == (reply.reference,)
+    assert not root.exists()
+
+
+def test_check_history_never_pulls_an_answered_message_from_outside_its_scope(source, scratch_root):
+    original = source.messaging.send("unselected", "A", "Unselected private context").message
+    source.messaging.send("B", "A", "A reference does not expand the selected scope", answers=(original.reference,))
+    root = scratch_root / "outside-window"
+    before = source.bus.bus.revision()
+    with pytest.raises(RelationViolationError):
+        with CheckRoot(source, ("B",), root).open():
+            pytest.fail("A selected check copied unselected private history")
+    assert source.bus.bus.revision() == before
     assert not root.exists()
 
 
