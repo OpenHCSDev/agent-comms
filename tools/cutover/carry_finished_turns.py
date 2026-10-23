@@ -16,12 +16,17 @@ from agent_comms.installer.carry import Carried, Carry
 from agent_comms.registry_store import RegistryStore
 from agent_comms.store_files import _atomic_write_text, _store_lock
 
-from .carry_bus_history import CarryCatalogSource
+from .carry_bus_history import BusHistory, CarryCatalogSource
+from .carry_owner_requests import OwnerRequests
+from .carry_turn_owner import TurnOwner
 
 RETIRED = "last_finished_turn_id"
 
 
 class FinishedTurns(Carry):
+    precedes = (BusHistory, OwnerRequests, TurnOwner)
+    """Each decodes the registry, which refuses the retired field."""
+
     def backup_files(self) -> tuple[Path, ...]:
         sources = CarryCatalogSource.read(self.root, self.original_root)
         roots = (
