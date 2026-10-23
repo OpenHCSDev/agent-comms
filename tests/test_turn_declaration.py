@@ -2,7 +2,7 @@
 
 import pytest
 
-from agent_comms.child_process import NoProcess
+from agent_comms.child_process import NoProcess, ProcessIdentity
 from agent_comms.errors import RelationViolationError
 from agent_comms.field_codec import FieldCodec
 from agent_comms.thread_identity import TurnId
@@ -10,7 +10,7 @@ from agent_comms.turn_lease import ActiveTurn, NoTurn, TurnDeclaration
 from agent_comms.turn_phase import ToolRunningPhase
 
 
-@pytest.mark.parametrize('turn', [NoTurn(), ActiveTurn('turn', 123, started_at=1.0)])
+@pytest.mark.parametrize('turn', [NoTurn(), ActiveTurn('turn', ProcessIdentity(123, 1), started_at=1.0)])
 def test_turn_family_round_trip_keeps_its_original_wire_form(turn):
     encoded = FieldCodec.encode(turn, TurnDeclaration)
     assert FieldCodec.decode(TurnDeclaration, encoded) == turn

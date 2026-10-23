@@ -50,7 +50,7 @@ async def test_queue_observation_owns_capture_and_rejects_malformed_available_sc
     scope = await agent.inputs.queue_binding('beta')
     assert scope == LiveQueueScope(
         'beta', comms.registry.snapshot().claimed_identity('beta'),
-        comms.registry.require('beta').require_process().pid,
+        comms.registry.require('beta').require_process(),
     )
     for projection in (PendingQueueProjection(), UnavailableQueueProjection()):
         observation = QueueChangedUpdate(NoQueueScope(), 0, projection)

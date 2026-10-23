@@ -301,7 +301,7 @@ class PrivateRegistryGuard(DurableFile, WireWakeFile, RegistryPrivacy):
         return LiveCursorScope(
             session_id, self.namespace,
             ClaimedIdentity(owner.thread.incarnation, owner.claimed_generation),
-            owner.thread.require_process().pid,
+            owner.thread.require_process(),
         )
 
     async def cursor_metadata(

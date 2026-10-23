@@ -281,11 +281,9 @@ class OwnerLifecycle:
         self.maintenance = MaintenanceBarrier(registry.store.path)
         self.releases = OwnerReleaseStore(root)
 
-    def acquire_thread(self, name: str, *, owner_pid: int) -> Thread:
+    def acquire_thread(self, name: str) -> Thread:
         """Bind only this calling process; stored birth time is signal authority."""
-        if owner_pid != os.getpid():
-            raise RelationViolationError("An owner may acquire only its own process identity.")
-        identity = ProcessIdentity.capture(owner_pid)
+        identity = ProcessIdentity.capture(os.getpid())
         self.maintenance.assert_open_unlocked()
         thread = self.registry.require(name)
         thread.execution.require_native()
