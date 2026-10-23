@@ -2184,6 +2184,15 @@ class _RepresentedDecoder(ValueDecoder[Any]):
         # Null handlers can change the structural null contract; leave that decision to decode.
         return data is None or self.wire_structure.admits_wire(data)
 
+    def admits_external(self, data: object) -> bool:
+        # The representation reads through its wire structure, so an external read admits
+        # whatever that structure's external reader admits.
+        return (
+            any(self.external_decoders(data))
+            or data is None
+            or self.wire_structure.admits_external(data)
+        )
+
     def _rewrite_records(
         self, data: object, change: WireRecordChange, select: WireRecordFilter,
     ) -> object:
