@@ -123,7 +123,7 @@ def _covered_session(tmp_path):
     comms.registry.declare(other)
     with Coordination(comms.root / "coordination.sqlite3") as store:
         store.participants.register(
-            RecordedThreadIncarnation("fixture", other.created_at).lookup, other.name, other.name, committed=True,
+            RecordedThreadIncarnation("fixture", other.created_at).lookup, committed=True,
         )
     publish_initial(comms, "sender", other.name, "another recipient's original source")
     return comms, agent, root_id
@@ -144,5 +144,3 @@ def test_coordination_read_preserves_revision_and_repairs_exposed_mode(tmp_path)
 
     # This control observes actual delivery/recovery facts. It neither mocks
     # native execution nor grants a provider call to the pending input.
-
-

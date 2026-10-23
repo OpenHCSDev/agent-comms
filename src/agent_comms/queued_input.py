@@ -483,7 +483,7 @@ class DeliveredInput(QueuedInput):
             with store.session.read():
                 assignments = tuple(
                     assignment for assignment in pending_sealed_assignments(
-                        store, lookup, owner.name, after_seq=after_seq
+                        store, lookup, after_seq=after_seq
                     ) if assignment.audience.joins_active_turn()
                 )
             with NativeBoundary(bus) as boundary, bus.bus.reading() as source:

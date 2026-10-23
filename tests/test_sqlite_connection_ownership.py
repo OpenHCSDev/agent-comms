@@ -62,7 +62,7 @@ async def test_scoped_reader_releases_for_owner_commit(tmp_path):
 
     def commit(store):
         store.participants.register(
-            "reader-release-owner", "Reader Release Owner", "owner-thread"
+            "reader-release-owner"
         )
 
     read_task = asyncio.create_task(Coordination.run_read_async(path, read))
@@ -116,7 +116,7 @@ async def test_resident_cancellation_joins_operation_before_retirement(tmp_path)
     def operation(store):
         begun.set()
         assert release.wait(2)
-        store.participants.register("joined", "Joined", "joined")
+        store.participants.register("joined")
         finished.set()
     async with Coordination.worker(path):
         pending = asyncio.create_task(Coordination.run_async(path, operation))
@@ -128,7 +128,7 @@ async def test_resident_cancellation_joins_operation_before_retirement(tmp_path)
         with pytest.raises(asyncio.CancelledError):
             await pending
         assert finished.is_set()
-        assert await Coordination.run_read_async(path, lambda store: store.participants.get("joined").owner_identity.owner_thread) == "joined"
+        assert await Coordination.run_read_async(path, lambda store: store.participants.get("joined").owner_identity.owner_lookup) == "joined"
 
 
 @pytest.mark.asyncio
@@ -150,10 +150,10 @@ async def test_nested_resident_scopes_restore_outer_and_standalone_routes(tmp_pa
     outer, inner = tmp_path / "outer.sqlite3", tmp_path / "inner.sqlite3"
 
     async def register(path, name):
-        await Coordination.run_async(path, lambda store: store.participants.register(name, name, name))
+        await Coordination.run_async(path, lambda store: store.participants.register(name))
 
     async def owner(path, name):
-        return await Coordination.run_read_async(path, lambda store: store.participants.get(name).owner_identity.owner_thread)
+        return await Coordination.run_read_async(path, lambda store: store.participants.get(name).owner_identity.owner_lookup)
 
     async with Coordination.worker(outer):
         await register(outer, "outer")

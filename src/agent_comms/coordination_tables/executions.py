@@ -346,7 +346,6 @@ class ExecutionRecord(
     ]
     origin: Annotated[type[ExecutionProvenance], FrozenColumn()]
     lifecycle: Annotated[ExecutionState, SnapshotExclude()]
-    owner_thread: Annotated[str, FrozenColumn(check="length(owner_thread) BETWEEN 1 AND 256")]
     owner_lookup: Annotated[str, FrozenColumn()]
     revision: Annotated[int, Column(check="revision > 0")]
     max_attempts: Annotated[int, FrozenColumn(check="max_attempts > 0")]
@@ -369,7 +368,6 @@ class ExecutionRecord(
     def __post_init__(self) -> None:
         validate_execution_id(self.execution_id)
         for field, value in (
-            ("owner_thread", self.owner_thread),
             ("owner_lookup", self.owner_lookup),
         ):
             require_nonempty(value, field)

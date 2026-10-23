@@ -370,7 +370,7 @@ class VerifiedCursorObservation(CursorObservation):
         cursor = self.cursor
         if (
             cursor.wire_root_id != scope.wire_root_id
-            or cursor.owner_thread != scope.claim_scope.incarnation.name
+            or cursor.recipient_lookup != scope.claim_scope.incarnation.lookup
             or cursor.owner_claimed_generation != scope.claimed_generation
             or not 0 <= cursor.injected_seq <= cursor.covered_seq
         ):

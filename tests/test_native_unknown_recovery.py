@@ -56,7 +56,7 @@ async def release_starting_attempt(directory):
             assert participant is not None
             created = store.create(
                 participant.batch.execution_id, WireOrigin,
-                participant.lookup, participant.owner.thread.name, 1,
+                participant.lookup, 1,
                 sources=participant.batch.sources,
             ).value
             await SelectedAttempt.engage(participant, created)
@@ -232,7 +232,7 @@ def test_recover_owner_refuses_a_conflicting_input_identity(released_starting, c
                 input_id="c" * 32, stage=FullNativeExecution,
                 execution_id=TextNativeColumn(execution_id),
                 attempt_ordinal=NumberNativeColumn(before.attempt.attempt_ordinal),
-                owner_lookup=owner.incarnation.lookup, owner_thread=owner.name,
+                owner_lookup=owner.incarnation.lookup,
                 owner_generation=before.attempt.owner_generation + 1,
                 owner_token_digest="e" * 64,
             ).insert(db)

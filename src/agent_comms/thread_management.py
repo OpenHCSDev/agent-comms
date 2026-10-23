@@ -387,8 +387,7 @@ class ThreadManagement:
     def _rename_thread_unlocked(
         self, name: str, new_name: str, *, title: ThreadText = NoThreadText()
     ) -> RenameThreadResult:
-        privacy = self._privacy()
-        previous, current = privacy.rename(self, self.registry.require(name), new_name)
+        previous, current = self.registry.rename(name, new_name)
         thread = self.registry.require(current)
         titled = replace(thread, auto_title_pending=False, title=title.applied(thread.title))
         if titled != thread:
@@ -400,7 +399,6 @@ class ThreadManagement:
             self.ledger.rename_thread(previous, current)
             with self.catalog.editing() as document:
                 document.rename_thread(previous, current)
-        privacy.rename_applied(self.root)
         return RenameThreadResult(previous, current, changed)
 
     def heartbeat(self, name: str) -> None:

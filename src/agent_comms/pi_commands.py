@@ -8,7 +8,7 @@ from collections.abc import Iterable, Mapping, Sequence
 from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import TYPE_CHECKING, Annotated, Any, ClassVar, Literal
+from typing import TYPE_CHECKING, Annotated, Any, ClassVar
 from uuid import uuid4
 
 from .agent_backend import StreamingInputPolicy

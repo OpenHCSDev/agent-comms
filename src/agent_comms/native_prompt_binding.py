@@ -64,7 +64,6 @@ class PromptBinding(
     execution_id: Annotated[NativeColumn, Column(storage=TextStorage, nullable=True)]
     attempt_ordinal: Annotated[NativeColumn, Column(storage=IntegerStorage, nullable=True)]
     owner_lookup: str
-    owner_thread: str
     owner_generation: Annotated[int, Column(check="owner_generation>0")]
     wire_root_id: str
     expected_prompt_digest: str
@@ -85,7 +84,7 @@ class PromptBinding(
     checks = (
         "(stage='triage' AND execution_id IS NULL AND attempt_ordinal IS NULL) OR "
         "(stage='full' AND execution_id IS NOT NULL AND attempt_ordinal>0)",
-        "length(owner_lookup)=32 AND owner_thread<>'' AND length(wire_root_id)=32 "
+        "length(owner_lookup)=32 AND length(wire_root_id)=32 "
         "AND wire_root_id NOT GLOB '*[^0-9a-f]*' "
         "AND length(expected_prompt_digest)=64 AND expected_prompt_digest NOT GLOB '*[^0-9a-f]*'",
     )
@@ -164,7 +163,6 @@ def bind_expected_prompt(
                 stage=type(stage.execution),
                 **stage.execution.binding_fields(),
                 owner_lookup=stage.recipient_lookup,
-                owner_thread=owner.name,
                 owner_generation=generation,
                 wire_root_id=wire_root_id,
                 expected_prompt_digest=digest,

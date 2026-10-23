@@ -79,7 +79,6 @@ def execution(*, status=PendingExecution, ordinal=None, origin=AcpOrigin):
     return ExecutionRecord(
         execution_id="execution-1",
         origin=origin,
-        owner_thread="worker",
         owner_lookup="owner-1",
         revision=1,
         max_attempts=3,
@@ -95,7 +94,6 @@ def attempt(*, ordinal=1, phase=PromptStartingAttempt, generation=1, done=False,
         execution_id="execution-1",
         attempt_ordinal=ordinal,
         owner_lookup="owner-1",
-        owner_thread="worker",
         owner_generation=generation,
         owner_token_digest=f"digest-{generation}",
         revision=1,
@@ -189,12 +187,11 @@ def sql_execution(
     ordinal=None,
     max_attempts=3,
     owner="p",
-    thread="worker",
 ):
     ExecutionRecord(
         execution_id=name, origin=ExecutionProvenance.member_named(origin),
         lifecycle=ExecutionState.member_named(status).load(ordinal),
-        owner_thread=thread, owner_lookup=owner, revision=1,
+         owner_lookup=owner, revision=1,
         max_attempts=max_attempts, reason_code=NoReasonCode(), created_at_ms=0, updated_at_ms=0,
     ).insert(db)
 
@@ -221,10 +218,10 @@ def sql_wire_execution(db, *, pending=True, name="e", target="requester"):
     db.execute("COMMIT")
 
 
-def sql_attempt(db, name="e", ordinal=1, generation=1, owner="p", thread="worker", digest=None):
+def sql_attempt(db, name="e", ordinal=1, generation=1, owner="p", digest=None):
     AttemptRecord(
         execution_id=name, attempt_ordinal=ordinal, owner_lookup=owner,
-        owner_thread=thread, owner_generation=generation,
+         owner_generation=generation,
         owner_token_digest=digest if digest is not None else f"digest-{generation}",
         lifecycle=PromptStartingAttempt.load(500, False, False), revision=1,
         last_progress_at_ms=None, reason_code=NoReasonCode(), created_at_ms=0, updated_at_ms=0,
@@ -232,8 +229,8 @@ def sql_attempt(db, name="e", ordinal=1, generation=1, owner="p", thread="worker
 
 
 def owner(db):
-    Participants(participant_lookup="p", display_name="worker", committed=True).insert(db)
-    OwnerGenerations(owner_lookup="p", owner_thread="worker", generation=1).insert(db)
+    Participants(participant_lookup="p", committed=True).insert(db)
+    OwnerGenerations(owner_lookup="p",  generation=1).insert(db)
     CurrentExecutions(owner_lookup="p", execution_id=NoPointedExecution(), attempt_ordinal=NoPointedAttempt(),
                       pointer_revision=0).insert(db)
 
@@ -1005,7 +1002,7 @@ def test_direct_sql_immutable_attempt_identity_and_monotonic_evidence(db):
         "attempt_ordinal=2",
         "owner_generation=2",
         "owner_token_digest='changed'",
-        "owner_thread='renamed'",
+        "owner_lookup='renamed'",
         "lifecycle=json_set(lifecycle,'$.backend_done',json('true'),'$.process_dead',json('true'),"
         "'$.lease_expires_at_ms',499),revision=2,last_progress_at_ms=5,updated_at_ms=5",
     ):
@@ -1214,14 +1211,14 @@ def test_fence_digest_is_globally_unique_across_executions(db):
     c, path = db
     sql_execution(c)
     activate(c)
-    Participants(participant_lookup="q", display_name="other-worker", committed=True).insert(c)
-    OwnerGenerations(owner_lookup="q", owner_thread="other-worker", generation=1).insert(c)
+    Participants(participant_lookup="q", committed=True).insert(c)
+    OwnerGenerations(owner_lookup="q",  generation=1).insert(c)
     CurrentExecutions(owner_lookup="q", execution_id=NoPointedExecution(), attempt_ordinal=NoPointedAttempt(),
                       pointer_revision=0).insert(c)
-    sql_execution(c, name="other-e", owner="q", thread="other-worker")
+    sql_execution(c, name="other-e", owner="q")
     c.execute("BEGIN IMMEDIATE")
     with pytest.raises(sqlite3.IntegrityError):
-        sql_attempt(c, name="other-e", owner="q", thread="other-worker", digest="digest-1")
+        sql_attempt(c, name="other-e", owner="q", digest="digest-1")
     c.execute("ROLLBACK")
     with CoordinationStore(path) as reopened:
         assert reopened._connection.execute("SELECT count(*) FROM attempts").fetchone()[0] == 1
@@ -1232,7 +1229,7 @@ def test_fence_digest_is_globally_unique_across_executions(db):
 def test_claim_target_and_recipient_lineage_is_immutable(db):
     c, path = db
     sql_wire_execution(c, pending=False)
-    Participants(participant_lookup="other", display_name="other-worker", committed=True).insert(c)
+    Participants(participant_lookup="other", committed=True).insert(c)
     original = WakeAssignment.one(c, assignment_id="a")
     assert original is not None
     c.execute("BEGIN IMMEDIATE")
@@ -1258,7 +1255,6 @@ def test_populated_durable_authorities_reject_delete_and_survive_reopen(db):
     c, path = db
     sql_wire_execution(c)
     activate(c)
-    c.execute("INSERT INTO participant_aliases VALUES ('old-worker','p',100)")
     c.execute("INSERT INTO replay_assessments VALUES ('e',0,1,0,1)")
     c.execute(
         "INSERT INTO recovery_audit (execution_id,kind,reason_code,"
@@ -1267,7 +1263,6 @@ def test_populated_durable_authorities_reject_delete_and_survive_reopen(db):
     )
     tables = (
         "participants",
-        "participant_aliases",
         "owner_generations",
         "executions",
         "attempts",
@@ -1404,7 +1399,6 @@ def test_recovery_audit_immutable_reopen(db):
         "publication_intents",
         "publication_receipts",
         "recovery_audit",
-        "participant_aliases",
     ],
 )
 def test_all_durable_tables_reject_delete_even_when_empty(db, table):

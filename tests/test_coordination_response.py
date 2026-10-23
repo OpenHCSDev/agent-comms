@@ -68,7 +68,7 @@ def _ready(tmp_path: Path, *, direct: bool = False, extra_targets: tuple[str, ..
         )
     root_id = comms.registry.prepare_native_root().namespace
     target = "owner" if direct else "#team"
-    original = publish_initial(comms, 
+    original = publish_initial(comms,
         "sender", target, "Need owner to consider and reply."
     )
     original_record = comms.bus.bus.delivery(original.seq)
@@ -79,8 +79,6 @@ def _ready(tmp_path: Path, *, direct: bool = False, extra_targets: tuple[str, ..
     PrivateCoordinatorTable.install(store)
     store.participants.register(
         recipient.recipient_lookup,
-        recipient.canonical_thread,
-        recipient.canonical_thread,
         committed=True,
     )
     accepted = accept_delivery_cohort(comms.bus, root_id, original.seq, store)
@@ -99,7 +97,6 @@ def _ready(tmp_path: Path, *, direct: bool = False, extra_targets: tuple[str, ..
         "exec",
         WireOrigin,
         recipient.recipient_lookup,
-        "owner",
         1,
         sources=tuple(sources),
     )
@@ -109,7 +106,7 @@ def _ready(tmp_path: Path, *, direct: bool = False, extra_targets: tuple[str, ..
         AttemptStart(
             "exec",
             1,
-            "owner",
+            recipient.recipient_lookup,
             1,
             token,
             expected_execution_revision=2,

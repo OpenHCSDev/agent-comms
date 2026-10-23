@@ -39,21 +39,19 @@ class ExecutionStore(RecoveryReader):
         execution_id: str,
         origin: type[ExecutionProvenance],
         owner_lookup: str,
-        owner_thread: str,
         max_attempts: int,
         *,
         sources: tuple[SelectedSource, ...] = (),
     ) -> Applied[RecoverySnapshot] | AlreadyApplied[RecoverySnapshot]:
         with self.session.writing() as db:
             assignments = tuple(source.assignment for source in sources)
-            return self._create(db, execution_id, origin, owner_lookup, owner_thread, max_attempts, sources, assignments)
+            return self._create(db, execution_id, origin, owner_lookup, max_attempts, sources, assignments)
 
     def create_after_triage(
         self,
         execution_id: str,
         origin: type[ExecutionProvenance],
         owner_lookup: str,
-        owner_thread: str,
         max_attempts: int,
         *,
         sources: tuple[SelectedSource, ...],
@@ -64,9 +62,9 @@ class ExecutionStore(RecoveryReader):
             assignments = tuple(source.assignment for source in sources)
             if assignments != settled:
                 raise StaleRevision("original claims changed after proved native settlement")
-            return self._create(db, execution_id, origin, owner_lookup, owner_thread, max_attempts, sources, assignments)
+            return self._create(db, execution_id, origin, owner_lookup, max_attempts, sources, assignments)
 
-    def _create(self, db, execution_id, origin, owner_lookup, owner_thread,
+    def _create(self, db, execution_id, origin, owner_lookup,
                 max_attempts, sources, assignments):
         """The single creation algorithm, under its caller's owning transaction."""
         for source in sources:
@@ -81,14 +79,12 @@ class ExecutionStore(RecoveryReader):
             if (
                 e.origin,
                 e.owner_lookup,
-                e.owner_thread,
                 e.max_attempts,
                 tuple(sorted(row.exact_target for row in snapshot.obligations)),
                 tuple(link.assignment_id for link in snapshot.links),
             ) != (
                 origin,
                 owner_lookup,
-                owner_thread,
                 max_attempts,
                 tuple(sorted({source.delivery.message.exact_reply_target for source in sources})),
                 assignment_ids,
@@ -96,7 +92,7 @@ class ExecutionStore(RecoveryReader):
                 raise IdentityConflict("execution identity conflicts")
             return AlreadyApplied(snapshot)
         participant = self.participants.get(owner_lookup)
-        if not participant.committed or participant.owner_identity.owner_thread != owner_thread:
+        if not participant.committed:
             raise IdentityConflict("execution requires committed current owner")
         if not isinstance(max_attempts, int) or max_attempts <= 0:
             raise ValueError("max_attempts must be positive")
@@ -107,7 +103,6 @@ class ExecutionStore(RecoveryReader):
             execution_id=execution_id,
             origin=origin,
             lifecycle=QueuedExecution(),
-            owner_thread=owner_thread,
             owner_lookup=owner_lookup,
             revision=1,
             max_attempts=max_attempts,

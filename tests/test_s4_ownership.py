@@ -2,7 +2,7 @@
 
 
 
-from agent_comms.channels import AnyOfMatch, ViewPredicate, ActivityView
+from agent_comms.channels import ActivityView, AnyOfMatch, SavedView, ViewPredicate
 from agent_comms.field_codec import FieldCodec
 from agent_comms.messages import Message, InfoKind
 

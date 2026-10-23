@@ -102,7 +102,7 @@ def ready(
 ) -> StandaloneCoordination:
     db = store(path)
     sources = ()
-    assert isinstance(db.participants.register("owner", "Owner", "thread", committed=True), Applied)
+    assert isinstance(db.participants.register("owner", committed=True), Applied)
     if origin is WireOrigin:
         original = Message("owner", "Owner", "Original request", InfoKind, timestamp=1.0, seq=1)
         db.assignments.accept(
@@ -123,7 +123,6 @@ def ready(
         "exec",
         origin,
         "owner",
-        "thread",
         max_attempts,
         sources=sources,
     )
@@ -137,7 +136,7 @@ def started(db: StandaloneCoordination) -> tuple[str, object]:
         AttemptStart(
             "exec",
             1,
-            "thread",
+            "owner",
             1,
             token,
             expected_execution_revision=2,
@@ -174,7 +173,7 @@ def _concurrent_registration(
     try:
         with StandaloneCoordination(path, clock_ms=lambda: 1_000) as db:
             gate.wait(timeout=5)
-            result = db.participants.register("owner", "Owner", "thread", committed=True)
+            result = db.participants.register("owner", committed=True)
             output.put(type(result).__name__)
     except Exception as exc:
         output.put(type(exc).__name__)
@@ -190,7 +189,7 @@ def _concurrent_start(
                 AttemptStart(
                     "exec",
                     1,
-                    "thread",
+                    "owner",
                     1,
                     token,
                     expected_execution_revision=2,
@@ -218,55 +217,29 @@ def test_execution_and_attempt_queries_share_the_coordination_owner(db_path, mon
         assert readers and all(reader is db for reader in readers)
 
 
-def test_registration_complete_atomic_reopen_and_rename(db_path: Path) -> None:
+def test_registration_complete_atomic_reopen_and_generation(db_path: Path) -> None:
     db = store(db_path)
-    original = db.participants.register("owner", "Owner", "thread", committed=False)
+    original = db.participants.register("owner", committed=False)
     assert isinstance(original, Applied)
     assert original.value.pointer.pointer_revision == 0
-    assert original.value.aliases == ("owner",)
-    assert isinstance(db.participants.register("owner", "Owner", "thread"), AlreadyApplied)
+    assert isinstance(db.participants.register("owner"), AlreadyApplied)
     assert isinstance(db.participants.commit("owner"), Applied)
     assert isinstance(db.participants.commit("owner"), AlreadyApplied)
-    rename = db.participants.rename("owner", "Owner New", "Owner New", expected_generation=1)
-    assert rename.value.aliases == ("owner", "Owner New")
     assert isinstance(
-        db.participants.rename("owner", "Owner New", "Owner New", expected_generation=1),
-        AlreadyApplied,
-    )
-    assert isinstance(
-        db.participants.advance_generation("owner", "thread", expected_generation=1), Applied
+        db.participants.advance_generation("owner", expected_generation=1), Applied
     )
     with pytest.raises(StaleRevision):
-        db.participants.advance_generation("owner", "thread", expected_generation=1)
+        db.participants.advance_generation("owner", expected_generation=1)
     db.close()
     with store(db_path) as reopened:
         assert reopened.participants.get("owner").owner_identity.generation == 2
         assert reopened.participants.get("owner").committed
-        assert reopened.participants.get("owner").aliases == ("owner", "Owner New")
-        replay = reopened.participants.register("owner", "Owner", "thread", committed=False)
+        replay = reopened.participants.register("owner", committed=False)
         assert isinstance(replay, AlreadyApplied)
         assert replay.value.owner_identity.generation == 2
-        assert replay.value.display_name == "Owner New"
+        assert replay.value.owner_identity.owner_lookup == "owner"
 
 
-def test_registration_transaction_rollback_on_alias_collision(db_path: Path) -> None:
-    with store(db_path) as db:
-        db.participants.register("first", "First", "thread", alias="alias")
-        with pytest.raises(IdentityConflict):
-            db.participants.register("second", "Second", "thread", alias="alias")
-        assert (
-            db.session._connection.execute("SELECT count(*) FROM participants").fetchone()[0] == 1
-        )
-        assert not db.session._connection.in_transaction
-    with store(db_path) as db:
-        assert (
-            db.session._connection.execute("SELECT count(*) FROM owner_generations").fetchone()[0]
-            == 1
-        )
-        assert (
-            db.session._connection.execute("SELECT count(*) FROM current_executions").fetchone()[0]
-            == 1
-        )
 
 
 def test_claim_execution_idempotency_and_rollback(db_path: Path) -> None:
@@ -281,7 +254,6 @@ def test_claim_execution_idempotency_and_rollback(db_path: Path) -> None:
         "exec",
         WireOrigin,
         "owner",
-        "thread",
         2,
         sources=(wire_source(db, "claim", original, FullWake()),),
     )
@@ -293,7 +265,6 @@ def test_claim_execution_idempotency_and_rollback(db_path: Path) -> None:
             "exec",
             WireOrigin,
             "owner",
-            "thread",
             2,
             sources=(wire_source(db, "claim", different, FullWake()),),
         )
@@ -304,7 +275,7 @@ def test_claim_execution_idempotency_and_rollback(db_path: Path) -> None:
 
 def test_claim_acceptance_requires_initial_mode_decision(db_path: Path) -> None:
     with store(db_path) as db:
-        db.participants.register("owner", "Owner", "thread", committed=True)
+        db.participants.register("owner", committed=True)
 
         def assignment(
             index: int,
@@ -367,7 +338,7 @@ def test_claim_acceptance_requires_initial_mode_decision(db_path: Path) -> None:
 
 def test_claim_preengagement_and_mixed_engagement_rollback(db_path: Path) -> None:
     with store(db_path) as db:
-        db.participants.register("owner", "Owner", "thread", committed=True)
+        db.participants.register("owner", committed=True)
         sources = []
         for index, disposition in (
             (1, TriagePendingAssignment),
@@ -401,7 +372,6 @@ def test_claim_preengagement_and_mixed_engagement_rollback(db_path: Path) -> Non
                 "exec",
                 WireOrigin,
                 "owner",
-                "thread",
                 2,
                 sources=tuple(sources),
             )
@@ -419,7 +389,7 @@ def test_token_prepared_before_transaction_and_loss_replay_ignores_mutable(db_pa
             AttemptStart(
                 "exec",
                 1,
-                "thread",
+                "owner",
                 1,
                 token,
                 expected_execution_revision=2,
@@ -440,7 +410,7 @@ def test_token_prepared_before_transaction_and_loss_replay_ignores_mutable(db_pa
             AttemptStart(
                 "exec",
                 1,
-                "thread",
+                "owner",
                 1,
                 token,
                 expected_execution_revision=2,
@@ -460,7 +430,7 @@ def test_token_prepared_before_transaction_and_loss_replay_ignores_mutable(db_pa
             AttemptStart(
                 "exec",
                 1,
-                "thread",
+                "owner",
                 1,
                 token,
                 expected_execution_revision=2,
@@ -474,7 +444,7 @@ def test_token_prepared_before_transaction_and_loss_replay_ignores_mutable(db_pa
                 AttemptStart(
                     "exec",
                     2,
-                    "thread",
+                    "owner",
                     1,
                     token,
                     expected_execution_revision=2,
@@ -488,7 +458,7 @@ def test_token_prepared_before_transaction_and_loss_replay_ignores_mutable(db_pa
             AttemptStart(
                 "exec",
                 1,
-                "thread",
+                "owner",
                 1,
                 token,
                 expected_execution_revision=2,
@@ -501,15 +471,15 @@ def test_token_prepared_before_transaction_and_loss_replay_ignores_mutable(db_pa
 def test_token_digest_is_global_and_only_digest_persists(db_path: Path) -> None:
     with ready(db_path) as db:
         token, _ = started(db)
-        db.participants.register("other", "Other", "other-thread", committed=True)
-        db.create("other-exec", GoalOrigin, "other", "other-thread", 1)
+        db.participants.register("other", committed=True)
+        db.create("other-exec", GoalOrigin, "other", 1)
         db.mark_pending("other-exec", expected_revision=1)
         with pytest.raises(IdentityConflict):
             db.start(
                 AttemptStart(
                     "other-exec",
                     1,
-                    "other-thread",
+                    "other",
                     1,
                     token,
                     expected_execution_revision=2,
@@ -527,8 +497,8 @@ def test_settled_snapshot_encodes_recovery_kind_separately_from_table(db_path: P
     from agent_comms.coordination_tables.recovery import RecoveryAudit
 
     with store(db_path) as db:
-        db.participants.register("owner", "Owner", "thread", committed=True)
-        db.create("exec", AcpOrigin, "owner", "thread", 1)
+        db.participants.register("owner", committed=True)
+        db.create("exec", AcpOrigin, "owner", 1)
         db.mark_pending("exec", expected_revision=1)
         _, fence = started(db)
         fence = final_evidence(db, fence)
@@ -592,19 +562,19 @@ def test_retry_partition_and_generation_fence(db_path: Path) -> None:
                 AttemptStart(
                     "exec",
                     2,
-                    "thread",
+                    "owner",
                     1,
                     prepare_fence_token(),
                     expected_execution_revision=4,
                     expected_pointer_revision=2,
                 )
             )
-        db.participants.advance_generation("owner", "thread", expected_generation=1)
+        db.participants.advance_generation("owner", expected_generation=1)
         second = db.start(
             AttemptStart(
                 "exec",
                 2,
-                "thread",
+                "owner",
                 2,
                 prepare_fence_token(),
                 expected_execution_revision=4,
@@ -620,7 +590,7 @@ def test_retry_partition_and_generation_fence(db_path: Path) -> None:
                 AttemptStart(
                     "exec",
                     1,
-                    "thread",
+                    "owner",
                     1,
                     token,
                     expected_execution_revision=2,
@@ -721,12 +691,12 @@ def test_provider_proof_carries_until_later_attempt_records_output(
         )
         proof = deferred.value.replay.require_assessment()
         assert deferred.value.can_retry and proof.allows_retry
-        db.participants.advance_generation("owner", "thread", expected_generation=1)
+        db.participants.advance_generation("owner", expected_generation=1)
         second = db.start(
             AttemptStart(
                 "exec",
                 2,
-                "thread",
+                "owner",
                 2,
                 prepare_fence_token(),
                 expected_execution_revision=4,
@@ -824,7 +794,7 @@ def test_retry_start_rollback_restores_prior_replay_authorization(db_path: Path)
             failure=ProviderRetryExhausted("controlled provider failure"),
         )
         assert deferred.value.can_retry
-        db.participants.advance_generation("owner", "thread", expected_generation=1)
+        db.participants.advance_generation("owner", expected_generation=1)
         before = db.get("exec")
         prepared = prepare_fence_token()
         db.session._connection.execute(
@@ -839,7 +809,7 @@ def test_retry_start_rollback_restores_prior_replay_authorization(db_path: Path)
                 AttemptStart(
                     "exec",
                     2,
-                    "thread",
+                    "owner",
                     2,
                     prepared,
                     expected_execution_revision=4,
@@ -854,7 +824,7 @@ def test_retry_start_rollback_restores_prior_replay_authorization(db_path: Path)
             AttemptStart(
                 "exec",
                 2,
-                "thread",
+                "owner",
                 2,
                 prepared,
                 expected_execution_revision=4,
@@ -1042,12 +1012,12 @@ def test_recovered_audit_rejects_prior_attempt_incident_and_terminal(db_path: Pa
                 kind=RecoveredRecovery,
                 reason_code=GivenReasonCode("terminal"),
             )
-        db.participants.advance_generation("owner", "thread", expected_generation=1)
+        db.participants.advance_generation("owner", expected_generation=1)
         second = db.start(
             AttemptStart(
                 "exec",
                 2,
-                "thread",
+                "owner",
                 2,
                 prepare_fence_token(),
                 expected_execution_revision=4,
@@ -1084,7 +1054,7 @@ def test_unstarted_failure_and_claim_requeue(db_path: Path) -> None:
                 AttemptStart(
                     "exec",
                     1,
-                    "thread",
+                    "owner",
                     1,
                     prepare_fence_token(),
                     expected_execution_revision=3,
@@ -1095,7 +1065,7 @@ def test_unstarted_failure_and_claim_requeue(db_path: Path) -> None:
         assert type(reopened.get("exec").execution.lifecycle) is FailedExecution
 
     with store(db_path.with_name("claim-only.sqlite3")) as db:
-        db.participants.register("owner", "Owner", "thread", committed=True)
+        db.participants.register("owner", committed=True)
         db.assignments.accept(
             WakeAssignment(
                 assignment_id="claim",
@@ -1150,7 +1120,7 @@ def test_frozen_v2_pre_attempt_deferred_execution_cannot_resume(db_path: Path) -
                 AttemptStart(
                     "exec",
                     1,
-                    "thread",
+                    "owner",
                     1,
                     prepare_fence_token(),
                     expected_execution_revision=3,
@@ -1173,13 +1143,13 @@ def test_crash_reopen_pending_starts_once_after_owner_returns(db_path: Path) -> 
     db.close()  # Owner disappeared before the attempt began; PENDING remains durable.
     with store(db_path) as returned:
         assert type(returned.get("exec").execution.lifecycle) is PendingExecution
-        returned.participants.advance_generation("owner", "thread", expected_generation=1)
+        returned.participants.advance_generation("owner", expected_generation=1)
         token = prepare_fence_token()
         applied = returned.start(
             AttemptStart(
                 "exec",
                 1,
-                "thread",
+                "owner",
                 2,
                 token,
                 expected_execution_revision=2,
@@ -1194,7 +1164,7 @@ def test_crash_reopen_pending_starts_once_after_owner_returns(db_path: Path) -> 
             AttemptStart(
                 "exec",
                 1,
-                "thread",
+                "owner",
                 2,
                 token,
                 expected_execution_revision=2,
@@ -1208,7 +1178,7 @@ def test_crash_reopen_pending_starts_once_after_owner_returns(db_path: Path) -> 
                 AttemptStart(
                     "exec",
                     1,
-                    "thread",
+                    "owner",
                     2,
                     prepare_fence_token(),
                     expected_execution_revision=2,
@@ -1441,21 +1411,19 @@ def test_public_snapshot_is_one_committed_revision_during_settlement(db_path: Pa
         assert type(db.get("exec").execution.lifecycle) is FailedExecution
 
 
-def test_public_participant_is_one_committed_revision_during_rename(db_path: Path) -> None:
+def test_public_participant_is_one_committed_revision_during_commit(db_path: Path) -> None:
     with store(db_path) as db:
-        db.participants.register("owner", "Old", "thread", committed=True)
+        db.participants.register("owner", committed=False)
 
     observed = _read_while_other_store_waits(
         db_path,
         "participants",
         lambda reader: reader.participants.get("owner"),
-        lambda writer: writer.participants.rename("owner", "New", "New", expected_generation=1),
+        lambda writer: writer.participants.commit("owner"),
     )
-    assert observed.display_name == "Old"
-    assert observed.aliases == ("owner",)
+    assert not observed.committed
     with store(db_path) as db:
-        assert db.participants.get("owner").display_name == "New"
-        assert db.participants.get("owner").aliases == ("owner", "New")
+        assert db.participants.get("owner").committed
 
 
 def test_public_read_exception_releases_transaction_and_mutators_reuse_it(db_path: Path) -> None:
@@ -1472,17 +1440,17 @@ def test_public_read_exception_releases_transaction_and_mutators_reuse_it(db_pat
             assert db.participants.get("owner").committed
             assert db.session._connection.in_transaction
         assert not db.session._connection.in_transaction
-        db.participants.register("other", "Other", "other-thread")
-        assert db.participants.get("other").display_name == "Other"
+        db.participants.register("other")
+        assert db.participants.get("other").lookup == "other"
 
 
 def test_observation_closes_failed_reads_and_preserves_schema_disposition(db_path: Path) -> None:
     from agent_comms.coordination_database import CoordinationStore
 
     with store(db_path) as writer:
-        writer.participants.register("owner", "Owner", "thread", committed=True)
+        writer.participants.register("owner", committed=True)
     for statement in (
-        "UPDATE participants SET display_name='unauthorized'",
+        "UPDATE participants SET committed=0",
         "SELECT * FROM nonexistent_original_table",
     ):
         with pytest.raises(sqlite3.OperationalError):
@@ -1496,7 +1464,7 @@ def test_observation_closes_failed_reads_and_preserves_schema_disposition(db_pat
     with pytest.raises(sqlite3.ProgrammingError):
         reader.execute("SELECT 1")
     with store(db_path) as writer:
-        assert writer.participants.get("owner").display_name == "Owner"
+        assert writer.participants.get("owner").committed
 
 
 @pytest.mark.parametrize(
@@ -1519,7 +1487,7 @@ def test_nonterminal_settlement_cannot_silence_wire(db_path: Path, invalid: obje
 def test_other_public_evidence_flags_require_exact_bool(db_path: Path, invalid: object) -> None:
     with store(db_path) as db:
         with pytest.raises(ValueError):
-            db.participants.register("owner", "Owner", "thread", committed=invalid)
+            db.participants.register("owner", committed=invalid)
         assert (
             db.session._connection.execute("SELECT count(*) FROM participants").fetchone()[0] == 0
         )

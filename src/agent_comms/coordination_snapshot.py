@@ -95,13 +95,13 @@ class RecoverySnapshot:
         if intent is None or not intent.matches_request(self.execution.execution_id, candidate):
             raise IdentityConflict("prepared response envelope conflicts")
 
-    def require_publishing_intent(self, exact_target: str) -> tuple[PublicationIntents, ResponseObligation]:
+    def require_publishing_intent(self, exact_target: str, registry) -> tuple[PublicationIntents, ResponseObligation]:
         if len(self.publication_intents) != len(self.require_wire_responses()):
             raise IdentityConflict("all original response bodies must be frozen before first append")
         obligation = self.require_wire_response(exact_target)
         obligation.lifecycle.require_publishing()
         intent = ResponseObligation.response_record(self.publication_intents, exact_target)
-        if intent is None or intent.message.sender != self.execution.owner_thread:
+        if intent is None or registry.require(intent.message.sender).incarnation.lookup != self.execution.owner_lookup:
             raise IdentityConflict("no frozen publishing intent for current owner")
         return intent, obligation
 

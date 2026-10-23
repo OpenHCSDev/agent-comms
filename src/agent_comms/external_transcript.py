@@ -278,7 +278,7 @@ class DraftRow(TypedTable, TranscriptDraft, declared_name="external_draft"):
             yield DraftPublication()
             return
         from .registration import Registration
-        thread = Registration(RegistryFile.path_in(root)).require(original.owner_thread)
+        thread = Registration(RegistryFile.path_in(root)).snapshot().by_lookup[original.owner_lookup]
         original.owner_identity.require_recorded_owner(thread)
         transcript = ExternalTranscript(root, thread.incarnation)
         with transcript.writer_connection(check_same_thread=False) as connection:

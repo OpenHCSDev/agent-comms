@@ -36,7 +36,7 @@ async def test_interrupted_following_delivery_recovers_only_before_native_send(
     )
 
     with Coordination(str(store_path)) as store:
-        assignments = pending_sealed_assignments(store, lookup, owner.name)
+        assignments = pending_sealed_assignments(store, lookup)
         deliveries = comms.bus.bus.deliveries_for_references(
             tuple(row.source for row in assignments))
     # Freeze the original storage operation without placing its live result,
@@ -78,7 +78,7 @@ async def test_interrupted_following_delivery_recovers_only_before_native_send(
     )
     with Coordination(str(store_path)) as store:
         current = store.assignments.get(paused.assignment_id)
-        pending = pending_sealed_assignments(store, lookup, owner.name)
+        pending = pending_sealed_assignments(store, lookup)
     if native_bound:
         assert recovered == 0
         assert isinstance(current.lifecycle, DeferredAssignment)
@@ -115,7 +115,7 @@ async def test_recovery_without_paused_assignments_is_read_only(tmp_path, monkey
     lookup = RecordedThreadIncarnation("fixture", owner.created_at).lookup
     await _accept_visible_deliveries(comms.bus, root_id, store_path, lookup, 0, owner_name="beta")
     with Coordination(str(store_path)) as store:
-        assignments = pending_sealed_assignments(store, lookup, "beta")
+        assignments = pending_sealed_assignments(store, lookup)
         deliveries = comms.bus.bus.deliveries_for_references(
             tuple(row.source for row in assignments))
     reserved = []
@@ -134,5 +134,3 @@ async def test_recovery_without_paused_assignments_is_read_only(tmp_path, monkey
             assert await DeliveredInput.recover_interrupted(agent.inputs, "beta", root_id) == 0
     finally:
         await agent.shutdown()
-
-

@@ -105,7 +105,7 @@ class PublicationAppendDispatches(ResponseTable, TypedTable):
     @classmethod
     def resolve_retained(
         cls, store: Coordination, bus: MessageBus, boundary, *,
-        owner_lookup: str, owner_thread: str, execution_id: str | None = None,
+        owner_lookup: str, execution_id: str | None = None,
     ) -> tuple[RecoverySnapshot, ...]:
         """Finish only frozen responses whose exact keyed bus rows already exist.
 
@@ -131,7 +131,7 @@ class PublicationAppendDispatches(ResponseTable, TypedTable):
             if execution_id is not None and current_id != execution_id:
                 continue
             snapshot = store.get(current_id)
-            if snapshot.execution.owner_thread != owner_thread:
+            if snapshot.execution.owner_lookup != owner_lookup:
                 raise StaleFence("retained response belongs to another owner")
             for frozen in snapshot.publication_intents:
                 if ResponseObligation.response_record(
@@ -142,7 +142,7 @@ class PublicationAppendDispatches(ResponseTable, TypedTable):
                     snapshot = store.get(current_id)
                     _require_cohort_assignments(store, bus, snapshot, boundary.privacy)
                     intent, obligation = snapshot.require_publishing_intent(
-                        frozen.exact_target
+                        frozen.exact_target, boundary.registry
                     )
                     attempt = snapshot.require_current_attempt()
                     dispatch = cls.one(
@@ -231,12 +231,11 @@ class LiveResponseOwner(RegistryOwner):
         return self.thread.incarnation.lookup
 
     def require_live(self, snapshot: RegistrySnapshot, fence: OwnerFence) -> None:
-        # The registry resolves a renamed owner through its alias; the reply's
-        # sender is the current canonical name, which must still be the fenced one.
+        # The registry resolves a renamed owner; its lookup keeps the fence valid.
         actual = self._snapshot_owner(
             snapshot, "response owner turn stopped or changed before publication", self.check_type,
         )
-        if actual.name != fence.owner_thread:
+        if actual.incarnation.lookup != fence.owner_lookup:
             raise StaleFence("response turn belongs to a different fenced owner")
         self.require_active_turn()
 
@@ -264,7 +263,6 @@ class LiveResponseOwner(RegistryOwner):
             )
             return PublicationAppendDispatches.resolve_retained(
                 store, bus, boundary, owner_lookup=self.recipient_lookup,
-                owner_thread=self.thread.name,
             )
 
     def _publish_owned(
@@ -430,7 +428,7 @@ def prepare_fenced_response(
             if existing is not None:
                 snapshot.require_existing_preparation(
                     Message(
-                        execution.owner_thread,
+                        registry_snapshot.by_lookup[execution.owner_lookup].name,
                         target,
                         payload,
                         message_type,
@@ -442,7 +440,7 @@ def prepare_fenced_response(
                 return AlreadyApplied(existing)
             obligation = snapshot.require_preparation(target)
             candidate = Message(
-                execution.owner_thread,
+                registry_snapshot.by_lookup[execution.owner_lookup].name,
                 target,
                 payload,
                 message_type,
@@ -523,7 +521,7 @@ def _settle_fenced_response(
                 if terminal is not None:
                     return terminal
                 snapshot = _require_final_owner(store, bus, fence, boundary.privacy, owner_witness, exact_target)
-                snapshot.require_publishing_intent(exact_target)
+                snapshot.require_publishing_intent(exact_target, registry_snapshot)
                 prior = PublicationAppendDispatches.one(db, execution_id=fence.execution_id, exact_target=exact_target)
                 if prior is None:
                     PublicationAppendDispatches(
@@ -543,7 +541,7 @@ def _settle_fenced_response(
             if terminal is not None:
                 return terminal
             snapshot = _require_final_owner(store, bus, fence, boundary.privacy, owner_witness, exact_target)
-            intent, obligation = snapshot.require_publishing_intent(exact_target)
+            intent, obligation = snapshot.require_publishing_intent(exact_target, registry_snapshot)
             dispatch = PublicationAppendDispatches.one(db, execution_id=fence.execution_id, exact_target=exact_target)
             if dispatch is None or not dispatch.matches(wire_root_id, fence, exact_target):
                 raise PublicationUncertain("no matching durable append dispatch")
@@ -555,7 +553,7 @@ def _settle_fenced_response(
                 # only authorized first append while its final fence is locked.
                 from .response_conversation import ResponseConversation
 
-                conversation = ResponseConversation.capture(bus, snapshot, obligation, boundary.privacy)
+                conversation = ResponseConversation.capture(bus, snapshot, obligation, boundary.privacy, registry_snapshot)
                 matched = bus.publisher._publish_keyed_response_unlocked(
                     intent, conversation=conversation, registry_snapshot=registry_snapshot, activity=boundary.activity
                 )

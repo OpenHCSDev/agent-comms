@@ -223,9 +223,9 @@ def test_coordination_assignment_generation_is_independent_of_registry_process(t
     registry = registry_with_owner(tmp_path)
     initial = registry.snapshot().owner_identity("owner")
     with Coordination(str(tmp_path / "coordination.sqlite3")) as store:
-        participant = store.participants.register("lookup", "Owner", "owner", committed=True).value
+        participant = store.participants.register("lookup", committed=True).value
         advanced = store.participants.advance_generation(
-            "lookup", "owner", expected_generation=participant.owner_identity.generation
+            "lookup", expected_generation=participant.owner_identity.generation
         ).value
         assert advanced.owner_identity.generation == participant.owner_identity.generation + 1
         assert registry.snapshot().owner_identity("owner") == initial
@@ -316,5 +316,3 @@ def test_same_launch_ignores_metadata_and_follows_process_session_and_model(tmp_
         replace(thread, created_at=2.0),
     ):
         assert not thread.same_launch(changed)
-
-
