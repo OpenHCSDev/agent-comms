@@ -1,5 +1,5 @@
 """Original authored ingress and neutral historical evidence share one input store."""
-from agent_comms.controller import SessionUpdateSink
+from agent_comms.controller import Controller, SessionUpdateSink
 
 from agent_comms.channel_targets import CommandTarget
 
@@ -27,7 +27,16 @@ from stored_inputs import stored_inputs
 from agent_comms.threads import Thread
 
 
-class Client(SessionUpdateSink):
+class Client(Controller, SessionUpdateSink):
+    def require_current(self, authority, session_id) -> None:
+        return None
+
+    async def request_ui_permission(self, runner, session_id, request) -> dict[str, object] | None:
+        return None
+
+    def departed(self, runtime, session_id) -> bool:
+        return False
+
     async def publish_update(self, **kwargs):
         return True
 

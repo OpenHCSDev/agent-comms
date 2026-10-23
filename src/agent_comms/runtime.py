@@ -20,7 +20,7 @@ from contextlib import ExitStack, contextmanager, suppress
 from contextvars import ContextVar
 from dataclasses import dataclass
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, ClassVar
+from typing import TYPE_CHECKING, Any, ClassVar, Self
 
 from pydantic import BaseModel
 
@@ -33,13 +33,12 @@ from acp.schema import (
     ToolCallUpdate,
 )
 
-from .jsonl_stream import JsonlStreamReader
 from .controller import (
     ACP_PERMISSION_TIMEOUT_SECONDS, UNBOUND_CONTROLLER, Controller, SessionUpdateSink,
 )
-from .field_codec import MalformedRecord
+from .field_codec import MalformedRecord, WireName
 from .owner_protocol import (
-    ClientPermissionResponse,
+    ClientLine,
     IncompatibleOwnerError,
     OwnerFailure,
     OwnerLine,
@@ -48,11 +47,10 @@ from .owner_protocol import (
     OwnerUpdate,
     UnannouncedOwner,
 )
+from .owner_connection import OwnerConnection, OwnerIdentityChangedError, socket_path
 from .runtime_requests import RuntimeRequest, SubscribeRuntimeRequest
-from .registry_document import RegistryEntry
-from .child_process import Platform, ProcessIdentity
-from .thread_identity import OwnerIdentity
-from .errors import RelationViolationError, UnregisteredThreadError
+from .child_process import Platform
+from .errors import RelationViolationError
 from .coordination_errors import CoordinationError, IdentityConflict, RequestRefused
 from .native_failures import NativeRequestFailure
 from .private_path import PrivateSocketRole
@@ -72,10 +70,6 @@ def client_refusals() -> Iterator[None]:
         raise RequestRefused(error.code, str(error), error.data) from error
 
 
-def socket_path(root: Path, pid: int) -> Path:
-    return root / "runtime" / f"{pid}.sock"
-
-
 class UnboundClient(SessionUpdateSink):
     async def publish_update(self, *, session_id: str, update: BaseModel) -> bool:
         raise RuntimeError("An unbound client cannot publish session updates")
@@ -87,6 +81,35 @@ _LOG = logging.getLogger(__name__)
 
 class SubscriberClosed(ConnectionError):
     """The attached reader left; the normal end of a subscription, not a failed request."""
+
+
+@dataclass(frozen=True, kw_only=True)
+class ClientPermissionResponse(ClientLine):
+    """The controller's decision on one permission request."""
+
+    id: str
+    outcome: dict[str, object]
+
+    def __post_init__(self) -> None:
+        self.response()
+
+    @classmethod
+    def cancelled(cls, request_id: str) -> Self:
+        denied = RequestPermissionResponse(outcome=DeniedOutcome(outcome="cancelled"))
+        return cls.of(request_id, denied)
+
+    @classmethod
+    def of(cls, request_id: str, response: RequestPermissionResponse) -> Self:
+        outcome = response.outcome.model_dump(by_alias=True, exclude_none=True)
+        return cls(id=request_id, outcome=outcome)
+
+    def response(self) -> RequestPermissionResponse:
+        return RequestPermissionResponse.model_validate({"outcome": self.outcome})
+
+    def answer(self, client: SocketClient) -> None:
+        pending = client.pending.get(self.id)
+        if pending is not None and not pending.done():
+            pending.set_result(self.response())
 
 
 class SocketClient(Controller, SessionUpdateSink):
@@ -192,14 +215,6 @@ class SocketClient(Controller, SessionUpdateSink):
     async def publish_update(self, *, session_id: str, update: BaseModel) -> bool:
         await self.send(OwnerUpdate.of(update))
         return True
-
-
-class OwnerIdentityChangedError(RuntimeError, ConnectionError):
-    """A saved attachment lost its root or thread identity and cannot reconnect."""
-
-
-class OwnerReplyLostError(RuntimeError, ConnectionError):
-    """The owner disconnected after dispatch; a mutating request remains uncertain."""
 
 
 class SessionClients(dict[str, set[SocketClient]]):
@@ -376,124 +391,17 @@ def present_session(metadata: dict[str, object], session_id: str) -> dict[str, o
     }
 
 
-class RuntimeConnection:
-    """A shared headless-client socket connection that checks root, owner and process identity."""
-
-    def __init__(self, comms, session_id: str, path: Path):
-        self.session_id = session_id
-        self.path = path
-        self._comms = comms
-        self._closed = False
-        self._requests: set[asyncio.Task] = set()
-        self._identity = comms.registry.entry(session_id).entry.thread.incarnation
-        self._root_identity = comms.root.stat()
+class RuntimeConnection(OwnerConnection):
+    """ACP attachments select declared request behavior and their controller token."""
 
     @property
     def controller_token(self):
         return None
 
-    def _owner_entry(self) -> RegistryEntry:
-        if self._closed:
-            raise ConnectionError("Owner attachment was closed before request dispatch")
-        try:
-            same_root = os.path.samestat(self._root_identity, self._comms.root.stat())
-        except FileNotFoundError:
-            same_root = False
-        if not same_root:
-            raise OwnerIdentityChangedError("Wire root changed; open a new attachment.")
-        try:
-            entry = self._comms.registry.entry(self.session_id).entry
-        except UnregisteredThreadError as error:
-            raise OwnerIdentityChangedError(
-                "Thread identity changed; open a new attachment."
-            ) from error
-        if (not entry.matches_name(self._identity.name)
-                or self._identity != entry.thread.incarnation):
-            raise OwnerIdentityChangedError("Thread identity changed; open a new attachment.")
-        return entry
-
-    def _require_connect_owner(self, owner: OwnerIdentity, process: ProcessIdentity) -> None:
-        try:
-            self._owner_entry().require_owner_process(owner, process)
-        except RelationViolationError as error:
-            raise ConnectionError(f"Cannot attach {self.session_id!r}: {error}") from error
-        if not process.alive():
-            raise ConnectionError(
-                f"Owner {process.pid} for {self.session_id!r} exited before attachment; "
-                f"request not sent. Startup output: {self._comms.root / 'diagnostics'}"
-            )
-
-    async def _connect_current(self) -> tuple[asyncio.StreamReader, asyncio.StreamWriter]:
-        # Startup has no elapsed-time expiry. The registered process and lease
-        # own its lifetime; caller cancellation also ends this unsent operation.
-        entry = await Coordination.run_worker(self._owner_entry)
-        try:
-            entry.status.require_active()
-            process = entry.thread.require_process()
-        except RelationViolationError as error:
-            raise ConnectionError(f"Cannot attach {self.session_id!r}: {error}") from error
-        owner = entry.owner_identity
-        path = socket_path(self._comms.root, process.pid)
-
-        while True:
-            await Coordination.run_worker(partial(self._require_connect_owner, owner, process))
-            try:
-                with PrivateSocketRole.address(path) as address:
-                    reader, writer = await asyncio.open_unix_connection(address, limit=8 * 1024 * 1024)
-            except (FileNotFoundError, ConnectionRefusedError):
-                await asyncio.sleep(0.05)
-                continue
-            try:
-                await Coordination.run_worker(partial(self._require_connect_owner, owner, process))
-                self.path = path
-                return reader, writer
-            except BaseException:
-                writer.close()
-                raise
-
-    async def _read_response(self, reader: asyncio.StreamReader) -> bytes:
-        return await JsonlStreamReader(reader).readline()
-
-    async def request(self, action: str, **kwargs: object) -> object:
-        if self._closed:
-            raise ConnectionError("Owner attachment was closed before request dispatch")
-        task = asyncio.current_task()
-        assert task is not None
-        self._requests.add(task)
-        writer = None
-        try:
-            reader, writer = await self._connect_current()
-            if self._closed:
-                raise ConnectionError("Owner attachment was closed before request dispatch")
-            writer.write(
-                (
-                    json.dumps(
-                        RuntimeRequest.member_named(action).proxy_payload(
-                            self.session_id, self.controller_token, kwargs
-                        )
-                    )
-                    + "\n"
-                ).encode()
-            )
-            await writer.drain()
-            line = await self._read_response(reader)
-            if not line:
-                raise OwnerReplyLostError("Thread owner disconnected after request; outcome unknown.")
-            return OwnerLine.read(line).reply()
-        finally:
-            try:
-                if writer is not None:
-                    writer.close()
-                    await writer.wait_closed()
-            finally:
-                self._requests.discard(task)
-
-    async def close(self):
-        self._closed = True
-        tasks = tuple(self._requests)
-        for task in tasks:
-            task.cancel()
-        await asyncio.gather(*tasks, return_exceptions=True)
+    def request_payload(self, action: str, parameters: dict[str, object]) -> dict[str, object]:
+        return RuntimeRequest.member_named(action).proxy_payload(
+            self.session_id, self.controller_token, parameters,
+        )
 
 
 class OwnerReplyConnection(RuntimeConnection):

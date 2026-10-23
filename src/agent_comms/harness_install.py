@@ -70,6 +70,10 @@ class Harness(DeclaredFamily, affix="Harness"):
     def configure(self) -> tuple[Path, ...]:
         """Write this harness's own config in its own format; returns the files written."""
 
+    def retire_configuration(self) -> tuple[Path, ...]:
+        """Remove superseded configuration during installer maintenance."""
+        return ()
+
     @classmethod
     def published_links(cls, home: Path) -> dict[Path, Path]:
         """Refresh present harnesses and retain links of previously installed harnesses."""
@@ -109,22 +113,31 @@ class CodexHarness(Harness):
 
     executable: ClassVar[str] = 'codex'
     skills_dir: ClassVar[str] = '.codex/skills'
-    bus_threads: ClassVar[tuple[str, ...]] = ('codex',)
+
+    def retire_configuration(self) -> tuple[Path, ...]:
+        unit = self.home / '.config/systemd/user/codex-comms-inbox.service'
+        if not unit.exists():
+            return ()
+        unit.unlink()
+        return (unit,)
 
     def configure(self) -> tuple[Path, ...]:
-        unit = self.home / '.config/systemd/user/codex-comms-inbox.service'
+        unit = self.home / '.config/systemd/user/codex-comms-inbox@.service'
         unit.parent.mkdir(parents=True, exist_ok=True)
         unit.write_text(f"""[Unit]
-Description=Core message stream to the selected Codex conversation
+Description=Core message stream to Codex conversation %i
 
 [Service]
 Type=simple
-ExecStart={self.bin('agent-comms-codex-bridge')} watch --state {self.home / '.local/state/codex-comms-inbox'}
+ExecStart={self.bin('agent-comms-codex-bridge')} watch --session %i
 Restart=on-failure
 RestartSec=5
 KillMode=control-group
 TimeoutStopSec=10
 UMask=0077
+
+[Install]
+WantedBy=default.target
 """)
         return (unit,)
 

@@ -23,7 +23,6 @@ from functools import cached_property, partial
 from pathlib import Path
 from typing import Annotated, ClassVar, Generic, Literal, Self, TextIO, TypeVar
 
-from acp.schema import SessionConfigSelectOption
 from pydantic import Field, model_validator
 
 from agent_comms import field_codec, messages
@@ -48,7 +47,7 @@ from agent_comms.cli_protocol import (
     raise_child_exit,
 )
 from agent_comms.comms import Comms, wire
-from agent_comms.config_options import CatalogConfigOption, CatalogSelection, ConfigOptions
+from agent_comms.config_options import CatalogChoice, CatalogConfigOption, CatalogSelection, ConfigOptions
 from agent_comms.coordination_errors import CoordinationError
 from agent_comms.declared_family import DeclaredFamily
 from agent_comms.declared_verb import DeclaredOptions
@@ -378,7 +377,7 @@ class TargetField:
 @dataclass(frozen=True)
 class ChoiceTargetField(TargetField):
     """A prepared finite declaration, from its annotation or configuration catalog."""
-    options: tuple[SessionConfigSelectOption, ...] = ()
+    options: tuple[CatalogChoice, ...] = ()
 
     @property
     def editor_declarations(self) -> tuple[object, ...]:
@@ -386,12 +385,12 @@ class ChoiceTargetField(TargetField):
 
     @property
     def choices(self) -> tuple[tuple[str, str], ...]:
-        return tuple((choice.name, choice.value) for choice in self.options)
+        return tuple((choice.name, choice.editor_value) for choice in self.options)
 
     async def prepare(self, catalogs: ConfigOptions,
                       selection: CatalogSelection) -> ChoiceTargetField:
         decoder = field_codec.compile_decoder(self.annotation)
-        options = (SessionConfigSelectOption(
+        options = (CatalogChoice(
                        name=label, value=decoder.encode_editor(decoder.decode(value)))
                    for label, value in decoder.editor_choices())
         return replace(self, options=tuple(options))
@@ -414,7 +413,7 @@ class CatalogTargetField(ChoiceTargetField):
         catalog = catalogs.catalog_for(self.catalog)
         options = await catalog.display_choices(selection)
         decoder = field_codec.compile_decoder(self.annotation)
-        return replace(self, options=tuple(SessionConfigSelectOption(name=item.name,
+        return replace(self, options=tuple(CatalogChoice(name=item.name,
             value=decoder.encode_editor(decoder.decode(item.value))) for item in options))
 
     def value_schema(self) -> dict[str, object]:
@@ -466,7 +465,14 @@ class Inbox(Operation[OperationBridge]):
         """Delivery alone, without the transcript that confirms it on some bridges."""
         return not issubclass(bridge, TranscriptConfirmsDelivery)
 
-    def start(self, bridge: OperationBridge, tasks: asyncio.TaskGroup) -> None:
+    async def start(self, bridge: OperationBridge, tasks: asyncio.TaskGroup,
+                    endpoint: ExitStack) -> None:
+        from agent_comms.registration import Registration
+
+        registry = await asyncio.to_thread(
+            Registration, RegistryFile.path_in(Path(bridge.binding.root)))
+        await bridge.comms.bus.when_open(lambda: endpoint.enter_context(
+            registry.external_process(bridge.binding.bus, bridge.session_process())))
         tasks.create_task(bridge.watch())
 
     def claimed(self, claim: WatchClaim,
@@ -482,6 +488,12 @@ class Inbox(Operation[OperationBridge]):
 
 class Watch(Inbox):
     help = "Deliver this binding's bus messages and publish its harness transcript to the bus"
+
+    def binding(self, arguments: argparse.Namespace) -> BindingRequest:
+        if arguments.session is not None:
+            arguments.state = arguments.state / arguments.session
+        return super().binding(arguments)
+
     @classmethod
     def serves(cls, bridge: type[CliBridge]) -> bool:
         return issubclass(bridge, PublishesTranscript)
@@ -489,8 +501,16 @@ class Watch(Inbox):
     async def execute(self, bridge: OperationBridge) -> None:
         await bridge.watch_operation(self)
 
-    def start(self, bridge: TranscriptBridge, tasks: asyncio.TaskGroup) -> None:
-        super().start(bridge, tasks)
+    async def start(self, bridge: TranscriptBridge, tasks: asyncio.TaskGroup,
+                    endpoint: ExitStack) -> None:
+        from agent_comms.cli_commands import RegisterCliCommand
+
+        if not bridge.comms.registry.snapshot().taken(bridge.binding.bus):
+            command = RegisterCliCommand(
+                name=bridge.binding.bus, worktree=str(await bridge.session_worktree()),
+                process=bridge.session_process())
+            await bridge.comms.bus.when_open(partial(command.apply, bridge.comms))
+        await super().start(bridge, tasks, endpoint)
         tasks.create_task(bridge.publish_transcript())
 
 
@@ -591,8 +611,9 @@ class Serve(Watch):
         self.owner.require_alive()
         await bridge.registered_watch(self)
 
-    def start(self, bridge: LineMonitorBridge, tasks: asyncio.TaskGroup) -> None:
-        super().start(bridge, tasks)
+    async def start(self, bridge: LineMonitorBridge, tasks: asyncio.TaskGroup,
+                    endpoint: ExitStack) -> None:
+        await super().start(bridge, tasks, endpoint)
         tasks.create_task(MonitorService(bridge, self.owner, bridge.stop).run())
 
 
@@ -859,17 +880,19 @@ class CliBridge(ExternalRuntime, DeliversInput, Generic[BridgeOptions]):
         return WatchRecord(self.binding.bus, self.binding.root,
                            (Path(sys.argv[0]).name, *sys.argv[1:]))
 
+    def session_process(self) -> ProcessIdentity:
+        """A line-monitor endpoint lives in the session-owned bridge process."""
+        return ProcessIdentity.capture(os.getpid())
+
+    async def session_worktree(self) -> Path:
+        return Path.cwd()
+
     async def registered_watch(self, operation: Inbox) -> None:
-        from agent_comms.registration import Registration
-        registry = await asyncio.to_thread(
-            Registration, RegistryFile.path_in(Path(self.binding.root)))
         with ExitStack() as endpoint:
-            await self.comms.bus.when_open(lambda: endpoint.enter_context(
-                registry.external_process(self.binding.bus, ProcessIdentity.capture(os.getpid()))))
             with operation.claimed(WatchClaim(self.binding.thread), self.watch_record()) as held:
                 try:
                     async with asyncio.TaskGroup() as tasks:
-                        operation.start(self, tasks)
+                        await operation.start(self, tasks, endpoint)
                 finally:
                     # A pause ends the tasks by cancellation; the claim is kept either way.
                     operation.keep(self, held)

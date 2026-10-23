@@ -18,7 +18,7 @@ from agent_comms.send_result import SendResult
 from agent_comms.cli_protocol import Outcome, DeliveredOutcome
 
 from .history import HarnessAddress, OnlineHistory, OpenCodeHistory
-from .shared import Binding, CliBridge, IncomingFrame, Options, TranscriptBridge, Watch, run_bridge
+from .shared import Binding, BindingRequest, CliBridge, IncomingFrame, Options, TranscriptBridge, Watch, run_bridge
 from agent_comms.runtime_updates import RuntimeUpdate
 from .opencode_protocol import (
     Connected, OpenCodeEvent, OpenCodeStream, Prompt, SavedInput, Session, TextInput, Toast,
@@ -51,6 +51,7 @@ async def event_payloads(response: aiohttp.ClientResponse) -> AsyncIterator[str]
 class OpenCodeOptions(Options):
     server: str
     directory: Path
+    pid: int
 
 
 @dataclass(frozen=True)
@@ -58,7 +59,6 @@ class Attach(Watch):
     """The selected native session owns its Core thread and bridge child."""
 
     help = "Attach the running OpenCode session to its bus thread and deliver to it"
-    pid: int
 
     @classmethod
     def serves(cls, bridge: type[CliBridge]) -> bool:
@@ -68,23 +68,15 @@ class Attach(Watch):
     def add_arguments(cls, parser: argparse.ArgumentParser) -> None:
         parser.add_argument('--pid', type=int, required=True)
 
-    def binding(self, arguments: argparse.Namespace) -> Binding:
+    def binding(self, arguments: argparse.Namespace) -> BindingRequest:
         from agent_comms.comms import wire
 
         if arguments.session is None:
             raise ValueError('Attach requires the selected native session')
         comms = wire(arguments.root)
-        name = arguments.bus_thread or f'opencode-{arguments.session}'
-        arguments.state = arguments.state / arguments.session
-        return Binding(str(comms.root), name, arguments.session)
-
-    def start(self, bridge: OpenCodeBridge, tasks: asyncio.TaskGroup) -> None:
-        from agent_comms.comms import wire
-        from agent_comms.cli_commands import RegisterCliCommand
-
-        RegisterCliCommand(name=bridge.binding.bus, worktree=str(bridge.options.directory),
-                           process=ProcessIdentity.capture(self.pid)).apply(wire(bridge.binding.root))
-        super().start(bridge, tasks)
+        arguments.root = str(comms.root)
+        arguments.bus_thread = arguments.bus_thread or f'opencode-{arguments.session}'
+        return super().binding(arguments)
 
 
 class OpenCodeConnection:
@@ -206,6 +198,12 @@ class OpenCodeBridge(OpenCodeServer, TranscriptBridge[OpenCodeOptions], declared
     def add_arguments(cls, parser: argparse.ArgumentParser) -> None:
         parser.add_argument('--server', required=True, help='HTTP address of the running OpenCode TUI/server')
         parser.add_argument('--directory', type=Path, default=Path.cwd(), help='OpenCode session working directory')
+
+    def session_process(self) -> ProcessIdentity:
+        return ProcessIdentity.capture(self.options.pid)
+
+    async def session_worktree(self) -> Path:
+        return self.options.directory
 
     async def transcript(self) -> AsyncIterator[RuntimeUpdate]:
         async with self.connection() as connection:
