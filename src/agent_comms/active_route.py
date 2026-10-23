@@ -17,7 +17,7 @@ from collections.abc import Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass, replace
 from pathlib import Path
-from typing import Annotated, ClassVar
+from typing import TYPE_CHECKING, Annotated, ClassVar
 
 from .child_process import Platform
 from .coordination_errors import CoordinationError
@@ -28,6 +28,9 @@ from .launch_root import LaunchRoot
 from .private_nk_entrypoint import PrivateNkLaunch, RootLaunch
 from .private_path import ObservedPath
 from .recorded_bus import RecordedBusIdentity
+
+if TYPE_CHECKING:
+    from .installer.reporting import RootWriter
 
 
 @dataclass(frozen=True, slots=True)
@@ -404,9 +407,21 @@ class RouteFile(ABC):
     def route_new_bus(self, route: ActiveRoute, path: Path, directory: int) -> str:
         return f"replaced {path}; old route kept at {self.replace(route, path, directory)}"
 
+    def outgoing_writer(self, writer: RootWriter) -> RootWriter:
+        """Who posts install reports before install routes to its bus: the outgoing runtime,
+        which borrows this file like every client."""
+        return writer
+
 
 class ReplaceableRoute(RouteFile):
     """Selects no bus: install and the repair both replace it."""
+
+    def outgoing_writer(self, writer: RootWriter) -> RootWriter:
+        """Every borrower of the default root refuses this file, the outgoing runtime
+        included, so nothing posts until install's route step replaces it."""
+        from .installer.reporting import UnpostedWriter
+
+        return UnpostedWriter()
 
 
 class AbsentRoute(RouteFile):
