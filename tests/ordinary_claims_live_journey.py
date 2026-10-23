@@ -5,7 +5,6 @@ storage. Uses the configured provider/model, writes scratch files, and explicitl
 cancels one turn and kills one acquired scratch native child. Never replays input.
 """
 from __future__ import annotations
-from agent_comms.controller import SessionUpdateSink
 
 
 from agent_comms.bus import Bus
@@ -33,7 +32,7 @@ from agent_comms.thread_model import DeclaredModel
 from agent_comms.threads import Thread
 
 
-class Observer(SessionUpdateSink):
+class Observer:
     """A real ACP client's notification sink, not an execution substitute."""
     def __init__(self):
         self.updates = []
@@ -41,9 +40,8 @@ class Observer(SessionUpdateSink):
     def on_connect(self, connection):
         self.connection = connection
 
-    async def publish_update(self, session_id, update, **kwargs):
+    async def session_update(self, session_id, update, **kwargs):
         self.updates.append(update.model_dump(by_alias=True, exclude_none=True))
-        return True
 
     async def request_permission(self, **kwargs):
         raise AssertionError("No permission dialog belongs to this scratch operation")
