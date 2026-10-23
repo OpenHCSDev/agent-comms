@@ -15,16 +15,20 @@ from agent_comms.envelope_claim_transitions import AcquiringClaim, RecordedScope
 from agent_comms.errors import RelationViolationError
 from agent_comms.field_codec import FieldCodec, compile_decoder
 from agent_comms.goal_failure_observation import FailedTurnEvidence
+from agent_comms.historical_views import HistoryArchive
 from agent_comms.input_attempt import StoredInput
 from agent_comms.input_origin import HumanInputOrigin
-from agent_comms.historical_views import HistoryArchive
 from agent_comms.locked_store import JsonDocument, RegistryFile, SQLiteFile
 from agent_comms.native_runtime_input import CurrentNativeCursor, NativeRuntimeInput
 from agent_comms.owner_lifecycle import OwnerRestartSelection
 from agent_comms.queued_input import QueuedInputContext
 from agent_comms.registry_document import RegistryDocument
 from agent_comms.restart_queue import QueuedRestart
-from agent_comms.selected_write_plan import SelectedWriteBinding, SelectedWriteIntent, SelectedWritePlans
+from agent_comms.selected_write_plan import (
+    SelectedWriteBinding,
+    SelectedWriteIntent,
+    SelectedWritePlans,
+)
 from agent_comms.thread_identity import ClaimedIdentity, TurnFence
 from agent_comms.turn_lease import ActiveTurn
 from agent_comms.typed_table import TypedTable, _identifier

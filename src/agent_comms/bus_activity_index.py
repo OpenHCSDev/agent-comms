@@ -1,16 +1,16 @@
 """Activity maxima derived in the transaction that appends their original message."""
 from __future__ import annotations
 
-from . import activity_clocks
 import sqlite3
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Annotated, Self
+from typing import TYPE_CHECKING, Annotated
 
+from . import activity_clocks
 from .messages import BusProjectionTables
-from .typed_table import Column, TypedTable
+from .typed_table import Column
 
 if TYPE_CHECKING:
-    from .messages import Message
+    pass
 
 
 class ActivityMaximum(BusProjectionTables, declared_name=None):

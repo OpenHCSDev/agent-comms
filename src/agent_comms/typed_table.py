@@ -17,7 +17,7 @@ import types
 from abc import ABC, abstractmethod
 from collections.abc import Callable, Generator, Iterable, Iterator, Mapping, Sequence
 from contextlib import AbstractContextManager, ExitStack, closing, contextmanager
-from dataclasses import dataclass, field, replace
+from dataclasses import dataclass, field, is_dataclass, replace
 from enum import Enum, IntEnum, IntFlag
 from functools import cache
 from inspect import getsource
@@ -264,8 +264,6 @@ class JsonStorage(SqlStorage):
 
     @classmethod
     def accepts(cls, annotation: object) -> bool:
-        from dataclasses import is_dataclass
-
         return (
             is_dataclass(annotation)
             or get_origin(annotation) in (list, tuple, dict, frozenset, Union, types.UnionType)
@@ -534,7 +532,8 @@ class TypedRow(SqlProjection):
     """Typed query projection; also the shared decoder for stored row types."""
 
     @ClassFact
-    def _fields(cls) -> tuple[_Field, ...]:
+    @staticmethod
+    def _fields(cls: type[TypedRow]) -> tuple[_Field, ...]:
         if not cls.__dataclass_params__.frozen:
             raise TypeError("SQLite row declarations must be frozen dataclasses")
         return tuple(_Field.for_field(plan) for plan in FieldCodec.field_plans(cls))
@@ -593,7 +592,7 @@ class TypedRow(SqlProjection):
         return instance
 
     @classmethod
-    def iterate(cls, cursor: sqlite3.Cursor) -> Generator[Self, None, None]:
+    def iterate(cls, cursor: sqlite3.Cursor) -> Generator[Self]:
         """Stream strictly decoded rows; close this iterator to release its query."""
         try:
             positions = cls._positions(cursor)
@@ -1500,7 +1499,8 @@ class TypedTable(
         return ()
 
     @ClassFact
-    def _columns(cls) -> tuple[_Field, ...]:
+    @staticmethod
+    def _columns(cls: type[TypedTable]) -> tuple[_Field, ...]:
         """Every stored column: the record's fields, each generated column after the field
         declared before it."""
         fields = cls._fields
@@ -1588,17 +1588,19 @@ class TypedTable(
                 + (", WITHOUT ROWID" if cls.without_rowid else ""))
 
     @ClassFact
-    def schema_names(cls) -> frozenset[str]:
+    @staticmethod
+    def schema_names(cls: type[TypedTable]) -> frozenset[str]:
         """Every object this row declares, by name; overrides change only the SQL."""
         return frozenset(cls.schema_objects())
 
     @FamilyFact
-    def claimed_names(cls) -> frozenset[str]:
+    @staticmethod
+    def claimed_names(cls: type[TypedTable]) -> frozenset[str]:
         """Every object name any row of the family declares, held once on ``TypedTable``;
         each new row declaration forgets it, so it always covers the whole registry."""
         return frozenset(name for row in cls.members_with(cls) for name in row.schema_names)
 
-    def __init_subclass__(cls, **kwargs: object) -> None:
+    def __init_subclass__(cls, **kwargs: str | None) -> None:
         super().__init_subclass__(**kwargs)
         TypedTable.__dict__["claimed_names"].forget(cls)
 
@@ -1748,7 +1750,7 @@ class TypedTable(
         cls, db: sqlite3.Connection, where: str, parameters: tuple,
         order_by: tuple[str, ...], descending: bool, key: dict[str, object],
         row_type: type[RelatedRow] | None, limit: int | None,
-    ) -> Generator[Self | RelatedRow, None, None]:
+    ) -> Generator[Self | RelatedRow]:
         condition, parameters = cls._condition(where, parameters, key)
         direction, selected = " DESC" if descending else "", row_type or cls
         return selected.iterate(db.execute(
@@ -1795,7 +1797,7 @@ class TypedTable(
         cls, db: sqlite3.Connection, *, row_type: type[RelatedRow], where: str = "1",
         parameters: tuple = (), order_by: tuple[str, ...] = (), descending: bool = False,
         limit: int | None = None, **key: object,
-    ) -> Generator[RelatedRow, None, None]: ...
+    ) -> Generator[RelatedRow]: ...
 
     @overload
     @classmethod
@@ -1803,7 +1805,7 @@ class TypedTable(
         cls, db: sqlite3.Connection, *, row_type: None = None, where: str = "1",
         parameters: tuple = (), order_by: tuple[str, ...] = (), descending: bool = False,
         limit: int | None = None, **key: object,
-    ) -> Generator[Self, None, None]: ...
+    ) -> Generator[Self]: ...
 
     @classmethod
     def stream(
@@ -1816,7 +1818,7 @@ class TypedTable(
         descending: bool = False,
         row_type: type[RelatedRow] | None = None, limit: int | None = None,
         **key: object,
-    ) -> Generator[Self | RelatedRow, None, None]:
+    ) -> Generator[Self | RelatedRow]:
         """Rows decoded as the caller consumes them; close it to release the query."""
         return cls._query(db, where, parameters, order_by, descending, key, row_type, limit)
 

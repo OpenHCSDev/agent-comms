@@ -21,7 +21,6 @@ start and result through the bus's ordinary publisher.
 from __future__ import annotations
 
 import hashlib
-import json
 import os
 import shutil
 import sys
@@ -102,23 +101,25 @@ from agent_comms.installer.practice import (
     RuntimeHome,
 )
 from agent_comms.installer.reporting import (
-    RootWriter, RuntimeWriter, UnpostedWriter,
+    RootWriter,
+    RuntimeWriter,
+    UnpostedWriter,
 )
 from agent_comms.installer.runtime_resolution import RuntimeResolution, StackProject
 from agent_comms.launch_runtime import LaunchRuntime, RestartEnvironment, SpecifiedImportPath
-from agent_comms.locked_store import BusFile, DeclaredFile, RootFile, UndeclaredFile
-from agent_comms.native_build_inputs import NativeBuildInputs
-from agent_comms.native_package import pinned_package_for
-from agent_comms.root_runtime import RootRuntime, RootRuntimeStore
-from agent_comms.runtime_processes import RuntimeProcesses
+from agent_comms.locked_store import BusFile, DeclaredFile, UndeclaredFile
 from agent_comms.maintenance_barrier import (
     MaintenanceBarrier,
     MaintenanceOperator,
     MaintenanceState,
 )
+from agent_comms.native_build_inputs import NativeBuildInputs
+from agent_comms.native_package import pinned_package_for
 from agent_comms.recorded_bus import RecordedBusIdentity
 from agent_comms.registry_store import RegistryStore
 from agent_comms.repo import Checkout, Repo, ScratchCheckout
+from agent_comms.root_runtime import RootRuntime, RootRuntimeStore
+from agent_comms.runtime_processes import RuntimeProcesses
 from agent_comms.storage_rules import StorageRule
 
 if TYPE_CHECKING:
