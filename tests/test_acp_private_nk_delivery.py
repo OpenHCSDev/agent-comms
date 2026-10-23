@@ -128,7 +128,7 @@ def test_private_rename_of_unregistered_participant_takes_the_plain_path(tmp_pat
             store.participants.get(lookup)
 
 
-async def test_missing_native_schema_refuses_cursor_metadata(tmp_path):
+async def test_missing_native_schema_refuses_cursor_metadata(tmp_path, native_runtime_package):
     comms, agent, _ = _session(tmp_path)
     assert cursor_envelope((await agent.sessions.metadata("beta"))) is not None
     with Coordination(str(comms.root / "coordination.sqlite3")) as store:
