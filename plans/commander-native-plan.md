@@ -241,6 +241,13 @@ Installed full-session/parity acceptance and the complete control-plane phase
 remain open. The source census has zero parse omissions; unprojected declarations
 remain visible.
 
+The schema follow-through is a separate change stacked on #2624. Its starting
+defect is `ComposedSchemas.carry_schema` invoking every family, so an index-only
+change resets unchanged bus projections. The repair must retain replay when
+source rows or projection contents actually become invalid, while deleting
+history decoding for catalog-only changes. The retained replay and source
+evidence above are its baseline; #2624 remains independently reviewable.
+
 ### Phase 8: cutover
 
 **Changes.**
