@@ -97,9 +97,9 @@ def test_a_reused_revision_still_finds_its_user_thread(tmp_path):
 
     path = tmp_path / "registry.json"
     writer = Registration(path)
-    writer.register(writer.new_thread(name="user", tags=frozenset(), worktree=str(tmp_path),
-                                      role=UserThreadRole))
-    writer.register(writer.new_thread(name="worker", tags=frozenset(), worktree=str(tmp_path)))
+    writer.register(Thread(name="user", tags=frozenset(), worktree=str(tmp_path),
+                           role=UserThreadRole))
+    writer.register(Thread(name="worker", tags=frozenset(), worktree=str(tmp_path)))
     reader = Registration(path)
     with reader.store.reading() as document:
         assert [thread.name for thread in document.user_thread().existing()] == ["user"]
