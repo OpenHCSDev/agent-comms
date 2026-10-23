@@ -312,9 +312,7 @@ def pr_commander(tmp_path, monkeypatch, proof_build_checkouts, configured_reposi
     configured_repository(Comms(tmp_path), source)
     bus = Comms(tmp_path)
     bus.goals.todos.add_request(lead.incarnation, "Repair the copied order workflow")
-    return Commander(commander=lead.name, root=tmp_path, state=tmp_path / "state",
-                     repos=(source,), worktrees=source.checkout.parent,
-                     scratch=tmp_path, disk=tmp_path)
+    return Commander.read_root(tmp_path)
 
 
 def pr_order(ctx, pid, run: OrderRun = MechanicalOrderRun()):
