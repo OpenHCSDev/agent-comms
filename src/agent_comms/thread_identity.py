@@ -35,7 +35,6 @@ from .response_policy import CollectivePolicy, InformationalPolicy, ResponsePoli
 
 if TYPE_CHECKING:
     from .child_process import ProcessIdentity
-    from .maintenance_barrier import MaintenanceBarrier
     from .messages import Message
     from .participant_store import ParticipantStore
     from .read_ledger import ReadDocument, ReadLedger
@@ -628,11 +627,6 @@ class ThreadRole(DeclaredFamily, ProjectionSource, affix="ThreadRole"):
 
     @classmethod
     @abstractmethod
-    def require_maintenance_open(cls, barrier: MaintenanceBarrier, claims_owner: bool) -> None:
-        """An owner claim waits for open maintenance; a human claims no owner."""
-
-    @classmethod
-    @abstractmethod
     def unread_since(cls, since: float | None, recorded_delivery: bool) -> float | None:
         """A routed display's unread boundary, never permission to start an input."""
 
@@ -697,11 +691,6 @@ class AgentThreadRole(ThreadRole):
     @classmethod
     def human[T](cls, item: T) -> tuple[T, ...]:
         return ()
-
-    @classmethod
-    def require_maintenance_open(cls, barrier: MaintenanceBarrier, claims_owner: bool) -> None:
-        if claims_owner:
-            barrier.assert_open_unlocked()
 
     @classmethod
     def unread_since(cls, since: float | None, recorded_delivery: bool) -> float | None:
@@ -773,10 +762,6 @@ class UserThreadRole(ThreadRole):
     @classmethod
     def human[T](cls, item: T) -> tuple[T, ...]:
         return (item,)
-
-    @classmethod
-    def require_maintenance_open(cls, barrier: MaintenanceBarrier, claims_owner: bool) -> None:
-        """A human claims no owner, so maintenance never gates its registration."""
 
     @classmethod
     def unread_since(cls, since: float | None, recorded_delivery: bool) -> float | None:

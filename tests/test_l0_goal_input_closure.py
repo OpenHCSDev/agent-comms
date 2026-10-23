@@ -37,11 +37,13 @@ def register(comms, name):
 def test_unknown_reason_survives_real_history_without_inventing_provenance(tmp_path):
     comms = wire(tmp_path)
     register(comms, "owner")
-    goal = Goal(
-        "Retained objective", "retained", published_seq=0, progress="Unrelated progress", state=UnrecordedBlockGoal()
+    # Goals creates the goal and its generation; the carried record supplies a block whose
+    # reason and provenance were never recorded, which no live transition produces.
+    set_goal = comms.goals.update_goal("owner", SetGoalAction(text="Retained objective"))
+    goal = replace(
+        set_goal, progress="Unrelated progress", mention_source=None, state=UnrecordedBlockGoal()
     )
     comms.registry.register(replace(comms.registry.require("owner"), goal=goal))
-    comms.goals.open_goal_store().create_goal(goal.id)
     history = comms.goals.goal_history("owner")
     assert history[-1].after == goal and history[-1].after.mention_source is None
     assert history[-1].after.state.reason is None

@@ -78,8 +78,6 @@ class ProcessState(SubclassUnion, affix=""):
     def allows_owner_start(self) -> bool: ...
     @abstractmethod
     def allows_inactive_stop(self) -> bool: ...
-    @abstractmethod
-    def claims_owner(self) -> bool: ...
 
     @abstractmethod
     def require_held_by(self, role: type[ThreadRole]) -> None: ...
@@ -132,9 +130,6 @@ class NoProcess(NullMember, ProcessState):
 
     def allows_inactive_stop(self) -> bool:
         return True
-
-    def claims_owner(self) -> bool:
-        return False
 
     def require_held_by(self, role: type[ThreadRole]) -> None:
         """No process is held, so any role may declare it."""
@@ -205,9 +200,6 @@ class ProcessIdentity(RecordMember, ProcessState):
 
     def allows_inactive_stop(self) -> bool:
         return self.runs_here()
-
-    def claims_owner(self) -> bool:
-        return True
 
     def require_held_by(self, role: type[ThreadRole]) -> None:
         role.require_executable(
