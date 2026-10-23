@@ -7,7 +7,7 @@ from threading import Thread as WorkerThread
 
 import pytest
 
-from agent_comms.channel_targets import CommandTarget
+from agent_comms.channel_targets import CommandTarget, ThreadTarget
 from agent_comms.channels import AnyOfMatch, ViewPredicate, ActivityView
 from agent_comms.comms import wire
 from agent_comms.coordination_errors import DMPaintedBoundChanged, DMScopeChanged
@@ -213,7 +213,7 @@ def test_busy_display_journey_uses_identity_not_presence_file_replacement(tmp_pa
             page = comms.views.channel_display_page("#api", viewer=NamedViewer(comms.messaging.user_identity(str(tmp_path)).name))
             if page.newest_seq is not None:
                 comms.views.mark_page_read(page, worktree=str(tmp_path))
-            dm = comms.views.dm_display_page("alice", worktree=str(tmp_path))
+            dm = comms.views.dm_display_page(ThreadTarget("alice"), worktree=str(tmp_path))
             assert bodies(dm) == ["DM original"]
             comms.views.mark_page_read(dm, worktree=str(tmp_path))
     finally:

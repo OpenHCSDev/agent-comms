@@ -3,12 +3,14 @@
 from __future__ import annotations
 
 import agent_comms
+from .projection_source import ProjectionSource
 from .turn_origin import TurnOrigin
 import builtins
 import hashlib
 import re
 import sqlite3
 import time
+from types import ModuleType
 from abc import ABC, abstractmethod
 from collections.abc import Iterable, Iterator, Mapping, Sequence
 from contextlib import closing
@@ -72,16 +74,8 @@ class BusProjectionTables(ProducedTable, SharedFileTables, DerivedTables, declar
     """Reverse lookups are derived from the record, in its append transaction."""
 
     @classmethod
-    def producer_capabilities(cls) -> tuple[tuple[type[DeclaredFamily], type], ...]:
-        return ((BusRecord, BusCapability), (ClaimTransition, ClaimTransition))
-
-    @classmethod
-    def producer_classes(cls) -> tuple[type[DeclaredFamily], ...]:
-        return tuple(
-            member
-            for family, capability in cls.producer_capabilities()
-            for member in family.discover_members(agent_comms, capability)
-        )
+    def producer_package(cls) -> ModuleType:
+        return agent_comms
 
     @classmethod
     def create_schema(cls, db: sqlite3.Connection) -> None:
@@ -204,7 +198,7 @@ class HeldResources(BusProjectionTables):
         holders.advance(removed, projected)
 
 
-class ProjectionPass(ABC):
+class ProjectionPass(ABC, ProjectionSource):
     """How one projection pass writes the rows its records derive: an append writes its
     few rows at once."""
 
@@ -274,7 +268,7 @@ class CapabilityRow(BusTables, declared_name=None):
     seq: Annotated[int, Column(primary_key=True, references=TableReference(BusRow, ("seq",)))]
 
 
-class _CapabilityTable:
+class _CapabilityTable(ProjectionSource):
     """A class's table is derived once, after its dataclass decorator has run."""
 
     def __get__(self, instance: BusCapability | None, owner: type[BusCapability]) -> type[CapabilityRow]:
@@ -295,7 +289,7 @@ class _CapabilityTable:
 
 
 @dataclass(frozen=True)
-class BusCapability(TypedRow):
+class BusCapability(TypedRow, ProjectionSource):
     """The hierarchy and each dataclass declaration own their table union."""
 
     table = _CapabilityTable()
@@ -374,7 +368,7 @@ class Addressed(BusCapability):
     indexes: ClassVar[tuple[Index, ...]] = (Index(("sender", "target", "seq")),)
 
 
-class MessageKind(DeclaredFamily, affix="Kind"):
+class MessageKind(DeclaredFamily, ProjectionSource, affix="Kind"):
     """A declared message kind; each member owns the validation it requires.
 
     Members are the kind themselves, never instances: the wire carries the
@@ -488,7 +482,7 @@ class ChangeReportKind(SendableMessageKind, declared_name="change-report"):
         message.report.require_references_exist(worktree)
 
 
-class MembershipTransition(DeclaredFamily, affix="Membership"):
+class MembershipTransition(DeclaredFamily, ProjectionSource, affix="Membership"):
     @classmethod
     def conversation_role(cls) -> MembershipConversationRole:
         return MembershipConversationRole(cls)
@@ -515,13 +509,13 @@ class LeftMembership(MembershipTransition):
 
 
 @dataclass(frozen=True, slots=True)
-class NoMembershipChange(NullMember):
+class NoMembershipChange(NullMember, ProjectionSource):
     def conversation_role(self):
         return ConversationRole()
 
 
 @dataclass(frozen=True, slots=True)
-class MessageRoleWire:
+class MessageRoleWire(ProjectionSource):
     """The unchanged external fields, decoded once into a message role."""
 
     change: Annotated[
@@ -536,7 +530,7 @@ class MessageRoleWire:
         return role.as_notice() if self.notice else role
 
 
-class MessageRole(InlineRecord):
+class MessageRole(InlineRecord, ProjectionSource):
     category: ClassVar[type[MessageCategory]]
 
     @abstractmethod
@@ -576,7 +570,7 @@ class SendableRole(MessageRole, DeclaredFamily, affix="Role"):
     pass
 
 
-class InformationalMessage:
+class InformationalMessage(ProjectionSource):
     def response_policy(self, message):
         return InformationalPolicy.instance()
 

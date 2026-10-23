@@ -9,6 +9,7 @@ from functools import cache
 from typing import TYPE_CHECKING
 
 from .declared_family import DeclaredFamily
+from .projection_source import ProjectionSource
 
 if TYPE_CHECKING:
     from .messages import Message
@@ -16,7 +17,7 @@ if TYPE_CHECKING:
 
 
 @dataclass(frozen=True)
-class ResponsePolicy(DeclaredFamily, affix="Policy"):
+class ResponsePolicy(DeclaredFamily, ProjectionSource, affix="Policy"):
     starts_turn = False
     separate_turn = False
 
@@ -52,7 +53,7 @@ class ResponsePolicy(DeclaredFamily, affix="Policy"):
         return f"bus:{message.seq}:owner:{float(owner.created_at).hex()}"
 
 
-class NoChannelRecipients:
+class NoChannelRecipients(ProjectionSource):
     def recipients(
         self, message: Message, audience: Sequence[str], *, aliases: Mapping[str, str] | None = None
     ) -> tuple[str, ...]:
@@ -119,7 +120,7 @@ class InformationalPolicy(NoChannelRecipients, ResponsePolicy):
 
 
 @dataclass(frozen=True, slots=True)
-class ResponseEligibility:
+class ResponseEligibility(ProjectionSource):
     policy: ResponsePolicy
     recipients: tuple[str, ...] = ()
 

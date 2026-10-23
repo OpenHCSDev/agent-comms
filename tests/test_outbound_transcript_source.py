@@ -19,7 +19,6 @@ from agent_comms.notification_progress import (
     UnrecordedProgress,
 )
 from agent_comms.pi_payloads import PublishedMessageToolDetails
-from agent_comms.thread_identity import RecordedThreadIncarnation
 from agent_comms.tool_caller import NoThreadCaller
 from agent_comms.tools import invoke_tool
 from agent_comms.transcripts import TranscriptRead
@@ -98,7 +97,7 @@ def test_frozen_unhandled_delivery_projects_recovery_without_claiming(tmp_path):
     beta = next(notice for notice in notices if notice.recipient=='beta')
     assert beta.state == ContextualProgress(UnrecordedProgress())
     assert beta.state.detail == ''
-    assert beta.recipient_identity.recipient_lookup==RecordedThreadIncarnation("fixture", comms.registry.require('beta').created_at).lookup
+    assert beta.recipient_identity.recipient_lookup==comms.registry.require('beta').incarnation.require_recorded().lookup
     with Coordination(str(root/'coordination.sqlite3')) as store:
         assert WakeAssignment.select(store.session._connection)==before
     assert not any(row.wire_seq==message.seq for row in before)
@@ -148,7 +147,7 @@ def test_publication_intent_joins_original_sender_and_target_only(tmp_path):  # 
         comms.root, comms.registry.require("beta"), comms.bus.bus
     )
     original = source.rows(sequences=(reply.seq,))
-    lookup = RecordedThreadIncarnation("fixture", source.recipient.created_at).lookup
+    lookup = source.recipient.require_recorded().lookup
     intent = TurnRouting((initial.message.reference,), MessageRoute("beta", ("sender", "alpha")))
     # A later send can fail; this first committed subset stays a valid relation.
     intent.require_publications(original, lookup)

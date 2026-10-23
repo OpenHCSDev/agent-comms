@@ -181,14 +181,20 @@ def test_predecessor_publisher_history_round_trips_into_bus(tmp_path):
     spill = tmp_path / "hdd-spill"
     spill.mkdir()
     StoreBackup.copy_tree(original, root)
-    # This publisher authored a pre-carry registry. Its finished-turn carry
-    # precedes the goal-request carry and every current registry reader.
-    finished = FinishedTurns(root, original, spill)
-    finished_dry_run = finished.carry(apply=False)
-    finished_result = finished.carry(apply=True)
-    assert finished_result.changed > 0
-    assert finished_result.detail == finished_dry_run.detail
-    assert finished.carry(apply=False).changed == 0
+    # This publisher authored a pre-carry registry: every step the chain orders before the
+    # goal-request carry runs first, as the installer runs them.
+    preceding = {}
+    maintenance = MaintenanceBarrier(RegistryStore.at(root).path)
+    hold = maintenance.begin(MaintenanceOperator.current())
+    with hold.holding():
+        for step in chain.steps[:chain.steps.index(OwnerRequests)]:
+            carry = step(root, original, spill)
+            dry_run = carry.carry(apply=False)
+            preceding[step] = carry.carry(apply=True)
+            assert preceding[step].detail == dry_run.detail
+            assert carry.carry(apply=False).changed == 0
+    maintenance.clear(hold)
+    assert preceding[FinishedTurns].changed > 0
     relatives = (Path(), archived.relative_to(original))
     originals = {relative: (original / relative / BusHistory.filename).read_bytes()
                  for relative in relatives}

@@ -10,6 +10,7 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, ClassVar, Annotated
 
 
+from .projection_source import ProjectionSource
 from .channel_targets import ChannelTarget, Tag
 from .cli_result import CliResult
 from .declared_family import DeclaredFamily
@@ -47,7 +48,7 @@ class ChannelMemberIndex(dict[str, tuple["Thread", ...]]):
 
 
 @dataclass(frozen=True, slots=True)
-class Channel(DeclaredFamily, CliResult, ToolResult, affix="Channel"):
+class Channel(DeclaredFamily, CliResult, ToolResult, ProjectionSource, affix="Channel"):
     """A captured channel presentation with behavior supplied by its declaration."""
 
     name: str

@@ -28,6 +28,7 @@ from .field_codec import FieldCodec, NullMember, SingleFieldValue, SubclassUnion
 from .mentions import ThreadMention
 from .message_reference import MessageReference
 from .private_path import FileObservation, MissingFile
+from .projection_source import ProjectionSource
 from .recorded_bus import RecordedBus, RecordedBusIdentity
 from .store_files import SharedLock
 from .thread_identity import RecordedThreadIncarnation, ThreadIncarnation
@@ -37,7 +38,7 @@ class DisplayViewer(SubclassUnion, affix="Viewer"):
     """The reader owns read evidence, aliases and cursor selection."""
 
     @abstractmethod
-    def direct_history(self, direct: type[DMHistory], peer: str | ThreadTarget) -> DMHistory: ...
+    def direct_history(self, direct: type[DMHistory], peer: ThreadTarget) -> DMHistory: ...
 
     @abstractmethod
     def resolve(self, snapshot: RegistryProvenance) -> DisplayViewer: ...
@@ -69,7 +70,7 @@ class AnonymousViewer(NullMember, DisplayViewer):
     def resolve(self, snapshot: RegistryProvenance) -> AnonymousViewer:
         return self
 
-    def direct_history(self, direct: type[DMHistory], peer: str | ThreadTarget) -> DMHistory:
+    def direct_history(self, direct: type[DMHistory], peer: ThreadTarget) -> DMHistory:
         raise ValueError("DM history requires --as <participant>.")
 
     def historical_selection(self, page: MessagePage, presentation: BusPresentation, historical: HistorySource, source: Bus, document: ReadDocument, snapshot: RegistrySnapshot) -> NoDisplaySelection:
@@ -101,7 +102,7 @@ class NamedViewer(SingleFieldValue, DisplayViewer):
     def resolve(self, snapshot: RegistryProvenance) -> NamedViewer:
         return type(self)(snapshot.canonical_name(self.name))
 
-    def direct_history(self, direct: type[DMHistory], peer: str | ThreadTarget) -> DMHistory:
+    def direct_history(self, direct: type[DMHistory], peer: ThreadTarget) -> DMHistory:
         return direct(self.name, peer)
 
     def historical_selection(self, page: MessagePage, presentation: BusPresentation, historical: HistorySource, source: Bus, document: ReadDocument, snapshot: RegistrySnapshot) -> HistoricalSelection:
@@ -679,7 +680,7 @@ class DMDisplayBasis:
         registry: Registration,
         root: Path,
         viewer: str,
-        peer: str | ThreadTarget,
+        peer: ThreadTarget,
         *,
         worktree: str,
         bounds: PageBounds,
@@ -689,11 +690,9 @@ class DMDisplayBasis:
         Fetching is not paint proof. A UI may use the basis only after proving
         that the corresponding inbound tail was contiguous and visibly painted.
         """
-        target = CommandTarget.named(peer)
-        target.require_dm_peer()
         with registry.store.reading_snapshot() as snapshot:
             viewer_name = snapshot.canonical_name(viewer)
-            peer_name = target.selected_name(snapshot)
+            peer_name = peer.selected_name(snapshot)
             scope = DMDisplayScope.capture_human(viewer_name, peer_name, snapshot)
             viewer_thread = snapshot.threads[viewer_name]
             peer_thread = snapshot.participant(peer_name)
@@ -708,7 +707,7 @@ class DMDisplayBasis:
             root=str(root.resolve()),
             root_identity=(root_info.st_dev, root_info.st_ino),
             worktree=str(Path(worktree).resolve()),
-            requested_peer=target.name,
+            requested_peer=peer.name,
             viewer_identity=viewer_thread.incarnation,
             viewer_names=viewer_names,
             peer_identity=peer_thread.incarnation,
@@ -817,7 +816,7 @@ class DMDisplayBasis:
         self.displayed.validate(self.viewer, snapshot, bus_identity)
 
 
-class MessageDisplayScope(DeclaredFamily, ABC, affix="DisplayScope"):
+class MessageDisplayScope(DeclaredFamily, ABC, ProjectionSource, affix="DisplayScope"):
     """Captured inclusion and its exact predicate on the bus capability tables."""
 
     def read_key(self, sender: str, target: str, snapshot: RegistryProvenance) -> Conversation:

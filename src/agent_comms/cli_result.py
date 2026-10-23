@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass
+from typing import TextIO
 
 from .pi_vocabulary import ServiceTier
 from .tool_result import DeclaredReply
@@ -21,6 +23,12 @@ class CliResult(DeclaredReply):
 
     def exit_code(self) -> int:
         return 0
+
+    def write(self, output: TextIO) -> int:
+        """Write this result to the caller's stream; its exit code."""
+        json.dump(self.to_wire(), output, indent=2)
+        output.write("\n")
+        return self.exit_code()
 
 
 @dataclass(frozen=True)

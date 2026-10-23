@@ -1,6 +1,6 @@
 """The stored registry revision owns human identity and UI history uses it."""
 
-from agent_comms.channel_targets import CommandTarget
+from agent_comms.channel_targets import CommandTarget, ThreadTarget
 
 
 from dataclasses import replace
@@ -41,7 +41,7 @@ def test_channel_and_dm_history_keep_the_human_as_sender(tmp_path):
     assert channel.sender_role is direct.sender_role is UserThreadRole
     channel_page = comms.views.channel_display_page(
         '#comms', viewer=comms.views.display_viewer(str(tmp_path)))
-    direct_page = comms.views.dm_display_page('peer', worktree=str(tmp_path))
+    direct_page = comms.views.dm_display_page(ThreadTarget('peer'), worktree=str(tmp_path))
     assert channel.message_id in {message.message_id for message in channel_page.messages}
     assert direct.message_id in {message.message_id for message in direct_page.messages}
     assert all(message.sender == human.name for message in (*channel_page.messages, *direct_page.messages))
