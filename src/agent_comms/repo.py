@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import shutil
 import subprocess
+from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Annotated, Self
@@ -14,6 +15,19 @@ from .repository_name import RepositoryName
 
 if TYPE_CHECKING:
     from .todos import Todo
+
+
+class RepositorySelection(ABC):
+    """A repository choice is applied by the native project it configures."""
+
+    @abstractmethod
+    def applied(self, recorded: tuple[Repo, ...]) -> tuple[Repo, ...]: ...
+
+    @abstractmethod
+    def founding(self, commander: str) -> tuple[Repo, ...]: ...
+
+    @abstractmethod
+    def without_commander(self) -> None: ...
 
 
 class Repo(BaseModel):
