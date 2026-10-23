@@ -26,7 +26,7 @@ from .bus import Bus
 from .child_process import join_retirement
 from .cohort_schema import AcceptanceFrontier
 from .comms import Comms
-from .controller import UNBOUND_CONTROLLER, SessionUpdateSink
+from .controller import SessionUpdateSink
 from .coordination_cohort import next_sealed_assignment
 from .coordination_database import CoordinationStore
 from .coordinator import Coordination
@@ -708,8 +708,8 @@ class InputDrain(InputObservation):
     ) -> PromptResponse:
         inbox = self.state(session_id).require_inbox()
         controller = self.runtime.controller.get()
-        if controller is UNBOUND_CONTROLLER:
-            controller = self.sessions.client
+        if controller is not None:
+            controller = controller.attached(self.sessions.client)
         followup = UserFollowupSegment.capture(text.removeprefix(AGENT_PREFIX))
         async with QueuedInput.reserve(
             self, session_id, self.sessions.require(session_id), text=display_text,

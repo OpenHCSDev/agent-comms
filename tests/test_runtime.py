@@ -1,4 +1,5 @@
 """Single-owner attachment and idle wakeup through real processes and sockets."""
+from agent_comms.owner_connection import OwnerReplyLostError
 from agent_comms.controller import SessionUpdateSink
 
 import asyncio
@@ -22,7 +23,7 @@ from agent_comms.child_process import ProcessIdentity, SpawnedProcess
 from agent_comms.comms import wire
 from agent_comms.owner_protocol import OwnerAnnouncement, OwnerReady, OwnerResult, OwnerUpdate
 from agent_comms.runtime import (
-    OwnerReplyLostError, RuntimeConnection, RuntimeProxy, present_session, socket_path,
+    RuntimeConnection, RuntimeProxy, present_session, socket_path,
 )
 from agent_comms.private_path import PrivateSocketRole
 from agent_comms.thread_identity import RecordedThreadIncarnation

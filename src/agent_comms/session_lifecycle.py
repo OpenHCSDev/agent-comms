@@ -35,7 +35,7 @@ from .acp_extension import (
 )
 from .child_process import join_retirement
 from .comms import Comms
-from .config_options import SessionConfigOptions
+from .session_config_options import SessionConfigOptions
 from .coordinator import Coordination
 from .errors import RelationViolationError
 from .field_codec import FieldCodec, MalformedRecord, boundary_decoder
