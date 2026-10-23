@@ -101,13 +101,17 @@ class InterpreterWorker:
                 raise InterpreterWorkerDied(self.child.reap(), self.errors())
             return answer.decode()
 
+    def finish(self) -> None:
+        """Closing its requests ends the worker's loop, so its interpreter starts exiting."""
+        self.requests.close()
+
     def close(self) -> None:
-        """Closing its requests ends the worker's loop; it is then reaped and its streams closed."""
+        """A finished worker is reaped and its streams closed."""
         with ExitStack() as closing:
             closing.callback(self.diagnostics.close)
             closing.callback(self.answers.close)
             closing.callback(self.child.close)
-            self.requests.close()
+            self.finish()
             self.child.reap()
 
 
@@ -129,10 +133,15 @@ class InstallCommands:
         return self
 
     def close_workers(self, keys: tuple[InterpreterWorkerKey, ...]) -> None:
-        """Every selected worker closes, even when another one's close raises."""
+        """Every selected worker closes, even when another one's close raises. All of them
+        finish before the first is reaped, so their interpreters exit together and the
+        close waits for the slowest exit, not the sum of them."""
         with self.worker_lock, ExitStack() as exits:
-            for key in keys:
-                exits.callback(self.workers.pop(key).close)
+            closing = tuple(self.workers.pop(key) for key in keys)
+            for worker in closing:
+                exits.callback(worker.close)
+            for worker in closing:
+                worker.finish()
 
     def close_runtime(self, python: Path) -> None:
         self.close_workers(tuple(key for key in self.workers if key.python == python))
