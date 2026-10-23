@@ -8,11 +8,10 @@ from typing import TYPE_CHECKING
 
 from agent_comms.commander.vibe_check import OverloadDegradation
 from agent_comms.field_codec import projected
+from agent_comms.heartbeat_frame import HeartbeatFrame
 from agent_comms.plan_phases import PlanPhase
-from agent_comms.phase_evidence import MainTree, PlanReading
 from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.thread_identity import ThreadIncarnation
-from agent_comms.repo import Repo
 from agent_comms.todos import OrderProgress, ProgressRead, PullRequest, Todo, UnmergedListedPullRequest
 from agent_comms.tool_result import ToolResult
 from agent_comms.turn_digests import OrderEditCountRead
@@ -94,10 +93,11 @@ class CommanderHud(ToolResult):
         snapshot, now = comms.registry.snapshot(), time.time()
         owner = snapshot.require(commander).incarnation
         store = comms.goals.todos
-        history = store.history_for_commander(owner)
+        frame = HeartbeatFrame.read(comms, commander, ProgressRead())
+        pulls, reading = frame.pulls, frame.plan
+        history = reading.todos
         held = tuple(todo for todo in history if todo.holder)
-        pulls = ProgressRead(held)
-        progress = {todo.id: OrderProgress.read(todo, comms.registry, pulls) for todo in held}
+        progress = pulls.progress(held, comms.registry)
         timers = store.timers_up_in(held, now, progress)
         edits = {
             read.todo.id: read.read()
@@ -124,8 +124,6 @@ class CommanderHud(ToolResult):
                 tuple(request for request in requests.values() if not request.draft),
                 tuple(request for request in requests.values() if request.draft),
             ))
-        repository = Repo.declaring(snapshot.commander_project.require().repos, PlanPhase.__module__)
-        reading = PlanReading(history, MainTree.of(repository))
         phases = tuple(CommanderPhase(
             phase, phase.done(reading), phase.ready(reading),
             tuple(dict.fromkeys(todo.held().owner_identity for todo in phase.holding(reading))),

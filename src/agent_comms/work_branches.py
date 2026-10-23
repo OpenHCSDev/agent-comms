@@ -14,13 +14,13 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from functools import cached_property
 from pathlib import Path
-from typing import TYPE_CHECKING, ClassVar
+from typing import TYPE_CHECKING, Annotated, ClassVar
 
 from pydantic import ConfigDict
 from pydantic.alias_generators import to_camel
 
 from .declared_family import DeclaredFamily
-from .field_codec import projected
+from .field_codec import PathText, projected
 from .repo import GitCommandError, Repo
 from .repository_name import RepositoryName
 from .wire_models import WireModel
@@ -174,7 +174,7 @@ class UnpushedHead:
 class BranchComparison:
     base: str
     head: str
-    paths: tuple[Path, ...]
+    paths: tuple[Annotated[Path, PathText], ...]
 
 
 @dataclass(frozen=True)

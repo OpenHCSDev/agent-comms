@@ -43,6 +43,7 @@ from agent_comms_hooks.shell import ShellCommand
 
 if TYPE_CHECKING:
     from agent_comms.comms import Comms
+    from agent_comms.heartbeat_frame import HeartbeatFrame
     from agent_comms.registration import Registration
     from agent_comms.thread_identity import ThreadIncarnation
     from agent_comms.threads import Thread
@@ -397,7 +398,7 @@ class StorageViolation(UndatedStandingRule, declared_name=None):
 
     @classmethod
     def scan_observed(cls, comms: Comms, commander: str,
-                      observed: Sequence[UnitState]) -> tuple[Self, ...]:
+                      observed: Sequence[UnitState], frame: HeartbeatFrame) -> tuple[Self, ...]:
         # Storage reads the filesystem, not the git source an unreadable card failed on:
         # a unit whose declared home is gone is that card and a missing home.
         held = StandingRule.holders(comms, commander)

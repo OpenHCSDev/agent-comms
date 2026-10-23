@@ -38,6 +38,7 @@ from agent_comms.activity import ObservedActivity
 from agent_comms.coordination_errors import (
     CoordinationError,
     CoordinationReadUnavailable,
+    DeferredRead,
     ReloadRequired,
     StaleRevision,
 )
@@ -227,9 +228,6 @@ class UnreadableHistory(ValueError):  # noqa: N818 - nominal stored-read state
     deleted just as newer records can fail in an older reader.
     """
 
-    # Currentness and contention defer the existing read; they do not show
-    # broken saved data.
-    DEFERRED_READS = (CoordinationReadUnavailable, StaleRevision)
     # Every way Core refuses saved data is a ValueError: StoredHistoryUnreadable and the other
     # relation violations, a codec's refusal of a malformed record, an archive's source checks,
     # and UnreadableHistory itself.
@@ -240,7 +238,7 @@ class UnreadableHistory(ValueError):  # noqa: N818 - nominal stored-read state
         """Run a stored read: its value, a read deferred to retry, or unreadable with its cause."""
         try:
             return ReadValue(read())
-        except cls.DEFERRED_READS as error:
+        except DeferredRead as error:
             return ReadDeferred(error)
         except cls.UNREADABLE_READS as error:
             return ReadUnreadable(error, cls.capture(error))
@@ -275,7 +273,7 @@ class StoredRead[T](ABC):
     """A stored read's outcome: its value, or one of the two ways it fails."""
 
     @abstractmethod
-    def answer[R](self, value: Callable[[T], R], deferred: Callable[[CoordinationError], R],
+    def answer[R](self, value: Callable[[T], R], deferred: Callable[[DeferredRead], R],
                   unreadable: Callable[[UnreadableHistory], R]) -> R: ...
 
     @abstractmethod
@@ -287,7 +285,7 @@ class StoredRead[T](ABC):
 class ReadValue[T](StoredRead[T]):
     value: T
 
-    def answer[R](self, value: Callable[[T], R], deferred: Callable[[CoordinationError], R],
+    def answer[R](self, value: Callable[[T], R], deferred: Callable[[DeferredRead], R],
                   unreadable: Callable[[UnreadableHistory], R]) -> R:
         return value(self.value)
 
@@ -299,9 +297,9 @@ class ReadValue[T](StoredRead[T]):
 class ReadDeferred[T](StoredRead[T]):
     """Currentness or contention: the existing read is retried, not shown as broken."""
 
-    error: CoordinationError
+    error: DeferredRead
 
-    def answer[R](self, value: Callable[[T], R], deferred: Callable[[CoordinationError], R],
+    def answer[R](self, value: Callable[[T], R], deferred: Callable[[DeferredRead], R],
                   unreadable: Callable[[UnreadableHistory], R]) -> R:
         return deferred(self.error)
 
@@ -314,7 +312,7 @@ class ReadUnreadable[T](StoredRead[T]):
     error: ValueError
     cause: UnreadableHistory
 
-    def answer[R](self, value: Callable[[T], R], deferred: Callable[[CoordinationError], R],
+    def answer[R](self, value: Callable[[T], R], deferred: Callable[[DeferredRead], R],
                   unreadable: Callable[[UnreadableHistory], R]) -> R:
         return unreadable(self.cause)
 
@@ -335,9 +333,7 @@ class AwaitedRead(ObservationRequest):
 
     @property
     def refusal_errors(self) -> tuple[type[Exception], ...]:
-        return (
-            CoordinationReadUnavailable, RelationViolationError, UnreadableHistory, StaleRevision,
-        )
+        return (DeferredRead, RelationViolationError, UnreadableHistory)
 
     def require_root(self, comms: Comms) -> None:
         if Path(self.root).expanduser().resolve() != comms.root.resolve():
@@ -472,7 +468,7 @@ class TranscriptRequest[ResultT](ReadRequest):
 class ReadTranscript(TranscriptRequest[TranscriptSnapshotUpdate]):
     """Read a complete page, including its current draft."""
 
-    deferred_reads: ClassVar[tuple[type[Exception], ...]] = UnreadableHistory.DEFERRED_READS
+    deferred_reads: ClassVar[tuple[type[Exception], ...]] = (DeferredRead,)
 
     def result(self, read: TranscriptRead) -> TranscriptSnapshotUpdate:
         return TranscriptSnapshotUpdate.from_read(read)
@@ -481,10 +477,7 @@ class ReadTranscript(TranscriptRequest[TranscriptSnapshotUpdate]):
 class SubscribeTranscript(ReadTranscript):
     """A subscription answers contention instead of waiting for another revision."""
 
-    deferred_reads: ClassVar[tuple[type[Exception], ...]] = tuple(
-        error for error in ReadTranscript.deferred_reads
-        if not issubclass(error, CoordinationReadUnavailable)
-    )
+    deferred_reads: ClassVar[tuple[type[Exception], ...]] = (StaleRevision,)
 
 
 class TranscriptPublicationState(ABC):
@@ -994,7 +987,7 @@ class SidebarResult(PublishState, Observed):
 class SidebarPreparing(SidebarResult, WaitingSidebar):
     """The first answer explains the unfinished read without replacing real rows."""
 
-    cause: CoordinationError
+    cause: DeferredRead
 
     def send_state(self, key: SidebarSent) -> SendState:
         return NoSidebarSent()

@@ -1366,7 +1366,7 @@ class TurnContext(DeclaredReply):
         """
         relations = comms.relationships.context_relations(owner.name)
         context = cls.for_owner(owner, NextContextTurn(), "", comms.views.thread_views(), relations, comms.goals)
-        return context.with_goal(owner, comms.goals).with_awareness(comms, owner, relations, blocking=True)
+        return context.with_goal(owner, comms.goals).with_awareness(comms, owner, relations)
 
     def with_goal(self, owner: Thread, goals) -> TurnContext:
         return owner.goal.active().add_context(self, owner, goals)
@@ -1375,7 +1375,7 @@ class TurnContext(DeclaredReply):
         return self.prepend(GoalSegment.capture(owner, goal, goals))
 
     def with_awareness(
-        self, comms, owner: Thread, relations: tuple[PeerRelation, ...], *, blocking: bool = False
+        self, comms, owner: Thread, relations: tuple[PeerRelation, ...]
     ) -> TurnContext:
         """Append what the owner should know without being asked.
 
@@ -1387,7 +1387,7 @@ class TurnContext(DeclaredReply):
         context = self
         for segment in (
             *RelationshipsSegment.capture(owner, relations),
-            *comms.bus.awareness_segments(owner, relations, blocking=blocking),
+            *comms.bus.awareness_segments(owner, relations),
             *PartnerActivitySegment.capture(owner, relations, comms.goals),
         ):
             context = context.append(segment)

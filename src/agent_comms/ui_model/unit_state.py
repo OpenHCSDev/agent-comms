@@ -38,6 +38,7 @@ from agent_comms.work_branches import WorkBranchError
 
 if TYPE_CHECKING:
     from agent_comms.comms import Comms
+    from agent_comms.heartbeat_frame import HeartbeatFrame
     from agent_comms.threads import Thread
 
 
@@ -130,7 +131,7 @@ class UnitState(UndatedStandingRule, declared_name=None):
 
     @classmethod
     def scan_observed(
-        cls, comms: Comms, commander: str, observed: Sequence[UnitState]
+        cls, comms: Comms, commander: str, observed: Sequence[UnitState], frame: HeartbeatFrame
     ) -> tuple[Self, ...]:
         # States are already read; ordinary scans consume them rather than emit them again.
         return ()

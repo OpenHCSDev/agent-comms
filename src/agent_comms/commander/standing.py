@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import time
+from abc import abstractmethod
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
 from typing import ClassVar, Self
@@ -13,16 +14,16 @@ from agent_comms.commander.questions import UnansweredUnitAsks
 from agent_comms.commander_heartbeat import CommanderHeartbeat
 from agent_comms.comms import Comms
 from agent_comms.goal_actions import ReissuedOrderGoalAction
+from agent_comms.heartbeat_frame import HeartbeatFrame
 from agent_comms.message_bus import WatchPass
 from agent_comms.message_page import MessageReadRequest
 from agent_comms.messages import Message
 from agent_comms.owner_requests import OwnerRequestId
-from agent_comms.phase_evidence import MainTree, PlanReading
+from agent_comms.phase_evidence import PlanReading
 from agent_comms.plan_phases import PlanPhase
 from agent_comms.read_basis import RepliesDisplayScope
 from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.registry_document import RegistrySnapshot
-from agent_comms.repo import Repo
 from agent_comms.standing_rules import (
     DatedStandingRule,
     IndependentStandingRule,
@@ -108,17 +109,21 @@ class AnswersTo(MessageReadRequest[tuple[Message, ...]]):
         )
 
 
-class PlanRule(IndependentStandingRule, UndatedStandingRule, declared_name=None):
-    """A rule read from one look at the plans and the commander's orders."""
+class PlanRule(UndatedStandingRule, declared_name=None):
+    """Rules read from the heartbeat's one look at the plans and the commander's orders."""
 
-    @staticmethod
-    def plan_reading(comms: Comms, commander: str) -> PlanReading:
-        snapshot = comms.registry.snapshot()
-        repository = Repo.declaring(snapshot.commander_project.require().repos, PlanPhase.__module__)
-        return PlanReading(
-            comms.goals.todos.history_for_commander(snapshot.require(commander).incarnation),
-            MainTree.of(repository),
-        )
+    @classmethod
+    def scan_owner(cls) -> type[StandingRule]:
+        return PlanRule
+
+    @classmethod
+    def scan_observed(cls, comms: Comms, commander: str,
+                      observed: Sequence[UnitState], frame: HeartbeatFrame) -> tuple[Self, ...]:
+        return tuple(rule for member in cls.members_with(cls) for rule in member.found(frame.plan))
+
+    @classmethod
+    @abstractmethod
+    def found(cls, reading: PlanReading) -> tuple[Self, ...]: ...
 
 
 @dataclass(frozen=True)
@@ -129,8 +134,7 @@ class PlanIdle(PlanRule):
     reading: PlanReading = field(compare=False)
 
     @classmethod
-    def violations(cls, comms: Comms, commander: str) -> tuple[Self, ...]:
-        reading = cls.plan_reading(comms, commander)
+    def found(cls, reading: PlanReading) -> tuple[Self, ...]:
         return tuple(
             cls(phase, reading)
             for phase in PlanPhase.members_with(PlanPhase)
@@ -159,8 +163,8 @@ class PlanStalled(PlanRule):
     window: ClassVar[int] = 2 * 60 * 60
 
     @classmethod
-    def violations(cls, comms: Comms, commander: str) -> tuple[Self, ...]:
-        reading, now = cls.plan_reading(comms, commander), time.time()
+    def found(cls, reading: PlanReading) -> tuple[Self, ...]:
+        now = time.time()
         return tuple(
             cls(phase, since)
             for phase in PlanPhase.members_with(PlanPhase)
@@ -187,7 +191,7 @@ class UnitAskUnanswered(OwedAnswer, UndatedStandingRule):
 
     @classmethod
     def scan_observed(cls, comms: Comms, commander: str,
-                      observed: Sequence[UnitState]) -> tuple[Self, ...]:
+                      observed: Sequence[UnitState], frame: HeartbeatFrame) -> tuple[Self, ...]:
         return tuple(cls(message, state.unit.name) for state in observed for message in state.owed)
 
     @classmethod

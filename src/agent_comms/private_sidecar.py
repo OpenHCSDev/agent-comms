@@ -119,7 +119,7 @@ class _PinnedDirectory:
 
 
 @contextmanager
-def _locked_directory(path: Path, *, blocking: bool = True) -> Iterator[_PinnedDirectory]:
+def _locked_directory(path: Path) -> Iterator[_PinnedDirectory]:
     if os.name != "posix" or not hasattr(os, "O_NOFOLLOW"):
         raise IdentityConflict("Private sidecar snapshots require POSIX no-follow descriptors.")
     import fcntl
@@ -149,7 +149,7 @@ def _locked_directory(path: Path, *, blocking: bool = True) -> Iterator[_PinnedD
         )
         stack.callback(os.close, lock)
         _require_file(os.fstat(lock))
-        fcntl.flock(lock, fcntl.LOCK_EX | (0 if blocking else fcntl.LOCK_NB))
+        fcntl.flock(lock, fcntl.LOCK_EX)
         stack.callback(fcntl.flock, lock, fcntl.LOCK_UN)
         directory.unchanged(lock_name, os.fstat(lock))
         directory.lock_name = lock_name
@@ -339,14 +339,14 @@ def create_sidecar_file(path: Path, row_type: type[TypedTable]) -> None:
 
 @contextmanager
 def sidecar_connection(
-    path: Path, row_type: type[TypedTable], *, blocking: bool = True, read_only: bool = False
+    path: Path, row_type: type[TypedTable], *, read_only: bool = False
 ) -> Iterator[sqlite3.Connection]:
     """Verify and use one exact snapshot, committing only on successful scope exit.
 
     Callers must check rowcount/readback for their own exact inserted identities.
     SQL COMMIT alone is not a durable acknowledgement: the scope must also exit normally.
     """
-    with _locked_directory(path, blocking=blocking) as directory:
+    with _locked_directory(path) as directory:
         snapshot = _read_snapshot(directory, path.name)
         if snapshot is None:
             raise IdentityConflict("Sidecar store is not installed.")

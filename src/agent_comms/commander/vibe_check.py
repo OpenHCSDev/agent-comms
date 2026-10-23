@@ -10,7 +10,8 @@ from __future__ import annotations
 import math
 import time
 from collections.abc import Mapping, Sequence
-from dataclasses import dataclass
+from abc import abstractmethod
+from dataclasses import dataclass, field
 from typing import ClassVar, Self
 
 from agent_comms.bus import BusReader
@@ -19,6 +20,7 @@ from agent_comms.commander.questions import SenderMessages, UnansweredBurst
 from agent_comms.commander.standing import AnswersTo, PlanStalled
 from agent_comms.comms import Comms
 from agent_comms.field_codec import projected
+from agent_comms.heartbeat_frame import HeartbeatFrame
 from agent_comms.goal_actions import (
     ChokeholdPausedGoalAction,
     CompliedGoalAction,
@@ -39,8 +41,9 @@ from agent_comms.standing_rules import (
     UndatedStandingRule,
 )
 from agent_comms.thread_identity import ThreadIncarnation
-from agent_comms.todos import OwnerRequest, Todo
+from agent_comms.todos import OwnerRequest, ProgressRead, Todo
 from agent_comms.tool_result import ToolResult
+from agent_comms.ui_model.unit_state import UnitState
 from agent_comms.turn_digests import OrderEditCountRead
 
 
@@ -120,11 +123,11 @@ class PlanStalledDegradation(Degradation):
     phase stops the commander when it crosses the window and again each time its age doubles."""
 
     @classmethod
-    def found(cls, comms: Comms, commander: str) -> tuple[Sign, ...]:
+    def found(cls, comms: Comms, commander: str, frame: HeartbeatFrame) -> tuple[Sign, ...]:
         now = time.time()
         return tuple(
             Sign(cls, (rule.phase, rule.since, cls.doublings(now - rule.since)), rule.line())
-            for rule in PlanStalled.violations(comms, commander)
+            for rule in PlanStalled.found(frame.plan)
         )
 
     @staticmethod
@@ -146,10 +149,10 @@ class OverloadDegradation(Degradation, BlocksRelease, ToolResult):
     unjudged: int
 
     @classmethod
-    def of(cls, comms: Comms, commander: str) -> Self:
+    def of(cls, comms: Comms, commander: str, pulls: ProgressRead) -> Self:
         return cls.from_orders(
             StandingRule.todos(comms, commander),
-            len(ReviewTimerUp.violations(comms, commander)),
+            len(tuple(ReviewTimerUp.conditions(comms, commander, pulls))),
             OrderEditCountRead.count(comms, commander),
         )
 
@@ -173,8 +176,8 @@ class OverloadDegradation(Degradation, BlocksRelease, ToolResult):
         )
 
     @classmethod
-    def found(cls, comms: Comms, commander: str) -> tuple[Sign, ...]:
-        load = cls.of(comms, commander)
+    def found(cls, comms: Comms, commander: str, frame: HeartbeatFrame) -> tuple[Sign, ...]:
+        load = cls.of(comms, commander, frame.pulls)
         if not load.overloaded:
             return ()
         return (Sign(cls, (int(time.time() // cls.round_seconds),),
@@ -182,7 +185,7 @@ class OverloadDegradation(Degradation, BlocksRelease, ToolResult):
 
 
 @dataclass(frozen=True)
-class VibeCheck(IndependentStandingRule, UndatedStandingRule):
+class VibeCheck(UndatedStandingRule):
     """Each degraded sign breaks it once: the heartbeat enforces a rule when it newly breaks, so a
     sign that persists stops the commander once, and a new message, a newly stalled phase or a
     doubled stall stops it again. Pings are decisions, each once."""
@@ -190,11 +193,12 @@ class VibeCheck(IndependentStandingRule, UndatedStandingRule):
     sign: Sign
 
     @classmethod
-    def violations(cls, comms: Comms, commander: str) -> tuple[Self, ...]:
+    def scan_observed(cls, comms: Comms, commander: str,
+                      observed: Sequence[UnitState], frame: HeartbeatFrame) -> tuple[Self, ...]:
         return tuple(
             cls(sign)
             for member in Degradation.members_with(Degradation)
-            for sign in member.found(comms, commander)
+            for sign in member.found(comms, commander, frame)
         )
 
     def heartbeat_group(self) -> object:
@@ -331,10 +335,33 @@ class ChokeholdUnanswered(Escalation, OwedAnswer, UndatedStandingRule):
 
 
 @dataclass(frozen=True)
-class ChokeholdAnswer(IndependentStandingRule, UndatedStandingRule, declared_name=None):
-    """The commander's newest answer to a chokehold, once every chokehold message is answered."""
+class ChokeholdAnswer(UndatedStandingRule, declared_name=None):
+    """The commander's newest answer to a chokehold, once every chokehold message is answered.
+    The family judges each answer against one read of the signs still blocking release."""
 
     answer: Message
+    blocking: tuple[Sign, ...] = field(compare=False)
+
+    @classmethod
+    def scan_owner(cls) -> type[StandingRule]:
+        return ChokeholdAnswer
+
+    @classmethod
+    def scan_observed(cls, comms: Comms, commander: str,
+                      observed: Sequence[UnitState], frame: HeartbeatFrame) -> tuple[Self, ...]:
+        if not cls.held(comms):
+            return ()
+        blocking = cls.blocking_signs(comms, commander, frame)
+        return tuple(
+            rule
+            for answer in cls.newest(comms, commander)
+            for member in cls.members_with(cls)
+            for rule in member.judged(answer, blocking)
+        )
+
+    @classmethod
+    @abstractmethod
+    def judged(cls, answer: Message, blocking: tuple[Sign, ...]) -> tuple[Self, ...]: ...
 
     @staticmethod
     def newest(comms: Comms, commander: str) -> tuple[Message, ...]:
@@ -350,12 +377,12 @@ class ChokeholdAnswer(IndependentStandingRule, UndatedStandingRule, declared_nam
             ).read_opened(source)
 
     @staticmethod
-    def blocking(comms: Comms, commander: str) -> tuple[Sign, ...]:
+    def blocking_signs(comms: Comms, commander: str, frame: HeartbeatFrame) -> tuple[Sign, ...]:
         """The signs still degraded that a quote does not clear."""
         return tuple(
             sign
             for member in Degradation.members_with(BlocksRelease)
-            for sign in member.found(comms, commander)
+            for sign in member.found(comms, commander, frame)
         )
 
     @staticmethod
@@ -372,12 +399,8 @@ class ChokeholdReleased(ChokeholdAnswer):
     """The answer quotes the indictment: Core resumes every unit the chokehold paused."""
 
     @classmethod
-    def violations(cls, comms: Comms, commander: str) -> tuple[Self, ...]:
-        if not cls.held(comms) or ChokeholdAnswer.blocking(comms, commander):
-            return ()
-        return tuple(
-            cls(answer) for answer in cls.newest(comms, commander) if Indictment.quoted(answer.body)
-        )
+    def judged(cls, answer: Message, blocking: tuple[Sign, ...]) -> tuple[Self, ...]:
+        return (cls(answer, blocking),) if not blocking and Indictment.quoted(answer.body) else ()
 
     def enforce(self, comms: Comms, commander: str) -> None:
         for unit in self.held(comms):
@@ -399,12 +422,8 @@ class ChokeholdHeld(ChokeholdAnswer):
     paused until those clear, and the commander is told which."""
 
     @classmethod
-    def violations(cls, comms: Comms, commander: str) -> tuple[Self, ...]:
-        if not cls.held(comms) or not cls.blocking(comms, commander):
-            return ()
-        return tuple(
-            cls(answer) for answer in cls.newest(comms, commander) if Indictment.quoted(answer.body)
-        )
+    def judged(cls, answer: Message, blocking: tuple[Sign, ...]) -> tuple[Self, ...]:
+        return (cls(answer, blocking),) if blocking and Indictment.quoted(answer.body) else ()
 
     def enforce(self, comms: Comms, commander: str) -> None:
         verdict = f"Quoted, and still degraded: {self.answer.seq}:{self.answer.message_id}."
@@ -413,7 +432,7 @@ class ChokeholdHeld(ChokeholdAnswer):
             commander,
             (
                 verdict,
-                *(sign.line for sign in self.blocking(comms, commander)),
+                *(sign.line for sign in self.blocking),
                 "Your units stay paused until these clear. Fork judges and answer; a quote is"
                 " not relief.",
             ),
@@ -430,14 +449,8 @@ class ChokeholdRefused(ChokeholdAnswer):
     """The answer quotes nothing: the units stay paused and the commander is choked again."""
 
     @classmethod
-    def violations(cls, comms: Comms, commander: str) -> tuple[Self, ...]:
-        if not cls.held(comms):
-            return ()
-        return tuple(
-            cls(answer)
-            for answer in cls.newest(comms, commander)
-            if not Indictment.quoted(answer.body)
-        )
+    def judged(cls, answer: Message, blocking: tuple[Sign, ...]) -> tuple[Self, ...]:
+        return () if Indictment.quoted(answer.body) else (cls(answer, blocking),)
 
     def enforce(self, comms: Comms, commander: str) -> None:
         verdict = f"That's not a quote: {self.answer.seq}:{self.answer.message_id}."

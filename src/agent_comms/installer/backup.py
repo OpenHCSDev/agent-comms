@@ -403,6 +403,15 @@ class StoreBackup(ResourceBackup):
         owners = self.resource_owners(selected, saved)
         return all(self.file_original(name, saved, owners[name]) for name in selected)
 
+    def restore_parents(self, target: Path) -> None:
+        """A carry may delete the directory that held a saved file (install 24 met
+        imported_sessions/selected-tool-ledger gone); restoring the file restores it."""
+        missing = [parent for parent in target.relative_to(self.root).parents
+                   if not (self.root / parent).exists()]
+        for parent in reversed(missing):
+            (self.root / parent).mkdir(mode=0o700)
+            Platform.current().sync_directory((self.root / parent).parent)
+
     def restore(self) -> None:
         saved = self.files()
         selected = self.selected_files()
@@ -421,6 +430,7 @@ class StoreBackup(ResourceBackup):
             target = self.root / name
             owner = owners[name]
             if name in saved:
+                self.restore_parents(target)
                 descriptor, temporary = tempfile.mkstemp(prefix='.restore-', dir=target.parent)
                 os.close(descriptor)
                 stage = Path(temporary)

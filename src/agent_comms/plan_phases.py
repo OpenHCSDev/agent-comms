@@ -21,7 +21,10 @@ from agent_comms.phase_evidence import (
     AllEvidence,
     BusStorageAbsent,
     ClassFlagsAbsent,
+    ClassDeclared,
+    ClassRostersAbsent,
     CommitMerged,
+    FunctionDeclared,
     NoAbsenceProbes,
     NoExactCopies,
     NoGodFunction,
@@ -33,6 +36,7 @@ from agent_comms.phase_evidence import (
     PatternPresent,
     PhaseEvidence,
     PlanReading,
+    RestatedMembersAbsent,
     RulesetGates,
 )
 from agent_comms.phase_tasks import PhaseTask, UnspecifiedPhaseTask
@@ -200,8 +204,8 @@ class StoryPhase(CommanderNativePhase):
     after = (RecordPlanePhase,)
     evidence = AllEvidence(
         (
-            PatternPresent(r"^class CommsOrderStoryTool\b", ("src/agent_comms/tools.py",)),
-            PatternPresent(r"^class CommsFleetStoryTool\b", ("src/agent_comms/tools.py",)),
+            ClassDeclared("CommsOrderStoryTool", ("src/agent_comms/tools.py",)),
+            ClassDeclared("CommsFleetStoryTool", ("src/agent_comms/tools.py",)),
             PatternAbsent(r"^def roast\b", (COMMANDER + "judge.py",)),
         )
     )
@@ -213,7 +217,7 @@ class CommanderPagePhase(CommanderNativePhase):
     after = (RecordPlanePhase, ControlPlanePhase)
     evidence = AllEvidence(
         (
-            PatternPresent(r"^class CommanderHud\b", ("src",)),
+            ClassDeclared("CommanderHud", ("src",)),
             PatternPresent(r"\bcomms_hud\b", ("src",)),
         )
     )
@@ -332,31 +336,29 @@ class BusDeletionPhase(VirtualBusPhase):
 
 
 FLAG = r"(: ClassVar\[bool\])? = (True|False)$"
+LIFECYCLE_FLAGS = (
+    "terminal|failed|successful|pending|active|executing|unresolved|deferred|complete|completed"
+)
+CODEC_FLAGS = "accepts_null|opaque|external_json_shape|strict_fields|accepts_prompt"
+SMALL_FAMILY_FLAGS = "multiple_targets|preengagement_target|notification_changed|input_uncertain"
 
 
 class LifecycleFlagsPhase(MultipleInheritancePhase):
     """1A: flags declared on classes; a function's local named ``complete`` is not one."""
 
-    evidence = ClassFlagsAbsent(
-        r"^\s+(terminal|failed|successful|pending|active|executing"
-        r"|unresolved|deferred|complete|completed)" + FLAG
-    )
+    evidence = ClassFlagsAbsent(rf"^\s+({LIFECYCLE_FLAGS})" + FLAG)
 
 
 class CodecFlagsPhase(MultipleInheritancePhase):
     """1B."""
 
-    evidence = PatternAbsent(
-        r"^\s+(accepts_null|opaque|external_json_shape|strict_fields|accepts_prompt)" + FLAG
-    )
+    evidence = PatternAbsent(rf"^\s+({CODEC_FLAGS})" + FLAG)
 
 
 class SmallFamilyFlagsPhase(MultipleInheritancePhase):
     """1C. ``GoalDisplay.visible`` stays by the commander's decision, so ``visible`` is not read."""
 
-    evidence = PatternAbsent(
-        r"^\s+(multiple_targets|preengagement_target|notification_changed|input_uncertain)" + FLAG
-    )
+    evidence = PatternAbsent(rf"^\s+({SMALL_FAMILY_FLAGS})" + FLAG)
 
 
 class TriggersPhase(MultipleInheritancePhase):
@@ -466,10 +468,22 @@ class OwnTypeChecksPhase(MultipleInheritancePhase):
 
 
 class InheritanceCleanupPhase(MultipleInheritancePhase):
-    """Batch 4: no lifecycle capability is left with one member."""
+    """Batch 4, the deletion closure: no capability shell left with one member, no member
+    restating its base's answer, no probe for a batch 1 flag, and no literal roster of
+    classes."""
 
     after = (OwnTypeChecksPhase,)
-    evidence = ParentsShared(paths=("src/agent_comms/lifecycle_capability.py",))
+    evidence = AllEvidence(
+        (
+            ParentsShared(paths=("src/agent_comms/lifecycle_capability.py",)),
+            RestatedMembersAbsent(),
+            PatternAbsent(
+                rf"\b(getattr|hasattr)\([^,()]+, *[\"']"
+                rf"({LIFECYCLE_FLAGS}|{CODEC_FLAGS}|{SMALL_FAMILY_FLAGS})[\"']"
+            ),
+            ClassRostersAbsent(families=(PlanPhase,)),
+        )
+    )
 
 
 class DeadModulesPhase(RemainingSlopPhase):
@@ -645,7 +659,7 @@ class OwnedDispatchPhase(RemainingSlopPhase):
                 r"""separators\s*=\s*\(\s*["'],["']\s*,\s*["']:["']\s*\)""",
                 ("src", ":!src/agent_comms/field_codec.py"),
             ),
-            PatternPresent(r"def compact\(", ("src/agent_comms/field_codec.py",)),
+            FunctionDeclared("compact", ("src/agent_comms/field_codec.py",)),
         )
     )
 
@@ -716,7 +730,7 @@ class FleetAwarenessPhase(CommanderNativePhase, declared_name=None):
 class OneHolderPerWorktreePhase(FleetAwarenessPhase):
     """One holder per worktree, refused at order time."""
 
-    evidence = PatternPresent(r"class SharedWorktreeRefusal\(", ("src/agent_comms",))
+    evidence = ClassDeclared("SharedWorktreeRefusal", ("src/agent_comms",))
 
 
 class DriftOverlapRulesPhase(FleetAwarenessPhase):
@@ -724,8 +738,8 @@ class DriftOverlapRulesPhase(FleetAwarenessPhase):
 
     evidence = AllEvidence(
         (
-            PatternPresent(r"class BranchBehindMain\(", ("src/agent_comms",)),
-            PatternPresent(r"class SharedFileBranches\(", ("src/agent_comms",)),
+            ClassDeclared("BranchBehindMain", ("src/agent_comms",)),
+            ClassDeclared("SharedFileBranches", ("src/agent_comms",)),
         )
     )
 
@@ -733,31 +747,31 @@ class DriftOverlapRulesPhase(FleetAwarenessPhase):
 class SpinningUnitPhase(FleetAwarenessPhase):
     """Spinning as a UnitState member."""
 
-    evidence = PatternPresent(r"class SpinningUnit\(", ("src/agent_comms",))
+    evidence = ClassDeclared("SpinningUnit", ("src/agent_comms",))
 
 
 class UnpushedWorkPhase(FleetAwarenessPhase):
     """Unpushed work as a standing rule."""
 
-    evidence = PatternPresent(r"class UnpushedBranch\(", ("src/agent_comms",))
+    evidence = ClassDeclared("UnpushedBranch", ("src/agent_comms",))
 
 
 class EmptyPullRequestPhase(FleetAwarenessPhase):
     """Empty PRs as a standing rule."""
 
-    evidence = PatternPresent(r"class EmptyPullRequest\(", ("src/agent_comms",))
+    evidence = ClassDeclared("EmptyPullRequest", ("src/agent_comms",))
 
 
 class DeliveryReviewPhase(FleetAwarenessPhase):
     """Review is triggered by delivery."""
 
-    evidence = PatternPresent(r"class DeliveredHeadReview\(", ("src/agent_comms",))
+    evidence = ClassDeclared("DeliveredHeadReview", ("src/agent_comms",))
 
 
 class LostToolsPhase(FleetAwarenessPhase):
     """Lost tools are a bus fact."""
 
-    evidence = PatternPresent(r"class LostTools\(", ("src/agent_comms",))
+    evidence = ClassDeclared("LostTools", ("src/agent_comms",))
 
 
 class FleetReplayPhase(FleetAwarenessPhase):
@@ -772,4 +786,4 @@ class FleetReplayPhase(FleetAwarenessPhase):
         DeliveryReviewPhase,
         LostToolsPhase,
     )
-    evidence = PatternPresent(r"def test_replay_raises_each_incident_once\b", ("tests",))
+    evidence = FunctionDeclared("test_replay_raises_each_incident_once", ("tests",))

@@ -80,6 +80,7 @@ from .field_codec import (
     WireOmitDefault,
     projected,
 )
+from .heartbeat_frame import HeartbeatFrame
 from .goal_actions import (
     ActiveGoalAction,
     CreateProblemGoalAction,
@@ -971,7 +972,7 @@ class CommsCommanderLoadTool(ThreadReadTool):
     description = "Read open orders, review timers and unjudged edits used by the overload rule."
 
     def apply(self, comms: Comms, caller: ToolCaller) -> OverloadDegradation:
-        return OverloadDegradation.of(comms, caller.subject(self.thread))
+        return OverloadDegradation.of(comms, caller.subject(self.thread), ProgressRead())
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -1053,8 +1054,10 @@ class CommsStandingRulesTool(ThreadToolRequest):
     ] = 0.0
 
     def apply(self, comms: Comms, caller: ThreadCaller) -> StandingRulesRead:
-        states = UnitState.current(comms, caller.name, ProgressRead())
-        broken = (*StandingRule.broken(comms, caller.name, observed=states),
+        pulls = ProgressRead()
+        states = UnitState.current(comms, caller.name, pulls)
+        frame = HeartbeatFrame.read(comms, caller.name, pulls)
+        broken = (*StandingRule.broken(comms, caller.name, observed=states, frame=frame),
                   *(state for state in states if state.attention()))
         rejected = StandingRule.enforce_all(comms, caller.name, broken)
         return StandingRulesRead(

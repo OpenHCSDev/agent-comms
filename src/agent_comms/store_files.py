@@ -79,11 +79,6 @@ class StoreLockContention:
 
     remaining: float
 
-    @classmethod
-    def for_blocking(cls, blocking: bool) -> StoreLockContention:
-        """An unbounded wait, or no wait at all."""
-        return UNBOUNDED_CONTENTION if blocking else cls(0)
-
     def waits(self, descriptor: int, platform: Platform, *, mode: LockMode) -> Iterator[float]:
         """One physical acquisition algorithm; drivers own sync/async waiting."""
         while True:

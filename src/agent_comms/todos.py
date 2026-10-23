@@ -106,6 +106,7 @@ from agent_comms.thread_identity import (
 )
 from agent_comms.threads import Thread
 from agent_comms.typed_table import (
+    StoreRows,
     TableReference,
     Column,
     DurableStore,
@@ -640,12 +641,29 @@ class PullRequests:
             for candidate in problems.values():
                 self._read[repo, kind, candidate.id] = ()
             return ()
+        requests = tuple((row, row.parsed(
+            tuple(candidate.id for candidate in linked[row.number]),
+            tuple(dict.fromkeys(order.id for candidate in linked[row.number]
+                                for order in candidate.order_history
+                                if PullRequestLink(repo, row.number) in order.pull_requests))))
+            for row in self.query(repo, tuple(linked)))
+        for selection in dict.fromkeys((kind, *ListedPullRequest.members_with(ListedPullRequest))):
+            for candidate in problems.values():
+                self._read[repo, selection, candidate.id] = tuple(sorted(
+                    (request for row, request in requests
+                     if isinstance(row, selection) and request.belongs_to(candidate)),
+                    key=lambda request: request.updated_at, reverse=True))
+        return self._read[repo, kind, todo.id]
+
+    def query(self, repo: RepositoryName,
+              numbers: tuple[int, ...]) -> tuple[ListedPullRequest, ...]:
+        """GitHub's rows for these numbers: the one forge read in this frame."""
         selections = [
             f'p{number}: pullRequest(number: {number}) {{ number branch: headRefName '
             'head: headRefOid base: baseRefName draft: isDraft closed merge: mergeCommit { oid } '
             'merged: mergedAt updated: updatedAt '
             'head_statuses: commits(last: 1) { nodes { commit { status { contexts { context } } } } } }'
-            for number in linked]
+            for number in numbers]
         query = (f'query {{ repository(owner: {json.dumps(repo.owner)}, '
                  f'name: {json.dumps(repo.name)}) {{ {" ".join(selections)} }} }}')
         listed = repo.api(
@@ -660,20 +678,8 @@ class PullRequests:
         if listed.returncode:
             raise WorkBranchError(
                 listed.stderr.strip() or f"GitHub order lookup in {repo.to_wire()} failed.")
-        rows = FieldCodec.decode(dict[str, ListedPullRequest], FieldCodec.parse(listed.stdout))
-        requests = tuple((row, row.parsed(
-            tuple(candidate.id for candidate in linked[row.number]),
-            tuple(dict.fromkeys(order.id for candidate in linked[row.number]
-                                for order in candidate.order_history
-                                if PullRequestLink(repo, row.number) in order.pull_requests))))
-            for row in rows.values())
-        for selection in dict.fromkeys((kind, *ListedPullRequest.members_with(ListedPullRequest))):
-            for candidate in problems.values():
-                self._read[repo, selection, candidate.id] = tuple(sorted(
-                    (request for row, request in requests
-                     if isinstance(row, selection) and request.belongs_to(candidate)),
-                    key=lambda request: request.updated_at, reverse=True))
-        return self._read[repo, kind, todo.id]
+        return tuple(FieldCodec.decode(
+            dict[str, ListedPullRequest], FieldCodec.parse(listed.stdout)).values())
 
 
 @dataclass(frozen=True)
@@ -993,6 +999,11 @@ class ProgressRead(PullRequests, CheckoutReads):
         CheckoutReads.__init__(self)
         PullRequests.__init__(self, todos)
 
+    def progress(self, held: Sequence[Todo], registry: Registration) -> dict[str, OrderProgress]:
+        """Each held order's progress, read through this frame's one reader."""
+        self.register(held)
+        return {todo.id: OrderProgress.read(todo, registry, self) for todo in held}
+
 
 @dataclass(frozen=True)
 class ProgressSource:
@@ -1286,7 +1297,11 @@ class OrderWords(WireValue):
         return sorted({m.group(0).lower() for m in cls.REFUSED.finditer(cls.CITED.sub(' ', text))})
 
 
-class PlainText(OrderWords):
+class DirectiveWords(OrderWords):
+    """A wording check every text sent to units passes; each check declares itself one."""
+
+
+class PlainText(DirectiveWords):
     """Prose in the words the user uses: no word that hides what happened."""
 
     REFUSED = re.compile(r'\b(custody|admission|admit\w*|receipt\w*|checkpoint\w*|provenance|authority|authorities|witness\w*|lattice|surface|disposition\w*|invariant\w*|semantic\w*|ownership|lifecycle|acceptance|canonical|retained|borrow(?:ed|er|ers)?|bounded|certif\w*|recertif\w*|candidate|fence\w*|sidecar\w*|substrate|installed-path|source[- ]paired|exact[- ]head|integration owner|separately owned|follow-?up|remaining scope|not claimed|remains held|load[- ]bearing|cutover|carr(?:y|ies) across|declared dependency|qualifying)\b', re.I)
@@ -1342,7 +1357,7 @@ class BluntText(BluntWords, OrderWords):
         return not found
 
 
-class FairText(OrderWords):
+class FairText(DirectiveWords):
     """The OOPSLA paper proves multiple parents derive every required pair with nothing outside, which composition and
     forwarding supply outside (Fig 3, Thm 4.6): faulting inheritance itself is dogma, not a restated fact.
     Only explanatory prose is checked; code and banned-action fields are not prose."""
@@ -1356,7 +1371,7 @@ class FairText(OrderWords):
                "name the restated fact and the declaration that derives it.")
 
 
-class HierarchyText(OrderWords):
+class HierarchyText(DirectiveWords):
     """A forwarder restates an implementation pair: explanatory prose must fix the
     hierarchy rather than preserve a forwarding route."""
 
@@ -1369,12 +1384,13 @@ class DirectiveText:
     """What the commander and the owner's voice send units: order send, order say and the
     connector's send refuse a text failing any of these."""
 
-    OUTGOING: ClassVar[tuple[type[OrderWords], ...]] = (
-        FairText, HierarchyText, PlainText)
+    @staticmethod
+    def checks() -> tuple[type[DirectiveWords], ...]:
+        return tuple(DirectiveWords.__subclasses__())
 
     @classmethod
     def refused(cls, text: str) -> tuple[str, ...]:
-        return tuple(refused for family in cls.OUTGOING if (refused := family.refused(text)))
+        return tuple(refused for family in cls.checks() if (refused := family.refused(text)))
 
     @classmethod
     def require(cls, text: str) -> None:
@@ -2433,8 +2449,12 @@ class OrderedHunt(Hunt):
             raise ValueError("The hunt must name this commander's current order.")
 
 
+class TodoStoreRows(StoreRows):
+    """The tables of TodoStore; each row declares itself one."""
+
+
 @dataclass(frozen=True)
-class HuntRecord(TypedTable):
+class HuntRecord(TodoStoreRows, TypedTable):
     id: Annotated[str, Column(primary_key=True)]
     commander: Annotated[ThreadIncarnation, Column(index=True)]
     hunt: Hunt
@@ -3338,7 +3358,7 @@ class ChangeTodoState(TodoOperation):
 
 
 @dataclass(frozen=True, slots=True)
-class OwnerRequest(TypedTable, SharedFileTables, DurableTables):
+class OwnerRequest(TodoStoreRows, TypedTable, SharedFileTables, DurableTables):
     """One owner's request, independent of any current turn goal."""
 
     indexes = (Index(("commander_created_at", "state", "created_at")),)
@@ -3385,7 +3405,7 @@ class OwnerRequest(TypedTable, SharedFileTables, DurableTables):
 
 
 @dataclass(frozen=True, slots=True)
-class Todo(TypedTable):
+class Todo(TodoStoreRows, TypedTable):
     unit_index: ClassVar[ExpressionIndex] = ExpressionIndex((
         Assignment.sql_field('owner'), Assignment.sql_field('owner_created'), '{state}',
     ))
@@ -3673,7 +3693,7 @@ def _participant(thread: Thread) -> ThreadIncarnation:
 
 
 @dataclass(frozen=True)
-class ProblemAllocation(TypedTable):
+class ProblemAllocation(TodoStoreRows, TypedTable):
     """Only issued, unsent numbers; creating a Todo removes its allocation row.
 
     SQLite's sequence remembers issuance, while Todo.id owns every created identity.
@@ -3772,7 +3792,7 @@ class TodoStore(OwnerRequestStore):
 
     root: Path
     filename: ClassVar[str] = "todos.sqlite3"
-    rows: ClassVar[tuple[type[TypedTable], ...]] = (OwnerRequest, Todo, HuntRecord, ProblemAllocation)
+    tables = TodoStoreRows
 
     @contextmanager
     def writing(self) -> Iterator[sqlite3.Connection]:
@@ -3972,14 +3992,6 @@ class TodoStore(OwnerRequestStore):
                      reader=partial(self._open, state=OpenTodoState))
                      if todo.pending and todo.handed_out_on_release)
 
-    def merged_orders(self, commander: ThreadIncarnation,
-                      registry: Registration) -> tuple[Todo, ...]:
-        """Observe linked merges without holding a write lock."""
-        held = self.held_for_commander(commander)
-        pulls = ProgressRead(held)
-        return tuple(closed for todo in held
-                     for closed in todo.order.closed_by_merge(todo, registry, pulls))
-
     def record_merges(self, completed: tuple[Todo, ...]) -> None:
         """Record only merge changes whose observed revision still holds."""
         if not completed:
@@ -3991,15 +4003,14 @@ class TodoStore(OwnerRequestStore):
                     result.upsert(db)
 
     def board_disagreements(
-        self, commander: ThreadIncarnation, registry: Registration,
+        self, commander: ThreadIncarnation, registry: Registration, pulls: ProgressRead,
     ) -> Iterator[tuple[Todo, MergedProgress]]:
-        """Open orders whose progress misses a linked merge, sharing one PR read cache."""
+        """Open orders whose progress misses a linked merge, read through the caller's frame."""
         todos = self.held_for_commander(commander)
-        pulls = ProgressRead(todos)
+        progress = pulls.progress(todos, registry)
         for todo in todos:
-            progress = OrderProgress.read(todo, registry, pulls)
             source = ProgressSource.of(todo, registry, pulls)
-            for merged in progress.missing_merges(source):
+            for merged in progress[todo.id].missing_merges(source):
                 yield todo, merged
 
     def holds_pending(self, owner: ThreadIncarnation) -> bool:
@@ -4010,14 +4021,6 @@ class TodoStore(OwnerRequestStore):
     def for_commander(self, commander: ThreadIncarnation) -> tuple[Todo, ...]:
         return self._select("creator=? AND creator_created=?",
                             (commander.name, commander.wire_birth), reader=self._open)
-
-    def timers_up_for_commander(self, commander: ThreadIncarnation, registry: Registration,
-                                now: float) -> tuple[tuple[Todo, RecordedEventTime], ...]:
-        """Held work whose review timer is up, with its round; merged work waits on install."""
-        held = self.held_for_commander(commander)
-        pulls = ProgressRead(held)
-        progress = {todo.id: OrderProgress.read(todo, registry, pulls) for todo in held}
-        return self.timers_up_in(held, now, progress)
 
     @staticmethod
     def timers_up_in(held: Sequence[Todo], now: float,
@@ -4031,11 +4034,11 @@ class TodoStore(OwnerRequestStore):
             (commander.name, commander.wire_birth), reader=self._open)
 
     def claimed_heads_for_commander(
-        self, commander: ThreadIncarnation, pulls: PullRequests | None = None,
+        self, commander: ThreadIncarnation, pulls: PullRequests,
     ) -> Iterator[tuple[Todo, OrderClaim, PullRequest]]:
         """Recorded delivery claims survive a missing or stopped unit observation."""
         held = self.held_for_commander(commander)
-        reader = PullRequests(held) if pulls is None else pulls.register(held)
+        reader = pulls.register(held)
         for todo in held:
             for claim, request in reader.claimed_heads(todo):
                 yield todo, claim, request
