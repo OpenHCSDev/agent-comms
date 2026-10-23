@@ -6,10 +6,10 @@ from collections.abc import Iterable, Iterator
 from itertools import takewhile
 from typing import TYPE_CHECKING, ClassVar, Literal
 
-from pydantic import Field, JsonValue, TypeAdapter
+from pydantic import Field, JsonValue
 
-from agent_comms.cli_protocol import TaggedWire, WireModel
-from agent_comms.declared_family import DeclaredWireFamily, UnknownFamilyMember
+from agent_comms.cli_protocol import TaggedWire
+from agent_comms.declared_family import UnknownFamilyMember
 from agent_comms.runtime_updates import (
     AllTurnsEnded,
     AppendDraftItem,
@@ -18,6 +18,7 @@ from agent_comms.runtime_updates import (
     TurnStarted,
 )
 
+from ..wire_models import DeclaredWireFamily, WireModel
 from .opencode_parts import MessageInfo, Part, SavedMessage, UserMessage
 
 if TYPE_CHECKING:
@@ -117,8 +118,8 @@ class RetryStatus(SessionStatus, declared_name='retry'):
         return TurnStarted(f'Retry {self.attempt}: {self.message}')
 
 
-SESSION_STATUSES = TypeAdapter(dict[str, SessionStatus.declared_union()])
-MESSAGES = TypeAdapter(list[SavedMessage])
+SESSION_STATUSES = WireModel.adapter(dict[str, SessionStatus.declared_union()])
+MESSAGES = WireModel.adapter(list[SavedMessage])
 
 
 class StatusUpdate(WireModel):
