@@ -13,6 +13,8 @@ from uuid import uuid4
 
 import pytest
 
+from agent_comms.store_files import StoreLockContention
+
 from agent_comms import agent_events as events
 from agent_comms.bus import Bus
 from agent_comms.bus_publication import AgentOrigin, HumanOrigin
@@ -181,7 +183,7 @@ def test_order_claim_publishes_only_to_its_retained_commander_birth(
     if change in ("rename", "rename_holder"):
         def registry_cut_held():
             try:
-                with comms.registry.store.locked(blocking=False):
+                with comms.registry.store.locked(contention=StoreLockContention(0)):
                     return False
             except BlockingIOError:
                 return True

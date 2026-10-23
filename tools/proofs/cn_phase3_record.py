@@ -36,6 +36,7 @@ from agent_comms.todos import (
     VoidStrikeTodo,
 )
 from agent_comms.order_runs import MechanicalOrderRun
+from agent_comms.threads import Thread
 from agent_comms.tool_caller import ToolCaller
 from agent_comms.tools import (
     CommsChangeProblemTool,
@@ -76,7 +77,7 @@ def setup() -> None:
     Bus.install(Bus.path_in(comms.root))
     for name in ("record-lead", "record-worker"):
         comms.registry.declare(
-            comms.registry.new_thread(name, frozenset(), str(CHECKOUT), created_at=time.time())
+            Thread(name, frozenset(), str(CHECKOUT), created_at=time.time())
         )
     comms.goals.todos.add_request(comms.registry.require('record-lead').incarnation,
         'Confirm the order record through the actual Core tools on this isolated bus')
