@@ -44,7 +44,7 @@ from agent_comms.change_report import (
     SourceReference,
     SourceRevision,
 )
-from agent_comms.channel_targets import CommandTarget, CommsTag
+from agent_comms.channel_targets import CommandTarget, CommsTag, IncarnationThreadTarget
 from agent_comms.child_process import (
     BoundedRun,
     CheckPrinted,
@@ -3119,7 +3119,7 @@ class ClaimOrder(TodoCommand):
 
     def after_record(self, goals: Goals, changed: Todo) -> None:
         goals.bus.publisher.publish_ordinary(
-            self.claim.message, destination=CommandTarget.named(self.claim.message.target),
+            self.claim.message, destination=IncarnationThreadTarget(changed.creator_identity),
             origin=AgentOrigin())
 
 

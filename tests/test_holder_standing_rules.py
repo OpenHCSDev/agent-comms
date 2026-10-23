@@ -28,7 +28,7 @@ from agent_comms.commander.standing import (
 from agent_comms.comms import Comms
 from agent_comms.commander_heartbeat import CommanderHeartbeat
 from agent_comms.coordinator import Coordination
-from agent_comms.errors import RelationViolationError
+from agent_comms.errors import HumanSendRefusedError, RelationViolationError
 from agent_comms.field_codec import FieldCodec
 from agent_comms.goal_actions import (
     CreateProblemGoalAction,
@@ -140,6 +140,39 @@ def claim_order(held_bus):
 def state_cards(comms, member):
     return tuple(state for state in UnitState.current(comms, "lead", ProgressRead())
                  if isinstance(state, member))
+
+
+@pytest.mark.parametrize("change", ["rename", "remove", "recreate"])
+def test_order_claim_publishes_only_to_its_retained_commander_birth(held_bus, change):
+    comms = held_bus
+    todo = comms.goals.todos.get("P1")
+    lead = comms.registry.require("lead").incarnation
+    worker = comms.registry.require("worker").incarnation
+    original = comms.messaging.send("lead", "worker", todo.order.instructions(todo)).message
+    todo = comms.goals.todos.apply(
+        todo.id, OrderMessage(todo.revision, lead, original.message_id))
+    claim = OrderClaim.for_order(
+        todo, worker, 1, "a" * 40, "Review this published repair", original.reference)
+    if change == "rename":
+        comms.registry.rename("lead", "renamed")
+    else:
+        worktree = comms.registry.require("lead").worktree
+        comms.registry.unregister("lead")
+        comms.registry.remove("lead")
+        if change == "recreate":
+            comms.registry.declare(comms.registry.new_thread("lead", frozenset({"comms"}), worktree))
+    before = comms.bus.bus.revision()
+    operation = ClaimOrder(todo.revision, worker, todo.held().generation, claim)
+    if change == "rename":
+        operation.record(comms.goals, todo.id)
+        delivery = comms.bus.bus.delivery(before + 1)
+        assert delivery.message.target == "renamed"
+        assert [(row.canonical_thread, row.recipient_lookup) for row in delivery.audience.recipients] == [
+            ("renamed", lead.require_recorded().lookup)]
+    else:
+        with pytest.raises(HumanSendRefusedError):
+            operation.record(comms.goals, todo.id)
+        assert comms.bus.bus.revision() == before
 
 
 def unanswered(comms):
