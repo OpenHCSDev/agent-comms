@@ -16,12 +16,12 @@ from datetime import datetime
 from functools import cache
 from pathlib import Path
 from string import Formatter
-from typing import ClassVar, Iterator, Self
+from typing import Annotated, ClassVar, Iterator, Self
 
 from agent_comms.child_process import Platform
 from agent_comms.active_route import ActiveRoute, _route_directory, route_directory
 from agent_comms.coordination_errors import CoordinationError
-from agent_comms.field_codec import FieldCodec
+from agent_comms.field_codec import FieldCodec, PathText
 from agent_comms.installer.interpreter_operation import RouteSelection
 from agent_comms.locked_store import LockedStore, RootFile, RuntimeFile, SQLiteFile, UndeclaredFile
 from agent_comms.private_path import FileObservation, FileRevision, MissingFile
@@ -74,7 +74,8 @@ def bus_files(root: Path) -> dict[tuple[type[RootFile] | UndeclaredFile, Path], 
     companions.update(member for path, owner in owners.items()
                       for member in owner.member_paths(path) if member != path)
     return {
-        (declared.get(path, UndeclaredFile(path.relative_to(root))), path.relative_to(root)): {
+        (declared[path] if path in declared else UndeclaredFile(path.relative_to(root)),
+         path.relative_to(root)): {
             member.relative_to(root): SavedFile(
                 observed[member].st_size, observed[member].st_mtime_ns, observed[member].st_ino,
             ) for member in owner.snapshot_members(path, observed)
@@ -182,9 +183,13 @@ class StoreBackup(ResourceBackup):
     def spill_directory(self, configured: Path) -> Path:
         return self.path
 
-    def files(self) -> dict[str, str]:
-        return FieldCodec.decode(dict[str, str],
+    def files(self) -> dict[Annotated[Path, PathText], str]:
+        return FieldCodec.decode(dict[Annotated[Path, PathText], str],
                                  FieldCodec.parse((self.path / 'files.json').read_text()))
+
+    def selected_files(self) -> tuple[Annotated[Path, PathText], ...]:
+        return FieldCodec.decode(tuple[Annotated[Path, PathText], ...],
+                                 FieldCodec.parse((self.path / 'selected.json').read_text()))
 
     def retire(self) -> Path:
         archived = self.path.with_name(f'{self.path.name}.restored-{time.time_ns()}')
@@ -238,9 +243,9 @@ class StoreBackup(ResourceBackup):
     def take(cls, root: Path, route: Path, files: tuple[Path, ...], spill_dir: Path) -> StoreBackup:
         path = spill_dir / BackupName.now(root).value
         backup = cls(root, route, path)
-        selected = tuple(str(file.relative_to(root)) for file in files)
+        selected = tuple(file.relative_to(root) for file in files)
         if path.exists():
-            if tuple(json.loads((path / 'selected.json').read_text())) != selected:
+            if backup.selected_files() != selected:
                 raise UpgradeRefused('Existing backup belongs to different resources')
             backup.files()  # An interrupted snapshot is never treated as complete.
             with route_directory(route):
@@ -249,13 +254,15 @@ class StoreBackup(ResourceBackup):
                 backup.route_revision = FileRevision.capture(route)
             return backup
         path.mkdir(mode=0o700, parents=True)
-        AtomicFile(path / 'selected.json').write_text(json.dumps(selected))
+        AtomicFile(path / 'selected.json').write_text(json.dumps(FieldCodec.encode(
+            selected, tuple[Annotated[Path, PathText], ...])))
         contents = backup.capture(files)
         with route_directory(route):
             if route.exists():
                 shutil.copy2(route, path / 'active-route.json')
             backup.route_revision = FileRevision.capture(route)
-        AtomicFile(path / 'files.json').write_text(json.dumps(FieldCodec.encode(contents), indent=1))
+        AtomicFile(path / 'files.json').write_text(json.dumps(FieldCodec.encode(
+            contents, dict[Annotated[Path, PathText], str]), indent=1))
         return backup
 
     def retain(self, spill_dir: Path) -> tuple[Path, ...]:
@@ -315,12 +322,12 @@ class StoreBackup(ResourceBackup):
             source, target, symlinks=True, ignore=transient, copy_function=cls.copy_file
         )
 
-    def capture(self, files: tuple[Path, ...]) -> dict[str, str]:
-        contents = {}
+    def capture(self, files: tuple[Path, ...]) -> dict[Annotated[Path, PathText], str]:
+        contents: dict[Path, str] = {}
         for source in files:
             if not source.exists():
                 continue
-            name = str(source.relative_to(self.root))
+            name = source.relative_to(self.root)
             target = self.data_root / name
             target.parent.mkdir(parents=True, exist_ok=True)
             self.copy_file(source, target)
@@ -329,7 +336,7 @@ class StoreBackup(ResourceBackup):
             Platform.current().sync_directory(target.parent)
         return contents
 
-    def file_original(self, name: str, saved: dict[str, str]) -> bool:
+    def file_original(self, name: Path, saved: dict[Annotated[Path, PathText], str]) -> bool:
         """An unchanged selected file keeps its identity as well as its contents."""
         target = self.root / name
         if name not in saved:
@@ -344,14 +351,16 @@ class StoreBackup(ResourceBackup):
             return False
         saved = self.files()
         return all(self.file_original(name, saved)
-                   for name in json.loads((self.path / 'selected.json').read_text()))
+                   for name in self.selected_files())
 
     def restore(self) -> None:
         saved = self.files()
-        for name in json.loads((self.path / 'selected.json').read_text()):
+        for name in self.selected_files():
             if self.file_original(name, saved):
                 continue
             target = self.root / name
+            observed = self.data_root / name if name in saved else target
+            owner = RootFile.content_owner(observed) if observed.exists() else RootFile
             if name in saved:
                 descriptor, temporary = tempfile.mkstemp(prefix='.restore-', dir=target.parent)
                 os.close(descriptor)
@@ -363,7 +372,7 @@ class StoreBackup(ResourceBackup):
                     stage.unlink(missing_ok=True)
             else:
                 target.unlink(missing_ok=True)
-            for companion in SQLiteFile.files(target)[1:]:
+            for companion in set(owner.files(target)) - {target}:
                 companion.unlink(missing_ok=True)
         Platform.current().sync_directory(self.root)
         self.restore_route()
