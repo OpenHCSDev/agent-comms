@@ -20,14 +20,13 @@ from agent_comms.installer.backup import (
 )
 from agent_comms.installer.carry import (
     STEPS,
-    BackupFilesOperation,
     Carried,
     Carry,
     CarryChain,
     MigrateOperation,
 )
 from agent_comms.installer.commands import InstallCommands
-from agent_comms.installer.practice import practice_copy
+from agent_comms.installer.practice import PracticeCopy
 from agent_comms.installer.upgrade import (
     BackedUpMigration,
     PracticeBus,
@@ -54,7 +53,7 @@ def step_source() -> str:
     return (
         "from agent_comms.installer.carry import Carried, Carry\n\n"
         "class Step(Carry):\n"
-        "    def backup_files(self):\n        return ()\n"
+        "    opened_files = ()\n"
         "    def carry(self, *, apply):\n        return Carried(0)\n"
     )
 
@@ -85,35 +84,34 @@ class Repository:
 
 
 @pytest.mark.parametrize("pending", (False, True))
-def test_pending_uses_one_worker_on_a_real_practice_copy(
-        comms, stack, private_directory, pending):
+def test_pending_uses_one_worker_on_a_real_bus(comms, stack, private_directory, pending):
     chain = CarryChain((DropConnectivity, ParkedThreads, CommanderProjectCarry))
     # The worker uses this checkout's actual source and carry declarations.
     tree = TargetTree(REPO, private_directory, "pending")
     tree.path.mkdir()
     (tree.path / "src").symlink_to(REPO / "src", target_is_directory=True)
     (tree.path / "tools").symlink_to(REPO / "tools", target_is_directory=True)
-    with practice_copy(comms.root, private_directory / "practice" / "bus") as (copied, measurement):
-        practice = PracticeBus(private_directory / "practice", copied, measurement,
-                               comms.root, private_directory / "spill")
-        if pending:
-            # ParkedThreads must run before CommanderProjectCarry can decode this.
-            (copied / "commander.json").write_text('{"parked": []}')
-        position = len(chain.steps)
-        for index, step in enumerate(chain.steps):
-            (answer,) = stack.call_steps(
-                (step(copied, comms.root, practice.spill_dir),), tree, MigrateOperation(False))
-            if answer.changed:
-                position = index
-                break
-        before = len(stack.commands.ran)
-        assert practice.pending(chain, stack, tree) == chain.steps[position:]
-        commands = stack.commands.ran[before:]
-        assert len(commands) == 1
-        assert "-m agent_comms.installer.step_worker " in commands[0].command
-        assert practice.pending(CarryChain(()), stack, tree) == ()
-        assert len(stack.commands.ran) == before + 1
-
+    practice = PracticeBus(private_directory / "practice",
+                           PracticeCopy(comms.root, private_directory / "practice" / "bus"),
+                           comms.root, private_directory / "spill")
+    if pending:
+        # ParkedThreads must run before CommanderProjectCarry can decode this.
+        (comms.root / "commander.json").write_text('{"parked": []}')
+    position = len(chain.steps)
+    for index, step in enumerate(chain.steps):
+        (answer,) = stack.call_steps(
+            (step(comms.root, comms.root, practice.spill_dir),), tree, MigrateOperation(False))
+        if answer.changed:
+            position = index
+            break
+    before = len(stack.commands.ran)
+    assert practice.pending(chain, stack, tree) == chain.steps[position:]
+    commands = stack.commands.ran[before:]
+    assert len(commands) == 1
+    assert "-m agent_comms.installer.step_worker " in commands[0].command
+    assert practice.pending(CarryChain(()), stack, tree) == ()
+    assert len(stack.commands.ran) == before + 1
+    assert not practice.copy.copied
 
 def record_source(version: int, fields: str) -> str:
     return ("from dataclasses import dataclass\nfrom typing import Annotated, ClassVar\n"
@@ -187,9 +185,7 @@ def noisy_step(tmp_path_factory):
         "from pathlib import Path\n"
         "from agent_comms.installer.carry import Carry, Carried\n"
         "class Noisy(Carry):\n"
-        "    def backup_files(self):\n"
-        "        print('backup diagnostic')\n"
-        "        return (self.root / 'saved',)\n"
+        "    opened_files = ()\n"
         "    def carry(self, *, apply):\n"
         "        import atexit\n"
         "        atexit.register(print, 'diagnostic after the answer')\n"
@@ -206,8 +202,7 @@ def noisy_step(tmp_path_factory):
         def module(cls):
             return module
 
-        def backup_files(self):
-            raise AssertionError("The selected interpreter lists the backups, never its caller")
+        opened_files = ()
 
         def carry(self, *, apply):
             raise AssertionError("The selected interpreter executes the carry, never its caller")
@@ -222,7 +217,6 @@ def test_step_answers_are_separate_from_diagnostics_and_keep_their_types(
     root = tmp_path / "bus"
     root.mkdir()
     request = step(root, root, tmp_path / "spill")
-    assert stack.call_steps((request,), tree, BackupFilesOperation()) == ((root / "saved",),)
     assert stack.call_steps((request,), tree, MigrateOperation(False)) == (
         Carried(1, {"applied": False}, (Path("saved"),)),)
     assert not (root / "saved").exists()

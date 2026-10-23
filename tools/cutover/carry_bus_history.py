@@ -47,7 +47,7 @@ from agent_comms.field_codec import (
     WireOrder,
 )
 from agent_comms.historical_views import HistoryArchive, HistorySource
-from agent_comms.installer.carry import Carried, Carry
+from agent_comms.installer.carry import ArchivedInputs, Carried, Carry
 from agent_comms.locked_store import BusFile, RegistryFile, RootFile
 from agent_comms.private_path import FileObservation, FileRevision
 from agent_comms.read_ledger import ReadLedger
@@ -67,6 +67,7 @@ from agent_comms.wake_policy import (
 )
 
 
+from .archived_roots import ArchivedCarry, CarryCatalogSource
 from .retired_claim_fields import RetiredClaimFields
 
 @dataclass(frozen=True)
@@ -94,75 +95,8 @@ class HistoryMetadata(BusFile):
         )
 
 
-class CarryCatalogSource(SubclassUnion, ABC, affix=""):
-    """Decode the archive's stored state once, including an already converted source."""
 
-    root: str
 
-    @property
-    @abstractmethod
-    def pending(self) -> int: ...
-
-    @abstractmethod
-    def require_snapshot(self) -> None: ...
-
-    @abstractmethod
-    def carried_registry(self, mapped: Path) -> Self:
-        """Reseal a registry carried before the bus format changes."""
-
-    @abstractmethod
-    def converted(
-        self,
-        root: Path,
-        original_root: Path,
-        bindings: Mapping[RecordedBusIdentity, RecordedBusIdentity],
-    ) -> tuple[HistorySource, Carried]: ...
-
-    @classmethod
-    def read(cls, root: Path, original_root: Path) -> tuple[CarryCatalogSource, ...]:
-        path = HistoryArchive.path_in(root)
-        if not path.exists():
-            return ()
-        sources = FieldCodec.decode(
-            tuple[CarryCatalogSource, ...],
-            FieldCodec.parse(path.read_bytes()),
-        )
-        for source in sources:
-            source.mapped_root(root, original_root)
-            source.require_snapshot()
-        return sources
-
-    @classmethod
-    def publish(
-        cls,
-        root: Path,
-        original_root: Path,
-        sources: tuple[CarryCatalogSource, ...],
-        bindings: Mapping[RecordedBusIdentity, RecordedBusIdentity],
-    ) -> Carried:
-        path = HistoryArchive.path_in(root)
-        if not path.exists():
-            return Carried(0)
-        results = tuple(source.converted(root, original_root, bindings) for source in sources)
-        converted = tuple(source for source, _ in results)
-        changed = sum(result.changed for _, result in results)
-        rewritten = tuple(name for _, result in results for name in result.rewritten)
-        # BusHistory holds the catalog lock from the old read through this publication.
-        payload = json.dumps(FieldCodec.encode(converted))
-        if path.read_bytes() == payload.encode():
-            return Carried(changed, rewritten=rewritten)
-        AtomicFile(path).write_text(payload)
-        return Carried(changed + len(converted), rewritten=(*rewritten, path.relative_to(root)))
-
-    def mapped_root(self, root: Path, original_root: Path) -> Path:
-        original = Path(self.root)
-        if original.is_relative_to(root):
-            Carry.require_confined(root, original)
-            return original
-        Carry.require_confined(original_root, original)
-        mapped = root / original.relative_to(original_root)
-        Carry.require_confined(root, mapped)
-        return mapped
 
 
 @dataclass(frozen=True)
@@ -846,8 +780,8 @@ class HistoryInput:
         return tuple(rewritten)
 
 
-class BusHistory(Carry, BusFile):
-    """Validate and stream the retired history through the bus's one insert path."""
+class RetiredBusFile(BusFile):
+    """The retired stream and its marker form one copied file group."""
 
     filename = "bus.jsonl"
 
@@ -864,23 +798,11 @@ class BusHistory(Carry, BusFile):
                 RootFile.copy_file(path, target.with_name(path.name))
         return copied
 
-    def backup_files(self) -> tuple[Path, ...]:
-        root = self.root
-        sources = CarryCatalogSource.read(root, self.original_root)
-        roots = (root, *(source.mapped_root(root, self.original_root) for source in sources))
-        paths = {HistoryArchive.path_in(root)}
-        for directory in roots:
-            paths.update(RegistryStore.at(directory).written)
-            paths.update(
-                (
-                    directory / self.filename,
-                    directory / HistoryMetadata.filename,
-                    ReadLedger.path_in(directory),
-                )
-            )
-        for path in paths:
-            self.require_confined(root, path)
-        return tuple(sorted(paths))
+class BusHistory(ArchivedCarry, RetiredBusFile):
+    """Validate and stream the retired history through the bus's one insert path."""
+
+    opened_files = (RetiredBusFile, HistoryMetadata, Bus, RegistryFile, ReadLedger, HistoryArchive)
+
 
     @staticmethod
     def rebind_reads(root: Path, original: RecordedBusIdentity) -> Carried:
