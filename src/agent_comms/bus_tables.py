@@ -23,6 +23,7 @@ from agent_comms.errors import RelationViolationError
 from agent_comms.field_codec import FieldCodec, WireName, WireOrder
 from agent_comms.message_reference import MessageReference
 from agent_comms.typed_table import (
+    TableReference,
     AppendOnlyTables,
     Column,
     ComposedSchemas,
@@ -300,7 +301,7 @@ class ClaimOperations(TypedTable, BusProjectionTables):
 
     @classmethod
     def references(cls) -> tuple[ForeignKey, ...]:
-        return (ForeignKey(("seq",), messages.Claimed.table, ("seq",)),)
+        return (ForeignKey(columns=("seq",), target=messages.Claimed.table, target_columns=("seq",)),)
 
     @classmethod
     def used(cls, db: sqlite3.Connection, operation_id: str) -> bool:
@@ -316,7 +317,7 @@ class HeldResources(TypedTable, BusProjectionTables):
 
     @classmethod
     def references(cls) -> tuple[ForeignKey, ...]:
-        return (ForeignKey(("claim_seq",), messages.Claimed.table, ("seq",)),)
+        return (ForeignKey(columns=("claim_seq",), target=messages.Claimed.table, target_columns=("seq",)),)
 
     @classmethod
     def owner_for(cls, db: sqlite3.Connection, resource: str) -> ResourceClaim:
@@ -382,7 +383,7 @@ class HeldResources(TypedTable, BusProjectionTables):
 class CapabilityRow(TypedTable, BusTables, declared_name=None):
     """Every generated capability row belongs to one original bus sequence."""
 
-    seq: Annotated[int, Column(primary_key=True, references=(BusRow, "seq"))]
+    seq: Annotated[int, Column(primary_key=True, references=TableReference(BusRow, ("seq",)))]
 
 
 class _CapabilityTable:

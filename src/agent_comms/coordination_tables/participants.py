@@ -64,7 +64,7 @@ class ParticipantAliases(ImmutableRows, CoordinatorRow):
 
     @classmethod
     def references(cls):
-        return (ForeignKey(("participant_lookup",), Participants, ("participant_lookup",)),)
+        return (ForeignKey(columns=("participant_lookup",), target=Participants, target_columns=("participant_lookup",)),)
 
 @dataclass(frozen=True, kw_only=True)
 class OwnerGenerations(
@@ -86,7 +86,7 @@ class OwnerGenerations(
 
     @classmethod
     def references(cls):
-        return (ForeignKey(("owner_lookup",), Participants, ("participant_lookup",)),)
+        return (ForeignKey(columns=("owner_lookup",), target=Participants, target_columns=("participant_lookup",)),)
 
     @property
     def lookup(self) -> str:

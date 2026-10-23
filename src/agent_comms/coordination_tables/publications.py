@@ -137,11 +137,11 @@ class PublicationIntents(
         from agent_comms.coordination_tables.responses import ResponseObligation
 
         return (
-            ForeignKey(("execution_id",), ExecutionRecord, ("execution_id",), on_delete="RESTRICT"),
+            ForeignKey(columns=("execution_id",), target=ExecutionRecord, target_columns=("execution_id",), on_delete="RESTRICT"),
             ForeignKey(
-                ("execution_id", "exact_target", "obligation_intent_required"),
-                ResponseObligation,
-                ("execution_id", "exact_target", "intent_settled"),
+                columns=("execution_id", "exact_target", "obligation_intent_required"),
+                target=ResponseObligation,
+                target_columns=("execution_id", "exact_target", "intent_settled"),
                 deferred=True,
             ),
         )
@@ -218,14 +218,14 @@ class PublicationEvidence(
 
         return (
             ForeignKey(
-                ("execution_id", "exact_target"),
-                PublicationIntents,
-                ("execution_id", "exact_target"),
+                columns=("execution_id", "exact_target"),
+                target=PublicationIntents,
+                target_columns=("execution_id", "exact_target"),
             ),
             ForeignKey(
-                ("execution_id", "exact_target", "obligation_publication_required"),
-                ResponseObligation,
-                ("execution_id", "exact_target", "publication_settled"),
+                columns=("execution_id", "exact_target", "obligation_publication_required"),
+                target=ResponseObligation,
+                target_columns=("execution_id", "exact_target", "publication_settled"),
                 deferred=True,
             ),
         )

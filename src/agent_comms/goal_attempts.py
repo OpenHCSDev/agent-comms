@@ -62,7 +62,7 @@ from .lifecycle_capability import Failed
 from .locked_store import DurableFile, PublishedSQLiteFile, WireWakeFile
 from .pi_counts import PiCount, UnreportedCount
 from .pi_payloads import PiUsage
-from .typed_table import Column, Generated, SQLiteJournalMode, TypedTable
+from .typed_table import Column, Generated, SQLiteJournalMode, TypedTable, TableReference
 
 if TYPE_CHECKING:
     from .goal_management import Goals
@@ -280,7 +280,7 @@ class AttemptRecord(GoalLedgerTable, TypedTable):
         str,
         Column(
             generated="json_extract(reservation,'$.goal_id')",
-            references=(Generation, "goal_id"),
+            references=TableReference(Generation, ("goal_id",)),
             nullable=True,
         ),
     )
@@ -437,7 +437,7 @@ class NoAttempt(MissingAttempt):
 @dataclass(frozen=True)
 class GoalWorkDecision(GoalLedgerTable, TypedTable):
     """Explicit new-work authority, named by this declaration."""
-    goal_id: Annotated[str, Column(primary_key=True, references=(Generation, "goal_id"))]
+    goal_id: Annotated[str, Column(primary_key=True, references=TableReference(Generation, ("goal_id",)))]
     decision_id: Annotated[str, Column(primary_key=True)]
     generation: int
 
@@ -451,7 +451,7 @@ class GoalWorkDecision(GoalLedgerTable, TypedTable):
 @dataclass(frozen=True)
 class GoalProviderUsage(GoalLedgerTable, TypedTable):
     attempt_id: Annotated[
-        str, Column(primary_key=True, references=(AttemptRecord, "attempt_id"))
+        str, Column(primary_key=True, references=TableReference(AttemptRecord, ("attempt_id",)))
     ]
     response_id: Annotated[str, Column(primary_key=True)]
     # The canonical opaque provider object remains exact; no second native usage codec.
