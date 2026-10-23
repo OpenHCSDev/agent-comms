@@ -76,6 +76,7 @@ from agent_comms.installer.carry import (
     CarryChain,
     CarryOperation,
     CarryRequest,
+    FirstPendingOperation,
     MigrateOperation,
     RetireInputsOperation,
 )
@@ -616,7 +617,7 @@ class Stack:
     def call_steps[Answer](self, steps: tuple[Carry, ...], tree: TargetTree,
                            operation: CarryOperation[Answer]) -> tuple[Answer, ...]:
         """Run one pass of steps, in order, in one worker in the target tree with this
-        stack's interpreter; each step's answer in step order."""
+        stack's interpreter; the operation owns traversal and its answer tuple."""
         if not steps:
             return ()
         request = CarryRequest(operation, steps)
@@ -626,15 +627,9 @@ class Stack:
                               cwd=tree.path, env=self.environment(*tree.source_paths()))
             return operation.decode_answers(result.read_text())
 
-    def call_step[Answer](self, step: Carry, tree: TargetTree,
-                          operation: CarryOperation[Answer]) -> Answer:
-        (answer,) = self.call_steps((step,), tree, operation)
-        return answer
-
     def running_owners(self, root: Path) -> list[str]:
         """Use the restart request's receiving declaration in the selected runtime."""
         return self.probe(RunningOwnersProbe(root))
-
 
     def owners(self, root: Path, command: type[CliCommand[CliResult]],
                names: list[str]) -> None:
@@ -735,10 +730,13 @@ class PracticeBus:
 
     def pending(self, chain: CarryChain, staged: Stack,
                 tree: TargetTree) -> tuple[type[Carry], ...]:
-        """Read-only dry runs choose the pending steps before copying their inputs."""
-        return chain.pending(lambda step: staged.call_step(
-            step(self.original_root, self.original_root, self.spill_dir), tree,
-            MigrateOperation(apply=False)))
+        """Read-only dry runs in one worker stop at the first step that says work remains."""
+        if not chain.steps:
+            return ()
+        steps = tuple(step(self.original_root, self.original_root, self.spill_dir)
+                      for step in chain.steps)
+        (position,) = staged.call_steps(steps, tree, FirstPendingOperation())
+        return chain.steps[position:]
 
     def select(self, pending: tuple[Carry, ...], reconciled: tuple[Path, ...]) -> tuple[Path, ...]:
         # This is the one input union consumed by both rehearsal and live backup.
