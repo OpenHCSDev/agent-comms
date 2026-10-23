@@ -11,6 +11,11 @@ import sysconfig
 import tempfile
 import uuid
 from collections.abc import AsyncIterator, Awaitable, Callable, Iterator
+from pydantic import JsonValue
+from agent_comms.field_codec import FieldCodec
+from agent_comms.pi_payloads import PiMessage
+from agent_comms.native_entries import SessionEntry
+from agent_comms.tool_declaration import ToolDeclaration, NoToolRecord
 from contextlib import AsyncExitStack, contextmanager
 from pathlib import Path
 
@@ -26,11 +31,11 @@ from agent_comms.comms import Comms, wire
 from agent_comms.locked_store import RegistryFile
 from agent_comms.maintenance_barrier import MaintenanceBarrier, MaintenanceOperator
 from agent_comms.message_bus import MessageBus
-from agent_comms.messages import ConversationRole, InfoKind, Message, MessageKind
+from agent_comms.messages import ConversationRole, InfoKind, Message, MessageKind, MessageRole
 from agent_comms.native_package import pinned_location, pinned_native_package
 from agent_comms.native_tool_transport import ToolListener
 from agent_comms.pi_durable_backend import PiDurableBackend
-from agent_comms.publisher import ParticipantPublisher, Publisher
+from agent_comms.publisher import InitialWrites, ParticipantPublisher, Publisher
 from agent_comms.registration import Registration
 from agent_comms.thread_text import ForkedParent, GivenThreadText
 from agent_comms.typed_table import TypedTable
@@ -50,25 +55,27 @@ pytest_plugins = (goal_owner_fixture.__name__,)
 class TranscriptRecords:
     """Fixed test time, projected through each record's declared constructor."""
 
-    def __init__(self):
+    def __init__(self) -> None:
         from agent_comms.field_codec import RecordedTimestamp
 
         self.timestamp = RecordedTimestamp("2026-10-01T00:00:00.000Z")
 
-    def event(self, declaration, *args, **facts):
+    def event[Event](self, declaration: Callable[..., Event], *args: str, **facts: JsonValue | ToolDeclaration | NoToolRecord) -> Event:
         return declaration(*args, timestamp=self.timestamp.at.timestamp(), **facts)
 
-    def entry(self, declaration, **facts):
+    def entry[Entry](self, declaration: Callable[..., Entry], **facts: JsonValue | PiMessage) -> Entry:
         return declaration(timestamp=self.timestamp, **facts)
 
-    def message(self, payload, **coordinates):
+    def message(self, payload: dict[str, JsonValue], **coordinates: JsonValue) -> dict[str, JsonValue]:
         from agent_comms.native_entries import MessageEntry
         from agent_comms.pi_payloads import PiMessage
 
         entry = self.entry(MessageEntry, message=PiMessage.from_wire(payload), **coordinates)
-        return {**entry.to_wire(), "message": payload}
+        encoded = FieldCodec.encode(entry)
+        assert isinstance(encoded, dict)
+        return {**encoded, "message": payload}
 
-    def session(self, **coordinates):
+    def session(self, **coordinates: JsonValue) -> SessionEntry:
         from agent_comms.native_entries import SessionEntry
 
         return self.entry(SessionEntry, **coordinates)
@@ -115,7 +122,7 @@ _MANAGED_RUNTIME_ENVIRONMENT = frozenset({
 })
 
 
-async def await_event_or_task(event: Awaitable[object], task: asyncio.Task) -> object:
+async def await_event_or_task[Result, Work](event: Awaitable[Result], task: asyncio.Task[Work]) -> Result:
     """A producer failure ends its event wait with the original exception."""
     observed = asyncio.ensure_future(event)
     try:
@@ -141,11 +148,13 @@ def responder(root: Path, registry: Registration) -> MessageBus[ParticipantPubli
 
 def publish_initial(
     comms: Comms, sender: str, target: str, body: str, type: type[MessageKind] = InfoKind,
-    *, role: ConversationRole = ConversationRole(),
+    *, role: MessageRole = ConversationRole(),
 ) -> BusRecord:
     """Publish through the ordinary owner without submitting to a native agent."""
     type.require_sendable()
-    return comms.bus.publisher.publish_ordinary(
+    publisher = comms.bus.publisher
+    assert isinstance(publisher, InitialWrites)
+    return publisher.publish_ordinary(
         Message(sender=sender, target=target, body=body, type=type, role=role),
         destination=CommandTarget.named(target), origin=AgentOrigin(),
     )

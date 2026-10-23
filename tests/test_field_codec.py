@@ -294,11 +294,15 @@ def test_subclass_union_slots_replacement_decodes_once_and_keeps_unions_independ
             calls.append(cls)
             return cls(FieldCodec.decode(int, data))
 
-    def declare_number[Union: SubclassUnion](union: type[Union]) -> type[Number]:
-        return dataclass(frozen=True, slots=True)(type("Number", (Number, union), {}))
+    @dataclass(frozen=True, slots=True)
+    class FirstNumber(Number, First, declared_name="number"):
+        pass
 
-    first = declare_number(First)
-    second = declare_number(Second)
+    @dataclass(frozen=True, slots=True)
+    class SecondNumber(Number, Second, declared_name="number"):
+        pass
+
+    first, second = FirstNumber, SecondNumber
 
     @dataclass(frozen=True, slots=True)
     class Text(OwnedWireText, First):
@@ -705,7 +709,7 @@ def test_saved_tool_start_decodes_its_own_tool_tag_and_nullable_arguments() -> N
     from agent_comms.tool_declaration import ToolDeclaration
     from agent_comms.transcript_events import ToolStartTranscript
 
-    arguments = {"from": "sender", "to": "receiver", "body": "hello"}
+    arguments: dict[str, JsonValue] = {"from": "sender", "to": "receiver", "body": "hello"}
     event = transcript_records.event(
         ToolStartTranscript,
         position=0,
@@ -715,8 +719,11 @@ def test_saved_tool_start_decodes_its_own_tool_tag_and_nullable_arguments() -> N
         tool=ToolDeclaration.record("comms_send", arguments, call_id="case"),
     )
     encoded = FieldCodec.encode(event)
-    assert encoded["tool"]["tool"] == "comms_send"
-    assert "kind" not in encoded["tool"]
+    assert isinstance(encoded, dict)
+    tool = encoded["tool"]
+    assert isinstance(tool, dict)
+    assert tool["tool"] == "comms_send"
+    assert "kind" not in tool
     assert FieldCodec.decode(ToolStartTranscript, encoded) == event
 
 
