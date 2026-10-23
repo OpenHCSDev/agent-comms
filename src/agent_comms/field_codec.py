@@ -457,11 +457,11 @@ class FieldPlan:
     def key(self) -> str:
         return WireName.read(self.annotation, self.name)
 
-    @property
+    @cached_property
     def required(self) -> bool:
         return WireRequired.read(self.annotation, False)
 
-    @property
+    @cached_property
     def reject_null(self) -> bool:
         return any(
             policy.rejects_null(self.declared) for policy in NullPolicy.single(self.annotation)
