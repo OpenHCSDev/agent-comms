@@ -163,6 +163,10 @@ class RootFile:
         return frozenset((path, store_lock_path(path)))
 
     @classmethod
+    def transient_paths(cls, path: Path) -> frozenset[Path]:
+        return frozenset((store_lock_path(path),))
+
+    @classmethod
     def snapshot_members(
         cls, path: Path, observed: Mapping[Path, os.stat_result],
     ) -> frozenset[Path]:
@@ -246,17 +250,22 @@ class RootFile:
         undeclared existing file acquires content behavior without inventing a
         store declaration for it.
         """
-        declarations = cls.existing_in(root)
+        primaries = cls.existing_in(root)
+        declarations = {member: owner for path, owner in primaries.items()
+                        for member in owner.member_paths(path)}
+        declarations.update(primaries)
         selected = frozenset(paths)
         owners: dict[Path, type[RootFile]] = {
-            path: owner for path, owner in declarations.items() if path in selected
+            path: owner for path, owner in primaries.items() if path in selected
         }
         companions = {member for path, owner in owners.items()
-                      for member in owner.member_paths(path) if member != path}
+                      for member in (*owner.files(path), *owner.transient_paths(path))
+                      if member != path}
         owners.update((path, cls.content_owner(path) if path.exists() else RootFile)
                       for path in selected - owners.keys() - companions)
         companions.update(member for path, owner in owners.items()
-                          for member in owner.member_paths(path) if member != path)
+                          for member in (*owner.files(path), *owner.transient_paths(path))
+                          if member != path)
         return {
             (DeclaredFile(declarations[path], path.relative_to(root)) if path in declarations
              else UndeclaredFile(path.relative_to(root))): owner
@@ -553,6 +562,12 @@ class SQLiteFile(RootFile):
     @classmethod
     def wal_path(cls, path: Path) -> Path:
         return path.with_name(path.name + cls.wal_suffix)
+
+    @classmethod
+    def transient_paths(cls, path: Path) -> frozenset[Path]:
+        return super().transient_paths(path) | frozenset((
+            *(set(cls.files(path)) - {path, cls.wal_path(path)}), StoreOwner.snapshot_lock(path),
+        ))
 
     @classmethod
     def snapshot_members(

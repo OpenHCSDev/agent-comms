@@ -307,7 +307,7 @@ class StoreBackup(ResourceBackup):
                     omitted.add(path)
                 elif path.is_file() and not path.is_symlink():
                     owner = RootFile.content_owner(path)
-                    omitted.update(owner.member_paths(path) - {path})
+                    omitted.update(set(owner.files(path)) - {path})
             return {path.name for path in omitted}
 
         shutil.copytree(
