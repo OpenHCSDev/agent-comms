@@ -29,12 +29,11 @@ from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Annotated, Self
 
-from pydantic import Field, InstanceOf, PrivateAttr
+from pydantic import BaseModel, ConfigDict, Field, InstanceOf, PrivateAttr
 
 from agent_comms.change_report import FileLine, MainRevision, NoSourceReference
 from agent_comms.channel_targets import CommsTag
 from agent_comms.cli_bridges.shared import DeclaredVerb
-from agent_comms.commander.config import CommanderConfig, CommanderRole
 from agent_comms.commander.standing import UnownedWheelSpin
 from agent_comms.comms import Comms
 from agent_comms.declared_family import DeclaredFamily
@@ -55,10 +54,12 @@ from agent_comms.message_reference import MessageReference
 from agent_comms.messages import Message
 from agent_comms.native_tool_call import SelectedToolDenied
 from agent_comms.owner_requests import NewestOpenRequest, OwnerRequestId, RequestSelection
-from agent_comms.plan_phases import OrderPhase
+from agent_comms.phase_evidence import MainTree, PlanReading
+from agent_comms.plan_phases import OrderPhase, PlanPhase
 from agent_comms.problem_number import ProblemNumber
 from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.repo import Repo
+from agent_comms.registry_document import RegisteredCommanderProject
 from agent_comms.standing_rules import HuntDue, OwedAnswer
 from agent_comms.storage_rules import UnitStorage
 from agent_comms.thread_identity import ThreadIncarnation
@@ -326,8 +327,11 @@ STAGES = (
 )  # where a mistake was caught; later is worse
 
 
-class CommanderContext(CommanderConfig):
+class CommanderContext(BaseModel):
     """The selected root's bus and canonical reads, shared by command families."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+    root: Path
 
     actor: Annotated[
         InstanceOf[CommanderForkCaller] | InstanceOf[NoThreadCaller], Field(exclude=True)
@@ -336,6 +340,34 @@ class CommanderContext(CommanderConfig):
 
     def model_post_init(self, context: object) -> None:
         self._comms = Comms(self.root)
+
+    @classmethod
+    def read_root(cls, root: Path | str) -> Self:
+        return cls(root=Path(root).resolve())
+
+    @classmethod
+    def on_root(cls, commander: str, repos: tuple[Repo, ...], root: Path) -> Self:
+        context = cls.read_root(root)
+        thread = context.comms.registry.require(commander)
+        context.comms.registry.set_commander_project(
+            RegisteredCommanderProject(thread.incarnation, repos)
+        )
+        return context
+
+    @property
+    def commander(self) -> str:
+        snapshot = self.comms.registry.snapshot()
+        project = snapshot.commander_project.require()
+        (thread,) = project.commanders(snapshot)
+        return thread.name
+
+    @property
+    def repos(self) -> tuple[Repo, ...]:
+        return self.comms.registry.snapshot().commander_project.require().repos
+
+    def plan_reading(self, todos: tuple[Todo, ...]) -> PlanReading:
+        repository = Repo.declaring(self.repos, PlanPhase.__module__)
+        return PlanReading(todos, MainTree.of(repository))
 
     @boundary_decoder
     def model_copy(self, *, update: Mapping[str, object] | None = None,
@@ -381,7 +413,7 @@ class CommanderContext(CommanderConfig):
     def read_check(self, line: str) -> OrderCheck:
         if not (check := OrderCheck.parse(line)):
             sys.exit('Refused: Check reads "<repo> :: <shell command> -> <integer>"')
-        directory = self.repo_directory(check.directory)
+        directory = Repo.selected(self.repos, check.directory).checkout
         if not directory.is_dir():
             sys.exit(f'Refused: Check repo {check.directory} is not a directory')
         return replace(check, directory=str(directory))
@@ -601,7 +633,7 @@ class Commander(CommanderContext):
         check = self.read_check(line)
         if len(why.split()) < 8:
             sys.exit('Refused: --why says what was wrong with the recorded check (8+ words)')
-        order.require_check_acceptance(check, self.worktrees)
+        order.require_check_acceptance(check, self.comms.registry.storage_rule.checkout_base)
         self.call(CommsOrderCheckTool(problem=pid, check=check, why=why))
         print(f'{pid}: order {order.id} now checks `{check.command}`')
 
@@ -745,7 +777,7 @@ class Commander(CommanderContext):
 
 
 @dataclass(frozen=True, kw_only=True)
-class CommanderVerb(CommanderRole, DeclaredVerb, affix="Verb"):
+class CommanderVerb(DeclaredVerb, affix="Verb"):
     """One commander verb: its options are its fields, its parser comes from them, and run() does the work."""
 
     fork: Annotated[
@@ -760,14 +792,14 @@ class CommanderVerb(CommanderRole, DeclaredVerb, affix="Verb"):
         return ctx.actor_name
 
     def apply(self, ctx: Commander) -> None:
-        self.require_commander(ctx.comms.registry.require(ctx.commander))
+        ctx.comms.registry.require(ctx.commander).require_commander()
         self.fork.commanding(ctx.comms, ctx.commander)
         ctx = ctx.model_copy(update={'actor': self.fork})
         self.gate(ctx)
         self.run(ctx)
 
     def gate(self, ctx: Commander) -> None:
-        self.require_commander(ctx.comms.registry.require(self.who(ctx)))
+        ctx.comms.registry.require(self.who(ctx)).require_commander()
 
     @abstractmethod
     def run(self, ctx: Commander) -> None: ...
