@@ -132,11 +132,7 @@ class Fleet:
         """Register a unit on its worktree and give it one order through the goal writer."""
         declare_test_bus(
             self.comms,
-            threads=(
-                self.comms.registry.new_thread(
-                    name=name, tags=frozenset({"comms"}), worktree=str(worktree)
-                ),
-            ),
+            threads=(Thread(name=name, tags=frozenset({"comms"}), worktree=str(worktree)),),
         )
         return self.order(name, worktree, at=time.time() if at is None else at)
 
@@ -359,7 +355,7 @@ class LostToolsSeed(IncidentSeed):
         declare_test_bus(
             fleet.comms,
             threads=(
-                registry.new_thread(
+                Thread(
                     name="restarted",
                     tags=frozenset({"comms"}),
                     worktree=str(fleet.source.checkout),
@@ -391,9 +387,7 @@ def fleet(comms, tmp_path, configured_repository, installed_runtime):
         comms,
         channels=("comms",),
         threads=(
-            comms.registry.new_thread(
-                name=Fleet.commander, tags=frozenset({"comms"}), worktree=str(source.checkout)
-            ),
+            Thread(name=Fleet.commander, tags=frozenset({"comms"}), worktree=str(source.checkout)),
         ),
     )
     request = comms.goals.todos.add_request(
@@ -431,9 +425,7 @@ def test_replay_raises_each_incident_once(fleet):
     declare_test_bus(
         built.comms,
         threads=(
-            built.comms.registry.new_thread(
-                name="squatter", tags=frozenset({"comms"}), worktree=str(behind.project_path)
-            ),
+            Thread(name="squatter", tags=frozenset({"comms"}), worktree=str(behind.project_path)),
         ),
     )
     with pytest.raises(SharedWorktreeRefusal) as refused:
