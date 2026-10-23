@@ -13,6 +13,7 @@ class RequestRefused(Exception):  # noqa: N818 - domain request outcome
     INVALID_PARAMS: ClassVar[int] = -32602
     METHOD_NOT_FOUND: ClassVar[int] = -32601
     INTERNAL_ERROR: ClassVar[int] = -32603
+    AUTH_REQUIRED: ClassVar[int] = -32000
 
     code: int
     message: str
@@ -36,6 +37,10 @@ class RequestRefused(Exception):  # noqa: N818 - domain request outcome
     @classmethod
     def internal_error(cls, data: object = None, *, message: str = "Internal error") -> Self:
         return cls(cls.INTERNAL_ERROR, message, data)
+
+    @classmethod
+    def auth_required(cls, data: object = None) -> Self:
+        return cls(cls.AUTH_REQUIRED, "Authentication required", data)
 
 
 class DrainDeferred(Exception):  # noqa: N818 - capability, not an outcome

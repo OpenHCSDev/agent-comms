@@ -437,8 +437,9 @@ class CommsAgent(SessionEffects, InputEffects, TurnEffects):
     ) -> SetSessionConfigOptionResponse:
         return await self.sessions.config.set_option(config_id, session_id, value)
 
+    @answers_refusals
     async def authenticate(self, method_id: str, **kwargs: JsonValue) -> None:
-        raise RequestError.auth_required({"reason": "agent-comms requires no authentication"})
+        raise RequestRefused.auth_required({"reason": "agent-comms requires no authentication"})
 
     # ─── Helpers ─────────────────────────────────────────────────────────────
 
