@@ -29,6 +29,7 @@ from typing import TYPE_CHECKING, Annotated, ClassVar, Self, get_args, get_origi
 from uuid import uuid4
 
 from agent_comms import skills
+from agent_comms.active_route import guard_original_root_write
 from agent_comms.build_identity import (
     BuildIdentity,
     CommitInstallation,
@@ -54,6 +55,7 @@ from agent_comms.child_process import (
     OrderCheckFailedError,
 )
 from agent_comms.command import Command
+from agent_comms.coordination_session import NativeBoundary
 from agent_comms.declared_family import DeclaredFamily
 from agent_comms.errors import ToolRefusedError
 from agent_comms.field_codec import (
@@ -3110,6 +3112,21 @@ class ClaimOrder(TodoCommand):
     actor: ThreadIncarnation
     generation: str
     claim: OrderClaim
+
+    def record(self, goals: Goals, problem: str) -> Todo:
+        """Retain the publication's actual address before saving its content identity."""
+        with guard_original_root_write(goals.root), NativeBoundary(goals.bus) as boundary:
+            current = goals.todos.get(problem)
+            target = IncarnationThreadTarget(current.creator_identity)
+            target.require_publication(
+                self.claim.message, boundary.registry, goals.bus.require_channel)
+            message = replace(
+                self.claim.message,
+                sender=boundary.registry.canonical_name(self.claim.message.sender),
+                target=target.selected_name(boundary.registry),
+            )
+            prepared = replace(self, claim=replace(self.claim, message=message))
+            return super(ClaimOrder, prepared).record(goals, problem)
 
     def changed(self, current: Todo) -> Todo:
         current.state.require_open(current)
