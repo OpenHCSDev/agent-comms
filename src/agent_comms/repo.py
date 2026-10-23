@@ -62,7 +62,8 @@ class Repo(BaseModel, WireValue):
             f"{repository.github.to_wire()} ({repository.checkout})"
             for repository in repositories
         )
-        raise ValueError(f"Unknown repository {name!r}. Registered repositories: {configured}.")
+        raise ValueError(f"Unknown repository {name!r}. Registered repositories: {configured}. "
+                         "Set repositories with agent-comms install --repos.")
 
     @classmethod
     def declaring(cls, repositories: tuple[Repo, ...], module: str) -> Repo:
