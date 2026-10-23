@@ -772,7 +772,7 @@ class InlineFieldPlan(DeclaredFieldPlan):
 
     def contribute(self, fields):
         fields.extend(self.record.fields)
-        return self.record.init_required_keys
+        return self.record.required_keys
 
     @cached_property
     def wire_keys(self) -> tuple[str, ...]:
@@ -1817,12 +1817,13 @@ class FieldCodec(MroDispatch, Sealed):
         fields: tuple[FieldPlan, ...]
         bindings: tuple[FieldPlan, ...]
         required_keys: tuple[str, ...]
-        init_required_keys: tuple[str, ...]
+        """The keys every stored row carries, in wire order: one list the decoder enforces
+        and the schema publishes."""
         accepted_keys: frozenset[str]
 
         @cached_property
         def required_wire_keys(self) -> frozenset[str]:
-            return frozenset((*self.required_keys, *self.init_required_keys))
+            return frozenset(self.required_keys)
 
         @cached_property
         def record_fields(self) -> tuple[tuple[Field[object], str], ...]:
@@ -1846,7 +1847,7 @@ class FieldCodec(MroDispatch, Sealed):
         def schema_fields(self, properties, required):
             for entry in self.fields:
                 properties.update(entry.schema_fields())
-            required.extend(self.init_required_keys)
+            required.extend(self.required_keys)
             return properties
 
     @classmethod
@@ -1869,13 +1870,11 @@ class FieldCodec(MroDispatch, Sealed):
             )
         )
         computed = {member.wire_name for member in cls._projections(record, "wire").values()}
-        wire_fields, required_keys, init_required_keys = [], [], []
+        wire_fields, required_keys = [], []
         for entry in entries:
             keys = entry.contribute(wire_fields)
-            if entry.required:
+            if entry.required or entry.constructor_required:
                 required_keys.extend(keys)
-            if entry.constructor_required:
-                init_required_keys.extend(keys)
         wire_keys = [key for entry in entries for key in entry.wire_keys]
         if len(set(wire_keys)) != len(wire_keys) or (
             issubclass(record, DeclaredFamily) and record.family_discriminator in wire_keys
@@ -1886,7 +1885,6 @@ class FieldCodec(MroDispatch, Sealed):
             fields=tuple(wire_fields),
             bindings=entries,
             required_keys=tuple(required_keys),
-            init_required_keys=tuple(init_required_keys),
             accepted_keys=frozenset(wire_keys) | computed,
         )
 
