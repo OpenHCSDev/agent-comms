@@ -240,8 +240,6 @@ class AttemptStore(RecoveryReader):
         reason_code: ReasonCode = NoReasonCode(),
         failure: TurnFailure | None = None,
     ) -> Applied[RecoverySnapshot]:
-        if not isinstance(outcome, TerminalAttempt):
-            raise ValueError("settlement requires a terminal attempt outcome")
         with self.session.settlement() as acquired:
             snapshot, _ = self.require_fence(fence)
             if snapshot.pointer_revision != expected_pointer_revision:

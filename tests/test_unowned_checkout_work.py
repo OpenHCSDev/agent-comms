@@ -1,5 +1,6 @@
 """Retained Git work protects linked rows through the real watcher and heartbeat."""
 
+
 from agent_comms.bus import Bus
 
 import json
@@ -26,7 +27,7 @@ from agent_comms.commander_heartbeat import (
     CommanderObservation,
     CommanderReview,
 )
-from agent_comms.comms import Comms
+from agent_comms.comms import Comms, wire
 from agent_comms.field_codec import FieldCodec
 from agent_comms.goals import OrderCheck
 from agent_comms.installer.practice import practice_copy
@@ -126,7 +127,7 @@ def checkout_bus(tmp_path: Path, configured_repository, installed_runtime) -> Co
     root.mkdir(mode=0o700)
     (root / 'storage.json').write_text(json.dumps(FieldCodec.encode(rule)))
     Bus.install(Bus.path_in(root))
-    c = Comms(root)
+    c = wire(root)
     Bus.install(Bus.path_in(c.root))
     for name in ('lead', 'worker', 'idle'):
         c.registry.declare(c.registry.new_thread(
@@ -194,7 +195,7 @@ def test_dirty_then_unpushed_then_pushed_linked_checkout(checkout_bus: Comms, tm
     idle_goal = original.registry.require('idle').goal
     checkout = original.registry.storage_rule.order_checkout('worker', 'P1')
     with practice_copy(original.root, tmp_path / 'practice') as (root, _measurement):
-        c = Comms(root)
+        c = wire(root)
         review = CommanderReview(frozenset())
 
         def beat():
@@ -243,7 +244,7 @@ def test_unreadable_checkout_is_its_units_state_and_the_pass_carries_on(
         checkout_bus: Comms, tmp_path: Path):
     """10:08 on 2026-10-21: one unit's unreadable checkout failed the whole pass for every unit."""
     with practice_copy(checkout_bus.root, tmp_path / 'practice') as (root, _measurement):
-        c = Comms(root)
+        c = wire(root)
         checkout = c.registry.storage_rule.order_checkout('worker', 'P1')
         (checkout / '.git').write_text('gitdir: /nonexistent/removed\n')
         before = c.goals.todos.get('P2')

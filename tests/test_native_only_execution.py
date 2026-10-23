@@ -1,5 +1,6 @@
 """Retained native execution, refusal, and canonical headless/runtime behavior."""
 
+
 from agent_comms.bus import Bus
 
 from bus_history import read_history
@@ -42,7 +43,7 @@ async def test_unvalidated_configuration_refuses_before_child(tmp_path, pinned_n
 
 async def test_headless_uses_existing_owner_runtime_and_owner_project(tmp_path, native_runtime_package):
     from agent_comms.acp import CommsClient
-    from agent_comms.comms import Comms
+    from agent_comms.comms import wire
     from agent_comms.runtime import socket_path
 
     # The real private boundary disallows volatile or symlinked roots.
@@ -54,7 +55,7 @@ async def test_headless_uses_existing_owner_runtime_and_owner_project(tmp_path, 
         caller_project = base / "caller-project"
         project.mkdir()
         caller_project.mkdir()
-        comms = Comms(base / "wire")
+        comms = wire(base / "wire")
         Bus.install(Bus.path_in(comms.root))
         comms.registry.declare(comms.registry.new_thread('headless', frozenset(), str(project)))
         env = dict(

@@ -1,5 +1,7 @@
 """Whole conversations derive their original frozen wire sources, in both directions."""
 
+from agent_comms.channel_targets import CommandTarget
+
 import sqlite3
 from dataclasses import replace
 
@@ -87,7 +89,7 @@ def test_frozen_unhandled_delivery_projects_recovery_without_claiming(tmp_path):
         owner, 'NativePiUnavailable', 'Original uncertain outcome', recorded_at=1.0
     )
     assert comms.agents.set_drain_diagnostic('beta', owner, diagnostic)
-    message = comms.messaging.send_user_message('#team', 'Independent saved original',
+    message = comms.messaging.send_user_message(CommandTarget.named('#team'), 'Independent saved original',
                                                worktree=str(tmp_path))
     with Coordination(str(root/'coordination.sqlite3')) as store:
         before = WakeAssignment.select(store.session._connection)

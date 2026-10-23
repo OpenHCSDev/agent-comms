@@ -1,5 +1,6 @@
 """Held-order recovery and unanswered DMs on an independently copied bus."""
 
+
 from agent_comms.channel_targets import CommandTarget
 import asyncio
 import json
@@ -25,7 +26,7 @@ from agent_comms.commander.standing import (
     AnswersTo,
     UnitAskUnanswered,
 )
-from agent_comms.comms import Comms
+from agent_comms.comms import wire
 from agent_comms.commander_heartbeat import CommanderHeartbeat
 from agent_comms.coordinator import Coordination
 from agent_comms.errors import CommittedMessageError, HumanSendRefusedError, RelationViolationError
@@ -104,7 +105,7 @@ def held_bus(comms, tmp_path, source_repository, configured_repository):
     configured_repository(comms)
     copied = tmp_path / "copied-bus"
     StoreBackup.copy_tree(comms.root, copied)
-    copied_bus = Comms(copied)
+    copied_bus = wire(copied)
     configured_repository(copied_bus)
     return copied_bus
 

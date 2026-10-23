@@ -6,6 +6,7 @@ activate private processing for existing public sessions.
 
 from __future__ import annotations
 
+
 from agent_comms.private_runtime_schema import PrivateCoordinatorTable
 from bus_record_fixture import prepare_native_comms
 
@@ -21,7 +22,7 @@ from agent_comms.acp_extension import (
     decode_updates,
 )
 from agent_comms.child_process import ProcessIdentity
-from agent_comms.comms import Comms
+from agent_comms.comms import wire
 from agent_comms.coordination_errors import ParticipantNotRegistered, PublicationActivationBlocked, StaleRevision
 from agent_comms.coordinator import Coordination
 from agent_comms.errors import RelationViolationError
@@ -33,7 +34,7 @@ tmp_path = private_root_fixture
 
 def _private_comms(tmp_path):
     root = tmp_path / "wire"
-    comms = prepare_native_comms(Comms(root))
+    comms = prepare_native_comms(wire(root))
     comms.registry.declare(
         comms.registry.new_thread('sender', frozenset(), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid()))
     )

@@ -1,4 +1,5 @@
 """Real turn acquisition and terminal handling share the execution owner."""
+
 import os
 import sqlite3
 from contextlib import AsyncExitStack, asynccontextmanager, closing
@@ -9,7 +10,7 @@ import pytest
 from agent_comms import agent_events as events
 from agent_comms.acp import CommsAgent
 from agent_comms.child_process import ProcessIdentity
-from agent_comms.comms import Comms
+from agent_comms.comms import wire
 from agent_comms.field_codec import FieldCodec
 from agent_comms.goal_actions import (
     PausedGoalAction,
@@ -118,7 +119,7 @@ async def test_owner_stop_beats_backend_failure_and_next_turn_runs_without_retry
         await turn.progress.done(events.Done("dying backend", False))
         turn.runner.owner_stop.request()
     # A new reader observes the same retained bus, without a Retry or goal write.
-    relaunched = Comms(comms.root)
+    relaunched = wire(comms.root)
     assert isinstance(relaunched.goals.goal_execution("worker"), RunnableExecution)
     assert relaunched.registry.require("worker").goal.state == ActiveGoal()
     assert failure_count(relaunched) == 0
