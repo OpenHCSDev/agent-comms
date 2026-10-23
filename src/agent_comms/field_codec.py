@@ -1956,6 +1956,10 @@ class ValueDecoder[T](ABC):
         """
         return True
 
+    def shape_refusal(self, data: object) -> MalformedRecord:
+        """Why fits_wire refused data; it states a refusal and never decides one."""
+        return MalformedRecord(f"Expected {self.target}, received {type(data).__name__}")
+
     def fits_external(self, data: object) -> bool:
         """A sibling-aware external reader may accept more than the stored wire shape."""
         return any(self.external_decoders(data)) or self.fits_wire(data)
@@ -2190,6 +2194,9 @@ class _RepresentedDecoder(ValueDecoder[Any]):
         # whatever that structure's external reader takes.
         return ValueDecoder.fits_external(self, data) or self.wire_structure.fits_external(data)
 
+    def shape_refusal(self, data: object) -> MalformedRecord:
+        return self.wire_structure.shape_refusal(data)
+
     def _rewrite_records(
         self, data: object, change: WireRecordChange, select: WireRecordFilter,
     ) -> object:
@@ -2390,7 +2397,7 @@ class UnionDecoder[T](_ContextDecoder[T]):
         if any(alternative.accepts_external_value(data) for alternative in self.alternatives):
             return self.decode_bound(data, record)
         return self.decode_resolved(self.decode_candidates(
-            lambda alternative: alternative.decode_external(data, record),
+            data, lambda alternative: alternative.decode_external(data, record),
             fits=lambda alternative: alternative.fits_external(data),
         ))
 
@@ -2412,18 +2419,27 @@ class UnionDecoder[T](_ContextDecoder[T]):
 
     def decode_bound(self, data: object, context: Mapping[str, object]) -> T:
         return self.decode_candidates(
-            lambda alternative: alternative.decode_bound(data, context),
+            data, lambda alternative: alternative.decode_bound(data, context),
             fits=lambda alternative: alternative.fits_wire(data),
         )
 
+    def shape_refusal(self, data: object) -> MalformedRecord:
+        refusals = tuple(alternative.shape_refusal(data) for alternative in self.alternatives)
+        refusal = MalformedRecord(
+            f"Value does not match {self.target}: " + "; ".join(map(str, refusals)))
+        refusal.__cause__ = refusals[0]
+        return refusal
+
     def decode_candidates(
-        self, decode: Callable[[ValueDecoder[T]], T], *,
+        self, data: object, decode: Callable[[ValueDecoder[T]], T], *,
         fits: Callable[[ValueDecoder[T]], bool],
     ) -> T:
         first_error = None
-        # Shapes only rule alternatives out; when they rule out every one, the first
-        # alternative's own decode states the refusal.
-        candidates = tuple(filter(fits, self.alternatives)) or self.alternatives[:1]
+        # Shapes only rule alternatives out. When they rule out every one, the
+        # union refuses with each shape's own reason and decodes nothing.
+        candidates = tuple(filter(fits, self.alternatives))
+        if not candidates:
+            raise self.shape_refusal(data)
         try:
             for alternative in candidates:
                 try:
@@ -2454,11 +2470,14 @@ class _ArrayDecoder(ValueDecoder[Any]):
     def fits_wire(self, data: object) -> bool:
         return isinstance(data, list)
 
+    def shape_refusal(self, data: object) -> MalformedRecord:
+        return MalformedRecord("Expected a JSON array.")
+
     def _rewrite_records(
         self, data: object, change: WireRecordChange, select: WireRecordFilter,
     ) -> object:
         if not isinstance(data, list):
-            raise MalformedRecord("Expected a JSON array.")
+            raise _ArrayDecoder.shape_refusal(self, data)
         return [plan.rewrite_records(value, change, select) for plan, value in self.plan_items(data)]
 
     @classmethod
@@ -2492,7 +2511,7 @@ class _ArrayDecoder(ValueDecoder[Any]):
         self, data: object, read: Callable[[ValueDecoder[object], object], object],
     ) -> object:
         if not isinstance(data, list):
-            raise MalformedRecord("Expected a JSON array.")
+            raise _ArrayDecoder.shape_refusal(self, data)
         return self.container(read(plan, value) for plan, value in self.plan_items(data))
 
     def plan_items(self, data: list[object]) -> Iterable[tuple[ValueDecoder[object], object]]:
@@ -2533,9 +2552,15 @@ class _FixedTupleDecoder(_TupleDecoder):
     def fits_wire(self, data: object) -> bool:
         return super().fits_wire(data) and len(cast(list[object], data)) == len(self.items)
 
+    def shape_refusal(self, data: object) -> MalformedRecord:
+        if super().fits_wire(data):
+            return MalformedRecord("Tuple length does not match declaration")
+        return super().shape_refusal(data)
+
     def plan_items(self, data: list[object]) -> Iterable[tuple[ValueDecoder[object], object]]:
-        with MalformedRecord.refusing("Tuple length does not match declaration"):
-            return tuple(zip(self.items, data, strict=True))
+        if not self.fits_wire(data):
+            raise self.shape_refusal(data)
+        return tuple(zip(self.items, data, strict=True))
 
     def encode_items(self, items: Iterable[object]) -> list[object]:
         return [plan.encode(item) for plan, item in zip(self.items, items, strict=True)]
@@ -2701,15 +2726,18 @@ class _FamilyRecordDecoder[Member: DeclaredFamily](_ContextDecoder[Member]):
     def argument_payload(self, text: object) -> object:
         return {self.target.family_discriminator: text}
 
+    def shape_refusal(self, data: object) -> MalformedRecord:
+        if isinstance(data, dict):
+            return MalformedRecord(f"Expected a string family {self.target.family_discriminator}.")
+        return MalformedRecord("Expected a family object.")
+
     def member(self, data: object) -> tuple[type[Member], dict]:
-        if not isinstance(data, dict):
-            raise MalformedRecord("Expected a family object.")
+        if not _FamilyRecordDecoder.fits_wire(self, data):
+            raise _FamilyRecordDecoder.shape_refusal(self, data)
         tag = self.target.family_discriminator
-        name = data.get(tag)
-        if not isinstance(name, str):
-            raise MalformedRecord(f"Expected a string family {tag}.")
-        return _declared_member(self.target, name), {
-            key: value for key, value in data.items() if key != tag
+        payload = cast(dict, data)
+        return _declared_member(self.target, payload[tag]), {
+            key: value for key, value in payload.items() if key != tag
         }
 
     def decode_bound(self, data: object, context: Mapping[str, object]) -> Member:
@@ -2720,20 +2748,28 @@ class _FamilyRecordDecoder[Member: DeclaredFamily](_ContextDecoder[Member]):
 class _LeafDocumentDecoder(_FamilyRecordDecoder):
     """A directly declared leaf document omits its family selector."""
 
+    @property
+    def leaf(self) -> ValueDecoder[object]:
+        """The decoder of the record this document declares directly."""
+        return _member_decoder(self.target)
+
     def fits_wire(self, data: object) -> bool:
-        return (super().fits_wire(data)
-                or _member_decoder(self.target).fits_wire(data))
+        return super().fits_wire(data) or self.leaf.fits_wire(data)
+
+    def shape_refusal(self, data: object) -> MalformedRecord:
+        # The direct leaf form is this document's declared shape.
+        return self.leaf.shape_refusal(data)
 
     def encode_document(self, value: DeclaredFamily) -> object:
         return _member_decoder(type(value)).encode(value)
 
     def decode_document(self, data: object) -> object:
-        return _member_decoder(self.target).decode_bound(data, {})
+        return self.leaf.decode_bound(data, {})
 
     def rewrite_document(
         self, data: object, change: WireRecordChange, select: WireRecordFilter,
     ) -> object:
-        return _member_decoder(self.target).rewrite_records(data, change, select)
+        return self.leaf.rewrite_records(data, change, select)
 
 
 @dataclass(frozen=True, slots=True)
@@ -2788,12 +2824,15 @@ class _RecordDecoder(_ContextDecoder[Any]):
                          for key in data.keys() - plan.accepted_keys})
         return problems
 
+    def shape_refusal(self, data: object) -> MalformedRecord:
+        if isinstance(data, dict):
+            return RecordProblems(self.problems(data))
+        return MalformedRecord("Expected a record object; fix: supply a JSON object.")
+
     def checked(self, data: object) -> dict:
-        if not isinstance(data, dict):
-            raise MalformedRecord("Expected a record object; fix: supply a JSON object.")
-        if problems := self.problems(data):
-            raise RecordProblems(problems)
-        return data
+        if not self.fits_wire(data):
+            raise self.shape_refusal(data)
+        return cast(dict, data)
 
     @property
     def field_names(self) -> tuple[str, ...]:
