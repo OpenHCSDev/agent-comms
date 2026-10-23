@@ -30,7 +30,7 @@ from .image_inputs import ImageInput
 from .input_attempt import InputAttempt, ReservedInput
 from .input_disposition import InputDispositions
 from .input_origin import InputOrigin, UnattributedInputOrigin, WireInputOrigin
-from .thread_identity import ClaimedIdentity
+from .thread_identity import ClaimScoped, ClaimedIdentity
 from .threads import Thread
 from .turn_goal_permission import AcceptedGoalPermission, TurnGoalPermission
 from .turn_input_source import AcceptedFollowingInput, DeliveredFollowingInput
@@ -54,8 +54,7 @@ class InputHandoffRefused(RelationViolationError):
 
 
 @dataclass(frozen=True, slots=True)
-class QueuedInputContext:
-    claimed_identity: ClaimedIdentity
+class QueuedInputContext(ClaimScoped):
     goal: GoalDeclaration = field(default_factory=NoGoal)
 
     @classmethod

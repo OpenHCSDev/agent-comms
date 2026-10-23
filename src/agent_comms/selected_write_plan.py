@@ -35,7 +35,7 @@ from .envelope_claim_transitions import ExistingFileClaim
 from .field_codec import FieldCodec, Id128Text, MalformedRecord
 from .message_reference import MessageReference
 from .private_path import PrivateDirectoryRole, PrivateFileRole
-from .thread_identity import ClaimedIdentity, RecordedThreadIncarnation
+from .thread_identity import ClaimScoped, ClaimedIdentity, RecordedThreadIncarnation
 from .threads import Thread
 
 _MAX_BYTES = 1024 * 1024
@@ -49,11 +49,10 @@ class PlannedWrite:
 
 
 @dataclass(frozen=True, slots=True)
-class SelectedWriteBinding:
+class SelectedWriteBinding(ClaimScoped):
     root_id: str
     source: MessageReference
     assignment_id: str
-    claimed_identity: ClaimedIdentity
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -78,8 +77,11 @@ class SelectedWriteIntent(DeclaredFamily, affix="WriteIntent"):
     @property
     def binding(self) -> SelectedWriteBinding:
         return SelectedWriteBinding(
-            self.root_id, MessageReference(self.source_seq, self.source_message_id),
-            self.claim_id, ClaimedIdentity(RecordedThreadIncarnation(self.owner, self.incarnation), self.claim_epoch),
+            root_id=self.root_id, source=MessageReference(self.source_seq, self.source_message_id),
+            assignment_id=self.claim_id,
+            claimed_identity=ClaimedIdentity(
+                RecordedThreadIncarnation(self.owner, self.incarnation), self.claim_epoch,
+            ),
         )
 
     def require_accepted(self):
@@ -251,8 +253,8 @@ class SelectedWritePlans(DurableFile, PatternFile):
             return None
         row = row.require_accepted()
         expected = SelectedWriteBinding(
-            self.root_id, assignment.source, assignment.assignment_id,
-            ClaimedIdentity(owner.incarnation, claimed_generation),
+            root_id=self.root_id, source=assignment.source, assignment_id=assignment.assignment_id,
+            claimed_identity=ClaimedIdentity(owner.incarnation, claimed_generation),
         )
         if row.binding != expected:
             raise IdentityConflict("Selected write intent is stale or uncertain")

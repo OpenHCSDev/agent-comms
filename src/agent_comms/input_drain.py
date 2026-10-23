@@ -584,9 +584,9 @@ class InputDrain(InputObservation):
             # The unavailable observation carries no local queue authority.
             return NoQueueScope()
         return LiveQueueScope(
-            session_id,
-            ClaimedIdentity(owner.incarnation, claim_scope),
-            owner.require_process(),
+            session_id=session_id,
+            claimed_identity=ClaimedIdentity(owner.incarnation, claim_scope),
+            owner=owner.require_process(),
         )
 
     def next_revision(self, session_id: str) -> int:
