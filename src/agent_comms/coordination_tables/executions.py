@@ -52,7 +52,6 @@ from agent_comms.typed_table import (
     NonIncreasing,
     OrdinalTransitions,
     TextStorage,
-    sql_literal,
 )
 
 
@@ -131,10 +130,6 @@ class WireOrigin(ExecutionProvenance):
 
     @classmethod
     def matches_sql(cls, column: str) -> str:
-        members = cls.members_with(cls)
-        # Preserve the existing scalar DDL; additional sourced cases derive a set.
-        if len(members) == 1:
-            return f"{column} = {sql_literal(members[0])}"
         return f"{column} IN {cls.sql_choices()}"
 
     @classmethod
