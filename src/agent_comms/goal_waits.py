@@ -22,7 +22,7 @@ from .store_files import SharedLock
 from .thread_identity import RecordedThreadIncarnation
 from .thread_owned_state import ThreadOwnedState
 from .turn_lease import TurnLease
-from .typed_table import Column, DurableStore, ForeignKey, Index, TypedTable
+from .typed_table import Column, DurableStore, ForeignKey, Index, StoreRows, TypedTable
 
 if TYPE_CHECKING:
     from .agent_activity import AgentActivity
@@ -388,14 +388,18 @@ class GoalInputReview(GoalWaitReview):
         )
 
 
+class GoalWaitsRows(StoreRows):
+    """The tables of GoalWaits; each row declares itself one."""
+
+
 @dataclass(frozen=True, slots=True)
-class StoredGoalWaitRow(TypedTable):
+class StoredGoalWaitRow(GoalWaitsRows, TypedTable):
     goal_id: Annotated[str, Column(primary_key=True)]
     wait: RecordedGoalWait
 
 
 @dataclass(frozen=True, slots=True)
-class GoalWaitTargetRow(TypedTable):
+class GoalWaitTargetRow(GoalWaitsRows, TypedTable):
     goal_id: Annotated[str, Column(primary_key=True)]
     position: Annotated[int, Column(primary_key=True)]
     target_lookup: str
@@ -410,7 +414,7 @@ class GoalWaitTargetRow(TypedTable):
 class GoalWaits(ThreadOwnedState, DurableStore, WireWakeFile):
     path: Path = field()
     filename: ClassVar[str] = "goal_waits.sqlite3"
-    rows: ClassVar[tuple[type[TypedTable], ...]] = (StoredGoalWaitRow, GoalWaitTargetRow)
+    tables = GoalWaitsRows
 
     def read(self) -> dict[str, RecordedGoalWait]:
         with self.snapshot() as db:

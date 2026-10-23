@@ -34,6 +34,7 @@ from .typed_table import (
     Generated,
     Index,
     RealStorage,
+    StoreRows,
     StoreWriter,
     TypedRow,
     TypedTable,
@@ -165,8 +166,12 @@ class ExternalPageRow(TypedRow):
                                parameters=(self.thread, self.turn_id, self.item_id), earlier=earlier)
 
 
+class ExternalTranscriptRows(StoreRows):
+    """The tables of ExternalTranscript; each row declares itself one."""
+
+
 @dataclass(frozen=True)
-class ExternalItemRow(ExternalPageRow, TypedTable):
+class ExternalItemRow(ExternalTranscriptRows, ExternalPageRow, TypedTable):
     """A stable item position; older pages prepend without moving saved cursors."""
 
     unique = (("thread", "seq"),)
@@ -199,7 +204,7 @@ class ExternalItemRow(ExternalPageRow, TypedTable):
 
 
 @dataclass(frozen=True)
-class ExternalEventRow(TypedTable):
+class ExternalEventRow(ExternalTranscriptRows, TypedTable):
     """Each saved event exists once; SQL derives its query keys from that event."""
 
     thread: Annotated[str, Column(primary_key=True)]
@@ -256,7 +261,7 @@ class ExternalEventRow(TypedTable):
 
 
 @dataclass(frozen=True)
-class DraftRow(TypedTable, TranscriptDraft, declared_name="external_draft"):
+class DraftRow(ExternalTranscriptRows, TypedTable, TranscriptDraft, declared_name="external_draft"):
     """The assigned transcript's current message, shared by native and CLI writers."""
 
     thread: Annotated[str, Column(primary_key=True)]
@@ -438,7 +443,7 @@ class ExternalTranscript(TranscriptSource, DurableStore):
     root: Path
     incarnation: ThreadIncarnation
     filename: ClassVar[str] = "external_transcripts.sqlite3"
-    rows: ClassVar[tuple[type[TypedTable], ...]] = (ExternalItemRow, ExternalEventRow, DraftRow)
+    tables = ExternalTranscriptRows
     # The CLI keeps its own items; a lost tail is republished when a watch starts.
     synchronous: ClassVar[str] = "NORMAL"
 
