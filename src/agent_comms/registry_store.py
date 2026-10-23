@@ -30,9 +30,9 @@ from .registry_document import (
     RegistrySnapshot,
 )
 from .routing import TurnRouting
-from .store_files import SharedLock
-from .thread_identity import TurnIdentity
 from .session_file import RegistrySessionLocation
+from .store_files import RegistryTier, SharedLock
+from .thread_identity import TurnIdentity
 from .threads import Thread
 from .turn_lease import ActiveTurn, RecordedGeneration, StoredTurnRecord
 
@@ -192,7 +192,7 @@ class RegistryEdit:
 
 
 @dataclass(frozen=True, slots=True)
-class RegistryStore(RegistryFile, CarriedDocument[RegistryDocument]):
+class RegistryStore(RegistryFile, CarriedDocument[RegistryDocument], RegistryTier):
     json_indent = 2
     cache: RegistryCache = field(init=False, compare=False, repr=False)
 

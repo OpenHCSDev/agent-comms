@@ -11,7 +11,7 @@ import tempfile
 import threading
 import time
 from abc import ABC, abstractmethod
-from collections.abc import AsyncIterator, Iterator, Mapping
+from collections.abc import AsyncIterator, Iterable, Iterator, Mapping
 from contextlib import (
     AbstractAsyncContextManager,
     AbstractContextManager,
@@ -23,7 +23,6 @@ from contextlib import (
 from contextvars import Context, ContextVar
 from dataclasses import dataclass, field
 from fnmatch import fnmatchcase
-from functools import cache
 from pathlib import Path
 from typing import BinaryIO, ClassVar
 
@@ -161,7 +160,7 @@ class StoreLock:
             yield {owner: resources.enter_context(owner.locked(
                 mode=requests[owner], contention=contention))
                 for owner in sorted(requests, key=lambda owner: (
-                    StoreLockOwner.lock_ranks()[type(owner)], str(owner.path)))}
+                    type(owner).lock_rank(), str(owner.path)))}
 
     @classmethod
     def current_release(cls) -> StoreLockRelease:
@@ -261,19 +260,25 @@ class StoreLockOwner(StoreOwner, declared_name=None):
     lock_type: ClassVar[type[StoreLock]] = StoreLock
 
     @classmethod
-    @cache
-    def lock_ranks(cls) -> Mapping[type[StoreLockOwner], int]:
-        """The declared acquisition order, read at the first ordered lock, never at import."""
-        from .store_order import STORE_LOCK_ORDER
+    def lock_tiers(cls) -> tuple[type[StoreLockOwner], ...]:
+        """Direct tier declarations, in this module's family-registration order."""
+        return tuple(owner for owner in StoreLockOwner.members_with(StoreLockTier)
+                     if StoreLockTier in owner.__bases__)
 
-        owners = STORE_LOCK_ORDER
-        if len(set(owners)) != len(owners):
-            raise TypeError("A store owner occurs twice in the lock order")
-        missing = set(cls.members_with(cls)) - set(owners)
-        if missing:
-            names = ", ".join(sorted(owner.__name__ for owner in missing))
-            raise TypeError(f"Store owners missing from the lock order: {names}")
-        return {owner: rank for rank, owner in enumerate(owners)}
+    @classmethod
+    def lock_rank(cls) -> int:
+        tiers = StoreLockOwner.lock_tiers()
+        inherited = tuple(tier for tier in tiers if tier in cls.__mro__)
+        if len(inherited) != 1:
+            raise TypeError(f"{cls.__qualname__} must inherit exactly one store lock tier")
+        return tiers.index(inherited[0])
+
+    @classmethod
+    def validate_selection(cls, members: Iterable[type[DeclaredFamily]]) -> None:
+        # A tier registers before it can rank its concrete stores. Store declarations
+        # already see all tiers because this module finishes before theirs imports.
+        if StoreLockTier not in cls.__bases__:
+            cls.lock_rank()
 
     def locked(self, *, read_budget: StoreReadBudget = UNBOUNDED_STORE_READ,
                mode: LockMode = ExclusiveLock(),
@@ -283,6 +288,36 @@ class StoreLockOwner(StoreOwner, declared_name=None):
 
     def locked_async(self) -> AbstractAsyncContextManager[StoreLock]:
         return _async_store_lock(self.path, lock_type=self.lock_type)
+
+
+class StoreLockTier(StoreLockOwner, declared_name=None):
+    """Rank capabilities in the existing owner family, without a file of their own."""
+
+    __slots__ = ()
+
+
+class SourceTier(StoreLockTier):
+    """HistoryArchive.attach holds history before registry (historical_views.py:472/492)."""
+
+    __slots__ = ()
+
+
+class RegistryTier(StoreLockTier):
+    """Tag updates hold registry before catalog (channel_management.py:191/303)."""
+
+    __slots__ = ()
+
+
+class CatalogTier(StoreLockTier):
+    """CapturedSelection holds catalog before reads (read_basis.py:1127/1128)."""
+
+    __slots__ = ()
+
+
+class DependentStateTier(StoreLockTier):
+    """Reads follow catalog; rename/delete state follows registry (thread_management.py:397)."""
+
+    __slots__ = ()
 
 
 def store_lock_path(store_path: Path) -> Path:
