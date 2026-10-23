@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 
-from agent_comms.private_runtime_schema import PrivateCoordinatorTable
 from bus_record_fixture import prepare_native_comms
 from conftest import responder
 
@@ -59,7 +58,6 @@ async def test_second_pid_public_acp_owner_ipc_preplan(tmp_path, native_runtime_
         )
         root_id = comms.owners.require_private_launch().wire_root_id
         with Coordination(str(root / "coordination.sqlite3")) as store:
-            PrivateCoordinatorTable.install(store)
             store.participants.register(
                 alpha.incarnation.lookup, committed=True
             )

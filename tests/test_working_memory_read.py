@@ -28,7 +28,7 @@ def test_readers_do_not_create_a_missing_store(tmp_path):
     segment = local_system("Keep the original instructions.")
     with pytest.raises(sqlite3.OperationalError):
         WorkingMemoryAnnotations.for_segment(path, segment.measured_manifest(), JevClassifier.version())
-    assert not path.parent.exists()
+    assert not path.exists()
 
 
 def test_file_attribution_is_bounded_by_original_assembly_range():

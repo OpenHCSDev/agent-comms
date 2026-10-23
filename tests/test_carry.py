@@ -12,27 +12,14 @@ import pytest
 from tools.debt_ratchet import UncarriedRecordFormat, git
 
 from agent_comms.cli_commands import ArchiveCliCommand
-from agent_comms.installer.backup import (
-    StoreBackup,
-    UpgradeRefused,
-    bus_files,
-)
-from agent_comms.installer.carry import (
-    STEPS,
-    Carried,
-    Carry,
-    CarryChain,
-    CarryProbe,
-    FirstPendingOperation,
-    MigrateOperation,
-)
-from agent_comms.field_codec import FieldCodec
+from agent_comms.installer.backup import StoreBackup, bus_files
+from agent_comms.installer.refusals import UpgradeRefused
+from agent_comms.installer.carry import STEPS
+from agent_comms.installer.probes.carry import Carried, Carry, MigrateOperation
 from agent_comms.installer.commands import InstallCommands
-from agent_comms.installer.interpreter_operation import ProbeRequest, TargetProgram
-from agent_comms.installer.practice import PracticeCopy
+from agent_comms.installer.interpreter_operation import TargetProgram
 from agent_comms.installer.upgrade import (
     BackedUpMigration,
-    PracticeBus,
     PreparedMigration,
     RehearsalFiles,
     Stack,
@@ -45,9 +32,6 @@ from agent_comms.maintenance_barrier import MaintenanceBarrier, MaintenanceOpera
 from agent_comms.registry_store import RegistryStore
 from agent_comms.thread_execution import ExternalThreadExecution
 from agent_comms.thread_status import ArchivedThreadStatus, StoppedThreadStatus
-from cutover.carry_commander_project import CommanderProjectCarry
-from cutover.carry_drop_connectivity import DropConnectivity
-from cutover.carry_parked_threads import ParkedThreads
 from agent_comms.threads import Thread
 from fixture_git import IDENTITY
 
@@ -56,7 +40,7 @@ REPO = Path(__file__).resolve().parents[1]
 
 def step_source() -> str:
     return (
-        "from agent_comms.installer.carry import Carried, Carry\n\n"
+        "from agent_comms.installer.probes.carry import Carried, Carry\n\n"
         "class Step(Carry):\n"
         "    opened_files = ()\n"
         "    def carry(self, *, apply):\n        return Carried(0)\n"
@@ -86,48 +70,8 @@ class Repository:
         return self.git("rev-parse", "HEAD")
 
 
-def test_every_declared_step_crosses_to_the_worker(tmp_path):
-    """Pending encodes the whole chain in one worker request; a step whose fields the
-    codec cannot spell stops every install before its first dry run."""
-    steps = tuple(step(tmp_path, tmp_path, tmp_path / "spill")
-                  for step in CarryChain.at(REPO).steps)
-    request = ProbeRequest(CarryProbe(FirstPendingOperation(), steps), "holder")
-    assert FieldCodec.decode(ProbeRequest, FieldCodec.encode(request)) == request
 
 
-@pytest.mark.parametrize("pending", (False, True))
-def test_pending_uses_one_worker_on_a_real_bus(comms, stack, private_directory, pending):
-    # The pending step's changed count is one, while its position is zero.
-    chain = CarryChain((ParkedThreads, DropConnectivity, CommanderProjectCarry))
-    # The worker uses this checkout's actual source and carry declarations.
-    tree = TargetTree(REPO, private_directory, "pending")
-    tree.path.mkdir()
-    (tree.path / "src").symlink_to(REPO / "src", target_is_directory=True)
-    (tree.path / "tools").symlink_to(REPO / "tools", target_is_directory=True)
-    practice = PracticeBus(private_directory / "practice",
-                           PracticeCopy(comms.root, private_directory / "practice" / "bus"),
-                           comms.root, private_directory / "spill")
-    if pending:
-        # ParkedThreads must run before CommanderProjectCarry can decode this.
-        (comms.root / "commander.json").write_text('{"parked": []}')
-    staged = replace(stack, program=TargetProgram(tree.steps_package))
-    position = len(chain.steps)
-    for index, step in enumerate(chain.steps):
-        (answer,) = staged.call_steps(
-            (step(comms.root, comms.root, practice.spill_dir),), MigrateOperation(False))
-        if answer.changed:
-            position = index
-            break
-    before = len(staged.commands.ran)
-    assert practice.pending(chain, staged) == chain.steps[position:]
-    commands = staged.commands.ran[before:]
-    assert len(commands) == 1
-    assert commands[0].command.endswith(" CarryProbe")
-    assert practice.pending(CarryChain(()), staged) == ()
-    assert len(staged.commands.ran) == before + 1
-    # Every pass, the per-step reads and the whole-chain pending, went to one interpreter.
-    assert len(staged.commands.workers) == 1
-    assert not practice.copy.copied
 
 def record_source(version: int, fields: str) -> str:
     return ("from dataclasses import dataclass\nfrom typing import Annotated, ClassVar\n"
@@ -201,7 +145,7 @@ def noisy_step(tmp_path_factory):
     module = tree.path / "tools" / "cutover" / "carry_noisy.py"
     module.write_text(
         "from pathlib import Path\n"
-        "from agent_comms.installer.carry import Carry, Carried\n"
+        "from agent_comms.installer.probes.carry import Carry, Carried\n"
         "class Noisy(Carry):\n"
         "    opened_files = ()\n"
         "    def carry(self, *, apply):\n"

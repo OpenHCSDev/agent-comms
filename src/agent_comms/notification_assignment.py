@@ -10,7 +10,6 @@ from pathlib import Path
 from typing import TYPE_CHECKING, NoReturn
 
 from .audience_manifest import FrozenRecipient
-from .coordination_schema import CoordinatorTable
 from .coordination_tables.assignments import WakeAssignment
 from .coordination_tables.publications import PublicationEvidence
 from .declared_family import DeclaredFamily
@@ -306,7 +305,7 @@ class NotificationAssignment(NotificationSource):
         if not sources:
             return NotificationAssignmentRead((), ())
         from .coordination_tables.executions import CurrentExecutions
-        CoordinatorTable.require_schema(connection)
+        privacy.coordinator_schema().require_schema(connection)
         columns = ",".join(f"w.{name}" for name in WakeAssignment.columns())
         # The window's assignments and their native-input membership are each
         # selected once; membership has no assignment index, so it is built

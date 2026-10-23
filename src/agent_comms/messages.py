@@ -772,6 +772,14 @@ class Message(Addressed, BusCapability, TurnOrigin):
         """The public message declaration this class's values carry."""
         return Message
 
+    @property
+    def envelope(self) -> Message:
+        public = self.envelope_type()
+        if type(self) is public:
+            return self
+        return FieldCodec.construct(public, {item.name: getattr(self, item.name)
+                                             for item in fields(public)})
+
     def messages(self) -> tuple[Self, ...]:
         return (self,)
 
@@ -937,12 +945,6 @@ class BusRecord(Message, DeclaredFamily, affix="Record"):
     def envelope_type(cls) -> builtins.type[Message]:
         """A record carries the envelope of the message declaration after it in the MRO."""
         return super().envelope_type()
-
-    @property
-    def envelope(self) -> Message:
-        public = self.envelope_type()
-        return FieldCodec.construct(public, {item.name: getattr(self, item.name)
-                                             for item in fields(public)})
 
     def to_wire(self) -> dict:
         """The public envelope; delivery and publication capabilities stay in their tables."""
