@@ -889,7 +889,7 @@ class ViewReading(Observation[ObserveViews]):
 class ServiceResult(ABC):
     """What the service sends; each declares how the UI side receives it."""
 
-    def retire_request(self, pending, request) -> None:
+    def retire_request(self, pending: dict[int, ReadRequest], request: ReadRequest) -> None:
         pending.pop(request.request_id)
 
     @abstractmethod
@@ -925,7 +925,7 @@ class ReadBusy(ServiceResult):
 
     request_id: int
 
-    def retire_request(self, pending, request) -> None:
+    def retire_request(self, pending: dict[int, ReadRequest], request: ReadRequest) -> None:
         pass
 
     @property
