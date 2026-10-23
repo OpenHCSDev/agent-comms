@@ -18,6 +18,7 @@ from agent_comms.typed_table import SQLiteSchemaObject, TypedTable
 
 
 class ContextRequestKey(Carry):
+    opened_files = (ContextStore,)
     @property
     def path(self) -> Path:
         return self.root / ContextStore.filename

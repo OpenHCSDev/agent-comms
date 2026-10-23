@@ -13,6 +13,7 @@ from agent_comms.errors import RelationViolationError
 from agent_comms.field_codec import FieldCodec
 from agent_comms.historical_views import HistoryArchive
 from agent_comms.installer.carry import Carried, Carry
+from agent_comms.locked_store import RegistryFile
 from agent_comms.registry_store import RegistryStore
 from agent_comms.store_files import AtomicFile, _store_lock
 
@@ -25,6 +26,7 @@ RETIRED = "last_finished_turn_id"
 
 
 class FinishedTurns(Carry):
+    opened_files = (HistoryArchive, RegistryFile)
     precedes = (BusHistory, DeadTurns, OwnerRequests, TurnOwner)
     """Each decodes the registry, which refuses the retired field."""
 

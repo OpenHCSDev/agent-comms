@@ -16,6 +16,7 @@ from agent_comms.diagnostics import DiagnosticDocument
 from agent_comms.errors import RelationViolationError
 from agent_comms.goal_attempts import AttemptRecord, GoalAttemptStore
 from agent_comms.goal_failure_observation import FailedTurnEvidence, GoalLedgerTable
+from agent_comms.historical_views import HistoryArchive
 from agent_comms.installer.carry import Carried, Carry
 from agent_comms.locked_store import SQLiteFile
 from agent_comms.store_files import AtomicFile
@@ -27,6 +28,7 @@ from .retired_claim_fields import RetiredClaimFields
 
 
 class DeclaredFailures(RetiredClaimFields, Carry):
+    opened_files = (HistoryArchive, GoalAttemptStore, DiagnosticDocument)
     # Both changes affect one table. Rebuild it once with both source columns;
     # ClaimFields then observes the already-carried SQL claim field.
     precedes = (ClaimFields,)

@@ -12,7 +12,7 @@ from pathlib import Path
 
 from agent_comms.field_codec import FieldCodec
 from agent_comms.installer.carry import Carried, Carry
-from agent_comms.locked_store import RegistryFile
+from agent_comms.locked_store import RegistryFile, RetiredCommanderFile
 from agent_comms.registry_store import RegistryStore
 from agent_comms.store_files import AtomicFile
 from agent_comms.threads import ParkedThreadWorkState
@@ -22,6 +22,7 @@ from .carry_commander_project import CommanderProjectCarry
 
 
 class ParkedThreads(Carry):
+    opened_files = (RetiredCommanderFile, RegistryFile)
     precedes = (CommanderProjectCarry,)
 
     @property

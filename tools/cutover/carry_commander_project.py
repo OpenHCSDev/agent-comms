@@ -18,6 +18,7 @@ from agent_comms.typed_table import HeldBusFile
 
 
 class CommanderProjectCarry(Carry):
+    opened_files = (RetiredCommanderFile, RegistryFile)
     @property
     def configuration(self) -> Path:
         return RetiredCommanderFile.path_in(self.root)

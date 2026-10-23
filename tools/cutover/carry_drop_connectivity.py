@@ -21,6 +21,7 @@ TABLE = "connectivity"
 
 
 class DropConnectivity(Carry):
+    opened_files = (CoordinationStore,)
     @property
     def path(self) -> Path:
         return self.root / CoordinationStore.filename

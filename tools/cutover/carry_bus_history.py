@@ -846,8 +846,8 @@ class HistoryInput:
         return tuple(rewritten)
 
 
-class BusHistory(Carry, BusFile):
-    """Validate and stream the retired history through the bus's one insert path."""
+class RetiredBusFile(BusFile):
+    """The retired stream and its marker form one copied file group."""
 
     filename = "bus.jsonl"
 
@@ -863,6 +863,11 @@ class BusHistory(Carry, BusFile):
             for path in copied:
                 RootFile.copy_file(path, target.with_name(path.name))
         return copied
+
+class BusHistory(Carry, RetiredBusFile):
+    """Validate and stream the retired history through the bus's one insert path."""
+
+    opened_files = (RetiredBusFile, HistoryMetadata, Bus, RegistryFile, ReadLedger, HistoryArchive)
 
     def backup_files(self) -> tuple[Path, ...]:
         root = self.root

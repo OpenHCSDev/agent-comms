@@ -17,7 +17,7 @@ from collections.abc import Iterator, Mapping
 from contextlib import contextmanager
 from dataclasses import dataclass, replace
 from pathlib import Path
-from typing import TYPE_CHECKING, Annotated
+from typing import TYPE_CHECKING, Annotated, ClassVar
 
 
 from .child_process import OutlivesLauncherLifetime, Platform, ProcessIdentity, SpawnedProcess
@@ -29,6 +29,7 @@ from .errors import RelationViolationError
 from .field_codec import FieldCodec, WireOmitDefault
 from .launch_runtime import LaunchRuntime, RestartEnvironment
 from .lifecycle_capability import Active, LifecycleCapability, Pending
+from .locked_store import DurableFile, PatternFile
 from .native_arguments import GivenBinary, NativeArguments
 from .owner_cutover import PreserveOwnerRuntime
 from .owner_launch import RetainedOwnerLaunch
@@ -169,7 +170,14 @@ class RestartTarget:
 
 
 @dataclass(frozen=True)
-class QueuedRestart:
+class QueuedRestart(DurableFile, PatternFile):
+    filename: ClassVar[str] = "{id}.json"
+    root_directory: ClassVar[str] = DIRECTORY
+
+    @classmethod
+    def matching_in(cls, root: Path) -> frozenset[Path]:
+        return frozenset(path for path in root.rglob(str(cls.pattern())) if path.is_file())
+
     id: str
     selection: OwnerRestartSelection
     target: RestartTarget

@@ -50,88 +50,6 @@ class DocumentChange[D, R]:
         return cls(document, document)
 
 
-class JsonDocument(ABC, Generic[T]):
-    """Declared JSON codec and atomic file I/O; LockedStore owns transactions."""
-
-    path: Path
-    json_indent: ClassVar[int | None] = None
-    json_sort_keys: ClassVar[bool] = False
-    json_suffix: ClassVar[str] = ""
-
-    record_type: ClassVar[type]
-    """The declaration decoded by FieldCodec, including container types."""
-
-    @abstractmethod
-    def empty(self) -> T:
-        """Return a fresh value for a missing document."""
-
-    def _read_unlocked(self) -> T:
-        return self._read_using(self._decode)
-
-    def _read_using(self, decode: Callable[[object], T]) -> T:
-        try:
-            return decode(FieldCodec.parse(self.path.read_bytes()))
-        except FileNotFoundError:
-            return self.empty()
-        except (OSError, MalformedRecord) as error:
-            return self._unreadable(error)
-
-    def _unreadable(self, error: Exception) -> T:
-        """Strict by default; optional owners may declare a fail-closed value."""
-        raise error
-
-    def _decode(self, data: Any) -> T:
-        """Decode the current declaration at the storage boundary."""
-        return FieldCodec.decode_document(self.record_type, data)
-
-    def _encode(self, value: T) -> Any:
-        """Owners with an established external shape may project that encoding."""
-        return FieldCodec.encode_document(value, self.record_type)
-
-    def read(self) -> T:
-        return self._read_unlocked()
-
-    def _publish_unlocked(self, value: T) -> None:
-        self._write_unlocked(
-            json.dumps(self._encode(value), indent=self.json_indent, sort_keys=self.json_sort_keys)
-            + self.json_suffix
-        )
-
-    def _write_unlocked(self, text: str) -> None:
-        """Stage before publication; retain the old inode until directory sync.
-
-        A reported staging/publication/fsync failure restores the old bytes and
-        mode while the exclusive lock is held. A second failure during rollback
-        is propagated too; no filesystem can promise recovery from arbitrary
-        repeated I/O failure. Process death after replace has the usual atomic
-        old-or-new semantics, not a multi-file transaction or recovery journal.
-        """
-        fd, staged = StoreOwner.stage_file(self.path)
-        os.close(fd)
-        staged.unlink()
-        backup = StoreOwner.rollback_file(staged)
-        try:
-            mode = stat.S_IMODE(self.path.stat().st_mode)
-            os.link(self.path, backup)
-        except FileNotFoundError:
-            mode = PrivateFileRole.permissions
-        try:
-            try:
-                AtomicFile(self.path, mode).write_text(text)
-                backup.unlink(missing_ok=True)
-            except BaseException:
-                if backup.exists():
-                    if not self.path.exists() or not self.path.samefile(backup):
-                        os.replace(backup, self.path)
-                        Platform.current().sync_directory(self.path.parent)
-                else:
-                    self.path.unlink(missing_ok=True)
-                    Platform.current().sync_directory(self.path.parent)
-                raise
-        finally:
-            # A failed restore leaves the last original inode for recovery.
-            if backup.exists() and self.path.exists() and self.path.samefile(backup):
-                backup.unlink()
 
 
 
@@ -281,6 +199,91 @@ class RootFile:
             path for owner, directory in cls.declarations_in(root)
             for path in owner.files_in(directory)
         )
+
+
+class JsonDocument(RootFile, ABC, Generic[T]):
+    """Declared JSON codec and atomic file I/O; LockedStore owns transactions."""
+
+    path: Path
+    json_indent: ClassVar[int | None] = None
+    json_sort_keys: ClassVar[bool] = False
+    json_suffix: ClassVar[str] = ""
+
+    record_type: ClassVar[type]
+    """The declaration decoded by FieldCodec, including container types."""
+
+    @abstractmethod
+    def empty(self) -> T:
+        """Return a fresh value for a missing document."""
+
+    def _read_unlocked(self) -> T:
+        return self._read_using(self._decode)
+
+    def _read_using(self, decode: Callable[[object], T]) -> T:
+        try:
+            return decode(FieldCodec.parse(self.path.read_bytes()))
+        except FileNotFoundError:
+            return self.empty()
+        except (OSError, MalformedRecord) as error:
+            return self._unreadable(error)
+
+    def _unreadable(self, error: Exception) -> T:
+        """Strict by default; optional owners may declare a fail-closed value."""
+        raise error
+
+    def _decode(self, data: Any) -> T:
+        """Decode the current declaration at the storage boundary."""
+        return FieldCodec.decode_document(self.record_type, data)
+
+    def _encode(self, value: T) -> Any:
+        """Owners with an established external shape may project that encoding."""
+        return FieldCodec.encode_document(value, self.record_type)
+
+    def read(self) -> T:
+        return self._read_unlocked()
+
+    def _publish_unlocked(self, value: T) -> None:
+        self._write_unlocked(
+            json.dumps(self._encode(value), indent=self.json_indent, sort_keys=self.json_sort_keys)
+            + self.json_suffix
+        )
+
+    def _write_unlocked(self, text: str) -> None:
+        """Stage before publication; retain the old inode until directory sync.
+
+        A reported staging/publication/fsync failure restores the old bytes and
+        mode while the exclusive lock is held. A second failure during rollback
+        is propagated too; no filesystem can promise recovery from arbitrary
+        repeated I/O failure. Process death after replace has the usual atomic
+        old-or-new semantics, not a multi-file transaction or recovery journal.
+        """
+        fd, staged = StoreOwner.stage_file(self.path)
+        os.close(fd)
+        staged.unlink()
+        backup = StoreOwner.rollback_file(staged)
+        try:
+            mode = stat.S_IMODE(self.path.stat().st_mode)
+            os.link(self.path, backup)
+        except FileNotFoundError:
+            mode = PrivateFileRole.permissions
+        try:
+            try:
+                AtomicFile(self.path, mode).write_text(text)
+                backup.unlink(missing_ok=True)
+            except BaseException:
+                if backup.exists():
+                    if not self.path.exists() or not self.path.samefile(backup):
+                        os.replace(backup, self.path)
+                        Platform.current().sync_directory(self.path.parent)
+                else:
+                    self.path.unlink(missing_ok=True)
+                    Platform.current().sync_directory(self.path.parent)
+                raise
+        finally:
+            # A failed restore leaves the last original inode for recovery.
+            if backup.exists() and self.path.exists() and self.path.samefile(backup):
+                backup.unlink()
+
 
 
 @dataclass(frozen=True)

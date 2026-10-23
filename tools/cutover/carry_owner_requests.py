@@ -21,7 +21,7 @@ from agent_comms.goals import Goal, UnorderedGoalOrder
 from agent_comms.historical_views import HistoryArchive
 from agent_comms.installer.carry import Carried, Carry
 from agent_comms.lifecycle_capability import Complete
-from agent_comms.locked_store import SQLiteFile
+from agent_comms.locked_store import RegistryFile, SQLiteFile
 from agent_comms.owner_requests import (
     CompletedRequestState,
     OpenRequestState,
@@ -116,6 +116,7 @@ def historical(
 
 
 class OwnerRequests(Carry):
+    opened_files = (HistoryArchive, RegistryFile, TodoStore, GoalHistoryStore)
     precedes = (BusHistory,)
 
     def backup_files(self) -> tuple[Path, ...]:
