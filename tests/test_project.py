@@ -19,7 +19,9 @@ from agent_comms.native_arguments import GivenArguments, GivenBinary
 
 
 
-async def test_project_update_is_published_and_old_saved_cwd_can_resume(tmp_path):
+async def test_project_update_is_published_and_old_saved_cwd_can_resume(
+    tmp_path, native_runtime_package
+):
     old = tmp_path / "old"
     new = tmp_path / "new"
     old.mkdir()
@@ -61,7 +63,7 @@ async def test_project_update_is_published_and_old_saved_cwd_can_resume(tmp_path
 
 
 @pytest.mark.skipif(os.name == "nt", reason="UNIX runtime subscriptions")
-async def test_project_changes_reach_all_subscribed_clients(tmp_path):
+async def test_project_changes_reach_all_subscribed_clients(tmp_path, native_runtime_package):
     from agent_comms.runtime import RuntimeProxy, socket_path
 
     old, new = tmp_path / "old", tmp_path / "new"

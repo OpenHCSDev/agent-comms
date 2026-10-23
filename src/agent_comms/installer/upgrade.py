@@ -63,7 +63,7 @@ from agent_comms.host_services import HostService, RestartedService
 from agent_comms.install_choices import InstallerChoice, RunMode
 from agent_comms.installer.backup import BackupReport, RestoreSpace, SavedFile, StoreBackup, bus_files
 from agent_comms.installer.refusals import InstallRolledBack, UpgradeRefused
-from agent_comms.installer.owner_starts import OwnerStart, RefusedOwner, StartedOwner
+from agent_comms.installer.owner_starts import OwnerStart
 from agent_comms.installer.carry import STEPS, CarryChain
 from agent_comms.installer.probes.carry import Carried, Carry, CarryOperation, FirstPendingOperation, MigrateOperation, RetireInputsOperation
 from agent_comms.installer.probes.carry import CarryProbe
@@ -96,7 +96,6 @@ from agent_comms.installer.reporting import (
 )
 from agent_comms.installer.runtime_resolution import RuntimeResolution, StackProject
 from agent_comms.launch_runtime import LaunchRuntime, RestartEnvironment
-from agent_comms.lifecycle_capability import Successful
 from agent_comms.locked_store import BusFile, DeclaredFile, UndeclaredFile
 from agent_comms.maintenance_barrier import (
     MaintenanceBarrier,
@@ -606,15 +605,8 @@ class Stack:
 
     def start(self, root: Path, names: list[str]) -> tuple[OwnerStart, ...]:
         """One start batch; keep each refusal in the installed or rollback report."""
-        started: list[OwnerStart] = []
-        for outcome in self.owners(root, StartCliCommand, names).outcomes:
-            try:
-                outcome.require(Successful, UpgradeRefused(str(outcome)))
-            except UpgradeRefused as error:
-                started.append(RefusedOwner(outcome.target, str(error)))
-            else:
-                started.append(StartedOwner(outcome.target))
-        return tuple(started)
+        return tuple(outcome.owner_start()
+                     for outcome in self.owners(root, StartCliCommand, names).outcomes)
 
     def start_services(self, stopped: tuple[HostService, ...]) -> tuple[RestartedService, ...]:
         with ServicesPhase("start").running(self.commands.clock):

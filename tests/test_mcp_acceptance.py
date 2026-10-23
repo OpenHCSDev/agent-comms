@@ -345,12 +345,12 @@ async def _observer(case, root):
 
 
 @pytest.mark.parametrize("case", ["allow", "no_controller", "revoke_midturn", "disconnect"])
-async def test_real_pi_mcp_acp_link(case, tmp_path, monkeypatch, request):
+async def test_real_pi_mcp_acp_link(case, tmp_path, monkeypatch, native_runtime_package):
     binary = os.environ.get("AC_MCP_NATIVE_BIN")
     if not binary:
         pytest.skip("Set AC_MCP_NATIVE_BIN to an explicitly prepared native Pi launcher")
     assert binary == "pi" or (Path(binary).is_absolute() and os.access(binary, os.X_OK))
-    native_package = request.getfixturevalue("pinned_native")
+    native_package = native_runtime_package.path
     package, node, agent, project, digest, starts, calls, env = _prepare(
         tmp_path, native_package
     )

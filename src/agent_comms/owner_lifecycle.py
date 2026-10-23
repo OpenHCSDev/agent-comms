@@ -26,7 +26,7 @@ from .child_process import (
     SynchronousProcess,
 )
 from .cli_result import CliResult
-from .commander_heartbeat import CommanderHeartbeat
+from .commander_service import CommanderService
 from .diagnostics import OwnerProcessOutput
 from .errors import RelationViolationError
 from .launch_root import LaunchRoot
@@ -335,7 +335,7 @@ class OwnerLifecycle:
         if previous.process_identity.offline():
             orders = tuple(
                 todo
-                for commander in CommanderHeartbeat.commanders(self.registry, self.goals)
+                for commander in CommanderService.commanders(self.registry, self.goals)
                 for todo in self.goals.todos.held_by(commander.incarnation, owned.incarnation)
                 if todo.pending and todo.held().owner_identity == owned.incarnation
             )
@@ -348,8 +348,8 @@ class OwnerLifecycle:
 
     def _announce_restart(self, name: str, identities: str) -> None:
         """Publish once after the registry's process reservation commits."""
-        CommanderHeartbeat.register(self.registry)
-        self.messaging.send(CommanderHeartbeat.sender, name,
+        CommanderService.register(self.registry)
+        self.messaging.send(CommanderService.sender, name,
             f"Restarted holding {identities}; continue them from your branch")
 
     def ensure_owner(
