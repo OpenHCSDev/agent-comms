@@ -9,7 +9,7 @@ from agent_comms.field_codec import FieldCodec
 from agent_comms.installer.commands import InstallCommands
 from agent_comms.installer.refusals import InterpreterWorkerDied
 from agent_comms.installer.probes.packages import DistributionVersionsProbe, InstalledPackagesProbe
-from agent_comms.installer.interpreter_operation import ProbeRequest, RuntimeProbe, serve
+from agent_comms.installer.interpreter_operation import ProbeReply, ProbeRequest, RuntimeProbe, serve
 from agent_comms.launch_runtime import LaunchRuntime
 from agent_comms.maintenance_barrier import HOLDER_NONCE, MaintenanceHolder
 
@@ -42,7 +42,8 @@ def test_worker_answers_each_request_as_that_request_s_holder(monkeypatch, tmp_p
     monkeypatch.setattr("sys.stdout", answers.open("w"))
     monkeypatch.setenv(HOLDER_NONCE, "the test's own hold")
     serve()
-    assert [HolderSeenProbe().decode_answer(line)
+    assert [FieldCodec.decode(HolderSeenProbe().answer_type(),
+                              FieldCodec.decode(ProbeReply, FieldCodec.parse(line)).answer)
             for line in answers.read_text().splitlines()] == list(holders)
 
 

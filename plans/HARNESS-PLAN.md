@@ -279,8 +279,7 @@ The growth alarm is commander-native phase 7's (`plans/commander-native-plan.md`
 
 ### 4. Plans that read as one
 
-- Delete the dead files in `plans/`; keep the three live plans and this one.
-- Delete `REMAINING-SLOP-PLAN.md` or `remaining-slop-plan.md`, whichever is superseded.
+Done 2026-10-23: dead plan files deleted; REMAINING-SLOP-PLAN.md is the one remaining-slop plan.
 - The multiple inheritance plan keeps one version: its corrections replace the original body instead of sitting above it.
 
 **Done when** `plans/` holds only plans someone is executing, and each states its target once.

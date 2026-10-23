@@ -50,7 +50,7 @@ from .owner_protocol import (
 )
 from .runtime_requests import RuntimeRequest, SubscribeRuntimeRequest
 from .registry_document import RegistryEntry
-from .child_process import ProcessIdentity
+from .child_process import Platform, ProcessIdentity
 from .thread_identity import OwnerIdentity
 from .errors import RelationViolationError, UnregisteredThreadError
 from .coordination_errors import CoordinationError, IdentityConflict
@@ -243,7 +243,7 @@ class RuntimeServer(SessionUpdateSink):
             _LOG.error("Owner work %s failed", task.get_name(), exc_info=error)
 
     async def start(self) -> None:
-        if self.server is not None or os.name == "nt":
+        if self.server is not None or not Platform.current().serves_local_socket:
             return
         self.path.parent.mkdir(parents=True, exist_ok=True)
         try:
@@ -326,11 +326,9 @@ class RuntimeServer(SessionUpdateSink):
 
     async def handle(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:
         client = SocketClient(writer)
-        session_id = None
         try:
             request = RuntimeRequest.from_wire(json.loads(await reader.readline()))
             context = await request.bind(self, reader, client)
-            session_id = context.session_id
             await request.apply(context)
         except SubscriberClosed:
             pass

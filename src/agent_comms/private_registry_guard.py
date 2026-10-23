@@ -29,6 +29,7 @@ from typing import TYPE_CHECKING, NoReturn
 from .child_process import Platform
 from . import store_files
 from .coordination_database import CoordinationStore
+from .cohort_schema import AcceptanceFrontier
 from .coordinator import Coordination
 from .errors import RelationViolationError
 from .field_codec import Id128Text, MalformedRecord
@@ -165,12 +166,19 @@ class RegistryPrivacy(ABC):
         """The complete schema this root's authority requires during reconciliation."""
 
     @abstractmethod
+    def declare_acceptance(self, db: sqlite3.Connection, recipient_lookup: str) -> None:
+        """Prepare the new recipient's acceptance state before registry publication."""
+
+    @abstractmethod
     def publication_connection(self, connection: sqlite3.Connection) -> sqlite3.Connection | None:
         """This root's recorded native publications, or no private publication source."""
 
 
 
 class PublicRegistry(RegistryPrivacy):
+
+    def declare_acceptance(self, db: sqlite3.Connection, recipient_lookup: str) -> None:
+        """Public roots have no native cohort acceptance state."""
 
     def publication_connection(self, connection: sqlite3.Connection) -> None:
         """Public attached history has no private native publication relations."""
@@ -237,6 +245,11 @@ class PrivateRegistryGuard(DurableFile, WireWakeFile, RegistryPrivacy):
 
 
     filename = ".registry-owner-guard"
+
+    def declare_acceptance(self, db: sqlite3.Connection, recipient_lookup: str) -> None:
+        AcceptanceFrontier(
+            wire_root_id=self.namespace, recipient_lookup=recipient_lookup, through_seq=0,
+        ).insert_if_absent(db)
 
     def publication_connection(self, connection: sqlite3.Connection) -> sqlite3.Connection:
         from .coordination_response import ResponseTable
