@@ -72,7 +72,7 @@ publish() (
         deployment_stage=$(mktemp -d "$publish_root/.native-current-$build_id.stage.XXXXXXXX")
         trap 'rm -rf -- "$deployment_stage"' EXIT
         mkdir -p -- "$deployment_stage/node_modules/@earendil-works"
-        cp -a --reflink=auto -- "$prepared/node_modules/@earendil-works/pi-coding-agent" \
+        cp -a -- "$prepared/node_modules/@earendil-works/pi-coding-agent" \
             "$deployment_stage/node_modules/@earendil-works/pi-coding-agent"
         native \
             publish_sources \
