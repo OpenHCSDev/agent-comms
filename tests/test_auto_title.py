@@ -5,7 +5,9 @@ from agent_comms.tool_caller import ThreadCaller
 from agent_comms.native_arguments import GivenArguments
 
 
-async def test_new_pi_thread_requests_one_concise_title(private_comms, monkeypatch):
+async def test_new_pi_thread_requests_one_concise_title(
+    private_comms, monkeypatch, native_runtime_package
+):
     monkeypatch.setenv("AGENT_COMMS_AGENT_MODELS", "test/model")
     agent = CommsAgent(private_comms, agent_args=GivenArguments(("--model", "test/model",)))
     await agent.new_session("/tmp/project")

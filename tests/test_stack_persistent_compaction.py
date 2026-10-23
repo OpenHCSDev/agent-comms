@@ -97,7 +97,7 @@ def _history(session: Path, project: Path) -> None:
     session.chmod(0o600)
 
 
-async def test_manual_compaction_keeps_the_retained_child_serving(monkeypatch):
+async def test_manual_compaction_keeps_the_retained_child_serving(monkeypatch, native_runtime_package):
     native = os.environ.get("AC_NATIVE_STACK_BIN")
     if not native:
         pytest.skip("Requires prepared native Pi stack")
