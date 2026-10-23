@@ -1139,19 +1139,21 @@ class _RepresentedDecoder[T](ValueDecoder[T]):
         return self.representation.decode_field(data, self.structural)
 
 
-class _NominalTextDecoder[T](_RepresentedDecoder[T]):
+@dataclass(frozen=True, slots=True)
+class _NominalTextDecoder[T: str](_RepresentedDecoder[T]):
     """The field owns the decoded kind; its inherited spelling owns wire text."""
 
-    __slots__ = ()
+    structural: _ScalarDecoder[T, type[T]]
 
     def decode(self, data: object) -> T:
         return self.structural.target(super().decode(data))
 
     def encode(self, value: T) -> object:
+        encoded = self.representation.encode(value)
         target = self.structural.target
         if not isinstance(value, target):
-            raise TypeError(f"Expected {target}, received {type(value).__name__}")
-        return self.representation.encode(value)
+            raise MalformedRecord(f"Expected {target}, received {type(value).__name__}")
+        return encoded
 
     def compared(self, value: T) -> object:
         return self.encode(value)
@@ -1165,7 +1167,7 @@ class FieldRepresentation[T](MroDispatch, ABC):
     """
 
     field_plan: ClassVar[type[FieldPlan]] = DeclaredFieldPlan
-    decoder: ClassVar[type[ValueDecoder]] = _RepresentedDecoder
+    decoder: ClassVar[type[_RepresentedDecoder]] = _RepresentedDecoder
 
     @classmethod
     def wire_structure(cls, structural: DecoderPlan) -> DecoderPlan:
@@ -1235,6 +1237,10 @@ class WireValue(WireForm):
     """A value supplies its representation to the single field boundary."""
 
     __slots__ = ()
+
+    @classmethod
+    def representation(cls) -> type[FieldRepresentation]:
+        return cls
 
     @abstractmethod
     def to_wire(self) -> JsonValue: ...
@@ -1610,6 +1616,10 @@ class NominalText(str):
     __slots__ = ()
     spelled_by: ClassVar[type[NominalSpelling]]
 
+    @classmethod
+    def representation(cls) -> type[FieldRepresentation]:
+        return cls.spelled_by
+
 
 class NominalSpelling[V: NominalText](SpelledText):
     """One spelling declared for a nominal value and inherited by its kinds."""
@@ -1896,11 +1906,8 @@ class FieldCodec(MroDispatch, Sealed):
             return target, representations[0]
         if target is object:
             return object, _JsonValueRepresentation
-        if isinstance(target, type):
-            if issubclass(target, NominalText):
-                return target, target.spelled_by
-            if issubclass(target, WireValue):
-                return target, target
+        if isinstance(target, type) and issubclass(target, (NominalText, WireValue)):
+            return target, target.representation()
         return target, None
 
     @classmethod
@@ -2331,8 +2338,10 @@ class _ChoiceDecoder[T](ValueDecoder[T]):
 
 
 @dataclass(frozen=True, slots=True)
-class _ScalarDecoder[T](ValueDecoder[T]):
+class _ScalarDecoder[T, Target = object](ValueDecoder[T]):
     """A plain target accepts no wire value unless a scalar below declares it."""
+
+    target: Target
 
     def decode(self, data: object) -> T:
         if self.accepts(data):

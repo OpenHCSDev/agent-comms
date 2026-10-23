@@ -1,5 +1,4 @@
 """Source membership, public-only capture, and selected recorded values."""
-from agent_comms.field_codec import TurnId
 
 from agent_comms.context_store import UNREAD_CONTEXT
 from bus_history import read_history
@@ -10,7 +9,7 @@ import json
 import pytest
 
 from agent_comms.session_file import NoSessionFile
-from agent_comms.field_codec import FieldCodec
+from agent_comms.field_codec import FieldCodec, TurnId
 from agent_comms.native_session_reopen import NativeSessionIdentity
 from agent_comms.native_turn_context import NativeContextData, NativeContextManifestData
 from agent_comms.runtime_requests import (RuntimeRequest, ContextRecordedSegmentRuntimeRequest,
@@ -37,7 +36,9 @@ def identity(tmp_path):
 
 def recorded(segments):
     owner = RecordedThreadIncarnation("original-owner", 17002.0)
-    turn = RecordedContextTurn(RegisteredTurn(TurnId('ab87f599dc0a50a56b7c65de71c39426')), TurnIdentity(owner, 2))
+    turn = RecordedContextTurn(
+        RegisteredTurn(TurnId('ab87f599dc0a50a56b7c65de71c39426')), TurnIdentity(owner, 2)
+    )
     return ContextManifest(owner, turn, tuple(segments), "pi.estimateTokens",
                            ObservedDispatchRequest("request-one"))
 

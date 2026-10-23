@@ -31,7 +31,7 @@ from .change_report import FileLine, NoSourceReference
 from .child_process import ProcessIdentity
 from .command import Command
 from .declared_family import DeclaredFamily
-from .errors import RelationViolationError
+from .errors import OverdueHeadRefusalError, RelationViolationError
 from .goal_mentions import bind_goal_mentions
 from .goal_states import (
     ActiveGoal,
@@ -556,7 +556,7 @@ class ProblemOrderGoalAction(GoalAction[Goal], RuntimeInvocable):
         from .standing_rules import OrderRefusingStandingRule
 
         if refused := OrderRefusingStandingRule.refusals(goals, self.commander):
-            raise RelationViolationError("Review overdue heads before sending new orders:\n" + "\n".join(refused))
+            raise OverdueHeadRefusalError("Review overdue heads before sending new orders:\n" + "\n".join(refused))
 
     def require_ready(self, ctx: GoalActionContext) -> None:
         """Recheck local request facts before goal reservation or allocating a child."""

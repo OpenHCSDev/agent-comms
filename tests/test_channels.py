@@ -1,4 +1,3 @@
-from agent_comms.field_codec import TurnId
 from agent_comms.session_file import RegistrySessionLocation
 from agent_comms.pi_vocabulary import HighThinkingLevel
 import os
@@ -18,7 +17,7 @@ from agent_comms.channel_management import (
 from agent_comms.bus import Bus
 from agent_comms.comms import wire
 from conftest import installed_comms
-from agent_comms.field_codec import FieldCodec
+from agent_comms.field_codec import FieldCodec, TurnId
 from agent_comms.display_order import (
     ChannelSort, CreatedThreadSort, LastActivityThreadSort, LastMessageThreadSort, ThreadSort,
 )

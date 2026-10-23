@@ -22,7 +22,6 @@ from .acp_extension import (
     UnavailableCursorObservation,
     encode_updates,
 )
-from .agent_backend import InputId
 from .comms import Comms
 from .coordinator import Coordination
 from .cursor_owner import CommittedCursorOwner, CursorOwner, CursorState
@@ -73,7 +72,7 @@ class CursorDelivery:
                 claimed_generation=participant.owner.claimed_generation,
                 wire_root_id=participant.root_id,
                 generation=participant.identity.generation,
-                input_id=InputId(input_id),
+                input_id=input_id,
             )
             return await owner.advance_async(participant.bus, source_reads=source_reads)
 

@@ -11,7 +11,7 @@ from agent_comms.coordination_errors import RequestRefused
 from acp.schema import AgentMessageChunk, PromptResponse, TextContentBlock
 
 from . import agent_events as events
-from . import field_codec
+from .field_codec import TurnId
 from .acp_extension import CompactionCommittedUpdate, TranscriptChangedUpdate, encode_updates
 from .agent_backend import (
     CompactionOutcome,
@@ -88,7 +88,7 @@ async def _compact_started(runner, session_id, thread_name, instructions):
     async with AsyncExitStack() as resources:
         owner = await Coordination.run_worker(partial(
             runner.acquire_turn, resources, session_id, thread_name,
-            field_codec.TurnId.mint(), "Compacting context", task=task,
+            TurnId.mint(), "Compacting context", task=task,
         ))
         runner.turn_tasks[session_id] = task
         await runner.transition_turn(

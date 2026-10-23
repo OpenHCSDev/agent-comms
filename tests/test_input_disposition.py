@@ -1,5 +1,4 @@
 """Direct input state survives a process exit without replaying an attempt."""
-from agent_comms.field_codec import TurnId
 
 import multiprocessing
 from concurrent.futures import ThreadPoolExecutor
@@ -8,6 +7,7 @@ from pathlib import Path
 import pytest
 
 from agent_comms.errors import RelationViolationError
+from agent_comms.field_codec import TurnId
 from agent_comms.input_attempt import (
     BoundUnknownInput,
     ClearedNativeInput,
@@ -57,11 +57,37 @@ def test_unknown_is_durable_and_native_start_is_a_cas(tmp_path: Path) -> None:
     )
 
     native_id = "a" * 32
-    assert store.bind("bus:7", claim_scope=3, turn_id=TurnId('974cad2dd603827b06e9e6affa3de03d'), native_id=native_id, text="full ask")
-    assert not store.started("bus:7", turn_id=TurnId('974cad2dd603827b06e9e6affa3de03d'), native_id="b" * 32, text="full ask")
-    assert not store.started("bus:7", turn_id=TurnId('974cad2dd603827b06e9e6affa3de03d'), native_id=native_id, text="wrong")
-    assert store.started("bus:7", turn_id=TurnId('974cad2dd603827b06e9e6affa3de03d'), native_id=native_id, text="full ask")
-    assert not store.started("bus:7", turn_id=TurnId('974cad2dd603827b06e9e6affa3de03d'), native_id=native_id, text="full ask")
+    assert store.bind(
+        "bus:7",
+        claim_scope=3,
+        turn_id=TurnId('974cad2dd603827b06e9e6affa3de03d'),
+        native_id=native_id,
+        text="full ask",
+    )
+    assert not store.started(
+        "bus:7",
+        turn_id=TurnId('974cad2dd603827b06e9e6affa3de03d'),
+        native_id="b" * 32,
+        text="full ask",
+    )
+    assert not store.started(
+        "bus:7",
+        turn_id=TurnId('974cad2dd603827b06e9e6affa3de03d'),
+        native_id=native_id,
+        text="wrong",
+    )
+    assert store.started(
+        "bus:7",
+        turn_id=TurnId('974cad2dd603827b06e9e6affa3de03d'),
+        native_id=native_id,
+        text="full ask",
+    )
+    assert not store.started(
+        "bus:7",
+        turn_id=TurnId('974cad2dd603827b06e9e6affa3de03d'),
+        native_id=native_id,
+        text="full ask",
+    )
     assert (
         stored_inputs(tmp_path).unknown(frozenset({"kid"}))
         == ()
@@ -81,12 +107,23 @@ def test_unresolved_projection_follows_rename_without_private_receipts(tmp_path:
     store = InputDispositions(comms.root)
     store.record("bus:7", seq=7, owner="kid", claim_scope=1, target="#review", text="exact source")
     store.record("bus:8", seq=8, owner="peer", claim_scope=1, target="#review", text="other owner")
-    store.bind("bus:7", claim_scope=1, turn_id=TurnId('9b473845f684444f80a26586ae298d2b'), native_id="a" * 32, text="private wrapper")
+    store.bind(
+        "bus:7",
+        claim_scope=1,
+        turn_id=TurnId('9b473845f684444f80a26586ae298d2b'),
+        native_id="a" * 32,
+        text="private wrapper",
+    )
     comms.threads.rename_managed_thread("kid", "new-kid", owner=ProcessIdentity.capture(os.getpid()))
     expected = (UnresolvedInput(7, "#review", "exact source", "bus:7", "unknown"),)
     assert comms.goals.unresolved_inputs("new-kid") == expected
     assert comms.goals.unresolved_inputs("kid") == expected
-    assert store.started("bus:7", turn_id=TurnId('9b473845f684444f80a26586ae298d2b'), native_id="a" * 32, text="private wrapper")
+    assert store.started(
+        "bus:7",
+        turn_id=TurnId('9b473845f684444f80a26586ae298d2b'),
+        native_id="a" * 32,
+        text="private wrapper",
+    )
     assert comms.goals.unresolved_inputs("new-kid") == ()
 
 
@@ -144,11 +181,22 @@ ROOT, NATIVE, SENT = "c" * 32, "a" * 32, "sent text"
 REFERENCE = MessageReference(7, "original-id")
 RESERVED = ReservedInput("bus:7", 7, "owner", 1, "owner", "ask",
                          origin=WireInputOrigin(ROOT, REFERENCE))
-BOUND = RESERVED._transition(BoundUnknownInput, turn_id=TurnId('974cad2dd603827b06e9e6affa3de03d'), native_id=NATIVE,
-                             sent_digest=TextDigest.of(SENT))
+BOUND = RESERVED._transition(
+    BoundUnknownInput,
+    turn_id=TurnId('974cad2dd603827b06e9e6affa3de03d'),
+    native_id=NATIVE,
+    sent_digest=TextDigest.of(SENT),
+)
 TRANSITIONS = {
-    "bind": lambda row: row.bind(claim_scope=1, turn_id=TurnId('974cad2dd603827b06e9e6affa3de03d'), native_id=NATIVE, text=SENT),
-    "started": lambda row: row.started(turn_id=TurnId('974cad2dd603827b06e9e6affa3de03d'), native_id=NATIVE, text=SENT),
+    "bind": lambda row: row.bind(
+        claim_scope=1,
+        turn_id=TurnId('974cad2dd603827b06e9e6affa3de03d'),
+        native_id=NATIVE,
+        text=SENT,
+    ),
+    "started": lambda row: row.started(
+        turn_id=TurnId('974cad2dd603827b06e9e6affa3de03d'), native_id=NATIVE, text=SENT
+    ),
     "finish_unbound": lambda row: row.finish_unbound(),
     "clear_unbound": lambda row: row.clear_unbound(),
     "clear_native": lambda row: row.clear_native(NATIVE, SENT),

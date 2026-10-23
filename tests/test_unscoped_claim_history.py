@@ -1,5 +1,4 @@
 """Bus history holds tool acquisitions written before claims recorded a scope."""
-from agent_comms.field_codec import TurnId
 
 import pytest
 
@@ -8,7 +7,7 @@ from agent_comms.envelope_claim_transitions import (
     ClaimProjection, ClaimRelease, ClaimTransition, NativeClaim, ReleasedClaims,
     UnrecordedScope, UnscopedClaims, WakeClaims,
 )
-from agent_comms.field_codec import FieldCodec, MalformedRecord
+from agent_comms.field_codec import FieldCodec, MalformedRecord, TurnId
 from agent_comms.thread_status import RunningThreadStatus
 from agent_comms.threads import Thread
 
@@ -38,10 +37,18 @@ def test_unscoped_history_row_decodes_projects_never_live_and_releases(tmp_path)
     # A current acquisition by another owner is not blocked by the unscoped holder.
     peer = registry.require("peer")
     taken = WakeClaims(
-        owner="peer", incarnation=str(peer.created_at), seq=2, message_id="msg-2",
-        claims=(resource,), generation=G2,
-        resource_scope=NativeClaim(owner_claimed_generation=1, operation_id="c" * 32,
-                                turn_id=TurnId('ff33c94032d9f01447a779689c1dff6a'), input_id="input-2"),
+        owner="peer",
+        incarnation=str(peer.created_at),
+        seq=2,
+        message_id="msg-2",
+        claims=(resource,),
+        generation=G2,
+        resource_scope=NativeClaim(
+            owner_claimed_generation=1,
+            operation_id="c" * 32,
+            turn_id=TurnId('ff33c94032d9f01447a779689c1dff6a'),
+            input_id="input-2",
+        ),
     ).apply(held, registry)
     assert taken[resource].owner == "peer"
 

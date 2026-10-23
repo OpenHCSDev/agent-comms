@@ -1,5 +1,4 @@
 """ClaimTransition owns atomic application; durability belongs to its checkpoint."""
-from agent_comms.field_codec import TurnId
 
 import os
 from dataclasses import replace
@@ -13,7 +12,7 @@ from agent_comms.envelope_claim_transitions import (
     ClaimTransitionError, ExistingFileClaim, NativeClaim, ReleasedClaims,
     UnscopedClaims, WakeClaim, WakeClaims,
 )
-from agent_comms.field_codec import FieldCodec, MalformedRecord
+from agent_comms.field_codec import FieldCodec, MalformedRecord, TurnId
 from agent_comms.messages import ClaimMessage, ClaimNoticeKind, Message
 
 G1 = "a" * 32
@@ -70,10 +69,17 @@ def test_same_name_can_take_a_previous_birth_only_with_current_registry_evidence
 def test_selected_wake_binding_survives_claim_projection(tmp_path):
     _, resource, _ = resources(tmp_path)
     claim_scope = WakeClaim(
-        wire_root_id="c" * 32, source_seq=7, source_message_id="source-7",
-        wake_assignment_id="cohort-v1:" + "d" * 64, wake_revision=3,
-        recipient_lookup="e" * 32, execution_id="execution-7", operation_id="f" * 32,
-        owner_claimed_generation=2, turn_id=TurnId('c8196fb128b89f486c374c42dba8df8e'), participant_generation=1,
+        wire_root_id="c" * 32,
+        source_seq=7,
+        source_message_id="source-7",
+        wake_assignment_id="cohort-v1:" + "d" * 64,
+        wake_revision=3,
+        recipient_lookup="e" * 32,
+        execution_id="execution-7",
+        operation_id="f" * 32,
+        owner_claimed_generation=2,
+        turn_id=TurnId('c8196fb128b89f486c374c42dba8df8e'),
+        participant_generation=1,
         attempt_ordinal=1,
     )
     claimed = WakeClaims("owner", "epoch-1", 8, "msg-8", claims=(resource,),

@@ -1,7 +1,6 @@
 """Native claims refuse stale authority and redirected filesystem paths."""
 
 from __future__ import annotations
-from agent_comms.field_codec import TurnId
 
 
 from bus_record_fixture import prepare_native_comms
@@ -20,6 +19,7 @@ from agent_comms.assignment_states import FullPendingAssignment
 from agent_comms.attempt_start import AttemptStart
 from agent_comms.attempt_states import ModelRunningAttempt, PromptAcceptedAttempt, SettlingAttempt
 from agent_comms.child_process import ProcessIdentity
+from agent_comms.field_codec import TurnId
 from agent_comms.selected_claim import (
     publish_selected_resource_claim,
     verify_selected_wake,
@@ -75,7 +75,9 @@ def test_selected_wake_verifier_refuses_no_wake_and_stale_authority(
             assert type(assignment.lifecycle) is FullPendingAssignment
             owner, claimed_generation = comms.registry.live_owner_with_claim("Alice")
             owner, claimed_generation = comms.registry.lease_live_turn_with_claim(
-                owner, TurnId('088fbdccfa8d303a5026987cf37e23b8'), expected_generation=claimed_generation
+                owner,
+                TurnId('088fbdccfa8d303a5026987cf37e23b8'),
+                expected_generation=claimed_generation,
             )
             person = store.participants.get(alice_lookup)
             execution_id = "verifier-execution"

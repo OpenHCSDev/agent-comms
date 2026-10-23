@@ -19,7 +19,6 @@ from agent_comms.coordinator import Coordination
 from agent_comms.lifecycle_capability import Active
 from agent_comms.native_runtime_input import NativeRuntimeTable
 
-from .agent_backend import InputId
 from .audience_manifest import FrozenRecipient
 from .bus import Bus
 from .bus_publication import Delivered
@@ -143,7 +142,7 @@ class InjectedInput(CoverageInput):
         if self.original.owner_identity != owner.participant_identity:
             raise IdentityConflict('current cursor native proof belongs to another owner')
         state.require_input_progress(self.original)
-        if not owner.permits_input(InputId(self.original.input_id)):
+        if not owner.permits_input(self.original.input_id):
             return False
         row = NativeRuntimeInput.one(db, input_id=self.original.input_id)
         if row is not None and not row.sent_owner_claimed_generation.matches(owner.claimed_generation):

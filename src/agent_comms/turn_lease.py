@@ -75,7 +75,7 @@ class TurnDeclaration(LifecycleCapability, SubclassUnion, affix=""):
     def without_claim(self) -> TurnDeclaration: ...
 
     @abstractmethod
-    def observed_id(self, finished: str | None) -> str | None: ...
+    def observed_id(self, finished: TurnId | None) -> TurnId | None: ...
 
     @abstractmethod
     def started_by(self, updated_at_ms: int) -> bool: ...
@@ -118,7 +118,7 @@ class NoTurn(NullMember, TurnDeclaration):
     def without_claim(self) -> NoTurn:
         return self
 
-    def observed_id(self, finished: str | None) -> str | None:
+    def observed_id(self, finished: TurnId | None) -> TurnId | None:
         return finished
 
     def started_by(self, updated_at_ms: int) -> bool:
@@ -267,7 +267,7 @@ class ActiveTurn(Executing, RecordMember, TurnDeclaration):
     ) -> TurnLease:
         return self.turn_generation.fence(self.claimed_generation, incarnation, self.id, record)
 
-    def observed_id(self, finished: str | None) -> str:
+    def observed_id(self, finished: TurnId | None) -> TurnId:
         return self.id
 
     def started_by(self, updated_at_ms: int) -> bool:
@@ -303,7 +303,7 @@ class TurnState:
     """Read-only capture of the existing lease, not another state store."""
 
     active: TurnDeclaration = field(default_factory=NoTurn)
-    finished_turn_id: str | None = None
+    finished_turn_id: TurnId | None = None
 
     def phase_effects(self, phase: TurnPhase) -> Iterator[TurnState]:
         for active in self.active.phase_effects(phase):
@@ -312,10 +312,10 @@ class TurnState:
     def native_phase_effects(self, phase: TurnPhase) -> Iterator[TurnState]:
         yield from self.phase_effects(self.active.phase.observed(phase))
 
-    def observed_id(self) -> str | None:
+    def observed_id(self) -> TurnId | None:
         return self.active.observed_id(self.finished_turn_id)
 
-    def matches(self, turn_id: str | None) -> bool:
+    def matches(self, turn_id: TurnId | None) -> bool:
         return turn_id is None or self.observed_id() == turn_id
 
 
@@ -343,12 +343,12 @@ class TurnLease(ABC):
 
     @abstractmethod
     @boundary_decoder
-    def reports(self, turn_id: str | None, generation: int | None) -> bool:
+    def reports(self, turn_id: TurnId | None, generation: int | None) -> bool:
         """A stored wait's reporting turn is this lease's turn."""
 
     @abstractmethod
     @boundary_decoder
-    def stored_turn_id(self) -> str | None:
+    def stored_turn_id(self) -> TurnId | None:
         """The reporting turn ID a stored goal wait records."""
 
     @abstractmethod
@@ -379,11 +379,11 @@ class NoTurnLease(NullMember, TurnLease):
         return idle
 
     @boundary_decoder
-    def reports(self, turn_id: str | None, generation: int | None) -> bool:
+    def reports(self, turn_id: TurnId | None, generation: int | None) -> bool:
         return False
 
     @boundary_decoder
-    def stored_turn_id(self) -> str | None:
+    def stored_turn_id(self) -> TurnId | None:
         return None
 
     @boundary_decoder
@@ -414,11 +414,11 @@ class TurnLeaseFence(TurnFence, TurnLease):
         return self.authored(identity, turn) or identity.generation == self.identity.generation - 1
 
     @boundary_decoder
-    def reports(self, turn_id: str | None, generation: int | None) -> bool:
+    def reports(self, turn_id: TurnId | None, generation: int | None) -> bool:
         return (turn_id, generation) == (self.turn_id, self.identity.generation)
 
     @boundary_decoder
-    def stored_turn_id(self) -> str | None:
+    def stored_turn_id(self) -> TurnId | None:
         return self.turn_id
 
     @boundary_decoder
@@ -474,11 +474,7 @@ class NoTurnRecord(NullMember, TurnRecord):
 class FinishedTurn(RecordMember, TurnRecord):
     """No live turn; the last one finished with this ID."""
 
-    turn_id: str
-
-    def __post_init__(self) -> None:
-        if type(self.turn_id) is not str or not self.turn_id:
-            raise MalformedRecord("Finished turn requires its ID.")
+    turn_id: TurnId
 
     def bound_to(self, registry_path: Path, identity: TurnIdentity) -> FinishedTurn:
         return self

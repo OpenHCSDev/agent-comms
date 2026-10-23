@@ -1,5 +1,4 @@
 """Canonical inspection unblocks standby without fabricating native delivery."""
-from agent_comms.field_codec import TurnId
 
 from agent_comms.lifecycle_capability import Unresolved
 from agent_comms.channel_targets import CommandTarget
@@ -11,7 +10,7 @@ from conftest import publish_initial
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.comms import wire
 from conftest import installed_comms
-from agent_comms.field_codec import FieldCodec, MalformedRecord
+from agent_comms.field_codec import FieldCodec, MalformedRecord, TurnId
 from agent_comms.goal_presentation import GoalExecution
 from agent_comms.goal_actions import (
     ActiveGoalAction,

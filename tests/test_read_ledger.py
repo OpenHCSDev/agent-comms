@@ -1,5 +1,4 @@
 """Read evidence follows displayed messages across projections and restarts."""
-from agent_comms.field_codec import TurnId
 
 
 import random
@@ -11,7 +10,7 @@ from agent_comms.channel_targets import CommandTarget, ThreadTarget
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.comms import wire
 from agent_comms.coordination_errors import DMPaintedBoundChanged, StaleRevision
-from agent_comms.field_codec import FieldCodec
+from agent_comms.field_codec import FieldCodec, TurnId
 from agent_comms.message_page import MessagePageRequest, PageBounds
 from agent_comms.page_traversal import PageCursor
 from agent_comms.presentation import ReadThrough

@@ -10,7 +10,7 @@ from typing import TYPE_CHECKING
 from agent_comms.native_runtime_input import NativeRuntimeTable
 
 from .acp_extension import CursorObservation, EmptyCursorObservation, VerifiedCursorObservation
-from .agent_backend import InputId
+from agent_comms.field_codec import InputId
 from .coordination_database import CoordinationStore
 from .coordination_errors import IdentityConflict, StaleFence
 from .coordinator import Coordination

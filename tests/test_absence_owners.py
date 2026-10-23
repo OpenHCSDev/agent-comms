@@ -5,7 +5,8 @@ import asyncio
 
 import pytest
 
-from agent_comms.agent_backend import InputId, SendNow, TurnInbox
+from agent_comms.agent_backend import SendNow, TurnInbox
+from agent_comms.field_codec import InputId
 from agent_comms.backend import EventFinishSignal, FinishSignal, InputStartListener, NoFinishSignal, NoInputStartListener
 from agent_comms.change_report import FileLine, NoSourceReference
 from agent_comms.field_codec import FieldCodec
@@ -23,7 +24,7 @@ def test_drain_lifecycle_keeps_inbox_and_original_in_one_owner():
     assert not state.turn_open() and not state.turn_started()
     with pytest.raises(KeyError):
         state.require_inbox()
-    state.to_turn(SendNow((InputId("before-open"),)))
+    state.to_turn(SendNow((InputId.mint(),)))
     inbox = state.open_inbox()
     assert state.open_inbox() is inbox and inbox.empty()
     assert state.turn_open() and not state.turn_started()
@@ -33,7 +34,7 @@ def test_drain_lifecycle_keeps_inbox_and_original_in_one_owner():
         "original input", TurnGoalPermission(InactiveGoalPermission()))
     state.capture_first_source(original)
     assert state.turn_started() and state.require_first_source() is original
-    item = SendNow((InputId("live"),))
+    item = SendNow((InputId.mint(),))
     state.to_turn(item)
     assert inbox.get_nowait() is item
     # A duplicate/stale cleanup cannot retire the next turn's inbox or source.

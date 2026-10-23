@@ -1,5 +1,4 @@
 """Actual process birth is the registration/claim_scope authority, never PID alone."""
-from agent_comms.field_codec import TurnId
 
 import os
 from dataclasses import replace
@@ -9,6 +8,7 @@ import pytest
 from agent_comms.child_process import NoProcess, ProcessIdentity
 from agent_comms.comms import wire
 from agent_comms.errors import RelationViolationError
+from agent_comms.field_codec import TurnId
 from agent_comms.registry_document import RegistryDocument
 from agent_comms.runtime_requests import ProjectRuntimeRequest
 from agent_comms.thread_execution import ExternalThreadExecution
@@ -154,7 +154,9 @@ def test_active_executor_cannot_be_replaced_by_same_pid_different_birth(tmp_path
     owner = comms.threads.claim_thread(
         "owner", tags=frozenset(), worktree=str(tmp_path), process=identity
     )
-    leased, _ = comms.registry.lease_local_turn(owner.name, TurnId('e99af36cdfcffbc191cce98c5d771afb'))
+    leased, _ = comms.registry.lease_local_turn(
+        owner.name, TurnId('e99af36cdfcffbc191cce98c5d771afb')
+    )
     stale = replace(identity, start_time=identity.start_time + 1)
     with pytest.raises(RelationViolationError):
         comms.registry.declare(replace(owner, process_identity=stale))

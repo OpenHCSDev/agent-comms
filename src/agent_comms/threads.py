@@ -17,6 +17,7 @@ from .context_segments.wake_values import WakeWorkContext
 from .declared_family import DeclaredFamily
 from .errors import RelationViolationError
 from .field_codec import (
+    TurnId,
     Argument,
     Description,
     FieldCodec,
@@ -601,7 +602,7 @@ class Thread(ThreadProvenance):
 
     def observed_turn(self, claim_scope: int) -> TurnFence | None:
         """Passive current/last-completed witness; never a begin-turn grant."""
-        turn_id = self.turn_state.observed_id()
+        turn_id: TurnId | None = self.turn_state.observed_id()
         if turn_id is None:
             return None
         return TurnFence(self.turn_identity, turn_id, claim_scope)

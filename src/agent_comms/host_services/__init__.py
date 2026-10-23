@@ -109,10 +109,13 @@ class HostService(DeclaredFamily, affix="Service", discovery_package=__name__):
         failure = f"{self.described()} did not run again within {self.patience}s"
         for _ in range(self.patience):
             for instance in type(self).running():
-                runtime = instance.runtime()
-                if runtime == installed:
-                    return RestartedService(instance.described(), installed)
-                failure = f"{instance.described()} runs {runtime}, not the installed {installed}"
+                if instance == self:
+                    runtime = instance.runtime()
+                    if runtime == installed:
+                        return RestartedService(instance.described(), installed)
+                    failure = (
+                        f"{instance.described()} runs {runtime}, not the installed {installed}"
+                    )
             time.sleep(1)
         raise ServiceNotServingError(failure)
 
@@ -121,67 +124,80 @@ class HostService(DeclaredFamily, affix="Service", discovery_package=__name__):
 class SystemdUserService(HostService, declared_name=None):
     """Systemd owns the unit's process; its definition starts that process again.
 
-    Its owned unit declares readiness. The process reports READY=1 once it serves,
-    so a restart returns only when it is serving. Systemd, not this configuration,
-    owns the current PID.
+    Each member declares its readiness options. Systemd, not this configuration,
+    owns the current PID; the member's serving proof checks the running service.
     """
 
     program: ClassVar[str]
     unit: ClassVar[str]
-    @classmethod
-    def unit_file(cls) -> Path:
-        return Path.home() / ".config/systemd/user" / cls.unit
+    service_options: ClassVar[tuple[str, ...]] = ("Type=notify", "NotifyAccess=main")
 
-    def unit_text(self, arguments: tuple[str, ...]) -> str:
-        executable = LaunchRuntime.current_pointer() / "bin" / self.program
+    @classmethod
+    def unit_file(cls, home: Path) -> Path:
+        return home / ".config/systemd/user" / cls.unit
+
+    def unit_name(self) -> str:
+        return self.unit
+
+    @classmethod
+    def command_line(cls, arguments: tuple[str, ...]) -> str:
+        executable = LaunchRuntime.current_pointer() / "bin" / cls.program
         # systemd uses C-quoted words, then expands specifiers and environment
         # references. Protect literal percent/dollar signs before quoting.
-        command = " ".join(json.dumps(word.replace("%", "%%").replace("$", "$$"),
-                                      ensure_ascii=False)
-                           for word in (str(executable), *arguments))
+        return " ".join(
+            json.dumps(word.replace("%", "%%").replace("$", "$$"), ensure_ascii=False)
+            for word in (str(executable), *arguments)
+        )
+
+    @classmethod
+    def render_unit(cls, command: str) -> str:
+        options = "\n".join(cls.service_options)
         return (
-            f"[Unit]\nDescription={self.unit}\n\n"
-            "[Service]\nType=notify\nNotifyAccess=main\n"
+            f"[Unit]\nDescription={cls.unit}\n\n"
+            f"[Service]\n{options}\n"
             f"ExecStart={command}\nRestart=on-failure\n\n"
             "[Install]\nWantedBy=default.target\n"
         )
 
-    def install(self, arguments: tuple[str, ...]) -> None:
-        self.unit_file().parent.mkdir(parents=True, exist_ok=True)
-        self.unit_file().write_text(self.unit_text(arguments), encoding="utf-8")
-        subprocess.run(("systemctl", "--user", "daemon-reload"), check=True)
-        subprocess.run(("systemctl", "--user", "enable", self.unit), check=True)
+    @classmethod
+    def unit_text(cls, arguments: tuple[str, ...]) -> str:
+        return cls.render_unit(cls.command_line(arguments))
 
     @classmethod
-    def pid(cls) -> int:
+    def install(cls, arguments: tuple[str, ...] = (), *, home: Path) -> None:
+        unit = cls.unit_file(home)
+        unit.parent.mkdir(parents=True, exist_ok=True)
+        unit.write_text(cls.unit_text(arguments), encoding="utf-8")
+        subprocess.run(("systemctl", "--user", "daemon-reload"), check=True)
+
+    def enable(self) -> None:
+        subprocess.run(("systemctl", "--user", "enable", self.unit_name()), check=True)
+
+    @classmethod
+    def _pid_for(cls, name: str) -> int:
         """Only the unit loaded from this home's owned definition belongs to it.
 
         The user manager belongs to the UID, not HOME; a private install must not
         discover or restart the real home's service through that shared manager.
         """
-        unit = cls.unit_file()
+        unit = cls.unit_file(Path.home())
         if not unit.is_file():
             return 0
         loaded = subprocess.check_output(
-            ("systemctl", "--user", "show", "-p", "FragmentPath", "--value", cls.unit),
+            ("systemctl", "--user", "show", "-p", "FragmentPath", "--value", name),
             text=True,
         ).strip()
         if Path(loaded).resolve() != unit.resolve():
             return 0
-        return int(subprocess.check_output(
-            ("systemctl", "--user", "show", "-p", "MainPID", "--value", cls.unit),
-            text=True,
-        ))
+        return int(
+            subprocess.check_output(
+                ("systemctl", "--user", "show", "-p", "MainPID", "--value", name),
+                text=True,
+            )
+        )
 
-    @classmethod
-    @abstractmethod
-    def from_process(cls, pid: int) -> Self:
-        """Read this instance's declared configuration from its running process."""
-
-    @classmethod
-    def running(cls) -> tuple[Self, ...]:
-        pid = cls.pid()
-        return () if pid == 0 else (cls.from_process(pid),)
+    def pid(self) -> int:
+        return self._pid_for(self.unit_name())
 
     @classmethod
     def running_arguments(cls, pid: int) -> tuple[str, ...]:
@@ -194,7 +210,7 @@ class SystemdUserService(HostService, declared_name=None):
         return Path(self.running_arguments(self.pid())[0])
 
     def stop(self) -> None:
-        subprocess.run(("systemctl", "--user", "stop", self.unit), check=True)
+        subprocess.run(("systemctl", "--user", "stop", self.unit_name()), check=True)
 
     def start(self) -> None:
-        subprocess.run(("systemctl", "--user", "start", self.unit), check=True)
+        subprocess.run(("systemctl", "--user", "start", self.unit_name()), check=True)

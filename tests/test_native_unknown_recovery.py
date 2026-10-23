@@ -1,9 +1,9 @@
 """Explicit abandonment releases a dead slot without replaying an UNKNOWN input."""
 
 from __future__ import annotations
+
+
 from agent_comms.field_codec import TurnId
-
-
 from agent_comms.lifecycle_capability import Failed
 import asyncio
 import multiprocessing
@@ -135,7 +135,9 @@ def running_successor(comms):
         replace(previous, process_identity=ProcessIdentity.capture(os.getpid())),
         new_owner=True,
     )
-    successor, _ = comms.registry.lease_local_turn("beta", TurnId('2f82e5f1baad91cc244b943f3e4dd487'))
+    successor, _ = comms.registry.lease_local_turn(
+        "beta", TurnId('2f82e5f1baad91cc244b943f3e4dd487')
+    )
     assert successor.executing
     return successor
 

@@ -1,5 +1,4 @@
 """Restoration changes visibility without replay or transferring live ownership."""
-from agent_comms.field_codec import TurnId
 
 from agent_comms.channel_targets import CommandTarget
 
@@ -12,6 +11,7 @@ from dataclasses import replace
 
 import pytest
 
+from agent_comms.field_codec import TurnId
 from agent_comms.registry_document import ThreadRows
 
 from agent_comms.session_file import RegistrySessionLocation

@@ -1,5 +1,4 @@
 """Same-ID, explicitly requested goal resume through the public tool boundary."""
-from agent_comms.field_codec import TurnId
 
 
 import os
@@ -9,7 +8,7 @@ import pytest
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.comms import wire
 from agent_comms.lifecycle_capability import Active
-from agent_comms.field_codec import FieldCodec
+from agent_comms.field_codec import FieldCodec, TurnId
 from agent_comms.goal_actions import (
     ActiveGoalAction,
     BlockedGoalAction,

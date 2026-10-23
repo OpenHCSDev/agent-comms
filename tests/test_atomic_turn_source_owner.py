@@ -1,5 +1,4 @@
 """Original begin/attachment ownership with real registry and callback resources."""
-from agent_comms.field_codec import TurnId
 
 
 from contextlib import AsyncExitStack
@@ -13,6 +12,7 @@ from agent_comms.child_process import ProcessIdentity
 from agent_comms.comms import wire
 from conftest import installed_comms
 from agent_comms.coordination_errors import StaleFence
+from agent_comms.field_codec import TurnId
 from agent_comms.session_file import RegistrySessionLocation
 from agent_comms.goal_actions import SetGoalAction
 from agent_comms.native_input_owner import RegistryOwner

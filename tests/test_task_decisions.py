@@ -1,5 +1,4 @@
 """One original decision/correction journey through declared tools and wire ownership."""
-from agent_comms.field_codec import TurnId
 
 
 from agent_comms.channel_targets import CommandTarget
@@ -16,7 +15,7 @@ import pytest
 
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.errors import RelationViolationError
-from agent_comms.field_codec import FieldCodec
+from agent_comms.field_codec import FieldCodec, TurnId
 from agent_comms.goals import Goal
 from agent_comms.messages import Message, InfoKind
 from agent_comms.task_sources import Decision
@@ -324,7 +323,9 @@ def test_turn_scope_correction_cannot_revive_a_finished_turn_choice(comms, monke
     first = invoke_tool(comms, "comms_decision", request)
     comms.registry.release_turn(owner.turn_lease)
     owner, claim_scope = comms.registry.live_owner_with_claim("alpha")
-    comms.registry.lease_live_turn_with_claim(owner, TurnId('bf5eb504b7221133c4f3cf2aa87008a3'), expected_generation=claim_scope)
+    comms.registry.lease_live_turn_with_claim(
+        owner, TurnId('bf5eb504b7221133c4f3cf2aa87008a3'), expected_generation=claim_scope
+    )
     before = read_history(comms)
     with pytest.raises(RelationViolationError):
         invoke_tool(comms, "comms_decision", {

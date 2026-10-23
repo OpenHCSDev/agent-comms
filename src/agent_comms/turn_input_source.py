@@ -119,7 +119,8 @@ class OriginalTurnInput(TurnInputSource):
         return super().valid_keys(text) or (self.batch.allows_multiple and text == self.prompt)
 
     def reserve(
-        self, dispositions: InputDispositions, owner: Thread, turn: RegisteredTurn, claim_scope: int,
+        self, dispositions: InputDispositions, owner: Thread, turn: RegisteredTurn,
+        claim_scope: int,
         *, ownership: ExitStack,
     ) -> OriginalTurnInput:
         """Every original uses the same durable input authority before native preparation.

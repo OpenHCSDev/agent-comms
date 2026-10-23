@@ -1,5 +1,4 @@
 """Dependency replies retain original checked identities across registry changes."""
-from agent_comms.field_codec import TurnId
 
 from agent_comms.messages import NoticeRole
 import os
@@ -7,6 +6,7 @@ from dataclasses import replace
 
 
 from agent_comms.child_process import ProcessIdentity
+from agent_comms.field_codec import TurnId
 from agent_comms.goal_actions import GoalPrecondition, SetGoalAction, StandbyGoalAction
 from agent_comms.goal_presentation import GoalWaitTarget
 from goal_owner_fixture import canonical_goal_wire

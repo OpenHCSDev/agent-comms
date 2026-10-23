@@ -997,8 +997,10 @@ def test_nominal_ids_roundtrip_preserves_wire_schema_and_refuses_wrong_kind() ->
         pass
 
     assert FieldCodec.encode(SpecializedTurnId(value), TurnId) == str(value)
-    with pytest.raises(TypeError):
+    with pytest.raises(MalformedRecord):
         FieldCodec.encode(_NominalIdentityRow(value, value, value, InputId(value)))
+    with pytest.raises(MalformedRecord):
+        FieldCodec.encode("not-an-id", Annotated[str, Id128Text])
 
     # Fixed outputs of MessageIdText.mint at origin/main b966250de, before moving it.
     for text, expected in (

@@ -1,7 +1,6 @@
 """Provider-free selected-tool contract tests; no native Pi/provider launch."""
 
 from __future__ import annotations
-from agent_comms.field_codec import TurnId
 
 
 import asyncio
@@ -19,6 +18,7 @@ from agent_comms.channel_coding_tools import CodingToolSocket
 from agent_comms.coordinator import Coordination
 from agent_comms.coordination_database import CoordinationStore
 from agent_comms.envelope_claim_transitions import WakeClaim
+from agent_comms.field_codec import TurnId
 from agent_comms.native_tool_call import (
     DuplicateToolCallIdentity,
     OwnerToolConnection,

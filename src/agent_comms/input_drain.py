@@ -21,7 +21,7 @@ from .acp_extension import (
     encode_updates,
 )
 from .activity import FailedWakeDiagnostic
-from .agent_backend import ClearQueue, InputContent, InputId, SendNow, TurnInbox, TurnInboxItem
+from .agent_backend import ClearQueue, InputContent, SendNow, TurnInbox, TurnInboxItem
 from .bus import Bus
 from .child_process import join_retirement
 from .cohort_schema import AcceptanceFrontier
@@ -579,7 +579,7 @@ class InputDrain(InputObservation):
                 ))
             state.queued = retained
             if cleared:
-                state.to_turn(ClearQueue(tuple(InputId(item.input_id) for item in cleared)))
+                state.to_turn(ClearQueue(tuple(item.input_id for item in cleared)))
             state.restored = {}
         await self.emit_queue_state(session_id)
 
@@ -749,7 +749,7 @@ class InputDrain(InputObservation):
         async with self.queue_lock:
             state = self.state(session_id)
             if state.queued:
-                state.to_turn(SendNow(tuple(InputId(input_id) for input_id in state.queued)))
+                state.to_turn(SendNow(tuple(state.queued)))
 
     async def close(self) -> None:
         """Retire input producers; their turns settle from the runner's owner stop."""

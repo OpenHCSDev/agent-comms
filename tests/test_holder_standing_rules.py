@@ -1,5 +1,4 @@
 """Held-order recovery and unanswered DMs on an independently copied bus."""
-from agent_comms.field_codec import TurnId
 
 
 from agent_comms.channel_targets import CommandTarget
@@ -34,7 +33,7 @@ from agent_comms.commander_pings import CommanderUpdate
 from agent_comms.service_passes import ServicePassStore
 from agent_comms.coordinator import Coordination
 from agent_comms.errors import CommittedMessageError, HumanSendRefusedError, RelationViolationError
-from agent_comms.field_codec import FieldCodec
+from agent_comms.field_codec import FieldCodec, TurnId
 from agent_comms.goal_actions import (
     CreateProblemGoalAction,
     ReissuedOrderGoalAction,
@@ -108,8 +107,13 @@ def held_bus(comms, tmp_path, source_repository, configured_repository):
     inputs = InputDispositions(comms.root)
     inputs.record("unresolved-input", seq=None, owner="worker", claim_scope=1,
                   target="worker", text="Do not replay this input")
-    assert inputs.bind("unresolved-input", claim_scope=1, turn_id=TurnId('310c74d7ac243239a928d4021c709acb'),
-                       native_id=uuid4().hex, text="Do not replay this input")
+    assert inputs.bind(
+        "unresolved-input",
+        claim_scope=1,
+        turn_id=TurnId('310c74d7ac243239a928d4021c709acb'),
+        native_id=uuid4().hex,
+        text="Do not replay this input",
+    )
     configured_repository(comms)
     copied = tmp_path / "copied-bus"
     StoreBackup.copy_tree(comms.root, copied)

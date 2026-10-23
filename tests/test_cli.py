@@ -1,4 +1,3 @@
-from agent_comms.field_codec import TurnId
 
 
 from agent_comms.bus import Bus
@@ -10,6 +9,7 @@ from pathlib import Path
 
 import pytest
 
+from agent_comms.field_codec import TurnId
 from agent_comms.session_file import RegistrySessionLocation
 from agent_comms.channel_targets import CommandTarget, PerTargetChannels
 from agent_comms.cli import main
@@ -375,8 +375,13 @@ class TestSelectedTargetActions:
         assert not RestartCliCommand.thread_bindings(comms, owner, StoppedThreadStatus())
         busy = TurnIdentity(owner.incarnation, owner.turn_generation + 1)
         record = StoredTurnRecord.begin(
-            comms.registry.store.path, busy,
-            ActiveTurn(TurnId('c9bc072f4fa8189466c2a8f2c36a56a4'), owner.require_process(), turn_generation=RecordedGeneration(busy.generation)),
+            comms.registry.store.path,
+            busy,
+            ActiveTurn(
+                TurnId('c9bc072f4fa8189466c2a8f2c36a56a4'),
+                owner.require_process(),
+                turn_generation=RecordedGeneration(busy.generation),
+            ),
         )
         assert not RestartCliCommand.thread_bindings(comms,
             replace(owner, turn_record=record, turn_generation=busy.generation), status)

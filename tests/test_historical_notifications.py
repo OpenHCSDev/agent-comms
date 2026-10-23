@@ -1,5 +1,4 @@
 """Authored archived deliveries use recorded owners, not live availability."""
-from agent_comms.field_codec import TurnId
 
 
 from agent_comms.bus import Bus
@@ -20,6 +19,7 @@ from agent_comms.assignment_states import (
 )
 from agent_comms.comms import wire
 from agent_comms.coordination_errors import DMScopeChanged, SchemaVersionError
+from agent_comms.field_codec import TurnId
 from agent_comms.read_basis import HistoricalDisplay, ReadCursor
 from agent_comms.read_ledger import ReadLedger
 from agent_comms.thread_identity import AgentThreadRole, UserThreadRole
