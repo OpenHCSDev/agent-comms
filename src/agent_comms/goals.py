@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from agent_comms.lifecycle_capability import Active
 
-import json
 import os
 import re
 import shlex
@@ -471,7 +470,7 @@ class CheckedCommit:
 
     def store(self, repository: str, sha: str) -> None:
         self.git(repository, *self.NOTES, "append", "-m",
-                 json.dumps(FieldCodec.encode(self), separators=(",", ":")), sha)
+                 FieldCodec.compact(FieldCodec.encode(self)), sha)
 
 
 class GoalOrder(DeclaredFamily, affix="GoalOrder"):

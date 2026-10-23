@@ -8,9 +8,10 @@ from collections.abc import Iterable, Mapping, Sequence
 from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import TYPE_CHECKING, Annotated, Any, ClassVar, Literal
+from typing import TYPE_CHECKING, Annotated, Any, ClassVar
 from uuid import uuid4
 
+from .agent_backend import StreamingInputPolicy
 from . import agent_events as events
 from . import turn_phase as phases
 from .declared_family import DeclaredFamily, UnknownFamilyMember
@@ -184,7 +185,7 @@ class Prompt(PiCommand):
     ] = ()
     owner_tools: Annotated[OwnerToolConnection, WireName("ownerTools")]
     streaming_behavior: Annotated[
-        Literal[None, "steer", "followUp"],
+        type[StreamingInputPolicy] | None,
         WireOmitDefault(),
         WireName("streamingBehavior"),
     ] = None

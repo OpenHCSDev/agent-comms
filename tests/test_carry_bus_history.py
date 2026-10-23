@@ -205,15 +205,15 @@ def test_predecessor_publisher_history_round_trips_into_bus(tmp_path):
     result_path = tmp_path / "carried.json"
     with hold.holding():
         completed = subprocess.run(
-            [sys.executable, "-m", "agent_comms.installer.step_worker", request.name(),
-             json.dumps(FieldCodec.encode(request)), json.dumps(FieldCodec.encode(operation)),
-             str(result_path)], cwd=REPOSITORY,
+            [sys.executable, "-m", "agent_comms.installer.step_worker",
+             json.dumps(FieldCodec.encode(operation)), str(result_path),
+             json.dumps([[request.name(), FieldCodec.encode(request)]])], cwd=REPOSITORY,
             env={**os.environ, "PYTHONPATH": os.pathsep.join(
                 map(str, (REPOSITORY / "src", REPOSITORY / "tools")))},
             capture_output=True, text=True, timeout=60,
         )
     assert completed.returncode == 0, completed.stdout + completed.stderr
-    result = operation.decode_answer(result_path.read_text())
+    (result,) = operation.decode_answers(result_path.read_text())
     steps = (StepRun(requests.name(), request_result), StepRun(request.name(), result))
     carried(root, saved, steps, RehearsalFiles.declared(steps))
     maintenance.clear(hold)

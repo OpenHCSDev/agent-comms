@@ -798,7 +798,7 @@ class CliBridge(ExternalRuntime, DeliversInput, Generic[BridgeOptions]):
     async def accept(self, message: messages.Message) -> None:
         conversation = message.type.conversation_message
         outcome = UnconfirmedOutcome if conversation else FilteredOutcome
-        delivery = DeliveryRow(message.message_id, json.dumps(message.to_wire(), separators=(',', ':')) + '\n', outcome)
+        delivery = DeliveryRow(message.message_id, FieldCodec.compact(message.to_wire()) + '\n', outcome)
         with self.db:
             first = delivery.insert_if_absent(self.db).rowcount
         if not first:

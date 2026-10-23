@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 import os
 import time
 from abc import ABC, abstractmethod
@@ -333,7 +332,7 @@ class Thread(DurableFile, PatternFile, ThreadProvenance):
         catalog = ThreadToolCatalogResult(
             tuple(NativeRequestTools.catalog()), self.service_tier, launch.arguments(),
         )
-        AtomicFile(path).write_text(json.dumps(catalog.to_wire(), separators=(",", ":")))
+        AtomicFile(path).write_text(FieldCodec.compact(catalog.to_wire()))
         return (*arguments.argv, "--comms-catalog", str(path))
 
     def launch(self) -> ThreadLaunch:

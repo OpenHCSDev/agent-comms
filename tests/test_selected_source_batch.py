@@ -32,7 +32,7 @@ async def test_a_mixed_route_wave_turns_one_route_at_a_time(tmp_path, *, cursor_
     root_id = comms.registry.prepare_native_root().namespace
     lookup = RecordedThreadIncarnation("fixture", comms.registry.require("receiver").created_at).lookup
     with Coordination(str(root / "coordination.sqlite3")) as store:
-        store.participants.register(lookup, "receiver", "receiver", committed=True)
+        store.participants.register(lookup, committed=True)
 
         def send(target, body):
             message = publish_initial(comms, "sender", target, body)
@@ -42,7 +42,7 @@ async def test_a_mixed_route_wave_turns_one_route_at_a_time(tmp_path, *, cursor_
         direct = send("receiver", "A private question")          # reply route: sender
         channel = send("#team", "A team question")               # reply route: #team
         pending_wires = (direct.seq, channel.seq)
-        pending = pending_sealed_assignments(store, lookup, "receiver")
+        pending = pending_sealed_assignments(store, lookup)
         assert tuple(row.wire_seq for row in pending) == pending_wires
         async with SelectedParticipant.select(
             comms, store, root_id, "receiver", 0, cursor_delivery=cursor_delivery
@@ -52,5 +52,4 @@ async def test_a_mixed_route_wave_turns_one_route_at_a_time(tmp_path, *, cursor_
         # The channel original was never claimed by this turn: selection alone
         # settles nothing, so it stays pending for its own turn.
         assert tuple(row.wire_seq for row in
-                     pending_sealed_assignments(store, lookup, "receiver")) == pending_wires
-
+                     pending_sealed_assignments(store, lookup)) == pending_wires

@@ -12,7 +12,7 @@ from agent_comms.field_codec import FieldCodec
 from agent_comms.response_acknowledgement import (
     KeyedResponseAcknowledgement, NoResponseAcknowledgement, ResponseAcknowledgement,
 )
-from agent_comms.wake import ControlClassification, resolve_wake_cohort
+from agent_comms.wake import MessageControl, resolve_wake_cohort
 from agent_comms.wake_policy import MessageAudience, WakeDecision
 
 
@@ -22,7 +22,7 @@ class DeliveryManifest:
     manifest_codec: str
     resolver_version: str
     policy_version: str
-    control: ControlClassification
+    control: type[MessageControl]
     audience: FrozenAudience
     # Exact existing canonical decision projection. Its digest is already bound
     # by immutable cohort evidences; changing this spelling would change proofs.

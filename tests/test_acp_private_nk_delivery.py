@@ -42,7 +42,7 @@ def _private_comms(tmp_path):
     root_id = comms.registry.prepare_native_root().namespace
     with Coordination(str(root / "coordination.sqlite3")) as store:
         store.participants.register(
-            RecordedThreadIncarnation("fixture", owner.created_at).lookup, "beta", "beta", committed=True
+            RecordedThreadIncarnation("fixture", owner.created_at).lookup, committed=True
         )
         PrivateCoordinatorTable.install(store)
     return comms, root_id
@@ -74,7 +74,7 @@ def cursor_envelope(metadata):
 def test_private_owner_rename_during_active_attempt_can_complete(tmp_path, managed):
     from agent_comms.attempt_start import AttemptStart
     from agent_comms.attempt_states import SucceededAttempt
-    from agent_comms.coordination_tables.executions import ExecutionOrigin
+    from agent_comms.coordination_tables.executions import ExecutionProvenance, AcpOrigin
     from agent_comms.owner_fence import prepare_fence_token
     from test_coordination_store import final_evidence
 
@@ -82,10 +82,10 @@ def test_private_owner_rename_during_active_attempt_can_complete(tmp_path, manag
     lookup = RecordedThreadIncarnation("fixture", comms.registry.require("beta").created_at).lookup
     with Coordination(str(comms.root / "coordination.sqlite3")) as store:
         before = store.participants.get(lookup)
-        store.create("rename-active", ExecutionOrigin.ACP, lookup, "beta", 1)
+        store.create("rename-active", AcpOrigin, lookup, 1)
         store.mark_pending("rename-active", expected_revision=1)
         fence = store.start(AttemptStart(
-            "rename-active", 1, "beta", 1, prepare_fence_token(),
+            "rename-active", 1, lookup, 1, prepare_fence_token(),
             expected_execution_revision=2, expected_pointer_revision=0,
         )).value.fence
         active = store.participants.get(lookup)
@@ -96,11 +96,9 @@ def test_private_owner_rename_during_active_attempt_can_complete(tmp_path, manag
     assert comms.registry.require("beta").name == "gamma"
     with Coordination(str(comms.root / "coordination.sqlite3")) as store:
         after = store.participants.get(lookup)
-        assert after.owner_identity.owner_thread == "gamma"
+        assert after.owner_identity == before.owner_identity
         assert after.owner_identity.generation == before.owner_identity.generation
         assert after.pointer == active.pointer
-        with pytest.raises(StaleRevision):
-            store.participants.rename_owner(lookup, "wrong", expected_generation=2)
         fence = final_evidence(store, fence)
         settled = store.settle_nonpublication(
             fence, expected_pointer_revision=1, outcome=SucceededAttempt(),
@@ -109,15 +107,15 @@ def test_private_owner_rename_during_active_attempt_can_complete(tmp_path, manag
         assert not settled.is_current
 
 
-def test_private_rename_refuses_mismatched_sql_owner_before_registry_mutation(tmp_path):
+def test_private_rename_preserves_independent_sql_generation(tmp_path):
     comms, _ = _private_comms(tmp_path)
     lookup = RecordedThreadIncarnation("fixture", comms.registry.require("beta").created_at).lookup
     with Coordination(str(comms.root / "coordination.sqlite3")) as store:
-        store.participants.advance_generation(lookup, "unexpected", expected_generation=1)
-    with pytest.raises(RelationViolationError):
-        comms.threads._rename_thread("beta", "gamma")
-    assert comms.registry.require("beta").name == "beta"
-    assert "gamma" not in comms.registry
+        store.participants.advance_generation(lookup, expected_generation=1)
+    comms.threads._rename_thread("beta", "gamma")
+    assert comms.registry.require("beta").name == "gamma"
+    with Coordination(str(comms.root / "coordination.sqlite3")) as store:
+        assert store.participants.get(lookup).owner_identity.generation == 2
     assert comms.bus.bus.revision() == 0
 
 
@@ -140,5 +138,3 @@ async def test_missing_native_schema_refuses_cursor_metadata(tmp_path):
         store.session._connection.execute("DROP TABLE native_runtime_triage_sources")
     with pytest.raises(PublicationActivationBlocked):
         await agent.sessions.metadata("beta")
-
-

@@ -12,7 +12,7 @@ from agent_comms.coordination_contracts import (
     validate_execution_id,
 )
 from agent_comms.coordination_schema import CoordinatorRow
-from agent_comms.coordination_tables.executions import ExecutionReference, RetryPartition
+from agent_comms.coordination_tables.executions import ExecutionReference, RetryPartition, WireOrigin
 from agent_comms.field_codec import SnapshotExclude, WireName, projected
 from agent_comms.obligation_states import ResponseState
 from agent_comms.reason_codes import ReasonCode
@@ -60,10 +60,10 @@ class ResponseObligation(
         AND exact_target = NEW.exact_target
         AND message_id = json_extract(NEW.lifecycle, '$.message_id')
         AND seq = json_extract(NEW.lifecycle, '$.seq'))))"""
-    insert_condition = """(NOT EXISTS (SELECT 1 FROM executions e
+    insert_condition = f"""(NOT EXISTS (SELECT 1 FROM executions e
         JOIN wake_claims c ON c.execution_id=e.execution_id WHERE e.execution_id=NEW.execution_id
-        AND e.origin='wire' AND c.exact_target=NEW.exact_target))
-        OR (json_extract(NEW.lifecycle, '$.kind') IN ({required_intent_response_names}))"""
+        AND {WireOrigin.matches_sql("e.origin")} AND c.exact_target=NEW.exact_target))
+        OR (json_extract(NEW.lifecycle, '$.kind') IN ({{required_intent_response_names}}))"""
     column_guards = (
         ColumnGuard(("lifecycle",), """(EXISTS (SELECT 1 FROM publication_receipts
         WHERE execution_id = OLD.execution_id AND exact_target = OLD.exact_target)
@@ -71,9 +71,9 @@ class ResponseObligation(
         SELECT 1 FROM publication_intents WHERE execution_id = OLD.execution_id
         AND exact_target = OLD.exact_target) AND json_extract(NEW.lifecycle, '$.kind')
         NOT IN ({intent_response_names}))"""),
-        ColumnGuard(("exact_target",), """(NOT EXISTS (SELECT 1 FROM executions e
+        ColumnGuard(("exact_target",), f"""(NOT EXISTS (SELECT 1 FROM executions e
         JOIN wake_claims c ON c.execution_id=e.execution_id WHERE e.execution_id=NEW.execution_id
-        AND e.origin='wire' AND c.exact_target=NEW.exact_target)) OR (EXISTS (
+        AND {WireOrigin.matches_sql("e.origin")} AND c.exact_target=NEW.exact_target)) OR (EXISTS (
         SELECT 1 FROM publication_intents WHERE execution_id = OLD.execution_id
         AND exact_target = OLD.exact_target))"""),
     )

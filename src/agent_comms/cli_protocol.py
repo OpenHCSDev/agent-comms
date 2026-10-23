@@ -19,6 +19,7 @@ from .messages import Message
 from .field_codec import TimestampText
 from .recorded_time import UnrecordedTimeError
 from .external_transcript import RequestedEarlierPage
+from .turn_item import TurnItem
 
 if TYPE_CHECKING:
     from .child_process import AttachedChild
@@ -210,10 +211,8 @@ class ArrivedMessage(WatchLine, declared_name='message'):
         await bridge.accept(self.message)
 
 
-class EarlierItems(WatchLine, declared_name='earlier-items'):
+class EarlierItems(WatchLine, TurnItem, declared_name='earlier-items'):
     """The pager's outstanding continuation, handled only by its socket-owning bridge."""
-    turn_id: str
-    item_id: str
     request: RequestedEarlierPage
 
     @classmethod

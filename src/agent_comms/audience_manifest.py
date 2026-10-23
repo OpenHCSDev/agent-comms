@@ -9,7 +9,6 @@ and bind the value to the original committed envelope before runtime use.
 from __future__ import annotations
 
 import hashlib
-import json
 import math
 import re
 from collections.abc import Sequence
@@ -19,7 +18,7 @@ from typing import Final
 from agent_comms.coordination_contracts import MAX_IDENTIFIER_CHARS
 
 from .channel_targets import exact_stored_target
-from .field_codec import MalformedRecord, Sha256Text
+from .field_codec import FieldCodec, MalformedRecord, Sha256Text
 from .messages import Message
 
 AUDIENCE_VERSION: Final = 1
@@ -43,8 +42,8 @@ def _bounded_text(value: str, field: str, *, thread_name: bool = False) -> None:
 
 def _canonical_json(value: object, *, limit: int) -> bytes:
     try:
-        encoded = json.dumps(
-            value, sort_keys=True, separators=(",", ":"), ensure_ascii=False, allow_nan=False
+        encoded = FieldCodec.compact(
+            value, sort_keys=True, ensure_ascii=False, allow_nan=False,
         ).encode("utf-8")
     except ValueError as error:  # NaN, or a lone surrogate the UTF-8 encoding refuses
         raise MalformedRecord("audience data cannot be canonically encoded") from error

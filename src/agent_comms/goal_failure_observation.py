@@ -13,7 +13,7 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Annotated
 
 from .turn_failure import TurnFailure
-from .field_codec import Id128Text, WireName
+from .field_codec import Id128Text
 from .goal_attempt_identity import GoalAttemptIdentity
 from .thread_identity import (
     ClaimedIdentity,
@@ -56,8 +56,8 @@ class FailedTurnEvidence(GoalLedgerTable, TypedTable, GoalFailureEvidence):
     owner: str
     owner_created_at: float
     worktree: str
-    claim_scope: Annotated[
-        int, WireName("admission"), Column(record_key=True, check="{claim_scope}>0")
+    claim_generation: Annotated[
+        int, Column(record_key=True, check="{claim_generation}>0")
     ]
     turn_generation: Annotated[int, Column(check="turn_generation>0")]
     goal_revision: Annotated[int, Column(check="goal_revision>=0")]
@@ -67,7 +67,7 @@ class FailedTurnEvidence(GoalLedgerTable, TypedTable, GoalFailureEvidence):
     def __post_init__(self) -> None:
         # These are the durable observation's constraints, independent of any
         # caller's authority. SQL/FieldCodec remains the single stored decoder.
-        if type(self.claim_scope) is not int or self.claim_scope <= 0:
+        if type(self.claim_generation) is not int or self.claim_generation <= 0:
             raise ValueError("Observation claim_scope must be positive")
         if type(self.turn_generation) is not int or self.turn_generation <= 0:
             raise ValueError("Observation turn generation must be positive")
@@ -89,11 +89,11 @@ class FailedTurnEvidence(GoalLedgerTable, TypedTable, GoalFailureEvidence):
 
     @property
     def claimed_identity(self) -> ClaimedIdentity:
-        return ClaimedIdentity(self.incarnation, self.claim_scope)
+        return ClaimedIdentity(self.incarnation, self.claim_generation)
 
     @property
     def turn(self) -> TurnFence:
-        return TurnFence(TurnIdentity(self.incarnation, self.turn_generation), self.turn_id, self.claim_scope)
+        return TurnFence(TurnIdentity(self.incarnation, self.turn_generation), self.turn_id, self.claim_generation)
 
     def matches_owner(self, owner: Thread, claim_scope: int | None) -> bool:
         if claim_scope is None:

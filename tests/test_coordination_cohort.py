@@ -75,7 +75,7 @@ def _root(tmp_path: Path) -> tuple[Comms, Coordination, str, dict[str, str]]:
     coordinator = Coordination(str(root / "coordinator.sqlite"), clock_ms=lambda: 4723)
     PrivateCoordinatorTable.install(coordinator)
     for name in ("Alice", "Bob", "Charlie"):
-        coordinator.participants.register(lookups[name], name, name, committed=True)
+        coordinator.participants.register(lookups[name], committed=True)
     root_id = comms.registry.prepare_native_root().namespace
     return comms, coordinator, root_id, lookups
 
@@ -417,7 +417,7 @@ def test_message_taken_by_a_running_turn_is_delivered_once_and_stays_delivered(
             coordinator.assignments.transition_preengagement(
                 alice.assignment_id, after, expected_revision=delivered.revision
             )
-    pending = pending_sealed_assignments(coordinator, lookups["Alice"], "Alice")
+    pending = pending_sealed_assignments(coordinator, lookups["Alice"])
     assert alice.assignment_id not in {item.assignment_id for item in pending}
 
     # The stored rules, not only the Python states, refuse to reopen it.
@@ -437,5 +437,5 @@ def test_message_taken_by_a_running_turn_is_delivered_once_and_stays_delivered(
         bob.assignment_id, type(bob.lifecycle), expected_revision=bob_paused.revision
     ).value
     assert type(back.lifecycle) is type(bob.lifecycle)
-    pending = pending_sealed_assignments(coordinator, lookups["Bob"], "Bob")
+    pending = pending_sealed_assignments(coordinator, lookups["Bob"])
     assert bob.assignment_id in {item.assignment_id for item in pending}

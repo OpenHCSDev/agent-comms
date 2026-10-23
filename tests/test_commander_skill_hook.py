@@ -10,6 +10,7 @@ from pathlib import Path
 
 from agent_comms.behaviour_patterns import PostmortemFailure
 from agent_comms.commander.config import CommanderConfig
+from agent_comms.commander.package import CommanderPackage
 from agent_comms.commander.rule_file import RuleFile
 from agent_comms.todos import Slop
 from agent_comms_hooks.reread import SliceReminder
@@ -18,7 +19,7 @@ from agent_comms_hooks.skill import CommanderStart
 
 @pytest.mark.parametrize("source", ["startup", "resume", "compact"])
 @pytest.mark.parametrize("configuration", ["configured", "missing", "invalid"])
-def test_session_start_reads_all_packaged_files_without_a_bus(tmp_path, source, configuration):
+def test_session_start_reads_all_package_files_without_a_bus(tmp_path, source, configuration):
     home = tmp_path / "home"
     home.mkdir()
     bus = tmp_path / "bus"
@@ -65,10 +66,10 @@ def test_session_start_reads_all_packaged_files_without_a_bus(tmp_path, source, 
     )
     assert text.startswith(expected_notice)
     assert text.split("\n\n", 1)[1] == "\n\n".join((
-        CommanderConfig.packaged_voice().read_text(),
-        CommanderConfig.packaged_indictment().read_text(),
+        CommanderPackage.voice().read_text(),
+        CommanderPackage.indictment().read_text(),
         "# Recorded failures\n\n" + PostmortemFailure.catalog(),
-        RuleFile.document(CommanderConfig.packaged_skill())[1],
+        RuleFile.document(CommanderPackage.skill())[1],
         *(rule.render() for rule in RuleFile.packaged()),
         (Slop.catalog() / "README.md").read_text(),
     ))
@@ -103,8 +104,8 @@ def test_a_slice_every_few_calls_rotating_and_dealt_again_at_compaction(tmp_path
 
 def test_the_deck_carries_the_voice_every_fourth_slice_every_drift_tell_and_every_failure():
     slices = CommanderStart.slices()
-    voice = CommanderStart.paragraphs(CommanderConfig.packaged_voice().read_text())
-    indictment = CommanderStart.paragraphs(CommanderConfig.packaged_indictment().read_text())
+    voice = CommanderStart.paragraphs(CommanderPackage.voice().read_text())
+    indictment = CommanderStart.paragraphs(CommanderPackage.indictment().read_text())
     assert set(slices[0::4]) == set(voice)
     assert set(slices[1::4]) == set(indictment)
     assert set(slices[2::4]) == set(RuleFile.drift_tells())
@@ -137,13 +138,13 @@ def test_the_installed_commands_order_the_reads_once_then_put_slices_inline(
     assert "Read each of these" not in context
 
 
-@pytest.mark.parametrize("path", CommanderConfig.packaged_rules_files(), ids=lambda path: path.name)
-def test_packaged_rule_has_a_reason(path):
+@pytest.mark.parametrize("path", CommanderPackage.rules_files(), ids=lambda path: path.name)
+def test_package_rule_has_a_reason(path):
     assert RuleFile.read(path).why
 
 
-def test_packaged_descriptions_do_not_repeat_rule_kind():
-    for path in CommanderConfig.packaged_rules_files():
+def test_package_descriptions_do_not_repeat_rule_kind():
+    for path in CommanderPackage.rules_files():
         metadata, _ = RuleFile.document(path)
         assert not metadata["description"].startswith("HARD RULE:"), path.name
 

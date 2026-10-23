@@ -59,7 +59,7 @@ async def test_second_pid_public_acp_owner_ipc_preplan(tmp_path, native_runtime_
         with Coordination(str(root / "coordination.sqlite3")) as store:
             PrivateCoordinatorTable.install(store)
             store.participants.register(
-                alpha.incarnation.lookup, "alpha", "alpha", committed=True
+                alpha.incarnation.lookup, committed=True
             )
         env = dict(os.environ)
         source_root = Path(__file__).resolve().parents[1]
@@ -89,7 +89,7 @@ async def test_second_pid_public_acp_owner_ipc_preplan(tmp_path, native_runtime_
             )
             with Coordination(str(root / "coordination.sqlite3")) as store:
                 store.participants.register(
-                    beta.incarnation.lookup, "beta", "beta", committed=True
+                    beta.incarnation.lookup, committed=True
                 )
             (base / "registered").touch()
 

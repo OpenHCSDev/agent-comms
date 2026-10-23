@@ -10,18 +10,11 @@ from agent_comms.audience_manifest import FrozenAudience, FrozenRecipient, freez
 from conftest import installed_comms
 from agent_comms.wake_policy import MessageAudience
 from agent_comms.mentions import ThreadMention
-from agent_comms.messages import (
-    AckKind, HandoffKind, InfoKind, MembershipChange, MembershipConversationRole, Message, MessageKind,
-    NoticeRole,
-)
+from agent_comms.messages import AckKind, HandoffKind, InfoKind, MembershipTransition, MembershipConversationRole, Message, MessageKind, NoticeRole, JoinedMembership
 from agent_comms.obligation_states import SilentResponse
 from agent_comms.response_policy import CollectivePolicy, InformationalPolicy, MentionedOnlyPolicy
 from agent_comms.thread_identity import AgentThreadRole, ThreadRole, UserThreadRole
-from agent_comms.wake import (
-    ControlClassification,
-    resolve_wake,
-    resolve_wake_cohort,
-)
+from agent_comms.wake import MessageControl, resolve_wake, resolve_wake_cohort, OrdinaryControl, SystemControl
 from agent_comms.wake_policy import BoundedTriageWake, FullWake, PassiveWake, NoWakeDecision, NoWakeReason, RecipientDecision, WakeDecision
 
 MEMBERS = (FrozenRecipient("lookup-alpha", "alpha"), FrozenRecipient("lookup-beta", "beta"))
@@ -56,7 +49,7 @@ def decide(
     message: Message,
     lookup: str = "lookup-alpha",
     members: tuple[FrozenRecipient, ...] = MEMBERS,
-    control: ControlClassification = ControlClassification.ORDINARY,
+    control: type[MessageControl] = OrdinaryControl,
 ) -> RecipientDecision | None:
     recipient = next(
         (member for member in members if member.recipient_lookup == lookup),
@@ -159,10 +152,10 @@ def test_mixed_in_and_out_of_scope_mentions_only_name_valid_frozen_member() -> N
     assert MEMBERS[0] in audience(message).recipients
 
 
-@pytest.mark.parametrize("control", list(ControlClassification))
-@pytest.mark.parametrize("role", [NoticeRole(), MembershipConversationRole(MembershipChange.JOINED)])
+@pytest.mark.parametrize("control", MessageControl.members_with(MessageControl))
+@pytest.mark.parametrize("role", [NoticeRole(), MembershipConversationRole(JoinedMembership)])
 def test_notice_and_membership_are_passive_regardless_of_control_or_sender(
-    role, control: ControlClassification
+    role, control: type[MessageControl]
 ) -> None:
     message = replace(stored(sender_role=AgentThreadRole), role=role)
     assert decide(message, control=control) == WakeDecision(
@@ -174,7 +167,7 @@ def test_explicit_control_on_mentioned_row_is_passive_not_unmentioned_observer()
     message = stored("#team", "@beta investigate", mentions=(ThreadMention("beta", 0, 5),))
     for member in MEMBERS:
         assert decide(
-            message, member.recipient_lookup, control=ControlClassification.SYSTEM_CONTROL
+            message, member.recipient_lookup, control=SystemControl
         ) == WakeDecision(member.recipient_lookup, MessageAudience.MENTIONED, PassiveWake())
 
 
@@ -183,20 +176,18 @@ def test_system_control_must_be_explicit_not_guessed_from_body_or_ack_type() -> 
     assert decide(ordinary) == WakeDecision(
         "lookup-alpha", MessageAudience.COLLECTIVE, BoundedTriageWake()
     )
-    assert decide(ordinary, control=ControlClassification.SYSTEM_CONTROL) == WakeDecision(
+    assert decide(ordinary, control=SystemControl) == WakeDecision(
         "lookup-alpha", MessageAudience.COLLECTIVE, PassiveWake()
     )
     direct = stored("alpha", sender_role=UserThreadRole)
-    assert decide(direct, members=MEMBERS[:1], control=ControlClassification.SYSTEM_CONTROL) == (
+    assert decide(direct, members=MEMBERS[:1], control=SystemControl) == (
         WakeDecision("lookup-alpha", MessageAudience.DIRECT, PassiveWake())
     )
-    with pytest.raises(TypeError):
-        resolve_wake(
-            ordinary,
-            recipient=MEMBERS[0],
-            frozen_audience=audience(ordinary),
-            control="system_control",  # type: ignore[arg-type]
-        )
+    from agent_comms.field_codec import FieldCodec, MalformedRecord
+
+    assert FieldCodec.decode(type[MessageControl], "system_control") is SystemControl
+    with pytest.raises(MalformedRecord):
+        FieldCodec.decode(type[MessageControl], "invented_control")
 
 
 def test_no_wake_is_not_a_passive_claim() -> None:
@@ -223,7 +214,7 @@ def test_excluded_recipient_and_bad_identity_fail_closed() -> None:
             message,
             recipient=FrozenRecipient("lookup-alpha", "someone_else"),
             frozen_audience=manifest,
-            control=ControlClassification.ORDINARY,
+            control=OrdinaryControl,
         )
         is None
     )  # Lookup alone cannot steal another frozen name's decision.
@@ -232,14 +223,14 @@ def test_excluded_recipient_and_bad_identity_fail_closed() -> None:
             message,
             recipient="alpha",  # type: ignore[arg-type]
             frozen_audience=manifest,
-            control=ControlClassification.ORDINARY,
+            control=OrdinaryControl,
         )
     with pytest.raises(TypeError):
         resolve_wake(
             message,
             recipient=MEMBERS[0],
             frozen_audience=object(),  # type: ignore[arg-type]
-            control=ControlClassification.ORDINARY,
+            control=OrdinaryControl,
         )
     with pytest.raises(ValueError):
         decide(stored("alpha"), members=MEMBERS)
@@ -250,7 +241,7 @@ def test_excluded_recipient_and_bad_identity_fail_closed() -> None:
             replace(message, seq=0),
             recipient=MEMBERS[0],
             frozen_audience=manifest,
-            control=ControlClassification.ORDINARY,
+            control=OrdinaryControl,
         )
 
 
@@ -271,14 +262,14 @@ def test_prepared_message_must_match_frozen_manifest_identity(field: str) -> Non
             mismatched,
             recipient=MEMBERS[0],
             frozen_audience=manifest,
-            control=ControlClassification.ORDINARY,
+            control=OrdinaryControl,
         )
 
 
 @pytest.mark.parametrize("changes", [
     {"mentions": ()},
     pytest.param({"role": NoticeRole()}, id="notice"),
-    pytest.param({"role": MembershipConversationRole(MembershipChange.JOINED)}, id="membership"),
+    pytest.param({"role": MembershipConversationRole(JoinedMembership)}, id="membership"),
     {"type": HandoffKind},
     {"sender_role": UserThreadRole},
 ])
@@ -293,7 +284,7 @@ def test_same_message_id_does_not_override_frozen_full_envelope(changes) -> None
             changed,
             recipient=MEMBERS[0],
             frozen_audience=manifest,
-            control=ControlClassification.ORDINARY,
+            control=OrdinaryControl,
         )
 
 
@@ -302,13 +293,13 @@ def test_full_cohort_preserves_direct_control_and_fail_closed_envelope() -> None
     assert resolve_wake_cohort(
         direct,
         frozen_audience=audience(direct, MEMBERS[:1]),
-        control=ControlClassification.ORDINARY,
+        control=OrdinaryControl,
     ) == (WakeDecision("lookup-alpha", MessageAudience.DIRECT, FullWake()),)
     collective = stored()
     assert resolve_wake_cohort(
         collective,
         frozen_audience=audience(collective),
-        control=ControlClassification.SYSTEM_CONTROL,
+        control=SystemControl,
     ) == tuple(
         WakeDecision(member.recipient_lookup, MessageAudience.COLLECTIVE, PassiveWake())
         for member in MEMBERS
@@ -317,13 +308,13 @@ def test_full_cohort_preserves_direct_control_and_fail_closed_envelope() -> None
         resolve_wake_cohort(
             direct,
             frozen_audience=audience(direct, (MEMBERS[1],)),
-            control=ControlClassification.ORDINARY,
+            control=OrdinaryControl,
         )
     with pytest.raises(ValueError):
         resolve_wake_cohort(
             replace(collective, role=NoticeRole()),
             frozen_audience=audience(collective),
-            control=ControlClassification.ORDINARY,
+            control=OrdinaryControl,
         )
 
 
@@ -365,7 +356,7 @@ def test_pure_shadow_does_not_mutate_envelope_state_or_live_cursor(tmp_path: Pat
         message,
         recipient=MEMBERS[0],
         frozen_audience=manifest,
-        control=ControlClassification.ORDINARY,
+        control=OrdinaryControl,
     ) == WakeDecision("lookup-alpha", MessageAudience.COLLECTIVE, BoundedTriageWake())
     assert message.exact_reply_target == "#team"
     assert message.to_wire() == before

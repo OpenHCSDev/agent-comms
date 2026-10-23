@@ -599,7 +599,7 @@ class NativeInputConstraintPin(HumanConstraintPin):
         original_author = RecordedThreadIncarnation(origin.author.sender, origin.author.created_at)
         if original_author.resolved(registry) != self.source_user.resolved(registry):
             raise RelationViolationError("USER input pin differs from its original human author")
-        if origin.claim_scope.incarnation.resolved(registry) != self.recipient.resolved(registry):
+        if origin.claimed_identity.incarnation.resolved(registry) != self.recipient.resolved(registry):
             raise RelationViolationError("USER input pin recipient did not receive its original input")
         if origin.project != self.scope.project:
             raise RelationViolationError("USER input pin belongs to another project")

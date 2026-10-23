@@ -408,7 +408,6 @@ class NativeInputRecord(OwnerRecord, ABC):
     input_id: str
     execution: NativeInputExecution
     owner_lookup: str
-    owner_thread: str
     owner_generation: int
 
     @property

@@ -30,7 +30,7 @@ from agent_comms.child_process import ProcessIdentity
 from agent_comms.comms import Comms
 from agent_comms.coordination_errors import RecoveryBlocked
 from agent_comms.coordination_tables.attempts import ReplayFact
-from agent_comms.coordination_tables.executions import CurrentExecutions, ExecutionOrigin
+from agent_comms.coordination_tables.executions import CurrentExecutions, ExecutionProvenance, WireOrigin
 from agent_comms.cursor_publication import CursorDelivery
 from agent_comms.native_input_record import FullNativeExecution, NumberNativeColumn, TextNativeColumn
 from agent_comms.selected_participant import SelectedParticipant
@@ -55,8 +55,8 @@ async def release_starting_attempt(directory):
         ) as participant:
             assert participant is not None
             created = store.create(
-                participant.batch.execution_id, ExecutionOrigin.WIRE,
-                participant.lookup, participant.owner.thread.name, 1,
+                participant.batch.execution_id, WireOrigin,
+                participant.lookup, 1,
                 sources=participant.batch.sources,
             ).value
             await SelectedAttempt.engage(participant, created)
@@ -232,7 +232,7 @@ def test_recover_owner_refuses_a_conflicting_input_identity(released_starting, c
                 input_id="c" * 32, stage=FullNativeExecution,
                 execution_id=TextNativeColumn(execution_id),
                 attempt_ordinal=NumberNativeColumn(before.attempt.attempt_ordinal),
-                owner_lookup=owner.incarnation.lookup, owner_thread=owner.name,
+                owner_lookup=owner.incarnation.lookup,
                 owner_generation=before.attempt.owner_generation + 1,
                 owner_token_digest="e" * 64,
             ).insert(db)

@@ -27,7 +27,7 @@ INITIAL_LEASE_DURATION_MS = 60_000
 class AttemptStart:
     execution_id: str
     attempt_ordinal: int
-    owner_thread: str
+    owner_lookup: str
     owner_generation: int
     token: str
     expected_execution_revision: int
@@ -41,7 +41,7 @@ class AttemptStart:
         return OwnerFence(
             self.execution_id,
             self.attempt_ordinal,
-            self.owner_thread,
+            self.owner_lookup,
             self.owner_generation,
             revision,
             self.token,
@@ -52,13 +52,11 @@ class AttemptStart:
         if (
             old.attempt_ordinal,
             old.owner_lookup,
-            old.owner_thread,
             old.owner_generation,
             old.created_at_ms >= snapshot.execution.created_at_ms,
         ) != (
             self.attempt_ordinal,
-            snapshot.execution.owner_lookup,
-            self.owner_thread,
+            self.owner_lookup,
             self.owner_generation,
             True,
         ):
@@ -69,10 +67,10 @@ class AttemptStart:
         execution = snapshot.execution
         ordinal = execution.lifecycle.next_attempt_ordinal
         if not participant.committed or (
-            participant.owner_identity.owner_thread,
+            participant.owner_identity.owner_lookup,
             participant.owner_identity.generation,
-        ) != (self.owner_thread, self.owner_generation):
-            raise StaleFence("owner generation or thread changed")
+        ) != (self.owner_lookup, self.owner_generation):
+            raise StaleFence("owner lookup or generation changed")
         if (execution.revision, participant.pointer.pointer_revision) != (
             self.expected_execution_revision,
             self.expected_pointer_revision,
@@ -99,7 +97,6 @@ class AttemptStart:
             execution_id=self.execution_id,
             attempt_ordinal=self.attempt_ordinal,
             owner_lookup=execution.owner_lookup,
-            owner_thread=self.owner_thread,
             owner_generation=self.owner_generation,
             owner_token_digest=self.digest,
             lifecycle=PromptStartingAttempt(lease),

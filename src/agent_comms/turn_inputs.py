@@ -1,7 +1,7 @@
 """Input forwarding owns pending native IDs and never replays written inputs.
 
-Each inbox member delivers itself to this receiver. This owner converts it to
-its Pi command when it writes it to the running child.
+Declared handlers on this owner select each inbox operation by its nominal
+MRO, and convert it to its Pi command at the owning send boundary.
 """
 
 from __future__ import annotations
@@ -22,23 +22,21 @@ from .agent_backend import (
     TurnInbox,
     TurnInboxItem,
     UseSettings,
-    WhenBusy,
 )
 from .field_codec import Id128Text
 from .locked_store import RegistryFile
 from .maintenance_barrier import MaintenanceBarrier
+from .mro_dispatch import MroDispatch, handles
+from .native_failures import NativePiUnavailable
+from .prompt_state import PreparedSession, UnwrittenPrompt
 
 if TYPE_CHECKING:
-    from .backend import TurnSession
+    from .backend import NativeSession, TurnSession
     from .pi_events import MessageStart, Response
 
 
-# Pi's spelling of each busy policy it supports; Pi has no way to refuse an input.
-_PI_STREAMING_BEHAVIOR = {WhenBusy.STEER: "steer", WhenBusy.FOLLOW_UP: "followUp"}
-
-
 @dataclass
-class InputForwarding:
+class InputForwarding(MroDispatch):
     queue: TurnInbox = field(default_factory=TurnInbox)
     pending: dict[str, commands.Prompt] = field(default_factory=dict)
     accepted: set[str] = field(default_factory=set)
@@ -82,19 +80,55 @@ class InputForwarding:
         self.changed.set()
         return item
 
-    async def forward(self, session: TurnSession) -> None:
+    async def forward(self, session: NativeSession) -> None:
         # Inputs that wait through one tool batch reach the model together,
         # not one model call apiece.
         await self.write(session, commands.SetSteeringMode(mode="all"))
         while True:
             self.current = await self.queue.get()
             try:
-                if not await self.current.deliver_to(self, session):
+                # An inbox item performs one operation. PreparedSession must not
+                # also run its UnwrittenPrompt ancestor and send a prompt.
+                handler = next(self.handlers_for(self.current))
+                if not await handler(self.current, session):
                     return
             finally:
                 self.current = None
 
-    async def write(self, session: TurnSession, *written: commands.PiCommand) -> None:
+    @handles(TurnInboxItem)
+    async def unhandled(self, item: TurnInboxItem, session: NativeSession) -> bool:
+        raise TypeError(f"No input handler declared for {type(item).__name__}")
+
+    @handles(UnwrittenPrompt)
+    async def original_prompt(self, item: UnwrittenPrompt, session: TurnSession) -> bool:
+        def write():
+            session.grant_prompt()
+            session.native.send(session.command)
+        barrier = MaintenanceBarrier(RegistryFile.path_in(session.startup.root))
+        async with barrier.ingress_async() as status:
+            with status.phase.send_new(
+                session.send_boundary, None, session.command.input_id, session.command.message,
+            ) as outcome:
+                completion = outcome.dispatch(self, session, item, write)
+        return await completion
+
+    @handles(PreparedSession)
+    async def prepare_session(self, item: PreparedSession, session: NativeSession) -> bool:
+        session.native.forget_context()
+        state = session.native.attestation.require_state()
+        identity = session.native.attestation.require_identity()
+        session.launch.session.attest(identity)
+        if (
+            state.is_streaming.value_or(True)
+            or state.is_compacting.value_or(True)
+            or not state.pending_message_count.matches(0)
+        ):
+            raise NativePiUnavailable("Native preparation did not attest the idle saved session")
+        session.active_session_file = identity.session_file
+        await session.stats.request(session)
+        return True
+
+    async def write(self, session: NativeSession, *written: commands.PiCommand) -> None:
         for command in written:
             session.native.send(command)
         await session.native.drain()
@@ -113,7 +147,8 @@ class InputForwarding:
                 return candidates
             await self.changed.wait()
 
-    async def clear_queue(self, session: TurnSession, item: ClearQueue) -> bool:
+    @handles(ClearQueue)
+    async def clear_queue(self, item: ClearQueue, session: TurnSession) -> bool:
         command = commands.ClearQueue(input_ids=await self.queued(item.input_ids))
         if not command.input_ids:
             return True
@@ -131,7 +166,8 @@ class InputForwarding:
         session.rejected_signal.set()
         return True
 
-    async def use_settings(self, session: TurnSession, item: UseSettings) -> bool:
+    @handles(UseSettings)
+    async def use_settings(self, item: UseSettings, session: TurnSession) -> bool:
         # Pi resets thinking to the new model's default, so the level follows the model.
         await self.write(
             session,
@@ -142,7 +178,8 @@ class InputForwarding:
         )
         return True
 
-    async def send_now(self, session: TurnSession, item: SendNow) -> bool:
+    @handles(SendNow)
+    async def send_now(self, item: SendNow, session: TurnSession) -> bool:
         candidates = await self.queued(item.input_ids)
         if not candidates:
             return True
@@ -156,7 +193,8 @@ class InputForwarding:
                 ))
         return await completion
 
-    async def place(self, session: TurnSession, item: InputRequest) -> bool:
+    @handles(InputRequest)
+    async def place(self, item: InputRequest, session: TurnSession) -> bool:
         public_id = item.input_id.value
         native_id = Id128Text.mint()
         text = item.content.text
@@ -167,7 +205,7 @@ class InputForwarding:
             images=item.content.images,
             context_contributions=item.content.contributions,
             owner_tools=session.tool_socket.listener.connection,
-            streaming_behavior=_PI_STREAMING_BEHAVIOR[item.when_busy],
+            streaming_behavior=item.when_busy.streaming(),
         )
         def write():
             if command.images:

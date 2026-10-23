@@ -11,7 +11,7 @@ from .assignment_states import CompletedAssignment
 from .channel_coding_tools import SelectedCodingToolOwner
 from .coordination_errors import CoordinationError, IdentityConflict, StaleFence
 from .coordinator import Coordination
-from .coordination_tables.executions import ExecutionOrigin
+from .coordination_tables.executions import WireOrigin
 from .coordination_snapshot import RecoverySnapshot
 from .coordination_tables.responses import ResponseObligation
 from .durable_turn import DurableTurn
@@ -125,7 +125,7 @@ class SelectedAttempt:
             AttemptStart(
                 execution_id,
                 attempt_ordinal,
-                participant.owner.thread.name,
+                participant.lookup,
                 participant.identity.generation,
                 token,
                 expected_execution_revision=snapshot.execution.revision,
@@ -165,7 +165,7 @@ class SelectedAttempt:
         return SelectedCodingToolOwner(
             comms=participant.comms,
             store=participant.store,
-            claim_scope=claim_scope,
+            resource_scope=claim_scope,
             owner_name=participant.owner.thread.name,
             session_dir=session.directory,
             input_id=input_id,
@@ -256,8 +256,8 @@ class SelectedConsideration:
         if not participant.batch.requires_triage:
             await participant.require_current()
             created = participant.store.create(
-                participant.batch.execution_id, ExecutionOrigin.WIRE,
-                participant.lookup, participant.owner.thread.name,
+                participant.batch.execution_id, WireOrigin,
+                participant.lookup,
                 execution.max_attempts,
                 sources=participant.batch.sources,
             ).value

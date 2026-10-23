@@ -108,12 +108,12 @@ class FullSelectedTriage(SelectedTriage, declared_name="FULL"):
         pass
 
     async def continue_turn(self, participant, session, input_id, execution, settled):
-        from .coordination_tables.executions import ExecutionOrigin
+        from .coordination_tables.executions import WireOrigin
 
         await participant.require_current()
         created = participant.store.create_after_triage(
-            participant.batch.execution_id, ExecutionOrigin.WIRE,
-            participant.lookup, participant.owner.thread.name,
+            participant.batch.execution_id, WireOrigin,
+            participant.lookup,
             execution.max_attempts,
             sources=participant.batch.sources, settled=settled,
         ).value

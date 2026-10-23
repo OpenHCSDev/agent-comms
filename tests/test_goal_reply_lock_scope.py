@@ -21,11 +21,12 @@ from agent_comms.goal_actions import (
     SetGoalAction,
     StandbyGoalAction,
 )
-from agent_comms.goal_waits import GoalWaitReview, RecordedGoalWait
+from agent_comms.goal_waits import GoalWaitReview, NoGoalWait, RecordedGoalWait
 from agent_comms.input_disposition import InputDispositions
 from agent_comms.messages import ConversationRole, NoticeRole
 from agent_comms.store_files import store_lock_path
 from agent_comms.thread_text import GivenThreadText
+from agent_comms.thread_status import StoppedThreadStatus
 from agent_comms.tool_caller import ThreadCaller
 from agent_comms.tools import CommsGoalTool
 from goal_owner_fixture import canonical_goal_wire
@@ -332,3 +333,102 @@ def test_display_edit_during_terminal_review_does_not_strand_wait(reviewing, ren
     )
     assert reviewing.registry.require("owner").title == title
     assert reviewing.goals.goal_wait("owner") != captured.wait
+
+
+def edit_waiting_goal(comms):
+    comms.goals.update_goal("owner", EditGoalAction(text="Keep this newer objective"))
+
+
+def edit_waiting_progress(comms):
+    owner = comms.registry.require("owner")
+    goal = owner.goal.require()
+    comms.registry.register(replace(
+        owner, goal=replace(goal, progress="Keep this newer progress", revision=goal.revision + 1),
+    ))
+
+
+def edit_waiting_title(comms):
+    owner = comms.registry.require("owner")
+    comms.registry.register(replace(owner, title=GivenThreadText("Keep this newer title")))
+
+
+def stop_unrelated_thread(comms):
+    comms.registry.register(comms.registry.require("other"), StoppedThreadStatus())
+
+
+def release_terminal_wait(comms):
+    fence = comms.agents.finish_turn(comms.registry.require("child").require_turn_lease())
+    return partial(comms.goals.release_waits_after_terminal_turn, fence)
+
+
+def recover_closed_wait(comms):
+    comms.agents.finish_turn(comms.registry.require("child").require_turn_lease())
+    comms.registry.unregister("child")
+    return partial(comms.goals.recover_closed_goal_wait, "owner")
+
+
+@pytest.mark.parametrize("release", (release_terminal_wait, recover_closed_wait))
+@pytest.mark.parametrize("change", (
+    edit_waiting_goal, edit_waiting_progress, edit_waiting_title, stop_unrelated_thread,
+))
+def test_retained_wait_releases_in_same_call_after_concurrent_edit(reviewing, release, change):
+    reviewing.registry.declare(reviewing.registry.new_thread("other", frozenset(), str(reviewing.root)))
+    reviewing.goals.update_goal("owner", standby(reviewing))
+    wait = reviewing.goals.goal_wait("owner")
+    current_goal = reviewing.registry.require("owner").goal.require()
+    release_once = release(reviewing)
+
+    def change_after_snapshot():
+        nonlocal current_goal
+        change(reviewing)
+        assert reviewing.goals.goal_wait("owner") == wait
+        current_goal = reviewing.registry.require("owner").goal.require()
+
+    reviewing.bus.bus = AfterReadBus(reviewing.bus.bus.path, change_after_snapshot)
+    assert release_once() == ("owner",)
+    assert reviewing.bus.bus.changed
+    assert reviewing.goals.goal_wait("owner") == NoGoalWait()
+    published = reviewing.registry.require("owner").goal.require()
+    assert published.revision == current_goal.revision + 1
+    assert published.progress.startswith(current_goal.progress)
+    assert "Standby was released" in published.progress
+    assert replace(published, progress=current_goal.progress, revision=current_goal.revision) == current_goal
+
+
+@pytest.mark.parametrize("change", (edit_waiting_goal, edit_waiting_progress))
+def test_completed_reply_consumes_retained_wait_after_concurrent_goal_edit(reviewing, change):
+    witness, reply, wait = completed_reply(reviewing)
+    reviewing.bus.bus = AfterReadBus(reviewing.bus.bus.path, partial(change, reviewing))
+    assert reviewing.goals.consume_reply_wait(witness, reply.reference)
+    assert reviewing.bus.bus.changed
+    assert reviewing.goals.goal_wait("owner") == NoGoalWait()
+    assert reviewing.registry.require("owner").goal.require().revision == wait.revision + 1
+
+
+def test_new_dependency_turn_during_silence_read_keeps_wait(reviewing):
+    reviewing.goals.update_goal("owner", standby(reviewing))
+    wait = reviewing.goals.goal_wait("owner")
+    fence = reviewing.agents.finish_turn(reviewing.registry.require("child").require_turn_lease())
+    reviewing.bus.bus = AfterReadBus(
+        reviewing.bus.bus.path, partial(reviewing.agents.begin_turn, "child", "new-child-turn"),
+    )
+    assert reviewing.goals.release_waits_after_terminal_turn(fence) == ()
+    assert reviewing.bus.bus.changed
+    assert reviewing.goals.goal_wait("owner") == wait
+
+
+def test_terminal_callback_reobserves_same_wait_after_waiter_turn_changes(reviewing):
+    reviewing.goals.update_goal("owner", standby(reviewing))
+    wait = reviewing.goals.goal_wait("owner")
+    owner = reviewing.registry.require("owner")
+    fence = reviewing.agents.finish_turn(reviewing.registry.require("child").require_turn_lease())
+
+    def finish_waiter_turn():
+        witness = reviewing.agents.begin_turn("owner", "intervening-owner-turn")
+        reviewing.agents.finish_turn(witness.thread.require_turn_lease())
+        assert reviewing.goals.goal_wait("owner") == wait
+
+    reviewing.bus.bus = AfterReadBus(reviewing.bus.bus.path, finish_waiter_turn)
+    assert reviewing.goals.release_waits_after_terminal_turn(fence) == ("owner",)
+    assert reviewing.registry.require("owner").turn_generation > owner.turn_generation
+    assert reviewing.goals.goal_wait("owner") == NoGoalWait()

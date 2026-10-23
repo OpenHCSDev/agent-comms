@@ -644,7 +644,11 @@ class OwnedDispatchPhase(RemainingSlopPhase):
     evidence = AllEvidence(
         (
             PatternAbsent(r"class TurnInboxReceiver\b"),
-            PatternAbsent(r"separators=\(\",\", ?\":\"\)"),
+            PatternAbsent(
+                r"""separators\s*=\s*\(\s*["'],["']\s*,\s*["']:["']\s*\)""",
+                ("src", ":!src/agent_comms/field_codec.py"),
+            ),
+            PatternPresent(r"def compact\(", ("src/agent_comms/field_codec.py",)),
         )
     )
 
@@ -652,9 +656,15 @@ class OwnedDispatchPhase(RemainingSlopPhase):
 class KindFamiliesPhase(RemainingSlopPhase):
     """6.3: kinds are families whose members carry their behaviour and spelling."""
 
-    evidence = PatternAbsent(
-        r"class (TagAction|ExecutionOrigin|WhenBusy|ControlClassification|MembershipChange"
-        r"|ViewKind)\b"
+    evidence = AllEvidence(
+        (
+            PatternAbsent(
+                r"class (TagAction|ExecutionOrigin|WhenBusy|ControlClassification"
+                r"|MembershipChange)\b"
+            ),
+            # SQLite's ViewKind(CatalogKind) is already a behavior-owning member.
+            PatternAbsent(r"class ViewKind\((StrEnum|Enum)\)"),
+        )
     )
 
 

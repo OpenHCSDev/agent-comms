@@ -48,7 +48,6 @@ if TYPE_CHECKING:
     from .coordinated_runtime import SelectedExecution
     from .selected_participant import SelectedParticipant
     from .selected_session import SelectedSession
-from .private_registry_guard import _require_no_private_owner_rename
 from .private_send_stage import NativeSendStage
 
 
@@ -250,7 +249,6 @@ class PrivateSendClaim(PromptBoundary):
             if not self._once.acquire(blocking=False):
                 raise IdentityConflict("native send claim_scope cannot be reused")
             with self.selected.cursor_delivery.measurements.operation("claim_checks"):
-                _require_no_private_owner_rename(self.bus.bus.path.parent)
                 self.owner.require_snapshot(
                     registry, "recipient registry owner changed before native send"
                 )

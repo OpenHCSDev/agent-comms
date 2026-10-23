@@ -13,7 +13,6 @@ from __future__ import annotations
 
 import argparse
 import asyncio
-import json
 import os
 import re
 import select
@@ -116,7 +115,7 @@ def reserve_foreground_owner(
 
 
 def _emit(payload: dict[str, object]) -> None:
-    json.dump(payload, sys.stdout, separators=(",", ":"))
+    sys.stdout.write(FieldCodec.compact(payload))
     sys.stdout.write("\n")
     sys.stdout.flush()
 

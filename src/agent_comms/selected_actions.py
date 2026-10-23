@@ -148,14 +148,14 @@ class SelectedExistingFileWrite(NoSelectedTools):
         claimed = publish_selected_resource_claim(
             owner.comms,
             owner.store,
-            owner.claim_scope,
+            owner.resource_scope,
             owner.owner_name,
             self.resource,
         )
         write_selected_claimed_file(
             owner.comms,
             owner.store,
-            owner.claim_scope,
+            owner.resource_scope,
             owner.owner_name,
             claimed,
             self.contents,
