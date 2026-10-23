@@ -104,14 +104,14 @@ jobs:
       - name: Run tests with coverage (85% enforced on Linux)
         if: matrix.os == 'ubuntu-latest'
         run: |
-          pytest --cov=agent_comms --cov-report=xml --cov-report=term-missing -v
+          pytest -n auto --maxprocesses=8 --dist=worksteal --cov=agent_comms --cov-report=xml --cov-report=term-missing -v
 
       # Sealed /var/tmp, /proc and SO_PEERCRED fixtures run only on Linux.
       # Keep macOS test execution, but do not enforce Linux coverage there.
       - name: Run tests (coverage reported, Linux-only fixtures skipped)
         if: matrix.os != 'ubuntu-latest'
         run: |
-          pytest --cov=agent_comms --cov-fail-under=0 --cov-report=xml --cov-report=term-missing -v
+          pytest -n auto --maxprocesses=8 --dist=worksteal --cov=agent_comms --cov-fail-under=0 --cov-report=xml --cov-report=term-missing -v
 
   build:
     runs-on: ubuntu-latest
