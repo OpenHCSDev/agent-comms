@@ -72,6 +72,10 @@ class Provenance(DeclaredFamily, affix="Provenance"):
     def entry_membership(self) -> tuple[Provenance, ...]:
         return ()
 
+    def bus_references(self) -> tuple[MessageReference, ...]:
+        """Only a wire coordinate names a committed bus message."""
+        return ()
+
     def require_human_input(self):
         from .errors import RelationViolationError
 
@@ -144,6 +148,9 @@ class WireProvenance(Provenance):
     def public_text(self, comms) -> str:
         (original,) = comms.bus.bus.messages_for_references((self.source,))
         return original.body
+
+    def bus_references(self) -> tuple[MessageReference, ...]:
+        return (self.source,)
 
 
 @dataclass(frozen=True)
@@ -326,6 +333,10 @@ class SegmentManifest:
     @property
     def sources(self) -> ContextSources:
         return ContextSources(self.provenance)
+
+    def selected_wire(self) -> tuple[MessageReference, ...]:
+        """The committed bus messages a wake in this input selected."""
+        return self.kind.selected_wire(self)
 
     async def public_text(self, read_reference) -> str:
         if self.public_text_recorded:
@@ -665,6 +676,11 @@ class ContextSegment(
     @classmethod
     def remember_received(cls, child, provenance):
         pass
+
+    @classmethod
+    def selected_wire(cls, original: SegmentManifest) -> tuple[MessageReference, ...]:
+        """Only a wake selects bus messages; any other segment answers through its contributors."""
+        return tuple(source for child in original.contributors for source in child.selected_wire())
 
     def contributor_manifests(self) -> tuple[SegmentManifest, ...]:
         return ()

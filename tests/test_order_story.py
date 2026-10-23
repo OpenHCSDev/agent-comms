@@ -90,11 +90,7 @@ def test_order_story_copied_bus_strike_and_send_back_once(comms, tmp_path):
     assert CommsOrderStoryTool.invoke(copied, {"order_id": "resent-order"}, caller=caller) == result
     fleet = FieldCodec.decode(FleetStory, CommsFleetStoryTool.invoke(
         copied, {"thread": "lead"}, caller=NoThreadCaller()))
-    assert len(fleet.lines) == 2
-    assert reason in fleet.lines[0] and standalone in fleet.lines[1]
-    assert "\n".join(fleet.lines).count(reason) == 1
-    assert "\n".join(fleet.lines).count(standalone) == 1
-    assert "accepted-call" not in "\n".join(fleet.lines)
+    assert fleet.lines == (f"P1 worker: {saved.order.line}",)
     assert copied.goals.todos.get("P1") == saved == comms.goals.todos.get("P1")
     assert copied.goals.todos.path.stat().st_mtime_ns == stored_at
     with copied.goals.todos.writing() as db:
@@ -122,6 +118,6 @@ def test_order_story_copied_bus_strike_and_send_back_once(comms, tmp_path):
     ))
     assert withdrawn.state is DoneTodoState
     assert FieldCodec.decode(FleetStory, CommsFleetStoryTool.invoke(
-        copied, {"thread": "lead"}, caller=caller)) == fleet
+        copied, {"thread": "lead"}, caller=caller)).lines == ()
     with pytest.raises(TodoError):
         CommsOrderStoryTool.invoke(copied, {"order_id": "absent-order"}, caller=caller)

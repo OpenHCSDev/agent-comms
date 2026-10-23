@@ -74,7 +74,7 @@ from agent_comms.message_reference import MessageReference
 from agent_comms.messages import InfoKind, Message
 from agent_comms.tool_denial import SelectedToolDenied
 from agent_comms.order_runs import OrderRun
-from agent_comms.order_story import FleetEvent, ProblemStory, StoryEvent, StoryLine, StorySource
+from agent_comms.order_story import ProblemStory, StoryEvent, StoryLine, StorySource
 from agent_comms.owner_requests import (
     OpenRequestState,
     OwnerRequestId,
@@ -2777,7 +2777,7 @@ class CitedStrike(TodoOperation, declared_name=None):
 
 
 @dataclass(frozen=True)
-class StrikeTodo(CitedStrike, FleetEvent):
+class StrikeTodo(CitedStrike, StoryEvent):
     actor: ThreadIncarnation
     previous: Assignment
     reason: str
@@ -3067,7 +3067,7 @@ class DroppedVerdict(ToolCallVerdict):
 
 
 @dataclass(frozen=True)
-class SendBackVerdict(ToolCallVerdict, CitedStrike, FleetEvent):
+class SendBackVerdict(ToolCallVerdict, CitedStrike, StoryEvent):
     """The tool call goes back; the same write strikes the holder and revises the order Goal."""
     reason: StrikeReason
 
@@ -3520,10 +3520,6 @@ class Todo(TodoStoreRows, TypedTable):
             key=lambda event: event.at.chronology(),
         ))
         return ProblemStory(self.id, self.order.line, events)
-
-    def fleet_story(self) -> tuple[StoryLine, ...]:
-        return tuple(StoryLine(event.at, f"{self.id}: {event.text}")
-                     for source in self.story_sources() for event in source.fleet_story())
 
     @property
     def review_window(self) -> float:

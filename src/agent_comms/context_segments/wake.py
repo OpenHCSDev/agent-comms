@@ -42,6 +42,12 @@ class SelectedWakeSegment(InstructionSegment):
     sent_limit = 5
 
     @classmethod
+    def selected_wire(cls, original):
+        """The selected originals and the owner's own sent outcomes; their sender tells them apart."""
+        return tuple(source for provenance in original.provenance
+                     for source in provenance.bus_references())
+
+    @classmethod
     def capture(cls, sources, owner, goals, *, obligations=(), sent_outcomes=()):
         relevance = WakePolicy.relevance_instruction()
         sent_outcomes = tuple(sent_outcomes)
