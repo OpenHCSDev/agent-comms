@@ -8,7 +8,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Annotated, ClassVar
 
-from .bus import Bus
+from .bus import BusReader
 from .bus_publication import Delivered
 from .bus_tables import DirectReplySource
 from .declared_family import DeclaredFamily
@@ -17,14 +17,19 @@ from .goal_presentation import GoalExecution, GoalExecutionSource, GoalWaitTarge
 from .goals import Goal, GoalDeclaration
 from .input_attempt import StoredInput, UnresolvedInput
 from .locked_store import WireWakeFile
+from .private_path import FileRevision
+from .store_files import SharedLock
 from .thread_identity import RecordedThreadIncarnation
 from .thread_owned_state import ThreadOwnedState
+from .turn_lease import TurnLease
 from .typed_table import Column, DurableStore, ForeignKey, Index, TypedTable
 
 if TYPE_CHECKING:
     from .agent_activity import AgentActivity
     from .registry_document import RegistrySnapshot
     from .threads import Thread
+    from .goal_management import Goals
+    from .registry_store import RegistryRevision
 
 
 class GoalWait(ABC):
@@ -62,7 +67,13 @@ class GoalWait(ABC):
     def consume_dependency(self, comms, canonical: str) -> bool:
         return True
 
-    def consume_reply(self, waits: GoalWaits, goal_id: str) -> bool:
+    def clear(self, waits: GoalWaits) -> bool:
+        return False
+
+    def current_for(self, goal: Goal, owner: RecordedThreadIncarnation) -> bool:
+        return False
+
+    def has_reply(self, bus: BusReader, owner: RecordedThreadIncarnation) -> bool:
         return False
 
     @abstractmethod
@@ -145,8 +156,8 @@ class RecordedGoalWait(GoalWait):
     def consume_dependency(self, comms, canonical: str) -> bool:
         return comms.goals.consume_goal_wait(canonical, self.wait_id)
 
-    def consume_reply(self, waits: GoalWaits, goal_id: str) -> bool:
-        return waits.clear(goal_id, wait_id=self.wait_id)
+    def clear(self, waits: GoalWaits) -> bool:
+        return waits.clear(self.goal_id, wait_id=self.wait_id)
 
     def execution(self, source: GoalExecutionSource) -> GoalExecution:
         targets = tuple(
@@ -187,7 +198,7 @@ class RecordedGoalWait(GoalWait):
             return self.after_seq
         return super().review_after_seq(goal, owner, targets)
 
-    def has_reply(self, bus: Bus, owner: RecordedThreadIncarnation) -> bool:
+    def has_reply(self, bus: BusReader, owner: RecordedThreadIncarnation) -> bool:
         if not self.owner_matches(owner):
             return False
         return any(
@@ -243,12 +254,55 @@ class StandbyReview:
 
 
 @dataclass(frozen=True, slots=True)
-class GoalInputReview:
-    """Ephemeral dependency review projection derived from bus and input authority."""
+class GoalWaitReview:
+    """The existing registry, turn and wait observed before reading reply history."""
 
-    goal_id: str
+    registry: RegistryRevision
+    owner: Thread
+    wait: GoalWait
+    turn: TurnLease
+
+    @classmethod
+    def capture(cls, goals: Goals, name: str) -> GoalWaitReview:
+        with goals.registry.store.locked(mode=SharedLock()):
+            registry = goals.registry.store.read_revision_unlocked()
+            owner = registry.snapshot.require(name)
+            return cls(registry, owner, goals.waits.resolve(owner.goal), owner.turn_lease)
+
+    def current_for(self, goals: Goals) -> bool:
+        """Caller holds the publication lock; no reply decoding belongs in this check."""
+        return (
+            FileRevision.capture(goals.registry.store.path) == self.registry.revision
+            and self.owner.turn_lease == self.turn
+            and goals.waits.resolve(self.owner.goal) == self.wait
+        )
+
+    def require_current(self, goals: Goals) -> None:
+        if not self.current_for(goals):
+            raise ValueError("Goal, dependency or wait changed during reply review; inspect it again.")
+
+    def unanswered(self, bus: BusReader) -> tuple[int, ...]:
+        """The captured bus cut with no qualifying reply, or no such cut."""
+        with bus.reading() as source:
+            if self.wait.has_reply(source, self.owner.incarnation.require_recorded()):
+                return ()
+            return (source.revision(),)
+
+    @property
+    def goal_id(self) -> str:
+        return self.owner.goal.require().id
+
+    @property
+    def owners(self) -> frozenset[str]:
+        return self.registry.snapshot.names_for(self.owner.name)
+
+
+@dataclass(frozen=True, slots=True)
+class GoalInputReview(GoalWaitReview):
+    """Reply eligibility and the exact bus cut inspected before publication."""
+
+    through_seq: int
     targets: tuple[GoalWaitTarget, ...]
-    owners: frozenset[str]
     unknown: tuple[StoredInput, ...]
     eligible_keys: frozenset[str]
 

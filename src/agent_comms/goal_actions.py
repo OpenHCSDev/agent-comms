@@ -41,7 +41,7 @@ from .goal_states import (
     PausedGoal,
     RuntimePause,
 )
-from .goal_waits import GoalWaits, RecordedGoalWait
+from .goal_waits import GoalInputReview, GoalWaits, RecordedGoalWait
 from .lifecycle_capability import Settled
 from .owner_requests import OwnerRequestId
 from .progress_claims import ProgressClaim
@@ -267,10 +267,31 @@ class StandbyGoalAction(TransitionGoalAction, ModelInvocable, RuntimeInvocable):
     def next_state(self, goal: Goal, ctx: GoalActionContext) -> GoalState:
         return ActiveGoal()
 
+    def prepare(self, goals: Goals, name: str, actor: type) -> GoalAction[Goal]:
+        ctx = GoalActionContext(goals, goals.registry.require(name), actor)
+        self.expect.check(ctx)
+        review = goals._goal_input_review(name, ctx.thread.goal.require().id, self.wait_for)
+        self.expect.check(GoalActionContext(goals, review.owner, actor))
+        return PreparedStandbyGoalAction(
+            expect=replace(self.expect, expected_goal=review.owner.goal),
+            progress=self.progress,
+            wait_for=self.wait_for,
+            reviewed_inputs=self.reviewed_inputs,
+            review=review,
+        )
+
+
+@dataclass(frozen=True, kw_only=True)
+class PreparedStandbyGoalAction(StandbyGoalAction, declared_name=None):
+    """Only the action prepared from real replies can publish this exact wait."""
+
+    review: GoalInputReview
+
     def before_goal_publish(self, goal: Goal, ctx: GoalActionContext) -> None:
+        review = self.review
+        review.require_current(ctx.goals)
         thread = ctx.thread
         report_turn = ctx.report_turn
-        review = ctx.goals._goal_input_review(thread, goal.id, self.wait_for)
         wait_targets = review.targets
         aliases = review.owners
         dispositions = InputDispositions(ctx.goals.root)
@@ -340,7 +361,7 @@ class StandbyGoalAction(TransitionGoalAction, ModelInvocable, RuntimeInvocable):
                 goal.id,
                 uuid4().hex,
                 goal.revision,
-                ctx.goals.bus.bus.revision(),
+                review.through_seq,
                 wait_targets,
                 owner=thread.incarnation.require_recorded(),
                 report_turn_id=reporting_lease.stored_turn_id(),
