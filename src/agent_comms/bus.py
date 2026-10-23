@@ -8,6 +8,7 @@ from abc import ABC, abstractmethod
 from collections.abc import Callable, Generator, Iterable, Iterator
 from contextlib import AbstractContextManager, ExitStack, closing, contextmanager
 from dataclasses import dataclass, replace
+from heapq import nlargest
 from itertools import islice, product
 from pathlib import Path
 from typing import TYPE_CHECKING, Self
@@ -83,6 +84,22 @@ class AddressedRow(Addressed, BusRow, declared_name=None):
             f'FROM "{addresses.declared_name}" '
             f'JOIN "{BusRow.declared_name}" USING(seq) '
             f'WHERE {addresses._sql(predicate)}', parameters))
+
+
+    @classmethod
+    def latest(
+        cls, db: sqlite3.Connection, senders: frozenset[str], targets: frozenset[str],
+    ) -> tuple[Message, ...]:
+        """One indexed candidate per alias pair; an empty selection stays empty."""
+        positions = nlargest(1, (
+            row.seq for sender, target in product(senders, targets)
+            for row in Addressed.table.select(
+                db, sender=sender, target=target,
+                order_by=("seq",), descending=True, limit=1,
+            )
+        ))
+        headers = (BusRow.require(db, seq=seq) for seq in positions)
+        return tuple(header.kind.read_from(db, header.seq) for header in headers)
 
 
 class BusReader(RouteCounts, ABC):
@@ -236,19 +253,8 @@ class BusReader(RouteCounts, ABC):
     def latest_addressed(
         self, senders: frozenset[str], targets: frozenset[str],
     ) -> tuple[Message, ...]:
-        """Newest directed message across aliases, with one indexed candidate per pair."""
         with self.observing() as db:
-            newest = max((
-                row.seq for sender, target in product(senders, targets)
-                for row in Addressed.table.select(
-                    db, sender=sender, target=target,
-                    order_by=("seq",), descending=True, limit=1,
-                )
-            ), default=None)
-            if newest is None:
-                return ()
-            header = BusRow.require(db, seq=newest)
-            return (header.kind.read_from(db, header.seq),)
+            return AddressedRow.latest(db, senders, targets)
 
     def messages_for_references(
         self, references: Iterable[MessageReference],
@@ -269,9 +275,9 @@ class BusReader(RouteCounts, ABC):
 
     def _source_sequences(
         self, query: str, parameters: tuple[object, ...], *, after: int = 0,
-        before: int | None = None, descending: bool = True,
-        sequences: tuple[int, ...] = (), limit: int | None = None,
-    ) -> Generator[int, None, None]:
+        before: int | None = None, limit: int = 100, descending: bool = True,
+        sequences: tuple[int, ...] = (),
+    ) -> Generator[int]:
         """Stream selected frozen participant positions on the held snapshot."""
         with self.observing() as db:
             before = BusRow.last_seq(db) + 1 if before is None else before
@@ -281,8 +287,8 @@ class BusReader(RouteCounts, ABC):
             order = "DESC" if descending else "ASC"
             with closing(db.execute(
                 f"SELECT seq FROM ({query}) WHERE seq > ? AND seq < ?{selected} "
-                f"ORDER BY seq {order}" + (" LIMIT ?" if limit is not None else ""),
-                (*parameters, after, before, *sequences) + ((limit,) if limit is not None else ()),
+                f"ORDER BY seq {order} LIMIT ?",
+                (*parameters, after, before, *sequences, limit),
             )) as rows:
                 for row in rows:
                     yield FieldCodec.decode(int, row[0])
@@ -295,8 +301,7 @@ class BusReader(RouteCounts, ABC):
             positions: set[int] = set()
             for participant in ParticipantSource.schema_rows():
                 with closing(source._source_sequences(
-                    f'SELECT seq FROM "{participant.declared_name}" WHERE lookup=?',
-                    (lookup,), after=after, before=before, descending=descending,
+                    *participant.query(lookup), after=after, before=before, descending=descending,
                     sequences=sequences, limit=limit,
                 )) as selected:
                     positions.update(selected)
@@ -309,47 +314,31 @@ class BusReader(RouteCounts, ABC):
         limit: int = 100, descending: bool = True,
     ) -> tuple[Delivered, ...]:
         with self.reading() as source, closing(source._source_sequences(
-            f'SELECT seq FROM "{SentSource.declared_name}" WHERE lookup=?', (lookup,),
+            *SentSource.query(lookup),
             after=after, before=before, descending=descending, limit=limit,
         )) as positions:
             return tuple(source.delivery(seq) for seq in positions)
-
-    def _received_sequences(
-        self, lookup: str, *, after: int = 0, before: int | None = None,
-        sender_lookups: tuple[str, ...] = (), descending: bool = True,
-        sequences: tuple[int, ...] = (), limit: int | None = None,
-    ) -> Generator[int, None, None]:
-        sender = ""
-        if sender_lookups:
-            marks = ",".join("?" for _ in sender_lookups)
-            sender = (f' AND seq IN (SELECT seq FROM "{SentSource.declared_name}" '
-                      f'WHERE lookup IN ({marks}))')
-        return self._source_sequences(
-            f'SELECT seq FROM "{ReceivedSource.declared_name}" WHERE lookup=?{sender}',
-            (lookup, *sender_lookups), after=after, before=before,
-            descending=descending, sequences=sequences, limit=limit,
-        )
 
     def received(
         self, lookup: str, *, after: int = 0, before: int | None = None, limit: int = 100,
         sender_lookups: tuple[str, ...] = (), descending: bool = True,
         sequences: tuple[int, ...] = (),
     ) -> tuple[Delivered, ...]:
-        with self.reading() as source, closing(source._received_sequences(
-            lookup, after=after, before=before, sender_lookups=sender_lookups,
+        with self.reading() as source, closing(source._source_sequences(
+            *ReceivedSource.query(lookup, sender_lookups), after=after, before=before,
             descending=descending, sequences=sequences, limit=limit,
         )) as positions:
             return tuple(source.delivery(seq) for seq in positions)
 
     def direct_replies(
-        self, lookup: str, *, after: int = 0, before: int | None = None, limit: int = 100,
+        self, lookup: str, *, after: int = 0, limit: int = 100,
         sender_lookups: tuple[str, ...] = (), descending: bool = True,
         sequences: tuple[int, ...] = (),
     ) -> tuple[Delivered, ...]:
         """Read actual message policy before loading accepted frozen deliveries."""
-        with self.reading() as source, source.observing() as db, closing(source._received_sequences(
-            lookup, after=after, before=before, sender_lookups=sender_lookups,
-            descending=descending, sequences=sequences,
+        with self.reading() as source, source.observing() as db, closing(source._source_sequences(
+            *ReceivedSource.query(lookup, sender_lookups), after=after,
+            descending=descending, sequences=sequences, limit=-1,
         )) as positions:
             messages = (Message.read_from(db, seq) for seq in positions)
             # ReceivedSource already establishes the frozen recipient incarnation.

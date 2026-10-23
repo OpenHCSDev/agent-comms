@@ -359,7 +359,7 @@ class HeartbeatSilent(IndependentStandingRule, DatedStandingRule, declared_name=
         if not requests:
             return ()
         request, = requests
-        beats = ()
+        beats: tuple[Message, ...] = ()
         if snapshot.canonical_name(CommanderHeartbeat.sender) in snapshot.threads:
             beats = comms.bus.bus.latest_addressed(
                 snapshot.names_for(CommanderHeartbeat.sender), snapshot.names_for(thread.name),

@@ -71,6 +71,10 @@ class ParticipantSource(TypedTable, BusProjectionTables, declared_name=None):
     lookup: Annotated[str, Column(primary_key=True)]
     seq: Annotated[int, Column(primary_key=True)]
 
+    @classmethod
+    def query(cls, lookup: str) -> tuple[str, tuple[object, ...]]:
+        return f'SELECT seq FROM "{cls.declared_name}" WHERE lookup=?', (lookup,)
+
 
 class SentSource(ParticipantSource):
     """The participant authored this record."""
@@ -78,6 +82,17 @@ class SentSource(ParticipantSource):
 
 class ReceivedSource(ParticipantSource):
     """The participant belongs to the frozen delivery audience."""
+
+    @classmethod
+    def query(
+        cls, lookup: str, sender_lookups: tuple[str, ...] = (),
+    ) -> tuple[str, tuple[object, ...]]:
+        query, parameters = super().query(lookup)
+        if sender_lookups:
+            marks = ",".join("?" for _ in sender_lookups)
+            query += (f' AND seq IN (SELECT seq FROM "{SentSource.declared_name}" '
+                      f'WHERE lookup IN ({marks}))')
+        return query, (*parameters, *sender_lookups)
 
 
 @dataclass(frozen=True)
@@ -163,13 +178,15 @@ class AnsweredSource(TypedTable, BusProjectionTables):
         ))) as sequences:
             headers = (BusRow.require(db, seq=FieldCodec.decode(int, row[0])) for row in sequences)
             originals = (header.kind.read_from(db, header.seq) for header in headers)
-            return tuple(islice((original for original in originals if scope.includes(original)), limit))
+            return tuple(islice(
+                (original for original in originals if scope.includes(original)), limit,
+            ))
 
     @classmethod
     def _answer_values[V](
         cls, db: sqlite3.Connection, scope: RepliesDisplayScope,
         since: float, selection: str, value_type: type[V],
-    ) -> Generator[V, None, None]:
+    ) -> Generator[V]:
         """Visit each linked original once, in the requested answer order."""
         requesters, responders = scope.second_names, scope.first_names
         asking = ",".join("?" for _ in requesters)
