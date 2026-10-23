@@ -19,6 +19,7 @@ from .declared_family import DeclaredFamily
 from .display_order import ChannelSort, ThreadSort
 from .message_bus import MessageBus
 from .messages import InfoKind, MembershipConversationRole, Message
+from .mro_dispatch import MroDispatch, handles
 from .registration import Registration
 from .thread_identity import ThreadIncarnation
 from .thread_management import ChangedTags, GivenTags
@@ -37,7 +38,7 @@ class TagChangeResult(CliResult):
 
 
 @dataclass(frozen=True)
-class TagDisposition(DeclaredFamily, affix="TagDisposition"):
+class TagDisposition(DeclaredFamily, MroDispatch, affix="TagDisposition"):
     """Each declared channel operation owns its membership effect and warning."""
     label: ClassVar[str]
     requires_confirmation: ClassVar[bool] = True
@@ -45,10 +46,19 @@ class TagDisposition(DeclaredFamily, affix="TagDisposition"):
     @abstractmethod
     def confirmation(self, tag: str | tuple[str, ...]) -> str: ...
 
+    @classmethod
+    def tag_names(cls, tag: str | tuple[str, ...]) -> str:
+        return ', '.join(map(ChannelTarget.normalize_name, cls.handler_for(type(tag))(tag)))
+
+    @handles(str)
     @staticmethod
-    def tag_names(tag: str | tuple[str, ...]) -> str:
-        return ', '.join(map(ChannelTarget.normalize_name,
-                             (tag,) if isinstance(tag, str) else tag))
+    def single_tag(tag: str) -> tuple[str, ...]:
+        return (tag,)
+
+    @handles(object)
+    @staticmethod
+    def multiple_tags(tags: Sequence[str]) -> Sequence[str]:
+        return tags
 
     @abstractmethod
     def apply(self, channels: ChannelManagement, tag: str, cohort: tuple[Thread, ...]) -> TagChangeResult: ...

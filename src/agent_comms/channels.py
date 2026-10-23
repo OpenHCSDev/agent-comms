@@ -19,6 +19,7 @@ from .errors import RelationViolationError
 from .field_codec import FieldCodec, CatalogExclude
 from .history_result import ChannelHistoryPageResult, EverythingHistoryPageResult, HistoryPageResult
 from .messages import MembershipTransition
+from .mro_dispatch import MroDispatch, handles
 from .read_basis import AllChannelDisplayScope, ChannelDisplayScope, MemberActivityDisplayScope
 from .tool_result import ToolResult
 
@@ -48,7 +49,7 @@ class ChannelMemberIndex(dict[str, tuple["Thread", ...]]):
 
 
 @dataclass(frozen=True, slots=True)
-class Channel(DeclaredFamily, CliResult, ToolResult, ProjectionSource, affix="Channel"):
+class Channel(DeclaredFamily, MroDispatch, CliResult, ToolResult, ProjectionSource, affix="Channel"):
     """A captured channel presentation with behavior supplied by its declaration."""
 
     name: str
@@ -66,10 +67,10 @@ class Channel(DeclaredFamily, CliResult, ToolResult, ProjectionSource, affix="Ch
         object.__setattr__(self, "name", name)
         if self.parent is not None:
             object.__setattr__(self, "parent", ChannelTarget.normalize_name(self.parent))
-        if not isinstance(self.order, type) or self.order not in ThreadSort.members_with(ThreadSort):
+        if self.order not in ThreadSort.members_with(ThreadSort):
             raise ValueError("Channel ordering must be a declared ThreadSort.")
-        if not isinstance(self.archived, bool) or not isinstance(self.any_mode, bool):
-            raise ValueError("Channel presentation flags must be boolean.")
+        for flag in (self.archived, self.any_mode):
+            self.handler_for(type(flag))(flag)
         if self.any_mode and not self.exact:
             raise ValueError("Only exact tag channels can include member activity.")
         if self.parent is not None:
@@ -77,6 +78,16 @@ class Channel(DeclaredFamily, CliResult, ToolResult, ProjectionSource, affix="Ch
         if self.parent == name:
             raise RelationViolationError("A channel cannot be its own parent.")
         self.validate_declaration()
+
+    @handles(bool)
+    @staticmethod
+    def valid_flag(value: bool) -> None:
+        pass
+
+    @handles(object)
+    @staticmethod
+    def invalid_flag(value: object) -> None:
+        raise ValueError("Channel presentation flags must be boolean.")
 
     @abstractmethod
     def validate_declaration(self) -> None: ...

@@ -29,6 +29,7 @@ from .field_codec import (
     WireRequired,
 )
 from .message_reference import MessageReference
+from .mro_dispatch import MroDispatch, handles
 from .thread_identity import GenerationCounter, RecordedThreadIncarnation, TurnId
 
 if TYPE_CHECKING:
@@ -52,14 +53,23 @@ class ClaimConflict(ClaimTransitionError):  # noqa: N818 - domain-specific losin
 
 
 @dataclass(frozen=True)
-class FileClaimPath(ABC):
+class FileClaimPath(ABC, MroDispatch):
     """A caller's file operation owns which physical paths may be claimed."""
 
     resource: Path
 
     def __post_init__(self) -> None:
-        if not isinstance(self.resource, Path):
-            raise TypeError("File claim requires a parsed path")
+        self.handler_for(type(self.resource))(self.resource)
+
+    @handles(Path)
+    @staticmethod
+    def parsed_path(resource: Path) -> None:
+        pass
+
+    @handles(object)
+    @staticmethod
+    def invalid_path(resource: object) -> None:
+        raise TypeError("File claim requires a parsed path")
 
     def normalized(self, root: Path) -> str:
         base = Path(root).absolute()
