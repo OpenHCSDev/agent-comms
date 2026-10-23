@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import agent_comms
 from .turn_origin import TurnOrigin
 import builtins
 import hashlib
@@ -24,7 +25,7 @@ from typing import (
 from agent_comms.response_policy import InformationalPolicy, ResponseEligibility, ResponsePolicy
 from agent_comms.typed_table import (
     AppendOnlyTables, Column, DerivedTables, DurableTables, ForeignKey, Index,
-    ProducedRow, SharedFileTables, TableReference, TypedRow, TypedTable,
+    ProducedTable, SharedFileTables, TableReference, TypedRow, TypedTable,
 )
 
 from .change_report import FileLine, NoChangeReport, ReportEvidence
@@ -63,12 +64,19 @@ if TYPE_CHECKING:
     from .threads import Thread
 
 
-class BusTables(SharedFileTables, DurableTables, AppendOnlyTables):
+class BusTables(TypedTable, AppendOnlyTables, SharedFileTables, DurableTables, declared_name=None):
     """Bus history cannot be rebuilt from another source."""
 
 
-class BusProjectionTables(ProducedRow, SharedFileTables, DerivedTables):
+class BusProjectionTables(ProducedTable, SharedFileTables, DerivedTables, declared_name=None):
     """Reverse lookups are derived from the record, in its append transaction."""
+
+    @classmethod
+    def producer_classes(cls) -> tuple[type[DeclaredFamily], ...]:
+        return (
+            *BusRecord.discover_members(agent_comms, BusCapability),
+            *ClaimTransition.discover_members(agent_comms, ClaimTransition),
+        )
 
     @classmethod
     def create_schema(cls, db: sqlite3.Connection) -> None:
@@ -81,7 +89,7 @@ class BusProjectionTables(ProducedRow, SharedFileTables, DerivedTables):
 
 
 @dataclass(frozen=True)
-class BusRow(TypedTable, BusTables):
+class BusRow(BusTables):
     seq: Annotated[int, Column(primary_key=True, auto_increment=True)]
     kind: type[BusRecord]
     at: float
@@ -101,7 +109,7 @@ class BusRow(TypedTable, BusTables):
 
 
 @dataclass(frozen=True)
-class ClaimOperations(TypedTable, BusProjectionTables):
+class ClaimOperations(BusProjectionTables):
     """An acquisition's consumed operation refers to its original claim row."""
 
     operation_id: Annotated[str, Column(primary_key=True)]
@@ -117,7 +125,7 @@ class ClaimOperations(TypedTable, BusProjectionTables):
 
 
 @dataclass(frozen=True)
-class HeldResources(TypedTable, BusProjectionTables):
+class HeldResources(BusProjectionTables):
     """Current membership references the canonical transition, never a copy."""
 
     resource: Annotated[str, Column(primary_key=True)]
@@ -255,7 +263,7 @@ class ReplayedHolders(ClaimHolders):
 
 
 @dataclass(frozen=True)
-class CapabilityRow(TypedTable, BusTables, declared_name=None):
+class CapabilityRow(BusTables, declared_name=None):
     """Every generated capability row belongs to one original bus sequence."""
 
     seq: Annotated[int, Column(primary_key=True, references=TableReference(BusRow, ("seq",)))]
