@@ -31,14 +31,6 @@ class RegistrationChange(ABC):
     def prior_goal(self) -> GoalDeclaration: ...
 
     @property
-    def claims_owner(self) -> bool:
-        return self.status.claims_owner(self.thread.process_identity) and self.takes_over_owner
-
-    @property
-    @abstractmethod
-    def takes_over_owner(self) -> bool: ...
-
-    @property
     @abstractmethod
     def changes_owner(self) -> bool: ...
 
@@ -63,7 +55,6 @@ class RegistrationChange(ABC):
 class InitialRegistration(RegistrationChange):
     prior_goal = NoGoal()
     changes_owner = True
-    takes_over_owner = True
 
     def restarted(self) -> RegistrationChange:
         return InitialOwnerRegistration(thread=self.thread, status=self.status)
@@ -99,13 +90,6 @@ class UpdatedRegistration(RegistrationChange):
         return self.previous.goal
 
     @property
-    def takes_over_owner(self) -> bool:
-        return (
-            self.previous.process_identity != self.thread.process_identity
-            or self.previous_status.starts_owner(self.status)
-        )
-
-    @property
     def changes_owner(self) -> bool:
         return (
             self.previous.process_identity != self.thread.process_identity
@@ -138,10 +122,6 @@ class ExplicitOwnerChange(RegistrationChange):
     """Fresh explicit registration always revokes imported permission to run a turn."""
 
     changes_owner = True
-
-    @property
-    def claims_owner(self) -> bool:
-        return True
 
     def restarted(self) -> RegistrationChange:
         return self

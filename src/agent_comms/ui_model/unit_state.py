@@ -130,7 +130,7 @@ class UnitState(UndatedStandingRule, declared_name=None):
 
     @classmethod
     def scan_observed(
-        cls, comms: Comms, commander: str, observed: Sequence[UnitState]
+        cls, comms: Comms, commander: str, observed: Sequence[UnitState], pulls: ProgressRead
     ) -> tuple[Self, ...]:
         # States are already read; ordinary scans consume them rather than emit them again.
         return ()

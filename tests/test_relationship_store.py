@@ -9,7 +9,7 @@ import pytest
 from agent_comms.relationships import RelationshipEdit
 from agent_comms.comms import wire
 from agent_comms.relationships import RelationshipDocument, RelationshipStore
-from agent_comms.store_files import SharedLock, _store_lock
+from agent_comms.store_files import SharedLock, StoreLockContention, _store_lock
 from test_locked_store import _hold_lock, assert_writer_excluded, event, process
 from test_relationships import setup_wire
 
@@ -43,7 +43,7 @@ def test_actual_adopter_reads_share_document_lock(tmp_path):
             assert ready.wait(5)
             with process(_read_adopter, comms.root, done):
                 assert done.wait(5), "adopter read requested an exclusive document lock"
-            with pytest.raises(BlockingIOError), _store_lock(path, blocking=False):
+            with pytest.raises(BlockingIOError), _store_lock(path, contention=StoreLockContention(0)):
                 pass
         finally:
             release.set()
@@ -54,7 +54,7 @@ def test_shared_read_scope_holds_lock_until_exit(tmp_path):
     with store.reading() as document:
         assert document == RelationshipDocument()
         assert_writer_excluded(store.path)
-    with _store_lock(store.path, blocking=False):
+    with _store_lock(store.path, contention=StoreLockContention(0)):
         pass
 
 

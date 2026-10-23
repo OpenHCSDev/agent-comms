@@ -29,6 +29,7 @@ from .store_files import (
     AtomicFile,
     SharedLock,
     StoreLock,
+    StoreLockContention,
     StoreLockOwner,
     StoreOwner,
     _store_lock,
@@ -450,6 +451,10 @@ class StoreContention(ABC):
     ) -> sqlite3.Connection:
         return sqlite3.connect(path, timeout=self.timeout, **options)
 
+    def lock_budget(self) -> StoreLockContention:
+        """The same wait spent on the store's file locks: one fresh budget per operation."""
+        return StoreLockContention(self.timeout)
+
 
 @dataclass(frozen=True)
 class StoreWait(StoreContention):
@@ -688,9 +693,9 @@ class LockedStore(FileStore, LockedFile, JsonDocument[T], declared_name=None):
 
     path: Path
     @contextmanager
-    def reading(self, *sources, blocking: bool = True) -> Iterator[T]:
+    def reading(self, *sources) -> Iterator[T]:
         """Retain dependent source owners before this document's shared lock."""
-        with StoreLock.ordered(dict.fromkeys((*sources, self), SharedLock()), blocking=blocking):
+        with StoreLock.ordered(dict.fromkeys((*sources, self), SharedLock())):
             yield self._read_unlocked()
 
     def read(self) -> T:

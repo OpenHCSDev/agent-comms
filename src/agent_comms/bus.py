@@ -51,6 +51,7 @@ from agent_comms.locked_store import BusFile, SQLiteFile, StoreCommittedError
 from agent_comms.message_reference import MessageReference
 from agent_comms.private_path import FileIdentity, PresentPath
 from agent_comms.read_basis import ChannelDisplayScope, ReadCursor, RepliesDisplayScope
+from agent_comms.store_files import UNBOUNDED_CONTENTION, StoreLockContention
 from agent_comms.typed_table import CarriedWriter, ReconciledFile, SQLiteDatabase, WalStore
 from agent_comms.watched import Watched
 
@@ -114,7 +115,11 @@ class BusReader(RouteCounts, ABC):
     """One query implementation for individual reads and a held read snapshot."""
 
     @abstractmethod
-    def observing(self) -> AbstractContextManager[sqlite3.Connection]: ...
+    def observing(
+        self, contention: StoreLockContention = UNBOUNDED_CONTENTION,
+    ) -> AbstractContextManager[sqlite3.Connection]:
+        """One read snapshot; a file attachment spends ``contention``, the lock budget of
+        the read it serves."""
 
     @contextmanager
     def reading(self) -> Iterator[BusSnapshot]:
@@ -126,8 +131,10 @@ class BusReader(RouteCounts, ABC):
         with self.observing() as db:
             return BusRow.last_seq(db)
 
-    def activity_clocks(self) -> ActivityClocks:
-        with self.observing() as db:
+    def activity_clocks(
+        self, contention: StoreLockContention = UNBOUNDED_CONTENTION,
+    ) -> ActivityClocks:
+        with self.observing(contention) as db:
             return BusActivityIndex.clocks(db)
 
     def target_activity(self, predicate: str, parameters: tuple[object, ...]) -> ChannelActivity:
@@ -459,11 +466,13 @@ class Bus(BusReader, ReconciledFile, WalStore, CarriedWriter, BusFile, Watched):
         return BusSchema
 
     @contextmanager
-    def observing(self) -> Iterator[sqlite3.Connection]:
+    def observing(
+        self, contention: StoreLockContention = UNBOUNDED_CONTENTION,
+    ) -> Iterator[sqlite3.Connection]:
         """Borrow one read-only snapshot, including for an archived bus; a bus before its
         first write reads as its declared empty tables."""
         with self.committed_or_empty(
-            self.table_schema(), lambda: SQLiteFile.observing(self.path)
+            self.table_schema(), lambda: SQLiteFile.observing(self.path), contention
         ) as db:
             yield db
 
@@ -543,7 +552,10 @@ class BusSnapshot(PresentPath, BusReader):
         return cls(identity=FileIdentity.from_stat(path.stat()), path=path, _connection=connection)
 
     @contextmanager
-    def observing(self) -> Iterator[sqlite3.Connection]:
+    def observing(
+        self, contention: StoreLockContention = UNBOUNDED_CONTENTION,
+    ) -> Iterator[sqlite3.Connection]:
+        """The held snapshot is already attached, so it takes no lock."""
         yield self._connection
 
     @contextmanager

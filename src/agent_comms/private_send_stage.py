@@ -162,9 +162,7 @@ class NativeSendStage(ABC):
                 )
             # Binding writers acquire sidecar before SQL. Keep that order here,
             # and finish journal I/O before acquiring the coordinator snapshot.
-            with self.bound_prompt(
-                store, input_id, owner, wire_root_id, prompt, blocking=True,
-            ) as binding:
+            with self.bound_prompt(store, input_id, owner, wire_root_id, prompt) as binding:
                 if not expected_prompt_matches_journal(context.session_file, binding, evidence=evidence):
                     raise IdentityConflict("live native input lacks exact bound source prompt equality")
                 with store.session.read():
@@ -209,9 +207,9 @@ class NativeSendStage(ABC):
     @contextmanager
     def bound_prompt(
         self, store: Coordination, input_id: str, owner: ParticipantOwner,
-        wire_root_id: str, prompt: str, *, blocking: bool = False,
+        wire_root_id: str, prompt: str,
     ) -> Iterator[PromptBinding]:
-        with expected_prompt_bindings(store, (input_id,), blocking=blocking) as bindings:
+        with expected_prompt_bindings(store, (input_id,)) as bindings:
             binding = bindings.get(input_id)
             self.require_bound_prompt(binding, owner, wire_root_id, prompt)
             yield binding

@@ -72,7 +72,7 @@ from agent_comms.head_review import AcceptedHeadReview
 from agent_comms.lifecycle_capability import LifecycleCapability, Pending
 from agent_comms.message_reference import MessageReference
 from agent_comms.messages import InfoKind, Message
-from agent_comms.native_tool_call import SelectedToolDenied
+from agent_comms.tool_denial import SelectedToolDenied
 from agent_comms.order_runs import OrderRun
 from agent_comms.order_story import FleetEvent, ProblemStory, StoryEvent, StoryLine, StorySource
 from agent_comms.owner_requests import (
@@ -997,6 +997,11 @@ class ProgressRead(PullRequests, CheckoutReads):
     def __init__(self, todos: Sequence[Todo] = ()) -> None:
         CheckoutReads.__init__(self)
         PullRequests.__init__(self, todos)
+
+    def progress(self, held: Sequence[Todo], registry: Registration) -> dict[str, OrderProgress]:
+        """Each held order's progress, read through this frame's one reader."""
+        self.register(held)
+        return {todo.id: OrderProgress.read(todo, registry, self) for todo in held}
 
 
 @dataclass(frozen=True)
@@ -4016,17 +4021,6 @@ class TodoStore(OwnerRequestStore):
         return self._select("creator=? AND creator_created=?",
                             (commander.name, commander.wire_birth), reader=self._open)
 
-    def timers_up_for_commander(
-        self, commander: ThreadIncarnation, registry: Registration, now: float,
-        pulls: ProgressRead | None = None,
-    ) -> tuple[tuple[Todo, RecordedEventTime], ...]:
-        """Held work whose review timer is up, with its round; merged work waits on install.
-        The heartbeat passes its frame's reader, so one beat asks the forge once."""
-        held = self.held_for_commander(commander)
-        pulls = ProgressRead(held) if pulls is None else pulls.register(held)
-        progress = {todo.id: OrderProgress.read(todo, registry, pulls) for todo in held}
-        return self.timers_up_in(held, now, progress)
-
     @staticmethod
     def timers_up_in(held: Sequence[Todo], now: float,
                      progress: Mapping[str, OrderProgress]) -> tuple[tuple[Todo, RecordedEventTime], ...]:
@@ -4039,11 +4033,11 @@ class TodoStore(OwnerRequestStore):
             (commander.name, commander.wire_birth), reader=self._open)
 
     def claimed_heads_for_commander(
-        self, commander: ThreadIncarnation, pulls: PullRequests | None = None,
+        self, commander: ThreadIncarnation, pulls: PullRequests,
     ) -> Iterator[tuple[Todo, OrderClaim, PullRequest]]:
         """Recorded delivery claims survive a missing or stopped unit observation."""
         held = self.held_for_commander(commander)
-        reader = PullRequests(held) if pulls is None else pulls.register(held)
+        reader = pulls.register(held)
         for todo in held:
             for claim, request in reader.claimed_heads(todo):
                 yield todo, claim, request

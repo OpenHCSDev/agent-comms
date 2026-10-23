@@ -7,7 +7,7 @@ import math
 import re
 import shutil
 import time
-from abc import abstractmethod
+from abc import ABC, abstractmethod
 from collections.abc import Iterable, Iterator, Sequence
 from dataclasses import dataclass, field, replace
 from enum import StrEnum
@@ -27,7 +27,6 @@ from agent_comms.field_codec import (
     SubclassUnion,
 )
 from agent_comms.locked_store import DurableFile
-from agent_comms.native_tool_call import SelectedToolDenied
 from agent_comms.problem_number import ProblemNumber
 from agent_comms.repo import Repo
 from agent_comms.repository_name import RepositoryName
@@ -38,6 +37,7 @@ from agent_comms.storage_room import (
     RoomAllocation,
     TestGateRoomWork,
 )
+from agent_comms.tool_denial import SelectedToolDenied
 from agent_comms.work_branches import WorkBranches
 from agent_comms_hooks.shell import ShellCommand
 
@@ -46,7 +46,7 @@ if TYPE_CHECKING:
     from agent_comms.registration import Registration
     from agent_comms.thread_identity import ThreadIncarnation
     from agent_comms.threads import Thread
-    from agent_comms.todos import Todo, TodoStore
+    from agent_comms.todos import ProgressRead, Todo, TodoStore
     from agent_comms.ui_model.unit_state import UnitState
 
 StoragePath = Annotated[Path, PathText]
@@ -397,7 +397,7 @@ class StorageViolation(UndatedStandingRule, declared_name=None):
 
     @classmethod
     def scan_observed(cls, comms: Comms, commander: str,
-                      observed: Sequence[UnitState]) -> tuple[Self, ...]:
+                      observed: Sequence[UnitState], pulls: ProgressRead) -> tuple[Self, ...]:
         # Storage reads the filesystem, not the git source an unreadable card failed on:
         # a unit whose declared home is gone is that card and a missing home.
         held = StandingRule.holders(comms, commander)
@@ -453,6 +453,11 @@ class StorageProjection:
     def storage(self) -> UnitStorage:
         return UnitStorage.read(self.rule, self.thread)
 
+    def check(self, effects: Sequence[StorageEffect]) -> None:
+        """Preflight every effect of one call against this one snapshot."""
+        for effect in effects:
+            effect.check(self)
+
 
 class ShellProgram:
     names: ClassVar[frozenset[str]] = frozenset()
@@ -482,9 +487,13 @@ class StorageDenied(SelectedToolDenied):
     """The storage preflight refused an operation before it executed."""
 
 
-class StorageEffect:
+class StorageEffect(ABC):
     """Preflight one actual operation and declare its measured work, if any."""
     work: ClassVar[tuple] = ()
+
+    @abstractmethod
+    def check(self, projection: StorageProjection) -> None:
+        """Refuse this operation if the thread's storage cannot take it."""
 
 
 @dataclass(frozen=True)
