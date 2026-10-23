@@ -929,14 +929,7 @@ class CliCommand[Answer: CliResult = CliResult](
 
     def run(self, ctx: Comms, output: TextIO) -> int:
         """Run this command and write its declared result."""
-        return self.written(self.apply(ctx), output)
-
-    @staticmethod
-    def written(result: CliResult, output: TextIO) -> int:
-        """Write one declared result to the caller's stream; its exit code."""
-        json.dump(result.to_wire(), output, indent=2)
-        output.write("\n")
-        return result.exit_code()
+        return self.apply(ctx).write(output)
 
     @classmethod
     def published_launch(cls) -> LaunchRoot:
@@ -1390,8 +1383,41 @@ class InboxCliCommand(ThreadArgument, CliCommand):
         return InboxResult(tuple(ctx.bus.inbox(self.thread)))
 
 
+@dataclass(frozen=True)
+class WatchStream(CliResult):
+    """Unread and arriving messages, written as JSON lines for as long as the watch lasts."""
+
+    comms: Comms
+    watch: WatchCliCommand
+
+    def messages(self) -> AsyncIterator[Message]:
+        return self.comms.bus.watch(self.watch.thread, acknowledgment=self.watch.acknowledgment,
+                                    after=self.watch.after)
+
+    def write(self, output: TextIO) -> int:
+        emit = self.watch.acknowledgment.line_output(output)
+        async def stream() -> None:
+            async with aclosing(self.messages()) as messages:
+                async for message in messages:
+                    emit(ArrivedMessage(message=message).model_dump_json())
+
+        async def watch() -> None:
+            thread = self.comms.registry.require(self.watch.thread)
+            source = thread.runtime.history_source(self.comms.root, thread.incarnation)
+            async with asyncio.TaskGroup() as tasks:
+                tasks.create_task(stream())
+                tasks.create_task(source.watch_requests(
+                    lambda row: emit(EarlierItems.from_row(row).model_dump_json())))
+
+        try:
+            asyncio.run(watch())
+        except* MaintenanceHeldError as held:  # the bridge reads it as its one held line
+            raise held.exceptions[0] from None
+        return self.exit_code()
+
+
 @dataclass(frozen=True, kw_only=True)
-class WatchCliCommand(ThreadArgument, CliCommand, declared_name="watch"):
+class WatchCliCommand(ThreadArgument, CliCommand[WatchStream], declared_name="watch"):
     help = "Stream unread and arriving messages as JSON lines"
     after: Annotated[
         InboxStart,
@@ -1409,29 +1435,8 @@ class WatchCliCommand(ThreadArgument, CliCommand, declared_name="watch"):
         Argument(flags=("--acknowledgment",)),
     ] = OnReadWatchAcknowledgment
 
-    def apply(self, ctx: Comms) -> AsyncIterator[Message]:
-        return ctx.bus.watch(self.thread, acknowledgment=self.acknowledgment, after=self.after)
-
-    def run(self, ctx: Comms, output: TextIO) -> int:
-        emit = self.acknowledgment.line_output(output)
-        async def stream() -> None:
-            async with aclosing(self.apply(ctx)) as messages:
-                async for message in messages:
-                    emit(ArrivedMessage(message=message).model_dump_json())
-
-        async def watch() -> None:
-            thread = ctx.registry.require(self.thread)
-            source = thread.runtime.history_source(ctx.root, thread.incarnation)
-            async with asyncio.TaskGroup() as tasks:
-                tasks.create_task(stream())
-                tasks.create_task(source.watch_requests(
-                    lambda row: emit(EarlierItems.from_row(row).model_dump_json())))
-
-        try:
-            asyncio.run(watch())
-        except* MaintenanceHeldError as held:  # the bridge reads it as its one held line
-            raise held.exceptions[0] from None
-        return 0
+    def apply(self, ctx: Comms) -> WatchStream:
+        return WatchStream(ctx, self)
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -1813,7 +1818,7 @@ class ReadBackCliCommand(CliCommand[BusReadBack], declared_name="read-back"):
 
     def execute(self, route: CommsRoute, output: TextIO) -> int:
         """Before its carries, the installer reads only the existing registry."""
-        return self.written(self.answer(route.root), output)
+        return self.answer(route.root).write(output)
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -1837,7 +1842,7 @@ class StoreReconcileCliCommand(CliCommand[ReconciledStoresResult]):
 
     def execute(self, route: CommsRoute, output: TextIO) -> int:
         """Reconciliation reads its declared files before opening runtime consumers."""
-        return self.written(self.answer(route.root), output)
+        return self.answer(route.root).write(output)
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -1859,7 +1864,7 @@ class PlannedReconcileCliCommand(StoreReconcileCliCommand, declared_name="planne
     def changes(owner: type[ReconciledFile], path: Path) -> bool:
         schema = owner.schema_at(path)
         with closing(owner.read_snapshot(path)) as db:
-            return schema.schema_differs(db)
+            return schema.reconcile_writes(db)
 
 @dataclass(frozen=True, kw_only=True)
 class CheckpointCliCommand(NameArgument, CliCommand, declared_name="checkpoint"):
@@ -2569,4 +2574,4 @@ class ReplaceRouteCliCommand(CliCommand[RouteReplacedResult],
     def execute(self, route: CommsRoute, output: TextIO) -> int:
         """Every client borrows the published route, and a route that selects no bus refuses
         each borrower, so the repair of that route borrows none."""
-        return self.written(self.answer(route.root), output)
+        return self.answer(route.root).write(output)

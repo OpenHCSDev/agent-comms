@@ -198,7 +198,7 @@ class StoreBackup(ResourceBackup):
                 root, (path.name for path in spill_dir.iterdir() if path.is_dir())
             ), reverse=True)
         )
-        return tuple(backup for backup in backups if not backup.original())
+        return tuple(backup for backup in backups if backup.restoring.exists())
 
     @classmethod
     def complete_interrupted(cls, root: Path, spill_dir: Path) -> tuple[Path, ...]:
@@ -214,6 +214,13 @@ class StoreBackup(ResourceBackup):
             maintenance.clear(hold)
             retired.append(backup.retire())
         return tuple(retired)
+
+    @property
+    def restoring(self) -> Path:
+        """Present from a restore's first write until it verifies: the only record that a
+        restore began and did not finish. A backup that differs from the live root was never
+        necessarily restored; every completed install leaves one behind."""
+        return self.path / 'restoring'
 
     def retire(self) -> Path:
         archived = self.path.with_name(f'{self.path.name}.restored-{time.time_ns()}')
@@ -402,6 +409,7 @@ class StoreBackup(ResourceBackup):
             *(name for name in selected if name not in registry),
             *(name for name in registry if name in selected),
         )
+        AtomicFile(self.restoring).write_text('')
         for name in ordered:
             if self.file_original(name, saved, owners[name]):
                 continue
@@ -424,3 +432,5 @@ class StoreBackup(ResourceBackup):
         self.restore_route()
         if not self.stores_original():
             raise UpgradeRefused('Selected stores differ after backup restoration')
+        self.restoring.unlink()
+        Platform.current().sync_directory(self.path)

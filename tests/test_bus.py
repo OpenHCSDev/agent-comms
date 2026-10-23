@@ -155,6 +155,26 @@ def test_projection_digest_ignores_infrastructure_source(
             "HeldResources.apply(db, self.claim_transition, projected, holders)",
             "HeldResources.apply(db, self.claim_transition, projected, holders)\n        del projected",
         ),
+        (
+            "messages.py",
+            "return (SentActivity(message.sender, message.timestamp),)",
+            "return (SentActivity(message.target, message.timestamp),)",
+        ),
+        (
+            "messages.py",
+            "return (BusRouteCounts.from_message(message),)",
+            "return (BusRouteCounts.from_message(message), BusRouteCounts.from_message(message))",
+        ),
+        (
+            "channel_targets.py",
+            "    def direct_names(self) -> tuple[str, ...]:\n        return self.names\n",
+            "    def direct_names(self) -> tuple[str, ...]:\n        return self.names[:1]\n",
+        ),
+        (
+            "activity_clocks.py",
+            "message.sender_role.last_user_input(0.0, message.timestamp),",
+            "message.sender_role.last_user_input(1.0, message.timestamp),",
+        ),
     ),
 )
 def test_projection_digest_tracks_producing_source(
@@ -169,6 +189,66 @@ def test_projection_digest_tracks_producing_source(
     assert original.count(old) == 1
     path.write_text(original.replace(old, new))
     assert projection_source_digest(projection_source) != before
+
+
+# Mechanisms that decode, store and dispatch rows; their edits never change row content.
+PROJECTION_MECHANISM_MODULES = frozenset({
+    "agent_comms.core_stamp",
+    "agent_comms.declared_family",
+    "agent_comms.field_codec",
+    "agent_comms.mro_dispatch",
+    "agent_comms.projection_source",
+    "agent_comms.typed_table",
+})
+
+
+def projection_rebuild_classes(bus: Bus) -> set[type]:
+    """Every agent_comms class whose own code ran while the projections were rebuilt."""
+    codes = set()
+
+    def profile(frame, event, argument):
+        if event == "call":
+            codes.add(frame.f_code)
+
+    with bus.writing() as db:
+        BusProjectionTables.reset_schema(db)  # imports and caches outside the profile
+        sys.setprofile(profile)
+        try:
+            BusProjectionTables.reset_schema(db)
+        finally:
+            sys.setprofile(None)
+    modules = {
+        module.__file__: module for name, module in tuple(sys.modules.items())
+        if name.startswith("agent_comms.") and getattr(module, "__file__", None)
+    }
+    classes = set()
+    for code in codes:
+        if code.co_filename not in modules:
+            continue
+        owner = modules[code.co_filename]
+        for part in code.co_qualname.split(".")[:-1]:
+            if part == "<locals>":
+                break
+            owner = getattr(owner, part)
+        if isinstance(owner, type):
+            classes.add(owner)
+    return classes
+
+
+def test_every_class_that_produces_projection_rows_is_in_the_digest(bus):
+    first = bus.append(lambda seq, db: PublicRecord.from_message(
+        Message("author", "worker", "direct", InfoKind, seq=seq),
+    ))
+    bus.append(lambda seq, db: PublicRecord.from_message(
+        Message("worker", "author", "reply", InfoKind, seq=seq, answers=(first.reference,)),
+    ))
+    owners = set(BusProjectionTables.producer_owners())
+    missing = sorted(
+        f"{owner.__module__}.{owner.__qualname__}"
+        for owner in projection_rebuild_classes(bus)
+        if owner.__module__ not in PROJECTION_MECHANISM_MODULES and owner not in owners
+    )
+    assert missing == []
 
 
 def test_bus_attachment_and_failed_write_do_not_install_a_schema(tmp_path):
