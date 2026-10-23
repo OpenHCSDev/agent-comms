@@ -82,7 +82,6 @@ def _verify_selected_wake_state(
             raise IdentityConflict("Wake assignment binding changed")
         expected_owner = OwnerGenerations(
             owner_lookup=claim_scope.recipient_lookup,
-            owner_thread=owner.name,
             generation=claim_scope.participant_generation,
         )
         if not participant.committed or participant.owner_identity != expected_owner:
@@ -96,7 +95,7 @@ def _verify_selected_wake_state(
             or attempt.attempt_ordinal != claim_scope.attempt_ordinal
         ):
             raise IdentityConflict("Wake selected attempt owner changed")
-        if snapshot.execution.owner_thread != owner.name:
+        if snapshot.execution.owner_lookup != owner.incarnation.lookup:
             raise IdentityConflict("Wake execution owner changed")
         if not attempt.lifecycle.tool_claim_open:
             raise IdentityConflict("Wake execution is not the current selected attempt")

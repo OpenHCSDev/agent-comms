@@ -295,7 +295,6 @@ def _require_sent_full_input(
         input_id, FullNativeExecution(claim_scope.execution_id, claim_scope.attempt_ordinal),
         OwnerGenerations(
             owner_lookup=claim_scope.recipient_lookup,
-            owner_thread=owner_name,
             generation=claim_scope.participant_generation,
         ),
     )

@@ -26,13 +26,12 @@ class OwnerRecord:
     """Stored owner components produce one coordinator identity, never live permission."""
 
     owner_lookup: str
-    owner_thread: str
     owner_generation: int
 
     @property
     def owner_identity(self) -> OwnerGenerations:
         return OwnerGenerations(
-            owner_lookup=self.owner_lookup, owner_thread=self.owner_thread,
+            owner_lookup=self.owner_lookup,
             generation=self.owner_generation,
         )
 
@@ -74,13 +73,12 @@ class OwnerGenerations(
     counter_column = 'generation'
 
     owner_lookup: Annotated[str, FrozenColumn(primary_key=True)]
-    owner_thread: Annotated[str, Column(check="length(owner_thread) BETWEEN 1 AND 256")]
     generation: Annotated[int, Column(check="generation > 0")]
 
     def require_recorded_owner(self, thread):
-        """Join original coordinator naming/birth; grant no live ownership."""
+        """Join the registry-issued identity; grant no live ownership."""
         expected = type(self)(owner_lookup=thread.incarnation.lookup,
-                              owner_thread=thread.name, generation=self.generation)
+                              generation=self.generation)
         if self != expected:
             raise IdentityConflict("Native input belongs to another recorded owner")
 

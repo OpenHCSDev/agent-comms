@@ -86,7 +86,7 @@ class CoverageInput(ABC):
     def build(self, owner, covered_seq):
         return CurrentNativeCursor(
             wire_root_id=owner.wire_root_id, recipient_lookup=owner.lookup,
-            owner_thread=owner.thread.name, owner_generation=owner.generation,
+            owner_generation=owner.generation,
             owner_claimed_generation=owner.claimed_generation, covered_seq=covered_seq,
             **self.input_fields(),
         )

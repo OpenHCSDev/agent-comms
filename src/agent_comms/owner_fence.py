@@ -20,7 +20,7 @@ class AttemptAuthority:
 
     execution_id: str
     ordinal: int
-    owner_thread: str
+    owner_lookup: str
     owner_generation: int
     token_digest: str
 
@@ -29,7 +29,7 @@ class AttemptAuthority:
 class OwnerFence:
     execution_id: str
     attempt_ordinal: int
-    owner_thread: str
+    owner_lookup: str
     owner_generation: int
     revision: int
     token: str
@@ -37,13 +37,13 @@ class OwnerFence:
     @property
     def authority(self) -> AttemptAuthority:
         return AttemptAuthority(
-            self.execution_id, self.attempt_ordinal, self.owner_thread,
+            self.execution_id, self.attempt_ordinal, self.owner_lookup,
             self.owner_generation, _digest(self.token),
         )
 
     def __post_init__(self) -> None:
         validate_execution_id(self.execution_id)
-        for field, value in (("owner_thread", self.owner_thread), ("token", self.token)):
+        for field, value in (("owner_lookup", self.owner_lookup), ("token", self.token)):
             require_nonempty(value, field)
             require_bounded(value, field, MAX_IDENTIFIER_CHARS)
         if min(self.attempt_ordinal, self.owner_generation, self.revision) <= 0:

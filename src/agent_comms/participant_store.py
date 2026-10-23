@@ -79,14 +79,13 @@ class ParticipantStore:
         self,
         lookup: str,
         display_name: str,
-        owner_thread: str,
         *,
         alias: str | None = None,
         committed: bool = False,
     ) -> Applied[ParticipantSnapshot] | AlreadyApplied[ParticipantSnapshot]:
         if type(committed) is not bool:
             raise ValueError("committed must be a boolean")
-        for value in (lookup, display_name, owner_thread, alias or lookup):
+        for value in (lookup, display_name, alias or lookup):
             if not isinstance(value, str) or not 1 <= len(value) <= MAX_IDENTIFIER_CHARS:
                 raise MalformedRecord("participant identity must be bounded and nonempty")
         primary = alias or lookup
@@ -108,7 +107,7 @@ class ParticipantStore:
             ParticipantAliases(
                 alias=primary, participant_lookup=lookup, renamed_at_ms=self.session.now()
             ).insert(db)
-            OwnerGenerations(owner_lookup=lookup, owner_thread=owner_thread, generation=1).insert(
+            OwnerGenerations(owner_lookup=lookup, generation=1).insert(
                 db
             )
             CurrentExecutions(
@@ -168,40 +167,12 @@ class ParticipantStore:
             )
             return Applied(self.get(lookup))
 
-    def rename_owner(
-        self,
-        lookup: str,
-        owner_thread: str,
-        *,
-        expected_generation: int,
-    ) -> Applied[ParticipantSnapshot]:
-        return self._update_owner(
-            lookup, owner_thread,
-            expected_generation=expected_generation, new_generation=expected_generation,
-        )
-
     def advance_generation(
         self,
         lookup: str,
-        owner_thread: str,
         *,
         expected_generation: int,
     ) -> Applied[ParticipantSnapshot]:
-        return self._update_owner(
-            lookup, owner_thread,
-            expected_generation=expected_generation, new_generation=expected_generation + 1,
-        )
-
-    def _update_owner(
-        self,
-        lookup: str,
-        owner_thread: str,
-        *,
-        expected_generation: int,
-        new_generation: int,
-    ) -> Applied[ParticipantSnapshot]:
-        if not isinstance(owner_thread, str) or not 1 <= len(owner_thread) <= MAX_IDENTIFIER_CHARS:
-            raise ValueError("owner thread must be bounded and nonempty")
         with self.session.writing() as db:
             person = self.get(lookup)
             if not person.committed:
@@ -212,7 +183,6 @@ class ParticipantStore:
                 db,
                 where="owner_lookup=? AND generation=?",
                 parameters=(lookup, expected_generation),
-                owner_thread=owner_thread,
-                generation=new_generation,
+                generation=expected_generation + 1,
             )
             return Applied(self.get(lookup))

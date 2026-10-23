@@ -525,7 +525,7 @@ class AgentThreadRole(ThreadRole):
 
     @classmethod
     def register_sender(cls, participants: ParticipantStore, lookup: str, name: str) -> None:
-        participants.register(lookup, name, name, committed=True)
+        participants.register(lookup, name, committed=True)
 
     @classmethod
     def require_executable(cls, refusal: Exception) -> None:

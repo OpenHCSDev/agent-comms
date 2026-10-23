@@ -65,7 +65,6 @@ from .wake_candidate_index import ProjectionUnavailableError, WakeCandidateIndex
 class _ParticipantOwner(TypedRow):
     generation: int
     committed: bool
-    owner_thread: str
 
 
 @dataclass(frozen=True, slots=True)
@@ -221,7 +220,6 @@ class OptionalAwarenessProjection:
             obligations = self._open_obligations(db, lookup)
             expected = OwnerGenerations(
                 owner_lookup=lookup,
-                owner_thread=owner.name,
                 generation=self.expected_participant_generation,
             )
             selected = [row for row in decisions if row.generation.current(expected)]
@@ -285,13 +283,13 @@ class OptionalAwarenessProjection:
         with CoordinationStore.observing(Path(path), StoreBusy()) as db:
             rows = _ParticipantOwner.read(
                 db.execute(
-                    "SELECT g.generation,p.committed,g.owner_thread FROM owner_generations g "
+                    "SELECT g.generation,p.committed FROM owner_generations g "
                     "JOIN participants p ON p.participant_lookup=g.owner_lookup "
                     "WHERE g.owner_lookup=?",
                     (lookup,),
                 )
             )
-            if rows != [_ParticipantOwner(self.expected_participant_generation, True, owner.name)]:
+            if rows != [_ParticipantOwner(self.expected_participant_generation, True)]:
                 raise ProjectionUnavailableError("current participant generation changed")
         _require_no_private_owner_rename(self.index.root)
 
@@ -308,13 +306,13 @@ class OptionalAwarenessProjection:
         assert_optional_awareness_schema(db)
         people = _ParticipantOwner.read(
             db.execute(
-                "SELECT p.committed,g.owner_thread,g.generation FROM participants p "
+                "SELECT p.committed,g.generation FROM participants p "
                 "JOIN owner_generations g ON g.owner_lookup=p.participant_lookup "
                 "WHERE p.participant_lookup=?",
                 (assignment.recipient_lookup,),
             )
         )
-        if people != [_ParticipantOwner(self.expected_participant_generation, True, owner.name)]:
+        if people != [_ParticipantOwner(self.expected_participant_generation, True)]:
             raise ProjectionUnavailableError("selected participant owner changed")
         acknowledgement = _claim_record(db, initial, privacy)
         if not any(current == assignment for current in acknowledgement.assignments):

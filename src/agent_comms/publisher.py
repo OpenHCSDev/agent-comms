@@ -217,7 +217,7 @@ class InitialWrites(Publisher):
             with Coordination(str(CoordinationStore.path_in(self.bus.path.parent))) as store:
                 sender_thread.role.register_sender(store.participants, sender_lookup, sender)
                 for thread, lookup in zip(selected, lookups, strict=True):
-                    store.participants.register(lookup, thread.name, thread.name, committed=True)
+                    store.participants.register(lookup, thread.name, committed=True)
 
             def build(seq: int, db: sqlite3.Connection) -> PrivateRecord:
                 source = BusSnapshot.from_connection(db)

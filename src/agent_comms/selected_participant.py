@@ -90,7 +90,7 @@ class SelectedParticipant(MroDispatch):
         await self.require_current()
         snapshot = self.store.create(
             self.batch.execution_id, ExecutionOrigin.WIRE,
-            self.lookup, self.owner.thread.name, max_attempts,
+            self.lookup, max_attempts,
             sources=self.batch.sources,
         ).value
         self.store.fail_unstarted(
@@ -103,7 +103,6 @@ class SelectedParticipant(MroDispatch):
         if snapshot.execution.lifecycle.retry:
             participant = self.store.participants.advance_generation(
                 self.lookup,
-                self.owner.thread.name,
                 expected_generation=self.identity.generation,
             ).value
             self.identity = ParticipantOwner(

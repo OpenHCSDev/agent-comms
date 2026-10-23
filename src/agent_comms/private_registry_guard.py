@@ -455,7 +455,7 @@ class PrivateRegistryGuard(DurableFile, WireWakeFile, RegistryPrivacy):
         with Coordination(str(CoordinationStore.path_in(self.registry_path.parent))) as store:
             for thread in threads:
                 store.participants.register(
-                    thread.incarnation.require_recorded().lookup, thread.name, thread.name,
+                    thread.incarnation.require_recorded().lookup, thread.name,
                     committed=True)
 
     def create_pending(self) -> None:

@@ -125,7 +125,7 @@ class SelectedAttempt:
             AttemptStart(
                 execution_id,
                 attempt_ordinal,
-                participant.owner.thread.name,
+                participant.lookup,
                 participant.identity.generation,
                 token,
                 expected_execution_revision=snapshot.execution.revision,
@@ -257,7 +257,7 @@ class SelectedConsideration:
             await participant.require_current()
             created = participant.store.create(
                 participant.batch.execution_id, ExecutionOrigin.WIRE,
-                participant.lookup, participant.owner.thread.name,
+                participant.lookup,
                 execution.max_attempts,
                 sources=participant.batch.sources,
             ).value
