@@ -7,7 +7,7 @@ from .projection_source import ProducedRow, ProjectionSource
 from abc import abstractmethod
 from dataclasses import dataclass
 
-from .field_codec import NullMember, RecordMember, SingleFieldValue, SubclassUnion
+from .field_codec import MessageId, NullMember, RecordMember, SingleFieldValue, SubclassUnion
 from .page_traversal import LiveCursor, NewestCursor, PageCursor, PageTraversal
 
 
@@ -20,7 +20,7 @@ class MessageReference(ProjectionSource):
         return (MessageIdentitySource, AnsweredSource)
 
     seq: int
-    message_id: str
+    message_id: MessageId
 
 
 class InboxStart(SubclassUnion, affix="Start"):

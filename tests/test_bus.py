@@ -39,6 +39,7 @@ from agent_comms.errors import (
     RelationViolationError,
     UnclaimedError,
 )
+from agent_comms.field_codec import MessageId
 from agent_comms.message_reference import MessageReference
 from agent_comms.read_basis import RepliesDisplayScope
 from agent_comms.response_acknowledgement import (
@@ -132,14 +133,6 @@ def test_projection_digest_ignores_infrastructure_source(
 
 
 def test_projection_digest_tracks_declared_column_spelling(projection_source: Path) -> None:
-    reference = projection_source / "message_reference.py"
-    reference.write_text(reference.read_text().replace(
-        "from dataclasses import dataclass",
-        "from dataclasses import dataclass\nfrom typing import Annotated",
-    ).replace(
-        "from .field_codec import NullMember,",
-        "from .field_codec import MessageIdText, NullMember,",
-    ).replace("message_id: str", "message_id: Annotated[str, MessageIdText]"))
     before = json.loads(projection_source_digest(projection_source))["message_identity_source"]
     codec = projection_source / "field_codec.py"
     original = codec.read_text()
@@ -151,6 +144,22 @@ def test_projection_digest_tracks_declared_column_spelling(projection_source: Pa
     assert original.count(unrelated) == 1
     codec.write_text(original.replace(unrelated, 'spelling = re.compile("[0-9a-f]{8,40}")'))
     assert json.loads(projection_source_digest(projection_source))["message_identity_source"] == before
+
+
+def test_nominal_message_id_column_stores_plain_text() -> None:
+    identifier = MessageId.mint("nominal column storage")
+    row = MessageIdentitySource(seq=1, message_id=identifier, sender="sender")
+    with sqlite3.connect(":memory:") as db:
+        MessageIdentitySource.create(db)
+        row.insert(db)
+        value, storage = db.execute(
+            f'SELECT message_id, typeof(message_id) FROM "{MessageIdentitySource.declared_name}"',
+        ).fetchone()
+        assert storage == "text"
+        assert value == str(identifier)
+        restored, = MessageIdentitySource.select(db)
+        assert type(restored.message_id) is MessageId
+        assert restored == row
 
 
 @pytest.mark.parametrize(

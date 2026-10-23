@@ -17,7 +17,7 @@ import types
 from abc import ABC, abstractmethod
 from collections.abc import Callable, Generator, Iterable, Iterator, Mapping, Sequence
 from contextlib import AbstractContextManager, ExitStack, closing, contextmanager
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, is_dataclass
 from enum import Enum, IntEnum, IntFlag
 from functools import cache
 from importlib import import_module
@@ -47,6 +47,7 @@ from .field_codec import (
     FieldPlan,
     FieldRepresentation,
     MalformedRecord,
+    NominalText,
     NullMember,
     TextRepresentation,
     ValueDecoder,
@@ -184,7 +185,7 @@ class TextStorage(SqlStorage):
     def accepts(cls, annotation: object) -> bool:
         if annotation is str:
             return True
-        _, representation = FieldCodec._representation(annotation)
+        _, representation = FieldCodec.representation(annotation)
         return representation is not None and issubclass(representation, TextRepresentation)
 
 
@@ -2107,19 +2108,17 @@ class ProducedTable(ProducedRow, TypedTable, ProjectionSource, declared_name=Non
                 if issubclass(parent, ProjectionSource)
                 and ("writes" not in vars(parent) or parent in writers)
             )
-        annotations = [column.annotation for column in cls._columns]
+        annotations = [column.annotation for column in cls._columns] if is_dataclass(cls) else []
         while annotations:
-            value, representation = FieldCodec._representation(annotations.pop())
+            value, representation = FieldCodec.representation(annotations.pop())
             annotations.extend(get_args(value))
             for owner in (value, representation):
                 if not isinstance(owner, type):
                     continue
-                for parent in owner.__mro__:
-                    if parent.__module__ == object.__module__:
-                        continue
-                    owners.add(parent)
-                    if parent is FieldRepresentation:
-                        break
+                owners.update(
+                    parent for parent in owner.__mro__
+                    if issubclass(parent, (FieldRepresentation, NominalText))
+                )
         return tuple(sorted(owners, key=lambda owner: (owner.__module__, owner.__qualname__)))
 
 

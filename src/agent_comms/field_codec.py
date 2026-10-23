@@ -584,7 +584,7 @@ class FieldPlan:
 
     def schema_fields(self):
         annotation, declared = self.annotation, self.declared
-        base = FieldCodec._representation(annotation)[0]
+        base = FieldCodec.representation(annotation)[0]
         if self.reject_null and get_origin(base) in (Union, types.UnionType):
             members = tuple(item for item in get_args(base) if item is not type(None))
             annotation = members[0] if len(members) == 1 else Union[members]  # noqa: UP007 - runtime tuple
@@ -659,7 +659,7 @@ class DeclaredFieldPlan(FieldPlan):
 
     @classmethod
     def claims(cls, declared: Field, annotation: object) -> bool:
-        representation = FieldCodec._representation(annotation)[1] or FieldRepresentation
+        representation = FieldCodec.representation(annotation)[1] or FieldRepresentation
         return super().claims(declared, annotation) or representation.field_plan is cls
 
 
@@ -747,7 +747,7 @@ class InlineFieldPlan(DeclaredFieldPlan):
 
     @cached_property
     def inlined(self) -> type:
-        declared, representation = FieldCodec._representation(self.annotation)
+        declared, representation = FieldCodec.representation(self.annotation)
         match representation:
             case type() as inline if issubclass(inline, InlineRecord):
                 return inline.wire_record()
@@ -784,7 +784,7 @@ class InlineFamilyPlan(InlineFieldPlan):
 
     @classmethod
     def claims(cls, declared: Field, annotation: object) -> bool:
-        value_type = FieldCodec._representation(annotation)[0]
+        value_type = FieldCodec.representation(annotation)[0]
         return (
             super().claims(declared, annotation)
             and isinstance(value_type, type)
@@ -1851,8 +1851,9 @@ class FieldCodec(MroDispatch, Sealed):
     def external_decoder(cls, target: type[ExternalField]) -> ExternalDecoder:
         return target.decode_external
 
-    @staticmethod
-    def _representation(annotation: object) -> tuple[object, type[FieldRepresentation] | None]:
+    @classmethod
+    def representation(cls, annotation: object) -> tuple[object, type[FieldRepresentation] | None]:
+        """The declared value type and the codec owning its wire representation."""
         if annotation is None:
             return None, None
         if annotation is object:
@@ -1884,10 +1885,10 @@ class FieldCodec(MroDispatch, Sealed):
     @classmethod
     def _value_representation(cls, value: object, annotation: object):
         if annotation is None:
-            return cls._representation(type(value))[1]
-        _, representation = cls._representation(annotation)
+            return cls.representation(type(value))[1]
+        _, representation = cls.representation(annotation)
         if representation is None:
-            _, representation = cls._representation(type(value))
+            _, representation = cls.representation(type(value))
         return representation
 
     @classmethod
@@ -1977,7 +1978,7 @@ class FieldCodec(MroDispatch, Sealed):
         """Decode declared fields, with nominal narrowing supplied by their contextual owner."""
         decoder = _RecordDecoder(target)
         for name, narrowed in field_types.items():
-            annotation, _ = cls._representation(cls.field_plan(target, name).annotation)
+            annotation, _ = cls.representation(cls.field_plan(target, name).annotation)
             if not issubclass(narrowed, annotation):
                 raise TypeError(f"{target.__name__}.{name} cannot widen its declared type")
         return cast(T, decoder.decode_selected(
@@ -2104,7 +2105,7 @@ class FieldCodec(MroDispatch, Sealed):
     @classmethod
     def value_schema(cls, annotation: object) -> dict[str, JsonValue]:
         """Derive external scalar/array choices from the same decode declarations."""
-        annotation, representation = cls._representation(annotation)
+        annotation, representation = cls.representation(annotation)
         if representation is not None:
             schema = representation.schema()
             if type(None) in get_args(annotation):
@@ -2158,7 +2159,7 @@ class FieldCodec(MroDispatch, Sealed):
         if is_dataclass(value) and not isinstance(value, type):
             return cls._project_record(value, view)
         if isinstance(value, (tuple, list)):
-            arguments = get_args(cls._representation(annotation)[0])
+            arguments = get_args(cls.representation(annotation)[0])
             return [cls.project(item, view, arguments[0] if arguments else None) for item in value]
         return cls.encode(value)
 
@@ -3090,7 +3091,7 @@ def compile_decoder(annotation: object) -> ValueDecoder[object]: ...
 @lru_cache(maxsize=None)
 def compile_decoder(annotation: object) -> ValueDecoder[object]:
     """Compile each immutable declaration once; value paths never parse it again."""
-    declared, representation = FieldCodec._representation(annotation)
+    declared, representation = FieldCodec.representation(annotation)
     if representation is None:
         return _structural_decoder(declared)
     try:
