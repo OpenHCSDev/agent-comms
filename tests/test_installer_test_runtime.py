@@ -10,7 +10,8 @@ from pathlib import Path
 import pytest
 
 from agent_comms.installer import practice
-from agent_comms.installer.backup import SavedFile, UpgradeRefused
+from agent_comms.installer.backup import SavedFile
+from agent_comms.installer.refusals import UpgradeRefused
 from agent_comms.installer.commands import InstallCommands
 from agent_comms.installer.declared_uv import DeclaredUv
 from agent_comms.installer.upgrade import Stack

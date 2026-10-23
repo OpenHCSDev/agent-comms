@@ -52,13 +52,9 @@ from agent_comms.declared_family import DeclaredFamily
 from agent_comms.field_codec import FieldCodec, MalformedRecord, PathText
 from agent_comms.host_services import HostService, RestartedService
 from agent_comms.install_choices import InstallerChoice, RunMode
-from agent_comms.installer.backup import (
-    BackupReport,
-    RestoreSpace,
-    SavedFile,
-    StoreBackup,
-    UpgradeRefused,
-    bus_files,
+from agent_comms.installer.backup import BackupReport, RestoreSpace, SavedFile, StoreBackup, bus_files
+from agent_comms.installer.refusals import (
+    InstallRolledBack, OwnerStart, RefusedOwner, StartedOwner, UpgradeRefused,
 )
 from agent_comms.installer.carry import STEPS, CarryChain
 from agent_comms.installer.probes.carry import Carried, Carry, CarryOperation, FirstPendingOperation, MigrateOperation, RetireInputsOperation
@@ -167,57 +163,12 @@ def carried(
                           for file in before[key].values()))
 
 
-@dataclass(frozen=True)
-class OwnerStart(DeclaredFamily, affix="Owner"):
-    """What starting one stopped owner did. A unit that cannot start is reported by name;
-    the runtime and bus it would run on are installed either way."""
-
-    name: str
-
-    @abstractmethod
-    def lines(self) -> tuple[str, ...]: ...
-
-    @staticmethod
-    def attempt(stack: Stack, root: Path, name: str) -> OwnerStart:
-        try:
-            stack.cli(root, StartCliCommand, "--name", name)
-        except UpgradeRefused as error:
-            return RefusedOwner(name, str(error))
-        return StartedOwner(name)
 
 
-@dataclass(frozen=True)
-class StartedOwner(OwnerStart):
-    def lines(self) -> tuple[str, ...]:
-        return (f"Started owner: {self.name}",)
 
 
-@dataclass(frozen=True)
-class RefusedOwner(OwnerStart):
-    error: str
-
-    def lines(self) -> tuple[str, ...]:
-        return (f"Owner not started: {self.name}: {self.error}",)
 
 
-class InstallRolledBack(UpgradeRefused):
-    """The original installation was restored after a failed live pass."""
-
-    def __init__(self, error: BaseException, started: tuple[OwnerStart, ...], backup: str,
-                 *, runtime: LaunchRuntime):
-        self.error = error
-        self.started = started
-        self.backup = backup
-        self.runtime = runtime
-        super().__init__("; ".join(self.lines()))
-
-    def lines(self) -> tuple[str, ...]:
-        return (
-            f"Install rolled back: {type(self.error).__name__}: {self.error}",
-            f"Original runtime selected again: {self.runtime.prefix}",
-            *(line for owner in self.started for line in owner.lines()),
-            f"Backup: {self.backup}",
-        )
 
 
 @dataclass(frozen=True)
@@ -650,10 +601,17 @@ class Stack:
             raise UpgradeRefused("; ".join(str(failure.args[0]) for failure in failures)
                                  ) from failures[0]
 
+    def start_owner(self, root: Path, name: str) -> OwnerStart:
+        try:
+            self.cli(root, StartCliCommand, "--name", name)
+        except UpgradeRefused as error:
+            return RefusedOwner(name, str(error))
+        return StartedOwner(name)
+
     def start(self, root: Path, names: list[str]) -> tuple[OwnerStart, ...]:
         """Start the captured owner set together; each owner's outcome is its own."""
         with ThreadPoolExecutor(max_workers=max(1, len(names))) as pool:
-            return tuple(pool.map(lambda name: OwnerStart.attempt(self, root, name), names))
+            return tuple(pool.map(lambda name: self.start_owner(root, name), names))
 
     def restart_services(self) -> tuple[RestartedService, ...]:
         """Every running host service moves onto this runtime, which owns the root and so

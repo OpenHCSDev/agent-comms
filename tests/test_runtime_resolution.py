@@ -2,7 +2,7 @@ import os
 
 import pytest
 
-from agent_comms.installer.backup import UpgradeRefused
+from agent_comms.installer.refusals import UpgradeRefused
 from agent_comms.installer.commands import InstallCommands
 from agent_comms.installer.probes.packages import InstalledPackagesProbe
 from agent_comms.installer.interpreter_operation import RetainedProgram, SourceProgram

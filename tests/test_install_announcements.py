@@ -15,32 +15,16 @@ from agent_comms.repo import GitCommandError
 from agent_comms.commander_heartbeat import CommanderHeartbeat
 from agent_comms.field_codec import FieldCodec
 from agent_comms.host_services import RestartedService
-from agent_comms.installer.backup import BackupReport, RestoreSpace, UpgradeRefused
+from agent_comms.installer.backup import BackupReport, RestoreSpace
+from agent_comms.installer.refusals import UpgradeRefused
 from agent_comms.installer.probes.carry import Carried
 from agent_comms.installer.launch import InstallReport
 from agent_comms.installer.commands import InstallCommands, TimedCommand
 from agent_comms.installer.interpreter_operation import InstalledProgram
 from agent_comms.installer.probes.report import InstallReportProbe
 from agent_comms.installer.reporting import FinishedInstall, RuntimeWriter
-from agent_comms.installer.upgrade import (
-    CarriedPass,
-    CarriedRun,
-    CreatedRun,
-    FreshRehearsal,
-    InstalledUpgrade,
-    InstallRolledBack,
-    RefusedOwner,
-    RehearsalFiles,
-    RetiredRun,
-    StartedOwner,
-    StepRun,
-    Stack,
-    TargetTree,
-    UnchangedRun,
-    UnresumedUpgrade,
-    Upgrade,
-    upgrade,
-)
+from agent_comms.installer.upgrade import CarriedPass, CarriedRun, CreatedRun, FreshRehearsal, InstalledUpgrade, RehearsalFiles, RetiredRun, StepRun, Stack, TargetTree, UnchangedRun, UnresumedUpgrade, Upgrade, upgrade
+from agent_comms.installer.refusals import InstallRolledBack, RefusedOwner, StartedOwner
 from agent_comms.install_choices import LiveMode, RehearsalMode, UnnamedInstaller
 from agent_comms.launch_runtime import LaunchRuntime, RestoredRuntime
 from agent_comms.thread_execution import ExternalThreadExecution

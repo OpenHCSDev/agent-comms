@@ -20,7 +20,8 @@ from agent_comms.comms import wire
 from agent_comms.commander.config import GivenRepos, NamedCommander
 from agent_comms.registry_document import NoCommanderProject, RegisteredCommanderProject
 from agent_comms.thread_identity import RecordedThreadIncarnation
-from agent_comms.installer.backup import UpgradeRefused, bus_files
+from agent_comms.installer.refusals import UpgradeRefused
+from agent_comms.installer.backup import bus_files
 from agent_comms.installer.carry import CarryChain
 from agent_comms.installer.practice import PracticeCopy
 from agent_comms.locked_store import BusFile, RootFile, SQLiteFile

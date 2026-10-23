@@ -13,11 +13,8 @@ import pytest
 from tools.debt_ratchet import UncarriedRecordFormat, git
 
 from agent_comms.cli_commands import ArchiveCliCommand
-from agent_comms.installer.backup import (
-    StoreBackup,
-    UpgradeRefused,
-    bus_files,
-)
+from agent_comms.installer.backup import StoreBackup, bus_files
+from agent_comms.installer.refusals import UpgradeRefused
 from agent_comms.installer.carry import STEPS, CarryChain
 from agent_comms.installer.probes.carry import Carried, Carry, FirstPendingOperation, MigrateOperation
 from agent_comms.installer.probes.carry import CarryProbe

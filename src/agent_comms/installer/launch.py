@@ -25,7 +25,8 @@ from agent_comms.cli_bridges.shared import SessionBridgeResumes
 from agent_comms.cli_commands import InstallCliCommand
 from agent_comms.installer.probes.harnesses import InstallResult
 from agent_comms.field_codec import FieldCodec, Id128Text, PathText
-from agent_comms.installer.backup import StoreBackup, UpgradeRefused
+from agent_comms.installer.backup import StoreBackup
+from agent_comms.installer.refusals import UpgradeRefused
 from agent_comms.installer.commands import InstallCommands
 from agent_comms.installer.reporting import (
     FinishedInstall, InstallOutcome, RootWriter, UnfinishedInstall, UnpostedWriter,

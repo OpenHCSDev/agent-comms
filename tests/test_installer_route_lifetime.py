@@ -20,7 +20,8 @@ from agent_comms.active_route import (
 )
 from agent_comms.bus import Bus
 from agent_comms.comms import wire
-from agent_comms.installer.backup import StoreBackup, UpgradeRefused
+from agent_comms.installer.backup import StoreBackup
+from agent_comms.installer.refusals import UpgradeRefused
 from agent_comms.installer.commands import InstallCommands
 from agent_comms.installer.probes.publication import SelectedRouteProbe
 from agent_comms.installer.interpreter_operation import InstalledProgram
