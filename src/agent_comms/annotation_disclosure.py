@@ -5,7 +5,7 @@ from __future__ import annotations
 import re
 from abc import abstractmethod
 from dataclasses import dataclass
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, ClassVar
 
 from .declared_family import DeclaredFamily
 
@@ -43,15 +43,22 @@ class PublicInstructionDisclosure(DisclosurePolicy):
         return text
 
 
-class WithheldAnnotations:
+class Annotations:
+    """The declared policy owns disclosure; messages and segments share its construction."""
+
+    disclosure_policy: ClassVar[type[DisclosurePolicy]]
+
+    def disclosure_for(self, span: ContextSpan) -> DisclosurePolicy:
+        return self.disclosure_policy()
+
+
+class WithheldAnnotations(Annotations):
     """Source text cannot be disclosed to an annotation provider."""
 
-    def disclosure_for(self, span: ContextSpan) -> DisclosurePolicy:
-        return WithheldDisclosure()
+    disclosure_policy = WithheldDisclosure
 
 
-class PublicInstructionAnnotations:
+class PublicInstructionAnnotations(Annotations):
     """Instruction text uses the existing credential-filtering disclosure policy."""
 
-    def disclosure_for(self, span: ContextSpan) -> DisclosurePolicy:
-        return PublicInstructionDisclosure()
+    disclosure_policy = PublicInstructionDisclosure

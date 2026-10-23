@@ -83,7 +83,7 @@ def test_failed_rehearsal_does_not_publish_to_the_source_bus(private_comms, tmp_
 @pytest.mark.parametrize("live", (
     CarriedRun(
         steps=(StepRun("carry_order_scopes", Carried(6)),),
-        files=RehearsalFiles(3, 1, ("todos.sqlite3",), 1024),
+        files=RehearsalFiles(3, 1, (Path("todos.sqlite3"),), 1024),
         read=BusReadBack(2), stopped=("worker",), services=(RESTARTED,),
         started=(StartedOwner("worker"), RefusedOwner("busy", "already running")),
         restore_space=RestoreSpace(1024, 4096, 0.01),
