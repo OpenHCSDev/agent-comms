@@ -38,9 +38,11 @@ class FamilyMeta(AutoRegisterMeta, ABCMeta):
         **class_options: Any,
     ) -> FamilyMeta:
         roots = {
-            base._family_root
+            ancestor
             for base in bases
-            if isinstance(base, FamilyMeta) and base._family_root is not None
+            if isinstance(base, FamilyMeta)
+            for ancestor in base.__mro__
+            if ancestor is base._family_root
         }
         if len(roots) > 1:
             raise TypeError("A declaration cannot belong to two families.")
@@ -50,7 +52,7 @@ class FamilyMeta(AutoRegisterMeta, ABCMeta):
         # Explicit child roots reuse family behavior; a slots-rebuilt root
         # carries its own registry in the copied class namespace.
         is_root = affix is not None or "__registry__" in namespace or (
-            root is None and any(isinstance(base, FamilyMeta) for base in bases)
+            not roots and any(isinstance(base, FamilyMeta) for base in bases)
         )
         if is_root:
             # slots dataclasses recreate the root without its class-header keywords.
