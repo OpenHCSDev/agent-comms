@@ -3912,18 +3912,16 @@ class TodoStore(OwnerRequestStore):
         """Creation and reassignment share this decision under registry then Todo locks."""
         self.require_unit_in(db, unit, assigner)
         snapshot = RegistryStore.at(self.root).read_snapshot_unlocked()
-        # A unit with no registry record has no recorded worktree to share.
-        for owner in snapshot.threads_for(unit.require_recorded()):
-            for held in self._open(db, "assignment IS NOT NULL", ()):
-                previous = held.held().owner_identity
-                if held.id == problem or previous == unit:
-                    continue
-                for other in snapshot.threads_for(previous.require_recorded()):
-                    if owner.project_path == other.project_path:
-                        raise SharedWorktreeRefusal(
-                            problem, held.id, owner.incarnation, other.incarnation,
-                            owner.project_path,
-                        )
+        worktrees = {owner.project_path for owner in snapshot.threads_for(unit.require_recorded())}
+        for held in self._open(db, "assignment IS NOT NULL", ()):
+            previous = held.held().owner_identity
+            if held.id == problem or previous == unit:
+                continue
+            for other in snapshot.threads_for(previous.require_recorded()):
+                if other.project_path in worktrees:
+                    raise SharedWorktreeRefusal(
+                        problem, held.id, unit, other.incarnation, other.project_path
+                    )
 
     def record_hunt(self, commander: ThreadIncarnation, hunt: Hunt) -> HuntRecord:
         hunt.require_commander(self, commander)
