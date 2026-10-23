@@ -38,11 +38,9 @@ class FamilyMeta(AutoRegisterMeta, ABCMeta):
         **class_options: Any,
     ) -> FamilyMeta:
         roots = {
-            ancestor
+            base._family_root
             for base in bases
-            if isinstance(base, FamilyMeta)
-            for ancestor in base.__mro__
-            if ancestor is base._family_root
+            if isinstance(base, FamilyMeta) and base is not DeclaredFamily
         }
         if len(roots) > 1:
             raise TypeError("A declaration cannot belong to two families.")
@@ -87,7 +85,11 @@ class FamilyMeta(AutoRegisterMeta, ABCMeta):
         cls: type[DeclaredFamily] = super().__new__(
             mcs, name, bases, namespace, registry_config=config, **class_options
         )
-        cls._family_root = cls if is_root else root
+        if is_root:
+            cls._family_root = cls
+        else:
+            for family_root in roots:
+                cls._family_root = family_root
         return cast(FamilyMeta, cls)
 
     @staticmethod
@@ -130,7 +132,7 @@ class DeclaredFamily(ABC, metaclass=FamilyMeta):
 
     declared_name: ClassVar[str]
     family_discriminator: ClassVar[str] = "kind"
-    _family_root: ClassVar[type[DeclaredFamily] | None] = None
+    _family_root: ClassVar[type[DeclaredFamily]]
     _family_affix: ClassVar[str]
     __registry__: ClassVar[dict[str, type[DeclaredFamily]]]
 
@@ -235,8 +237,13 @@ class DeclaredFamily(ABC, metaclass=FamilyMeta):
         )
 
     @classmethod
+    def family_root(cls) -> type[DeclaredFamily]:
+        """The nominal root recorded when this declaration was constructed."""
+        return cls._family_root
+
+    @classmethod
     def declared_position(cls) -> int:
-        root = cast(type[DeclaredFamily], cls._family_root)
+        root = cls.family_root()
         return root.members_with(root).index(cls)
 
 
