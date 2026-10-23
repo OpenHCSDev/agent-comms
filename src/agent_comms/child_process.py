@@ -581,13 +581,16 @@ class LinuxPlatform(PidfdHandles, PosixPlatform):
         try:
             pending = select.poll()
             for identity in identities:
-                descriptor = self.open_pidfd(identity.pid)
-                descriptors.append(descriptor)
-                self.require(identity)
+                try:
+                    descriptor = self.open_pidfd(identity.pid)
+                    descriptors.append(descriptor)
+                    current = self.identity(identity.pid)
+                except ProcessLookupError:
+                    return
+                if current != identity:
+                    raise IdentityMismatchError(identity.pid)
                 pending.register(descriptor, select.POLLIN)
             pending.poll(None if math.isinf(timeout) else max(0, math.ceil(timeout * 1000)))
-        except ProcessLookupError:
-            return
         finally:
             for descriptor in descriptors:
                 os.close(descriptor)
@@ -711,9 +714,14 @@ class DarwinPlatform(PosixPlatform):
                 )
                 for identity in identities
             ]
+            for identity in identities:
+                try:
+                    current = self.identity(identity.pid)
+                except ProcessLookupError:
+                    return
+                if current != identity:
+                    raise IdentityMismatchError(identity.pid)
             try:
-                for identity in identities:
-                    self.require(identity)
                 returned = pending.control(
                     events, 1, None if math.isinf(timeout) else max(0, timeout),
                 )
@@ -872,8 +880,12 @@ class Win32Platform(Platform):
         try:
             with ExitStack() as waits:
                 for identity in identities:
-                    handle = waits.enter_context(self.process_handle(identity.pid))
-                    if self._identity(identity.pid, handle) != identity:
+                    try:
+                        handle = waits.enter_context(self.process_handle(identity.pid))
+                        current = self._identity(identity.pid, handle)
+                    except ProcessLookupError:
+                        return
+                    if current != identity:
                         raise IdentityMismatchError(identity.pid)
                     registered = ctypes.c_void_p()
                     if not self.kernel.RegisterWaitForSingleObject(
@@ -886,8 +898,6 @@ class Win32Platform(Platform):
                                 else max(0, math.ceil(timeout * 1000)))
                 if self.kernel.WaitForSingleObject(event, milliseconds) == 0xFFFFFFFF:
                     raise ctypes.WinError(ctypes.get_last_error())
-        except ProcessLookupError:
-            return
         finally:
             self.kernel.CloseHandle(event)
 
