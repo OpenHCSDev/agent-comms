@@ -47,7 +47,7 @@ from .recorded_bus import RecordedBusIdentity
 from .registration import Registration
 from .registry_provenance import RegistryProvenance
 from .revision_views import BusSourceView
-from .store_files import AtomicFile, _store_lock
+from .store_files import AtomicFile
 from .thread_identity import UnrecordedThreadIncarnation
 from .threads import ThreadProvenance
 
@@ -469,7 +469,7 @@ class HistoryArchive(DurableFile, LockedFile):
         source_root = source_root.resolve()
         if source_root == self.bus_path.parent.resolve():
             raise ValueError("The live bus cannot be its own history source")
-        with _store_lock(self.path):
+        with self.locked():
             sources = self.sources()
             existing = next((s for s in sources if s.original_root == str(source_root)), None)
             if existing is not None:

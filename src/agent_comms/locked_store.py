@@ -319,7 +319,7 @@ class UndeclaredFile(RootFile):
     path: Path
 
 
-class LockedFile(RootFile):
+class LockedFile(RootFile, StoreLockOwner, declared_name=None):
     """A declared file whose writers hold its store lock, so its copy shares that lock."""
 
     __slots__ = ()
@@ -683,7 +683,7 @@ class PublishedSQLiteFile(SQLiteFile):
 
 
 @dataclass(frozen=True, slots=True)
-class LockedStore(FileStore, LockedFile, StoreLockOwner, JsonDocument[T], declared_name=None):
+class LockedStore(FileStore, LockedFile, JsonDocument[T], declared_name=None):
     """Ordered document transactions; callbacks never mutate or reenter."""
 
     path: Path
