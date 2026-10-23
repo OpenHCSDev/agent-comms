@@ -67,7 +67,9 @@ from .locked_store import (
 from .maintenance_barrier import MaintenanceBarrier, MaintenanceHolder
 from .package_stamp import STAMP
 from .projection_source import ProjectionSource
-from .store_files import UNBOUNDED_CONTENTION, AtomicFile, StoreLockContention, _store_lock
+from .store_files import (
+    UNBOUNDED_CONTENTION, AtomicFile, StoreLockContention, StoreLockFile, _store_lock,
+)
 
 if TYPE_CHECKING:
     from .execution_states import ExecutionState
@@ -2117,7 +2119,7 @@ class StoreWriter(PublishedSQLiteFile, FileStore):
         """Borrow one committed write transaction from this lifetime owner."""
 
 
-class ReconciledFile(SQLiteFile):
+class ReconciledFile(SQLiteFile, StoreLockFile):
     """A SQLite file whose writer reconciles a stored schema that differs from its
     declaration. The installer reconciles every one with the target's runtime under
     maintenance, after the outgoing owners stop, so no owner meets a schema change when
@@ -2162,7 +2164,7 @@ class RuntimeWriter(StoreWriter, RuntimeFile):
         """No installation reads this file, so maintenance never refuses its writers."""
 
 
-class WalStore(StoreWriter):
+class WalStore(StoreWriter, StoreLockFile):
     """One WAL file owns connection setup, attachment and retirement."""
 
     synchronous: ClassVar[str] = "FULL"

@@ -254,7 +254,14 @@ class StoreOwner(DeclaredFamily):
         )
 
 
-class StoreLockOwner(StoreOwner, declared_name=None):
+class StoreLockFile(StoreOwner, declared_name=None):
+    """A file whose writers take the store lock inode beside it, so that inode is
+    this file's live state, never a leftover."""
+
+    __slots__ = ()
+
+
+class StoreLockOwner(StoreLockFile, declared_name=None):
     __slots__ = ()
     path: Path
     lock_type: ClassVar[type[StoreLock]] = StoreLock

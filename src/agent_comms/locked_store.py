@@ -30,6 +30,7 @@ from .store_files import (
     SharedLock,
     StoreLock,
     StoreLockContention,
+    StoreLockFile,
     StoreLockOwner,
     StoreOwner,
     _store_lock,
@@ -181,11 +182,11 @@ class RootFile:
     @classmethod
     def declaring_owner(cls) -> type[RootFile]:
         """A locking store can inherit its filename from a location-only declaration."""
-        if issubclass(cls, StoreLockOwner):
+        if issubclass(cls, StoreLockFile):
             return cls
         stores = tuple(
             owner
-            for owner in StoreLockOwner.members_with(cls)
+            for owner in StoreLockFile.members_with(cls)
             if issubclass(owner, RootFile)
             and owner.filename == cls.filename
             and owner.root_directory == cls.root_directory
@@ -336,7 +337,7 @@ class DeclaredFile(RootFile):
     path: Path
 
     def takes_store_lock(self) -> bool:
-        return issubclass(self.owner, StoreLockOwner)
+        return issubclass(self.owner, StoreLockFile)
 
 
 @dataclass(frozen=True)
