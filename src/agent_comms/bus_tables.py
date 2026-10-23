@@ -420,3 +420,4 @@ class BusCapability(TypedRow):
 class Addressed(BusCapability):
     sender: Annotated[str, WireName("from"), WireOrder(2)]
     target: Annotated[str, WireName("to"), WireOrder(3), Column(index=True)]
+    indexes: ClassVar[tuple[Index, ...]] = (Index(("sender", "target", "seq")),)

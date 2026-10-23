@@ -8,6 +8,7 @@ from abc import ABC, abstractmethod
 from collections.abc import Callable, Iterable, Iterator
 from contextlib import AbstractContextManager, ExitStack, closing, contextmanager
 from dataclasses import dataclass, replace
+from itertools import product
 from pathlib import Path
 from typing import TYPE_CHECKING, Self
 
@@ -230,6 +231,23 @@ class BusReader(RouteCounts, ABC):
                      f'WHERE ({predicate}) AND seq <= ? GROUP BY sender, target)'),
                 (*parameters, through),
             )
+
+    def latest_addressed(
+        self, senders: frozenset[str], targets: frozenset[str],
+    ) -> tuple[Message, ...]:
+        """Newest directed message across aliases, with one indexed candidate per pair."""
+        with self.observing() as db:
+            newest = max((
+                row.seq for sender, target in product(senders, targets)
+                for row in Addressed.table.select(
+                    db, sender=sender, target=target,
+                    order_by=("seq",), descending=True, limit=1,
+                )
+            ), default=None)
+            if newest is None:
+                return ()
+            header = BusRow.require(db, seq=newest)
+            return (header.kind.read_from(db, header.seq),)
 
     def messages_for_references(
         self, references: Iterable[MessageReference],
