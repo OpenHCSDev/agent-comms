@@ -33,6 +33,7 @@ from .field_codec import (
     Id128Text,
     MalformedRecord,
     NullMember,
+    PresentMember,
     SingleFieldValue,
     SingleExternalMember,
     TextRepresentation,
@@ -113,9 +114,6 @@ class PiOmitted(NullMember):
 
     def value_or[D](self, default: D) -> D:
         return default
-
-    def present(self) -> tuple[()]:
-        return ()
 
     def text_or[D](self, default: D) -> D:
         return default
@@ -444,16 +442,13 @@ class UnreportedUsage(PiUsage):
 
 
 @dataclass(frozen=True)
-class PiContent(OpenPayload, affix="Content"):
+class PiContent(PresentMember, OpenPayload, affix="Content"):
     def text_parts(self) -> tuple[str, ...]:
         return ()
 
     def with_display_text(self, text: str) -> PiContent | PiOmitted:
         """Keep non-text content beside the message's replacement display block."""
         return self
-
-    def present(self) -> tuple[PiContent, ...]:
-        return (self,)
 
     def tool_calls(self) -> tuple[ToolCallContent, ...]:
         return ()

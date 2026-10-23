@@ -988,8 +988,18 @@ class SubclassUnion(DeclaredFamily, AcceptsNull, ExternalJsonShape, WireValue):
         return ValueDecoder.for_members(cls.members_with(cls)).argument_options()
 
 
+class PresentMember:
+    """A provided member contributes itself to an optional member sequence."""
+
+    def present(self) -> tuple[Self]:
+        return (self,)
+
+
 class NullMember(ExternalField, AcceptsNull, WireValue):
     """One declared empty member owns the JSON null representation."""
+
+    def present(self) -> tuple[()]:
+        return ()
 
     @classmethod
     def wire_structure(cls, structural: ValueDecoder[object]) -> ValueDecoder[object]:

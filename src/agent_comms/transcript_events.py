@@ -14,7 +14,7 @@ from pydantic import JsonValue
 
 from . import tool_declaration
 from .declared_family import DeclaredFamily
-from .field_codec import FieldCodec, NullMember, WireBind, WireOmitDefault
+from .field_codec import FieldCodec, NullMember, PresentMember, WireBind, WireOmitDefault
 from .message_reference import MessageReference
 from .messages import Message
 from .recorded_time import EventTime, UnrecordedEventTime
@@ -41,9 +41,6 @@ TRUNCATED = "\n[Import excerpt truncated]"
 
 @dataclass(frozen=True, slots=True)
 class NoRetainedRequest(NullMember):
-    def present(self) -> tuple[()]:
-        return ()
-
     def matches(self, latest_request: str) -> bool:
         return False
 
@@ -82,7 +79,7 @@ class ImportedInput(ImportedMessage):
         return {"role": "user", "content": [{"type": "text", "text": self.body}], "timestamp": timestamp}
 
 
-class ImportedRequest(ImportedInput):
+class ImportedRequest(PresentMember, ImportedInput):
     """A person's or a commanding agent's prompt."""
 
     def remember(self, buffer: ImportBuffer) -> None:
@@ -90,9 +87,6 @@ class ImportedRequest(ImportedInput):
 
     def retained_request(self) -> ImportedRequest:
         return self
-
-    def present(self) -> tuple[ImportedRequest]:
-        return (self,)
 
     def matches(self, latest_request: str) -> bool:
         return self.body == latest_request or (
