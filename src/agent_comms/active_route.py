@@ -52,7 +52,7 @@ class CommsRoute(ABC):
 
     @contextmanager
     def hold_client_route(self) -> Iterator[None]:
-        """Borrow the published route until this client's work has retired.
+        """Borrow the published route for one client call.
 
         An explicit selection of the published root is still its borrower.
         Independent private roots do not participate in default publication.

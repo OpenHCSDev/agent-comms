@@ -59,8 +59,9 @@ class RouteSelection:
     def for_child(cls, env: Mapping[str, str], cwd: str | Path) -> RouteSelection:
         """Capture the explicit process selection before launching its child."""
         root = child_root(env, cwd)
-        return cls(resolve_comms_route(root), root,
-                   RecordedBusIdentity.capture(Bus.path_in(root)))
+        return cls(
+            resolve_comms_route(root), root, RecordedBusIdentity.capture(Bus.path_in(root))
+        )
 
 
 @contextmanager
