@@ -20,6 +20,7 @@ from contextlib import AbstractContextManager, ExitStack, closing, contextmanage
 from dataclasses import dataclass, field
 from enum import Enum, IntEnum, IntFlag
 from functools import cache
+from importlib import import_module
 from inspect import getsource
 from pathlib import Path
 from typing import (
@@ -2000,8 +2001,6 @@ class TypedTable(
 class ProducedTable(ProducedRow, TypedTable, ProjectionSource, declared_name=None):
     """A table derives its producers from the writers that declare it as an output."""
 
-    shared_producers: ClassVar[tuple[type, ...]] = (TypedTable, TypedRow, FieldCodec)
-
     @classmethod
     def writer_declarations(cls) -> tuple[type[ProjectionSource], ...]:
         """A row contributes itself; extra writes belong to the class declaring them."""
@@ -2025,18 +2024,20 @@ class ProducedTable(ProducedRow, TypedTable, ProjectionSource, declared_name=Non
     def producer_owners(cls) -> tuple[type, ...]:
         """Only this table's writers and their inherited implementations.
 
-        An ancestor declaring other outputs owns those outputs alone; unscoped
-        inherited machinery still follows the writer that uses it.
+        An ancestor declaring other outputs owns those outputs alone. Inherited
+        producer capabilities follow the writer; unrelated mechanisms do not.
         """
-        owners = {*cls.shared_producers, cls}
-        owners.update(parent for parent in cls.__mro__
-                      if parent.__module__.partition(".")[0] == __package__)
+        # Complete the same declared family for direct source reads and wheel builds.
+        import_module("agent_comms.producer_stamp")
+        owners: set[type] = {
+            parent for parent in cls.__mro__ if issubclass(parent, ProjectionSource)
+        }
         writers = ProjectionSource.writers_for(cls)
         owners.update(writers)
         for writer in writers:
             owners.update(
                 parent for parent in writer.__mro__
-                if parent.__module__.partition(".")[0] == __package__
+                if issubclass(parent, ProjectionSource)
                 and ("writes" not in vars(parent) or parent in writers)
             )
         return tuple(sorted(owners, key=lambda owner: (owner.__module__, owner.__qualname__)))

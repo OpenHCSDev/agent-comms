@@ -54,14 +54,7 @@ class CoreBuildHook(BuildHookInterface):
         """
         return json.loads(
             subprocess.check_output(
-                (
-                    sys.executable,
-                    "-c",
-                    "import json; from agent_comms.bus import Bus; "
-                    "from agent_comms.typed_table import ProducedTable; "
-                    "print(json.dumps({row.declared_name: row.producer_digest() "
-                    "for row in ProducedTable.members_with(ProducedTable)}, sort_keys=True))",
-                ),
+                (sys.executable, "-m", "agent_comms.producer_stamp"),
                 cwd=root,
                 env={**os.environ, "PYTHONPATH": str(root / "src")},
                 text=True,

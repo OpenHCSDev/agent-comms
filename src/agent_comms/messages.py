@@ -72,13 +72,6 @@ class BusTables(TypedTable, AppendOnlyTables, SharedFileTables, DurableTables, d
 class BusProjectionTables(ProducedTable, SharedFileTables, DerivedTables, declared_name=None):
     """Reverse lookups are derived from the record, in its append transaction."""
 
-    @ClassFact
-    def shared_producers(cls) -> tuple[type, ...]:
-        return (
-            *ProducedTable.shared_producers, BusCapability, BusRecord,
-            ProjectionPass, StoredHolders, ReplayedHolders,
-        )
-
     @classmethod
     def create_schema(cls, db: sqlite3.Connection) -> None:
         """Create/rebuild rows from history using the append projection owner."""

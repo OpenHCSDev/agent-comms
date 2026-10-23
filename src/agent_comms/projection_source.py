@@ -41,7 +41,7 @@ class ProjectionSource:
         """Reverse the writers' declarations, without discovering unrelated modules."""
         return {
             writer
-            for owner, writers in ProjectionSource._declarations.items()
+            for owner, writers in tuple(ProjectionSource._declarations.items())
             for writer in writers
             if table in owner.writes
         }

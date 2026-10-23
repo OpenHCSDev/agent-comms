@@ -89,19 +89,15 @@ def projection_source_digest(source: Path) -> str:
     return subprocess.run(
         (
             sys.executable,
-            "-I",
-            "-c",
-            "import sys; sys.path.insert(0, sys.argv[1]); "
-            "import json; from agent_comms.bus import Bus; "
-            "from agent_comms.messages import BusProjectionTables; "
-            "print(json.dumps({row.declared_name: row.producer_digest() "
-            "for row in BusProjectionTables.projection_rows()}, sort_keys=True))",
-            str(source.parent),
+            "-P",
+            "-m",
+            "agent_comms.producer_stamp",
         ),
         check=True,
         capture_output=True,
         text=True,
         timeout=60,
+        env={**os.environ, "PYTHONPATH": str(source.parent)},
     ).stdout.strip()
 
 
@@ -207,22 +203,13 @@ def test_activity_source_changes_only_sent_activity(projection_source: Path) -> 
 
 
 def test_display_import_does_not_add_projection_producers(projection_source: Path) -> None:
-    program = """
-import sys
-sys.path.insert(0, sys.argv[1])
-from agent_comms.bus import Bus
-from agent_comms.messages import BusProjectionTables
-rows = BusProjectionTables.projection_rows()
-before = {row.declared_name: row.producer_digest() for row in rows}
-from agent_comms import cli
-rows[0]._producer_digest.cache_clear()
-after = {row.declared_name: row.producer_digest() for row in rows}
-assert before == after
-"""
-    subprocess.run(
-        (sys.executable, "-I", "-c", program, str(projection_source.parent)),
-        check=True, capture_output=True, text=True, timeout=60,
-    )
+    before = projection_source_digest(projection_source)
+    path = projection_source / "producer_stamp.py"
+    original = path.read_text()
+    declaration = "from agent_comms.bus import Bus as Bus"
+    assert original.count(declaration) == 1
+    path.write_text(original.replace(declaration, declaration + "\nfrom agent_comms import cli"))
+    assert projection_source_digest(projection_source) == before
 
 
 
