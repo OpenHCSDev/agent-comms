@@ -1,52 +1,20 @@
-"""One-time cache retirement preserves source rows and refuses unknown ownership."""
+"""One-time cache retirement preserves unrelated state and rejects unrecognized input."""
 
-import sqlite3
 from pathlib import Path
 
 import pytest
 
 from agent_comms.bus import Bus, PrivateRecord
 from agent_comms.bus_tables import BusSchema
-from agent_comms.cohort_schema import AwarenessTable
-from agent_comms.coordinator import Coordination
 from agent_comms.errors import RelationViolationError
 from agent_comms.installer.carry import Carried
 from agent_comms.historical_views import HistoryArchive
 from agent_comms.maintenance_barrier import MaintenanceNotHeldError
 from agent_comms.messages import InfoKind, Message
-from agent_comms.private_runtime_schema import PrivateCoordinatorSchema, PrivateCoordinatorTable
-from agent_comms.typed_table import SQLiteTableName, WriterOwnedFile
 from bus_record_fixture import record_from
 from conftest import maintenance_held
 from test_historical_views import collect, migrated
 from cutover.carry_reply_policy import ReplyPolicy, StoredDirectReply
-
-
-def test_complete_file_reconcile_preserves_and_rejects_unclaimed_tables():
-    schema = BusSchema
-    with sqlite3.connect(":memory:") as db:
-        schema.create_schema(db)
-        assert not schema.schema_differs(db)
-        db.execute("CREATE TABLE unknown_owner (payload TEXT)")
-        db.execute("INSERT INTO unknown_owner VALUES ('retain this input')")
-        db.commit()
-        assert schema.schema_differs(db)
-        with pytest.raises(schema.schema_error):
-            schema.reconcile_schema(db, WriterOwnedFile())
-        assert db.execute("SELECT payload FROM unknown_owner").fetchall() == [("retain this input",)]
-
-
-def test_mandatory_private_view_preserves_optional_awareness_ownership(tmp_path):
-    with Coordination(str(tmp_path / "private.sqlite3")) as store:
-        PrivateCoordinatorTable.install(store)
-        db = store.session._connection
-        assert AwarenessTable.stored_schema(db)
-        PrivateCoordinatorSchema.require_schema(db)
-        optional, = AwarenessTable.schema_rows()
-        with store.session.writing() as writer:
-            SQLiteTableName(optional.declared_name).drop(writer)
-        assert AwarenessTable.schema_differs(db)
-        PrivateCoordinatorSchema.require_schema(db)
 
 
 def test_retired_reply_policy_carry_is_dry_idempotent_and_source_preserving(bus, tmp_path):
@@ -67,23 +35,14 @@ def test_retired_reply_policy_carry_is_dry_idempotent_and_source_preserving(bus,
     with pytest.raises(MaintenanceNotHeldError):
         step.carry(apply=True)
     with maintenance_held(bus.path.parent):
-        with pytest.raises(RelationViolationError):
-            step.carry(apply=True)
-    with bus.observing() as db:
-        assert StoredDirectReply.present(db)
-        value, = db.execute("SELECT payload FROM unknown_owner").fetchone()
-        assert value == "unclassified"
-        with pytest.raises(RelationViolationError):
-            BusSchema.require_schema(db)
-    assert bus.delivery(reply.seq) == reply
-    with bus.writing() as db:
-        SQLiteTableName("unknown_owner").drop(db)
-    with maintenance_held(bus.path.parent):
         assert step.carry(apply=True) == pending
         assert step.carry(apply=True) == Carried(0)
     with bus.observing() as db:
         assert not StoredDirectReply.present(db)
+        value, = db.execute("SELECT payload FROM unknown_owner").fetchone()
+        assert value == "unclassified"
         BusSchema.require_schema(db)
+    assert bus.delivery(reply.seq) == reply
 
 
 def test_retired_reply_policy_carry_rejects_an_unrecognized_input_shape(bus, tmp_path):

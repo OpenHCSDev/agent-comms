@@ -32,9 +32,6 @@ from agent_comms.typed_table import (
     ForeignKey,
     Index,
     SharedFileTables,
-    SQLiteSchemaObject,
-    SQLiteTableName,
-    TableSchema,
     TypedRow,
     TypedTable,
     sql_literal,
@@ -64,19 +61,6 @@ class BusProjectionTables(SharedFileTables, DerivedTables):
 class BusSchema(ComposedSchemas, BusTables, BusProjectionTables):
     """One file reconciles its declared families using each family's carry policy."""
 
-    @classmethod
-    def stored_schema(cls, db: sqlite3.Connection) -> list[SQLiteSchemaObject]:
-        """This complete file sees objects its partial family views cannot name."""
-        return TableSchema.stored_schema(db)
-
-    @classmethod
-    def stored_tables(cls, db: sqlite3.Connection) -> list[SQLiteTableName]:
-        return TableSchema.stored_tables(db)
-
-    @classmethod
-    def carry_schema(cls, db: sqlite3.Connection) -> None:
-        super().carry_schema(db)
-        cls.require_schema(db)
 
 @dataclass(frozen=True)
 class ParticipantSource(TypedTable, BusProjectionTables, declared_name=None):

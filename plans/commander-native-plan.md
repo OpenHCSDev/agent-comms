@@ -298,12 +298,16 @@ It costs 44.02 seconds; no projection skip is restored. A real attached archive
 still validates and browses with identical catalog and read results afterward.
 The cutover is deleted after all buses have run it.
 
-`BusSchema` now compares the complete catalog and rejects unknown tables without
-deleting them. Private coordinator composition remains its original mandatory
-view: optional awareness has a separate owner and absence/drift contract.
-Configured optional awareness is covered by a real coordinator check. The
-current installed pair remains independent of this draft; installation and
-live commander qualification belong to integration acceptance.
+Whole-file ownership remains open with the control-plane owner. The attempted
+complete-catalog check was removed: the converter's `HistoryOffset` must survive
+retry until `BusHistory.after_acceptance`, and private optional awareness owns
+a separate schema view. The repair retains existing partial schema-family
+scopes and drops only the exact proven retired input. Other unclaimed tables
+are preserved; general detection is not closed by this change. The actual
+`OwnerRequests`, `ReplyPolicy`, `BusHistory` order is checked with unconverted
+JSONL and retained conversion maps, through normal after-acceptance retirement.
+The current installed pair remains independent of this draft; installation
+and live commander qualification belong to integration acceptance.
 
 ### Phase 8: cutover
 
