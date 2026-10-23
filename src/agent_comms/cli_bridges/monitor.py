@@ -309,11 +309,14 @@ class InspectSession(SessionRequest[SessionInformation], declared_name='inspect'
     def awaited(self, claim: WatchClaim) -> SessionInformation:
         """An install swaps the endpoint; the claim's state says whether an absent socket is
         that gap or gone."""
+        named = False
         while True:
             try:
                 return self.information(claim.socket_path)
             except (FileNotFoundError, ConnectionRefusedError) as absent:
-                claim.state().await_socket(claim, absent)
+                state = claim.state()
+                named = named or state.name_wait(claim)
+                state.await_socket(claim, absent)
 
     async def handle(self, service: MonitorService, peer: MonitorPeer) -> SessionReply:
         return SessionInformation(
