@@ -6,7 +6,8 @@ import asyncio
 import os
 import subprocess
 import sys
-from contextlib import closing, nullcontext
+import time
+from contextlib import closing, contextmanager, nullcontext
 from dataclasses import replace
 from pathlib import Path
 
@@ -18,19 +19,85 @@ from agent_comms.child_process import (
     ChildOutcome,
     DiesWithLauncherLifetime,
     ExitedOutcome,
+    ForcedStopOutcome,
     GroupMember,
     IdentityMismatchError,
     ObservedProcess,
-    SpawnedProcess,
-    SynchronousProcess,
     Platform,
     ProcessIdentity,
+    STOP_GRACE_SECONDS,
+    SpawnedProcess,
+    SynchronousProcess,
     TimedOutOutcome,
 )
 from agent_comms.field_codec import FieldCodec
 from agent_comms.launch_runtime import LaunchRuntime
-
 from process_tree_fixture import TREE, identities, ready
+
+
+def test_wait_any_exit_returns_before_another_member_exits() -> None:
+    first = SpawnedProcess.launch((sys.executable, "-c", "import time; time.sleep(.1)"))
+    last = SpawnedProcess.launch((sys.executable, "-c", "import time; time.sleep(60)"))
+    try:
+        started = time.monotonic()
+        Platform.current().wait_any_exited((first.identity, last.identity), 10)
+        assert time.monotonic() - started < 5
+        assert not first.alive()
+        assert last.alive()
+    finally:
+        first.close()
+        last.close()
+
+
+def test_wait_any_exit_returns_for_reused_identity_and_exited_member() -> None:
+    child = SpawnedProcess.launch((sys.executable, "-c", "import time; time.sleep(60)"))
+    platform = Platform.current()
+    try:
+        # Another incarnation at the pid means the awaited member already exited.
+        started = time.monotonic()
+        platform.wait_any_exited(
+            (replace(child.identity, start_time=child.identity.start_time + 1),), 10,
+        )
+        assert time.monotonic() - started < 5
+        assert child.alive()
+    finally:
+        child.close()
+    started = time.monotonic()
+    platform.wait_any_exited((child.identity,), 10)
+    assert time.monotonic() - started < 5
+
+
+def test_stop_batch_shares_one_force_deadline() -> None:
+    command = (sys.executable, "-c", (
+        "import signal,time; signal.signal(signal.SIGTERM, signal.SIG_IGN); "
+        "print('ready',flush=True); time.sleep(60)"
+    ))
+    children = tuple(SpawnedProcess.launch(command, output=subprocess.PIPE) for _ in range(2))
+    try:
+        for child in children:
+            assert child.process.stdout is not None
+            assert child.process.stdout.readline() == b"ready\n"
+        signalled: dict[int, list[float]] = {index: [] for index in range(len(children))}
+
+        def recording(index: int):
+            @contextmanager
+            def guard():
+                signalled[index].append(time.monotonic())
+                yield
+            return guard
+
+        outcomes = SynchronousProcess.stop_together(
+            tuple((child, recording(index)) for index, child in enumerate(children))
+        )
+        assert all(isinstance(outcome, ForcedStopOutcome) for outcome in outcomes)
+        # Each plan's first guarded signal is the graceful pass, its second the force.
+        # One shared deadline forces both within one grace period, whatever the load.
+        forced = [times[1] for times in signalled.values()]
+        assert max(forced) - min(forced) < STOP_GRACE_SECONDS
+        assert all(child.retired for child in children)
+    finally:
+        for child in children:
+            child.close()
 
 
 @pytest.mark.asyncio

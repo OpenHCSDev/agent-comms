@@ -66,7 +66,7 @@ def installed_home(tmp_path_factory) -> dict[str, str]:
     environment = {**os.environ, "HOME": str(home), "UV_CACHE_DIR": caches.stdout.strip(),
                    "npm_config_cache": str(Path.home() / ".npm")}
     environment.pop("PYTHONPATH", None)
-    outgoing = Stack.build(REPOSITORY, InstallCommands(), home)
+    outgoing = Stack.build(Checkout.prepared(REPOSITORY), InstallCommands(), home)
     assert (outgoing.runtime.package_root / "__init__.py").is_file()
     (home / ".local/share/agent-comms/current").symlink_to(
         outgoing.runtime.prefix, target_is_directory=True)
