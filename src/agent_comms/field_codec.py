@@ -1810,6 +1810,13 @@ class ValueDecoder[T](ABC):
     def wire_children(self) -> tuple[ValueDecoder[object], ...]:
         return ()
 
+    def admits_wire(self, data: object) -> bool:
+        """Check outer wire shape without decoding nested values.
+
+        This may admit a value decoding rejects, but must never reject one decoding accepts.
+        """
+        return True
+
     def selects_record(self, select: WireRecordFilter) -> bool:
         return False
 
