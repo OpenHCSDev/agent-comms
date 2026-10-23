@@ -1444,7 +1444,6 @@ class Projected(property):
 
     def __set_name__(self, owner: type, name: str) -> None:
         """Every class body declaring this field records it, a slots rebuild included."""
-        super().__set_name__(owner, name)
         Projected._declared.setdefault(owner, {})[name] = self
 
     @staticmethod
