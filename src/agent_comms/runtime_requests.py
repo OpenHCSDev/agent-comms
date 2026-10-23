@@ -67,7 +67,9 @@ class RuntimeRequestContext:
 
 
 @dataclass(frozen=True, kw_only=True)
-class RuntimeRequest(DeclaredFamily, Command[RuntimeRequestContext, Awaitable[None]], affix="RuntimeRequest"):
+class RuntimeRequest(
+    DeclaredFamily, Command[RuntimeRequestContext, Awaitable[None]], affix="RuntimeRequest"
+):
     thread: str
 
     @classmethod

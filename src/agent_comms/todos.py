@@ -2739,8 +2739,12 @@ class DoneTodoState(TodoState):
                        revision=current.revision + 1)
 
 
+# Todo stores these commands, so it is declared after them; the alias reads it lazily.
+type CommandedTodo = Todo
+
+
 @dataclass(frozen=True)
-class TodoCommand(Command["Todo", "Todo"], DeclaredFamily, affix="TodoOperation"):
+class TodoCommand(Command[CommandedTodo, CommandedTodo], DeclaredFamily, affix="TodoOperation"):
     expected_revision: int
 
     def __post_init__(self) -> None:
