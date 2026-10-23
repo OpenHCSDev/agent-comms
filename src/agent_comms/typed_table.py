@@ -9,20 +9,17 @@ from __future__ import annotations
 
 import annotationlib
 import hashlib
-import inspect
 import json
-import marshal
 import os
 import re
 import sqlite3
-import sys
 import types
 from abc import ABC, abstractmethod
 from collections.abc import Callable, Generator, Iterable, Iterator, Mapping, Sequence
 from contextlib import AbstractContextManager, ExitStack, closing, contextmanager
 from dataclasses import dataclass, field
 from enum import Enum, IntEnum, IntFlag
-from functools import cached_property, lru_cache
+from functools import lru_cache
 from pathlib import Path
 from typing import (
     TYPE_CHECKING,
@@ -65,6 +62,7 @@ from .locked_store import (
     StoreCommittedError,
 )
 from .maintenance_barrier import HOLDER_NONCE, MaintenanceBarrier
+from .package_stamp import STAMP
 from .store_files import _store_lock
 
 if TYPE_CHECKING:
@@ -1343,7 +1341,7 @@ class DerivedTables(TableSchema):
     __slots__ = ()
 
     @classmethod
-    def projection_rows(cls) -> tuple[type[ProducedRow], ...]:
+    def projection_rows(cls) -> tuple[type[TypedTable], ...]:
         return tuple(row for row in cls.schema_rows() if issubclass(row, ProducedRow))
 
     @classmethod
@@ -1386,143 +1384,7 @@ class ProjectionProducerTables(SharedFileTables, DurableTables):
 
 
 class ProducedRow(ABC):
-    """Each projection capability declares the classes that produce its rows."""
-
-    @classmethod
-    @abstractmethod
-    def producer_classes(cls, row: type[TypedTable]) -> tuple[type, ...]: ...
-
-    @classmethod
-    def producer_declarations(cls) -> tuple[type, ...]:
-        roots = (cls, *(producer for capability in cls.__mro__
-                       if issubclass(capability, ProducedRow)
-                       and capability is not ProducedRow
-                       and "producer_classes" in vars(capability)
-                       for producer in capability.producer_classes(cls)))
-        pending, family = list(roots), set()
-        while pending:
-            producer = pending.pop()
-            if producer not in family:
-                family.add(producer)
-                pending.extend(producer.__subclasses__())
-        return tuple(sorted(
-            {base for producer in family for base in producer.__mro__},
-            key=lambda owner: (owner.__module__, owner.__qualname__),
-        ))
-
-    @staticmethod
-    def producer_identities(rows: tuple[type[ProducedRow], ...]) -> dict[type[ProducedRow], str]:
-        """One declaration snapshot for the complete family, not retained process caches."""
-        declarations = {row: row.producer_declarations() for row in rows}
-        owners = {owner for related in declarations.values() for owner in related}
-        modules = {name: ProducedRow._module_identity(sys.modules[name])
-                   for name in {owner.__module__ for owner in owners}}
-        members = {owner: ProducedRow._namespace_identity(vars(owner)) for owner in owners}
-        identities = {}
-        for row, related in declarations.items():
-            identity = sorted({(
-                owner.__module__, owner.__qualname__,
-                tuple((base.__module__, base.__qualname__) for base in owner.__bases__),
-                modules[owner.__module__], members[owner],
-            ) for owner in related})
-            identities[row] = hashlib.sha256(json.dumps(identity).encode()).hexdigest()
-        return identities
-
-    @staticmethod
-    def _code_identity(code: types.CodeType) -> str:
-        """Loaded Python implementation, independent of installation path and line layout."""
-        def constant(value):
-            if isinstance(value, types.CodeType):
-                return normalized(value)
-            if isinstance(value, tuple):
-                return "tuple", tuple(constant(item) for item in value)
-            if isinstance(value, frozenset):
-                return "frozenset", tuple(sorted(marshal.dumps(constant(item), 2) for item in value))
-            if isinstance(value, slice):
-                # Python 3.14 emits slices, which marshal format 2 predates.
-                return "slice", constant(value.start), constant(value.stop), constant(value.step)
-            return value
-
-        def normalized(current):
-            return current.replace(
-                co_filename="", co_firstlineno=0, co_linetable=b"",
-                co_consts=tuple(constant(value) for value in current.co_consts),
-            )
-
-        # Marshal format 2 avoids object-interning/reference-layout differences.
-        try:
-            encoded = marshal.dumps(normalized(code), 2)
-        except ValueError as error:
-            kinds = tuple(type(value).__module__ + "." + type(value).__qualname__
-                          for value in code.co_consts)
-            raise TypeError(f"Unsupported constants in producer {code.co_qualname}: {kinds}") from error
-        return hashlib.sha256(encoded).hexdigest()
-
-    @staticmethod
-    def _literal_identity(value):
-        """Immutable declaration values; runtime maps and mutable caches are not declarations."""
-        if isinstance(value, type):
-            return ("class", value.__module__, value.__qualname__)
-        if isinstance(value, Enum):
-            return ("enum", type(value).__module__, type(value).__qualname__, value.name,
-                    ProducedRow._literal_identity(value.value))
-        if isinstance(value, types.FunctionType):
-            return ("function", value.__module__, value.__qualname__,
-                    ProducedRow._code_identity(value.__code__))
-        if type(value) in (type(None), bool, int, float, complex, str, bytes, types.EllipsisType):
-            return ("literal", marshal.dumps(value, 2).hex())
-        if isinstance(value, slice):
-            return ("slice", *(ProducedRow._literal_identity(item)
-                               for item in (value.start, value.stop, value.step)))
-        if type(value) in (tuple, frozenset):
-            values = tuple(ProducedRow._literal_identity(item) for item in value)
-            if all(item is not None for item in values):
-                encoded = tuple(json.dumps(item) for item in values)
-                return (type(value).__name__, tuple(sorted(encoded)) if type(value) is frozenset else encoded)
-        return None
-
-    @staticmethod
-    def _member_identity(value):
-        if isinstance(value, cached_property):
-            return ("cached_property", ProducedRow._member_identity(value.func))
-        if isinstance(value, property):
-            return ("property", tuple(ProducedRow._member_identity(getter)
-                                      for getter in (value.fget, value.fset, value.fdel)))
-        unwrapped = inspect.unwrap(value) if inspect.isroutine(value) else value
-        if isinstance(unwrapped, types.FunctionType):
-            return ("function", ProducedRow._code_identity(unwrapped.__code__),
-                    ProducedRow._literal_identity(unwrapped.__defaults__),
-                    tuple(sorted((name, ProducedRow._literal_identity(default))
-                                 for name, default in (unwrapped.__kwdefaults__ or {}).items())),
-                    tuple(ProducedRow._literal_identity(cell.cell_contents)
-                          for cell in (unwrapped.__closure__ or ())))
-        return ProducedRow._literal_identity(value)
-
-    @staticmethod
-    def _namespace_identity(namespace):
-        return json.dumps(tuple(sorted(
-            (name, identity) for name, value in namespace.items()
-            if (not name.startswith("__") or inspect.isroutine(value))
-            and (identity := ProducedRow._member_identity(value)) is not None
-        )))
-
-    @staticmethod
-    def _module_identity(module: types.ModuleType):
-        """Retain the artifact dependency and distinguish the declarations actually loaded."""
-        namespace = vars(module)
-        filename = namespace.get("__file__")
-        if filename is None:
-            if module.__spec__ is None or module.__spec__.origin != "built-in":
-                raise TypeError(f"Producer module {module.__name__} has no source artifact")
-            artifact = sys.version
-        else:
-            artifact = hashlib.sha256(Path(filename).read_bytes()).hexdigest()
-        classes = tuple(sorted(
-            (name, ProducedRow._namespace_identity(vars(value)))
-            for name, value in namespace.items()
-            if isinstance(value, type) and value.__module__ == module.__name__
-        ))
-        return artifact, ProducedRow._namespace_identity(namespace), classes
+    """Rows rebuilt whenever the installed Core build changes."""
 
 
 @lru_cache(maxsize=4)
@@ -2034,15 +1896,14 @@ class TypedTable(
 @dataclass(frozen=True)
 class ProjectionProducer(TypedTable, ProjectionProducerTables):
     projection: Annotated[str, Column(primary_key=True)]
-    identity: str
+    commit: str
 
     @classmethod
-    def records_for(cls, rows: tuple[type[ProducedRow], ...]) -> tuple[Self, ...]:
-        return tuple(cls(row.declared_name, identity)
-                     for row, identity in ProducedRow.producer_identities(rows).items())
+    def records_for(cls, rows: tuple[type[TypedTable], ...]) -> tuple[Self, ...]:
+        return tuple(cls(row.declared_name, STAMP.commit()) for row in rows)
 
     @classmethod
-    def matches(cls, db: sqlite3.Connection, rows: tuple[type[ProducedRow], ...]) -> bool:
+    def matches(cls, db: sqlite3.Connection, rows: tuple[type[TypedTable], ...]) -> bool:
         if not rows:
             return True
         if not cls.present(db):

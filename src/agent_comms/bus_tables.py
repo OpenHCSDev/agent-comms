@@ -21,7 +21,7 @@ from agent_comms.envelope_claim_transitions import (
     UnclaimedResource,
 )
 from agent_comms.errors import RelationViolationError
-from agent_comms.field_codec import FieldCodec, ValueDecoder, WireName, WireOrder
+from agent_comms.field_codec import FieldCodec, WireName, WireOrder
 from agent_comms.message_reference import MessageReference
 from agent_comms.typed_table import (
     AppendOnlyTables,
@@ -34,7 +34,6 @@ from agent_comms.typed_table import (
     ProducedRow,
     ProjectionProducerTables,
     SharedFileTables,
-    SqlStorage,
     TypedRow,
     TypedTable,
     sql_literal,
@@ -51,10 +50,6 @@ class BusTables(SharedFileTables, DurableTables, AppendOnlyTables):
 
 class BusProjectionTables(ProducedRow, SharedFileTables, DerivedTables):
     """Reverse lookups are derived from the record, in its append transaction."""
-
-    @classmethod
-    def producer_classes(cls, row) -> tuple[type, ...]:
-        return (BusCapability, FieldCodec, SqlStorage, ValueDecoder)
 
     @classmethod
     def create_schema(cls, db: sqlite3.Connection) -> None:
@@ -75,14 +70,6 @@ class ParticipantSource(TypedTable, BusProjectionTables, declared_name=None):
 
     lookup: Annotated[str, Column(primary_key=True)]
     seq: Annotated[int, Column(primary_key=True)]
-
-    @classmethod
-    def producer_classes(cls, row) -> tuple[type, ...]:
-        from .audience_manifest import FrozenAudience
-        from .bus_publication import Delivered
-        from .channel_targets import CommandTarget
-
-        return (Delivered, FrozenAudience, messages.MessageRole, CommandTarget, ResponsePolicy)
 
 
 class SentSource(ParticipantSource):
@@ -105,12 +92,6 @@ class MessageIdentitySource(MessageReference, TypedTable, BusProjectionTables):
     )
 
     @classmethod
-    def producer_classes(cls, row) -> tuple[type, ...]:
-        from .channel_targets import CommandTarget
-
-        return (messages.Message, messages.MessageRole, CommandTarget, ResponsePolicy)
-
-    @classmethod
     def reference_sql(cls, alias: str) -> str:
         fields = ",".join(
             value for item, key in FieldCodec.record_fields(MessageReference)
@@ -123,10 +104,6 @@ class MessageIdentitySource(MessageReference, TypedTable, BusProjectionTables):
 class AnsweredSource(TypedTable, BusProjectionTables):
     original: Annotated[MessageReference, Column(primary_key=True)]
     seq: Annotated[int, Column(primary_key=True)]
-
-    @classmethod
-    def producer_classes(cls, row) -> tuple[type, ...]:
-        return (messages.Message, MessageReference)
 
     @classmethod
     def unanswered_references(
@@ -266,10 +243,6 @@ class ClaimOperations(TypedTable, BusProjectionTables):
     seq: int
 
     @classmethod
-    def producer_classes(cls, row) -> tuple[type, ...]:
-        return (messages.Claimed, ClaimTransition, HeldResources)
-
-    @classmethod
     def references(cls) -> tuple[ForeignKey, ...]:
         return (ForeignKey(("seq",), messages.Claimed.table, ("seq",)),)
 
@@ -284,10 +257,6 @@ class HeldResources(TypedTable, BusProjectionTables):
 
     resource: Annotated[str, Column(primary_key=True)]
     claim_seq: int
-
-    @classmethod
-    def producer_classes(cls, row) -> tuple[type, ...]:
-        return (messages.Claimed, ClaimTransition, ResourceClaim)
 
     @classmethod
     def references(cls) -> tuple[ForeignKey, ...]:

@@ -1,12 +1,8 @@
 import os
-import json
 import signal
 import sqlite3
-import subprocess
-import sys
 from contextlib import closing, contextmanager
 from dataclasses import replace
-from pathlib import Path
 
 import pytest
 
@@ -22,6 +18,7 @@ from agent_comms.bus_tables import (
     AnsweredSource,
     BusProjectionTables,
     BusRow,
+    BusSchema,
     BusTables,
     MessageIdentitySource,
 )
@@ -41,10 +38,17 @@ from agent_comms.messages import (
     MessageRoleWire,
 )
 from agent_comms.message_reference import MessageReference
+from agent_comms.package_stamp import STAMP
 from agent_comms.response_acknowledgement import (
     canonical_publication_key,
 )
-from agent_comms.typed_table import ProjectionProducer, RowNotFoundError, SQLiteTableName, TypedTable
+from agent_comms.typed_table import (
+    ProjectionProducer,
+    RowNotFoundError,
+    SQLiteTableName,
+    TypedTable,
+    WriterOwnedFile,
+)
 from bus_record_fixture import publication_processes, record_from
 
 
@@ -87,64 +91,39 @@ def test_install_refuses_existing_schema_changes_until_an_explicit_rebuild(bus):
     assert bus.page(3, 2) == (second, record)
 
 
-@pytest.mark.parametrize("edit_after_import", (False, True), ids=("fresh-import", "edited-after-import"))
-def test_changed_message_producer_rebuilds_real_projection_with_identical_ddl(tmp_path, edit_after_import):
-    source = Path(__file__).parents[1] / "src/agent_comms/messages.py"
-    producer = tmp_path / "messages.py"
-    original = source.read_text()
-    producer.write_text(original)
-    producing_call = "CommandTarget.named(message.target).response_policy(message)"
-    assert original.count(producing_call) == 1
-    replacement = tmp_path / "changed.py"
-    replacement.write_text(original.replace(producing_call, "InformationalPolicy.instance()"))
-    database = tmp_path / "bus.sqlite3"
-    runtime = Path(__file__).parent / "fixtures/projection_runtime.py"
+def test_projection_freshness_follows_the_installed_core_commit(bus):
+    record = bus.append(lambda seq, db: PublicRecord.from_message(
+        Message("author", "worker", "preserved source", InfoKind, seq=seq),
+    ))
+    current = STAMP.commit()
+    older = "0" * 40
+    assert older != current
+    with bus.writer_connection() as db:
+        before = db.total_changes
+        assert not BusSchema.schema_differs(db)
+        assert not BusSchema.reconcile_schema(db, WriterOwnedFile())
+        assert db.total_changes == before
 
-    def replay(after_import_source=None):
-        arguments = (sys.executable, str(runtime), str(producer), str(database))
-        if after_import_source is not None:
-            arguments += (str(after_import_source),)
-        result = subprocess.run(
-            arguments,
-            capture_output=True, text=True, timeout=30, check=True,
+        ProjectionProducer.update(
+            db, where="{projection}=?", parameters=(MessageIdentitySource.declared_name,),
+            commit=older,
         )
-        return json.loads(result.stdout)
+        MessageIdentitySource.update(db, where="{seq}=?", parameters=(record.seq,), sender="stale")
+        assert BusSchema.schema_differs(db)
+        assert BusSchema.reconcile_schema(db, WriterOwnedFile())
+        assert MessageIdentitySource.require(db, seq=record.seq).sender == record.sender
+        assert all(row.commit == current for row in ProjectionProducer.select(db))
 
-    built = replay(replacement if edit_after_import else None)
-    assert built["policy"] == "DirectPolicy"
-    if not edit_after_import:
-        unchanged = replay()
-        assert not unchanged["reconciled"] and unchanged["row_writes"] == 0
-        assert not unchanged["planned"]
-        assert unchanged["ddl"] == built["ddl"] and unchanged["source"] == built["source"]
-    producer.write_text(original.replace(producing_call, "InformationalPolicy.instance()"))
-    changed = replay()
-    assert changed["ddl"] == built["ddl"]
-    assert changed["source"] == built["source"]
-    assert changed["source_rows"] == built["source_rows"] == 1
-    assert changed["producer"] != built["producer"]
-    assert changed["reconciled"] and changed["row_writes"] > 0
-    assert changed["planned"]
-    assert changed["policy"] == "InformationalPolicy"
-    assert changed["fresh"] and changed["integrity"] == "ok"
-    assert changed["foreign_keys"] == []
-    repeated = replay()
-    assert repeated["policy"] == "InformationalPolicy"
-    assert not repeated["reconciled"] and repeated["row_writes"] == 0
-    assert not repeated["planned"]
-    # A changed producer that fails during replay cannot bless the old rows as current.
-    producer.write_text(original.replace(producing_call, "1 / 0"))
-    with pytest.raises(subprocess.CalledProcessError) as failed:
-        replay()
-    assert "ZeroDivisionError" in failed.value.stderr
-    with sqlite3.connect(database) as stored:
-        assert ProjectionProducer.require(
-            stored, projection=MessageIdentitySource.declared_name).identity == changed["producer"]
-        assert MessageIdentitySource.require(stored, seq=1).response_policy.__name__ == "InformationalPolicy"
-    producer.write_text(original.replace(producing_call, "InformationalPolicy.instance()"))
-    recovered = replay()
-    assert not recovered["reconciled"] and recovered["row_writes"] == 0
-    assert not recovered["planned"]
+        ProjectionProducer.drop(db)
+        MessageIdentitySource.update(db, where="{seq}=?", parameters=(record.seq,), sender="stale")
+        assert BusSchema.schema_differs(db)
+        assert BusSchema.reconcile_schema(db, WriterOwnedFile())
+        assert MessageIdentitySource.require(db, seq=record.seq).sender == record.sender
+        assert ProjectionProducer.select(db) == list(ProjectionProducer.records_for(
+            BusProjectionTables.projection_rows()))
+        assert db.execute("PRAGMA integrity_check").fetchone()[0] == "ok"
+        assert db.execute("PRAGMA foreign_key_check").fetchall() == []
+    assert bus.lookup(record.seq) == record
 
 
 @pytest.mark.parametrize("declaration", BusRecord.members_with(BusRecord))

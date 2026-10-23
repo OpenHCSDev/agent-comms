@@ -24,12 +24,6 @@ class BusRouteCounts(TypedTable, BusProjectionTables):
     )
 
     @classmethod
-    def producer_classes(cls, row) -> tuple[type, ...]:
-        from .bus_publication import Delivered
-
-        return (Message, Delivered)
-
-    @classmethod
     def from_message(cls, message: Message):
         return cls(message.seq, message.target, message.sender,
                    message.sender_lookup, message.timestamp)
