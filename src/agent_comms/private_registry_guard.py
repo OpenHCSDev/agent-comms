@@ -470,33 +470,28 @@ class PrivateRegistryGuard(DurableFile, WireWakeFile, RegistryPrivacy):
                 os.fsync(registry_fd)
             finally:
                 os.close(registry_fd)
-        directory_fd = os.open(
-            self.registry_path.parent, os.O_RDONLY | os.O_DIRECTORY
+        platform = Platform.current()
+        platform.sync_directory(self.registry_path.parent)  # baseline registry name and existing root
+        fd = os.open(
+            self.path,
+            os.O_RDWR | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW,
+            0o600,
         )
         try:
-            os.fsync(directory_fd)  # baseline registry name and existing root
-            fd = os.open(
-                self.path,
-                os.O_RDWR | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW,
-                0o600,
-            )
-            try:
-                if (
-                    os.pwrite(
-                        fd,
-                        _record(self.root_id, 0, _COMMITTED, digest) * 2,
-                        0,
-                    )
-                    != 2 * _SIZE
-                ):
-                    _reject("initial slots were incomplete")
-                os.fsync(fd)
-                os.fsync(directory_fd)  # guard name is durable before native preparation returns
-                self._write(fd, 1, _record(self.root_id, 1, _PENDING, digest))
-            finally:
-                os.close(fd)
+            if (
+                os.pwrite(
+                    fd,
+                    _record(self.root_id, 0, _COMMITTED, digest) * 2,
+                    0,
+                )
+                != 2 * _SIZE
+            ):
+                _reject("initial slots were incomplete")
+            os.fsync(fd)
+            platform.sync_directory(self.registry_path.parent)
+            self._write(fd, 1, _record(self.root_id, 1, _PENDING, digest))
         finally:
-            os.close(directory_fd)
+            os.close(fd)
 
     def commit_initial(self) -> None:
         fd = self._open()

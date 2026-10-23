@@ -436,7 +436,7 @@ def _atomic_write_text(
     path: Path, text: str, *,
     mode: int = PrivateFileRole.permissions,
 ) -> None:
-    """Replace a snapshot; private guarded writes also durably sync its name."""
+    """Replace a snapshot and durably sync its name."""
     path.parent.mkdir(parents=True, exist_ok=True)
     fd, temporary_path = StoreOwner.stage_file(path)
     try:
