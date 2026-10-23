@@ -15,7 +15,7 @@ from .agent_activity import UnavailableRecipientActivity
 from .errors import RelationViolationError, UnregisteredThreadError
 from .routing import DeliveryScope
 from .thread_identity import ThreadIncarnation
-from .thread_provenance import ThreadProvenance
+from .threads import ThreadProvenance
 
 if TYPE_CHECKING:
     from .audience_manifest import FrozenRecipient
