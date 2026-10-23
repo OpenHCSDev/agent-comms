@@ -8,7 +8,6 @@ from __future__ import annotations
 
 from abc import abstractmethod
 from dataclasses import dataclass, field, replace
-from hashlib import sha256
 from typing import TYPE_CHECKING, Annotated, Callable, ClassVar
 
 
@@ -397,9 +396,7 @@ class CursorEnvelope:
 
     @property
     def digest(self) -> str:
-        return sha256(
-            FieldCodec.compact(FieldCodec.encode(self), sort_keys=True).encode()
-        ).hexdigest()
+        return FieldCodec.digest(self)
 
 
 @dataclass(frozen=True)
@@ -569,9 +566,7 @@ class QueueChangedUpdate(AgentCommsUpdate):
 
     @property
     def digest(self) -> str:
-        return sha256(
-            FieldCodec.compact(FieldCodec.encode(self), sort_keys=True).encode()
-        ).hexdigest()
+        return FieldCodec.digest(self)
 
 
 @dataclass(frozen=True)

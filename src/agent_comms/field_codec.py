@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import math
 import os
@@ -1366,6 +1367,11 @@ class FieldCodec(MroDispatch, Sealed):
             value, ensure_ascii=ensure_ascii, sort_keys=sort_keys,
             allow_nan=allow_nan, separators=(",", ":"),
         )
+
+    @classmethod
+    def digest(cls, value: object) -> str:
+        """SHA-256 of a declared value's sorted compact encoding."""
+        return hashlib.sha256(cls.compact(cls.encode(value), sort_keys=True).encode()).hexdigest()
 
     @classmethod
     def encode_document(cls, value: object, declared: object) -> object:

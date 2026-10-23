@@ -65,7 +65,7 @@ class AuthorizationQuery:
     @property
     def request_id(self) -> str:
         """A repeated query reuses its wait, never another client's PKCE challenge."""
-        return digest(FieldCodec.compact(FieldCodec.encode(self), sort_keys=True))
+        return FieldCodec.digest(self)
 
     def redirect(self, code: str) -> str:
         return f"{self.redirect_uri}?{urlencode({'code': code, 'state': self.state})}"

@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import hashlib
 import json
 import sqlite3
 import uuid
@@ -186,8 +185,7 @@ class ContextSegmentVersion(TypedTable):
 
     @classmethod
     def append(cls, db: sqlite3.Connection, segment: RecordedSegmentManifest) -> int:
-        encoded = FieldCodec.compact(FieldCodec.encode(segment), sort_keys=True)
-        digest = hashlib.sha256(encoded.encode()).hexdigest()
+        digest = FieldCodec.digest(segment)
         rows = cls.select(db, digest=digest)
         if rows:
             existing = rows[0]

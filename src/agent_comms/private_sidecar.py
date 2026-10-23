@@ -28,7 +28,6 @@ from typing import Annotated, Literal, TYPE_CHECKING
 
 from agent_comms.locked_store import SQLiteFile
 from agent_comms.coordination_errors import IdentityConflict
-from agent_comms.field_codec import FieldCodec
 
 from .field_codec import FieldCodec
 

@@ -29,7 +29,6 @@ from agent_comms.coordination_tables.assignments import WakeAssignment
 from agent_comms.coordinator import Coordination
 
 from .comms import Comms
-from .child_process import Platform
 from .coordination_cohort import sealed_cohort_assignments
 from .declared_family import DeclaredFamily
 from .envelope_claim_transitions import ExistingFileClaim
