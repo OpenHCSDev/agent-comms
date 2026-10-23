@@ -2,7 +2,7 @@
 import pytest
 from agent_comms.input_attempt import ReservedInput, NotSentInput, MissingInput
 from agent_comms.input_disposition import InputDocument
-from agent_comms.turn_failure import NativePreflightExit, NativePreflightTimeout, PromptSendFailed
+from agent_comms.turn_failure import InputIdUnavailable, NativePreflightExit, NativePreflightTimeout, PromptSendFailed
 from agent_comms.turn_output import TurnOutput
 from stored_inputs import stored_inputs
 
