@@ -33,9 +33,7 @@ def old_registry(tmp_path):
     return comms, bus, external
 
 
-def test_carry_splits_bus_and_external_transcripts_once(tmp_path, monkeypatch):
-    # The published route is this machine's; the copy is never it.
-    monkeypatch.setenv("HOME", str(tmp_path / "home"))
+def test_carry_splits_bus_and_external_transcripts_once(tmp_path):
     comms, bus, external = old_registry(tmp_path)
     step = SessionLocations(comms.root, comms.root, tmp_path / "spill")
     with maintenance_held(comms.root):
@@ -45,7 +43,8 @@ def test_carry_splits_bus_and_external_transcripts_once(tmp_path, monkeypatch):
         assert step.carry(apply=False) == Carried(0)
     stored = json.loads(comms.registry.store.path.read_text())["threads"]
     assert stored["bus"]["session_file"] == {"path": "native-sessions/bus.jsonl"}
-    assert stored["harness"]["session_file"] == {"path": str(external)}
+    published = {"path": str(external), "published": str(comms.root.resolve())}
+    assert stored["harness"]["session_file"] == published
 
     copy = tmp_path / "copy"
     shutil.copytree(comms.root, copy, symlinks=True)
@@ -59,7 +58,7 @@ def test_carry_splits_bus_and_external_transcripts_once(tmp_path, monkeypatch):
 
 def test_unbound_location_refuses_to_guess_its_root():
     for location in (BusSessionLocation(Path("native-sessions/a.jsonl")),
-                     ExternalSessionLocation(Path("/harness/a.jsonl"))):
+                     ExternalSessionLocation(Path("/harness/a.jsonl"), Path("/bus"))):
         with pytest.raises(RelationViolationError, match="must be bound by its registry"):
             location.location(PiNativeBackend)
 
@@ -69,6 +68,18 @@ def test_publishing_into_another_root_keeps_the_named_transcript(tmp_path):
     moved = first.bound_to(tmp_path / "b")
     assert isinstance(moved, ExternalSessionLocation)
     assert moved.location(PiNativeBackend).path == str((tmp_path / "a" / "s.jsonl").resolve())
+    assert moved.published == (tmp_path / "a").resolve()
+    with pytest.raises(RelationViolationError, match="published by"):
+        moved.writable_location(PiNativeBackend)
+
+
+def test_a_private_root_writes_the_harness_transcript_it_published(tmp_path):
+    comms = wire(tmp_path / "private")
+    harness = tmp_path / "harness" / "external.jsonl"
+    comms.registry.declare(comms.registry.new_thread(
+        "owner", frozenset(), str(tmp_path),
+        session_file=RegistrySessionLocation.from_path(harness, comms.root)))
+    assert comms.registry.require("owner").writable_runtime.path == str(harness.resolve())
 
 
 def test_carry_converts_the_archived_catalogue_before_reading_its_roots(tmp_path):
