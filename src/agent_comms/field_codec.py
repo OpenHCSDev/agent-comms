@@ -1175,6 +1175,14 @@ class PathText(TextRepresentation[Path]):
         return Path(value)
 
 
+class AbsolutePathText(PathText):
+    """A filesystem path resolved once, where its external spelling enters."""
+
+    @classmethod
+    def from_text(cls, value: str) -> Path:
+        return Path(value).expanduser().resolve()
+
+
 class BoundedText(TextRepresentation[str], ValidatedScalar):
     """Nonempty identity text of bounded length: an owner, incarnation or message ID."""
 

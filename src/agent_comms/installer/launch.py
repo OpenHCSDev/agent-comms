@@ -15,7 +15,7 @@ import sys
 import tempfile
 from collections.abc import Iterator
 from contextlib import contextmanager
-from dataclasses import dataclass, field, replace
+from dataclasses import dataclass, field
 from pathlib import Path
 from traceback import extract_tb
 from typing import Annotated, TextIO
@@ -120,7 +120,7 @@ class InstallRun:
 
     @classmethod
     def start(cls, command: InstallCliCommand, root: Path) -> InstallRun:
-        checkout = command.checkout.resolve()
+        checkout = command.checkout
         commands = InstallCommands()
         commands.run("git", "-C", checkout, "fetch", "-q", "origin")
         target = commands.run("git", "-C", checkout, "rev-parse", "--verify",
@@ -129,10 +129,7 @@ class InstallRun:
         parent.mkdir(mode=0o700, parents=True, exist_ok=True)
         scratch = Path(tempfile.mkdtemp(dir=parent, prefix="install-"))
         TargetTree(checkout, scratch, target).add()
-        # Paths resolve here: the install child runs in the target tree, not the caller's cwd.
-        return cls(replace(command, checkout=checkout, project=command.project.resolve(),
-                           repos=command.repos.resolved()),
-                   root, scratch, target)
+        return cls(command, root, scratch, target)
 
     def launch(self, output: TextIO) -> int:
         """The install outlives its caller: a new session, its output in files beside the bus.

@@ -97,6 +97,7 @@ from .exporting import (
     UnsetScopeFlag,
 )
 from .field_codec import (
+    AbsolutePathText,
     Argument,
     Catalog,
     Editor,
@@ -1651,7 +1652,7 @@ class InstallCliCommand(CliCommand):
             "harness to use the bus, with the commander skill and tools")
     checkout: Annotated[
         Path,
-        PathText,
+        AbsolutePathText,
         Argument(flags=("--checkout",)),
     ] = dataclasses.field(default_factory=Path.cwd)
     to: Annotated[str, Argument(flags=("--to",))] = "origin/main"
@@ -1680,7 +1681,7 @@ class InstallCliCommand(CliCommand):
     ] = False
     spill_dir: Annotated[
         Path,
-        PathText,
+        AbsolutePathText,
         Argument(
             flags=("--spill-dir",),
             options={"help": "Parent directory for live backups"},
@@ -1688,7 +1689,7 @@ class InstallCliCommand(CliCommand):
     ] = dataclasses.field(default_factory=lambda: Path.home() / ".cache/agent-rehearsal")
     project: Annotated[
         Path,
-        PathText,
+        AbsolutePathText,
         Argument(flags=("--project",), options={"help": "The worktree harness threads register in"}),
     ] = dataclasses.field(default_factory=Path.cwd)
     repos: Annotated[
