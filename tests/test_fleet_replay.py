@@ -4,15 +4,19 @@ from collections import Counter
 from dataclasses import dataclass
 from pathlib import Path
 import time
+from typing import Annotated
 
 import pytest
 
 from agent_comms.fleet_replay import FleetInputs, FleetRootCopy
-from agent_comms.field_codec import FieldCodec
+from agent_comms.field_codec import FieldCodec, PathText
+from agent_comms.comms import Comms
+from agent_comms.active_route import LocalRoute
 from agent_comms.phase_evidence import MainTree
 from agent_comms.repo import Repo
 from agent_comms.standing_rules import StandingRule
-from agent_comms.todos import CheckoutReads, PresentCheckout, PullRequests
+from agent_comms.todos import CheckoutReads, PresentCheckout, PullRequests, SharedWorktreeRefusal
+from agent_comms.thread_identity import ThreadIncarnation
 from agent_comms.work_branches import WorkBranches
 
 
@@ -22,12 +26,32 @@ class ExpectedIncident:
     evidence: tuple[str, ...]
 
 
+@dataclass(frozen=True)
+class ExpectedAssignment:
+    problem: str
+    holder: ThreadIncarnation
+
+
+@dataclass(frozen=True)
+class ExpectedSharedWorktree:
+    worktree: Annotated[Path, PathText]
+    attempt: ExpectedAssignment
+    others: tuple[ExpectedAssignment, ...]
+    evidence: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class ExpectedFleet:
+    incidents: tuple[ExpectedIncident, ...]
+    shared_worktree: ExpectedSharedWorktree
+
+
 @pytest.fixture
 def recorded_fleet(monkeypatch):
     directory = Path.home() / ".cache/agent-scratch/fleet-replay-2026-10-23"
     copy = FieldCodec.decode(FleetRootCopy, FieldCodec.parse((directory / "copy.json").read_bytes()))
     inputs = FieldCodec.decode(FleetInputs, FieldCodec.parse((directory / "inputs.json").read_bytes()))
-    expected = FieldCodec.decode(tuple[ExpectedIncident, ...], FieldCodec.parse(
+    expected = FieldCodec.decode(ExpectedFleet, FieldCodec.parse(
         (Path(__file__).parent / "fixtures/fleet-2026-10-23-incidents.json").read_bytes()))
     original_repo_git, original_checkout_git = Repo.git, PresentCheckout.git
 
@@ -71,12 +95,27 @@ def test_replay_raises_each_incident_once(recorded_fleet):
     copy, expected = recorded_fleet
     first = copy.observations()
     actual = tuple(rule for commander in first for rule in commander.rules)
-    expected_rules = tuple(incident.rule for incident in expected)
+    expected_rules = tuple(incident.rule for incident in expected.incidents)
     assert expected_rules, "The dated fixture must contain independently checked real incidents"
     selected = {type(rule) for rule in expected_rules}
     assert Counter(rule for rule in actual if type(rule) in selected) == Counter(expected_rules)
     assert all(count == 1 for count in Counter(expected_rules).values())
-    assert all(incident.evidence for incident in expected)
+    assert all(incident.evidence for incident in expected.incidents)
+
+    conflict = expected.shared_worktree
+    comms = Comms(LocalRoute(copy.root))
+    commander, = first
+    with pytest.raises(SharedWorktreeRefusal) as refused:
+        with comms.goals.todos.writing() as database:
+            comms.goals.todos.require_assignment_in(database, conflict.attempt.problem,
+                                                  conflict.attempt.holder,
+                                                  commander.thread.incarnation)
+    assert refused.value.problem == conflict.attempt.problem
+    assert refused.value.holder == conflict.attempt.holder
+    assert refused.value.worktree == conflict.worktree
+    assert ExpectedAssignment(refused.value.holding_problem,
+                              refused.value.holding_holder) in conflict.others
+    assert conflict.evidence
 
     second = copy.observations()
     assert tuple(commander.thread.incarnation for commander in first) == tuple(
