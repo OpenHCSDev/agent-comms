@@ -240,6 +240,9 @@ class StoreBackup(ResourceBackup):
 
     @classmethod
     def take(cls, root: Path, route: Path, files: tuple[Path, ...], spill_dir: Path) -> StoreBackup:
+        registry = RegistryStore.at(root).written
+        if any(path in files for path in registry):
+            files = tuple(dict.fromkeys((*files, *registry)))
         path = spill_dir / BackupName.now(root).value
         backup = cls(root, route, path)
         selected = tuple(str(file.relative_to(root)) for file in files)

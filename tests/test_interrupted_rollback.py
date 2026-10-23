@@ -10,6 +10,7 @@ from pathlib import Path
 import pytest
 
 from agent_comms.comms import Comms
+from agent_comms.active_route import active_route_path
 from agent_comms.install_choices import RehearsalMode, UnnamedInstaller
 from agent_comms.installer.backup import StoreBackup, UpgradeRefused
 from agent_comms.installer.carry import Carried, Carry
@@ -60,7 +61,7 @@ def test_next_install_completes_a_killed_registry_restore(tmp_path, monkeypatch,
     comms = prepare_native_comms(Comms(tmp_path / "wire"))
     comms.registry.declare(comms.registry.new_thread("worker", frozenset(), str(tmp_path)))
     registry = RegistryStore.at(comms.root)
-    route = Path.home() / ".local/state/agent-comms/active-route.json"
+    route = active_route_path()
     route.parent.mkdir(mode=0o700, parents=True)
     spill = tmp_path / "backups"
     # Put the guard first, as the interrupted historical backup did. Restore ordering
