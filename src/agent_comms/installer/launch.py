@@ -15,7 +15,7 @@ import sys
 import tempfile
 from collections.abc import Iterator
 from contextlib import contextmanager
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 from traceback import extract_tb
 from typing import Annotated, TextIO
@@ -26,7 +26,7 @@ from agent_comms.cli_commands import InstallCliCommand, InstallResult
 from agent_comms.field_codec import FieldCodec, Id128Text, PathText
 from agent_comms.installer.backup import StoreBackup, UpgradeRefused
 from agent_comms.installer.commands import InstallCommands
-from agent_comms.installer.interpreter_operation import InstallClock, PhaseTiming, PreparePhase, PublicationPhase, TreeClosePhase
+from agent_comms.installer.interpreter_operation import InstallClock, InstallerProcessPhase, PhaseTiming, PreparePhase, PublicationPhase, TreeClosePhase
 from agent_comms.installer.reporting import (
     FinishedInstall, InstallOutcome, RootWriter, UnfinishedInstall, UnpostedWriter,
 )
@@ -149,20 +149,27 @@ class InstallRun:
         tree = TargetTree(self.command.checkout, self.scratch, self.target)
         logs = InstallLogs(self.root).minted()
         result, errors = logs / "result.json", logs / "stderr.log"
-        with result.open("xb") as stdout, errors.open("xb") as stderr:
-            process = subprocess.Popen(
-                [sys.executable, "-m", agent_comms.installer.__name__], cwd=tree.path,
-                env={**os.environ, "PYTHONPATH": os.pathsep.join(map(str, tree.source_paths()))},
-                stdin=subprocess.PIPE, stdout=stdout, stderr=stderr, start_new_session=True,
-            )
-        print(f"install: pid {process.pid} runs {self.target[:12]}; diagnostics {errors}",
-              file=sys.stderr, flush=True)
-        process.communicate(json.dumps(FieldCodec.encode(self)).encode())
-        if process.returncode:
-            print(f"install failed ({process.returncode}): {errors.read_text().strip()}",
-                  file=sys.stderr)
-        else:
-            output.write(result.read_text())
+        clock = InstallClock(self.phases)
+        inherited = len(clock.phases)
+        with InstallerProcessPhase().running(clock) as measured:
+            with result.open("xb") as stdout, errors.open("xb") as stderr:
+                process = subprocess.Popen(
+                    [sys.executable, "-m", agent_comms.installer.__name__], cwd=tree.path,
+                    env={**os.environ, "PYTHONPATH": os.pathsep.join(map(str, tree.source_paths()))},
+                    stdin=subprocess.PIPE, stdout=stdout, stderr=stderr, start_new_session=True,
+                )
+            print(f"install: pid {process.pid} runs {self.target[:12]}; diagnostics {errors}",
+                  file=sys.stderr, flush=True)
+            process.communicate(json.dumps(FieldCodec.encode(self)).encode())
+            if process.returncode:
+                print(f"install failed ({process.returncode}): {errors.read_text().strip()}",
+                      file=sys.stderr)
+                return process.returncode
+            answer = FieldCodec.decode(RehearsedUpgrade, FieldCodec.parse(result.read_text()))
+            # The child received our existing records plus this active launch.
+            # Only its subsequent operations are new measurements.
+            clock.include(answer.phases[inherited + 1:], measured)
+        output.write(json.dumps(FieldCodec.encode(replace(answer, phases=clock.phases)), indent=2))
         return process.returncode
 
     def run(self) -> Upgrade:

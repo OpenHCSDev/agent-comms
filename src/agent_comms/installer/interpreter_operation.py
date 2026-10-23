@@ -64,6 +64,10 @@ class InstallRunPhase(InstallPhase):
     """The whole installer, including teardown and its final publication."""
 
 
+class InstallerProcessPhase(InstallPhase):
+    """Launch the target interpreter, collect its answer and reap it."""
+
+
 class PreparePhase(InstallPhase):
     """Read the selected target, outgoing runtime and pending operation declarations."""
 
