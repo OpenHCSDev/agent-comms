@@ -12,7 +12,7 @@ import shutil
 import subprocess
 from concurrent.futures import ProcessPoolExecutor
 from contextlib import chdir, nullcontext
-from dataclasses import replace
+from dataclasses import dataclass, replace
 from multiprocessing import Manager
 from pathlib import Path
 
@@ -55,6 +55,7 @@ from agent_comms.todos import (
     ReleaseTodo,
     StrikeReason,
     Todo,
+    TodoCommand,
     TodoConflict,
     TodoError,
     TodoState,
@@ -132,6 +133,33 @@ def test_create_is_idempotent_and_goal_reference_is_historical(tmp_path: Path, s
     with pytest.raises(TodoConflict):
         store.apply("P1", ChangeTodoState(1, DoneTodoState, newer.incarnation, None))
     assert store.get("P1") == original
+
+
+def test_new_mutation_inherits_revision_admission(tmp_path, source_repository):
+    mutations = []
+
+    @dataclass(frozen=True)
+    class RetitleTodo(TodoCommand, declared_name=None):
+        def changed(self, current: Todo) -> Todo:
+            mutations.append(current.revision)
+            return replace(current, text="Changed through the inherited admission",
+                           revision=current.revision + 1)
+
+    store = TodoStore(tmp_path)
+    lead = thread("lead", tmp_path, 1.0)
+    original = store.create(
+        "P1", RepositoryName.from_wire("org/repo"), "Original title",
+        creator=lead, assigner=lead.incarnation, owner=lead, generation="first",
+        goal=GoalRef("lead", 1.0, "request"), review_at=RecordedEventTime(1000),
+        order=order(source_repository),
+    )
+
+    changed = store.apply(original.id, RetitleTodo(original.revision))
+    assert changed.text == "Changed through the inherited admission"
+    with pytest.raises(TodoConflict):
+        store.apply(original.id, RetitleTodo(original.revision))
+    assert mutations == [original.revision]
+    assert store.get(original.id) == changed
 
 
 def test_withdraw_retires_a_released_problem(tmp_path, source_repository):
