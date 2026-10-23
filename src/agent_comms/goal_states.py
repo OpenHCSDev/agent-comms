@@ -141,7 +141,7 @@ class OpenGoal(GoalState):
 
 
 @dataclass(frozen=True)
-class ActiveGoal(Active, OpenGoal, FromOpenGoal):
+class ActiveGoal(FromOpenGoal, Active, OpenGoal):
 
     def execution(self, source: GoalExecutionSource) -> GoalExecution:
         return source.wait.execution(source)
@@ -152,7 +152,7 @@ class ActiveGoal(Active, OpenGoal, FromOpenGoal):
 
 
 @dataclass(frozen=True)
-class PausedGoal(OpenGoal, FromOpenGoal):
+class PausedGoal(FromOpenGoal, OpenGoal):
     source: PauseSource = field(default_factory=OwnerPause)
 
     def execution(self, source: GoalExecutionSource) -> GoalExecution:
@@ -188,7 +188,7 @@ class PausedGoal(OpenGoal, FromOpenGoal):
             raise ValueError(self.source.instruction())
 
 
-class BlockedState(GoalState, FromOpenGoal):
+class BlockedState(FromOpenGoal, GoalState):
     def accept_order(self, action: ProblemOrderGoalAction, goal: Goal, ctx: GoalActionContext) -> Goal:
         return replace(action.continue_goal(goal, ctx), state=ActiveGoal())
 
@@ -238,7 +238,7 @@ class UnrecordedBlockGoal(BlockedState):
 
 
 @dataclass(frozen=True)
-class CompletedGoal(FromCompletedGoal, Complete, Terminal, GoalState, FromOpenGoal):
+class CompletedGoal(FromOpenGoal, FromCompletedGoal, Complete, Terminal, GoalState):
 
     def execution(self, source: GoalExecutionSource) -> GoalExecution:
         from .goal_presentation import CompletedExecution

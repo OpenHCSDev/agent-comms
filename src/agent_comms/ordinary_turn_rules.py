@@ -20,12 +20,39 @@ if TYPE_CHECKING:
     from .turn_input_source import TurnInputSource
 
 
-class MissingTurnOwnerCheck(RuleCheck):
+class MissingTurnOwnerRules:
+    """Shared applicability of MissingTurnOwnerCheck and its reservation rules."""
+
+class OrdinaryOwnerRules:
+    """Shared applicability of OrdinaryOwnerCheck and its reservation rules."""
+
+class InputKeysRules:
+    """Shared applicability of InputKeysCheck and its reservation rules."""
+
+class MissingAcceptedInputRules:
+    """Shared applicability of MissingAcceptedInputCheck and its reservation rules."""
+
+class AcceptedInputRules:
+    """Shared applicability of AcceptedInputCheck and its reservation rules."""
+
+class OrdinaryContextRules:
+    """Shared applicability of OrdinaryContextCheck and its reservation rules."""
+
+class OrdinaryGoalGrantRules:
+    """Shared applicability of OrdinaryGoalGrantCheck and its reservation rules."""
+
+class UnboundOrdinaryInputRules:
+    """Shared applicability of UnboundOrdinaryInputCheck and its reservation rules."""
+
+class UnconsumedDependencyRules:
+    """Shared applicability of UnconsumedDependencyCheck and its reservation rules."""
+
+
+class MissingTurnOwnerCheck(MissingTurnOwnerRules, RuleCheck):
     pass
 
 
-class MissingTurnOwnerRule(ReservationRule):
-    check_type = MissingTurnOwnerCheck
+class MissingTurnOwnerRule(MissingTurnOwnerRules, ReservationRule):
     explanation = "The ordinary turn's registered owner no longer exists."
 
     def violated(self, check: MissingTurnOwnerCheck) -> bool:
@@ -33,7 +60,7 @@ class MissingTurnOwnerRule(ReservationRule):
 
 
 @dataclass(frozen=True, kw_only=True)
-class OrdinaryOwnerCheck(RuleCheck):
+class OrdinaryOwnerCheck(OrdinaryOwnerRules, RuleCheck):
     expected: Thread
     current: Thread
     registry: RegistrySnapshot
@@ -42,48 +69,42 @@ class OrdinaryOwnerCheck(RuleCheck):
     turn: TurnId
 
 
-class OrdinaryIncarnationRule(ReservationRule):
-    check_type = OrdinaryOwnerCheck
+class OrdinaryIncarnationRule(OrdinaryOwnerRules, ReservationRule):
     explanation = "The captured ordinary thread incarnation changed."
 
     def violated(self, check: OrdinaryOwnerCheck) -> bool:
         return not check.expected.incarnation.current(check.registry)
 
 
-class OrdinaryRunningRule(ReservationRule):
-    check_type = OrdinaryOwnerCheck
+class OrdinaryRunningRule(OrdinaryOwnerRules, ReservationRule):
     explanation = "The ordinary owner is no longer running."
 
     def violated(self, check: OrdinaryOwnerCheck) -> bool:
         return not check.registry.status(check.canonical).running
 
 
-class OrdinaryClaimRule(ReservationRule):
-    check_type = OrdinaryOwnerCheck
+class OrdinaryClaimRule(OrdinaryOwnerRules, ReservationRule):
     explanation = "The ordinary owner claim_scope generation changed."
 
     def violated(self, check: OrdinaryOwnerCheck) -> bool:
         return check.registry.claim_generation(check.canonical) != check.claim_generation
 
 
-class OrdinaryProcessRule(ReservationRule):
-    check_type = OrdinaryOwnerCheck
+class OrdinaryProcessRule(OrdinaryOwnerRules, ReservationRule):
     explanation = "The ordinary turn belongs to another process incarnation."
 
     def violated(self, check: OrdinaryOwnerCheck) -> bool:
         return check.current.process_identity != check.expected.process_identity
 
 
-class OrdinaryWorktreeRule(ReservationRule):
-    check_type = OrdinaryOwnerCheck
+class OrdinaryWorktreeRule(OrdinaryOwnerRules, ReservationRule):
     explanation = "The ordinary owner's worktree changed."
 
     def violated(self, check: OrdinaryOwnerCheck) -> bool:
         return check.current.worktree != check.expected.worktree
 
 
-class OrdinaryTurnRule(ReservationRule):
-    check_type = OrdinaryOwnerCheck
+class OrdinaryTurnRule(OrdinaryOwnerRules, ReservationRule):
     explanation = "The captured ordinary turn is no longer the active turn."
 
     def violated(self, check: OrdinaryOwnerCheck) -> bool:
@@ -93,25 +114,23 @@ class OrdinaryTurnRule(ReservationRule):
 
 
 @dataclass(frozen=True, kw_only=True)
-class InputKeysCheck(RuleCheck):
+class InputKeysCheck(InputKeysRules, RuleCheck):
     source: TurnInputSource
     text: str
 
 
-class InputKeysRule(ReservationRule):
-    check_type = InputKeysCheck
+class InputKeysRule(InputKeysRules, ReservationRule):
     explanation = "The input keys do not prove this exact original channel batch."
 
     def violated(self, check: InputKeysCheck) -> bool:
         return not check.source.valid_keys(check.text)
 
 
-class MissingAcceptedInputCheck(RuleCheck):
+class MissingAcceptedInputCheck(MissingAcceptedInputRules, RuleCheck):
     pass
 
 
-class MissingAcceptedInputRule(ReservationRule):
-    check_type = MissingAcceptedInputCheck
+class MissingAcceptedInputRule(MissingAcceptedInputRules, ReservationRule):
     explanation = "The accepted live input acknowledgement is missing."
 
     def violated(self, check: MissingAcceptedInputCheck) -> bool:
@@ -119,7 +138,7 @@ class MissingAcceptedInputRule(ReservationRule):
 
 
 @dataclass(frozen=True, kw_only=True)
-class AcceptedInputCheck(RuleCheck):
+class AcceptedInputCheck(AcceptedInputRules, RuleCheck):
     acknowledgement: QueuedInput
     current: Thread
     claim_generation: int
@@ -129,24 +148,21 @@ class AcceptedInputCheck(RuleCheck):
     session_id: str
 
 
-class AcceptedInputAuthorityRule(ReservationRule):
-    check_type = AcceptedInputCheck
+class AcceptedInputAuthorityRule(AcceptedInputRules, ReservationRule):
     explanation = "The live input's accepted owner or goal authority changed."
 
     def violated(self, check: AcceptedInputCheck) -> bool:
         return not check.acknowledgement.current(check.current, check.claim_generation)
 
 
-class AcceptedInputKeyRule(ReservationRule):
-    check_type = AcceptedInputCheck
+class AcceptedInputKeyRule(AcceptedInputRules, ReservationRule):
     explanation = "The input does not name its exact accepted ACP acknowledgement."
 
     def violated(self, check: AcceptedInputCheck) -> bool:
         return (check.input_id, check.keys) != (check.acknowledgement.input_id, (check.acknowledgement.key,))
 
 
-class AcceptedInputSourceRule(ReservationRule):
-    check_type = AcceptedInputCheck
+class AcceptedInputSourceRule(AcceptedInputRules, ReservationRule):
     explanation = "The captured accepted input source is no longer live."
 
     def violated(self, check: AcceptedInputCheck) -> bool:
@@ -154,7 +170,7 @@ class AcceptedInputSourceRule(ReservationRule):
 
 
 @dataclass(frozen=True, kw_only=True)
-class OrdinaryContextCheck(RuleCheck):
+class OrdinaryContextCheck(OrdinaryContextRules, RuleCheck):
     source: TurnInputSource
     owner: Thread
     goal: GoalDeclaration
@@ -162,24 +178,21 @@ class OrdinaryContextCheck(RuleCheck):
     comms: Comms
 
 
-class OrdinaryGoalRule(ReservationRule):
-    check_type = OrdinaryContextCheck
+class OrdinaryGoalRule(OrdinaryContextRules, ReservationRule):
     explanation = "The input's captured goal permission no longer applies."
 
     def violated(self, check: OrdinaryContextCheck) -> bool:
         return not check.source.goal_permission.allows(check.goal)
 
 
-class OrdinaryDependencyRule(ReservationRule):
-    check_type = OrdinaryContextCheck
+class OrdinaryDependencyRule(OrdinaryContextRules, ReservationRule):
     explanation = "The original dependency wait was removed or replaced."
 
     def violated(self, check: OrdinaryContextCheck) -> bool:
         return not check.source.dependency_current(check.wait)
 
 
-class OrdinaryWaitRule(ReservationRule):
-    check_type = OrdinaryContextCheck
+class OrdinaryWaitRule(OrdinaryContextRules, ReservationRule):
     explanation = "The current dependency wait does not authorize this input."
 
     def violated(self, check: OrdinaryContextCheck) -> bool:
@@ -188,8 +201,7 @@ class OrdinaryWaitRule(ReservationRule):
         )
 
 
-class OrdinaryGoalInputRule(ReservationRule):
-    check_type = OrdinaryContextCheck
+class OrdinaryGoalInputRule(OrdinaryContextRules, ReservationRule):
     explanation = "An active goal does not authorize this routed input."
 
     def violated(self, check: OrdinaryContextCheck) -> bool:
@@ -197,37 +209,34 @@ class OrdinaryGoalInputRule(ReservationRule):
 
 
 @dataclass(frozen=True, kw_only=True)
-class OrdinaryGoalGrantCheck(RuleCheck):
+class OrdinaryGoalGrantCheck(OrdinaryGoalGrantRules, RuleCheck):
     permit: LaunchPermit
     store: GoalAttemptStore
 
 
-class OrdinaryGoalGrantRule(ReservationRule):
-    check_type = OrdinaryGoalGrantCheck
+class OrdinaryGoalGrantRule(OrdinaryGoalGrantRules, ReservationRule):
     explanation = "The captured autonomous goal launch is no longer claimed."
 
     def violated(self, check: OrdinaryGoalGrantCheck) -> bool:
         return not check.permit.is_claimed(check.store)
 
 
-class UnboundOrdinaryInputCheck(RuleCheck):
+class UnboundOrdinaryInputCheck(UnboundOrdinaryInputRules, RuleCheck):
     pass
 
 
-class UnboundOrdinaryInputRule(ReservationRule):
-    check_type = UnboundOrdinaryInputCheck
+class UnboundOrdinaryInputRule(UnboundOrdinaryInputRules, ReservationRule):
     explanation = "The durable input binding refused the exact native input."
 
     def violated(self, check: UnboundOrdinaryInputCheck) -> bool:
         return True
 
 
-class UnconsumedDependencyCheck(RuleCheck):
+class UnconsumedDependencyCheck(UnconsumedDependencyRules, RuleCheck):
     pass
 
 
-class UnconsumedDependencyRule(ReservationRule):
-    check_type = UnconsumedDependencyCheck
+class UnconsumedDependencyRule(UnconsumedDependencyRules, ReservationRule):
     explanation = "The dependency wait changed before its durable consumption."
 
     def violated(self, check: UnconsumedDependencyCheck) -> bool:

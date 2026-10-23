@@ -25,6 +25,16 @@ if TYPE_CHECKING:
     from .turn_runner import TurnRunner
 
 
+class SessionScheduleRules:
+    """Shared applicability of SessionScheduleCheck and its reservation rules."""
+
+class OwnerTurnScheduleRules:
+    """Shared applicability of OwnerTurnScheduleCheck and its reservation rules."""
+
+class WakeScheduleRules:
+    """Shared applicability of WakeScheduleCheck and its reservation rules."""
+
+
 class WakeOutcome(DeclaredFamily):
     """A completed wake owns whether observation should run again."""
 
@@ -54,13 +64,13 @@ class BackgroundWake(RuleCheck):
 
 
 @dataclass(frozen=True, kw_only=True)
-class SessionScheduleCheck(RuleCheck):
+class SessionScheduleCheck(SessionScheduleRules, RuleCheck):
     session_id: str
     inputs: "InputDrain"
 
 
 @dataclass(frozen=True, kw_only=True)
-class OwnerTurnScheduleCheck(SessionScheduleCheck):
+class OwnerTurnScheduleCheck(OwnerTurnScheduleRules, SessionScheduleCheck):
     turns: "TurnRunner"
 
 
@@ -87,7 +97,7 @@ class ProjectResumeCheck(BackgroundWake, OwnerTurnScheduleCheck):
             WakeScheduleCheck(session_id=session_id, inputs=inputs).schedule()
 
 
-class WakeScheduleCheck(SchedulesWake, BackgroundWake, SessionScheduleCheck):
+class WakeScheduleCheck(WakeScheduleRules, SchedulesWake, BackgroundWake, SessionScheduleCheck):
     """Check wake permission and execute it under the existing turn lock.
 
     A queued wake never carries a stale owner grant across a lock wait. The
@@ -206,56 +216,49 @@ class SelectedWakeCheck(SchedulesWake, SessionScheduleCheck):
         return WakeDue()
 
 
-class ClosingScheduleRule(ReservationRule):
-    check_type = SessionScheduleCheck
+class ClosingScheduleRule(SessionScheduleRules, ReservationRule):
     explanation = "Input draining is closing."
 
     def violated(self, check):
         return check.inputs.closing
 
 
-class OccupiedOwnerTurnRule(ReservationRule):
-    check_type = OwnerTurnScheduleCheck
+class OccupiedOwnerTurnRule(OwnerTurnScheduleRules, ReservationRule):
     explanation = "The session still owns a running turn."
 
     def violated(self, check):
         return check.session_id in check.turns.turn_tasks
 
 
-class NativeInboxOwnerTurnRule(ReservationRule):
-    check_type = OwnerTurnScheduleCheck
+class NativeInboxOwnerTurnRule(OwnerTurnScheduleRules, ReservationRule):
     explanation = "A live native inbox still owns pending input."
 
     def violated(self, check):
         return check.inputs.state(check.session_id).turn_open()
 
 
-class PendingWakeScheduleRule(ReservationRule):
-    check_type = SchedulesWake
+class PendingWakeScheduleRule(SchedulesWake, ReservationRule):
     explanation = "A previously scheduled wake has not finished."
 
     def violated(self, check):
         return check.inputs.state(check.session_id).wake_pending()
 
 
-class PendingTurnOwnerTurnRule(ReservationRule):
-    check_type = OwnerTurnScheduleCheck
+class PendingTurnOwnerTurnRule(OwnerTurnScheduleRules, ReservationRule):
     explanation = "Already queued turns have priority over a turn the owner starts itself."
 
     def violated(self, check):
         return bool(check.inputs.state(check.session_id).pending_turns)
 
 
-class DisabledWakeScheduleRule(ReservationRule):
-    check_type = BackgroundWake
+class DisabledWakeScheduleRule(BackgroundWake, ReservationRule):
     explanation = "Background waking is disabled by the input/runtime configuration."
 
     def violated(self, check):
         return check.inputs.background_wakes_disabled
 
 
-class EmptyWakeScheduleRule(ReservationRule):
-    check_type = WakeScheduleCheck
+class EmptyWakeScheduleRule(WakeScheduleRules, ReservationRule):
     explanation = "No queued turn requires a background wake."
 
     def violated(self, check):
