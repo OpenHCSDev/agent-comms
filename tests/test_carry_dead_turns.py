@@ -6,11 +6,12 @@ import shutil
 from agent_comms.child_process import ProcessIdentity
 from cutover.carry_dead_turns import DeadTurns
 from goal_owner_fixture import canonical_goal_wire
+from agent_comms.threads import Thread
 
 
 def test_deleted_turn_files_are_named_and_the_current_one_kept(tmp_path):
     comms = canonical_goal_wire(tmp_path)
-    comms.registry.declare(comms.registry.new_thread(
+    comms.registry.declare(Thread(
         "carol", frozenset(), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid())))
     comms.agents.begin_turn("carol", "carol-turn")
     current = comms.registry.require("carol").require_turn_lease().record.path

@@ -25,12 +25,13 @@ from goal_owner_fixture import canonical_goal_wire
 from agent_comms.goal_waits import NoGoalWait
 from agent_comms.goal_waits import RecordedGoalWait
 from agent_comms.thread_text import GivenThreadText
+from agent_comms.threads import Thread
 
 
 
 def _thread(comms, name, worktree):
     comms.registry.declare(
-        comms.registry.new_thread(name, frozenset(), str(worktree), process_identity=ProcessIdentity.capture(os.getpid()))
+        Thread(name, frozenset(), str(worktree), process_identity=ProcessIdentity.capture(os.getpid()))
     )
 
 

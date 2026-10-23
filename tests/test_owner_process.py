@@ -33,6 +33,7 @@ from agent_comms.thread_text import GivenThreadText
 from agent_comms.session_file import NoSessionFile
 from delivery_owner_fixture import canonical_agent
 from native_backend_fixture import native_backend_fixture
+from agent_comms.threads import Thread
 
 
 @pytest.fixture
@@ -45,7 +46,7 @@ async def native_workers(tmp_path, native_runtime_package, source_programs):
 
 async def test_real_owner_start_restart_and_stop_preserve_thread(tmp_path: Path, native_workers) -> None:
     comms = wire(native_workers.root)
-    declared = comms.registry.new_thread('worker', frozenset(), str(tmp_path), task=GivenThreadText('retained task'))
+    declared = Thread('worker', frozenset(), str(tmp_path), task=GivenThreadText('retained task'))
     comms.registry.declare(declared)
     first = await Coordination.run_worker(partial(
         comms.owners.start, "worker", agent_bin=GivenBinary("pi"), agent_args=GivenArguments(()),
@@ -111,7 +112,7 @@ def test_stale_stored_birth_does_not_signal_real_process(tmp_path: Path) -> None
     try:
         comms = wire(tmp_path)
         comms.registry.declare(
-            comms.registry.new_thread('stale', frozenset(), str(tmp_path), process_identity=replace(child.identity, start_time=child.identity.start_time + 1))
+            Thread('stale', frozenset(), str(tmp_path), process_identity=replace(child.identity, start_time=child.identity.start_time + 1))
         )
         with pytest.raises(RelationViolationError):
             comms.owners.restart_owners(OwnersNamed(("stale",)))
@@ -130,7 +131,7 @@ def test_stale_stored_birth_does_not_signal_real_process(tmp_path: Path) -> None
 def test_failed_real_worker_startup_retains_private_trace(tmp_path: Path, monkeypatch) -> None:
     """The production detached launch retains a failure before socket creation."""
     comms = wire(tmp_path)
-    comms.registry.declare(comms.registry.new_thread('failed-start', frozenset(), str(tmp_path)))
+    comms.registry.declare(Thread('failed-start', frozenset(), str(tmp_path)))
     result = comms.owners.start("failed-start")
     owner = comms.registry.require("failed-start")
     deadline = time.monotonic() + 5
@@ -171,7 +172,7 @@ async def test_real_batch_retains_each_launch_and_busy_refuses_every_stop(tmp_pa
             client = canonical_agent(comms, agent_bin=GivenBinary(str(package / 'dist' / 'cli.js')), auto_wake=False)
             lifetime.push_async_callback(client.shutdown)
             catalog = client.sessions.config.catalog_for(ThinkingLevelConfigOption)
-            return await catalog.choices(comms.registry.new_thread('catalog', frozenset(), str(tmp_path), model=DeclaredModel(model)))
+            return await catalog.choices(Thread('catalog', frozenset(), str(tmp_path), model=DeclaredModel(model)))
 
     declared_options = await thinking_options()
     thinking = compile_decoder(ThinkingLevelField).decode(declared_options[0].value)
@@ -216,7 +217,7 @@ async def test_real_batch_retains_each_launch_and_busy_refuses_every_stop(tmp_pa
     try:
         for name, arguments, credential in settings:
             goal = Goal("Protected failed original", name + "-goal", published_seq=0, state=BlockedGoal("No replay"))
-            comms.registry.declare(comms.registry.new_thread(name, frozenset({name}), str(tmp_path), model=DeclaredModel(model), thinking_level=thinking, goal=goal, task=GivenThreadText('retained task ' + name)))
+            comms.registry.declare(Thread(name, frozenset({name}), str(tmp_path), model=DeclaredModel(model), thinking_level=thinking, goal=goal, task=GivenThreadText('retained task ' + name)))
             with monkeypatch.context() as patch:
                 patch.setenv("BATCH_OWNER_CREDENTIAL", credential)
                 patch.setenv("PI_CODING_AGENT_DIR", str(tmp_path / (name + "-config")))

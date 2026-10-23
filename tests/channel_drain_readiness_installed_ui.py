@@ -50,8 +50,8 @@ class InstalledApp(ToadApp):
     CSS_PATH = files('toad').joinpath('toad.tcss')
 
 async def prepare(comms, project, *_):
-    comms.registry.declare(comms.registry.new_thread('history-sender', frozenset(), str(project)))
-    comms.registry.declare(comms.registry.new_thread('history-recipient', frozenset(), str(project)))
+    comms.registry.declare(Thread('history-sender', frozenset(), str(project)))
+    comms.registry.declare(Thread('history-recipient', frozenset(), str(project)))
     for index in range(220):
         publish_initial(comms, 'history-sender', 'history-recipient',
             f'Original retained source {index}: ' + 'history '*250)

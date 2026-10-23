@@ -23,6 +23,7 @@ from agent_comms.pi_vocabulary import ServiceTier
 from agent_comms.runtime_requests import (
     RuntimeRequest,
 )
+from agent_comms.threads import Thread
 
 
 def test_cli_decodes_tag_sets_enums_json_and_shell_words_once(monkeypatch, tmp_path):
@@ -147,7 +148,7 @@ def test_normal_history_cli_keeps_migrated_content_and_source_identity(
         Bus.install(Bus.path_in(comms.root))
         for name in ("alice", "bob"):
             comms.registry.declare(
-                old.registry.new_thread(name, frozenset({"team"}), str(tmp_path))
+                Thread(name, frozenset({"team"}), str(tmp_path))
             )
         comms.messaging.send("alice", "#team", f"{comms.root.name} channel").message.message_id
         comms.messaging.send("alice", "bob", f"{comms.root.name} direct").message.message_id

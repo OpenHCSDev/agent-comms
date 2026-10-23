@@ -16,6 +16,7 @@ from agent_comms.response_acknowledgement import (
     KeyedResponseAcknowledgement, canonical_publication_key, public_envelope_digest,
 )
 from agent_comms.wake import OrdinaryControl, resolve_wake_cohort
+from agent_comms.threads import Thread
 
 
 publication_processes = ForkServerContext()
@@ -41,7 +42,7 @@ def context_comms(directory: Path) -> Comms:
         ("Bob", {"team"}, 17003.0),
         ("outsider", {"else"}, 17004.0),
     ):
-        comms.registry.declare(comms.registry.new_thread(
+        comms.registry.declare(Thread(
             name, frozenset(tags), str(directory), process_identity=process, created_at=stamp))
     return comms
 

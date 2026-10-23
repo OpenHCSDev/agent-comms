@@ -30,11 +30,12 @@ from .storage_rules import CheckoutStorageEffect, StorageProjection
 from .thread_status import StoppedThreadStatus
 from .session_file import RegistrySessionLocation
 
+from .threads import Thread
+
 if TYPE_CHECKING:
     from .comms import Comms
     from .phase_evidence import PlanReading
     from .plan_phases import PlanPhase
-    from .threads import Thread
     from .todos import PendingProblemOrder
 
 
@@ -60,7 +61,7 @@ class WorkDispatch:
         name = self.name
         storage = comms.registry.storage_rule
         checkout = storage.order_checkout(name, self.action.problem)
-        candidate = comms.registry.new_thread(
+        candidate = Thread(
             name,
             frozenset(),
             str(checkout),

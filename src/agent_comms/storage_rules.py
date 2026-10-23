@@ -13,9 +13,19 @@ from dataclasses import dataclass, field, replace
 from enum import StrEnum
 from functools import cached_property
 from pathlib import Path
-from typing import TYPE_CHECKING, Annotated, ClassVar, Self
+from typing import TYPE_CHECKING, Annotated, ClassVar, Self, cast
 
-from agent_comms.field_codec import FieldCodec, PathText
+from pydantic import JsonValue
+
+from agent_comms.errors import RelationViolationError
+from agent_comms.field_codec import (
+    FieldCodec,
+    FieldRepresentation,
+    NullMember,
+    PathText,
+    RecordMember,
+    SubclassUnion,
+)
 from agent_comms.locked_store import DurableFile
 from agent_comms.native_tool_call import SelectedToolDenied
 from agent_comms.problem_number import ProblemNumber
@@ -42,13 +52,61 @@ if TYPE_CHECKING:
 StoragePath = Annotated[Path, PathText]
 
 
-@dataclass(frozen=True)
-class StorageRoots:
+class ThreadStorage(SubclassUnion, affix="ThreadStorage"):
+    """A thread's storage roots: the ones its registry assigned, or none assigned yet."""
+
+    @abstractmethod
+    def assigned(self, rule: StorageRule, name: str) -> StorageRoots:
+        """The roots thread ``name`` holds under ``rule``."""
+
+    @abstractmethod
+    def stored(self) -> StorageRoots:
+        """The roots a registry row records."""
+
+
+@dataclass(frozen=True, slots=True)
+class StorageRoots(RecordMember, ThreadStorage):
     scratch: StoragePath
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         if not self.scratch.is_absolute():
             raise ValueError("Storage scratch requires an absolute path.")
+
+    def assigned(self, rule: StorageRule, name: str) -> StorageRoots:
+        return self
+
+    def stored(self) -> StorageRoots:
+        return self
+
+
+@dataclass(frozen=True, slots=True)
+class UnassignedThreadStorage(NullMember, ThreadStorage):
+    """A thread not yet declared; its registry assigns its roots at declaration."""
+
+    def assigned(self, rule: StorageRule, name: str) -> StorageRoots:
+        return rule.initial_roots(name)
+
+    def stored(self) -> StorageRoots:
+        raise RelationViolationError(
+            "A thread is stored only after its registry assigned its storage roots."
+        )
+
+
+class AssignedStorageRoots(FieldRepresentation):
+    """A stored thread holds the roots its registry assigned at registration, so its
+    stored form is StorageRoots; only an unregistered thread in memory has none."""
+
+    @classmethod
+    def decode(cls, value: object) -> StorageRoots:
+        return FieldCodec.decode(StorageRoots, value)
+
+    @classmethod
+    def encode(cls, value: object) -> object:
+        return FieldCodec.encode(cast(ThreadStorage, value).stored())
+
+    @classmethod
+    def schema(cls) -> dict[str, JsonValue]:
+        return FieldCodec.record_schema(StorageRoots)
 
 
 @dataclass(frozen=True)
@@ -171,13 +229,11 @@ class StorageRule(RoomAllocation, DurableFile):
         home = thread.project_path
         candidates = (home, *self.checkout_paths(thread))
         checkouts = {home}
-        listed = set()
+        listed: set[Path] = set()
         for repository in candidates:
             if repository in listed or not (repository / '.git').exists():
                 continue
-            output = Repo.git(repository, 'worktree', 'list', '--porcelain', '-z', timeout=10)
-            entries = tuple(Path(field.removeprefix('worktree ')).resolve()
-                            for field in output.split('\0') if field.startswith('worktree '))
+            entries = WorkBranches(repository).read_checkout().worktrees()
             listed.update(entries)
             checkouts.update(path for path in entries
                              if path.is_dir() and self.owns_checkout(thread, path, path))
@@ -255,19 +311,15 @@ class StorageRule(RoomAllocation, DurableFile):
         (see owns_checkout); a path inside a checkout is judged by that checkout."""
         if '.artifacts' in path.parts:
             self.deny('writes inside .artifacts are forbidden')
-        if path.is_relative_to(self.scratch_base) and not path.is_relative_to(thread.storage_roots.scratch):
-            self.deny(f'foreign scratch destination {path}; registered scratch is {thread.storage_roots.scratch}')
+        scratch = thread.storage_roots.assigned(self, thread.name).scratch
+        if path.is_relative_to(self.scratch_base) and not path.is_relative_to(scratch):
+            self.deny(f'foreign scratch destination {path}; registered scratch is {scratch}')
         base = self.checkout_base.resolve()
         if path.is_relative_to(base) and path != base:
             checkout = base / path.relative_to(base).parts[0]
             judged_by = source if checkout == path else checkout
             if not self.owns_checkout(thread, checkout, judged_by):
                 self.deny(f'{checkout} is not a checkout of {thread.name}')
-
-    def render(self, roots):
-        return (f'StorageRule: scratch {roots.scratch}; '
-                f'{self.max_checkouts} extra checkouts; allocation floor {self.floor_gib:g} GiB. '
-                'No clones, virtualenv creation, uv sync or .artifacts writes.')
 
     def order_text(self, thread: Thread, pythons: Sequence[str]) -> str:
         """The rule uses the same declared paths as storage enforcement."""
@@ -278,7 +330,8 @@ class StorageRule(RoomAllocation, DurableFile):
             f'at most {self.max_checkouts} besides your home checkout {thread.project_path}, '
             'removed with git worktree remove in the same order that created them; '
             'your only scratch dir is '
-            f'{thread.storage_roots.scratch}/, capped at {self.scratch_cap_gib:g} GB together with '
+            f'{thread.storage_roots.assigned(self, thread.name).scratch}/, '
+            f'capped at {self.scratch_cap_gib:g} GB together with '
             f'your checkouts. Run tests with PYTHONPATH=src on the shared {" or ".join(pythons)}; '
             'never create a venv, never uv sync, never write .artifacts, never git clone. '
             f'Below {self.floor_gib:g} GB free on {self.volume}, no worktree, venv, build, install '

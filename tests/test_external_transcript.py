@@ -9,6 +9,7 @@ from agent_comms.field_codec import FieldCodec
 from agent_comms.transcript_events import AssistantTranscript, NoticeTranscript
 from agent_comms.transcripts import TranscriptReadIdentity, UnreadTranscriptCursor
 from agent_comms.turn_digests import LastTurns
+from agent_comms.threads import Thread
 
 
 @pytest.fixture(autouse=True)
@@ -19,7 +20,7 @@ def installed_bus(tmp_path):
 
 def test_finished_cli_items_append_once_and_page(tmp_path):
     comms = wire(tmp_path / "wire")
-    comms.registry.declare(comms.registry.new_thread('codex', frozenset(), str(tmp_path)))
+    comms.registry.declare(Thread('codex', frozenset(), str(tmp_path)))
     transcript = comms.transcripts.external("codex")
     transcript.finish(turn_id="t1", item_id="compaction",
                       events=(NoticeTranscript("Compacting context…", timestamp=2.0, position='compaction'),))
@@ -54,7 +55,7 @@ def test_finished_cli_items_append_once_and_page(tmp_path):
 
 def test_absent_store_reads_stay_empty_without_creating_storage(tmp_path):
     comms = wire(tmp_path / 'wire')
-    comms.registry.declare(comms.registry.new_thread('cli', frozenset(), str(tmp_path)))
+    comms.registry.declare(Thread('cli', frozenset(), str(tmp_path)))
     transcript = comms.transcripts.external('cli')
     with transcript.reading() as read:
         assert not read.has_records(0)
@@ -70,7 +71,7 @@ def test_absent_store_reads_stay_empty_without_creating_storage(tmp_path):
 
 def test_captured_draft_cannot_delete_a_later_turns_draft(tmp_path):
     comms = wire(tmp_path / "wire")
-    comms.registry.declare(comms.registry.new_thread("cli", frozenset(), str(tmp_path)))
+    comms.registry.declare(Thread("cli", frozenset(), str(tmp_path)))
     transcript = comms.transcripts.external("cli")
     transcript.draft(turn_id="old", item_id="draft", events=(AssistantTranscript("old", timestamp=1.0, position='draft'),))
     with transcript.reading() as records:
@@ -87,7 +88,7 @@ async def test_turn_owned_draft_commit_reaches_a_watching_reader(tmp_path):
     from agent_comms.watched import ChangeSignal, FileSource
 
     comms = wire(tmp_path / "wire")
-    comms.registry.declare(comms.registry.new_thread('cli', frozenset(), str(tmp_path)))
+    comms.registry.declare(Thread('cli', frozenset(), str(tmp_path)))
     transcript = comms.transcripts.external('cli')
     marker, = transcript.source_paths(comms.root)
     async with ChangeSignal.opened(FileSource(marker)) as watcher:
@@ -111,7 +112,7 @@ async def test_earlier_page_requests_reach_initial_and_committed_watch_observati
     from agent_comms.runtime_updates import FinishedItem
 
     comms = wire(tmp_path / "wire")
-    comms.registry.declare(comms.registry.new_thread("cli", frozenset(), str(tmp_path)))
+    comms.registry.declare(Thread("cli", frozenset(), str(tmp_path)))
     transcript = comms.transcripts.external("cli")
     transcript.publish_page((FinishedItem("turn", "newest", ()),), EarlierPage("first"))
     emitted = asyncio.Queue()
@@ -135,7 +136,7 @@ async def test_earlier_page_requests_reach_initial_and_committed_watch_observati
 
 def test_a_native_session_thread_takes_no_cli_items(tmp_path):
     comms = wire(tmp_path / "wire")
-    comms.registry.declare(comms.registry.new_thread('pi', frozenset(), str(tmp_path), session_file=RegistrySessionLocation.from_path(str(tmp_path / 'session.jsonl'), comms.root)))
+    comms.registry.declare(Thread('pi', frozenset(), str(tmp_path), session_file=RegistrySessionLocation.from_path(str(tmp_path / 'session.jsonl'), comms.root)))
     with pytest.raises(ValueError):
         comms.transcripts.external("pi")
 
@@ -144,7 +145,7 @@ def test_draft_is_current_state_and_finishes_atomically(tmp_path):
     from agent_comms.acp_extension import TranscriptSnapshotUpdate, encode_updates, decode_updates
     from agent_comms.coordination_errors import StaleRevision
     comms = wire(tmp_path / "wire")
-    comms.registry.declare(comms.registry.new_thread('codex', frozenset(), str(tmp_path)))
+    comms.registry.declare(Thread('codex', frozenset(), str(tmp_path)))
     transcript = comms.transcripts.external("codex")
     transcript.draft(turn_id="t", item_id="a", events=(AssistantTranscript("Hel", timestamp=1.0, position='a'),))
     with transcript.reading() as records:
@@ -173,7 +174,7 @@ def test_draft_is_current_state_and_finishes_atomically(tmp_path):
 
 def test_a_thread_with_nothing_read_pages_older_and_newer_from_its_cursor(tmp_path):
     comms = wire(tmp_path / "wire")
-    comms.registry.declare(comms.registry.new_thread('codex', frozenset(), str(tmp_path)))
+    comms.registry.declare(Thread('codex', frozenset(), str(tmp_path)))
     transcript = comms.transcripts.external("codex")
     for index, text in enumerate(("first", "second", "third")):
         transcript.finish(turn_id="t1", item_id=text,

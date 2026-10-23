@@ -25,11 +25,12 @@ from agent_comms.goal_waits import GoalWait, GoalWaits
 from agent_comms.goals import Goal
 from agent_comms.input_disposition import InputDispositions
 from stored_inputs import stored_inputs
+from agent_comms.threads import Thread
 
 
 def register(comms, name):
     comms.registry.declare(
-        comms.registry.new_thread(name, frozenset(), str(comms.root), process_identity=ProcessIdentity.capture(os.getpid()))
+        Thread(name, frozenset(), str(comms.root), process_identity=ProcessIdentity.capture(os.getpid()))
     )
 
 
