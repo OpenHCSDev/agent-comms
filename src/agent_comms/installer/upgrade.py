@@ -52,7 +52,7 @@ from agent_comms.cli_commands import (
     TargetActionCliCommand,
     TargetBatchResult,
 )
-from agent_comms.installer.probes.harnesses import InstallResult, RetireHarnessConfigurationProbe
+from agent_comms.installer.probes.harnesses import InstallResult
 from agent_comms.cli_protocol import CoreError
 from agent_comms.cli_result import CliResult
 from agent_comms.comms import wire
@@ -1020,8 +1020,6 @@ class ChangedInstall(ExistingBusInstall[RehearsedFiles]):
                 passed = migration.carry(self.pending, self.staged)
                 passed.files.require_rehearsal(rehearsal.files)
                 self.publish(migration.backup, selected_route)
-                with MaintenancePhase("retire harness configuration").running(self.staged.commands.clock):
-                    self.staged.probe(RetireHarnessConfigurationProbe(self.root))
                 with MaintenancePhase("clear").running(self.staged.commands.clock):
                     holder.close()
                     maintenance.clear(held)
