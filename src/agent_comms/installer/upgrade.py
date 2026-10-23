@@ -308,21 +308,23 @@ class CarriedRehearsal(CarriedPass, RehearsedFiles):
 
 
 @dataclass(frozen=True)
-class UncopiedRehearsal(RehearsedFiles):
+class UncopiedPractice:
+    copy: PracticeMeasurement = PracticeMeasurement(0, 0.0)
+
+
+@dataclass(frozen=True)
+class UncopiedRehearsal(RehearsedFiles, UncopiedPractice):
     """A read of the live root found no carry pending and no store to reconcile, so no
     practice copy was taken and the live pass may rewrite nothing. Its own planned
     reconcile, under the hold, still refuses before any write if it names a file."""
 
     files: RehearsalFiles = field(default_factory=RehearsalFiles.none)
     inputs: tuple[Annotated[Path, PathText], ...] = ()
-    copy: PracticeMeasurement = PracticeMeasurement(0, 0.0)
 
 
 @dataclass(frozen=True)
-class UnchangedRehearsal(Rehearsal):
+class UnchangedRehearsal(Rehearsal, UncopiedPractice):
     """Nothing to rehearse: the checkout and lock are already the target's."""
-
-    copy: PracticeMeasurement = PracticeMeasurement(0, 0.0)
 
 
 @dataclass(frozen=True)
