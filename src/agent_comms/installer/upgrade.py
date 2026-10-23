@@ -81,8 +81,8 @@ from agent_comms.installer.carry import (
     RetireInputsOperation,
 )
 from agent_comms.installer.commands import InstallCommands, TimedCommand
-from agent_comms.installer.command_worker import CliCommandProbe
 from agent_comms.installer.interpreter_operation import (
+    CliCommandProbe,
     ClientImportsProbe,
     InstalledProgram,
     PackageRootProbe,

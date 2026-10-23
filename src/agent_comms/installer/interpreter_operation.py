@@ -10,9 +10,12 @@ from __future__ import annotations
 import inspect
 import json
 import sys
+import traceback
 from abc import ABC, abstractmethod
+from contextlib import redirect_stdout
 from dataclasses import dataclass
 from importlib import import_module
+from io import StringIO
 from pathlib import Path
 from typing import Annotated, ClassVar, Self, cast
 
@@ -60,28 +63,23 @@ class InstalledProgram(ProbeProgram):
     """A published runtime owns its declaration after the target tree is retired."""
 
     def entry(self) -> tuple[str, str]:
-        return "-c", "from agent_comms.installer.command_worker import main; main()"
+        return "-c", f"from {__name__} import serve; serve()"
 
 
 @dataclass(frozen=True)
 class RetainedProgram(ProbeProgram):
-    """A source operation that must finish after its owning checkout closes."""
+    """A source operation that must finish after its owning checkout closes. It runs as the
+    interpreter's main module, so the selected runtime's own imports keep its declarations."""
 
     source: str
 
     @classmethod
     def current(cls) -> RetainedProgram:
         """The operation family and its worker loop, as this checkout holds them now."""
-        family = Path(inspect.getfile(RuntimeProbe))
-        modules = ((RuntimeProbe.__module__, family),
-                   (f"{__package__}.command_worker", family.with_name("command_worker.py")))
-        return cls("import importlib.util, sys\n" + "".join(
-            f"spec = importlib.util.spec_from_loader({name!r}, loader=None)\n"
-            "module = importlib.util.module_from_spec(spec)\n"
-            f"module.__file__ = {str(path)!r}\n"
-            "sys.modules[spec.name] = module\n"
-            f"exec(compile({path.read_text()!r}, module.__file__, 'exec'), module.__dict__)\n"
-            for name, path in modules) + "module.main()\n")
+        path = Path(inspect.getfile(RuntimeProbe))
+        return cls(f"__file__ = {str(path)!r}\n"
+                   f"exec(compile({path.read_text()!r}, __file__, 'exec'))\n"
+                   "serve()\n")
 
     def entry(self) -> tuple[str, str]:
         return "-c", self.source
@@ -116,6 +114,38 @@ class FailedProbeReply(ProbeReply):
 
     def answer(self) -> str:
         raise RuntimeProbeFailed(self.traceback)
+
+
+@dataclass(frozen=True)
+class CliOutput:
+    returncode: int
+    stdout: str
+
+
+@dataclass(frozen=True)
+class CliCommandProbe(RuntimeProbe[CliOutput]):
+    """One command-line call, answered by the selected runtime's own command line."""
+
+    arguments: tuple[str, ...]
+
+    def run(self) -> CliOutput:
+        from agent_comms import cli
+
+        with StringIO() as output, redirect_stdout(output):
+            returncode = cli.main(self.arguments)
+            return CliOutput(returncode, output.getvalue())
+
+
+def serve() -> None:
+    """Answer declared operations from stdin, one encoded request per line, until it closes."""
+    for line in sys.stdin:
+        try:
+            with redirect_stdout(sys.stderr):
+                probe = FieldCodec.decode(RuntimeProbe, FieldCodec.parse(line))
+                reply = CompletedProbeReply(probe.encode_answer(probe.run()))
+        except Exception:
+            reply = FailedProbeReply(traceback.format_exc())
+        print(json.dumps(FieldCodec.encode(reply)), flush=True)
 
 
 class ClientImportsProbe(RuntimeProbe[None]):
