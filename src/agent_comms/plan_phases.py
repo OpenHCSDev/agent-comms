@@ -484,13 +484,7 @@ class TransitionScaffoldingPhase(RemainingSlopPhase):
     """0.4."""
 
     after = (CutoverPhase,)
-    evidence = PathsAbsent(
-        (
-            "src/agent_comms/commander_parity",
-            "tools/carry_rts_orders.py",
-            "tools/cutover/rts-launchers.patch",
-        )
-    )
+    evidence = CommitMerged("995be3b3f")
 
 
 class AbsencePhase(RemainingSlopPhase):
