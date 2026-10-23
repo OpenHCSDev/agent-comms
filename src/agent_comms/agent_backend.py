@@ -136,14 +136,14 @@ class InputContent:
     contributions: tuple[InputContributionCoordinates, ...] = ()
 
 
-class TurnInbox(asyncio.Queue):
+class TurnInbox(asyncio.Queue["TurnInboxItem"]):
     """The live inbox parks its head until the existing observer sees READY."""
     def __init__(self):
         super().__init__()
         self.ready = asyncio.Event()
         self.ready.set()
 
-    async def get(self):
+    async def get(self) -> TurnInboxItem:
         await self.ready.wait()
         return await super().get()
 
@@ -156,11 +156,11 @@ class TurnInbox(asyncio.Queue):
     def all_written_started(self):
         return not any(item.carried_inputs for item in self._queue)
 
-    def begin(self, item):
+    def begin(self, item: TurnInboxItem) -> None:
         self._queue.appendleft(item)
         self._wakeup_next(self._getters)
 
-    def hold(self, item):
+    def hold(self, item: TurnInboxItem) -> None:
         # Park under the shared wire lock, before READY can be published.
         self.ready.clear()
         self.begin(item)
@@ -175,7 +175,6 @@ class TurnInboxItem(ABC):
 
     def refuse(self, inputs, turn):
         inputs.refuse(turn, self.carried_inputs)
-
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -195,7 +194,6 @@ class InputRequest(TurnInboxItem):
 
 
 
-
 @dataclass(frozen=True)
 class SendNow(TurnInboxItem):
     """Ask the running turn to place these queued steering inputs immediately.
@@ -204,7 +202,6 @@ class SendNow(TurnInboxItem):
     """
 
     input_ids: tuple[InputId, ...]
-
 
 
 
@@ -221,13 +218,11 @@ class UseSettings(TurnInboxItem):
 
 
 
-
 @dataclass(frozen=True)
 class ClearQueue(TurnInboxItem):
     """Clear only these queued user inputs, never delivered bus inputs."""
 
     input_ids: tuple[InputId, ...]
-
 
 
 

@@ -1352,6 +1352,21 @@ class FieldCodec(MroDispatch, Sealed):
     def encode(cls, value: object, annotation: object = None) -> Any:
         return compile_decoder(annotation).encode(value)
 
+    @staticmethod
+    def compact(
+        value: object, *, ensure_ascii: bool = True,
+        sort_keys: bool = False, allow_nan: bool = True,
+    ) -> str:
+        """Write an already encoded JSON value without layout whitespace.
+
+        Callers retain their boundary's Unicode, ordering and numeric contract;
+        declared values pass through ``encode`` before this text boundary.
+        """
+        return json.dumps(
+            value, ensure_ascii=ensure_ascii, sort_keys=sort_keys,
+            allow_nan=allow_nan, separators=(",", ":"),
+        )
+
     @classmethod
     def encode_document(cls, value: object, declared: object) -> object:
         """A document whose declaration names its leaf member stores that member untagged."""

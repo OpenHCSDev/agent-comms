@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 import hashlib
-import json
 import secrets
 import time
 from collections.abc import Iterator
@@ -66,7 +65,7 @@ class AuthorizationQuery:
     @property
     def request_id(self) -> str:
         """A repeated query reuses its wait, never another client's PKCE challenge."""
-        return digest(json.dumps(FieldCodec.encode(self), sort_keys=True, separators=(",", ":")))
+        return digest(FieldCodec.compact(FieldCodec.encode(self), sort_keys=True))
 
     def redirect(self, code: str) -> str:
         return f"{self.redirect_uri}?{urlencode({'code': code, 'state': self.state})}"

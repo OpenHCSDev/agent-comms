@@ -272,7 +272,7 @@ class JsonStorage(SqlStorage):
 
     @classmethod
     def to_sql(cls, value: object) -> str | None:
-        return None if value is None else json.dumps(value, separators=(",", ":"), allow_nan=False)
+        return None if value is None else FieldCodec.compact(value, allow_nan=False)
 
     @classmethod
     def from_sql(cls, value: object) -> object:

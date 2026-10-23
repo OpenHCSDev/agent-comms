@@ -15,7 +15,6 @@ arbitrary code running as the same uid, nor protection from a malicious filesyst
 from __future__ import annotations
 
 import hashlib
-import json
 import os
 import secrets
 import sqlite3
@@ -29,6 +28,7 @@ from typing import Annotated, Literal
 
 from agent_comms.locked_store import SQLiteFile
 from agent_comms.coordination_errors import IdentityConflict
+from agent_comms.field_codec import FieldCodec
 
 from .private_path import ObservedPath
 from .store_files import StoreOwner
@@ -218,7 +218,7 @@ def _schema(row_type: type[TypedTable]) -> dict[str, str]:
 
 
 def _digest(row_type: type[TypedTable]) -> str:
-    return hashlib.sha256(json.dumps(_schema(row_type), separators=(",", ":")).encode()).hexdigest()
+    return hashlib.sha256(FieldCodec.compact(_schema(row_type)).encode()).hexdigest()
 
 
 def _verify_schema(connection: sqlite3.Connection, row_type: type[TypedTable]) -> None:
@@ -367,7 +367,7 @@ def sidecar_connection(
 
 def encode_request(text: str, *, streaming_behavior: str | None = None) -> str:
     """JSON-encode like the pinned native ``_claimNativeInput`` request."""
-    return json.dumps(
+    return FieldCodec.compact(
         {
             "kind": "prompt",
             "text": text,
@@ -375,9 +375,7 @@ def encode_request(text: str, *, streaming_behavior: str | None = None) -> str:
             "streamingBehavior": streaming_behavior,
             "expandPromptTemplates": True,
             "source": "rpc",
-        },
-        separators=(",", ":"),
-        ensure_ascii=False,
+        }, ensure_ascii=False,
     )
 
 
