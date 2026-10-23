@@ -29,7 +29,7 @@ from .repo import Checkout
 from .repository_name import RepositoryName
 from .storage_rules import CheckoutStorageEffect, StorageProjection
 from .thread_status import StoppedThreadStatus
-from .session_file import SavedSessionFile
+from .session_file import RegistrySessionLocation
 
 if TYPE_CHECKING:
     from .comms import Comms
@@ -85,7 +85,7 @@ class WorkDispatch:
         )
         location = candidate.runtime.new_location(comms.root, checkout)
         child = comms.registry.declare(
-            replace(candidate, session_file=SavedSessionFile(location.read_key)),
+            replace(candidate, session_file=RegistrySessionLocation.from_path(location.read_key, comms.root)),
             StoppedThreadStatus(),
         )
         # A failed publication leaves a stopped unit and its checkout, not an

@@ -28,7 +28,7 @@ from agent_comms.read_basis import (
 )
 from agent_comms.read_ledger import ReadLedger
 from agent_comms.routing import MessageRoute, TurnRouting
-from agent_comms.session_file import SavedSessionFile
+from agent_comms.session_file import RegistrySessionLocation
 
 
 @pytest.mark.parametrize('exists', [False, True])
@@ -199,7 +199,7 @@ def test_duplicate_and_newer_incarnations_sessions(tmp_path):
     session.write_text("".join(json.dumps(r) + "\n" for r in records))
     with old.registry.store.editing() as edit:
         edit.document.threads["bob"] = replace(edit.document.threads["bob"], created_at=10.0)
-        edit.document.threads["alice"] = replace(edit.document.threads["alice"], session_file=SavedSessionFile(str(session)))
+        edit.document.threads["alice"] = replace(edit.document.threads["alice"], session_file=RegistrySessionLocation.from_path(str(session), tmp_path))
         edit.commit()
     routing = TurnRouting(reply=MessageRoute("alice", ("#team",)))
     old.transcripts.routes.record(str(session), ("two",), routing)

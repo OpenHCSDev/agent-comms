@@ -10,7 +10,7 @@ from agent_comms.active_route import resolve_comms_route
 from bus_record_fixture import prepare_native_comms
 from agent_comms.lifecycle_capability import Complete
 from agent_comms.coordination_session import NativeBoundary
-from agent_comms.session_file import SavedSessionFile
+from agent_comms.session_file import RegistrySessionLocation
 from agent_comms.native_entries import NativeEvidenceScope
 from conftest import publish_initial
 from agent_comms.pi_vocabulary import OffThinkingLevel
@@ -150,7 +150,7 @@ async def configured_pure_channel(arguments):
         assert hashlib.sha256(original.read_bytes()).hexdigest() == before
         source_hashes[str(original)] = before
         name = f'purechannel-owner-{index}'
-        child = service.registry.new_thread(name, source.tags, source.worktree, parent=ForkedParent(source.name), task=source.task, session_file=SavedSessionFile(fork.session_file), model=source.model, thinking_level=source.thinking_level, execution=source.execution)
+        child = service.registry.new_thread(name, source.tags, source.worktree, parent=ForkedParent(source.name), task=source.task, session_file=RegistrySessionLocation.from_path(fork.session_file, service.root), model=source.model, thinking_level=source.thinking_level, execution=source.execution)
         service.registry.declare(child)
         names.append(name)
         settings.append({'source_owner':source.name, 'private_owner':name,
@@ -832,7 +832,7 @@ async def run(arguments):
                 with closing(sqlite3.connect(str(saved)+'.input-proof')) as copied:
                     original.backup(copied)
             Path(str(saved)+'.input-proof').chmod(0o600)
-            service.registry.register(replace(owner, session_file=SavedSessionFile(str(saved))))
+            service.registry.register(replace(owner, session_file=RegistrySessionLocation.from_path(str(saved), service.root)))
     for index in range(arguments.history):
         publish_initial(service, 'fixture-sender','history-recipient',
             f'Retained unrelated canonical source {index}: ' + 'history '*250)

@@ -243,7 +243,7 @@ class PiNativeBackend(
             owner=thread.incarnation.require_recorded(),
             session_directory=thread.native_session_directory(self.comms.root),
             environment=environment,
-            session_file=thread.runtime.read_key,
+            session_file=thread.writable_runtime.read_key,
             observe=partial(self.observe, thread),
         )
 
@@ -269,7 +269,7 @@ class PiNativeBackend(
             delivery.environment,
             **images,
             context_contributions=content.contributions,
-            **thread.runtime.arguments(),
+            **thread.writable_runtime.arguments(),
             steering_queue=delivery.inbox,
             finish_event=delivery.finish_event,
             send_boundary=delivery.send_boundary,

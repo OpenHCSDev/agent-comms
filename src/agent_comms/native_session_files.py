@@ -217,7 +217,7 @@ class NativeInputProof(DurableFile, ReconciledFile, PatternFile):
         return NativeContextJournal
 
 
-class SavedSessionFile(PatternFile):
+class BusTranscriptFile(PatternFile):
     """A bus location holding saved native transcripts and their writer locks."""
 
     __slots__ = ()
@@ -246,14 +246,14 @@ class SavedSessionFile(PatternFile):
         )
 
 
-class PrivateSession(DurableFile, SavedSessionFile):
+class PrivateSession(DurableFile, BusTranscriptFile):
     """A thread's own session, created fresh for it."""
 
     __slots__ = ()
     filename = "sessions/enrolled-{session_id}.jsonl"
 
 
-class CheckSession(DurableFile, SavedSessionFile):
+class CheckSession(DurableFile, BusTranscriptFile):
     """A check root's copy of one selected worker's history, under its record's slot."""
 
     __slots__ = ()

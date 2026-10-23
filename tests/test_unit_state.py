@@ -15,7 +15,7 @@ from agent_comms.read_basis import DMDisplayScope
 from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.thread_status import StoppedThreadStatus
 from agent_comms.thread_text import ForkedParent
-from agent_comms.session_file import SavedSessionFile
+from agent_comms.session_file import RegistrySessionLocation
 from agent_comms.todos import DeliverTodo, OperationDelivery, ProgressRead
 from agent_comms.ui_model.unit_state import (
     AwaitingCommander,
@@ -96,7 +96,7 @@ def recorded_turn(comms, calls):
     path.write_text("".join(json.dumps(row) + "\n" for row in rows))
     path.chmod(0o600)
     thread = comms.registry.require("worker")
-    comms.registry.register(replace(thread, session_file=SavedSessionFile(str(path))))
+    comms.registry.register(replace(thread, session_file=RegistrySessionLocation.from_path(str(path), tmp_path)))
 
 
 def unread_checkout(comms, tmp_path):

@@ -11,7 +11,7 @@ import json
 
 import pytest
 
-from agent_comms.session_file import SavedSessionFile
+from agent_comms.session_file import RegistrySessionLocation
 from agent_comms.cli import main
 from agent_comms.cli_commands import ConstraintPinnedResult
 from agent_comms.field_codec import FieldCodec
@@ -34,7 +34,7 @@ def test_original_retained_source_narrow_export(comms, tmp_path, capsys):
     saved = tmp_path / "original.jsonl"
     saved_source(saved)
     goal = Goal("Original task goal, not an exported human constraint", "original-goal", published_seq=0, revision=7)
-    owner = comms.registry.declare(comms.registry.new_thread('reader', frozenset(), str(tmp_path), session_file=SavedSessionFile(str(saved)), goal=goal))
+    owner = comms.registry.declare(comms.registry.new_thread('reader', frozenset(), str(tmp_path), session_file=RegistrySessionLocation.from_path(str(saved), tmp_path), goal=goal))
     wording = "Original human constraint λ; preserve UNKNOWN and its source."
     original = comms.messaging.send_user_message(CommandTarget.named(owner.name), wording, worktree=owner.worktree)
     comms.messaging.pin_user_constraint(owner.name, original.reference, worktree=owner.worktree)

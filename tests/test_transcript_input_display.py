@@ -6,7 +6,7 @@ import sqlite3
 import pytest
 
 from conftest import transcript_records
-from agent_comms.session_file import SavedSessionFile
+from agent_comms.session_file import RegistrySessionLocation
 from agent_comms.acp import CommsAgent
 from agent_comms.acp_extension import TranscriptSnapshotUpdate, decode_updates
 from agent_comms.comms import wire
@@ -97,7 +97,7 @@ async def test_acp_saved_transcript_replay_hides_only_owned_internal_input(tmp_p
             ]
         )
     )
-    comms.registry.declare(comms.registry.new_thread('worker', frozenset(), str(tmp_path), session_file=SavedSessionFile(str(session))))
+    comms.registry.declare(comms.registry.new_thread('worker', frozenset(), str(tmp_path), session_file=RegistrySessionLocation.from_path(str(session), tmp_path)))
     comms.transcripts.routes.record_input_display("a" * 32, None)
     comms.transcripts.routes.record_input_display("b" * 32, "test2")
     agent = CommsAgent(wire(comms.root))

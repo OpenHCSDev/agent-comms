@@ -12,7 +12,7 @@ from agent_comms.child_process import ProcessIdentity
 from agent_comms.comms import wire
 from conftest import installed_comms
 from agent_comms.coordination_errors import StaleFence
-from agent_comms.session_file import SavedSessionFile
+from agent_comms.session_file import RegistrySessionLocation
 from agent_comms.goal_actions import SetGoalAction
 from agent_comms.native_input_owner import RegistryOwner
 from agent_comms.owned_turn import OwnedTurn
@@ -51,7 +51,7 @@ async def test_begin_callback_and_native_attachment_share_original_owner(tmp_pat
             saved = str(native_file)
             await turn.progress.before_native_metadata(AgentInfo(session_file=saved))
             assert turn.registry_owner is not initial
-            assert turn.thread.session_file == SavedSessionFile(saved)
+            assert turn.thread.session_file == RegistrySessionLocation.from_path(saved, tmp_path)
             assert turn.progress.thread is turn.thread
             assert turn.progress.turn_lease == initial.turn_lease
             assert comms.registry.require("owner").turn_lease == initial.turn_lease

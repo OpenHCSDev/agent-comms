@@ -8,7 +8,7 @@ import sqlite3
 
 import pytest
 
-from agent_comms.session_file import SavedSessionFile
+from agent_comms.session_file import RegistrySessionLocation
 from agent_comms.acp import CommsAgent
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.comms import wire
@@ -30,7 +30,7 @@ async def test_subscription_busy_read_retains_original_traceback(tmp_path, caplo
         "timestamp": "2026-10-10T00:00:00.000Z", "cwd": str(tmp_path),
     }) + "\n")
     session_file.chmod(0o600)
-    thread = comms.registry.new_thread('owner', frozenset(), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid()), session_file=SavedSessionFile(str(session_file)))
+    thread = comms.registry.new_thread('owner', frozenset(), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid()), session_file=RegistrySessionLocation.from_path(str(session_file), tmp_path))
     comms.registry.declare(thread)
     await owner.sessions.bind_owned(thread, thread.name)
     database = comms.root / "coordination.sqlite3"
