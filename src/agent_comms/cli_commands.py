@@ -24,7 +24,9 @@ from inspect import iscoroutinefunction, signature
 from itertools import dropwhile, takewhile
 from pathlib import Path
 from types import get_original_bases
-from typing import Annotated, Any, ClassVar, Literal, Self, TextIO, cast, get_args, get_origin
+from typing import Annotated, ClassVar, Literal, Self, TextIO, cast, get_args, get_origin
+
+from pydantic import JsonValue
 
 from acp.exceptions import RequestError
 
@@ -2292,7 +2294,7 @@ class TargetActionCliCommand(TargetArguments, declared_name="target-action"):
     help = "Execute a declared operation against its current target"
     operation: Annotated[str, Argument(flags=("--operation",))]
     arguments: Annotated[
-        dict[str, Any],
+        dict[str, JsonValue],
         Argument(
             flags=("--arguments",)
         ),

@@ -10,7 +10,9 @@ from collections.abc import Mapping
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 from types import MappingProxyType
-from typing import TYPE_CHECKING, Any, ClassVar, Self, Annotated
+from typing import TYPE_CHECKING, ClassVar, Self, Annotated
+
+from pydantic import JsonValue
 
 
 from .annotation_disclosure import PublicInstructionAnnotations, WithheldAnnotations
@@ -899,7 +901,7 @@ class SystemLayerSegment(PublicInstructionAnnotations, MeasuredNativeSegment):
 class NativeMessages:
     # These are the SDK's exact *provider* messages, including opaque extension
     # and provider fields. Core does not decode them as its event/message subset.
-    messages: tuple[dict[str, Any], ...]
+    messages: tuple[dict[str, JsonValue], ...]
     tokens: int
     sha256: str
     utf8_bytes: int
@@ -985,7 +987,7 @@ class InjectionMessageSegment(NativeAnnotations, MeasuredNativeSegment):
 
 @dataclass(frozen=True, kw_only=True)
 class ToolCatalogSegment(MeasuredNativeSegment):
-    tools: tuple[dict[str, Any], ...]
+    tools: tuple[dict[str, JsonValue], ...]
     tokens: int
     sha256: str
     utf8_bytes: int
@@ -1148,7 +1150,7 @@ class ReplyRouteSegment(InstructionSegment):
 @dataclass(frozen=True)
 class RenderedInput:
     text: str
-    provider: dict[str, Any]
+    provider: dict[str, JsonValue]
     contributions: tuple[InputContributionCoordinates, ...] = ()
 
 
@@ -1451,7 +1453,7 @@ class TurnContext(DeclaredReply):
     @staticmethod
     def render_segments(segments: tuple[ContextSegment, ...], *, images=()) -> RenderedInput:
         prompt_parts: list[str] = []
-        provider: dict[str, object] = {}
+        provider: dict[str, JsonValue] = {}
         contributions: list[InputContributionCoordinates] = []
         offset = 0
         for segment in segments:
