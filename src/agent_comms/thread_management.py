@@ -285,24 +285,6 @@ class ThreadManagement:
             snapshot.historical_instructions,
         )
 
-    def restore_stopped(self, source: RegistrySnapshot, names: Sequence[str]) -> tuple[str, ...]:
-        """Restore historical declarations and their private delivery identities.
-
-        Registry restoration owns collision checks and strips execution authority;
-        the registry's privacy registers what restored threads need beyond it.
-        Repeating this operation repairs an interrupted coordinator registration
-        without replacing existing owners or importing historical delivery state.
-        """
-        selected = tuple(dict.fromkeys(names))
-        with self.registry.store.locked():
-            restored = self.registry.restore_stopped(source, selected)
-            self._privacy().register_restored(self.registry.require(name) for name in selected)
-            return restored
-
-    def _privacy(self) -> RegistryPrivacy:
-        with self.registry.store.locked():
-            return self.registry.store.private_guard_unlocked()
-
     def claim_thread(
         self,
         wanted: str,

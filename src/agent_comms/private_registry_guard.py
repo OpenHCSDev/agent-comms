@@ -22,7 +22,7 @@ import sqlite3
 import stat
 import struct
 from abc import ABC, abstractmethod
-from collections.abc import Callable, Iterable, Sequence
+from collections.abc import Callable, Sequence
 from pathlib import Path
 from typing import TYPE_CHECKING, NoReturn
 
@@ -143,9 +143,6 @@ class RegistryPrivacy(ABC):
     def write(self, registry_path: Path, text: str) -> None: ...
 
     @abstractmethod
-    def register_restored(self, threads: Iterable[Thread]) -> None: ...
-
-    @abstractmethod
     def launch(self, root: Path) -> RootLaunch: ...
 
     @abstractmethod
@@ -215,9 +212,6 @@ class PublicRegistry(RegistryPrivacy):
 
     def write(self, registry_path: Path, text: str) -> None:
         store_files.AtomicFile(registry_path).write_text(text)
-
-    def register_restored(self, threads: Iterable[Thread]) -> None:
-        """A public bus has no coordinator identities for restored threads."""
 
     def launch(self, root: Path) -> RootLaunch:
         from .private_nk_entrypoint import SharedRootLaunch
@@ -454,15 +448,6 @@ class PrivateRegistryGuard(DurableFile, WireWakeFile, RegistryPrivacy):
         sequence, slot = self.prepare(digest)
         store_files.AtomicFile(registry_path).write_text(text)
         self.commit(sequence, slot, digest)
-
-    def register_restored(self, threads: Iterable[Thread]) -> None:
-        """Stopped subscribers still belong to frozen audiences; their coordinator identities
-        must exist before any cohort can be accepted."""
-        with Coordination(str(CoordinationStore.path_in(self.registry_path.parent))) as store:
-            for thread in threads:
-                store.participants.register(
-                    thread.incarnation.require_recorded().lookup,
-                    committed=True)
 
     def create_pending(self) -> None:
         """The registry lock covers explicit native preparation before coordinator setup."""

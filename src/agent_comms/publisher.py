@@ -212,13 +212,6 @@ class InitialWrites(Publisher):
             selected = [snapshot.threads[name] for name in names]
             lookups = [thread.incarnation.lookup for thread in selected]
             sender_lookup = snapshot.threads[sender].incarnation.lookup
-            # Participant identities are prerequisites, not part of the bus commit.
-            # Finish their own transactions before opening the publication transaction.
-            with Coordination(str(CoordinationStore.path_in(self.bus.path.parent))) as store:
-                sender_thread.role.register_sender(store.participants, sender_lookup, sender)
-                for thread, lookup in zip(selected, lookups, strict=True):
-                    store.participants.register(lookup, committed=True)
-
             def build(seq: int, db: sqlite3.Connection) -> PrivateRecord:
                 source = BusSnapshot.from_connection(db)
                 stored = self._prepare_message_unlocked(

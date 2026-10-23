@@ -10,10 +10,13 @@ from __future__ import annotations
 import time
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, replace
+from pathlib import Path
 from typing import TYPE_CHECKING
 
 from .errors import RelationViolationError
+from .coordination_session import CoordinationSession
 from .goals import GoalDeclaration, NoGoal
+from .participant_store import ParticipantStore
 from .thread_status import ThreadStatus
 from .threads import Thread
 
@@ -41,6 +44,9 @@ class RegistrationChange(ABC):
         """Initial declarations have no prior executor to preserve or replace."""
         return self
 
+    def prepare_participant(self, root: Path) -> None:
+        """An update retains the participant its incarnation already declared."""
+
     def apply(self, document: RegistryDocument) -> None:
         """Caller holds registry/publication authority and records goal history."""
         thread = self.thread.restarted_tools() if self.changes_owner else self.thread
@@ -55,6 +61,11 @@ class RegistrationChange(ABC):
 class InitialRegistration(RegistrationChange):
     prior_goal = NoGoal()
     changes_owner = True
+
+    def prepare_participant(self, root: Path) -> None:
+        """The participant commits before the registry makes this incarnation visible."""
+        with CoordinationSession(str(CoordinationSession.path_in(root))) as session:
+            ParticipantStore(session).register(self.thread.incarnation.lookup, committed=True)
 
     def restarted(self) -> RegistrationChange:
         return InitialOwnerRegistration(thread=self.thread, status=self.status)
