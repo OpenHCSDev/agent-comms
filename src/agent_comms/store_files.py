@@ -278,15 +278,22 @@ def store_lock_path(store_path: Path) -> Path:
     return store_path.with_name(f'.{store_path.name}.lock')
 
 
+def locked_store_path(lock_path: Path) -> Path:
+    """The store ``store_lock_path`` would name ``lock_path`` for; inverse of that function."""
+    return lock_path.with_name(lock_path.name.removeprefix('.').removesuffix('.lock'))
+
+
 def is_store_lock(path: Path) -> bool:
     """Whether ``path`` is the lock ``store_lock_path`` names, present or not its store."""
-    store = path.with_name(path.name.removeprefix('.').removesuffix('.lock'))
+    store = locked_store_path(path)
     return store != path and store_lock_path(store) == path
 
 
 @contextmanager
 def _store_lock_file(store_path: Path):
     """Open read-only: lock retirement must not generate a close-write watch event."""
+    if is_store_lock(store_path):
+        raise ValueError(f"A store lock is never itself a lockable store: {store_path}")
     store_path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
     lock_path = store_lock_path(store_path)
     with StoreLock.releasing(), os.fdopen(
