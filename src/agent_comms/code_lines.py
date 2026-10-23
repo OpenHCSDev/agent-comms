@@ -9,15 +9,15 @@ class CodeLines:
     @classmethod
     def of(cls, source: str) -> int:
         module = ast.parse(source)
-        leading: list[ast.stmt] = []
+        leading: set[ast.stmt] = set()
         statements = module.body
         if ast.get_docstring(module, clean=False) is not None:
-            leading.append(statements[0])
+            leading.add(statements[0])
             statements = statements[1:]
         for statement in statements:
             if not isinstance(statement, (ast.Import, ast.ImportFrom)):
                 break
-            leading.append(statement)
+            leading.add(statement)
         excluded = {
             line
             for statement in leading
