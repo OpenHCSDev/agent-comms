@@ -28,27 +28,9 @@ from agent_comms.obligation_states import (
     PendingResponse,
 )
 from agent_comms.recovery_reader import RecoveryReader
-from agent_comms.mro_dispatch import MroDispatch, handles
 
 if TYPE_CHECKING:
     from agent_comms.selected_source_batch import SelectedSource
-
-
-class AttemptBudget(MroDispatch):
-    @classmethod
-    def require(cls, max_attempts: int) -> None:
-        cls.handler_for(type(max_attempts))(max_attempts)
-
-    @handles(int)
-    @staticmethod
-    def positive_budget(max_attempts: int) -> None:
-        if max_attempts <= 0:
-            raise ValueError("max_attempts must be positive")
-
-    @handles(object)
-    @staticmethod
-    def invalid_budget(max_attempts: object) -> None:
-        raise ValueError("max_attempts must be positive")
 
 
 class ExecutionStore(RecoveryReader):
@@ -112,7 +94,8 @@ class ExecutionStore(RecoveryReader):
         participant = self.participants.get(owner_lookup)
         if not participant.committed:
             raise IdentityConflict("execution requires committed current owner")
-        AttemptBudget.require(max_attempts)
+        if not isinstance(max_attempts, int) or max_attempts <= 0:
+            raise ValueError("max_attempts must be positive")
         if len(set(assignment_ids)) != len(assignment_ids):
             raise IdentityConflict("duplicate claim membership")
         now = self.session.now()

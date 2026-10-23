@@ -22,31 +22,6 @@ if TYPE_CHECKING:
     from .coordination_snapshot import RecoverySnapshot
 
 
-class FromQueuedExecution:
-    @classmethod
-    def after_queued_execution(cls) -> bool:
-        return True
-
-
-class FromPendingExecution:
-    @classmethod
-    def after_pending_execution(cls) -> bool:
-        return True
-
-
-class FromActiveExecution:
-    @classmethod
-    def after_active_execution(cls) -> bool:
-        return True
-
-
-class FromDeferredExecution:
-    @classmethod
-    def after_deferred_execution(cls) -> bool:
-        return True
-
-
-
 class OrdinalRule:
     increment: int = 0
     predecessors: type = LifecycleState
@@ -158,12 +133,8 @@ class QueuedExecution(UnstartedExecution):
     queued = True
 
     @classmethod
-    def successors(cls) -> tuple[type[LifecycleState], ...]:
-        return tuple(FromQueuedExecution.__subclasses__())
-
-    @classmethod
-    def may_become(cls, nxt: LifecycleState | type[LifecycleState]) -> bool:
-        return nxt.after_queued_execution()
+    def successors(cls):
+        return PendingExecution, FailedExecution
 
 
 class StartsAttempt:
@@ -171,15 +142,11 @@ class StartsAttempt:
         pass
 
 
-class PendingExecution(FromQueuedExecution, StartsAttempt, UnstartedExecution):
+class PendingExecution(StartsAttempt, UnstartedExecution):
 
     @classmethod
-    def successors(cls) -> tuple[type[LifecycleState], ...]:
-        return tuple(FromPendingExecution.__subclasses__())
-
-    @classmethod
-    def may_become(cls, nxt: LifecycleState | type[LifecycleState]) -> bool:
-        return nxt.after_pending_execution()
+    def successors(cls):
+        return ActiveExecution, DeferredExecution, FailedExecution
 
 
 class AttemptReference:
@@ -205,19 +172,15 @@ class AttemptExecution(AttemptReference, ExecutionState):
             raise IntegrityViolationError("active/completed execution requires an attempt")
 
 
-class ActiveExecution(FromPendingExecution, FromDeferredExecution, Active, EngagedExecution, AttemptExecution):
+class ActiveExecution(Active, EngagedExecution, AttemptExecution):
     ordinal_rule = AdvancedOrdinal(StartsAttempt)
 
     def require_final_response(self) -> None:
         pass
 
     @classmethod
-    def successors(cls) -> tuple[type[LifecycleState], ...]:
-        return tuple(FromActiveExecution.__subclasses__())
-
-    @classmethod
-    def may_become(cls, nxt: LifecycleState | type[LifecycleState]) -> bool:
-        return nxt.after_active_execution()
+    def successors(cls):
+        return DeferredExecution, CompletedExecution, FailedExecution
 
     def accepts_attempt(self, phase):
         return phase.accepts_active_execution()
@@ -227,7 +190,7 @@ class ActiveExecution(FromPendingExecution, FromDeferredExecution, Active, Engag
             raise IntegrityViolationError("active snapshot must carry exact owner pointer")
 
 
-class CompletedExecution(FromActiveExecution, Complete, Terminal, AttemptExecution):
+class CompletedExecution(Complete, Terminal, AttemptExecution):
 
     @classmethod
     def assignment_state(cls) -> type[AssignmentState]:
@@ -251,7 +214,7 @@ class InterruptedExecution(AttemptReference, ExecutionState):
         return bool(phase.items_with(Failed, phase))
 
 
-class DeferredExecution(FromPendingExecution, FromActiveExecution, StartsAttempt, InterruptedExecution):
+class DeferredExecution(StartsAttempt, InterruptedExecution):
     retry = True
 
     def require_retry_start(self, snapshot: RecoverySnapshot) -> None:
@@ -262,12 +225,8 @@ class DeferredExecution(FromPendingExecution, FromActiveExecution, StartsAttempt
         return DeferredAssignment
 
     @classmethod
-    def successors(cls) -> tuple[type[LifecycleState], ...]:
-        return tuple(FromDeferredExecution.__subclasses__())
-
-    @classmethod
-    def may_become(cls, nxt: LifecycleState | type[LifecycleState]) -> bool:
-        return nxt.after_deferred_execution()
+    def successors(cls):
+        return ActiveExecution, FailedExecution
 
     def validate_budget(self, maximum: int) -> None:
         super().validate_budget(maximum)
@@ -285,7 +244,7 @@ class DeferredExecution(FromPendingExecution, FromActiveExecution, StartsAttempt
         return authorized and attempt.permits_retry() and not is_current
 
 
-class FailedExecution(FromQueuedExecution, FromPendingExecution, FromActiveExecution, FromDeferredExecution, Failed, Terminal, InterruptedExecution):
+class FailedExecution(Failed, Terminal, InterruptedExecution):
 
     @classmethod
     def assignment_state(cls) -> type[AssignmentState]:

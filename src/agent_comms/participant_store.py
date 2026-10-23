@@ -24,7 +24,6 @@ from agent_comms.coordination_tables.participants import (
     Participants,
 )
 from agent_comms.field_codec import MalformedRecord
-from agent_comms.mro_dispatch import MroDispatch, handles
 
 
 @dataclass(frozen=True, slots=True)
@@ -42,18 +41,7 @@ class ParticipantSnapshot:
     pointer: CurrentExecutions
 
 
-class ParticipantStore(MroDispatch):
-    @handles(str)
-    @staticmethod
-    def bounded_identity(lookup: str) -> None:
-        if not 1 <= len(lookup) <= MAX_IDENTIFIER_CHARS:
-            raise MalformedRecord("participant identity must be bounded and nonempty")
-
-    @handles(object)
-    @staticmethod
-    def invalid_identity(lookup: object) -> None:
-        raise MalformedRecord("participant identity must be bounded and nonempty")
-
+class ParticipantStore:
     def __init__(self, session: CoordinationSession) -> None:
         self.session = session
 
@@ -79,7 +67,8 @@ class ParticipantStore(MroDispatch):
     ) -> Applied[ParticipantSnapshot] | AlreadyApplied[ParticipantSnapshot]:
         if type(committed) is not bool:
             raise ValueError("committed must be a boolean")
-        self.handler_for(type(lookup))(lookup)
+        if not isinstance(lookup, str) or not 1 <= len(lookup) <= MAX_IDENTIFIER_CHARS:
+            raise MalformedRecord("participant identity must be bounded and nonempty")
         with self.session.writing() as db:
             existing = Participants.one(self.session._connection, participant_lookup=lookup)
             if existing is not None:

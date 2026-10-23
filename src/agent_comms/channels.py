@@ -19,7 +19,6 @@ from .errors import RelationViolationError
 from .field_codec import FieldCodec, CatalogExclude
 from .history_result import ChannelHistoryPageResult, EverythingHistoryPageResult, HistoryPageResult
 from .messages import MembershipTransition
-from .mro_dispatch import MroDispatch, handles
 from .read_basis import AllChannelDisplayScope, ChannelDisplayScope, MemberActivityDisplayScope
 from .tool_result import ToolResult
 
@@ -48,39 +47,6 @@ class ChannelMemberIndex(dict[str, tuple["Thread", ...]]):
         return ()
 
 
-class ChannelOrder(MroDispatch):
-    @classmethod
-    def require(cls, order: type[ThreadSort]) -> None:
-        cls.handler_for(type(order))(order)
-
-    @handles(type)
-    @staticmethod
-    def declared(order: type[ThreadSort]) -> None:
-        if order not in ThreadSort.members_with(ThreadSort):
-            raise ValueError("Channel ordering must be a declared ThreadSort.")
-
-    @handles(object)
-    @staticmethod
-    def invalid(order: object) -> None:
-        raise ValueError("Channel ordering must be a declared ThreadSort.")
-
-
-class ChannelFlag(MroDispatch):
-    @classmethod
-    def require(cls, value: bool) -> None:
-        cls.handler_for(type(value))(value)
-
-    @handles(bool)
-    @staticmethod
-    def valid(value: bool) -> None:
-        pass
-
-    @handles(object)
-    @staticmethod
-    def invalid(value: object) -> None:
-        raise ValueError("Channel presentation flags must be boolean.")
-
-
 @dataclass(frozen=True, slots=True)
 class Channel(DeclaredFamily, CliResult, ToolResult, ProjectionSource, affix="Channel"):
     """A captured channel presentation with behavior supplied by its declaration."""
@@ -100,9 +66,10 @@ class Channel(DeclaredFamily, CliResult, ToolResult, ProjectionSource, affix="Ch
         object.__setattr__(self, "name", name)
         if self.parent is not None:
             object.__setattr__(self, "parent", ChannelTarget.normalize_name(self.parent))
-        ChannelOrder.require(self.order)
-        for flag in (self.archived, self.any_mode):
-            ChannelFlag.require(flag)
+        if not isinstance(self.order, type) or self.order not in ThreadSort.members_with(ThreadSort):
+            raise ValueError("Channel ordering must be a declared ThreadSort.")
+        if not isinstance(self.archived, bool) or not isinstance(self.any_mode, bool):
+            raise ValueError("Channel presentation flags must be boolean.")
         if self.any_mode and not self.exact:
             raise ValueError("Only exact tag channels can include member activity.")
         if self.parent is not None:

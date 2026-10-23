@@ -80,24 +80,13 @@ if TYPE_CHECKING:
     from .launch_runtime import ThreadLaunch
 
 
-class FromThreadWorkState:
-    @classmethod
-    def after_thread_work_state(cls) -> bool:
-        return True
-
-
-
 @dataclass(frozen=True)
-class ThreadWorkState(FromThreadWorkState, DeclaredFamily, LifecycleState, affix="ThreadWorkState"):
+class ThreadWorkState(DeclaredFamily, LifecycleState, affix="ThreadWorkState"):
     """Order availability belongs to the thread, independently of process presence."""
 
     @classmethod
     def successors(cls) -> tuple[type[LifecycleState], ...]:
         return ThreadWorkState.members_with(ThreadWorkState)
-
-    @classmethod
-    def may_become(cls, nxt: LifecycleState | type[LifecycleState]) -> bool:
-        return nxt.after_thread_work_state()
 
     @abstractmethod
     def candidates(self, thread: Thread) -> tuple[Thread, ...]: ...

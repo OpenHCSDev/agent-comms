@@ -23,7 +23,7 @@ from .field_codec import Id128Text, MalformedRecord
 from .external_transcript import DraftRow
 from .following_inputs import FollowingInputs
 from .maintenance_barrier import UNCOORDINATED_INGRESS, MaintenanceIngress
-from .mro_dispatch import MroDispatch, handles
+from .mro_dispatch import handles
 from .native_arguments import SelectedModel
 from .native_attestation import AttestationError, ObservedAttestation
 from .native_package import VerifiedNativePackage
@@ -224,23 +224,6 @@ class AmbiguousTrackedTerminal(PendingTrackedTerminal):
         return self
 
 
-class NativePrompt(MroDispatch):
-    @classmethod
-    def require(cls, prompt: str) -> None:
-        cls.handler_for(type(prompt))(prompt)
-
-    @handles(str)
-    @staticmethod
-    def text(prompt: str) -> None:
-        if not prompt:
-            raise ValueError("A native turn requires a nonempty prompt")
-
-    @handles(object)
-    @staticmethod
-    def invalid(prompt: object) -> None:
-        raise ValueError("A native turn requires a nonempty prompt")
-
-
 class TrackedTurnSession(TurnSession):
     """Own one strict input/proof exchange; never grant publication or retry authority."""
 
@@ -308,7 +291,8 @@ class TrackedTurnSession(TurnSession):
         following: FollowingInputs = NO_FOLLOWING_INPUTS,
     ) -> NativeTurnResult:
         Id128Text.decode(input_id)
-        NativePrompt.require(prompt)
+        if not prompt or not isinstance(prompt, str):
+            raise ValueError("A native turn requires a nonempty prompt")
         measurements = startup.measurements
         # Independent execution acquires a fresh artifact. A selected stage
         # derives from its execution's original pre-claim factory; source/config and

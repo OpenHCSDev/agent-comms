@@ -5,7 +5,6 @@ from __future__ import annotations
 import hashlib
 import secrets
 from dataclasses import dataclass
-from .mro_dispatch import MroDispatch, handles
 
 from agent_comms.coordination_contracts import (
     MAX_IDENTIFIER_CHARS,
@@ -57,18 +56,6 @@ def prepare_fence_token() -> str:
 
 
 def _digest(token: str) -> str:
-    return FenceTokenDigest.handler_for(type(token))(token)
-
-
-class FenceTokenDigest(MroDispatch):
-    @handles(str)
-    @staticmethod
-    def text(token: str) -> str:
-        if not 1 <= len(token) <= MAX_IDENTIFIER_CHARS:
-            raise ValueError("invalid retained fence token")
-        return hashlib.sha256(token.encode("utf-8")).hexdigest()
-
-    @handles(object)
-    @staticmethod
-    def invalid(token: object) -> str:
+    if not isinstance(token, str) or not 1 <= len(token) <= MAX_IDENTIFIER_CHARS:
         raise ValueError("invalid retained fence token")
+    return hashlib.sha256(token.encode("utf-8")).hexdigest()

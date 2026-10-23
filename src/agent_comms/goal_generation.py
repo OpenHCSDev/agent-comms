@@ -32,25 +32,6 @@ if TYPE_CHECKING:
     from .threads import Thread
 
 
-class FromReadyGeneration:
-    @classmethod
-    def after_ready_generation(cls) -> bool:
-        return True
-
-
-class FromReservedGeneration:
-    @classmethod
-    def after_reserved_generation(cls) -> bool:
-        return True
-
-
-class FromBlockedGeneration:
-    @classmethod
-    def after_blocked_generation(cls) -> bool:
-        return True
-
-
-
 @dataclass(frozen=True)
 class GenerationState(DeclaredFamily, LifecycleState, affix="Generation"):
     ready: ClassVar[bool] = False
@@ -108,7 +89,7 @@ class GenerationState(DeclaredFamily, LifecycleState, affix="Generation"):
 
 
 @dataclass(frozen=True)
-class ReadyGeneration(FromReadyGeneration, FromReservedGeneration, FromBlockedGeneration, GenerationState):
+class ReadyGeneration(GenerationState):
     ready = True
 
     def execution(self, source: GoalExecutionSource) -> GoalExecution:
@@ -138,12 +119,8 @@ class ReadyGeneration(FromReadyGeneration, FromReservedGeneration, FromBlockedGe
         return True
 
     @classmethod
-    def successors(cls) -> tuple[type[LifecycleState], ...]:
-        return tuple(FromReadyGeneration.__subclasses__())
-
-    @classmethod
-    def may_become(cls, nxt: LifecycleState | type[LifecycleState]) -> bool:
-        return nxt.after_ready_generation()
+    def successors(cls) -> tuple[type[GenerationState], ...]:
+        return ReadyGeneration, ReservedGeneration, CancelledGeneration
 
     def allows_resume(self, active_turn: bool) -> bool:
         return True
@@ -157,7 +134,7 @@ class ReadyGeneration(FromReadyGeneration, FromReservedGeneration, FromBlockedGe
 
 
 @dataclass(frozen=True)
-class ReservedGeneration(FromReadyGeneration, GenerationState):
+class ReservedGeneration(GenerationState):
     def stopped_permit(self, store: GoalAttemptStore, generation: Generation) -> GoalTurnPermit:
         return store.read_attempt(generation.attempt_identity.attempt_id).stopped_permit()
 
@@ -165,19 +142,15 @@ class ReservedGeneration(FromReadyGeneration, GenerationState):
         return phase.may_become(FailedAttempt())
 
     @classmethod
-    def successors(cls) -> tuple[type[LifecycleState], ...]:
-        return tuple(FromReservedGeneration.__subclasses__())
-
-    @classmethod
-    def may_become(cls, nxt: LifecycleState | type[LifecycleState]) -> bool:
-        return nxt.after_reserved_generation()
+    def successors(cls) -> tuple[type[GenerationState], ...]:
+        return ReadyGeneration, BlockedGeneration, CompletedGeneration, CancelledGeneration
 
     def allows_resume(self, active_turn: bool) -> bool:
         return active_turn
 
 
 @dataclass(frozen=True)
-class BlockedGeneration(FromReservedGeneration, Failed, GenerationState):
+class BlockedGeneration(Failed, GenerationState):
     def resume_status(self, generation: Generation, goal: Goal, ctx: GoalActionContext) -> None:
         """A status-only Resume cannot authorize an uncertain attempt."""
         if generation.attempt_id:
@@ -201,12 +174,8 @@ class BlockedGeneration(FromReservedGeneration, Failed, GenerationState):
         return phase.permits_retirement
 
     @classmethod
-    def successors(cls) -> tuple[type[LifecycleState], ...]:
-        return tuple(FromBlockedGeneration.__subclasses__())
-
-    @classmethod
-    def may_become(cls, nxt: LifecycleState | type[LifecycleState]) -> bool:
-        return nxt.after_blocked_generation()
+    def successors(cls) -> tuple[type[GenerationState], ...]:
+        return ReadyGeneration, CancelledGeneration
 
     def authorize_retry(
         self, store: GoalAttemptStore, generation: Generation, decision: str
@@ -221,13 +190,13 @@ class BlockedGeneration(FromReservedGeneration, Failed, GenerationState):
 
 
 @dataclass(frozen=True)
-class CompletedGeneration(FromReservedGeneration, Complete, Terminal, GenerationState):
+class CompletedGeneration(Complete, Terminal, GenerationState):
     def execution(self, source: GoalExecutionSource) -> GoalExecution:
         return CompletedExecution(source.goal.id)
 
 
 @dataclass(frozen=True)
-class CancelledGeneration(FromReadyGeneration, FromReservedGeneration, FromBlockedGeneration, Terminal, GenerationState):
+class CancelledGeneration(Terminal, GenerationState):
     def validate_attempt(self, attempt_id: str | None) -> None:
         if attempt_id is not None and not attempt_id:
             raise ValueError("A retired attempt identity must be nonempty.")

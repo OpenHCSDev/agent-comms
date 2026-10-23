@@ -24,67 +24,6 @@ if TYPE_CHECKING:
     from .coordination_tables.attempts import ReplayFact
 
 
-class FromPromptStartingAttempt:
-    @classmethod
-    def after_prompt_starting_attempt(cls) -> bool:
-        return True
-
-
-class FromPromptAcceptedAttempt:
-    @classmethod
-    def after_prompt_accepted_attempt(cls) -> bool:
-        return True
-
-
-class FromModelRunningAttempt:
-    @classmethod
-    def after_model_running_attempt(cls) -> bool:
-        return True
-
-
-class FromToolRunningAttempt:
-    @classmethod
-    def after_tool_running_attempt(cls) -> bool:
-        return True
-
-
-class FromCompactionAttempt:
-    @classmethod
-    def after_compaction_attempt(cls) -> bool:
-        return True
-
-
-class FromSettlingAttempt:
-    @classmethod
-    def after_settling_attempt(cls) -> bool:
-        return True
-
-
-class FromModelStalledAttempt:
-    @classmethod
-    def after_model_stalled_attempt(cls) -> bool:
-        return True
-
-
-class FromAbortingAttempt:
-    @classmethod
-    def after_aborting_attempt(cls) -> bool:
-        return True
-
-
-class FromRetryingAttempt:
-    @classmethod
-    def after_retrying_attempt(cls) -> bool:
-        return True
-
-
-class FromProviderUnavailableAttempt:
-    @classmethod
-    def after_provider_unavailable_attempt(cls) -> bool:
-        return True
-
-
-
 @dataclass(frozen=True)
 class AttemptState(CoordinatorVocabulary, LifecycleState, affix="Attempt"):
     @classmethod
@@ -112,7 +51,7 @@ class AttemptState(CoordinatorVocabulary, LifecycleState, affix="Attempt"):
     has_model_context: ClassVar[bool] = False
 
     def observed(self, phase, *, backend_done: bool, process_dead: bool, progress: bool):
-        if phase is not type(self) and not self.may_become(phase):
+        if phase is not type(self) and not issubclass(phase, self.successors()):
             raise IdentityConflict("attempt phase edge is not declared")
         if self.process_dead or self.backend_done:
             # Once either finality fact is recorded, the backend cannot
@@ -209,29 +148,30 @@ class TerminalAttempt(Terminal, AttemptState):
         return cls()
 
 
-class PromptStartingAttempt(FromRetryingAttempt, LiveAttempt):
+class PromptStartingAttempt(LiveAttempt):
     allows_tool_claim = True
     starting = True
 
     @classmethod
-    def successors(cls) -> tuple[type[LifecycleState], ...]:
-        return tuple(FromPromptStartingAttempt.__subclasses__())
+    def successors(cls):
+        return (
+            UnsuccessfulTerminal,
+            PromptAcceptedAttempt,
+            ProviderUnavailableAttempt,
+        )
 
-    @classmethod
-    def may_become(cls, nxt: LifecycleState | type[LifecycleState]) -> bool:
-        return nxt.after_prompt_starting_attempt()
 
-
-class PromptAcceptedAttempt(FromPromptStartingAttempt, LiveAttempt):
+class PromptAcceptedAttempt(LiveAttempt):
     allows_tool_claim = True
 
     @classmethod
-    def successors(cls) -> tuple[type[LifecycleState], ...]:
-        return tuple(FromPromptAcceptedAttempt.__subclasses__())
-
-    @classmethod
-    def may_become(cls, nxt: LifecycleState | type[LifecycleState]) -> bool:
-        return nxt.after_prompt_accepted_attempt()
+    def successors(cls):
+        return (
+            AbortingAttempt,
+            UnsuccessfulTerminal,
+            ModelRunningAttempt,
+            ModelStalledAttempt,
+        )
 
 
 class ContextualAttempt(LiveAttempt):
@@ -240,42 +180,48 @@ class ContextualAttempt(LiveAttempt):
     has_model_context = True
 
 
-class ModelRunningAttempt(FromPromptAcceptedAttempt, FromToolRunningAttempt, FromCompactionAttempt, FromRetryingAttempt, ContextualAttempt):
+class ModelRunningAttempt(ContextualAttempt):
     allows_tool_claim = True
     running = True
 
     @classmethod
-    def successors(cls) -> tuple[type[LifecycleState], ...]:
-        return tuple(FromModelRunningAttempt.__subclasses__())
+    def successors(cls):
+        return (
+            AbortingAttempt,
+            UnsuccessfulTerminal,
+            CompactionAttempt,
+            ModelStalledAttempt,
+            ProviderUnavailableAttempt,
+            SettlingAttempt,
+            ToolRunningAttempt,
+        )
 
-    @classmethod
-    def may_become(cls, nxt: LifecycleState | type[LifecycleState]) -> bool:
-        return nxt.after_model_running_attempt()
 
-
-class ToolRunningAttempt(FromModelRunningAttempt, ContextualAttempt):
+class ToolRunningAttempt(ContextualAttempt):
     allows_tool_claim = True
 
     @classmethod
-    def successors(cls) -> tuple[type[LifecycleState], ...]:
-        return tuple(FromToolRunningAttempt.__subclasses__())
+    def successors(cls):
+        return (
+            AbortingAttempt,
+            UnsuccessfulTerminal,
+            ModelRunningAttempt,
+            SettlingAttempt,
+        )
 
+
+class CompactionAttempt(ContextualAttempt):
     @classmethod
-    def may_become(cls, nxt: LifecycleState | type[LifecycleState]) -> bool:
-        return nxt.after_tool_running_attempt()
+    def successors(cls):
+        return (
+            AbortingAttempt,
+            UnsuccessfulTerminal,
+            ModelRunningAttempt,
+            ModelStalledAttempt,
+        )
 
 
-class CompactionAttempt(FromModelRunningAttempt, ContextualAttempt):
-    @classmethod
-    def successors(cls) -> tuple[type[LifecycleState], ...]:
-        return tuple(FromCompactionAttempt.__subclasses__())
-
-    @classmethod
-    def may_become(cls, nxt: LifecycleState | type[LifecycleState]) -> bool:
-        return nxt.after_compaction_attempt()
-
-
-class SettlingAttempt(FromModelRunningAttempt, FromToolRunningAttempt, ContextualAttempt):
+class SettlingAttempt(ContextualAttempt):
     def require_silent_completion(self) -> None:
         pass
 
@@ -290,55 +236,53 @@ class SettlingAttempt(FromModelRunningAttempt, FromToolRunningAttempt, Contextua
             raise ResponseClaimBlocked()
 
     @classmethod
-    def successors(cls) -> tuple[type[LifecycleState], ...]:
-        return tuple(FromSettlingAttempt.__subclasses__())
+    def successors(cls):
+        return (
+            UnsuccessfulTerminal,
+            SucceededAttempt,
+        )
 
+
+class ModelStalledAttempt(LiveAttempt):
     @classmethod
-    def may_become(cls, nxt: LifecycleState | type[LifecycleState]) -> bool:
-        return nxt.after_settling_attempt()
+    def successors(cls):
+        return (
+            AbortingAttempt,
+            UnsuccessfulTerminal,
+        )
 
 
-class ModelStalledAttempt(FromPromptAcceptedAttempt, FromModelRunningAttempt, FromCompactionAttempt, FromRetryingAttempt, LiveAttempt):
+class AbortingAttempt(LiveAttempt):
     @classmethod
-    def successors(cls) -> tuple[type[LifecycleState], ...]:
-        return tuple(FromModelStalledAttempt.__subclasses__())
+    def successors(cls):
+        return (
+            UnsuccessfulTerminal,
+            RetryingAttempt,
+        )
 
+
+class RetryingAttempt(LiveAttempt):
     @classmethod
-    def may_become(cls, nxt: LifecycleState | type[LifecycleState]) -> bool:
-        return nxt.after_model_stalled_attempt()
+    def successors(cls):
+        return (
+            UnsuccessfulTerminal,
+            ModelRunningAttempt,
+            ModelStalledAttempt,
+            PromptStartingAttempt,
+            ProviderUnavailableAttempt,
+        )
 
 
-class AbortingAttempt(FromPromptAcceptedAttempt, FromModelRunningAttempt, FromToolRunningAttempt, FromCompactionAttempt, FromModelStalledAttempt, LiveAttempt):
+class ProviderUnavailableAttempt(LiveAttempt):
     @classmethod
-    def successors(cls) -> tuple[type[LifecycleState], ...]:
-        return tuple(FromAbortingAttempt.__subclasses__())
-
-    @classmethod
-    def may_become(cls, nxt: LifecycleState | type[LifecycleState]) -> bool:
-        return nxt.after_aborting_attempt()
-
-
-class RetryingAttempt(FromAbortingAttempt, FromProviderUnavailableAttempt, LiveAttempt):
-    @classmethod
-    def successors(cls) -> tuple[type[LifecycleState], ...]:
-        return tuple(FromRetryingAttempt.__subclasses__())
-
-    @classmethod
-    def may_become(cls, nxt: LifecycleState | type[LifecycleState]) -> bool:
-        return nxt.after_retrying_attempt()
+    def successors(cls):
+        return (
+            UnsuccessfulTerminal,
+            RetryingAttempt,
+        )
 
 
-class ProviderUnavailableAttempt(FromPromptStartingAttempt, FromModelRunningAttempt, FromRetryingAttempt, LiveAttempt):
-    @classmethod
-    def successors(cls) -> tuple[type[LifecycleState], ...]:
-        return tuple(FromProviderUnavailableAttempt.__subclasses__())
-
-    @classmethod
-    def may_become(cls, nxt: LifecycleState | type[LifecycleState]) -> bool:
-        return nxt.after_provider_unavailable_attempt()
-
-
-class SucceededAttempt(FromSettlingAttempt, TerminalAttempt):
+class SucceededAttempt(TerminalAttempt):
     @property
     def release_wording(self) -> str:
         return "Released files after a completed turn"
@@ -354,7 +298,7 @@ class SucceededAttempt(FromSettlingAttempt, TerminalAttempt):
     succeeded = True
 
 
-class UnsuccessfulTerminal(FromPromptStartingAttempt, FromPromptAcceptedAttempt, FromModelRunningAttempt, FromToolRunningAttempt, FromCompactionAttempt, FromSettlingAttempt, FromModelStalledAttempt, FromAbortingAttempt, FromRetryingAttempt, FromProviderUnavailableAttempt, Failed, TerminalAttempt):
+class UnsuccessfulTerminal(Failed, TerminalAttempt):
     """A terminal attempt that did not succeed, irrespective of retry authority."""
 
     def disposition(self, snapshot, attempt):

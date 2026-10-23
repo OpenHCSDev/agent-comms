@@ -28,21 +28,13 @@ class ThreadOwnedState(StoreOwner):
         """Remove every row these stopped declarations own; idempotent."""
 
     @classmethod
-    def consulted_owners(cls) -> frozenset[type[ThreadOwnedState]]:
-        """The declared storage owners this held store supplies through inheritance."""
-        return frozenset(
-            owner for owner in ThreadOwnedState.members_with(ThreadOwnedState)
-            if owner in cls.__mro__
-        )
-
-    @classmethod
     def require_complete(cls, held: Iterable[ThreadOwnedState]) -> None:
         """Fail before any removal when a declared owner is not consulted."""
-        consulted = frozenset(owner for store in held for owner in store.consulted_owners())
+        held = tuple(held)
         missing = sorted(
             owner.__qualname__
             for owner in cls.members_with(cls)
-            if owner not in consulted
+            if not any(isinstance(store, owner) for store in held)
         )
         if missing:
             raise RelationViolationError(

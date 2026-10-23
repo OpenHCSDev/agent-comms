@@ -39,31 +39,6 @@ if TYPE_CHECKING:
     from .presentation import MessageNotification
 
 
-class FromTriagePendingAssignment:
-    @classmethod
-    def after_triage_pending_assignment(cls) -> bool:
-        return True
-
-
-class FromFullPendingAssignment:
-    @classmethod
-    def after_full_pending_assignment(cls) -> bool:
-        return True
-
-
-class FromEngagedAssignment:
-    @classmethod
-    def after_engaged_assignment(cls) -> bool:
-        return True
-
-
-class FromDeferredAssignment:
-    @classmethod
-    def after_deferred_assignment(cls) -> bool:
-        return True
-
-
-
 @dataclass(frozen=True)
 class PendingDecision:
     mode: WakePolicy
@@ -318,7 +293,7 @@ class ChangedNotification:
         )
 
 
-class TriagePendingAssignment(FromDeferredAssignment, PreengagementTarget, PendingNotification, AssignmentState):
+class TriagePendingAssignment(PreengagementTarget, PendingNotification, AssignmentState):
     def wake_frame(self, source: Delivered, obligation: ResponseObligation | None) -> tuple[str, str]:
         if obligation is not None:
             raise IdentityConflict("bounded triage cannot inherit a response obligation")
@@ -333,15 +308,11 @@ class TriagePendingAssignment(FromDeferredAssignment, PreengagementTarget, Pendi
         return BoundedTriageWake()
 
     @classmethod
-    def successors(cls) -> tuple[type[LifecycleState], ...]:
-        return tuple(FromTriagePendingAssignment.__subclasses__())
-
-    @classmethod
-    def may_become(cls, nxt: LifecycleState | type[LifecycleState]) -> bool:
-        return nxt.after_triage_pending_assignment()
+    def successors(cls):
+        return IgnoredAssignment, EngagedAssignment, DeferredAssignment, FailedAssignment
 
 
-class FullPendingAssignment(FromDeferredAssignment, PreengagementTarget, PendingNotification, AssignmentState):
+class FullPendingAssignment(PreengagementTarget, PendingNotification, AssignmentState):
     def writable_pending_assignments(self, assignment: WakeAssignment) -> tuple[WakeAssignment, ...]:
         return (assignment,)
 
@@ -350,15 +321,11 @@ class FullPendingAssignment(FromDeferredAssignment, PreengagementTarget, Pending
         return FullWake()
 
     @classmethod
-    def successors(cls) -> tuple[type[LifecycleState], ...]:
-        return tuple(FromFullPendingAssignment.__subclasses__())
-
-    @classmethod
-    def may_become(cls, nxt: LifecycleState | type[LifecycleState]) -> bool:
-        return nxt.after_full_pending_assignment()
+    def successors(cls):
+        return EngagedAssignment, DeferredAssignment, FailedAssignment
 
 
-class IgnoredAssignment(FromTriagePendingAssignment, ChangedNotification, PreengagementTarget, Terminal, AssignmentState):
+class IgnoredAssignment(ChangedNotification, PreengagementTarget, Terminal, AssignmentState):
     notification_state = IgnoredProgress
 
     @property
@@ -427,7 +394,7 @@ class BoundAssignment(ChangedNotification, AssignmentDecision, AssignmentState):
         return cls(mode.engage(execution_id, target))
 
 
-class EngagedAssignment(FromTriagePendingAssignment, FromFullPendingAssignment, FromDeferredAssignment, SelectedResponseNotification, BoundAssignment):
+class EngagedAssignment(SelectedResponseNotification, BoundAssignment):
     notification_state = EngagedProgress
     def wake_frame(self, source: Delivered, obligation: ResponseObligation | None) -> tuple[str, str]:
         if obligation is None:
@@ -451,15 +418,11 @@ class EngagedAssignment(FromTriagePendingAssignment, FromFullPendingAssignment, 
 
 
     @classmethod
-    def successors(cls) -> tuple[type[LifecycleState], ...]:
-        return tuple(FromEngagedAssignment.__subclasses__())
-
-    @classmethod
-    def may_become(cls, nxt: LifecycleState | type[LifecycleState]) -> bool:
-        return nxt.after_engaged_assignment()
+    def successors(cls):
+        return CompletedAssignment, DeferredAssignment, FailedAssignment
 
 
-class CompletedAssignment(FromEngagedAssignment, Complete, Terminal, BoundAssignment):
+class CompletedAssignment(Complete, Terminal, BoundAssignment):
     def notification(
         self,
         recipient: FrozenRecipient,
@@ -494,7 +457,7 @@ class InterruptedAssignment(
         )
 
 
-class DeferredAssignment(FromTriagePendingAssignment, FromFullPendingAssignment, FromEngagedAssignment, 
+class DeferredAssignment(
     EngageableAssignment, Deferred, SelectedResponseNotification, InterruptedAssignment
 ):
     def requires_selected_triage(self) -> bool:
@@ -505,16 +468,18 @@ class DeferredAssignment(FromTriagePendingAssignment, FromFullPendingAssignment,
     notification_state = InterruptedProgress
 
     @classmethod
-    def successors(cls) -> tuple[type[LifecycleState], ...]:
-        return tuple(FromDeferredAssignment.__subclasses__())
-
-    @classmethod
-    def may_become(cls, nxt: LifecycleState | type[LifecycleState]) -> bool:
-        return nxt.after_deferred_assignment()
+    def successors(cls):
+        return (
+            TriagePendingAssignment,
+            FullPendingAssignment,
+            EngagedAssignment,
+            DeliveredAssignment,
+            FailedAssignment,
+        )
 
 
 @dataclass(frozen=True)
-class DeliveredAssignment(FromDeferredAssignment, 
+class DeliveredAssignment(
     ChangedNotification, PreengagementTarget, Terminal, AssignmentDecision, AssignmentState
 ):
     """The recipient's running turn took this message as one of its inputs.
@@ -562,7 +527,7 @@ class DeliveredAssignment(FromDeferredAssignment,
         return cls(PendingDecision(mode))
 
 
-class FailedAssignment(FromTriagePendingAssignment, FromFullPendingAssignment, FromEngagedAssignment, FromDeferredAssignment, Failed, Terminal, InterruptedAssignment):
+class FailedAssignment(Failed, Terminal, InterruptedAssignment):
     def notification(
         self,
         recipient: FrozenRecipient,

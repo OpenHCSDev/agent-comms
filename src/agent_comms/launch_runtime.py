@@ -26,7 +26,6 @@ from agent_comms.field_codec import (
     WireOmitDefault,
 )
 from agent_comms.launch_root import LaunchRoot
-from agent_comms.mro_dispatch import MroDispatch, handles
 from agent_comms.thread_text import (
     AbsentText,
     GivenText,
@@ -356,40 +355,24 @@ class RestartEnvironment(EnvironmentRecord):
         return result
 
 
-class TagListText(TextRepresentation[frozenset[str]], MroDispatch):
+class TagListText(TextRepresentation[frozenset[str]]):
     @classmethod
     def encode(cls, value: object) -> str:
-        return cls.handler_for(type(value))(value)
-
-    @handles(frozenset)
-    @staticmethod
-    def tags(value: frozenset[str]) -> str:
+        if not isinstance(value, frozenset):
+            raise TypeError("Expected a set of tags")
         return ",".join(sorted(value))
-
-    @handles(object)
-    @staticmethod
-    def invalid(value: object) -> str:
-        raise TypeError("Expected a set of tags")
 
     @classmethod
     def from_text(cls, value: str) -> frozenset[str]:
         return frozenset(tag.strip() for tag in value.split(",") if tag.strip())
 
 
-class FlagText(TextRepresentation[bool], MroDispatch):
+class FlagText(TextRepresentation[bool]):
     @classmethod
     def encode(cls, value: object) -> str:
-        return cls.handler_for(type(value))(value)
-
-    @handles(bool)
-    @staticmethod
-    def flag(value: bool) -> str:
+        if not isinstance(value, bool):
+            raise TypeError("Expected a flag")
         return str(int(value))
-
-    @handles(object)
-    @staticmethod
-    def invalid(value: object) -> str:
-        raise TypeError("Expected a flag")
 
     @classmethod
     def from_text(cls, value: str) -> bool:

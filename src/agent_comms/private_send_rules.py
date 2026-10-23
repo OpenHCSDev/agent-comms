@@ -20,30 +20,8 @@ if TYPE_CHECKING:
     from .private_send_stage import NativeSendStage
 
 
-class RegistryIdentityRules:
-    """Shared applicability of RegistryIdentityCheck and its reservation rules."""
-
-class RegistryClaimRules:
-    """Shared applicability of RegistryClaimCheck and its reservation rules."""
-
-class GoalRegistryIdentityRules:
-    """Shared applicability of GoalRegistryIdentityCheck and its reservation rules."""
-
-class NativeIdentityRules:
-    """Shared applicability of NativeIdentityCheck and its reservation rules."""
-
-class NativeReservationRules:
-    """Shared applicability of NativeReservationCheck and its reservation rules."""
-
-class NativeBindingRules:
-    """Shared applicability of NativeBindingCheck and its reservation rules."""
-
-class NativeClaimRules:
-    """Shared applicability of NativeClaimCheck and its reservation rules."""
-
-
 @dataclass(frozen=True, kw_only=True)
-class RegistryIdentityCheck(RegistryIdentityRules, RuleCheck):
+class RegistryIdentityCheck(RuleCheck):
     expected: Thread
     actual: Thread
     expected_claim: int
@@ -64,7 +42,7 @@ class RegistryIdentityCheck(RegistryIdentityRules, RuleCheck):
         return self.actual.thinking_level == self.expected.thinking_level
 
 
-class RegistryClaimCheck(RegistryClaimRules, RegistryIdentityCheck):
+class RegistryClaimCheck(RegistryIdentityCheck):
     """A claimed turn uses its captured settings, not the next-turn selection.
 
     Before a claim, configuration must still match. After a claim, the exact
@@ -101,7 +79,7 @@ class RunningTurnRegistryCheck(RegistryClaimCheck):
         )
 
 
-class GoalRegistryIdentityCheck(GoalRegistryIdentityRules, RegistryIdentityCheck):
+class GoalRegistryIdentityCheck(RegistryIdentityCheck):
     """Fresh turn claims capture the goal, not the earlier turn state."""
 
 
@@ -109,21 +87,24 @@ class GoalRegistryClaimCheck(GoalRegistryIdentityCheck, RegistryClaimCheck):
     """Selected input/awareness also captures the goal; reply settlement does not."""
 
 
-class RegistryIncarnationRule(RegistryIdentityRules, ReservationRule):
+class RegistryIncarnationRule(ReservationRule):
+    check_type = RegistryIdentityCheck
     explanation = "The registered thread incarnation changed before native send."
 
     def violated(self, check: RegistryIdentityCheck) -> bool:
         return check.actual.incarnation != check.expected.incarnation
 
 
-class RegistryNameRule(RegistryIdentityRules, ReservationRule):
+class RegistryNameRule(ReservationRule):
+    check_type = RegistryIdentityCheck
     explanation = "The captured owner name changed."
 
     def violated(self, check: RegistryIdentityCheck) -> bool:
         return not check.name_matches()
 
 
-class RegistryProcessRule(RegistryIdentityRules, ReservationRule):
+class RegistryProcessRule(ReservationRule):
+    check_type = RegistryIdentityCheck
     explanation = "The registered process is not the captured current owner process."
 
     def violated(self, check: RegistryIdentityCheck) -> bool:
@@ -133,56 +114,64 @@ class RegistryProcessRule(RegistryIdentityRules, ReservationRule):
         )
 
 
-class RegistryClaimRule(RegistryIdentityRules, ReservationRule):
+class RegistryClaimRule(ReservationRule):
+    check_type = RegistryIdentityCheck
     explanation = "The registry claim_scope generation changed."
 
     def violated(self, check: RegistryIdentityCheck) -> bool:
         return check.claim_generation != check.expected_claim
 
 
-class RegistryRoleRule(RegistryIdentityRules, ReservationRule):
+class RegistryRoleRule(ReservationRule):
+    check_type = RegistryIdentityCheck
     explanation = "The captured owner role changed."
 
     def violated(self, check: RegistryIdentityCheck) -> bool:
         return check.actual.role != check.expected.role
 
 
-class RegistryWorktreeRule(RegistryIdentityRules, ReservationRule):
+class RegistryWorktreeRule(ReservationRule):
+    check_type = RegistryIdentityCheck
     explanation = "The captured owner worktree changed."
 
     def violated(self, check: RegistryIdentityCheck) -> bool:
         return not check.worktree_matches()
 
 
-class RegistryModelRule(RegistryIdentityRules, ReservationRule):
+class RegistryModelRule(ReservationRule):
+    check_type = RegistryIdentityCheck
     explanation = "The captured owner's selected model changed."
 
     def violated(self, check: RegistryIdentityCheck) -> bool:
         return not check.model_matches()
 
 
-class RegistryThinkingRule(RegistryIdentityRules, ReservationRule):
+class RegistryThinkingRule(ReservationRule):
+    check_type = RegistryIdentityCheck
     explanation = "The captured owner's thinking level changed."
 
     def violated(self, check: RegistryIdentityCheck) -> bool:
         return not check.thinking_matches()
 
 
-class RegistrySessionRule(RegistryIdentityRules, ReservationRule):
+class RegistrySessionRule(ReservationRule):
+    check_type = RegistryIdentityCheck
     explanation = "The captured owner's native session changed."
 
     def violated(self, check: RegistryIdentityCheck) -> bool:
         return check.actual.session_file != check.expected.session_file
 
 
-class RegistryTurnRule(RegistryClaimRules, ReservationRule):
+class RegistryTurnRule(ReservationRule):
+    check_type = RegistryClaimCheck
     explanation = "The exact captured active turn changed."
 
     def violated(self, check: RegistryClaimCheck) -> bool:
         return not check.actual.same_turn(check.expected)
 
 
-class RegistryGoalRule(GoalRegistryIdentityRules, ReservationRule):
+class RegistryGoalRule(ReservationRule):
+    check_type = GoalRegistryIdentityCheck
     explanation = "The captured goal changed."
 
     def violated(self, check: GoalRegistryIdentityCheck) -> bool:
@@ -190,68 +179,75 @@ class RegistryGoalRule(GoalRegistryIdentityRules, ReservationRule):
 
 
 @dataclass(frozen=True, kw_only=True)
-class NativeIdentityCheck(NativeIdentityRules, RuleCheck):
+class NativeIdentityCheck(RuleCheck):
     row: NativeInputRecord
     stage: NativeSendStage
     owner: OwnerGenerations
 
 
 @dataclass(frozen=True, kw_only=True)
-class NativeReservationCheck(NativeReservationRules, NativeIdentityCheck):
+class NativeReservationCheck(NativeIdentityCheck):
     row: NativeRuntimeInput
     token_digest: str
 
 
 @dataclass(frozen=True, kw_only=True)
-class NativeBindingCheck(NativeBindingRules, NativeIdentityCheck):
+class NativeBindingCheck(NativeIdentityCheck):
     row: PromptBinding
     wire_root_id: str
     prompt_digest: TextDigest
 
 
-class NativeInputIdentityRule(NativeIdentityRules, ReservationRule):
+class NativeInputIdentityRule(ReservationRule):
+    check_type = NativeIdentityCheck
     explanation = "The original native input assignment, stage, attempt or owner changed."
 
     def violated(self, check: NativeIdentityCheck) -> bool:
         return check.row.identity != check.stage.identity(check.row.input_id, check.owner)
 
 
-class NativeTokenRule(NativeReservationRules, ReservationRule):
+class NativeTokenRule(ReservationRule):
+    check_type = NativeReservationCheck
     explanation = "The reserved native input token changed."
 
     def violated(self, check: NativeReservationCheck) -> bool:
         return check.row.owner_token_digest != check.token_digest
 
 
-class NativeAlreadyBoundRule(NativeReservationRules, ReservationRule):
+class NativeAlreadyBoundRule(ReservationRule):
+    check_type = NativeReservationCheck
     explanation = "The native input was already bound to a sending claim_scope."
 
     def violated(self, check: NativeReservationCheck) -> bool:
         return check.row.sent_owner_claimed_generation.reservation_violation()
 
 
-class NativeAlreadyProvenRule(NativeReservationRules, ReservationRule):
+class NativeAlreadyProvenRule(ReservationRule):
+    check_type = NativeReservationCheck
     explanation = "The native input already has a proven session result."
 
     def violated(self, check: NativeReservationCheck) -> bool:
         return check.row.reference.recorded
 
 
-class NativeAlreadyDecidedRule(NativeReservationRules, ReservationRule):
+class NativeAlreadyDecidedRule(ReservationRule):
+    check_type = NativeReservationCheck
     explanation = "The native triage input already has a verdict."
 
     def violated(self, check: NativeReservationCheck) -> bool:
         return check.row.verdict.decided
 
 
-class NativeBindingRootRule(NativeBindingRules, ReservationRule):
+class NativeBindingRootRule(ReservationRule):
+    check_type = NativeBindingCheck
     explanation = "The prelaunch binding belongs to a different wire root."
 
     def violated(self, check: NativeBindingCheck) -> bool:
         return check.row.wire_root_id != check.wire_root_id
 
 
-class NativeBindingContentRule(NativeBindingRules, ReservationRule):
+class NativeBindingContentRule(ReservationRule):
+    check_type = NativeBindingCheck
     explanation = "The native request digest differs from its durable prelaunch binding."
 
     def violated(self, check: NativeBindingCheck) -> bool:
@@ -259,40 +255,45 @@ class NativeBindingContentRule(NativeBindingRules, ReservationRule):
 
 
 @dataclass(frozen=True, kw_only=True)
-class NativeClaimCheck(NativeClaimRules, RuleCheck):
+class NativeClaimCheck(RuleCheck):
     captured: WakeAssignment
     current: WakeAssignment
 
 
-class NativeClaimRecipientRule(NativeClaimRules, ReservationRule):
+class NativeClaimRecipientRule(ReservationRule):
+    check_type = NativeClaimCheck
     explanation = "The selected claim recipient changed."
 
     def violated(self, check: NativeClaimCheck) -> bool:
         return check.current.recipient != check.captured.recipient
 
 
-class NativeClaimLookupRule(NativeClaimRules, ReservationRule):
+class NativeClaimLookupRule(ReservationRule):
+    check_type = NativeClaimCheck
     explanation = "The selected claim recipient lookup changed."
 
     def violated(self, check: NativeClaimCheck) -> bool:
         return check.current.recipient_lookup != check.captured.recipient_lookup
 
 
-class NativeClaimSequenceRule(NativeClaimRules, ReservationRule):
+class NativeClaimSequenceRule(ReservationRule):
+    check_type = NativeClaimCheck
     explanation = "The selected claim source sequence changed."
 
     def violated(self, check: NativeClaimCheck) -> bool:
         return check.current.wire_seq != check.captured.wire_seq
 
 
-class NativeClaimMessageRule(NativeClaimRules, ReservationRule):
+class NativeClaimMessageRule(ReservationRule):
+    check_type = NativeClaimCheck
     explanation = "The selected claim committed message changed."
 
     def violated(self, check: NativeClaimCheck) -> bool:
         return check.current.message_id != check.captured.message_id
 
 
-class NativeClaimModeRule(NativeClaimRules, ReservationRule):
+class NativeClaimModeRule(ReservationRule):
+    check_type = NativeClaimCheck
     explanation = "The selected claim wake mode changed."
 
     def violated(self, check: NativeClaimCheck) -> bool:

@@ -16,25 +16,6 @@ if TYPE_CHECKING:
     from .goal_attempts import AttemptRecord
 
 
-class FromReservedAttempt:
-    @classmethod
-    def after_reserved_attempt(cls) -> bool:
-        return True
-
-
-class FromClaimedAttempt:
-    @classmethod
-    def after_claimed_attempt(cls) -> bool:
-        return True
-
-
-class FromFailedAttempt:
-    @classmethod
-    def after_failed_attempt(cls) -> bool:
-        return True
-
-
-
 class ReadyAttempt(ABC):
     """Attempt outcomes that record their own evidence before a fresh grant."""
 
@@ -54,27 +35,19 @@ class GoalAttemptPhase(DeclaredFamily, LifecycleState, affix="Attempt"):
 
 class ReservedAttempt(GoalAttemptPhase):
     @classmethod
-    def successors(cls) -> tuple[type[LifecycleState], ...]:
-        return tuple(FromReservedAttempt.__subclasses__())
-
-    @classmethod
-    def may_become(cls, nxt: LifecycleState | type[LifecycleState]) -> bool:
-        return nxt.after_reserved_attempt()
+    def successors(cls):
+        return ClaimedAttempt, FailedAttempt, ResolvedAttempt
 
 
-class ClaimedAttempt(FromReservedAttempt, GoalAttemptPhase):
+class ClaimedAttempt(GoalAttemptPhase):
     launched = True
 
     @classmethod
-    def successors(cls) -> tuple[type[LifecycleState], ...]:
-        return tuple(FromClaimedAttempt.__subclasses__())
-
-    @classmethod
-    def may_become(cls, nxt: LifecycleState | type[LifecycleState]) -> bool:
-        return nxt.after_claimed_attempt()
+    def successors(cls):
+        return FailedAttempt, SucceededAttempt, ResolvedAttempt
 
 
-class FailedAttempt(FromReservedAttempt, FromClaimedAttempt, Failed, ReadyAttempt, GoalAttemptPhase):
+class FailedAttempt(Failed, ReadyAttempt, GoalAttemptPhase):
     permits_retirement: ClassVar[bool] = True
 
     def require_retryable(self) -> None:
@@ -84,20 +57,16 @@ class FailedAttempt(FromReservedAttempt, FromClaimedAttempt, Failed, ReadyAttemp
         attempt.advance(db, self, resolution=note)
 
     @classmethod
-    def successors(cls) -> tuple[type[LifecycleState], ...]:
-        return tuple(FromFailedAttempt.__subclasses__())
-
-    @classmethod
-    def may_become(cls, nxt: LifecycleState | type[LifecycleState]) -> bool:
-        return nxt.after_failed_attempt()
+    def successors(cls):
+        return (ResolvedAttempt,)
 
 
-class SucceededAttempt(FromClaimedAttempt, Terminal, ReadyAttempt, GoalAttemptPhase):
+class SucceededAttempt(Terminal, ReadyAttempt, GoalAttemptPhase):
     verified_progress = True
 
     def record_ready(self, attempt: AttemptRecord, db: sqlite3.Connection, note: str) -> None:
         attempt.advance(db, self, progress_witness=note)
 
 
-class ResolvedAttempt(FromReservedAttempt, FromClaimedAttempt, FromFailedAttempt, Terminal, GoalAttemptPhase):
+class ResolvedAttempt(Terminal, GoalAttemptPhase):
     pass

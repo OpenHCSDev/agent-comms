@@ -19,25 +19,6 @@ if TYPE_CHECKING:
     from .coordination_tables.responses import ResponseObligation
 
 
-class FromPendingResponse:
-    @classmethod
-    def after_pending_response(cls) -> bool:
-        return True
-
-
-class FromPublishingResponse:
-    @classmethod
-    def after_publishing_response(cls) -> bool:
-        return True
-
-
-class FromDeferredResponse:
-    @classmethod
-    def after_deferred_response(cls) -> bool:
-        return True
-
-
-
 @dataclass(frozen=True, slots=True)
 class Unpublished(NullMember):
     """An obligation has no publication acknowledgement until it is published."""
@@ -118,22 +99,18 @@ class ResponseState(CoordinatorVocabulary, LifecycleState, affix="Response"):
             raise IntegrityViolationError("publication acknowledgement exists iff published")
 
 
-class PendingResponse(FromDeferredResponse, Pending, ResponseState):
+class PendingResponse(Pending, ResponseState):
     retryable = True
 
     def require_preparation(self) -> None:
         pass
 
     @classmethod
-    def successors(cls) -> tuple[type[LifecycleState], ...]:
-        return tuple(FromPendingResponse.__subclasses__())
-
-    @classmethod
-    def may_become(cls, nxt: LifecycleState | type[LifecycleState]) -> bool:
-        return nxt.after_pending_response()
+    def successors(cls):
+        return PublishingResponse, DeferredResponse, SilentResponse, FailedResponse
 
 
-class PublishingResponse(FromPendingResponse, ResponseState):
+class PublishingResponse(ResponseState):
     publishing = True
     allows_intent = True
     requires_intent = True
@@ -145,15 +122,11 @@ class PublishingResponse(FromPendingResponse, ResponseState):
         pass
 
     @classmethod
-    def successors(cls) -> tuple[type[LifecycleState], ...]:
-        return tuple(FromPublishingResponse.__subclasses__())
-
-    @classmethod
-    def may_become(cls, nxt: LifecycleState | type[LifecycleState]) -> bool:
-        return nxt.after_publishing_response()
+    def successors(cls):
+        return PublishedResponse, FailedResponse
 
 
-class DeferredResponse(FromPendingResponse, Deferred, ResponseState):
+class DeferredResponse(Deferred, ResponseState):
     retryable = True
 
     @classmethod
@@ -171,16 +144,12 @@ class DeferredResponse(FromPendingResponse, Deferred, ResponseState):
         )
 
     @classmethod
-    def successors(cls) -> tuple[type[LifecycleState], ...]:
-        return tuple(FromDeferredResponse.__subclasses__())
-
-    @classmethod
-    def may_become(cls, nxt: LifecycleState | type[LifecycleState]) -> bool:
-        return nxt.after_deferred_response()
+    def successors(cls):
+        return PendingResponse, SilentResponse, FailedResponse
 
 
 @dataclass(frozen=True)
-class PublishedResponse(FromPublishingResponse, Successful, ResponseState):
+class PublishedResponse(Successful, ResponseState):
     message_id: str
     seq: int
     allows_intent = True
@@ -218,9 +187,9 @@ class PublishedResponse(FromPublishingResponse, Successful, ResponseState):
         return cls(message_id, seq)
 
 
-class SilentResponse(FromPendingResponse, FromDeferredResponse, Successful, ResponseState):
+class SilentResponse(Successful, ResponseState):
     pass
 
 
-class FailedResponse(FromPendingResponse, FromPublishingResponse, FromDeferredResponse, Failed, Terminal, ResponseState):
+class FailedResponse(Failed, Terminal, ResponseState):
     allows_intent = True

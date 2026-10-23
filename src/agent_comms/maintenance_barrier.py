@@ -42,31 +42,6 @@ from .store_files import (
 )
 
 
-class FromDrainingPhase:
-    @classmethod
-    def after_draining_phase(cls) -> bool:
-        return True
-
-
-class FromPausedPhase:
-    @classmethod
-    def after_paused_phase(cls) -> bool:
-        return True
-
-
-class FromInstallingPhase:
-    @classmethod
-    def after_installing_phase(cls) -> bool:
-        return True
-
-
-class FromReadyPhase:
-    @classmethod
-    def after_ready_phase(cls) -> bool:
-        return True
-
-
-
 class MaintenanceHeldError(RelationViolationError, ToolRefusedError):
     """The bus is in maintenance: its readers close and wait for READY."""
 
@@ -168,7 +143,7 @@ class MaintenancePhase(DeclaredFamily, LifecycleState, affix="Phase"):
         """A failed upgrade's restore runs under the hold it began, still in place here."""
 
 
-class DrainingPhase(FromReadyPhase, MaintenancePhase):
+class DrainingPhase(MaintenancePhase):
     running_sends = GrantedSends
 
     @classmethod
@@ -179,35 +154,25 @@ class DrainingPhase(FromReadyPhase, MaintenancePhase):
         return state
 
     @classmethod
-    def successors(cls) -> tuple[type[LifecycleState], ...]:
-        return tuple(FromDrainingPhase.__subclasses__())
+    def successors(cls):
+        # A wire-compatible cutover clears directly; format migrations may
+        # proceed through Paused and Installing before they become READY.
+        return (PausedPhase, ReadyPhase)
 
+
+class PausedPhase(MaintenancePhase):
     @classmethod
-    def may_become(cls, nxt: LifecycleState | type[LifecycleState]) -> bool:
-        return nxt.after_draining_phase()
+    def successors(cls):
+        return (InstallingPhase,)
 
 
-class PausedPhase(FromDrainingPhase, MaintenancePhase):
+class InstallingPhase(MaintenancePhase):
     @classmethod
-    def successors(cls) -> tuple[type[LifecycleState], ...]:
-        return tuple(FromPausedPhase.__subclasses__())
-
-    @classmethod
-    def may_become(cls, nxt: LifecycleState | type[LifecycleState]) -> bool:
-        return nxt.after_paused_phase()
+    def successors(cls):
+        return (ReadyPhase,)
 
 
-class InstallingPhase(FromPausedPhase, MaintenancePhase):
-    @classmethod
-    def successors(cls) -> tuple[type[LifecycleState], ...]:
-        return tuple(FromInstallingPhase.__subclasses__())
-
-    @classmethod
-    def may_become(cls, nxt: LifecycleState | type[LifecycleState]) -> bool:
-        return nxt.after_installing_phase()
-
-
-class ReadyPhase(FromDrainingPhase, FromInstallingPhase, MaintenancePhase):
+class ReadyPhase(MaintenancePhase):
     new_sends = running_sends = GrantedSends
 
     @classmethod
@@ -228,12 +193,8 @@ class ReadyPhase(FromDrainingPhase, FromInstallingPhase, MaintenancePhase):
         return barrier.begin(operator)
 
     @classmethod
-    def successors(cls) -> tuple[type[LifecycleState], ...]:
-        return tuple(FromReadyPhase.__subclasses__())
-
-    @classmethod
-    def may_become(cls, nxt: LifecycleState | type[LifecycleState]) -> bool:
-        return nxt.after_ready_phase()
+    def successors(cls):
+        return (DrainingPhase,)
 
     @classmethod
     def hold_restore(cls, barrier: MaintenanceBarrier, operator: MaintenanceOperator,

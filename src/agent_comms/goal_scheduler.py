@@ -16,7 +16,6 @@ from typing import TYPE_CHECKING
 from .agent_event_updates import AcpEventConsumer
 from .child_process import ProcessIdentity
 from .coordinator import Coordination
-from .mro_dispatch import MroDispatch, handles
 from .errors import RelationViolationError
 from .goal_actions import (
     EditGoalAction,
@@ -55,18 +54,7 @@ class GoalSessionPublication:
         return self.snapshot.standby()
 
 
-class GoalScheduler(MroDispatch):
-    @handles(str)
-    @staticmethod
-    def goal_text(text: str) -> None:
-        if not text.strip():
-            raise ValueError("A goal requires text.")
-
-    @handles(object)
-    @staticmethod
-    def invalid_goal_text(text: object) -> None:
-        raise ValueError("A goal requires text.")
-
+class GoalScheduler:
     def __init__(self, comms: Comms, effects: TurnEffects):
         self.comms = comms
         self.effects = effects
@@ -145,7 +133,8 @@ class GoalScheduler(MroDispatch):
 
     async def set_goal(self, session_id: str, text: str) -> Goal:
         """Commit a UI goal through its executing owner and private launch ledger."""
-        self.handler_for(type(text))(text)
+        if not isinstance(text, str) or not text.strip():
+            raise ValueError("A goal requires text.")
         name = self.sessions.require(session_id)
         goal = await Coordination.run_worker(lambda: self.comms.goals.update_goal(
             name,
