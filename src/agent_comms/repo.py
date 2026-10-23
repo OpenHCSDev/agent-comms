@@ -85,7 +85,7 @@ class Repo(BaseModel):
         """Its GitHub name comes from the checkout's own origin remote."""
         url = cls.git(checkout, "remote", "get-url", "origin").strip()
         github = url.removesuffix(".git").replace(":", "/").split("/")[-2:]
-        return cls(checkout=checkout.resolve(), github=RepositoryName.from_wire("/".join(github)))
+        return cls(checkout=checkout, github=RepositoryName.from_wire("/".join(github)))
 
 
 class CheckoutHoldsWorkError(Exception):
