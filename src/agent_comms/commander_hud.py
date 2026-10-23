@@ -6,12 +6,13 @@ import time
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
-from agent_comms.commander.config import CommanderConfig
 from agent_comms.commander.vibe_check import OverloadDegradation
 from agent_comms.field_codec import projected
 from agent_comms.plan_phases import PlanPhase
+from agent_comms.phase_evidence import MainTree, PlanReading
 from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.thread_identity import ThreadIncarnation
+from agent_comms.repo import Repo
 from agent_comms.todos import OrderProgress, ProgressRead, PullRequest, Todo, UnmergedListedPullRequest
 from agent_comms.tool_result import ToolResult
 from agent_comms.turn_digests import OrderEditCountRead
@@ -123,7 +124,8 @@ class CommanderHud(ToolResult):
                 tuple(request for request in requests.values() if not request.draft),
                 tuple(request for request in requests.values() if request.draft),
             ))
-        reading = CommanderConfig.read_root(comms.root).plan_reading(history)
+        repository = Repo.declaring(snapshot.commander_project.require().repos, PlanPhase.__module__)
+        reading = PlanReading(history, MainTree.of(repository))
         phases = tuple(CommanderPhase(
             phase, phase.done(reading), phase.ready(reading),
             tuple(dict.fromkeys(todo.held().owner_identity for todo in phase.holding(reading))),

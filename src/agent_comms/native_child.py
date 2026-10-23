@@ -16,7 +16,7 @@ from .child_process import AttachedChild, ChildOutcome, join_retirement
 from .launch_runtime import INHERITED_ENVIRONMENT
 from .native_attestation import NativeAttestation, PendingAttestation
 from .native_pi import NativePiRpcLaunch
-from .native_failures import NativePiUnavailable
+from .native_failures import NativePiUnavailable, NativeRequestFailure
 from .native_session_reopen import NativeSessionIdentity
 from .pi_rpc import PiRpcChannel
 from .private_path import PrivateSocketRole
@@ -205,9 +205,11 @@ class PiChild:
             await self.shutdown()
             stderr = await self.proc.stderr_tail()
             error.add_note(f"Original native child stderr:\n{stderr or '(empty)'}")
-            if isinstance(error, NativePiUnavailable):
-                error.native_stderr = stderr
-            raise
+            try:
+                raise
+            except NativeRequestFailure as failure:
+                failure.attach_stderr(stderr)
+                raise
 
 
 @dataclass

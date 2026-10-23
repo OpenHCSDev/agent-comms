@@ -45,7 +45,6 @@ from . import pi_events as pi
 from . import turn_failure as failures
 from .agent_backend import TurnInbox
 from .acp_failure import UnrecordedFailureSource
-from .child_process import TimedOutOutcome
 from .coordinator import Coordination
 from .extension_ui import ExtensionUiSession
 from .field_codec import Id128Text, MalformedRecord, boundary_decoder
@@ -618,8 +617,10 @@ class NativeSession(MroDispatch, ABC):
             retention.retain(self.native, self.native_session)
         if not self.native_session.child_state.retained:
             outcome = await self.native.shutdown(graceful=True)
-            if isinstance(outcome, TimedOutOutcome):
-                self.output.record_failure(failures.BackendDidNotExit("agent backend did not exit"))
+            outcome.report_shutdown(partial(
+                self.output.record_failure,
+                failures.BackendDidNotExit("agent backend did not exit"),
+            ))
 
     async def finish_diagnostics(self) -> None:
         self.error_text = (

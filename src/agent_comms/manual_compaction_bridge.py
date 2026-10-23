@@ -100,13 +100,9 @@ async def _compact_started(runner, session_id, thread_name, instructions):
                 owner.thread, instructions.strip() if instructions else None,
             )
         finally:
-            placed = isinstance(outcome, PlacedCompaction)
-            await consumer.dispatch(events.CompactionEnd(
-                reason=ManualCompactionReason,
-                aborted=not placed,
-                summary=outcome.summary if placed else None,
-            ))
-        if placed:
+            completion = outcome.completion_event(events.CompactionEnd, ManualCompactionReason)
+            await consumer.dispatch(completion)
+        if not completion.aborted:
             await runner.runtime.session_update(
                 session_id=session_id,
                 update=AgentMessageChunk(

@@ -3,18 +3,17 @@
 from agent_comms.bus import Bus
 
 import json
-import os
 import subprocess
-import sys
 import time
 from contextlib import nullcontext
 from pathlib import Path
 
 import pytest
 
+from cli_command import core
 from order_scope_fixture import FIX_SCOPE
 from agent_comms.change_report import FileLine
-from agent_comms.commander.config import CommanderConfig
+from agent_comms.threads import ParkedThreadWorkState, ReadyThreadWorkState
 from agent_comms.commander.standing import (
     CheckoutHeldWheelSpin,
     ReassignedWheelSpin,
@@ -211,15 +210,14 @@ def test_dirty_then_unpushed_then_pushed_linked_checkout(checkout_bus: Comms, tm
             assert git(checkout, 'status', '--porcelain') == ''
             assert_retained(c)
             git(checkout, 'push', '-q', 'origin', 'worker-work')
-            config = CommanderConfig.read_root(root)
-            config.model_copy(update={'parked': frozenset({'idle'})}).write(tmp_path / 'copy-home')
+            c.registry.set_work_state('idle', ParkedThreadWorkState())
             waiting = UnownedWheelSpin.violations(c, 'lead')
             assert len(waiting) == 1
             assert isinstance(waiting[0], WaitingUnownedWheelSpin)
             UnownedOrderWatch().watch_pass(lambda: nullcontext(c))
             assert c.goals.todos.get('P2').holder is None
             beat()
-            config.write(tmp_path / 'copy-home')
+            c.registry.set_work_state('idle', ReadyThreadWorkState())
             available = UnownedWheelSpin.violations(c, 'lead')
             assert len(available) == 1
             assert isinstance(available[0], ReassignedWheelSpin)
@@ -230,10 +228,9 @@ def test_dirty_then_unpushed_then_pushed_linked_checkout(checkout_bus: Comms, tm
             assert assigned.holder == 'idle'
             assert c.registry.require('idle').goal.require().text
             beat()
-        history = subprocess.run(
-            (sys.executable, '-m', 'agent_comms.cli', '--root', str(root), 'history',
-             '--target', '@commander-heartbeat', '--as', 'lead', '--limit', '10'),
-            env=os.environ.copy(), capture_output=True, text=True, timeout=30, check=True)
+        history = core('--root', str(root), 'history',
+                       '--target', '@commander-heartbeat', '--as', 'lead', '--limit', '10')
+        assert history.returncode == 0, history.stderr
         assert f'WORK HELD: P2 worker retains work in {checkout}' in history.stdout
         assert f'NO LONGER CURRENT: WORK HELD: P2 worker retains work in {checkout}' in history.stdout
         print('PRIVATE HEARTBEAT', history.stdout)

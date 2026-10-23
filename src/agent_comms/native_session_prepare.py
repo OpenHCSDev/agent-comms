@@ -78,8 +78,7 @@ class NativeSessionPreparation(backend.NativeSession):
         async with session_writer_fence(launch.session.session_file):
             async with aclosing(preparation.run()) as stream:
                 async for event in stream:
-                    if isinstance(event, events.Done) and not event.ok:
-                        raise NativePiUnavailable(event.text)
+                    event.require_preparation_success()
             state = preparation.native.attestation.require_state()
             await observe(state, state.agent_info(preparation))
             return state

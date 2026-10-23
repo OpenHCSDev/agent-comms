@@ -3,6 +3,7 @@
 import ast
 import json
 import os
+import socket
 import subprocess
 import sys
 import time
@@ -63,10 +64,71 @@ def test_string_field_metadata_resolves_imports_and_refuses_opaque_keys(source, 
     assert StringFieldMetadata.count(source.encode(), "example.py") == expected
 
 
+SOURCE = Path(__file__).resolve().parents[2]
+
+
+def ratchet_environment() -> dict[str, str]:
+    """The command's environment: this checkout's src before the inherited path."""
+    return {**os.environ, "PYTHONPATH": os.pathsep.join(
+        (str(SOURCE / "src"), os.environ["PYTHONPATH"]))}
+
+
+class RatchetServer:
+    """The ratchet's command line served by one interpreter per test worker (ratchet_server.py).
+
+    Each comparison still forks its own measuring pool; it no longer pays the interpreter's
+    start. The command's own process tree and log are proven by the tests that launch it.
+    """
+
+    script = Path(__file__).with_name("ratchet_server.py")
+
+    def __init__(self, directory: Path):
+        self.directory = directory
+        self.socket = directory / "ratchet.sock"
+        self.child = self.launch()
+
+    def launch(self) -> SpawnedProcess:
+        self.socket.unlink(missing_ok=True)
+        child = SpawnedProcess.launch((sys.executable, str(self.script), str(self.socket)),
+                                      env=ratchet_environment(), output=subprocess.PIPE)
+        assert child.process.stdout.readline() == b"ready\n", child.process.communicate()
+        return child
+
+    def run(self, cwd: Path, argv: tuple[str, ...], *,
+            timeout: float) -> subprocess.CompletedProcess[str]:
+        stdout, stderr = self.directory / "stdout", self.directory / "stderr"
+        request = dict(cwd=str(cwd), argv=list(argv), env=ratchet_environment(),
+                       stdout=str(stdout), stderr=str(stderr))
+        try:
+            with socket.socket(socket.AF_UNIX) as connection:
+                connection.settimeout(timeout)
+                connection.connect(str(self.socket))
+                connection.sendall(json.dumps(request).encode() + b"\n")
+                reply = json.loads(connection.makefile("rb").readline())
+        except Exception:
+            # A comparison still running would answer the next test's request late.
+            self.close()
+            self.child = self.launch()
+            raise
+        return subprocess.CompletedProcess(argv, reply["returncode"],
+                                           stdout.read_text(), stderr.read_text())
+
+    def close(self) -> None:
+        self.child.close()
+
+
+@pytest.fixture(scope="module")
+def ratchet(tmp_path_factory) -> Iterator[RatchetServer]:
+    server = RatchetServer(tmp_path_factory.mktemp("ratchet-server"))
+    yield server
+    server.close()
+
+
 class Repository:
-    def __init__(self, path: Path, root: str):
+    def __init__(self, path: Path, root: str, ratchet: RatchetServer):
         self.path = path
         self.root = root
+        self.ratchet = ratchet
         self.git("init", "-q")
         self.git("config", "user.email", "ratchet@example.invalid")
         self.git("config", "user.name", "Ratchet test")
@@ -88,30 +150,27 @@ class Repository:
         self.git("-c", "commit.gpgsign=false", "commit", "-qm", "test", "--allow-empty")
         return self.git("rev-parse", "HEAD")
 
+    def arguments(self, base: str, head: str) -> tuple[str, ...]:
+        # pytest-xdist runs these comparisons side by side; each keeps a narrow pool.
+        return ("--root", self.root, "--base", base, "--head", head, "--workers", "2")
+
     @contextmanager
     def comparing(self, base: str, head: str) -> Iterator[SpawnedProcess]:
-        source = Path(__file__).resolve().parents[2]
-        command = (
-            sys.executable, str(source / "tools/debt_ratchet.py"),
-            "--root", self.root, "--base", base, "--head", head,
-            # pytest-xdist runs these comparisons side by side; each keeps a narrow pool.
-            "--workers", "2",
-        )
-        environment = {**os.environ, "PYTHONPATH": os.pathsep.join(
-            (str(source / "src"), os.environ["PYTHONPATH"]))}
-        with SpawnedProcess.launch(command, cwd=self.path, env=environment,
+        """The command launched as its own process, for the tests of its process tree."""
+        command = (sys.executable, str(SOURCE / "tools/debt_ratchet.py"),
+                   *self.arguments(base, head))
+        with SpawnedProcess.launch(command, cwd=self.path, env=ratchet_environment(),
                                    output=subprocess.PIPE) as child:
             yield child
 
     def compare(self, base: str, head: str, *, timeout: float = 120) -> tuple[int, dict]:
-        with self.comparing(base, head) as child:
-            result = child.collect(timeout=timeout)
+        result = self.ratchet.run(self.path, self.arguments(base, head), timeout=timeout)
         assert result.returncode in (0, 1), result.stderr[-2000:]
         return result.returncode, json.loads(result.stdout)
 
 
-def test_compare_timeout_retires_pool_probe_and_defiant_grandchild(tmp_path: Path) -> None:
-    repo = Repository(tmp_path, "src/sample")
+def test_compare_timeout_retires_pool_probe_and_defiant_grandchild(tmp_path: Path, ratchet) -> None:
+    repo = Repository(tmp_path, "src/sample", ratchet)
     announcement = tmp_path / "probe-tree.json"
     declaration = (
         "from dataclasses import dataclass\nfrom typing import ClassVar\n"
@@ -157,8 +216,8 @@ def test_compare_timeout_retires_pool_probe_and_defiant_grandchild(tmp_path: Pat
 
 
 @pytest.fixture(params=["src/agent_comms", "src/toad"])
-def repo(tmp_path: Path, request) -> Repository:
-    return Repository(tmp_path, request.param)
+def repo(tmp_path: Path, request, ratchet) -> Repository:
+    return Repository(tmp_path, request.param, ratchet)
 
 
 def test_batch_sources_keep_exact_git_bytes_and_path_names(repo: Repository, monkeypatch) -> None:
@@ -193,8 +252,8 @@ def test_batch_sources_keep_exact_git_bytes_and_path_names(repo: Repository, mon
         GitMeasure.sources(repo.path, revision, selected | {f'{repo.root}/missing.py'})
 
 
-def test_format_probe_keeps_parent_dependencies_and_reads_archived_source(tmp_path, monkeypatch):
-    repo = Repository(tmp_path, "src/agent_comms")
+def test_format_probe_keeps_parent_dependencies_and_reads_archived_source(tmp_path, monkeypatch, ratchet):
+    repo = Repository(tmp_path, "src/agent_comms", ratchet)
     source = subprocess.check_output(
         ["git", "archive", "HEAD", "--", "src/agent_comms"], timeout=20
     )
@@ -372,9 +431,9 @@ def owner(name: str, lines: int, indent: str = "") -> str:
 
 @pytest.mark.parametrize("root", ["src/agent_comms", "src/toad", "src/textual"])
 def test_family_flattening_cannot_offset_another_file_or_admit_a_named_facade(
-    tmp_path: Path, root: str
+    tmp_path: Path, root: str, ratchet
 ):
-    repo = Repository(tmp_path, root)
+    repo = Repository(tmp_path, root, ratchet)
     from tools.debt_ratchet import FamilyFlattened
     from audit.measures import FamilyFlattened as AuditFamilyFlattened
 
@@ -1221,13 +1280,10 @@ def test_growth_lines_end_the_merged_log(repo: Repository) -> None:
     report is flushed first, so what grew is what a reader without the job log sees."""
     base = repo.commit({"check.py": 'value = row["a"]\n'})
     head = repo.commit({"check.py": "value = type(x) is int\n"})
-    source = Path(__file__).resolve().parents[2]
-    environment = {**os.environ, "PYTHONPATH": os.pathsep.join(
-        (str(source / "src"), os.environ["PYTHONPATH"]))}
     merged = subprocess.run(
-        (sys.executable, str(source / "tools/debt_ratchet.py"),
+        (sys.executable, str(SOURCE / "tools/debt_ratchet.py"),
          "--root", repo.root, "--base", base, "--head", head),
-        cwd=repo.path, env=environment, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+        cwd=repo.path, env=ratchet_environment(), stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
         text=True, timeout=120,
     )
     assert merged.returncode == 1

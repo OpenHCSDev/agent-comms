@@ -2,22 +2,19 @@
 
 from agent_comms.bus import Bus
 from concurrent.futures import ThreadPoolExecutor
-from contextlib import redirect_stderr, redirect_stdout
 from dataclasses import replace
-from io import StringIO
 import json
 import os
 from pathlib import Path
 import subprocess
 import sys
 import time
-from unittest.mock import patch
 
 import pytest
 
 from source_revision_fixture import SourceRepository
 from agent_comms.change_report import FileLine
-from agent_comms.commander.cli import main
+from cli_command import commander
 from agent_comms.commander.order import Commander, CommanderContext, OrderFile
 from agent_comms.comms import Comms
 from agent_comms.field_codec import FieldCodec
@@ -62,8 +59,7 @@ def fork_bus(tmp_path):
     request = comms.goals.todos.add_request(
         comms.registry.require('lead').incarnation, 'Repair the commander workflow')
     core = Repo.of(Path(__file__).parents[1])
-    config = Commander.on_machine('lead', (source, core), comms.root, tmp_path)
-    config.path_in(comms.root).write_text(config.model_dump_json())
+    Commander.on_root('lead', (source, core), comms.root)
     now = time.time()
     order = PendingProblemOrder(
         id='first-order', owner=source.scope().shape.parents[0], scope=source.scope(),
@@ -83,20 +79,7 @@ def fork_bus(tmp_path):
 
 def command(comms, *args):
     """Exercise the real parser and state without cold-importing Core for every verb."""
-    argv = ['agent-comms-commander', '--root', str(comms.root), *args]
-    output, error = StringIO(), StringIO()
-    code = 0
-    with patch.object(sys, 'argv', argv), redirect_stdout(output), redirect_stderr(error):
-        try:
-            main()
-        except SystemExit as exited:
-            # CPython prints a non-integer SystemExit value and returns 1.
-            if isinstance(exited.code, str):
-                print(exited.code, file=error)
-                code = 1
-            else:
-                code = exited.code or 0
-    return subprocess.CompletedProcess(argv, code, output.getvalue(), error.getvalue())
+    return commander('--root', str(comms.root), *args)
 
 
 def process_command(comms, *args):

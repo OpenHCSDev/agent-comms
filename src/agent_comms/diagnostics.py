@@ -18,6 +18,8 @@ from uuid import uuid4
 from .child_process import Platform
 from .field_codec import FieldCodec, Id128Text
 from .locked_store import DurableFile, PatternFile
+from .native_failures import NativeRequestFailure
+from .mro_dispatch import MroDispatch, handles
 from .store_files import AtomicFile
 from .turn_failure import TurnFailure
 
@@ -157,7 +159,7 @@ def record_terminal_failure(
     }
     if native_response is not None:
         document["native_response"] = native_response.rejection_details()
-    document.update(_source_error_evidence(source_error))
+    document.update(DiagnosticDocument.source_error_evidence(source_error))
     return DiagnosticDocument.write(root, turn_id, document)
 
 
@@ -181,7 +183,7 @@ def record_drain_failure(
             replace(diagnostic, reason=str(source_error)), "artifact"
         ),
         "outcome": "inbox observation failed; this record grants no retry authority",
-        **_source_error_evidence(source_error),
+        **DiagnosticDocument.source_error_evidence(source_error),
     }
     digest = hashlib.sha256(json.dumps(document, sort_keys=True).encode()).hexdigest()
     path = DiagnosticDocument.path_in(root, name=f"drain-{digest}")
@@ -194,23 +196,30 @@ def record_drain_failure(
     return path.resolve()
 
 
-def _source_error_evidence(source_error: BaseException | None) -> dict:
-    if source_error is None:
-        return {}
-    document = {"source_error": "".join(
-        TracebackException.from_exception(source_error, capture_locals=False).format(chain=True)
-    )}
-    from .native_failures import NativePiUnavailable
-
-    if isinstance(source_error, NativePiUnavailable):
-        document["native"] = source_error.diagnostic_evidence
-    return document
-
-
-class DiagnosticDocument(DurableFile, PatternFile):
+class DiagnosticDocument(DurableFile, PatternFile, MroDispatch):
     """Publish diagnostic documents through their single declared location."""
 
     filename = "diagnostics/{name}.json"
+
+    @classmethod
+    def source_error_evidence(cls, source_error: BaseException | None) -> dict:
+        if source_error is None:
+            return {}
+        document = {"source_error": "".join(
+            TracebackException.from_exception(source_error, capture_locals=False).format(chain=True)
+        )}
+        document.update(cls.handler_for(type(source_error))(source_error))
+        return document
+
+    @handles(NativeRequestFailure)
+    @staticmethod
+    def native_evidence(error: NativeRequestFailure) -> dict:
+        return {"native": error.diagnostic_evidence()}
+
+    @handles(BaseException)
+    @staticmethod
+    def ordinary_evidence(error: BaseException) -> dict:
+        return {}
 
     @classmethod
     def write(cls, root: Path, name: str, document: dict) -> Path:
