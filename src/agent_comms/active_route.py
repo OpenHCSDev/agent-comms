@@ -11,14 +11,14 @@ import json
 import os
 import time
 import uuid
-from abc import ABC, abstractmethod
+from abc import ABC
 from collections.abc import Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import TYPE_CHECKING, Annotated, ClassVar
 
-from .child_process import Platform, ProcessIdentity
+from .child_process import Platform
 from .coordination_errors import CoordinationError
 from .declared_family import DeclaredFamily
 from .errors import RelationViolationError
@@ -264,69 +264,6 @@ def guard_default_route_write(
         os.close(directory)
 
 
-class RouteLockHolder(DeclaredFamily, affix="LockHolder"):
-    """An observed Linux flock owner; diagnosis, not authority to signal it."""
-
-    @abstractmethod
-    def describe(self) -> str: ...
-
-
-@dataclass(frozen=True, slots=True)
-class IdentifiedLockHolder(RouteLockHolder):
-    pid: int
-
-    def describe(self) -> str:
-        return f"PID {self.pid}: {self.detail()}"
-
-    @abstractmethod
-    def detail(self) -> str: ...
-
-
-@dataclass(frozen=True, slots=True)
-class RunningLockHolder(IdentifiedLockHolder):
-    command: str
-
-    def detail(self) -> str:
-        return self.command
-
-
-class ExitedLockHolder(IdentifiedLockHolder):
-    def detail(self) -> str:
-        return "process exited"
-
-
-class UnidentifiedLockHolder(RouteLockHolder):
-    def describe(self) -> str:
-        return "kernel did not identify the owner"
-
-
-def route_lock_holders(directory: int) -> tuple[RouteLockHolder, ...]:
-    """Identify actual flock owners of this opened directory, not merely open FDs.
-
-    An OFD lock with no reported PID, inaccessible /proc, or a concurrent exit
-    is unknown; absence from this snapshot never proves sole ownership of the lock.
-    """
-    info = os.fstat(directory)
-    identity = f"{os.major(info.st_dev):02x}:{os.minor(info.st_dev):02x}:{info.st_ino}"
-    holders = []
-    with open('/proc/locks', encoding='ascii') as locks:
-        for line in locks:
-            fields = line.split()
-            if len(fields) < 8 or fields[1] != 'FLOCK' or fields[5] != identity:
-                continue
-            pid = int(fields[4])
-            if pid < 0:
-                holders.append(UnidentifiedLockHolder())
-                continue
-            try:
-                command = " ".join(ProcessIdentity.capture(pid).arguments())
-            except ProcessLookupError:
-                holders.append(ExitedLockHolder(pid))
-            else:
-                holders.append(RunningLockHolder(pid, command))
-    return tuple(holders)
-
-
 class RouteReadersHold(CoordinationError):
     """A client still reads the default route; a route change never waits for it."""
 
@@ -336,7 +273,7 @@ def acquire_exclusive_route_lock(directory: int) -> None:
     try:
         fcntl.flock(directory, fcntl.LOCK_EX | fcntl.LOCK_NB)
     except BlockingIOError as error:
-        detail = '; '.join(holder.describe() for holder in route_lock_holders(directory))
+        detail = '; '.join(holder.describe() for holder in Platform.current().lock_holders(directory))
         raise RouteReadersHold(
             f'default-route readers hold the route: '
             f'{detail or "unknown (lock changed during inspection)"}; close them and rerun'

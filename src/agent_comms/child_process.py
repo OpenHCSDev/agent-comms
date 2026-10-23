@@ -315,6 +315,42 @@ class GroupMember(ProcessIdentity, declared_name=None):
         return (self,) if platform.matches(self) else ()
 
 
+class LockHolder(DeclaredFamily, affix="LockHolder"):
+    """An observed flock owner; diagnosis, not authority to signal it."""
+
+    @abstractmethod
+    def describe(self) -> str: ...
+
+
+@dataclass(frozen=True, slots=True)
+class IdentifiedLockHolder(LockHolder):
+    pid: int
+
+    def describe(self) -> str:
+        return f"PID {self.pid}: {self.detail()}"
+
+    @abstractmethod
+    def detail(self) -> str: ...
+
+
+@dataclass(frozen=True, slots=True)
+class RunningLockHolder(IdentifiedLockHolder):
+    command: str
+
+    def detail(self) -> str:
+        return self.command
+
+
+class ExitedLockHolder(IdentifiedLockHolder):
+    def detail(self) -> str:
+        return "process exited"
+
+
+class UnidentifiedLockHolder(LockHolder):
+    def describe(self) -> str:
+        return "kernel did not identify the owner"
+
+
 class PidfdHandles:
     @staticmethod
     def open_pidfd(pid: int) -> int:
@@ -428,6 +464,9 @@ class Platform(DeclaredFamily, affix="Platform"):
 
     @abstractmethod
     def environment(self, process: ProcessIdentity) -> dict[str, str]: ...
+
+    def lock_holders(self, descriptor: int) -> tuple[LockHolder, ...]:
+        return (UnidentifiedLockHolder(),)
 
     def parent_identity(self, pid: int) -> ProcessIdentity:
         raise NotImplementedError('This platform does not expose exact parent identities')
@@ -591,6 +630,32 @@ class LinuxPlatform(PidfdHandles, PosixPlatform):
             raise ProcessLookupError(process.pid) from None
         values = (item.split(b"=", 1) for item in raw.split(b"\0") if b"=" in item)
         return {os.fsdecode(key): os.fsdecode(value) for key, value in values}
+
+    def lock_holders(self, descriptor: int) -> tuple[LockHolder, ...]:
+        """Identify actual flock owners of this opened file, not merely open FDs.
+
+        An OFD lock with no reported PID, inaccessible /proc, or a concurrent exit
+        is unknown; absence never proves sole ownership of the lock.
+        """
+        info = os.fstat(descriptor)
+        identity = f"{os.major(info.st_dev):02x}:{os.minor(info.st_dev):02x}:{info.st_ino}"
+        holders = []
+        with open('/proc/locks', encoding='ascii') as locks:
+            for line in locks:
+                fields = line.split()
+                if len(fields) < 8 or fields[1] != 'FLOCK' or fields[5] != identity:
+                    continue
+                pid = int(fields[4])
+                if pid < 0:
+                    holders.append(UnidentifiedLockHolder())
+                    continue
+                try:
+                    command = " ".join(self.arguments(self.identity(pid)))
+                except ProcessLookupError:
+                    holders.append(ExitedLockHolder(pid))
+                else:
+                    holders.append(RunningLockHolder(pid, command))
+        return tuple(holders)
 
     def parent_identity(self, pid: int) -> ProcessIdentity:
         return self.identity(self._stat(pid).parent)
