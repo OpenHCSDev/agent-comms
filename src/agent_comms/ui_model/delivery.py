@@ -8,7 +8,6 @@ from pydantic import JsonValue
 
 from agent_comms.declared_family import DeclaredFamily
 from agent_comms.field_codec import FieldCodec
-from agent_comms.input_attempt import HistoricalInput, UnresolvedInput
 from agent_comms.input_disposition import DeliveryOverview
 from agent_comms.thread_presentation import ThreadPresentation, ThreadPresentationStatus
 
@@ -36,26 +35,17 @@ class FailedInputDeliveryReadState(InputDeliveryReadState):
 
 
 @dataclass(frozen=True)
-class InputDelivery:
-    """The owner's delivery overview (``InputDocument.delivery_overview``), decoded once.
+class DeliveryView:
+    """The owner's decoded delivery overview and this view's read state."""
 
-    ``owner_queue`` says the current inputs were checked against the live
-    owner's turn and queue, so they await a start; otherwise they are only
-    unconfirmed. Rows are the owner's public input records.
-    """
-
-    inputs: tuple[UnresolvedInput, ...] = ()
-    historical_count: int = 0
-    dismissed_historical_count: int = 0
-    historical_inputs: tuple[HistoricalInput, ...] = ()
-    owner_queue: bool = False
+    overview: DeliveryOverview
     read_state: InputDeliveryReadState = LoadedInputDeliveryReadState()
 
     @property
     def error(self) -> str:
         return self.read_state.error
 
-    def failed(self, error: Exception) -> InputDelivery:
+    def failed(self, error: Exception) -> DeliveryView:
         """Retain the last acquired input evidence when its refresh fails."""
         return replace(self, read_state=FailedInputDeliveryReadState(str(error)))
 
@@ -65,28 +55,23 @@ class InputDelivery:
         return self.read_state.present_status(status).present_attention(ordinary)
 
     @classmethod
-    def from_wire(cls, overview: Mapping[str, JsonValue]) -> InputDelivery:
-        decoded = FieldCodec.decode(DeliveryOverview, overview)
-        return cls(
-            decoded.inputs,
-            decoded.historical_count,
-            decoded.dismissed_historical_count,
-            decoded.historical_inputs,
-            decoded.current_scope.owner_queue,
-        )
+    def from_wire(cls, overview: Mapping[str, JsonValue]) -> DeliveryView:
+        return cls(FieldCodec.decode(DeliveryOverview, overview))
 
     @property
     def current(self) -> int:
-        return len(self.inputs)
+        return len(self.overview.inputs)
 
     @property
     def notices(self) -> int:
         """Earlier notices still shown, else those cleared."""
-        return self.historical_count or self.dismissed_historical_count
+        return self.overview.historical_count or self.overview.dismissed_historical_count
 
     @property
     def shown(self) -> bool:
-        return bool(self.current or self.historical_count or self.dismissed_historical_count)
+        return bool(
+            self.current or self.overview.historical_count or self.overview.dismissed_historical_count
+        )
 
     @property
     def summary(self) -> str:
@@ -95,12 +80,12 @@ class InputDelivery:
 
     @property
     def pending(self) -> str:
-        return "awaiting start" if self.owner_queue else "unconfirmed"
+        return self.overview.current_scope.pending_label
 
     @property
     def notice_label(self) -> str:
-        return "earlier notices" if self.owner_queue else "historical notices"
+        return self.overview.current_scope.notices_label
 
-    def history_changed(self, other: InputDelivery) -> bool:
-        return (self.historical_count, self.dismissed_historical_count) != (
-            other.historical_count, other.dismissed_historical_count)
+    def history_changed(self, other: DeliveryView) -> bool:
+        return (self.overview.historical_count, self.overview.dismissed_historical_count) != (
+            other.overview.historical_count, other.overview.dismissed_historical_count)
