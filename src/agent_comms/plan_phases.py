@@ -215,8 +215,8 @@ class StoryPhase(CommanderNativePhase):
     after = (RecordPlanePhase,)
     evidence = AllEvidence(
         (
-            PatternPresent(r"\bcomms_order_story\b", OUTSIDE_PARITY),
-            PatternPresent(r"\bcomms_fleet_story\b", OUTSIDE_PARITY),
+            PatternPresent(r"^class CommsOrderStoryTool\b", ("src/agent_comms/tools.py",)),
+            PatternPresent(r"^class CommsFleetStoryTool\b", ("src/agent_comms/tools.py",)),
             PatternAbsent(r"^def roast\b", (COMMANDER + "judge.py",)),
         )
     )

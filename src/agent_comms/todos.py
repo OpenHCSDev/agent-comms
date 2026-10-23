@@ -76,7 +76,7 @@ from agent_comms.lifecycle_capability import LifecycleCapability, Pending
 from agent_comms.message_reference import MessageReference
 from agent_comms.messages import InfoKind, Message
 from agent_comms.order_runs import OrderRun
-from agent_comms.order_story import ProblemStory, StoryEvent, StoryLine, StorySource
+from agent_comms.order_story import FleetEvent, ProblemStory, StoryEvent, StoryLine, StorySource
 from agent_comms.owner_requests import (
     OpenRequestState,
     OwnerRequestId,
@@ -2619,7 +2619,7 @@ class CitedStrike(TodoOperation, declared_name=None):
 
 
 @dataclass(frozen=True)
-class StrikeTodo(CitedStrike, StoryEvent):
+class StrikeTodo(CitedStrike, FleetEvent):
     actor: ThreadIncarnation
     previous: Assignment
     reason: str
@@ -2914,7 +2914,7 @@ class DroppedVerdict(ToolCallVerdict):
 
 
 @dataclass(frozen=True)
-class SendBackVerdict(ToolCallVerdict, CitedStrike):
+class SendBackVerdict(ToolCallVerdict, CitedStrike, FleetEvent):
     """The tool call goes back; the same write strikes the holder and revises the order Goal."""
     reason: StrikeReason
 
@@ -2936,7 +2936,16 @@ class SendBackVerdict(ToolCallVerdict, CitedStrike):
         return replace(struck, order=order, prior_orders=current.orders_before(order))
 
     def record(self, goals: Goals, problem: str) -> Todo:
-        return goals.send_back(problem, self)
+        changed = goals.send_back(problem, self)
+        audience = self.audience.of(self.previous.owner, changed)
+        target = audience.target
+        goals.bus.publisher.publish_ordinary(
+            Message(sender=self.actor.name, target=target.name,
+                    body=target.addressed(audience.threads, f"{changed.id}: {self.story_text()}"),
+                    type=InfoKind),
+            destination=target, origin=AgentOrigin(),
+        )
+        return changed
 
 
 @dataclass(frozen=True)
@@ -3341,16 +3350,24 @@ class Todo(TypedTable):
     def pending(self):
         return bool(self.order.items_with(Pending, self))
 
-    def story(self) -> ProblemStory:
+    def story_sources(self) -> tuple[StorySource, ...]:
         implied = frozenset(strike for verdict in self.verdicts
                             for strike in verdict.implied_strikes())
-        sources: tuple[StorySource, ...] = (
+        return (
             self.order, *(strike for strike in self.strikes if strike not in implied),
             *self.voided, *self.released, *self.verdicts,
         )
-        events = tuple(sorted((event for source in sources for event in source.story()),
-                              key=lambda event: event.at.chronology()))
+
+    def story(self) -> ProblemStory:
+        events = tuple(sorted(
+            (event for source in self.story_sources() for event in source.story()),
+            key=lambda event: event.at.chronology(),
+        ))
         return ProblemStory(self.id, self.order.line, events)
+
+    def fleet_story(self) -> tuple[StoryLine, ...]:
+        return tuple(StoryLine(event.at, f"{self.id}: {event.text}")
+                     for source in self.story_sources() for event in source.fleet_story())
 
     @property
     def review_window(self) -> float:

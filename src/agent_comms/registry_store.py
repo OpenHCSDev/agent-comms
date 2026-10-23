@@ -162,7 +162,7 @@ class RegistryEdit:
         identity = TurnIdentity(current.incarnation, current.turn_generation + 1)
         turn = ActiveTurn(
             turn_id,
-            current.require_process().pid,
+            current.require_process(),
             routing=routing,
             claimed_generation=RecordedGeneration(self.document.claims.generations[current.name]),
             turn_generation=RecordedGeneration(identity.generation),

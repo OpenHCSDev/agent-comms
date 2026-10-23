@@ -20,7 +20,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Annotated
 
 
-from .child_process import OutlivesLauncherLifetime, ProcessIdentity, SpawnedProcess
+from .child_process import OutlivesLauncherLifetime, Platform, ProcessIdentity, SpawnedProcess
 from .comms import Comms, wire
 from .coordination_errors import CoordinationError
 from .coordinator import Coordination
@@ -241,15 +241,11 @@ class RestartQueue:
             raise FileExistsError(destination)
         os.rename(path, destination)
         for parent in (path.parent, destination.parent):
-            descriptor = os.open(parent, os.O_RDONLY | os.O_DIRECTORY)
-            try:
-                os.fsync(descriptor)
-            finally:
-                os.close(descriptor)
+            Platform.current().sync_directory(parent)
 
     def save(self, record: QueuedRestart) -> None:
         path = self.active_path(record.selection.identity.incarnation.require_recorded())
-        _atomic_write_text(path, json.dumps(FieldCodec.encode(record), sort_keys=True), fsync_parent=True)
+        _atomic_write_text(path, json.dumps(FieldCodec.encode(record), sort_keys=True))
         if not record.state.items_with(Active, record):
             self.move(path, record)
 
