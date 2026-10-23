@@ -61,7 +61,7 @@ class ThreadNameOwners(Carry):
                 tables = (
                     (Participants, OwnerGenerations, ExecutionRecord, AttemptRecord,
                      NativeRuntimeInput, CurrentNativeCursor, AwarenessClaimGenerations)
-                    if path.name == CoordinationStore.filename else (PromptBinding,)
+                    if path.name == CoordinationStore.filename else (SnapshotMeta, PromptBinding)
                 )
                 present = tuple(table for table in tables if table.stored_columns(db))
                 pending = tuple(table for table in present if SQLiteSchemaObject.differences(
