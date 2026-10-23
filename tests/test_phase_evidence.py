@@ -27,7 +27,7 @@ from agent_comms.phase_evidence import (
     UnreadableEvidenceError,
 )
 from agent_comms.pinned_audit import GodFunction
-from agent_comms.plan_phases import FLAG, ExternalBoundariesPhase, PlanPhase
+from agent_comms.plan_phases import BusDeletionPhase, FLAG, ExternalBoundariesPhase, PlanPhase
 from agent_comms.repo import Repo
 from agent_comms.repository_name import RepositoryName
 
@@ -98,6 +98,35 @@ def main_of(tmp_path, files):
     git(tmp_path, "update-ref", "refs/remotes/origin/main", git(tmp_path, "rev-parse", "HEAD"))
     return PlanReading((), MainTree.of(
         Repo(checkout=tmp_path, github=RepositoryName.from_wire("OpenHCSDev/agent-comms"))))
+
+
+def test_bus_deletion_evidence_reads_uses_without_matching_its_own_declaration(tmp_path):
+    reading = main_of(tmp_path, {
+        "src/phase.py": "from agent_comms.phase_evidence import BusStorageAbsent\n"
+                        "evidence = BusStorageAbsent()\n"
+                        "# Delete bus.jsonl and bus_meta once the carry is accepted.\n"
+                        "def documentation():\n    'bus.jsonl'\n",
+    })
+    assert reading.holds(BusDeletionPhase.evidence)
+    # Every production spelling found during the owner trace must make the phase fail.
+    for source in (
+        "class WireLog:\n    pass\n",
+        "def has_private_wire_fields(value):\n    return False\n",
+        "from somewhere.wire_log import WireLog\n",
+        "from somewhere.wire_log import another_name\n",
+        "def use(owner):\n    return owner._wire_lock_path\n",
+        "def use(owner):\n    return owner / 'wire'\n",
+        "def use(owner):\n    return owner.with_name('wire')\n",
+        "def use(owner):\n    return owner.joinpath('wire')\n",
+        "def use(owner):\n    return owner / 'bus.jsonl'\n",
+        "def use(owner):\n    return owner / 'bus_meta.json'\n",
+    ):
+        (tmp_path / "src/uses.py").write_text(source)
+        git(tmp_path, "add", ".")
+        git(tmp_path, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-qm", "use")
+        git(tmp_path, "update-ref", "refs/remotes/origin/main", git(tmp_path, "rev-parse", "HEAD"))
+        changed = PlanReading((), MainTree.of(reading.main.repo))
+        assert not changed.holds(BusDeletionPhase.evidence), source
 
 
 def test_source_shape_evidence_reads_declarations_on_main(tmp_path):

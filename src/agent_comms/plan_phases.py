@@ -14,6 +14,7 @@ from typing import TYPE_CHECKING, ClassVar
 from agent_comms.declared_family import DeclaredFamily
 from agent_comms.phase_evidence import (
     AllEvidence,
+    BusStorageAbsent,
     ClassFlagsAbsent,
     CommitMerged,
     NoAbsenceProbes,
@@ -322,9 +323,7 @@ class BusDeletionPhase(VirtualBusPhase):
                     "src/agent_comms/wire_record.py",
                 )
             ),
-            PatternAbsent(
-                r"bus\.jsonl|bus_meta|_wire_lock_path|has_private_wire_fields|/ \"wire\""
-            ),
+            BusStorageAbsent(),
         )
     )
 
