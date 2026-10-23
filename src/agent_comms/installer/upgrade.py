@@ -104,7 +104,7 @@ from agent_comms.installer.practice import (
 from agent_comms.installer.reporting import RootWriter, RuntimeWriter, UnpostedWriter
 from agent_comms.installer.runtime_resolution import RuntimeResolution
 from agent_comms.launch_runtime import LaunchRuntime, RestartEnvironment, SpecifiedImportPath
-from agent_comms.locked_store import BusFile, RootFile, UndeclaredFile
+from agent_comms.locked_store import BusFile, DeclaredFile, RootFile, UndeclaredFile
 from agent_comms.maintenance_barrier import (
     MaintenanceBarrier,
     MaintenanceOperator,
@@ -157,16 +157,16 @@ class RehearsalFiles:
 
 def carried(
     root: Path,
-    before: dict[tuple[type[RootFile] | UndeclaredFile, Path], dict[Path, SavedFile]],
+    before: dict[DeclaredFile | UndeclaredFile, dict[Path, SavedFile]],
     steps: tuple[StepRun, ...], expected: frozenset[Path],
 ) -> RehearsalFiles:
     """Only the files a step names as rewritten may differ from ``before``."""
     after = bus_files(root)
     physical = {key for key in before.keys() | after.keys()
                 if before.get(key) != after.get(key)}
-    members = {member: primary for (_owner, primary), snapshot in (*before.items(), *after.items())
+    members = {member: resource.path for resource, snapshot in (*before.items(), *after.items())
                for member in snapshot}
-    changed = {primary for _owner, primary in physical}
+    changed = {resource.path for resource in physical}
     declared = {members.get(path, path) for path in RehearsalFiles.declared(steps)}
     unnamed = sorted(changed - declared)
     if unnamed:
@@ -175,7 +175,7 @@ def carried(
     if outside:
         raise UpgradeRefused(f"Carries changed files outside the expected set: {outside}")
     return RehearsalFiles(
-        identical=len({primary for _owner, primary in before} - changed), rewritten=len(changed),
+        identical=len({resource.path for resource in before} - changed), rewritten=len(changed),
         names=tuple(sorted(changed)),
         restore_bytes=sum(file.size for key in physical & before.keys()
                           for file in before[key].values()))
@@ -848,7 +848,7 @@ class PreparedMigration(Extendable):
     """The held bus as the outgoing runtime read it, before any migration."""
 
     hold: MaintenanceState
-    before: dict[tuple[type[RootFile] | UndeclaredFile, Path], dict[Path, SavedFile]]
+    before: dict[DeclaredFile | UndeclaredFile, dict[Path, SavedFile]]
     read: BusReadBack
 
     @property

@@ -23,7 +23,7 @@ from agent_comms.active_route import ActiveRoute, _route_directory, route_direct
 from agent_comms.coordination_errors import CoordinationError
 from agent_comms.field_codec import FieldCodec, PathText
 from agent_comms.installer.interpreter_operation import RouteSelection
-from agent_comms.locked_store import LockedStore, RootFile, RuntimeFile, UndeclaredFile
+from agent_comms.locked_store import DeclaredFile, LockedStore, RootFile, RuntimeFile, UndeclaredFile
 from agent_comms.private_path import FileObservation, FileRevision, MissingFile
 from agent_comms.store_files import AtomicFile
 
@@ -55,8 +55,8 @@ class SavedFile:
         return self.size == copied.size
 
 
-def bus_files(root: Path) -> dict[tuple[type[RootFile] | UndeclaredFile, Path], dict[Path, SavedFile]]:
-    """Read saved file identity and modification metadata, never contents."""
+def bus_files(root: Path) -> dict[DeclaredFile | UndeclaredFile, dict[Path, SavedFile]]:
+    """Record owner identities and their content members' physical metadata."""
     excluded = RuntimeFile.paths_in(root)
     observed: dict[Path, os.stat_result] = {}
     for path in root.rglob("*"):
@@ -74,8 +74,8 @@ def bus_files(root: Path) -> dict[tuple[type[RootFile] | UndeclaredFile, Path], 
     companions.update(member for path, owner in owners.items()
                       for member in owner.member_paths(path) if member != path)
     return {
-        (declared[path] if path in declared else UndeclaredFile(path.relative_to(root)),
-         path.relative_to(root)): {
+        (DeclaredFile(declared[path], path.relative_to(root)) if path in declared
+         else UndeclaredFile(path.relative_to(root))): {
             member.relative_to(root): SavedFile(
                 observed[member].st_size, observed[member].st_mtime_ns, observed[member].st_ino,
             ) for member in owner.snapshot_members(path, observed)

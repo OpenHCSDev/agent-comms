@@ -147,7 +147,8 @@ def test_failed_live_migration_restores_data_checkout_and_runtime(
     (comms.root / "fail-live").touch()
     current = subprocess.check_output(["git", "-C", checkout, "rev-parse", "HEAD"], text=True).strip()
     step = checkout / "tools/cutover/carry_fault.py"
-    step.write_text('''from agent_comms.installer.carry import Carry, Carried
+    step.write_text('''from pathlib import Path
+from agent_comms.installer.carry import Carry, Carried
 class Fault(Carry):
     def backup_files(self):
         return (self.root / "saved",)
@@ -156,7 +157,7 @@ class Fault(Carry):
             (self.root / "saved").write_text("changed by the worker")
             if (self.root / "fail-live").exists():
                 raise RuntimeError("intentional failure after writing the resource")
-        return Carried(1, rewritten=("saved",))
+        return Carried(1, rewritten=(Path("saved"),))
 ''')
     subprocess.run(["git", "-C", checkout, "add", step], check=True)
     subprocess.run(["git", "-C", checkout, "-c", "user.name=Installer test",

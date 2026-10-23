@@ -245,6 +245,14 @@ class RootFile:
 
 
 @dataclass(frozen=True)
+class DeclaredFile(RootFile):
+    """A declared store and its primary path form one physical resource identity."""
+
+    owner: type[RootFile]
+    path: Path
+
+
+@dataclass(frozen=True)
 class UndeclaredFile(RootFile):
     """A physical file without a stored declaration, still identified by its path."""
 
