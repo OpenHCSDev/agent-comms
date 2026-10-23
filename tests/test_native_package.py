@@ -122,8 +122,7 @@ def launcher(tmp_path):
         + "\n"
     )
     (stack / "pi-native.sha256").write_text(manifest)
-    build = hashlib.sha256(manifest.encode()).hexdigest()[:16]
-    package = stack / f".pi-native-{build}/node_modules/@earendil-works/pi-coding-agent"
+    package = native_package.pinned_package_for(stack / "pi-native.sha256")
     package.parent.mkdir(parents=True)
     staged.rename(package)
     return stack, package
@@ -184,8 +183,8 @@ def test_publication_installs_declared_source_with_one_link(launcher, tmp_path):
         + "\n"
     )
     (stack / "pi-native.sha256").write_text(pin)
-    build = hashlib.sha256(pin.encode()).hexdigest()[:16]
-    prepared = stack / f".pi-native-{build}"
+    build = native_package.built_tree_pin(stack / "pi-native.sha256")
+    prepared = native_package.pinned_package_for(stack / "pi-native.sha256").parents[2]
     package.parents[2].rename(prepared)
     deployments = tmp_path / "deployments"
     launch = [str(stack / "bin/prepare-pi-native"), "--publish", str(deployments)]
