@@ -7,7 +7,6 @@ installer. These checks rehearse an already-current bus format through the CLI:
 launch, target tree, staged stack build, carried practice copy and the outgoing
 runtime's owner probe. The outgoing package uses this source; the isolated target
 records a distinct incoming revision while retaining every declared carry dependency.
-The predecessor-history carry has its own real-writer fixture in test_carry_bus_history.
 """
 from __future__ import annotations
 
