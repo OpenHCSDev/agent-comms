@@ -32,7 +32,7 @@ from .message_reference import MessageReference
 from .messages import Message
 from .threads import Thread
 from .tool_result import ToolResult
-from .typed_table import Column, DurableStore, Generated, Index, TypedTable, sql_literal
+from .typed_table import Column, DurableStore, Generated, Index, StoreRows, TypedTable, sql_literal
 
 if TYPE_CHECKING:
     from .bus import BusReader
@@ -189,8 +189,12 @@ def _unresolved_kinds() -> str:
     ) + ")"
 
 
+class InputDispositionsRows(StoreRows):
+    """The tables of InputDispositions; each row declares itself one."""
+
+
 @dataclass(frozen=True)
-class InputDispositionRow(TypedTable):
+class InputDispositionRow(InputDispositionsRows, TypedTable):
     """One stored input; its lookup columns are generated from the stored row."""
 
     key: Annotated[str, Column(primary_key=True)]
@@ -226,7 +230,7 @@ class InputDispositions(DurableStore):
 
     root: Path
     filename: ClassVar[str] = "input_dispositions.sqlite3"
-    rows: ClassVar[tuple[type[TypedTable], ...]] = (InputDispositionRow,)
+    tables = InputDispositionsRows
 
     @staticmethod
     def _document(connection: sqlite3.Connection, where: str, parameters: tuple) -> InputDocument:

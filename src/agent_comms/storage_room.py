@@ -21,7 +21,7 @@ from .child_process import ProcessIdentity
 from .declared_family import DeclaredFamily
 from .repo import Checkout
 from .thread_identity import ThreadIncarnation
-from .typed_table import Column, DurableStore, JsonStorage, TypedTable
+from .typed_table import Column, DurableStore, JsonStorage, StoreRows, TypedTable
 from .watched import ChangeSignal, FileSource
 
 
@@ -85,14 +85,18 @@ class HoldingRoomPhase(RoomPhase):
     held: RoomNeed
 
 
+class RoomLedgerRows(StoreRows):
+    """The tables of RoomLedger; each row declares itself one."""
+
+
 @dataclass(frozen=True)
-class WorkPeak(TypedTable):
+class WorkPeak(RoomLedgerRows, TypedTable):
     work: Annotated[type[RoomWork], Column(primary_key=True)]
     need: Annotated[RoomNeed, Column(storage=JsonStorage)]
 
 
 @dataclass(frozen=True)
-class RoomClaim(TypedTable):
+class RoomClaim(RoomLedgerRows, TypedTable):
     ticket: Annotated[str, Column(primary_key=True)]
     root: str
     unit: Annotated[ThreadIncarnation, Column(storage=JsonStorage)]
@@ -106,7 +110,7 @@ class RoomClaim(TypedTable):
 class RoomLedger(DurableStore):
     root: Path
     filename = "work_room.sqlite3"
-    rows = (WorkPeak, RoomClaim)
+    tables = RoomLedgerRows
 
     def dead_claims(self):
         # Dead/replaced processes cannot hold room, but are never replayed.
