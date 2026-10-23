@@ -20,6 +20,7 @@ from pydantic import ConfigDict
 from pydantic.alias_generators import to_camel
 
 from .declared_family import DeclaredFamily
+from .code_lines import CodeLines
 from .field_codec import PathText, projected
 from .repo import GitCommandError, Repo
 from .repository_name import RepositoryName
@@ -88,6 +89,7 @@ class BranchDifference:
     main: str
     behind: int
     files: frozenset[str]
+    code_growth: int
 
 
 class ForgeAnswer(WireModel):
@@ -380,8 +382,30 @@ query($owner: String!, $name: String!, $after: String) {
             ).split("\0")
             if path
         )
+        sources = tuple(
+            (f"{commit}:{path}", weight)
+            for path in sorted(files) if path.startswith("src/") and path.endswith(".py")
+            for commit, weight in ((base, -1), (head, 1))
+        )
+        batch = Repo.git_bytes(
+            self.checkout, "cat-file", "--batch", "-Z", timeout=self.timeout,
+            input="".join(f"{expression}\0" for expression, _weight in sources),
+        )
+        offset = 0
+        code_growth = 0
+        for _expression, weight in sources:
+            end = batch.index(b"\0", offset)
+            header = batch[offset:end]
+            offset = end + 1
+            if header.endswith(b" missing"):
+                continue  # An added/deleted file contributes zero on its absent side.
+            size = int(header.rsplit(b" ", 1)[1])
+            source = batch[offset:offset + size].decode()
+            offset += size + 1
+            code_growth += weight * CodeLines.of(source)
         return BranchDifference(
-            RepositoryName(*self.repository), branch, head, moved_at, main, behind, files
+            RepositoryName(*self.repository), branch, head, moved_at, main, behind, files,
+            code_growth,
         )
 
     def _pages(self, query: str, answer: type[ForgeQuery], **variables: str):
