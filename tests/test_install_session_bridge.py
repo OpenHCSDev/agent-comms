@@ -18,7 +18,7 @@ from agent_comms.child_process import ProcessIdentity
 from agent_comms.cli_bridges.monitor import InspectSession, PauseSession
 from agent_comms.cli_bridges import claude
 from agent_comms.cli_bridges.shared import (
-    MONITOR_FRAME, Binding, MonitorProbe, Serve, SessionBridgeResumes,
+    MONITOR_FRAME, Binding, MonitorBridgeStopped, MonitorProbe, Serve, SessionBridgeResumes,
 )
 from agent_comms.comms import wire
 from agent_comms.field_codec import FieldCodec
@@ -82,11 +82,15 @@ def stop(child):
     child.wait(timeout=15)
 
 
-def probe(child):
-    assert select.select((child.stdout,), (), (), 15)[0], 'Monitor did not attach'
+def frame(child):
+    assert select.select((child.stdout,), (), (), 15)[0], 'Monitor wrote nothing'
     line = child.stdout.readline()
     assert line, child.stderr.read().decode()
-    value = MONITOR_FRAME.validate_json(line)
+    return MONITOR_FRAME.validate_json(line)
+
+
+def probe(child):
+    value = frame(child)
     assert isinstance(value, MonitorProbe)
     return value
 
@@ -98,8 +102,9 @@ def test_real_monitor_survives_bridge_retirement_and_requires_a_fresh_probe(tmp_
             monitor = subprocess.Popen(
                 (sys.executable, '-c',
                  'import asyncio; from agent_comms.cli_bridges.monitor import read_monitor; '
+                 'from agent_comms.cli_bridges.shared import MonitorBridgeStopped; '
                  'from agent_comms_hooks.watch import WatchClaim; '
-                 'asyncio.run(read_monitor(WatchClaim("copied-session")))'),
+                 'asyncio.run(read_monitor(WatchClaim("copied-session"), MonitorBridgeStopped.announce))'),
                 env=env, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
             )
             cleanup.callback(stop, monitor)
@@ -109,6 +114,10 @@ def test_real_monitor_survives_bridge_retirement_and_requires_a_fresh_probe(tmp_
                 bridge.pause(resources)
                 assert monitor.poll() is None
             assert child.wait(timeout=15) == 0, log.read_text()
+            # A stopped bridge is an outage the session hears about, once, from the reader.
+            notice = frame(monitor)
+            assert isinstance(notice, MonitorBridgeStopped)
+            assert str(claim.path.with_suffix('.log')) in notice.notice
             with log.open('ab') as output:
                 successor = subprocess.Popen(child.args, env=env, stdout=output, stderr=output)
             cleanup.callback(stop, successor)
@@ -173,8 +182,13 @@ def test_installer_discovers_the_live_claim_independent_of_state_directory(
             paused = bridge.pause(resources)
             assert paused.bridge == bridge
             assert isinstance(claim.state(), LiveWatch)
+            # A held claim's absent socket is an install's gap: the reader waits it out.
+            claim.state().await_socket(FileNotFoundError(claim.socket_path))
         assert child.wait(timeout=15) == 0, log.read_text()
         assert isinstance(claim.state(), LapsedWatch)
+        # A bridge that stopped ends the Monitor reader with the reason, not a silent spin.
+        with pytest.raises(RuntimeError, match='No session bridge is running'):
+            claim.state().await_socket(FileNotFoundError(claim.socket_path))
 
 
 def test_session_start_and_runtime_replacement_share_the_declared_launcher(tmp_path):
@@ -238,8 +252,10 @@ def test_install_swap_keeps_the_claim_and_resumes_the_same_process_on_the_new_ru
                 monitor = subprocess.Popen(
                     (sys.executable, '-c',
                      'import asyncio; from agent_comms.cli_bridges.monitor import read_monitor; '
+                     'from agent_comms.cli_bridges.shared import MonitorBridgeStopped; '
                      'from agent_comms_hooks.watch import WatchClaim; '
-                     f'asyncio.run(read_monitor(WatchClaim({claim.thread!r})))'),
+                     f'asyncio.run(read_monitor(WatchClaim({claim.thread!r}), '
+                     'MonitorBridgeStopped.announce))'),
                     env=env, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
                 )
                 cleanup.callback(stop, monitor)

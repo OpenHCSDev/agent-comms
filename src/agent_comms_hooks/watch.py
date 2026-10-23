@@ -175,9 +175,16 @@ class WatchState:
         """No session binding exists until this watch is enrolled."""
         return ()
 
+    def announce_absence(self, announce: Callable[[], None]) -> bool:
+        """No bridge holds the claim: the reader says delivery is down, once per outage."""
+        announce()
+        return True
+
     def await_socket(self, absent: OSError) -> None:
         """No bridge holds the claim, so its socket is gone, not between bridges."""
-        raise absent
+        raise RuntimeError(
+            'No session bridge is running for this claim; its log names why it stopped. '
+            'Start it with agent-comms-claude-bridge connect.') from absent
 
 
 class UnclaimedWatch(WatchState):
@@ -226,6 +233,10 @@ class LiveWatch(RecordedWatch):
     def enrol(self, claim: WatchClaim, record: WatchRecord) -> None:
         if self.record != record:
             raise ValueError('This session is already bound to another bridge command')
+
+    def announce_absence(self, announce: Callable[[], None]) -> bool:
+        """A held claim's absent socket is an install's swap, not an outage."""
+        return False
 
     def await_socket(self, absent: OSError) -> None:
         """The claim's lock outlives the install's exec, so a held claim's absent socket is

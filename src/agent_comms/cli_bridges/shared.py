@@ -939,14 +939,36 @@ class MonitorFrame(TaggedWire, ABC, affix=""):
     async def confirm(self, bridge: LineMonitorBridge, record: ObservedMonitor) -> None: ...
 
 
-class MonitorProbe(MonitorFrame, declared_name='probe'):
+class MonitorProtocolFrame(MonitorFrame, declared_name=None):
+    """A line the monitor writes itself; the transcript scan knows it by its protocol prefix."""
     protocol: Literal['agent-comms-monitor'] = 'agent-comms-monitor'
     wire_prefix: ClassVar[str] = '{"protocol":' + json.dumps(protocol) + ','
+
+
+class MonitorProbe(MonitorProtocolFrame, declared_name='probe'):
     session: str
     token: str
 
     async def confirm(self, bridge: LineMonitorBridge, record: ObservedMonitor) -> None:
         await bridge.confirm_probe(self)
+
+
+class MonitorBridgeStopped(MonitorProtocolFrame, declared_name='bridge-stopped'):
+    """The reader's notice that no bridge holds its claim, so nothing is delivered until one starts."""
+    notice: str
+
+    @classmethod
+    def announce(cls, claim: WatchClaim) -> None:
+        """One Monitor event: the bridge is gone, so nothing arrives until it starts again."""
+        stopped = cls(notice=(
+            'Comms bridge stopped: no messages are delivered until it starts again. '
+            f'{claim.path.with_suffix(".log")} names why; '
+            'agent-comms-claude-bridge connect restarts it and this Monitor resumes.'))
+        sys.stdout.write(stopped.model_dump_json() + '\n')
+        sys.stdout.flush()
+
+    async def confirm(self, bridge: LineMonitorBridge, record: ObservedMonitor) -> None:
+        """A notice carries no delivery to confirm."""
 
 
 class MonitorPart(MonitorFrame, declared_name='part'):
@@ -1017,7 +1039,7 @@ class LineMonitorBridge(TranscriptConfirmsDelivery, TranscriptBridge[Options]):
         return WatchRecord(self.binding.bus, self.binding.root, command)
 
     async def watch_operation(self, operation: Watch) -> None:
-        await read_monitor(WatchClaim(self.binding.thread))
+        await read_monitor(WatchClaim(self.binding.thread), MonitorBridgeStopped.announce)
 
     async def accept(self, message: messages.Message) -> None:
         # Wait before recording an attempt. Detachment never creates

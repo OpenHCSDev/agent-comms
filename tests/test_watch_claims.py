@@ -62,5 +62,6 @@ def test_reader_waits_for_a_held_claims_socket_until_its_holder_dies(bridge_home
         with pytest.raises(TimeoutError):
             reader.result(timeout=1)
         killed(child)
-        with pytest.raises(FileNotFoundError):
+        with pytest.raises(RuntimeError, match='No session bridge is running') as stopped:
             reader.result(timeout=5)
+        assert isinstance(stopped.value.__cause__, FileNotFoundError)
