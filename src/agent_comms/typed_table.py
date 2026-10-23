@@ -1995,7 +1995,7 @@ class ProjectionProducer(TypedTable, ProjectionProducerTables):
         commit = STAMP.commit()
         names = {row.declared_name for row in rows}
         outdated = tuple(record for record in cls.select(
-            db, where="{commit} != ?", parameters=(commit,),
+            db, where='"{commit}" != ?', parameters=(commit,),
         ) if record.projection in names)
         if not outdated:
             return False
