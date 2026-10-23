@@ -1,7 +1,6 @@
 """Shared Core inbox delivery and process lifetime for external CLI adapters."""
 from __future__ import annotations
 
-
 import argparse
 import asyncio
 import builtins
@@ -24,13 +23,17 @@ from pathlib import Path
 from typing import Annotated, ClassVar, Generic, Literal, Self, TextIO, TypeVar
 
 from acp.schema import SessionConfigSelectOption
-from pydantic import Field, TypeAdapter, model_validator
+from pydantic import Field, model_validator
 
 from agent_comms import field_codec, messages
 from agent_comms.agent_runtime import DeliversInput, ExternalRuntime, PublishesTranscript
 from agent_comms.change_report import NoChangeReport, ReportEvidence
 from agent_comms.child_process import (
-    AttachedChild, OutlivesLauncherLifetime, ProcessIdentity, SpawnedProcess, StreamingChildStdio,
+    AttachedChild,
+    OutlivesLauncherLifetime,
+    ProcessIdentity,
+    SpawnedProcess,
+    StreamingChildStdio,
 )
 from agent_comms.cli_protocol import (
     CliArguments,
@@ -54,8 +57,13 @@ from agent_comms.read_basis import ExplicitWatchAcknowledgment
 from agent_comms.runtime_updates import RuntimeUpdate, ThreadOutput
 from agent_comms.send_result import SendResult
 from agent_comms.typed_table import (
-    Column, DurableTables, ExpressionIndex, WriterOwnedFile, TypedTable,
+    Column,
+    DurableTables,
+    ExpressionIndex,
+    TypedTable,
+    WriterOwnedFile,
 )
+from agent_comms.wire_models import WireModel
 from agent_comms_hooks.watch import HeldClaim, WatchClaim, WatchRecord
 
 from ..locked_store import RegistryFile, SQLiteFile
@@ -985,7 +993,7 @@ class ForeignMonitorFrame(MonitorFrame, declared_name='foreign'):
         """Another monitor's output is not comms delivery evidence."""
 
 
-MONITOR_FRAME = TypeAdapter(MonitorFrame.declared_union())
+MONITOR_FRAME = WireModel.adapter(MonitorFrame.declared_union())
 
 
 @dataclass(frozen=True)
