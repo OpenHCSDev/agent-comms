@@ -28,6 +28,7 @@ from agent_comms.field_codec import PathText
 from agent_comms.installer.interpreter_operation import InterpreterOperation, RuntimeProbe
 from agent_comms.locked_store import RootFile
 from agent_comms.repo import Repo
+from agent_comms.store_files import is_store_lock
 
 STEPS = Path("tools/cutover")
 
@@ -39,8 +40,15 @@ class Carried:
     changed: int
     detail: dict[str, int | bool] = field(default_factory=dict)
     rewritten: tuple[Annotated[Path, PathText], ...] = ()
-    """Files under the bus root this run wrote or deleted; every other file stays
-    byte-identical."""
+    """Inventory-tracked files under the bus root this run wrote or deleted.
+    Store locks are excluded from that inventory and cannot authorize a rewrite."""
+
+    def __post_init__(self) -> None:
+        for path in self.rewritten:
+            if is_store_lock(path):
+                raise TypeError(
+                    f"Carried.rewritten cannot name an inventory-excluded store lock: {path}"
+                )
 
 
 @dataclass(frozen=True)
