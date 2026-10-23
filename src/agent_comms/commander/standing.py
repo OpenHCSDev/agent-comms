@@ -34,7 +34,7 @@ from agent_comms.standing_rules import (
 from agent_comms.storage_rules import OrderCheckoutWork
 from agent_comms.thread_identity import ThreadIncarnation
 from agent_comms.threads import Thread
-from agent_comms.todos import OwnerRequest, Todo
+from agent_comms.todos import OwnerRequest, ProgressRead, Todo
 from agent_comms.turn_digests import OrderEditCountRead, TurnDigestRead, TurnsSince
 from agent_comms.ui_model.unit_state import AwaitingCommander, UnitState
 from agent_comms.work_dispatch import ReusedWorkDispatch, WorkDispatch
@@ -187,7 +187,7 @@ class UnitAskUnanswered(OwedAnswer, UndatedStandingRule):
 
     @classmethod
     def scan_observed(cls, comms: Comms, commander: str,
-                      observed: Sequence[UnitState]) -> tuple[Self, ...]:
+                      observed: Sequence[UnitState], pulls: ProgressRead) -> tuple[Self, ...]:
         return tuple(cls(message, state.unit.name) for state in observed for message in state.owed)
 
     @classmethod
