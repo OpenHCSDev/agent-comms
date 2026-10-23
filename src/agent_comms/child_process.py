@@ -467,6 +467,9 @@ class Platform(DeclaredFamily, affix="Platform"):
     def arguments(self, process: ProcessIdentity) -> tuple[str, ...]: ...
 
     @abstractmethod
+    def process_name(self, pid: int) -> str: ...
+
+    @abstractmethod
     def environment(self, process: ProcessIdentity) -> dict[str, str]: ...
 
     def lock_holders(self, descriptor: int) -> tuple[LockHolder, ...]:
@@ -631,6 +634,9 @@ class LinuxPlatform(PidfdHandles, PosixPlatform):
         if not raw:
             raise ProcessLookupError(process.pid)
         return tuple(os.fsdecode(word) for word in raw.split(b"\0")[:-1])
+
+    def process_name(self, pid: int) -> str:
+        return Path(f"/proc/{pid}/comm").read_text().strip()
 
     def environment(self, process: ProcessIdentity) -> dict[str, str]:
         try:
@@ -807,6 +813,9 @@ class DarwinPlatform(PosixPlatform):
 
     def arguments(self, process: ProcessIdentity) -> tuple[str, ...]:
         raise NotImplementedError(f"{type(self).__name__} does not read process arguments")
+
+    def process_name(self, pid: int) -> str:
+        raise NotImplementedError(f"{type(self).__name__} does not read process names")
 
     def environment(self, process: ProcessIdentity) -> dict[str, str]:
         raise NotImplementedError(f"{type(self).__name__} does not read process environment")
@@ -1019,6 +1028,9 @@ class Win32Platform(Platform):
 
     def arguments(self, process: ProcessIdentity) -> tuple[str, ...]:
         raise NotImplementedError(f"{type(self).__name__} does not read process arguments")
+
+    def process_name(self, pid: int) -> str:
+        raise NotImplementedError(f"{type(self).__name__} does not read process names")
 
     def environment(self, process: ProcessIdentity) -> dict[str, str]:
         raise NotImplementedError(f"{type(self).__name__} does not read process environment")

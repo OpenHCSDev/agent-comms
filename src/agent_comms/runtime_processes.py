@@ -71,32 +71,35 @@ class RuntimeProcesses:
         directory = target.prefix.parent
         outcomes: list[RuntimeProcessOutcome] = []
         platform = Platform.current()
+        observer = ProcessIdentity.capture(os.getpid())
         for entry in proc.iterdir():
             if not entry.name.isdecimal():
                 continue
             pid = int(entry.name)
             try:
                 identity = ProcessIdentity.capture(pid)
-                invoked = (entry / "cmdline").read_bytes().partition(b"\0")[0]
+                invoked = platform.arguments(identity)[0]
                 identity.require_alive()
             except ProcessLookupError, FileNotFoundError:
                 continue
             except (OSError, IdentityMismatchError) as error:
                 outcomes.append(UnreadableRuntimeProcess(pid, str(error)))
                 continue
-            # Empty command lines declare no userspace invocation (kernel/exited
-            # tasks). Other namespaces do not name an agent-comms installation.
-            interpreter = Path(os.fsdecode(invoked))
-            if not invoked or not interpreter.is_relative_to(directory):
+            # Other namespaces do not name an agent-comms installation.
+            interpreter = Path(invoked)
+            if not interpreter.is_relative_to(directory):
                 continue
             runtime = LaunchRuntime.from_interpreter(interpreter)
             if runtime.prefix == target.prefix:
                 continue
             try:
+                ancestor = identity
+                while ancestor.pid > 1 and ancestor != observer:
+                    ancestor = platform.parent_identity(ancestor.pid)
+                if ancestor == observer:
+                    continue
                 parent = platform.parent_identity(pid)
-                application = RuntimeApplication(
-                    parent, (proc / str(parent.pid) / "comm").read_text().strip()
-                )
+                application = RuntimeApplication(parent, platform.process_name(parent.pid))
                 parent.require_alive()
                 identity.require_alive()
             except (OSError, IdentityMismatchError) as error:
