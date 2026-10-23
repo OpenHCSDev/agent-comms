@@ -273,11 +273,18 @@ class GoalWaitReview:
         """Caller holds the publication lock; no reply decoding belongs in this check."""
         snapshot = goals.registry.snapshot()
         return any(
-            owner.goal == self.owner.goal
+            self._current_goal(owner)
             and owner.turn_lease == self.turn
             and goals.waits.resolve(owner.goal) == self.wait
             for owner in snapshot.threads_for(self.owner.incarnation.require_recorded())
             if self._same_thread(snapshot, owner, self.owner)
+        )
+
+    def _current_goal(self, owner: Thread) -> bool:
+        """A retained wait follows edits of its active goal, not a frozen goal value."""
+        return any(
+            self.wait.current_for(goal, owner.incarnation.require_recorded())
+            for goal in owner.goal.active()
         )
 
     def _same_thread(self, snapshot: RegistrySnapshot, actual: Thread, expected: Thread) -> bool:
@@ -333,6 +340,10 @@ class GoalInputReview(GoalWaitReview):
     targets: tuple[GoalWaitTarget, ...]
     unknown: tuple[StoredInput, ...]
     eligible_keys: frozenset[str]
+
+    def _current_goal(self, owner: Thread) -> bool:
+        """Publishing an input review still requires the exact prepared goal."""
+        return owner.goal == self.owner.goal
 
     def current_for(self, goals: Goals) -> bool:
         if not super(GoalInputReview, self).current_for(goals):
