@@ -12,4 +12,3 @@ class ServingProbe(RuntimeProbe[None]):
         for member in HostService.members_with(HostService):
             for instance in member.running():
                 instance.serves()
-

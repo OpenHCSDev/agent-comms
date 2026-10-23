@@ -1,4 +1,5 @@
 """The installed distribution records shared by probes and runtime resolution."""
+
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -15,11 +16,9 @@ class PackagePin:
     version: str
 
 
-
 @dataclass(frozen=True)
 class GitPin(PackagePin):
     commit: str
-
 
 
 @dataclass(frozen=True)
@@ -27,10 +26,8 @@ class ArchivePin(PackagePin):
     url: str
 
 
-
 class CommitRecord(BaseModel):
     commit_id: str
-
 
 
 class SourceRecord(BaseModel):
@@ -40,11 +37,9 @@ class SourceRecord(BaseModel):
         raise ValueError("The installed package does not record a Git revision")
 
 
-
 class ArchiveRecord(SourceRecord):
     def pin(self, version: str) -> PackagePin:
         return ArchivePin(version, self.url)
-
 
 
 class GitRecord(SourceRecord):
@@ -57,7 +52,6 @@ class GitRecord(SourceRecord):
         return GitPin(version, self.vcs_info.commit_id)
 
 
-
 class RegistryRecord(RootModel[None]):
     """null is the build record's declared registry-package representation."""
 
@@ -66,7 +60,6 @@ class RegistryRecord(RootModel[None]):
 
     def pin(self, version: str) -> PackagePin:
         return PackagePin(version)
-
 
 
 class PackageRecord(BaseModel, WireValue):
@@ -88,4 +81,3 @@ class PackageRecord(BaseModel, WireValue):
         cls, by_alias: bool = True, ref_template: str = DEFAULT_REF_TEMPLATE
     ) -> dict[str, object]:
         return cls.model_json_schema(by_alias=by_alias, ref_template=ref_template)
-

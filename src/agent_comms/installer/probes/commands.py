@@ -13,7 +13,6 @@ class CliOutput:
     stdout: str
 
 
-
 @dataclass(frozen=True)
 class CliCommandProbe(RuntimeProbe[CliOutput]):
     """One command-line call, answered by the selected runtime's own command line."""
@@ -26,4 +25,3 @@ class CliCommandProbe(RuntimeProbe[CliOutput]):
         with StringIO() as output, redirect_stdout(output):
             returncode = cli.main(self.arguments)
             return CliOutput(returncode, output.getvalue())
-

@@ -10,4 +10,3 @@ class PrepareNativeProbe(RuntimeProbe[None]):
 
         VerifiedNativePackage.qualify(pinned_native_package())
         UnitInstructions.prepare()
-

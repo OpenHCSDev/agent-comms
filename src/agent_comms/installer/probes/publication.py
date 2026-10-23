@@ -15,10 +15,8 @@ class PublicationProbe(RuntimeProbe[None]):
         RuntimePublication.installed().publish_links()
 
 
-
 class SelectedRouteProbe(RuntimeProbe[RouteFileSelection]):
     """The staged runtime reads the published route before source changes."""
 
     def run(self) -> RouteFileSelection:
         return RouteFile.read(active_route_path()).selection()
-

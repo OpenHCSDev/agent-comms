@@ -20,8 +20,6 @@ from graphlib import TopologicalSorter
 from pathlib import Path
 from typing import Annotated, ClassVar
 
-from typing_extensions import TypeForm
-
 from agent_comms.declared_family import DeclaredFamily
 from agent_comms.errors import RelationViolationError
 from agent_comms.field_codec import PathText

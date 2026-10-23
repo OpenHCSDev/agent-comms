@@ -18,4 +18,3 @@ class RunningOwnersProbe(RuntimeProbe[list[str]]):
 
         snapshot = wire(self.root).registry.snapshot()
         return [thread.name for thread in OwnerRestartRequest().scope.threads(snapshot)]
-

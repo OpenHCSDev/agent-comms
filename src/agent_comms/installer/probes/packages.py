@@ -18,7 +18,6 @@ class DistributionVersionsProbe(RuntimeProbe[dict[str, str]]):
         return {canonicalize_name(dist.metadata["Name"]): dist.version for dist in distributions()}
 
 
-
 @dataclass(frozen=True)
 class InstalledPackagesProbe(RuntimeProbe[dict[str, PackageRecord]]):
     core: str
@@ -49,4 +48,3 @@ class InstalledPackagesProbe(RuntimeProbe[dict[str, PackageRecord]]):
             )
             for dist in distributions()
         }
-

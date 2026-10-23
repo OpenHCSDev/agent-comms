@@ -10,8 +10,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Annotated
 
-from agent_comms.installer.harness_installation import HarnessInstallation, InstallResult
 from agent_comms.field_codec import PathText
+from agent_comms.installer.harness_installation import HarnessInstallation, InstallResult
 from agent_comms.installer.interpreter_operation import RuntimeProbe
 
 

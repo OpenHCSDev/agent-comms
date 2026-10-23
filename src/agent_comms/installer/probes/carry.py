@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+
 from typing_extensions import TypeForm
 
 from agent_comms.installer.carry import Carry, CarryOperation
@@ -20,4 +21,3 @@ class CarryProbe[Answer](RuntimeProbe[tuple[Answer, ...]]):
 
     def run(self) -> tuple[Answer, ...]:
         return self.operation.run(self.steps)
-
