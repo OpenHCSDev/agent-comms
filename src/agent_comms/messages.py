@@ -14,7 +14,7 @@ from enum import StrEnum
 from pathlib import Path
 from typing import TYPE_CHECKING, Annotated, ClassVar, Self, Type, cast, dataclass_transform
 
-from agent_comms.bus_tables import Addressed, BusCapability, HeldResources
+from agent_comms.bus_tables import Addressed, BusCapability, BusRow, HeldResources
 from agent_comms.response_policy import InformationalPolicy, ResponseEligibility, ResponsePolicy
 from agent_comms.typed_table import Column
 
@@ -571,6 +571,15 @@ class Message(Addressed, BusCapability):
 @dataclass_transform(frozen_default=True, kw_only_default=True)
 class BusRecord(Message, DeclaredFamily, affix="Record"):
     """Every record declaration owns its frozen value and derived tables."""
+
+    def append_to(self, db: sqlite3.Connection, seq: int) -> int:
+        """The caller's transaction owns the sequence, including preserved history."""
+        BusRow.insert_values(db, seq=seq, kind=type(self), at=time.time())
+        stored = replace(self, seq=seq)
+        for row in stored.rows():
+            row.insert(db)
+        stored.project_into(db)
+        return stored.seq
 
     @property
     def publication_snapshot(self) -> Message:
