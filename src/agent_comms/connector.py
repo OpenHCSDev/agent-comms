@@ -833,7 +833,7 @@ class Connector:
 
 @dataclass(frozen=True, kw_only=True)
 class ConnectorVerb(
-    DeclaredVerb, Command,
+    DeclaredVerb, Command[ConnectorStore, int | str],
     affix="Verb", discovery_package=HostService.__module__,
 ):
     """One connector command: its options are its fields, and its parser comes from them."""

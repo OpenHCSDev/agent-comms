@@ -6,7 +6,7 @@ import asyncio
 import os
 from functools import partial
 from pathlib import Path
-from typing import Any, cast
+from typing import cast
 
 from acp import RequestError
 from acp.schema import (

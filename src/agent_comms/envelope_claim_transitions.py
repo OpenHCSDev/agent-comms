@@ -437,10 +437,8 @@ class UnclaimedResource(ResourceClaim):
 
 @dataclass(frozen=True)
 class ClaimOwner(AcquiringClaim, ResourceClaim):
+    # Built only by Acquisition.claimed from a validated acquisition and one of its own claims.
     resource: Annotated[str, ResourcePathText]
-
-    def __post_init__(self) -> None:
-        FieldCodec.require_fields(self)
 
     def acquire(
         self, scope: RecordedScope, registry: RegistrySnapshot, publish: Callable[[], ClaimOwner]
@@ -465,7 +463,7 @@ class ClaimProjection(Mapping[str, ClaimOwner]):
     """Immutable sorted claim table plus the last processed envelope sequence."""
 
     last_seq: Annotated[int, ProjectionSequence] = 0
-    # Built from a dict, which the codec checks; held afterwards as a read-only view.
+    # Built from a dict by the transitions and the holder tables; held as a read-only view.
     _claims: dict[str, ClaimOwner] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
