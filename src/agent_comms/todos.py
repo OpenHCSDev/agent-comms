@@ -19,8 +19,7 @@ from abc import ABC, abstractmethod
 from collections.abc import Callable, Iterator, Mapping, Sequence
 from contextlib import contextmanager
 from dataclasses import dataclass, field, fields, replace
-from functools import cache, cached_property, partial
-from importlib.resources import files
+from functools import cached_property, partial
 from math import ceil
 from pathlib import Path
 from statistics import median
@@ -28,7 +27,6 @@ from types import get_original_bases
 from typing import TYPE_CHECKING, Annotated, ClassVar, Self, get_args, get_origin
 from uuid import uuid4
 
-from agent_comms import skills
 from agent_comms.active_route import guard_original_root_write
 from agent_comms.build_identity import (
     BuildIdentity,
@@ -98,6 +96,7 @@ from agent_comms.recorded_time import (
 from agent_comms.registry_store import RegistryStore
 from agent_comms.repo import Repo
 from agent_comms.repository_name import RepositoryName
+from agent_comms.slop import Slop
 from agent_comms.storage_rules import StorageRule
 from agent_comms.store_files import SharedLock
 from agent_comms.thread_identity import (
@@ -1364,86 +1363,6 @@ class HierarchyText(OrderWords):
     REFUSED = re.compile(r"(leave|keep|retain|preserve)[^.\n]{0,60}\bforward|forwarders? (stay|remain)|reach(es|ing)? through", re.I)
     refusal = ("{1} keeps a forwarder or bans fixing the hierarchy: fold the false owner into the real one or compose "
                "providers as parents, and delete every route.")
-
-
-class Derivation(DeclaredFamily, affix="Derivation"):
-    sentence: ClassVar[str]
-
-    @classmethod
-    def declaration_elsewhere(cls, by: FileLine, where: FileLine, root: Path) -> bool:
-        return False
-
-
-class DeclarationDerivation(Derivation):
-    sentence = "the declaration derives it"
-
-    @classmethod
-    def declaration_elsewhere(cls, by: FileLine, where: FileLine, root: Path) -> bool:
-        return not by.same_file(where, root)
-
-
-class NominalKeyDerivation(Derivation, declared_name="nominal-key"):
-    sentence = "the nominal key identifies it"
-
-
-class SubclassDerivation(DeclarationDerivation):
-    sentence = "the subclass derives it"
-
-
-class MixinDerivation(DeclarationDerivation):
-    sentence = "the mixed-in capability derives it"
-
-
-class BaseMethodDerivation(DeclarationDerivation, declared_name="base-method"):
-    sentence = "the base method derives it"
-
-
-class InitSubclassDerivation(DeclarationDerivation, declared_name="init-subclass"):
-    sentence = "subclass initialization derives it"
-
-
-class MetaclassDerivation(DeclarationDerivation):
-    sentence = "the metaclass derives it"
-
-
-class DeleteCopyDerivation(Derivation, declared_name="delete-copy"):
-    sentence = "deleting the copy leaves its original declaration"
-
-
-@dataclass(frozen=True)
-class Slop:
-    pattern: str
-    fact: str
-    at: FileLine
-    derive: type[Derivation]
-    by: FileLine
-
-    PATTERN_ENTRY: ClassVar[re.Pattern] = re.compile(r'^## ([A-Z]+-\d+)\s+\S', re.M)
-
-    @staticmethod
-    def catalog() -> Path:
-        """The pinned refactor-audit pattern catalog that slop citations name."""
-        return Path(str(files(skills) / 'refactor-audit' / 'references' / 'patterns'))
-
-    @classmethod
-    @cache
-    def patterns(cls) -> frozenset[str]:
-        return frozenset(found[1] for source in cls.catalog().glob('*.md')
-                         for found in cls.PATTERN_ENTRY.finditer(source.read_text(encoding='utf-8')))
-
-    def __post_init__(self):
-        problems = []
-        if self.pattern not in self.patterns():
-            problems.append(f'Unknown refactor-audit pattern ID {self.pattern!r}; '
-                            'fix: use an ID from the packaged pattern catalog.')
-        if len(self.fact.split()) < 4:
-            problems.append('fact: fix: describe the duplicated fact in at least four words')
-        if problems:
-            raise ValueError('\n'.join(problems))
-
-    def render(self):
-        return (f'{self.at.to_wire()} restates {self.pattern}: {self.fact}. '
-                f'{self.by.to_wire()} owns it; {self.derive.sentence}, so the copy is deleted.')
 
 
 class DirectiveText:
