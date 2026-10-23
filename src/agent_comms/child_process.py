@@ -14,6 +14,7 @@ import math
 import multiprocessing
 import os
 import re
+import select
 import signal
 import stat
 import subprocess
@@ -505,6 +506,12 @@ class PosixPlatform(Platform):
     @abstractmethod
     def members_of_group(self, pgid: int) -> tuple[ProcessIdentity, ...]: ...
 
+    @abstractmethod
+    def wait_any_exited(
+        self, identities: tuple[ProcessIdentity, ...], timeout: float,
+    ) -> None:
+        """Wait for a member's exit or the caller's remaining deadline."""
+
     def send(self, identity: ProcessIdentity, signum: int) -> None:
         self.require(identity)
         os.kill(identity.pid, signum)
@@ -567,6 +574,24 @@ class LinuxPlatform(PidfdHandles, PosixPlatform):
             return
         finally:
             os.close(descriptor)
+
+    def wait_any_exited(
+        self, identities: tuple[ProcessIdentity, ...], timeout: float,
+    ) -> None:
+        descriptors: list[int] = []
+        try:
+            pending = select.poll()
+            for identity in identities:
+                descriptor = self.open_pidfd(identity.pid)
+                descriptors.append(descriptor)
+                self.require(identity)
+                pending.register(descriptor, select.POLLIN)
+            pending.poll(None if math.isinf(timeout) else max(0, math.ceil(timeout * 1000)))
+        except ProcessLookupError:
+            return
+        finally:
+            for descriptor in descriptors:
+                os.close(descriptor)
 
     def members_of_group(self, pgid: int) -> tuple[ProcessIdentity, ...]:
         members = []
@@ -674,6 +699,30 @@ class DarwinPlatform(PosixPlatform):
                 with suppress(ProcessLookupError):
                     members.append(self.identity(pid))
         return tuple(members)
+
+    def wait_any_exited(
+        self, identities: tuple[ProcessIdentity, ...], timeout: float,
+    ) -> None:
+        with select.kqueue() as pending:
+            events = [
+                select.kevent(
+                    identity.pid, filter=select.KQ_FILTER_PROC,
+                    flags=select.KQ_EV_ADD | select.KQ_EV_ONESHOT,
+                    fflags=select.KQ_NOTE_EXIT,
+                )
+                for identity in identities
+            ]
+            try:
+                for identity in identities:
+                    self.require(identity)
+                returned = pending.control(
+                    events, 1, None if math.isinf(timeout) else max(0, timeout),
+                )
+            except ProcessLookupError:
+                return
+            for event in returned:
+                if event.flags & select.KQ_EV_ERROR:
+                    raise OSError(event.data, os.strerror(event.data))
 
 
 class Win32Platform(Platform):
