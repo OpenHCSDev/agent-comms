@@ -84,6 +84,9 @@ class HistoryView(ABC):
 class ConversationObservation:
     """A first observation has no selection and therefore always reads."""
 
+    def matches_stores(self, stores: WireRevision) -> bool:
+        return False
+
     def capture(self, stores: WireRevision,
                 read: Callable[[], ConversationRevision]) -> ConversationRevision:
         return read()
@@ -98,6 +101,9 @@ class ConversationRevision(ConversationObservation):
 
     stores: WireRevision
     selection: DisplayIdentity
+
+    def matches_stores(self, stores: WireRevision) -> bool:
+        return self.stores == stores
 
     def capture(self, stores: WireRevision,
                 read: Callable[[], ConversationRevision]) -> ConversationRevision:
