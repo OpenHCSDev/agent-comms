@@ -419,8 +419,8 @@ class HeartbeatNotStarted(HeartbeatSilent):
 @dataclass(frozen=True)
 class Unjudged(ReasonedStandingRule, UndatedStandingRule):
     limit: ClassVar[int] = 30
-    text = ("UNJUDGED {why} edits -> accept each reviewed PR head with judge head (one verdict"
-            " judges every edit before it), or fork judges for the rest")
+    text = ("UNJUDGED {why} edits -> accept each reviewed PR head with judge ok --pr N --head SHA"
+            " (one verdict judges every edit before it), or fork judges for the rest")
 
     @classmethod
     def reason(cls, comms: Comms, commander: str) -> str | None:

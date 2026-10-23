@@ -1,7 +1,7 @@
 """Committed commander notifications own what the heartbeat has already handled.
 
-Quiet state changes are passive notices. Unhandled urgent states remain eligible
-for the next five-decision packet; no process-local cache or pending queue owns them.
+Quiet state changes are passive notices. Urgent packets lead with five decisions
+and publish every current observation; no process-local cache owns them.
 """
 from __future__ import annotations
 
@@ -89,13 +89,17 @@ class CommanderUpdate(TaskAttachment, declared_name=None):
     @abstractmethod
     def body(self, previous: CommanderUpdate | None) -> str: ...
 
+    def changed_pings(self, previous: CommanderUpdate | None,
+                      presented: tuple[Ping, ...] = ()) -> tuple[Ping, ...]:
+        known = frozenset(previous.handled) if previous else frozenset()
+        return tuple(ping for ping in self.handled if ping not in known and ping not in presented)
+
     def changed_lines(self, previous: CommanderUpdate | None,
                       presented: tuple[Ping, ...] = ()) -> tuple[str, ...]:
         prior = previous.handled if previous else ()
-        known = frozenset(prior)
         current = frozenset(ping.key for ping in self.handled)
         return (
-            *(ping.text for ping in self.handled if ping not in known and ping not in presented),
+            *(ping.text for ping in self.changed_pings(previous, presented)),
             *(f"NO LONGER CURRENT: {ping.text}" for ping in prior if ping.key not in current),
         )
 
@@ -132,10 +136,7 @@ class CommanderUpdate(TaskAttachment, declared_name=None):
         urgent = (*(UnitPing.capture(state) for state in states if state.attention()),
                   *(RulePing.capture(rule) for rule in rules))
         decisions = tuple(ping for ping in urgent if known.get(ping.key) != ping)[:5]
-        handled = (*quiet, *(
-            ping if ping in decisions else known[ping.key]
-            for ping in urgent if ping in decisions or ping.key in known
-        ))
+        handled = (*quiet, *urgent)
         if decisions:
             return CommanderDecisions(commander, handled, decisions)
         if previous is None or handled != previous.handled:
@@ -171,5 +172,8 @@ class CommanderDecisions(CommanderUpdate):
     role = ConversationRole()
 
     def body(self, previous: CommanderUpdate | None) -> str:
+        also_current = self.changed_pings(previous, self.decisions)
         return "\n".join((*(ping.text for ping in self.decisions),
-                          *self.changed_lines(previous, self.decisions)))
+                          *(("ALSO CURRENT:", *(ping.text for ping in also_current))
+                            if also_current else ()),
+                          *self.changed_lines(previous, self.handled)))

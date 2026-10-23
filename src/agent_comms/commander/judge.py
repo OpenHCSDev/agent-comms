@@ -46,9 +46,6 @@ from agent_comms.todos import (
     RejectedHeadVerdict,
     HeadVerdict,
     HeadReviewOrder,
-    LinkedHeadReview,
-    NoHeadOrder,
-    OrderHeadReview,
     SendBackVerdict,
     StrikeReason,
     SupersededVerdict,
@@ -155,36 +152,6 @@ class AlarmVerb(JudgeVerb):
 
     def run(self, ctx: order.Commander) -> None:
         alarm(ctx)
-
-
-@dataclass(frozen=True, kw_only=True)
-class HeadVerb(JudgeVerb):
-    help = ("accept an order's reviewed PR head: every edit before it is judged and "
-            "agent-comms/review is posted on the commit")
-    problem: Annotated[str, Argument(flags=("problem",), options={"metavar": "PROBLEM"})]
-    head: Annotated[str, Argument(flags=("head",), options={"metavar": "SHA"})]
-    serves: Annotated[
-        str, Argument(options={"help": "exact words of the order the head carries out"})
-    ]
-    pr: int = 0
-
-    def run(self, ctx: order.Commander) -> None:
-        held = [todo for todo in ctx.held_orders() if todo.id == self.problem]
-        if not held:
-            sys.exit(f'Refused: {self.problem} is not an order this commander holds')
-        todo, = held
-        links = tuple(link for link in todo.order.checked().pull_requests
-                      if not self.pr or link.number == self.pr)
-        if len(links) != 1:
-            sys.exit('Refused: select --pr from this order\'s linked pull requests')
-        link, = links
-        ctx.call(CommsHeadVerdictTool(
-            request=PullRequestHead(link.repo, link.number, self.head),
-            operation=ReviewedHeadVerdict(),
-            order=OrderHeadReview(todo.revision, LinkedHeadReview.of(todo, self.serves)),
-        ))
-        left = len(Edit.unjudged(ctx.comms, ctx.commander))
-        print(f'head {self.head} accepted on {todo.id}; {left} still unjudged')
 
 
 class ReviewSubject(DeclaredFamily):

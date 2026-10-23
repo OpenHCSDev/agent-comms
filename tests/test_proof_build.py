@@ -386,6 +386,6 @@ def test_install_waits_for_merges_to_settle_into_one_batch(
 
     monkeypatch.setattr(time, "time", lambda: merged + InstallDue.settle)
     (due,) = InstallDue.violations(bus, "lead")
-    assert graph.newer in due.why
-    assert "oldest 30 min" in due.why
+    assert due.main == graph.newer
+    assert due.oldest_minutes == 30
 

@@ -72,7 +72,7 @@ def test_recreated_watcher_reads_original_committed_unit_observation(notificatio
     assert unchanged.reference == first.reference
 
 
-def test_rule_packets_admit_five_and_leave_remaining_occurrences_unhandled(notification_bus):
+def test_rule_packets_lead_with_five_and_publish_all_current_occurrences(notification_bus):
     comms = notification_bus
     rules = tuple(ServicePassFailing(f"watch-{index}", 1.0, "failed source read")
                   for index in range(7))
@@ -80,16 +80,12 @@ def test_rule_packets_admit_five_and_leave_remaining_occurrences_unhandled(notif
     first, = notifications(comms)
     assert isinstance(first.task, CommanderDecisions)
     assert len(first.task.decisions) == 5
+    assert {RulePing.capture(rule) for rule in rules} == set(first.task.handled)
     beat(comms, rules)
-    first, second = notifications(comms)
-    assert isinstance(second.task, CommanderDecisions)
-    assert len(second.task.decisions) == 2
-    assert {RulePing.capture(rule) for rule in rules} == set(second.task.handled)
-    beat(comms, rules)
-    assert len(notifications(comms)) == 2
+    assert len(notifications(comms)) == 1
     # Changed diagnostic wording is not another failed occurrence.
     beat(comms, tuple(replace(rule, error="new diagnostic detail") for rule in rules))
-    assert len(notifications(comms)) == 2
+    assert len(notifications(comms)) == 1
 
 
 def test_resolution_is_passive_and_same_rule_can_recur(notification_bus):
