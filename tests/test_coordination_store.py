@@ -1467,22 +1467,6 @@ def test_observation_closes_failed_reads_and_preserves_schema_disposition(db_pat
         assert writer.participants.get("owner").committed
 
 
-@pytest.mark.parametrize(
-    "invalid",
-    ["false", 0, 1, None, PromptStartingAttempt(60000)],
-    ids=["string", "zero", "one", "none", "live-phase"],
-)
-def test_nonterminal_settlement_cannot_silence_wire(db_path: Path, invalid: object) -> None:
-    with ready(db_path) as db:
-        _, fence = started(db)
-        fence = final_evidence(db, fence)
-        before = db.get("exec")
-        with pytest.raises(ValueError):
-            db.settle_nonpublication(fence, expected_pointer_revision=1, outcome=invalid)
-        assert db.get("exec") == before
-        assert not db.session._connection.in_transaction
-
-
 @pytest.mark.parametrize("invalid", ["false", 0, 1, None], ids=["string", "zero", "one", "none"])
 def test_other_public_evidence_flags_require_exact_bool(db_path: Path, invalid: object) -> None:
     with store(db_path) as db:

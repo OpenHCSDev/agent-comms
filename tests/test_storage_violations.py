@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+
 import json
 import shutil
 import subprocess
@@ -12,7 +13,7 @@ from types import CodeType
 import pytest
 
 from agent_comms.change_report import FileLine
-from agent_comms.comms import Comms
+from agent_comms.comms import wire
 from agent_comms.field_codec import FieldCodec
 from agent_comms.goals import OrderCheck
 from agent_comms.order_runs import MechanicalOrderRun
@@ -91,7 +92,7 @@ def test_storage_family_reads_once_and_renders_each_broken_fact(
     (root / "storage.json").write_text(
         json.dumps(FieldCodec.encode(StorageRule(checkout_base=base)))
     )
-    comms = Comms(root)
+    comms = wire(root)
     lead = comms.registry.declare(comms.registry.new_thread("lead", frozenset(), str(repository)))
     worker = comms.registry.declare(
         comms.registry.new_thread("worker", frozenset(), str(home))

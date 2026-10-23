@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+
 import json
 import os
 from dataclasses import replace
@@ -9,7 +10,7 @@ from dataclasses import replace
 import pytest
 
 from agent_comms.child_process import Platform
-from agent_comms.comms import Comms
+from agent_comms.comms import Comms, wire
 from conftest import installed_comms
 from agent_comms.goal_actions import (
     ClearGoalAction,
@@ -57,7 +58,7 @@ def test_goal_history_records_transitions_replacement_clear_and_rename(tmp_path,
     second = comms.goals.update_goal("reviewer", SetGoalAction(text="Start a new objective"))
     comms.goals.update_goal("reviewer", ClearGoalAction(expect=GoalPrecondition(goal_id=second.id)))
 
-    reopened = Comms(comms.root)
+    reopened = wire(comms.root)
     entries = reopened.goals.goal_history("worker")
     assert [entry.kind for entry in entries] == ["transition"] * 6
     assert [entry.after for entry in entries] == [first, paused, resumed, completed, second, NoGoal()]
@@ -89,16 +90,16 @@ def test_existing_goal_seeds_only_current_observed_baseline(tmp_path):
         comms.root / "goal_history.sqlite3"
     ).unlink()  # model missing history beside an existing current goal
 
-    reopened = Comms(comms.root)
+    reopened = wire(comms.root)
     baseline = reopened.goals.goal_history("worker")
     assert len(baseline) == 1
     assert baseline[0].kind == "baseline"
     assert baseline[0].before == NoGoal() and baseline[0].after == current
-    assert Comms(comms.root).goals.goal_history("worker") == baseline
+    assert wire(comms.root).goals.goal_history("worker") == baseline
     paused = reopened.goals.update_goal(
         "worker", PausedGoalAction(expect=GoalPrecondition(goal_id=current.id))
     )
-    entries = Comms(comms.root).goals.goal_history("worker")
+    entries = wire(comms.root).goals.goal_history("worker")
     assert [entry.kind for entry in entries] == ["baseline", "transition"]
     assert entries[-1].before == current and entries[-1].after == paused
 
@@ -120,7 +121,7 @@ def test_crash_before_registry_write_does_not_expose_history_intent(tmp_path, mo
                 "worker", PausedGoalAction(expect=GoalPrecondition(goal_id=current.id))
             )
 
-    reopened = Comms(comms.root)
+    reopened = wire(comms.root)
     assert reopened.registry.require("worker").goal == current
     entries = reopened.goals.goal_history("worker")
     assert len(entries) == 1 and entries[0].after == current
@@ -152,7 +153,7 @@ def test_crash_after_registry_write_reconciles_pending_history(tmp_path, monkeyp
                 "worker", PausedGoalAction(expect=GoalPrecondition(goal_id=current.id))
             )
 
-    reopened = Comms(comms.root)
+    reopened = wire(comms.root)
     paused = reopened.registry.require("worker").goal
     assert paused is not None and paused.state.declared_name == "paused"
     entries = reopened.goals.goal_history("worker")
@@ -169,9 +170,9 @@ def test_unjournaled_current_registry_change_is_labeled_observed_gap(tmp_path):
     raw["threads"]["worker"]["goal"]["revision"] = current.revision + 2
     registry_path.write_text(json.dumps(raw))
 
-    reopened = Comms(comms.root)
+    reopened = wire(comms.root)
     entries = reopened.goals.goal_history("worker")
     assert [entry.kind for entry in entries] == ["transition", "observed_gap"]
     assert entries[-1].before == current
     assert entries[-1].after.text == "Unjournaled change"
-    assert len(Comms(comms.root).goals.goal_history("worker")) == 2
+    assert len(wire(comms.root).goals.goal_history("worker")) == 2

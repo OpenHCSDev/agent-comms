@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+
 import os
 import subprocess
 from collections.abc import Iterator, Sequence
@@ -15,7 +16,7 @@ from .attempt_recovery import RecoveryMonitorCapability
 from .bus import Bus
 from .child_process import NoProcess
 from .cli_result import CliResult
-from .comms import Comms
+from .comms import Comms, wire
 from .fresh_private_session import create_fresh_private_session
 from .native_session_files import CheckSession
 from .goals import NoGoal
@@ -70,7 +71,7 @@ class CheckRoot:
             raise ValueError("A check root cannot be inside its source")
         root.mkdir(mode=0o700, parents=True)  # Refuse an existing directory, including a symlink.
         try:
-            copied = Comms(root)
+            copied = wire(root)
             self._populate(copied)
             try:
                 yield copied

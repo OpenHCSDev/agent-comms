@@ -246,7 +246,8 @@ class RecoverySnapshot:
             raise RecoveryBlocked("settlement requires exact final done/death evidence")
         ReplayAssessments.accumulate(db, execution.execution_id, outcome.replay_contribution)
         execution_state, response = outcome.disposition(self, attempt)
-        session.release_resources(self, outcome, boundary)
+        if boundary is not None:
+            session.release_resources(self, outcome, boundary)
         now = session.now(max(execution.updated_at_ms, attempt.updated_at_ms))
         AttemptRecord.update(
             db,

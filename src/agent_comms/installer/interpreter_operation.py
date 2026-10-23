@@ -6,6 +6,7 @@ supplies its own imports even when it predates this file.
 
 from __future__ import annotations
 
+
 import inspect
 import json
 import sys
@@ -165,10 +166,10 @@ class RunningOwnersProbe(RuntimeProbe[list[str]]):
     root: Annotated[Path, PathText]
 
     def run(self) -> list[str]:
-        from agent_comms.comms import Comms
+        from agent_comms.comms import wire
         from agent_comms.owner_restart import OwnerRestartRequest
 
-        snapshot = Comms(self.root).registry.snapshot()
+        snapshot = wire(self.root).registry.snapshot()
         return [thread.name for thread in OwnerRestartRequest().scope.threads(snapshot)]
 
 

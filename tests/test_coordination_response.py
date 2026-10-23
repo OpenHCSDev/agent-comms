@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+
 from agent_comms.private_runtime_schema import PrivateCoordinatorTable
 from bus_record_fixture import prepare_native_comms
 from agent_comms.lifecycle_capability import Active, Complete
@@ -17,7 +18,7 @@ from agent_comms.assignment_states import CompletedAssignment
 from agent_comms.attempt_start import AttemptStart
 from agent_comms.attempt_states import ModelRunningAttempt, PromptAcceptedAttempt, SettlingAttempt
 from agent_comms.child_process import ProcessIdentity
-from agent_comms.comms import Comms
+from agent_comms.comms import Comms, wire
 from agent_comms.coordination_cohort import accept_delivery_cohort
 from agent_comms.coordination_errors import (
     IdentityConflict,
@@ -61,7 +62,7 @@ class Fixture:
 
 
 def _ready(tmp_path: Path, *, direct: bool = False, extra_targets: tuple[str, ...] = ()) -> Fixture:
-    comms = prepare_native_comms(Comms(tmp_path / "wire"))
+    comms = prepare_native_comms(wire(tmp_path / "wire"))
     for name in ("sender", "owner"):
         comms.registry.declare(
             comms.registry.new_thread(name, frozenset({'team'}), worktree=str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid()))
