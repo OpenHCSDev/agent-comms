@@ -264,7 +264,8 @@ query($owner: String!, $name: String!, $after: String) {
                 "git", "for-each-ref", "--format=%(upstream:remotename) %(upstream:remoteref)",
                 reference,
             ).split()
-            published = self.remote_heads(remote, remote_ref)
+            # Git spells a local-branch upstream as remote "."; that is not publication.
+            published = self.remote_heads(remote, remote_ref) if remote != "." else ()
             if published:
                 remote_head, = published
                 self.require_commits(remote, remote_head)
