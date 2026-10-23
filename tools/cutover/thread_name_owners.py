@@ -41,7 +41,7 @@ class ThreadNameOwners(Carry):
             raise RelationViolationError("Inspect the unfinished old rename before carrying its bus.")
         changed = 0
         detail: dict[str, int] = {}
-        rewritten: list[str] = []
+        rewritten: list[Path] = []
         for path in paths:
             with ExitStack() as lifetime:
                 sidecar = path.name == PromptBinding.filename
@@ -117,5 +117,5 @@ class ThreadNameOwners(Carry):
                     else:
                         with closing(SQLiteFile.writer(path)) as destination:
                             db.backup(destination)
-                    rewritten.append(str(path.relative_to(self.root)))
+                    rewritten.append(path.relative_to(self.root))
         return Carried(changed, detail, tuple(rewritten))

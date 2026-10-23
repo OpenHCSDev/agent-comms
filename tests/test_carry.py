@@ -179,11 +179,11 @@ def noisy_step(tmp_path_factory):
         "            (self.root / 'saved').write_text('migrated')\n"
         "            if (self.root / 'fail').exists():\n"
         "                raise RuntimeError('failed after changing the saved file')\n"
-        "        return Carried(1, {'applied': apply}, ('saved',))\n"
+        "        return Carried(1, {'applied': apply}, (Path('saved'),))\n"
     )
     # The parent needs only the selected step's identity; its implementation is loaded
     # by the worker from the target tree.
-    class SelectedStep(Carry):
+    class Noisy(Carry):
         @classmethod
         def module(cls):
             return module
@@ -194,7 +194,7 @@ def noisy_step(tmp_path_factory):
         def carry(self, *, apply):
             raise AssertionError("The selected interpreter executes the carry, never its caller")
 
-    return tree, SelectedStep
+    return tree, Noisy
 
 
 def test_step_answers_are_separate_from_diagnostics_and_keep_their_types(
@@ -206,10 +206,10 @@ def test_step_answers_are_separate_from_diagnostics_and_keep_their_types(
     request = step(root, root, tmp_path / "spill")
     assert stack.call_step(request, tree, BackupFilesOperation()) == (root / "saved",)
     assert stack.call_step(request, tree, MigrateOperation(False)) == (
-        Carried(1, {"applied": False}, ("saved",)))
+        Carried(1, {"applied": False}, (Path("saved"),)))
     assert not (root / "saved").exists()
     assert stack.call_step(request, tree, MigrateOperation(True)) == (
-        Carried(1, {"applied": True}, ("saved",)))
+        Carried(1, {"applied": True}, (Path("saved"),)))
     assert (root / "saved").read_text() == "migrated"
 
 

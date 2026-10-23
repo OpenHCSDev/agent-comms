@@ -36,7 +36,7 @@ class TurnOwner(Carry):
         registry = RegistryStore.at(self.root)
         if not registry.path.exists():
             return Carried(0)
-        rewritten: list[str] = []
+        rewritten: list[Path] = []
         for thread in registry.read_snapshot_unlocked().threads.values():
             if not thread.executing:
                 continue
@@ -56,5 +56,5 @@ class TurnOwner(Carry):
             FieldCodec.decode(ActiveTurn, carried)
             if apply:
                 AtomicFile(path).write_text(json.dumps(carried))
-            rewritten.append(str(path.relative_to(self.root)))
+            rewritten.append(path.relative_to(self.root))
         return Carried(len(rewritten), rewritten=tuple(rewritten) if apply else ())
