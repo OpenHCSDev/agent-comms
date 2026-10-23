@@ -37,7 +37,8 @@ class Carried:
     changed: int
     detail: dict[str, int | bool] = field(default_factory=dict)
     rewritten: tuple[str, ...] = ()
-    """Files under the bus root this run wrote; every other file stays byte-identical."""
+    """Files under the bus root this run wrote or deleted; every other file stays
+    byte-identical."""
 
 
 @dataclass(frozen=True)
