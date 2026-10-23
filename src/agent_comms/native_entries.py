@@ -129,28 +129,16 @@ class NativeEntry(RecordedEntry, DeclaredFamily, affix="Entry"):
 
     @classmethod
     def read(cls, raw: bytes) -> NativeEntry:
-        return cls.from_wire(json.loads(raw))
+        return cls.from_wire(FieldCodec.parse(raw))
 
     @classmethod
     def from_evidence(cls, raw: dict) -> NativeEntry:
         """Strict tracked-input boundary, separate from tolerant display decoding."""
-        entry = cls.from_wire(raw)
-        if isinstance(entry, MessageEntry):
-            message = raw["message"]
-            # Opaque display roles must not hide a tracked ID from proof readers.
-            if message.get("inputId") is not None and not entry.message.user:
-                raise MalformedRecord("Tracked native input must belong to a user")
-            if entry.message.user and isinstance(entry.message.content, tuple):
-                # A digest/context reader may corroborate extended native content,
-                # but continued STARTED text matching must never lose extra fields.
-                content = tuple(
-                    part.preserve_evidence(raw_part)
-                    for part, raw_part in zip(
-                        entry.message.content, message["content"], strict=True
-                    )
-                )
-                entry = replace(entry, message=replace(entry.message, content=content))
-        return entry
+        return cls.from_wire(raw).preserve_evidence(raw)
+
+    def preserve_evidence(self, raw: dict) -> NativeEntry:
+        """Non-message members have no tracked message content to corroborate."""
+        return self
 
     @classmethod
     def input_evidence(cls, raw: dict) -> tuple[NativeEntry, ...]:
@@ -234,7 +222,8 @@ class NativeEvidenceState(ABC):
 
 class UnreadNativeEvidence(NativeEvidenceState):
     def read(self, reader: NativeEvidenceRead) -> SessionEntry:
-        header = reader._accept_header((NativeEntry.from_evidence(reader.source.consume_header()),))
+        header = SessionEntry.from_wire(reader.source.consume_header())
+        header.require_header()
         reader.entries = (header,)
         reader.state = HeaderNativeEvidence()
         return header
@@ -347,12 +336,6 @@ class NativeEvidenceRead:
                         "ambiguous tracked user input: one input ID on two entries")
                 self.inputs[user.input_id] = position
 
-    def _accept_header(self, entries: tuple[NativeEntry, ...]) -> SessionEntry:
-        if not entries or not isinstance(entries[0], SessionEntry):
-            raise MalformedRecord('Native Pi session header is invalid')
-        entries[0].require_header()
-        return entries[0]
-
     def header(self) -> SessionEntry:
         """Read and decode record one without discarding an existing input index."""
         try:
@@ -407,7 +390,6 @@ class NativeEvidenceRead:
             appended = tuple(self.decode_rows(self.source.rows()))
             self.index(appended)
             entries = self.entries + appended
-            self._accept_header(entries)
         except NativeEvidencePrefixChanged:
             if reverified:
                 self.close()
@@ -527,6 +509,20 @@ class SessionEntry(NativeEntry):
 
 @dataclass(frozen=True, kw_only=True)
 class MessageEntry(NativeEntry):
+    def preserve_evidence(self, raw: dict) -> MessageEntry:
+        message = raw["message"]
+        # Opaque display roles must not hide a tracked ID from proof readers.
+        if message.get("inputId") is not None and not self.message.user:
+            raise MalformedRecord("Tracked native input must belong to a user")
+        if self.message.user and isinstance(self.message.content, tuple):
+            # Continued STARTED text matching must retain extended native fields.
+            content = tuple(
+                part.preserve_evidence(raw_part)
+                for part, raw_part in zip(self.message.content, message["content"], strict=True)
+            )
+            return replace(self, message=replace(self.message, content=content))
+        return self
+
     @classmethod
     def input_evidence(cls, raw: dict) -> tuple[NativeEntry, ...]:
         message = raw.get("message")
