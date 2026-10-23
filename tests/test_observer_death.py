@@ -50,7 +50,9 @@ async def test_a_killed_observer_is_reported_once_with_its_signal_and_fails_awai
         with pytest.raises(ObserverDied) as awaited:
             await waiting
         assert awaited.value is died.value
-        process.request(StopSidebar())  # what a closing view sends; the observer's end was already reported
+        with pytest.raises(ObserverDied) as stopping:
+            process.request(StopSidebar())  # what a closing view sends
+        assert stopping.value is died.value
         with pytest.raises(ObserverDied) as later:
             await process.read(ReadNotifications(str(comms.root), ()))
         assert later.value is died.value

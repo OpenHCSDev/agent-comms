@@ -1,6 +1,5 @@
 """Source contention retains a viewer read, never manufactures an input failure."""
 
-from agent_comms.private_runtime_schema import PrivateCoordinatorTable
 import asyncio
 import json
 import subprocess
@@ -11,10 +10,10 @@ import pytest
 
 from agent_comms.acp_extension import TranscriptSnapshotUpdate
 from agent_comms.comms import wire
-from agent_comms.coordinator import Coordination
 from agent_comms.ui_model.observation import (
     ObservationProcess, ReadBusy, ReadNotifications, ReadTranscript,
 )
+from agent_comms.session_file import RegistrySessionLocation
 from agent_comms.thread_identity import UnrecordedThreadIncarnation
 from agent_comms.threads import Thread
 
@@ -28,9 +27,8 @@ def saved_history(tmp_path):
         {"type": "message", "id": "saved-answer", "parentId": None, "timestamp": timestamp,
          "message": {"role": "assistant", "content": [{"type": "text", "text": "Saved answer"}]}},
     )))
-    comms.registry.declare(Thread('saved', frozenset(), str(tmp_path), session_file=str(session)))
-    with Coordination(str(comms.root / "coordination.sqlite3")) as store:
-        PrivateCoordinatorTable.install(store)
+    comms.registry.declare(Thread('saved', frozenset(), str(tmp_path), session_file=RegistrySessionLocation.from_path(str(session), comms.root)))
+    comms.registry.prepare_native_root()
     return comms, session
 
 
@@ -193,13 +191,15 @@ async def test_owner_reply_uses_the_same_peer_retirement(comms):
     connection, viewer = multiprocessing.get_context("spawn").Pipe()
     with connection, viewer:
         service = ObservationService(comms, connection)
-        # A real missing-owner refusal still has to be sent through the shared endpoint.
-        request = ReadOwnerGoal(str(comms.root), UnrecordedThreadIncarnation("missing"), request_id=7)
-        request.receive(service)
-        asking = service.owner_reads[7]
-        viewer.close()
-        async with asyncio.timeout(5):
-            await asking
+        # Owner reads live in the service's task group, which only its run enters.
+        async with service.tasks:
+            # A real missing-owner refusal still has to be sent through the shared endpoint.
+            request = ReadOwnerGoal(str(comms.root), UnrecordedThreadIncarnation("missing"), request_id=7)
+            request.receive(service)
+            asking = service.owner_reads[7]
+            viewer.close()
+            async with asyncio.timeout(5):
+                await asking
         assert not service.owner_reads
         assert service.closed and service.changed.is_set()
 
