@@ -7,6 +7,7 @@ from agent_comms.pi_vocabulary import OffThinkingLevel
 from agent_comms.native_arguments import NativeArguments
 from agent_comms.launch_runtime import RestoredRuntime
 from agent_comms.owner_restart import OwnerRestartRequest
+from agent_comms.restart_scope import OwnersNamed
 from agent_comms.owner_cutover import PreserveOwnerRuntime
 from acp.schema import SessionNotification
 
@@ -470,7 +471,7 @@ async def test_native_channel_reply_automatically_reaches_original_sender(tmp_pa
                 name: Path(before.threads[name].runtime.read_key).read_bytes() for name in projects
             }
             await attachment.shutdown()
-            restart = OwnerRestartRequest(tuple(projects), launch_runtime=runtime)
+            restart = OwnerRestartRequest(OwnersNamed(tuple(projects)), launch_runtime=runtime)
             await asyncio.to_thread(PreserveOwnerRuntime().restart, comms.owners, restart)
             after = comms.registry.snapshot()
             for name in projects:
