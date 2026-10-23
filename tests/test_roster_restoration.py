@@ -134,7 +134,8 @@ def test_private_restoration_allows_new_cohort_without_starting_old_subscribers(
     live = Thread('live', frozenset({'comms'}), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid()))
     missing = Thread('missing', frozenset({'comms'}), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid()))
     old.registry.declare(missing)
-    current.registry.declare(live)
+    # The registry assigns storage roots at declaration; restoration must leave that thread alone.
+    live = current.registry.declare(live)
     root_id = current.registry.prepare_native_root().namespace
     source = old.registry.snapshot()
     with Coordination(str(current.root / "coordination.sqlite3")) as store:
