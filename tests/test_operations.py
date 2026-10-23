@@ -176,7 +176,7 @@ class TestThreadOps:
         ]
         session_file.write_text("\n".join(json.dumps(record) for record in records) + "\n")
         wired.registry.declare(
-            wired.registry.new_thread(name='transcript-thread', tags=frozenset(), worktree=str(tmp_path), session_file=RegistrySessionLocation.from_path(str(session_file), tmp_path))
+            wired.registry.new_thread(name='transcript-thread', tags=frozenset(), worktree=str(tmp_path), session_file=RegistrySessionLocation.from_path(str(session_file), wired.root))
         )
 
         events = wired.transcripts.thread_transcript_page("transcript-thread").events
@@ -202,7 +202,7 @@ class TestThreadOps:
             + "\n"
         )
         wired.registry.declare(
-            wired.registry.new_thread(name='compacted-thread', tags=frozenset(), worktree=str(tmp_path), session_file=RegistrySessionLocation.from_path(str(session_file), tmp_path))
+            wired.registry.new_thread(name='compacted-thread', tags=frozenset(), worktree=str(tmp_path), session_file=RegistrySessionLocation.from_path(str(session_file), wired.root))
         )
 
         events = wired.transcripts.thread_transcript_page("compacted-thread").events
@@ -303,7 +303,7 @@ class TestThreadOps:
         assert attached.parent == ForkedParent("PR111")
         assert attached.task == GivenThreadText("fix auth")
         assert attached.process_identity == ProcessIdentity.capture(os.getpid())
-        assert attached.session_file == RegistrySessionLocation.from_path(str(session_file.resolve()), tmp_path)
+        assert attached.session_file == RegistrySessionLocation.from_path(str(session_file.resolve()), wired.root)
         assert wired.registry.status("fixer").declared_name == "running"
 
 
@@ -512,7 +512,7 @@ class TestLedgerOps:
                     + "\n"
                 )
         wired.registry.declare(
-            wired.registry.new_thread(name='large', tags=frozenset(), worktree=str(tmp_path), session_file=RegistrySessionLocation.from_path(str(path), tmp_path))
+            wired.registry.new_thread(name='large', tags=frozenset(), worktree=str(tmp_path), session_file=RegistrySessionLocation.from_path(str(path), wired.root))
         )
         page = wired.transcripts.thread_transcript_page("large")
         assert page.has_older
@@ -581,10 +581,10 @@ class TestReDeclarationPreservesProvenance:
 
     def test_missing_session_file_inherits_previous(self, wired, tmp_path):
         wired.registry.declare(
-            wired.registry.new_thread(name='PR111', tags=frozenset({'base'}), worktree='/tmp/wt1', session_file=RegistrySessionLocation.from_path(str(tmp_path / 's.json'), tmp_path))
+            wired.registry.new_thread(name='PR111', tags=frozenset({'base'}), worktree='/tmp/wt1', session_file=RegistrySessionLocation.from_path(str(tmp_path / 's.json'), wired.root))
         )
         wired.registry.declare(wired.registry.new_thread(name='PR111', tags=frozenset({'base'}), worktree='/tmp/wt1'))
-        assert wired.registry.require("PR111").session_file == RegistrySessionLocation.from_path(str(tmp_path / "s.json"), tmp_path)
+        assert wired.registry.require("PR111").session_file == RegistrySessionLocation.from_path(str(tmp_path / "s.json"), wired.root)
 
     def test_fresh_declaration_is_unaffected(self, wired):
         wired.registry.declare(wired.registry.new_thread(name='fresh', tags=frozenset(), worktree='/wt'))

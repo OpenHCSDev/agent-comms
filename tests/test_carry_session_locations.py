@@ -6,8 +6,10 @@ from pathlib import Path
 
 import pytest
 
+from agent_comms.bus import Bus
 from agent_comms.comms import wire
 from agent_comms.errors import RelationViolationError
+from agent_comms.historical_views import HistoryArchive
 from agent_comms.installer.carry import Carried
 from agent_comms.pi_native_backend import PiNativeBackend
 from agent_comms.registry_store import RegistryStore
@@ -65,3 +67,25 @@ def test_publishing_into_another_root_keeps_the_named_transcript(tmp_path):
     moved = first.bound_to(tmp_path / "b")
     assert isinstance(moved, ExternalSessionLocation)
     assert moved.location(PiNativeBackend).path == str((tmp_path / "a" / "s.jsonl").resolve())
+
+
+def test_carry_converts_the_archived_catalogue_before_reading_its_roots(tmp_path):
+    old = wire(tmp_path / "old")
+    session = old.root / "native-sessions" / "bus.jsonl"
+    old.registry.declare(old.registry.new_thread(
+        "bus", frozenset(), str(tmp_path), session_file=RegistrySessionLocation.from_path(session, old.root)))
+    Bus.install(Bus.path_in(old.root))
+    live = wire(tmp_path / "live")
+    Bus.install(Bus.path_in(live.root))
+    live.views.attach_history(old.root)
+    catalog = HistoryArchive.path_in(live.root)
+    recorded = json.loads(catalog.read_text())
+    recorded[0]["provenance"]["threads"]["bus"]["session_file"] = str(session)
+    catalog.write_text(json.dumps(recorded))
+    step = SessionLocations(live.root, live.root, tmp_path / "spill")
+    with maintenance_held(live.root):
+        assert step.carry(apply=False) == Carried(1, {"BusSessionLocation": 1})
+        assert step.carry(apply=True).changed == 1
+        assert step.carry(apply=False) == Carried(0)
+    (source,) = live.bus.history.sources()
+    assert source.provenance.require("bus").runtime.path == str(session.resolve())

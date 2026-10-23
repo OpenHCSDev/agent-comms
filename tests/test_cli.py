@@ -599,7 +599,7 @@ class TestSelectedTargetActions:
         source.write_text(json.dumps({'type': 'message', 'timestamp': '2026-09-20T00:00:01Z', 'message': {
             'role': 'assistant', 'content': [{'type': 'text', 'text': 'Saved reply'}],
         }}) + '\n')
-        comms.registry.declare(comms.registry.new_thread('alpha', frozenset({'team'}), str(tmp_path), session_file=RegistrySessionLocation.from_path(str(source), tmp_path)))
+        comms.registry.declare(comms.registry.new_thread('alpha', frozenset({'team'}), str(tmp_path), session_file=RegistrySessionLocation.from_path(str(source), comms.root)))
         comms.channels.update_tags('beta', add=frozenset({'team'}))
         viewer = comms.messaging.user_identity(str(tmp_path)).name
         comms.messaging.send('alpha', 'beta', 'Executor message').message.message_id

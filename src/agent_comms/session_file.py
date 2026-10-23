@@ -33,11 +33,19 @@ class SessionFile(SubclassUnion, affix="SessionFile"):
     def applied(self, previous: SessionFile) -> SessionFile: ...
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(frozen=True, slots=True, eq=False)
 class RegistrySessionLocation(RecordMember, SessionFile, declared_name=None):
     """A saved transcript whose storage owner was selected at publication."""
 
     path: Annotated[Path, PathText]
+
+    def __eq__(self, other: object) -> bool:
+        """A bus path is relative and an external one absolute, so the path is the location;
+        the root a registry bound it to says where it is read, not which one it is."""
+        return isinstance(other, RegistrySessionLocation) and self.path == other.path
+
+    def __hash__(self) -> int:
+        return hash(self.path)
 
     @classmethod
     def from_path(cls, path: Path | str, root: Path) -> BoundSessionLocation:
@@ -66,16 +74,15 @@ class RegistrySessionLocation(RecordMember, SessionFile, declared_name=None):
         return self.resolve(root)
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, eq=False)
 class BoundSessionLocation:
     """A wire location bound to the root whose registry decoded it."""
 
-    root: Annotated[Path, WireTransient()] = field(repr=False, compare=False)
+    root: Annotated[Path, WireTransient()] = field(repr=False)
 
     def bound_to(self, root: Path) -> BoundSessionLocation:
         """Publishing into another root keeps the transcript this location names."""
-        root = root.resolve()
-        if self.root == root:
+        if self.root == root or self.root == (root := root.resolve()):
             return self
         return RegistrySessionLocation.from_path(self.resolve(self.root), root)
 
@@ -86,7 +93,7 @@ class BoundSessionLocation:
         return backend.location_type(str(self.writable(self.root)))
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(frozen=True, slots=True, eq=False)
 class BusSessionLocation(RegistrySessionLocation):
     """A transcript stored under the bus root; a copied root reads its own copy."""
 
@@ -105,7 +112,7 @@ class BusSessionLocation(RegistrySessionLocation):
         return path
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(frozen=True, slots=True, eq=False)
 class ExternalSessionLocation(RegistrySessionLocation):
     """A harness transcript outside every bus root; only the published root writes it."""
 
@@ -126,12 +133,12 @@ class ExternalSessionLocation(RegistrySessionLocation):
         return self.resolve(root)
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, eq=False)
 class BoundBusSession(BoundSessionLocation, BusSessionLocation, declared_name=None):
     pass
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, eq=False)
 class BoundExternalSession(BoundSessionLocation, ExternalSessionLocation, declared_name=None):
     pass
 

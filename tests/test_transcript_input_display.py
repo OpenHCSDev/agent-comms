@@ -97,7 +97,7 @@ async def test_acp_saved_transcript_replay_hides_only_owned_internal_input(tmp_p
             ]
         )
     )
-    comms.registry.declare(comms.registry.new_thread('worker', frozenset(), str(tmp_path), session_file=RegistrySessionLocation.from_path(str(session), tmp_path)))
+    comms.registry.declare(comms.registry.new_thread('worker', frozenset(), str(tmp_path), session_file=RegistrySessionLocation.from_path(str(session), comms.root)))
     comms.transcripts.routes.record_input_display("a" * 32, None)
     comms.transcripts.routes.record_input_display("b" * 32, "test2")
     agent = CommsAgent(wire(comms.root))

@@ -62,7 +62,7 @@ def test_saved_presence_roundtrip_and_wire_views_preserve_data(tmp_path, status)
     comms = installed_comms(tmp_path)
     child = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(30)"])
     try:
-        thread = comms.registry.new_thread('owner', frozenset({'team'}), str(tmp_path), process_identity=ProcessIdentity.capture(child.pid), title=GivenThreadText('Retained title'), session_file=RegistrySessionLocation.from_path('/retained/session.jsonl', tmp_path), created_at=12.5)
+        thread = comms.registry.new_thread('owner', frozenset({'team'}), str(tmp_path), process_identity=ProcessIdentity.capture(child.pid), title=GivenThreadText('Retained title'), session_file=RegistrySessionLocation.from_path('/retained/session.jsonl', comms.root), created_at=12.5)
         comms.registry.register(thread, status)
         before = comms.registry.snapshot()
         saved = comms.registry.store.path.read_bytes()

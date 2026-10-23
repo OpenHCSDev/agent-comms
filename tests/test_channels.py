@@ -138,7 +138,7 @@ def test_exclusive_tag_deletion_uses_original_storage_and_preserves_survivors(tm
         path.write_text('{"original_saved_history":"' + name + '"}\n')
         saved[name] = path.read_bytes()
         process = ProcessIdentity.capture(os.getpid()) if name == 'active' else NoProcess()
-        comms.registry.declare(comms.registry.new_thread(name, frozenset(tags), str(tmp_path), session_file=RegistrySessionLocation.from_path(str(path), tmp_path), process_identity=process), status)
+        comms.registry.declare(comms.registry.new_thread(name, frozenset(tags), str(tmp_path), session_file=RegistrySessionLocation.from_path(str(path), comms.root), process_identity=process), status)
     comms.channels.set_channel_pinned('remove', True)
     comms.channels.set_thread_pinned('keep', 'multi', True)
     original_active = comms.registry.require('active')
@@ -383,7 +383,7 @@ def test_all_implicit_tag_introduction_paths_honor_name_reservations(tmp_path):
     parent_session = tmp_path / "parent.jsonl"
     parent_session.write_text("{}\n")
     comms.registry.declare(
-        comms.registry.new_thread('parent', frozenset(), str(tmp_path), session_file=RegistrySessionLocation.from_path(str(parent_session), tmp_path))
+        comms.registry.new_thread('parent', frozenset(), str(tmp_path), session_file=RegistrySessionLocation.from_path(str(parent_session), comms.root))
     )
     with pytest.raises(ValueError):
         comms.threads.create(

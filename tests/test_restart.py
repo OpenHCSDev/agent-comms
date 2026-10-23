@@ -23,7 +23,7 @@ async def test_real_idle_owner_is_replaced_without_losing_session(
         comms = wire(native.root)
         with LaunchRoot.from_path(comms.root).selected():
             comms.registry.declare(comms.registry.new_thread(
-                'worker', frozenset(), str(native.project), session_file=RegistrySessionLocation.from_path(str(native.session), tmp_path)))
+                'worker', frozenset(), str(native.project), session_file=RegistrySessionLocation.from_path(str(native.session), comms.root)))
             comms.agents.observe_runtime_info('worker', ContextUsageObservation(
                 context_used=PiCount.from_wire(23)))
             comms.agents.observe_runtime_info('worker', AgentInfo(
@@ -48,7 +48,7 @@ async def test_real_idle_owner_is_replaced_without_losing_session(
                 assert results[0].pid != process.pid
                 assert not owner.process_alive
                 await ready(results[0].pid)
-                assert comms.registry.require('worker').session_file == RegistrySessionLocation.from_path(str(native.session), tmp_path)
+                assert comms.registry.require('worker').session_file == RegistrySessionLocation.from_path(str(native.session), comms.root)
                 assert not comms.registry.require('worker').executing
                 assert comms.agents.runtime_info.path.read_bytes() == metadata
                 assert comms.ledger.path.read_bytes() == collaboration

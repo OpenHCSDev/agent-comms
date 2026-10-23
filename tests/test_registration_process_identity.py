@@ -111,7 +111,7 @@ def test_claim_attach_and_reload_preserve_the_captured_process(tmp_path):
     saved = restored.threads[owner.name]
     assert saved.process_identity == NoProcess() and not saved.executing
     assert saved.incarnation == owner.incarnation
-    assert saved.session_file == RegistrySessionLocation.from_path(str(session), tmp_path)
+    assert saved.session_file == RegistrySessionLocation.from_path(str(session), comms.root)
 
 
 def test_same_pid_different_birth_advances_both_authority_domains(tmp_path):

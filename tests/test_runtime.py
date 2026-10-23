@@ -235,7 +235,7 @@ async def test_existing_proxy_follows_renamed_owner_restart_and_resubscribes(
         )
         # Session metadata may be filled in after initial owner attachment.
         comms.registry.register(
-            replace(comms.registry.require("worker"), session_file=RegistrySessionLocation.from_path(str(tmp_path / "session.jsonl"), tmp_path))
+            replace(comms.registry.require("worker"), session_file=RegistrySessionLocation.from_path(str(tmp_path / "session.jsonl"), comms.root))
         )
         assert await proxy.request("cancel") == {"owner": "old"}
         comms.threads.rename_managed_thread("worker", "renamed", owner=old)

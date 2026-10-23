@@ -37,7 +37,18 @@ class SessionLocations(ArchivedCarry):
             HeldBusFile(RegistryFile, RegistryFile.path_in(self.root)).require()
         rewritten: list[Path] = []
         carried: Counter[str] = Counter()
-        with _store_lock(HistoryArchive.path_in(self.root)):
+        catalog = HistoryArchive.path_in(self.root)
+        with _store_lock(catalog):
+            recorded = json.loads(catalog.read_bytes()) if catalog.exists() else []
+            for source in recorded:
+                carried.update(self.carry_threads(
+                    source["provenance"]["threads"].values(), Path(source["original_root"])))
+            if carried and not apply:
+                # The catalogue names the archived roots and decodes only once carried.
+                return Carried(carried.total(), dict(carried))
+            if carried:
+                AtomicFile(catalog).write_text(json.dumps(recorded))
+                rewritten.append(Path(HistoryArchive.filename))
             sources = CarryCatalogSource.read(self.root, self.original_root)
             for root in self.roots():
                 registry = RegistryStore.at(root)
@@ -46,7 +57,7 @@ class SessionLocations(ArchivedCarry):
                 with registry.locked():
                     registry.private_guard_unlocked()
                     raw = json.loads(registry.path.read_bytes())
-                    changed = self.carry_threads(raw["threads"].values())
+                    changed = self.carry_threads(raw["threads"].values(), self.original_root)
                     carried.update(changed)
                     if changed and apply:
                         registry._write_unlocked(json.dumps(raw, indent=2))
@@ -55,19 +66,19 @@ class SessionLocations(ArchivedCarry):
                 rebound = tuple(source.carried_registry(source.mapped_root(self.root, self.original_root))
                                 for source in sources)
                 if rebound:
-                    AtomicFile(HistoryArchive.path_in(self.root)).write_text(
-                        json.dumps(FieldCodec.encode(rebound)))
+                    AtomicFile(catalog).write_text(json.dumps(FieldCodec.encode(rebound)))
                     rewritten.append(Path(HistoryArchive.filename))
-        return Carried(carried.total(), dict(carried), tuple(rewritten))
+        return Carried(carried.total(), dict(carried), tuple(dict.fromkeys(rewritten)))
 
-    def carry_threads(self, threads) -> Counter[str]:
+    @staticmethod
+    def carry_threads(threads, published: Path) -> Counter[str]:
         """Rewrite each old path string in place; the decoded member names the result."""
         changed: Counter[str] = Counter()
         for thread in threads:
             saved = thread.get("session_file")
             if not isinstance(saved, str):
                 continue
-            location = RegistrySessionLocation.from_path(saved, self.original_root)
+            location = RegistrySessionLocation.from_path(saved, published)
             thread["session_file"] = FieldCodec.encode(location, SessionFile)
             changed[type(FieldCodec.decode(SessionFile, thread["session_file"])).__name__] += 1
         return changed

@@ -96,7 +96,7 @@ def recorded_turn(comms, calls):
     path.write_text("".join(json.dumps(row) + "\n" for row in rows))
     path.chmod(0o600)
     thread = comms.registry.require("worker")
-    comms.registry.register(replace(thread, session_file=RegistrySessionLocation.from_path(str(path), tmp_path)))
+    comms.registry.register(replace(thread, session_file=RegistrySessionLocation.from_path(str(path), comms.root)))
 
 
 def unread_checkout(comms, tmp_path):

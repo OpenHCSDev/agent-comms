@@ -51,7 +51,7 @@ async def test_begin_callback_and_native_attachment_share_original_owner(tmp_pat
             saved = str(native_file)
             await turn.progress.before_native_metadata(AgentInfo(session_file=saved))
             assert turn.registry_owner is not initial
-            assert turn.thread.session_file == RegistrySessionLocation.from_path(saved, tmp_path)
+            assert turn.thread.session_file == RegistrySessionLocation.from_path(saved, comms.root)
             assert turn.progress.thread is turn.thread
             assert turn.progress.turn_lease == initial.turn_lease
             assert comms.registry.require("owner").turn_lease == initial.turn_lease

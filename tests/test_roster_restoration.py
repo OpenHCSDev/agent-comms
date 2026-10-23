@@ -28,7 +28,7 @@ def test_restore_keeps_live_owner_and_bus_while_importing_saved_stopped_identity
     old = installed_comms(tmp_path / "old")
     current = installed_comms(tmp_path / "current")
     live = old.registry.new_thread('live', frozenset({'comms'}), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid()))
-    missing = old.registry.new_thread('missing', frozenset({'nra', 'openhcs'}), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid()), session_file=RegistrySessionLocation.from_path(str(tmp_path / 'saved.jsonl'), tmp_path), title=GivenThreadText('Preserved title'), task=GivenThreadText('Original task'))
+    missing = old.registry.new_thread('missing', frozenset({'nra', 'openhcs'}), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid()), session_file=RegistrySessionLocation.from_path(str(tmp_path / 'saved.jsonl'), old.root), title=GivenThreadText('Preserved title'), task=GivenThreadText('Original task'))
     old.registry.declare(live)
     old.registry.declare(missing)
     missing = old.agents.begin_turn("missing", "old-turn").thread

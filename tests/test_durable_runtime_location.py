@@ -1,6 +1,7 @@
 """P117 location behavior over a real, paused durable store; no provider inputs."""
 import asyncio
 import subprocess
+from dataclasses import replace
 from pathlib import Path
 
 import pytest
@@ -21,6 +22,7 @@ def test_durable_thread_roundtrip_and_worker_selection(tmp_path, saved, *, threa
     location = DurableDatabase(str(tmp_path / 'session.sqlite3'))
     thread = thread_registration.new_thread('durable', frozenset(), str(tmp_path), backend=PiDurableBackend, session_file=RegistrySessionLocation.from_path(location.read_key, tmp_path) if saved else NoSessionFile())
     restored = FieldCodec.decode(Thread, FieldCodec.encode(thread))
+    restored = replace(restored, session_file=restored.session_file.bound_to(tmp_path))
     assert restored.runtime == (location if saved else UnstartedRuntime(PiDurableBackend))
     assert restored.runtime.backend is PiDurableBackend
     assert NewThreadBackend.selected() is PiNativeBackend

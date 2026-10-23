@@ -24,7 +24,7 @@ def working(comms, name, created):
     path.write_text("".join(json.dumps(row) + "\n" for row in rows))
     path.chmod(0o600)
     if name in comms.registry.all_threads():
-        comms.registry.register(replace(comms.registry.require(name), session_file=RegistrySessionLocation.from_path(str(path), tmp_path)))
+        comms.registry.register(replace(comms.registry.require(name), session_file=RegistrySessionLocation.from_path(str(path), comms.root)))
     else:
         comms.registry.declare(comms.registry.new_thread(
             name, frozenset(), str(comms.root), session_file=RegistrySessionLocation.from_path(str(path), tmp_path), created_at=created))

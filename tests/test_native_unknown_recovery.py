@@ -155,7 +155,7 @@ def test_undispatched_owner_loss_refuses_a_live_native_child(released_starting, 
     directory = released_starting / "native-sessions" / owner.incarnation.lookup
     session = directory / "undispatched.jsonl"
     comms.registry.register(
-        replace(owner, session_file=RegistrySessionLocation.from_path(str(session), tmp_path)),
+        replace(owner, session_file=RegistrySessionLocation.from_path(str(session), comms.root)),
         status=comms.registry.status(owner.name),
     )
     selected = session if argument == "--session" else directory

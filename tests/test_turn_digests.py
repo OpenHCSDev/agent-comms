@@ -107,7 +107,7 @@ def test_native_turns_keep_original_calls_results_and_input_identity(tmp_path):
     ]
     source.write_text(''.join(json.dumps(row) + '\n' for row in rows))
     source.chmod(0o600)
-    comms.registry.declare(comms.registry.new_thread('native', frozenset(), str(tmp_path), session_file=RegistrySessionLocation.from_path(str(source), tmp_path)))
+    comms.registry.declare(comms.registry.new_thread('native', frozenset(), str(tmp_path), session_file=RegistrySessionLocation.from_path(str(source), comms.root)))
     answer = endpoint(comms, 'native', LastTurns(1))
     turn, = answer['turns']
     assert turn['turn_id'] == 'u2'

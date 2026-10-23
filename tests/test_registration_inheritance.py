@@ -45,7 +45,7 @@ def test_registry_redeclaration_inherits_metadata_but_respects_explicit_values(t
         "owner",
         frozenset({"team"}),
         '/old',
-        session_file=RegistrySessionLocation.from_path(str(tmp_path / "session.jsonl"), tmp_path),
+        session_file=RegistrySessionLocation.from_path(str(tmp_path / "session.jsonl"), comms.root),
         model=DeclaredModel('provider/model'),
         thinking_level=HighThinkingLevel,
         auto_title_pending=True,
@@ -113,7 +113,7 @@ def test_project_change_retains_executing_source_but_refuses_another_input(tmp_p
         observed = comms.registry.attach_native_session(original, saved)
         current = comms.registry.require('owner')
         assert current.worktree == str(new) and current.earlier_projects == (old,)
-        assert current.session_file == observed.thread.session_file == RegistrySessionLocation.from_path(saved, tmp_path)
+        assert current.session_file == observed.thread.session_file == RegistrySessionLocation.from_path(saved, comms.root)
         assert observed.thread.worktree == str(old)
         assert observed.turn_lease == original.turn_lease == current.turn_lease
         # Later native observations use the same source and preserve old -> new.

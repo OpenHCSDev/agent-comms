@@ -22,7 +22,7 @@ def test_newer_read_moves_past_a_line_still_being_appended(tmp_path):
     session = tmp_path / "saved.jsonl"
     session.write_text(line({"type": "session", "version": 3, "id": "saved-session",
                              "timestamp": "2026-10-20T00:00:00.000Z"}) + line(answer("first", "First answer")))
-    comms.registry.declare(comms.registry.new_thread("saved", frozenset(), str(tmp_path), session_file=RegistrySessionLocation.from_path(str(session), tmp_path)))
+    comms.registry.declare(comms.registry.new_thread("saved", frozenset(), str(tmp_path), session_file=RegistrySessionLocation.from_path(str(session), comms.root)))
     with Coordination(str(comms.root / "coordination.sqlite3")) as store:
         PrivateCoordinatorTable.install(store)
     complete = session.stat().st_size
