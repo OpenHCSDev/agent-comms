@@ -21,19 +21,17 @@ TABLE = "connectivity"
 
 
 class DropConnectivity(Carry):
+    opened_files = (CoordinationStore,)
     @property
     def path(self) -> Path:
         return self.root / CoordinationStore.filename
 
-    def backup_files(self) -> tuple[Path, ...]:
-        self.require_confined(self.root, self.path)
-        return (self.path,) if self.path.exists() else ()
 
     def carry(self, *, apply: bool) -> Carried:
         if not self.path.exists():
             return Carried(0)
         with _store_lock(self.path), closing(
-            CoordinationStore.writer(self.path, isolation_level=None)
+            CoordinationStore.read_snapshot(self.path)
         ) as db:
             if not db.execute(
                 "SELECT 1 FROM sqlite_master WHERE type='table' AND name=?", (TABLE,)
@@ -42,6 +40,7 @@ class DropConnectivity(Carry):
             (rows,) = db.execute(f'SELECT count(*) FROM "{TABLE}"').fetchone()
             if not apply:
                 return Carried(1, {TABLE: rows})
+        with _store_lock(self.path), closing(CoordinationStore.writer(self.path, isolation_level=None)) as db:
             CoordinationStore.schema_change(self.path).require()
             with SQLiteFile.write_transaction(db):
                 db.execute(f'DROP TABLE "{TABLE}"')

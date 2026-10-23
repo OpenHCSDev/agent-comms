@@ -16,17 +16,13 @@ from pathlib import Path
 
 from agent_comms.errors import RelationViolationError
 from agent_comms.installer.carry import Carried, Carry
+from agent_comms.locked_store import RegistryFile
 from agent_comms.registry_store import RegistryStore
 from agent_comms.turn_lease import StoredTurnRecord
 
 
 class DeadTurns(Carry):
-    def backup_files(self) -> tuple[Path, ...]:
-        """Every turn file, read without decoding: earlier steps carry the registry first."""
-        paths = tuple(sorted(StoredTurnRecord.matching_in(RegistryStore.at(self.root).path.parent)))
-        for path in paths:
-            self.require_confined(self.root, path)
-        return paths
+    opened_files = (RegistryFile, StoredTurnRecord)
 
     def carry(self, *, apply: bool) -> Carried:
         registry = RegistryStore.at(self.root)
