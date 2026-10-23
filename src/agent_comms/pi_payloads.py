@@ -36,6 +36,7 @@ from .field_codec import (
     MalformedRecord,
     NullMember,
     PresentMember,
+    RecordProblems,
     SingleFieldValue,
     SingleExternalMember,
     TextRepresentation,
@@ -209,16 +210,19 @@ class PiPayload(ExternalField):
         cls, value: dict[str, JsonValue], decoded: dict[str, object],
     ) -> dict[str, object]:
         hints = FieldCodec._types(cls)
+        problems: dict[str, str] = {}
         for f, key in FieldCodec.record_fields(cls):
             if f.name in decoded:
                 decoded[f.name] = FieldCodec.decode_resolved(hints[f.name], decoded[f.name])
-            else:
-                plan = FieldCodec.field_plan(cls, f.name)
+                continue
+            plan = FieldCodec.field_plan(cls, f.name)
+            with plan.locating(problems):
                 captured = plan.decoded_external(value)
-                if f.name in captured:
-                    decoded.update(captured)
-                elif plan.constructor_required or plan.required:
+                if f.name not in captured and (plan.constructor_required or plan.required):
                     raise MalformedRecord(f"Missing required field {key}")
+                decoded.update(captured)
+        if problems:
+            raise RecordProblems(problems)
         return decoded
 
     @classmethod

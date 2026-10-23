@@ -86,6 +86,28 @@ class MalformedRecord(ValueError):  # noqa: N818 - names the refused data
                 raise self.error_cls(f"{self.subject}: {exc}") from exc
             return False
 
+    class _Located:
+        """Record a refused field under its key so sibling refusals are reported together."""
+
+        __slots__ = ("fix", "name", "problems")
+
+        def __init__(self, problems: dict[str, str], name: str, fix: str) -> None:
+            self.problems = problems
+            self.name = name
+            self.fix = fix
+
+        def __enter__(self) -> None:
+            return None
+
+        def __exit__(
+            self, _exc_type: type[BaseException] | None, exc: BaseException | None,
+            _traceback: types.TracebackType | None,
+        ) -> bool:
+            if isinstance(exc, MalformedRecord):
+                self.problems.update(exc.located(self.name, self.fix))
+                return True
+            return False
+
     @classmethod
     def refusing(cls, subject: str) -> MalformedRecord._Refusal:
         """Any check that refuses decoded data with ValueError refuses a malformed record.
@@ -466,6 +488,10 @@ class FieldPlan:
     @cached_property
     def key(self) -> str:
         return WireName.read(self.annotation, self.name)
+
+    def locating(self, problems: dict[str, str]) -> MalformedRecord._Located:
+        """A refused value joins its record's problems under this field's key."""
+        return MalformedRecord._Located(problems, self.key, f"supply {self.annotation}")
 
     @cached_property
     def required(self) -> bool:
@@ -2856,7 +2882,7 @@ class _RecordDecoder(_ContextDecoder[Any]):
             if entry.name not in fields:
                 continue
             key = (target, entry.name)
-            try:
+            with entry.locating(problems):
                 if entry.name in field_types:
                     narrowed = compile_decoder(field_types[entry.name])
                     values.update(entry.decoded_using(
@@ -2865,8 +2891,6 @@ class _RecordDecoder(_ContextDecoder[Any]):
                 else:
                     values.update(entry.decoded_selected(data, selections[key], selections)
                                   if key in selections else entry.decoded_bound(data, context))
-            except MalformedRecord as error:
-                problems.update(error.located(entry.key, f"supply {entry.annotation}"))
         if problems:
             raise RecordProblems(problems)
         return FieldCodec.construct(target, values)
