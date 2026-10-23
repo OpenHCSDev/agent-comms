@@ -43,7 +43,6 @@ from acp.schema import (
     PermissionOption,
     RequestPermissionResponse,
     ToolCallUpdate,
-    SessionNotification,
     SetSessionConfigOptionResponse,
     TextContentBlock,
 )
@@ -100,10 +99,7 @@ class SdkSessionConnection(AgentSideConnection, Controller, SessionUpdateSink):
     """The SDK connection and controller publish one Core acceptance answer."""
 
     async def publish_update(self, *, session_id: str, update: BaseModel) -> bool:
-        notification = SessionNotification.model_validate({
-            "session_id": session_id, "update": update,
-        })
-        await self.session_update(session_id=notification.session_id, update=notification.update)
+        await self.session_update(session_id=session_id, update=update)
         return True
 
 

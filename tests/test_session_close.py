@@ -86,7 +86,8 @@ async def test_close_retires_one_real_subscription_and_permission(tmp_path, monk
         await owner._runtime.publish_update(session_id="beta", update=SessionInfoUpdate(
             session_update="session_info_update", title="Still attached"))
         async with asyncio.timeout(5):
-            while not any(name == "beta" and update.get("title") == "Still attached"
+            while not any(name == "beta" and isinstance(update, SessionInfoUpdate)
+                          and update.title == "Still attached"
                           for name, update in callbacks.updates):
                 await asyncio.sleep(0)
         # Reloading the closed ID creates a new original subscription.

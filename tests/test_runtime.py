@@ -200,6 +200,15 @@ async def test_existing_proxy_follows_renamed_owner_restart_and_resubscribes(
     connections = []
     calls = []
 
+    def model_menu(owner):
+        return ConfigOptionUpdate(
+            session_update="config_option_update",
+            config_options=[SessionConfigOptionSelect(
+                type="select", id="model", name="Model", current_value=owner,
+                options=[SessionConfigSelectOption(value=owner, name=owner)],
+            )],
+        )
+
     def handler(owner):
         async def receive(reader, writer):
             request = json.loads(await reader.readline())
@@ -213,13 +222,7 @@ async def test_existing_proxy_follows_renamed_owner_restart_and_resubscribes(
                         controller_token="a" * 64,
                     ).wire()
                 )
-                writer.write(OwnerUpdate.of(ConfigOptionUpdate(
-                    session_update="config_option_update",
-                    config_options=[SessionConfigOptionSelect(
-                        type="select", id="model", name="Model", current_value=owner,
-                        options=[SessionConfigSelectOption(value=owner, name=owner)],
-                    )],
-                )).wire())
+                writer.write(OwnerUpdate.of(model_menu(owner)).wire())
                 writer.write(OwnerUpdate.of(SessionInfoUpdate(
                     session_update="session_info_update", title=owner,
                     field_meta={"owner": owner},
@@ -273,8 +276,7 @@ async def test_existing_proxy_follows_renamed_owner_restart_and_resubscribes(
                 (
                     "worker",
                     {
-                        "sessionUpdate": "config_option_update",
-                        "configOptions": [{"id": "model", "currentValue": "new"}],
+                        **model_menu("new").model_dump(mode="json", by_alias=True, exclude_none=True),
                         "_meta": encode_updates(),
                     },
                 )
