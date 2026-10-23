@@ -38,7 +38,9 @@ class LedgerSlot:
     def read(self) -> tuple[SelectedToolSlot, ...]:
         original = self.consumed.read_bytes()
         consumed = SelectedToolSlot(
-            self.consumed.name, original.decode("ascii").removesuffix("\n"), ConsumedSlot,
+            self.consumed.name,
+            original.decode("ascii").removesuffix("\n"),
+            ConsumedSlot,
         )
         records = [consumed]
         for acknowledgement in self.acknowledgements:
@@ -55,7 +57,8 @@ class SelectedToolSlots(Carry):
 
     def directories(self) -> tuple[Path, ...]:
         directories = {
-            path for owner, root in SavedSessionFile.declarations_in(self.root)
+            path
+            for owner, root in SavedSessionFile.declarations_in(self.root)
             for path in root.glob(str(owner.pattern().parent / "selected-tool-ledger"))
         }
         for directory in directories:
@@ -69,13 +72,20 @@ class SelectedToolSlots(Carry):
             for path in files:
                 self.require_confined(self.root, path)
                 if not path.is_file():
-                    raise RelationViolationError(f"Selected tool ledger entry is not a file: {path}")
+                    raise RelationViolationError(
+                        f"Selected tool ledger entry is not a file: {path}"
+                    )
                 if path.suffix == ".done" and path.with_suffix("") not in files:
-                    raise RelationViolationError(f"Selected tool acknowledgement has no consumed file: {path}")
+                    raise RelationViolationError(
+                        f"Selected tool acknowledgement has no consumed file: {path}"
+                    )
             slots.extend(
-                LedgerSlot(path, tuple(ack for ack in (path.with_name(path.name + ".done"),)
-                                       if ack in files))
-                for path in sorted(files) if path.suffix != ".done"
+                LedgerSlot(
+                    path,
+                    tuple(ack for ack in (path.with_name(path.name + ".done"),) if ack in files),
+                )
+                for path in sorted(files)
+                if path.suffix != ".done"
             )
         return tuple(slots)
 
@@ -91,9 +101,12 @@ class SelectedToolSlots(Carry):
         files = tuple(path for slot in slots for path in slot.files)
         acknowledged = sum(len(slot.acknowledgements) for slot in slots)
         detail = {
-            "consumed_files": len(slots), "acknowledgement_files": acknowledged,
-            "consumed_rows": len(slots) - acknowledged, "acknowledged_rows": acknowledged,
-            "slot_rows": len(slots), "deleted_files": len(files) if apply else 0,
+            "consumed_files": len(slots),
+            "acknowledgement_files": acknowledged,
+            "consumed_rows": len(slots) - acknowledged,
+            "acknowledged_rows": acknowledged,
+            "slot_rows": len(slots),
+            "deleted_files": len(files) if apply else 0,
         }
         changed = len(files) + len(directories) - len({slot.consumed.parent for slot in slots})
         if not apply:
@@ -119,5 +132,8 @@ class SelectedToolSlots(Carry):
         for directory in directories:
             directory.rmdir()
             Platform.current().sync_directory(directory.parent)
-        return Carried(changed, detail,
-                       (path.relative_to(self.root), *(file.relative_to(self.root) for file in files)))
+        return Carried(
+            changed,
+            detail,
+            (path.relative_to(self.root), *(file.relative_to(self.root) for file in files)),
+        )
