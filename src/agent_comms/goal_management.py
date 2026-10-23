@@ -21,7 +21,8 @@ from .goal_actions import (
     RuntimeInvocable,
     SentBackOrderGoalAction,
 )
-from .goal_attempts import Generation, GoalAttemptStore, UnresolvedAttemptError
+from .goal_attempts import Generation, GoalAttemptStore
+from .errors import UnresolvedAttemptError
 from .goal_history import GoalHistoryEntry
 from .goal_waits import (
     GoalInputReview,

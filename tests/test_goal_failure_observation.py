@@ -10,7 +10,8 @@ import pytest
 
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.turn_failure import BackendFailed, FinalStopMissing
-from agent_comms.goal_attempts import AttemptRecord, GoalAttemptStore, UnresolvedAttemptError
+from agent_comms.goal_attempts import AttemptRecord, GoalAttemptStore
+from agent_comms.errors import UnresolvedAttemptError
 from agent_comms.goal_failure_observation import FailedTurnObservation, NoFailedTurnEvidence
 from agent_comms.goal_generation import BlockedGeneration
 from agent_comms.goals import Goal

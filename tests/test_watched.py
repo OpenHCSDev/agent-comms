@@ -11,7 +11,8 @@ import pytest
 
 from agent_comms.bus import Bus, PublicRecord
 from agent_comms.comms import Comms
-from agent_comms.goal_attempts import Generation, GoalAttemptStore, StorageUncertainError, UnresolvedAttemptError
+from agent_comms.goal_attempts import Generation, GoalAttemptStore, StorageUncertainError
+from agent_comms.errors import UnresolvedAttemptError
 from agent_comms.goal_presentation import GoalWaitTarget
 from agent_comms.goal_waits import GoalWaits, RecordedGoalWait
 from agent_comms.locked_store import RegistryFile

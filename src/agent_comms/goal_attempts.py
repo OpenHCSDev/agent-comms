@@ -80,12 +80,6 @@ class ReservationConflictError(errors.GoalAttemptError):
     """This goal/generation is already reserved or is not ready."""
 
 
-class UnresolvedAttemptError(errors.GoalAttemptError):
-    """A blocked or in-flight attempt needs an explicit resolution."""
-
-    diagnostic_text = "Goal attempt unresolved; inspect diagnostics before Retry."
-
-
 class MissingGoalGenerationError(errors.GoalAttemptError, ValueError):
     """Historical goal has no launch record; Retry must not invent authority."""
 
@@ -165,13 +159,13 @@ class Generation(GoalLedgerTable, TypedTable):
     @staticmethod
     def grant_digest(grant: str) -> str:
         if type(grant) is not str or len(grant) != 64:
-            raise UnresolvedAttemptError("A valid acknowledged ready grant is required.")
+            raise errors.UnresolvedAttemptError("A valid acknowledged ready grant is required.")
         try:
             raw = bytes.fromhex(grant)
         except ValueError as error:
-            raise UnresolvedAttemptError("A valid acknowledged ready grant is required.") from error
+            raise errors.UnresolvedAttemptError("A valid acknowledged ready grant is required.") from error
         if raw.hex() != grant:
-            raise UnresolvedAttemptError("A valid acknowledged ready grant is required.")
+            raise errors.UnresolvedAttemptError("A valid acknowledged ready grant is required.")
         return hashlib.sha256(raw).hexdigest()
 
 
@@ -419,7 +413,7 @@ class NoAttempt(MissingAttempt):
     def retire(
         self, conn: sqlite3.Connection, lifecycle: GenerationState, goal_id: str, generation: int
     ) -> None:
-        if not lifecycle.permits_retirement(None):
+        if not lifecycle.permits_retirement_without_attempt():
             raise errors.StaleAttemptError("Goal or attempt is no longer eligible for retirement.")
 
 
@@ -434,7 +428,7 @@ class GoalWorkDecision(GoalLedgerTable, TypedTable):
         try:
             self.insert(conn)
         except sqlite3.IntegrityError as error:
-            raise UnresolvedAttemptError("That work decision was already used.") from error
+            raise errors.UnresolvedAttemptError("That work decision was already used.") from error
 
 
 @dataclass(frozen=True)
@@ -811,7 +805,7 @@ class GoalAttemptStore(DurableFile, PublishedSQLiteFile, WireWakeFile):
 
     def ready_grant(self, goal_id: str, generation: int) -> str:
         """Delegate only this instance's acknowledged READY authority to a supervisor."""
-        refusal = UnresolvedAttemptError("No acknowledged ready grant is available; decide explicitly.")
+        refusal = errors.UnresolvedAttemptError("No acknowledged ready grant is available; decide explicitly.")
         try:
             grant = self._ready_grants[(goal_id, generation)]
         except KeyError as error:
@@ -872,7 +866,7 @@ class GoalAttemptStore(DurableFile, PublishedSQLiteFile, WireWakeFile):
                 or not current.lifecycle.ready
             ):
                 raise ReservationConflictError("Goal generation is not ready or already reserved.")
-            raise UnresolvedAttemptError(
+            raise errors.UnresolvedAttemptError(
                 "No acknowledged ready grant; explicit recovery is required."
             )
         digest = Generation.grant_digest(ready_grant)
@@ -883,7 +877,7 @@ class GoalAttemptStore(DurableFile, PublishedSQLiteFile, WireWakeFile):
             if current != Generation(goal_id, expected_generation, ReadyGeneration(), None):
                 raise ReservationConflictError("Goal generation is not ready or already reserved.")
             if not hmac.compare_digest(current.ready_digest, digest):
-                raise UnresolvedAttemptError("Ready grant is stale or was never acknowledged.")
+                raise errors.UnresolvedAttemptError("Ready grant is stale or was never acknowledged.")
             AttemptRecord(attempt, ReservedAttempt(), None, None).insert(conn)
             current.advance(
                 conn,
@@ -912,7 +906,7 @@ class GoalAttemptStore(DurableFile, PublishedSQLiteFile, WireWakeFile):
     def claim_launch(self, reservation: Reservation) -> LaunchPermit:
         """One-shot durable pre-launch claim; only this reserving instance may use it."""
         if reservation.attempt_id not in self._owned:
-            raise UnresolvedAttemptError("A reservation cannot be replayed after owner loss.")
+            raise errors.UnresolvedAttemptError("A reservation cannot be replayed after owner loss.")
 
         def write(conn: sqlite3.Connection) -> LaunchPermit:
             current = reservation.require_current(conn, ReservedAttempt())
@@ -992,7 +986,7 @@ class GoalAttemptStore(DurableFile, PublishedSQLiteFile, WireWakeFile):
         if current is None or current.number != expected_generation:
             raise errors.StaleAttemptError("Goal generation changed before resume.")
         if not current.lifecycle.ready or current.attempt_id is not None:
-            raise UnresolvedAttemptError("Explicit attempt resolution is required before resume.")
+            raise errors.UnresolvedAttemptError("Explicit attempt resolution is required before resume.")
         self.ready_grant(goal_id, expected_generation)
         return current
 
@@ -1012,7 +1006,7 @@ class GoalAttemptStore(DurableFile, PublishedSQLiteFile, WireWakeFile):
         def write(conn: sqlite3.Connection, digest: str) -> Generation:
             current = Generation.read_in(conn, goal_id)
             if current != Generation(goal_id, expected_generation, ReadyGeneration(), None):
-                raise UnresolvedAttemptError(
+                raise errors.UnresolvedAttemptError(
                     "Goal is not ready; an attempt may already be unresolved."
                 )
             GoalWorkDecision(goal_id, user_decision_id, expected_generation).claim(conn)
@@ -1049,15 +1043,14 @@ class GoalAttemptStore(DurableFile, PublishedSQLiteFile, WireWakeFile):
         def write(conn: sqlite3.Connection, digest: str) -> Generation:
             current = Generation.read_in(conn, goal_id)
             if current != Generation(goal_id, expected_generation, BlockedGeneration(), attempt_id):
-                raise UnresolvedAttemptError("Blocked attempt changed or is not resolved.")
-            unrecorded = UnresolvedAttemptError(
+                raise errors.UnresolvedAttemptError("Blocked attempt changed or is not resolved.")
+            unrecorded = errors.UnresolvedAttemptError(
                 "Only a blocked, recorded failure may be retried explicitly."
             )
             attempt = AttemptRecord.read_in(conn, attempt_id).identified(
                 GoalAttemptIdentity(goal_id, expected_generation, attempt_id), unrecorded
             )
-            if not isinstance(attempt.phase, FailedAttempt):
-                raise unrecorded
+            attempt.phase.require_retryable()
             GoalWorkDecision(goal_id, user_decision_id, expected_generation).claim(conn)
             attempt.advance(conn, ResolvedAttempt(), resolution=user_decision_id)
             return current.advance(
