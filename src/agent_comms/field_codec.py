@@ -1516,9 +1516,12 @@ class FieldCodec(MroDispatch, Sealed):
             )
 
     @classmethod
-    def require_fields(cls, record: DataclassInstance) -> None:
-        """A record built in code holds each field to the rule its declared type states."""
+    def require_fields(cls, record: DataclassInstance, *names: str) -> None:
+        """A record built in code holds each field, or each one ``names`` selects, to the
+        rule its declared type states."""
         for name, annotation in cls.field_types(record.__class__):
+            if names and name not in names:
+                continue
             value = getattr(record, name)
             if cls.decode(annotation, cls.encode(value)) != value:
                 raise MalformedRecord(f"{type(record).__name__}.{name} is not its declared type")
