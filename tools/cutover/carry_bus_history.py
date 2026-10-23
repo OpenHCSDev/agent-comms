@@ -56,7 +56,7 @@ from agent_comms.recorded_bus import RecordedBusIdentity
 from agent_comms.registry_provenance import RegistryProvenance
 from agent_comms.registry_store import RegistryStore
 from agent_comms.response_acknowledgement import KeyedResponseAcknowledgement
-from agent_comms.store_files import SharedLock, _atomic_write_text, _store_lock
+from agent_comms.store_files import AtomicFile, SharedLock, _store_lock
 from agent_comms.typed_table import Column, DerivedTables, SharedFileTables, TypedTable
 from agent_comms.wake_policy import (
     MessageAudience,
@@ -150,7 +150,7 @@ class CarryCatalogSource(SubclassUnion, ABC, affix=""):
         payload = json.dumps(FieldCodec.encode(converted))
         if path.read_bytes() == payload.encode():
             return Carried(changed, rewritten=rewritten)
-        _atomic_write_text(path, payload)
+        AtomicFile(path).write_text(payload)
         return Carried(changed + len(converted), rewritten=(*rewritten, HistoryArchive.filename))
 
     def mapped_root(self, root: Path, original_root: Path) -> Path:

@@ -173,7 +173,6 @@ class NoRetry(NullMember, ProviderRetryResult):
 class ACPFailure(DeliveryFailure):
     code: int | None
     detail: str
-    classification_priority: ClassVar[int] = 0
     input_state: type[InputAttempt] | None = None
     diagnostics: tuple[PiDiagnostic, ...] = ()
     # Public failed-outcome projection of the turn-owned immutable result.
@@ -224,11 +223,7 @@ class ACPFailure(DeliveryFailure):
         detail = detail or "ACP request failed"
         owner = next(
             member
-            for member in sorted(
-                cls.members_with(ACPFailure),
-                key=lambda member: member.classification_priority,
-                reverse=True,
-            )
+            for member in cls.members_with(ACPFailure)
             if member.matches(code, detail, diagnostics)
         )
         return owner(code, detail, diagnostics=diagnostics)
@@ -346,46 +341,7 @@ class FailedNativeTurnOutcome(NativeTurnOutcome):
         raise NativeTurnError(self.request)
 
 
-class RequestACPFailure(ACPFailure):
-    @classmethod
-    def matches(
-        cls, code: int | None, detail: str, diagnostics: tuple[PiDiagnostic, ...] = ()
-    ) -> bool:
-        return True
-
-    @property
-    def title(self) -> str:
-        return "Request failed"
-
-
-class ProviderQuotaFailure(ACPFailure):
-    classification_priority = 100
-    display_pattern = re.compile(
-        r"usage limit|quota|insufficient credits|credit balance|rate.limit|too many requests",
-        re.I,
-    )
-
-    @classmethod
-    def matches(
-        cls, code: int | None, detail: str, diagnostics: tuple[PiDiagnostic, ...] = ()
-    ) -> bool:
-        return cls.display_pattern.search(detail) is not None
-
-    @property
-    def title(self) -> str:
-        return "Provider usage limit reached"
-
-    @property
-    def next_step(self) -> str:
-        return (
-            "Wait for the provider limit to reset or restore credits, "
-            "then inspect input delivery before any explicit resend."
-        )
-
-
 class ProviderConnectionFailure(ACPFailure):
-    classification_priority = 150
-
     @classmethod
     def matches(cls, code, detail, diagnostics=()) -> bool:
         return any(diagnostic.provider_connection_failure for diagnostic in diagnostics)
@@ -409,6 +365,42 @@ class ProviderConnectionFailure(ACPFailure):
             "The provider connection failed. Inspect the response and input delivery "
             "before choosing whether to send a new message."
         )
+
+
+class ProviderQuotaFailure(ACPFailure):
+    display_pattern = re.compile(
+        r"usage limit|quota|insufficient credits|credit balance|rate.limit|too many requests",
+        re.I,
+    )
+
+    @classmethod
+    def matches(
+        cls, code: int | None, detail: str, diagnostics: tuple[PiDiagnostic, ...] = ()
+    ) -> bool:
+        return cls.display_pattern.search(detail) is not None
+
+    @property
+    def title(self) -> str:
+        return "Provider usage limit reached"
+
+    @property
+    def next_step(self) -> str:
+        return (
+            "Wait for the provider limit to reset or restore credits, "
+            "then inspect input delivery before any explicit resend."
+        )
+
+
+class RequestACPFailure(ACPFailure):
+    @classmethod
+    def matches(
+        cls, code: int | None, detail: str, diagnostics: tuple[PiDiagnostic, ...] = ()
+    ) -> bool:
+        return True
+
+    @property
+    def title(self) -> str:
+        return "Request failed"
 
 
 class ErrorValue(DeclaredFamily, JsonShapeFamily, affix="ErrorValue"):

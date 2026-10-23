@@ -8,7 +8,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from uuid import uuid4
 
-from .child_process import Platform
+from agent_comms.child_process import Platform
 from .field_codec import RecordedTimestamp
 from .native_entries import SessionEntry
 from .native_failures import NativePiUnavailable

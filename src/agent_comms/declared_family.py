@@ -88,6 +88,18 @@ class UnknownFamilyMember(ValueError):
     """The selected name is not a declared member of the requested family."""
 
 
+class DeclaredOrder(ABC):
+    """Plain rank capabilities ordered by their direct declarations."""
+
+    @classmethod
+    def position_of(cls, member: type) -> int:
+        declarations = cls.__subclasses__()
+        for base in member.__mro__:
+            if base in declarations:
+                return declarations.index(base)
+        raise ValueError(f"{member.__name__} has no {cls.__name__} rank base")
+
+
 class DeclaredFamily(ABC, metaclass=_FamilyMeta):
     """A family root owns one registry; names and capability views derive from members.
 
@@ -174,3 +186,8 @@ class DeclaredFamily(ABC, metaclass=_FamilyMeta):
             for member in cls._member_declarations()
             if issubclass(member, cls) and issubclass(member, capability)
         )
+
+    @classmethod
+    def declared_position(cls) -> int:
+        root = cast(type[DeclaredFamily], cls._family_root)
+        return root.members_with(root).index(cls)

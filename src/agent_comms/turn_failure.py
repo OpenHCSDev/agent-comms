@@ -19,7 +19,6 @@ if TYPE_CHECKING:
 class TurnFailure(DeclaredFamily):
     text: str
     code: ClassVar[str | None] = None
-    precedence: ClassVar[int] = 0
     # A failure of the model request itself; Pi re-sending that request ends it.
     ends_with_request_retry: ClassVar[bool] = False
 
@@ -30,7 +29,7 @@ class TurnFailure(DeclaredFamily):
         return self
 
     def supersedes(self, previous: TurnFailure | None) -> bool:
-        return previous is None or self.precedence >= previous.precedence
+        return previous is None or self.declared_position() < previous.declared_position()
 
     def prepare_execution_retry(self, db, execution_id: str) -> None:
         """Consume any earlier provider proof for this nonretryable failure."""
@@ -56,22 +55,18 @@ class InputIdUnavailable(TurnFailure):
         return self.with_text(self.text + "\nBackend startup reported:\n" + stderr)
 
     code = FailureReason.INPUT_ID_UNAVAILABLE
-    precedence = 100
 
 
 class IdentityUncertain(TurnFailure):
     code = FailureReason.IDENTITY_UNCERTAIN
-    precedence = 80
 
 
 class AuthorityChanged(TurnFailure):
     code = FailureReason.AUTHORITY_CHANGED
-    precedence = 70
 
 
 class FollowupUnrecognized(TurnFailure):
     code = FailureReason.FOLLOWUP_UNRECOGNIZED
-    precedence = 60
 
 
 class TerminalFailure(TurnFailure):
@@ -90,7 +85,6 @@ class TerminalFailure(TurnFailure):
 
 class InputMissing(TerminalFailure):
     code = FailureReason.INPUT_MISSING
-    precedence = 50
     default_text = "Pi RPC run ended without this prompt's user message start."
 
     @classmethod
@@ -98,20 +92,6 @@ class InputMissing(TerminalFailure):
         return not session.prompt_state.started and bool(
             transport_ok or session.inputs.uncertain or session.output.failure_text
         )
-
-
-class FinalStopMissing(TerminalFailure):
-    code = FailureReason.FINAL_STOP_MISSING
-    precedence = 40
-    default_text = "Pi RPC run ended without an authoritative final assistant stop."
-
-    @classmethod
-    def detected(cls, session: TurnSession, transport_ok: bool) -> bool:
-        return transport_ok and not session.output.final_assistant_stop
-
-    @classmethod
-    def explanation(cls, output: TurnOutput) -> str:
-        return output.failure_text or output.error_message or cls.default_text
 
 
 class ModelRequestFailed(TurnFailure):
@@ -133,7 +113,6 @@ class ModelRequestFailed(TurnFailure):
         raise NativePiTerminalFailure(self.text, proof, model, self)
 
     code = FailureReason.MODEL_REQUEST_FAILED
-    precedence = 45
     ends_with_request_retry = True
 
 
@@ -161,9 +140,21 @@ class ProviderTransportFailed(RetryableProviderFailure, ModelRequestFailed):
     """The native diagnostic declared a provider transport failure."""
 
 
+class FinalStopMissing(TerminalFailure):
+    code = FailureReason.FINAL_STOP_MISSING
+    default_text = "Pi RPC run ended without an authoritative final assistant stop."
+
+    @classmethod
+    def detected(cls, session: TurnSession, transport_ok: bool) -> bool:
+        return transport_ok and not session.output.final_assistant_stop
+
+    @classmethod
+    def explanation(cls, output: TurnOutput) -> str:
+        return output.failure_text or output.error_message or cls.default_text
+
+
 class QueuedInputMissing(TerminalFailure):
     code = FailureReason.QUEUED_INPUT_MISSING
-    precedence = 30
     default_text = "Pi RPC run ended with an unstarted queued input; delivery is uncertain."
 
     @classmethod

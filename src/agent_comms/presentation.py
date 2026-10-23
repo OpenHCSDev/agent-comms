@@ -75,7 +75,7 @@ from .revision_views import (
 from .runtime_info import RuntimeInfo
 from .storage_room import RoomLedger
 from .thread_identity import ThreadIncarnation
-from .thread_provenance import ThreadProvenance
+from .threads import ThreadProvenance
 from .thread_presentation import (
     ThreadOwnerBinding,
     ThreadPresentation,
@@ -177,7 +177,7 @@ class MessageNotification:
 
     @classmethod
     def ordered(cls, notifications: Iterable[MessageNotification]) -> tuple[MessageNotification, ...]:
-        return tuple(sorted(notifications, key=lambda item: (item.state.priority, item.recipient.casefold())))
+        return tuple(sorted(notifications, key=lambda item: (item.state.rank(), item.recipient.casefold())))
 
     @classmethod
     def summary(cls, notifications: Iterable[MessageNotification]) -> str:

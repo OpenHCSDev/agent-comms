@@ -12,7 +12,6 @@ import base64
 import hashlib
 import json
 import os
-import secrets
 from contextlib import suppress
 from dataclasses import dataclass, fields
 from pathlib import Path
@@ -20,6 +19,7 @@ from typing import TYPE_CHECKING, Literal
 
 from .coordination_database import CoordinationStore
 from .locked_store import DurableFile, PatternFile
+from .store_files import AtomicFile
 
 if TYPE_CHECKING:
     from .acp_extension import SelectedWriteAcceptedUpdate
@@ -269,16 +269,6 @@ class SelectedWritePlans(DurableFile, PatternFile):
         if accepted.operation_id != operation_id:
             raise IdentityConflict("Selected write intent is no longer unique")
         completed = accepted.applied()
-        temporary = path.with_name(f".{path.name}.{secrets.token_hex(8)}.tmp")
-        fd = os.open(temporary, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600)
-        try:
-            with os.fdopen(fd, "wb") as stream:
-                stream.write(json.dumps(FieldCodec.encode(completed), sort_keys=True, separators=(",", ":")).encode())
-                stream.flush()
-                os.fsync(stream.fileno())
-            os.replace(temporary, path)
-            Platform.current().sync_directory(self.directory)
-        except BaseException:
-            # A post-write failure is UNKNOWN. The bus claim and attempt
-            # remain visible; no path automatically reissues the write.
-            raise
+        AtomicFile(path).write_bytes(json.dumps(
+            FieldCodec.encode(completed), sort_keys=True, separators=(",", ":")
+        ).encode())

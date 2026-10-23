@@ -53,13 +53,15 @@ from agent_comms.selected_write_plan import (
     SelectedWriteIntent,
     SelectedWritePlans,
 )
-from agent_comms.store_files import _atomic_write_text, _store_lock
+from agent_comms.store_files import AtomicFile, _store_lock
 from agent_comms.thread_identity import ClaimedIdentity, TurnFence
 from agent_comms.turn_lease import ActiveTurn
 from agent_comms.typed_table import HeldBusFile, JsonStorage, TypedTable, _identifier
 
 from .carry_bus_history import CarryCatalogSource
 from .carry_context_request_key import ContextRequestKey
+from .carry_dead_turns import DeadTurns
+from .carry_finished_turns import FinishedTurns
 from .carry_owner_requests import OwnerRequests
 from .carry_turn_owner import TurnOwner
 
@@ -218,7 +220,7 @@ WIRE_NAMES = ClaimFieldNames()
 
 
 class ClaimFields(Carry):
-    precedes = (OwnerRequests, TurnOwner, ContextRequestKey)
+    precedes = (FinishedTurns, DeadTurns, OwnerRequests, TurnOwner, ContextRequestKey)
 
     @staticmethod
     def documents(root: Path, files: dict[Path, type[RootFile]]) -> dict[Path, object]:
@@ -284,7 +286,7 @@ class ClaimFields(Carry):
                         current = visitor.rewrite(plan, raw)
                         count = int(current != raw)
                         if count and apply:
-                            _atomic_write_text(path, json.dumps(current))
+                            AtomicFile(path).write_text(json.dumps(current))
                     changed += count
                     if count and apply:
                         rewritten.append(str(path.relative_to(self.root)))
@@ -292,8 +294,8 @@ class ClaimFields(Carry):
                 rebound = tuple(source.carried_registry(source.mapped_root(self.root, self.original_root))
                                 for source in sources)
                 if rebound:
-                    _atomic_write_text(HistoryArchive.path_in(self.root),
-                                       json.dumps(FieldCodec.encode(rebound)))
+                    AtomicFile(HistoryArchive.path_in(self.root)).write_text(
+                        json.dumps(FieldCodec.encode(rebound)))
                     rewritten.append(HistoryArchive.filename)
         return Carried(changed, rewritten=tuple(rewritten))
 

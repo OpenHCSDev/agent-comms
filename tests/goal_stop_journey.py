@@ -64,11 +64,11 @@ async def stopped_goal_journey(
             assert resumed is not None and resumed.number == ready.number
             fixture.provider.response_gate.set()
             await wait_for(lambda: (
-                bool(comms.registry.require("stop-copy").last_finished_turn_id)
-                and comms.registry.require("stop-copy").last_finished_turn_id
-                != stopped.last_finished_turn_id))
+                bool(comms.registry.require("stop-copy").turn_state.finished_turn_id)
+                and comms.registry.require("stop-copy").turn_state.finished_turn_id
+                != stopped.turn_state.finished_turn_id))
             continued = comms.registry.require("stop-copy")
-            assert continued.last_finished_turn_id
+            assert continued.turn_state.finished_turn_id
             with closing(store._connect()) as db:
                 finished = AttemptRecord.one(db, attempt_id=resumed.attempt_id)
             assert finished is not None and isinstance(finished.phase, SucceededAttempt)
@@ -82,8 +82,8 @@ async def stopped_goal_journey(
                 "before": before, "after": after,
                 "continued": FieldCodec.encode(continued.goal),
                 "provider_posts": fixture.provider.posts,
-                "stopped_turn": stopped.last_finished_turn_id,
-                "continued_turn": continued.last_finished_turn_id,
+                "stopped_turn": stopped.turn_state.finished_turn_id,
+                "continued_turn": continued.turn_state.finished_turn_id,
                 "failed_turn_observations": failures,
                 "stopped_attempt_phase": FieldCodec.encode(attempt.phase),
                 "continued_attempt_phase": FieldCodec.encode(finished.phase),

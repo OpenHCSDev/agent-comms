@@ -25,7 +25,7 @@ from agent_comms.field_codec import FieldCodec
 from agent_comms.installer.interpreter_operation import RouteSelection
 from agent_comms.locked_store import LockedStore, RootFile, RuntimeFile, SQLiteFile
 from agent_comms.private_path import FileObservation, FileRevision, MissingFile
-from agent_comms.store_files import _atomic_write_text
+from agent_comms.store_files import AtomicFile
 
 
 class UpgradeRefused(CoordinationError):
@@ -192,7 +192,7 @@ class StoreBackup(ResourceBackup):
                 return
             saved = self.path / 'active-route.json'
             if saved.exists():
-                _atomic_write_text(self.route, saved.read_text())
+                AtomicFile(self.route).write_text(saved.read_text())
             else:
                 os.unlink(self.route.name, dir_fd=directory)
                 os.fsync(directory)
@@ -239,13 +239,13 @@ class StoreBackup(ResourceBackup):
                 backup.route_revision = FileRevision.capture(route)
             return backup
         path.mkdir(mode=0o700, parents=True)
-        _atomic_write_text(path / 'selected.json', json.dumps(selected))
+        AtomicFile(path / 'selected.json').write_text(json.dumps(selected))
         contents = backup.capture(files)
         with route_directory(route):
             if route.exists():
                 shutil.copy2(route, path / 'active-route.json')
             backup.route_revision = FileRevision.capture(route)
-        _atomic_write_text(path / 'files.json', json.dumps(FieldCodec.encode(contents), indent=1))
+        AtomicFile(path / 'files.json').write_text(json.dumps(FieldCodec.encode(contents), indent=1))
         return backup
 
     def retain(self, spill_dir: Path) -> tuple[Path, ...]:
@@ -348,8 +348,7 @@ class StoreBackup(ResourceBackup):
                 stage = Path(temporary)
                 try:
                     shutil.copy2(self.data_root / name, stage)
-                    Platform.current().sync_file(stage)
-                    os.replace(stage, target)
+                    AtomicFile(target).replace(stage)
                 finally:
                     stage.unlink(missing_ok=True)
             else:

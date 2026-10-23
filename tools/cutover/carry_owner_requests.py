@@ -29,7 +29,7 @@ from agent_comms.owner_requests import (
     RequestDirective,
 )
 from agent_comms.registry_store import RegistryStore
-from agent_comms.store_files import _atomic_write_text, _store_lock
+from agent_comms.store_files import AtomicFile, _store_lock
 from agent_comms.thread_identity import RecordedThreadIncarnation
 from agent_comms.todos import OwnerRequest, Todo, TodoStore
 from agent_comms.typed_table import (
@@ -163,9 +163,7 @@ class OwnerRequests(Carry):
                 for name in result.rewritten
             ]
             if resealed:
-                _atomic_write_text(
-                    HistoryArchive.path_in(self.root), json.dumps(FieldCodec.encode(tuple(rebound)))
-                )
+                AtomicFile(HistoryArchive.path_in(self.root)).write_text(json.dumps(FieldCodec.encode(tuple(rebound))))
                 rewritten.append(HistoryArchive.filename)
             detail: dict[str, int] = {}
             for _, result in results:

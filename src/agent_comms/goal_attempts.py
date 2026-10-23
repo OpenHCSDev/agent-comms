@@ -62,6 +62,7 @@ from .lifecycle_capability import Failed
 from .locked_store import DurableFile, PublishedSQLiteFile, WireWakeFile
 from .pi_counts import PiCount, UnreportedCount
 from .pi_payloads import PiUsage
+from .store_files import AtomicFile
 from .typed_table import Column, Generated, SQLiteJournalMode, TypedTable
 
 if TYPE_CHECKING:
@@ -708,14 +709,12 @@ class GoalAttemptStore(DurableFile, PublishedSQLiteFile, WireWakeFile):
                 conn.execute("PRAGMA foreign_keys=ON")
                 with cls.write_transaction(conn):
                     GoalLedgerTable.create_schema(conn)
-            platform = Platform.current()
-            platform.sync_file(staging)
-            platform.sync_directory(directory)
+            AtomicFile(staging).sync()
             # Publish only the complete schema; a concurrent initializer may win.
             # The staging descriptor is closed before its inode becomes shared.
             with suppress(FileExistsError):
                 os.link(staging, path, follow_symlinks=False)
-            platform.sync_directory(directory)
+            Platform.current().sync_directory(directory)
         except (sqlite3.Error, OSError) as error:
             raise StorageUncertainError("Goal attempt initialization is uncertain.") from error
         finally:
@@ -751,9 +750,7 @@ class GoalAttemptStore(DurableFile, PublishedSQLiteFile, WireWakeFile):
             raise StorageUncertainError("Goal attempt database unavailable.") from error
 
     def _sync(self) -> None:
-        platform = Platform.current()
-        platform.sync_file(self.path)
-        platform.sync_directory(self.root)
+        AtomicFile(self.path).sync()
 
     def _change(
         self, operation: Callable[[sqlite3.Connection], _T], verify: Callable[[_T], bool]

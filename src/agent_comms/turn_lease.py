@@ -13,6 +13,7 @@ from .activity import ObservedActivity
 from .child_process import ProcessIdentity, ProcessState
 from .errors import RelationViolationError
 from .field_codec import (
+    MalformedRecord,
     NullMember,
     RecordMember,
     SingleFieldValue,
@@ -310,8 +311,11 @@ class TurnState:
     def native_phase_effects(self, phase: TurnPhase) -> Iterator[TurnState]:
         yield from self.phase_effects(self.active.phase.observed(phase))
 
+    def observed_id(self) -> str | None:
+        return self.active.observed_id(self.finished_turn_id)
+
     def matches(self, turn_id: str | None) -> bool:
-        return turn_id is None or self.active.observed_id(self.finished_turn_id) == turn_id
+        return turn_id is None or self.observed_id() == turn_id
 
 
 class TurnLease(ABC):
@@ -437,6 +441,16 @@ class TurnRecord(LifecycleCapability, SubclassUnion, affix=""):
     def lease(self, incarnation: ThreadIncarnation, process: ProcessState,
               generation: int) -> TurnLease: ...
 
+    def state(self) -> TurnState:
+        return TurnState(self.read())
+
+    def released(self) -> TurnRecord:
+        """What stays once the live reference is dropped."""
+        return self
+
+    def require_generation(self, generation: int) -> None:
+        pass
+
 
 @dataclass(frozen=True)
 class NoTurnRecord(NullMember, TurnRecord):
@@ -456,6 +470,37 @@ class NoTurnRecord(NullMember, TurnRecord):
 
 
 @dataclass(frozen=True)
+class FinishedTurn(RecordMember, TurnRecord):
+    """No live turn; the last one finished with this ID."""
+
+    turn_id: str
+
+    def __post_init__(self) -> None:
+        if type(self.turn_id) is not str or not self.turn_id:
+            raise MalformedRecord("Finished turn requires its ID.")
+
+    def bound_to(self, registry_path: Path, identity: TurnIdentity) -> FinishedTurn:
+        return self
+
+    def read(self) -> NoTurn:
+        return NoTurn()
+
+    def state(self) -> TurnState:
+        return TurnState(finished_turn_id=self.turn_id)
+
+    def without_claim(self) -> None:
+        pass
+
+    def lease(self, incarnation: ThreadIncarnation, process: ProcessState,
+              generation: int) -> NoTurnLease:
+        return NoTurnLease()
+
+    def require_generation(self, generation: int) -> None:
+        if generation == 0:
+            raise ValueError("Finished turn requires a prior turn generation.")
+
+
+@dataclass(frozen=True)
 class StoredTurnReference(RecordMember, TurnRecord):
     """Wire presence only; the registry's thread supplies the turn identity."""
 
@@ -467,6 +512,9 @@ class StoredTurnReference(RecordMember, TurnRecord):
 
     def without_claim(self) -> None:
         self.read()
+
+    def released(self) -> NoTurnRecord:
+        return NoTurnRecord()
 
     def lease(self, incarnation: ThreadIncarnation, process: ProcessState,
               generation: int) -> TurnLease:
@@ -526,7 +574,11 @@ class StoredTurnRecord(Executing, DurableFile, PatternFile, JsonDocument[ActiveT
     def _turn_effects(
         self, lease: TurnLeaseFence, observe: Callable[[TurnState], Iterable[TurnState]],
     ) -> tuple[TurnState, ...]:
+        from .registry_store import RegistryStore
+
         with _store_lock(self.registry_path):
+            if not RegistryStore(self.registry_path).read_snapshot_unlocked().holds_turn(self.identity):
+                return ()
             active = self.read()
             if not active.held_by(lease):
                 return ()

@@ -14,7 +14,14 @@ from enum import StrEnum
 from pathlib import Path
 from typing import TYPE_CHECKING, Annotated, ClassVar, Self, Type, cast, dataclass_transform
 
-from agent_comms.bus_tables import Addressed, BusCapability, BusRow, HeldResources
+from agent_comms.bus_tables import (
+    Addressed,
+    BusCapability,
+    BusRow,
+    ClaimHolders,
+    HeldResources,
+    StoredHolders,
+)
 from agent_comms.response_policy import InformationalPolicy, ResponseEligibility, ResponsePolicy
 from agent_comms.typed_table import Column
 
@@ -37,12 +44,14 @@ from .field_codec import (
 from .mentions import ThreadMention
 from .message_reference import MessageReference
 from .page_traversal import LiveCursor, PageCursor
+from .routing import TurnOrigin
 from .task_sources import Decision, NoTaskAttachment, TaskAttachment
 from .thread_identity import AgentThreadRole, ThreadRole
 from .ui_model.message_category import InboundCategory, MessageCategory, OtherCategory
 from .wake_policy import BoundedTriageWake, PassiveWake
 
 if TYPE_CHECKING:
+    from .input_disposition import InputDispositions
     from .historical_views import HistorySource
     from .retained_task_facts import ExactTaskFact
     from .threads import Thread
@@ -361,7 +370,7 @@ class HistoricalMembershipNoticeRole(HistoricalRole, MembershipNoticeRole, decla
 
 
 @dataclass(frozen=True, slots=True)
-class Message(Addressed, BusCapability):
+class Message(Addressed, BusCapability, TurnOrigin):
     """Declares one inter-thread message.
 
     The bus assigns ``seq`` (a monotonically increasing log position) at send
@@ -560,6 +569,19 @@ class Message(Addressed, BusCapability):
         """The exact response destination owned by this opening message."""
         return CommandTarget.named(self.target).reply_target(self.sender)
 
+    autonomous: ClassVar[bool] = False
+
+    @property
+    def separate_turn(self) -> bool:
+        return self.role.response_policy(self).separate_turn
+
+    @property
+    def batch_target(self) -> str:
+        return self.exact_reply_target
+
+    def bus_keys(self, dispositions: InputDispositions, owner: Thread) -> tuple[str, ...]:
+        return (dispositions.bus_key(self, owner),)
+
     @property
     def reply_target(self) -> str | None:
         """An external sender may receive an automatic live reply."""
@@ -576,7 +598,7 @@ class BusRecord(Message, DeclaredFamily, affix="Record"):
         stored = replace(self, seq=seq)
         for row in stored.rows():
             row.insert(db)
-        stored.project_into(db)
+        stored.project_into(db, StoredHolders())
         return stored.seq
 
     @property
@@ -614,14 +636,11 @@ class Claimed(BusCapability):
     def require_claim_transition(self) -> ClaimTransition:
         return self.claim_transition
 
-    def replay_claim(self, db: sqlite3.Connection) -> None:
+    def project_into(self, db: sqlite3.Connection, holders: ClaimHolders) -> None:
         """Append and the shared derived rebuild replay this same original transition."""
-        projected = HeldResources.project(db, self.claim_transition)
-        HeldResources.apply(db, self.claim_transition, projected)
-
-    def project_into(self, db: sqlite3.Connection) -> None:
-        super().project_into(db)
-        self.replay_claim(db)
+        super().project_into(db, holders)
+        projected = HeldResources.project(db, self.claim_transition, holders)
+        HeldResources.apply(db, self.claim_transition, projected, holders)
 
 
 @dataclass(frozen=True, kw_only=True)

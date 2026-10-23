@@ -1754,6 +1754,18 @@ class TypedTable(
         return cls._query(db, where, parameters, order_by, descending, key, row_type, limit)
 
     @classmethod
+    def qualified(cls, *names: str) -> str:
+        """Columns named through this table, for one select joining tables that share names."""
+        table = _identifier(cls.declared_name)
+        return ", ".join(f"{table}.{_identifier(item.wire_name)}" for item in cls._fields_named(names))
+
+    @classmethod
+    def decode_at(cls, row: tuple[object, ...], offset: int) -> Self:
+        """Decode this table's columns, selected by ``qualified`` in declaration order at ``offset``."""
+        return cls._decode_row(row, {name: offset + index
+                                     for index, name in enumerate(cls.column_projection())})
+
+    @classmethod
     def one(cls, db: sqlite3.Connection, **key: object) -> Self | None:
         rows = cls._keyed(db, key)
         return next(iter(rows), None)

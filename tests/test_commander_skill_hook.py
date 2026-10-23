@@ -162,8 +162,10 @@ def test_a_session_bound_to_another_bus_thread_gets_no_commander_sources(tmp_pat
     monkeypatch.setenv("HOME", str(tmp_path / "home"))
     config = CommanderConfig.path()
     config.parent.mkdir(parents=True)
-    config.write_text(json.dumps(
-        {"commander": "claude-code", "root": str(tmp_path), "state": str(tmp_path), "repos": []}))
+    config.write_text(CommanderConfig(
+        commander="claude-code", root=tmp_path, state=tmp_path, repos=(),
+        worktrees=tmp_path / "worktrees", scratch=tmp_path / "scratch", disk=tmp_path,
+    ).model_dump_json())
     transcript = tmp_path / "session.jsonl"
     transcript.write_text("")
     record = {"hook_event_name": "SessionStart", "session_id": "s", "transcript_path": str(transcript)}
@@ -178,8 +180,10 @@ def test_the_commander_session_gets_its_sources(tmp_path, monkeypatch):
     monkeypatch.setenv("HOME", str(tmp_path / "home"))
     config = CommanderConfig.path()
     config.parent.mkdir(parents=True)
-    config.write_text(json.dumps(
-        {"commander": "claude-code", "root": str(tmp_path), "state": str(tmp_path), "repos": []}))
+    config.write_text(CommanderConfig(
+        commander="claude-code", root=tmp_path, state=tmp_path, repos=(),
+        worktrees=tmp_path / "worktrees", scratch=tmp_path / "scratch", disk=tmp_path,
+    ).model_dump_json())
     transcript = tmp_path / "session.jsonl"
     transcript.write_text("")
     WatchClaim("s").enrol(WatchRecord("claude-code", str(tmp_path), ()))

@@ -56,7 +56,7 @@ from .cli_commands import (
     ThreadStoppedResult,
 )
 from .cli_result import ToolCatalogResult
-from .commander.capacity import Load
+from .commander.vibe_check import OverloadDegradation
 from .coordination_tables.refusals import SendRefusal
 from .declared_family import DeclaredFamily
 from .display_order import ChannelSort, ThreadSort
@@ -156,8 +156,7 @@ from .thread_execution import (
     ThreadCommandAvailability,
 )
 from .thread_identity import ThreadIncarnation
-from .thread_management import InheritedTags, TagChoice
-from .thread_rename import RenameThreadResult
+from .thread_management import InheritedTags, RenameThreadResult, TagChoice
 from .thread_model import ThreadModel
 from .threads import NextTurnConfiguration
 from .tool_caller import NoThreadCaller, ThreadCaller, ThreadListing, ToolCaller
@@ -421,7 +420,6 @@ class ToolRequest[Caller: ToolCaller = ToolCaller](
     )
     context: ClassVar[str | None] = None
     action_label: ClassVar[str | None] = None
-    action_order: ClassVar[int] = 0
 
     @classmethod
     def context_bindings(cls) -> dict[str, type[ContextBinding]]:
@@ -443,7 +441,7 @@ class ToolRequest[Caller: ToolCaller = ToolCaller](
             result.update(
                 context=cls.context,
                 action_label=cls.action_label or cls.label,
-                action_order=cls.action_order,
+                action_order=cls.declared_position(),
                 context_bindings={
                     key: binding.declared_name for key, binding in cls.context_bindings().items()
                 },
@@ -976,10 +974,10 @@ class CommsUnjudgedTool(ThreadReadTool):
 @dataclass(frozen=True, kw_only=True)
 class CommsCommanderLoadTool(ThreadReadTool):
     label = "Measured commander load"
-    description = "Read canonical order/edit debt and receiving child commanders; never self-reported."
+    description = "Read open orders, review timers and unjudged edits used by the overload rule."
 
-    def apply(self, comms: Comms, caller: ToolCaller) -> Load:
-        return Load.of(comms, caller.subject(self.thread))
+    def apply(self, comms: Comms, caller: ToolCaller) -> OverloadDegradation:
+        return OverloadDegradation.of(comms, caller.subject(self.thread))
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -1588,12 +1586,31 @@ class CommsInboxTool(ToolRequest):
 
 
 @dataclass(frozen=True, kw_only=True)
+class CommsRestartQueueTool(ReadTool, ToolRequest):
+    label = "Restart Queue Status"
+    description = "Inspect queued, restarted, stale, or uncertain attempts for a thread."
+    name: Annotated[str, *tool_field("Agent thread")]
+
+    def apply(self, comms: Comms, caller: ToolCaller) -> RestartAttempts:
+        return RestartAttempts(tuple(restart_status(comms, self.name)))
+
+
+@dataclass(frozen=True, kw_only=True)
+class CommsCancelRestartTool(ToolRequest):
+    label = "Cancel Queued Restart"
+    description = "Cancel pending restarts for a thread; cannot undo an attempted restart."
+    name: Annotated[str, *tool_field("Agent thread")]
+
+    def apply(self, comms: Comms, caller: ToolCaller) -> RestartsCancelled:
+        return RestartsCancelled(tuple(cancel_restart(comms, self.name)))
+
+
+@dataclass(frozen=True, kw_only=True)
 class CommsForkTool(LiveOwnerTool, NativeOwnerCommand, ToolRequest):
     label = "Comms Fork"
     description = "Fork a child agent thread from a registered parent's persistent session."
     context = "thread"
     action_label = "Fork from this thread"
-    action_order = 10
     name: Annotated[str, *tool_field("Child thread name")]
     parent: Annotated[str, *tool_field("Parent thread name", binding=SubjectBinding)]
     task: Annotated[str, *tool_field("Optional task for the child")] = ""
@@ -1615,7 +1632,6 @@ class CommsStopTool(NativeOwnerCommand, OwnerLifecycleControl, ToolRequest):
     description = "Stop a thread after verifying that its process owns the registered identity."
     context = "thread"
     action_label = "Stop process"
-    action_order = 20
     name: Annotated[str, *tool_field("Thread name", binding=SubjectBinding)]
 
     def apply(self, comms: Comms, caller: ToolCaller) -> ThreadStoppedResult:
@@ -1632,7 +1648,6 @@ class CommsStartTool(LiveOwnerTool, NativeOwnerCommand, StartOwnerControl, ToolR
     )
     context = "thread"
     action_label = "Start thread"
-    action_order = 21
     name: Annotated[str, *tool_field("Thread to start", binding=SubjectBinding)]
 
     def apply(self, comms: Comms, caller: ToolCaller) -> OwnerStartResult:
@@ -1649,7 +1664,6 @@ class CommsQueueRestartTool(LiveOwnerTool, NativeOwnerCommand, OwnerLifecycleCon
     )
     context = "thread"
     action_label = "Queue idle restart"
-    action_order = 22
     name: Annotated[str, *tool_field("Live agent thread", binding=SubjectBinding)]
 
     def apply(self, comms: Comms, caller: ToolCaller) -> RestartQueued:
@@ -1659,32 +1673,11 @@ class CommsQueueRestartTool(LiveOwnerTool, NativeOwnerCommand, OwnerLifecycleCon
 
 
 @dataclass(frozen=True, kw_only=True)
-class CommsRestartQueueTool(ReadTool, ToolRequest):
-    label = "Restart Queue Status"
-    description = "Inspect queued, restarted, stale, or uncertain attempts for a thread."
-    name: Annotated[str, *tool_field("Agent thread")]
-
-    def apply(self, comms: Comms, caller: ToolCaller) -> RestartAttempts:
-        return RestartAttempts(tuple(restart_status(comms, self.name)))
-
-
-@dataclass(frozen=True, kw_only=True)
-class CommsCancelRestartTool(ToolRequest):
-    label = "Cancel Queued Restart"
-    description = "Cancel pending restarts for a thread; cannot undo an attempted restart."
-    name: Annotated[str, *tool_field("Agent thread")]
-
-    def apply(self, comms: Comms, caller: ToolCaller) -> RestartsCancelled:
-        return RestartsCancelled(tuple(cancel_restart(comms, self.name)))
-
-
-@dataclass(frozen=True, kw_only=True)
 class CommsArchiveTool(ArchiveOwnerControl, ToolRequest):
     label = "Archive Comms Thread"
     description = "Archive a stopped thread while retaining its messages."
     context = "thread"
     action_label = "Archive stopped thread"
-    action_order = 30
     name: Annotated[str, *tool_field("Stopped thread name", binding=SubjectBinding)]
 
     def apply(self, comms: Comms, caller: ToolCaller) -> ThreadArchivedResult:
@@ -1741,11 +1734,8 @@ class InvokeCliCommand(CliCommand, declared_name="tool"):
 
 
 def context_tool_catalog(context: str) -> list[dict[str, object]]:
-    tools = sorted(
-        (tool for tool in ToolRequest.members_with(ToolRequest) if tool.context == context),
-        key=lambda tool: tool.action_order,
-    )
-    return [tool.schema() for tool in tools]
+    return [tool.schema() for tool in ToolRequest.members_with(ToolRequest)
+            if tool.context == context]
 
 
 def invoke_tool(

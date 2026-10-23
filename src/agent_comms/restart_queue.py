@@ -25,10 +25,10 @@ from .comms import Comms, wire
 from .coordination_errors import CoordinationError
 from .coordinator import Coordination
 from .declared_family import DeclaredFamily
-from .lifecycle_capability import Active, LifecycleCapability, Pending
 from .errors import RelationViolationError
 from .field_codec import FieldCodec, WireOmitDefault
 from .launch_runtime import LaunchRuntime, RestartEnvironment
+from .lifecycle_capability import Active, LifecycleCapability, Pending
 from .native_arguments import GivenBinary, NativeArguments
 from .owner_cutover import PreserveOwnerRuntime
 from .owner_launch import RetainedOwnerLaunch
@@ -37,7 +37,7 @@ from .owner_restart import OwnerRestartRequest, StoppedOwnerFailure
 from .private_path import PrivateDirectoryRole
 from .restart_refusals import RestartRefusal
 from .restart_scope import OwnersNamed
-from .store_files import _atomic_write_text, _store_lock
+from .store_files import AtomicFile, _store_lock
 from .thread_identity import RecordedThreadIncarnation
 from .watched import ChangeSignal, DirectorySource, FileSource
 
@@ -245,7 +245,7 @@ class RestartQueue:
 
     def save(self, record: QueuedRestart) -> None:
         path = self.active_path(record.selection.identity.incarnation.require_recorded())
-        _atomic_write_text(path, json.dumps(FieldCodec.encode(record), sort_keys=True))
+        AtomicFile(path).write_text(json.dumps(FieldCodec.encode(record), sort_keys=True))
         if not record.state.items_with(Active, record):
             self.move(path, record)
 

@@ -33,8 +33,7 @@ from .private_path import FileObservation, FileRevision
 from .recorded_bus import RecordedBusIdentity
 from .registration import Registration
 from .routing import TurnRouting
-from .thread_provenance import ThreadProvenance
-from .threads import Thread
+from .threads import Thread, ThreadProvenance
 from .transcript_events import ForkOriginTranscript, ForkTaskTranscript, TranscriptEvent
 from .transcript_routes import TranscriptRoutes
 from .transcript_sources import (

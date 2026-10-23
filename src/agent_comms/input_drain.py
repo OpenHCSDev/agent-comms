@@ -638,9 +638,9 @@ class InputDrain(InputObservation):
             return UNOBSERVED_DELIVERY_SCOPE
         keys = set(self.input_keys(session_id))
         keys.update(
-            self.dispositions.bus_key(turn.origin, owner)
+            key
             for turn in self.state(session_id).pending_turns
-            if turn.origin is not None
+            for key in turn.origin.bus_keys(self.dispositions, owner)
         )
         return OwnerQueueInputDeliveryScope(frozenset(keys))
 

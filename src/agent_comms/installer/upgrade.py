@@ -489,7 +489,7 @@ class Stack:
         scratch.mkdir(mode=0o700, parents=True, exist_ok=True)
         with tempfile.TemporaryDirectory(dir=scratch, prefix=f"tests-{core[:12]}-") as temporary:
             print(self.commands.run(
-                "timeout", "300", self.python, "-m", "pytest", "-n", "0", "-q", "-s",
+                "timeout", "300", self.python, "-m", "pytest", "-q", "-s",
                 "-o", "pythonpath=. tools", "-o", "faulthandler_timeout=60",
                 "--basetemp", Path(temporary) / "pytest", "-p", "no:cacheprovider",
                 *pytest_arguments, cwd=self.checkout, env=self.environment()), end="")
@@ -584,9 +584,16 @@ class Stack:
 
     def owners(self, root: Path, command: type[CliCommand[CliResult]],
                names: list[str]) -> None:
-        """Run the captured owner set together and join every request before proceeding."""
+        """Run the captured owner set together and join every request before proceeding.
+
+        Every request is submitted and the pool's exit joins them all; only then does a
+        failure propagate, naming each failed owner. ``Executor.map`` is not used: it
+        cancels the requests not yet started the moment the first result raises."""
         with ThreadPoolExecutor(max_workers=max(1, len(names))) as pool:
-            list(pool.map(lambda name: self.cli(root, command, "--name", name), names))
+            requests = [pool.submit(self.cli, root, command, "--name", name) for name in names]
+        if failures := [request.exception() for request in requests if request.exception()]:
+            raise UpgradeRefused("; ".join(str(failure.args[0]) for failure in failures)
+                                 ) from failures[0]
 
     def start(self, root: Path, names: list[str]) -> tuple[OwnerStart, ...]:
         """Start the captured owner set together; each owner's outcome is its own."""

@@ -228,7 +228,6 @@ class NativeInputExecution(DeclaredFamily, affix="NativeExecution"):
 
 @dataclass(frozen=True)
 class TriageNativeExecution(NativeInputExecution):
-    proof_order: ClassVar[int] = 0
 
     def transcript_events(self, entry, projection, user):
         return [event.as_context() for event in
@@ -261,7 +260,6 @@ class TriageNativeExecution(NativeInputExecution):
 
 @dataclass(frozen=True)
 class FullNativeExecution(NativeInputExecution):
-    proof_order: ClassVar[int] = 1
 
     execution_id: str
     attempt_ordinal: int

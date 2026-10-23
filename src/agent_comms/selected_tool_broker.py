@@ -18,6 +18,7 @@ from functools import partial
 from pathlib import Path
 from typing import ClassVar
 
+from agent_comms.child_process import Platform
 from agent_comms.coordinator import Coordination
 
 from .comms import Comms

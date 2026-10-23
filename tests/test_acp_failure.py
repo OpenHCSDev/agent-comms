@@ -48,17 +48,9 @@ def test_public_not_sent_and_ambiguous_unknown_do_not_invent_binding():
     assert unknown.input_state is None and unknown.input_disposition == "Unconfirmed"
 
 
-def test_new_display_case_needs_only_its_declaration():
-    class FixtureDisplayFailure(ACPFailure):
-        classification_priority = 200
-        title = "Fixture feedback"
-
-        @classmethod
-        def matches(cls, code, detail, diagnostics=()):
-            return detail == "T2 display extension fixture"
-
-    failure = ACPFailure.from_error(RequestError(-32603, "T2 display extension fixture"))
-    assert isinstance(failure, FixtureDisplayFailure)
+def test_unmatched_display_detail_reaches_the_last_declared_fallback():
+    failure = ACPFailure.from_error(RequestError(-32603, "T2 unmatched display detail"))
+    assert isinstance(failure, RequestACPFailure)
     assert failure.input_disposition == "Unconfirmed"
     assert decode_updates(encode_updates(RequestFailedUpdate(failure)))[0].failure == failure
 
