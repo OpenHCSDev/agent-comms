@@ -15,6 +15,7 @@ from .channel_targets import Tag
 from .child_process import NoProcess, ProcessIdentity, ProcessState
 from .cli_result import ThreadToolCatalogResult
 from .context_segments.wake_values import WakeWorkContext
+from .declared_family import DeclaredFamily
 from .errors import RelationViolationError
 from .field_codec import (
     Argument,
@@ -32,6 +33,7 @@ from .goals import (
     NoGoal,
 )
 from .launch_root import LaunchRoot
+from .lifecycle import LifecycleState
 from .lifecycle_capability import Executing
 from .locked_store import DurableFile, PatternFile
 from .native_arguments import NativeArguments
@@ -76,6 +78,39 @@ class _GeneratedCreationTime(float):
 
 def _thread_creation_time() -> float:
     return _GeneratedCreationTime(time.time())
+
+
+@dataclass(frozen=True)
+class ThreadWorkState(DeclaredFamily, LifecycleState, affix="ThreadWorkState"):
+    """Order availability belongs to the thread, independently of process presence."""
+
+    @classmethod
+    def successors(cls) -> tuple[type[LifecycleState], ...]:
+        return ThreadWorkState.members_with(ThreadWorkState)
+
+    @abstractmethod
+    def candidates(self, thread: Thread) -> tuple[Thread, ...]: ...
+
+    @abstractmethod
+    def require_assignment(self) -> None: ...
+
+
+class ReadyThreadWorkState(ThreadWorkState):
+    def candidates(self, thread: Thread) -> tuple[Thread, ...]:
+        return (thread,)
+
+    def require_assignment(self) -> None:
+        pass
+
+
+class ParkedThreadWorkState(ThreadWorkState):
+    def candidates(self, thread: Thread) -> tuple[Thread, ...]:
+        return ()
+
+    def require_assignment(self) -> None:
+        raise RelationViolationError(
+            "The commander parked this thread; resume it before assigning work."
+        )
 
 
 class NextTurnSetting(ABC):
@@ -211,6 +246,9 @@ class Thread(DurableFile, PatternFile, ThreadProvenance):
     """Declares one agent thread's identity and provenance."""
 
     parent: ThreadParent = field(default_factory=NoParent)
+    work_state: Annotated[
+        ThreadWorkState, RegistrationPolicy(InheritPrevious), WireOmitDefault()
+    ] = field(default_factory=ReadyThreadWorkState, kw_only=True)
     task: ThreadText = field(default_factory=NoThreadText)
     process_identity: ProcessState = field(default_factory=NoProcess)
     model: Annotated[ThreadModel, RegistrationPolicy(InheritApplied)] = field(
