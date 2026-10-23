@@ -59,17 +59,14 @@ UNIT_INSTRUCTIONS = _resource_root() / "UNIT_SYSTEM.md"
 PACKAGE_LAYOUT = "node_modules/@earendil-works/pi-coding-agent"
 
 
-def pin_id() -> str:
-    return hashlib.sha256(MANIFEST.read_bytes()).hexdigest()[:16]
-
-
-def pinned_package_in(root: Path) -> Path:
-    """Where this pin's built package sits under a root laid out as stack/ is."""
-    return root / f".pi-native-{pin_id()}" / PACKAGE_LAYOUT
+def pinned_package_for(manifest: Path) -> Path:
+    """The package location derived from this manifest, beside the manifest itself."""
+    pin = hashlib.sha256(manifest.read_bytes()).hexdigest()[:16]
+    return manifest.parent / f".pi-native-{pin}" / PACKAGE_LAYOUT
 
 
 def pinned_location() -> Path:
-    return pinned_package_in(MANIFEST.parent)
+    return pinned_package_for(MANIFEST)
 
 
 def pinned_native_package() -> Path:

@@ -27,7 +27,7 @@ from .child_process import (
 )
 from .cli_result import CliResult
 from .commander_heartbeat import CommanderHeartbeat
-from .diagnostics import owner_process_output
+from .diagnostics import OwnerProcessOutput
 from .errors import RelationViolationError
 from .launch_root import LaunchRoot
 from .input_disposition import InputDispositions
@@ -493,7 +493,7 @@ class OwnerLifecycle:
         env = initial_input.launch(thread.launch()).apply(env)
         env[NativeArguments.binary_key] = agent_bin
         agent_args.apply(env)
-        with owner_process_output(self.root, thread) as output, SpawnedProcess.launching(
+        with OwnerProcessOutput.open(self.root, thread) as output, SpawnedProcess.launching(
             (str(launch_runtime.interpreter), "-m", "agent_comms.worker",
              *LaunchRoot.from_path(self.launch_authority.child_root).arguments()),
             env=env,

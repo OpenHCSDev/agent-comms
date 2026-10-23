@@ -182,9 +182,10 @@ def test_terminal_report_follows_real_tree_cleanup_and_keeps_original_error(
     tree.add()
     # This source test selects its source interpreter explicitly. The installed journey
     # separately qualifies artifact-only imports and the predecessor runtime.
-    monkeypatch.setenv("PYTHONPATH", str(Path(__file__).resolve().parents[1] / "src"))
+    repository = Path(__file__).resolve().parents[1]
+    monkeypatch.setenv("PYTHONPATH", str(repository / "src"))
     with InstallCommands() as commands:
-        stack = Stack(tree.path, commands,
+        stack = Stack(repository, commands,
                       runtime=RestoredRuntime(Path(sys.executable)))
         writer = RuntimeWriter(comms.root, stack, RetainedProgram.current())
         report = InstallReport()
