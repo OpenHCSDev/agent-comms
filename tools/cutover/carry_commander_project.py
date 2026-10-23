@@ -18,15 +18,11 @@ from agent_comms.typed_table import HeldBusFile
 
 
 class CommanderProjectCarry(Carry):
+    opened_files = (RetiredCommanderFile, RegistryFile)
     @property
     def configuration(self) -> Path:
         return RetiredCommanderFile.path_in(self.root)
 
-    def backup_files(self) -> tuple[Path, ...]:
-        paths = (self.configuration, *RegistryStore.at(self.root).written)
-        for path in paths:
-            self.require_confined(self.root, path)
-        return tuple(path for path in paths if path.exists())
 
     def carry(self, *, apply: bool) -> Carried:
         self.require_confined(self.root, self.configuration)
