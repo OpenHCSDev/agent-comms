@@ -2104,7 +2104,7 @@ class PendingProblemOrder(Pending, DeliverableProblemOrder):
             occupied = {todo.held().owner for todo in held} | {context.commander}
             idle = sorted(
                 candidate.name
-                for thread in snapshot.active_threads(snapshot.threads.values())
+                for thread in snapshot.active_threads(snapshot.active_candidates())
                 if thread.name not in occupied and thread.role.executor(thread)
                 for candidate in thread.work_state.candidates(thread)
             )

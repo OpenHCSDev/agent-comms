@@ -558,7 +558,7 @@ class Serve(Watch):
                     )
                     announced = True
                 time.sleep(.05)
-        summary = child.reap().summary()
+        summary = child.reap().summary
         with log.open('rb') as recorded:
             recorded.seek(offset)
             appended = recorded.read().decode(errors='replace').strip()
