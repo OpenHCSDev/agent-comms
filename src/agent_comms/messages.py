@@ -183,7 +183,7 @@ class HeldResources(BusProjectionTables):
     ) -> ClaimProjection:
         """Validate before the original is inserted; the caller retains the writer."""
         try:
-            transition.require_new_operation(lambda operation: ClaimOperations.used(db, operation))
+            transition.require_new_operation(lambda operation: holders.operation_used(db, operation))
             return transition.project(holders.before(db, transition))
         except (ClaimTransitionError, IdentityConflict) as error:
             raise RelationViolationError("Committed claim transition is inconsistent.") from error
@@ -191,6 +191,10 @@ class HeldResources(BusProjectionTables):
 class ProjectionPass(ABC, ProjectionSource):
     """How one projection pass writes the rows its records derive: an append writes its
     few rows at once."""
+
+    @ClassFact
+    def writes(cls) -> tuple[type[ProducedRow], ...]:
+        return BusProjectionTables.schema_rows()
 
     def write(self, db: sqlite3.Connection, row: TypedTable) -> None:
         row.insert(db)
@@ -204,6 +208,9 @@ class ClaimHolders(ProjectionPass):
 
     @abstractmethod
     def before(self, db: sqlite3.Connection, transition: ClaimTransition) -> ClaimProjection: ...
+
+    def operation_used(self, db: sqlite3.Connection, operation: str) -> bool:
+        return ClaimOperations.used(db, operation)
 
     def apply(
         self, db: sqlite3.Connection, transition: ClaimTransition, projected: ClaimProjection,
@@ -240,6 +247,7 @@ class ReplayedHolders(ClaimHolders):
         default_factory=lambda: frozenset(BusProjectionTables.schema_rows()))
     last_seq: int = 0
     owners: dict[str, ClaimOwner] = field(default_factory=dict)
+    operations: set[str] = field(default_factory=set)
     rows: dict[str, list[tuple]] = field(default_factory=dict)
     """Derived rows by insert statement; nothing in the rebuild reads them back before
     ``flush``, which inserts each statement's rows with one ``executemany``."""
@@ -254,7 +262,11 @@ class ReplayedHolders(ClaimHolders):
     ) -> None:
         for operation_id in transition.operation_ids:
             self.write(db, ClaimOperations(operation_id, transition.seq))
+        self.operations.update(transition.operation_ids)
         self.advance(transition.resources + transition.expired, projected)
+
+    def operation_used(self, db: sqlite3.Connection, operation: str) -> bool:
+        return operation in self.operations
 
     def flush(self, db: sqlite3.Connection) -> None:
         for owner in self.owners.values():

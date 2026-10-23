@@ -1452,6 +1452,10 @@ class DerivedTables(TableSchema):
     def reset_schema(cls, db: sqlite3.Connection) -> None:
         """Inside the caller's transaction: rebuild only this schema's derived tables."""
         changed = cls.changed_rows(db)
+        if not changed:
+            return
+        # Unchanged children may reference a rebuilt parent: check after its rows return.
+        db.execute("PRAGMA defer_foreign_keys=ON")
         for row in changed:
             row.take_previous_name(db)
         names = frozenset(row.declared_name for row in changed)
