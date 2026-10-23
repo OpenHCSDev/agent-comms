@@ -90,7 +90,7 @@ class NativeBoundary(ExitStack):
         from .store_files import SharedLock, _store_lock
 
         try:
-            self.activity = self.enter_context(self.bus.opened_activity())
+            self.activity = self.enter_context(self.bus.opened_activity(self.contention))
             with self.measurements.operation("file_exclusion"):
                 self.enter_context(_store_lock(
                     self.bus._registry.store.path, mode=SharedLock(),
@@ -118,7 +118,7 @@ class NativeCoordinationSession(CoordinationSession):
             publisher.ClaimWrites,
         )
 
-    def boundary(self, bus=None, **options):
+    def boundary(self, bus: MessageBus | None = None, **options: object) -> NativeBoundary:
         selected = self.bus if bus is None else bus
         if selected.bus.path.parent.resolve() != self.path.parent.resolve():
             raise IntegrityViolationError("native boundary belongs to another coordinator")
@@ -141,6 +141,19 @@ class NativeCoordinationSession(CoordinationSession):
 
 class ReadNativeCoordinationSession(NativeCoordinationSession):
     """Read-only native coordination through the complete session constructor."""
+
+    def __init__(
+        self, path: str, *, clock_ms: Callable[[], int] = system_clock,
+        contention: StoreContention = DEFAULT_STORE_CONTENTION,
+    ) -> None:
+        self.contention = contention
+        super().__init__(path, clock_ms=clock_ms, contention=contention)
+
+    def boundary(self, bus: MessageBus | None = None, **options: object) -> NativeBoundary:
+        """A read's boundary spends the read's own budget on every lock it takes, so
+        contention the read cannot wait out raises BlockingIOError for its caller to
+        defer, instead of a wait with no end."""
+        return super().boundary(bus, contention=self.contention.lock_budget(), **options)
 
     def _prepare_private_file(self) -> None:
         self._private_file()

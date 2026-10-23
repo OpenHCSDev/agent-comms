@@ -29,6 +29,7 @@ from .store_files import (
     AtomicFile,
     SharedLock,
     StoreLock,
+    StoreLockContention,
     StoreLockOwner,
     StoreOwner,
     _store_lock,
@@ -449,6 +450,10 @@ class StoreContention(ABC):
         self, path: str | os.PathLike[str], options: dict[str, object]
     ) -> sqlite3.Connection:
         return sqlite3.connect(path, timeout=self.timeout, **options)
+
+    def lock_budget(self) -> StoreLockContention:
+        """The same wait spent on the store's file locks: one fresh budget per operation."""
+        return StoreLockContention(self.timeout)
 
 
 @dataclass(frozen=True)

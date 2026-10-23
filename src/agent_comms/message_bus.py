@@ -53,6 +53,7 @@ if TYPE_CHECKING:
     from agent_comms.registration import Registration
     from agent_comms.registry_document import RegistrySnapshot
     from agent_comms.relationships import PeerRelation
+    from agent_comms.store_files import StoreLockContention
     from agent_comms.threads import Thread
 
 
@@ -94,8 +95,10 @@ class MessageBus[Writes: Publisher]:
         self.publisher = publisher(self.bus, registry, self._channels, self.opened_activity)
 
     @contextmanager
-    def opened_activity(self) -> Iterator[ActivityClocks]:
-        yield self.bus.activity_clocks()
+    def opened_activity(
+        self, contention: StoreLockContention | None = None,
+    ) -> Iterator[ActivityClocks]:
+        yield self.bus.activity_clocks(contention)
 
     def require_channel(self, target: str):
         with self.opened_activity() as activity:

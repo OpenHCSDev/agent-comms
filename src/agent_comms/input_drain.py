@@ -654,23 +654,23 @@ class InputDrain(InputObservation):
         # ordinary loop still synchronizes configuration and schedules goals.
         state = self.state(session_id)
         before = await self._observe_private_revision(session_id, root_id)
-        if state.idle_revision == before:
-            state.repeat_observation = False
-            await self.effects.cursors.refresh(session_id, self.sessions.require(session_id))
-            return 0
-        state.forget_observation()
-        result = await before.drain(self, session_id, root_id)
-        # Never absorb a message/owner/recovery change during a suspended read,
-        # or skip queued independent work after a completed native turn.
-        if result == 0:
-            if before == await self._observe_private_revision(session_id, root_id):
-                state.idle_revision = before
+        if state.idle_revision != before:
+            state.forget_observation()
+            result = await before.drain(self, session_id, root_id)
+            # Never absorb a message/owner/recovery change during a suspended read,
+            # or skip queued independent work after a completed native turn.
+            if result:
                 state.repeat_observation = False
-            else:
+                return result
+            if before != await self._observe_private_revision(session_id, root_id):
                 state.repeat_observation = True
-        else:
-            state.repeat_observation = False
-        return result
+                return 0
+            state.idle_revision = before
+        # Idle is where the cursor refresh is owed, on the drain that reaches it as on
+        # every drain that finds it.
+        state.repeat_observation = False
+        await self.effects.cursors.refresh(session_id, self.sessions.require(session_id))
+        return 0
 
     async def drain_owned_inbox(self, session_id: str) -> int:
         # The revision read below checks this root against the bus marker and

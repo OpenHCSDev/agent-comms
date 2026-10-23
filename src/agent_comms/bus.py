@@ -57,6 +57,7 @@ from agent_comms.watched import Watched
 if TYPE_CHECKING:
     from agent_comms.registry_document import RegistrySnapshot
     from agent_comms.registry_provenance import RegistryProvenance
+    from agent_comms.store_files import StoreLockContention
 
 
 class PublicRecord(BusRecord):
@@ -114,7 +115,11 @@ class BusReader(RouteCounts, ABC):
     """One query implementation for individual reads and a held read snapshot."""
 
     @abstractmethod
-    def observing(self) -> AbstractContextManager[sqlite3.Connection]: ...
+    def observing(
+        self, contention: StoreLockContention | None = None,
+    ) -> AbstractContextManager[sqlite3.Connection]:
+        """One read snapshot; a file attachment spends ``contention``, the lock budget of
+        the read it serves."""
 
     @contextmanager
     def reading(self) -> Iterator[BusSnapshot]:
@@ -126,8 +131,8 @@ class BusReader(RouteCounts, ABC):
         with self.observing() as db:
             return BusRow.last_seq(db)
 
-    def activity_clocks(self) -> ActivityClocks:
-        with self.observing() as db:
+    def activity_clocks(self, contention: StoreLockContention | None = None) -> ActivityClocks:
+        with self.observing(contention) as db:
             return BusActivityIndex.clocks(db)
 
     def target_activity(self, predicate: str, parameters: tuple[object, ...]) -> ChannelActivity:
@@ -459,11 +464,13 @@ class Bus(BusReader, ReconciledFile, WalStore, CarriedWriter, BusFile, Watched):
         return BusSchema
 
     @contextmanager
-    def observing(self) -> Iterator[sqlite3.Connection]:
+    def observing(
+        self, contention: StoreLockContention | None = None,
+    ) -> Iterator[sqlite3.Connection]:
         """Borrow one read-only snapshot, including for an archived bus; a bus before its
         first write reads as its declared empty tables."""
         with self.committed_or_empty(
-            self.table_schema(), lambda: SQLiteFile.observing(self.path)
+            self.table_schema(), lambda: SQLiteFile.observing(self.path), contention
         ) as db:
             yield db
 
@@ -543,7 +550,10 @@ class BusSnapshot(PresentPath, BusReader):
         return cls(identity=FileIdentity.from_stat(path.stat()), path=path, _connection=connection)
 
     @contextmanager
-    def observing(self) -> Iterator[sqlite3.Connection]:
+    def observing(
+        self, contention: StoreLockContention | None = None,
+    ) -> Iterator[sqlite3.Connection]:
+        """The held snapshot is already attached, so it takes no lock."""
         yield self._connection
 
     @contextmanager
