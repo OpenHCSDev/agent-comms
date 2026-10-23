@@ -11,6 +11,7 @@ from typing import TYPE_CHECKING, Annotated, Self
 
 from pydantic import BaseModel, ConfigDict, InstanceOf, PlainSerializer, PlainValidator
 
+from .field_codec import WireValue
 from .repository_name import RepositoryName
 
 if TYPE_CHECKING:
@@ -30,7 +31,7 @@ class RepositorySelection(ABC):
     def without_commander(self) -> None: ...
 
 
-class Repo(BaseModel):
+class Repo(BaseModel, WireValue):
     """A repository the fleet works on: its check checkout, its GitHub name and its source root."""
 
     model_config = ConfigDict(frozen=True)
@@ -44,6 +45,13 @@ class Repo(BaseModel):
         ]
     ]
     source: str = "src"
+
+    def to_wire(self) -> dict[str, object]:
+        return self.model_dump(mode="json")
+
+    @classmethod
+    def from_wire(cls, data: object) -> Self:
+        return cls.model_validate(data)
 
     @classmethod
     def selected(cls, repositories: tuple[Repo, ...], name: str) -> Repo:
