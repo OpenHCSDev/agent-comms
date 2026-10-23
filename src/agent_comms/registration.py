@@ -11,7 +11,6 @@ from typing import TYPE_CHECKING, Concatenate
 from .catalog_store import ChannelCatalog
 from .child_process import NoProcess, ProcessIdentity
 from .errors import RelationViolationError
-from .goal_actions import GoalActionContext, SetGoalAction
 from .goal_history import GoalHistoryEntry, GoalHistoryStore
 from .native_input_owner import RegistryOwner
 from .private_registry_guard import PrivateRegistryGuard
@@ -108,11 +107,8 @@ class Registration:
                 parent=ForkedParent(parent.name), model=parent.model,
                 thinking_level=parent.thinking_level, service_tier=parent.service_tier,
                 execution=CommanderForkExecution)
-            text = ('\n'.join(goal.text for goal in parent.goal.active())
-                    or f'Coordinate assigned work for {parent.name}.')
             with self._preparing_declaration(edit, child, _DEFAULT_PRESENCE) as change:
-                goal = SetGoalAction(text=text).create(
-                    GoalActionContext(goals, change.thread))
+                goal = goals.fork_goal(parent, change.thread)
                 return self._commit_registration(edit, replace(
                     change, thread=replace(change.thread, goal=goal))).thread
 
