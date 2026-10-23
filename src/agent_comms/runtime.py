@@ -15,8 +15,8 @@ import logging
 import os
 import secrets
 import socket
-from collections.abc import Coroutine
-from contextlib import ExitStack, suppress
+from collections.abc import Coroutine, Iterator
+from contextlib import ExitStack, contextmanager, suppress
 from contextvars import ContextVar
 from dataclasses import dataclass
 from pathlib import Path
@@ -61,6 +61,15 @@ if TYPE_CHECKING:
     from .acp import CommsAgent
     from .selected_write_authority import AcpSelectedWriteAuthority
     from .turn_runner import TurnRunner
+
+
+@contextmanager
+def client_refusals() -> Iterator[None]:
+    """Client-side ACP errors enter Core as refusals."""
+    try:
+        yield
+    except RequestError as error:
+        raise RequestRefused(error.code, str(error), error.data) from error
 
 
 def socket_path(root: Path, pid: int) -> Path:
@@ -288,10 +297,8 @@ class RuntimeServer(SessionUpdateSink):
         delivered = False
         client = self.agent.sessions.client
         if client is not None:
-            try:
+            with client_refusals():
                 delivered = await client.publish_update(session_id=session_id, update=update)
-            except RequestError as error:
-                raise RequestRefused(error.code, str(error), error.data) from error
         # Do not re-resolve the recipient set after an awaited handoff. A
         # socket reattach has a new identity even with the same session ID.
         sockets = (
@@ -582,12 +589,10 @@ class RuntimeProxy(RuntimeConnection):
         notification = SessionNotification.model_validate({
             "session_id": self.session_id, "update": {**line.update, "_meta": metadata},
         })
-        try:
+        with client_refusals():
             await client.publish_update(
                 session_id=notification.session_id, update=notification.update
             )
-        except RequestError as error:
-            raise RequestRefused(error.code, str(error), error.data) from error
 
     def ask(self, request: OwnerPermissionRequest) -> None:
         if len(self._permission_tasks) >= 4 or request.id in self._permission_tasks:
@@ -598,7 +603,7 @@ class RuntimeProxy(RuntimeConnection):
             response = ClientPermissionResponse.cancelled(request.id)
             try:
                 if self.agent.sessions.client is not None and token == self._controller_token:
-                    try:
+                    with client_refusals():
                         reply = await asyncio.wait_for(
                             self.agent.sessions.client.request_permission(
                                 session_id=self.session_id,
@@ -610,8 +615,6 @@ class RuntimeProxy(RuntimeConnection):
                             ),
                             timeout=ACP_PERMISSION_TIMEOUT_SECONDS,
                         )
-                    except RequestError as error:
-                        raise RequestRefused(error.code, str(error), error.data) from error
                     response = ClientPermissionResponse.of(
                         request.id, RequestPermissionResponse.model_validate(reply)
                     )

@@ -82,6 +82,7 @@ from .queued_input import DeliveredInput
 from .runtime import (
     RuntimeProxy,
     RuntimeServer,
+    client_refusals,
     socket_path,
 )
 from .schedule_rules import SelectedWakeCheck
@@ -132,15 +133,13 @@ class SdkSessionConnection(AgentSideConnection, Controller, SessionUpdateSink):
     ) -> dict[str, object] | None:
         tool_call, options = request
         if self is runner.sessions.client:
-            try:
+            with client_refusals():
                 response = await asyncio.wait_for(
                     self.request_permission(
                         session_id=session_id, tool_call=tool_call, options=options
                     ),
                     timeout=ACP_PERMISSION_TIMEOUT_SECONDS,
                 )
-            except RequestError as error:
-                raise RequestRefused(error.code, str(error), error.data) from error
             return RequestPermissionResponse.model_validate(response).outcome.model_dump(
                 by_alias=True, exclude_none=True
             )
