@@ -29,6 +29,8 @@ from typing import TYPE_CHECKING, Any
 
 from acp import RequestError, run_agent
 from acp.schema import (
+    ClientCapabilities,
+    Implementation,
     AgentMessageChunk,
     InitializeResponse,
     LoadSessionResponse,
@@ -37,6 +39,7 @@ from acp.schema import (
     SetSessionConfigOptionResponse,
     TextContentBlock,
 )
+from pydantic import JsonValue
 
 from agent_comms.coordination_errors import IdentityConflict
 from agent_comms.coordinator import Coordination
@@ -69,9 +72,9 @@ from .runtime import (
 )
 from .schedule_rules import SelectedWakeCheck
 from .session_effects import SessionEffects
-from .session_lifecycle import AttachedSessionLifecycle, SessionLifecycle
+from .session_lifecycle import AttachedSessionLifecycle, SessionLifecycle, SessionMcpServer
 from .threads import Thread
-from .turn_effects import TurnEffects
+from .turn_effects import PromptBlock, TurnEffects
 from .turn_runner import TurnRunner
 from .turn_terminal import EndedWithoutResult, TurnInterruption, TurnTerminal
 
@@ -153,13 +156,13 @@ class CommsAgent(SessionEffects, InputEffects, TurnEffects):
     async def initialize(
         self,
         protocol_version: int,
-        client_capabilities: Any = None,
-        client_info: Any = None,
+        client_capabilities: ClientCapabilities | dict[str, JsonValue] | None = None,
+        client_info: Implementation | None = None,
     ) -> InitializeResponse:
         return await self.sessions.initialize(protocol_version, client_capabilities, client_info)
 
     async def new_session(
-        self, cwd: str, mcp_servers: list[Any] | None = None, **kwargs: Any
+        self, cwd: str, mcp_servers: list[SessionMcpServer] | None = None, **kwargs: JsonValue
     ) -> NewSessionResponse:
         return await self.sessions.new_session(cwd, mcp_servers, **kwargs)
 
@@ -167,12 +170,12 @@ class CommsAgent(SessionEffects, InputEffects, TurnEffects):
         self,
         cwd: str,
         session_id: str,
-        mcp_servers: list[Any] | None = None,
-        **kwargs: Any,
+        mcp_servers: list[SessionMcpServer] | None = None,
+        **kwargs: JsonValue,
     ) -> LoadSessionResponse:
         return await self.sessions.load_session(cwd, session_id, mcp_servers, **kwargs)
 
-    async def prompt(self, session_id: str, prompt: list[Any], **kwargs: Any) -> PromptResponse:
+    async def prompt(self, session_id: str, prompt: list[PromptBlock], **kwargs: JsonValue) -> PromptResponse:
         from .acp_extension import decode_request
         from .acp_request_consumer import AcpRequestConsumer
 
@@ -236,7 +239,7 @@ class CommsAgent(SessionEffects, InputEffects, TurnEffects):
         )
         return PromptResponse(stop_reason="end_turn", field_meta=encode_updates(acknowledgement))
 
-    async def _prompt_request(self, session_id: str, prompt: list[Any], request) -> PromptResponse:
+    async def _prompt_request(self, session_id: str, prompt: list[PromptBlock], request) -> PromptResponse:
         display_text = request.user_text or self._prompt_text(prompt)
         try:
             images = prompt_images(prompt)
@@ -279,7 +282,7 @@ class CommsAgent(SessionEffects, InputEffects, TurnEffects):
                     self._runtime.controller.reset(context)
 
     @staticmethod
-    def _require_compaction_text(prompt: list[Any]) -> None:
+    def _require_compaction_text(prompt: list[PromptBlock]) -> None:
         if len(prompt) != 1:
             raise RequestError.invalid_params({"reason": "/compact requires one text block."})
         block = prompt[0]
@@ -304,18 +307,18 @@ class CommsAgent(SessionEffects, InputEffects, TurnEffects):
             with open(debug_path, "a") as debug_log:
                 debug_log.write(f"[{time.time():.3f}] {message}\n")
 
-    async def cancel(self, session_id: str, **kwargs: Any) -> None:
+    async def cancel(self, session_id: str, **kwargs: JsonValue) -> None:
         return await self.turns.cancel(session_id, **kwargs)
 
-    async def close_session(self, session_id: str, **kwargs: Any):
+    async def close_session(self, session_id: str, **kwargs: JsonValue):
         return await self.sessions.close_session(session_id)
 
     async def set_config_option(
-        self, config_id: str, session_id: str, value: str | bool, **kwargs: Any
+        self, config_id: str, session_id: str, value: str | bool, **kwargs: JsonValue
     ) -> SetSessionConfigOptionResponse:
         return await self.sessions.config.set_option(config_id, session_id, value)
 
-    async def authenticate(self, method_id: str, **kwargs: Any) -> None:
+    async def authenticate(self, method_id: str, **kwargs: JsonValue) -> None:
         raise RequestError.auth_required({"reason": "agent-comms requires no authentication"})
 
     # ─── Helpers ─────────────────────────────────────────────────────────────
@@ -421,7 +424,7 @@ class CommsAgent(SessionEffects, InputEffects, TurnEffects):
             retirement.push_async_callback(self.annotations.close)
 
     @staticmethod
-    def _prompt_text(prompt: list[Any]) -> str:
+    def _prompt_text(prompt: list[PromptBlock]) -> str:
         chunks: list[str] = []
         for block in prompt:
             if isinstance(block, dict):
