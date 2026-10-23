@@ -25,6 +25,7 @@ from typing import (
     Literal,
     Protocol,
     Self,
+    TypeGuard,
     TypeVar,
     Union,
     cast,
@@ -83,6 +84,25 @@ class MalformedRecord(ValueError):  # noqa: N818 - names the refused data
                 return False
             if isinstance(exc, ValueError):
                 raise self.error_cls(f"{self.subject}: {exc}") from exc
+            return False
+
+    class _Located:
+        """Record a refused field under its key so sibling refusals are reported together."""
+
+        __slots__ = ("fix", "name", "problems")
+
+        def __init__(self, problems: dict[str, str], name: str, fix: str) -> None:
+            self.problems = problems
+            self.name = name
+            self.fix = fix
+
+        def __enter__(self) -> None:
+            return None
+
+        def __exit__(self, _exc_type: object, exc: object, _traceback: object) -> bool:
+            if isinstance(exc, MalformedRecord):
+                self.problems.update(exc.located(self.name, self.fix))
+                return True
             return False
 
     @classmethod
@@ -465,6 +485,10 @@ class FieldPlan:
     @cached_property
     def key(self) -> str:
         return WireName.read(self.annotation, self.name)
+
+    def locating(self, problems: dict[str, str]) -> MalformedRecord._Located:
+        """A refused value joins its record's problems under this field's key."""
+        return MalformedRecord._Located(problems, self.key, f"supply {self.annotation}")
 
     @cached_property
     def required(self) -> bool:
@@ -2272,7 +2296,7 @@ class _AnyDecoder(_JsonValueRepresentation, ValueDecoder[JsonValue]):
 
 
 def _declared_member[Family: DeclaredFamily](
-    family: type[Family], name: str,
+    family: type[Family], name: object,
 ) -> type[Family]:
     """A wire name the family does not declare is malformed data."""
     try:
@@ -2696,8 +2720,12 @@ class _FamilyRecordDecoder[Member: DeclaredFamily](_ContextDecoder[Member]):
 
     target: type[Member]
 
-    def fits_wire(self, data: object) -> bool:
+    def tagged(self, data: object) -> TypeGuard[dict[str, object]]:
+        """The family form: an object naming its member under the family tag."""
         return isinstance(data, dict) and isinstance(data.get(self.target.family_discriminator), str)
+
+    def fits_wire(self, data: object) -> bool:
+        return self.tagged(data)
 
     @property
     def wire_children(self) -> tuple[ValueDecoder[object], ...]:
@@ -2732,12 +2760,11 @@ class _FamilyRecordDecoder[Member: DeclaredFamily](_ContextDecoder[Member]):
         return MalformedRecord("Expected a family object.")
 
     def member(self, data: object) -> tuple[type[Member], dict]:
-        if not _FamilyRecordDecoder.fits_wire(self, data):
+        if not self.tagged(data):
             raise _FamilyRecordDecoder.shape_refusal(self, data)
         tag = self.target.family_discriminator
-        payload = cast(dict, data)
-        return _declared_member(self.target, payload[tag]), {
-            key: value for key, value in payload.items() if key != tag
+        return _declared_member(self.target, data[tag]), {
+            key: value for key, value in data.items() if key != tag
         }
 
     def decode_bound(self, data: object, context: Mapping[str, object]) -> Member:
@@ -2754,7 +2781,7 @@ class _LeafDocumentDecoder(_FamilyRecordDecoder):
         return _member_decoder(self.target)
 
     def fits_wire(self, data: object) -> bool:
-        return super().fits_wire(data) or self.leaf.fits_wire(data)
+        return self.tagged(data) or self.leaf.fits_wire(data)
 
     def shape_refusal(self, data: object) -> MalformedRecord:
         # The direct leaf form is this document's declared shape.
@@ -2779,7 +2806,7 @@ class _RecordDecoder(_ContextDecoder[Any]):
 
     target: type
 
-    def fits_wire(self, data: object) -> bool:
+    def fits_wire(self, data: object) -> TypeGuard[dict[str, object]]:
         if not isinstance(data, dict):
             return False
         plan = FieldCodec._record_plan(self.target)
@@ -2829,10 +2856,10 @@ class _RecordDecoder(_ContextDecoder[Any]):
             return RecordProblems(self.problems(data))
         return MalformedRecord("Expected a record object; fix: supply a JSON object.")
 
-    def checked(self, data: object) -> dict:
+    def checked(self, data: object) -> dict[str, object]:
         if not self.fits_wire(data):
             raise self.shape_refusal(data)
-        return cast(dict, data)
+        return data
 
     @property
     def field_names(self) -> tuple[str, ...]:
@@ -2852,7 +2879,7 @@ class _RecordDecoder(_ContextDecoder[Any]):
             if entry.name not in fields:
                 continue
             key = (target, entry.name)
-            try:
+            with entry.locating(problems):
                 if entry.name in field_types:
                     narrowed = compile_decoder(field_types[entry.name])
                     values.update(entry.decoded_using(
@@ -2861,8 +2888,6 @@ class _RecordDecoder(_ContextDecoder[Any]):
                 else:
                     values.update(entry.decoded_selected(data, selections[key], selections)
                                   if key in selections else entry.decoded_bound(data, context))
-            except MalformedRecord as error:
-                problems.update(error.located(entry.key, f"supply {entry.annotation}"))
         if problems:
             raise RecordProblems(problems)
         return FieldCodec.construct(target, values)
