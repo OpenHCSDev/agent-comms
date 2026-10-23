@@ -13,10 +13,11 @@ from .diagnostics import record_terminal_failure
 from .messages import AlertKind, NoticeRole
 from .send_result import SendResult
 from .turn_failure import BackendFailed
+from .turn_outcome import TurnOutcome
 
 
 @dataclass(frozen=True, slots=True)
-class CoordinatedTurn:
+class CoordinatedTurn(TurnOutcome):
     assignment_ids: Annotated[tuple[str, ...], field_codec.WireName("claim_ids")]
     disposition: type[AssignmentState]
     input_id: str
