@@ -107,7 +107,7 @@ from agent_comms.installer.practice import (
 from agent_comms.installer.reporting import (
     OutgoingWriter, RootWriter, RuntimeWriter, UnpostedWriter,
 )
-from agent_comms.installer.runtime_resolution import RuntimeResolution
+from agent_comms.installer.runtime_resolution import RuntimeResolution, StackProject
 from agent_comms.launch_runtime import LaunchRuntime, RestartEnvironment, SpecifiedImportPath
 from agent_comms.locked_store import BusFile, DeclaredFile, RootFile, UndeclaredFile
 from agent_comms.root_runtime import RootRuntime, RootRuntimeStore
@@ -465,9 +465,9 @@ class Stack:
 
     def resolve(self) -> None:
         """Refresh declared source packages while retaining the committed release pins."""
-        with self.lock.with_name("pyproject.toml").open("rb") as project:
-            sources = tomllib.load(project)["tool"]["uv"]["sources"]
-        upgrades = tuple(argument for name in sources
+        with self.lock.with_name("pyproject.toml").open("rb") as definition:
+            project = StackProject.model_validate(tomllib.load(definition))
+        upgrades = tuple(argument for name in project.tool.uv.sources
                          for argument in ("--upgrade-package", name))
         self.commands.run(self.uv, "lock", "--project", "stack", *upgrades,
                           "--python", "3.14", cwd=self.checkout)
