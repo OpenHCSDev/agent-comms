@@ -99,10 +99,7 @@ class MalformedRecord(ValueError):  # noqa: N818 - names the refused data
         def __enter__(self) -> None:
             return None
 
-        def __exit__(
-            self, _exc_type: type[BaseException] | None, exc: BaseException | None,
-            _traceback: types.TracebackType | None,
-        ) -> bool:
+        def __exit__(self, _exc_type: object, exc: object, _traceback: object) -> bool:
             if isinstance(exc, MalformedRecord):
                 self.problems.update(exc.located(self.name, self.fix))
                 return True
