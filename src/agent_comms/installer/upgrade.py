@@ -42,16 +42,8 @@ from agent_comms.active_route import (
 )
 from agent_comms.bus import Bus
 from agent_comms.cli_bridges.shared import BridgeResume, Serve, SessionBridgeResumes
-from agent_comms.cli_commands import (
-    BusReadBack,
-    CliCommand,
-    InstallResult,
-    PlannedReconcileCliCommand,
-    ReadBackCliCommand,
-    ReconcileStoresCliCommand,
-    StartCliCommand,
-    StopCliCommand,
-)
+from agent_comms.cli_commands import BusReadBack, CliCommand, PlannedReconcileCliCommand, ReadBackCliCommand, ReconcileStoresCliCommand, StartCliCommand, StopCliCommand
+from agent_comms.installer.harness_installation import InstallResult
 from agent_comms.cli_protocol import CoreError
 from agent_comms.cli_result import CliResult
 from agent_comms.comms import wire
@@ -68,38 +60,24 @@ from agent_comms.installer.backup import (
     UpgradeRefused,
     bus_files,
 )
-from agent_comms.installer.carry import (
-    STEPS,
-    Carried,
-    Carry,
-    CarryChain,
-    CarryOperation,
-    CarryProbe,
-    FirstPendingOperation,
-    MigrateOperation,
-    RetireInputsOperation,
-)
+from agent_comms.installer.carry import STEPS, Carried, Carry, CarryChain, CarryOperation, FirstPendingOperation, MigrateOperation, RetireInputsOperation
+from agent_comms.installer.probes.carry import CarryProbe
 from agent_comms.installer.commands import InstallCommands, TimedCommand
 from agent_comms.installer.declared_uv import DeclaredUv
-from agent_comms.installer.interpreter_operation import (
-    CliCommandProbe,
-    ClientImportsProbe,
-    PrepareNativeProbe,
-    ProbeProgram,
-    PublicationProbe,
-    RetainedProgram,
-    RunningOwnersProbe,
-    RuntimeProbe,
-    ServingProbe,
-    TargetProgram,
-)
+from agent_comms.installer.probes.commands import CliCommandProbe
+from agent_comms.installer.probes.imports import ClientImportsProbe
+from agent_comms.installer.probes.native import PrepareNativeProbe
+from agent_comms.installer.interpreter_operation import ProbeProgram, RetainedProgram, RuntimeProbe, TargetProgram
+from agent_comms.installer.probes.publication import PublicationProbe
+from agent_comms.installer.probes.owners import RunningOwnersProbe
+from agent_comms.installer.probes.services import ServingProbe
 from agent_comms.installer.practice import (
     PracticeCopy,
     PracticeMeasurement,
     RehearsalHome,
     RuntimeHome,
 )
-from agent_comms.installer.publication import SelectedRouteProbe
+from agent_comms.installer.probes.publication import SelectedRouteProbe
 from agent_comms.installer.reporting import (
     RootWriter,
     RuntimeWriter,

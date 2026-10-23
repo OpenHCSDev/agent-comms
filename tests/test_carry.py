@@ -18,15 +18,8 @@ from agent_comms.installer.backup import (
     UpgradeRefused,
     bus_files,
 )
-from agent_comms.installer.carry import (
-    STEPS,
-    Carried,
-    Carry,
-    CarryChain,
-    CarryProbe,
-    FirstPendingOperation,
-    MigrateOperation,
-)
+from agent_comms.installer.carry import STEPS, Carried, Carry, CarryChain, FirstPendingOperation, MigrateOperation
+from agent_comms.installer.probes.carry import CarryProbe
 from agent_comms.field_codec import FieldCodec
 from agent_comms.installer.commands import InstallCommands
 from agent_comms.installer.interpreter_operation import ProbeRequest, TargetProgram

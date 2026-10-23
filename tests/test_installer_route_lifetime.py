@@ -22,7 +22,7 @@ from agent_comms.bus import Bus
 from agent_comms.comms import wire
 from agent_comms.installer.backup import StoreBackup, UpgradeRefused
 from agent_comms.installer.commands import InstallCommands
-from agent_comms.installer.publication import SelectedRouteProbe
+from agent_comms.installer.probes.publication import SelectedRouteProbe
 from agent_comms.installer.interpreter_operation import InstalledProgram
 from agent_comms.launch_runtime import LaunchRuntime
 from agent_comms.recorded_bus import RecordedBusIdentity

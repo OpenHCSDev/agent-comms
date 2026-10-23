@@ -116,6 +116,7 @@ from .field_codec import (
     boundary_decoder,
 )
 from .harness_install import Harness
+from .installer.harness_installation import HarnessInstallation, InstallResult
 from .history_result import HistoryPageResult
 from .history_views import CallingThreadTarget, NamedThreadTarget, PollTarget
 from .importing import ImportedSessionMetadata, ImportLimits, ThreadImported
@@ -691,10 +692,6 @@ class SubagentsImportedResult(CliResult):
     imported: tuple[ThreadImported, ...]
 
 
-@dataclass(frozen=True)
-class InstallResult(CliResult):
-    config: CommanderProject
-    registered: dict[str, tuple[str, ...]]
 
 
 @dataclass(frozen=True)
@@ -1665,7 +1662,7 @@ class RegisterCliCommand(NameArgument, CliCommand):
 
 
 @dataclass(frozen=True, kw_only=True)
-class InstallCliCommand(CliCommand):
+class InstallCliCommand(HarnessInstallation, CliCommand):
     help = ("Upgrade this machine's bus, checkout and runtime to --to, then set up every coding "
             "harness to use the bus, with the commander skill and tools")
     checkout: Annotated[
@@ -1705,19 +1702,6 @@ class InstallCliCommand(CliCommand):
             options={"help": "Parent directory for live backups"},
         ),
     ] = dataclasses.field(default_factory=lambda: Path.home() / ".cache/agent-rehearsal")
-    project: Annotated[
-        Path,
-        AbsolutePathText,
-        Argument(flags=("--project",), options={"help": "The worktree harness threads register in"}),
-    ] = dataclasses.field(default_factory=Path.cwd)
-    repos: Annotated[
-        RepoChoice,
-        Argument(flags=("--repos",), options={"help": "Replace the commander's recorded repositories"}),
-    ] = KeptRepos()
-    commander: Annotated[
-        CommanderChoice,
-        Argument(flags=("--commander",), options={"help": "Record this thread as the bus's commander"}),
-    ] = KeptCommander()
 
     @classmethod
     def published_launch(cls) -> LaunchRoot:
@@ -1732,25 +1716,7 @@ class InstallCliCommand(CliCommand):
 
         return InstallRun.start(self, route.root).launch(output)
 
-    def apply(self, ctx: Comms) -> InstallResult:
-        """The install's last step, on the bus it carried or created, run by that bus's
-        runtime (HarnessesProbe)."""
-        home = Path.home()
-        snapshot = ctx.registry.snapshot()
-        project = self.commander.configured(snapshot.commander_project, self.repos, snapshot)
-        ctx.registry.set_commander_project(project)
-        return InstallResult(project, {
-            type(harness).declared_name: self.declare_bus_threads(ctx, harness)
-            for harness in Harness.present(home)})
 
-    def declare_bus_threads(self, ctx: Comms, harness: Harness) -> tuple[str, ...]:
-        """Declare the bus threads this harness needs and the registry does not hold yet."""
-        names = ctx.registry.snapshot()
-        registered = tuple(name for name in harness.bus_threads if not names.taken(name))
-        for name in registered:
-            ctx.registry.declare(Thread(name=name, tags=frozenset(), worktree=str(self.project),
-                                        execution=ExternalThreadExecution))
-        return registered
 
 
 @dataclass(frozen=True, kw_only=True)

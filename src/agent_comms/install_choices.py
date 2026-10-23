@@ -14,7 +14,7 @@ from agent_comms.thread_text import AbsentText, GivenText, TextChoice
 
 if TYPE_CHECKING:
     from agent_comms.cli_bridges.shared import SessionBridgeResumes
-    from agent_comms.cli_commands import InstallResult
+    from agent_comms.installer.harness_installation import InstallResult
     from agent_comms.installer.launch import InstallReport
     from agent_comms.installer.reporting import RootWriter
     from agent_comms.installer.upgrade import Install, Rehearsal, RehearsedUpgrade, Stack

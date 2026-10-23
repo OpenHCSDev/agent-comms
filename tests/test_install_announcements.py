@@ -8,7 +8,8 @@ import pytest
 
 from agent_comms.channel_targets import CommsTag
 from agent_comms.cli import build_parser
-from agent_comms.cli_commands import BusReadBack, CliCommand, HistoryCliCommand, InstallResult
+from agent_comms.cli_commands import BusReadBack, CliCommand, HistoryCliCommand
+from agent_comms.installer.harness_installation import InstallResult
 from agent_comms.registry_document import NoCommanderProject
 from agent_comms.repo import GitCommandError
 from agent_comms.commander_heartbeat import CommanderHeartbeat
@@ -18,9 +19,8 @@ from agent_comms.installer.backup import BackupReport, RestoreSpace, UpgradeRefu
 from agent_comms.installer.carry import Carried
 from agent_comms.installer.launch import InstallReport
 from agent_comms.installer.commands import InstallCommands, TimedCommand
-from agent_comms.installer.interpreter_operation import (
-    InstalledProgram, InstallReportProbe,
-)
+from agent_comms.installer.interpreter_operation import InstalledProgram
+from agent_comms.installer.probes.report import InstallReportProbe
 from agent_comms.installer.reporting import FinishedInstall, RuntimeWriter
 from agent_comms.installer.upgrade import (
     CarriedPass,

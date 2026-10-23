@@ -148,7 +148,7 @@ def test_a_message_sent_while_the_bus_is_copied_preserves_one_database_cut(
 
 def test_install_report_encodes_its_registered_harnesses() -> None:
     # The live install printed nothing: its report's field type had no codec.
-    from agent_comms.cli_commands import InstallResult
+    from agent_comms.installer.harness_installation import InstallResult
     from agent_comms.field_codec import FieldCodec
 
     for config in (RegisteredCommanderProject(RecordedThreadIncarnation("lead", 1.0), ()),

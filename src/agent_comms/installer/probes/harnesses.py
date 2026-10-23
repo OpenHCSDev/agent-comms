@@ -10,7 +10,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Annotated
 
-from agent_comms.cli_commands import InstallCliCommand, InstallResult
+from agent_comms.installer.harness_installation import HarnessInstallation, InstallResult
 from agent_comms.field_codec import PathText
 from agent_comms.installer.interpreter_operation import RuntimeProbe
 
@@ -18,7 +18,7 @@ from agent_comms.installer.interpreter_operation import RuntimeProbe
 @dataclass(frozen=True)
 class HarnessesProbe(RuntimeProbe[InstallResult]):
     root: Annotated[Path, PathText]
-    install: InstallCliCommand
+    install: HarnessInstallation
 
     def run(self) -> InstallResult:
         from agent_comms.comms import client_wire

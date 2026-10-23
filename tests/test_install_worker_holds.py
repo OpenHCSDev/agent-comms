@@ -7,13 +7,8 @@ import pytest
 
 from agent_comms.field_codec import FieldCodec
 from agent_comms.installer.commands import InstallCommands, InterpreterWorkerDied
-from agent_comms.installer.interpreter_operation import (
-    DistributionVersionsProbe,
-    InstalledPackagesProbe,
-    ProbeRequest,
-    RuntimeProbe,
-    serve,
-)
+from agent_comms.installer.probes.packages import DistributionVersionsProbe, InstalledPackagesProbe
+from agent_comms.installer.interpreter_operation import ProbeRequest, RuntimeProbe, serve
 from agent_comms.launch_runtime import LaunchRuntime
 from agent_comms.maintenance_barrier import HOLDER_NONCE, MaintenanceHolder
 

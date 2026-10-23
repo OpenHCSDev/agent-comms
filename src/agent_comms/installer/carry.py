@@ -25,7 +25,7 @@ from typing_extensions import TypeForm
 from agent_comms.declared_family import DeclaredFamily
 from agent_comms.errors import RelationViolationError
 from agent_comms.field_codec import PathText
-from agent_comms.installer.interpreter_operation import InterpreterOperation, RuntimeProbe
+from agent_comms.installer.interpreter_operation import InterpreterOperation
 from agent_comms.locked_store import RootFile
 from agent_comms.repo import Repo
 from agent_comms.store_files import is_store_lock
@@ -144,21 +144,6 @@ class FirstPendingOperation(CarryOperation[int]):
 class RetireInputsOperation(CarryOperation[Carried]):
     def run(self, steps: tuple[Carry, ...]) -> tuple[Carried, ...]:
         return tuple(step.after_acceptance() for step in steps)
-
-
-@dataclass(frozen=True)
-class CarryProbe[Answer](RuntimeProbe[tuple[Answer, ...]]):
-    """One pass of steps, in order, answered by the staged runtime's worker; the
-    operation owns traversal and declares the answer."""
-
-    operation: CarryOperation
-    steps: tuple[Carry, ...]
-
-    def answer_type(self) -> TypeForm[tuple[Answer, ...]]:
-        return self.operation.answer_type()
-
-    def run(self) -> tuple[Answer, ...]:
-        return self.operation.run(self.steps)
 
 
 @dataclass(frozen=True)

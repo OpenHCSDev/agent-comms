@@ -14,14 +14,8 @@ from packaging.utils import canonicalize_name
 from pydantic import BaseModel, Field
 
 from agent_comms.declared_family import DeclaredFamily
-from agent_comms.installer.interpreter_operation import (
-    ArchivePin,
-    DistributionVersionsProbe,
-    GitPin,
-    InstalledPackagesProbe,
-    PackagePin,
-    PackageRecord,
-)
+from agent_comms.installer.package_records import ArchivePin, GitPin, PackagePin, PackageRecord
+from agent_comms.installer.probes.packages import DistributionVersionsProbe, InstalledPackagesProbe
 from agent_comms.launch_runtime import LaunchRuntime
 from agent_comms.repository_name import RepositoryName
 
