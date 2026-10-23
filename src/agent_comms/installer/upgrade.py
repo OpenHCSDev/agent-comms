@@ -597,7 +597,7 @@ class Stack:
             with self.commands.timing(verb):
                 completed = subprocess.run(
                     [str(self.python), "-m", cli.__name__, "--root", str(root), *invocation],
-                    cwd=self.checkout, env=self.environment(), capture_output=True, text=True)
+                    cwd=self.home, env=self.environment(), capture_output=True, text=True)
             try:
                 if not completed.returncode:
                     return FieldCodec.decode(command.result_type(),
