@@ -478,7 +478,7 @@ class PosixPlatform(Platform):
         self, command: tuple[str, ...], pass_fds: tuple[int, ...], runtime: LaunchRuntime,
         lifetime: type[ChildLifetime],
     ) -> ChildLaunch:
-        return PosixLaunch(command, pass_fds, runtime, lifetime.launcher(self))
+        return PosixLaunch(command, pass_fds, runtime, lifetime)
 
     def parent_death_binding(self) -> int:
         """Darwin has no parent-death signal: its exec gate binds no launcher."""
@@ -894,6 +894,18 @@ class Win32Platform(Platform):
 class ChildLifetime(DeclaredFamily, affix="Lifetime"):
     """Whether a launched child may outlive the process that launched it."""
 
+    handoff: ClassVar[bool] = False
+
+    @classmethod
+    def spawned(cls, process: subprocess.Popen[bytes], descriptor: int,
+                registration: ChildRegistration) -> SpawnedProcess:
+        return SpawnedProcess(process, Platform.current().identity(process.pid), registration)
+
+    @classmethod
+    async def spawned_async(cls, process: asyncio.subprocess.Process, descriptor: int,
+                            registration: ChildRegistration) -> AttachedChild:
+        return AttachedChild(process, Platform.current().identity(process.pid), registration)
+
     @classmethod
     @abstractmethod
     def launcher(cls, platform: PosixPlatform) -> int:
@@ -914,6 +926,37 @@ class DiesWithLauncherLifetime(ChildLifetime):
 
 class OutlivesLauncherLifetime(ChildLifetime):
     """A resident the launcher hands off, such as a worker, a watcher or a bridge."""
+
+    handoff: ClassVar[bool] = True
+
+    @staticmethod
+    def resident(descriptor: int) -> ProcessIdentity:
+        encoded = os.read(descriptor, 64)
+        if not encoded:
+            raise ChildProcessError("Exec gate exited without handing off its resident")
+        return Platform.current().identity(int(encoded))
+
+    @classmethod
+    def spawned(cls, process: subprocess.Popen[bytes], descriptor: int,
+                registration: ChildRegistration) -> SpawnedProcess:
+        try:
+            identity = cls.resident(descriptor)
+        finally:
+            returncode = process.wait()
+        if returncode != 0:
+            raise ChildProcessError("Resident handoff failed")
+        return HandedOffProcess(process, identity, registration)
+
+    @classmethod
+    async def spawned_async(cls, process: asyncio.subprocess.Process, descriptor: int,
+                            registration: ChildRegistration) -> AttachedChild:
+        try:
+            identity = await asyncio.to_thread(cls.resident, descriptor)
+        finally:
+            returncode = await process.wait()
+        if returncode != 0:
+            raise ChildProcessError("Resident handoff failed")
+        return HandedOffAttachedChild(process, identity, registration)
 
     @classmethod
     def launcher(cls, platform: PosixPlatform) -> int:
@@ -963,6 +1006,14 @@ class ChildLaunch(ABC):
     @abstractmethod
     def options(self) -> dict: ...
 
+    def spawned(self, process: subprocess.Popen[bytes], registration: ChildRegistration
+                ) -> SpawnedProcess:
+        return ChildLifetime.spawned(process, -1, registration)
+
+    async def spawned_async(self, process: asyncio.subprocess.Process,
+                            registration: ChildRegistration) -> AttachedChild:
+        return await ChildLifetime.spawned_async(process, -1, registration)
+
     def spawn(
         self,
         *,
@@ -978,10 +1029,9 @@ class ChildLaunch(ABC):
                 self.argv, cwd=cwd, env=self.runtime.child_environment(env), stdin=stdin,
                 stdout=stdout, stderr=stderr, **self.options,
             )
-            identity = Platform.current().identity(process.pid)
-            child = SpawnedProcess(process, identity, reservation.store)
+            child = self.spawned(process, reservation.store)
             try:
-                self.record(identity, reservation)
+                self.record(child.identity, reservation)
             except BaseException:
                 child.reap()
                 child.close_streams()
@@ -994,11 +1044,10 @@ class ChildLaunch(ABC):
                 self.argv[0], *self.argv[1:], cwd=cwd, env=self.runtime.child_environment(env),
                 **stdio.options, **self.options,
             )
-            identity = Platform.current().identity(process.pid)
-            child = AttachedChild(process, identity, reservation.store)
+            child = await self.spawned_async(process, reservation.store)
             child._stderr_task = asyncio.create_task(child._drain_stderr())
             try:
-                self.record(identity, reservation)
+                self.record(child.identity, reservation)
             except BaseException:
                 await process.wait()
                 await child._stderr_task
@@ -1064,14 +1113,16 @@ class WindowsLaunch(ChildLaunch):
 
 class PosixLaunch(ChildLaunch):
     def __init__(self, command: tuple[str, ...], pass_fds: tuple[int, ...], runtime: LaunchRuntime,
-                 launcher: int):
+                 lifetime: type[ChildLifetime]):
         super().__init__(runtime)
         self.command = command
         self.pass_fds = pass_fds
-        self.launcher = launcher
+        self.lifetime = lifetime
         self.read_fd, self.write_fd = os.pipe()
         self.error_r, error_w = os.pipe()
         self.error_writer = os.fdopen(error_w, "wb", buffering=0)
+        self.identity_r, identity_w = os.pipe()
+        self.identity_writer = os.fdopen(identity_w, "wb", buffering=0)
 
     @property
     def argv(self) -> tuple[str, ...]:
@@ -1082,7 +1133,9 @@ class PosixLaunch(ChildLaunch):
             _EXEC_GATE,
             str(self.read_fd),
             str(self.error_writer.fileno()),
-            str(self.launcher),
+            str(self.lifetime.launcher(Platform.current())),
+            str(int(self.lifetime.handoff)),
+            str(self.identity_writer.fileno()),
             *self.command,
         )
 
@@ -1090,8 +1143,19 @@ class PosixLaunch(ChildLaunch):
     def options(self) -> dict:
         return {
             "start_new_session": True,
-            "pass_fds": (self.read_fd, self.error_writer.fileno(), *self.pass_fds),
+            "pass_fds": (self.read_fd, self.error_writer.fileno(),
+                         self.identity_writer.fileno(), *self.pass_fds),
         }
+
+    def spawned(self, process: subprocess.Popen[bytes], registration: ChildRegistration
+                ) -> SpawnedProcess:
+        self.identity_writer.close()
+        return self.lifetime.spawned(process, self.identity_r, registration)
+
+    async def spawned_async(self, process: asyncio.subprocess.Process,
+                            registration: ChildRegistration) -> AttachedChild:
+        self.identity_writer.close()
+        return await self.lifetime.spawned_async(process, self.identity_r, registration)
 
     def release(self, identity: ProcessIdentity) -> None:
         self.error_writer.close()
@@ -1113,7 +1177,8 @@ class PosixLaunch(ChildLaunch):
 
     def close(self) -> None:
         self.error_writer.close()
-        for fd in (self.read_fd, self.write_fd, self.error_r):
+        self.identity_writer.close()
+        for fd in (self.read_fd, self.write_fd, self.error_r, self.identity_r):
             os.close(fd)
 
 
@@ -1325,6 +1390,20 @@ class ChildResult:
 # exit. It owns no business logic or stored state and preserves exec PID/group.
 _EXEC_GATE = """import os,sys
 fd=int(sys.argv[1]); error_fd=int(sys.argv[2]); launcher=int(sys.argv[3])
+handoff=int(sys.argv[4]); identity_fd=int(sys.argv[5])
+if handoff:
+    ready_r, ready_w = os.pipe()
+    resident = os.fork()
+    if resident:
+        os.close(ready_w)
+        ready = os.read(ready_r, 1); os.close(ready_r)
+        if ready != b'R': os._exit(126)
+        os.write(identity_fd, str(resident).encode()); os.close(identity_fd)
+        os._exit(0)
+    os.close(ready_r)
+    os.setsid()
+    os.write(ready_w, b'R'); os.close(ready_w)
+os.close(identity_fd)
 if launcher:
     import ctypes
     # PR_SET_PDEATHSIG (1) survives exec: the kernel kills this child with its launcher.
@@ -1334,7 +1413,7 @@ if launcher:
 go=os.read(fd,1); os.close(fd)
 if go != b'G': sys.exit(126)
 os.set_inheritable(error_fd, False)
-try: os.execvpe(sys.argv[4], sys.argv[4:], os.environ)
+try: os.execvpe(sys.argv[6], sys.argv[6:], os.environ)
 except OSError as error:
     os.write(error_fd, str(error.errno).encode()); os._exit(126)
 """
@@ -1639,6 +1718,19 @@ class AttachedChild(ChildProcess):
             return TimedOutOutcome(await self.stop())
 
 
+class HandedOffAttachedChild(AttachedChild):
+    """The gate was reaped; resident completion has no parent exit status."""
+
+    @property
+    def returncode(self) -> None:
+        return None
+
+    async def wait(self) -> ChildOutcome:
+        await self.identity.wait_exited()
+        await asyncio.shield(self._stderr_task)
+        return DetachedExitOutcome()
+
+
 class ParentLifeline:
     """Inherited pipe for a Python child which must die with its launcher.
 
@@ -1921,6 +2013,13 @@ class SpawnedProcess(SynchronousProcess):
 
     def __exit__(self, *_):
         self.close()
+
+
+class HandedOffProcess(ObservedProcess, SpawnedProcess):
+    """Keep launch streams, while observed-process behavior owns resident retirement."""
+
+    def collect(self, *, timeout: float) -> subprocess.CompletedProcess[bytes]:
+        raise ChildProcessError("A handed-off resident has no parent exit status to collect")
 
 
 class PoolWorkerStopped(BaseException):
