@@ -22,7 +22,7 @@ def test_missing_registry_version_is_rejected_without_rewriting_the_file(tmp_pat
     path.write_text(json.dumps(raw))
     before = path.read_bytes()
     with pytest.raises(RelationViolationError, match="version"):
-        Registration(path)
+        Registration(path).snapshot()
     assert path.read_bytes() == before
 
 
@@ -50,6 +50,8 @@ def test_a_new_revision_decodes_only_the_threads_that_changed(tmp_path):
     reader = Registration(path)
     before = dict(reader.all_threads())
     statuses = {name: reader.status(name) for name in before}
+    with reader.store.reading() as document:
+        stored = dict(document.statuses)
 
     # Another process stops one thread: an external replacement of the file.
     raw = json.loads(path.read_text())
@@ -62,7 +64,10 @@ def test_a_new_revision_decodes_only_the_threads_that_changed(tmp_path):
     after = reader.all_threads()
     # Unchanged threads keep their decoded declarations and statuses.
     assert all(after[name] is before[name] for name in before)
-    assert reader.status("first") is statuses["first"] and reader.status("third") is statuses["third"]
+    with reader.store.reading() as document:
+        assert document.statuses["first"] is stored["first"] and document.statuses["third"] is stored["third"]
+    # A status read derives presence from the process or heartbeat on every read.
+    assert reader.status("first") == statuses["first"] and reader.status("third") == statuses["third"]
     assert reader.status("second") == StoppedThreadStatus()
     # The result is the document a full decode of the same rows gives.
     with reader.store.reading() as document:

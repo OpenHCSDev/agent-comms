@@ -1,25 +1,47 @@
-"""The declared capability of code that produces derived projection rows."""
+"""Writer-owned declarations of the projection tables their code produces."""
 
 from __future__ import annotations
 
+from abc import ABC, abstractmethod
 from typing import ClassVar
 
 
-class ProjectionSource:
-    """A class whose code decides projection row content.
+class ProducedRow(ABC):
+    """Rows rebuilt when the source of a class producing them changes."""
 
-    Its source, and every subclass's source, belongs to the digest that tells a
-    stored projection it is still fresh. A class reached while rows are produced
-    that does not inherit this capability is a hole in that digest.
+    @classmethod
+    @abstractmethod
+    def producer_digest(cls) -> str: ...
+
+class ProjectionSource:
+    """A writer declares ``writes`` as table classes, inherited by its members.
+
+    ClassFact defers the table references until imports finish: a value such as
+    MessageReference can produce a table that itself inherits MessageReference.
+    Only explicit output declarations register writers; importing another subclass
+    without such a declaration contributes nothing to any projection.
     """
 
     __slots__ = ()
-    _sources: ClassVar[list[type[ProjectionSource]]] = []
+    writes: ClassVar[tuple[type[ProducedRow], ...]]
+    _declarations: ClassVar[dict[type[ProjectionSource], set[type[ProjectionSource]]]] = {}
 
     def __init_subclass__(cls, **kwargs: object) -> None:
         super().__init_subclass__(**kwargs)
-        ProjectionSource._sources.append(cls)
+        for parent in cls.writer_declarations():
+            ProjectionSource._declarations.setdefault(parent, set()).add(cls)
+
+    @classmethod
+    def writer_declarations(cls) -> tuple[type[ProjectionSource], ...]:
+        """Value-family members share their declared producing behavior."""
+        return tuple(parent for parent in cls.__mro__ if "writes" in vars(parent))
 
     @staticmethod
-    def sources() -> tuple[type[ProjectionSource], ...]:
-        return tuple(ProjectionSource._sources)
+    def writers_for(table: type[ProducedRow]) -> set[type[ProjectionSource]]:
+        """Reverse the writers' declarations, without discovering unrelated modules."""
+        return {
+            writer
+            for owner, writers in tuple(ProjectionSource._declarations.items())
+            for writer in writers
+            if table in owner.writes
+        }

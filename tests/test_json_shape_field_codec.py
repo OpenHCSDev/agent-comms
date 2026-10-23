@@ -8,7 +8,7 @@ import pytest
 
 from agent_comms.declared_family import DeclaredFamily
 from agent_comms.field_codec import (
-    FieldCodec, JsonShapeFamily, JsonShapeMember, MalformedRecord, SingleFieldValue,
+    Argument, FieldCodec, JsonShapeFamily, JsonShapeMember, MalformedRecord, SingleFieldValue,
 )
 from agent_comms.launch_runtime import ImportPath, NoImportPath, SpecifiedImportPath
 from agent_comms.native_claim_epoch import NativeClaimEpoch, RecordedNativeClaim, UnrecordedNativeClaim
@@ -112,10 +112,11 @@ def test_one_field_encoding_preserves_distinct_cli_argument_contracts():
 
     assert ScalarArgument(5).to_wire() == 5
     assert ScalarArgument.from_wire(5) == ScalarArgument(5)
-    assert ScalarArgument.argument_options() == {"type": int}
-    assert ExternalValue.argument_options() == {}
-    assert ImportPath.argument_options() == {}
-    assert NativeClaimEpoch.argument_options() == {}
+    argument = Argument(flags=("--x",))
+    assert ScalarArgument.argument_options(argument) == {"type": int}
+    assert ExternalValue.argument_options(argument) == {}
+    assert ImportPath.argument_options(argument) == {}
+    assert NativeClaimEpoch.argument_options(argument) == {}
 
 
 def test_semantic_members_stay_out_of_shape_selection():

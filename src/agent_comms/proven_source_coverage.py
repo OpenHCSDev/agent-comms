@@ -33,6 +33,7 @@ from .message_bus import MessageBus
 from .native_input_record import NumberNativeColumn, TextNativeColumn, UnrecordedNativeColumn
 from .native_runtime_input import CurrentNativeCursor, NativeRuntimeInput
 from .private_path import FileIdentity, ObservedPath, PresentPath
+from .source_proof_requirement import SourceSettlement
 from .wake_policy import RecipientDecision
 
 if TYPE_CHECKING:
@@ -274,11 +275,10 @@ class SourceCoverage:
                 if not claims:
                     no_wake.append(seq)
                 for selected in claims:
-                    evidence = self._selected_inputs(seq, recipient, selected, acknowledgement, source_reads)
-                    if not evidence:
+                    settlement = self._selected_inputs(seq, recipient, selected, acknowledgement, source_reads)
+                    if not settlement.apply(inputs):
                         blocked = seq
                         break
-                    inputs.extend(evidence)
                 if blocked is not None:
                     break
                 covered = seq
@@ -309,7 +309,7 @@ class SourceCoverage:
     def _selected_inputs(
         self, seq: int, recipient: FrozenRecipient, decision: RecipientDecision, acknowledgement: AcceptedCohort,
         source_reads: NativeEvidenceScope,
-    ) -> tuple[HistoricalNativeInput, ...]:
+    ) -> SourceSettlement:
         assignments = [
             a
             for a in acknowledgement.assignments
@@ -319,14 +319,10 @@ class SourceCoverage:
         policy = decision.wake_policy()
         if len(assignments) != 1 or assignments[0].lifecycle.mode != policy:
             raise IdentityConflict("selected claim differs from frozen bus recipient")
-        if not policy.items_with(Active, policy):
-            return ()  # PASSIVE is not native injection.
-        evidence = self.native_inputs(seq, source_reads=source_reads)
-        if policy.proves_source(evidence) and all(
-            p.assignment_id == assignments[0].assignment_id for p in evidence
-        ):
-            return evidence
-        return ()
+        evidence = (self.native_inputs(seq, source_reads=source_reads)
+                    if policy.items_with(Active, policy) else ())
+        assignment = assignments[0]
+        return assignment.lifecycle.source_settlement(evidence, policy, assignment.assignment_id)
 
     def native_inputs(self, source_seq: int, *, source_reads: NativeEvidenceScope) -> tuple[HistoricalNativeInput, ...]:
         return read_historical_native_inputs(

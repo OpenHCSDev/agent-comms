@@ -7,7 +7,10 @@ from agent_comms.tool_request import ToolRequest
 
 
 def result_type(tool: type[ToolRequest]) -> type:
-    return get_type_hints(tool.apply, localns={"Comms": Comms})["return"]
+    return get_type_hints(tool.apply, localns={
+        "Comms": Comms,
+        **{param.__name__: param for param in ToolRequest.__type_params__},
+    })["return"]
 
 
 def stores(comms: Comms) -> dict:

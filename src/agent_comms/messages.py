@@ -2,15 +2,13 @@
 
 from __future__ import annotations
 
-import agent_comms
-from .projection_source import ProjectionSource
+from .class_fact import ClassFact
+from .projection_source import ProducedRow, ProjectionSource
 from .turn_origin import TurnOrigin
 import builtins
-import hashlib
 import re
 import sqlite3
 import time
-from types import ModuleType
 from abc import ABC, abstractmethod
 from collections.abc import Iterable, Iterator, Mapping, Sequence
 from contextlib import closing
@@ -42,6 +40,7 @@ from .errors import RelationViolationError
 from .field_codec import (
     FieldCodec,
     InlineRecord,
+    MessageIdText,
     NullMember,
     PublicationExclude,
     WireName,
@@ -72,10 +71,6 @@ class BusTables(TypedTable, AppendOnlyTables, SharedFileTables, DurableTables, d
 
 class BusProjectionTables(ProducedTable, SharedFileTables, DerivedTables, declared_name=None):
     """Reverse lookups are derived from the record, in its append transaction."""
-
-    @classmethod
-    def producer_package(cls) -> ModuleType:
-        return agent_comms
 
     @classmethod
     def create_schema(cls, db: sqlite3.Connection) -> None:
@@ -126,6 +121,11 @@ class ClaimOperations(BusProjectionTables):
 @dataclass(frozen=True)
 class HeldResources(BusProjectionTables):
     """Current membership references the canonical transition, never a copy."""
+
+    @ClassFact
+    def writes(cls) -> tuple[type[ProducedRow], ...]:
+        return (HeldResources, ClaimOperations)
+
 
     resource: Annotated[str, Column(primary_key=True)]
     claim_seq: int
@@ -376,6 +376,13 @@ class MessageKind(DeclaredFamily, ProjectionSource, affix="Kind"):
     stored it. Publication-time checks run once, from the single commit path.
     """
 
+    @ClassFact
+    def writes(cls) -> tuple[type[ProducedRow], ...]:
+        from .bus_route_counts import BusRouteCounts
+        from .bus_tables import AwaitingAnswerSource
+        return (BusRouteCounts, AwaitingAnswerSource)
+
+
     conversation_message: ClassVar[bool] = True
 
     @classmethod
@@ -483,6 +490,12 @@ class ChangeReportKind(SendableMessageKind, declared_name="change-report"):
 
 
 class MembershipTransition(DeclaredFamily, ProjectionSource, affix="Membership"):
+    @ClassFact
+    def writes(cls) -> tuple[type[ProducedRow], ...]:
+        from .bus_activity_index import SentActivity
+        from .bus_tables import AwaitingAnswerSource
+        return (SentActivity, AwaitingAnswerSource)
+
     @classmethod
     def conversation_role(cls) -> MembershipConversationRole:
         return MembershipConversationRole(cls)
@@ -510,6 +523,13 @@ class LeftMembership(MembershipTransition):
 
 @dataclass(frozen=True, slots=True)
 class NoMembershipChange(NullMember, ProjectionSource):
+
+    @ClassFact
+    def writes(cls) -> tuple[type[ProducedRow], ...]:
+        from .bus_activity_index import SentActivity
+        from .bus_tables import AwaitingAnswerSource
+        return (SentActivity, AwaitingAnswerSource)
+
     def conversation_role(self):
         return ConversationRole()
 
@@ -517,6 +537,13 @@ class NoMembershipChange(NullMember, ProjectionSource):
 @dataclass(frozen=True, slots=True)
 class MessageRoleWire(ProjectionSource):
     """The unchanged external fields, decoded once into a message role."""
+
+    @ClassFact
+    def writes(cls) -> tuple[type[ProducedRow], ...]:
+        from .bus_activity_index import SentActivity
+        from .bus_tables import AwaitingAnswerSource
+        return (SentActivity, AwaitingAnswerSource)
+
 
     change: Annotated[
         type[MembershipTransition] | NoMembershipChange,
@@ -531,6 +558,13 @@ class MessageRoleWire(ProjectionSource):
 
 
 class MessageRole(InlineRecord, ProjectionSource):
+
+    @ClassFact
+    def writes(cls) -> tuple[type[ProducedRow], ...]:
+        from .bus_activity_index import SentActivity
+        from .bus_tables import AwaitingAnswerSource
+        return (SentActivity, AwaitingAnswerSource)
+
     category: ClassVar[type[MessageCategory]]
 
     @abstractmethod
@@ -571,6 +605,13 @@ class SendableRole(MessageRole, DeclaredFamily, affix="Role"):
 
 
 class InformationalMessage(ProjectionSource):
+
+    @ClassFact
+    def writes(cls) -> tuple[type[ProducedRow], ...]:
+        from .bus_activity_index import SentActivity
+        from .bus_tables import AwaitingAnswerSource
+        return (SentActivity, AwaitingAnswerSource)
+
     def response_policy(self, message):
         return InformationalPolicy.instance()
 
@@ -584,8 +625,28 @@ class InformationalMessage(ProjectionSource):
         return PassiveWake()
 
 
+class ConversationActivity(ProjectionSource):
+    """Conversation activity owns its rows independently of reply eligibility."""
+
+    @ClassFact
+    def writes(cls) -> tuple[type[ProducedRow], ...]:
+        from .bus_activity_index import SentActivity
+        return (SentActivity,)
+
+    def activity_rows(self, message: Message) -> tuple[TypedTable, ...]:
+        from .bus_activity_index import SentActivity
+
+        return (SentActivity(message.sender, message.timestamp),)
+
+
 @dataclass(frozen=True, slots=True)
-class ConversationRole(SendableRole):
+class ConversationRole(ConversationActivity, SendableRole):
+
+    @ClassFact
+    def writes(cls) -> tuple[type[ProducedRow], ...]:
+        from .bus_tables import AwaitingAnswerSource
+        return (AwaitingAnswerSource,)
+
     category = InboundCategory
 
     def wire_fields(self):
@@ -596,11 +657,6 @@ class ConversationRole(SendableRole):
 
     def counts_as_conversation(self):
         return True
-
-    def activity_rows(self, message):
-        from .bus_activity_index import SentActivity
-
-        return (SentActivity(message.sender, message.timestamp),)
 
     def as_historical(self):
         return HistoricalConversationRole()
@@ -734,22 +790,18 @@ class Message(Addressed, BusCapability, TurnOrigin):
         tuple[MessageReference, ...], WireOmitDefault(), WireOrder(14)
     ] = ()
 
-    def projections(self):
-        from .bus_activity_index import BusActivityIndex
-        from .bus_display_index import BusDisplayIndex
-        from .bus_tables import AnsweredSource, MessageIdentitySource
+    def require_answers(self, db: sqlite3.Connection) -> None:
+        """Validate public references once, before appending their sequence-only projection."""
+        from .bus_tables import MessageIdentitySource
 
-        yield from super().projections()
-        yield BusActivityIndex.from_message(self, target=self.target)
-        participants = {self.sender, *CommandTarget.named(self.target).direct_names,
-                        *(mention.thread for mention in self.mentions)}
-        for participant in participants:
-            yield BusDisplayIndex.from_message(self, participant=participant)
-        yield from self.role.activity_rows(self)
-        yield from self.type.route_rows(self)
-        yield MessageIdentitySource(self.seq, self.message_id, self.sender)
         for original in self.answers:
-            yield AnsweredSource(original, self.seq)
+            if not MessageIdentitySource.exists(
+                db, seq=original.seq, message_id=original.message_id,
+            ):
+                raise RelationViolationError(
+                    f"Answer reference {original.seq}:{original.message_id} does not match "
+                    "a recorded message identity"
+                )
 
     @classmethod
     def from_message(cls, message: Message, **capabilities: object) -> Self:
@@ -863,10 +915,7 @@ class Message(Addressed, BusCapability, TurnOrigin):
 
     @projected(view="wire", name="id")
     def message_id(self) -> str:
-        digest = hashlib.sha256(
-            f"{self.sender}:{self.target}:{self.timestamp}:{self.body}".encode()
-        ).hexdigest()[:12]
-        return digest
+        return MessageIdText.mint(f"{self.sender}:{self.target}:{self.timestamp}:{self.body}")
 
     @property
     def history_source(self) -> HistorySource | None:
@@ -927,8 +976,38 @@ class Message(Addressed, BusCapability, TurnOrigin):
 class BusRecord(Message, DeclaredFamily, affix="Record"):
     """Every record declaration owns its frozen value and derived tables."""
 
+    @ClassFact
+    def writes(cls) -> tuple[type[ProducedRow], ...]:
+        from .bus_activity_index import BusActivityIndex, SentActivity
+        from .bus_display_index import BusDisplayIndex
+        from .bus_route_counts import BusRouteCounts
+        from .bus_tables import MessageIdentitySource, AnsweredSource
+        return (
+            BusActivityIndex, SentActivity, BusDisplayIndex, BusRouteCounts,
+            MessageIdentitySource, AnsweredSource,
+        )
+
+    def projections(self):
+        from .bus_activity_index import BusActivityIndex
+        from .bus_display_index import BusDisplayIndex
+        from .bus_tables import AnsweredSource, MessageIdentitySource
+
+        yield from super().projections()
+        yield BusActivityIndex.from_message(self, target=self.target)
+        participants = {self.sender, *CommandTarget.named(self.target).direct_names,
+                        *(mention.thread for mention in self.mentions)}
+        for participant in participants:
+            yield BusDisplayIndex.from_message(self, participant=participant)
+        yield from self.role.activity_rows(self)
+        yield from self.type.route_rows(self)
+        yield MessageIdentitySource(self.seq, self.message_id, self.sender)
+        for original in self.answers:
+            yield AnsweredSource(original.seq, self.seq)
+
+
     def append_to(self, db: sqlite3.Connection, seq: int) -> int:
         """The caller's transaction owns the sequence, including preserved history."""
+        self.require_answers(db)
         BusRow.insert_values(db, seq=seq, kind=type(self), at=time.time())
         stored = replace(self, seq=seq)
         for row in stored.rows():
@@ -959,6 +1038,11 @@ class BusRecord(Message, DeclaredFamily, affix="Record"):
 @dataclass(frozen=True, kw_only=True)
 class Claimed(BusCapability):
     """The transition attesting this row, stored in its append transaction."""
+
+    @ClassFact
+    def writes(cls) -> tuple[type[ProducedRow], ...]:
+        return (HeldResources, ClaimOperations)
+
 
     claim_transition: Annotated[ClaimTransition, WireOrder(11)]
 

@@ -2104,7 +2104,7 @@ class PendingProblemOrder(Pending, DeliverableProblemOrder):
             occupied = {todo.held().owner for todo in held} | {context.commander}
             idle = sorted(
                 candidate.name
-                for thread in snapshot.active_threads(snapshot.threads.values())
+                for thread in snapshot.active_threads(snapshot.active_candidates())
                 if thread.name not in occupied and thread.role.executor(thread)
                 for candidate in thread.work_state.candidates(thread)
             )
@@ -2293,9 +2293,6 @@ class ClaimedProblemOrder(BranchPointCheck, DeliverableProblemOrder):
 
     def commander_claims(self) -> tuple[OrderClaim, ...]:
         return (self.claim,)
-
-    def observed_merges(self, repo: Repo, source: ProgressSource) -> tuple[MergedProblemOrder, ...]:
-        return ()
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -4037,17 +4034,6 @@ class TodoStore(OwnerRequestStore):
                 if current.revision + 1 == result.revision:
                     result.upsert(db)
 
-    def board_disagreements(
-        self, commander: ThreadIncarnation, registry: Registration, pulls: ProgressRead,
-    ) -> Iterator[tuple[Todo, MergedProgress]]:
-        """Open orders whose progress misses a linked merge, read through the caller's frame."""
-        todos = self.held_for_commander(commander)
-        progress = pulls.progress(todos, registry)
-        for todo in todos:
-            source = ProgressSource.of(todo, registry, pulls)
-            for merged in progress[todo.id].missing_merges(source):
-                yield todo, merged
-
     def holds_pending(self, owner: ThreadIncarnation) -> bool:
         """Whether a problem assigned to owner pends, under any generation; its Goal stays open."""
         return any(todo.pending for todo in self._select(
@@ -4067,16 +4053,6 @@ class TodoStore(OwnerRequestStore):
     def held_for_commander(self, commander: ThreadIncarnation) -> tuple[Todo, ...]:
         return self._select("creator=? AND creator_created=? AND assignment IS NOT NULL",
             (commander.name, commander.wire_birth), reader=self._open)
-
-    def claimed_heads_for_commander(
-        self, commander: ThreadIncarnation, pulls: PullRequests,
-    ) -> Iterator[tuple[Todo, OrderClaim, PullRequest]]:
-        """Recorded delivery claims survive a missing or stopped unit observation."""
-        held = self.held_for_commander(commander)
-        reader = pulls.register(held)
-        for todo in held:
-            for claim, request in reader.claimed_heads(todo):
-                yield todo, claim, request
 
     def held_by(self, commander: ThreadIncarnation, unit: ThreadIncarnation) -> tuple[Todo, ...]:
         return self._select('creator=? AND creator_created=?',

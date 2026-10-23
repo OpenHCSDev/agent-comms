@@ -138,10 +138,9 @@ def test_ordered_family_views_have_one_declaration_module():
     from agent_comms.acp_failure import ACPFailure
     from agent_comms.native_input_record import NativeInputExecution
     from agent_comms.todos import FoundProgress
-    from agent_comms.tool_request import ToolRequest
     from agent_comms.turn_failure import TurnFailure
 
-    for family in (TurnFailure, FoundProgress, ACPFailure, NativeInputExecution, ToolRequest):
+    for family in (TurnFailure, FoundProgress, ACPFailure, NativeInputExecution):
         assert {member.__module__ for member in family.members_with(family)} == {family.__module__}
 
 
