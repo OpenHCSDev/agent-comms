@@ -8,7 +8,7 @@ from abc import ABC, abstractmethod
 from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
 from dataclasses import dataclass, field, replace
 from types import MappingProxyType
-from typing import TYPE_CHECKING, Any, Literal, Annotated
+from typing import TYPE_CHECKING, Any, Literal, Annotated, Self
 
 
 from .child_process import NoProcess, ProcessIdentity
@@ -198,16 +198,31 @@ class ThreadSlice[Value](ABC):
                 return policy.value
         raise TypeError(f"{plan.name} declares no thread slice")
 
-    @staticmethod
-    def required[Document: type](document: Document) -> Document:
+    @classmethod
+    def required[Document: type](cls, document: Document) -> Document:
         """Refuse, at class definition, a document field without a slice kind."""
         for plan in FieldCodec.field_plans(document):
             if plan.declared.init and plan.records:
-                ThreadSlice.of(plan)
+                cls.of(plan)
         return document
 
 
-class OwnRow(ThreadSlice[dict]):
+class SnapshotValue[Value](ThreadSlice[Value]):
+    """A declared registry field owns both editable and snapshot copies."""
+
+    @classmethod
+    @abstractmethod
+    def freeze(cls, value: Value) -> object: ...
+
+    @staticmethod
+    def of(plan: FieldPlan) -> type[SnapshotValue]:
+        policy = ThreadSlice.of(plan)
+        if not issubclass(policy, SnapshotValue):
+            raise TypeError(f"{plan.name} declares no snapshot value policy")
+        return policy
+
+
+class OwnRow(SnapshotValue[dict]):
     """The row under the thread's own name."""
 
     @staticmethod
@@ -215,8 +230,12 @@ class OwnRow(ThreadSlice[dict]):
         return {canonical: raw[canonical]} if canonical in raw else {}
 
     @classmethod
-    def copy(cls, value: dict) -> dict:
+    def copy(cls, value: Mapping) -> dict:
         return dict(value)
+
+    @classmethod
+    def freeze(cls, value: Mapping) -> Mapping:
+        return MappingProxyType(cls.copy(value))
 
 
 class AliasesOf(OwnRow):
@@ -243,7 +262,7 @@ class GenerationOf(ThreadSlice[GenerationCounter]):
         return GenerationCounter(value.counter, dict(value.generations))
 
 
-class WholeDocumentValue[Value](ThreadSlice[Value]):
+class WholeDocumentValue[Value](SnapshotValue[Value]):
     """A scalar shared by the whole document and every one-thread view."""
 
     @staticmethod
@@ -253,6 +272,10 @@ class WholeDocumentValue[Value](ThreadSlice[Value]):
     @classmethod
     def copy(cls, value: Value) -> Value:
         return value
+
+    @classmethod
+    def freeze(cls, value: Value) -> Value:
+        return cls.copy(value)
 
 
 class RootPurpose(DeclaredFamily, affix="RootPurpose"):
@@ -718,16 +741,40 @@ class RegistryEntry:
         return OwnerIdentity(self.thread.incarnation, self.owner_generation)
 
 
+@SnapshotValue.required
 @dataclass(frozen=True, slots=True)
 class RegistrySnapshot(RegistryPresence[Mapping[str, ThreadStatus]], RegistryProvenance):
-    purpose: RootPurpose
-    threads: Mapping[str, Thread]
-    statuses: Mapping[str, ThreadStatus]
-    last_seen: Mapping[str, float]
-    aliases: Mapping[str, str]
-    owner_generations: Mapping[str, int]
-    _claimed_generations: Mapping[str, int] = field(repr=False)
-    by_lookup: Mapping[str, Thread] = field(repr=False, compare=False)
+    purpose: Annotated[RootPurpose, SlicePolicy(WholeDocumentValue)]
+    threads: Annotated[Mapping[str, Thread], SlicePolicy(OwnRow)]
+    statuses: Annotated[Mapping[str, ThreadStatus], SlicePolicy(OwnRow)]
+    last_seen: Annotated[Mapping[str, float], SlicePolicy(OwnRow)]
+    aliases: Annotated[Mapping[str, str], SlicePolicy(OwnRow)]
+    owner_generations: Annotated[Mapping[str, int], SlicePolicy(OwnRow)]
+    _claimed_generations: Annotated[Mapping[str, int], SlicePolicy(OwnRow)] = field(repr=False)
+    by_lookup: Mapping[str, Thread] = field(init=False, repr=False, compare=False)
+
+    def __post_init__(self) -> None:
+        """Own each copied value and derive the birth index from the frozen threads."""
+        for plan in FieldCodec.field_plans(type(self)):
+            if plan.declared.init:
+                object.__setattr__(
+                    self, plan.name, SnapshotValue.of(plan).freeze(getattr(self, plan.name)),
+                )
+        indexed: dict[str, Thread] = {}
+        for thread in self.threads.values():
+            lookup = thread.incarnation.require_recorded().lookup
+            if lookup in indexed:
+                raise RelationViolationError("Registry creation identities collide.")
+            indexed[lookup] = thread
+        object.__setattr__(self, "by_lookup", MappingProxyType(indexed))
+        super(RegistrySnapshot, self).__post_init__()
+
+    def __reduce__(self) -> tuple[type[Self], tuple[object, ...]]:
+        """Worker restoration preserves scalar policy and re-enters the constructor."""
+        return type(self), tuple(
+            SnapshotValue.of(plan).copy(getattr(self, plan.name))
+            for plan in FieldCodec.field_plans(type(self)) if plan.declared.init
+        )
 
     def claim_generation(self, name: str) -> int:
         """The allocated input generation follows this registry's alias lineage."""
@@ -756,21 +803,14 @@ class RegistrySnapshot(RegistryPresence[Mapping[str, ThreadStatus]], RegistryPro
     @classmethod
     def capture(cls, document: RegistryDocument) -> RegistrySnapshot:
         """One live registry cut owns the index and all its source maps."""
-        indexed: dict[str, Thread] = {}
-        for thread in document.threads.values():
-            lookup = thread.incarnation.require_recorded().lookup
-            if lookup in indexed:
-                raise RelationViolationError("Registry creation identities collide.")
-            indexed[lookup] = thread
         return cls(
             purpose=document.purpose,
-            threads=MappingProxyType(dict(document.threads)),
-            statuses=MappingProxyType(dict(document.statuses)),
-            last_seen=MappingProxyType(dict(document.last_seen)),
-            aliases=MappingProxyType(dict(document.aliases)),
-            owner_generations=MappingProxyType(dict(document.owners.generations)),
-            _claimed_generations=MappingProxyType(dict(document.claims.generations)),
-            by_lookup=MappingProxyType(indexed),
+            threads=document.threads,
+            statuses=document.statuses,
+            last_seen=document.last_seen,
+            aliases=document.aliases,
+            owner_generations=document.owners.generations,
+            _claimed_generations=document.claims.generations,
         )
 
     def observed_activity(

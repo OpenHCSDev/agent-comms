@@ -10,6 +10,7 @@ from agent_comms.change_report import FileLine, MainRevision, MissingSourceLine,
 from agent_comms.field_codec import MalformedRecord
 from agent_comms.goal_actions import OrderGoalAction
 from agent_comms.goals import GitCommandFailed
+from agent_comms.owner_requests import OwnerRequestId
 from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.thread_identity import RecordedThreadIncarnation
 from agent_comms.todos import FixScope, FixShape, LocatedProblemFinding
@@ -60,7 +61,7 @@ def test_order_derives_its_only_source_revision_from_its_pull_request(tmp_path):
     location = FileLine('branch.py', 2)
     declaration = replace(declaration, owner=location, finding=LocatedProblemFinding(location),
         scope=FixScope(FixShape(parents=(location,), members=())), pull_requests=(source.link,))
-    action = OrderGoalAction(problem='P1', order=declaration, request='request',
+    action = OrderGoalAction(problem='P1', order=declaration, request=OwnerRequestId('request'),
         review_at=RecordedEventTime(1000), commander='lead', expected_revision=1,
         assigner=RecordedThreadIncarnation('lead', 1.0))
     action.require_sendable()

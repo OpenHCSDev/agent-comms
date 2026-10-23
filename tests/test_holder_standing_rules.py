@@ -1,10 +1,13 @@
 """Held-order recovery and unanswered DMs on an independently copied bus."""
+
+from agent_comms.channel_targets import CommandTarget
 import asyncio
 import json
 import os
 import subprocess
 import sys
 import time
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import replace
 from functools import partial
 from uuid import uuid4
@@ -26,17 +29,17 @@ from agent_comms.commander.standing import (
 from agent_comms.comms import Comms
 from agent_comms.commander_heartbeat import CommanderHeartbeat
 from agent_comms.coordinator import Coordination
-from agent_comms.errors import RelationViolationError
+from agent_comms.errors import CommittedMessageError, HumanSendRefusedError, RelationViolationError
 from agent_comms.field_codec import FieldCodec
 from agent_comms.goal_actions import (
     CreateProblemGoalAction,
-    DirectiveGoalAction,
     ReissuedOrderGoalAction,
     SetGoalAction,
 )
 from agent_comms.goal_presentation import RunnableExecution
 from agent_comms.goal_states import ActiveGoal
-from agent_comms.goals import CountCheckResult, OrderCheck, RequestGoalOrder
+from agent_comms.goals import CountCheckResult, OrderCheck
+from agent_comms.owner_requests import NewestOpenRequest, RequestDirective
 from agent_comms.input_disposition import InputDispositions
 from agent_comms.installer.backup import StoreBackup
 from agent_comms.launch_root import LaunchRoot
@@ -76,13 +79,12 @@ def held_bus(comms, tmp_path, source_repository, configured_repository):
         comms.registry.new_thread(name=name, tags=frozenset({'comms'}), worktree=str(source.checkout))
         for name in ('lead', 'worker', 'outsider')
     ))
-    comms.goals.update_goal("lead", SetGoalAction(
-        text="Repair the held work", goal_id="request", order=RequestGoalOrder(),
-    ))
+    request = comms.goals.todos.add_request(
+        comms.registry.require('lead').incarnation, 'Repair the held work').id
     now = time.time()
     for problem in ("P1", "P2"):
         comms.goals.update_goal("worker", CreateProblemGoalAction(
-            problem=problem, commander="lead", request="request",
+            problem=problem, commander="lead", request=request,
             assigner=comms.registry.require('lead').incarnation,
             repo=RepositoryName.from_wire("OpenHCSDev/agent-comms"), text=f"Repair {problem}",
             review_at=RecordedEventTime(now + 3600),
@@ -126,7 +128,8 @@ def claim_order(held_bus):
         todo = held_bus.goals.todos.apply(
             todo.id, OrderMessage(todo.revision, lead, original.message_id))
         claimed = OrderClaim.for_order(todo, worker, 1, "a" * 40,
-                                      "Review the published repair", original.reference)
+                                      "Review the published repair", original.reference,
+                                      store=held_bus.goals.todos)
         claimed = replace(claimed, message=replace(
             claimed.message, timestamp=time.time() - AwaitingCommander.seconds - 1))
         ClaimOrder(todo.revision, worker, todo.held().generation, claimed).record(
@@ -138,6 +141,77 @@ def claim_order(held_bus):
 def state_cards(comms, member):
     return tuple(state for state in UnitState.current(comms, "lead", ProgressRead())
                  if isinstance(state, member))
+
+
+@pytest.mark.parametrize("change,notification_fails", [
+    ("rename", False), ("rename_holder", False), ("remove", False), ("recreate", False),
+    ("rename", True),
+])
+def test_order_claim_publishes_only_to_its_retained_commander_birth(
+    held_bus, change, notification_fails,
+):
+    comms = held_bus
+    todo = comms.goals.todos.get("P1")
+    lead = comms.registry.require("lead").incarnation
+    worker = comms.registry.require("worker").incarnation
+    original = comms.messaging.send("lead", "worker", todo.order.instructions(todo)).message
+    todo = comms.goals.todos.apply(
+        todo.id, OrderMessage(todo.revision, lead, original.message_id))
+    claim = OrderClaim.for_order(
+        todo, worker, 1, "a" * 40, "Review this published repair with @outsider", original.reference,
+        store=comms.goals.todos)
+    if change == "rename":
+        comms.registry.rename("lead", "renamed")
+    elif change == "rename_holder":
+        comms.registry.rename("worker", "renamed-worker")
+    else:
+        worktree = comms.registry.require("lead").worktree
+        comms.registry.unregister("lead")
+        comms.registry.remove("lead")
+        if change == "recreate":
+            comms.registry.declare(comms.registry.new_thread("lead", frozenset({"comms"}), worktree))
+    before = comms.bus.bus.revision()
+    operation = ClaimOrder(todo.revision, worker, todo.held().generation, claim)
+    if change in ("rename", "rename_holder"):
+        def registry_cut_held():
+            try:
+                with comms.registry.store.locked(blocking=False):
+                    return False
+            except BlockingIOError:
+                return True
+
+        if notification_fails:
+            marker = comms.bus.bus.path.with_suffix(".changed")
+            marker.unlink()
+            marker.mkdir()
+        with ThreadPoolExecutor(max_workers=1) as pool:
+            with comms.goals.todos.writing():
+                future = pool.submit(operation.record, comms.goals, todo.id)
+                asyncio.run(asyncio.wait_for(wait_for(registry_cut_held), timeout=2))
+                assert not future.done()
+            if notification_fails:
+                with pytest.raises(CommittedMessageError) as failed:
+                    future.result(timeout=5)
+                changed = comms.goals.todos.get(todo.id)
+                assert failed.value.record.seq == before + 1
+            else:
+                changed = future.result(timeout=5)
+        delivery = comms.bus.bus.delivery(before + 1)
+        recipient = "renamed" if change == "rename" else "lead"
+        assert delivery.message.target == recipient
+        assert delivery.message.sender == ("renamed-worker" if change == "rename_holder" else "worker")
+        assert [(row.canonical_thread, row.recipient_lookup) for row in delivery.audience.recipients] == [
+            (recipient, lead.require_recorded().lookup)]
+        assert comms.goals.todos.get(todo.id) == changed
+        with comms.bus.bus.reading() as source:
+            retained = comms.goals.todos.get(todo.id).order.commander_claims()[0]
+            assert retained.original(source) == Message.from_message(delivery.message)
+            assert retained.original(source).mentions
+    else:
+        with pytest.raises(HumanSendRefusedError):
+            operation.record(comms.goals, todo.id)
+        assert comms.bus.bus.revision() == before
+        assert comms.goals.todos.get(todo.id) == todo
 
 
 def unanswered(comms):
@@ -177,7 +251,7 @@ def test_an_active_goal_with_an_unresolved_attempt_is_reported_never_retried(hel
 def publish(comms, sender, target, timestamp, *, answers=()):
     return comms.bus.publisher.publish_ordinary(
         Message(sender=sender, target=target, type=QuestionKind, body="Inspect the pending work",
-                timestamp=timestamp, answers=answers), origin=AgentOrigin(),
+                timestamp=timestamp, answers=answers), destination=CommandTarget.named(target), origin=AgentOrigin(),
     )
 
 
@@ -248,7 +322,7 @@ def test_goal_generation_cannot_transfer_to_a_different_owner(held_bus):
         held_bus.goals.todos.assign(
             todo.id, expected_revision=todo.revision,
             owner=held_bus.registry.require("outsider"), assigner=CoreWatcherIncarnation.watcher(),
-            generation=todo.held().generation, goal=todo.goal, review_at=todo.review_at,
+            generation=todo.held().generation, request=todo.request.require(), review_at=todo.review_at,
             order=todo.order.checked().reissued(time.time()),
         )
     assert held_bus.goals.todos.get(todo.id) == todo
@@ -348,7 +422,7 @@ def test_latest_answer_retains_the_original_response_eligibility(
     sender = user.name if user else "worker"
     origin = HumanOrigin.of(user) if user else AgentOrigin()
     original = held_bus.bus.publisher.publish_ordinary(
-        Message(sender, target, body, InfoKind, timestamp=now - 20, role=role), origin=origin,
+        Message(sender, target, body, InfoKind, timestamp=now - 20, role=role), destination=CommandTarget.named(target), origin=origin,
     )
     reply = publish(held_bus, "lead", sender, now - 10, answers=(original.reference,))
     scope = RepliesDisplayScope(frozenset({"lead"}), frozenset({sender}))
@@ -375,7 +449,7 @@ def test_latest_answer_retains_the_original_commander_alias(held_bus):
 def test_commander_say_answers_an_unanswered_unit_message(held_bus, target, body, tmp_path):
     question = held_bus.bus.publisher.publish_ordinary(
         Message(sender='worker', target=target, type=QuestionKind, body=body,
-                timestamp=time.time() - AwaitingCommander.seconds - 1), origin=AgentOrigin(),
+                timestamp=time.time() - AwaitingCommander.seconds - 1), destination=CommandTarget.named(target), origin=AgentOrigin(),
     )
     ctx = Commander.read_root(held_bus.root)
     reply = tmp_path / 'reply.txt'
@@ -422,10 +496,12 @@ def test_answering_one_owed_message_leaves_another_owed(held_bus, tmp_path):
 def test_an_overdue_owner_directive_gates_until_answered(held_bus, tmp_path):
     directive = held_bus.bus.publisher.publish_ordinary(
         Message(sender="outsider", target="lead", type=InfoKind, body="Ship the install now",
-                timestamp=time.time() - 3600), origin=AgentOrigin(),
+                timestamp=time.time() - 3600), destination=CommandTarget.named("lead"), origin=AgentOrigin(),
     )
-    held_bus.goals.update_goal("lead", DirectiveGoalAction(
-        text=directive.body, seq=directive.seq, at=directive.timestamp))
+    store = held_bus.goals.todos
+    selected = NewestOpenRequest().select(store, held_bus.registry.require('lead').incarnation)
+    store.record_directive(selected[0].id, RequestDirective(
+        directive.seq, directive.timestamp + RequestDirective.window))
     ctx = Commander.read_root(held_bus.root)
     reply = tmp_path / "reply.txt"
     reply.write_text("Installing now")

@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
-from typing import ClassVar
+from typing import TYPE_CHECKING, ClassVar
 
-from .registration import Registration
 from .thread_execution import ExternalThreadExecution
+
+if TYPE_CHECKING:
+    from .registration import Registration
 
 
 class ServiceSender:

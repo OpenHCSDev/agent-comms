@@ -256,7 +256,7 @@ class ChangeSignal(ChangedSources, asyncio.Queue[SourceChange]):
     def _on_ready(self) -> None:
         try:
             self._drain()
-        except Exception as error:
+        except (OSError, ValueError) as error:
             # Callback failures must reach the waiting reader, not just stderr.
             self.loop.remove_reader(self.fd)
             self._publish(SourceFailed(error))

@@ -1,11 +1,13 @@
 """Activity maxima derived in the transaction that appends their original message."""
 from __future__ import annotations
 
-from collections.abc import Mapping
-from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Annotated
+import sqlite3
+from collections.abc import Iterable, Mapping
+from dataclasses import dataclass, field, fields
+from typing import TYPE_CHECKING, Annotated, Self
 
 from .bus_tables import BusProjectionTables
+from .field_codec import FieldCodec
 from .typed_table import Column, TypedRow, TypedTable
 
 if TYPE_CHECKING:
@@ -25,13 +27,18 @@ class ChannelActivity(TypedRow):
         )
 
     @classmethod
-    def from_message(cls, message: Message, **key):
-        return cls(last_message=message.timestamp,
-                   last_user_input=message.sender_role.last_user_input(0.0, message.timestamp),
-                   **key)
+    def from_message(cls, message: Message, **key: str) -> Self:
+        clocks = ChannelActivity(
+            message.timestamp,
+            message.sender_role.last_user_input(0.0, message.timestamp),
+        )
+        return FieldCodec.construct(cls, {
+            **{item.name: getattr(clocks, item.name) for item in fields(clocks)},
+            **key,
+        })
 
     @classmethod
-    def combine(cls, clocks) -> ChannelActivity:
+    def combine(cls, clocks: Iterable[ChannelActivity]) -> ChannelActivity:
         clocks = tuple(clocks)
         return cls(max((item.last_message for item in clocks), default=0),
                    max((item.last_user_input for item in clocks), default=0))
@@ -52,7 +59,7 @@ class ActivityClocks:
 class ActivityMaximum(TypedTable, BusProjectionTables, declared_name=None):
     """The declared non-key values are maxima, not independently writable clocks."""
 
-    def insert(self, db):
+    def insert(self, db: sqlite3.Connection) -> sqlite3.Cursor:
         statement, values = self._insertion()
         keys = tuple(item.name for item in self._fields() if item.column.primary_key)
         updates = tuple(item.wire_name for item in self._writable_fields()
@@ -63,7 +70,8 @@ class ActivityMaximum(TypedTable, BusProjectionTables, declared_name=None):
 
 
     @classmethod
-    def aggregate(cls, db, predicate: str, parameters: tuple) -> ChannelActivity:
+    def aggregate(cls, db: sqlite3.Connection, predicate: str,
+                  parameters: tuple[object, ...]) -> ChannelActivity:
         result, = ChannelActivity.read(db.execute(
             f'SELECT coalesce(max(last_message),0.0) AS last_message, '
             f'coalesce(max(last_user_input),0.0) AS last_user_input '
@@ -76,7 +84,7 @@ class BusActivityIndex(ChannelActivity, ActivityMaximum):
     target: Annotated[str, Column(primary_key=True)] = field(kw_only=True)
 
     @classmethod
-    def clocks(cls, db) -> ActivityClocks:
+    def clocks(cls, db: sqlite3.Connection) -> ActivityClocks:
         return ActivityClocks(
             {row.target: ChannelActivity(row.last_message, row.last_user_input)
              for row in cls.select(db)},

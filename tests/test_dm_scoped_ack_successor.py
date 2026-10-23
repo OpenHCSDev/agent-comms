@@ -9,6 +9,7 @@ from pathlib import Path
 import pytest
 
 from agent_comms.channel_targets import CommandTarget
+from agent_comms.comms import wire
 from agent_comms.child_process import ProcessIdentity
 from conftest import installed_comms
 from agent_comms.coordination_errors import DMScopeChanged

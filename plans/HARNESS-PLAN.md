@@ -2,6 +2,30 @@
 
 Decision (Tristan, 2026-10-21 22:45): the commander fixes the harness it commands with. It works with full authority on this plan only: it makes each change, inspects it with full attention, runs only the tests the change touches, and pushes straight to `main`. Audited against `origin/main` at `39fdfe810`.
 
+## Expanded installer integration, 2026-10-22
+
+Tristan requested the next paired installation include the useful remaining open
+work. Core's virtual-bus checkpoint passed the full configured-root rehearsal:
+19,182 records, 194 threads, preserved read ledger, 208.38 seconds. That is a
+rehearsal result, not an installed checkpoint.
+
+Root owns porting the remaining reporting and bridge-lifetime work from #2556
+and #2527 into the current `ChangedInstall` and `PreparedMigration` family.
+The old branches' detached migration paths stay deleted. Reports before carry
+must execute in the outgoing runtime; reports after accepted carry use the
+incoming runtime. Rehearsals publish nothing. The report lifetime includes
+target-tree cleanup, so cleanup failure cannot leave a successful terminal post.
+Bridge outcomes belong to the actual captured bridge and survive failed exits.
+
+The reused finished checkout is `/home/ts/wt/harness-plan`, branch
+`integration/installer-report-lifetime`. Before-source evidence is
+`/home/ts/.cache/agent-scratch/root-installer-report-before.json`: NRA parsed
+953 production/test/tool modules and retained 5,341 original class declarations;
+5,151 project into the conservative family index. The remaining 190 original
+declarations stay visible rather than being counted as resolved. No parse
+omissions; source evidence does not prove behavior. Implementation and affected
+CLI/application qualification remain open.
+
 ## Why
 
 On 2026-10-21 the plans Tristan asked for at 18:30 the day before had not landed 28 hours later. Every error pulled the fleet off them, and the errors came from the harness itself:
@@ -273,3 +297,27 @@ The growth alarm is commander-native phase 7's (`plans/commander-native-plan.md`
 - Each change deletes what it replaces in the same commit.
 - Never touch a file another plan deletes (2026-10-21: the reverted 047bccc65 added 16 conflicts to #2549).
 - Say what is slow or broken the moment it shows, out loud, instead of working around it.
+
+
+### Installer reporting implementation checkpoint; user pause
+
+Draft #2620 now moves publication into the existing RuntimeProbe/ServiceSender family,
+selects the runtime that owns each migration stage, and keeps terminal reporting outside
+TargetTree cleanup. RunMode owns rehearsal/live behavior while FieldCodec retains the
+single Boolean launcher representation. The outgoing report retains its declared probe
+source in memory; the incoming report runs its installed module after source retirement.
+Probe commands use runtime home instead of the retired checkout. Existing bridge resume
+ownership now covers partial pause failure and decodes a broken socket into the existing
+per-bridge failure type.
+
+Latest focused report/cleanup tests pass14/14 (22.44s); the preceding command/bridge batch
+passed43/43 before retained-source execution was added. These are source checks. Actual
+new installer build/rollback/fresh-root qualification and the paired installed journey
+remain open. The earlier package-probe test failure from the main editable environment
+is retained in the root evidence. Bridge state discovery still misses custom/default
+Claude directories; this is an unresolved installer defect owned by root. The full old
+nominal bridge-outcome port is not claimed complete.
+
+Tristan explicitly paused the fleet to reopen Codex after its thread tools retained a
+dead MCP address. Preserve current dirty owned checkouts and uncertain inputs. The
+existing root handoff contains precise heads, results and remaining integration work.

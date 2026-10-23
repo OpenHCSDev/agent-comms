@@ -1,19 +1,26 @@
-import pytest
 import os
+
+import pytest
 
 from agent_comms.installer.backup import UpgradeRefused
 from agent_comms.installer.commands import InstallCommands
-from agent_comms.installer.installed_packages import InstalledPackagesProbe
+from agent_comms.installer.interpreter_operation import (
+    InstalledPackagesProbe,
+    RetainedProgram,
+    SourceProgram,
+)
 from agent_comms.installer.runtime_resolution import ResolvedLock, RuntimeResolution
 from agent_comms.launch_runtime import LaunchRuntime
 
 
-def test_package_probe_entry_uses_one_declaration_before_refusing_build_identity():
+@pytest.mark.parametrize("program", [SourceProgram(), RetainedProgram.of(InstalledPackagesProbe)])
+def test_package_probe_entry_uses_one_declaration_before_refusing_build_identity(program):
     runtime = LaunchRuntime.running()
     with pytest.raises(UpgradeRefused, match="Core is editable|wheel stamp does not name"):
         InstallCommands().probe(
             InstalledPackagesProbe("not-a-built-wheel"), runtime.interpreter,
             env=runtime.environment(os.environ),
+            program=program,
         )
 
 

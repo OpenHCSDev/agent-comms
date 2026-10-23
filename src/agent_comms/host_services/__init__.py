@@ -114,9 +114,9 @@ class SystemdUserService(HostService, declared_name=None):
             notify.connect(target)
             notify.sendall(b"READY=1")
 
-    @property
-    def unit_file(self) -> Path:
-        return Path.home() / ".config/systemd/user" / self.unit
+    @classmethod
+    def unit_file(cls) -> Path:
+        return Path.home() / ".config/systemd/user" / cls.unit
 
     def unit_text(self, arguments: tuple[str, ...]) -> str:
         executable = LaunchRuntime.current_pointer() / "bin" / self.program
@@ -133,13 +133,27 @@ class SystemdUserService(HostService, declared_name=None):
         )
 
     def install(self, arguments: tuple[str, ...]) -> None:
-        self.unit_file.parent.mkdir(parents=True, exist_ok=True)
-        self.unit_file.write_text(self.unit_text(arguments), encoding="utf-8")
+        self.unit_file().parent.mkdir(parents=True, exist_ok=True)
+        self.unit_file().write_text(self.unit_text(arguments), encoding="utf-8")
         subprocess.run(("systemctl", "--user", "daemon-reload"), check=True)
         subprocess.run(("systemctl", "--user", "enable", self.unit), check=True)
 
     @classmethod
     def pid(cls) -> int:
+        """Only the unit loaded from this home's owned definition belongs to it.
+
+        The user manager belongs to the UID, not HOME; a private install must not
+        discover or restart the real home's service through that shared manager.
+        """
+        unit = cls.unit_file()
+        if not unit.is_file():
+            return 0
+        loaded = subprocess.check_output(
+            ("systemctl", "--user", "show", "-p", "FragmentPath", "--value", cls.unit),
+            text=True,
+        ).strip()
+        if Path(loaded).resolve() != unit.resolve():
+            return 0
         return int(subprocess.check_output(
             ("systemctl", "--user", "show", "-p", "MainPID", "--value", cls.unit),
             text=True,

@@ -2,26 +2,28 @@
 
 from __future__ import annotations
 
+from abc import abstractmethod
 from collections.abc import Sequence
 from dataclasses import dataclass, replace
-from abc import abstractmethod
-from typing import TYPE_CHECKING, ClassVar
 from enum import Enum
 from pathlib import Path
+from typing import TYPE_CHECKING, ClassVar
+
+from agent_comms.channel_targets import CommandTarget
 
 from .active_route import guard_original_root_write
 from .bus_publication import AgentOrigin
 from .channel_targets import ChannelTarget, Tag
 from .channels import Channel, SavedView
 from .cli_result import CliResult
+from .declared_family import DeclaredFamily
 from .display_order import ChannelSort, ThreadSort
 from .message_bus import MessageBus
-from .messages import InfoKind, Message, MembershipConversationRole
+from .messages import InfoKind, MembershipConversationRole, Message
 from .registration import Registration
-from .threads import Thread
-from .thread_management import ChangedTags, GivenTags
 from .thread_identity import ThreadIncarnation
-from .declared_family import DeclaredFamily
+from .thread_management import ChangedTags, GivenTags
+from .threads import Thread
 
 if TYPE_CHECKING:
     from .thread_management import TagChoice, ThreadManagement
@@ -183,6 +185,7 @@ class ChannelManagement:
                             InfoKind,
                             role=MembershipConversationRole(change),
                         ),
+                        destination=CommandTarget.named(channel.name),
                         origin=AgentOrigin(),
                     )
         return updated

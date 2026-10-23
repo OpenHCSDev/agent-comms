@@ -30,7 +30,7 @@ from agent_comms.messages import Message
 from agent_comms.read_basis import RepliesDisplayScope
 from agent_comms.registry_document import RegistrySnapshot
 from agent_comms.thread_identity import ThreadIncarnation
-from agent_comms.todos import Todo
+from agent_comms.todos import OwnerRequest, Todo
 from agent_comms.service_sender import ServiceSender
 from agent_comms.standing_rules import (
     IndependentStandingRule,
@@ -239,7 +239,8 @@ class VibeCheckUnanswered(Escalation, OwedAnswer, UndatedStandingRule):
 
     @classmethod
     def read_open(cls, source: BusReader, snapshot: RegistrySnapshot,
-                  held: Mapping[ThreadIncarnation, Sequence[Todo]], commander: str) -> tuple[Self, ...]:
+                  held: Mapping[ThreadIncarnation, Sequence[Todo]], commander: str,
+                  requests: Sequence[OwnerRequest]) -> tuple[Self, ...]:
         return tuple(cls(message) for message in
                      VibeCheckSender.unanswered(source, snapshot, commander, time.time()))
 
@@ -327,7 +328,8 @@ class ChokeholdUnanswered(Escalation, OwedAnswer, UndatedStandingRule):
 
     @classmethod
     def read_open(cls, source: BusReader, snapshot: RegistrySnapshot,
-                  held: Mapping[ThreadIncarnation, Sequence[Todo]], commander: str) -> tuple[Self, ...]:
+                  held: Mapping[ThreadIncarnation, Sequence[Todo]], commander: str,
+                  requests: Sequence[OwnerRequest]) -> tuple[Self, ...]:
         return tuple(cls(message) for message in
                      ChokeholdSender.unanswered(source, snapshot, commander, time.time()))
 

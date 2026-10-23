@@ -13,7 +13,7 @@ from agent_comms.coordination_contracts import (
     validate_execution_id,
 )
 from agent_comms.coordination_errors import CoordinationError, IntegrityViolationError
-from agent_comms.coordination_schema import CoordinatorTable
+from agent_comms.coordination_schema import CoordinatorRow
 from agent_comms.errors import RelationViolationError
 from agent_comms.field_codec import FieldCodec, MalformedRecord, WireName
 from agent_comms.message_reference import MessageReference
@@ -26,7 +26,6 @@ from agent_comms.typed_table import (
     Generated,
     GuardedInserts,
     ImmutableRows,
-    TypedTable,
     ValidatedInserts,
 )
 
@@ -36,7 +35,7 @@ if TYPE_CHECKING:
 
 @dataclass(frozen=True, slots=True)
 class PublicationIntents(
-    ValidatedInserts, GuardedInserts, ImmutableRows, CoordinatorTable, TypedTable
+    ValidatedInserts, GuardedInserts, ImmutableRows, CoordinatorRow
 ):
     """One obligation route's frozen response: the exact Message it publishes."""
 
@@ -166,8 +165,7 @@ class PublicationIntents(
 class PublicationEvidence(
     GuardedInserts,
     ImmutableRows,
-    CoordinatorTable,
-    TypedTable,
+    CoordinatorRow,
     declared_name="publication_receipts",
 ):
     insert_condition = """(EXISTS (SELECT 1 FROM executions

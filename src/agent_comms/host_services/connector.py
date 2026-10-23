@@ -99,7 +99,7 @@ class InstallServiceVerb(ConnectorOptions, declared_name="install-service"):
             launch=LaunchRoot.from_path(self.root), store=ctx, port=self.port,
         )
         service.install(service.exec_arguments(self.issuer))
-        print(service.unit_file)
+        print(service.unit_file())
         return 0
 
 

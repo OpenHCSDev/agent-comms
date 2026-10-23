@@ -5,11 +5,19 @@ from __future__ import annotations
 from abc import abstractmethod
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Annotated
+from collections.abc import Callable
+from typing import TYPE_CHECKING, Annotated, Literal
 
-from agent_comms.field_codec import BoundedText, SubclassUnion
+from agent_comms.field_codec import BoundedText, SingleFieldValue, SubclassUnion
 from agent_comms.storage_rules import StorageRule
 from agent_comms.thread_text import AbsentText, GivenText, TextChoice
+
+if TYPE_CHECKING:
+    from agent_comms.cli_bridges.shared import SessionBridgeResumes
+    from agent_comms.cli_commands import InstallResult
+    from agent_comms.installer.launch import InstallReport
+    from agent_comms.installer.reporting import RootWriter
+    from agent_comms.installer.upgrade import Install, Rehearsal, RehearsedUpgrade
 
 
 class InstallerChoice(SubclassUnion, TextChoice, affix="Installer"):
@@ -32,3 +40,42 @@ class NamedInstaller(GivenText, InstallerChoice):
 class UnnamedInstaller(AbsentText, InstallerChoice):
     def scratch(self, rule: StorageRule) -> Path:
         return rule.scratch_base
+
+
+class RunMode(SubclassUnion, affix="Mode"):
+    """The command selects once whether the run stops after rehearsal."""
+
+    @abstractmethod
+    def destination(self, live: RootWriter) -> RootWriter: ...
+
+    @abstractmethod
+    def finish[Rehearsed: Rehearsal](self, install: Install[Rehearsed], rehearsal: Rehearsed,
+               bridges: SessionBridgeResumes, harnesses: Callable[[], InstallResult],
+               report: InstallReport) -> RehearsedUpgrade: ...
+
+
+@dataclass(frozen=True)
+class RehearsalMode(SingleFieldValue, RunMode):
+    value: Literal[True] = True
+
+    def destination(self, live: RootWriter) -> RootWriter:
+        from agent_comms.installer.reporting import UnpostedWriter
+        return UnpostedWriter()
+
+    def finish[Rehearsed: Rehearsal](self, install: Install[Rehearsed], rehearsal: Rehearsed,
+               bridges: SessionBridgeResumes, harnesses: Callable[[], InstallResult],
+               report: InstallReport) -> RehearsedUpgrade:
+        return install.reported(rehearsal)
+
+
+@dataclass(frozen=True)
+class LiveMode(SingleFieldValue, RunMode):
+    value: Literal[False] = False
+
+    def destination(self, live: RootWriter) -> RootWriter:
+        return live
+
+    def finish[Rehearsed: Rehearsal](self, install: Install[Rehearsed], rehearsal: Rehearsed,
+               bridges: SessionBridgeResumes, harnesses: Callable[[], InstallResult],
+               report: InstallReport) -> RehearsedUpgrade:
+        return install.finished(rehearsal, bridges, harnesses, report)

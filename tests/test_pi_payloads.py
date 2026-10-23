@@ -5,7 +5,7 @@ from collections.abc import Mapping
 
 import pytest
 
-from agent_comms.field_codec import FieldCodec
+from agent_comms.field_codec import FieldCodec, MalformedRecord
 from agent_comms.tool_results import NoToolDiff
 from agent_comms.pi_commands import GetState, PiCommand, Prompt
 from agent_comms.pi_counts import PiCount, ReportedCount, UnreportedCount
@@ -173,7 +173,7 @@ def test_tracked_commit_observations_preserve_original_receipt_and_refuse_repeti
     ],
 )
 def test_malformed_known_authority_fields_fail_at_boundary(record):
-    with pytest.raises((ValueError, TypeError)):
+    with pytest.raises(MalformedRecord):
         decode(record)
 
 
