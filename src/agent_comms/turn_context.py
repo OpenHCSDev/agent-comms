@@ -13,6 +13,7 @@ from types import MappingProxyType
 from typing import TYPE_CHECKING, Any, ClassVar, Self, Annotated
 
 
+from .annotation_disclosure import PublicInstructionAnnotations, WithheldAnnotations
 from .cli_result import CliResult
 from .declared_family import DeclaredFamily
 from .field_codec import (
@@ -638,7 +639,7 @@ class PreviouslyRecordedSegment(SegmentRecording):
 
 @dataclass(frozen=True, kw_only=True)
 class ContextSegment(
-    DeclaredFamily, affix="Segment", discovery_package="agent_comms.context_segments"
+    WithheldAnnotations, DeclaredFamily, affix="Segment", discovery_package="agent_comms.context_segments"
 ):
     provenance: tuple[Provenance, ...]
 
@@ -696,11 +697,6 @@ class ContextSegment(
         return tuple(ContextSpan(digest, sentence)
                      for source in self.source_ranges()
                      for sentence in source.sentences(text))
-
-    def disclosure_for(self, span: ContextSpan):
-        from .working_memory_disclosure import WithheldDisclosure
-
-        return WithheldDisclosure()
 
     def render_into(self, prompt_parts, provider):
         prompt_parts.append(self.text())
@@ -848,17 +844,8 @@ class MeasuredNativeSegment(ContextSegment):
         return self.contributors
 
 
-class PublicInstructionSegment:
-    """Instruction-bearing context discloses its wording as public instruction."""
-
-    def disclosure_for(self, span: ContextSpan):
-        from .working_memory_disclosure import PublicInstructionDisclosure
-
-        return PublicInstructionDisclosure()
-
-
 @dataclass(frozen=True, kw_only=True)
-class SystemLayerSegment(PublicInstructionSegment, MeasuredNativeSegment):
+class SystemLayerSegment(PublicInstructionAnnotations, MeasuredNativeSegment):
     content: str
     tokens: int
     sha256: str
@@ -951,7 +938,7 @@ class NativeMessages:
 
         for source, message in zip(self.source_ranges(), self.messages, strict=True):
             if source.contains(span.coordinates):
-                return PiMessage.from_wire(message).annotation_disclosure()
+                return PiMessage.from_wire(message).disclosure_for(span)
         raise ValueError("Annotation names no original native message")
 
     def render_into(self, prompt_parts, provider):
@@ -983,7 +970,7 @@ class TranscriptSegment(NativeMessages, MeasuredNativeSegment):
 
 
 @dataclass(frozen=True, kw_only=True)
-class CompactionSummarySegment(PublicInstructionSegment, NativeMessages, MeasuredNativeSegment):
+class CompactionSummarySegment(PublicInstructionAnnotations, NativeMessages, MeasuredNativeSegment):
     pass
 
 
@@ -1017,7 +1004,7 @@ class ToolCatalogSegment(MeasuredNativeSegment):
 
 
 @dataclass(frozen=True, kw_only=True)
-class InstructionSegment(PublicInstructionSegment, ContextSegment):
+class InstructionSegment(PublicInstructionAnnotations, ContextSegment):
     instruction: InstructionFile
 
     @classmethod
