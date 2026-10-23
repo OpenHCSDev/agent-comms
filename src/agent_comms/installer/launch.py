@@ -90,7 +90,7 @@ class InstallReport(MroDispatch):
     def running(self, tree: TargetTree) -> Iterator[None]:
         """Every writer runs installed artifacts from outside ``tree``, so the report follows
         the tree's cleanup and a cleanup failure is the install's failure."""
-        self.source = Repo(checkout=tree.checkout, github=CorePackage.repository)
+        self.source = Repo(checkout=tree.path, github=CorePackage.repository)
         try:
             with tree:
                 yield
