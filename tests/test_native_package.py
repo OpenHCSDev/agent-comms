@@ -126,7 +126,7 @@ def stamp_prepared(stack, env):
     )
     prepared = NativePackageStore.at_home(Path.home()).package_for(manifest).parents[2]
     namespace = load_resource_module(stack.parent / "src/agent_comms/native_package.py")
-    namespace["VerifiedNativePackage"].prepare(native_package.pinned_package_for(manifest))
+    namespace["VerifiedNativePackage"].prepare(prepared / native_package.PACKAGE_LAYOUT)
     (prepared / ".prepared-inputs.sha256").write_text(stamp + "\n")
 
 
