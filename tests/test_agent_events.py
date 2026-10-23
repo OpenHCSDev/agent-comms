@@ -173,7 +173,7 @@ def test_payload_fields_and_frozen_multiple_inheritance():
         with pytest.raises(FrozenInstanceError):
             value.extra = "not a declared field"
     done = events.Done("failed", False, "input_authority_changed", {"elapsed_ms": 3})
-    assert done.reason_code == "input_authority_changed"
+    assert done.reason_code == "authority_changed"
     assert done.diagnostic == {"elapsed_ms": 3}
 
 

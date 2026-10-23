@@ -8,7 +8,7 @@ from dataclasses import replace
 import pytest
 
 from agent_comms.child_process import ProcessIdentity
-from agent_comms.diagnostics import FailureReason
+from agent_comms.turn_failure import BackendFailed, FinalStopMissing
 from agent_comms.goal_attempts import (
     AttemptRecord,
     GoalAttemptStore,
@@ -43,7 +43,7 @@ def bound(tmp_path, *, thread_registration):
     observation = FailedTurnObservation.from_terminal(
         permit.reservation, owner=owner, goal=goal, lease=lease,
         turn_id=lease.turn_id, claim_scope=3, current_owner=owner, current_claim=3,
-        reason=FailureReason.FINAL_STOP_MISSING,
+        failure=FinalStopMissing,
     )
     assert observation is not None
     return store, owner, lease, observation
@@ -81,7 +81,7 @@ def test_mismatched_turn_lease_is_not_bound(bound, mutation):
     rejected = FailedTurnObservation.from_terminal(
         observation.reservation, owner=owner, goal=owner.goal,
         lease=replace(lease, **mutation), turn_id=lease.turn_id, claim_scope=3,
-        current_owner=owner, current_claim=3, reason=FailureReason.BACKEND_FAILED,
+        current_owner=owner, current_claim=3, failure=BackendFailed,
     )
     assert rejected is None
     observation.reservation.fail(store, "failed anyway", observation=rejected)

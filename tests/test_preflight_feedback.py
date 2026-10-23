@@ -2,22 +2,21 @@
 import pytest
 from agent_comms.input_attempt import ReservedInput, NotSentInput, MissingInput
 from agent_comms.input_disposition import InputDocument
-from agent_comms.turn_failure import InputIdUnavailable, PromptSendFailed
+from agent_comms.turn_failure import NativePreflightExit, NativePreflightTimeout, PromptSendFailed
 from agent_comms.turn_output import TurnOutput
-from agent_comms.diagnostics import FailureReason
 from stored_inputs import stored_inputs
 
-@pytest.mark.parametrize('reason', [FailureReason.PREFLIGHT_EXIT, FailureReason.PREFLIGHT_TIMEOUT])
-def test_preflight_diagnostics_keep_original_phase(reason):
-    output = TurnOutput(preflight_failure=reason)
-    output.record_failure(InputIdUnavailable('Original preflight phase and timing'))
+@pytest.mark.parametrize('kind', [NativePreflightExit, NativePreflightTimeout])
+def test_preflight_diagnostics_keep_original_phase(kind):
+    output = TurnOutput()
+    output.record_failure(kind('Original preflight phase and timing'))
     output.startup_error('Native startup cause\n')
     assert output.failure_text == 'Original preflight phase and timing\nBackend startup reported:\nNative startup cause'
-    output = TurnOutput(sensitive=True, preflight_failure=reason)
-    output.record_failure(InputIdUnavailable('Private phase'))
+    output = TurnOutput(sensitive=True)
+    output.record_failure(kind('Private phase'))
     output.startup_error('private image bytes')
     assert output.failure_text == 'Image prompt failed; backend diagnostics withheld.'
-    assert output.preflight_failure is reason
+    assert type(output.failure) is kind
     assert 'Private phase' not in repr(output)
     assert 'private image bytes' not in repr(output)
     ordinary = TurnOutput(failure=PromptSendFailed('Transport cause'))

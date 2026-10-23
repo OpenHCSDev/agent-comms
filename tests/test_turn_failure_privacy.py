@@ -22,7 +22,7 @@ def test_recorded_failure_has_one_safe_text_and_keeps_its_behavior(kind, sensiti
     assert original.text == 'private provider response body'
     assert stored.text == output.failure_text == expected
     assert output.terminal_text(False, 'private stderr', 1) == expected
-    assert stored.code == original.code
+    assert type(stored) is type(original)
     assert stored.declared_position() == original.declared_position()
     assert stored.ends_with_request_retry == original.ends_with_request_retry
     if sensitive:
