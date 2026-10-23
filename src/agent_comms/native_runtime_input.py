@@ -359,20 +359,18 @@ class AcknowledgedSlot(SelectedSlotState):
 
 
 @dataclass(frozen=True)
-class SelectedToolSlot(WriteOnceColumns, NativeRuntimeTable, WithoutRowid):
+class SelectedToolSlot(NativeRuntimeTable, WithoutRowid):
     """One durable tool slot, retained and retired with its original native input."""
 
     input_id: Annotated[str, FrozenColumn(primary_key=True)]
     call_id: Annotated[str, FrozenColumn()]
     native_input_id: Annotated[str, FrozenColumn(index=True)]
-    state: Annotated[
-        type[SelectedSlotState], Column(check=SelectedSlotState.sql_constraint("state"))
-    ] = ConsumedSlot
+    state: type[SelectedSlotState] = ConsumedSlot
 
-    foreign_keys = (
-        ForeignKey(target=NativeRuntimeInput, target_columns=("input_id",),
-                   columns=("native_input_id",), on_delete="CASCADE"),
-    )
+    @classmethod
+    def references(cls) -> tuple[ForeignKey, ...]:
+        return (ForeignKey(target=NativeRuntimeInput, target_columns=("input_id",),
+                           columns=("native_input_id",), on_delete="CASCADE"),)
 
     @classmethod
     def consume(

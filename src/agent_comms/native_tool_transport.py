@@ -17,6 +17,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Generic, TypeVar
 
 from .child_process import join_retirement
+from .coordination_database import CoordinationStore
 from .field_codec import FieldCodec, MalformedRecord, Token256Text
 from .lifecycle_capability import Complete
 from .native_tool_call import (
@@ -320,7 +321,7 @@ class ToolTransport(Generic[Call]):
         call.finish(
             FieldCodec.encode(event.tool_name),
             FieldCodec.encode(event.is_error),
-            self.listener.session_directory,
+            CoordinationStore.path_in(self.turn.launch.session.root),
             input_id,
             identity.round_number,
         )
