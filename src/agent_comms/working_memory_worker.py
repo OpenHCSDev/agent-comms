@@ -34,7 +34,7 @@ class AnnotationWorker:
 
     def start(self, policy, session_id, manifest, values):
         sessions = self.runtime.agent.sessions
-        publish = partial(self.runtime.session_update, session_id=session_id,
+        publish = partial(self.runtime.publish_update, session_id=session_id,
             _expected_client=sessions.client, _expected_thread=sessions.require(session_id),
             _expected_sockets=frozenset(self.runtime.clients.get(session_id, ())))
         task = self.runtime.background(self.run(policy, publish, manifest, values))

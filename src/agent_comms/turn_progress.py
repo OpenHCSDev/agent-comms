@@ -349,7 +349,7 @@ class TurnProgress(events.AgentEventConsumer):
         ))
         checkpoint = await Coordination.run_worker(partial(
             self.comms.transcripts.transcript_checkpoint, self.thread_name))
-        await self.runtime.session_update(
+        await self.runtime.publish_update(
             session_id=self.session_id,
             update=AgentMessageChunk(
                 session_update="agent_message_chunk",
