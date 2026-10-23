@@ -581,11 +581,7 @@ class Stack:
         invocation = TargetActionCliCommand.invocation(
             "--operation", command.declared_name, "--targets", *names)
         completed = self.probe(CliCommandProbe(("--root", str(root), *invocation)))
-        try:
-            return FieldCodec.decode(TargetBatchResult, FieldCodec.parse(completed.stdout))
-        except (MalformedRecord, ValueError) as error:
-            raise UpgradeRefused(
-                f"agent-comms {' '.join(invocation)}: {completed.stdout.strip()}") from error
+        return FieldCodec.decode(TargetBatchResult, FieldCodec.parse(completed.stdout))
 
     def start(self, root: Path, names: list[str]) -> tuple[OwnerStart, ...]:
         """One start batch; keep each refusal in the installed or rollback report."""

@@ -7,6 +7,19 @@ from agent_comms.channel_targets import CommandTarget
 from agent_comms.threads import Thread
 
 
+def test_batch_completed_result_round_trips_with_its_command_result_type():
+    from agent_comms.cli_commands import (
+        StopCliCommand, TargetBatchResult, TargetCompleted, TargetFailed, ThreadStoppedResult,
+    )
+    from agent_comms.field_codec import FieldCodec
+
+    original = TargetBatchResult((
+        TargetCompleted("first", StopCliCommand(name="first"), ThreadStoppedResult("first")),
+        TargetFailed("missing", "UnregisteredThreadError", "Thread 'missing' is not registered."),
+    ))
+    assert FieldCodec.decode(TargetBatchResult, FieldCodec.encode(original)) == original
+
+
 @pytest.mark.parametrize("selection,target,resolvable", [
     (OneTarget, CommandTarget.named("first"), True),
     (OneTarget, CommandTarget.named("ghost"), False),

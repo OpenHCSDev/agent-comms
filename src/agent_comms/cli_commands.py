@@ -109,10 +109,12 @@ from .field_codec import (
     NamedArgumentGroup,
     Normalize,
     PathText,
+    RecordMember,
     TargetBound,
     WireForm,
     WireName,
     WireOmitDefault,
+    WireValue,
     boundary_decoder,
 )
 from .harness_install import Harness
@@ -285,10 +287,16 @@ class TargetOutcome(LifecycleCapability):
 
 
 @dataclass(frozen=True)
-class TargetCompleted(Successful, TargetOutcome):
+class TargetCompleted(Successful, TargetOutcome, RecordMember):
     target: str
     command: CliCommand
-    result: Annotated[CliResult, WireForm]
+    result: Annotated[CliResult, WireValue]
+
+    @classmethod
+    def from_wire(cls, data: JsonValue) -> Self:
+        record = FieldCodec.decode(dict[str, JsonValue], data)
+        command = FieldCodec.decode(CliCommand, record["command"])
+        return FieldCodec.decode_record(cls, record, field_types={"result": command.result_type()})
 
     def reconnect_targets(self) -> tuple[str, ...]:
         return self.result.reconnect_targets()
