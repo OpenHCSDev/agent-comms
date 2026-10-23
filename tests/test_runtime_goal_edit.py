@@ -1,4 +1,5 @@
 """Goal edits/history use the actual owner socket and persisted backend state."""
+from agent_comms.controller import SessionUpdateSink
 
 import asyncio
 import os
@@ -36,9 +37,10 @@ async def test_goal_edit_and_history_over_owner_socket(tmp_path, monkeypatch):
     paused = comms.goals.update_goal(session, PausedGoalAction(), actor=OwnerInvocable)
     updates = []
 
-    class Client:
-        async def session_update(self, session_id, update):
-            updates.append(update)
+    class Client(SessionUpdateSink):
+        async def publish_update(self, session_id, update):
+            updates.append(update.model_dump(mode="json", by_alias=True, exclude_none=True))
+            return True
 
     observer = canonical_agent(comms)
     observer.on_connect(Client())

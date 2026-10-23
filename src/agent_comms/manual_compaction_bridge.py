@@ -103,7 +103,7 @@ async def _compact_started(runner, session_id, thread_name, instructions):
             completion = outcome.completion_event(events.CompactionEnd, ManualCompactionReason)
             await consumer.dispatch(completion)
         if not completion.aborted:
-            await runner.runtime.session_update(
+            await runner.runtime.publish_update(
                 session_id=session_id,
                 update=AgentMessageChunk(
                     session_update="agent_message_chunk",

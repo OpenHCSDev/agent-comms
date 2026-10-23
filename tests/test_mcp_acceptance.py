@@ -7,6 +7,7 @@ Without that adapter these tests prove the Pi/ACP path, NOT Toad rendering.
 """
 
 from __future__ import annotations
+from agent_comms.controller import SessionUpdateSink
 
 import asyncio
 import importlib.util
@@ -424,17 +425,19 @@ async def test_real_pi_mcp_acp_link(case, tmp_path, monkeypatch, request):
                     AGENT_COMMS_NATIVE_CONFIG_DIR=str(agent),
                 )
 
-                class Audit:
-                    async def session_update(self, session_id, update):
+                class Audit(SessionUpdateSink):
+                    async def publish_update(self, session_id, update):
                         row = {
                             "sessionId": session_id,
                             "update": update.model_dump(mode="json", by_alias=True, exclude_none=True),
                         }
                         updates.append(row)
+                        return True
 
-                class Attachment:
-                    async def session_update(self, session_id, update):
+                class Attachment(SessionUpdateSink):
+                    async def publish_update(self, session_id, update):
                         nonlocal attachment_turn
+                        update = update.model_dump(mode="json", by_alias=True, exclude_none=True)
                         if observer:
                             await observer.session_update(session_id=session_id, update=update)
                         for fact in decode_updates(update.get("_meta")):
@@ -453,6 +456,7 @@ async def test_real_pi_mcp_acp_link(case, tmp_path, monkeypatch, request):
                                 elif attachment_turn is not None:
                                     assert fact.state.matches(attachment_turn.active.id)
                                     attachment_settled.set()
+                        return True
 
                     async def request_permission(self, **kwargs):
                         permissions.append(kwargs)
