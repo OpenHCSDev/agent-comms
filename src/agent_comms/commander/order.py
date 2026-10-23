@@ -316,7 +316,7 @@ class OrderFile:
 
     def resolved(self, context: CommanderContext, finding: ProblemFinding) -> OrderFile:
         check = replace(self.order.check,
-                        directory=str(context.repo_directory(self.order.check.directory)))
+                        directory=str(Repo.selected(context.repos, self.order.check.directory).checkout))
         return replace(self, order=replace(self.order, finding=finding, check=check))
 STAGES = (
     "tool call",
@@ -1008,7 +1008,7 @@ class DoneVerb(OrderVerb):
         todo = ctx.comms.goals.todos.resolve_order(ctx.incarnation, self.unit, self.problem)
         order = todo.order.checked()
         delivery = order.scope.delivery(
-            ctx.repo_directory(order.check.directory), self.sha, self.screenshot, self.seen)
+            Repo.selected(ctx.repos, order.check.directory).checkout, self.sha, self.screenshot, self.seen)
         ctx.done(todo.id, delivery)
 
 
@@ -1157,7 +1157,7 @@ class ProblemVerb(RequestedOrderVerb):
     def respond(self, ctx: Commander, references: tuple[MessageReference, ...]) -> None:
         document = OrderFile.read(Path(self.order).read_text())
         location = FileLine.from_wire(self.where)
-        checkout = ctx.repo_directory(document.order.check.directory)
+        checkout = Repo.selected(ctx.repos, document.order.check.directory).checkout
         if checkout.is_dir():
             ctx.comms.goals.todos.require_recurrence_declaration(
                 document.order, location, checkout, document.slop, time.time())
