@@ -143,7 +143,7 @@ class PrivateNkLaunch(RootLaunch):
             package = VerifiedNativePackage.acquire(pinned_native_package())
         except NativePackageError as error:
             raise PublicationActivationBlocked(
-                "private owner launch needs this installation's prepared native package"
+                f"private owner launch needs this installation's prepared native package: {error}"
             ) from error
         return cls(root, wire_root_id, package)
 
