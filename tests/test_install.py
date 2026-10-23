@@ -197,14 +197,20 @@ def test_an_install_without_flags_keeps_the_recorded_commander_and_rehomes_its_p
     comms = Comms(root)
     comms.registry.declare(comms.registry.new_thread("lead", frozenset(), str(private_directory)))
     old_home = private_directory / "old-home"
-    recorded = CommanderConfig.on_machine("lead", (), root, old_home, frozenset({"parked-unit"}))
+    from agent_comms.threads import ParkedThreadWorkState
+
+    comms.registry.declare(comms.registry.new_thread(
+        "parked-unit", frozenset(), str(private_directory)))
+    comms.registry.set_work_state("parked-unit", ParkedThreadWorkState())
+    recorded = CommanderConfig.on_machine("lead", (), root, old_home)
     recorded.write(old_home)
     home = _harnessless_home(private_directory, monkeypatch)
     result = InstallCliCommand(project=private_directory).apply(comms)
-    expected = CommanderConfig.on_machine("lead", (), root, home, frozenset({"parked-unit"}))
+    expected = CommanderConfig.on_machine("lead", (), root, home)
     assert result.config == WrittenConfigFile(str(CommanderConfig.path(home)))
     assert CommanderConfig.path_in(root).read_text() == expected.model_dump_json(indent=1) + "\n"
     assert CommanderConfig.read(CommanderConfig.path(home)) == expected
+    assert comms.registry.require("parked-unit").work_state == ParkedThreadWorkState()
 
 
 def test_a_practice_copy_of_a_bus_without_messages_reads_its_history_twice(private_directory, capsys):
