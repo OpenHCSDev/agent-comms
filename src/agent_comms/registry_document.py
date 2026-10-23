@@ -56,7 +56,7 @@ from .thread_status import (
 )
 from .thread_text import ForkedParent, NoParent
 from .threads import Thread
-from .turn_lease import FinishedTurnFence, NoFinishedTurn, TurnCompletion, TurnLeaseFence
+from .turn_lease import FinishedTurn, FinishedTurnFence, NoFinishedTurn, TurnCompletion, TurnLeaseFence
 
 if TYPE_CHECKING:
     from .activity import ObservedActivity
@@ -700,8 +700,8 @@ class RegistryDocument(RegistryPresence[dict[str, ThreadStatus]]):
         keeps_resume = turn.phase.keeps_project_resume
         record.without_claim()
         self.threads[name] = replace(
-            current.without_turn(),
-            last_finished_turn_id=(lease.turn_id if current.turn_generation else None),
+            current,
+            turn_record=FinishedTurn(lease.turn_id),
             project_resume_due=current.project_resume_due and keeps_resume,
         )
         self.last_seen[name] = time.time()

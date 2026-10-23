@@ -88,7 +88,6 @@ class UpdatedRegistration(RegistrationChange):
                     process_identity=self.previous.process_identity,
                     turn_record=self.previous.turn_record,
                     turn_generation=self.previous.turn_generation,
-                    last_finished_turn_id=self.previous.last_finished_turn_id,
                 ),
             )
         return requested.process_identity.registration_change(

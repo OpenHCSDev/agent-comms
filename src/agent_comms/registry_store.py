@@ -170,7 +170,6 @@ class RegistryEdit:
         leased = replace(
             current,
             turn_generation=identity.generation,
-            last_finished_turn_id=None,
             project_resume_due=False,
             turn_record=StoredTurnRecord.begin(self.store.path, identity, turn),
         )
