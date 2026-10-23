@@ -20,7 +20,6 @@ start and result through the bus's ordinary publisher.
 """
 from __future__ import annotations
 
-
 import hashlib
 import json
 import os

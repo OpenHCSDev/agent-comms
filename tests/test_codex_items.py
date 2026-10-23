@@ -4,12 +4,12 @@ from agent_comms.transcript_events import UserTranscript
 
 
 def _output(tmp_path):
-    from agent_comms.comms import wire as wire_comms
+    from agent_comms.comms import wire
     from agent_comms.runtime_updates import ThreadOutput
     from agent_comms.thread_execution import ExternalThreadExecution
     from agent_comms.threads import Thread
 
-    comms = wire_comms(tmp_path)
+    comms = wire(tmp_path)
     comms.registry.declare(comms.registry.new_thread('cli', frozenset(), str(tmp_path), execution=ExternalThreadExecution))
     return ThreadOutput(comms.transcripts.external('cli'), comms.agents)
 
@@ -133,13 +133,13 @@ def test_function_outputs_keep_wire_fields_and_source_clocks_in_page_and_live_de
     from agent_comms.runtime_updates import FinishedItem
 
     for name, item_type in (("comms_send", SendOutputItem), ("other_tool", FunctionOutputItem)):
-        wire = {"type": "functionCallOutput", "id": "out", "name": name, "output": "result"}
+        payload = {"type": "functionCallOutput", "id": "out", "name": name, "output": "result"}
         page = ItemsPage.model_validate({"data": [{
-            "turnId": "turn", "startedAtMs": 1000, "completedAtMs": 2000, "item": wire,
+            "turnId": "turn", "startedAtMs": 1000, "completedAtMs": 2000, "item": payload,
         }]})
         entry, = page.data
         assert type(entry.item) is item_type
-        assert entry.item.model_dump(mode="json") == wire
+        assert entry.item.model_dump(mode="json") == payload
         expected = () if item_type is SendOutputItem else (
             ToolEndTranscript(position="out", tool_call_id="out", tool_name=name, text="result", timestamp=1.0),)
         assert entry.publication().events == expected
@@ -147,11 +147,11 @@ def test_function_outputs_keep_wire_fields_and_source_clocks_in_page_and_live_de
         stream = ItemStream("thread")
         output = _output(tmp_path / name)
         started, = stream.receive(RpcNotification(method="item/started", params={
-            "threadId": "thread", "turnId": "turn", "startedAtMs": 1000, "item": wire,
+            "threadId": "thread", "turnId": "turn", "startedAtMs": 1000, "item": payload,
         }))
         started.accumulate(output)
         complete, = stream.receive(RpcNotification(method="item/completed", params={
-            "threadId": "thread", "turnId": "turn", "completedAtMs": 2000, "item": wire,
+            "threadId": "thread", "turnId": "turn", "completedAtMs": 2000, "item": payload,
         }))
         finished, = complete.accumulate(output)
         assert finished.events == (() if item_type is SendOutputItem else (
@@ -177,12 +177,12 @@ def test_shared_tool_input_and_text_display_preserve_external_shapes():
     from agent_comms.cli_bridges.codex_protocol import ItemEntry, TextInput, ToolText
 
     assert TextInput(text="visible").display == ToolText(text="visible").display == "visible"
-    for wire in (
+    for payload in (
         {"type": "dynamicToolCall", "id": "dynamic", "tool": "example",
          "arguments": {"path": "input"}, "success": True},
         {"type": "mcpToolCall", "id": "mcp", "server": "local", "tool": "example",
          "arguments": {"path": "input"}, "status": "completed"},
     ):
-        item = ItemEntry.model_validate({"turnId": "turn", "item": wire}).item
-        assert item.arguments == wire["arguments"]
-        assert item.model_dump(mode="json", by_alias=True)["arguments"] == wire["arguments"]
+        item = ItemEntry.model_validate({"turnId": "turn", "item": payload}).item
+        assert item.arguments == payload["arguments"]
+        assert item.model_dump(mode="json", by_alias=True)["arguments"] == payload["arguments"]

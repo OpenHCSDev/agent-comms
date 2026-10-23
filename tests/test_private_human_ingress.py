@@ -16,7 +16,7 @@ import pytest
 
 from agent_comms.bus_publication import HumanOrigin
 from agent_comms.channel_targets import CommandTarget
-from agent_comms.comms import Comms, wire, wire as wire_comms
+from agent_comms.comms import Comms, wire
 from agent_comms.coordination_cohort import accept_delivery_cohort
 from agent_comms.coordination_database import CoordinationStore
 from agent_comms.coordination_results import Applied
@@ -76,7 +76,7 @@ class InterruptCompletionTaskAttachment(CompletionFailureTaskAttachment):
 def _root(tmp_path: Path) -> tuple[Comms, Coordination, str, dict[str, str]]:
     root = tmp_path / "wire"
     root.mkdir(mode=0o700)
-    comms = prepare_native_comms(wire_comms(root))
+    comms = prepare_native_comms(wire(root))
     comms.channels.create_tag("team")
     lookups: dict[str, str] = {}
     for name, created_at in (("alice", 17001.0), ("bob", 17002.0)):
@@ -191,11 +191,11 @@ def test_preappend_route_or_target_denial_has_no_bus_row(tmp_path: Path) -> None
 
 def test_cooperating_process_objects_serialize_distinct_user_inputs(tmp_path: Path) -> None:
     comms, _, root_id, _ = _root(tmp_path)
-    roots = [wire_comms(comms.root), wire_comms(comms.root)]
+    roots = [wire(comms.root), wire(comms.root)]
     with ThreadPoolExecutor(max_workers=2) as pool:
         futures = [
-            pool.submit(wire.messaging.send_user_message, CommandTarget.named("#team"), f"input-{n}", worktree=str(tmp_path))
-            for n, wire in enumerate(roots)
+            pool.submit(service.messaging.send_user_message, CommandTarget.named("#team"), f"input-{n}", worktree=str(tmp_path))
+            for n, service in enumerate(roots)
         ]
         messages = [future.result(timeout=5) for future in futures]
     assert sorted(message.seq for message in messages) == [1, 2]
