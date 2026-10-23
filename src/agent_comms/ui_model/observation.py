@@ -798,11 +798,19 @@ class NotificationReading(Observation[ObserveNotifications]):
                                   UnreadableNotificationsRead(revision)))
 
 
+@dataclass(frozen=True)
+class LocatedThreads:
+    activity: Mapping[str, ObservedActivity | DeletedThread]
+    names: frozenset[str]
+    reads: Mapping[str, Callable[[], ThreadPresentation]]
+
+
 class ThreadReading(Observation[ObserveThreads]):
     def __init__(self, request: ObserveThreads):
         super().__init__(request)
         self.observed = ThreadsObserved(WireRevision.empty(), {}, frozenset(), {})
         self.initial = request.names
+        self.located_threads = LocatedThreads({}, request.names, {})
 
     def continue_from(self, previous: Self) -> Self:
         self.observed = previous.observed
@@ -812,37 +820,45 @@ class ThreadReading(Observation[ObserveThreads]):
     def read(self, comms: Comms, revision: WireRevision) -> Generator[ObservationStep]:
         previous = self.observed
         results: dict[str, ThreadReadResult] = {}
-        activity: dict[str, ObservedActivity | DeletedThread] = {}
-        names = self.request.names
-
-        def located() -> dict[str, Callable[[], ThreadPresentation]]:
-            nonlocal activity, names
-            readable, _ = previous.revision_inputs()
-            watched = names | frozenset(actor for view in readable.values()
-                                        for actor in view.notification_activity_names())
-            activity = comms.registry.snapshot().observed_activity(comms.agents, watched)
-            names = (revision.changed_threads(previous, comms, activity) | names - previous.results.keys()) & names
-            if not names:
-                return {}
-            batch = comms.views.thread_presentations(names)
-            return {name: partial(batch.read, name) for name in names}
-
-        def failed(result: ThreadReadResult) -> Iterator[ObservationStep]:
-            results.update(dict.fromkeys(names, result))
-            return iter(())
-
-        yield from UnreadableHistory.outcome(located).answer(
-            lambda reads: self.presented(reads, results),
-            lambda error: failed(ThreadBusy()), lambda error: failed(ThreadUnavailable(error)))
+        outcome = UnreadableHistory.outcome(partial(self.located, comms, revision, previous))
+        located = self.located_threads
+        yield from outcome.answer(
+            lambda located: self.presented(located.reads, results),
+            lambda error: self.failed(located.names, ThreadBusy(), results),
+            lambda error: self.failed(located.names, ThreadUnavailable(error), results))
         results.update((name, value) for name, value in previous.results.items()
-                       if name in self.request.names and name not in names)
-        observed = ThreadsObserved(revision, results, frozenset(), activity)
+                       if name in self.request.names and name not in located.names)
+        observed = ThreadsObserved(revision, results, frozenset(), located.activity)
         self.observed = observed
         changed = observed.changed_since(previous) | self.initial
         self.initial = frozenset()
         if changed:
             yield replace(observed, changed=changed,
                           results={name: value for name, value in results.items() if name in changed})
+
+    def located(self, comms: Comms, revision: WireRevision, previous: ThreadsObserved) -> LocatedThreads:
+        # Keep each completed stage when a later stored read fails, exactly as
+        # the original read did before its activity/names became declared state.
+        self.located_threads = LocatedThreads({}, self.request.names, {})
+        readable, _ = previous.revision_inputs()
+        names = self.located_threads.names
+        watched = names | frozenset(actor for view in readable.values()
+                                    for actor in view.notification_activity_names())
+        activity = comms.registry.snapshot().observed_activity(comms.agents, watched)
+        self.located_threads = replace(self.located_threads, activity=activity)
+        names = (revision.changed_threads(previous, comms, activity) | names - previous.results.keys()) & names
+        self.located_threads = replace(self.located_threads, names=names)
+        if names:
+            batch = comms.views.thread_presentations(names)
+            self.located_threads = replace(
+                self.located_threads, reads={name: partial(batch.read, name) for name in names})
+        return self.located_threads
+
+    @staticmethod
+    def failed(names: frozenset[str], result: ThreadReadResult,
+               results: dict[str, ThreadReadResult]) -> Iterator[ObservationStep]:
+        results.update(dict.fromkeys(names, result))
+        return iter(())
 
     @staticmethod
     def presented(reads: Mapping[str, Callable[[], ThreadPresentation]],
