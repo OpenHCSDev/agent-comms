@@ -48,15 +48,15 @@ class LedgerSlot(ABC):
     def files(self) -> tuple[Path, ...]:
         return (self.consumed,)
 
-    def require_acknowledgement(self, original: bytes) -> None:
-        """A consumed file does not claim a terminal acknowledgement."""
+    def contents(self) -> bytes:
+        return self.consumed.read_bytes()
 
     def retire_acknowledgement(self) -> None:
-        """A consumed file has no acknowledgement file to retire."""
+        for acknowledgement in self.files[1:]:
+            acknowledgement.unlink()
 
     def read(self) -> SelectedToolSlot:
-        original = self.consumed.read_bytes()
-        self.require_acknowledgement(original)
+        original = self.contents()
         return SelectedToolSlot(
             self.consumed.name,
             original.decode("ascii").removesuffix("\n"),
@@ -77,14 +77,14 @@ class AcknowledgedLedgerSlot(LedgerSlot):
     def files(self) -> tuple[Path, ...]:
         return (self.consumed, self.acknowledgement)
 
-    def require_acknowledgement(self, original: bytes) -> None:
+    def contents(self) -> bytes:
+        original = super().contents()
         if self.acknowledgement.read_bytes() != original:
             raise RelationViolationError(
-                f"Selected tool acknowledgement differs from {self.consumed}: {self.acknowledgement}"
+                f"Selected tool acknowledgement differs from {self.consumed}: "
+                f"{self.acknowledgement}"
             )
-
-    def retire_acknowledgement(self) -> None:
-        self.acknowledgement.unlink()
+        return original
 
 
 class SelectedToolSlots(Carry):
@@ -101,7 +101,7 @@ class SelectedToolSlots(Carry):
         return tuple(sorted(directories))
 
     def slots(self) -> tuple[LedgerSlot, ...]:
-        slots = []
+        slots: list[LedgerSlot] = []
         for directory in self.directories():
             files = frozenset(directory.iterdir())
             for path in files:
