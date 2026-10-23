@@ -82,10 +82,6 @@ def install_checkout(tmp_path) -> Path:
     checkout = tmp_path / "checkout"
     subprocess.run(["git", "clone", "--shared", "-q", REPOSITORY, checkout], check=True)
     Checkout(checkout).prepare()
-    subprocess.run(["git", "-C", checkout, "rm", "-q", "tools/cutover/carry_bus_history.py"], check=True)
-    subprocess.run(["git", "-C", checkout, "-c", "user.name=Installer test",
-                    "-c", "user.email=installer@example.invalid", "commit",
-                    "-qm", "Retire the completed history carry on an already-converted bus"], check=True)
     return checkout
 
 

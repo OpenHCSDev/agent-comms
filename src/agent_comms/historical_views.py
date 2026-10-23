@@ -13,6 +13,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from .bus import Bus
+from .channel_targets import CommandTarget, NamedTarget, ThreadTarget
 from .channels import Channel
 from .coordination_errors import HistoricalSourceChanged
 from .errors import UnregisteredThreadError
@@ -120,18 +121,20 @@ class ConversationHistoryView:
         return page.selection.identity == earlier.selection.identity
 
     @classmethod
-    def revision(cls, views: HistoryViews, target: str, earlier: ConversationObservation,
+    def revision(cls, views: HistoryViews, target: str | NamedTarget,
+                 earlier: ConversationObservation,
                  *, worktree: str) -> ConversationRevision:
         return earlier.capture(
             views.revision(), partial(cls._read_revision, views, target, worktree))
 
     @classmethod
-    def _read_revision(cls, views: HistoryViews, target: str,
+    def _read_revision(cls, views: HistoryViews, target: str | NamedTarget,
                        worktree: str) -> ConversationRevision:
         worktree = str(Path(worktree).resolve())
         viewer = views.messaging.user_identity(worktree).name
         with views.registry.store.reading(views.channels.catalog):
             snapshot = views.registry.store.read_snapshot_unlocked()
+            target = CommandTarget.named(target)
             stores = views.revision()
             return ConversationRevision(
                 stores, cls._selection(
@@ -143,7 +146,7 @@ class ConversationHistoryView:
     @classmethod
     @abstractmethod
     def _selection(cls, views: HistoryViews, snapshot: RegistrySnapshot, catalog: CatalogDocument,
-                   viewer: str, target: str, worktree: str,
+                   viewer: str, target: NamedTarget, worktree: str,
                    history_revision: FileObservation) -> DisplayIdentity: ...
 
     def page_request(self, scope, bounds: PageBounds) -> MessagePageRequest:
@@ -165,10 +168,10 @@ class ChannelDisplayHistory(ConversationHistoryView, HistoryView):
 
     @classmethod
     def _selection(cls, views: HistoryViews, snapshot: RegistrySnapshot, catalog: CatalogDocument,
-                   viewer: str, target: str, worktree: str,
+                   viewer: str, target: NamedTarget, worktree: str,
                    history_revision: FileObservation) -> ChannelDisplayIdentity:
         with views.bus.opened_activity() as activity:
-            channel = catalog.require_channel(target, activity)
+            channel = catalog.require_channel(target.selected_name(snapshot), activity)
         return ChannelDisplayIdentity(
             viewer=snapshot.require(viewer).incarnation,
             bus_identity=RecordedBusIdentity.capture(views.bus.bus.path),
@@ -185,10 +188,11 @@ class ChannelDisplayHistory(ConversationHistoryView, HistoryView):
 @dataclass(frozen=True, slots=True)
 class DMHistory(HistoryView):
     first: str
-    second: str
+    second: str | ThreadTarget
 
     def capture(self, snapshot: RegistryProvenance) -> DMDisplayScope:
-        return DMDisplayScope.capture(self.first, self.second, snapshot)
+        return DMDisplayScope.capture(
+            self.first, CommandTarget.named(self.second).selected_name(snapshot), snapshot)
 
 
 @dataclass(frozen=True, slots=True)
@@ -197,19 +201,20 @@ class DMDisplayHistory(ConversationHistoryView, DMHistory):
 
     @classmethod
     def _selection(cls, views: HistoryViews, snapshot: RegistrySnapshot, catalog: CatalogDocument,
-                   viewer: str, target: str, worktree: str,
+                   viewer: str, target: NamedTarget, worktree: str,
                    history_revision: FileObservation) -> DMDisplayIdentity:
+        name = target.selected_name(snapshot)
         try:
-            peer = snapshot.participant(target).incarnation
+            peer = snapshot.participant(name).incarnation
         except UnregisteredThreadError:
-            peer = UnrecordedThreadIncarnation(snapshot.canonical_name(target))
+            peer = UnrecordedThreadIncarnation(name)
         root = views.root.stat()
         return DMDisplayIdentity(
             root_identity=(root.st_dev, root.st_ino),
             bus_identity=RecordedBusIdentity.capture(views.bus.bus.path),
-            worktree=worktree, requested_peer=target,
+            worktree=worktree, requested_peer=target.name,
             viewer=snapshot.require(viewer).incarnation, peer=peer,
-            scope=DMDisplayScope.capture(viewer, target, snapshot), history_revision=history_revision,
+            scope=DMDisplayScope.capture(viewer, name, snapshot), history_revision=history_revision,
         )
 
     @property
@@ -220,7 +225,12 @@ class DMDisplayHistory(ConversationHistoryView, DMHistory):
         from .read_basis import DMDisplayBasis
 
         bus = presentation.bus
-        if self.second not in presentation.registry and bus.history.threads(self.second):
+        target = CommandTarget.named(self.second)
+        target.require_dm_peer()
+        with presentation.registry.store.reading_snapshot() as snapshot:
+            peer = target.selected_name(snapshot)
+            missing = peer not in snapshot.threads
+        if missing and bus.history.threads(peer):
             return MessagePage((), False, False, NoDisplaySelection())
         return DMDisplayBasis.fetch_page(
             bus,

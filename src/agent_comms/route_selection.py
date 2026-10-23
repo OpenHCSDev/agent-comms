@@ -14,12 +14,11 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import TypeVar
 
+from agent_comms import errors
+
 from .active_route import CommsRoute, resolve_comms_route
 from .launch_root import LaunchRoot
 
-
-class RouteChanged(ValueError):
-    """The selected Comms route was replaced; reopen against the current one."""
 
 T = TypeVar("T")
 
@@ -49,7 +48,7 @@ class RouteSelection:
         route = resolve_comms_route()
         selection = cls(route, route.observe_root())
         if source is not None and Path(source).expanduser().resolve() != selection.root:
-            raise RouteChanged("Comms route changed; reopen this view")
+            raise errors.RouteChangedError(errors.RouteChangedError.reader_sentence)
         return selection
 
     @classmethod

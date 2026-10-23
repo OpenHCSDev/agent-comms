@@ -126,16 +126,12 @@ class InstallReportProbe(RuntimeProbe[None], ServiceSender):
     body: str
 
     def run(self) -> None:
-        from agent_comms.bus_publication import AgentOrigin
         from agent_comms.channel_targets import CommsTag
         from agent_comms.comms import client_wire
-        from agent_comms.messages import InfoKind, Message
 
         with client_wire(self.root) as comms:
             self.register(comms.registry)
-            comms.bus.publisher.publish_ordinary(
-                Message(sender=self.sender, target=CommsTag.channel(),
-                        body=self.body, type=InfoKind), origin=AgentOrigin())
+            comms.messaging.send(self.sender, CommsTag.channel(), self.body)
 
 
 @dataclass(frozen=True)

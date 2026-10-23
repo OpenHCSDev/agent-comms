@@ -3,11 +3,11 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from collections.abc import Callable, Iterable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, ClassVar, overload
 
 from .declared_family import DeclaredFamily
-from .errors import RelationViolationError, UnregisteredThreadError
+from .errors import HumanSendRefusedError, RelationViolationError, UnregisteredThreadError
 from .field_codec import NullMember, SingleFieldValue, SubclassUnion
 from .history_result import DmHistoryPageResult, HistoryPageResult
 from .response_policy import DirectPolicy, MentionedOnlyPolicy
@@ -23,6 +23,7 @@ if TYPE_CHECKING:
     from .messages import Message
     from .read_basis import ChannelConversation, Conversation, DisplayViewer, DMConversation
     from .registry_provenance import RegistryProvenance
+    from .thread_identity import ThreadIncarnation
     from .thread_status import ThreadStatus
     from .threads import Thread
 
@@ -94,7 +95,7 @@ class CommandTarget(ABC):
 
     @staticmethod
     @overload
-    def named(name: str) -> NamedTarget: ...
+    def named(name: str | NamedTarget) -> NamedTarget: ...
 
     @staticmethod
     @overload
@@ -196,8 +197,12 @@ class NamedTarget(CommandTarget):
     @abstractmethod
     def mark_view_read(self, views: HistoryViews, worktree: str) -> None: ...
 
-    def canonical_name(self, canonical):
+    def canonical_name(self, canonical: Callable[[str], str]) -> str:
         return self.name
+
+    def selected_name(self, snapshot: RegistryProvenance) -> str:
+        """Bind this destination inside the registry cut used by its consumer."""
+        return self.canonical_name(snapshot.canonical_name)
 
     def require_channel(self):
         raise ValueError(f"{self.name!r} is not a channel target.")
@@ -248,7 +253,7 @@ class ThreadTarget(NamedTarget):
     def direct_names(self) -> tuple[str, ...]:
         return self.names
 
-    def canonical_name(self, canonical):
+    def canonical_name(self, canonical: Callable[[str], str]) -> str:
         return canonical(self.name)
 
     def require_dm_peer(self):
@@ -261,7 +266,7 @@ class ThreadTarget(NamedTarget):
 
     def history_view(self, viewer: DisplayViewer, require_channel: Callable[[str], Channel],
                      channel: type[ChannelHistory], direct: type[DMHistory]) -> HistoryView:
-        return viewer.direct_history(direct, self.name)
+        return viewer.direct_history(direct, self)
 
     def history_result(self, require_channel: Callable[[str], Channel], messages: tuple[Message, ...],
                        has_older: bool) -> HistoryPageResult:
@@ -271,16 +276,16 @@ class ThreadTarget(NamedTarget):
         return declaration.selection_channels(channel, self.name)
 
     def available(self, snapshot) -> bool:
-        return self.canonical_name(snapshot.canonical_name) in snapshot.threads
+        return self.selected_name(snapshot) in snapshot.threads
 
     def pending_count(
         self, counts: dict[str, int], snapshot: RegistryProvenance,
         require_channel: Callable[[str], Channel],
     ) -> int:
-        return counts.get(snapshot.require(self.name).name, 0)
+        return counts.get(snapshot.require(self.selected_name(snapshot)).name, 0)
 
     def resolve(self, snapshot, require_channel) -> ResolvedThread:
-        thread = snapshot.require(self.name)
+        thread = snapshot.require(self.selected_name(snapshot))
         return ResolvedThread(thread, snapshot.status(thread.name))
 
     def bindings(self, declaration, comms, channel, resolved: ResolvedThread, *, snapshot, catalog):
@@ -300,14 +305,14 @@ class ThreadTarget(NamedTarget):
         return FullWake()
 
     def require_publication(self, message, snapshot, require_channel):
-        target = self.canonical_name(snapshot.canonical_name)
+        target = self.selected_name(snapshot)
         if target not in snapshot.threads:
             raise UnregisteredThreadError(f"Target {self.name!r} is not a registered thread.")
         if target == snapshot.canonical_name(message.sender) and message.type.conversation_message:
             raise RelationViolationError(f"Thread {target!r} cannot message itself.")
 
     def initial_delivery(self, sender, message, snapshot, require_channel):
-        target = self.canonical_name(snapshot.canonical_name)
+        target = self.selected_name(snapshot)
         recipient = snapshot.require(target)
         snapshot.status(target).require_visible()
         if target == sender:
@@ -316,20 +321,46 @@ class ThreadTarget(NamedTarget):
         return ThreadTarget(target), message, names
 
     def display_scope(self, viewer, snapshot, require_channel, direct_scope):
-        return direct_scope.capture(viewer, snapshot.require(self.name).name, snapshot)
+        return direct_scope.capture(
+            viewer, snapshot.require(self.selected_name(snapshot)).name, snapshot)
 
     def conversation_key(self, sender, snapshot, channel, direct):
-        names = sorted({snapshot.canonical_name(sender), self.canonical_name(snapshot.canonical_name)})
+        names = sorted({snapshot.canonical_name(sender), self.selected_name(snapshot)})
         return direct(participants=tuple(snapshot.participant(name).incarnation for name in names))
 
     def changed_threads(
         self, names: Iterable[str], snapshot: RegistryProvenance,
         catalog: CatalogDocument, activity: ActivityClocks,
     ) -> tuple[str, ...]:
-        return (self.canonical_name(snapshot.canonical_name),)
+        return (self.selected_name(snapshot),)
 
     def mark_view_read(self, views: HistoryViews, worktree: str) -> None:
         views.mark_thread_user_read(self.name, worktree=worktree)
+
+
+@dataclass(frozen=True)
+class IncarnationThreadTarget(ThreadTarget):
+    """A retained DM addresses its original birth, never a name's successor."""
+
+    name: str = field(init=False)
+    incarnation: ThreadIncarnation
+
+    def __post_init__(self) -> None:
+        self.incarnation.require_recorded()
+        object.__setattr__(self, "name", self.incarnation.name)
+
+    def selected_name(self, snapshot: RegistryProvenance) -> str:
+        if not self.incarnation.current(snapshot):
+            raise UnregisteredThreadError(
+                f"Original DM peer {self.name!r} is no longer registered.")
+        return super().selected_name(snapshot)
+
+    def require_publication(self, message: Message, snapshot: RegistryProvenance,
+                            require_channel: Callable[[str], Channel]) -> None:
+        try:
+            super().require_publication(message, snapshot, require_channel)
+        except UnregisteredThreadError as error:
+            raise HumanSendRefusedError(error) from error
 
 
 class ChannelTarget(NamedTarget):

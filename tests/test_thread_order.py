@@ -1,5 +1,7 @@
 """Sort timestamps must reflect thread events, never attachment or heartbeat."""
 
+from agent_comms.channel_targets import CommandTarget
+
 
 import os
 
@@ -20,12 +22,12 @@ def test_sort_metadata_survives_selection_heartbeat_and_rename(tmp_path, monkeyp
     comms.bus.publisher.publish_ordinary(
         Message(
             sender="alpha", target="beta", body="outgoing", type=InfoKind, timestamp=400
-        ), origin=AgentOrigin()
+        ), destination=CommandTarget.named("beta"), origin=AgentOrigin()
     ).message_id
     comms.bus.publisher.publish_ordinary(
         Message(
             sender="beta", target="alpha", body="incoming", type=InfoKind, timestamp=500
-        ), origin=AgentOrigin()
+        ), destination=CommandTarget.named("alpha"), origin=AgentOrigin()
     ).message_id
     with comms.bus.opened_activity() as clocks:
         assert comms.views.last_sent_timestamps(clocks.sent.items(), registry=comms.registry.snapshot()) == {"alpha": 400, "beta": 500}

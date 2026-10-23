@@ -1,4 +1,6 @@
 """Held-order recovery and unanswered DMs on an independently copied bus."""
+
+from agent_comms.channel_targets import CommandTarget
 import asyncio
 import json
 import os
@@ -177,7 +179,7 @@ def test_an_active_goal_with_an_unresolved_attempt_is_reported_never_retried(hel
 def publish(comms, sender, target, timestamp, *, answers=()):
     return comms.bus.publisher.publish_ordinary(
         Message(sender=sender, target=target, type=QuestionKind, body="Inspect the pending work",
-                timestamp=timestamp, answers=answers), origin=AgentOrigin(),
+                timestamp=timestamp, answers=answers), destination=CommandTarget.named(target), origin=AgentOrigin(),
     )
 
 
@@ -348,7 +350,7 @@ def test_latest_answer_retains_the_original_response_eligibility(
     sender = user.name if user else "worker"
     origin = HumanOrigin.of(user) if user else AgentOrigin()
     original = held_bus.bus.publisher.publish_ordinary(
-        Message(sender, target, body, InfoKind, timestamp=now - 20, role=role), origin=origin,
+        Message(sender, target, body, InfoKind, timestamp=now - 20, role=role), destination=CommandTarget.named(target), origin=origin,
     )
     reply = publish(held_bus, "lead", sender, now - 10, answers=(original.reference,))
     scope = RepliesDisplayScope(frozenset({"lead"}), frozenset({sender}))
@@ -375,7 +377,7 @@ def test_latest_answer_retains_the_original_commander_alias(held_bus):
 def test_commander_say_answers_an_unanswered_unit_message(held_bus, target, body, tmp_path):
     question = held_bus.bus.publisher.publish_ordinary(
         Message(sender='worker', target=target, type=QuestionKind, body=body,
-                timestamp=time.time() - AwaitingCommander.seconds - 1), origin=AgentOrigin(),
+                timestamp=time.time() - AwaitingCommander.seconds - 1), destination=CommandTarget.named(target), origin=AgentOrigin(),
     )
     ctx = Commander.read_root(held_bus.root)
     reply = tmp_path / 'reply.txt'
@@ -422,7 +424,7 @@ def test_answering_one_owed_message_leaves_another_owed(held_bus, tmp_path):
 def test_an_overdue_owner_directive_gates_until_answered(held_bus, tmp_path):
     directive = held_bus.bus.publisher.publish_ordinary(
         Message(sender="outsider", target="lead", type=InfoKind, body="Ship the install now",
-                timestamp=time.time() - 3600), origin=AgentOrigin(),
+                timestamp=time.time() - 3600), destination=CommandTarget.named("lead"), origin=AgentOrigin(),
     )
     store = held_bus.goals.todos
     selected = NewestOpenRequest().select(store, held_bus.registry.require('lead').incarnation)
