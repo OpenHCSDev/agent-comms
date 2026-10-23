@@ -16,7 +16,6 @@ from pathlib import Path
 
 import pytest
 
-from agent_comms.thread_identity import RecordedThreadIncarnation
 from agent_comms.coordinated_runtime import SelectedExecution
 from agent_comms.coordination_errors import IdentityConflict
 from agent_comms.coordinator import Coordination
@@ -251,9 +250,7 @@ async def test_native_full_four_tools_publish_and_release(tmp_path, monkeypatch,
             proofs = read_historical_native_inputs(
                 store,
                 wire_root_id=root_id,
-                recipient_lookup=RecordedThreadIncarnation(
-                    "fixture", owner.created_at
-                ).lookup,
+                recipient_lookup=owner.incarnation.lookup,
                 source_seq=initial.message.seq,
                 source_reads=source_reads,
             )
