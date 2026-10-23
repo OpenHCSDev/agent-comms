@@ -23,7 +23,7 @@ from agent_comms.active_route import ActiveRoute, _route_directory, route_direct
 from agent_comms.coordination_errors import CoordinationError
 from agent_comms.field_codec import FieldCodec, PathText
 from agent_comms.installer.interpreter_operation import RouteSelection
-from agent_comms.locked_store import LockedStore, RootFile, RuntimeFile, SQLiteFile, UndeclaredFile
+from agent_comms.locked_store import LockedStore, RootFile, RuntimeFile, UndeclaredFile
 from agent_comms.private_path import FileObservation, FileRevision, MissingFile
 from agent_comms.store_files import AtomicFile
 
@@ -183,9 +183,10 @@ class StoreBackup(ResourceBackup):
     def spill_directory(self, configured: Path) -> Path:
         return self.path
 
-    def files(self) -> dict[Annotated[Path, PathText], str]:
-        return FieldCodec.decode(dict[Annotated[Path, PathText], str],
-                                 FieldCodec.parse((self.path / 'files.json').read_text()))
+    def files(self) -> dict[Path, str]:
+        stored = FieldCodec.decode(dict[str, str],
+                                   FieldCodec.parse((self.path / 'files.json').read_text()))
+        return {PathText.decode(path): digest for path, digest in stored.items()}
 
     def selected_files(self) -> tuple[Annotated[Path, PathText], ...]:
         return FieldCodec.decode(tuple[Annotated[Path, PathText], ...],
@@ -261,8 +262,8 @@ class StoreBackup(ResourceBackup):
             if route.exists():
                 shutil.copy2(route, path / 'active-route.json')
             backup.route_revision = FileRevision.capture(route)
-        AtomicFile(path / 'files.json').write_text(json.dumps(FieldCodec.encode(
-            contents, dict[Annotated[Path, PathText], str]), indent=1))
+        AtomicFile(path / 'files.json').write_text(json.dumps(
+            {PathText.encode(file): digest for file, digest in contents.items()}, indent=1))
         return backup
 
     def retain(self, spill_dir: Path) -> tuple[Path, ...]:
@@ -305,24 +306,23 @@ class StoreBackup(ResourceBackup):
         """Copy committed files; their owners declare transient names before any stat."""
 
         def transient(directory: str, names: list[str]) -> set[str]:
-            omitted: set[str] = set()
-            for name in sorted(names):
-                path = Path(directory) / name
-                if name in omitted or path in excluded or LockedStore.is_staging(path):
-                    omitted.add(name)
+            omitted: set[Path] = set()
+            for path in sorted(Path(directory) / name for name in names):
+                if path in omitted or path in excluded or LockedStore.is_staging(path):
+                    omitted.add(path)
                     continue
                 if stat.S_ISSOCK(path.lstat().st_mode):
-                    omitted.add(name)
+                    omitted.add(path)
                 elif path.is_file() and not path.is_symlink():
                     owner = RootFile.content_owner(path)
-                    omitted.update(companion.name for companion in owner.files(path)[1:])
-            return omitted
+                    omitted.update(owner.member_paths(path) - {path})
+            return {path.name for path in omitted}
 
         shutil.copytree(
             source, target, symlinks=True, ignore=transient, copy_function=cls.copy_file
         )
 
-    def capture(self, files: tuple[Path, ...]) -> dict[Annotated[Path, PathText], str]:
+    def capture(self, files: tuple[Path, ...]) -> dict[Path, str]:
         contents: dict[Path, str] = {}
         for source in files:
             if not source.exists():
@@ -336,7 +336,7 @@ class StoreBackup(ResourceBackup):
             Platform.current().sync_directory(target.parent)
         return contents
 
-    def file_original(self, name: Path, saved: dict[Annotated[Path, PathText], str]) -> bool:
+    def file_original(self, name: Path, saved: dict[Path, str]) -> bool:
         """An unchanged selected file keeps its identity as well as its contents."""
         target = self.root / name
         if name not in saved:
