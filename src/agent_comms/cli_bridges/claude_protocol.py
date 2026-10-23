@@ -694,7 +694,7 @@ class SystemRecord(ClaudeRecord, declared_name='system'):
     def decode_subtype(cls, value: dict) -> dict:
         # Claude places both discriminators on one envelope. Decode that shape
         # once; its declared subtype owns the behavior and any retained fields.
-        return {'subtype': value}
+        return {**value, 'subtype': value}
 
     def updates(self, session: ClaudeSession) -> tuple[RuntimeUpdate, ...]:
         return self.subtype.updates(session)
