@@ -6,7 +6,7 @@ longer had (fixed in #2419); every required check passed both, because nothing r
 installer. These checks rehearse an already-current bus format through the CLI:
 launch, target tree, staged stack build, carried practice copy and the outgoing
 runtime's owner probe. The outgoing package uses this source; the isolated target
-retires the history converter, as an already-converted installation does.
+records a distinct incoming revision while retaining every declared carry dependency.
 The predecessor-history carry has its own real-writer fixture in test_carry_bus_history.
 """
 from __future__ import annotations
@@ -82,6 +82,9 @@ def install_checkout(tmp_path) -> Path:
     checkout = tmp_path / "checkout"
     subprocess.run(["git", "clone", "--shared", "-q", REPOSITORY, checkout], check=True)
     Checkout(checkout).prepare()
+    subprocess.run(["git", "-C", checkout, "-c", "user.name=Installer test",
+                    "-c", "user.email=installer@example.invalid", "commit", "--allow-empty",
+                    "-qm", "Record the incoming installer qualification revision"], check=True)
     return checkout
 
 
