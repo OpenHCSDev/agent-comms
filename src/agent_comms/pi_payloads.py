@@ -23,6 +23,7 @@ from uuid import uuid4
 
 from pydantic import JsonValue
 
+from .annotation_disclosure import PublicInstructionAnnotations, WithheldAnnotations
 from .declared_family import DeclaredFamily, UnknownFamilyMember
 from .field_codec import (
     ExternalField,
@@ -747,12 +748,7 @@ class UnknownDiagnostic(UnknownPayload, PiDiagnostic):
 
 
 @dataclass(frozen=True)
-class PiMessage(ExternalNull, OpenPayload, affix="Message"):
-    def annotation_disclosure(self):
-        from .working_memory_disclosure import WithheldDisclosure
-
-        return WithheldDisclosure()
-
+class PiMessage(WithheldAnnotations, ExternalNull, OpenPayload, affix="Message"):
     @property
     def parts(self) -> tuple[PiContent, ...]:
         return (TextContent(self.content),) if isinstance(self.content, str) else self.content or ()
@@ -839,12 +835,7 @@ class AbsentMessage(ExternalNullMember, PiMessage):
 
 
 @dataclass(frozen=True)
-class AssistantMessage(PiMessage):
-    def annotation_disclosure(self):
-        from .working_memory_disclosure import PublicInstructionDisclosure
-
-        return PublicInstructionDisclosure()
-
+class AssistantMessage(PublicInstructionAnnotations, PiMessage):
     # Pi's assistant record always carries an array, including failed terminals.
     content: Annotated[tuple[PiContent, ...], WireRequired()] = ()
     # Original Pi completion metadata. These are observations, not registry
