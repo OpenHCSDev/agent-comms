@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
+from agent_comms.heartbeat_frame import HeartbeatFrame
 from agent_comms.message_bus import WatchPass
 from agent_comms.registration import Registration
 from agent_comms.service_sender import ServiceSender
@@ -73,7 +74,8 @@ class CommanderObservation:
         """One frame's progress facts come from ``reading``; Core reads the live forge and Git."""
         pulls = reading(StandingRule.todos(comms, thread.name))
         states = UnitState.current(comms, thread.name, pulls)
-        rules = StandingRule.broken(comms, thread.name, observed=states, pulls=pulls)
+        frame = HeartbeatFrame.read(comms, thread.name, pulls)
+        rules = StandingRule.broken(comms, thread.name, observed=states, frame=frame)
         merged = tuple(todo for state in states for todo in state.merged_orders(comms, pulls))
         return cls(thread, merged, rules, states)
 
