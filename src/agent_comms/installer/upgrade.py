@@ -540,7 +540,10 @@ class Stack:
         publishes with it). Copied from the prepared build, or built when no install has
         built this pin yet. Answers the staged build and its layout under ``stack/``."""
         manifest = self.checkout / "stack/pi-native.sha256"
-        NativeBuildInputs(self.checkout).require_pinned(manifest)
+        try:
+            NativeBuildInputs(self.checkout).require_pinned(manifest)
+        except ValueError as error:
+            raise UpgradeRefused(str(error)) from None
         native = pinned_package_for(manifest)
         layout = native.relative_to(manifest.parent)
         prepared = self.prepared_natives / layout
