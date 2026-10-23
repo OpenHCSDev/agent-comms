@@ -7,7 +7,7 @@ import os
 import threading
 import time
 from abc import ABC, abstractmethod
-from collections.abc import Callable, Iterator
+from collections.abc import Callable, Iterator, Sequence
 from contextlib import contextmanager
 from dataclasses import dataclass, field, replace
 from functools import cached_property
@@ -22,7 +22,7 @@ from .maintenance_barrier import CarriedDocument
 from .native_input_owner import RegistryOwner
 from .private_path import FileObservation, FileRevision, MissingFile
 from .private_registry_guard import PrivateRegistryGuard, PublicRegistry, RegistryPrivacy
-from .registration_change import NativeSourcePublication
+from .registration_change import InitialRegistration, NativeSourcePublication
 from .registry_document import (
     HistoricalRootPurpose,
     RegistryDocument,
@@ -143,6 +143,14 @@ class RegistryEdit:
     original: RegistryRevision
     superseded: list[StoredTurnRecord] = field(default_factory=list)
     """Turn files a lease in this edit replaced; deleted once the registry stops naming them."""
+
+    def restore_stopped(self, source: RegistrySnapshot, names: Sequence[str]) -> tuple[str, ...]:
+        restored = self.document.restore_stopped(source, names)
+        for name in restored:
+            InitialRegistration(
+                thread=self.document.require(name), status=self.document.status(name),
+            ).prepare_participant(self.store.path.parent)
+        return restored
 
     def prepare_native_source(self, owner: RegistryOwner, session_file: str) -> NativeSourcePublication:
         current = owner.require_source_snapshot(self.original.snapshot)

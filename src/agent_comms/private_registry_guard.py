@@ -22,7 +22,7 @@ import sqlite3
 import stat
 import struct
 from abc import ABC, abstractmethod
-from collections.abc import Callable, Iterable, Sequence
+from collections.abc import Callable, Sequence
 from pathlib import Path
 from typing import TYPE_CHECKING, NoReturn
 
@@ -35,6 +35,7 @@ from .field_codec import Id128Text, MalformedRecord
 from .locked_store import DurableFile, WireWakeFile
 from .native_runtime_input import NativeRuntimeInput, NativeRuntimeTable
 from .private_path import PrivateFileRole
+from .private_runtime_schema import PrivateCoordinatorSchema, PrivateCoordinatorTable
 
 if TYPE_CHECKING:
     from .acp_extension import CursorAdvancedUpdate, CursorScope
@@ -43,7 +44,6 @@ if TYPE_CHECKING:
     from .notification_assignment import NotificationAssignmentRead
     from .private_nk_entrypoint import RootLaunch
     from .registry_document import RegistrySnapshot
-    from .threads import Thread
     from .typed_table import TableSchema
 
 _MAGIC = b"ACRG"
@@ -143,9 +143,6 @@ class RegistryPrivacy(ABC):
     def write(self, registry_path: Path, text: str) -> None: ...
 
     @abstractmethod
-    def register_restored(self, threads: Iterable[Thread]) -> None: ...
-
-    @abstractmethod
     def launch(self, root: Path) -> RootLaunch: ...
 
     @abstractmethod
@@ -216,9 +213,6 @@ class PublicRegistry(RegistryPrivacy):
     def write(self, registry_path: Path, text: str) -> None:
         store_files.AtomicFile(registry_path).write_text(text)
 
-    def register_restored(self, threads: Iterable[Thread]) -> None:
-        """A public bus has no coordinator identities for restored threads."""
-
     def launch(self, root: Path) -> RootLaunch:
         from .private_nk_entrypoint import SharedRootLaunch
 
@@ -226,6 +220,11 @@ class PublicRegistry(RegistryPrivacy):
 
     def prepare_native(self, registry_path: Path) -> PrivateRegistryGuard:
         guard = PrivateRegistryGuard(registry_path, Id128Text.mint())
+        guard._trusted_root()
+        # Install the new private capabilities while the existing public schema
+        # still owns opening this file, before publishing the private guard.
+        with Coordination(str(CoordinationStore.path_in(registry_path.parent))) as store:
+            PrivateCoordinatorTable.install(store)
         guard.create_pending()
         guard.commit_initial()
         return guard
@@ -247,14 +246,10 @@ class PrivateRegistryGuard(DurableFile, WireWakeFile, RegistryPrivacy):
         return connection
 
     def coordinator_schema(self) -> type[TableSchema]:
-        from .private_runtime_schema import PrivateCoordinatorSchema, PrivateCoordinatorTable
-
         PrivateCoordinatorTable.declarations()
         return PrivateCoordinatorSchema
 
     def prepare_runtime(self) -> None:
-        from .private_runtime_schema import PrivateCoordinatorTable
-
         PrivateCoordinatorTable.declarations()
         with Coordination(str(CoordinationStore.path_in(self.registry_path.parent))) as store:
             PrivateCoordinatorTable.install(store)
@@ -454,15 +449,6 @@ class PrivateRegistryGuard(DurableFile, WireWakeFile, RegistryPrivacy):
         sequence, slot = self.prepare(digest)
         store_files.AtomicFile(registry_path).write_text(text)
         self.commit(sequence, slot, digest)
-
-    def register_restored(self, threads: Iterable[Thread]) -> None:
-        """Stopped subscribers still belong to frozen audiences; their coordinator identities
-        must exist before any cohort can be accepted."""
-        with Coordination(str(CoordinationStore.path_in(self.registry_path.parent))) as store:
-            for thread in threads:
-                store.participants.register(
-                    thread.incarnation.require_recorded().lookup,
-                    committed=True)
 
     def create_pending(self) -> None:
         """The registry lock covers explicit native preparation before coordinator setup."""
