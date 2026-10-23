@@ -33,6 +33,7 @@ from agent_comms.field_codec import Argument, FieldCodec
 from agent_comms.todos import (
     AcceptedVerdict,
     BluntText,
+    DirectiveText,
     DroppedVerdict,
     PeerAcceptedVerdict,
     ReviewedHeadVerdict,
@@ -346,7 +347,7 @@ class BackVerb(VerdictVerb):
             sys.exit('Refused: --fix needs 8+ words naming the owner and replacing shape')
         self.slop()
         order.refuse(self.roast, BluntText)
-        order.refuse(' '.join((self.why, self.roast, self.fix)), *order.OUTGOING)
+        order.refuse(' '.join((self.why, self.roast, self.fix)), *DirectiveText.checks())
 
 def main(args, ctx):
     JudgeVerb.parse(args or ['show']).apply(ctx)

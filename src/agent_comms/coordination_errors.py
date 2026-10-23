@@ -15,7 +15,11 @@ class CoordinationError(RuntimeError):
         return __newobj__, (type(self), *self.args), self.__dict__ | {"__cause__": self.__cause__}
 
 
-class CoordinationReadUnavailable(CoordinationError):
+class DeferredRead(Exception):  # noqa: N818 - capability, not an outcome
+    """A read refused only for now, for currentness or contention; retrying may answer it."""
+
+
+class CoordinationReadUnavailable(CoordinationError, DeferredRead):
     """No committed SQLite snapshot was acquired; no absence is established."""
 
     @classmethod
@@ -55,7 +59,7 @@ class ParticipantNotRegistered(IdentityConflict):  # noqa: N818 - nominal outcom
     """No participant aggregate is recorded for the lookup."""
 
 
-class StaleRevision(CoordinationError):  # noqa: N818 - nominal outcome name
+class StaleRevision(CoordinationError, DeferredRead):  # noqa: N818 - nominal outcome name
     """The supplied CAS revision is not the authoritative revision."""
 
 

@@ -45,6 +45,14 @@ class WakeDue(WakeOutcome):
         observer(session_id)
 
 
+class SchedulesWake(RuleCheck):
+    """A check that schedules a wake, so it waits for the previous wake to finish."""
+
+
+class BackgroundWake(RuleCheck):
+    """A check that starts work in the background, so configuration can disable it."""
+
+
 @dataclass(frozen=True, kw_only=True)
 class SessionScheduleCheck(RuleCheck):
     session_id: str
@@ -56,7 +64,7 @@ class OwnerTurnScheduleCheck(SessionScheduleCheck):
     turns: "TurnRunner"
 
 
-class ProjectResumeCheck(OwnerTurnScheduleCheck):
+class ProjectResumeCheck(BackgroundWake, OwnerTurnScheduleCheck):
     """Start the turn the registry records as due after a project change.
 
     The registry entry is the only record, so an owner started later reads
@@ -79,7 +87,7 @@ class ProjectResumeCheck(OwnerTurnScheduleCheck):
             WakeScheduleCheck(session_id=session_id, inputs=inputs).schedule()
 
 
-class WakeScheduleCheck(SessionScheduleCheck):
+class WakeScheduleCheck(SchedulesWake, BackgroundWake, SessionScheduleCheck):
     """Check wake permission and execute it under the existing turn lock.
 
     A queued wake never carries a stale owner grant across a lock wait. The
@@ -151,7 +159,7 @@ class WakeScheduleCheck(SessionScheduleCheck):
 
 
 @dataclass(frozen=True, kw_only=True)
-class SelectedWakeCheck(SessionScheduleCheck):
+class SelectedWakeCheck(SchedulesWake, SessionScheduleCheck):
     """A selected turn runs beside the owner's observation, which hands it later messages."""
 
     execution: "SelectedExecution"
@@ -223,7 +231,7 @@ class NativeInboxOwnerTurnRule(ReservationRule):
 
 
 class PendingWakeScheduleRule(ReservationRule):
-    check_type = (WakeScheduleCheck, SelectedWakeCheck)
+    check_type = SchedulesWake
     explanation = "A previously scheduled wake has not finished."
 
     def violated(self, check):
@@ -239,7 +247,7 @@ class PendingTurnOwnerTurnRule(ReservationRule):
 
 
 class DisabledWakeScheduleRule(ReservationRule):
-    check_type = (WakeScheduleCheck, ProjectResumeCheck)
+    check_type = BackgroundWake
     explanation = "Background waking is disabled by the input/runtime configuration."
 
     def violated(self, check):
