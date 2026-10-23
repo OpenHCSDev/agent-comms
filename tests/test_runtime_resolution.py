@@ -2,6 +2,7 @@ import os
 
 import pytest
 
+from agent_comms.field_codec import FieldCodec
 from agent_comms.installer.refusals import UpgradeRefused
 from agent_comms.installer.commands import InstallCommands
 from agent_comms.installer.probes.packages import InstalledPackagesProbe
@@ -48,7 +49,7 @@ def manifest(core="core", toad="toad", wheel="old-wheel"):
 def test_installed_package_probe_transports_the_declared_records_and_source_cases():
     original = manifest().packages
     probe = InstalledPackagesProbe("core")
-    decoded = probe.decode_answer(probe.encode_answer(original))
+    decoded = FieldCodec.decode(probe.answer_type(), FieldCodec.encode(original, probe.answer_type()))
     assert decoded == original
     assert {name: record.pin() for name, record in decoded.items()} == {
         name: record.pin() for name, record in original.items()

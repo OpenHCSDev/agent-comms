@@ -90,8 +90,9 @@ class PackageInventory(ABC):
     bytes: int = 0
 
     def inspect(self, root: Path) -> None:
-        if os.name != "posix":
-            raise NativePackageError("Native package filesystem verification requires POSIX")
+        Platform.current().require_posix(
+            NativePackageError("Native package filesystem verification requires POSIX")
+        )
         try:
             self.visit(os.fspath(root), ".", 0)
         except OSError as error:
@@ -225,9 +226,17 @@ class NativePackageStore:
         build = self.package_for(manifest).parents[2]
         destination = resources / build.name
         resources.mkdir(mode=0o700, parents=True, exist_ok=True)
-        if destination.is_symlink() and destination.resolve(strict=True) == build.resolve(strict=True):
-            return
-        destination.symlink_to(build, target_is_directory=True)
+        if destination.is_symlink():
+            if destination.resolve(strict=False) == build.resolve(strict=False):
+                return
+        elif destination.exists():
+            raise NativePackageError(f"Native package link would replace real content: {destination}")
+        temporary = resources / f".{build.name}.{os.getpid()}.link"
+        temporary.symlink_to(build, target_is_directory=True)
+        try:
+            os.replace(temporary, destination)
+        finally:
+            temporary.unlink(missing_ok=True)
 
     def retire(self, build: Path) -> None:
         """Only this store retires sealed trees; shared file inodes stay read-only."""

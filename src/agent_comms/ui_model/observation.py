@@ -1296,8 +1296,7 @@ def serve(route: CommsRoute, connection: Connection) -> None:
     from agent_comms.comms import Comms
 
     try:
-        with route.hold_client_route():
-            asyncio.run(ObservationService(Comms(route), connection).run())
+        asyncio.run(ObservationService(Comms(route), connection).run())
     except BaseException:
         try:
             connection.send(ObservationFailed(traceback.format_exc()))

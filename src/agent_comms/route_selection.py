@@ -17,7 +17,9 @@ from typing import TypeVar
 from agent_comms import errors
 
 from .active_route import CommsRoute, resolve_comms_route
+from .bus import Bus
 from .launch_root import LaunchRoot
+from .recorded_bus import RecordedBusIdentity
 
 
 T = TypeVar("T")
@@ -42,11 +44,13 @@ def child_root(env: Mapping[str, str], cwd: str | Path) -> Path:
 class RouteSelection:
     route: CommsRoute
     root: Path
+    bus_identity: RecordedBusIdentity
 
     @classmethod
     def capture(cls, source: str | Path | None = None) -> RouteSelection:
         route = resolve_comms_route()
-        selection = cls(route, route.observe_root())
+        root = route.observe_root()
+        selection = cls(route, root, RecordedBusIdentity.capture(Bus.path_in(root)))
         if source is not None and Path(source).expanduser().resolve() != selection.root:
             raise errors.RouteChangedError(errors.RouteChangedError.reader_sentence)
         return selection
@@ -55,7 +59,9 @@ class RouteSelection:
     def for_child(cls, env: Mapping[str, str], cwd: str | Path) -> RouteSelection:
         """Capture the explicit process selection before launching its child."""
         root = child_root(env, cwd)
-        return cls(resolve_comms_route(root), root)
+        return cls(
+            resolve_comms_route(root), root, RecordedBusIdentity.capture(Bus.path_in(root))
+        )
 
 
 @contextmanager

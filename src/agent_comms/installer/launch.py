@@ -28,11 +28,17 @@ from agent_comms.field_codec import FieldCodec, Id128Text, PathText
 from agent_comms.installer.backup import StoreBackup
 from agent_comms.installer.refusals import UpgradeRefused
 from agent_comms.installer.commands import InstallCommands
-from agent_comms.installer.reporting import (
-    FinishedInstall, InstallOutcome, RootWriter, UnfinishedInstall, UnpostedWriter,
+from agent_comms.installer.interpreter_operation import (
+    InstallClock, LauncherPhase, PhaseTiming, PreparePhase, PublicationPhase, TreeClosePhase,
 )
+from agent_comms.installer.reporting import (
+    FailedInstall, FinishedInstall, InstallOutcome, ObservedInstall, RootWriter,
+    UnfinishedInstall, UnpostedWriter,
+)
+from agent_comms.installer.runtime_resolution import CorePackage
 from agent_comms.installer.probes.harnesses import HarnessesProbe
 from agent_comms.installer.upgrade import (
+    LiveRun,
     RehearsedUpgrade,
     Stack,
     TargetTree,
@@ -40,6 +46,7 @@ from agent_comms.installer.upgrade import (
     upgrade,
 )
 from agent_comms.mro_dispatch import MroDispatch, handles
+from agent_comms.repo import Repo
 from agent_comms.storage_rules import StorageRule
 
 
@@ -50,6 +57,12 @@ class InstallReport(MroDispatch):
     writer: RootWriter = field(default_factory=UnpostedWriter)
     outcome: InstallOutcome = field(default_factory=UnfinishedInstall, init=False)
     bridges: SessionBridgeResumes = field(default_factory=SessionBridgeResumes, init=False)
+    inherited_phases: list[PhaseTiming] = field(default_factory=list)
+    source: Repo = field(init=False, repr=False)
+
+    def record_live(self, result: LiveRun) -> LiveRun:
+        self.outcome = ObservedInstall(result)
+        return result
 
     def complete(self, result: RehearsedUpgrade) -> RehearsedUpgrade:
         self.outcome = FinishedInstall(result)
@@ -65,28 +78,43 @@ class InstallReport(MroDispatch):
 
     @handles(BaseException)
     def crashed(self, error: BaseException) -> tuple[str, ...]:
-        frame = extract_tb(error.__traceback__)[-1]
+        package = Path(agent_comms.__file__).resolve().parent
+        frame = next(
+            frame for frame in reversed(extract_tb(error.__traceback__))
+            if Path(frame.filename).resolve().is_relative_to(package)
+        )
+        module = ".".join(
+            Path(frame.filename).resolve().relative_to(package.parent).with_suffix("").parts
+        )
+        location = self.source.module_file(module)
         return (f"Install failed: {type(error).__name__}: {error}",
-                f"{frame.filename}:{frame.lineno}")
+                f"{location}:{frame.lineno}")
 
     @contextmanager
-    def running(self, tree: TargetTree) -> Iterator[None]:
+    def running(self, tree: TargetTree, clock: InstallClock) -> Iterator[None]:
         """Every writer runs installed artifacts from outside ``tree``, so the report follows
         the tree's cleanup and a cleanup failure is the install's failure."""
+        self.source = Repo(checkout=tree.path, github=CorePackage.repository)
         try:
-            with tree:
-                yield
-            lines = self.outcome.lines()
-        except BaseException as error:
-            failure = (*next(self.handlers_for(error))(error), *self.bridges.lines())
+            tree.__enter__()
             try:
-                self.writer.post(failure)
+                yield
+            finally:
+                with TreeClosePhase().running(clock):
+                    tree.__exit__(*sys.exc_info())
+            lines = self.outcome.lines(tuple(self.inherited_phases))
+        except BaseException as error:
+            self.outcome = FailedInstall(self.outcome, next(self.handlers_for(error))(error))
+            try:
+                with PublicationPhase("failure report").running(clock):
+                    self.writer.post((*self.outcome.lines(), *self.bridges.lines()))
             except BaseException as publication_error:
                 error.add_note(f"Install failure report also failed: {publication_error}")
                 print(f"install: failure report also failed: {publication_error}", file=sys.stderr)
             raise
         else:
-            self.writer.post(lines)
+            with PublicationPhase("finished report").running(clock):
+                self.writer.post(lines)
 
 
 @dataclass(frozen=True)
@@ -122,19 +150,21 @@ class InstallRun:
     root: Annotated[Path, PathText]
     scratch: Annotated[Path, PathText]
     target: str
+    phases: list[PhaseTiming] = field(default_factory=list)
 
     @classmethod
     def start(cls, command: InstallCliCommand, root: Path) -> InstallRun:
         checkout = command.checkout
-        with InstallCommands() as commands:
+        with InstallCommands() as commands, LauncherPhase().running(commands.clock):
             commands.git(checkout, "fetch", "-q", "origin")
             target = commands.git(checkout, "rev-parse", "--verify",
                                   f"{command.to}^{{commit}}").strip()
         parent = command.installer.scratch(StorageRule.load(root))
         parent.mkdir(mode=0o700, parents=True, exist_ok=True)
         scratch = Path(tempfile.mkdtemp(dir=parent, prefix="install-"))
-        TargetTree(checkout, scratch, target).add()
-        return cls(command, root, scratch, target)
+        with PreparePhase("target checkout").running(commands.clock):
+            TargetTree(checkout, scratch, target).add()
+        return cls(command, root, scratch, target, commands.clock.phases)
 
     def launch(self, output: TextIO) -> int:
         """The install outlives its caller: a new session, its output in files beside the bus.
@@ -162,7 +192,7 @@ class InstallRun:
         command = self.command
         return upgrade(command.checkout, self.root, self.target, command.installer,
                        command.mode, command.retire, command.spill_dir, self.scratch,
-                       self.harnesses, InstallReport())
+                       self.harnesses, InstallReport(inherited_phases=self.phases))
 
     def harnesses(self, stack: Stack) -> InstallResult:
         # The target runtime is published by now, and only its installed package

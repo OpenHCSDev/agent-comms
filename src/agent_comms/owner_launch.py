@@ -2,9 +2,7 @@
 
 from __future__ import annotations
 
-import os
 from dataclasses import dataclass, field
-from pathlib import Path
 from typing import TYPE_CHECKING
 
 from .child_process import Platform, ProcessIdentity
@@ -37,13 +35,10 @@ class RetainedOwnerLaunch:
         process = selection.process
         platform = Platform.current()
         platform.require(process)
-        command = Path(f"/proc/{process.pid}/cmdline").read_bytes().split(b"\0", 1)[0]
-        observed_interpreter = os.fsdecode(command)
+        observed_interpreter = process.arguments()[0]
         if observed_interpreter != selection.interpreter:
             raise RelationViolationError("Selected source owner interpreter changed")
-        raw = Path(f"/proc/{process.pid}/environ").read_bytes()
-        values = dict(item.split(b"=", 1) for item in raw.split(b"\0") if b"=" in item)
-        environment = {os.fsdecode(key): os.fsdecode(value) for key, value in values.items()}
+        environment = process.environment()
         platform.require(process)
         route = launch_runtime.ThreadLaunch.current(environment).name
         if not environment.get(NativeArguments.binary_key):
