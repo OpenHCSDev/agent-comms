@@ -108,7 +108,8 @@ def test_handoff_codec_preserves_complete_stopped_witness_and_original_launch(*,
     assert decoded.owners[0].require_current(snapshot) is thread
     assert decoded.owners[0].launch.arguments == ("--no-tools", "authored value")
     assert decoded.owners[0].launch.environment["AUTHORED_CREDENTIAL"] == "in-memory-only"
-    assert "execution" not in FieldCodec.encode(thread)
+    stored = replace(thread, storage_roots=thread_registration.storage_rule.initial_roots(thread.name))
+    assert "execution" not in FieldCodec.encode(stored)
     unrelated = replace(launch, process=ProcessIdentity(2147483646, 1))
     with pytest.raises(RelationViolationError):
         replace(owner, launch=unrelated).require_current(snapshot)
