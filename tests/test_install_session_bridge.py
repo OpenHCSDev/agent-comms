@@ -26,7 +26,7 @@ from agent_comms.launch_runtime import LaunchRuntime
 from agent_comms.root_runtime import RootRuntime
 from agent_comms.thread_execution import ExternalThreadExecution
 from agent_comms_hooks.session import started
-from agent_comms_hooks.watch import LapsedWatch, LiveWatch, WatchClaim, WatchRecord
+from agent_comms_hooks.watch import LapsedWatch, LiveWatch, NoSessionBridge, WatchClaim, WatchRecord
 from source_programs import SourcePrograms
 from agent_comms.threads import Thread
 
@@ -187,7 +187,7 @@ def test_installer_discovers_the_live_claim_independent_of_state_directory(
         assert child.wait(timeout=15) == 0, log.read_text()
         assert isinstance(claim.state(), LapsedWatch)
         # A bridge that stopped ends the Monitor reader with the reason, not a silent spin.
-        with pytest.raises(RuntimeError, match='No session bridge is running'):
+        with pytest.raises(NoSessionBridge):
             claim.state().await_socket(FileNotFoundError(claim.socket_path))
 
 

@@ -27,6 +27,15 @@ class SessionRefusedError(ValueError):
     """A session endpoint rejected the control request, not malformed wire data."""
 
 
+class NoSessionBridge(RuntimeError):
+    """No bridge holds this claim: nothing is delivered until connect starts one."""
+
+    def __init__(self) -> None:
+        super().__init__(
+            'No session bridge is running for this claim; its log names why it stopped. '
+            'Start it with agent-comms-claude-bridge connect.')
+
+
 @dataclass(frozen=True)
 class WatchRecord:
     bus: str
@@ -182,9 +191,7 @@ class WatchState:
 
     def await_socket(self, absent: OSError) -> None:
         """No bridge holds the claim, so its socket is gone, not between bridges."""
-        raise RuntimeError(
-            'No session bridge is running for this claim; its log names why it stopped. '
-            'Start it with agent-comms-claude-bridge connect.') from absent
+        raise NoSessionBridge() from absent
 
 
 class UnclaimedWatch(WatchState):

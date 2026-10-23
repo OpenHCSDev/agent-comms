@@ -8,7 +8,7 @@ from contextlib import contextmanager
 import pytest
 
 from agent_comms.cli_bridges.monitor import InspectSession
-from agent_comms_hooks.watch import LapsedWatch, LiveWatch, WatchClaim, WatchRecord
+from agent_comms_hooks.watch import LapsedWatch, LiveWatch, NoSessionBridge, WatchClaim, WatchRecord
 
 RECORD = WatchRecord(
     "commander", "/bus", ("agent-comms-claude-bridge", "watch", "--state", "/bus with spaces")
@@ -62,6 +62,6 @@ def test_reader_waits_for_a_held_claims_socket_until_its_holder_dies(bridge_home
         with pytest.raises(TimeoutError):
             reader.result(timeout=1)
         killed(child)
-        with pytest.raises(RuntimeError, match='No session bridge is running') as stopped:
+        with pytest.raises(NoSessionBridge) as stopped:
             reader.result(timeout=5)
         assert isinstance(stopped.value.__cause__, FileNotFoundError)
