@@ -81,7 +81,7 @@ class SystemdConnectorService(ConnectorService, SystemdUserService):
     @classmethod
     def from_process(cls, pid: int) -> Self:
         # Our installed console script's argv is interpreter, script, verb, options.
-        endpoint = ServeVerb.parse(cls.process_arguments(pid)[2:])
+        endpoint = ServeVerb.parse(cls.running_arguments(pid)[2:])
         return cls(launch=LaunchRoot.from_path(endpoint.root), port=endpoint.port)
 
     def exec_arguments(self, issuer: str) -> tuple[str, ...]:
