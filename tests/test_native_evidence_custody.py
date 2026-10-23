@@ -139,13 +139,13 @@ def test_physical_lock_budget_closes_refused_descriptor(tmp_path):
         # Reentrancy is intentional; a separate execution must contend.
         def compete():
             with pytest.raises(BlockingIOError):
-                with _store_lock(lock_target, blocking=False, contention=StoreLockContention(.025)):
+                with _store_lock(lock_target, contention=StoreLockContention(.025)):
                     pytest.fail("A competing descriptor acquired exclusive ownership")
         with ThreadPoolExecutor(max_workers=1) as worker:
             worker.submit(compete).result(timeout=1)
     # The original and the refused scope both closed: immediate new acquisition
     # succeeds without any leaked earlier lock or replacement of its evidence.
-    with _store_lock(lock_target, blocking=False):
+    with _store_lock(lock_target, contention=StoreLockContention(0)):
         pass
 
 
@@ -153,9 +153,9 @@ def test_consumer_work_cannot_spend_physical_lock_resource(tmp_path):
     import time
     from agent_comms.store_files import StoreLockContention, _store_lock
     resource = StoreLockContention(.025)
-    with _store_lock(tmp_path / "first", blocking=False, contention=resource):
+    with _store_lock(tmp_path / "first", contention=resource):
         time.sleep(.04)
-    with _store_lock(tmp_path / "second", blocking=False, contention=resource):
+    with _store_lock(tmp_path / "second", contention=resource):
         assert resource.remaining == .025
 
 

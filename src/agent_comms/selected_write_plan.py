@@ -65,8 +65,7 @@ class SelectedWriteIntent(DeclaredFamily, affix="WriteIntent"):
     source_seq: int
     source_message_id: str
     claim_id: str
-    owner: str
-    incarnation: float
+    owner: RecordedThreadIncarnation
     claim_epoch: int
     expected_attempt_ordinal: Literal[1]
     operation_id: str
@@ -79,9 +78,7 @@ class SelectedWriteIntent(DeclaredFamily, affix="WriteIntent"):
         return SelectedWriteBinding(
             root_id=self.root_id, source=MessageReference(self.source_seq, self.source_message_id),
             assignment_id=self.claim_id,
-            claimed_identity=ClaimedIdentity(
-                RecordedThreadIncarnation(self.owner, self.incarnation), self.claim_epoch,
-            ),
+            claimed_identity=ClaimedIdentity(self.owner, self.claim_epoch),
         )
 
     def require_accepted(self):
@@ -216,7 +213,7 @@ class SelectedWritePlans(DurableFile, PatternFile):
             record = AcceptedWriteIntent(
                 schema=1, root_id=self.root_id, source_seq=source_seq,
                 source_message_id=source_message_id, claim_id=selected[0].assignment_id,
-                owner=owner.name, incarnation=owner.created_at, claim_epoch=claimed_generation,
+                owner=owner.incarnation.require_recorded(), claim_epoch=claimed_generation,
                 expected_attempt_ordinal=1, operation_id=operation_id, resource=str(path),
                 contents_b64=base64.b64encode(raw).decode("ascii"), digest=hashlib.sha256(raw).hexdigest(),
             )

@@ -382,7 +382,7 @@ class Platform(DeclaredFamily, affix="Platform"):
         """Use the common physical wait driver when the platform needs polling."""
         from .store_files import StoreLockContention
 
-        StoreLockContention(math.inf if blocking else 0).acquire(descriptor, self, mode=mode)
+        StoreLockContention.for_blocking(blocking).acquire(descriptor, self, mode=mode)
 
     def release_store_lock(self, descriptor: int) -> None:
         """POSIX locks end at last close, including inherited descriptors."""
