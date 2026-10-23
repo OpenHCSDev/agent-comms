@@ -6,6 +6,7 @@ Delete with the claim-field carry after all retained roots cross the format chan
 
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass
 from functools import cache
 
@@ -61,6 +62,13 @@ class RetiredClaimFields:
     @cache
     def retired_fields(cls, record: type) -> dict[str, str]:
         return {item.name: item.old for item in RENAMED if issubclass(record, item.owner)}
+
+    @classmethod
+    @cache
+    def retired_keys(cls) -> tuple[str, ...]:
+        """Each old spelling as quoted JSON text. Conservative: text holding none of
+        them has no key rename_record could change, so a reader skips it undecoded."""
+        return tuple(sorted({json.dumps(item.old) for item in RENAMED}))
 
     @classmethod
     def selects_record(cls, record: type) -> bool:
