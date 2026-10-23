@@ -1,18 +1,16 @@
 """Held orders whose unit keeps calling tools without moving its checkout head."""
 
-from collections.abc import Sequence
 from dataclasses import dataclass, field
 from typing import ClassVar, Self
 
 from agent_comms.comms import Comms
-from agent_comms.standing_rules import UndatedStandingRule
+from agent_comms.standing_rules import HeldBranch, HeldBranchRule
 from agent_comms.thread_identity import ThreadIncarnation
 from agent_comms.turn_digests import OrderToolCallCountRead, TurnsSince
-from agent_comms.ui_model.unit_state import UnitState
 
 
 @dataclass(frozen=True)
-class SpinningUnit(UndatedStandingRule):
+class SpinningUnit(HeldBranchRule):
     """Activity without a new commit is a reportable condition, not progress."""
 
     problem: str
@@ -25,25 +23,19 @@ class SpinningUnit(UndatedStandingRule):
     minutes: ClassVar[int] = 20
 
     @classmethod
-    def scan_observed(cls, comms: Comms, commander: str,
-                      observed: Sequence[UnitState]) -> tuple[Self, ...]:
+    def derive(cls, comms: Comms, branches: tuple[HeldBranch, ...]) -> tuple[Self, ...]:
         found = []
-        for state in observed:
-            source = state.source
-            if not source.todos:
+        for held in branches:
+            source = held.source
+            since = max(held.difference.moved_at, held.todo.order.checked().at.recorded_at("A held order"))
+            elapsed = (source.now - since) / 60
+            if elapsed < cls.minutes:
                 continue
-            for holder in state.readable_units():
-                branch = source.pulls.branch_difference(source.thread.project_path)
-                for todo in source.todos:
-                    since = max(branch.moved_at, todo.order.checked().at.recorded_at("A held order"))
-                    elapsed = (source.now - since) / 60
-                    if elapsed < cls.minutes:
-                        continue
-                    count = OrderToolCallCountRead(
-                        comms.root, source.thread, TurnsSince(since), todo,
-                    ).read()
-                    if count >= cls.calls:
-                        found.append(cls(todo.id, holder, count, elapsed, branch.head))
+            count = OrderToolCallCountRead(
+                comms.root, source.thread, TurnsSince(since), held.todo,
+            ).read()
+            if count >= cls.calls:
+                found.append(cls(held.problem, held.holder, count, elapsed, held.difference.head))
         return tuple(found)
 
     def line(self) -> str:

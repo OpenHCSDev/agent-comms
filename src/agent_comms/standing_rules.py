@@ -33,7 +33,7 @@ if TYPE_CHECKING:
     from agent_comms.registry_document import RegistrySnapshot
     from agent_comms.storage_rules import MemoryUse, StorageRule
     from agent_comms.todos import OwnerRequest, Todo
-    from agent_comms.ui_model.unit_state import UnitState
+    from agent_comms.ui_model.unit_state import UnitObservation, UnitState
 
 
 @dataclass(frozen=True)
@@ -187,9 +187,14 @@ class UndatedStandingRule(StandingRule, declared_name=None):
 class HeldBranch:
     """One open order joined to the holder's current recorded checkout."""
 
-    problem: str
+    todo: Todo
     holder: ThreadIncarnation
     difference: BranchDifference
+    source: UnitObservation
+
+    @property
+    def problem(self) -> str:
+        return self.todo.id
 
 
 class HeldBranchRule(UndatedStandingRule, declared_name=None):
@@ -203,19 +208,19 @@ class HeldBranchRule(UndatedStandingRule, declared_name=None):
     def scan_observed(cls, comms: Comms, commander: str,
                       observed: Sequence[UnitState]) -> tuple[Self, ...]:
         branches = tuple(
-            HeldBranch(todo.id, unit, state.source.pulls.branch_difference(
-                state.source.thread.project_path))
+            HeldBranch(todo, unit, state.source.pulls.branch_difference(
+                state.source.thread.project_path), state.source)
             for state in observed for unit in state.readable_units() for todo in state.source.todos
         )
         ordered = tuple(sorted(branches, key=lambda held: (
             held.difference.repository.to_wire(), held.difference.branch,
             held.holder.require_recorded().lookup, held.problem,
         )))
-        return tuple(rule for member in cls.members_with(cls) for rule in member.derive(ordered))
+        return tuple(rule for member in cls.members_with(cls) for rule in member.derive(comms, ordered))
 
     @classmethod
     @abstractmethod
-    def derive(cls, branches: tuple[HeldBranch, ...]) -> tuple[Self, ...]: ...
+    def derive(cls, comms: Comms, branches: tuple[HeldBranch, ...]) -> tuple[Self, ...]: ...
 
 
 @dataclass(frozen=True)
@@ -230,7 +235,7 @@ class BranchBehindMain(HeldBranchRule):
     limit: ClassVar[int] = 30
 
     @classmethod
-    def derive(cls, branches: tuple[HeldBranch, ...]) -> tuple[Self, ...]:
+    def derive(cls, comms: Comms, branches: tuple[HeldBranch, ...]) -> tuple[Self, ...]:
         return tuple(cls(held.problem, held.holder, held.difference.repository,
                          held.difference.branch, held.difference.behind)
                      for held in branches if held.difference.behind > cls.limit)
@@ -255,7 +260,7 @@ class SharedFileBranches(HeldBranchRule):
     path: str
 
     @classmethod
-    def derive(cls, branches: tuple[HeldBranch, ...]) -> tuple[Self, ...]:
+    def derive(cls, comms: Comms, branches: tuple[HeldBranch, ...]) -> tuple[Self, ...]:
         found = []
         for first, second in combinations(branches, 2):
             left, right = first.difference, second.difference

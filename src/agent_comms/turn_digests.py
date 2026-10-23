@@ -10,7 +10,7 @@ from typing import TYPE_CHECKING, Self
 
 from .declared_family import DeclaredFamily
 from .errors import ToolRefusedError
-from .external_transcript import ExternalTranscript
+from .external_transcript import ExternalTranscript, StoreRead
 from .order_work import OrderWork
 from .thread_execution import ConversationPreparation
 from .thread_identity import ThreadIncarnation
@@ -148,7 +148,7 @@ class TranscriptRead[Result](ConversationPreparation):
     @abstractmethod
     def from_turns(self, turns: tuple[TurnDigest, ...]) -> Result: ...
 
-    def from_external(self, source) -> Result:
+    def from_external(self, source: StoreRead) -> Result:
         return self.from_turns(source.turns(self.bound))
 
 
@@ -201,7 +201,7 @@ class OrderEditsRead(OrderRead[tuple[EditCall, ...]]):
     def from_turns(self, turns: tuple[TurnDigest, ...]) -> tuple[EditCall, ...]:
         return self.edits_from_turns(turns)
 
-    def from_external(self, source) -> tuple[EditCall, ...]:
+    def from_external(self, source: StoreRead) -> tuple[EditCall, ...]:
         return tuple(source.unjudged(self.todo))
 
 
@@ -215,7 +215,7 @@ class OrderEditCountRead(OrderRead[int]):
     def from_turns(self, turns: tuple[TurnDigest, ...]) -> int:
         return len(self.edits_from_turns(turns))
 
-    def from_external(self, source) -> int:
+    def from_external(self, source: StoreRead) -> int:
         return source.unjudged_count(self.todo)
 
 
@@ -230,5 +230,5 @@ class OrderToolCallCountRead(OrderRead[int]):
             self.todo.id, self.thread.incarnation, self.bound.at, turns,
         ).calls)
 
-    def from_external(self, source) -> int:
+    def from_external(self, source: StoreRead) -> int:
         return source.tool_call_count(self.bound.at)
