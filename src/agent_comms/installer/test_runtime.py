@@ -33,7 +33,8 @@ def main() -> None:
         if home == Path.home().resolve():
             parser.error("--home must not name the live home")
         TestHome(home).prepare()
-        Stack.build(Path.cwd(), InstallCommands(), home).test(*arguments)
+        with InstallCommands() as commands:
+            Stack.build(Path.cwd(), commands, home).test(*arguments)
 
 
 if __name__ == "__main__":

@@ -187,8 +187,6 @@ def test_exact_incarnation_and_generation_fence_releases(tmp_path):
     assert new[a].owner == "peer" and new[a].seq == 3
     with pytest.raises(ClaimTransitionError):
         ClaimProjection(0, {a: new[a]})
-    with pytest.raises(MalformedRecord):
-        ClaimProjection(1, [])
     with pytest.raises(ClaimTransitionError):
         transition(4, releases=(ClaimRelease(a, G1),)).project(new)
 

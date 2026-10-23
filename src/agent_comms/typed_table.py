@@ -1439,6 +1439,11 @@ class ProducedRow(ABC):
 
     @classmethod
     @abstractmethod
+    def producer_capabilities(cls) -> tuple[tuple[type[DeclaredFamily], type], ...]:
+        """Each record family and the capability whose declarations produce these rows."""
+
+    @classmethod
+    @abstractmethod
     def producer_classes(cls) -> tuple[type[DeclaredFamily], ...]:
         """The record family's declarations that implement this projection's production."""
 
@@ -1988,18 +1993,20 @@ class ProducedTable(ProducedRow, TypedTable, declared_name=None):
     @cache
     def _producer_digest(cls) -> str:
         producers = cls.producer_classes()
-        owners: set[type[DeclaredFamily]] = {
+        owners: set[type] = {
             owner
             for row in (cls, *cls.members_with(cls))
             for owner in row.__mro__
             if issubclass(owner, cls)
         }
+        # The capability's classes outside the record family (Message, Claimed) hold the
+        # production code itself, so they belong to the digest beside the family.
+        capabilities = tuple(capability for _, capability in cls.producer_capabilities())
         for producer in producers:
-            root = producer.family_root()
             owners.update(
                 owner
                 for owner in producer.__mro__
-                if issubclass(owner, cls) or issubclass(owner, root)
+                if issubclass(owner, (cls, producer.family_root(), *capabilities))
             )
         source = "\0".join(
             f"{owner.__module__}.{owner.__qualname__}\0{getsource(owner)}"
