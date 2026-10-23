@@ -46,12 +46,23 @@ def test_participant_failure_cannot_publish_registry_incarnation(tmp_path, monke
     assert "missing" not in comms.registry.snapshot().threads
 
 
+def test_existing_public_participant_survives_native_root_preparation(tmp_path):
+    comms = wire(tmp_path / "wire")
+    thread = comms.registry.declare(Thread("public-first", frozenset(), str(tmp_path)))
+    with CoordinationSession(str(CoordinationStore.path_in(comms.root))) as session:
+        before = ParticipantStore(session).get(thread.incarnation.lookup)
+    comms.registry.prepare_native_root()
+    with CoordinationSession(str(CoordinationStore.path_in(comms.root))) as session:
+        assert ParticipantStore(session).get(thread.incarnation.lookup) == before
+
+
 @pytest.mark.parametrize("existing_store", (False, True))
 def test_carry_registers_all_legacy_incarnations_once(tmp_path, existing_store):
     comms = wire(tmp_path / "wire")
     legacy = RegistryDocument()
     for index, role in enumerate((AgentThreadRole, AgentThreadRole, UserThreadRole)):
         thread = Thread(f"legacy-{index}", frozenset(), str(tmp_path), role=role)
+        thread = replace(thread, storage_roots=thread.storage_roots.assigned(comms.registry.storage_rule, thread.name))
         legacy.prepare_declaration(thread, StoppedThreadStatus()).apply(legacy)
     # The old registry write did not declare participant rows.
     comms.registry.store.replace(legacy)

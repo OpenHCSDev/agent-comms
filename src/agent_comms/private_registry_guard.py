@@ -218,7 +218,14 @@ class PublicRegistry(RegistryPrivacy):
         return SharedRootLaunch(root)
 
     def prepare_native(self, registry_path: Path) -> PrivateRegistryGuard:
+        from .private_runtime_schema import PrivateCoordinatorTable
+
         guard = PrivateRegistryGuard(registry_path, Id128Text.mint())
+        guard._trusted_root()
+        # Install the new private capabilities while the existing public schema
+        # still owns opening this file, before publishing the private guard.
+        with Coordination(str(CoordinationStore.path_in(registry_path.parent))) as store:
+            PrivateCoordinatorTable.install(store)
         guard.create_pending()
         guard.commit_initial()
         return guard

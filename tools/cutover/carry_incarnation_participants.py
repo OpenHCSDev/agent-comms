@@ -5,7 +5,7 @@ from typing import ClassVar
 from agent_comms.coordination_database import CoordinationStore
 from agent_comms.coordination_session import CoordinationSession
 from agent_comms.coordination_tables.participants import Participants
-from agent_comms.installer.carry import Carried, Carry
+from agent_comms.installer.probes.carry import Carried, Carry
 from agent_comms.locked_store import RegistryFile, RootFile
 from agent_comms.participant_store import ParticipantStore
 from agent_comms.registry_store import RegistryStore
