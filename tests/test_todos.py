@@ -371,7 +371,9 @@ def test_watcher_git_and_github_reads_leave_wire_free(pr_commander, monkeypatch)
             goal_id="pr-work"))
         lead = c.registry.require(ctx.commander)
         c.registry.register(replace(lead, process_identity=ProcessIdentity.capture(os.getpid())))
-        worker = Thread("worker", frozenset(), str(source.checkout), created_at=2.0)
+        worker_checkout = ctx.root.parent / "worker-checkout"
+        worker_checkout.mkdir()
+        worker = Thread("worker", frozenset(), str(worker_checkout), created_at=2.0)
         c.registry.register(worker)
         original = adopt_pr(ctx, pr_order(ctx, "P1", ApplicationOrderRun(
             'Read the copied board and confirm the application order remains assigned',
