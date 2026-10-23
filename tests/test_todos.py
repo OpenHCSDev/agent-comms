@@ -42,6 +42,7 @@ from agent_comms.storage_rules import StorageRule
 from agent_comms.store_files import store_lock_path
 from agent_comms.thread_identity import CoreWatcherIncarnation
 from agent_comms.threads import Thread
+from agent_comms.tools import CommsHudTool
 from agent_comms.todos import (
     Assignment,
     ChangeTodoState,
@@ -529,7 +530,7 @@ def test_installed_merge_closes_only_the_run_that_has_been_proven(pr_commander):
         assert application.order.sha == mechanical.order.sha
         assert not application.order.accepted
         assert application.order.line == application.order.checked().run.merged_line
-        board = checked.board_text()
+        board = "\n".join(checked.call(CommsHudTool()).frame)
         assert application.order.line in board
         assert worker.name in board
         store.record_merges(store.merged_orders(checked.incarnation, checked.comms.registry))

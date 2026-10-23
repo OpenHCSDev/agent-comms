@@ -57,7 +57,7 @@ from .cli_commands import (
 )
 from .cli_result import ToolCatalogResult
 from .commander.vibe_check import OverloadDegradation
-from .commander_heartbeat import CommanderHud
+from .commander_hud import CommanderHud
 from .coordination_tables.refusals import SendRefusal
 from .declared_family import DeclaredFamily
 from .display_order import ChannelSort, ThreadSort
