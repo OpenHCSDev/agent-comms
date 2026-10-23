@@ -2748,24 +2748,28 @@ class _FamilyRecordDecoder[Member: DeclaredFamily](_ContextDecoder[Member]):
 class _LeafDocumentDecoder(_FamilyRecordDecoder):
     """A directly declared leaf document omits its family selector."""
 
+    @property
+    def leaf(self) -> ValueDecoder[object]:
+        """The decoder of the record this document declares directly."""
+        return _member_decoder(self.target)
+
     def fits_wire(self, data: object) -> bool:
-        return (super().fits_wire(data)
-                or _member_decoder(self.target).fits_wire(data))
+        return super().fits_wire(data) or self.leaf.fits_wire(data)
 
     def shape_refusal(self, data: object) -> MalformedRecord:
         # The direct leaf form is this document's declared shape.
-        return _member_decoder(self.target).shape_refusal(data)
+        return self.leaf.shape_refusal(data)
 
     def encode_document(self, value: DeclaredFamily) -> object:
         return _member_decoder(type(value)).encode(value)
 
     def decode_document(self, data: object) -> object:
-        return _member_decoder(self.target).decode_bound(data, {})
+        return self.leaf.decode_bound(data, {})
 
     def rewrite_document(
         self, data: object, change: WireRecordChange, select: WireRecordFilter,
     ) -> object:
-        return _member_decoder(self.target).rewrite_records(data, change, select)
+        return self.leaf.rewrite_records(data, change, select)
 
 
 @dataclass(frozen=True, slots=True)
