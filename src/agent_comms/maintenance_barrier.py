@@ -12,7 +12,7 @@ import json
 import os
 import stat
 from abc import ABC, abstractmethod
-from collections.abc import AsyncIterator, Callable, Iterator
+from collections.abc import AsyncIterator, Callable, Iterator, Mapping
 from contextlib import AbstractAsyncContextManager, asynccontextmanager, contextmanager
 from dataclasses import dataclass, field, replace
 from pathlib import Path
@@ -213,6 +213,38 @@ class DeadHolderReleasedPhase(ReadyPhase):
 HOLDER_NONCE = "AGENT_COMMS_MAINTENANCE_HOLDER"
 
 
+@dataclass(frozen=True)
+class MaintenanceHolder:
+    """The hold a process acts under; an empty nonce holds nothing. It travels in
+    ``HOLDER_NONCE`` to every child the process starts."""
+
+    nonce: str
+
+    @classmethod
+    def current(cls) -> MaintenanceHolder:
+        return cls(os.environ.get(HOLDER_NONCE, ""))
+
+    @staticmethod
+    def outside(environment: Mapping[str, str]) -> dict[str, str]:
+        """``environment`` as a child that outlives holds starts with it: it takes each
+        request's holder from the request, never from its launch."""
+        return {name: value for name, value in environment.items() if name != HOLDER_NONCE}
+
+    @contextmanager
+    def acting(self) -> Iterator[Self]:
+        """This process, and every child it starts, acts as this holder while the block
+        lasts, restoring its previous holder afterward."""
+        previous = os.environ.get(HOLDER_NONCE)
+        os.environ[HOLDER_NONCE] = self.nonce
+        try:
+            yield self
+        finally:
+            if previous is None:
+                os.environ.pop(HOLDER_NONCE, None)
+            else:
+                os.environ[HOLDER_NONCE] = previous
+
+
 class MaintenanceStatus:
     """Absent witness is READY; stored phases derive from their record."""
 
@@ -308,16 +340,9 @@ class MaintenanceState(MaintenanceMarker, MaintenanceStatus):
     @contextmanager
     def holding(self) -> Iterator[Self]:
         """This process, and every child it starts, acts as this hold's holder while the
-        block lasts, restoring its previous holder afterward."""
-        previous = os.environ.get(HOLDER_NONCE)
-        os.environ[HOLDER_NONCE] = self.nonce
-        try:
+        block lasts."""
+        with MaintenanceHolder(self.nonce).acting():
             yield self
-        finally:
-            if previous is None:
-                os.environ.pop(HOLDER_NONCE, None)
-            else:
-                os.environ[HOLDER_NONCE] = previous
 
     def successor(self, phase: type[MaintenancePhase], nonce: str) -> MaintenanceState:
         if not self.phase().may_become(phase()):
@@ -462,7 +487,7 @@ class MaintenanceBarrier(MaintenanceIngress):
 
     def assert_open_unlocked(self) -> MaintenanceStatus:
         hold = self.current_unlocked()
-        hold.require_open_to(os.environ.get(HOLDER_NONCE, ""))
+        hold.require_open_to(MaintenanceHolder.current().nonce)
         return hold
 
     def read(self) -> MaintenanceStatus:
@@ -539,7 +564,7 @@ class MaintenanceBarrier(MaintenanceIngress):
         self.current_unlocked()
         with _store_lock(self.registry_path, mode=SharedLock(), blocking=blocking):
             status = self._current_unlocked()
-            status.require_open_to(os.environ.get(HOLDER_NONCE, ""))
+            status.require_open_to(MaintenanceHolder.current().nonce)
             yield status
 
     @asynccontextmanager
