@@ -21,7 +21,6 @@ start and result through the bus's ordinary publisher.
 from __future__ import annotations
 
 import hashlib
-import json
 import os
 import shutil
 import sys
@@ -103,23 +102,25 @@ from agent_comms.installer.practice import (
     RuntimeHome,
 )
 from agent_comms.installer.reporting import (
-    RootWriter, RuntimeWriter, UnpostedWriter,
+    RootWriter,
+    RuntimeWriter,
+    UnpostedWriter,
 )
 from agent_comms.installer.runtime_resolution import RuntimeResolution, StackProject
 from agent_comms.launch_runtime import LaunchRuntime, RestartEnvironment, SpecifiedImportPath
 from agent_comms.locked_store import BusFile, DeclaredFile, RootFile, UndeclaredFile
-from agent_comms.native_build_inputs import NativeBuildInputs
-from agent_comms.native_package import link_sealed_tree, pinned_package_for
-from agent_comms.root_runtime import RootRuntime, RootRuntimeStore
-from agent_comms.runtime_processes import RuntimeProcesses
 from agent_comms.maintenance_barrier import (
     MaintenanceBarrier,
     MaintenanceOperator,
     MaintenanceState,
 )
+from agent_comms.native_build_inputs import NativeBuildInputs
+from agent_comms.native_package import link_sealed_tree, pinned_package_for
 from agent_comms.recorded_bus import RecordedBusIdentity
 from agent_comms.registry_store import RegistryStore
 from agent_comms.repo import Checkout, Repo, ScratchCheckout
+from agent_comms.root_runtime import RootRuntime, RootRuntimeStore
+from agent_comms.runtime_processes import RuntimeProcesses
 from agent_comms.storage_rules import StorageRule
 
 if TYPE_CHECKING:
@@ -641,14 +642,16 @@ class Stack:
     def call_steps[Answer](self, steps: tuple[Carry, ...], tree: TargetTree,
                            operation: CarryOperation[Answer]) -> tuple[Answer, ...]:
         """Run one pass of steps, in order, in one worker in the target tree with this
-        stack's interpreter; the operation owns traversal and its answer tuple."""
+        stack's interpreter; the operation owns traversal and its answer tuple. Every
+        caller passes the staged stack, built from this tree, so Core comes from its
+        compiled installation and only the steps come from the tree."""
         if not steps:
             return ()
         request = CarryRequest(operation, steps)
         with self.commands.exchange(FieldCodec.compact(FieldCodec.encode(request))) as (request_path, result):
             self.commands.run(self.python, "-m", step_worker.__name__,
                               request_path, result,
-                              cwd=tree.path, env=self.environment(*tree.source_paths()))
+                              cwd=tree.path, env=self.environment(tree.steps_package))
             return operation.decode_answer(result.read_text())
 
     def running_owners(self, root: Path) -> list[str]:
@@ -702,9 +705,15 @@ class TargetTree(AbstractContextManager):
     def path(self) -> Path:
         return self.scratch / f"tree-{self.revision[:12]}"
 
+    @property
+    def steps_package(self) -> Path:
+        """Where the tree's carry steps import from; they ship in no runtime."""
+        return self.path / STEPS.parent
+
     def source_paths(self) -> tuple[Path, Path]:
-        """What the install imports from: the tree's ``src``, then its carry steps' package."""
-        return self.path / "src", self.path / STEPS.parent
+        """What the installer imports from when an older runtime runs it: the tree's
+        ``src``, then its carry steps' package."""
+        return self.path / "src", self.steps_package
 
     def add(self) -> None:
         ScratchCheckout.add(self.repo, self.path, self.revision, "--detach", "-q")

@@ -121,10 +121,10 @@ class ClaimFields(RetiredClaimFields, Carry):
             for row in tables:
                 stored = row.stored_columns(db)
                 renamed = cls.retired_columns(row, stored)
-                json_fields = tuple(field for field in row._fields()
+                json_fields = tuple(field for field in row._fields
                                     if issubclass(field.storage, JsonStorage) and field.wire_name in stored
                                     and field.value.contains_records(cls.selects_record))
-                primary = tuple(field for field in row._fields() if field.column.primary_key)
+                primary = tuple(field for field in row._fields if field.column.primary_key)
                 if json_fields:
                     selected = (*primary, *json_fields)
                     columns = ",".join(renamed.get(field.name, _identifier(field.wire_name))
