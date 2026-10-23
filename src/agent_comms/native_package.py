@@ -14,6 +14,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import shutil
 import stat
 import tempfile
 from _hashlib import HASH
@@ -233,6 +234,22 @@ def share_native_resources(root: Path, deployments: Path) -> dict[str, int]:
     package_tree_digest(root)
     return {"shared_files": shared_files, "shared_content_bytes": shared_bytes}
 
+
+def link_sealed_tree(source: Path, destination: Path) -> None:
+    """Publish a sealed build at another path by sharing its file inodes.
+
+    A sealed build never changes in place: every regular file is read-only, and a declared
+    source replaces its own inode (``install_declared_sources``). So each copy of a build
+    holds the same bytes, and sharing the inodes is the copy. A writable file would become a
+    mutable shared resource, which the package inventory refuses, so it is refused here first.
+    """
+
+    def link(original: str, copy: str) -> None:
+        if os.lstat(original).st_mode & 0o222:
+            raise NativePackageError(f"Native package resource is writable: {original}")
+        os.link(original, copy, follow_symlinks=False)
+
+    shutil.copytree(source, destination, symlinks=True, copy_function=link)
 
 def write_native_manifest(root: Path) -> None:
     """Commit an assembled package through the existing diagnostic/tree format.

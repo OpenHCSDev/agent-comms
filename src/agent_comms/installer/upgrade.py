@@ -108,7 +108,7 @@ from agent_comms.installer.runtime_resolution import RuntimeResolution, StackPro
 from agent_comms.launch_runtime import LaunchRuntime, RestartEnvironment, SpecifiedImportPath
 from agent_comms.locked_store import BusFile, DeclaredFile, RootFile, UndeclaredFile
 from agent_comms.native_build_inputs import NativeBuildInputs
-from agent_comms.native_package import pinned_package_for
+from agent_comms.native_package import link_sealed_tree, pinned_package_for
 from agent_comms.root_runtime import RootRuntime, RootRuntimeStore
 from agent_comms.runtime_processes import RuntimeProcesses
 from agent_comms.maintenance_barrier import (
@@ -549,7 +549,7 @@ class Stack:
             return native, layout
         if prepared.is_dir():
             native.parents[2].mkdir(mode=0o700)
-            shutil.copytree(prepared, native)
+            link_sealed_tree(prepared, native)
         else:
             self.commands.run(self.checkout / "stack/bin/prepare-pi-native", "--python",
                               self.python, cwd=self.checkout,
@@ -564,7 +564,7 @@ class Stack:
         package = self.probe(PackageRootProbe())
         destination = package / "_native" / layout
         destination.parents[2].mkdir(mode=0o700, parents=True)
-        shutil.copytree(native, destination)
+        link_sealed_tree(native, destination)
         self.prepare_native()
 
     def keep_native(self, native: Path, layout: Path) -> None:
@@ -573,7 +573,7 @@ class Stack:
         self.prepared_natives.mkdir(mode=0o700, parents=True, exist_ok=True)
         stage = Path(tempfile.mkdtemp(dir=self.prepared_natives, prefix=".stage-"))
         try:
-            shutil.copytree(native, stage / layout)
+            link_sealed_tree(native, stage / layout)
             for retired in self.prepared_natives.glob(".pi-native-*"):
                 shutil.rmtree(retired)
             stage.joinpath(layout.parts[0]).rename(self.prepared_natives / layout.parts[0])
