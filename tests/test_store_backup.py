@@ -7,7 +7,6 @@ from contextlib import closing
 import pytest
 
 from agent_comms.installer.backup import BackupName, StoreBackup
-from agent_comms.external_transcript import ExternalTranscript
 from agent_comms.coordination_database import (
     CoordinationStore, InvalidStore, MissingStore, ReadableStore,
 )
