@@ -17,7 +17,7 @@ if TYPE_CHECKING:
     from agent_comms.cli_commands import InstallResult
     from agent_comms.installer.launch import InstallReport
     from agent_comms.installer.reporting import RootWriter
-    from agent_comms.installer.upgrade import Install, RehearsedUpgrade
+    from agent_comms.installer.upgrade import Install, Rehearsal, RehearsedUpgrade
 
 
 class InstallerChoice(SubclassUnion, TextChoice, affix="Installer"):
@@ -49,7 +49,7 @@ class RunMode(SubclassUnion, affix="Mode"):
     def destination(self, live: RootWriter) -> RootWriter: ...
 
     @abstractmethod
-    def finish(self, install: Install, rehearsed: RehearsedUpgrade,
+    def finish[Rehearsed: Rehearsal](self, install: Install[Rehearsed], rehearsal: Rehearsed,
                bridges: SessionBridgeResumes, harnesses: Callable[[], InstallResult],
                report: InstallReport) -> RehearsedUpgrade: ...
 
@@ -62,10 +62,10 @@ class RehearsalMode(SingleFieldValue, RunMode):
         from agent_comms.installer.reporting import UnpostedWriter
         return UnpostedWriter()
 
-    def finish(self, install: Install, rehearsed: RehearsedUpgrade,
+    def finish[Rehearsed: Rehearsal](self, install: Install[Rehearsed], rehearsal: Rehearsed,
                bridges: SessionBridgeResumes, harnesses: Callable[[], InstallResult],
                report: InstallReport) -> RehearsedUpgrade:
-        return rehearsed
+        return install.reported(rehearsal)
 
 
 @dataclass(frozen=True)
@@ -75,7 +75,7 @@ class LiveMode(SingleFieldValue, RunMode):
     def destination(self, live: RootWriter) -> RootWriter:
         return live
 
-    def finish(self, install: Install, rehearsed: RehearsedUpgrade,
+    def finish[Rehearsed: Rehearsal](self, install: Install[Rehearsed], rehearsal: Rehearsed,
                bridges: SessionBridgeResumes, harnesses: Callable[[], InstallResult],
                report: InstallReport) -> RehearsedUpgrade:
-        return install.finished(rehearsed, bridges, harnesses, report)
+        return install.finished(rehearsal, bridges, harnesses, report)

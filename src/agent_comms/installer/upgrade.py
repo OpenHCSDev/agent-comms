@@ -225,6 +225,7 @@ class InstallRolledBack(UpgradeRefused):
         )
 
 
+@dataclass(frozen=True)
 class Extendable:
     """A record a subclass extends with facts of its own; the shared ones carry over."""
 
@@ -693,10 +694,7 @@ def upgrade(checkout: Path, root: Path, target: str, installer: InstallerChoice,
         staged = Stack.build(tree.path, commands)
         install, rehearsal = member.rehearsed(checkout, root, current, target, chain,
                                               installed, staged, tree, installer, spill_dir)
-        names = tuple(step.name() for step in install.pending)
-        rehearsed = RehearsedUpgrade(current, target, root, names, rehearsal,
-                                    commands=tuple(commands.ran))
-        result = report.complete(mode.finish(install, rehearsed, bridges, harnesses, report))
+        result = report.complete(mode.finish(install, rehearsal, bridges, harnesses, report))
     bridges.require_resumed()
     return result
 
@@ -737,9 +735,16 @@ class Install[Rehearsed: Rehearsal](ABC):
                   installer: InstallerChoice, spill_dir: Path) -> tuple[Install, Rehearsal]:
         """This member's install, with what is pending, and its rehearsal."""
 
-    def finished(self, rehearsed: RehearsedUpgrade, bridges: SessionBridgeResumes,
+    def reported(self, rehearsal: Rehearsed) -> RehearsedUpgrade:
+        return RehearsedUpgrade(
+            self.current, self.target, self.root,
+            tuple(step.name() for step in self.pending), rehearsal,
+            commands=tuple(self.staged.commands.ran))
+
+    def finished(self, rehearsal: Rehearsed, bridges: SessionBridgeResumes,
                  harnesses: Callable[[], InstallResult], report: InstallReport) -> InstalledUpgrade:
-        live_run = self.install(rehearsed.rehearsal, bridges, report)
+        rehearsed = self.reported(rehearsal)
+        live_run = self.install(rehearsal, bridges, report)
         finished = InstalledUpgrade(
             rehearsed.source, rehearsed.target, rehearsed.root, rehearsed.pending,
             rehearsed.rehearsal, live_run, harnesses(), commands=tuple(self.staged.commands.ran))

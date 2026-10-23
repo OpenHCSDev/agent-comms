@@ -100,7 +100,7 @@ class StorageRule(RoomAllocation, DurableFile):
         path = cls.path_in(root)
         return FieldCodec.decode(cls, json.loads(path.read_text()) if path.exists() else {})
 
-    def initial_roots(self, name):
+    def initial_roots(self, name: str) -> StorageRoots:
         return StorageRoots(self.scratch_base / name)
 
     def order_checkout(self, name: str, problem: str) -> Path:
