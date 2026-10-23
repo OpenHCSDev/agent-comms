@@ -24,7 +24,6 @@ import stat
 import struct
 from abc import ABC, abstractmethod
 from collections.abc import Iterable, Sequence
-from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Annotated, NoReturn
 
@@ -44,7 +43,6 @@ if TYPE_CHECKING:
     from .notification_assignment import NotificationAssignmentRead
     from .private_nk_entrypoint import RootLaunch
     from .registry_document import RegistrySnapshot
-    from .thread_management import ThreadManagement
     from .threads import Thread
     from .typed_table import TableSchema
 

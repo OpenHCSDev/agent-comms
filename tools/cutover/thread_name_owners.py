@@ -21,7 +21,7 @@ from agent_comms.locked_store import SQLiteFile
 from agent_comms.native_prompt_binding import PromptBinding
 from agent_comms.native_runtime_input import CurrentNativeCursor, NativeRuntimeInput
 from agent_comms.store_files import _store_lock
-from agent_comms.typed_table import HeldBusFile
+from agent_comms.typed_table import HeldBusFile, SQLiteCatalogObject
 
 
 class ThreadNameOwners(Carry):
@@ -67,6 +67,9 @@ class ThreadNameOwners(Carry):
                 db.execute("PRAGMA foreign_keys=OFF")
                 db.setconfig(sqlite3.SQLITE_DBCONFIG_ENABLE_TRIGGER, False)
                 with SQLiteFile.write_transaction(db):
+                    SQLiteCatalogObject.carry(
+                        db, {}, frozenset(name for table in pending for name in table.schema_objects())
+                    )
                     for table in pending:
                         table.rebuild(db)
                     if aliases:
