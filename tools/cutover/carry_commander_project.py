@@ -54,4 +54,4 @@ class CommanderProjectCarry(Carry):
                 rewritten.extend(registry.written)
         self.configuration.unlink()
         rewritten.append(self.configuration)
-        return Carried(1, rewritten=tuple(str(path.relative_to(self.root)) for path in rewritten))
+        return Carried(1, rewritten=tuple(path.relative_to(self.root) for path in rewritten))
