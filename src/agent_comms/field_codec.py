@@ -955,10 +955,6 @@ class SubclassUnion(DeclaredFamily, AcceptsNull, ExternalJsonShape, WireValue):
 
     @classmethod
     def wire_structure(cls, structural: ValueDecoder[object]) -> ValueDecoder[object]:
-        """The union root admits any member's shape; a member admits only its own, or its
-        shape would be the union holding it, and admitting would never return."""
-        if cls._family_root is not cls:
-            return super().wire_structure(structural)
         return ValueDecoder.for_members(cls.members_with(cls))
 
     @classmethod
