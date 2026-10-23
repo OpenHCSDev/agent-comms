@@ -282,7 +282,7 @@ class RootFile:
 
 @dataclass(frozen=True)
 class DeclaredFile(RootFile):
-    """A declared store and its primary path form one physical resource identity."""
+    """A declared store and one retained file path identify a resource."""
 
     owner: type[RootFile]
     path: Path
