@@ -264,7 +264,7 @@ class RootFile:
         companions = {member for path, owner in owners.items()
                       for member in (*owner.files(path), *owner.transient_paths(path))
                       if member != path}
-        owners.update((path, cls.content_owner(path) if path.exists() else RootFile)
+        owners.update((path, RootFile)
                       for path in selected - owners.keys() - companions)
         companions.update(member for path, owner in owners.items()
                           for member in (*owner.files(path), *owner.transient_paths(path))
