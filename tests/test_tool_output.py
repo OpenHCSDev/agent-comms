@@ -25,7 +25,7 @@ def seed_unknown(comms, count, text):
     dispositions = InputDispositions(comms.root)
     rows = {
         f"bus:{index}": FieldCodec.encode(BoundUnknownInput(
-            key=f"bus:{index}", sequence=index, owner="b", claim_scope=index,
+            key=f"bus:{index}", sequence=index, owner="b", claim_generation=index,
             target="b", source_text=f"{index}: {text}", turn_id="private-turn",
             native_id="f" * 32, sent_digest=TextDigest.of("private-native-prompt"),
         ))

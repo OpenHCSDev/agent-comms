@@ -38,7 +38,7 @@ from .typed_table import (
     IntegerStorage,
     TextStorage,
     TypedRow,
-    TypedTable,
+    WithoutRowid,
 )
 
 if TYPE_CHECKING:
@@ -52,7 +52,7 @@ def binding_store_path(store: Coordination) -> Path:
 
 @dataclass(frozen=True, slots=True)
 class PromptBinding(
-    ImmutableRows, DurableFile, SQLiteFile, NativeInputRecord, TypedTable, DurableTables
+    ImmutableRows, DurableFile, SQLiteFile, NativeInputRecord, WithoutRowid, DurableTables
 ):
     filename = "native_prompt_bindings.sqlite3"
 
@@ -80,7 +80,6 @@ class PromptBinding(
         except MalformedRecord as error:
             raise IdentityConflict("Prompt binding execution columns conflict with their stage") from error
 
-    without_rowid = True
     checks = (
         "(stage='triage' AND execution_id IS NULL AND attempt_ordinal IS NULL) OR "
         "(stage='full' AND execution_id IS NOT NULL AND attempt_ordinal>0)",

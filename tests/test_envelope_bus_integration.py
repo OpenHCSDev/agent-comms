@@ -81,10 +81,10 @@ def test_scoped_acquisition_is_one_original_and_conflict_appends_nothing(tmp_pat
     transition = sent.claim_transition
     assert transition.claims == (str(worktree / "a.py"),)
     assert (transition.message_id, transition.seq) == (sent.message_id, sent.seq)
-    assert isinstance(transition.claim_scope, NativeClaim)
-    assert transition.claim_scope.input_id == "input-alice"
+    assert isinstance(transition.resource_scope, NativeClaim)
+    assert transition.resource_scope.input_id == "input-alice"
     assert comms.bus.bus.revision() == sent.seq
-    assert comms.bus.bus.claim(sent.seq).claim_scope.input_id == "input-alice"
+    assert comms.bus.bus.claim(sent.seq).resource_scope.input_id == "input-alice"
     assert read_history(comms) == [sent]
     assert comms.bus.bus.claim_projection()[str(worktree / "a.py")].owner == "alice"
     with pytest.raises(ClaimConflict) as loss:

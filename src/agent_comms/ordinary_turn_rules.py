@@ -38,7 +38,7 @@ class OrdinaryOwnerCheck(RuleCheck):
     current: Thread
     registry: RegistrySnapshot
     canonical: str
-    claim_scope: int
+    claim_generation: int
     turn: TurnId
 
 
@@ -63,7 +63,7 @@ class OrdinaryClaimRule(ReservationRule):
     explanation = "The ordinary owner claim_scope generation changed."
 
     def violated(self, check: OrdinaryOwnerCheck) -> bool:
-        return check.registry.claim_generation(check.canonical) != check.claim_scope
+        return check.registry.claim_generation(check.canonical) != check.claim_generation
 
 
 class OrdinaryProcessRule(ReservationRule):
@@ -122,7 +122,7 @@ class MissingAcceptedInputRule(ReservationRule):
 class AcceptedInputCheck(RuleCheck):
     acknowledgement: QueuedInput
     current: Thread
-    claim_scope: int
+    claim_generation: int
     input_id: str
     keys: tuple[str, ...]
     inputs: InputDrain
@@ -134,7 +134,7 @@ class AcceptedInputAuthorityRule(ReservationRule):
     explanation = "The live input's accepted owner or goal authority changed."
 
     def violated(self, check: AcceptedInputCheck) -> bool:
-        return not check.acknowledgement.current(check.current, check.claim_scope)
+        return not check.acknowledgement.current(check.current, check.claim_generation)
 
 
 class AcceptedInputKeyRule(ReservationRule):

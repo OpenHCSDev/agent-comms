@@ -72,7 +72,7 @@ class SelectedToolIntent(SelectedAction):
         return selected_tool_mode_for_owner(
             owner.comms,
             owner.store,
-            owner.claim_scope,
+            owner.resource_scope,
             owner.owner_name,
             owner.session_dir,
             owner.input_id,

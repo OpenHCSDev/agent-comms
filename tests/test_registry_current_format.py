@@ -58,7 +58,7 @@ def test_incomplete_saved_identity_cannot_authorize_an_owner(tmp_path):
     registry = Registration(path)
     registry.register(registry.new_thread('owner', frozenset(), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid())))
     raw = json.loads(path.read_text())
-    for field in ("owners", "admissions"):
+    for field in ("owners", "claims"):
         incomplete = dict(raw)
         incomplete.pop(field)
         path.write_text(json.dumps(incomplete))
