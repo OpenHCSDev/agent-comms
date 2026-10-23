@@ -67,29 +67,36 @@ class Slop:
     derive: type[Derivation]
     by: FileLine
 
-    PATTERN_ENTRY: ClassVar[re.Pattern] = re.compile(r'^## ([A-Z]+-\d+)\s+\S', re.M)
+    PATTERN_ENTRY: ClassVar[re.Pattern[str]] = re.compile(r"^## ([A-Z]+-\d+)\s+\S", re.M)
 
     @staticmethod
     def catalog() -> Path:
         """The pinned refactor-audit pattern catalog that slop citations name."""
-        return Path(str(files(skills) / 'refactor-audit' / 'references' / 'patterns'))
+        return Path(str(files(skills) / "refactor-audit" / "references" / "patterns"))
 
     @classmethod
     @cache
     def patterns(cls) -> frozenset[str]:
-        return frozenset(found[1] for source in cls.catalog().glob('*.md')
-                         for found in cls.PATTERN_ENTRY.finditer(source.read_text(encoding='utf-8')))
+        return frozenset(
+            found[1]
+            for source in cls.catalog().glob("*.md")
+            for found in cls.PATTERN_ENTRY.finditer(source.read_text(encoding="utf-8"))
+        )
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         problems = []
         if self.pattern not in self.patterns():
-            problems.append(f'Unknown refactor-audit pattern ID {self.pattern!r}; '
-                            'fix: use an ID from the packaged pattern catalog.')
+            problems.append(
+                f"Unknown refactor-audit pattern ID {self.pattern!r}; "
+                "fix: use an ID from the packaged pattern catalog."
+            )
         if len(self.fact.split()) < 4:
-            problems.append('fact: fix: describe the duplicated fact in at least four words')
+            problems.append("fact: fix: describe the duplicated fact in at least four words")
         if problems:
-            raise ValueError('\n'.join(problems))
+            raise ValueError("\n".join(problems))
 
-    def render(self):
-        return (f'{self.at.to_wire()} restates {self.pattern}: {self.fact}. '
-                f'{self.by.to_wire()} owns it; {self.derive.sentence}, so the copy is deleted.')
+    def render(self) -> str:
+        return (
+            f"{self.at.to_wire()} restates {self.pattern}: {self.fact}. "
+            f"{self.by.to_wire()} owns it; {self.derive.sentence}, so the copy is deleted."
+        )
