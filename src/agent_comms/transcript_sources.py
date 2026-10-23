@@ -609,13 +609,12 @@ class AssignedTranscriptSource(TranscriptSource):
                      for retained in event.for_assigned_source(self, published))
 
     def events(self, original: Delivered) -> tuple[TextTranscript, ...]:
-        message = original.envelope
         if original.audience.sender_lookup == self.recipient.lookup:
             return (
-                SentTranscript.from_message(message),
+                SentTranscript.from_message(original),
             )
         return (
-            IncomingTranscript(message=message, reader=self.recipient.name),
+            IncomingTranscript.of(original, reader=self.recipient.name),
         )
 
 
