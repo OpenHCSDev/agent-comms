@@ -48,6 +48,7 @@ from .thread_identity import (
 )
 from .thread_presentation import ThreadOwnerBinding
 from .thread_status import (
+    ActiveThreadPresence,
     ArchivedThreadStatus,
     StoppedThreadStatus,
     ThreadStatus,
@@ -113,6 +114,11 @@ class RegistryPresence[StatusMap: Mapping[str, ThreadStatus]](RegistryNames[Thre
         return (executor for thread in selected
                 if self.status(thread.name).in_view(visibility)
                 for executor in thread.role.executor(thread))
+
+    def active_threads(self, candidates: Iterable[Thread]) -> Iterator[Thread]:
+        """Select activity-bearing presences from this already acquired registry cut."""
+        return (member for thread in candidates
+                for member in self.status(thread.name).items_with(ActiveThreadPresence, thread))
 
     def channel_audience(self) -> Iterator[Thread]:
         """A channel reaches the default roster: stopped owners receive, archived do not."""
@@ -664,7 +670,9 @@ class RegistryDocument(RegistryPresence[dict[str, ThreadStatus]]):
         if not turn.may_release(canonical_lease):
             return False, NoFinishedTurn()
         attested = (canonical_lease.can_attest(self.claims.generations[name])
-                    and turn.held_by(canonical_lease) and self.status(name).active)
+                    and turn.held_by(canonical_lease))
+        completion = (self.status(name).completed_turn(canonical_lease)
+                      if attested else NoFinishedTurn())
         keeps_resume = turn.phase.keeps_project_resume
         record.without_claim()
         self.threads[name] = replace(
@@ -673,13 +681,7 @@ class RegistryDocument(RegistryPresence[dict[str, ThreadStatus]]):
             project_resume_due=current.project_resume_due and keeps_resume,
         )
         self.last_seen[name] = time.time()
-        if not attested:
-            return True, NoFinishedTurn()
-        return True, FinishedTurnFence(
-            identity=canonical_lease.identity,
-            turn_id=lease.turn_id,
-            claimed_generation=lease.claimed_generation,
-        )
+        return True, completion
 
 
 @dataclass(frozen=True, slots=True)
@@ -701,11 +703,7 @@ class RegistryEntry:
         return name in self.names
 
     def owned_by(self, owner: OwnerIdentity, process: ProcessIdentity) -> bool:
-        return (
-            self.status.active
-            and self.matches_name(owner.incarnation.name)
-            and owner.owns(self.thread, self.owner_generation, process)
-        )
+        return self.status.owns_entry(self, owner, process)
 
     def require_owner_process(self, owner: OwnerIdentity, process: ProcessIdentity) -> Thread:
         """The exact saved owner lease, current name and process still agree."""
@@ -751,9 +749,8 @@ class RegistrySnapshot(RegistryPresence[Mapping[str, ThreadStatus]], RegistryPro
     def idle_after(self, fence: FinishedTurnFence) -> tuple[Thread, ...]:
         return tuple(
             thread
-            for thread in self.threads_for(fence.identity.incarnation.require_recorded())
-            if self.status(thread.name).active
-            and thread.latest_idle_turn(fence, self.claim_generation(thread.name))
+            for thread in self.active_threads(self.threads_for(fence.identity.incarnation.require_recorded()))
+            if thread.latest_idle_turn(fence, self.claim_generation(thread.name))
         )
 
     @classmethod

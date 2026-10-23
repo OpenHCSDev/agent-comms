@@ -456,10 +456,9 @@ class ClaimOwner(AcquiringClaim, ResourceClaim):
     def live(self, registry: RegistrySnapshot) -> bool:
         incarnation = RecordedThreadIncarnation(self.owner, float(self.incarnation))
         return any(
-            registry.status(thread.name).active
-            and thread.process_alive
+            thread.process_alive
             and self.claim_scope.held_at(registry.claim_generation(thread.name))
-            for thread in registry.threads_for(incarnation)
+            for thread in registry.active_threads(registry.threads_for(incarnation))
         )
 
 

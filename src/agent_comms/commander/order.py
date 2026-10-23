@@ -331,9 +331,8 @@ class OrderFile:
         if busy:
             snapshot = context.comms.registry.snapshot()
             occupied = {todo.holder for todo in held} | {context.commander} | context.parked
-            idle = sorted(thread.name for thread in snapshot.threads.values()
-                          if thread.name not in occupied and thread.role.executor(thread)
-                          and snapshot.status(thread.name).active)
+            idle = sorted(thread.name for thread in snapshot.active_threads(snapshot.threads.values())
+                          if thread.name not in occupied and thread.role.executor(thread))
             problems.append(f'{unit} already holds orders '
                             f'{", ".join(todo.id for todo in busy)}; '
                             f'running units holding no order: {", ".join(idle) or "none"}')

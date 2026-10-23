@@ -17,6 +17,7 @@ from .tool_result import ToolResult
 
 if TYPE_CHECKING:
     from .comms import Comms
+    from .registration import Registration
     from .threads import Thread
     from .tools import ToolRequest
 
@@ -66,8 +67,11 @@ class ToolCaller(ABC):
     @abstractmethod
     def as_thread(self, commander: str) -> ThreadCaller: ...
 
-    @abstractmethod
-    def may_reconfigure(self, comms: Comms, name: str) -> bool: ...
+    def matches_thread(self, registry: Registration, name: str) -> bool:
+        return False
+
+    def may_reconfigure(self, comms: Comms, name: str) -> bool:
+        return comms.registry.status(name).permits_reconfiguration(self, comms.registry, name)
 
     @abstractmethod
     def require_directive(self, comms: Comms, body: str) -> None:
@@ -103,9 +107,6 @@ class NoThreadCaller(ToolCaller):
 
     def own_thread(self) -> NoReturn:
         return self.refuse_thread()
-
-    def may_reconfigure(self, comms: Comms, name: str) -> bool:
-        return not comms.registry.status(name).active
 
     def require_directive(self, comms: Comms, body: str) -> None:
         """A caller with no thread gives no directive."""
@@ -147,9 +148,8 @@ class ThreadCaller(ToolCaller):
     def own_thread(self) -> str:
         return self.name
 
-    def may_reconfigure(self, comms: Comms, name: str) -> bool:
-        return (not comms.registry.status(name).active
-                or comms.registry.canonical_name(name) == comms.registry.canonical_name(self.name))
+    def matches_thread(self, registry: Registration, name: str) -> bool:
+        return registry.canonical_name(name) == registry.canonical_name(self.name)
 
     def require_directive(self, comms: Comms, body: str) -> None:
         """A unit's or a script's send is a message, not a directive."""

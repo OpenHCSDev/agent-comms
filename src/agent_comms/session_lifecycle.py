@@ -39,6 +39,7 @@ from .native_arguments import NativeArguments
 from .runtime import RuntimeProxy, RuntimeServer
 from .session_effects import SessionEffects
 from .thread_model import ThreadModel
+from .thread_status import ActiveThreadPresence
 from .threads import Thread
 from .thread_identity import AcpThreadRole
 from .thread_text import NoThreadText, ThreadText
@@ -237,7 +238,8 @@ class SessionLifecycle:
         if not (
             self.bindings.get(session_id) == thread.name
             and thread.process_identity.runs_here()
-            and (await Coordination.run_worker(partial(self.comms.registry.status, thread.name))).active
+            and (await Coordination.run_worker(partial(self.comms.registry.status, thread.name)))
+                .items_with(ActiveThreadPresence, thread)
         ):
             thread = await Coordination.run_worker(partial(
                 self.comms.owners.acquire_thread, thread.name, owner_pid=os.getpid(),

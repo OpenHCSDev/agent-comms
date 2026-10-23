@@ -29,6 +29,7 @@ from agent_comms.coordinator import Coordination
 from agent_comms.declared_family import DeclaredFamily
 from agent_comms.diagnostics import PublicationMeasurements
 from agent_comms.locked_store import RegistryFile
+from agent_comms.errors import RelationViolationError
 from agent_comms.native_prompt_send import (
     PromptSendNotWritten,
     PromptSendUnknown,
@@ -114,7 +115,8 @@ class LifecycleWriteCase(PromptWriteCase):
         # A normal synchronous callback on the SAME loop must finish while
         # the independent writer is waiting for the child's pipe capacity.
         comms.registry.unregister("owner")
-        assert not comms.registry.status("owner").active
+        with pytest.raises(RelationViolationError):
+            comms.registry.status("owner").require_active()
 
 
 class CancelWriteCase(PromptWriteCase):
@@ -141,7 +143,8 @@ class PreflightDrainWriteCase(PromptWriteCase):
 
     async def interrupt(self, pending, stdin, comms):
         comms.registry.unregister("owner")
-        assert not comms.registry.status("owner").active
+        with pytest.raises(RelationViolationError):
+            comms.registry.status("owner").require_active()
 
     def check(self, stdin, entered, payload):
         assert entered == []

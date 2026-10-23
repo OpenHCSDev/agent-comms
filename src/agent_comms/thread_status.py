@@ -3,20 +3,32 @@
 from __future__ import annotations
 
 from abc import abstractmethod
+from collections.abc import Callable
 from dataclasses import dataclass, replace
 from typing import TYPE_CHECKING, ClassVar
 
-from .child_process import ProcessState
+from .child_process import ProcessIdentity, ProcessState
 from .declared_family import DeclaredFamily
 from .errors import RelationViolationError, ThreadNotStoppedError
 from .field_codec import FieldCodec, TextRepresentation
-from .thread_presentation import ThreadOwnerBinding, ThreadPresentation, InactiveThreadPresentationStatus
+from .lifecycle_capability import LifecycleCapability
+from .thread_presentation import (
+    InactiveThreadPresentationStatus,
+    LiveThreadOwnerBinding,
+    ThreadOwnerBinding,
+    ThreadPresentation,
+    UnavailableThreadOwnerBinding,
+)
 
 if TYPE_CHECKING:
     from .activity import ObservedActivity
-    from .registry_document import RosterVisibility
-    from .thread_identity import GenerationCounter
+    from .owner_lifecycle import OwnerLifecycle
+    from .registration import Registration
+    from .registry_document import RegistryEntry, RegistrySnapshot, RosterVisibility
+    from .thread_identity import GenerationCounter, OwnerIdentity
     from .threads import Thread
+    from .tool_caller import ToolCaller
+    from .turn_lease import TurnCompletion, TurnLeaseFence
 
 
 class AlwaysListed:
@@ -41,8 +53,7 @@ class Visible:
 
 
 @dataclass(frozen=True)
-class ThreadStatus(DeclaredFamily, affix="ThreadStatus"):
-    active: ClassVar[bool] = False
+class ThreadStatus(LifecycleCapability, DeclaredFamily, affix="ThreadStatus"):
     running: ClassVar[bool] = False
     stopped: ClassVar[bool] = False
     # Whether a message sent now is read now; each status answers, none by default.
@@ -64,8 +75,11 @@ class ThreadStatus(DeclaredFamily, affix="ThreadStatus"):
     def require_running(self) -> None:
         raise RelationViolationError("goal owner is not running")
 
-    def require_active(self) -> None:
-        raise RelationViolationError("live owner is stopped or unavailable")
+    def require_active(self, message: str = "live owner is stopped or unavailable") -> None:
+        self.require(ActiveThreadPresence, RelationViolationError(message))
+
+    def require_inactive(self, message: str) -> None:
+        """Inactive declarations may be changed without an active owner's session."""
 
     def require_stopped(self) -> None:
         raise ThreadNotStoppedError("Retired owner is no longer stopped")
@@ -81,10 +95,36 @@ class ThreadStatus(DeclaredFamily, affix="ThreadStatus"):
         """Withdraw this presence without inventing an owner it did not hold."""
 
     def starts_owner(self, nxt: ThreadStatus) -> bool:
-        return not self.active and nxt.active
+        return bool(nxt.items_with(ActiveThreadPresence, nxt))
 
     def changes_owner(self, nxt: ThreadStatus) -> bool:
-        return self.active != nxt.active
+        return self.starts_owner(nxt) or nxt.starts_owner(self)
+
+    def permits_reconfiguration(self, caller: ToolCaller, registry: Registration, name: str) -> bool:
+        return True
+
+    def native_owner_binding(self, snapshot: RegistrySnapshot, thread: Thread) -> ThreadOwnerBinding:
+        return UnavailableThreadOwnerBinding()
+
+    def restart_candidates(self, thread: Thread) -> tuple[Thread, ...]:
+        return ()
+
+    def settle_local_stop(self, lifecycle: OwnerLifecycle, thread: Thread) -> bool:
+        return thread.process_identity.allows_inactive_stop()
+
+    def deletable_threads(self, thread: Thread) -> tuple[Thread, ...]:
+        return () if thread.process_alive else (thread,)
+
+    def claims_owner(self, process: ProcessState) -> bool:
+        return False
+
+    def owns_entry(self, entry: RegistryEntry, owner: OwnerIdentity, process: ProcessIdentity) -> bool:
+        return False
+
+    def completed_turn(self, lease: TurnLeaseFence) -> TurnCompletion:
+        from .turn_lease import NoFinishedTurn
+
+        return NoFinishedTurn()
 
     def restored(self) -> ThreadStatus:
         """Restoring saved provenance never restarts its original process."""
@@ -113,7 +153,10 @@ class ThreadStatus(DeclaredFamily, affix="ThreadStatus"):
     ) -> ThreadPresentation:
         return ordinary
 
-    def presentation(self, title: str, activity: ObservedActivity) -> ThreadPresentation:
+    def presentation(
+        self, title: str, activity: ObservedActivity,
+        idle: Callable[[ThreadPresentation], ThreadPresentation],
+    ) -> ThreadPresentation:
         return ThreadPresentation(title, "○", self.declared_name.title(),
                                   status=InactiveThreadPresentationStatus())
 
@@ -121,14 +164,51 @@ class ThreadStatus(DeclaredFamily, affix="ThreadStatus"):
 class ActiveThreadPresence(AlwaysListed, Visible, ThreadStatus, declared_name=None):
     """Shared semantics of running and idle owners; not a second state family."""
 
-    active = True
     receiving = True
 
-    def require_active(self) -> None:
-        pass
+    def require_inactive(self, message: str) -> None:
+        raise RelationViolationError(message)
+
+    def starts_owner(self, nxt: ThreadStatus) -> bool:
+        return False
 
     def withdraw_owner(self, counter: GenerationCounter, name: str) -> None:
         counter.advance(name)
+
+    def permits_reconfiguration(self, caller: ToolCaller, registry: Registration, name: str) -> bool:
+        return caller.matches_thread(registry, name)
+
+    def native_owner_binding(self, snapshot: RegistrySnapshot, thread: Thread) -> ThreadOwnerBinding:
+        if not thread.process_alive:
+            return super().native_owner_binding(snapshot, thread)
+        return LiveThreadOwnerBinding(snapshot.owner_identity(thread.name), thread.require_process())
+
+    def restart_candidates(self, thread: Thread) -> tuple[Thread, ...]:
+        return thread.role.executor(thread) if thread.process_alive else ()
+
+    def settle_local_stop(self, lifecycle: OwnerLifecycle, thread: Thread) -> bool:
+        if not thread.process_identity.runs_here():
+            return False
+        lifecycle._settle_local_owner(thread)
+        return True
+
+    def deletable_threads(self, thread: Thread) -> tuple[Thread, ...]:
+        return ()
+
+    def claims_owner(self, process: ProcessState) -> bool:
+        return process.claims_owner()
+
+    def owns_entry(self, entry: RegistryEntry, owner: OwnerIdentity, process: ProcessIdentity) -> bool:
+        return (entry.matches_name(owner.incarnation.name)
+                and owner.owns(entry.thread, entry.owner_generation, process))
+
+    def completed_turn(self, lease: TurnLeaseFence) -> TurnCompletion:
+        from .turn_lease import FinishedTurnFence
+
+        return FinishedTurnFence(
+            identity=lease.identity, turn_id=lease.turn_id,
+            claimed_generation=lease.claimed_generation,
+        )
 
     def for_deletion(self) -> ThreadStatus:
         raise RelationViolationError("Stop a running thread before permanently deleting it.")
@@ -150,8 +230,13 @@ class ActiveThreadPresence(AlwaysListed, Visible, ThreadStatus, declared_name=No
             )
         return ordinary
 
-    def presentation(self, title: str, activity: ObservedActivity) -> ThreadPresentation:
-        return activity.ordinary_presentation(title)
+    def presentation(
+        self, title: str, activity: ObservedActivity,
+        idle: Callable[[ThreadPresentation], ThreadPresentation],
+    ) -> ThreadPresentation:
+        ordinary = activity.ordinary_presentation(title)
+        ordinary = ordinary.status.when_idle(ordinary, idle)
+        return activity.readiness.presentation(ordinary)
 
 
 class RunningThreadStatus(SelfRenaming, ActiveThreadPresence):
@@ -205,8 +290,11 @@ class NoBridgeThreadStatus(SelfRenaming, CliInboxPresence, StoppedThreadStatus):
     It has no launched process to stop or restart, so it stays in every view.
     """
 
-    def presentation(self, title: str, activity: ObservedActivity) -> ThreadPresentation:
-        return replace(super().presentation(title, activity), summary="CLI inbox · no bridge")
+    def presentation(
+        self, title: str, activity: ObservedActivity,
+        idle: Callable[[ThreadPresentation], ThreadPresentation],
+    ) -> ThreadPresentation:
+        return replace(super().presentation(title, activity, idle), summary="CLI inbox · no bridge")
 
 
 class ArchivedThreadStatus(ThreadStatus):

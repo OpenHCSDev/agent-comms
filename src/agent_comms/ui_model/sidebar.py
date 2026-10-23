@@ -20,6 +20,7 @@ from agent_comms.thread_execution import ConversationPreparation, ThreadExecutio
 from agent_comms.thread_identity import ThreadIncarnation
 from agent_comms.thread_model import ThreadModel
 from agent_comms.thread_presentation import SessionDisconnected, ThreadPresentationStatus
+from agent_comms.thread_status import ActiveThreadPresence
 from agent_comms.ui_model.changes import KeyedModel
 from agent_comms.ui_model.unread import UnreadPresentation, UnobservedUnread
 
@@ -66,7 +67,7 @@ class ThreadRowModel:
             person.thread.incarnation, presentation.title, presentation.label, presentation.summary,
             presentation.status, person.thread.model,
             unread,
-            person.status.active, person.thread.execution,
+            bool(person.status.items_with(ActiveThreadPresence, person)), person.thread.execution,
         )
 
 

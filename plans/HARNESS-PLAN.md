@@ -179,10 +179,30 @@ The Toad fork has removed that outcome substitution in both app and ordinary
 tests: the catalogue supplies context, and actual failed app attempts retain
 their output and private roots. That repair is pushed in Toad `291fd4780`; its
 actual-harness regression passed. A fresh installed client-request attempt timed
-out after 90 seconds. Its retained evidence is
-`/home/ts/.cache/agent-scratch/toad-test-7f90sh_5`; the Toad binding fork owns the
-diagnosis and repair. This does not invalidate the completed saved-fork journey
-or establish the recorded SelectCurrent diagnosis.
+out after root shortened the harness's default 165-second budget to 90 seconds.
+Its retained evidence is `/home/ts/.cache/agent-scratch/toad-test-7f90sh_5`:
+the first permission/file edit completed, then replacement session startup had
+roughly six seconds left before termination. The Toad fork's source trace found
+no permission/startup dependency cycle. A fresh isolated attempt with the default
+budget finished in 25.59 seconds and failed after replacement session creation:
+`DB().session_get(saved)` returned `None` at the native test's title assertion.
+Its full child output is retained in
+`/home/ts/.cache/agent-scratch/toad-test-ich92jvs/stdout.log`; the Toad fork owns
+that persistence diagnosis and the accompanying retired-session notifications.
+Neither attempt establishes the recorded SelectCurrent diagnosis or a deadlock.
+
+The persistence cause is traced: Toad's `Session` declared SQL directives in
+dataclass metadata after Core's column compiler moved to `Annotated`. Fresh
+session rows therefore had a NULL `id` while insertion returned SQLite's rowid.
+The Toad binding fork owns the complete DB family repair: annotation-derived
+session and model-history tables, shared durable schema reconciliation, one
+transaction path and surfaced SQLite failures. Eight focused checks passed on
+the source checkpoint; final connection-owner and dependency cleanup follows.
+The installed user's sessions table already has a valid primary key and no rows;
+its model-history table has two rows requiring a one-time schema carry.
+That carry uses an explicit SQLite backup and transaction outside the bus-only
+installer carry contract. Root owns its execution and paired installation after
+the Toad fork's copy proof; the virtual-bus integration is not a prerequisite.
 
 ### 2. Commander verbs take a fixed, small time
 

@@ -223,8 +223,9 @@ class OwnerReleaseEvidence(ReleasedOwner, OwnerRelease, TypedTable):
         process = self.require_process()
         if process.alive():
             raise RelationViolationError("Released native owner process is still alive")
-        if snapshot.status(current.name).active and self.matches(current):
-            raise RelationViolationError("Released native process is still the registry owner")
+        if self.matches(current):
+            snapshot.status(current.name).require_inactive(
+                "Released native process is still the registry owner")
         actual = snapshot.claimed_identity(current.name)
         released = ClaimedIdentity(self.incarnation(), self.after)
         if not actual.includes(released):
@@ -336,8 +337,7 @@ class OwnerLifecycle:
             thread.execution.require_native()
             refusal = RelationViolationError("Explicit start is required for a stopped agent.")
             thread.role.require_executable(refusal)
-            if not self.registry.status(thread.name).active:
-                raise refusal
+            self.registry.status(thread.name).require_active(str(refusal))
             return (
                 thread
                 if thread.process_alive
@@ -358,8 +358,7 @@ class OwnerLifecycle:
             thread.role.require_executable(refusal)
             status.require_visible(str(refusal))
             if thread.process_alive:
-                if not status.active:
-                    raise RelationViolationError("Stopped owner has not exited yet.")
+                status.require_active("Stopped owner has not exited yet.")
                 return OwnerStartResult(thread.name, thread.require_process().pid, False)
             owner = self._launch_owner(
                 thread, agent_bin.configured(), agent_args,
@@ -437,23 +436,18 @@ class OwnerLifecycle:
             thread.role.require_executable(
                 RelationViolationError("Only agent threads can be stopped.")
             )
-            if not snapshot.status(thread.name).active and (
-                thread.process_identity.allows_inactive_stop()
-            ):
-                return None
-            if (
-                snapshot.status(thread.name).active
-                and thread.process_identity.runs_here()
-            ):
-                if ThreadLaunch.called_by(
-                    thread.name,
-                    canonicalize=lambda caller: self.registry.require(caller).name,
-                ):
-                    self._release_current_owner_unlocked(thread.name)
-                else:
-                    self.registry.unregister(thread.name)
+            if snapshot.status(thread.name).settle_local_stop(self, thread):
                 return None
             return thread, snapshot.claim_generation(thread.name)
+
+    def _settle_local_owner(self, thread: Thread) -> None:
+        """Settle this process under the caller's existing stop-selection lock."""
+        if ThreadLaunch.called_by(
+            thread.name, canonicalize=lambda caller: self.registry.require(caller).name,
+        ):
+            self._release_current_owner_unlocked(thread.name)
+        else:
+            self.registry.unregister(thread.name)
 
     def stop(self, *names: str) -> None:
         owners = tuple(owner for name in dict.fromkeys(names)
