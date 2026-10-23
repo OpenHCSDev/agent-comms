@@ -1788,7 +1788,8 @@ class FieldCodec(MroDispatch, Sealed):
         from a read-only view, and a view never serves as a persistence record.
         """
         representation = cls._value_representation(value, annotation)
-        if representation is not None:
+        # A record member's wire form is its declared record, so a view projects it as one.
+        if representation is not None and not isinstance(value, RecordMember):
             return cls.encode(value, annotation)
         if is_dataclass(value) and not isinstance(value, type):
             result = cls._tag(value)

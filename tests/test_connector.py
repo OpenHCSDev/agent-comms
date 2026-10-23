@@ -195,7 +195,7 @@ async def approved_token(client: TestClient, comms: Comms) -> str:
     waiting = await client.get("/authorize", params=parameters, allow_redirects=False)
     assert waiting.status == 200
     owner = comms.messaging.user_identity(str(comms.root))
-    notice = comms.bus.inbox(owner.name)[-1]
+    notice = comms.bus.inbox(owner.name).page.messages[-1]
     link = urlsplit(notice.body.splitlines()[-1])
     assert (await client.head(link.path, allow_redirects=False)).status == 405
     preview = await client.get(link.path, allow_redirects=False)
@@ -273,7 +273,7 @@ async def test_request_log_names_the_route_and_never_its_values(client, store, r
         "/authorize", params=FieldCodec.encode(login.query), allow_redirects=False
     )).status == 200
     owner = comms.messaging.user_identity(str(comms.root))
-    link = urlsplit(comms.bus.inbox(owner.name)[-1].body.splitlines()[-1])
+    link = urlsplit(comms.bus.inbox(owner.name).page.messages[-1].body.splitlines()[-1])
     secret = link.path.rsplit("/", 1)[-1]
     runner = web.AppRunner(Connector(store, "http://127.0.0.1:18766", root).application(),
                            access_log=None)
@@ -359,7 +359,7 @@ async def test_watch_pass_waits_for_install_then_runs_once(comms, copied_connect
         with suppress(asyncio.CancelledError):
             await pending
     assert watch.calls == 1
-    assert [message.body for message in copied.bus.inbox("worker")] == ["One watch pass"]
+    assert [message.body for message in copied.bus.inbox("worker").page.messages] == ["One watch pass"]
     assert passes.read().failing == {}
     assert comms.bus.bus.revision() == original.seq
     assert not [record for record in caplog.records if record.levelno >= logging.ERROR]
@@ -502,7 +502,7 @@ async def test_connector_thread_tools_act_as_claude_ai(client, store, comms):
             "jsonrpc": "2.0", "id": 3, "method": "tools/call", "params": call})).json()
         assert reply["result"]["isError"] is False, reply
     assert comms.registry.require("claude-ai").goal.text == "Ship the connector"
-    assert [(message.sender, message.body) for message in comms.bus.inbox("worker")] == [
+    assert [(message.sender, message.body) for message in comms.bus.inbox("worker").page.messages] == [
         ("claude-ai", "Owner said go")]
 
 
@@ -571,7 +571,7 @@ async def test_approval_previews_do_not_grant_browser_trust(client, store, comms
         "/authorize", params=FieldCodec.encode(login.query), allow_redirects=False
     )).status == 200
     owner = comms.messaging.user_identity(str(comms.root))
-    link = urlsplit(comms.bus.inbox(owner.name)[-1].body.splitlines()[-1])
+    link = urlsplit(comms.bus.inbox(owner.name).page.messages[-1].body.splitlines()[-1])
     before = store.path.read_bytes()
     for _ in range(2):
         preview = await client.get(link.path, allow_redirects=False)
@@ -599,7 +599,7 @@ async def test_pending_authorizations_are_bounded(client, store, comms):
             "/authorize", params=FieldCodec.encode(query), allow_redirects=False
         )).status == 200
     owner = comms.messaging.user_identity(str(comms.root))
-    before = len(comms.bus.inbox(owner.name))
+    before = len(comms.bus.inbox(owner.name).page.messages)
     assert before == ConnectorGrants.waiting_limit
     blocked = replace(login.query, state="overflow")
     for _ in range(2):
@@ -609,12 +609,12 @@ async def test_pending_authorizations_are_bounded(client, store, comms):
         assert refused.status == 429 and int(refused.headers["Retry-After"]) == CODE_SECONDS
     assert len(store.read().requests) == ConnectorGrants.waiting_limit
     assert blocked.request_id not in store.read().requests
-    assert len(comms.bus.inbox(owner.name)) == before
+    assert len(comms.bus.inbox(owner.name).page.messages) == before
     repeated = replace(login.query, state="0")
     assert (await client.get(
         "/authorize", params=FieldCodec.encode(repeated), allow_redirects=False
     )).status == 200
-    assert len(comms.bus.inbox(owner.name)) == before
+    assert len(comms.bus.inbox(owner.name).page.messages) == before
     held = store.read().requests[repeated.request_id]
     store.update(lambda grants: DocumentChange.to(replace(grants, requests=grants.requests | {
         repeated.request_id: replace(held, expires_at=time.time() - 1)
@@ -623,14 +623,14 @@ async def test_pending_authorizations_are_bounded(client, store, comms):
         "/authorize", params=FieldCodec.encode(blocked), allow_redirects=False
     )).status == 200
     assert len(store.read().requests) == ConnectorGrants.waiting_limit
-    assert len(comms.bus.inbox(owner.name)) == before + 1
+    assert len(comms.bus.inbox(owner.name).page.messages) == before + 1
 
 
 async def test_owner_browser_approval_lifecycle(client, store, comms):
     """One real HTTP/store/bus journey: owner consent, remembered browser, expiry and revoke."""
     token = await approved_token(client, comms)
     owner = comms.messaging.user_identity(str(comms.root))
-    notices = comms.bus.inbox(owner.name)
+    notices = comms.bus.inbox(owner.name).page.messages
     assert len(notices) == 1 and notices[0].target == owner.name
     first_link = urlsplit(notices[0].body.splitlines()[-1])
     assert first_link.netloc == "127.0.0.1:18766"
@@ -658,7 +658,7 @@ async def test_owner_browser_approval_lifecycle(client, store, comms):
     assert redirected.status == 302
     redirected_query = parse_qs(urlsplit(redirected.headers["Location"]).query)
     assert redirected_query["state"] == [query.state] and redirected_query["code"]
-    assert len(comms.bus.inbox(owner.name)) == 1
+    assert len(comms.bus.inbox(owner.name).page.messages) == 1
 
     client.session.cookie_jar.clear()
     query = replace(query, state="untrusted-browser")
@@ -668,7 +668,7 @@ async def test_owner_browser_approval_lifecycle(client, store, comms):
         )
         assert waiting.status == 200
         assert "sent to the owner on comms" in await waiting.text()
-    notices = comms.bus.inbox(owner.name)
+    notices = comms.bus.inbox(owner.name).page.messages
     assert len(notices) == 2  # Retry the same waiting query, not the owner's message.
     link = urlsplit(notices[-1].body.splitlines()[-1])
     assert (await client.get(link.path + "wrong", allow_redirects=False)).status == 400
@@ -701,7 +701,7 @@ async def test_owner_browser_approval_lifecycle(client, store, comms):
         "/authorize", params=FieldCodec.encode(fresh), allow_redirects=False
     )).status == 200
     assert not store.read().codes and not store.read().trusts(browser)
-    assert len(comms.bus.inbox(owner.name)) == 5
+    assert len(comms.bus.inbox(owner.name).page.messages) == 5
 
 
 async def test_a_revoked_token_is_refused(client, store, comms):

@@ -3,12 +3,15 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass
-from typing import Annotated, ClassVar
+from typing import TYPE_CHECKING, Annotated, ClassVar
 
 from .bus_tables import ReceivedSource
 from .messages import BusProjectionTables, BusRow, Message
 from .read_basis import ReadCursor
 from .typed_table import Column, Index, TypedRow, TypedTable
+
+if TYPE_CHECKING:
+    from .page_traversal import PageTraversal
 
 
 @dataclass(frozen=True)
@@ -113,7 +116,8 @@ class RouteCounts:
             counts[row.actor][conversation] = counts[row.actor].get(conversation, 0) + row.count
         return counts
 
-    def unseen_deliveries(self, registry, delivery, seen, *, after: int = 0, scope=None, limit: int = 100):
+    def unseen_deliveries(self, registry, delivery, seen, *, after: int = 0, scope=None, limit: int = 100,
+                          traversal: PageTraversal):
         if limit <= 0:
             raise ValueError("Unread delivery limit must be positive.")
         scope = delivery if scope is None else scope
@@ -124,5 +128,6 @@ class RouteCounts:
                 SELECT request.seq,request.target,request.sender,message.mentions
                 FROM cursors AS request JOIN "{Message.table.declared_name}" AS message USING(seq)
                 WHERE actor=? AND {ReadCursor.unread_sql}
-            ) SELECT seq,target FROM unread WHERE ({predicate}) ORDER BY seq LIMIT ?''',
-            (delivery.actor, *values, limit)))
+            ) SELECT seq,target FROM unread WHERE ({predicate}) AND (? IS NULL OR seq < ?)
+            ORDER BY seq {traversal.seq_order} LIMIT ?''',
+            (delivery.actor, *values, traversal.upper, traversal.upper, limit)))

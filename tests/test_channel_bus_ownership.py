@@ -52,7 +52,7 @@ def test_no_wake_observer_keeps_bounded_pointers_after_ui_ack(tmp_path):  # noqa
     sent = tuple(comms.messaging.send("sender", "#team", f"@beta review {number}").message
                  for number in range(6))
     assert not comms.registry.require("alpha").executing
-    references = tuple(message.reference for message in comms.bus.inbox("alpha", CommandTarget.named("#team")))
+    references = tuple(message.reference for message in comms.bus.inbox("alpha", CommandTarget.named("#team")).page.messages)
     comms.messaging.acknowledge("alpha", references)
     ledger = comms.bus.reads.path.read_bytes()
     revision = comms.bus.bus.revision()

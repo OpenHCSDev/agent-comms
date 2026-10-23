@@ -74,7 +74,7 @@ def main(scratch: Path):
                 response, status = output.strip().rsplit("\n", 1)
                 assert status.split()[0] == "200"
                 assert json.loads(response)["result"]["isError"] is False
-                messages = comms.bus.inbox("worker")
+                messages = comms.bus.inbox("worker").page.messages
                 assert len(messages) == 1
                 assert messages[0].sender == "claude-ai"
                 assert messages[0].body == "Fix the candidate now"

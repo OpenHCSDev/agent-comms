@@ -58,7 +58,7 @@ def held_bus(tmp_path):
     Bus.install(Bus.path_in(comms.root))
     for name in ('sender', 'recipient'):
         comms.registry.declare(Thread(name, frozenset(), str(tmp_path)))
-    assert comms.bus.inbox('recipient') == []
+    assert comms.bus.inbox('recipient').page.messages == []
     barrier = comms.owners.maintenance
     hold = barrier.begin(MaintenanceOperator.current())
     try:
@@ -69,7 +69,7 @@ def held_bus(tmp_path):
 
 
 def assert_published_once(comms):
-    messages = comms.bus.inbox('recipient')
+    messages = comms.bus.inbox('recipient').page.messages
     assert len(messages) == 1
     assert messages[0].body == 'held publication'
     assert SendRefusal.recent(comms.root) == ()
