@@ -37,3 +37,17 @@ def test_acceptance_refuses_passing_and_unmeasurable_checks(source_repository, t
     assert not tuple((tmp_path / 'checks').iterdir())
 
 
+def test_check_uses_configured_persistent_checkout_and_retains_real_result(source_repository, tmp_path):
+    checkout_base = tmp_path / "persistent-checkouts"
+    marker = tmp_path / "observed-checkouts"
+    checkout = str(source_repository.checkout)
+    check = OrderCheck(checkout, f'pwd >> "{marker}"; echo 0', CountCheckResult(0))
+    commit = source_repository.main_commit
+    first = check.at(commit, checkout, checkout_base)
+    assert check.at(commit, checkout, checkout_base) == first
+    (actual,) = marker.read_text().splitlines()
+    assert actual.startswith(str(checkout_base) + "/order-check-")
+    assert not tuple(checkout_base.iterdir())
+    assert len(check.recorded(commit, checkout)) == 1
+
+
