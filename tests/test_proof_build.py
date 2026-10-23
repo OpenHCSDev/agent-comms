@@ -16,7 +16,7 @@ from agent_comms.build_identity import (
 )
 from agent_comms.bus import Bus
 from agent_comms.check_root import CheckRoot
-from agent_comms.commander.config import CommanderConfig
+from agent_comms.commander.order import Commander
 from agent_comms.commander.standing import InstallDue
 from agent_comms.comms import Comms
 from agent_comms.field_codec import FieldCodec
@@ -350,8 +350,8 @@ def test_install_due_compares_fetched_main_to_installed_build(
     Repo.git(checkout, "update-ref", "refs/remotes/origin/main", graph.oldest)
     before = Repo.git(checkout, "rev-parse", "HEAD")
     bus = Comms(tmp_path / "bus")
-    config = CommanderConfig.on_machine("lead", (graph.repository,), bus.root, tmp_path / "home")
-    CommanderConfig.path_in(bus.root).write_text(config.model_dump_json())
+    bus.registry.declare(bus.registry.new_thread("lead", frozenset(), str(checkout)))
+    Commander.on_root("lead", (graph.repository,), bus.root)
 
     due = InstallDue.violations(bus, "lead")
 
@@ -390,8 +390,8 @@ def test_install_waits_for_merges_to_settle_into_one_batch(
     Repo.git(checkout, "remote", "set-url", "origin", str(origin))
     Repo.git(checkout, "push", "origin", f"{graph.newer}:refs/heads/main")
     bus = Comms(tmp_path / "bus")
-    config = CommanderConfig.on_machine("lead", (graph.repository,), bus.root, tmp_path / "home")
-    CommanderConfig.path_in(bus.root).write_text(config.model_dump_json())
+    bus.registry.declare(bus.registry.new_thread("lead", frozenset(), str(checkout)))
+    Commander.on_root("lead", (graph.repository,), bus.root)
     merged = int(Repo.git(checkout, "log", "-1", "--format=%ct", graph.newer))
 
     monkeypatch.setattr(time, "time", lambda: merged + InstallDue.settle - 1)

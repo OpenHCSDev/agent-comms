@@ -8,6 +8,7 @@ from contextlib import closing
 from pathlib import Path
 
 import pytest
+from agent_comms.threads import ParkedThreadWorkState
 
 from agent_comms.active_route import ActiveRoute, read_active_route, route_new_bus
 from agent_comms.child_process import ProcessIdentity
@@ -15,9 +16,9 @@ from agent_comms.bus import Bus
 from agent_comms.recorded_bus import RecordedBusIdentity
 from bus_record_fixture import prepare_native_comms
 from agent_comms.comms import Comms, wire
-from agent_comms.commander.config import (
-    CommanderConfig, GivenRepos, NamedCommander, NoConfigFile, WrittenConfigFile,
-)
+from agent_comms.commander.config import GivenRepos, NamedCommander
+from agent_comms.registry_document import NoCommanderProject, RegisteredCommanderProject
+from agent_comms.thread_identity import RecordedThreadIncarnation
 from agent_comms.installer.backup import UpgradeRefused, bus_files
 from agent_comms.installer.carry import CarryChain
 from agent_comms.installer.practice import practice_copy
@@ -143,7 +144,8 @@ def test_install_report_encodes_its_registered_harnesses() -> None:
     from agent_comms.cli_commands import InstallResult
     from agent_comms.field_codec import FieldCodec
 
-    for config in (WrittenConfigFile("/config.json"), NoConfigFile()):
+    for config in (RegisteredCommanderProject(RecordedThreadIncarnation("lead", 1.0), ()),
+                   NoCommanderProject()):
         report = InstallResult(config, {"claude-code": ("skill", "tools")})
         assert FieldCodec.decode(InstallResult, FieldCodec.encode(report)) == report
 
@@ -165,9 +167,9 @@ def test_an_install_on_a_bus_with_no_commander_writes_no_commander_config(privat
     comms = Comms(root)
     home = _harnessless_home(private_directory, monkeypatch)
     result = InstallCliCommand(project=private_directory).apply(comms)
-    assert result.config == NoConfigFile()
-    assert not CommanderConfig.path_in(root).exists()
-    assert not CommanderConfig.path(home).exists() and not CommanderConfig.path(home).is_symlink()
+    assert result.config == NoCommanderProject()
+    assert not (root / "commander.json").exists()
+    assert not (home / ".config/agent-comms/commander.json").exists()
 
 
 @pytest.mark.parametrize("flags", [
@@ -182,12 +184,14 @@ def test_an_install_refuses_flags_a_bus_without_a_commander_record_cannot_use(
     root = private_directory / "wire"
     root.mkdir(mode=0o700)
     home = _harnessless_home(private_directory, monkeypatch)
+    comms = Comms(root)
+    comms.registry.declare(comms.registry.new_thread("lead", frozenset(), str(private_directory)))
     with pytest.raises(UpgradeRefused):
-        InstallCliCommand(project=private_directory, **flags).apply(Comms(root))
-    assert not CommanderConfig.path_in(root).exists() and not CommanderConfig.path(home).is_symlink()
+        InstallCliCommand(project=private_directory, **flags).apply(comms)
+    assert not (root / "commander.json").exists() and not (home / ".config/agent-comms/commander.json").is_symlink()
 
 
-def test_an_install_without_flags_keeps_the_recorded_commander_and_rehomes_its_paths(
+def test_an_install_without_flags_keeps_native_commander_and_parked_state(
     private_directory, monkeypatch,
 ):
     from agent_comms.cli_commands import InstallCliCommand
@@ -196,15 +200,18 @@ def test_an_install_without_flags_keeps_the_recorded_commander_and_rehomes_its_p
     root.mkdir(mode=0o700)
     comms = Comms(root)
     comms.registry.declare(comms.registry.new_thread("lead", frozenset(), str(private_directory)))
-    old_home = private_directory / "old-home"
-    recorded = CommanderConfig.on_machine("lead", (), root, old_home, frozenset({"parked-unit"}))
-    recorded.write(old_home)
+    comms.registry.declare(comms.registry.new_thread(
+        "parked-unit", frozenset(), str(private_directory)))
+    comms.registry.set_work_state("parked-unit", ParkedThreadWorkState())
+    recorded = RegisteredCommanderProject(comms.registry.require("lead").incarnation, ())
+    comms.registry.set_commander_project(recorded)
     home = _harnessless_home(private_directory, monkeypatch)
     result = InstallCliCommand(project=private_directory).apply(comms)
-    expected = CommanderConfig.on_machine("lead", (), root, home, frozenset({"parked-unit"}))
-    assert result.config == WrittenConfigFile(str(CommanderConfig.path(home)))
-    assert CommanderConfig.path_in(root).read_text() == expected.model_dump_json(indent=1) + "\n"
-    assert CommanderConfig.read(CommanderConfig.path(home)) == expected
+    assert result.config == recorded
+    assert Comms(root).registry.snapshot().commander_project == recorded
+    assert not (root / "commander.json").exists()
+    assert not (home / ".config/agent-comms/commander.json").exists()
+    assert comms.registry.require("parked-unit").work_state == ParkedThreadWorkState()
 
 
 def test_a_practice_copy_of_a_bus_without_messages_reads_its_history_twice(private_directory, capsys):

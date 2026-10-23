@@ -2102,9 +2102,13 @@ class PendingProblemOrder(Pending, DeliverableProblemOrder):
         busy = tuple(todo for todo in held if todo.held().owner == unit and todo.id not in group)
         if busy:
             snapshot = context.comms.registry.snapshot()
-            occupied = {todo.held().owner for todo in held} | {context.commander} | context.parked
-            idle = sorted(thread.name for thread in snapshot.active_threads(snapshot.threads.values())
-                          if thread.name not in occupied and thread.role.executor(thread))
+            occupied = {todo.held().owner for todo in held} | {context.commander}
+            idle = sorted(
+                candidate.name
+                for thread in snapshot.active_threads(snapshot.threads.values())
+                if thread.name not in occupied and thread.role.executor(thread)
+                for candidate in thread.work_state.candidates(thread)
+            )
             problems.append(f'{unit} already holds orders '
                             f'{", ".join(todo.id for todo in busy)}; '
                             f'running units holding no order: {", ".join(idle) or "none"}')
@@ -3685,6 +3689,7 @@ def _thread(thread: Thread) -> ThreadIncarnation:
     thread.role.require_executable(
         TodoError("Assignments require an executable registered thread snapshot.")
     )
+    thread.work_state.require_assignment()
     return _participant(thread)
 
 

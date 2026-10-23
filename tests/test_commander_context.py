@@ -12,13 +12,13 @@ def test_importing_order_with_empty_home_reads_no_config_and_opens_no_store(tmp_
     environment['HOME'] = str(tmp_path)
     result = subprocess.run([sys.executable, '-B', '-c', '''
 from agent_comms.comms import Comms
-from agent_comms.commander.config import CommanderConfig
+from agent_comms.registry_store import RegistryStore
 
 def forbidden(*args, **kwargs):
     raise AssertionError('import opened a store or read configuration')
 
 Comms.__init__ = forbidden
-CommanderConfig.read = classmethod(forbidden)
+RegistryStore.read_snapshot_unlocked = forbidden
 import agent_comms.commander.order
 '''], env=environment, capture_output=True, text=True, timeout=20)
     assert result.returncode == 0, result.stderr

@@ -171,6 +171,10 @@ class WatchState:
         """Whether this session can be the bus thread named; unbound, it cannot be ruled out."""
         return True
 
+    def bindings(self) -> tuple[WatchRecord, ...]:
+        """No session binding exists until this watch is enrolled."""
+        return ()
+
     def await_socket(self, absent: OSError) -> None:
         """No bridge holds the claim, so its socket is gone, not between bridges."""
         raise absent
@@ -184,6 +188,9 @@ class UnclaimedWatch(WatchState):
 class RecordedWatch(WatchState):
     claim: WatchClaim
     record: WatchRecord
+
+    def bindings(self) -> tuple[WatchRecord, ...]:
+        return (self.record,)
 
     def connect(self, serve: Callable[[], Serve],
                 request: Callable[[Serve], SessionRequest]) -> None:
