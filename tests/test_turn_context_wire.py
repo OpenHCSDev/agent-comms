@@ -7,7 +7,7 @@ from agent_comms.thread_identity import TurnId, TurnIdentity
 from agent_comms.turn_context import ContextManifest, RecordedContextTurn, SegmentManifest, OwnerProvenance, TurnContext, TranscriptSegment, UserInputSegment
 from agent_comms.pi_commands import Prompt
 from agent_comms.native_tool_call import OwnerToolConnection
-from agent_comms.image_inputs import ImageInput
+from agent_comms.image_input import ImageInput
 from agent_comms.field_codec import FieldCodec
 from bus_record_fixture import context_comms
 

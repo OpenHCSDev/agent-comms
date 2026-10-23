@@ -24,7 +24,7 @@ from .field_codec import (
     WireName,
     WireOmitDefault,
 )
-from .image_inputs import ImageInput
+from .image_input import ImageInput
 from .native_failures import NativePiUnavailable
 from .native_package import VerifiedNativePackage
 from .native_session_reopen import NativeSessionIdentity

@@ -46,7 +46,7 @@ from .input_attempt import (
 )
 from .input_disposition import InputDispositions, InputDocument
 from .input_effects import InputEffects
-from .image_inputs import ImageInput
+from .image_input import ImageInput
 from .lifecycle_capability import Executing
 from .maintenance_barrier import MaintenanceBarrier, MaintenanceIngress
 from .native_input_owner import RegistryOwner

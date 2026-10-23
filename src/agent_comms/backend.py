@@ -48,7 +48,7 @@ from .acp_failure import UnrecordedFailureSource
 from .coordinator import Coordination
 from .extension_ui import ExtensionUiSession
 from .field_codec import Id128Text, MalformedRecord, boundary_decoder
-from .image_inputs import ImageInput
+from .image_input import ImageInput
 from .native_attestation import AttestationError
 from .native_child import PiSessionChild
 from .native_package import VerifiedNativePackage

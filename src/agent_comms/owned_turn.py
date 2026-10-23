@@ -9,7 +9,7 @@ from functools import partial
 from pathlib import Path
 from typing import TYPE_CHECKING, NoReturn
 
-from .image_inputs import ImageInput
+from .image_input import ImageInput
 
 from acp import RequestError
 

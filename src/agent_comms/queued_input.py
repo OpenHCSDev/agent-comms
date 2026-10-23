@@ -27,7 +27,7 @@ from .controller import Controller
 from .errors import RelationViolationError
 from .field_codec import Id128Text
 from .goals import GoalDeclaration, NoGoal
-from .image_inputs import ImageInput
+from .image_input import ImageInput
 from .input_attempt import InputAttempt, ReservedInput
 from .input_disposition import InputDispositions
 from .input_origin import InputOrigin, UnattributedInputOrigin, WireInputOrigin
