@@ -19,6 +19,7 @@ from agent_comms.plan_phases import PlanPhase
 from ..comms import Comms
 from ..errors import RelationViolationError
 from ..field_codec import (
+    AbsolutePathText,
     BoundedText,
     FieldCodec,
     NullMember,
@@ -217,10 +218,6 @@ class RepoChoice(SubclassUnion, affix="Repos"):
     def without_commander(self) -> None:
         """Refuse repositories given to a bus that records no commander to hold them."""
 
-    @abstractmethod
-    def resolved(self) -> Self:
-        """This choice with its paths absolute, for an install child that runs elsewhere."""
-
 
 @dataclass(frozen=True, slots=True)
 class GivenRepos(RepoChoice):
@@ -231,7 +228,8 @@ class GivenRepos(RepoChoice):
     @classmethod
     def from_wire(cls, data: object) -> Self:
         text = FieldCodec.decode(str, data)
-        return cls(tuple(Path(part.strip()) for part in text.split(",") if part.strip()))
+        return cls(tuple(AbsolutePathText.decode(part.strip())
+                         for part in text.split(",") if part.strip()))
 
     def to_wire(self) -> str:
         return ",".join(map(str, self.checkouts))
@@ -246,9 +244,6 @@ class GivenRepos(RepoChoice):
         raise UpgradeRefused("--repos names a commander's repositories; this bus records no "
                              "commander, so name one with --commander")
 
-    def resolved(self) -> Self:
-        return type(self)(tuple(checkout.resolve() for checkout in self.checkouts))
-
 
 @dataclass(frozen=True, slots=True)
 class KeptRepos(NullMember, RepoChoice):
@@ -261,9 +256,6 @@ class KeptRepos(NullMember, RepoChoice):
 
     def without_commander(self) -> None:
         pass
-
-    def resolved(self) -> Self:
-        return self
 
 
 class CommanderConfigFile(SubclassUnion, affix="ConfigFile"):
