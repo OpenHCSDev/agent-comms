@@ -223,7 +223,7 @@ class ExternalEventRow(TypedTable):
     )
 
     foreign_keys = (
-        ForeignKey(("thread", "seq"), ExternalItemRow, ("thread", "seq"), on_delete="CASCADE"),
+        ForeignKey(columns=("thread", "seq"), target=ExternalItemRow, target_columns=("thread", "seq"), on_delete="CASCADE"),
     )
     indexes = (
         Index(("thread", "kind", "tool", "timestamp", "call_id")),

@@ -37,7 +37,8 @@ class Carried:
     changed: int
     detail: dict[str, int | bool] = field(default_factory=dict)
     rewritten: tuple[str, ...] = ()
-    """Files under the bus root this run wrote; every other file stays byte-identical."""
+    """Files under the bus root this run wrote or deleted; every other file stays
+    byte-identical."""
 
 
 @dataclass(frozen=True)
@@ -69,8 +70,9 @@ class Carry(ABC):
     def name(cls) -> str:
         return cls.module().stem
 
+    @abstractmethod
     def backup_files(self) -> tuple[Annotated[Path, PathText], ...]:
-        raise RuntimeError(f'{self.name()} needs the full agent-comms install operation')
+        """The existing files this step rewrites or deletes, backed up before it applies."""
 
     @abstractmethod
     def carry(self, *, apply: bool) -> Carried:

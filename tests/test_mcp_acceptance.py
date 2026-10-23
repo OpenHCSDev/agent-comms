@@ -7,7 +7,6 @@ Without that adapter these tests prove the Pi/ACP path, NOT Toad rendering.
 """
 
 from __future__ import annotations
-from agent_comms.native_package import pinned_native_package
 
 import asyncio
 import importlib.util
@@ -44,8 +43,7 @@ pytestmark = pytest.mark.skipif(sys.platform == "win32", reason="POSIX PTY accep
 TIMEOUT = 40
 
 
-def _node_run(node, env, script, cwd, artifact):
-    native_package = pinned_native_package()
+def _node_run(native_package, node, env, script, cwd, artifact):
     command = [
         node, "--no-global-search-paths",
         "--import", str(native_package / "dist/agent-comms-import-fence.mjs"),
@@ -124,6 +122,7 @@ def _prepare(root, native_package):
     }
     api = native_package / "dist" / "index.js"
     _node_run(
+        native_package,
         node,
         env,
         f"import {{ProjectTrustStore}} from {json.dumps(api.as_uri())};"
@@ -132,6 +131,7 @@ def _prepare(root, native_package):
         root / "project-trust",
     )
     digest = _node_run(
+        native_package,
         node,
         env,
         "import {declarationDigest,parseNativeConfig} from "
@@ -142,6 +142,7 @@ def _prepare(root, native_package):
     )
     # Initial fixture setup uses the real package writer, never a Toad ledger.
     _node_run(
+        native_package,
         node,
         env,
         "import {recordProjectDecision} from "
@@ -342,12 +343,12 @@ async def _observer(case, root):
 
 
 @pytest.mark.parametrize("case", ["allow", "no_controller", "revoke_midturn", "disconnect"])
-async def test_real_pi_mcp_acp_link(case, tmp_path, monkeypatch):
+async def test_real_pi_mcp_acp_link(case, tmp_path, monkeypatch, request):
     binary = os.environ.get("AC_MCP_NATIVE_BIN")
     if not binary:
         pytest.skip("Set AC_MCP_NATIVE_BIN to an explicitly prepared native Pi launcher")
     assert binary == "pi" or (Path(binary).is_absolute() and os.access(binary, os.X_OK))
-    native_package = pinned_native_package()
+    native_package = request.getfixturevalue("pinned_native")
     package, node, agent, project, digest, starts, calls, env = _prepare(
         tmp_path, native_package
     )
@@ -363,7 +364,7 @@ async def test_real_pi_mcp_acp_link(case, tmp_path, monkeypatch):
         json.dumps(
             {
                 "launcher": binary,
-                "nativePackage": str(pinned_native_package()),
+                "nativePackage": str(native_package),
                 "package": str(package),
                 "case": case,
             }

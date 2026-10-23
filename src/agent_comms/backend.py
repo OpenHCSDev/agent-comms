@@ -47,7 +47,6 @@ from .agent_backend import TurnInbox
 from .acp_failure import UnrecordedFailureSource
 from .child_process import TimedOutOutcome
 from .coordinator import Coordination
-from .diagnostics import FailureReason
 from .extension_ui import ExtensionUiSession
 from .field_codec import Id128Text, MalformedRecord, boundary_decoder
 from .image_inputs import ImageInput
@@ -158,8 +157,8 @@ async def stream_agent_events(
                 session_file=session_file,
             ))
         except NativePiUnavailable as error:
-            yield events.Error(text=str(error), reason_code="native_launch_invalid")
-            yield events.Done(ok=False, reason_code="native_launch_invalid", text=str(error))
+            yield events.Error(text=str(error), reason_code=failures.NativeLaunchInvalid.declared_name)
+            yield events.Done(ok=False, failure=failures.NativeLaunchInvalid(str(error)), text=str(error))
             return
         from .session_fence import session_writer_fence
 
@@ -539,7 +538,6 @@ class NativeSession(MroDispatch, ABC):
             return
         if not self.line:
             if self.awaiting_native_attestation:
-                self.output.preflight_failure = FailureReason.PREFLIGHT_EXIT
                 self.output.diagnostic = {
                     "elapsed_ms": round(
                         (self.loop.time() - self.watchdog.launch_started_at) * 1000
@@ -548,7 +546,7 @@ class NativeSession(MroDispatch, ABC):
                 }
                 self.output.diagnostic.update(self.watchdog.session_load.diagnostic)
                 self.output.record_failure(
-                    failures.InputIdUnavailable(
+                    failures.NativePreflightExit(
                         "Pi native input-ID capability preflight ended before attestation."
                     )
                 )
@@ -586,7 +584,7 @@ class NativeSession(MroDispatch, ABC):
         self.output.discard_text()
         updates = (self.context_info(), events.TurnState(
             state="failed",
-            reason_code="session_identity_uncertain",
+            reason_code=failures.IdentityUncertain.declared_name,
             elapsed_ms=0,
             phase=ShutdownPhase(),
         ))

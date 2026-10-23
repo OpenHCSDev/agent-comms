@@ -42,6 +42,7 @@ from agent_comms.storage_rules import StorageRule
 from agent_comms.store_files import store_lock_path
 from agent_comms.thread_identity import CoreWatcherIncarnation
 from agent_comms.threads import Thread
+from agent_comms.tools import CommsHudTool
 from agent_comms.todos import (
     Assignment,
     ChangeTodoState,
@@ -260,9 +261,7 @@ def test_merged_order_keeps_its_checked_fields(tmp_path: Path, source_repository
         "P1", RepositoryName.from_wire("OpenHCSDev/agent-comms"), "Fix the sidebar", creator=lead, assigner=lead.incarnation, request=request,
         owner=lead, generation="initial", review_at=RecordedEventTime(1000.0), order=order(source_repository))
     merged = replace(todo, order=todo.order.checked().merged("2b9c1f1ab"))
-    cells = merged.order.board_cells(merged)
-    assert cells.startswith(f"{todo.order.checked().owner.to_wire()} | lead | checked-order | {RecordedEventTime(1000.0).clock()} | ")
-    assert json.loads(cells.split(" | ", 4)[-1]) == FieldCodec.encode(merged.order.checked().check)
+    assert merged.order.checked().check == todo.order.checked().check
     assert merged.order.checked().copy_as(PendingProblemOrder) == todo.order
     assert merged.order.line == "Merged, waiting on install"
     assert merged.order.waiting_on_install(merged, {}) == (merged,)
@@ -529,7 +528,7 @@ def test_installed_merge_closes_only_the_run_that_has_been_proven(pr_commander):
         assert application.order.sha == mechanical.order.sha
         assert not application.order.accepted
         assert application.order.line == application.order.checked().run.merged_line
-        board = checked.board_text()
+        board = "\n".join(checked.call(CommsHudTool()).frame)
         assert application.order.line in board
         assert worker.name in board
         store.record_merges(store.merged_orders(checked.incarnation, checked.comms.registry))

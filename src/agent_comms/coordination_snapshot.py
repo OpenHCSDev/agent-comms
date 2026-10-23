@@ -33,7 +33,7 @@ from agent_comms.coordination_tables.executions import (
     ReplayAssessments,
 )
 from agent_comms.coordination_tables.publications import PublicationEvidence, PublicationIntents
-from agent_comms.coordination_tables.recovery import ConnectivityFacet, RecoveryAudit
+from agent_comms.coordination_tables.recovery import RecoveryAudit
 from agent_comms.coordination_tables.responses import ResponseObligation
 from agent_comms.field_codec import boundary_decoder, projected, SnapshotName, WireName
 from agent_comms.reason_codes import ReasonCode
@@ -59,7 +59,6 @@ class RecoverySnapshot:
     publication_evidence: Annotated[
         tuple[PublicationEvidence, ...], WireName("publication_receipts")
     ]
-    connectivity: ConnectivityFacet | None
     last_recovery: RecoveryAudit | None
     current_execution_id: PointerExecution
     current_attempt_ordinal: PointerAttempt
@@ -150,7 +149,6 @@ class RecoverySnapshot:
             *self.obligations,
             *self.publication_intents,
             *self.publication_evidence,
-            self.connectivity,
             self.last_recovery,
         )
         if any(

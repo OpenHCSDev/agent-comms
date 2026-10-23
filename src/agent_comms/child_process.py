@@ -14,9 +14,6 @@ import math
 import multiprocessing
 import os
 import re
-import secrets
-import selectors
-import shutil
 import signal
 import stat
 import subprocess
@@ -37,6 +34,7 @@ from contextlib import (
 from dataclasses import dataclass
 from functools import partial
 from pathlib import Path
+from tempfile import TemporaryDirectory
 from typing import TYPE_CHECKING, Any, ClassVar, NoReturn
 
 from .declared_family import DeclaredFamily
@@ -337,76 +335,6 @@ class PidfdHandles:
             code = ctypes.get_errno()
             raise OSError(code, os.strerror(code))
 
-    def watch_deadline(self, pidfd: int, deadline: float) -> None:
-        """Exact-process deadline, reusable by the independent watchdog entry."""
-        if not math.isfinite(deadline):
-            raise ValueError("Finite absolute deadline required")
-        os.fstat(pidfd)
-        with selectors.DefaultSelector() as selector:
-            selector.register(pidfd, selectors.EVENT_READ)
-            while (remaining := deadline - time.monotonic()) > 0:
-                if selector.select(remaining):
-                    return
-        with suppress(ProcessLookupError):
-            self.signal_pidfd(pidfd, signal.SIGKILL)
-
-
-@dataclass(frozen=True)
-class NamespaceReady:
-    token: str
-    namespace: str
-    pid: int
-
-
-@dataclass(frozen=True, eq=False)
-class PidNamespace(ProcessIdentity):
-    """The exact host identity of PID 1 owns the namespace's executing lifetime.
-
-    Linux kills and reaps every remaining member before PID 1 finishes exiting.
-    A pidfd for this init therefore observes the whole namespace, without asking
-    for permission to inspect unrelated processes on the machine.
-    """
-
-    namespace: str
-
-
-@dataclass(frozen=True)
-class NamespaceLaunch:
-    command: tuple[str, ...]
-    token: str
-    deadline: float
-
-
-class NamespaceContainment:
-    """Linux namespace launch and typed, gated PID-1 readiness proof."""
-
-    @staticmethod
-    def namespace_argv(launch: NamespaceLaunch, ready_fd: int, release_fd: int) -> tuple[str, ...]:
-        unshare = shutil.which("unshare")
-        if unshare is None:
-            raise NotImplementedError("PID namespace containment requires unshare")
-        return (
-            unshare,
-            "--user",
-            "--map-root-user",
-            "--pid",
-            "--fork",
-            "--kill-child=SIGKILL",
-            "--",
-            *NamespaceInitCommand(launch, ready_fd, release_fd).argv(),
-        )
-
-    @staticmethod
-    def namespace_owner(parent: ProcessIdentity, proof: NamespaceReady) -> PidNamespace:
-        """Resolve only unshare's gated init, before it can exec business code."""
-        parent.require_alive()
-        children = Path(f'/proc/{parent.pid}/task/{parent.pid}/children').read_text().split()
-        (pid,) = map(int, children)
-        init = ProcessIdentity.capture(pid)
-        parent.require_alive()
-        return PidNamespace(init.pid, init.start_time, proof.namespace)
-
-
 class Platform(DeclaredFamily, affix="Platform"):
     store_lock_interval = 0.025
     sync_open_flags: ClassVar[int] = os.O_RDONLY
@@ -429,7 +357,22 @@ class Platform(DeclaredFamily, affix="Platform"):
     def is_private(self, info: os.stat_result, permissions: int) -> bool: ...
 
     @abstractmethod
+    def is_owned(self, info: os.stat_result) -> bool: ...
+
+    @abstractmethod
     def make_private(self, path: Path, permissions: int) -> None: ...
+
+    @abstractmethod
+    def make_private_descriptor(self, descriptor: int, permissions: int) -> None: ...
+
+    @contextmanager
+    def socket_address(self, path: Path, descriptor: int) -> Generator[Path, None, None]:
+        with TemporaryDirectory(prefix="ac-socket-", dir="/tmp") as directory:
+            parent = Path(directory) / "d"
+            parent.symlink_to(path.parent, target_is_directory=True)
+            if not os.path.samestat(os.stat(parent), os.fstat(descriptor)):
+                raise ValueError("Socket directory changed during address acquisition")
+            yield parent / path.name
 
     @abstractmethod
     def try_store_lock(self, descriptor: int, *, mode: LockMode) -> None:
@@ -507,12 +450,19 @@ class PosixPlatform(Platform):
             os.close(descriptor)
 
     def is_private(self, info: os.stat_result, permissions: int) -> bool:
-        return stat.S_IMODE(info.st_mode) == permissions and info.st_uid == os.geteuid()
+        return stat.S_IMODE(info.st_mode) == permissions and self.is_owned(info)
+
+    def is_owned(self, info: os.stat_result) -> bool:
+        return info.st_uid == os.geteuid()
 
     def make_private(self, path: Path, permissions: int) -> None:
         with suppress(FileNotFoundError):
             if stat.S_IMODE(path.lstat().st_mode) != permissions:
                 os.chmod(path, permissions, follow_symlinks=False)
+
+    def make_private_descriptor(self, descriptor: int, permissions: int) -> None:
+        if stat.S_IMODE(os.fstat(descriptor).st_mode) != permissions:
+            os.fchmod(descriptor, permissions)
 
     def acquire_store_lock(self, descriptor: int, *, mode: LockMode, blocking: bool) -> None:
         import fcntl
@@ -558,7 +508,11 @@ class LinuxProcessRecord:
     parent: int
 
 
-class LinuxPlatform(NamespaceContainment, PidfdHandles, PosixPlatform):
+class LinuxPlatform(PidfdHandles, PosixPlatform):
+    @contextmanager
+    def socket_address(self, path: Path, descriptor: int) -> Generator[Path, None, None]:
+        yield Path(f"/proc/{os.getpid()}/fd/{descriptor}") / path.name
+
     def parent_death_binding(self) -> int:
         """The exec gate arms PR_SET_PDEATHSIG and binds to this launcher's PID."""
         return os.getpid()
@@ -728,7 +682,13 @@ class Win32Platform(Platform):
         # NTFS ACLs, not POSIX mode bits, determine privacy.
         return True
 
+    def is_owned(self, info: os.stat_result) -> bool:
+        return True
+
     def make_private(self, path: Path, permissions: int) -> None:
+        pass
+
+    def make_private_descriptor(self, descriptor: int, permissions: int) -> None:
         pass
 
     def try_store_lock(self, descriptor: int, *, mode: LockMode) -> None:
@@ -1858,24 +1818,24 @@ class SpawnedProcess(SynchronousProcess):
         self.process = process
 
     @classmethod
-    def launch(
+    @contextmanager
+    def launching(
         cls,
         command: tuple[str, ...],
         *,
         cwd: str | Path | None = None,
         env: Mapping[str, str] = INHERITED_ENVIRONMENT,
         output: Any = subprocess.DEVNULL,
-        before_start: Callable[[ProcessIdentity], None] | None = None,
         runtime: LaunchRuntime = LaunchRuntime.running(),
         lifetime: type[ChildLifetime] = DiesWithLauncherLifetime,
-    ) -> SpawnedProcess:
+    ) -> Generator[SpawnedProcess]:
+        """Yield the child before it executes; leaving the body releases it, raising reaps it."""
         if not command:
             raise ValueError("A child command is required")
         with Platform.current().launch(command, (), runtime, lifetime) as launch:
             child = launch.spawn(cwd=cwd, env=env, stdout=output, stderr=output)
             try:
-                if before_start is not None:
-                    before_start(child.identity)
+                yield child
             except BaseException:
                 launch.cancel_before_release(child.identity)
                 child.reap()
@@ -1887,7 +1847,12 @@ class SpawnedProcess(SynchronousProcess):
             except BaseException:
                 child.close()
                 raise
-        return child
+
+    @classmethod
+    def launch(cls, command: tuple[str, ...], **options: Any) -> SpawnedProcess:
+        """Launch with nothing to reserve before the child executes."""
+        with cls.launching(command, **options) as child:
+            return child
 
     def collect(self, *, timeout: float) -> subprocess.CompletedProcess[bytes]:
         """Collect within the caller's owned context; its exit retires descendants."""
@@ -2003,112 +1968,6 @@ class DetachedExitOutcome(ChildOutcome):
         return False
 
 
-class NamespacedChild(ChildProcess):
-    """Attached shape with kernel containment and an independent hard deadline.
-
-    Lifted from the selected-Pi guardian: namespace PID1 attests readiness before
-    exec release, a pidfd watchdog arms before launch, and killing unshare kills
-    namespace PID1 (including descendants which escaped the process group).
-    Business input/UNKNOWN journals stay with the caller.
-    """
-
-    def __init__(self, child: AttachedChild, watchdog: AttachedChild, namespace: PidNamespace):
-        super().__init__(child.identity)
-        self.child = child
-        self.watchdog = watchdog
-        self.namespace = namespace
-
-    @classmethod
-    async def start(
-        cls,
-        command: tuple[str, ...],
-        *,
-        deadline: float,
-        cwd: str | Path | None = None,
-        env: Mapping[str, str] = INHERITED_ENVIRONMENT,
-    ) -> NamespacedChild:
-        platform = Platform.current()
-        if not isinstance(platform, NamespaceContainment) or not isinstance(platform, PidfdHandles):
-            raise NotImplementedError("Exact namespace deadline containment unavailable")
-        if not math.isfinite(deadline) or deadline <= time.monotonic():
-            raise ValueError("A future finite monotonic deadline is required")
-        launch = NamespaceLaunch(command, secrets.token_hex(16), deadline)
-        ready_r, ready_w = os.pipe()
-        release_r, release_w = os.pipe()
-        child = watchdog = None
-        descriptor = None
-        try:
-            child = await AttachedChild.start(
-                platform.namespace_argv(launch, ready_w, release_r),
-                cwd=cwd,
-                env=env,
-                pass_fds=(ready_w, release_r),
-            )
-            descriptor = platform.open_pidfd(child.pid)
-            watchdog = await AttachedChild.start(
-                WatchDeadlineCommand(descriptor, deadline).argv(),
-                pass_fds=(descriptor,),
-            )
-            assert watchdog.stdout is not None
-            async with asyncio.timeout(max(0, deadline - time.monotonic())):
-                if await watchdog.stdout.readline() != b"armed\n":
-                    raise RuntimeError("Independent child watchdog failed to arm")
-                # Reading this dedicated pipe cannot consume provider stdout.
-                os.set_blocking(ready_r, False)
-                loop = asyncio.get_running_loop()
-                ready: asyncio.Future[bytes] = loop.create_future()
-                data = bytearray()
-
-                def receive() -> None:
-                    if ready.done():
-                        return
-                    chunk = os.read(ready_r, 4096)
-                    data.extend(chunk)
-                    if len(data) > 4096 or not chunk:
-                        ready.set_exception(RuntimeError("Namespace readiness missing"))
-                    elif b"\n" in data:
-                        ready.set_result(bytes(data))
-
-                loop.add_reader(ready_r, receive)
-                try:
-                    proof = FieldCodec.decode(NamespaceReady, json.loads(await ready))
-                finally:
-                    loop.remove_reader(ready_r)
-                if (
-                    proof.token != launch.token
-                    or proof.pid != 1
-                    or proof.namespace == os.readlink("/proc/self/ns/pid")
-                    or not child.alive()
-                ):
-                    raise RuntimeError("Namespace readiness identity mismatch")
-                namespace = platform.namespace_owner(child.identity, proof)
-                os.write(release_w, b"G")
-                return cls(child, watchdog, namespace)
-        except BaseException:
-            if child is not None:
-                await child.stop()
-            if watchdog is not None:
-                await watchdog.stop()
-            raise
-        finally:
-            for fd in (ready_r, ready_w, release_r, release_w):
-                os.close(fd)
-            if descriptor is not None:
-                os.close(descriptor)
-
-    async def wait(self) -> ChildOutcome:
-        return await self._retire(await self.child.wait())
-
-    async def _stop(self) -> ChildOutcome:
-        return await self._retire(await self.child.stop())
-
-    async def _retire(self, result: ChildOutcome) -> ChildOutcome:
-        await self.watchdog.stop()
-        async with asyncio.timeout(STOP_GRACE_SECONDS):
-            await self.namespace.wait_exited()
-        return result
-
-
 class ChildCommand(DeclaredFamily, affix="Command"):
     """Internal child entrypoints decode once through their declaration owner."""
 
@@ -2143,40 +2002,3 @@ class ControllingTerminalCommand(ChildCommand):
         os.execvpe(self.command[0], self.command, os.environ)
 
 
-@dataclass(frozen=True)
-class NamespaceInitCommand(ChildCommand):
-    launch: NamespaceLaunch
-    ready_fd: int
-    release_fd: int
-
-    def run(self) -> None:
-        try:
-            if os.getpid() != 1 or time.monotonic() >= self.launch.deadline:
-                raise RuntimeError("Namespace init missing or deadline elapsed")
-            proof = NamespaceReady(
-                self.launch.token,
-                os.readlink("/proc/self/ns/pid"),
-                os.getpid(),
-            )
-            os.write(self.ready_fd, (json.dumps(FieldCodec.encode(proof)) + "\n").encode())
-            os.close(self.ready_fd)
-            if os.read(self.release_fd, 1) != b"G" or time.monotonic() >= self.launch.deadline:
-                raise RuntimeError("Namespace release absent or deadline elapsed")
-            os.close(self.release_fd)
-            os.execvpe(self.launch.command[0], self.launch.command, os.environ)
-        except BaseException:
-            os._exit(127)
-
-
-@dataclass(frozen=True)
-class WatchDeadlineCommand(ChildCommand):
-    descriptor: int
-    deadline: float
-
-    def run(self) -> None:
-        platform = Platform.current()
-        if not isinstance(platform, PidfdHandles):
-            raise NotImplementedError("Exact process watchdog unavailable")
-        os.fstat(self.descriptor)
-        print("armed", flush=True)
-        platform.watch_deadline(self.descriptor, self.deadline)

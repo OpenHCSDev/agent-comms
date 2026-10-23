@@ -13,6 +13,7 @@ from typing import ClassVar, Literal, Self, get_args
 from urllib.parse import urlencode
 
 from .field_codec import FieldCodec
+from .locked_store import DocumentChange
 from .maintenance_barrier import CarriedDocument
 
 ACCESS_SECONDS = 3600
@@ -162,7 +163,7 @@ class ConnectorGrants:
             },
         )
 
-    def issued(self, client_id: str) -> tuple[ConnectorGrants, IssuedTokens]:
+    def issued(self, client_id: str) -> DocumentChange[ConnectorGrants, IssuedTokens]:
         """A new access and refresh token pair, dropping every expired grant and wait."""
         now = time.time()
         access, refresh = secrets.token_urlsafe(32), secrets.token_urlsafe(32)
@@ -173,7 +174,7 @@ class ConnectorGrants:
             | {digest(access): IssuedAccess(client_id, expires_at=now + ACCESS_SECONDS)},
             refresh=current.refresh | {digest(refresh): client_id},
         )
-        return grants, IssuedTokens(access, refresh)
+        return DocumentChange(grants, IssuedTokens(access, refresh))
 
     def holds(self, token: str) -> bool:
         key = digest(token)
@@ -201,12 +202,12 @@ class ConnectorStore(CarriedDocument[ConnectorGrants]):
         token = secrets.token_urlsafe(32)
         held = IssuedAccess(client_id, expires_at=time.time() + CODE_SECONDS)
         key = digest(token)
-        self.update(lambda grants: replace(grants, access=grants.access | {key: held}))
+        self.update(lambda grants: DocumentChange.to(replace(grants, access=grants.access | {key: held})))
         try:
             yield token
         finally:
             self.update(
-                lambda grants: replace(
+                lambda grants: DocumentChange.to(replace(
                     grants, access={k: v for k, v in grants.access.items() if k != key}
-                )
+                ))
             )

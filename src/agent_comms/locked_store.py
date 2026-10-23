@@ -36,6 +36,19 @@ from .store_files import (
 T = TypeVar("T")
 
 
+@dataclass(frozen=True, slots=True)
+class DocumentChange[D, R]:
+    """A document's successor and the answer its change gives the caller."""
+
+    document: D
+    result: R
+
+    @classmethod
+    def to(cls, document: D) -> DocumentChange[D, D]:
+        """A change whose answer is the successor itself."""
+        return cls(document, document)
+
+
 class JsonDocument(ABC, Generic[T]):
     """Declared JSON codec and atomic file I/O; LockedStore owns transactions."""
 
@@ -133,6 +146,12 @@ class RootFile:
         return Path(root) / cls.filename.format(**parts)
 
     @classmethod
+    def directory_in(cls, root: Path | str) -> Path:
+        """The directory this declaration's files live in under the bus root ``root``;
+        ``bus_root`` is its inverse."""
+        return Path(root) / cls.root_directory
+
+    @classmethod
     def bus_root(cls, path: Path) -> Path:
         """The bus root a file of this declaration at ``path`` lives under: one parent per
         directory its declared location names, the filename's own directories included."""
@@ -200,7 +219,7 @@ class RootFile:
             visited.add(family)
             pending.extend(family.__subclasses__())
             if "filename" in vars(family):
-                yield family, root / family.root_directory
+                yield family, family.directory_in(root)
 
     @classmethod
     def existing_in(cls, root: Path) -> dict[Path, type[Self]]:
@@ -568,13 +587,13 @@ class LockedStore(FileStore, StoreLockOwner, JsonDocument[T]):
         with self.reading() as value:
             return value
 
-    def update(self, change: Callable[[T], T]) -> T:
+    def update[R](self, change: Callable[[T], DocumentChange[T, R]]) -> R:
         with self.locked():
             original = self._read_unlocked()
             changed = change(original)
-            if changed is not original:
-                self._publish_unlocked(changed)
-            return changed
+            if changed.document is not original:
+                self._publish_unlocked(changed.document)
+            return changed.result
 
     def replace(self, value: T) -> None:
         """Publish a complete owned snapshot without reading the discarded one.

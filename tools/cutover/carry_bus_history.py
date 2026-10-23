@@ -67,6 +67,8 @@ from agent_comms.wake_policy import (
 )
 
 
+from .retired_claim_fields import RetiredClaimFields
+
 @dataclass(frozen=True)
 class HistoryMetadata(BusFile):
     """Only the retired stream boundary is needed, never its root ID or activation."""
@@ -489,9 +491,7 @@ class HistoryClaim(SubclassUnion, ClaimIdentity, ABC, affix="HistoryClaim"):
     """Retired field-group order is part of the original envelope's physical form."""
 
     def current(self) -> ClaimTransition:
-        from .carry_claim_fields import ClaimFields
-
-        raw = ClaimFields.convert(ClaimTransition, FieldCodec.encode(self))
+        raw = RetiredClaimFields.convert(ClaimTransition, FieldCodec.encode(self))
         return ClaimTransition.from_wire(raw)
 
     def restored_wire(self, transition: ClaimTransition) -> dict[str, object]:

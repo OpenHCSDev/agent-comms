@@ -3,7 +3,6 @@
 import asyncio
 import json
 import sys
-from pathlib import Path
 
 import pytest
 
@@ -11,29 +10,16 @@ from agent_comms.field_codec import FieldCodec
 from agent_comms.pi_payloads import McpLiveAcknowledgement
 from agent_comms.owner_protocol import OwnerLine, OwnerPermissionRequest
 from agent_comms.runtime import SocketClient
-from pi_session_turn import one_turn_events
 
 pytestmark = [
     pytest.mark.skipif(sys.platform == "win32", reason="POSIX executable stub"),
 ]
 
 
-def stub(tmp_path: Path, body: str) -> str:
-    path = tmp_path / "pi-rpc-stub"
-    path.write_text(f"#!{sys.executable}\n" + body)
-    path.chmod(0o755)
-    return str(path)
 
 
 
 
-async def collect_backend(program, cwd, controller):
-    return [
-        event
-        async for event in one_turn_events(
-            program, [], "fixture", str(cwd), ui_request=controller
-        )
-    ]
 
 
 def test_live_receipt_rejects_stale_input_malformed_and_ambiguous_claims():

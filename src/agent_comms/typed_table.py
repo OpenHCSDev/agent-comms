@@ -281,6 +281,31 @@ class JsonStorage(SqlStorage):
         return FieldCodec.parse(value)
 
 
+class Reference(ABC):
+    """The reference clause carried by a column or a composite foreign key."""
+
+    @abstractmethod
+    def reference_sql(self) -> str: ...
+
+
+@dataclass(frozen=True)
+class NoReference(Reference):
+    def reference_sql(self) -> str:
+        return ""
+
+
+@dataclass(frozen=True)
+class TableReference(Reference):
+    target: type[TypedTable]
+    target_columns: tuple[str, ...]
+
+    def reference_sql(self) -> str:
+        return (
+            f" REFERENCES {_identifier(self.target.declared_name)} "
+            f"({self.target._column_list(self.target_columns)})"
+        )
+
+
 @dataclass(frozen=True)
 class Column(FieldDirective):
     """Constraints on a field; its name and type remain on the dataclass field."""
@@ -289,7 +314,7 @@ class Column(FieldDirective):
     record_key: bool = False
     auto_increment: bool = False
     unique: bool = False
-    references: tuple[type[TypedTable], str] | None = None
+    references: Reference = field(default_factory=NoReference)
     check: str | None = None
     index: bool = False
     generated: str | None = None
@@ -402,12 +427,10 @@ class ExpressionIndex(Index):
 
 
 @dataclass(frozen=True)
-class ForeignKey:
+class ForeignKey(TableReference):
     """Composite references declared beside their row, including cyclic owners."""
 
     columns: tuple[str, ...]
-    target: type[TypedTable]
-    target_columns: tuple[str, ...]
     deferred: bool = False
     on_delete: str | None = None
 
@@ -415,16 +438,23 @@ class ForeignKey:
         if len(self.columns) != len(self.target_columns):
             raise ValueError("Foreign key column counts differ")
         return (
-            f"FOREIGN KEY ({owner._column_list(self.columns)}) "
-            f"REFERENCES {_identifier(self.target.declared_name)} "
-            f"({self.target._column_list(self.target_columns)})"
+            f"FOREIGN KEY ({owner._column_list(self.columns)})"
+            + self.reference_sql()
             + (f" ON DELETE {self.on_delete}" if self.on_delete else "")
             + (" DEFERRABLE INITIALLY DEFERRED" if self.deferred else "")
         )
 
 
+class SqlProjection:
+    """Scalar and record projections read SQLite's result columns at one boundary."""
+
+    @staticmethod
+    def result_columns(cursor: sqlite3.Cursor) -> tuple[str, ...]:
+        return tuple(column[0] for column in (cursor.description or ()))
+
+
 @dataclass(frozen=True)
-class SqlValue:
+class SqlValue(SqlProjection):
     """A compiled SQLite value; named record fields add their column declaration."""
 
     annotation: object
@@ -438,7 +468,7 @@ class SqlValue:
     def read(self, cursor: sqlite3.Cursor) -> list:
         """Read a single-column projection without losing empty or nullable results."""
         try:
-            if cursor.description is None or len(cursor.description) != 1:
+            if len(self.result_columns(cursor)) != 1:
                 raise MalformedRecord("Scalar projection requires exactly one SQLite column")
             return [self.decode(row[0]) for row in cursor]
         finally:
@@ -497,7 +527,7 @@ def sql_literal(value: str | None | type[DeclaredFamily]) -> str:
     return "NULL" if text is None else "'" + text.replace("'", "''") + "'"
 
 
-class TypedRow:
+class TypedRow(SqlProjection):
     """Typed query projection; also the shared decoder for stored row types."""
 
     @classmethod
@@ -538,9 +568,9 @@ class TypedRow:
     @classmethod
     def _positions(cls, cursor: sqlite3.Cursor,
                    extra: Mapping[str, str] = types.MappingProxyType({})) -> dict[str, int]:
-        if cursor.description is None:
+        names = cls.result_columns(cursor)
+        if not names:
             raise ValueError("Typed read requires a result set")
-        names = tuple(item[0] for item in cursor.description)
         projection = {**cls.column_projection(), **extra}
         carried = set(names).difference(cls._computed_columns())
         if len(set(names)) != len(names) or carried != set(projection.values()):
@@ -1516,9 +1546,7 @@ class TypedTable(
                 sql += " NOT NULL"
             if column.unique:
                 sql += " UNIQUE"
-            if column.references is not None:
-                target, name = column.references
-                sql += f" REFERENCES {_identifier(target.declared_name)} ({target._column_list((name,))})"
+            sql += column.references.reference_sql()
             for constraint in item.storage.constraints(item.wire_name, item.annotation):
                 sql += f" CHECK ({constraint})"
             if column.check:
@@ -2071,7 +2099,7 @@ class WalStore(StoreWriter):
     def _retire_committed(self, lifetime: ExitStack) -> None:
         try:
             lifetime.close()
-        except Exception as error:
+        except (sqlite3.Error, OSError) as error:
             raise StoreCommittedError(
                 f"Committed {self.path}, but connection retirement failed: {error}"
             ) from error

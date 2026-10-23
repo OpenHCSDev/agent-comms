@@ -12,6 +12,7 @@ from .coordination_tables.publications import PublicationEvidence
 from .diagnostics import record_terminal_failure
 from .messages import AlertKind, NoticeRole
 from .send_result import SendResult
+from .turn_failure import BackendFailed
 
 
 @dataclass(frozen=True, slots=True)
@@ -54,7 +55,7 @@ def publish_native_failure(
         participant.comms.root,
         turn_id=input_id,
         thread=participant.owner.thread.name,
-        event={},
+        failure=BackendFailed,
         sequences=tuple(source.delivery.message.seq for source in participant.batch.sources),
         native_response=native_response,
         source_error=source_error,

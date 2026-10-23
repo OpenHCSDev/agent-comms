@@ -1,6 +1,5 @@
 """Real release-before-exit: retirement keeps checking the exact owner fence."""
 from agent_comms.native_arguments import GivenArguments, GivenBinary
-from agent_comms.native_package import pinned_native_package
 from agent_comms.restart_scope import OwnersNamed
 from agent_comms.turn_lease import NoTurnLease
 
@@ -89,7 +88,7 @@ arguments = ('--provider','response-local','--model','fixture','--thinking','off
 result = service.owners.start(name,
     agent_bin=str(Path(sys.executable).with_name('pi-comms-native')), agent_args=arguments)
 print(json.dumps(FieldCodec.encode(result)), flush=True)
-''', name, str(native.project), str(native.session), str(pinned_native_package())), timeout=20,
+''', name, str(native.project), str(native.session), str(native_runtime_package.path)), timeout=20,
             cwd=native.project, env=environment)
         assert setup.outcome.successful, setup.stderr.decode()
         InputDispositions(native.root).replace(original_document)

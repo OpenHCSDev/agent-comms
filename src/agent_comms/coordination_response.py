@@ -79,8 +79,8 @@ class PublicationAppendDispatches(ResponseTable, WithoutRowid):
 
     @classmethod
     def references(cls):
-        return (ForeignKey(("execution_id", "exact_target"), PublicationIntents,
-                          ("execution_id", "exact_target")),)
+        return (ForeignKey(columns=("execution_id", "exact_target"), target=PublicationIntents,
+                          target_columns=("execution_id", "exact_target")),)
 
     def matches(self, wire_root_id: str, fence: OwnerFence, exact_target: str) -> bool:
         return self.matches_attempt(

@@ -6,6 +6,7 @@ from unittest.mock import patch
 import pytest
 
 from agent_comms.field_codec import FieldCodec
+from agent_comms.locked_store import DocumentChange
 from agent_comms.runtime_info import RuntimeInfoStore
 from agent_comms.shared_ledger import SharedLedger
 from test_locked_store import assert_writer_excluded
@@ -17,7 +18,7 @@ def test_document_readers_share_lock_and_exclude_updates(tmp_path, store_type):
     with store.reading() as first:
         assert first == store_type(store.path).read() == store.empty()
         assert_writer_excluded(store.path)
-    store.update(lambda document: document)
+    store.update(DocumentChange.to)
     assert store.read() == store.empty()
 
 

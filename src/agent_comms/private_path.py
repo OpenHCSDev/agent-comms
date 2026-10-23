@@ -8,15 +8,14 @@ from __future__ import annotations
 
 import os
 import stat
-import sys
 from abc import ABC, abstractmethod
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
-from tempfile import TemporaryDirectory
 from typing import BinaryIO, ClassVar
 
+from .child_process import Platform
 from .declared_family import DeclaredFamily
 from .errors import RelationViolationError
 from .field_codec import NullMember, RecordMember, SubclassUnion
@@ -285,15 +284,8 @@ class PrivateSocketRole(PrivateRole):
         try:
             if not os.path.samestat(observed, os.fstat(fd)):
                 raise ValueError("Socket directory changed during acquisition")
-            if sys.platform.startswith("linux"):
-                yield Path(f"/proc/{os.getpid()}/fd/{fd}") / path.name
-            else:
-                with TemporaryDirectory(prefix="ac-socket-", dir="/tmp") as directory:
-                    parent = Path(directory) / "d"
-                    parent.symlink_to(path.parent, target_is_directory=True)
-                    if not os.path.samestat(os.stat(parent), os.fstat(fd)):
-                        raise ValueError("Socket directory changed during address acquisition")
-                    yield parent / path.name
+            with Platform.current().socket_address(path, fd) as address:
+                yield address
         finally:
             os.close(fd)
 

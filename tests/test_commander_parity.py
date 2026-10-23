@@ -1,14 +1,8 @@
 from pathlib import Path
 
-from agent_comms.commander_parity import ParityComparison, ParityRow
+from agent_comms.commander_parity import ParityRow
 
 PLAN = Path(__file__).resolve().parents[1] / "plans/commander-native-plan.md"
-
-
-class MatchingComparison(ParityComparison):
-    passed = True
-
-
 
 
 def test_generated_prose_is_not_input_to_the_gate(tmp_path):
@@ -21,4 +15,3 @@ def test_generated_prose_is_not_input_to_the_gate(tmp_path):
     assert rendered.startswith("Before\n## Parity matrix\n\n")
     assert rendered.endswith("**Dropped deliberately:** historical text\nAfter\n")
     assert "Hand edited" not in rendered
-    assert not ParityRow.done(())
