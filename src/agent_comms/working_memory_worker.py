@@ -89,7 +89,7 @@ class AnnotationWorker:
                 try:
                     label = await self.answer(policy, manifest, segment, span, KindQuestion)
                     labels.append(label)
-                    for question in label.answer.follow_ups:
+                    for question in label.answer.follow_ups():
                         labels.append(await self.answer(policy, manifest, segment, span, question))
                 except AnnotationBudgetExhausted:
                     break

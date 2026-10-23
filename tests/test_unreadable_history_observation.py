@@ -15,6 +15,7 @@ import pytest
 from agent_comms.context_segments.response import SelectedResponseSegment
 from agent_comms.coordination_errors import (
     CoordinationReadUnavailable,
+    DeferredRead,
     SchemaVersionError,
     StaleRevision,
     TranscriptChanged,
@@ -132,7 +133,7 @@ def test_a_read_that_defers_staleness_answers_a_reload(comms, error, answered):
     # left an agent tab blank with no error.
     @dataclass(frozen=True)
     class DeferringRead(ReadRequest):
-        deferred_reads = UnreadableHistory.DEFERRED_READS
+        deferred_reads = (DeferredRead,)
 
         def read(self, comms):
             raise error

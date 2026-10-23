@@ -54,7 +54,7 @@ from .thread_owned_state import ThreadOwnedState
 from .thread_text import GivenThreadText, NoThreadText, ThreadText
 from .threads import Thread
 from .tool_result import ToolResult
-from .typed_table import Column, DurableStore, JsonStorage, TypedTable
+from .typed_table import StoreRows, Column, DurableStore, JsonStorage, TypedTable
 
 if TYPE_CHECKING:
     from .goal_management import Goals
@@ -192,8 +192,12 @@ class ReleasedOwner(ThreadIncarnationRecord):
         return self.incarnation() == expected.incarnation and self.process_identity == expected.process_identity
 
 
+class OwnerReleaseStoreRows(StoreRows):
+    """The tables of OwnerReleaseStore; each row declares itself one."""
+
+
 @dataclass(frozen=True)
-class OwnerReleaseEvidence(ReleasedOwner, OwnerRelease, TypedTable):
+class OwnerReleaseEvidence(OwnerReleaseStoreRows, ReleasedOwner, OwnerRelease, TypedTable):
     name: Annotated[str, Column(primary_key=True)]
     before: int
     after: int
@@ -240,7 +244,7 @@ class OwnerReleaseEvidence(ReleasedOwner, OwnerRelease, TypedTable):
 class OwnerReleaseStore(ThreadOwnedState, DurableStore):
     root: Path
     filename = "owner_releases.sqlite3"
-    rows = (OwnerReleaseEvidence,)
+    tables = OwnerReleaseStoreRows
 
     def get(self, name: str) -> OwnerRelease:
         with self.snapshot() as db, closing(OwnerReleaseEvidence.stream(db, name=name)) as records:

@@ -14,16 +14,16 @@ from agent_comms.commander.questions import UnansweredUnitAsks
 from agent_comms.commander_heartbeat import CommanderHeartbeat
 from agent_comms.comms import Comms
 from agent_comms.goal_actions import ReissuedOrderGoalAction
+from agent_comms.heartbeat_frame import HeartbeatFrame
 from agent_comms.message_bus import WatchPass
 from agent_comms.message_page import MessageReadRequest
 from agent_comms.messages import Message
 from agent_comms.owner_requests import OwnerRequestId
-from agent_comms.phase_evidence import MainTree, PlanReading
+from agent_comms.phase_evidence import PlanReading
 from agent_comms.plan_phases import PlanPhase
 from agent_comms.read_basis import RepliesDisplayScope
 from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.registry_document import RegistrySnapshot
-from agent_comms.repo import Repo
 from agent_comms.standing_rules import (
     DatedStandingRule,
     IndependentStandingRule,
@@ -35,7 +35,7 @@ from agent_comms.standing_rules import (
 from agent_comms.storage_rules import OrderCheckoutWork
 from agent_comms.thread_identity import ThreadIncarnation
 from agent_comms.threads import Thread
-from agent_comms.todos import OwnerRequest, ProgressRead, Todo
+from agent_comms.todos import OwnerRequest, Todo
 from agent_comms.turn_digests import OrderEditCountRead, TurnDigestRead, TurnsSince
 from agent_comms.ui_model.unit_state import AwaitingCommander, UnitState
 from agent_comms.work_dispatch import ReusedWorkDispatch, WorkDispatch
@@ -109,31 +109,21 @@ class AnswersTo(MessageReadRequest[tuple[Message, ...]]):
         )
 
 
-class PlanRule(IndependentStandingRule, UndatedStandingRule, declared_name=None):
-    """Rules read from one look at the plans and the commander's orders. The family scans once,
-    so GitHub's rules for main are read once per heartbeat, never once per member."""
+class PlanRule(UndatedStandingRule, declared_name=None):
+    """Rules read from the heartbeat's one look at the plans and the commander's orders."""
 
     @classmethod
     def scan_owner(cls) -> type[StandingRule]:
         return PlanRule
 
     @classmethod
-    def violations(cls, comms: Comms, commander: str) -> tuple[Self, ...]:
-        reading = cls.plan_reading(comms, commander)
-        return tuple(rule for member in cls.members_with(cls) for rule in member.found(reading))
+    def scan_observed(cls, comms: Comms, commander: str,
+                      observed: Sequence[UnitState], frame: HeartbeatFrame) -> tuple[Self, ...]:
+        return tuple(rule for member in cls.members_with(cls) for rule in member.found(frame.plan))
 
     @classmethod
     @abstractmethod
     def found(cls, reading: PlanReading) -> tuple[Self, ...]: ...
-
-    @staticmethod
-    def plan_reading(comms: Comms, commander: str) -> PlanReading:
-        snapshot = comms.registry.snapshot()
-        repository = Repo.declaring(snapshot.commander_project.require().repos, PlanPhase.__module__)
-        return PlanReading(
-            comms.goals.todos.history_for_commander(snapshot.require(commander).incarnation),
-            MainTree.of(repository),
-        )
 
 
 @dataclass(frozen=True)
@@ -201,7 +191,7 @@ class UnitAskUnanswered(OwedAnswer, UndatedStandingRule):
 
     @classmethod
     def scan_observed(cls, comms: Comms, commander: str,
-                      observed: Sequence[UnitState], pulls: ProgressRead) -> tuple[Self, ...]:
+                      observed: Sequence[UnitState], frame: HeartbeatFrame) -> tuple[Self, ...]:
         return tuple(cls(message, state.unit.name) for state in observed for message in state.owed)
 
     @classmethod
