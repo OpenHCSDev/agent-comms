@@ -67,8 +67,6 @@ from .monitor import (
     PauseSession,
     ReaderState,
     SessionInformation,
-    SessionReady,
-    SessionRefused,
     SessionRequest,
     VerifySession,
     read_monitor,
@@ -688,10 +686,10 @@ class SessionBridge:
                 self.observed.process.signal(signal.SIGTERM)
             return OwnerExitedBridge(self.claim.thread)
         self.observed.owner.require_alive()
-        peer = resources.enter_context(PauseSession(
-            owner=self.observed.owner, process=self.observed.process).connection(self.claim.socket_path))
+        request = PauseSession(owner=self.observed.owner, process=self.observed.process)
+        peer = resources.enter_context(request.connection(self.claim.socket_path))
         stream = resources.enter_context(peer.makefile('rb'))
-        FieldCodec.decode(SessionReady | SessionRefused, FieldCodec.parse(stream.readline(4096))).require()
+        request.decode_reply(stream.readline(4096))
         return PausedSessionBridge(self, peer)
 
 

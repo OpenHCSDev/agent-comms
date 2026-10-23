@@ -272,9 +272,12 @@ class SessionRequest[Reply: SessionReply](DeclaredFamily, affix=""):
             raw = stream.readline(4096)
             if not raw:
                 raise ConnectionResetError('Session bridge closed before replying')
-            reply = FieldCodec.decode(self.reply_class | SessionRefused, FieldCodec.parse(raw))
-            reply.require()
-            return reply
+            return self.decode_reply(raw)
+
+    def decode_reply(self, raw: bytes) -> Reply:
+        reply = FieldCodec.decode(self.reply_class | SessionRefused, FieldCodec.parse(raw))
+        reply.require()
+        return reply
 
     @abstractmethod
     async def handle(self, service: MonitorService, peer: MonitorPeer) -> SessionReply: ...
@@ -393,8 +396,9 @@ async def read_monitor(claim: WatchClaim) -> None:
                 reader, writer = await asyncio.open_unix_connection(str(claim.socket_path))
                 peer = MonitorPeer(reader, writer)
                 try:
-                    await peer.write(FieldCodec.compact(FieldCodec.encode(AttachMonitor())))
-                    FieldCodec.decode(SessionReady | SessionRefused, FieldCodec.parse(await reader.readline())).require()
+                    request = AttachMonitor()
+                    await peer.write(FieldCodec.compact(FieldCodec.encode(request)))
+                    request.decode_reply(await reader.readline())
                     async for line in reader:
                         sys.stdout.write(line.decode())
                         sys.stdout.flush()
