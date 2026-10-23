@@ -26,7 +26,7 @@ def append_transition(bus, transition):
         object.__setattr__(transition, "message_id", message.message_id)
         return ClaimRecord.of(message, transition)
 
-    return bus.append(build)
+    return bus.bus.append(build)
 
 
 def test_same_name_can_take_a_previous_birth_only_with_current_registry_evidence(comms, tmp_path):
