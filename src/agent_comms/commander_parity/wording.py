@@ -5,7 +5,7 @@ from __future__ import annotations
 import io
 import json
 import os
-from collections.abc import Callable, Iterable
+from collections.abc import Callable
 from contextlib import redirect_stderr, redirect_stdout
 from dataclasses import dataclass, replace
 from functools import partial
@@ -15,7 +15,7 @@ from uuid import uuid4
 
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.commander.config import CommanderConfig
-from agent_comms.commander.order import CommanderContext, OrderFile, refuse
+from agent_comms.commander.order import CommanderContext, OrderFile
 from agent_comms.commander_parity import ParityComparison, UnverifiedParity
 from agent_comms.commander_parity.lifecycle import (
     InstalledEvidenceCase,
@@ -75,62 +75,23 @@ def messages(context: CommanderContext) -> tuple[Message, ...]:
 
 
 @dataclass(frozen=True)
-class WordingComparison(ParityComparison):
-    observations: tuple[tuple[WordingOutcome, WordingOutcome], ...]
-    native_owner: ClassVar[type[OrderWords]]
+class OrderWordingComparison(ParityComparison):
+    """Compare distinct CLI and native request boundaries, never one constructor with itself."""
 
-    @staticmethod
-    def agrees(current: WordingOutcome, native: WordingOutcome) -> bool:
-        return current == native
+    observations: tuple[tuple[WordingOutcome, WordingOutcome], ...]
+    native_owner: ClassVar[type[OrderWords]] = OrderText
 
     @property
     def passed(self) -> bool:
-        return bool(self.observations) and all(self.agrees(a, b) for a, b in self.observations)
+        return bool(self.observations) and all(
+            current.accepted == native.accepted for current, native in self.observations
+        )
 
     def describe(self) -> str:
         return (
             f"observed={len(self.observations)}; "
-            f"mismatches={sum(not self.agrees(a, b) for a, b in self.observations)}; "
-            f"current_refusals={sum(not a.accepted for a, _ in self.observations)}; "
-            f"native_refusals={sum(not b.accepted for _, b in self.observations)}; "
-            f"native={self.native_owner.__module__}.{self.native_owner.__qualname__}; "
-            "compared actual refusal and warning results; no publication"
-        )
-
-    @classmethod
-    def compare_texts(cls, texts: Iterable[str]) -> ParityComparison:
-        observed = tuple(
-            (
-                WordingOutcome.observe(partial(refuse, text, cls.native_owner)),
-                WordingOutcome.observe(partial(cls.native_owner, text)),
-            )
-            for text in texts
-        )
-        return cls(observed) if observed else UnverifiedParity("No actual wording input exists.")
-
-
-class PlainWordsComparison(WordingComparison):
-    native_owner = PlainText
-
-    @classmethod
-    def read(cls) -> ParityComparison:
-        return cls.compare_texts(
-            strike.reason for todo in history(selected_context()) for strike in todo.strikes
-        )
-
-
-class OrderWordingComparison(WordingComparison):
-    native_owner = OrderText
-
-    @staticmethod
-    def agrees(current: WordingOutcome, native: WordingOutcome) -> bool:
-        # This row asks whether soft orders are refused, not whether surrounding
-        # CLI prose emits the same unrelated wording notes as the native request.
-        return current.accepted == native.accepted
-
-    def describe(self) -> str:
-        return super().describe() + (
-            f"; current={OrderFile.problems_found.__qualname__}; "
+            f"mismatches={sum(a.accepted != b.accepted for a, b in self.observations)}; "
+            f"current={OrderFile.problems_found.__qualname__}; "
             f"native_entry={OrderGoalAction.require_ready.__qualname__}"
         )
 
