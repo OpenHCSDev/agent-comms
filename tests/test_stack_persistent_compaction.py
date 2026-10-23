@@ -1,6 +1,6 @@
 """A manual /compact runs Pi's own engine in the retained child, which keeps serving."""
+from agent_comms.controller import SessionUpdateSink
 
-from agent_comms.queued_input import InitialInput
 import asyncio
 import json
 import os
@@ -11,6 +11,7 @@ from tempfile import TemporaryDirectory
 from uuid import uuid4
 
 import pytest
+from acp.schema import TextContentBlock
 
 from agent_comms.acp import CommsClient
 from agent_comms.acp_extension import (
@@ -23,10 +24,11 @@ from agent_comms.acp_extension import (
 )
 from agent_comms.agent_events import CompactionEnd
 from agent_comms.comms import wire
-from agent_comms.pi_vocabulary import ManualCompactionReason
 from agent_comms.launch_runtime import RestartEnvironment
-from agent_comms.runtime import socket_path
 from agent_comms.native_arguments import GivenArguments, GivenBinary
+from agent_comms.pi_vocabulary import ManualCompactionReason
+from agent_comms.queued_input import InitialInput
+from agent_comms.runtime import socket_path
 from delivery_owner_fixture import canonical_agent
 
 
@@ -198,9 +200,10 @@ async def test_manual_compaction_keeps_the_retained_child_serving(monkeypatch):
         )
         updates = []
 
-        class Client:
-            async def session_update(self, **kwargs):
+        class Client(SessionUpdateSink):
+            async def publish_update(self, **kwargs):
                 updates.append(kwargs["update"].model_dump(by_alias=True))
+                return True
 
         owner.on_connect(Client())
         attachment = CommsClient(
@@ -210,9 +213,10 @@ async def test_manual_compaction_keeps_the_retained_child_serving(monkeypatch):
         )
         attached_facts = []
 
-        class AttachedClient:
-            async def session_update(self, **kwargs):
-                attached_facts.extend(decode_updates(kwargs["update"].get("_meta")))
+        class AttachedClient(SessionUpdateSink):
+            async def publish_update(self, **kwargs):
+                attached_facts.extend(decode_updates(kwargs["update"].field_meta))
+                return True
 
         attachment.on_connect(AttachedClient())
         retained = resumed = None
@@ -239,7 +243,9 @@ async def test_manual_compaction_keeps_the_retained_child_serving(monkeypatch):
             attached_facts.clear()
             compact_task = asyncio.create_task(
                 attachment.prompt(
-                    "worker", [{"type": "text", "text": ""}], _meta=encode_request(CompactRequest())
+                    "worker",
+                    [TextContentBlock(type="text", text="")],
+                    _meta=encode_request(CompactRequest()),
                 )
             )
             entered = await asyncio.to_thread(summary_entered.wait, 15)

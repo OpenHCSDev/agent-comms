@@ -126,11 +126,11 @@ class AgentActivity:
         return self.all_activity((participant,), snapshot=snapshot)[participant.name]
 
     def is_live(self, incarnation: ThreadIncarnation, snapshot: RegistrySnapshot) -> bool:
-        """This exact registered incarnation still has a running, live process."""
+        """The registered presence owns liveness for this exact incarnation."""
         if not incarnation.current(snapshot):
             return False
         name = snapshot.canonical_name(incarnation.name)
-        return snapshot.status(name).running and snapshot.threads[name].process_alive
+        return snapshot.status(name).running
 
     def is_working(self, incarnation: ThreadIncarnation, snapshot: RegistrySnapshot) -> bool:
         return self.is_live(incarnation, snapshot) and self.activity_of(

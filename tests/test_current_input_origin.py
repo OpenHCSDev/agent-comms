@@ -1,4 +1,5 @@
 """Original authored ingress and neutral historical evidence share one input store."""
+from agent_comms.controller import SessionUpdateSink
 
 from agent_comms.channel_targets import CommandTarget
 
@@ -26,9 +27,9 @@ from stored_inputs import stored_inputs
 from agent_comms.threads import Thread
 
 
-class Client:
-    async def session_update(self, **kwargs):
-        pass
+class Client(SessionUpdateSink):
+    async def publish_update(self, **kwargs):
+        return True
 
 
 @pytest.fixture

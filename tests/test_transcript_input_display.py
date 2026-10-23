@@ -1,4 +1,5 @@
 """Saved native input IDs bind transcript display to the owner's submitted intent."""
+from agent_comms.controller import SessionUpdateSink
 
 import json
 import sqlite3
@@ -104,9 +105,10 @@ async def test_acp_saved_transcript_replay_hides_only_owned_internal_input(tmp_p
     agent = CommsAgent(wire(comms.root))
     updates = []
 
-    class Client:
-        async def session_update(self, **kwargs):
+    class Client(SessionUpdateSink):
+        async def publish_update(self, **kwargs):
             updates.append(kwargs["update"])
+            return True
 
     try:
         await agent.sessions.transcript.replay("worker", client=Client())

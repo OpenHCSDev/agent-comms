@@ -31,6 +31,7 @@ from agent_comms.message_page import InboxPage, MessagePage, MessagePageRequest,
 from agent_comms.message_reference import (
     AfterMessageStart,
     FirstUnreadStart,
+    NewestUnreadStart,
     InboxStart,
     MessageReference,
 )
@@ -117,11 +118,10 @@ class MessageBus[Writes: Publisher]:
 
     def inbox(
         self, name: str, target: NamedTarget = AnyChannel.target(), *,
-        after: InboxStart = FirstUnreadStart(), bounds: PageBounds = PageBounds(),
-    ) -> Sequence[Message]:
-        return list(self.inbox_at(
-            name, self._registry.snapshot(), target, after=after, bounds=bounds,
-        ).page.messages)
+        after: InboxStart = NewestUnreadStart(), bounds: PageBounds = PageBounds(),
+    ) -> InboxPage:
+        """A glance at a thread's unread messages: newest first, with the unread beyond them."""
+        return self.inbox_at(name, self._registry.snapshot(), target, after=after, bounds=bounds)
 
     def inbox_at(
         self, name: str, snapshot: RegistrySnapshot, target: NamedTarget = AnyChannel.target(), *,
@@ -134,9 +134,11 @@ class MessageBus[Writes: Publisher]:
         seen = self.reads.cursor(delivery.actor, snapshot, document=document)
         self.bus.messages_for_references(after.references())
         cursor = after.cursor()
+        traversal = after.traversal()
         with self.bus.reading() as source:
             unread = source.unseen_deliveries(
                 snapshot, delivery, seen, after=cursor, scope=selection, limit=bounds.limit + 1,
+                traversal=traversal,
             )
             counts = source.unseen_counts(
                 snapshot, {delivery.actor: delivery}, {delivery.actor: seen}, after=cursor,
@@ -145,7 +147,7 @@ class MessageBus[Writes: Publisher]:
         listed = ListedDeliveries(selection, frozenset(row.seq for row in unread),
                                   frozenset(row.target for row in unread))
         result = MessagePageRequest(
-            listed, PageBounds(LiveCursor(cursor).newer(), bounds.limit),
+            listed, PageBounds(traversal, bounds.limit),
         ).displayed(self.reads, document, delivery.actor, snapshot, snapshot, self.bus)
         return InboxPage(result.page, result.displayed, total - len(result.page.messages))
 

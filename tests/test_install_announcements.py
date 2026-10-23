@@ -118,7 +118,7 @@ def test_rollback_and_refusal_are_published_from_their_error_types(private_comms
     assert all(line in messages[1].body for line in restored.lines())
     assert str(error) in messages[1].body
     assert str(runtime.prefix) in messages[1].body
-    completed = core("--root", str(comms.root), "history", "--target", "#comms")
+    completed = core("--root", str(comms.root), "history", "#comms")
     assert completed.returncode == 0, completed.stderr
     assert FieldCodec.parse(completed.stdout) == HistoryCliCommand(target="#comms").apply(comms).to_wire()
 

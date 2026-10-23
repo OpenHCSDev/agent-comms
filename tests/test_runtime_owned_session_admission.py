@@ -10,6 +10,7 @@ from contextlib import AsyncExitStack
 
 import pytest
 from acp import RequestError
+from acp.schema import PromptRequest, TextContentBlock
 
 from agent_comms.acp import CommsAgent
 from agent_comms.comms import wire
@@ -64,7 +65,19 @@ async def test_cli_registration_refuses_unbound_then_uses_original_owned_session
     proxy = RuntimeProxy(client, "registered", socket_path(root, os.getpid()))
     try:
         for action, parameters in (
-            ("prompt", {"prompt": [{"type": "text", "text": "Unbound input must never execute"}]}),
+            (
+                "prompt",
+                {
+                    "request": PromptRequest(
+                        session_id="registered",
+                        prompt=[
+                            TextContentBlock(
+                                type="text", text="Unbound input must never execute"
+                            )
+                        ],
+                    )
+                },
+            ),
             ("goal_history", {}),
         ):
             with pytest.raises(RequestError) as caught:

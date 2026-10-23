@@ -37,7 +37,7 @@ from typing import (
 from uuid import uuid4
 from weakref import WeakKeyDictionary
 
-from pydantic import JsonValue
+from pydantic import BaseModel, JsonValue
 from typing_extensions import TypeAliasType, TypeForm
 
 from .declared_family import DeclaredFamily
@@ -1788,7 +1788,8 @@ class FieldCodec(MroDispatch, Sealed):
         from a read-only view, and a view never serves as a persistence record.
         """
         representation = cls._value_representation(value, annotation)
-        if representation is not None:
+        # A record member's wire form is its declared record, so a view projects it as one.
+        if representation is not None and not isinstance(value, RecordMember):
             return cls.encode(value, annotation)
         if is_dataclass(value) and not isinstance(value, type):
             result = cls._tag(value)
@@ -2965,6 +2966,23 @@ def _structural_decoder(annotation: object) -> ValueDecoder[object]:
     return _member_decoder(annotation)
 
 
+@dataclass(frozen=True, slots=True)
+class _PydanticDecoder(ValueDecoder[object]):
+    """An external model owns its validation and JSON representation."""
+
+    target: type[BaseModel]
+
+    @boundary_decoder
+    def decode(self, data: object) -> BaseModel:
+        with MalformedRecord.refusing(f"Invalid {self.target.__name__}"):
+            return self.target.model_validate(data)
+
+    def encode(self, value: object) -> object:
+        if not isinstance(value, self.target):
+            raise TypeError(f"Expected {self.target.__name__}, received {type(value).__name__}")
+        return value.model_dump(mode="json", by_alias=True, exclude_none=True)
+
+
 @lru_cache(maxsize=None)
 def _member_decoder(target: object) -> ValueDecoder[object]:
     """A concrete record, enum or scalar, after any family tag is removed."""
@@ -2972,4 +2990,6 @@ def _member_decoder(target: object) -> ValueDecoder[object]:
         return _RecordDecoder(target)
     if isinstance(target, type) and issubclass(target, Enum):
         return _EnumDecoder.from_annotation(target, ())
+    if isinstance(target, type) and issubclass(target, BaseModel):
+        return _PydanticDecoder(target)
     raise TypeError(f"Unsupported JSON type: {target}")

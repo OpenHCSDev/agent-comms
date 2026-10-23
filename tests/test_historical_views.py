@@ -53,7 +53,6 @@ def setup(root, count=5):
     comms = wire(root)
     comms.registry.declare(Thread('alice', frozenset({'team'}), str(root), created_at=10.0))
     comms.registry.declare(Thread('bob', frozenset({'team'}), str(root), created_at=11.0))
-    Bus.install(Bus.path_in(comms.root))
     viewer = comms.messaging.user_identity(str(root)).name
     for i in range(count):
         comms.messaging.send("alice", "#team", f"{root.name} channel {i}").message.message_id

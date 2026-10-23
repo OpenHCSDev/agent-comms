@@ -13,7 +13,7 @@ from abc import abstractmethod
 from collections.abc import Iterator, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import TYPE_CHECKING, ClassVar, Literal
+from typing import TYPE_CHECKING, Annotated, ClassVar, Literal
 
 from .child_process import (BoundedRun, CheckPrinted, ChildOutcome, ChildResult, CountPrinted,
                             ExitedOutcome, SignaledOutcome, TimedOutOutcome)
@@ -22,7 +22,7 @@ from .declared_family import DeclaredFamily
 from .errors import RelationViolationError
 from .field_codec import (
     FieldCodec, JsonShapeFamily, JsonShapeMember, MalformedRecord, NullMember,
-    RecordMember, SubclassUnion,
+    PresenceExclude, RecordMember, SubclassUnion,
 )
 from .goal_states import ActiveGoal, GoalState
 from agent_comms.goal_turn_permit import GoalTurnPermit, NoLaunchPermit
@@ -758,15 +758,17 @@ class ReportedTurn(ReportedTurnState, JsonShapeMember):
 class Goal(RecordMember, GoalDeclaration):
     """A goal owns one typed record for storage and agent-comms protocol boundaries."""
 
-    text: str
+    # A presence row names the goal and its state; its body and bookkeeping stay with the goal tools.
+    text: Annotated[str, PresenceExclude()]
     id: str
-    published_seq: int
-    progress: str = ""
-    revision: int = 0
-    reported_turn: ReportedTurnState = field(default_factory=NoReportedTurn)
-    mention_source: GoalMentionSource | None = None
+    published_seq: Annotated[int, PresenceExclude()]
+    progress: Annotated[str, PresenceExclude()] = ""
+    revision: Annotated[int, PresenceExclude()] = 0
+    reported_turn: Annotated[ReportedTurnState, PresenceExclude()] = field(
+        default_factory=NoReportedTurn)
+    mention_source: Annotated[GoalMentionSource | None, PresenceExclude()] = None
     state: GoalState = field(default_factory=ActiveGoal)
-    order: GoalOrder = field(default_factory=UnorderedGoalOrder)
+    order: Annotated[GoalOrder, PresenceExclude()] = field(default_factory=UnorderedGoalOrder)
 
     def stopped_permit(self, store: GoalAttemptStore) -> GoalTurnPermit:
         return store.stopped_permit(self.id)

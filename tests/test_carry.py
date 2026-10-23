@@ -1,6 +1,5 @@
 """The carry family: one chain of idempotent steps whose dry runs say what a bus still needs."""
 
-from agent_comms.bus import Bus
 
 import os
 import sqlite3
@@ -278,7 +277,6 @@ def test_restart_selection_uses_receiving_declaration_with_connected_cli_inbox(c
 
 
 def test_owner_request_failure_joins_the_entire_set_before_propagating(comms, stack):
-    Bus.install(Bus.path_in(comms.root))
     names = ["failed", "other", "last"]
     for name in names[1:]:
         comms.registry.declare(

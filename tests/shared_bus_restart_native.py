@@ -3,6 +3,7 @@
 Only the localhost provider is controlled. Worker, registry, bus, selected
 claim_scope, native process, source proof and response publication remain real.
 """
+from agent_comms.controller import SessionUpdateSink
 
 from agent_comms.channel_targets import CommandTarget
 from agent_comms.restart_scope import OwnersNamed
@@ -169,13 +170,15 @@ async def configured_pure_channel(arguments):
                 f'Original private retained history {index}: ' + 'history ' * 400)
     packets, timeline, compaction_events = [], [], []
     class Observation:
-        async def session_update(self, **kwargs):
+        async def publish_update(self, **kwargs):
+            kwargs = {**kwargs, "update": kwargs["update"].model_dump(mode="json", by_alias=True, exclude_none=True)}
             packets.append(kwargs)
             from agent_comms.acp_extension import CompactionChangedUpdate
             for item in decode_updates(kwargs['update'].get('_meta')):
                 if isinstance(item, CompactionChangedUpdate):
                     compaction_events.append({'elapsed_seconds': time.perf_counter()-begun,
                         'phase': item.event.phase})
+            return True
     attachment = CommsClient(service, runtime_enabled=True,
         )
     attachment.on_connect(Observation())
@@ -495,8 +498,10 @@ async def configured_mixed_routes(arguments):
                 (name, f'{stage.name}: Direct/private only: compute 7+8 and include PRIVATE_ROUTE_490 in this direct reply only.'))]
     packets = []
     class Observation:
-        async def session_update(self, **kwargs):
+        async def publish_update(self, **kwargs):
+            kwargs = {**kwargs, "update": kwargs["update"].model_dump(mode="json", by_alias=True, exclude_none=True)}
             packets.append(kwargs)
+            return True
     attachment = CommsClient(service,runtime_enabled=True,
         )
     attachment.on_connect(Observation())
@@ -839,9 +844,11 @@ async def run(arguments):
     started = time.perf_counter()
     failure = None
     packets = []
-    class Observation:
-        async def session_update(self, **kwargs):
+    class Observation(SessionUpdateSink):
+        async def publish_update(self, **kwargs):
+            kwargs = {**kwargs, "update": kwargs["update"].model_dump(mode="json", by_alias=True, exclude_none=True)}
             packets.append(kwargs)
+            return True
     attachment = CommsClient(service, runtime_enabled=True,
         )
     attachment.on_connect(Observation())
@@ -1045,7 +1052,7 @@ async def run(arguments):
                                    for name in names)
                         concurrent_native = True
                         provider.response_gate.set()
-                    replies = service.bus.inbox('fixture-sender')
+                    replies = service.bus.inbox('fixture-sender').page.messages
                     completed = len(replies)==len(names)
                     if arguments.collective:
                         with closing(sqlite3.connect(

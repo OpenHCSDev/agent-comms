@@ -13,7 +13,7 @@ from acp.schema import ToolCallStart
 import agent_comms.agent_events as events
 from agent_comms.agent_event_updates import AcpEventConsumer
 from agent_comms.comms import wire
-from agent_comms.controller import AcpController
+from agent_comms.acp import SdkSessionConnection
 from agent_comms.native_tools import BashTool, CodingTool, EditTool, ReadTool, WriteTool
 from agent_comms.tool_declaration import ReplacementEdit
 from agent_comms.tool_declaration import ToolDeclaration, UndeclaredTool
@@ -197,7 +197,7 @@ async def acp_tools(tmp_path):
         task = asyncio.current_task()
         connections.add(task)
         try:
-            connection = AcpController(owner, writer, reader, listening=False)
+            connection = SdkSessionConnection(owner, writer, reader, listening=False)
             try:
                 await connection.listen()
             finally:

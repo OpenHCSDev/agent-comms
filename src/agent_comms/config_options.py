@@ -37,7 +37,6 @@ from .threads import ChosenModel, NextTurnConfiguration
 from .watched import FileSource
 
 if TYPE_CHECKING:
-    from acp import Client
     from acp.schema import SessionConfigOptionBoolean
 
     from .active_route import CommsRoute
@@ -46,7 +45,8 @@ if TYPE_CHECKING:
     from .native_package import VerifiedNativePackage
     from .pi_commands import SettingCommand
     from .pi_vocabulary import ThinkingChoice
-    from .runtime import RuntimeServer, SocketClient
+    from .runtime import RuntimeServer
+    from .controller import SessionUpdateSink
     from .session_effects import SessionEffects
     from .session_lifecycle import SessionLifecycle
     from .thread_model import ThreadModel
@@ -364,7 +364,7 @@ class SessionConfigOptions(ConfigOptions):
         )
         if self.publications.get(session_id) == update:
             return
-        if await self.runtime.session_update(session_id=session_id, update=update):
+        if await self.runtime.publish_update(session_id=session_id, update=update):
             # Retain exactly what this send supplied, not a later catalog
             # generation or settings observation acquired during its await.
             self.publications[session_id] = update
@@ -439,7 +439,7 @@ class SessionConfigOptions(ConfigOptions):
         await self.effects.turns.goals.sync_goal_execution(session_id, name)
         await self.use_stored_settings(session_id, name)
 
-    def start_menu(self, session_id: str, client: Client | SocketClient) -> asyncio.Task[None]:
+    def start_menu(self, session_id: str, client: SessionUpdateSink) -> asyncio.Task[None]:
         """Retain initial publication until it finishes or its consumer retires."""
         self._publication_sessions.add(session_id)
         task = self.runtime.background(self.send_menu(client, session_id))
@@ -449,7 +449,7 @@ class SessionConfigOptions(ConfigOptions):
 
     @asynccontextmanager
     async def observe_configuration(
-        self, session_id: str, client: Client | SocketClient,
+        self, session_id: str, client: SessionUpdateSink,
     ) -> AsyncIterator[None]:
         """An attached socket owns its initial catalog wait through disconnect."""
         task = self.start_menu(session_id, client)
@@ -464,14 +464,14 @@ class SessionConfigOptions(ConfigOptions):
             task.cancel()
         await join_retirement(asyncio.gather(*pending, return_exceptions=True))
 
-    async def send_menu(self, client: Client | SocketClient, session_id: str) -> None:
+    async def send_menu(self, client: SessionUpdateSink, session_id: str) -> None:
         options = await self.options_for_session(session_id)
         async with self.catalog_publish_lock:
             update = ConfigOptionUpdate(
                 session_update="config_option_update", config_options=options,
             )
-            await client.session_update(session_id=session_id, update=update)
-            self.publications[session_id] = update
+            if await client.publish_update(session_id=session_id, update=update):
+                self.publications[session_id] = update
 
     async def options_for_session(
         self, session_id: str,

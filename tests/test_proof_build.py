@@ -15,13 +15,12 @@ from agent_comms.build_identity import (
     RecordedBuildIdentity,
     UninstalledRepositoryError,
 )
-from agent_comms.bus import Bus
 from agent_comms.check_root import CheckRoot
 from agent_comms.commander.order import Commander
 from agent_comms.commander.standing import InstallDue
 from agent_comms.comms import wire
 from agent_comms.field_codec import FieldCodec
-from agent_comms.goal_actions import CreateProblemGoalAction, SetGoalAction
+from agent_comms.goal_actions import CreateProblemGoalAction
 from agent_comms.goals import CountCheckResult, OrderCheck
 from agent_comms.installer.probes.packages import ArchiveRecord, CommitRecord, GitRecord, PackageRecord
 from agent_comms.installer.runtime_resolution import CorePackage, RuntimePackage, RuntimeResolution
@@ -222,7 +221,6 @@ def test_installed_proof_closes_and_older_build_is_refused_on_copied_bus(
         if graph.repository.github == CorePackage.repository
     )
     source = wire(tmp_path / "bus")
-    Bus.install(Bus.path_in(source.root))
     for number, name in enumerate(("lead", "worker"), 1):
         source.registry.declare(
             Thread(

@@ -6,7 +6,6 @@ from pathlib import Path
 
 import pytest
 
-from agent_comms.bus import Bus
 from agent_comms.comms import wire
 from agent_comms.errors import RelationViolationError
 from agent_comms.historical_views import HistoryArchive
@@ -88,9 +87,7 @@ def test_carry_converts_the_archived_catalogue_before_reading_its_roots(tmp_path
     session = old.root / "native-sessions" / "bus.jsonl"
     old.registry.declare(Thread(
         "bus", frozenset(), str(tmp_path), session_file=RegistrySessionLocation.from_path(session, old.root)))
-    Bus.install(Bus.path_in(old.root))
     live = wire(tmp_path / "live")
-    Bus.install(Bus.path_in(live.root))
     live.views.attach_history(old.root)
     catalog = HistoryArchive.path_in(live.root)
     recorded = json.loads(catalog.read_text())

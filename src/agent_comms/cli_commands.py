@@ -124,7 +124,7 @@ from .input_origin import InputProvenance
 from .install_choices import InstallerChoice, LiveMode, RehearsalMode, RunMode, UnnamedInstaller
 from .maintenance_barrier import MaintenanceHeldError
 from .message_page import PageBounds
-from .message_reference import FirstUnreadStart, InboxStart, MessageReference
+from .message_reference import FirstUnreadStart, InboxStart, MessageReference, NewestUnreadStart
 from .messages import (
     Message,
 )
@@ -566,11 +566,13 @@ class ConstraintDroppedResult(CliResult):
 
 
 @dataclass(frozen=True)
-class InboxResult(CliResult):
-    messages: tuple[Message, ...]
+class InboxResult(HistoryPageResult):
+    """The newest unread page, newest first, and how many unread messages there are in all."""
 
-    def to_wire(self) -> object:
-        return {"messages": [message.to_wire() for message in self.messages]}
+    pending: int
+
+    def to_wire(self) -> dict[str, object]:
+        return {**super().to_wire(), "pending": self.pending}
 
 
 @dataclass(frozen=True)
@@ -1372,10 +1374,19 @@ class ExportRetainedCliCommand(CliCommand, declared_name="export-retained"):
 
 @dataclass(frozen=True, kw_only=True)
 class InboxCliCommand(ThreadArgument, CliCommand):
-    help = "Undelivered messages for a thread"
+    help = "Undelivered messages for a thread, newest first"
+    before: Annotated[
+        PageCursor,
+        Argument(
+            flags=("--before",),
+            options={"help": "Exclusive older-page cursor (JSON)", "type": json.loads},
+        ),
+    ] = NewestCursor()
 
     def apply(self, ctx: Comms) -> CliResult:
-        return InboxResult(tuple(ctx.bus.inbox(self.thread)))
+        inbox = ctx.bus.inbox(self.thread, after=NewestUnreadStart(self.before))
+        shown = tuple(reversed(inbox.page.messages))
+        return InboxResult(shown, inbox.page.has_older, len(shown) + inbox.remaining)
 
 
 @dataclass(frozen=True)
@@ -1439,7 +1450,7 @@ class AckCliCommand(ThreadArgument, CliCommand):
     help = "Mark inbox delivered"
 
     def apply(self, ctx: Comms) -> CliResult:
-        messages = ctx.bus.inbox(self.thread)
+        messages = ctx.bus.inbox(self.thread).page.messages
         return AcknowledgedResult(ctx.messaging.acknowledge(
             self.thread, tuple(message.reference for message in messages)))
 
@@ -1469,7 +1480,7 @@ class StatusCliCommand(CliCommand):
 class HistoryCliCommand(CliCommand):
     help = "Newest-first bounded history of a named target"
     target: Annotated[
-        str, Argument(flags=("--target",), options={"help": "#channel or @peer"})
+        str, Argument(flags=("target",), options={"nargs": "?", "help": "#channel, @peer or a peer's name"})
     ] = AnyChannel.address()
     me: Annotated[
         DisplayViewer,

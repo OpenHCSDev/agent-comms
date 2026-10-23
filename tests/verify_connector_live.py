@@ -18,7 +18,6 @@ import tempfile
 from pathlib import Path
 
 from connector_readiness import ConnectorReadiness
-from agent_comms.bus import Bus
 from agent_comms.comms import wire
 from agent_comms.connector_store import ConnectorStore
 from agent_comms.threads import Thread
@@ -45,7 +44,6 @@ def main(scratch: Path):
         comms = wire(root)
         for name in ("claude-ai", "worker"):
             comms.registry.declare(Thread(name, frozenset(), str(base)))
-        Bus.install(Bus.path_in(comms.root))
         home = base / "home"
         store_root = home / ".local/state/agent-comms/connector"
         store_root.mkdir(mode=0o700, parents=True)
@@ -74,7 +72,7 @@ def main(scratch: Path):
                 response, status = output.strip().rsplit("\n", 1)
                 assert status.split()[0] == "200"
                 assert json.loads(response)["result"]["isError"] is False
-                messages = comms.bus.inbox("worker")
+                messages = comms.bus.inbox("worker").page.messages
                 assert len(messages) == 1
                 assert messages[0].sender == "claude-ai"
                 assert messages[0].body == "Fix the candidate now"

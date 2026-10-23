@@ -6,7 +6,6 @@ from dataclasses import replace
 
 import pytest
 
-from agent_comms.bus import Bus
 from agent_comms.channel_targets import CommandTarget, ThreadTarget
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.comms import wire
@@ -116,7 +115,6 @@ def test_typed_read_keys_round_trip_through_the_store_codec():
 
 def test_sidebar_presents_pending_read_reset_notice_once(tmp_path):
     comms = wire(tmp_path)
-    Bus.install(Bus.path_in(comms.root))
     viewer = comms.messaging.user_identity(str(tmp_path)).name
     notice = PendingReadNotice("Read positions were reset; reopen conversations to review them.")
     comms.bus.reads.replace(replace(comms.bus.reads.read(), notice=notice))
@@ -231,7 +229,7 @@ def test_dm_ack_survives_process_exit_and_rebind_does_not_inherit_reads(tmp_path
     fresh = comms.messaging.send("alice", viewer, "new incarnation unseen").message
     assert not read_message(comms, viewer, old)
     assert comms.bus.pending_count(viewer, CommandTarget.named("alice")) == 1
-    assert [row.seq for row in comms.bus.inbox(viewer, CommandTarget.named("alice"))] == [fresh.seq]
+    assert [row.seq for row in comms.bus.inbox(viewer, CommandTarget.named("alice")).page.messages] == [fresh.seq]
 
 
 @pytest.mark.parametrize("seed", [7, 31, 99])

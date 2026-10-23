@@ -661,7 +661,7 @@ class PrivateEvidenceRead:
     record, then decode only beyond their consumed position. No history is hashed.
     """
 
-    def __init__(self, path, stream):
+    def __init__(self, path: Path, stream):
         self.path, self.stream = path, stream
         self.identity = FileIdentity.from_stat(os.fstat(stream.fileno()))
         self.prefix = UnverifiedNativeEvidencePrefix()
@@ -672,7 +672,7 @@ class PrivateEvidenceRead:
         return self.prefix.size
 
     @classmethod
-    def _open_stream(cls, path):
+    def _open_stream(cls, path: Path):
         stream = None
         try:
             if path != path.resolve(strict=True):
@@ -691,7 +691,7 @@ class PrivateEvidenceRead:
 
     @classmethod
     @contextmanager
-    def open(cls, path):
+    def open(cls, path: Path):
         source = cls(path, cls._open_stream(path))
         try:
             yield source
