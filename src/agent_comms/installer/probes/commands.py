@@ -5,7 +5,7 @@ from contextlib import redirect_stdout
 from dataclasses import dataclass
 from io import StringIO
 
-from agent_comms.installer.interpreter_operation import RuntimeProbe
+from agent_comms.installer.interpreter_operation import ProbePhase, RuntimeProbe
 
 
 @dataclass(frozen=True)
@@ -20,9 +20,8 @@ class CliCommandProbe(RuntimeProbe[CliOutput]):
 
     arguments: tuple[str, ...]
 
-    @property
-    def label(self) -> str:
-        return f"{super().label} {shlex.join(self.arguments)}"
+    def install_phase(self) -> ProbePhase:
+        return ProbePhase(shlex.join(self.arguments), probe=type(self))
 
     def run(self) -> CliOutput:
         from agent_comms import cli

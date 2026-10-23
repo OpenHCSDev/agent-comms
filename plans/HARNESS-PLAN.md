@@ -263,9 +263,7 @@ the conflicting virtual-bus batch; no optimization or subsecond result is claime
 
 ### 2b. The growth alarm counts code, not imports
 
-The growth alarm is commander-native phase 7's (`plans/commander-native-plan.md`, Growth alarm); this step only fixes its measure. Today three places count raw lines (`git diff --stat`, the alarm, PR bodies), so a factoring that turns 22 declarations into one reads as +18 when twelve of those lines are top-of-file imports. One AST-based measure drops the leading module-level imports, blank lines and comments (imports below the top still count), the alarm and PR bodies read it, and each report shows it beside the ratchet's fact measures.
-
-**Done when** the alarm is the only place that counts net source lines and it ignores top-of-file imports.
+Done: CodeLines (src/agent_comms/code_lines.py) is the one net-line measure; BranchGrowth reads it.
 
 ### 3. No silent failures
 
@@ -279,8 +277,7 @@ The growth alarm is commander-native phase 7's (`plans/commander-native-plan.md`
 
 ### 4. Plans that read as one
 
-- Delete the dead files in `plans/`; keep the three live plans and this one.
-- Delete `REMAINING-SLOP-PLAN.md` or `remaining-slop-plan.md`, whichever is superseded.
+Done 2026-10-23: dead plan files deleted; REMAINING-SLOP-PLAN.md is the one remaining-slop plan.
 - The multiple inheritance plan keeps one version: its corrections replace the original body instead of sitting above it.
 
 **Done when** `plans/` holds only plans someone is executing, and each states its target once.

@@ -30,6 +30,7 @@ from .child_process import Platform
 from . import store_files
 from .coordination_database import CoordinationStore
 from .cohort_schema import AcceptanceFrontier
+from .coordination_tables.participants import Participants
 from .coordinator import Coordination
 from .errors import RelationViolationError
 from .field_codec import Id128Text, MalformedRecord
@@ -231,8 +232,13 @@ class PublicRegistry(RegistryPrivacy):
         guard._trusted_root()
         # Install the new private capabilities while the existing public schema
         # still owns opening this file, before publishing the private guard.
+        # Participants registered while public declared no acceptance; the new
+        # root declares it for each, as registration does for later ones.
         with Coordination(str(CoordinationStore.path_in(registry_path.parent))) as store:
             PrivateCoordinatorTable.install(store)
+            with store.session.writing() as db:
+                for participant in Participants.select(db):
+                    guard.declare_acceptance(db, participant.participant_lookup)
         guard.create_pending()
         guard.commit_initial()
         return guard

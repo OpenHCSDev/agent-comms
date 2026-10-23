@@ -13,7 +13,6 @@ import json
 import os
 import re
 import sqlite3
-import sys
 import types
 from abc import ABC, abstractmethod
 from collections.abc import Callable, Generator, Iterable, Iterator, Mapping, Sequence
@@ -21,6 +20,7 @@ from contextlib import AbstractContextManager, ExitStack, closing, contextmanage
 from dataclasses import dataclass, field
 from enum import Enum, IntEnum, IntFlag
 from functools import cache
+from importlib import import_module
 from inspect import getsource
 from pathlib import Path
 from typing import (
@@ -66,7 +66,7 @@ from .locked_store import (
 )
 from .maintenance_barrier import MaintenanceBarrier, MaintenanceHolder
 from .package_stamp import STAMP
-from .projection_source import ProjectionSource
+from .projection_source import ProducedRow, ProjectionSource
 from .store_files import (
     UNBOUNDED_CONTENTION, StoreLockContention, StoreLockFile, _store_lock,
 )
@@ -661,6 +661,14 @@ class SQLiteSchemaObject(TypedRow):
 
 
 @dataclass(frozen=True)
+class SQLiteColumnNullability(TypedRow):
+    """SQLite's column names and NOT NULL declarations, read without parsing DDL."""
+
+    name: str
+    notnull: bool
+
+
+@dataclass(frozen=True)
 class SQLiteTableName(TypedRow):
     """One table SQLite's catalog holds, whether or not a row declaration names it."""
 
@@ -878,6 +886,7 @@ class TableSchema(ABC):
         for row in cls.schema_rows():
             row.take_previous_name(db)
             row.derive_nullable_fields(db)
+            row.derive_relaxed_fields(db)
         SQLiteCatalogObject.carry(db, cls.declared_schema(),
                                   frozenset(item.name for item in cls.stored_schema(db, sharing)))
         cls.require_schema(db, sharing)
@@ -1460,17 +1469,6 @@ class ProjectionProducerTables(SharedFileTables, DerivedTables):
     """Verification metadata recreated with its projections when its schema changes."""
 
 
-class ProducedRow(ABC):
-    """Rows rebuilt when the source of a class producing them changes."""
-
-    @classmethod
-    @abstractmethod
-    def producer_package(cls) -> types.ModuleType:
-        """The package whose ProjectionSource classes produce these rows."""
-
-    @classmethod
-    @abstractmethod
-    def producer_digest(cls) -> str: ...
 
 
 @dataclass(frozen=True)
@@ -1593,7 +1591,10 @@ class TypedTable(
         return expression
 
     @classmethod
-    def _table_sql(cls, *, if_not_exists: bool = False, columns: tuple[str, ...] = ()) -> str:
+    def _table_sql(
+        cls, *, if_not_exists: bool = False, columns: tuple[str, ...] = (),
+        required: frozenset[str] = frozenset(),
+    ) -> str:
         existence = "IF NOT EXISTS " if if_not_exists else ""
         definitions = []
         fields = cls._fields_named(columns) if columns else cls._columns
@@ -1607,7 +1608,7 @@ class TypedTable(
             if column.auto_increment:
                 sql += " PRIMARY KEY AUTOINCREMENT"
             sql += cls._sql(column.generated_sql)
-            if not item.nullable or column.primary_key:
+            if not item.nullable or column.primary_key or item.name in required:
                 sql += " NOT NULL"
             if column.unique:
                 sql += " UNIQUE"
@@ -1725,6 +1726,32 @@ class TypedTable(
         )
         actual = {item.name: item.sql for item in cls.stored_objects(db)}
         if actual.get(cls.declared_name) == previous:
+            cls.rebuild(db)
+
+    @classmethod
+    def derive_relaxed_fields(cls, db: sqlite3.Connection) -> None:
+        """Only an exact earlier declaration requiring now-nullable fields can relax rows.
+
+        Column additions, removals and other table differences still require a data conversion.
+        Compare through the same DDL owner; only writable non-key fields may widen.
+        """
+        stored = SQLiteColumnNullability.read(db.execute(
+            'SELECT name, "notnull" FROM pragma_table_info(?)', (cls.declared_name,),
+        ))
+        if tuple(column.name for column in stored) != tuple(
+            item.wire_name for item in cls._columns
+        ):
+            return
+        nonnull = frozenset(column.name for column in stored if column.notnull)
+        required = frozenset(
+            item.name for item in cls._columns
+            if item.nullable and item.column.writable and not item.column.primary_key
+            and item.wire_name in nonnull
+        )
+        if not required:
+            return
+        actual = {item.name: item.sql for item in cls.stored_objects(db)}
+        if actual.get(cls.declared_name) == cls._table_sql(required=required):
             cls.rebuild(db)
 
     @classmethod
@@ -2009,82 +2036,49 @@ class TypedTable(
         )
 
 
-class ProducedTable(ProducedRow, TypedTable, declared_name=None):
-    """A named table whose producing family owns one source commitment.
+class ProducedTable(ProducedRow, TypedTable, ProjectionSource, declared_name=None):
+    """A table derives its producers from the writers that declare it as an output."""
 
-    The first install after this change rebuilds bus projections once because the digest
-    format changed.
-    """
+    @classmethod
+    def writer_declarations(cls) -> tuple[type[ProjectionSource], ...]:
+        """A row contributes itself; extra writes belong to the class declaring them."""
+        return (cls,) if "writes" in vars(cls) else ()
 
     @classmethod
     def producer_digest(cls) -> str:
-        for family in cls.__mro__:
-            if issubclass(family, ProducedTable) and "producer_package" in vars(family):
-                return family._producer_digest()
-        raise TypeError(f"{cls.__name__} has no producing family declaration")
+        return cls._producer_digest()
 
     @classmethod
     @cache
     def _producer_digest(cls) -> str:
-        source = "\0".join(
+        # slots dataclasses recreate a class; its declaration contributes once.
+        source = "\0".join(sorted({
             f"{owner.__module__}.{owner.__qualname__}\0{getsource(owner)}"
             for owner in cls.producer_owners()
-        )
+        }))
         return hashlib.sha256(source.encode()).hexdigest()
 
     @classmethod
     def producer_owners(cls) -> tuple[type, ...]:
-        """Every class whose source the produced rows depend on, in a stable order."""
-        DeclaredFamily.discover_package(cls.producer_package())
+        """Only this table's writers and their inherited implementations.
+
+        An ancestor declaring other outputs owns those outputs alone. Inherited
+        producer capabilities follow the writer; unrelated mechanisms do not.
+        """
+        # Complete the same declared family for direct source reads and wheel builds.
+        import_module("agent_comms.producer_stamp")
         owners: set[type] = {
-            owner
-            for row in (cls, *cls.members_with(cls))
-            for owner in row.__mro__
-            if issubclass(owner, cls)
+            parent for parent in cls.__mro__ if issubclass(parent, ProjectionSource)
         }
-        owners.update(ProjectionSource.sources())
+        writers = ProjectionSource.writers_for(cls)
+        owners.update(writers)
+        for writer in writers:
+            owners.update(
+                parent for parent in writer.__mro__
+                if issubclass(parent, ProjectionSource)
+                and ("writes" not in vars(parent) or parent in writers)
+            )
         return tuple(sorted(owners, key=lambda owner: (owner.__module__, owner.__qualname__)))
-
-
-@dataclass(frozen=True)
-class BuiltDigests:
-    """The producer digest of each projection one build computed, by its declared name."""
-
-    digests: dict[str, str]
-
-
-@dataclass(frozen=True)
-class BuildProducerDigests:
-    """The file holding one build's BuiltDigests, beside its interpreter.
-
-    Only installation publishes this file, using the staged interpreter's own source.
-    Readers cannot fill missing entries from a checkout imported into that interpreter.
-    """
-
-    path: Path
-
-    @classmethod
-    @cache
-    def current(cls) -> BuildProducerDigests:
-        return cls(Path(sys.prefix) / "agent-comms-producers.json")
-
-    def digests(self, rows: tuple[type[ProducedTable], ...]) -> dict[str, str]:
-        """Read the digests the installer computed from this runtime's own source."""
-        built = self.stored()
-        missing = sorted(row.declared_name for row in rows
-                         if row.declared_name not in built.digests)
-        if missing:
-            raise RuntimeError(
-                f"Runtime {sys.prefix} has no producer digests for {missing}; "
-                "run 'agent-comms install' to prepare the runtime")
-        return {row.declared_name: built.digests[row.declared_name] for row in rows}
-
-    def stored(self) -> BuiltDigests:
-        if not self.path.is_file():
-            raise RuntimeError(
-                f"Runtime {sys.prefix} has no producer digest file {self.path}; "
-                "run 'agent-comms install' to prepare the runtime")
-        return FieldCodec.decode(BuiltDigests, FieldCodec.parse(self.path.read_bytes()))
 
 
 @dataclass(frozen=True)
@@ -2094,10 +2088,10 @@ class ProjectionProducer(TypedTable, ProjectionProducerTables):
 
     @staticmethod
     def digests_for(rows: tuple[type[ProducedTable], ...]) -> dict[str, str]:
-        return STAMP.producer_digests(
+        digests = STAMP.producer_digests(
             {row.declared_name: row.producer_digest for row in rows},
-            lambda: BuildProducerDigests.current().digests(rows),
         )
+        return {row.declared_name: digests[row.declared_name] for row in rows}
 
     @classmethod
     def records_for(cls, rows: tuple[type[ProducedTable], ...]) -> tuple[Self, ...]:

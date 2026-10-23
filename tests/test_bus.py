@@ -1,3 +1,4 @@
+import json
 import os
 import shutil
 import signal
@@ -39,6 +40,7 @@ from agent_comms.errors import (
     UnclaimedError,
 )
 from agent_comms.message_reference import MessageReference
+from agent_comms.read_basis import RepliesDisplayScope
 from agent_comms.response_acknowledgement import (
     canonical_publication_key,
 )
@@ -88,17 +90,15 @@ def projection_source_digest(source: Path) -> str:
     return subprocess.run(
         (
             sys.executable,
-            "-I",
-            "-c",
-            "import sys; sys.path.insert(0, sys.argv[1]); "
-            "from agent_comms.messages import BusProjectionTables; "
-            "print(BusProjectionTables._producer_digest())",
-            str(source.parent),
+            "-P",
+            "-m",
+            "agent_comms.producer_stamp",
         ),
         check=True,
         capture_output=True,
         text=True,
         timeout=60,
+        env={**os.environ, "PYTHONPATH": str(source.parent)},
     ).stdout.strip()
 
 
@@ -191,67 +191,27 @@ def test_projection_digest_tracks_producing_source(
     assert projection_source_digest(projection_source) != before
 
 
-# Mechanisms that decode, store and dispatch rows; their edits never change row content.
-PROJECTION_MECHANISM_MODULES = frozenset({
-    "agent_comms.class_fact",
-    "agent_comms.core_stamp",
-    "agent_comms.declared_family",
-    "agent_comms.field_codec",
-    "agent_comms.mro_dispatch",
-    "agent_comms.package_stamp",  # CheckoutStamp reads HEAD through Repo.git
-    "agent_comms.projection_source",
-    "agent_comms.repo",
-    "agent_comms.typed_table",
-})
+def test_activity_source_changes_only_sent_activity(projection_source: Path) -> None:
+    before = json.loads(projection_source_digest(projection_source))
+    path = projection_source / "messages.py"
+    original = path.read_text()
+    old = "return (SentActivity(message.sender, message.timestamp),)"
+    assert original.count(old) == 1
+    path.write_text(original.replace(
+        old, "return (SentActivity(message.sender, message.timestamp + 1.0),)"))
+    after = json.loads(projection_source_digest(projection_source))
+    assert {name for name in before if before[name] != after[name]} == {"sent_activity"}
 
 
-def projection_rebuild_classes(bus: Bus) -> set[type]:
-    """Every agent_comms class whose own code ran while the projections were rebuilt."""
-    codes = set()
+def test_display_import_does_not_add_projection_producers(projection_source: Path) -> None:
+    before = projection_source_digest(projection_source)
+    path = projection_source / "producer_stamp.py"
+    original = path.read_text()
+    declaration = "from agent_comms.bus import Bus as Bus"
+    assert original.count(declaration) == 1
+    path.write_text(original.replace(declaration, declaration + "\nfrom agent_comms import cli"))
+    assert projection_source_digest(projection_source) == before
 
-    def profile(frame, event, argument):
-        if event == "call":
-            codes.add(frame.f_code)
-
-    with bus.writing() as db:
-        BusProjectionTables.reset_schema(db)  # imports and caches outside the profile
-        sys.setprofile(profile)
-        try:
-            BusProjectionTables.reset_schema(db)
-        finally:
-            sys.setprofile(None)
-    modules = {
-        module.__file__: module for name, module in tuple(sys.modules.items())
-        if name.startswith("agent_comms.") and getattr(module, "__file__", None)
-    }
-    classes = set()
-    for code in codes:
-        if code.co_filename not in modules:
-            continue
-        owner = modules[code.co_filename]
-        for part in code.co_qualname.split(".")[:-1]:
-            if part == "<locals>":
-                break
-            owner = getattr(owner, part)
-        if isinstance(owner, type):
-            classes.add(owner)
-    return classes
-
-
-def test_every_class_that_produces_projection_rows_is_in_the_digest(bus):
-    first = bus.append(lambda seq, db: PublicRecord.from_message(
-        Message("author", "worker", "direct", InfoKind, seq=seq),
-    ))
-    bus.append(lambda seq, db: PublicRecord.from_message(
-        Message("worker", "author", "reply", InfoKind, seq=seq, answers=(first.reference,)),
-    ))
-    owners = set(BusProjectionTables.producer_owners())
-    missing = sorted(
-        f"{owner.__module__}.{owner.__qualname__}"
-        for owner in projection_rebuild_classes(bus)
-        if owner.__module__ not in PROJECTION_MECHANISM_MODULES and owner not in owners
-    )
-    assert missing == []
 
 
 def test_bus_attachment_and_failed_write_do_not_install_a_schema(tmp_path):
@@ -385,13 +345,17 @@ def test_record_family_rebuild_and_public_history_install_preserve_scope(bus, de
     assert bus.lookup(record.seq) == record
     assert bus.lookup_message(record.message_id) == record
     assert bus.page(record.seq + 1, 10) == (record, original)
-    copied = Bus.install(Bus.path_in(tmp_path / "selected-history"), history=(record,))
+    scope = RepliesDisplayScope(frozenset({"author"}), frozenset({"worker"}))
+    copied = Bus.install(
+        Bus.path_in(tmp_path / "selected-history"), history=scope.history(bus, limit=2),
+    )
     public = copied.lookup(record.seq)
     assert type(public) is PublicRecord
     assert public.publication_snapshot == record.history_snapshot.publication_snapshot
     assert copied.lookup_message(record.message_id) == public
     assert copied.received("b" * 32) == ()
-    assert copied.page(record.seq + 1, 10) == (public,)
+    assert copied.page(record.seq + 1, 10) == (public, copied.lookup(original.seq))
+    assert copied.replies((original.reference,)) == (public,)
 
 
 @pytest.mark.parametrize("declaration", BusRecord.members_with(Claimed))
@@ -548,12 +512,15 @@ def test_scoped_and_frozen_source_queries_are_sequence_bounded(bus):
     ) == (accepted,)
 
 
-def test_unanswered_reference_selection_requires_the_recorded_original_and_exact_owner_answer(bus):
+@pytest.mark.parametrize("offset", (0, 100))
+def test_unanswered_reference_selection_requires_the_recorded_original_and_exact_owner_answer(bus, offset):
     original = bus.append(lambda seq, db: PublicRecord.from_message(
         Message("owner", "lead", "Recorded directive", InfoKind, seq=seq)))
-    bus.append(lambda seq, db: PublicRecord.from_message(
-        Message("lead", "#comms", "Wrong original hash", InfoKind, seq=seq,
-                answers=(MessageReference(original.seq, "wrong-hash"),))))
+    with pytest.raises(RelationViolationError):
+        bus.append(lambda seq, db: PublicRecord.from_message(
+            Message("lead", "#comms", "Wrong original reference", InfoKind, seq=seq,
+                    answers=(MessageReference(original.seq + offset, "wrong-hash"),))))
+    assert bus.revision() == original.seq
     bus.append(lambda seq, db: PublicRecord.from_message(
         Message("another-unit", "#comms", "Someone else's answer", InfoKind, seq=seq,
                 answers=(original.reference,))))
@@ -567,6 +534,25 @@ def test_unanswered_reference_selection_requires_the_recorded_original_and_exact
     assert bus.unanswered_references((original.seq,), frozenset({"lead", "renamed-lead"})) == ()
     with pytest.raises(RowNotFoundError):
         bus.unanswered_references((original.seq, bus.revision() + 1), frozenset({"lead"}))
+
+
+def test_answer_projection_rebuild_preserves_sequence_links_and_public_references(bus):
+    original = bus.append(lambda seq, db: PublicRecord.from_message(
+        Message("owner", "lead", "Recorded question", InfoKind, seq=seq)))
+    reply = bus.append(lambda seq, db: PublicRecord.from_message(
+        Message("lead", "owner", "Recorded answer", InfoKind, seq=seq,
+                answers=(original.reference,))))
+    with bus.writing() as db:
+        BusProjectionTables.reset_schema(db)
+    Bus.install(bus.path)
+    with bus.observing() as db:
+        assert AnsweredSource.select(db, original=original.seq) == [
+            AnsweredSource(original.seq, reply.seq),
+        ]
+        assert db.execute("PRAGMA foreign_key_check").fetchall() == []
+    assert bus.lookup(reply.seq).answers == (original.reference,)
+    assert bus.replies((original.reference,)) == (reply,)
+    assert bus.unanswered_references((original.seq,), frozenset({"lead"})) == ()
 
 
 def test_bulk_history_keeps_one_snapshot_across_pages(bus):

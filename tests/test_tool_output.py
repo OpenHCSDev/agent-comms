@@ -284,7 +284,7 @@ def test_inbox_page_bound_and_no_ack_keep_the_next_page_unread(inbox_comms):
 async def test_watch_drains_multiple_pages_without_another_file_event(inbox_comms):
     comms = inbox_comms
     expected = [comms.messaging.send("a", "b", str(index)).message for index in range(201)]
-    watcher = comms.bus.watch("b", acknowledgment=ExplicitWatchAcknowledgment)
+    watcher = comms.watch("b", acknowledgment=ExplicitWatchAcknowledgment)
     try:
         async with asyncio.timeout(5):
             received = [await anext(watcher) for _ in expected]

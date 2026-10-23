@@ -6,7 +6,7 @@ from contextlib import AsyncExitStack, aclosing
 import pytest
 
 from agent_comms.locked_store import RegistryFile
-from agent_comms.message_bus import MessageBus
+from agent_comms.comms import wire
 from agent_comms.publisher import Publisher
 from agent_comms.read_basis import ExplicitWatchAcknowledgment
 from agent_comms.registration import Registration
@@ -23,7 +23,7 @@ async def test_real_message_bus_watch_recipient_suffix_and_rollback(bus):
             name, frozenset(), str(root))).incarnation.require_recorded()
         for name in ("sender", "target", "idle")
     }
-    messages = MessageBus(root, registry, Publisher)
+    messages = wire(root, Publisher)
     primers = {
         name: append_reply(bus, people["sender"], people[name], f"prime {name}")
         for name in ("target", "idle")
@@ -65,7 +65,7 @@ async def test_real_message_bus_watch_recipient_suffix_and_rollback(bus):
             assert bus.revision() == before
             done, _ = await asyncio.wait((target, idle), timeout=0.2)
             assert not done, "unaddressed or rolled-back append yielded a message"
-            print("real MessageBus.watch: exact new recipient suffix; unaddressed and rollback silence")
+            print("real Comms.watch: exact new recipient suffix; unaddressed and rollback silence")
         finally:
             for task in tasks:
                 task.cancel()

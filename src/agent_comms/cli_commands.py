@@ -1412,7 +1412,7 @@ class WatchStream(CliResult):
     watch: WatchCliCommand
 
     def messages(self) -> AsyncIterator[Message]:
-        return self.comms.bus.watch(self.watch.thread, acknowledgment=self.watch.acknowledgment,
+        return self.comms.watch(self.watch.thread, acknowledgment=self.watch.acknowledgment,
                                     after=self.watch.after)
 
     def write(self, output: TextIO) -> int:
@@ -1423,8 +1423,9 @@ class WatchStream(CliResult):
                     emit(ArrivedMessage(message=message).model_dump_json())
 
         async def watch() -> None:
-            thread = self.comms.registry.require(self.watch.thread)
-            source = thread.runtime.history_source(self.comms.root, thread.incarnation)
+            with Comms.client(self.comms.route) as comms:
+                thread = comms.registry.require(self.watch.thread)
+                source = thread.runtime.history_source(comms.root, thread.incarnation)
             async with asyncio.TaskGroup() as tasks:
                 tasks.create_task(stream())
                 tasks.create_task(source.watch_requests(
@@ -1459,6 +1460,11 @@ class WatchCliCommand(ThreadArgument, CliCommand[WatchStream], declared_name="wa
     def apply(self, ctx: Comms) -> WatchStream:
         return WatchStream(ctx, self)
 
+    def execute(self, route: CommsRoute, output: TextIO) -> int:
+        with Comms.client(route) as comms:
+            stream = self.apply(comms)
+        return stream.write(output)
+
 
 @dataclass(frozen=True, kw_only=True)
 class AckCliCommand(ThreadArgument, CliCommand):
@@ -1484,7 +1490,7 @@ class StatusCliCommand(CliCommand):
 
     def apply(self, ctx: Comms) -> CliResult:
         snapshot = ctx.registry.snapshot()
-        running = snapshot.active_threads(snapshot.threads.values())
+        running = snapshot.active_threads(snapshot.active_candidates())
         activities = ctx.agents.all_activity(running, snapshot=snapshot)
         return ActiveStatusResult(tuple(
             ThreadActivityRow(thread, activity.state, activity.detail, activity.timestamp)

@@ -28,10 +28,9 @@ from agent_comms.storage_rules import (
     StorageViolation,
     UnitStorage,
 )
-from agent_comms.todos import PendingProblemOrder, PresentCheckout, ProgressRead
+from agent_comms.todos import PendingProblemOrder, PresentCheckout, ProgressRead, TodoStore
 from agent_comms.ui_model.unit_state import UnitState
 from order_scope_fixture import FIX_SCOPE
-from agent_comms.order_runs import MechanicalOrderRun
 from agent_comms.threads import Thread
 
 
@@ -123,9 +122,13 @@ def test_storage_family_reads_once_and_renders_each_broken_fact(
         ),
     )
     reads: list[UnitStorage] = []
+    held_reads: list[CodeType] = []
 
     def observed_read(_code: CodeType, _offset: int, value: UnitStorage) -> None:
         reads.append(value)
+
+    def held_read(code: CodeType, _offset: int) -> None:
+        held_reads.append(code)
 
     monitoring.use_tool_id(monitoring.PROFILER_ID, __name__)
     try:
@@ -135,14 +138,19 @@ def test_storage_family_reads_once_and_renders_each_broken_fact(
         monitoring.set_local_events(
             monitoring.PROFILER_ID, UnitStorage.read.__func__.__code__, monitoring.events.PY_RETURN
         )
-        pulls = ProgressRead()
+        monitoring.register_callback(
+            monitoring.PROFILER_ID, monitoring.events.PY_START, held_read,
+        )
+        monitoring.set_local_events(
+            monitoring.PROFILER_ID, TodoStore.held_for_commander.__code__, monitoring.events.PY_START,
+        )
+        frame = HeartbeatFrame.read(comms, "lead", ProgressRead())
         found = StorageViolation.broken(
-            comms, "lead", observed=UnitState.current(comms, "lead", pulls),
-            frame=HeartbeatFrame.read(comms, "lead", pulls))
+            comms, "lead", observed=UnitState.current(comms, "lead", frame), frame=frame)
     finally:
         monitoring.free_tool_id(monitoring.PROFILER_ID)
     assert {type(violation) for violation in found} == expected
-    assert len(reads) == 1
+    assert len(reads) == len(held_reads) == 1
     assert all(violation.storage is reads[0] for violation in found)
     assert reads[0].home == home
     assert len(reads[0].extra_checkouts) == extra_count

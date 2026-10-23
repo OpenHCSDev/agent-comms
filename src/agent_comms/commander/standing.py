@@ -30,6 +30,7 @@ from agent_comms.standing_rules import (
     OwedAnswer,
     ReasonedStandingRule,
     StandingRule,
+    StandingScan,
     UndatedStandingRule,
 )
 from agent_comms.storage_rules import OrderCheckoutWork
@@ -189,10 +190,8 @@ class UnitAskUnanswered(OwedAnswer, UndatedStandingRule):
 
     unit: str
 
-    @classmethod
-    def scan_observed(cls, comms: Comms, commander: str,
-                      observed: Sequence[UnitState], frame: HeartbeatFrame) -> tuple[Self, ...]:
-        return tuple(cls(message, state.unit.name) for state in observed for message in state.owed)
+    def questions_for(self, unit: ThreadIncarnation) -> tuple[Message, ...]:
+        return (self.message,) if unit.name == self.unit else ()
 
     @classmethod
     def read_open(cls, source: BusReader, snapshot: RegistrySnapshot,
@@ -203,6 +202,10 @@ class UnitAskUnanswered(OwedAnswer, UndatedStandingRule):
                          source, snapshot, commander, held, time.time(),
                      ).items()
                      for message in questions)
+
+    def clearing_action(self) -> str:
+        return (f"Reply to {self.cited} or use --answers {self.message.message_id}. "
+                'If the answer must wait, say "waiting on X, owner Y" now.')
 
     def due(self, now: float) -> bool:
         return self.message.timestamp <= now - AwaitingCommander.seconds
@@ -230,9 +233,9 @@ class UnownedWheelSpin(IndependentStandingRule, UndatedStandingRule):
     recent: ClassVar[int] = 10 * 60
 
     @classmethod
-    def idle(cls, comms: Comms, commander: str) -> list[Thread]:
+    def idle(cls, comms: Comms, commander: str, scan: StandingScan) -> list[Thread]:
         """Units with a recent turn in their own transcript and no order, parked threads aside."""
-        held = {todo.holder for todo in cls.todos(comms, commander)}
+        held = {todo.holder for todo in scan.todos}
         excluded = held | {commander, ""}
         bound = TurnsSince(time.time() - cls.recent)
         return sorted((candidate for thread in comms.registry.all_threads().values()
@@ -255,14 +258,24 @@ class UnownedWheelSpin(IndependentStandingRule, UndatedStandingRule):
 
     @classmethod
     def violations(cls, comms: Comms, commander: str) -> tuple[UnownedWheelSpin, ...]:
+        return cls.scan_orders(comms, commander, StandingScan.read(comms, commander))
+
+    @classmethod
+    def scan_observed(cls, comms: Comms, commander: str,
+                      observed: Sequence[UnitState], frame: HeartbeatFrame) -> tuple[Self, ...]:
+        return cls.scan_orders(comms, commander, frame)
+
+    @classmethod
+    def scan_orders(cls, comms: Comms, commander: str,
+                    scan: StandingScan) -> tuple[UnownedWheelSpin, ...]:
         actor = comms.registry.require(commander).incarnation
         rows = tuple(todo for todo in comms.goals.todos.for_commander(actor)
                      if not todo.holder_state.current_assignments())
-        return cls.paired(comms, commander, rows)
+        return cls.paired(comms, commander, rows, scan)
 
     @classmethod
     def paired(cls, comms: Comms, commander: str,
-               todos: Iterable[Todo]) -> tuple[UnownedWheelSpin, ...]:
+               todos: Iterable[Todo], scan: StandingScan) -> tuple[UnownedWheelSpin, ...]:
         """Both the heartbeat and automatic watcher preserve work before any dispatch."""
         rows = tuple(todo for todo in todos if todo.pending)
         retained = tuple(CheckoutHeldWheelSpin(todo, work)
@@ -270,7 +283,7 @@ class UnownedWheelSpin(IndependentStandingRule, UndatedStandingRule):
                          for work in comms.registry.storage_rule.work_for_problem(
                              todo, comms.registry, comms.goals.todos))
         protected = {rule.todo.id for rule in retained}
-        idle, found = cls.idle(comms, commander), []
+        idle, found = cls.idle(comms, commander, scan), []
         for todo in (todo for todo in rows if todo.id not in protected):
             for unit in idle:
                 if not todo.live_strikes(unit.name):
@@ -333,7 +346,9 @@ class UnownedOrderWatch(WatchPass[tuple[UnownedObservation, ...]]):
             mine = (todo for todo in available if todo.creator_identity.name == name)
             observed.extend(
                 UnownedObservation(commander, rule)
-                for rule in UnownedWheelSpin.paired(comms, name, mine)
+                for rule in UnownedWheelSpin.paired(
+                    comms, name, mine, StandingScan.read(comms, name),
+                )
             )
         return tuple(observed)
 

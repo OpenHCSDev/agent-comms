@@ -30,7 +30,7 @@ from agent_comms.locked_store import DurableFile
 from agent_comms.problem_number import ProblemNumber
 from agent_comms.repo import Repo
 from agent_comms.repository_name import RepositoryName
-from agent_comms.standing_rules import StandingRule, UndatedStandingRule
+from agent_comms.standing_rules import UndatedStandingRule
 from agent_comms.storage_room import (
     AllocationRoomWork,
     BuildRoomWork,
@@ -401,7 +401,7 @@ class StorageViolation(UndatedStandingRule, declared_name=None):
                       observed: Sequence[UnitState], frame: HeartbeatFrame) -> tuple[Self, ...]:
         # Storage reads the filesystem, not the git source an unreadable card failed on:
         # a unit whose declared home is gone is that card and a missing home.
-        held = StandingRule.holders(comms, commander)
+        held = frame.holders
         return cls.for_units(comms, (state.unit for state in observed if state.unit in held))
 
     @classmethod

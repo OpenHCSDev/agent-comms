@@ -33,6 +33,7 @@ from agent_comms.goal_generation import (
     ReadyGeneration,
     ReservedGeneration,
 )
+from agent_comms.native_runtime_input import NativeRuntimeInput
 from agent_comms.pi_counts import PiCount, UnreportedCount
 from agent_comms.pi_payloads import PiUsage
 from agent_comms.threads import Thread
@@ -455,7 +456,11 @@ def test_stop_recovers_claim_after_owner_exits_without_turn_cleanup(comms, claim
     with closing(store._connect()) as conn:
         attempt = AttemptRecord.one(conn, attempt_id=before.attempt_id)
         assert attempt.phase == ClaimedAttempt()
-    assert not CoordinationStore.path_in(comms.root).exists()
+    # Registration created the participant, not a native-input family.
+    with closing(sqlite3.connect(
+        CoordinationStore.path_in(comms.root).as_uri() + "?mode=ro", uri=True,
+    )) as conn:
+        assert not NativeRuntimeInput.present(conn)
     StopCliCommand(name=claimed_owner.name).apply(comms)
 
     stopped = comms.registry.require(claimed_owner.name)

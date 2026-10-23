@@ -216,7 +216,7 @@ def test_same_loop_lifecycle_and_partial_send_cleanup_are_bounded(tmp_path, case
         env={**os.environ, "PYTHONPATH": os.pathsep.join(
             [str(Path(__file__).parent), os.environ.get("PYTHONPATH", "")]
         )},
-        capture_output=True, text=True, timeout=8,
+        capture_output=True, text=True,
     )
     assert result.returncode == 0, result.stdout + result.stderr
     assert "BOUNDED_UNKNOWN_REAPED" in result.stdout

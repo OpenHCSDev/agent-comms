@@ -8,6 +8,8 @@ import os
 from pathlib import Path
 import pytest
 
+from agent_comms.registry_document import ThreadRows
+
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.errors import RelationViolationError
 from agent_comms.field_codec import FieldCodec
@@ -57,7 +59,7 @@ def stopped(registry):
     thread = Thread("authored", frozenset(), "/authored",
                     process_identity=ProcessIdentity(2147483647, 1), created_at=1.0)
     snapshot = RegistrySnapshot.capture(RegistryDocument(
-        threads={thread.name: thread}, statuses={thread.name: StoppedThreadStatus()},
+        threads=ThreadRows.from_threads({thread.name: thread}), statuses={thread.name: StoppedThreadStatus()},
         last_seen={thread.name: 1.0},
         owners=GenerationCounter(4, {thread.name: 4}),
         claims=GenerationCounter(5, {thread.name: 5}),
@@ -80,9 +82,9 @@ def test_retired_witness_cannot_borrow_live_or_replaced_claim(*, thread_registra
     changed = (
         replace(snapshot, owner_generations={thread.name: 6}),
         replace(snapshot, _claimed_generations={thread.name: 6}),
-        replace(snapshot, threads={thread.name: replace(thread, created_at=2.0)}),
-        replace(snapshot, threads={thread.name: replace(
-            thread, process_identity=ProcessIdentity(2147483646, 1))}),
+        replace(snapshot, threads=ThreadRows.from_threads({thread.name: replace(thread, created_at=2.0)})),
+        replace(snapshot, threads=ThreadRows.from_threads({thread.name: replace(
+            thread, process_identity=ProcessIdentity(2147483646, 1))})),
     )
     for substituted in changed:
         with pytest.raises(RelationViolationError):
@@ -108,7 +110,8 @@ def test_handoff_codec_preserves_complete_stopped_witness_and_original_launch(*,
     assert decoded.owners[0].require_current(snapshot) is thread
     assert decoded.owners[0].launch.arguments == ("--no-tools", "authored value")
     assert decoded.owners[0].launch.environment["AUTHORED_CREDENTIAL"] == "in-memory-only"
-    assert "execution" not in FieldCodec.encode(thread)
+    stored = replace(thread, storage_roots=thread_registration.storage_rule.initial_roots(thread.name))
+    assert "execution" not in FieldCodec.encode(stored)
     unrelated = replace(launch, process=ProcessIdentity(2147483646, 1))
     with pytest.raises(RelationViolationError):
         replace(owner, launch=unrelated).require_current(snapshot)

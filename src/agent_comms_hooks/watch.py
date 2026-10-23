@@ -189,6 +189,10 @@ class WatchState:
         announce()
         return True
 
+    def name_wait(self, announce: Callable[[], None]) -> bool:
+        """An absent holder is not a wait to name."""
+        return False
+
     def await_socket(self, claim: WatchClaim, absent: OSError) -> None:
         """No bridge holds the claim, so its socket is gone, not between bridges."""
         raise NoSessionBridge(claim.thread) from absent
@@ -244,6 +248,11 @@ class LiveWatch(RecordedWatch):
     def announce_absence(self, announce: Callable[[], None]) -> bool:
         """A held claim's absent socket is an install's swap, not an outage."""
         return False
+
+    def name_wait(self, announce: Callable[[], None]) -> bool:
+        """Name a held claim's replacement once through the reader's protocol."""
+        announce()
+        return True
 
     def await_socket(self, claim: WatchClaim, absent: OSError) -> None:
         """The claim's lock outlives the install's exec, so a held claim's absent socket is

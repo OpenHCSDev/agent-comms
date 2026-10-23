@@ -166,9 +166,12 @@ class RegistryProvenance(RegistryNames[ThreadProvenance]):
     aliases: dict[str, str]
 
     def __post_init__(self) -> None:
-        names = set(self.threads)
         if any(name != thread.name for name, thread in self.threads.items()):
             raise RelationViolationError("Provenance name differs from its original declaration")
+        self.require_alias_names()
+
+    def require_alias_names(self) -> None:
+        names = set(self.threads)
         if any(target not in names or alias in names for alias, target in self.aliases.items()):
             raise RelationViolationError("Provenance alias has no exclusive retained owner")
 

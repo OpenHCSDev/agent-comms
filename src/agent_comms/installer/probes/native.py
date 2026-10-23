@@ -3,7 +3,6 @@ from __future__ import annotations
 import sys
 
 import agent_comms
-from agent_comms.field_codec import FieldCodec
 from agent_comms.installer.interpreter_operation import RuntimeProbe
 
 
@@ -17,16 +16,13 @@ class PrepareNativeProbe(RuntimeProbe[None]):
 
 
 class PrepareProducerDigestsProbe(RuntimeProbe[None]):
-    """Only the staged runtime's installer publishes its producer declarations."""
+    """Read the producer commitments built into this runtime's wheel."""
 
     def run(self) -> None:
-        from agent_comms.store_files import AtomicFile
-        from agent_comms.typed_table import BuiltDigests, BuildProducerDigests, ProducedTable
+        from agent_comms.package_stamp import STAMP
 
-        rows = ProducedTable.members_with(ProducedTable)
-        built = BuiltDigests({row.declared_name: row.producer_digest() for row in rows})
-        destination = BuildProducerDigests.current().path
-        print(f"install: producer digests from {agent_comms.__file__}", file=sys.stderr)
-        AtomicFile(destination).write_text(
-            FieldCodec.compact(FieldCodec.encode(built), sort_keys=True) + "\n"
+        digests = STAMP.producer_digests({})
+        print(
+            f"install: {len(digests)} stamped producer digests from {agent_comms.__file__}",
+            file=sys.stderr,
         )

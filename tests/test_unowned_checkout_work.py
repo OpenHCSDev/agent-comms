@@ -39,6 +39,7 @@ from agent_comms.repository_name import RepositoryName
 from agent_comms.storage_rules import StorageDenied, StorageProjection, StorageRule, shell_storage_effects
 from agent_comms.thread_execution import ExternalThreadExecution
 from agent_comms.thread_identity import CoreWatcherIncarnation
+from agent_comms.heartbeat_frame import HeartbeatFrame
 from agent_comms.todos import PendingProblemOrder, ProgressRead, ReleaseTodo, StrikeReason
 from agent_comms.transcript_events import AssistantTranscript
 from agent_comms.ui_model.unit_state import UnitState, Unreadable
@@ -235,7 +236,7 @@ def test_dirty_then_unpushed_then_pushed_linked_checkout(checkout_bus: Comms, tm
         assert c.registry.require('idle').goal.require().text
         beat()
     history = core('--root', str(root), 'history',
-                   '--target', '@commander-heartbeat', '--as', 'lead', '--limit', '10')
+                   '@commander-heartbeat', '--as', 'lead', '--limit', '10')
     assert history.returncode == 0, history.stderr
     assert f'WORK HELD: P2 worker retains work in {checkout}' in history.stdout
     assert f'NO LONGER CURRENT: WORK HELD: P2 worker retains work in {checkout}' in history.stdout
@@ -260,7 +261,8 @@ def test_unreadable_checkout_is_its_units_state_and_the_pass_carries_on(
         assert isinstance(read, UnreadableCheckoutRead) and read.holds_work
         UnownedOrderWatch().watch_pass(lambda: nullcontext(c))
         assert c.goals.todos.get('P2') == before
-        unreadable, = (state for state in UnitState.current(c, 'lead', ProgressRead())
+        unreadable, = (state for state in UnitState.current(
+            c, 'lead', HeartbeatFrame.read(c, 'lead', ProgressRead()))
                       if isinstance(state, Unreadable))
         assert unreadable.unit == c.registry.require('worker').incarnation
         assert str(checkout) in unreadable.reason

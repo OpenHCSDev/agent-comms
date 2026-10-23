@@ -11,6 +11,8 @@ from dataclasses import replace
 
 import pytest
 
+from agent_comms.registry_document import ThreadRows
+
 from agent_comms.session_file import RegistrySessionLocation
 from agent_comms.coordination_tables.executions import NoPointedExecution
 from agent_comms.child_process import NoProcess, ProcessIdentity
@@ -71,7 +73,7 @@ def test_restore_conflict_has_no_partial_registry_write(tmp_path, collision):
         current.registry.rename("owner", "renamed")
         conflicting = replace(conflicting, name="owner")
     source = old.registry.snapshot()
-    source = replace(source, threads={"good": good, conflicting.name: conflicting})
+    source = replace(source, threads=ThreadRows.from_threads({"good": good, conflicting.name: conflicting}))
     before = current.registry.store.path.read_bytes()
     with pytest.raises(RelationViolationError):
         current.registry.restore_stopped(source, ("good", conflicting.name))
