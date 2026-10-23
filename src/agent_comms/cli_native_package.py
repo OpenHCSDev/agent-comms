@@ -16,6 +16,7 @@ from agent_comms.native_package import (
     install_declared_sources,
     package_tree_digest,
     pinned_native_package,
+    remove_native_tree,
     share_native_resources,
     write_native_manifest,
 )
@@ -58,13 +59,30 @@ class QualifiedPackageVerb(PackageVerb):
 
 
 @dataclass(frozen=True, kw_only=True)
-class VerifyVerb(QualifiedPackageVerb):
+class VerifyVerb(PackageVerb):
     """Qualify a copied build without publishing it."""
 
     help = "Verify a copied package against the source pin"
 
     def apply(self, ctx: None = None) -> None:
+        VerifiedNativePackage.prepare(self.package)
+        print(UnitInstructions.prepare(), file=sys.stderr)
+
+
+@dataclass(frozen=True, kw_only=True)
+class QualifyVerb(QualifiedPackageVerb):
+    help = "Check a manifest-named sealed package without reading its contents"
+
+    def apply(self, ctx: None = None) -> None:
         self._native_package()
+
+
+@dataclass(frozen=True, kw_only=True)
+class RetireVerb(PackageVerb):
+    help = "Remove an owned tree containing sealed native directories"
+
+    def apply(self, ctx: None = None) -> None:
+        remove_native_tree(self.package)
 
 
 @dataclass(frozen=True, kw_only=True)

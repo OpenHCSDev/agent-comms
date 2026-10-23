@@ -66,14 +66,14 @@ publish() (
     fi
     mkdir -p -- "$publish_root"
     publish_root=$(cd -- "$publish_root" && pwd -P)
-    deployment="$publish_root/native-current-$build_id"
+    deployment="$publish_root/.pi-native-$build_id"
     deployment_package="$deployment/node_modules/@earendil-works/pi-coding-agent"
     if [[ -e "$deployment" ]]; then
         native \
             publish_sources "$repo_root" "$deployment_package"
     else
         deployment_stage=$(mktemp -d "$publish_root/.native-current-$build_id.stage.XXXXXXXX")
-        trap 'rm -rf -- "$deployment_stage"' EXIT
+        trap 'native retire "$deployment_stage"' EXIT
         mkdir -p -- "$deployment_stage/node_modules/@earendil-works"
         cp -a -- "$prepared/node_modules/@earendil-works/pi-coding-agent" \
             "$deployment_stage/node_modules/@earendil-works/pi-coding-agent"
@@ -95,13 +95,14 @@ accept() (
     publish "$target"
     for stale in "$stack_root"/.pi-native-????????????????; do
         if [[ -d "$stale" && "$stale" != "$target" ]]; then
-            rm -rf -- "$stale"
+            native retire "$stale"
         fi
     done
 )
 
 if [[ "$update_pins" == false && -f "$target/$stamp_name" \
       && $(< "$target/$stamp_name") == "$preparation_stamp" ]]; then
+    native qualify "$target/node_modules/@earendil-works/pi-coding-agent"
     accept
     exit 0
 fi
@@ -146,7 +147,7 @@ if [[ "$prepared" != "${TMPDIR:-/var/tmp}"/agent-comms-pi-native-*/node_modules/
 fi
 
 stage=$(mktemp -d "$stack_root/.pi-native.stage.XXXXXXXX")
-trap 'rm -rf -- "$stage" "$scratch_root" "$stock_root"' EXIT
+trap 'native retire "$stage"; rm -rf -- "$scratch_root" "$stock_root"' EXIT
 mv -- "$scratch_root/node_modules" "$stage/node_modules"
 cp -- "$stock/$bedrock" "$stage/node_modules/@earendil-works/pi-coding-agent/$bedrock"
 compaction=dist/core/compaction/compaction.js

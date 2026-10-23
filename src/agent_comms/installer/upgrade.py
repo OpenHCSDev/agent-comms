@@ -115,7 +115,9 @@ from agent_comms.maintenance_barrier import (
     MaintenanceState,
 )
 from agent_comms.native_build_inputs import NativeBuildInputs
-from agent_comms.native_package import link_sealed_tree, pinned_package_for
+from agent_comms.native_package import (
+    link_sealed_tree, pinned_package_for, remove_native_tree, unseal_native_directories,
+)
 from agent_comms.recorded_bus import RecordedBusIdentity
 from agent_comms.registry_store import RegistryStore
 from agent_comms.repo import Checkout, Repo, ScratchCheckout
@@ -522,7 +524,7 @@ class Stack:
             RuntimeResolution.capture(built, core).save(prefix)
             built.imports()
         except BaseException:
-            shutil.rmtree(prefix)
+            remove_native_tree(prefix)
             raise
         return built
 
@@ -600,10 +602,10 @@ class Stack:
         try:
             link_sealed_tree(native, stage / layout)
             for retired in self.prepared_natives.glob(".pi-native-*"):
-                shutil.rmtree(retired)
+                remove_native_tree(retired)
             stage.joinpath(layout.parts[0]).rename(self.prepared_natives / layout.parts[0])
         finally:
-            shutil.rmtree(stage, ignore_errors=True)
+            remove_native_tree(stage)
 
     def prepare_runtime(self) -> None:
         self.probe(PrepareProducerDigestsProbe())
@@ -723,6 +725,7 @@ class TargetTree(AbstractContextManager):
     def close(self) -> None:
         """Retire the tree; a failed add left nothing to retire."""
         if self.path.is_dir():
+            unseal_native_directories(self.path / "stack")
             ScratchCheckout(self.path).retire()
 
     def __enter__(self) -> Self:

@@ -18,6 +18,7 @@ import shutil
 import stat
 import tempfile
 from _hashlib import HASH
+from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Annotated, Literal
@@ -82,12 +83,11 @@ def pinned_native_package() -> Path:
 
 
 @dataclass
-class PackageInventory:
-    """One bounded package walk and its ordered content commitment."""
+class PackageInventory(ABC):
+    """The bounded traversal and filesystem identity checks shared by build and install."""
 
     entries: int = 1
     bytes: int = 0
-    digest: HASH = field(default_factory=hashlib.sha256, repr=False)
 
     @staticmethod
     def identity(info: os.stat_result) -> tuple[int, ...]:
@@ -116,8 +116,7 @@ class PackageInventory:
         if before.st_uid not in (0, os.getuid()) or before.st_mode & 0o022:
             raise NativePackageError("Native package is not owner-controlled")
         if stat.S_ISDIR(before.st_mode):
-            record = ["directory", relative, before.st_mode & 0o111]
-            self.digest.update((json.dumps(record, ensure_ascii=True) + "\n").encode())
+            self.directory(relative, before)
             names = []
             with os.scandir(path) as entries:
                 for entry in entries:
@@ -131,35 +130,89 @@ class PackageInventory:
                 raise NativePackageError("Native package shared resource is writable")
             self.bytes += before.st_size
             self.require_byte_limit()
-            content = hashlib.sha256()
-            fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
-            try:
-                if self.identity(os.fstat(fd)) != self.identity(before):
-                    raise NativePackageError("Native package changed while opening")
-                remaining = before.st_size
-                while remaining:
-                    block = os.read(fd, min(remaining, 1024 * 1024))
-                    if not block:
-                        raise NativePackageError("Native package truncated while hashing")
-                    content.update(block)
-                    remaining -= len(block)
-                if os.read(fd, 1) or self.identity(os.fstat(fd)) != self.identity(before):
-                    raise NativePackageError("Native package changed while hashing")
-            finally:
-                os.close(fd)
-            record = ["file", relative, before.st_mode & 0o111, before.st_size, content.hexdigest()]
-            self.digest.update((json.dumps(record, ensure_ascii=True) + "\n").encode())
+            self.file(path, relative, before)
         else:
             raise NativePackageError("Native package contains symlinks or special files")
         if self.identity(os.lstat(path)) != self.identity(before):
             raise NativePackageError("Native package changed during verification")
+
+    @abstractmethod
+    def directory(self, relative: str, info: os.stat_result) -> None: ...
+
+    @abstractmethod
+    def file(self, path: str, relative: str, info: os.stat_result) -> None: ...
+
+
+@dataclass
+class PackageContentInventory(PackageInventory):
+    """Build preparation alone reads content to establish the manifest commitment."""
+
+    digest: HASH = field(default_factory=hashlib.sha256, repr=False)
+
+    def directory(self, relative: str, info: os.stat_result) -> None:
+        record = ["directory", relative, info.st_mode & 0o111]
+        self.digest.update((json.dumps(record, ensure_ascii=True) + "\n").encode())
+
+    def file(self, path: str, relative: str, before: os.stat_result) -> None:
+        content = hashlib.sha256()
+        fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
+        try:
+            if self.identity(os.fstat(fd)) != self.identity(before):
+                raise NativePackageError("Native package changed while opening")
+            remaining = before.st_size
+            while remaining:
+                block = os.read(fd, min(remaining, 1024 * 1024))
+                if not block:
+                    raise NativePackageError("Native package truncated while hashing")
+                content.update(block)
+                remaining -= len(block)
+            if os.read(fd, 1) or self.identity(os.fstat(fd)) != self.identity(before):
+                raise NativePackageError("Native package changed while hashing")
+        finally:
+            os.close(fd)
+        record = ["file", relative, before.st_mode & 0o111, before.st_size, content.hexdigest()]
+        self.digest.update((json.dumps(record, ensure_ascii=True) + "\n").encode())
+
+
+class SealedPackageInventory(PackageInventory):
+    """An installed build is accepted through its seal without opening file contents."""
+
+    def directory(self, relative: str, info: os.stat_result) -> None:
+        if stat.S_IMODE(info.st_mode) != 0o500:
+            raise NativePackageError(f"Native package directory is not sealed 0500: {relative}")
+
+    def file(self, path: str, relative: str, info: os.stat_result) -> None:
+        if info.st_mode & 0o222:
+            raise NativePackageError(f"Native package file is writable: {relative}")
+
+
+def seal_native_tree(root: Path) -> None:
+    """Preparation freezes files first, then directories from the leaves to the root."""
+    for directory, _, files in os.walk(root, topdown=False):
+        for name in files:
+            path = Path(directory) / name
+            path.chmod(stat.S_IMODE(path.lstat().st_mode) & ~0o222)
+        Path(directory).chmod(0o500)
+
+
+def unseal_native_directories(root: Path) -> None:
+    """Retirement may unlink owned trees; shared file inodes are never made writable."""
+    for directory, _, _ in os.walk(root):
+        path = Path(directory)
+        path.chmod(stat.S_IMODE(path.lstat().st_mode) | stat.S_IWUSR)
+
+
+def remove_native_tree(root: Path) -> None:
+    """Retire an owned build or runtime containing sealed native directories."""
+    unseal_native_directories(root)
+    shutil.rmtree(root)
 
 
 def package_tree_digest(root: Path) -> str:
     """Hash sorted path/type/execute-mode/size/content records with bounded reads."""
     if os.name != "posix":
         raise NativePackageError("Native package filesystem verification requires POSIX")
-    inventory = PackageInventory()
+    inventory = PackageContentInventory()
     try:
         inventory.visit(os.fspath(root), ".", 0)
     except OSError as error:
@@ -412,8 +465,8 @@ class VerifiedNativePackage:
     path: Path
 
     @classmethod
-    def qualify(cls, root: Path) -> VerifiedNativePackage:
-        """Compare a mutable build/install tree with the pin before publication."""
+    def prepare(cls, root: Path) -> VerifiedNativePackage:
+        """Compare build content with its pin, then seal it before publication."""
         pins = [
             line[len(TREE_PREFIX) :]
             for line in MANIFEST.read_text().splitlines()
@@ -427,6 +480,18 @@ class VerifiedNativePackage:
             raise NativePackageError("Pinned native package tree commitment unavailable") from error
         if package_tree_digest(root) != digest:
             raise NativePackageError("Native package tree differs from pinned artifact")
+        seal_native_tree(root)
+        return cls(root)
+
+    @classmethod
+    def qualify(cls, root: Path) -> VerifiedNativePackage:
+        """Check this manifest's named, sealed build without reading package files."""
+        if root.parts[-3:] != ("node_modules", "@earendil-works", "pi-coding-agent") or root.parents[2].name != pinned_package_for(MANIFEST).parents[2].name:
+            raise NativePackageError("Native package directory differs from its manifest-derived name")
+        try:
+            SealedPackageInventory().visit(os.fspath(root), ".", 0)
+        except OSError as error:
+            raise NativePackageError("Native package seal could not be verified") from error
         return cls(root)
 
     @property
