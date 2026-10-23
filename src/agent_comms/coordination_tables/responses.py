@@ -11,7 +11,7 @@ from agent_comms.coordination_contracts import (
     require_nonempty,
     validate_execution_id,
 )
-from agent_comms.coordination_schema import CoordinatorTable
+from agent_comms.coordination_schema import CoordinatorRow
 from agent_comms.coordination_tables.executions import ExecutionReference, RetryPartition
 from agent_comms.field_codec import SnapshotExclude, WireName, projected
 from agent_comms.obligation_states import ResponseState
@@ -31,7 +31,6 @@ from agent_comms.typed_table import (
     NoDelete,
     NonDecreasing,
     TextStorage,
-    TypedTable,
 )
 
 
@@ -47,8 +46,7 @@ class ResponseObligation(
     GuardedColumns,
     GuardedInserts,
     NoDelete,
-    CoordinatorTable,
-    TypedTable,
+    CoordinatorRow,
     declared_name="obligations",
 ):
     """One original reply-route obligation within an execution."""
