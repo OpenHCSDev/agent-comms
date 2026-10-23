@@ -210,13 +210,6 @@ class VibeCheck(UndatedStandingRule):
             for sign in member.found(comms, commander, frame)
         )
 
-    def heartbeat_group(self) -> object:
-        return VibeCheck
-
-    def heartbeat_line(self, current: Sequence[Self]) -> str:
-        names = ", ".join(sorted({check.sign.signal.declared_name for check in current}))
-        return f"VIBE CHECK ({names}) -> answer the {VibeCheckSender.sender} messages now"
-
     def enforce(self, comms: Comms, commander: str) -> None:
         indictment = self.indictment()
         VibeCheckSender.burst_once(comms, commander, indictment, indictment[0])
@@ -234,7 +227,8 @@ class VibeCheck(UndatedStandingRule):
         )
 
     def line(self) -> str:
-        return self.heartbeat_line((self,))
+        return (f"VIBE CHECK ({self.sign.signal.declared_name}) "
+                f"-> answer the {VibeCheckSender.sender} messages now")
 
 
 @dataclass(frozen=True)

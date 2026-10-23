@@ -30,6 +30,8 @@ from agent_comms.commander.standing import (
 )
 from agent_comms.comms import wire
 from agent_comms.commander_heartbeat import CommanderHeartbeat
+from agent_comms.commander_pings import CommanderUpdate
+from agent_comms.service_passes import ServicePassStore
 from agent_comms.coordinator import Coordination
 from agent_comms.errors import CommittedMessageError, HumanSendRefusedError, RelationViolationError
 from agent_comms.field_codec import FieldCodec
@@ -650,7 +652,8 @@ def test_startup_heartbeat_enforces_and_publishes_both_new_rule_lines(held_bus, 
     commander = held_bus.registry.require("lead")
     held_bus.registry.register(replace(commander, process_identity=ProcessIdentity.capture(os.getpid())))
     heartbeat.pass_body(held_bus, heartbeat.observe(held_bus))
-    assert commander.incarnation in heartbeat.reviews
+    saved = CommanderUpdate.latest(held_bus, commander.incarnation)
+    assert saved is not None and saved.handled
     assert isinstance(held_bus.registry.require("worker").goal.require().state, ActiveGoal)
     page = MessagePageRequest(DMDisplayScope.capture(
         heartbeat.sender, "lead", held_bus.registry.snapshot(),
@@ -661,81 +664,60 @@ def test_startup_heartbeat_enforces_and_publishes_both_new_rule_lines(held_bus, 
     print(message.body)
 
 
-def test_every_pass_beats_and_a_stale_beat_is_heartbeat_silent(held_bus, monkeypatch):
-    """10:08 on 2026-10-21: the heartbeat sent only on change, so 31 failed passes read as calm."""
-    from agent_comms.commander_heartbeat import CommanderReview
-
+def test_successful_pass_health_does_not_depend_on_messages(held_bus, monkeypatch):
     commander = held_bus.registry.require("lead")
     held_bus.registry.register(replace(commander, process_identity=ProcessIdentity.capture(os.getpid())))
-    commander = held_bus.registry.require("lead")
-    review = CommanderReview(frozenset())
-    CommanderHeartbeat.register(held_bus.registry)
+    passes = ServicePassStore.at(held_bus.root)
+    passes.passed(CommanderHeartbeat.__name__)
+    assert not passes.read().commander_completed
+    worker = held_bus.registry.require("worker").incarnation
+    observed = (commander.incarnation, worker)
+    passes.heartbeat_passed((worker,), observed)
+    passes.heartbeat_passed((commander.incarnation,), observed)
+    completed = passes.read().commander_completed[commander.incarnation]
     assert HeartbeatSilent.violations(held_bus, "lead") == ()
-    states = UnitState.current(
-        held_bus, "lead", HeartbeatFrame.read(held_bus, "lead", ProgressRead()))
-    review.wake(held_bus, CommanderHeartbeat.sender, commander, (), states)
-    review.wake(held_bus, CommanderHeartbeat.sender, commander, (), states)
-    page = MessagePageRequest(DMDisplayScope.capture(
-        CommanderHeartbeat.sender, "lead", held_bus.registry.snapshot(),
-    )).read_opened(held_bus.bus.bus)
-    changed, unchanged = (message for message in page.messages
-                          if message.sender == CommanderHeartbeat.sender)
-    assert "Standing rules clear." in changed.body
-    assert unchanged.body == f"COMMANDER HEARTBEAT: unchanged since seq {changed.seq}, 0 violations."
-    assert HeartbeatSilent.violations(held_bus, "lead") == ()
-    later = unchanged.timestamp + HeartbeatSilent.seconds + 1
+    before = held_bus.bus.bus.revision()
+    later = completed + HeartbeatSilent.seconds + 1
     monkeypatch.setattr(time, "time", lambda: later)
-    # Neither a commander reply nor a fresh beat sent to another commander proves
-    # this commander's heartbeat is alive.
-    held_bus.messaging.send("lead", CommanderHeartbeat.sender, "I read the last beat")
-    held_bus.messaging.send(CommanderHeartbeat.sender, "outsider", "Another commander is healthy")
     silent, = HeartbeatSilent.violations(held_bus, "lead")
-    assert silent.beat == unchanged.seq
-    assert silent.line().startswith(f"HEARTBEAT SILENT: no beat since seq {unchanged.seq}")
+    assert isinstance(silent, MissedHeartbeat)
+    assert silent.since == completed + HeartbeatSilent.seconds
+    # Another commander's pass cannot clear this alarm.
+    passes.heartbeat_passed((worker,), observed)
+    assert HeartbeatSilent.violations(held_bus, "lead") == (silent,)
+    # A successful quiet pass clears the alarm without inventing a conversation.
+    passes.heartbeat_passed((commander.incarnation,), observed)
+    assert HeartbeatSilent.violations(held_bus, "lead") == ()
+    assert held_bus.bus.bus.revision() == before
 
 
-def test_first_heartbeat_is_owed_from_the_oldest_open_request_then_survives_renames(
-        held_bus, monkeypatch):
+def test_first_pass_is_owed_from_oldest_request_and_survives_renames(held_bus, monkeypatch):
     commander = held_bus.registry.require("lead")
     held_bus.registry.register(replace(commander, process_identity=ProcessIdentity.capture(os.getpid())))
     request, = CommanderHeartbeat.requested_by(held_bus.registry.require("lead"), held_bus.goals)
-    assert HeartbeatSilent.violations(held_bus, "lead") == ()
     due = request.created_at + HeartbeatSilent.seconds
     monkeypatch.setattr(time, "time", lambda: due + 1)
     never, = HeartbeatSilent.violations(held_bus, "lead")
     assert isinstance(never, HeartbeatNotStarted)
     assert never.request == request.id and never.since == due
-    assert "HEARTBEAT NOT STARTED" in never.line()
-    assert HeartbeatSilent.broken(
-        held_bus, "lead", observed=(), frame=HeartbeatFrame.read(held_bus, "lead", ProgressRead()),
-    ) == (never,)
-
-    # A newer request and mere service registration cannot reset older unpaid service.
     held_bus.goals.todos.add_request(commander.incarnation, "A newer independent request")
     CommanderHeartbeat.register(held_bus.registry)
+    held_bus.messaging.send(CommanderHeartbeat.sender, "lead", "A DM is not a completed pass")
     assert HeartbeatSilent.violations(held_bus, "lead") == (never,)
-    fresh = held_bus.bus.publisher.publish_ordinary(Message(
-        sender=CommanderHeartbeat.sender, target="lead", body="The heartbeat is running now",
-        type=InfoKind, timestamp=due + 1,
-    ), destination=CommandTarget.named("lead"), origin=AgentOrigin())
+    passes = ServicePassStore.at(held_bus.root)
+    observed = (commander.incarnation,)
+    passes.heartbeat_passed(observed, observed)
+    completed = passes.read().commander_completed[commander.incarnation]
     assert HeartbeatSilent.violations(held_bus, "lead") == ()
-
     held_bus.threads._rename_thread("lead", "renamed-lead")
     held_bus.threads._rename_thread(CommanderHeartbeat.sender, "renamed-heartbeat")
-    monkeypatch.setattr(time, "time", lambda: fresh.timestamp + HeartbeatSilent.seconds + 1)
-    held_bus.messaging.send("renamed-lead", "renamed-heartbeat", "Read the earlier beat")
+    monkeypatch.setattr(time, "time", lambda: completed + HeartbeatSilent.seconds + 1)
     silent, = HeartbeatSilent.violations(held_bus, "renamed-lead")
-    assert isinstance(silent, MissedHeartbeat) and silent.beat == fresh.seq
-    assert silent.since == fresh.timestamp + HeartbeatSilent.seconds
-    newer = held_bus.bus.publisher.publish_ordinary(Message(
-        sender="renamed-heartbeat", target="renamed-lead", body="Heartbeat after both renames",
-        type=InfoKind, timestamp=time.time(),
-    ), destination=CommandTarget.named("renamed-lead"), origin=AgentOrigin())
+    assert isinstance(silent, MissedHeartbeat)
+    assert silent.since == completed + HeartbeatSilent.seconds
+    renamed = (held_bus.registry.require("renamed-lead").incarnation,)
+    passes.heartbeat_passed(renamed, renamed)
     assert HeartbeatSilent.violations(held_bus, "renamed-lead") == ()
-    monkeypatch.setattr(time, "time", lambda: newer.timestamp + HeartbeatSilent.seconds + 1)
-    held_bus.messaging.send("renamed-lead", "renamed-heartbeat", "Read the new beat too")
-    latest, = HeartbeatSilent.violations(held_bus, "renamed-lead")
-    assert isinstance(latest, MissedHeartbeat) and latest.beat == newer.seq
 
 
 def test_one_answer_covers_an_escalation_burst_sent_before_it(held_bus):

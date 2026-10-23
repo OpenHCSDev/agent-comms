@@ -9,27 +9,58 @@ from pathlib import Path
 
 def main():
     directory = Path(sys.argv[0]).parent
-    data = json.loads((directory / "pull_requests.json").read_text())
+    repositories = json.loads((directory / "pull_requests.json").read_text())
     arguments = sys.argv[1:]
     with (directory / "calls.jsonl").open("a") as calls:
         calls.write(json.dumps(arguments) + "\n")
     if arguments[:2] == ["pr", "view"]:
-        assert arguments[arguments.index("-R") + 1] == data["repo"]
+        data = repositories[arguments[arguments.index("-R") + 1]]
         request = data["requests"][arguments[2]]
         field = arguments[arguments.index("--json") + 1]
         assert arguments[arguments.index("--jq") + 1] == "." + field
         print({"number": request["listed"]["number"], "body": request["body"]}[field])
+    elif len(arguments) > 1 and arguments[0] == "api" and arguments[1].startswith("repos/"):
+        _, owner, name, *parts = arguments[1].split("/")
+        data = repositories[f"{owner}/{name}"]
+        if parts == ["pulls"]:
+            for entry in data["requests"].values():
+                if entry["listed"]["kind"] == data["open_kind"]:
+                    print(entry["listed"]["number"])
+        elif parts[:1] == ["pulls"] and len(parts) == 2:
+            print(data["requests"][parts[1]]["listed"]["head"])
+        elif parts[:1] == ["statuses"] and len(parts) == 2:
+            assert arguments[arguments.index("--method") + 1] == "POST"
+            print("{}")
+        else:
+            raise AssertionError(f"Unexpected repository endpoint: {parts}")
     elif arguments[:2] == ["api", "graphql"]:
         query = arguments[arguments.index("-f") + 1]
         assert query.startswith("query=")
-        owner, name = data["repo"].split("/")
-        assert f'repository(owner: "{owner}", name: "{name}")' in query
+        variables = dict(arguments[index + 1].split("=", 1)
+                         for index, value in enumerate(arguments) if value == "-F")
+        inline = re.search(r'repository\(owner: "([^"]+)", name: "([^"]+)"\)', query)
+        repository = "/".join(inline.groups()) if inline else f"{variables['owner']}/{variables['name']}"
+        data = repositories[repository]
         selections = re.findall(r"p(\d+): pullRequest\(number: (\d+)\)", query)
-        assert selections, "Only explicit recorded pull-request selections are supported"
-        assert all(alias == number for alias, number in selections)
-        # gh --jq returns the typed projection, not the raw GraphQL envelope.
-        print(json.dumps({f"p{number}": data["requests"][number]["listed"]
-                          for _, number in selections}))
+        if selections:
+            assert all(alias == number for alias, number in selections)
+            # gh --jq returns the typed projection, not the raw GraphQL envelope.
+            print(json.dumps({f"p{number}": data["requests"][number]["listed"]
+                              for _, number in selections}))
+        elif "pullRequests(" in query:
+            print(json.dumps({"data": {"repository": {"pullRequests": {
+                "nodes": [{"number": entry["listed"]["number"],
+                           "headRefName": entry["listed"]["branch"], "isCrossRepository": False}
+                          for entry in data["requests"].values()
+                          if entry["listed"]["kind"] == data["open_kind"]],
+                "pageInfo": {"hasNextPage": False, "endCursor": None},
+            }}}}))
+        elif "issues(" in query:
+            print(json.dumps({"data": {"repository": {"issues": {
+                "nodes": [], "pageInfo": {"hasNextPage": False, "endCursor": None},
+            }}}}))
+        else:
+            raise AssertionError(f"Unexpected GraphQL query: {query}")
     else:
         raise AssertionError(f"Unexpected gh invocation: {arguments!r}")
 

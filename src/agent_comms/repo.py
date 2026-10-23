@@ -83,6 +83,11 @@ class Repo(BaseModel, WireValue):
 
     @classmethod
     def selected(cls, repositories: tuple[Repo, ...], name: str) -> Repo:
+        if not name:
+            if len(repositories) != 1:
+                raise ValueError("Select --repo when more than one repository is registered.")
+            repository, = repositories
+            return repository
         for repository in repositories:
             if repository.named(name):
                 return repository

@@ -24,6 +24,8 @@ from agent_comms.plan_phases import PlanPhase
 from agent_comms.read_basis import RepliesDisplayScope
 from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.registry_document import RegistrySnapshot
+from agent_comms.repository_name import RepositoryName
+from agent_comms.service_passes import ServicePassStore
 from agent_comms.standing_rules import (
     DatedStandingRule,
     IndependentStandingRule,
@@ -51,7 +53,11 @@ class InstallDue(IndependentStandingRule, UndatedStandingRule):
     one install each. The window is read from the merges' own git times, not a schedule.
     """
 
-    why: str
+    repo: RepositoryName
+    main: str
+    installed: str
+    commits: int = field(compare=False)
+    oldest_minutes: int = field(compare=False)
     settle: ClassVar[float] = 30 * 60
 
     @classmethod
@@ -70,14 +76,15 @@ class InstallDue(IndependentStandingRule, UndatedStandingRule):
                               f"{recorded.commit}..{main}").split()
             waited = now - min(map(int, merged), default=now - cls.settle)
             if waited >= cls.settle:
-                due.append(cls(
-                    f"{repo.github.to_wire()}: main {main}, installed {recorded.commit}, "
-                    f"{len(merged)} commits, oldest {int(waited // 60)} min"))
+                due.append(cls(repo.github, main, recorded.commit,
+                               len(merged), int(waited // 60)))
         return tuple(due)
 
     def line(self) -> str:
-        return (f"INSTALL DUE ({self.why}) -> the installer rehearses and installs main with "
-                "agent-comms install and posts the result to the commander")
+        return (f"INSTALL DUE ({self.repo.to_wire()}: main {self.main}, installed "
+                f"{self.installed}, {self.commits} commits, oldest {self.oldest_minutes} min) "
+                "-> the installer rehearses and installs main with agent-comms install "
+                "and posts the result to the commander")
 
 
 @dataclass(frozen=True)
@@ -244,17 +251,17 @@ class UnownedWheelSpin(IndependentStandingRule, UndatedStandingRule):
                        if TurnDigestRead(comms.root, candidate, bound).read().turns),
                       key=lambda thread: thread.name)
 
-    def _identity(self) -> tuple[object, ...]:
+    def comparison_values(self) -> tuple[object, ...]:
         # Observation times and proposed idle units change; the row and its disposition do not.
-        return type(self), self.todo.id
+        return (self.todo.id,)
 
     def __eq__(self, other: object) -> bool:
         if not isinstance(other, UnownedWheelSpin):
             return NotImplemented
-        return self._identity() == other._identity()
+        return type(self) is type(other) and self.comparison_values() == other.comparison_values()
 
     def __hash__(self) -> int:
-        return hash(self._identity())
+        return hash((type(self), self.comparison_values()))
 
     @classmethod
     def violations(cls, comms: Comms, commander: str) -> tuple[UnownedWheelSpin, ...]:
@@ -321,8 +328,8 @@ class ReassignedWheelSpin(UnownedWheelSpin, declared_name=None):
 class CheckoutHeldWheelSpin(UnownedWheelSpin, declared_name=None):
     work: OrderCheckoutWork
 
-    def _identity(self) -> tuple[object, ...]:
-        return (*super()._identity(), self.work.owner.incarnation, self.work.checkout)
+    def comparison_values(self) -> tuple[object, ...]:
+        return (*super().comparison_values(), self.work.owner.incarnation, self.work.checkout)
 
     def line(self) -> str:
         return (f"WORK HELD: {self.todo.id} {self.work.owner.name} retains work in "
@@ -360,38 +367,32 @@ class UnownedOrderWatch(WatchPass[tuple[UnownedObservation, ...]]):
 class WaitingUnownedWheelSpin(UnownedWheelSpin, declared_name=None):
     """A row needs a new unit; a proposed dispatch name is not an idle thread."""
 
-    def heartbeat_group(self) -> object:
-        return type(self)
-
-    def heartbeat_line(self, current: Sequence[WaitingUnownedWheelSpin]) -> str:
-        rows = ", ".join(sorted(rule.todo.id for rule in current))
-        return f"{len(current)} unowned rows wait for a new unit: {rows}"
-
 
 @dataclass(frozen=True)
 class HeartbeatSilent(IndependentStandingRule, DatedStandingRule, declared_name=None):
-    """Missing or stale heartbeat service for the commander's current open requests.
-
-    The heartbeat beats on every pass, so its silence is the failure; this rule reads the
-    bus in the commander's own tool process, where a dead heartbeat cannot hide it.
-    """
+    """A missing or stale successful pass, independent of whether a DM needed sending."""
 
     seconds: ClassVar[int] = 180
     since: float
 
     @classmethod
-    def violations(cls, comms: Comms, commander: str) -> tuple[Self, ...]:
-        return tuple(rule for member in cls.members_with(cls)
-                     for rule in member.violations(comms, commander))
+    def scan_owner(cls) -> type[StandingRule]:
+        return HeartbeatSilent
 
-    @staticmethod
-    def beats(comms: Comms, commander: str) -> tuple[Message, ...]:
-        snapshot = comms.registry.snapshot()
-        if snapshot.canonical_name(CommanderHeartbeat.sender) not in snapshot.threads:
-            return ()
-        return comms.bus.bus.latest_addressed(
-            snapshot.names_for(CommanderHeartbeat.sender), snapshot.names_for(commander),
-        )
+    @classmethod
+    def violations(cls, comms: Comms, commander: str) -> tuple[HeartbeatSilent, ...]:
+        owner = comms.registry.require(commander)
+        completed = ServicePassStore.at(comms.root).read().commander_completed.get(owner.incarnation)
+        now = time.time()
+        found = []
+        for request in CommanderHeartbeat.requested_by(owner, comms.goals):
+            if completed is None or completed < request.created_at:
+                rule = HeartbeatNotStarted(request.created_at + cls.seconds, request.id)
+            else:
+                rule = MissedHeartbeat(completed + cls.seconds)
+            if rule.since < now:
+                found.append(rule)
+        return tuple(found)
 
     def began(self) -> float:
         return self.since
@@ -399,22 +400,9 @@ class HeartbeatSilent(IndependentStandingRule, DatedStandingRule, declared_name=
 
 @dataclass(frozen=True)
 class MissedHeartbeat(HeartbeatSilent):
-    beat: int
-
-    @classmethod
-    def violations(cls, comms: Comms, commander: str) -> tuple[Self, ...]:
-        requests = CommanderHeartbeat.requested_by(comms.registry.require(commander), comms.goals)
-        if not requests:
-            return ()
-        now = time.time()
-        found = tuple(
-            cls(since=max(request.created_at, beat.timestamp) + cls.seconds, beat=beat.seq)
-            for request in requests for beat in cls.beats(comms, commander)
-        )
-        return tuple(rule for rule in found if rule.since < now)
-
     def line(self) -> str:
-        return (f"HEARTBEAT SILENT: no beat since seq {self.beat}, silent past "
+        return (f"HEARTBEAT SILENT: no completed pass since "
+                f"{RecordedEventTime(self.since - self.seconds).clock()}, silent past "
                 f"{RecordedEventTime(self.since).clock()}"
                 " -> read the connector journal for the failing pass and fix its owner")
 
@@ -422,16 +410,6 @@ class MissedHeartbeat(HeartbeatSilent):
 @dataclass(frozen=True)
 class HeartbeatNotStarted(HeartbeatSilent):
     request: OwnerRequestId
-
-    @classmethod
-    def violations(cls, comms: Comms, commander: str) -> tuple[Self, ...]:
-        requests = CommanderHeartbeat.requested_by(comms.registry.require(commander), comms.goals)
-        if not requests or cls.beats(comms, commander):
-            return ()
-        now = time.time()
-        found = tuple(cls(since=request.created_at + cls.seconds, request=request.id)
-                      for request in requests)
-        return tuple(rule for rule in found if rule.since < now)
 
     def line(self) -> str:
         return (f"HEARTBEAT NOT STARTED: no beat for request {self.request.value}, overdue since "
@@ -441,8 +419,8 @@ class HeartbeatNotStarted(HeartbeatSilent):
 @dataclass(frozen=True)
 class Unjudged(ReasonedStandingRule, UndatedStandingRule):
     limit: ClassVar[int] = 30
-    text = ("UNJUDGED {why} edits -> accept each reviewed PR head with judge head (one verdict"
-            " judges every edit before it), or fork judges for the rest")
+    text = ("UNJUDGED {why} edits -> accept each reviewed PR head with judge ok --pr N --head SHA"
+            " (one verdict judges every edit before it), or fork judges for the rest")
 
     @classmethod
     def reason(cls, comms: Comms, commander: str) -> str | None:

@@ -324,8 +324,6 @@ def test_build_containment_does_not_turn_git_failure_into_absence_or_success(pro
 def test_install_due_compares_fetched_main_to_installed_build(
     tmp_path, proof_build_checkouts, advance_main, monkeypatch,
 ):
-    # The settle window is its own test; here every uninstalled merge has settled.
-    monkeypatch.setattr(InstallDue, "settle", 0)
     graph = next(graph for graph in proof_build_checkouts
                  if graph.repository.github == CorePackage.repository)
     checkout = graph.repository.checkout
@@ -344,19 +342,18 @@ def test_install_due_compares_fetched_main_to_installed_build(
     bus.registry.declare(Thread("lead", frozenset(), str(checkout)))
     Commander.on_root("lead", (graph.repository,), bus.root)
 
+    after_settle = time.time() + InstallDue.settle + 1
+    monkeypatch.setattr(time, "time", lambda: after_settle)
     due = InstallDue.violations(bus, "lead")
 
     assert Repo.git(checkout, "rev-parse", "HEAD") == before
     assert Repo.git(checkout, "rev-parse", "origin/main").strip() == (
         graph.newer if advance_main else graph.installed)
     assert len(due) == int(advance_main)
-    changes = StandingRule.heartbeat_changes((), due)
-    assert len(changes) == int(advance_main)
     for alarm in due:
-        assert graph.repository.github.to_wire() in alarm.why
-        assert graph.newer in alarm.why
-        assert graph.installed in alarm.why
-        assert alarm.line() in changes[0]
+        assert alarm.repo == graph.repository.github
+        assert alarm.main == graph.newer
+        assert alarm.installed == graph.installed
 
     # An install advances the canonical manifest, not a clock or bus schedule.
     runtime = LaunchRuntime.installed().prefix
@@ -364,7 +361,6 @@ def test_install_due_compares_fetched_main_to_installed_build(
     RuntimeResolution(core_commit=graph.newer, packages=resolution.packages).save(runtime)
     after_install = InstallDue.violations(bus, "lead")
     assert after_install == ()
-    assert len(StandingRule.heartbeat_changes(due, after_install)) == int(advance_main)
     assert Repo.git(checkout, "rev-parse", "HEAD") == before
 
 
@@ -390,6 +386,6 @@ def test_install_waits_for_merges_to_settle_into_one_batch(
 
     monkeypatch.setattr(time, "time", lambda: merged + InstallDue.settle)
     (due,) = InstallDue.violations(bus, "lead")
-    assert graph.newer in due.why
-    assert "oldest 30 min" in due.why
+    assert due.main == graph.newer
+    assert due.oldest_minutes == 30
 
