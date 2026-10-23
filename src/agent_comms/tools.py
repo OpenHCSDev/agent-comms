@@ -1232,11 +1232,13 @@ class CommsOrderStoryTool(ReadTool, ToolRequest):
 @dataclass(frozen=True, kw_only=True)
 class CommsFleetStoryTool(ThreadReadTool):
     label = "Fleet story"
-    description = "Read this commander's strikes and send-backs, newest first, from their records."
+    description = ("Read what each order this commander holds out is doing now, one line per "
+                   "order; orders held by units that no longer read collapse into one line.")
 
     def apply(self, comms: Comms, caller: ToolCaller) -> FleetStory:
-        actor = comms.registry.require(caller.subject(self.thread)).incarnation
-        return FleetStory.collect(comms.goals.todos.history_for_commander(actor))
+        snapshot = comms.registry.snapshot()
+        actor = snapshot.require(caller.subject(self.thread)).incarnation
+        return FleetStory.collect(comms.goals.todos.held_for_commander(actor), snapshot)
 
 
 @dataclass(frozen=True, kw_only=True)

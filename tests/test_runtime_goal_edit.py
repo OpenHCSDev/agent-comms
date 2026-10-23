@@ -6,7 +6,10 @@ import os
 import pytest
 
 from delivery_owner_fixture import canonical_agent
+from agent_comms.acp_extension import GoalChangedUpdate, decode_updates
 from agent_comms.comms import wire
+from agent_comms.field_codec import FieldCodec
+from agent_comms.goal_presentation import GoalExecution
 from agent_comms.goal_actions import (
     OwnerInvocable,
     PausedGoalAction,
@@ -14,6 +17,11 @@ from agent_comms.goal_actions import (
 )
 from agent_comms.runtime import RuntimeProxy, socket_path
 from agent_comms.native_arguments import GivenArguments, GivenBinary
+
+
+def goal_updates(metadata) -> tuple[GoalChangedUpdate, ...]:
+    """The goal snapshots one Comms update batch carries."""
+    return tuple(update for update in decode_updates(metadata) if isinstance(update, GoalChangedUpdate))
 
 
 @pytest.mark.skipif(os.name == "nt", reason="POSIX owner socket")
@@ -36,9 +44,9 @@ async def test_goal_edit_and_history_over_owner_socket(tmp_path, monkeypatch):
     observer.on_connect(Client())
     proxy = RuntimeProxy(observer, session, socket_path(comms.root, os.getpid()))
     try:
-        metadata = await proxy.subscribe()
-        assert metadata["agentComms"]["goal"]["revision"] == paused.revision
-        assert metadata["agentComms"]["goalExecution"]["state"] == "paused"
+        (presented,) = goal_updates(await proxy.subscribe())
+        assert presented.goal == paused
+        assert presented.execution.declared_name == "paused"
         result = await proxy.request(
             "edit_goal",
             goal_id=goal.id,
@@ -52,11 +60,10 @@ async def test_goal_edit_and_history_over_owner_socket(tmp_path, monkeypatch):
         assert changed.revision == paused.revision + 1
         assert changed.progress == paused.progress
         assert comms.registry.require(session).goal.state.pause_source.declared_name == "owner"
-        assert result["goalExecution"]["state"] == "paused"
+        assert FieldCodec.decode(GoalExecution, result["goalExecution"]).declared_name == "paused"
         async with asyncio.timeout(2):
-            while not any(
-                update.get("_meta", {}).get("agentComms", {}).get("goal") == result["goal"]
-                for update in updates
+            while changed not in (
+                published.goal for update in updates for published in goal_updates(update.get("_meta"))
             ):
                 await asyncio.sleep(0.01)
         history = (await proxy.request("goal_history", goal_id=goal.id))["history"]
