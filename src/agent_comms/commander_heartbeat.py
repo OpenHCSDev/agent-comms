@@ -1,25 +1,63 @@
-"""Core's commander wake delivers only new, typed decisions, at most five lines."""
+"""Service-owned commander review: changed standing rules wake through the real inbox."""
+
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
-from agent_comms.commander_pings import (
-    CommanderPingMessage, DeliveredPing, LatestCommanderPing, OrderRevision,
-    Ping,
-)
 from agent_comms.message_bus import WatchPass
-from agent_comms.message_reference import MessageReference
 from agent_comms.registration import Registration
 from agent_comms.service_sender import ServiceSender
 from agent_comms.standing_rules import StandingRule
+from agent_comms.thread_identity import ThreadIncarnation
 from agent_comms.threads import Thread
-from agent_comms.todos import CommanderCursor, ListedPullRequest, PullRequests, Todo
-from agent_comms.ui_model.unit_state import Moving, UnitState
+from agent_comms.todos import PullRequests
+from agent_comms.ui_model.unit_state import UnitState
 
 if TYPE_CHECKING:
     from agent_comms.comms import Comms
     from agent_comms.goal_management import Goals
+    from agent_comms.todos import Todo
+
+
+@dataclass
+class CommanderReview:
+    """One commander's handled observations and its last changed beat.
+
+    Seq 0 precedes every published message: no changed beat has been sent yet.
+    """
+
+    rules: frozenset[StandingRule]
+    states: frozenset[UnitState] = frozenset()
+    changed: int = 0
+
+    def wake(self, comms: Comms, sender: str, commander: Thread,
+             rules: tuple[StandingRule, ...], states: tuple[UnitState, ...]) -> None:
+        """Every pass beats, so silence is a failure; an unchanged beat is one short line."""
+        found_rules, found_states = frozenset(rules), frozenset(states)
+        actionable = (*rules, *(state for state in states if state.attention()))
+        old_rules = self.rules
+        previous = self.rules | self.states
+        if found_rules == self.rules and found_states == self.states and self.changed:
+            comms.messaging.send(sender, commander.name,
+                                 f"COMMANDER HEARTBEAT: unchanged since seq {self.changed},"
+                                 f" {len(actionable)} violations.")
+            return
+        # Mark the observation before any effect; an uncertain publication is not replayed.
+        self.rules, self.states = found_rules, found_states
+        rejected = StandingRule.enforce_all(
+            comms, commander.name, (rule for rule in actionable if rule not in previous)
+        )
+        # A checked rejection has no effects and must not suppress a fresh observation.
+        self.rules -= rejected
+        self.states -= rejected
+        lines = ["COMMANDER HEARTBEAT: unit states and standing rules changed."]
+        lines.extend(state.line() for state in states)
+        lines.extend(StandingRule.heartbeat_changes(old_rules, self.rules))
+        lines.extend(rule.rejected_line() for rule in actionable if rule in rejected)
+        if not actionable:
+            lines.append("Standing rules clear.")
+        self.changed = comms.messaging.send(sender, commander.name, "\n".join(lines)).message.seq
 
 
 @dataclass(frozen=True)
@@ -27,67 +65,48 @@ class CommanderObservation:
     thread: Thread
     merged: tuple[Todo, ...]
     rules: tuple[StandingRule, ...]
-    pings: tuple[Ping, ...]
-    known: tuple[DeliveredPing, ...]
-    cursor: MessageReference | None
+    states: tuple[UnitState, ...]
 
     @classmethod
-    def read(cls, comms: Comms, sender: str, thread: Thread) -> CommanderObservation:
-        held = comms.goals.todos.held_for_commander(thread.incarnation)
-        pulls = PullRequests(held)
-        # The PR watch and merge reconciliation consume the same forge read.
-        merged = comms.goals.todos.merged_orders(thread.incarnation, comms.registry, pulls)
-        rules = StandingRule.broken(comms, thread.name)
-        states = {state.unit: state for rule in rules for state in rule.unit_states()}
-        todos = {todo.id: todo for todo in held}
-        previous = LatestCommanderPing.read(comms, sender, thread.incarnation)
-        known = previous.delivered(comms) if previous is not None else ()
-        candidates = [ping for rule in rules for ping in rule.commander_pings(todos, states)]
-        for todo in held:
-            state = type(states[todo.held().owner_identity]) if todo.held().owner_identity in states else Moving
-            candidates.extend(ping for strike in todo.strikes for ping in strike.commander_pings(todo, state))
-            candidates.extend(ping for request in pulls.listed(todo.repo, ListedPullRequest, todo)
-                              for ping in request.commander_pings(todo, state))
-        # Installation removes the open assignment. The last delivered order reference
-        # leads directly to that row, without scanning closed history or mirroring owners.
-        for item in known:
-            for order in item.ping.orders:
-                current = comms.goals.todos.get(order.problem)
-                if current.order.checked().id == order.order:
-                    candidates.extend(current.order.installation_pings(item.ping, current))
-        fresh = tuple(dict.fromkeys(ping for ping in candidates if ping.new_since(known)))
-        urgency = UnitState.worst_first()
-        selected = tuple(sorted(fresh, key=lambda ping: urgency.index(ping.state)))[:5]
-        active = {OrderRevision.of(todo).key for todo in held}
-        relevant = active | {order.key for item in known
-            if any(order.key in active for order in item.ping.orders) for order in item.ping.orders}
-        relevant.update(order.key for ping in fresh if ping not in selected for order in ping.orders)
-        kept = tuple(item for item in known
-                     if any(order.key in relevant for order in item.ping.orders))
-        return cls(thread, merged, rules, selected, kept,
-                   previous.reference if previous is not None else None)
+    def read(cls, comms: Comms, thread: Thread) -> CommanderObservation:
+        pulls = PullRequests(StandingRule.todos(comms, thread.name))
+        states = UnitState.current(comms, thread.name, pulls)
+        rules = StandingRule.broken(comms, thread.name, observed=states)
+        merged = tuple(todo for state in states for todo in state.merged_orders(comms, pulls))
+        return cls(thread, merged, rules, states)
 
 
+@dataclass
 class CommanderHeartbeat(ServiceSender, WatchPass[tuple[CommanderObservation, ...]]):
     sender = "commander-heartbeat"
+    reviews: dict[ThreadIncarnation, CommanderReview] = field(default_factory=dict)
 
     @classmethod
     def commanders(cls, registry: Registration, goals: Goals) -> tuple[Thread, ...]:
-        return tuple(thread for thread in registry.all_threads().values()
-                     if thread.process_alive and any(
-                         goal.order.open_requests(goal, goals, thread.incarnation) for goal in thread.goal))
+        """The live request holders whose current incarnation owns commander work."""
+        return tuple(
+            thread
+            for thread in registry.all_threads().values()
+            if thread.process_alive
+            and any(
+                goal.order.open_requests(goal, goals, thread.incarnation) for goal in thread.goal
+            )
+        )
 
     def observe(self, comms: Comms) -> tuple[CommanderObservation, ...]:
-        return tuple(CommanderObservation.read(comms, self.sender, thread)
-                     for thread in self.commanders(comms.registry, comms.goals))
+        return tuple(
+            CommanderObservation.read(comms, thread)
+            for thread in self.commanders(comms.registry, comms.goals)
+        )
 
     def pass_body(self, comms: Comms, observed: tuple[CommanderObservation, ...]) -> None:
+        """Inactive commanders retire their review after the pass enters the bus."""
         self.register(comms.registry)
+        live = {item.thread.incarnation for item in observed}
+        self.reviews = {
+            owner: review for owner, review in self.reviews.items() if owner in live
+        }
         for item in observed:
             comms.goals.todos.record_merges(item.merged)
-            StandingRule.enforce_all(comms, item.thread.name, item.rules)
-            if item.pings:
-                CommanderPingMessage.send(comms, self.sender, item.thread.incarnation,
-                                          item.pings, item.known)
-            elif item.cursor is not None:
-                CommanderCursor(item.thread.incarnation, item.cursor).advance(comms.goals.todos)
+            review = self.reviews.setdefault(item.thread.incarnation, CommanderReview(frozenset()))
+            review.wake(comms, self.sender, item.thread, item.rules, item.states)

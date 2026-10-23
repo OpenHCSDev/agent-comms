@@ -50,14 +50,6 @@ if TYPE_CHECKING:
     from .turn_runner import TurnRunner
 
 
-class UnexpectedTurnFailure(NativeRequestFailure):
-    """An execution fault is reported without claiming the native runtime is unavailable."""
-
-    def __init__(self, cause: Exception) -> None:
-        super().__init__(f"Unexpected turn failure: {cause}")
-        self.__cause__ = cause
-
-
 class OwnedTurn:
     """One authorized owner turn; stable source facts and native callbacks live here."""
 
@@ -319,7 +311,7 @@ class OwnedTurn:
         resources.push_async_callback(self.close_changed_project)
 
     def finish_goals(self) -> None:
-        self.goals.finish(self.terminal)
+        self.goals.finish(self.runner.owner_stop.interrupting(self.terminal))
 
     async def close_changed_project(self) -> None:
         name = await self.runner.sessions.sync_identity(self.session_id)
@@ -412,8 +404,8 @@ class OwnedTurn:
                         return
                     await self.run_native()
                 except asyncio.CancelledError as error:
-                    self.terminal = self.terminal.interrupted(
-                        TurnTerminal.from_cancellation(error))
+                    cancelled = TurnTerminal.from_cancellation(error)
+                    self.terminal = cancelled.interrupting(self.terminal)
                     raise
 
     def settle_unbound(self):
@@ -440,8 +432,6 @@ class OwnedTurn:
             raise
         except (NativeRequestFailure, RequestError) as error:
             await self.fail(error, error)
-        except Exception as error:
-            await self.fail(UnexpectedTurnFailure(error), error)
         # The completed outcome owns notification delivery and request failure;
         # it is outside stream-fault reporting, so no failure is published twice.
         await self.progress.publish_result()

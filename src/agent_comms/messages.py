@@ -108,18 +108,8 @@ class InfoKind(SendableMessageKind):
         return cast(Message, compile_decoder(Message | ClaimMessage).decode(data))
 
 
-class CommanderPingKind(MessageKind):
-    """Only Core's heartbeat publishes these typed decision packets."""
-
-    @classmethod
-    def decode_message(cls, data: Mapping) -> Message:
-        from .commander_pings import CommanderPingMessage
-
-        return FieldCodec.decode(CommanderPingMessage, data)
-
-
 class NeedsAnswerKind(SendableMessageKind, declared_name=None):
-    """A question, decision alert or handoff asks its recipient to act."""
+    """Questions, alerts and handoffs ask their recipient to act."""
 
 
 class QuestionKind(NeedsAnswerKind):

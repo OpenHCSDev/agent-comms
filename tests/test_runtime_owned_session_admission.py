@@ -5,6 +5,7 @@ import json
 import os
 import subprocess
 import sys
+from contextlib import AsyncExitStack
 
 import pytest
 from acp import RequestError
@@ -13,9 +14,32 @@ from agent_comms.acp import CommsAgent
 from agent_comms.comms import Comms
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.errors import UnregisteredThreadError
+from agent_comms.field_codec import FieldCodec
+from agent_comms.owner_protocol import OwnerFailure, OwnerLine
+from agent_comms.private_path import PrivateSocketRole
 from agent_comms.runtime import RuntimeProxy, socket_path
 from agent_comms.runtime_requests import GoalHistoryRuntimeRequest
 from agent_comms.threads import Thread
+
+
+@pytest.mark.skipif(os.name == "nt", reason="original Unix owner socket")
+@pytest.mark.parametrize("wire", (b"{invalid json\n", b"[]\n"))
+async def test_malformed_runtime_request_receives_failure_before_socket_closes(tmp_path, wire):
+    async with AsyncExitStack() as resources:
+        owner = CommsAgent(Comms(tmp_path / "wire"), runtime_enabled=True, auto_wake=False)
+        resources.push_async_callback(owner.shutdown)
+        await owner._runtime.start()
+        with PrivateSocketRole.address(owner._runtime.path) as address:
+            reader, writer = await asyncio.open_unix_connection(address)
+        resources.push_async_callback(writer.wait_closed)
+        resources.callback(writer.close)
+        writer.write(wire)
+        await writer.drain()
+        response = await asyncio.wait_for(reader.readline(), timeout=5)
+        failure = FieldCodec.decode(OwnerLine, json.loads(response))
+        assert isinstance(failure, OwnerFailure)
+        assert failure.error
+        assert await asyncio.wait_for(reader.read(), timeout=5) == b""
 
 
 @pytest.mark.skipif(os.name == "nt", reason="original Unix owner socket")

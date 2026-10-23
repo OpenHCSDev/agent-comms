@@ -243,9 +243,9 @@ class ExternalEventRow(TypedTable):
         from .transcript_events import ToolStartTranscript
 
         tools = tuple(tool.declared_name for tool in ToolDeclaration.members_with(MutatingPathTool))
-        judged = todo.judged_call_ids
+        judged = todo.judged_calls
         placeholders = lambda values: ",".join("?" for _ in values)
-        since = todo.evidence_since
+        since = todo.unjudged_since
         where = (f'e.thread=? AND e.kind=? AND e.tool IN ({placeholders(tools)}) '
                  'AND (e.timestamp>=? OR e.timestamp IS NULL)')
         parameters = (thread, ToolStartTranscript.declared_name, *tools, since)
@@ -408,6 +408,12 @@ class StoreRead(TranscriptSource):
                 yield from tool.edit_calls(identity, GeneratedTimestamp.decode(timestamp),
                                            todo.held().owner, todo.id)
 
+    def unjudged_count(self, todo) -> int:
+        where, parameters = ExternalEventRow.unjudged_query(self.transcript.lookup, todo)
+        return self.connection.execute(
+            f'SELECT count(DISTINCT e.call_id) FROM "{ExternalEventRow.declared_name}" e WHERE {where}',
+            parameters).fetchone()[0]
+
 
 @dataclass(frozen=True, slots=True)
 class ExternalTranscript(TranscriptSource, DurableStore):
@@ -544,6 +550,9 @@ class TurnDraftPublication(DraftPublication, StoreWriter):
     @property
     def store(self) -> ExternalTranscript:
         return self.transcript
+
+    def require_maintenance_open(self) -> None:
+        self.transcript.require_maintenance_open()
 
     @contextmanager
     def writing(self):

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from agent_comms.lifecycle_capability import Active
+
 import dataclasses
 import json
 import sys
@@ -38,6 +40,7 @@ from .cli_commands import (
 )
 from .cli_result import ToolCatalogResult
 from .commander.capacity import Load
+from .ui_model.unit_state import UnitState
 from .coordination_tables.refusals import SendRefusal
 from .declared_family import DeclaredFamily
 from .display_order import ChannelSort, ThreadSort
@@ -72,7 +75,7 @@ from .goal_actions import (
     TransitionGoalAction,
 )
 from .goal_history import RecordedGoalRevision
-from .goal_presentation import GoalSnapshot, ThreadGoalExecution
+from .goal_presentation import GoalSnapshot, GoalExecution
 from .goal_waits import NoStandbyReview, StandbyReview
 from .goals import Goal, GoalDeclaration, OrderCheck
 from .message_bus import HeldBusWrite
@@ -108,12 +111,12 @@ from agent_comms.todos import (
     InstallTodo,
     OrderDelivery,
     OrderProgress,
-    HeadVerdict,
+    ToolCallVerdict,
     PlainText,
     PullRequests,
+    ReviewedHeadVerdict,
     StrikeReason,
     Todo,
-    TodoCommand,
     TodoOperation,
     VerdictAudience,
 )
@@ -222,7 +225,7 @@ class GoalSet(OwnGoalPublication):
 
 @dataclass(frozen=True)
 class GoalProgress(OwnGoalPublication, GoalSnapshot):
-    execution: Annotated[ThreadGoalExecution, WireName("goal_execution")]
+    execution: Annotated[GoalExecution, WireName("goal_execution")]
 
 
 @dataclass(frozen=True)
@@ -831,7 +834,7 @@ class CommsResumeGoalTool(ThreadToolRequest):
             ),
         )
         goal = goal.require()
-        if not goal.state.active or goal.progress != progress:
+        if not goal.state.items_with(Active, goal) or goal.progress != progress:
             raise ToolRefusedError("Goal changed during resume; refresh its state.")
         return GoalUpdated(goal)
 
@@ -883,12 +886,12 @@ class CommsTodoTool(ThreadToolRequest):
 
     def apply(self, comms: Comms, caller: ThreadCaller) -> TodoChanged | ProblemClosed:
         todo = comms.goals.todos.get(self.problem)
-        actor = comms.registry.require(caller.name).incarnation
+        actor = caller.identity(comms)
         return self.result(comms.goals.change_problem(
-            self.problem, self.operation_for(todo, actor, comms), caller.name))
+            self.problem, self.operation_for(todo, actor, comms), caller.commander(comms).name))
 
     @abstractmethod
-    def operation_for(self, todo: Todo, actor: ThreadIncarnation, comms: Comms) -> TodoCommand:
+    def operation_for(self, todo: Todo, actor: ThreadIncarnation, comms: Comms) -> TodoOperation:
         """Build the change, verifying any attached application claims before writing."""
 
     def result(self, changed: Todo) -> TodoChanged | ProblemClosed:
@@ -902,31 +905,48 @@ class CommsChangeProblemTool(CommsTodoTool, declared_name="comms_todo"):
     ]
 
     def operation_for(self, todo: Todo, actor: ThreadIncarnation, comms: Comms) -> TodoOperation:
-        return self.operation
+        return self.operation.authored_by(actor)
 
 
 @dataclass(frozen=True, kw_only=True)
-class CommsVerdictTool(CommsTodoTool):
-    label = "Review pull request head"
+class CommsVerdictTool(CommsChangeProblemTool):
+    label = "Judge order tool call"
     description = (
-        "Record an accepted or rejected verdict on a linked pull request's current head "
-        "and post its review status on that commit. A rejection strikes the holder and "
-        "revises its Goal in the same write."
+        "Record the commander's verdict on one tool call the holder made for its "
+        "order: an accepted verdict quotes 4+ words of the order; a send-back strikes "
+        "the holder and revises its Goal in the same write."
     )
     operation: Annotated[
-        HeadVerdict, *tool_field("Accepted or rejected verdict on the linked current head")
+        ToolCallVerdict, *tool_field("Accepted or send-back verdict on the judged tool call ID")
     ]
 
-    def operation_for(self, todo: Todo, actor: ThreadIncarnation, comms: Comms) -> HeadVerdict:
-        if self.operation.actor != actor:
-            raise ToolRefusedError("The verdict actor must be the commander recording it.")
-        return self.operation
+
+@dataclass(frozen=True, kw_only=True)
+class CommsHeadVerdictTool(ThreadToolRequest):
+    """One reviewed commit judges the holder's whole diff: the commander, or any fork of it,
+    accepts an order's exact PR head, so every edit made before it is judged in one verdict and
+    the head carries agent-comms/review for the merge queue."""
+
+    label = "Accept an order's PR head"
+    description = (
+        "Accept the exact pull request head commit an order's holder delivered: one verdict "
+        "judges every edit made before it and posts agent-comms/review on that commit. Quote "
+        "4+ words of the order it carries out."
+    )
+    problem: Annotated[str, *tool_field("Problem ID")]
+    operation: Annotated[ReviewedHeadVerdict, *tool_field("Accepted PR-head verdict")]
+
+    def apply(self, comms: Comms, caller: ThreadCaller) -> TodoChanged:
+        reviewer = caller.identity(comms)
+        comms.goals.todos.get(self.problem).require_commander(reviewer)
+        todo = self.operation.reviewed(comms.goals, self.problem, reviewer)
+        return TodoChanged(todo, todo.strike_count)
 
 
 @dataclass(frozen=True, kw_only=True)
 class CommsUnjudgedTool(ThreadReadTool):
-    label = "Review evidence"
-    description = "Read original edit calls since each open order's last head verdict."
+    label = "Unjudged edits"
+    description = "Read original edit calls since each open order, excluding that order's recorded verdicts."
 
     def apply(self, comms: Comms, caller: ToolCaller) -> UnjudgedEdits:
         return UnjudgedEdits(tuple(edit for read in OrderEditsRead.for_commander(
@@ -936,7 +956,7 @@ class CommsUnjudgedTool(ThreadReadTool):
 @dataclass(frozen=True, kw_only=True)
 class CommsCommanderLoadTool(ThreadReadTool):
     label = "Measured commander load"
-    description = "Read held work, ready heads awaiting review, timers and receiving child commanders."
+    description = "Read canonical order/edit debt and receiving child commanders; never self-reported."
 
     def apply(self, comms: Comms, caller: ToolCaller) -> Load:
         return Load.of(comms, caller.subject(self.thread))
@@ -953,7 +973,7 @@ class CommsFireTool(ThreadToolRequest):
     reason: Annotated[StrikeReason, *tool_field("What the unit did, plainly")]
 
     def apply(self, comms: Comms, caller: ThreadCaller) -> TodoList:
-        return TodoList(comms.goals.fire(self.unit, self.reason, caller.name))
+        return TodoList(comms.goals.fire(self.unit, self.reason, caller.identity(comms)))
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -1009,7 +1029,9 @@ class CommsStandingRulesTool(ThreadToolRequest):
     ] = 0.0
 
     def apply(self, comms: Comms, caller: ThreadCaller) -> StandingRulesRead:
-        broken = StandingRule.broken(comms, caller.name)
+        states = UnitState.current(comms, caller.name, PullRequests())
+        broken = (*StandingRule.broken(comms, caller.name, observed=states),
+                  *(state for state in states if state.attention()))
         rejected = StandingRule.enforce_all(comms, caller.name, broken)
         return StandingRulesRead(
             tuple(rule.line() for rule in broken
@@ -1032,7 +1054,7 @@ class CommsOrderTool(ThreadToolRequest):
 
     def apply(self, comms: Comms, caller: ThreadCaller) -> ProblemOrdered:
         goal = comms.goals.update_goal(self.owner, self.order.bound_to(
-            comms.registry.require(caller.name).incarnation))
+            caller.identity(comms), caller.commander(comms).incarnation))
         return ProblemOrdered(goal, comms.goals.todos.get(self.order.problem))
 
 

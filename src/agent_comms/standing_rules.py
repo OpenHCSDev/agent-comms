@@ -9,8 +9,8 @@ from __future__ import annotations
 import logging
 import time
 from abc import abstractmethod
-from collections import Counter
-from collections.abc import Iterable, Mapping, Sequence
+from collections import Counter, defaultdict
+from collections.abc import Iterable, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, ClassVar, Self
@@ -24,19 +24,18 @@ from agent_comms.service_passes import ServicePassStore
 if TYPE_CHECKING:
     from agent_comms.comms import Comms
     from agent_comms.goals import RequestDirective
-    from agent_comms.message_reference import MessageReference
-    from agent_comms.commander_pings import Ping
-    from agent_comms.thread_identity import ThreadIncarnation
-    from agent_comms.ui_model.unit_state import UnitState
+    from agent_comms.messages import Message
     from agent_comms.storage_rules import MemoryUse, StorageRule
     from agent_comms.thread_identity import ThreadIncarnation
     from agent_comms.todos import Todo
+    from agent_comms.ui_model.unit_state import UnitState
 
 
 class StandingRule(DeclaredFamily, affix="StandingRule", discovery_package="agent_comms.commander"):
     @classmethod
     @abstractmethod
-    def violations(cls, comms: Comms, commander: str) -> tuple[Self, ...]: ...
+    def scan_observed(cls, comms: Comms, commander: str,
+                      observed: Sequence[UnitState]) -> tuple[Self, ...]: ...
 
     @abstractmethod
     def line(self) -> str: ...
@@ -44,13 +43,8 @@ class StandingRule(DeclaredFamily, affix="StandingRule", discovery_package="agen
     @abstractmethod
     def broke_after(self, after: float) -> bool: ...
 
-    def unit_states(self) -> tuple[UnitState, ...]:
-        return ()
-
-    def commander_pings(self, todos: Mapping[str, Todo],
-                        states: Mapping[ThreadIncarnation, UnitState]) -> tuple[Ping, ...]:
-        """Only rules that declare a commander decision contribute a ping."""
-        return ()
+    def attention(self) -> bool:
+        return True
 
     def rejected_line(self) -> str:
         return f"Not applied (goal changed): {self.line()}"
@@ -70,6 +64,35 @@ class StandingRule(DeclaredFamily, affix="StandingRule", discovery_package="agen
                 rejected.add(rule)
         return frozenset(rejected)
 
+    def heartbeat_group(self) -> object:
+        """Ordinary violations each own one heartbeat line."""
+        return self
+
+    def heartbeat_line(self, current: Sequence[Self]) -> str:
+        return self.line()
+
+    @staticmethod
+    def _heartbeat_groups(rules: Iterable[StandingRule]) -> dict[object, list[StandingRule]]:
+        groups: dict[object, list[StandingRule]] = defaultdict(list)
+        for rule in rules:
+            groups[rule.heartbeat_group()].append(rule)
+        return groups
+
+    @classmethod
+    def heartbeat_changes(cls, previous: Iterable[StandingRule],
+                          current: Iterable[StandingRule]) -> tuple[str, ...]:
+        """Render changed groups through their owning rule, without replaying unchanged ones."""
+        before, after = cls._heartbeat_groups(previous), cls._heartbeat_groups(current)
+        lines = []
+        for group in dict.fromkeys((*after, *before)):
+            old, new = before.get(group, []), after.get(group, [])
+            if frozenset(old) == frozenset(new):
+                continue
+            rule = (new or old)[0]
+            prefix = "RULE" if new else "NO LONGER CURRENT:"
+            lines.append(f"{prefix} {rule.heartbeat_line(new or old)}")
+        return tuple(lines)
+
     @staticmethod
     def todos(comms: Comms, commander: str) -> tuple[Todo, ...]:
         return comms.goals.todos.held_for_commander(comms.registry.require(commander).incarnation)
@@ -80,9 +103,9 @@ class StandingRule(DeclaredFamily, affix="StandingRule", discovery_package="agen
 
     @staticmethod
     def holders(comms: Comms, commander: str) -> dict[ThreadIncarnation, list[Todo]]:
-        """Every unit holding a pending order, with its orders."""
+        """Every unit holding an open order, with its orders."""
         held: dict[ThreadIncarnation, list[Todo]] = {}
-        for todo in StandingRule.pending_todos(comms, commander):
+        for todo in StandingRule.todos(comms, commander):
             held.setdefault(todo.held().owner_identity, []).append(todo)
         return held
 
@@ -92,18 +115,26 @@ class StandingRule(DeclaredFamily, affix="StandingRule", discovery_package="agen
         return cls
 
     @classmethod
-    def broken(cls, comms: Comms, commander: str, after: float = 0.0) -> tuple[StandingRule, ...]:
-        """Read each inherited scan owner once, preserving the requested member scope."""
+    def broken(cls, comms: Comms, commander: str, after: float = 0.0, *,
+               observed: Sequence[UnitState]) -> tuple[Self, ...]:
+        """Read each owner once against the supplied frame, preserving the requested family."""
         owners = dict.fromkeys(rule.scan_owner() for rule in cls.members_with(cls))
-        found = (v for owner in owners for v in owner.violations(comms, commander))
-        return tuple(rule for rule in found if isinstance(rule, cls) and rule.broke_after(after))
+        return tuple(rule for owner in owners
+                     for rule in owner.scan_observed(comms, commander, observed)
+                     if isinstance(rule, cls) and rule.attention() and rule.broke_after(after))
 
 
-class OrderRefusingStandingRule(StandingRule, declared_name=None):
-    """A broken rule owns the reason an unrelated commander order cannot proceed."""
+class IndependentStandingRule(StandingRule, declared_name=None):
+    """A rule whose source read does not consume the unit observation frame."""
 
+    @classmethod
     @abstractmethod
-    def refusal(self, comms: Comms, answers: Sequence[MessageReference]) -> tuple[str, ...]: ...
+    def violations(cls, comms: Comms, commander: str) -> tuple[Self, ...]: ...
+
+    @classmethod
+    def scan_observed(cls, comms: Comms, commander: str,
+                      observed: Sequence[UnitState]) -> tuple[Self, ...]:
+        return cls.violations(comms, commander)
 
 
 class UndatedStandingRule(StandingRule, declared_name=None):
@@ -124,6 +155,41 @@ class DatedStandingRule(StandingRule, declared_name=None):
 
 
 @dataclass(frozen=True)
+class OwedAnswer(IndependentStandingRule, declared_name=None):
+    """A message to the commander owed an answer past its window. Every member gates the
+    commander's answering verbs until an action names it with --answers, so an answer cannot
+    be held: one that must wait is sent now as "waiting on X, owner Y"."""
+
+    message: Message
+
+    @property
+    def cited(self) -> str:
+        """The owed message as the heartbeat and the gate name it."""
+        return f"{self.message.seq}:{self.message.message_id}"
+
+    @classmethod
+    @abstractmethod
+    def open_messages(cls, comms: Comms, commander: str) -> tuple[Message, ...]:
+        """This member's messages an action may answer now, inside their window or past it."""
+
+    @classmethod
+    def overdue(cls, comms: Comms, commander: str) -> tuple[Self, ...]:
+        """The message gate reads message debt, without classifying checkouts or runtimes."""
+        return tuple(rule for member in cls.members_with(cls)
+                     for rule in member.violations(comms, commander))
+
+    def answered_by(self, named: tuple[Message, ...]) -> bool:
+        """Whether an action naming these open messages answers this one."""
+        return any(message.message_id == self.message.message_id for message in named)
+
+    @classmethod
+    def answerable(cls, comms: Comms, commander: str) -> tuple[Message, ...]:
+        """Every message an action may name with --answers, read from each member once."""
+        return tuple(message for member in cls.members_with(OwedAnswer)
+                     for message in member.open_messages(comms, commander))
+
+
+@dataclass(frozen=True)
 class ReasonedStandingRule(StandingRule, declared_name=None):
     """A rule broken at most once, saying why in its declared line."""
 
@@ -135,20 +201,22 @@ class ReasonedStandingRule(StandingRule, declared_name=None):
     def reason(cls, comms: Comms, commander: str) -> str | None: ...
 
     @classmethod
-    def found(cls, why: str, comms: Comms, commander: str) -> Self:
+    def found(cls, why: str, comms: Comms, commander: str,
+              observed: Sequence[UnitState]) -> Self:
         return cls(why)
 
     @classmethod
-    def violations(cls, comms: Comms, commander: str) -> tuple[Self, ...]:
+    def scan_observed(cls, comms: Comms, commander: str,
+                      observed: Sequence[UnitState]) -> tuple[Self, ...]:
         why = cls.reason(comms, commander)
-        return (cls.found(why, comms, commander),) if why else ()
+        return (cls.found(why, comms, commander, observed),) if why else ()
 
     def line(self) -> str:
         return self.text.format(why=self.why)
 
 
 @dataclass(frozen=True)
-class HeldOrderDue(DatedStandingRule, declared_name=None):
+class HeldOrderDue(IndependentStandingRule, DatedStandingRule, declared_name=None):
     """Each held order supplies one dated condition; the rule owns its wording."""
 
     problem: str
@@ -179,16 +247,6 @@ class ReviewTimerUp(HeldOrderDue):
         return comms.goals.todos.timers_up_for_commander(
             actor, comms.registry, time.time())
 
-    def commander_pings(self, todos, states):
-        from .commander_pings import OrderRevision, ReviewTimerPing
-        from .ui_model.unit_state import Moving
-
-        todo = todos[self.problem]
-        unit = todo.held().owner_identity
-        state = type(states[unit]) if unit in states else Moving
-        return (ReviewTimerPing(unit, state, (OrderRevision.of(todo),),
-                                self.since.recorded_at("A review timer")),)
-
     def line(self) -> str:
         return (f"TIMER UP: {self.holder} {self.problem} at {self.since.clock()}, "
                 f"order {self.order} -> read its diff and judge it")
@@ -211,13 +269,18 @@ class HuntDue(ReasonedStandingRule, DatedStandingRule):
         return f"last hunt {int(age // 60)} min ago" if age > cls.seconds else None
 
     @classmethod
-    def found(cls, why: str, comms: Comms, commander: str) -> HuntDue:
+    def found(cls, why: str, comms: Comms, commander: str,
+              observed: Sequence[UnitState]) -> HuntDue:
         since = cls.hunted(comms, commander) + cls.seconds
+        readable = {unit for state in observed for unit in state.readable_units()}
+        todos = tuple(todo for todo in cls.todos(comms, commander)
+                      if todo.held().owner_identity in readable)
         return next((LocatedHuntDue(why, since, path)
-                     for path in cls.next_hunt(comms, commander)), cls(why, since))
+                     for path in cls.next_hunt(comms, commander, todos)), cls(why, since))
 
     @classmethod
-    def next_hunt(cls, comms: Comms, commander: str) -> tuple[str, ...]:
+    def next_hunt(cls, comms: Comms, commander: str,
+                  todos: Iterable[Todo]) -> tuple[str, ...]:
         """Least recently hunted hot file in the held orders' declared check repositories."""
         actor = comms.registry.require(commander).incarnation
         hunted: dict[str, float] = {}
@@ -225,7 +288,7 @@ class HuntDue(ReasonedStandingRule, DatedStandingRule):
             hunted[hunt.where.file] = max(hunted.get(hunt.where.file, 0),
                                           hunt.at.recorded_at("A hunt"))
         repos = {Repo(checkout=Path(todo.order.checked().check.directory), github=todo.repo)
-                 for todo in cls.todos(comms, commander)}
+                 for todo in todos}
         candidates: list[str] = []
         for repo in repos:
             log = repo.git(repo.checkout, 'log', 'origin/main', '--since=7.days',
@@ -253,8 +316,8 @@ class LocatedHuntDue(HuntDue, declared_name=None):
 
 
 @dataclass(frozen=True)
-class DirectiveUnacted(OrderRefusingStandingRule, DatedStandingRule):
-    """A claude-ai directive recorded on an open request, past its deadline with no order since."""
+class DirectiveUnacted(OwedAnswer, DatedStandingRule):
+    """An owner directive recorded on an open request, past its deadline with no order since."""
 
     request: str
     directive: RequestDirective
@@ -263,28 +326,40 @@ class DirectiveUnacted(OrderRefusingStandingRule, DatedStandingRule):
     def violations(cls, comms: Comms, commander: str) -> tuple[Self, ...]:
         thread, now = comms.registry.require(commander), time.time()
         return tuple(
-            cls(goal.id, directive)
+            cls(original, goal.id, directive)
             for goal in thread.goal.active()
-            for directive in goal.order.overdue_directives(
+            for directive, original in goal.order.overdue_directives(
                 goal, comms.goals, thread.incarnation, now
             )
         )
+
+    @classmethod
+    def open_messages(cls, comms: Comms, commander: str) -> tuple[Message, ...]:
+        return tuple(message for goal in comms.registry.require(commander).goal.active()
+                     for message in goal.order.directive_messages(comms.goals))
 
     def began(self) -> float:
         return self.directive.deadline
 
     def line(self) -> str:
         return (
-            f"DIRECTIVE UNACTED: claude-ai {self.directive.seq} on request {self.request},"
+            f"DIRECTIVE UNACTED: owner directive {self.cited}"
+            f" on request {self.request},"
             f" due {self.directive.due_time} -> order its next step or mark the request done"
         )
 
-    def refusal(self, comms: Comms, answers: Sequence[MessageReference]) -> tuple[str, ...]:
-        message = self.directive.original(comms.goals)
-        if message.reference in answers:
-            return ()
-        return (f"{message.message_id}: overdue owner directive on request {self.request}; "
-                "reply to the original message or use --answers MESSAGE_ID.",)
+    def heartbeat_group(self) -> object:
+        return type(self), self.request
+
+    def heartbeat_line(self, current: Sequence[Self]) -> str:
+        oldest = min(current, key=lambda rule: rule.directive.seq).directive
+        newest = max(current, key=lambda rule: rule.directive.seq).directive
+        return (
+            f"DIRECTIVE UNACTED: request {self.request}: {len(current)} owner directives; "
+            f"oldest {oldest.seq} due {oldest.due_time}; "
+            f"newest {newest.seq} due {newest.due_time} "
+            "-> order the next step or mark the request done"
+        )
 
 
 @dataclass(frozen=True)
@@ -300,7 +375,7 @@ class BridgeDown(ReasonedStandingRule, UndatedStandingRule):
 
 
 @dataclass(frozen=True)
-class ServicePassFailing(DatedStandingRule):
+class ServicePassFailing(IndependentStandingRule, DatedStandingRule):
     """A Core service watch whose newest pass failed; the connector's log reaches nobody."""
 
     watch: str
@@ -322,7 +397,7 @@ class ServicePassFailing(DatedStandingRule):
                 " -> fix the owner of the failing read this wake")
 
 @dataclass(frozen=True)
-class BoardDisagrees(UndatedStandingRule):
+class BoardDisagrees(IndependentStandingRule, UndatedStandingRule):
     """An open order reads as no commit despite its linked pull request having merged."""
 
     problem: str
@@ -332,7 +407,7 @@ class BoardDisagrees(UndatedStandingRule):
     @classmethod
     def violations(cls, comms: Comms, commander: str) -> tuple[Self, ...]:
         return tuple(
-            cls(todo.id, todo.order.id, merged.sha)
+            cls(todo.id, todo.order.checked().id, merged.sha)
             for todo, merged in comms.goals.todos.board_disagreements(
                 comms.registry.require(commander).incarnation, comms.registry
             )
@@ -346,7 +421,7 @@ class BoardDisagrees(UndatedStandingRule):
 
 
 @dataclass(frozen=True)
-class MemoryLow(UndatedStandingRule):
+class MemoryLow(IndependentStandingRule, UndatedStandingRule):
     """Under the memory threshold a cleanup owner is due, told what holds the memory."""
 
     rule: StorageRule
@@ -370,7 +445,7 @@ class MemoryLow(UndatedStandingRule):
 
 
 @dataclass(frozen=True)
-class DiskLow(UndatedStandingRule):
+class DiskLow(IndependentStandingRule, UndatedStandingRule):
     """Under the cleanup threshold a cleanup owner is due; under the floor nothing allocates."""
 
     rule: StorageRule

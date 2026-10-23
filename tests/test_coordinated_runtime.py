@@ -17,10 +17,8 @@ from agent_comms.child_process import ProcessIdentity
 from agent_comms.comms import Comms
 from agent_comms.notification_progress import HumanReadProgress
 from agent_comms.coordinated_runtime import SelectedExecution, SessionSetupFailed
-from agent_comms.coordinated_runtime_schema import (
-    assert_native_runtime_schema,
-    install_native_runtime_schema,
-)
+from agent_comms.coordinated_runtime_schema import install_native_runtime_schema
+from agent_comms.native_runtime_input import NativeRuntimeInput, NativeRuntimeTable
 from agent_comms.coordination_cohort import accept_delivery_cohort, sealed_cohort_assignments
 from agent_comms.coordination_errors import (
     IdentityConflict,
@@ -170,10 +168,11 @@ def test_native_runtime_schema_explicit_install_and_drift_fail_closed(tmp_path: 
         )
         install_native_runtime_schema(store)
         install_native_runtime_schema(store)
-        assert_native_runtime_schema(store.session._connection)
-        store.session._connection.execute("DROP TRIGGER native_runtime_input_delete_guard")
+        NativeRuntimeTable.require_installed(store.session._connection)
+        trigger = next(iter(NativeRuntimeInput.triggers()))
+        store.session._connection.execute(f'DROP TRIGGER "{trigger}"')
         with pytest.raises(PublicationActivationBlocked):
-            assert_native_runtime_schema(store.session._connection)
+            NativeRuntimeTable.require_installed(store.session._connection)
 
 
 async def test_untrusted_pi_fails_before_any_bus_or_sql_mutation(tmp_path: Path, *, native_runtime_package, cursor_delivery) -> None:

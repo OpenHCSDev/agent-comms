@@ -22,6 +22,7 @@ from enum import Enum, IntEnum, IntFlag
 from functools import lru_cache
 from pathlib import Path
 from typing import (
+    TYPE_CHECKING,
     Annotated,
     ClassVar,
     Literal,
@@ -29,6 +30,7 @@ from typing import (
     Self,
     TypeVar,
     Union,
+    cast,
     get_args,
     get_origin,
 )
@@ -46,7 +48,12 @@ from .field_codec import (
     WireValue,
     compile_decoder,
 )
-from .locked_store import DurableFile, FileStore, RuntimeFile, SQLiteFile
+from .lifecycle import LifecycleState
+from .locked_store import DurableFile, FileStore, RegistryFile, RuntimeFile, SQLiteFile
+from .maintenance_barrier import MaintenanceBarrier
+
+if TYPE_CHECKING:
+    from .execution_states import ExecutionState
 
 RelatedRow = TypeVar("RelatedRow", bound="TypedRow")
 
@@ -282,6 +289,9 @@ class Column(FieldDirective):
             return column
         return cls()
 
+    def immutable_fields(self, field: _Field) -> tuple[_Field, ...]:
+        return ()
+
     @property
     def writable(self) -> bool:
         return self.generated is None
@@ -289,6 +299,13 @@ class Column(FieldDirective):
     @property
     def generated_sql(self) -> str:
         return "" if self.writable else f" GENERATED ALWAYS AS ({self.generated}) STORED"
+
+
+class FrozenColumn(Column):
+    """Immutability is declared with the field's other SQL constraints."""
+
+    def immutable_fields(self, field: _Field) -> tuple[_Field, ...]:
+        return (field,)
 
 
 _NAME_SEPARATORS = re.compile(r"\W+")
@@ -428,6 +445,17 @@ class _Field(SqlValue):
     init: bool
     nullable: bool
     column: Column
+
+    def reference(self, alias: str) -> str:
+        return f"{alias}.{_identifier(self.wire_name)}"
+
+    @property
+    def lifecycle_family(self) -> type[LifecycleState]:
+        return cast(type[LifecycleState], _base_type(self.annotation)[0])
+
+    def discriminator(self, alias: str) -> str:
+        family = cast(type[DeclaredFamily], _base_type(self.annotation)[0])
+        return f"json_extract({self.reference(alias)}, '$.{family.family_discriminator}')"
 
     @classmethod
     def for_field(cls, plan: FieldPlan) -> _Field:
@@ -588,6 +616,75 @@ class SQLiteTableName(TypedRow):
         db.execute(f"DROP TABLE {_identifier(self.name)}")
 
 
+class CatalogKind(DeclaredFamily, affix="Kind"):
+    """What SQLite's catalog calls an entry; each kind owns how a schema carry treats it."""
+
+    @classmethod
+    def drop(cls, db: sqlite3.Connection, name: str) -> None:
+        db.execute(f"DROP {cls.declared_name.upper()} IF EXISTS {_identifier(name)}")
+
+    @classmethod
+    def derive(cls, db: sqlite3.Connection, item: SQLiteCatalogObject,
+               declared: Mapping[str, str]) -> None:
+        """An object that holds no rows is rebuilt from its declaration: one that differs from
+        it, or that nothing declares, is dropped, and the carry creates what is declared."""
+        if declared.get(item.name) != item.sql:
+            cls.drop(db, item.name)
+
+
+class TableKind(CatalogKind):
+    @classmethod
+    def derive(cls, db: sqlite3.Connection, item: SQLiteCatalogObject,
+               declared: Mapping[str, str]) -> None:
+        """Rows are never rebuilt from a declaration: a table that differs stays, and the
+        caller's schema check refuses it."""
+
+
+class IndexKind(CatalogKind):
+    pass
+
+
+class TriggerKind(CatalogKind):
+    pass
+
+
+class ViewKind(CatalogKind):
+    pass
+
+
+@dataclass(frozen=True)
+class SQLiteCatalogObject(TypedRow):
+    """One catalog entry: SQLite's own type, name and table."""
+
+    type: type[CatalogKind]
+    name: str
+    tbl_name: str
+    sql: str
+
+    def drop(self, db: sqlite3.Connection) -> None:
+        self.type.drop(db, self.name)
+
+    @classmethod
+    def stored(cls, db: sqlite3.Connection) -> tuple[SQLiteCatalogObject, ...]:
+        return tuple(cls.read(db.execute(
+            "SELECT type,name,tbl_name,sql FROM sqlite_master "
+            "WHERE sql IS NOT NULL AND name NOT LIKE 'sqlite_%' ORDER BY type,name")))
+
+    @classmethod
+    def carry(cls, db: sqlite3.Connection, declared: Mapping[str, str],
+              compared: frozenset[str]) -> None:
+        """Inside the caller's write transaction, the compared objects onto the declaration:
+        each kind derives its stored objects (rebuilt, or left for the caller's check), then
+        every declared object the file lacks is created from its declared SQL."""
+        for item in cls.stored(db):
+            if item.name in compared:
+                item.type.derive(db, item, declared)
+        present = {item.name for item in cls.stored(db)}
+        for name, sql in declared.items():
+            if name not in present:
+                db.execute(sql)
+
+
 class TableSchema(ABC):
     """The tables of one SQLite file, and the one reader of the SQL SQLite stored for them.
 
@@ -642,49 +739,457 @@ class TableSchema(ABC):
             raise cls.schema_error(f"{cls.__name__} differs from its declaration")
 
     @classmethod
+    def require_installed(cls, db: sqlite3.Connection) -> None:
+        """Installed durable families require their declaration and enforced relations."""
+        cls.require_schema(db)
+        if SQLiteForeignKeys.read(db.execute("PRAGMA foreign_keys")) != [SQLiteForeignKeys(True)]:
+            raise cls.schema_error(f"{cls.__name__} foreign-key enforcement is disabled")
+
+    @classmethod
     def create_schema(cls, db: sqlite3.Connection) -> None:
         for row in cls.schema_rows():
             row.create(db)
 
     @classmethod
+    def derive_schema(cls, db: sqlite3.Connection) -> None:
+        """Inside the caller's write transaction, the stored schema onto the declaration
+        wherever the declaration says how: a row's declared earlier table name, an index,
+        trigger or view rebuilt from its SQL, a declared object the file lacks. What it cannot
+        say, a table whose columns differ, is refused with the rows untouched."""
+        for row in cls.schema_rows():
+            row.take_previous_name(db)
+        SQLiteCatalogObject.carry(db, cls.declared_schema(),
+                                  frozenset(item.name for item in cls.stored_schema(db)))
+        cls.require_schema(db)
+
+    @classmethod
     @abstractmethod
     def reconcile_schema(cls, db: sqlite3.Connection) -> None:
-        """The writer's answer to a stored schema that differs from the declaration."""
+        """The writer's answer to a stored schema that differs from the declaration, in a
+        write transaction of its own."""
 
 
 class RowMutation(Enum):
     """SQLite's destructive row events own their immutable-history guards."""
 
+    INSERT = "INSERT"
     UPDATE = "UPDATE"
     DELETE = "DELETE"
 
-    def abort_trigger(self, row: type[TypedTable]) -> SQLiteSchemaObject:
-        name = f"{row.declared_name}_{self.value.lower()}_abort"
+    def abort_trigger(
+        self, row: type[TypedTable], *, columns: tuple[str, ...] = (), when: str = "",
+        message: str = "Rows are immutable", after: bool = False, suffix: str = "",
+    ) -> SQLiteSchemaObject:
+        suffix = ("_" + "_".join(columns) if columns else "") + suffix
+        timing = "AFTER" if after else "BEFORE"
+        name = f"{row.declared_name}_{self.value.lower()}{suffix}_{timing.lower()}_abort"
+        selected = " OF " + row._column_list(columns) if columns else ""
+        condition = " WHEN " + row._sql(when) if when else ""
         return SQLiteSchemaObject(
             name,
-            f'CREATE TRIGGER "{name}" BEFORE {self.value} ON "{row.declared_name}" '
-            "BEGIN SELECT RAISE(ABORT, 'Bus history is append-only'); END",
+            f'CREATE TRIGGER "{name}" {timing} {self.value}{selected} ON "{row.declared_name}"'
+            f"{condition} BEGIN SELECT RAISE(ABORT, '{message}'); END",
         )
 
 
-class AppendOnlyTables(TableSchema):
+class MutationCapability(ABC):
+    """Each MRO declaration contributes guards; siblings never override one another."""
+
+    @classmethod
+    @abstractmethod
+    def mutation_guards(cls, row: type[TypedTable]) -> tuple[SQLiteSchemaObject, ...]: ...
+
+
+class NoUpdate(MutationCapability):
+    @classmethod
+    def mutation_guards(cls, row: type[TypedTable]) -> tuple[SQLiteSchemaObject, ...]:
+        return (RowMutation.UPDATE.abort_trigger(row, message="Rows cannot be updated"),)
+
+
+class NoDelete(MutationCapability):
+    @classmethod
+    def mutation_guards(cls, row: type[TypedTable]) -> tuple[SQLiteSchemaObject, ...]:
+        return (RowMutation.DELETE.abort_trigger(row, message="Rows cannot be deleted"),)
+
+
+@dataclass(frozen=True)
+class ColumnGuard:
+    """A predicate on an UPDATE's selected columns, not another SQL trigger template."""
+
+    columns: tuple[str, ...]
+    condition: str = "1"
+
+    def trigger(self, row: type[TypedTable]) -> SQLiteSchemaObject:
+        return RowMutation.UPDATE.abort_trigger(
+            row, columns=self.columns, when=self.condition, message="Column change is refused")
+
+
+class GuardedColumns(MutationCapability):
+    column_guards: ClassVar[tuple[ColumnGuard, ...]] = ()
+
+    @classmethod
+    def mutation_guards(cls, row: type[TypedTable]) -> tuple[SQLiteSchemaObject, ...]:
+        return tuple(guard.trigger(row) for guard in row.column_guards)
+
+
+class FrozenColumns(MutationCapability):
+    @classmethod
+    def immutable_columns(cls, row: type[TypedTable]) -> tuple[_Field, ...]:
+        return tuple(
+            immutable for field in row._columns()
+            for immutable in field.column.immutable_fields(field)
+        )
+
+    @classmethod
+    def mutation_guards(cls, row: type[TypedTable]) -> tuple[SQLiteSchemaObject, ...]:
+        columns = cls.immutable_columns(row)
+        if not columns:
+            return ()
+        condition = " OR ".join(
+            f'NEW."{column.wire_name}" IS NOT OLD."{column.wire_name}"' for column in columns)
+        return (RowMutation.UPDATE.abort_trigger(
+            row, when=condition, suffix="_frozen", message="Column values are immutable"),)
+
+
+class OneWayColumn(MutationCapability):
+    """Every update consumes one declared old-to-new column transition."""
+
+    transition_column: ClassVar[str]
+    transition_from: ClassVar[int]
+    transition_to: ClassVar[int]
+
+    @classmethod
+    def mutation_guards(cls, row: type[TypedTable]) -> tuple[SQLiteSchemaObject, ...]:
+        column = row._column_list((row.transition_column,))
+        condition = (f"OLD.{column} IS NOT {row.transition_from} "
+                     f"OR NEW.{column} IS NOT {row.transition_to}")
+        return (RowMutation.UPDATE.abort_trigger(
+            row, when=condition, suffix="_one_way", message="Column transition is one-way"),)
+
+
+class InitialOneWayColumn(OneWayColumn):
+    @classmethod
+    def mutation_guards(cls, row: type[TypedTable]) -> tuple[SQLiteSchemaObject, ...]:
+        column = row._column_list((row.transition_column,))
+        return (RowMutation.INSERT.abort_trigger(
+            row, when=f"NEW.{column} IS NOT {row.transition_from}", suffix="_initial_value",
+            message="Initial value must precede its transition"),)
+
+
+class IncrementingColumn(MutationCapability):
+    revision_column: ClassVar[str] = "revision"
+
+    @classmethod
+    def mutation_guards(cls, row: type[TypedTable]) -> tuple[SQLiteSchemaObject, ...]:
+        column = row._column_list((row.revision_column,))
+        return (RowMutation.UPDATE.abort_trigger(
+            row, when=f"NEW.{column} != OLD.{column} + 1", suffix="_revision",
+            message="Revision must advance once"),)
+
+
+@dataclass(frozen=True)
+class ColumnOrder(ABC):
+    columns: tuple[str, ...]
+
+    @property
+    @abstractmethod
+    def comparison(self) -> str: ...
+
+    @property
+    @abstractmethod
+    def suffix(self) -> str: ...
+
+    def violation(self, previous: str, following: str) -> str:
+        return f"{following} IS NULL OR {following} {self.comparison} {previous}"
+
+    def trigger(self, row: type[TypedTable]) -> SQLiteSchemaObject:
+        conditions = (
+            f"({field.reference('OLD')} IS NOT NULL AND "
+            f"({self.violation(field.reference('OLD'), field.reference('NEW'))}))"
+            for field in row._fields_named(self.columns))
+        return RowMutation.UPDATE.abort_trigger(
+            row, when=" OR ".join(conditions), suffix=self.suffix,
+            message="Column ordering is monotone")
+
+
+class NonDecreasing(ColumnOrder):
+    comparison = "<"
+    suffix = "_increasing"
+
+
+class NonIncreasing(ColumnOrder):
+    comparison = ">"
+    suffix = "_decreasing"
+
+
+class NonDecreasingWhenPresent(NonDecreasing):
+    suffix = "_present_increasing"
+
+    def violation(self, previous: str, following: str) -> str:
+        return f"{following} IS NOT NULL AND {following} {self.comparison} {previous}"
+
+
+class MonotoneColumns(MutationCapability):
+    column_orders: ClassVar[tuple[ColumnOrder, ...]]
+
+    @classmethod
+    def mutation_guards(cls, row: type[TypedTable]) -> tuple[SQLiteSchemaObject, ...]:
+        return tuple(order.trigger(row) for order in row.column_orders)
+
+
+class AccumulatingBits(MutationCapability):
+    accumulating_columns: ClassVar[tuple[str, ...]]
+
+    @classmethod
+    def mutation_guards(cls, row: type[TypedTable]) -> tuple[SQLiteSchemaObject, ...]:
+        conditions = (
+            f'((NEW."{field.wire_name}" | OLD."{field.wire_name}") != NEW."{field.wire_name}")'
+            for field in row._fields_named(row.accumulating_columns))
+        return (RowMutation.UPDATE.abort_trigger(
+            row, when=" OR ".join(conditions), suffix="_accumulating",
+            message="Observed bits cannot be erased"),)
+
+
+class WriteOnceColumns(MutationCapability):
+    write_once_columns: ClassVar[tuple[str, ...]]
+
+    @classmethod
+    def mutation_guards(cls, row: type[TypedTable]) -> tuple[SQLiteSchemaObject, ...]:
+        condition = " OR ".join(
+            f"({field.reference('OLD')} IS NOT NULL AND "
+            f"{field.reference('NEW')} IS NOT {field.reference('OLD')})"
+            for field in row._fields_named(row.write_once_columns))
+        return (RowMutation.UPDATE.abort_trigger(
+            row, when=condition, suffix="_write_once", message="Recorded values are immutable"),)
+
+
+class RequiredUpdateColumns(MutationCapability):
+    required_update_columns: ClassVar[tuple[str, ...]]
+
+    @classmethod
+    def mutation_guards(cls, row: type[TypedTable]) -> tuple[SQLiteSchemaObject, ...]:
+        condition = " OR ".join(f"{field.reference('NEW')} IS NULL"
+                                for field in row._fields_named(row.required_update_columns))
+        return (RowMutation.UPDATE.abort_trigger(
+            row, when=condition, suffix="_present", message="Update requires recorded references"),)
+
+
+class FinalizedColumn(MutationCapability):
+    finalized_column: ClassVar[str]
+
+    @classmethod
+    def mutation_guards(cls, row: type[TypedTable]) -> tuple[SQLiteSchemaObject, ...]:
+        (field,) = row._fields_named((row.finalized_column,))
+        return (RowMutation.UPDATE.abort_trigger(
+            row, when=f"{field.reference('OLD')} IS NOT NULL", suffix="_recorded",
+            message="Recorded row cannot be changed"),)
+
+
+class StableReferenceColumns(MutationCapability):
+    reference_column: ClassVar[str]
+    stable_reference_columns: ClassVar[tuple[str, ...]]
+
+    @classmethod
+    def mutation_guards(cls, row: type[TypedTable]) -> tuple[SQLiteSchemaObject, ...]:
+        (reference,) = row._fields_named((row.reference_column,))
+        changes = " OR ".join(
+            f"{field.reference('NEW')} IS NOT {field.reference('OLD')}"
+            for field in row._fields_named(row.stable_reference_columns))
+        return (RowMutation.UPDATE.abort_trigger(
+            row, when=(f"{reference.reference('NEW')} IS {reference.reference('OLD')} "
+                       f"AND ({changes})"),
+            suffix="_reference", message="Values require a new reference"),)
+
+
+class RequiredColumn(MutationCapability):
+    dependent_column: ClassVar[str]
+    required_column: ClassVar[str]
+
+    @classmethod
+    def mutation_guards(cls, row: type[TypedTable]) -> tuple[SQLiteSchemaObject, ...]:
+        dependent, required = row._fields_named((row.dependent_column, row.required_column))
+        return (RowMutation.UPDATE.abort_trigger(
+            row, when=f"{dependent.reference('NEW')} IS NOT NULL AND "
+            f"{required.reference('NEW')} IS NULL", suffix="_required",
+            message="Dependent value requires its original reference"),)
+
+
+class FirstValueState(MutationCapability):
+    initial_value_column: ClassVar[str]
+    initial_value_state: ClassVar[type[LifecycleState]]
+
+    @classmethod
+    def mutation_guards(cls, row: type[TypedTable]) -> tuple[SQLiteSchemaObject, ...]:
+        (value,) = row._fields_named((row.initial_value_column,))
+        (lifecycle,) = row._fields_named(("lifecycle",))
+        names = ",".join(sql_literal(state.declared_name) for state in
+                         lifecycle.lifecycle_family.members_with(row.initial_value_state))
+        return (RowMutation.UPDATE.abort_trigger(
+            row, when=f"{value.reference('OLD')} IS NULL AND {value.reference('NEW')} IS NOT NULL "
+            f"AND {lifecycle.discriminator('NEW')} NOT IN ({names})", suffix="_first_value",
+            message="Initial value requires its declared lifecycle"),)
+
+
+class LifecycleTransitions(MutationCapability):
+    @classmethod
+    def mutation_guards(cls, row: type[TypedTable]) -> tuple[SQLiteSchemaObject, ...]:
+        (field,) = row._fields_named(("lifecycle",))
+        previous, following = field.discriminator("OLD"), field.discriminator("NEW")
+        edges = " OR ".join(
+            f"({previous} = {sql_literal(name)} AND {following} IN "
+            f"({','.join(sql_literal(target) for target in sorted(targets))}))"
+            for name, targets in field.lifecycle_family.transition_table().items()
+            if targets
+        ) or "0"
+        return (RowMutation.UPDATE.abort_trigger(
+            row, columns=("lifecycle",), when=f"{previous} != {following} AND NOT ({edges})",
+            suffix="_edges", message="Lifecycle transition is not declared"),)
+
+
+class OrdinalTransitions(MutationCapability):
+    """Python and SQLite consume each state's same ordinal-rule declaration."""
+
+    ordinal_column: ClassVar[str] = "current_attempt_ordinal"
+
+    @classmethod
+    def mutation_guards(cls, row: type[TypedTable]) -> tuple[SQLiteSchemaObject, ...]:
+        (state,) = row._fields_named(("lifecycle",))
+        (ordinal,) = row._fields_named((row.ordinal_column,))
+        family = cast("type[ExecutionState]", state.lifecycle_family)
+        violations = []
+        for member in family.members_with(family):
+            rule = member.ordinal_rule
+            expected = f"NULLIF(COALESCE({ordinal.reference('OLD')}, 0) + {rule.increment}, 0)"
+            allowed = ",".join(sql_literal(previous.declared_name)
+                               for previous in family.members_with(rule.predecessors))
+            violations.append(
+                f"({state.discriminator('NEW')} = {sql_literal(member.declared_name)} AND "
+                f"({state.discriminator('OLD')} NOT IN ({allowed}) OR "
+                f"{ordinal.reference('NEW')} IS NOT ({expected})))")
+        return (RowMutation.UPDATE.abort_trigger(
+            row, when=" OR ".join(violations), suffix="_ordinal",
+            message="Attempt ordinal violates lifecycle rule"),)
+
+
+class LifecycleChanges(MutationCapability):
+    @classmethod
+    def mutation_guards(cls, row: type[TypedTable]) -> tuple[SQLiteSchemaObject, ...]:
+        (field,) = row._fields_named(("lifecycle",))
+        return (RowMutation.UPDATE.abort_trigger(
+            row, when=f"{field.discriminator('OLD')} = {field.discriminator('NEW')}",
+            suffix="_changed", message="Lifecycle disposition must change"),)
+
+
+class FinalizedLifecycle(MutationCapability):
+    @classmethod
+    def mutation_guards(cls, row: type[TypedTable]) -> tuple[SQLiteSchemaObject, ...]:
+        (field,) = row._fields_named(("lifecycle",))
+        closed = ",".join(sql_literal(name) for name, targets in
+                          field.lifecycle_family.transition_table().items() if not targets)
+        return (RowMutation.UPDATE.abort_trigger(
+            row, when=f"{field.discriminator('OLD')} = {field.discriminator('NEW')} AND "
+            f"{field.discriminator('OLD')} IN ({closed})", suffix="_final",
+            message="Final lifecycle cannot be rewritten"),)
+
+
+class CounterDependent:
+    """A historical counter reference blocks its owner's advance while still live."""
+
+    counter_reference: ClassVar[ForeignKey]
+
+
+class CounterAdvance(MutationCapability):
+    counter_column: ClassVar[str]
+
+    @classmethod
+    def mutation_guards(cls, row: type[TypedTable]) -> tuple[SQLiteSchemaObject, ...]:
+        (counter,) = row._fields_named((row.counter_column,))
+        blocked = []
+        for dependent in TypedTable.members_with(CounterDependent):
+            reference = dependent.counter_reference
+            if reference.target is not row:
+                continue
+            keys = " AND ".join(
+                f"{source.reference('dependent')} = {target.reference('OLD')}"
+                for source, target in zip(dependent._fields_named(reference.columns),
+                                          row._fields_named(reference.target_columns), strict=True))
+            (state,) = dependent._fields_named(("lifecycle",))
+            closed = ",".join(sql_literal(name) for name, targets in
+                              state.lifecycle_family.transition_table().items() if not targets)
+            blocked.append(
+                f"EXISTS (SELECT 1 FROM {_identifier(dependent.declared_name)} dependent "
+                f"WHERE {keys} AND {state.discriminator('dependent')} NOT IN ({closed}))"
+            )
+        condition = (
+            f"{counter.reference('NEW')} != {counter.reference('OLD')} AND ("
+            + " OR ".join(
+                [f"{counter.reference('NEW')} != {counter.reference('OLD')} + 1", *blocked]
+            )
+            + ")"
+        )
+        return (RowMutation.UPDATE.abort_trigger(
+            row, when=condition, suffix="_counter", message="Counter advance has live dependents"),)
+
+
+class GuardedUpdateMembership(MutationCapability):
+    update_membership_condition: ClassVar[str]
+
+    @classmethod
+    def mutation_guards(cls, row: type[TypedTable]) -> tuple[SQLiteSchemaObject, ...]:
+        return (RowMutation.UPDATE.abort_trigger(
+            row, when=row.update_membership_condition, suffix="_membership",
+            message="Update requires published membership"),)
+
+
+class GuardedInserts(MutationCapability):
+    insert_condition: ClassVar[str]
+
+    @classmethod
+    def mutation_guards(cls, row: type[TypedTable]) -> tuple[SQLiteSchemaObject, ...]:
+        return (RowMutation.INSERT.abort_trigger(
+            row, when=row.insert_condition, message="Insert violates row membership"),)
+
+
+class GuardedRelatedInserts(MutationCapability):
+    related_insert_target: ClassVar[type[TypedTable]]
+    related_insert_condition: ClassVar[str]
+
+    @classmethod
+    def mutation_guards(cls, row: type[TypedTable]) -> tuple[SQLiteSchemaObject, ...]:
+        return (RowMutation.INSERT.abort_trigger(
+            row.related_insert_target, when=row.related_insert_condition,
+            suffix=f"_related_{row.declared_name}",
+            message="Insert violates related row membership"),)
+
+
+class ValidatedInserts(MutationCapability):
+    validator_function: ClassVar[str]
+
+    @classmethod
+    def mutation_guards(cls, row: type[TypedTable]) -> tuple[SQLiteSchemaObject, ...]:
+        arguments = ", ".join(f'NEW."{field.wire_name}"' for field in row._fields() if field.init)
+        return (RowMutation.INSERT.abort_trigger(
+            row, when=f"{row.validator_function}({arguments}) != 1", suffix="_validation",
+            message="Insert fails declared validation"),)
+
+
+class GuardedAfterWrites(MutationCapability):
+    after_write_condition: ClassVar[str]
+
+    @classmethod
+    def mutation_guards(cls, row: type[TypedTable]) -> tuple[SQLiteSchemaObject, ...]:
+        return tuple(mutation.abort_trigger(
+            row, when=row.after_write_condition, after=True,
+            message="Write violates related row invariants")
+            for mutation in (RowMutation.INSERT, RowMutation.UPDATE))
+
+
+class ImmutableRows(NoUpdate, NoDelete):
+    """A row family refuses both destructive mutations."""
+
+
+class AppendOnlyTables(ImmutableRows, TableSchema):
     """Declared history tables reject UPDATE and DELETE, even from raw SQL."""
-
-    @classmethod
-    def _append_only_triggers(cls) -> dict[str, str]:
-        triggers = (mutation.abort_trigger(row)
-                    for row in cls.schema_rows() for mutation in RowMutation)
-        return {trigger.name: trigger.sql for trigger in triggers}
-
-    @classmethod
-    def declared_schema(cls) -> dict[str, str]:
-        return super().declared_schema() | cls._append_only_triggers()
-
-    @classmethod
-    def create_schema(cls, db: sqlite3.Connection) -> None:
-        super().create_schema(db)
-        for statement in cls._append_only_triggers().values():
-            db.execute(statement)
 
 
 class SharedFileTables(TableSchema):
@@ -728,13 +1233,17 @@ class DerivedTables(TableSchema):
 
 
 class DurableTables(TableSchema):
-    """Rows nothing else can rebuild: a schema that differs is refused; only a carry moves it."""
+    """Rows nothing else can rebuild: the writer carries a stored schema that differs onto
+    the declaration where the declaration says how, keeping every row, and refuses the rest.
+    No hand-written step repeats what a declaration already says."""
 
     __slots__ = ()
 
     @classmethod
     def reconcile_schema(cls, db: sqlite3.Connection) -> None:
-        cls.require_schema(db)
+        if cls.schema_differs(db):
+            with SQLiteFile.write_transaction(db):
+                cls.derive_schema(db)
 
 
 @lru_cache(maxsize=4)
@@ -758,7 +1267,9 @@ class SQLiteUserVersion(TypedRow):
     user_version: int
 
 
-class TypedTable(TypedRow, DeclaredFamily, affix="Row", discovery_package="agent_comms"):
+class TypedTable(
+    FrozenColumns, TypedRow, DeclaredFamily, affix="Row", discovery_package="agent_comms"
+):
     """The row declaration owns its table; no separate table/schema registry.
 
     Fields declare SQL capabilities with ``Annotated[T, Column(...)]``. Composite keys derive
@@ -772,6 +1283,9 @@ class TypedTable(TypedRow, DeclaredFamily, affix="Row", discovery_package="agent
     checks: ClassVar[tuple[str, ...]] = ()
     indexes: ClassVar[tuple[Index, ...]] = ()
     without_rowid: ClassVar[bool] = False
+    renamed_from: ClassVar[tuple[str, ...]] = ()
+    """Table names this row's rows were stored under before; the writer renames the one it
+    finds, so a renamed declaration needs no hand-written step."""
 
     @classmethod
     def _member_declarations(cls) -> tuple[type[DeclaredFamily], ...]:
@@ -889,15 +1403,28 @@ class TypedTable(TypedRow, DeclaredFamily, affix="Row", discovery_package="agent
         return statements
 
     @classmethod
-    def trigger_bodies(cls) -> dict[str, str]:
-        """Named trigger suffixes, including their leading SQL whitespace."""
-        return {}
+    def triggers(cls, *, if_not_exists: bool = False) -> dict[str, str]:
+        guards = (
+            trigger for capability in cls.__mro__
+            if issubclass(capability, MutationCapability)
+            and "mutation_guards" in vars(capability) and capability is not MutationCapability
+            for trigger in capability.mutation_guards(cls)
+        )
+        statements: dict[str, str] = {}
+        for trigger in guards:
+            if trigger.name in statements:
+                raise TypeError(f"{cls.__name__} declares two guards named {trigger.name}")
+            statements[trigger.name] = trigger.sql.replace(
+                "CREATE TRIGGER ", "CREATE TRIGGER IF NOT EXISTS ", 1
+            ) if if_not_exists else trigger.sql
+        return statements
 
     @classmethod
-    def triggers(cls, *, if_not_exists: bool = False) -> dict[str, str]:
-        existence = "IF NOT EXISTS " if if_not_exists else ""
-        return {name: f"CREATE TRIGGER {existence}{name}{cls._sql(body)}"
-                for name, body in cls.trigger_bodies().items()}
+    def structure_objects(cls, *, if_not_exists: bool = False) -> dict[str, str]:
+        """Tables, indexes and views, with mutation guards excluded by their declarations."""
+        guards = cls.triggers()
+        return {name: sql for name, sql in cls.schema_objects(if_not_exists=if_not_exists).items()
+                if name not in guards}
 
     @classmethod
     def ddl(cls, *, if_not_exists: bool = False) -> tuple[str, ...]:
@@ -913,6 +1440,23 @@ class TypedTable(TypedRow, DeclaredFamily, affix="Row", discovery_package="agent
     def drop(cls, db: sqlite3.Connection) -> None:
         """Drop the declared table; SQLite drops its indexes with it."""
         db.execute(f"DROP TABLE IF EXISTS {_identifier(cls.declared_name)}")
+
+    @classmethod
+    def take_previous_name(cls, db: sqlite3.Connection) -> None:
+        """Rows stored under a declared earlier name move to the declared one; rows under both
+        are refused, since nothing says which to keep."""
+        stored = {table.name for table in SQLiteTableName.stored(db)}
+        match [name for name in cls.renamed_from if name in stored]:
+            case []:
+                pass
+            case [previous] if cls.declared_name not in stored:
+                db.execute(f"ALTER TABLE {_identifier(previous)} RENAME TO "
+                           f"{_identifier(cls.declared_name)}")
+            case found:
+                holders = sorted({*found, cls.declared_name} & stored)
+                raise RelationViolationError(
+                    f"{cls.declared_name}: tables {holders} could each hold its rows;"
+                    " refusing to choose")
 
     @classmethod
     def stored_columns(cls, db: sqlite3.Connection) -> tuple[str, ...]:
@@ -1129,7 +1673,7 @@ class StoreWriter(SQLiteFile, FileStore):
     """A transaction capability shared by stores and their turn-owned writers.
 
     Whether the file outlives an installation belongs to each store: it inherits
-    DurableFile or RuntimeFile, and a TypedStore inherits DurableStore or DerivedStore.
+    CarriedWriter or RuntimeWriter, and a TypedStore inherits DurableStore or DerivedStore.
     """
 
     def __init__(self, path: Path) -> None:
@@ -1160,6 +1704,7 @@ class StoreWriter(SQLiteFile, FileStore):
     @contextmanager
     def transaction(self, connection: sqlite3.Connection) -> Iterator[sqlite3.Connection]:
         """The file's write transaction, and a touch of its watch file when rows changed."""
+        self.require_maintenance_open()
         before = connection.total_changes
         with self.write_transaction(connection):
             yield connection
@@ -1167,8 +1712,28 @@ class StoreWriter(SQLiteFile, FileStore):
             self._source_paths(self.store.path)[0].write_bytes(b'')
 
     @abstractmethod
+    def require_maintenance_open(self) -> None:
+        """Whether maintenance refuses this writer, which the file's kind declares."""
+
+    @abstractmethod
     def writing(self) -> AbstractContextManager[sqlite3.Connection]:
         """Borrow one committed write transaction from this lifetime owner."""
+
+
+class CarriedWriter(StoreWriter, DurableFile):
+    """A writer of a file every installation carries: while maintenance runs, only its
+    holder writes it, so the install's carry check sees no other change."""
+
+    def require_maintenance_open(self) -> None:
+        MaintenanceBarrier(RegistryFile.path_in(self.bus_root(self.path))).assert_open_unlocked()
+
+
+class RuntimeWriter(StoreWriter, RuntimeFile):
+    """A writer of a file no carry writes: running owners rewrite it at any time,
+    maintenance included."""
+
+    def require_maintenance_open(self) -> None:
+        """No installation reads this file, so maintenance never refuses its writers."""
 
 
 class TypedStore(StoreWriter, TableSchema):
@@ -1243,7 +1808,7 @@ class TypedStore(StoreWriter, TableSchema):
                 with self.write_transaction(connection):
                     if not self.stored_schema(connection):
                         self.create_schema(connection)
-            # Under the attachment boundary: a derived file is rebuilt, a durable one refused.
+            # Under the attachment boundary: a derived file is rebuilt, a durable one carried.
             self.reconcile_schema(connection)
             if SQLiteJournalMode.read(connection.execute("PRAGMA journal_mode=WAL")) != [
                 SQLiteJournalMode("wal")
@@ -1285,11 +1850,11 @@ class TypedStore(StoreWriter, TableSchema):
             yield connection
 
 
-class DurableStore(TypedStore, DurableTables, DurableFile):
+class DurableStore(TypedStore, DurableTables, CarriedWriter):
     """Rows nothing else can rebuild, in a file every installation carries."""
 
 
-class DerivedStore(TypedStore, DerivedTables, RuntimeFile):
+class DerivedStore(TypedStore, DerivedTables, RuntimeWriter):
     """Rows rebuilt from another source, in a file running owners rewrite at any time,
     maintenance included, so no installation backs it up, carries it or checks it.
 

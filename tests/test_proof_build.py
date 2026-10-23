@@ -2,6 +2,7 @@
 
 import subprocess
 import sys
+import time
 from dataclasses import dataclass, replace
 from pathlib import Path
 
@@ -20,7 +21,6 @@ from agent_comms.comms import Comms
 from agent_comms.field_codec import FieldCodec
 from agent_comms.goal_actions import CreateProblemGoalAction, SetGoalAction
 from agent_comms.goals import CountCheckResult, OrderCheck, RequestGoalOrder
-from agent_comms.installer.carry import CarryChain, CarryLedger
 from agent_comms.installer.runtime_resolution import (
     ArchiveRecord,
     CommitRecord,
@@ -50,7 +50,6 @@ from agent_comms.todos import (
 from agent_comms.tool_caller import ThreadCaller
 from agent_comms.tools import CommsOrderDoneTool, CommsProblemCloseTool, CommsTodoCreateTool
 from order_scope_fixture import FIX_SCOPE
-from cutover.carry_install_schedule import InstallSchedule
 from source_revision_fixture import SourceRepository
 
 
@@ -147,7 +146,7 @@ def test_merge_in_head_cannot_close_until_the_recorded_build_contains_it(
     merged = replace(order(graph.repository), run=run).merged(graph.newer)
     todo = comms.goals.todos.create(
         "P1", graph.repository.github, "Prove installation instead of inferring it from merge",
-        creator=lead, owner=lead, generation="fixture-goal",
+        creator=lead, assigner=lead.incarnation, owner=lead, generation="fixture-goal",
         goal=GoalRef(lead.name, lead.created_at, "fixture-goal"),
         review_at=RecordedEventTime(1000), order=merged,
     )
@@ -297,7 +296,7 @@ def test_installed_proof_closes_and_older_build_is_refused_on_copied_bus(
                         order=order,
                         request="request",
                         review_at=RecordedEventTime(4102444800),
-                        commander="lead",
+                        commander="lead", assigner=caller.identity(copied),
                         repo=graph.repository.github,
                         text="Bind proof to its build",
                     ),
@@ -339,8 +338,10 @@ def test_build_containment_does_not_turn_git_failure_into_absence_or_success(pro
 
 @pytest.mark.parametrize("advance_main", (False, True), ids=("installed-main", "newer-main"))
 def test_install_due_compares_fetched_main_to_installed_build(
-    tmp_path, proof_build_checkouts, advance_main,
+    tmp_path, proof_build_checkouts, advance_main, monkeypatch,
 ):
+    # The settle window is its own test; here every uninstalled merge has settled.
+    monkeypatch.setattr(InstallDue, "settle", 0)
     graph = next(graph for graph in proof_build_checkouts
                  if graph.repository.github == CorePackage.repository)
     checkout = graph.repository.checkout
@@ -357,7 +358,7 @@ def test_install_due_compares_fetched_main_to_installed_build(
     before = Repo.git(checkout, "rev-parse", "HEAD")
     bus = Comms(tmp_path / "bus")
     config = CommanderConfig.on_machine("lead", (graph.repository,), bus.root, tmp_path / "home")
-    CommanderConfig.root_path(bus.root).write_text(config.model_dump_json())
+    CommanderConfig.path_in(bus.root).write_text(config.model_dump_json())
 
     due = InstallDue.violations(bus, "lead")
 
@@ -383,26 +384,28 @@ def test_install_due_compares_fetched_main_to_installed_build(
     assert Repo.git(checkout, "rev-parse", "HEAD") == before
 
 
-def test_install_schedule_carry_is_discovered_and_deletes_only_its_file(tmp_path):
-    root = tmp_path / "bus"
-    root.mkdir()
-    schedule = root / "install-deadline.json"
-    schedule.write_text('{"at": 0, "installer": "retired"}')
-    history = root / "saved-session"
-    history.write_bytes(b"preserved original history")
-    chain = CarryChain.at(Path(__file__).resolve().parents[1])
-    ledger = CarryLedger(root)
-    ledger.write(())
-    assert InstallSchedule in chain.pending(ledger.applied())
-    assert InstallSchedule.backup_files(root) == (schedule,)
-    assert InstallSchedule.carry(root, apply=False).changed == 1
-    assert schedule.exists()
+def test_install_waits_for_merges_to_settle_into_one_batch(
+    tmp_path, proof_build_checkouts, monkeypatch,
+):
+    """A merge younger than the settle window is not due yet; once it has stood, it is."""
+    graph = next(graph for graph in proof_build_checkouts
+                 if graph.repository.github == CorePackage.repository)
+    checkout = graph.repository.checkout
+    origin = tmp_path / graph.repository.github.owner / f"{graph.repository.github.name}.git"
+    origin.parent.mkdir()
+    subprocess.run(("git", "init", "--bare", str(origin)), check=True, capture_output=True)
+    Repo.git(checkout, "remote", "set-url", "origin", str(origin))
+    Repo.git(checkout, "push", "origin", f"{graph.newer}:refs/heads/main")
+    bus = Comms(tmp_path / "bus")
+    config = CommanderConfig.on_machine("lead", (graph.repository,), bus.root, tmp_path / "home")
+    CommanderConfig.path_in(bus.root).write_text(config.model_dump_json())
+    merged = int(Repo.git(checkout, "log", "-1", "--format=%ct", graph.newer))
 
-    result = ledger.apply(InstallSchedule.name(), lambda: InstallSchedule.carry(root, apply=True))
+    monkeypatch.setattr(time, "time", lambda: merged + InstallDue.settle - 1)
+    assert InstallDue.violations(bus, "lead") == ()
 
-    assert result.changed == 1
-    assert schedule.name in result.rewritten
-    assert not schedule.exists()
-    assert history.read_bytes() == b"preserved original history"
-    assert InstallSchedule not in chain.pending(ledger.applied())
-    assert InstallSchedule.carry(root, apply=True).changed == 0
+    monkeypatch.setattr(time, "time", lambda: merged + InstallDue.settle)
+    (due,) = InstallDue.violations(bus, "lead")
+    assert graph.newer in due.why
+    assert "oldest 30 min" in due.why
+

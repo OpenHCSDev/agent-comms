@@ -16,7 +16,7 @@ def test_load_comparison_requires_every_reported_field_and_no_private_write(tmp_
     for different in (
         replace(load, owed=38),
         replace(load, timers_up=9),
-        replace(load, heads_waiting=1693),
+        replace(load, unjudged=1693),
         replace(load, forks=()),
     ):
         assert not replace(comparison, observation=replace(observed, native=str(different))).passed

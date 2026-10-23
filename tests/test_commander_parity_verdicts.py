@@ -13,8 +13,8 @@ def observation(mutation: VerdictMutation, changes: int) -> VerdictObservation:
     return VerdictObservation("native verdict owner", 1, mutation.checks(changes), "", mutation)
 
 
-def test_verdict_requires_the_actual_head_event_goal_and_strike_together():
-    accepted = VerdictMutation("a" * 40, 1, 1, 0, 0, 0, "P1: Open · Accepted")
+def test_verdict_requires_the_actual_call_event_goal_and_strike_together():
+    accepted = VerdictMutation("one-call", 1, 1, 0, 0, 0, "P1: Open · Accepted")
     back = replace(
         accepted,
         strikes=1,
@@ -40,5 +40,5 @@ def test_verdict_requires_the_actual_head_event_goal_and_strike_together():
         replace(sent_back, checks=(*sent_back.checks, ("retained native identity", False))),
     ):
         assert not replace(compared, back_current=changed, back_native=changed).passed
-    for changed in (replace(back, head="b" * 40), replace(back, progress="")):
+    for changed in (replace(back, call_id="other-call"), replace(back, progress="")):
         assert not replace(compared, back_native=observation(changed, 1)).passed

@@ -9,10 +9,11 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from importlib.resources import files
 from pathlib import Path
-from typing import TYPE_CHECKING, Annotated, Self
+from typing import TYPE_CHECKING, Annotated, ClassVar, Self
 
 from pydantic import BaseModel, ConfigDict, ValidationInfo, field_validator
 
+from agent_comms.locked_store import DurableFile
 from agent_comms.phase_evidence import MainTree, PlanReading
 from agent_comms.plan_phases import PlanPhase
 
@@ -48,7 +49,8 @@ class CommanderRole:
             )
 
 
-class CommanderConfig(CommanderRole, BaseModel):
+class CommanderConfig(CommanderRole, BaseModel, DurableFile):
+    filename: ClassVar[str] = "commander.json"
     model_config = ConfigDict(frozen=True)
 
     commander: str
@@ -62,7 +64,7 @@ class CommanderConfig(CommanderRole, BaseModel):
 
     @staticmethod
     def path(home: Path | None = None) -> Path:
-        return (home or Path.home()) / '.config/agent-comms/commander.json'
+        return (home or Path.home()) / '.config/agent-comms' / CommanderConfig.filename
 
     @staticmethod
     def packaged_rules() -> Path:
@@ -91,14 +93,10 @@ class CommanderConfig(CommanderRole, BaseModel):
     def read(cls, path: Path | str) -> Self:
         return cls.model_validate_json(Path(path).read_text())
 
-    @staticmethod
-    def root_path(root: Path) -> Path:
-        return root / 'commander.json'
-
     @classmethod
     def read_root(cls, root: Path | str) -> Self:
         root = Path(root).resolve()
-        return cls.model_validate_json(cls.root_path(root).read_text(), context=root)
+        return cls.model_validate_json(cls.path_in(root).read_text(), context=root)
 
     @classmethod
     def on_machine(cls, commander: str, repos: tuple[Repo, ...], root: Path, home: Path,
@@ -143,7 +141,7 @@ class CommanderConfig(CommanderRole, BaseModel):
         self.require_commander(Comms(self.root).registry.require(self.commander))
         path = self.path(home)
         path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
-        record = self.root_path(self.root)
+        record = self.path_in(self.root)
         record.write_text(self.model_dump_json(indent=1) + '\n')
         path.unlink(missing_ok=True)
         path.symlink_to(record)
@@ -160,7 +158,7 @@ class CommanderRecord(ABC):
     @boundary_decoder
     def read(root: Path) -> CommanderRecord:
         root = root.resolve()
-        if CommanderConfig.root_path(root).is_file():
+        if CommanderConfig.path_in(root).is_file():
             return RecordedCommander(CommanderConfig.read_root(root))
         return NoCommanderRecord()
 

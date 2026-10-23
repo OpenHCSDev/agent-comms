@@ -6,7 +6,7 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass, replace
 from typing import TYPE_CHECKING
 
-from .coordinated_runtime_schema import assert_native_runtime_schema
+from agent_comms.native_runtime_input import NativeRuntimeTable
 from .coordination_errors import IdentityConflict, StaleFence
 from .coordinator import Coordination
 from .historical_native_inputs import HistoricalNativeInput
@@ -48,7 +48,7 @@ class CursorOwner(RegistryOwner):
         self.require_snapshot(registry, reason)
 
     def require_participant(self, store: Coordination, reason: str) -> None:
-        assert_native_runtime_schema(store.session._connection)
+        NativeRuntimeTable.require_installed(store.session._connection)
         person = store.participants.get(self.lookup)
         if not person.committed or person.owner_identity != self.participant_identity:
             raise StaleFence(reason)

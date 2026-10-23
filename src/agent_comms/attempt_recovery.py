@@ -28,7 +28,8 @@ from agent_comms.coordination_errors import (
 )
 from agent_comms.coordination_results import Applied
 from agent_comms.coordination_snapshot import RecoverySnapshot
-from agent_comms.coordination_tables.attempts import AttemptRecord, ReplayAssessments, ReplayFact
+from agent_comms.coordination_tables.attempts import AttemptRecord, ReplayFact
+from agent_comms.coordination_tables.executions import ReplayAssessments
 from agent_comms.coordination_tables.executions import CurrentExecutions
 from agent_comms.coordination_tables.recovery import (
     RecoveryAudit,
@@ -40,7 +41,6 @@ from agent_comms.recovery_states import DeferredRecovery, FailedRecovery
 
 from .coordination_database import CoordinationStore
 from .native_input_record import FullNativeExecution
-from agent_comms.native_claim_epoch import UnrecordedNativeClaim
 from agent_comms.typed_table import RowNotFoundError
 from .field_codec import MalformedRecord
 from .input_disposition import InputDispositions
@@ -73,21 +73,21 @@ class VerifiedOwnerLoss(ABC):
         """Compare the recorded native send, released owner and live registry.
 
         Keep canonical wire/bus/registry exclusion through monitor settlement.
-        A later verified release also blocks earlier input generations of the same
-        owner. If permission to send was never recorded, require the exact
-        current owner to be attested stopped and dead: absence of an epoch is
-        not proof that the input was unsent. Lease expiry or a replaced PID alone
-        is insufficient.
+        The release records the original process identity (pid and start_time).
+        That process must be dead and no longer own the registry entry, and its
+        native subprocesses must have exited. A successor's claim counter or
+        active turn does not establish the predecessor's lifetime. Missing
+        input still settles UNKNOWN, never unsent or safe to replay.
         """
         from agent_comms.comms import Comms
-        from agent_comms.coordinated_runtime_schema import assert_native_runtime_schema
+        from agent_comms.native_runtime_input import NativeRuntimeTable
 
         if store.session.path.name != CoordinationStore.filename:
             raise RecoveryBlocked("native recovery requires the canonical coordination store")
         comms = Comms(store.session.path.parent)
         with store.session.boundary(comms.bus) as boundary:
             registry = boundary.registry
-            assert_native_runtime_schema(store.session._connection)
+            NativeRuntimeTable.require_installed(store.session._connection)
             snapshot = store.snapshots.get(execution_id)
             attempt = snapshot.attempt
             if attempt is None or not snapshot.is_current:
@@ -113,6 +113,7 @@ class VerifiedOwnerLoss(ABC):
             except (ValueError, IdentityConflict, RelationViolationError) as error:
                 raise RecoveryBlocked(f"native owner release does not prove loss of this claim_scope: {error}") from error
             try:
+                proof.require_native_exit()
                 yield proof
             finally:
                 object.__setattr__(proof, "_active", False)
@@ -131,8 +132,39 @@ class VerifiedOwnerLoss(ABC):
         )
 
     def require_native_exit(self) -> None:
+        """Both attempt kinds exclude the same native child resources."""
         if not self.owns(self._store, self.attempt):
             raise RecoveryBlocked("native exit observation requires acquired owner loss")
+        session_files = self.recovery_session_files()
+        session_dir = (
+            self._store.session.path.parent / "native-sessions" / self.attempt.owner_lookup
+        )
+        proc = Path("/proc")
+        if not proc.is_dir():
+            raise RecoveryBlocked("native recovery requires Linux process observation")
+        for entry in proc.iterdir():
+            if not entry.name.isdecimal():
+                continue
+            try:
+                if entry.stat().st_uid != os.getuid():
+                    continue
+                args = (entry / "cmdline").read_bytes().split(b"\0")
+            except (FileNotFoundError, ProcessLookupError):
+                continue
+            except PermissionError as error:
+                raise RecoveryBlocked("native process observation was denied") from error
+            for index, argument in enumerate(args[:-1]):
+                selected = argument == b"--session" and any(
+                    args[index + 1] == os.fsencode(path) for path in session_files
+                )
+                allocated = (
+                    argument == b"--session-dir" and args[index + 1] == os.fsencode(session_dir)
+                )
+                if selected or allocated:
+                    raise RecoveryBlocked("native session subprocess is still running")
+
+    @abstractmethod
+    def recovery_session_files(self) -> tuple[Path, ...]: ...
 
     @abstractmethod
     def settle(self, recovery_cls, store: Coordination, execution_id: str, owner) -> None: ...
@@ -143,16 +175,11 @@ class VerifiedOwnerLoss(ABC):
 
 @dataclass(frozen=True, slots=True)
 class UndispatchedOwnerLoss(VerifiedOwnerLoss):
-    """No input row was recorded; exact stopped owner loss still leaves UNKNOWN."""
+    """No input row was recorded; original process loss still leaves UNKNOWN."""
 
-    def require_native_exit(self) -> None:
-        super(UndispatchedOwnerLoss, self).require_native_exit()
-        release = self.release.require_owner_loss(self.boundary.registry, self.attempt.owner_identity)
-        current = self.boundary.registry.require(release.name)
-        try:
-            UnrecordedNativeClaim().require_release(release, self.boundary.registry, current)
-        except RelationViolationError as error:
-            raise RecoveryBlocked(str(error)) from error
+    def recovery_session_files(self) -> tuple[Path, ...]:
+        owner = self.boundary.registry.require(self.release.name)
+        return tuple(files.session for files in owner.runtime.storage_files())
 
     def require_native_input(self) -> NativeRuntimeInput:
         raise RecoveryBlocked("native attempt has no original input")
@@ -187,38 +214,11 @@ class DispatchedOwnerLoss(VerifiedOwnerLoss):
             except RecoveryBlocked:
                 recovery_cls.abandon_released_native_attempt(store, execution_id)
 
-    def require_native_exit(self) -> None:
-        """Observe the recorded input's original launch resources, never a successor's."""
-        super(DispatchedOwnerLoss, self).require_native_exit()
-        session_files = self.native_input.sent_owner_claimed_generation.recovery_session_files(
+    def recovery_session_files(self) -> tuple[Path, ...]:
+        """A dispatched input retains its original selected session."""
+        return self.native_input.sent_owner_claimed_generation.recovery_session_files(
             self.native_input, self.boundary.registry.require(self.release.name)
         )
-        session_dir = (
-            self._store.session.path.parent / "native-sessions" / self.native_input.owner_lookup
-        )
-        proc = Path("/proc")
-        if not proc.is_dir():
-            raise RecoveryBlocked("native recovery requires Linux process observation")
-        for entry in proc.iterdir():
-            if not entry.name.isdecimal():
-                continue
-            try:
-                if entry.stat().st_uid != os.getuid():
-                    continue
-                args = (entry / "cmdline").read_bytes().split(b"\0")
-            except (FileNotFoundError, ProcessLookupError):
-                continue
-            except PermissionError as error:
-                raise RecoveryBlocked("native process observation was denied") from error
-            for index, argument in enumerate(args[:-1]):
-                selected = argument == b"--session" and any(
-                    args[index + 1] == os.fsencode(path) for path in session_files
-                )
-                allocated = (
-                    argument == b"--session-dir" and args[index + 1] == os.fsencode(session_dir)
-                )
-                if selected or allocated:
-                    raise RecoveryBlocked("native session subprocess is still running")
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
@@ -395,8 +395,8 @@ class RecoveryMonitorCapability:
         UNKNOWN effects and releases its slot. Input evidences/cursors are never
         changed. A frozen publication still requires its acknowledgement resolver.
 
-        Without a recorded send generation, stop the current owner normally
-        before calling, then restart it normally for unrelated new work.
+        A live successor need not stop: loss belongs to the original process,
+        while its UNKNOWN input and all evidence remain untouched.
         """
         with VerifiedOwnerLoss.observe_native_release(store, execution_id) as loss:
             snapshot = store.snapshots.get(execution_id)

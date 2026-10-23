@@ -1,69 +1,52 @@
-"""Unit cards and decisions, derived from the original Core records.
+"""One derived card per unit, ordered by the family's declaration order.
 
-This is a subfamily of StandingRule, not a second classification registry. The
-inheritance chain declares urgency: a more urgent state is a subtype of every
-less urgent state. Readers use that MRO, never a separately numbered priority.
+States are siblings, not increasingly urgent subtypes of one another. The
+StandingRule registry supplies both membership and urgency; no second roster
+or independently writable unit status is retained.
 """
+
 from __future__ import annotations
 
 import time
 from abc import abstractmethod
-from collections.abc import Iterator
-from contextlib import closing
-from dataclasses import dataclass, replace
+from collections.abc import Iterator, Sequence
+from dataclasses import dataclass, field
 from functools import cached_property
+from subprocess import TimeoutExpired
 from typing import TYPE_CHECKING, ClassVar, Self
 
-from agent_comms.bus_page_index import BusPageIndex
-from agent_comms.declared_family import DeclaredFamily
-from agent_comms.goal_actions import GoalPrecondition
-from agent_comms.goal_generation import GenerationState, RetryableGeneration
-from agent_comms.goal_states import BlockedState
-from agent_comms.message_page import MessageReadRequest
-from agent_comms.messages import Message, NeedsAnswerKind
-from agent_comms.read_basis import RepliesDisplayScope
+from agent_comms.commander.questions import UnansweredUnitAsks
+from agent_comms.field_codec import MalformedRecord
+from agent_comms.goal_presentation import GoalSnapshot
+from agent_comms.goals import GitCommandFailed
+from agent_comms.messages import Message
+from agent_comms.native_failures import NativePiUnavailable
 from agent_comms.standing_rules import StandingRule, UndatedStandingRule
-from agent_comms.thread_identity import CoreWatcherIncarnation, ThreadIncarnation
+from agent_comms.thread_identity import ThreadIncarnation
+from agent_comms.thread_status import ThreadStatus
 from agent_comms.todos import (
-    OrderProgress, ProgressSource, PullRequests, Todo,
+    MergedProgress,
+    NoCommitProgress,
+    OrderClaim,
+    OrderProgress,
+    PresentCheckout,
+    ProgressSource,
+    PullRequests,
+    SendBackVerdict,
+    Todo,
 )
 from agent_comms.transcript_events import OrderCall, TurnDigest
 from agent_comms.turn_digests import LastTurns, TurnDigestRead
-from agent_comms.wire_log import WireSnapshot
+from agent_comms.work_branches import WorkBranchError
 
 if TYPE_CHECKING:
     from agent_comms.comms import Comms
-    from agent_comms.goals import Goal
-    from agent_comms.message_reference import MessageReference
     from agent_comms.threads import Thread
-
-
-@dataclass(frozen=True, slots=True)
-class UnansweredUnitAsks(MessageReadRequest[tuple[Message, ...]]):
-    scope: RepliesDisplayScope
-    since: float
-    before: float
-    empty: ClassVar[tuple[Message, ...]] = ()
-
-    def indexed(self, index: BusPageIndex, source: WireSnapshot) -> tuple[Message, ...]:
-        answered: set[MessageReference] = set()
-        found: list[Message] = []
-        with closing(index.recent_offsets(
-            self.since, predicate=self.scope.index_predicate, before_offset=source.boundary,
-        )) as offsets:
-            for row in self.indexed_records(source, offsets):
-                message = row.message
-                if message.sender in self.scope.first_names:
-                    answered.update(message.answers)
-                elif (issubclass(message.type, NeedsAnswerKind)
-                      and message.timestamp <= self.before and message.reference not in answered):
-                    found.append(message)
-        return tuple(found)
 
 
 @dataclass(frozen=True)
 class UnitObservation:
-    """One bounded read shared by all candidate states; never retained across reads."""
+    """Original sources shared by candidate states within this one read."""
 
     comms: Comms
     thread: Thread
@@ -71,6 +54,20 @@ class UnitObservation:
     pulls: PullRequests
     questions: tuple[Message, ...]
     now: float
+    presence: ThreadStatus
+    working: bool
+
+    @cached_property
+    def goal(self) -> GoalSnapshot:
+        return self.comms.goals.goal_snapshot(self.thread.name)
+
+    @cached_property
+    def due_questions(self) -> tuple[Message, ...]:
+        return tuple(
+            message
+            for message in self.questions
+            if message.timestamp <= self.now - AwaitingCommander.seconds
+        )
 
     @cached_property
     def pending(self) -> tuple[Todo, ...]:
@@ -94,104 +91,151 @@ class UnitObservation:
 
     @cached_property
     def sources(self) -> tuple[ProgressSource, ...]:
-        return tuple(ProgressSource.of(todo, self.comms.registry, self.pulls) for todo in self.todos)
+        return tuple(
+            ProgressSource.of(todo, self.comms.registry, self.pulls) for todo in self.todos
+        )
 
-    @cached_property
-    def progress(self) -> tuple[OrderProgress, ...]:
-        return tuple(OrderProgress.from_source(source) for source in self.sources)
+    def require_read(self) -> None:
+        if self.todos:
+            for path in self.comms.registry.storage_rule.checkout_paths(self.thread):
+                PresentCheckout(path).require_read()
+        for source in self.sources:
+            source.checkout.require_read()
 
     @property
     def orders(self) -> tuple[str, ...]:
         return tuple(todo.id for todo in self.todos)
 
 
+class NeedsCommanderAttention:
+    """Urgent siblings share their ping behavior without claiming each other's state."""
+
+    def attention(self) -> bool:
+        return True
+
+
 @dataclass(frozen=True)
 class UnitState(UndatedStandingRule, declared_name=None):
-    """One selected state per unit. Urgency is the states' declared MRO."""
-
     unit: ThreadIncarnation
     orders: tuple[str, ...]
+    presence: ThreadStatus
+    source: UnitObservation = field(compare=False, repr=False)
     action: ClassVar[str]
 
     @classmethod
     def worst_first(cls) -> tuple[type[UnitState], ...]:
-        members = UnitState.members_with(UnitState)
-        most_urgent = max(members, key=lambda member: len(member.__mro__))
-        ordered = tuple(base for base in most_urgent.__mro__ if base in members)
-        if len(ordered) != len(members):
-            raise TypeError("UnitState urgency must be declared by one complete MRO")
-        return ordered
+        return UnitState.members_with(UnitState)
 
     @classmethod
     def scan_owner(cls) -> type[StandingRule]:
         return UnitState
 
     @classmethod
-    def holders(cls, comms: Comms, commander: str) -> dict[ThreadIncarnation, list[Todo]]:
-        held: dict[ThreadIncarnation, list[Todo]] = {}
-        for todo in StandingRule.todos(comms, commander):
-            held.setdefault(todo.held().owner_identity, []).append(todo)
-        return held
+    def scan_observed(
+        cls, comms: Comms, commander: str, observed: Sequence[UnitState]
+    ) -> tuple[Self, ...]:
+        # States are already read; ordinary scans consume them rather than emit them again.
+        return ()
 
     @classmethod
-    def asks(cls, comms: Comms, commander: str, before: float) -> tuple[Message, ...]:
-        held = cls.holders(comms, commander)
-        pending = tuple(todo for todos in held.values() for todo in todos if todo.pending)
-        if not pending:
-            return ()
-        snapshot = comms.registry.snapshot()
-        peers = frozenset(name for owner in held for name in snapshot.names_for(owner.name))
-        since = min(todo.order.checked().at.recorded_at("A held order") for todo in pending)
-        return comms.bus.log.read_page(UnansweredUnitAsks(
-            RepliesDisplayScope(snapshot.names_for(commander), peers), since, before,
-        ))
+    def read(cls, source: UnitObservation) -> UnitState:
+        try:
+            return next(state for member in cls.worst_first() for state in member.derive(source))
+        except (
+            OSError,
+            GitCommandFailed,
+            WorkBranchError,
+            TimeoutExpired,
+            NativePiUnavailable,
+            MalformedRecord,
+        ) as failure:
+            return Unreadable(
+                source.thread.incarnation, source.orders, source.presence, source, str(failure)
+            )
 
     @classmethod
-    def read(cls, observation: UnitObservation) -> UnitState:
-        return next(state for member in cls.worst_first() for state in member.derive(observation))
-
-    @classmethod
-    def observations(cls, comms: Comms, commander: str,
-                     pulls: PullRequests | None = None) -> tuple[UnitObservation, ...]:
+    def observations(
+        cls, comms: Comms, commander: str, pulls: PullRequests
+    ) -> tuple[UnitObservation, ...]:
         snapshot, now = comms.registry.snapshot(), time.time()
-        held = cls.holders(comms, commander)
+        held = StandingRule.holders(comms, commander)
         for owner in held:
             if snapshot.require(owner.name).incarnation != owner:
                 raise ValueError("Held order owner incarnation changed")
-        questions = cls.asks(comms, commander, now - AwaitingCommander.seconds)
-        requests = pulls if pulls is not None else PullRequests(tuple(
-            todo for todos in held.values() for todo in todos))
-        found = []
-        for thread in snapshot.threads.values():
-            todos = tuple(held.get(thread.incarnation, ()))
-            if todos or thread.role.executor(thread) and thread.name != commander:
-                found.append(UnitObservation(comms, thread, todos, requests,
-                    tuple(message for message in questions
-                          if snapshot.canonical_name(message.sender) == thread.name), now))
-        return tuple(found)
+        requests = pulls.register(tuple(todo for todos in held.values() for todo in todos))
+        asks = UnansweredUnitAsks.for_orders(
+            comms, commander, StandingRule.todos(comms, commander), now
+        )
+        # Claim originals come from one read here, so no unit's questions read can fail alone.
+        claims = OrderClaim.originals(
+            comms,
+            {
+                owner: tuple(claim for todo in todos for claim in todo.order.commander_claims())
+                for owner, todos in held.items()
+            },
+        )
+        readings = tuple(
+            UnitObservation(
+                comms,
+                thread,
+                tuple(held.get(thread.incarnation, ())),
+                requests,
+                (
+                    *(
+                        message
+                        for message in asks
+                        if snapshot.canonical_name(message.sender) == thread.name
+                    ),
+                    *claims.get(thread.incarnation, ()),
+                ),
+                now,
+                snapshot.status(thread.name),
+                comms.agents.is_working(thread.incarnation, snapshot),
+            )
+            for thread in snapshot.threads.values()
+        )
+        candidates = tuple(reading for reading in readings if reading.thread.name != commander)
+        eligible = set(held)
+        eligible.update(
+            reading.thread.incarnation
+            for reading in candidates
+            if reading.thread.parent.named(commander)
+        )
+        eligible.update(
+            reading.thread.incarnation
+            for reading in candidates
+            if reading.thread.role.executor(reading.thread) and reading.presence.receiving
+        )
+        return tuple(reading for reading in readings if reading.thread.incarnation in eligible)
 
     @classmethod
-    def violations(cls, comms: Comms, commander: str) -> tuple[Self, ...]:
-        return tuple(state for source in cls.observations(comms, commander)
-                     for state in (UnitState.read(source),)
-                     if (cls is UnitState or type(state) is cls) and state.attention())
+    def current(cls, comms: Comms, commander: str, pulls: PullRequests) -> tuple[UnitState, ...]:
+        states = tuple(cls.read(source) for source in cls.observations(comms, commander, pulls))
+        return tuple(
+            state for member in cls.worst_first() for state in states if isinstance(state, member)
+        )
 
     @classmethod
     @abstractmethod
     def derive(cls, source: UnitObservation) -> Iterator[Self]: ...
 
-    def unit_states(self) -> tuple[UnitState, ...]:
-        return (self,)
+    @property
+    def owed(self) -> tuple[Message, ...]:
+        return self.source.due_questions
 
-    def commander_pings(self, todos, states):
-        from agent_comms.commander_pings import OrderRevision, UnitStatePing
-
-        return (UnitStatePing(self.unit, type(self), tuple(
-            OrderRevision.of(todos[problem]) for problem in self.orders),
-            self.detail(), self.default_action),)
+    def readable_units(self) -> tuple[ThreadIncarnation, ...]:
+        return (self.unit,)
 
     def attention(self) -> bool:
         return False
+
+    def merged_orders(self, comms: Comms, pulls: PullRequests) -> tuple[Todo, ...]:
+        return tuple(
+            closed
+            for problem in self.orders
+            for todo in (comms.goals.todos.get(problem),)
+            for closed in todo.order.closed_by_merge(todo, comms.registry, pulls)
+        )
 
     @property
     def default_action(self) -> str:
@@ -201,187 +245,201 @@ class UnitState(UndatedStandingRule, declared_name=None):
         return f"orders {', '.join(self.orders)}"
 
     def line(self) -> str:
-        return (f"{self.declared_name.replace('_', ' ').upper()} {self.unit.name}: "
-                f"{self.detail()} -> {self.default_action}")
-
-    def more_urgent_than(self, previous: type[UnitState]) -> bool:
-        return type(self) is not previous and issubclass(type(self), previous)
+        return f"{type(self).__name__} {self.unit.name}: {self.detail()} -> {self.default_action}"
 
 
-class Idle(UnitState):
-    action = "give it the next useful order"
+class ConditionalState(UnitState, declared_name=None):
+    """Abstract card construction shared by siblings, not a separate unit state."""
 
     @classmethod
     def derive(cls, source: UnitObservation) -> Iterator[Self]:
-        if not source.todos:
-            yield cls(source.thread.incarnation, ())
+        if cls.matches(source):
+            yield cls(source.thread.incarnation, source.orders, source.presence, source)
+
+    @classmethod
+    @abstractmethod
+    def matches(cls, source: UnitObservation) -> bool: ...
 
 
-class Moving(Idle):
-    action = "let it continue"
+class PendingWorkState(ConditionalState, declared_name=None):
+    """These sibling states require pending work; declare that condition once."""
 
     @classmethod
     def derive(cls, source: UnitObservation) -> Iterator[Self]:
-        if source.todos:
-            yield cls(source.thread.incarnation, source.orders)
-
-
-class DeliveredUnclosed(Moving):
-    action = "install the merge or close with the working application evidence"
-
-    @classmethod
-    def derive(cls, source: UnitObservation) -> Iterator[Self]:
-        if source.todos and (not source.pending or any(
-            progress.waiting_on_install(todo) for todo, progress in zip(source.todos, source.progress)
-        )):
-            yield cls(source.thread.incarnation, source.orders)
-
-    def attention(self) -> bool:
-        return True
-
-
-class StalledOnNothing(DeliveredUnclosed):
-    action = "resume its work or give it the missing next step"
-
-    @classmethod
-    def derive(cls, source: UnitObservation) -> Iterator[Self]:
-        if (source.pending and source.turns and not source.thread.executing
-                and not source.comms.bus.pending_count(source.thread.name)
-                and not source.comms.goals.goal_execution(source.thread.name).standby()):
-            yield cls(source.thread.incarnation, source.orders)
-
-
-class Spinning(StalledOnNothing):
-    action = "read the failed approach and change it before another rerun"
-
-    @classmethod
-    def derive(cls, source: UnitObservation) -> Iterator[Self]:
-        if not source.pending:
-            return
-        sends = sorted(at for todo in source.pending for verdict in todo.verdicts
-                       for at in verdict.send_back_times())
-        commit_at = max((commit.at for origin in source.sources for commit in origin.commits()),
-                        default=source.since)
-        calls = source.calls
-        repeats = len(calls) >= 2 and calls[-1].digest == calls[-2].digest
-        repeated_after_commit = repeats and source.turns[-1].start.since(commit_at)
-        if (len(sends) >= 2 and sends[-2] > commit_at) or repeated_after_commit:
-            yield cls(source.thread.incarnation, source.orders)
-
-
-class Stuck(Spinning):
-    seconds: ClassVar[int] = 20 * 60
-    action = "inspect its last turn and restart only known-safe work"
-
-    @classmethod
-    def derive(cls, source: UnitObservation) -> Iterator[Self]:
-        if not source.pending:
-            return
-        calls = source.calls
-        latest = max((event.timestamp for turn in source.turns for event in turn.events),
-                     default=source.since)
-        if (not calls and any(todo.order.checked().first_call_deadline.before(source.now)
-                              for todo in source.pending)) or latest < source.now - cls.seconds:
-            yield cls(source.thread.incarnation, source.orders)
+        if source.pending:
+            yield from super().derive(source)
 
 
 @dataclass(frozen=True)
-class AwaitingCommander(Stuck):
-    questions: tuple[Message, ...] = ()
-    seconds: ClassVar[int] = 15 * 60
-    action = "answer the original message"
+class Unreadable(NeedsCommanderAttention, UnitState):
+    reason: str
+    action = "repair the unreadable source; do not infer that the unit is idle"
 
     @classmethod
     def derive(cls, source: UnitObservation) -> Iterator[Self]:
-        if source.pending and source.questions:
-            yield cls(source.thread.incarnation, source.orders, source.questions)
+        # Validate the checkout reads before a higher-level label can hide a failure.
+        source.require_read()
+        return iter(())
+
+    def readable_units(self) -> tuple[ThreadIncarnation, ...]:
+        return ()
+
+    def merged_orders(self, comms: Comms, pulls: PullRequests) -> tuple[Todo, ...]:
+        # The card reports the failure; a merge read must not retry that source.
+        return ()
 
     def detail(self) -> str:
-        return ", ".join(f"message {message.reference.seq}:{message.message_id}"
-                         for message in self.questions)
+        return f"{super().detail()}; {self.reason}"
 
 
 @dataclass(frozen=True)
-class Detached(AwaitingCommander):
-    unread: int = 0
+class Blocked(NeedsCommanderAttention, UnitState):
+    goal: GoalSnapshot
+    action = "follow the blocked goal's declared response"
+
+    @classmethod
+    def derive(cls, source: UnitObservation) -> Iterator[Self]:
+        if not source.pending:
+            return
+        if source.goal.execution.unit_blocks():
+            yield cls(
+                source.thread.incarnation,
+                tuple(todo.id for todo in source.pending),
+                source.presence,
+                source,
+                source.goal,
+            )
+
+    def line(self) -> str:
+        return "\n".join(
+            block.unit_block_line(self.unit.name, self.orders)
+            for block in self.goal.execution.unit_blocks()
+        )
+
+
+@dataclass(frozen=True)
+class Detached(NeedsCommanderAttention, UnitState):
+    unread: int = field(compare=False)
     action = "wake it or reassign the order"
 
     @classmethod
     def derive(cls, source: UnitObservation) -> Iterator[Self]:
-        if source.pending and not source.comms.registry.status(source.thread.name).receiving:
-            yield cls(source.thread.incarnation, source.orders,
-                      unread=source.comms.bus.pending_count(source.thread.name))
+        if source.pending and not source.presence.receiving:
+            yield cls(
+                source.thread.incarnation,
+                source.orders,
+                source.presence,
+                source,
+                source.comms.bus.pending_count(source.thread.name),
+            )
 
     def detail(self) -> str:
-        return f"{self.unread} unread; {UnitState.detail(self)}"
+        return f"{self.unread} unread; {super().detail()}"
 
 
 @dataclass(frozen=True)
-class UnitBlock(DeclaredFamily, affix="UnitBlock"):
-    goal: Goal
-    action: ClassVar[str]
-
-    @staticmethod
-    @abstractmethod
-    def accepts(goal: Goal, generation: GenerationState) -> bool: ...
-
-    def enforce(self, comms: Comms, commander: str, unit: str, orders: tuple[str, ...]) -> None:
-        """Unknown attempts never run again merely because the connector restarted."""
-
-
-class UnresolvedUnitBlock(UnitBlock):
-    action = "inspect the unknown attempt, then fail or finish it; never replay its input"
-
-    @staticmethod
-    def accepts(goal: Goal, generation: GenerationState) -> bool:
-        return not isinstance(generation, RetryableGeneration)
-
-
-class RetryableUnitBlock(UnitBlock):
-    action = "reissue only the known-safe orders"
-
-    @staticmethod
-    def accepts(goal: Goal, generation: GenerationState) -> bool:
-        return isinstance(goal.state, BlockedState) and isinstance(generation, RetryableGeneration)
-
-    def enforce(self, comms: Comms, commander: str, unit: str, orders: tuple[str, ...]) -> None:
-        from agent_comms.commander.standing import UnownedWheelSpin
-
-        observed = self.goal
-        for problem in orders:
-            todo = comms.goals.todos.get(problem)
-            todo.require_assignee(comms.registry.require(unit).incarnation, observed.id)
-            action = UnownedWheelSpin.order_for(todo, commander, CoreWatcherIncarnation.watcher())
-            observed = comms.goals.update_goal(unit, replace(action, expect=GoalPrecondition(
-                goal_id=observed.id, expected_state=observed.state,
-                expected_checkpoint=observed.captured,
-            )))
-
-
-@dataclass(frozen=True)
-class Blocked(Detached):
-    blocks: tuple[UnitBlock, ...] = ()
+class AwaitingCommander(NeedsCommanderAttention, UnitState):
+    seconds: ClassVar[int] = 5 * 60
+    action = "answer the original message"
 
     @classmethod
     def derive(cls, source: UnitObservation) -> Iterator[Self]:
-        if not source.pending or source.thread.executing:
-            return
-        store = source.comms.goals.open_goal_store()
-        blocks = tuple(member(goal) for goal in source.thread.goal
-                       for generation in (store.require_generation(goal.id).lifecycle,)
-                       for member in UnitBlock.members_with(UnitBlock)
-                       if member.accepts(goal, generation))
-        if blocks:
-            yield cls(source.thread.incarnation, tuple(todo.id for todo in source.pending), blocks=blocks)
-
-    @property
-    def default_action(self) -> str:
-        return "; ".join(block.action for block in self.blocks)
+        if source.due_questions:
+            yield cls(source.thread.incarnation, source.orders, source.presence, source)
 
     def detail(self) -> str:
-        goals = ", ".join(f"goal {block.goal.id}@{block.goal.revision}" for block in self.blocks)
-        return f"{UnitState.detail(self)}; {goals}"
+        return ", ".join(
+            f"message {message.reference.seq}:{message.message_id}" for message in self.owed
+        )
 
-    def enforce(self, comms: Comms, commander: str) -> None:
-        for block in self.blocks:
-            block.enforce(comms, commander, self.unit.name, self.orders)
+
+class Stuck(NeedsCommanderAttention, PendingWorkState, UnitState):
+    seconds: ClassVar[int] = 20 * 60
+    action = "inspect its last turn and restart only known-safe work"
+
+    @classmethod
+    def matches(cls, source: UnitObservation) -> bool:
+        calls = source.calls
+        latest = max(
+            (event.timestamp for turn in source.turns for event in turn.events),
+            default=source.since,
+        )
+        return bool(
+            not calls
+            and any(
+                todo.order.checked().first_call_deadline.before(source.now)
+                for todo in source.pending
+            )
+            or calls
+            and latest < source.now - cls.seconds
+        )
+
+
+class Spinning(NeedsCommanderAttention, PendingWorkState, UnitState):
+    action = "read the failed approach and change it before another rerun"
+
+    @classmethod
+    def matches(cls, source: UnitObservation) -> bool:
+        sends = sorted(
+            verdict.at.recorded_at("A send-back")
+            for todo in source.pending
+            for verdict in todo.verdicts
+            if isinstance(verdict, SendBackVerdict)
+        )
+        calls = source.calls
+        repeats = len(calls) >= 2 and calls[-1].digest == calls[-2].digest
+        if len(sends) < 2 and not repeats:
+            return False
+        commit_at = max(
+            (commit.at for origin in source.sources for commit in origin.commits()),
+            default=source.since,
+        )
+        return (
+            len(sends) >= 2
+            and sends[-2] > commit_at
+            or repeats
+            and source.turns[-1].start.since(commit_at)
+        )
+
+
+class StalledOnNothing(NeedsCommanderAttention, PendingWorkState, UnitState):
+    action = "resume its work or give it the missing next step"
+
+    @classmethod
+    def matches(cls, source: UnitObservation) -> bool:
+        return bool(
+            source.goal.execution.runnable()
+            and source.turns
+            and not source.comms.bus.pending_count(source.thread.name)
+        )
+
+
+class DeliveredUnclosed(NeedsCommanderAttention, ConditionalState, UnitState):
+    action = "install the merge or close with the working application evidence"
+
+    @classmethod
+    def matches(cls, source: UnitObservation) -> bool:
+        progress: dict[str, OrderProgress] = {
+            origin.todo.id: next(MergedProgress.found(origin), NoCommitProgress())
+            for origin in source.sources
+        }
+        return any(
+            todo.order.accepted or todo.order.waiting_on_install(todo, progress)
+            for todo in source.todos
+        )
+
+
+class Moving(ConditionalState, UnitState):
+    action = "let it continue"
+
+    @classmethod
+    def matches(cls, source: UnitObservation) -> bool:
+        return bool(source.todos)
+
+
+class Idle(ConditionalState, UnitState):
+    action = "give it the next useful order"
+
+    @classmethod
+    def matches(cls, source: UnitObservation) -> bool:
+        return not source.todos

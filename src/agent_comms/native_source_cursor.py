@@ -4,7 +4,6 @@ from __future__ import annotations
 from functools import partial
 from typing import TYPE_CHECKING
 
-from .coordinated_runtime_schema import assert_native_runtime_schema
 from .coordination_database import CoordinationStore
 from .coordination_errors import IdentityConflict, StaleFence
 from .coordinator import Coordination
@@ -12,7 +11,7 @@ from .cursor_owner import CursorOwner
 from .field_codec import FieldCodec
 from .message_bus import MessageBus
 from .native_input_owner import RegistryOwner
-from .native_runtime_input import CurrentNativeCursor
+from .native_runtime_input import CurrentNativeCursor, NativeRuntimeTable
 from .proven_source_coverage import SourceCoverage
 from .store_files import StoreLockContention
 from .threads import Thread
@@ -63,7 +62,7 @@ class NativeSourceCursor:
     def _refresh_owned(cls, bus, wire_root_id, owner_name, source_reads, store):
         owner, claim_scope = bus._registry.live_owner_with_claim(owner_name)
         person = store.participants.get(owner.incarnation.lookup)
-        return cls._advance_owned(bus, wire_root_id, owner, claim_scope, person.participant_generation,
+        return cls._advance_owned(bus, wire_root_id, owner, claim_scope, person.owner_identity.generation,
                                   None, store, source_reads=source_reads)
 
     def _coverage(self, lookup, contention=None):
@@ -112,12 +111,12 @@ class NativeSourceCursor:
             captured = RegistryOwner.capture(boundary.registry, owner_name, reason)
             with self.store.session.read():
                 db = self.store.session._connection
-                assert_native_runtime_schema(db)
+                NativeRuntimeTable.require_installed(db)
                 person = self.store.participants.get(captured.thread.incarnation.lookup)
-                if not person.committed or person.owner_thread != owner_name:
+                if not person.committed or person.owner_identity.owner_thread != owner_name:
                     raise StaleFence('current native cursor recipient is not committed')
                 identity = CursorOwner(wire_root_id=self.wire_root_id, thread=captured.thread,
-                                       generation=person.participant_generation,
+                                       generation=person.owner_identity.generation,
                                        claimed_generation=captured.claimed_generation)
                 state = identity.state(db, marker.claimed_after_seq)
         sources = self._coverage(identity.lookup)

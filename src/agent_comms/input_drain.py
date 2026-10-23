@@ -271,7 +271,7 @@ class FullTick:
                 await observation.effects.turns.goals.schedule_goal(session_id)
                 current = await Coordination.run_worker(partial(observation.comms.registry.require, thread))
                 if (
-                    current.turn_record.executing
+                    current.executing
                     or observation.turn_live(session_id)
                 ):
                     return UnsettledTick()
@@ -517,7 +517,7 @@ class InputObservation(ABC):
             )
             cursor = CursorOwner(
                 thread=owner.thread, claimed_generation=owner.claimed_generation,
-                wire_root_id=root_id, generation=participant.participant_generation,
+                wire_root_id=root_id, generation=participant.owner_identity.generation,
             ).cursor(store.session._connection)
             original = store.session.path.stat()
         observation = PrivateObservation

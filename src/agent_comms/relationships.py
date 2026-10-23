@@ -26,7 +26,7 @@ from .declared_family import DeclaredFamily
 from .display_order import CreatedThreadSort, LastActivityThreadSort, ThreadSort
 from .errors import RelationViolationError, UnregisteredThreadError
 from .goals import Goal, GoalMentionBinding
-from .locked_store import DurableFile, LockedStore
+from .maintenance_barrier import CarriedDocument
 from .messages import Message
 from .peer_relevance import (
     ChannelmateRelevance,
@@ -654,7 +654,7 @@ class RemoveRelationshipEdit(RelationshipEdit):
         )
 
 
-class RelationshipStore(DurableFile, ThreadOwnedState, LockedStore[RelationshipDocument]):
+class RelationshipStore(ThreadOwnedState, CarriedDocument[RelationshipDocument]):
     """One current durable typed schema; retired formats are rejected."""
 
     filename = "relationships.json"

@@ -2,16 +2,16 @@
 
 from __future__ import annotations
 
-from collections.abc import Iterator
+from collections.abc import Iterator, Mapping
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Annotated, ClassVar
 
 from .context_reading import ContextReading, ContextUsage, UnmeasuredContext
 from .field_codec import (
     AcceptsNull,
+    ExternalField,
     ExternalJsonShape,
     FieldCodec,
-    FieldRepresentation,
     NullMember,
     WireValue,
     boundary_decoder,
@@ -23,7 +23,7 @@ if TYPE_CHECKING:
     from .turn_usage import UsageAccount
 
 
-class PiCountWire(AcceptsNull, FieldRepresentation):
+class PiCountWire(AcceptsNull):
     """Positive native counts: zero and omission mean not reported."""
 
     minimum: ClassVar[int] = 1
@@ -43,6 +43,15 @@ class PiCountWire(AcceptsNull, FieldRepresentation):
     @classmethod
     def schema(cls) -> dict[str, object]:
         return {"anyOf": [FieldCodec.value_schema(int), UnreportedCount.schema()]}
+
+
+class TotalCountWire(PiCountWire, ExternalField):
+    """Only external totals treat a non-integer as unreported; retained values stay strict."""
+
+    @classmethod
+    @boundary_decoder
+    def decode_external_value(cls, value: object, record: Mapping[str, object]) -> object:
+        return cls.decode(value) if type(value) is int else UnreportedCount()
 
 
 class NonnegativeCountWire(PiCountWire):
@@ -154,3 +163,4 @@ class ReportedCount(PiCount):
 
 
 NonnegativePiCount = Annotated[PiCount, NonnegativeCountWire]
+TotalPiCount = Annotated[PiCount, TotalCountWire]

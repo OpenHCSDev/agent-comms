@@ -23,13 +23,23 @@ from agent_comms.typed_table import (
     ExactStorage,
     ForeignKey,
     Generated,
+    GuardedInserts,
+    ImmutableRows,
     TypedTable,
+    ValidatedInserts,
 )
 
 
 @dataclass(frozen=True, slots=True)
-class PublicationIntents(CoordinatorTable, TypedTable):
+class PublicationIntents(
+    ValidatedInserts, GuardedInserts, ImmutableRows, CoordinatorTable, TypedTable
+):
     """One obligation route's frozen response: the exact Message it publishes."""
+
+    insert_condition = """NOT EXISTS (SELECT 1 FROM obligations
+        WHERE execution_id = NEW.execution_id AND exact_target = NEW.exact_target
+        AND state = 'pending')"""
+
 
     validator_function: ClassVar[str] = "coordination_validate_publication_intent"
 
@@ -126,44 +136,6 @@ class PublicationIntents(CoordinatorTable, TypedTable):
         )
 
     @classmethod
-    def trigger_bodies(cls):
-        return {
-            "publication_intent_envelope_authority": (
-                f""" BEFORE INSERT ON
-publication_intents
-WHEN {cls.validator_function}(
-  {", ".join("NEW." + field.name for field in fields(cls) if field.init)}) != 1
-BEGIN SELECT RAISE(ABORT, 'publication intent envelope is invalid' );
-END"""
-            ),
-            "publication_intent_requires_obligation": (
-                """
-BEFORE INSERT ON publication_intents
-WHEN NOT EXISTS (
-    SELECT 1 FROM obligations WHERE execution_id = NEW.execution_id
-      AND exact_target = NEW.exact_target AND state = 'pending'
-)
-BEGIN
-    SELECT RAISE(ABORT, 'publication intent requires matching pending obligation');
-END"""
-            ),
-            "publication_intent_update_frozen": (
-                """
-BEFORE UPDATE ON publication_intents
-BEGIN
-    SELECT RAISE(ABORT, 'publication intent is frozen');
-END"""
-            ),
-            "publication_intent_delete_frozen": (
-                """
-BEFORE DELETE ON publication_intents
-BEGIN
-    SELECT RAISE(ABORT, 'publication intent is frozen');
-END"""
-            ),
-        }
-
-    @classmethod
     def validate_sql(cls, *values: object) -> int:
         """SQLite positional input follows the declared columns; decode and validate once."""
         try:
@@ -179,7 +151,20 @@ END"""
 
 
 @dataclass(frozen=True, kw_only=True)
-class PublicationEvidence(CoordinatorTable, TypedTable, declared_name="publication_receipts"):
+class PublicationEvidence(
+    GuardedInserts,
+    ImmutableRows,
+    CoordinatorTable,
+    TypedTable,
+    declared_name="publication_receipts",
+):
+    insert_condition = """(EXISTS (SELECT 1 FROM executions
+        WHERE execution_id = NEW.execution_id AND status = 'failed'))
+        OR (NEW.message_id != (SELECT expected_message_id FROM publication_intents
+        WHERE execution_id = NEW.execution_id AND exact_target = NEW.exact_target))
+        OR (NOT EXISTS (SELECT 1 FROM obligations WHERE execution_id = NEW.execution_id
+        AND exact_target = NEW.exact_target AND state = 'publishing'))"""
+
     @property
     def reference(self) -> MessageReference:
         return MessageReference(self.seq, self.message_id)
@@ -234,41 +219,3 @@ class PublicationEvidence(CoordinatorTable, TypedTable, declared_name="publicati
                 deferred=True,
             ),
         )
-
-    @classmethod
-    def trigger_bodies(cls):
-        return {
-            "publication_receipt_matches_authorities": (
-                """
-BEFORE INSERT ON publication_receipts
-BEGIN
-    SELECT RAISE(ABORT, 'failed execution cannot accept publication receipt')
-    WHERE EXISTS (SELECT 1 FROM executions
-                  WHERE execution_id = NEW.execution_id AND status = 'failed');
-    SELECT RAISE(ABORT, 'publication receipt message mismatch')
-    WHERE NEW.message_id != (
-        SELECT expected_message_id FROM publication_intents
-        WHERE execution_id = NEW.execution_id AND exact_target = NEW.exact_target
-    );
-    SELECT RAISE(ABORT, 'publication receipt requires publishing obligation')
-    WHERE NOT EXISTS (
-        SELECT 1 FROM obligations
-        WHERE execution_id = NEW.execution_id AND exact_target = NEW.exact_target AND state = 'publishing'
-    );
-END"""
-            ),
-            "publication_receipt_is_frozen": (
-                """
-BEFORE UPDATE ON publication_receipts
-BEGIN
-    SELECT RAISE(ABORT, 'publication receipt is frozen');
-END"""
-            ),
-            "publication_receipt_delete_frozen": (
-                """
-BEFORE DELETE ON publication_receipts
-BEGIN
-    SELECT RAISE(ABORT, 'publication receipt is frozen');
-END"""
-            ),
-        }

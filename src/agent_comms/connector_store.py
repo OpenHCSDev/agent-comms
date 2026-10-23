@@ -13,7 +13,7 @@ from typing import ClassVar, Literal, Self, get_args
 from urllib.parse import urlencode
 
 from .field_codec import FieldCodec
-from .locked_store import DurableFile, LockedStore
+from .maintenance_barrier import CarriedDocument
 
 ACCESS_SECONDS = 3600
 CODE_SECONDS = 300
@@ -181,7 +181,7 @@ class ConnectorGrants:
 
 
 @dataclass(frozen=True, slots=True)
-class ConnectorStore(DurableFile, LockedStore[ConnectorGrants]):
+class ConnectorStore(CarriedDocument[ConnectorGrants]):
     filename: ClassVar[str] = "grants.json"
 
     @classmethod

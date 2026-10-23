@@ -14,10 +14,10 @@ from typing import Annotated, Callable, ClassVar
 
 from .agent_backend import RuntimeLocation
 from .bus_publication import CommittedDelivery
-from .coordinated_runtime_schema import assert_native_runtime_schema
+from agent_comms.native_runtime_input import NativeRuntimeTable
 from .coordination_database import CoordinationStore
 from .coordination_errors import CoordinationReadUnavailable, StaleRevision, TranscriptChanged
-from .coordination_response import _assert_response_schema
+from .coordination_response import ResponseTable
 from .declared_family import DeclaredFamily
 from .errors import RelationViolationError
 from .external_transcript import ExternalTranscript
@@ -399,8 +399,8 @@ class TranscriptRead:
 
     @classmethod
     def capture(cls, db):
-        assert_native_runtime_schema(db)
-        _assert_response_schema(db)
+        NativeRuntimeTable.require_installed(db)
+        ResponseTable.require_installed(db)
         return db
 
     @classmethod

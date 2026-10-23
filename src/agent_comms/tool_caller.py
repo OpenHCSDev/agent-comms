@@ -6,15 +6,18 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Annotated, NoReturn
 
 from .cli_result import ThreadToolCatalogResult, ToolCatalogResult
+from .errors import ToolRefusedError
 from .field_codec import WireForm
 from .launch_root import LaunchRoot
 from .launch_runtime import CallingThreadUnavailable
 from .presentation import MessageNotification, ThreadRecord
+from .thread_identity import CommanderForkIdentity, ThreadIncarnation
 from .tool_result import ToolResult
 
 if TYPE_CHECKING:
     from .comms import Comms
     from .messages import Message
+    from .threads import Thread
     from .tools import ToolRequest
 
 
@@ -53,6 +56,16 @@ class ToolCaller(ABC):
     def subject(self, named: str) -> str:
         return named or self.own_thread()
 
+    def commanding(self, comms: Comms, commander: str) -> None:
+        """An ordinary caller needs no commander-child registration."""
+        return None
+
+    def retire(self, comms: Comms) -> None:
+        raise ToolRefusedError('Only a commander fork can retire through this verb.')
+
+    @abstractmethod
+    def as_thread(self, commander: str) -> ThreadCaller: ...
+
     @abstractmethod
     def may_reconfigure(self, comms: Comms, name: str) -> bool: ...
 
@@ -67,6 +80,9 @@ class ToolCaller(ABC):
 
 @dataclass(frozen=True)
 class NoThreadCaller(ToolCaller):
+    def as_thread(self, commander: str) -> ThreadCaller:
+        return ThreadCaller(commander)
+
     def invoke(self, request: ToolRequest, comms: Comms) -> ToolResult:
         return request.apply_without_thread(comms, self)
 
@@ -102,6 +118,15 @@ class NoThreadCaller(ToolCaller):
 class ThreadCaller(ToolCaller):
     name: str
 
+    def as_thread(self, commander: str) -> ThreadCaller:
+        return self
+
+    def commander(self, comms: Comms) -> Thread:
+        return comms.registry.require(self.name)
+
+    def identity(self, comms: Comms) -> ThreadIncarnation:
+        return comms.registry.require(self.name).incarnation
+
     def invoke(self, request: ToolRequest[ThreadCaller], comms: Comms) -> ToolResult:
         return request.apply(comms, self)
 
@@ -134,3 +159,23 @@ class ThreadCaller(ToolCaller):
 
     def sent(self, comms: Comms, message: Message) -> None:
         """An agent's message is only the bus record."""
+
+
+@dataclass(frozen=True)
+class CommanderForkCaller(ThreadCaller):
+    """Commander verbs use a registered child without copying registry procedures."""
+
+    def commanding(self, comms: Comms, commander: str) -> None:
+        comms.registry.register_commander_child(self.name, commander, comms.goals)
+
+    def commander(self, comms: Comms) -> Thread:
+        fork = comms.registry.require(self.name)
+        parent, = fork.parent.names()
+        return comms.registry.require(parent)
+
+    def identity(self, comms: Comms) -> ThreadIncarnation:
+        fork = comms.registry.require(self.name)
+        return CommanderForkIdentity(fork.name, fork.created_at, self.commander(comms).incarnation)
+
+    def retire(self, comms: Comms) -> None:
+        comms.registry.unregister(self.name)

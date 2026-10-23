@@ -1,160 +1,46 @@
-"""One verdict family, a real Todo and the external gh executable boundary."""
-import os
-import time
-from dataclasses import dataclass, fields, replace
-from datetime import UTC, datetime
-from pathlib import Path
+"""A head verdict goes only on the pull request's current head; a moved head posts nothing."""
+
+import subprocess
 
 import pytest
 
-from test_holder_standing_rules import held_bus
-from agent_comms.commander.judge import BackVerb, OkVerb, ShowVerb
-from agent_comms.commander_parity.github_fixture import GithubFixture, GithubFixtureRequest
-from agent_comms.commander.order import Commander, SayVerb
-from agent_comms.commander.standing import Unjudged
-from agent_comms.comms import Comms
-from agent_comms.field_codec import FieldCodec, MalformedRecord
-from agent_comms.repo import Repo
-from agent_comms.input_disposition import InputDispositions
-from agent_comms.todos import (
-    AcceptedVerdict, GithubPullRequest, HeadVerdict, OrderVerdict, PullRequestLink,
-    RecordPullRequest, StrikeReason, TodoOperation,
-)
-from agent_comms.change_report import FileLine
-from agent_comms.tools import CommsVerdictTool
-from agent_comms.turn_digests import OrderEditsRead
+from agent_comms import head_review
+from agent_comms.errors import ToolRefusedError
+from agent_comms.head_review import AcceptedHeadReview, PullRequestHead
+from agent_comms.repository_name import RepositoryName
+
+CURRENT = "c" * 40
 
 
-def stamp(at: float) -> str:
-    return datetime.fromtimestamp(at, UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
+class Gh:
+    """Stands in for gh: answers the PR read and records every status post."""
 
+    def __init__(self) -> None:
+        self.posts: list[tuple[str, ...]] = []
 
-@dataclass
-class ReviewCase:
-    comms: Comms
-    ctx: Commander
-    binaries: Path
-    row: GithubPullRequest
-    diff: str
-
-    def write(self, row: GithubPullRequest) -> None:
-        self.row = row
-        GithubFixture(self.comms.goals.todos.get("P1").repo,
-            (GithubFixtureRequest(row, ""),), self.diff).write(self.binaries)
-
-    def posts(self) -> list[list[str]]:
-        return [call for call in GithubFixture.calls(self.binaries)
-                if call[:3] == ["api", "--method", "POST"]]
+    def __call__(self, command, **_options):
+        read = command[1] == "api" and command[2].endswith("/pulls/7")
+        self.posts.extend(() if read else (tuple(command),))
+        return subprocess.CompletedProcess(command, 0, f"{CURRENT}\n" if read else "", "")
 
 
 @pytest.fixture
-def review_case(held_bus, source_repository, tmp_path, monkeypatch):
-    binaries = tmp_path / "bin"
-    monkeypatch.setenv("PATH", os.pathsep.join((str(binaries), os.environ["PATH"])))
-    held_bus.channels.create_tag("comms")
-    for name in ("lead", "worker"):
-        held_bus.channels.update_tags(name, add=frozenset({"comms"}))
-    ctx = Commander(commander="lead", root=held_bus.root, state=tmp_path / "state", repos=(),
-                    worktrees=tmp_path, scratch=tmp_path, disk=tmp_path)
-    todo = held_bus.goals.todos.get("P1")
-    held_bus.goals.todos.apply(todo.id, RecordPullRequest(todo.revision, todo.creator_identity,
-        PullRequestLink(todo.repo, source_repository.number), todo.held().generation))
-    checkout = Path(todo.order.checked().check.directory)
-    head = Repo.git(checkout, "rev-parse", "feature").strip()
-    diff = Repo.git(checkout, "diff", f"main...{head}")
-    now = time.time()
-    row = GithubPullRequest(number=source_repository.number, branch="feature", head=head,
-        updated=stamp(now), base="main", created=stamp(now - 3600), head_time=stamp(now - 1200),
-        ready_events=(stamp(now - 700),), closed=False, isDraft=False, mergeStateStatus="CLEAN",
-        checks="SUCCESS", queued=False, merge=None, merged=None)
-    case = ReviewCase(held_bus, ctx, binaries, row, diff)
-    case.write(row)
-    return case
+def gh(monkeypatch) -> Gh:
+    stub = Gh()
+    monkeypatch.setattr(head_review.subprocess, "run", stub)
+    return stub
 
 
-def test_head_verdict_family_records_status_and_new_push_needs_new_verdict(review_case):
-    case = review_case
-    violation, = Unjudged.violations(case.comms, "lead")
-    assert violation.began() == datetime.strptime(case.row.ready_events[-1], "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=UTC).timestamp()
-    assert violation.refusal(case.comms, ())
-    # The same Todo and immutable head are judged through both declared members.
-    for index, verdict_type in enumerate(HeadVerdict.members_with(HeadVerdict), 1):
-        todo = case.comms.goals.todos.get("P1")
-        parameters = dict(expected_revision=todo.revision, actor=todo.creator_identity,
-            previous=todo.held(), quote="Repair the existing owner", head=case.row.head,
-            reason=StrikeReason("The required fact is duplicated in this code instead of derived from its declaration"),
-            evidence=(FileLine("owner.py", 2),))
-        operation = verdict_type(**{field.name: parameters[field.name]
-                                   for field in fields(verdict_type) if field.name in parameters})
-        result = case.ctx.call(CommsVerdictTool(problem="P1", operation=operation)).todo
-        assert result.head_verdict(case.row.head) == operation
-        assert Unjudged.violations(case.comms, "lead") == ()
-        posts = case.posts()
-        assert len(posts) == index
-        assert posts[-1][3].endswith("/statuses/" + case.row.head)
-        assert "state=" + verdict_type.state in posts[-1]
-        assert "context=" + HeadVerdict.context in posts[-1]
-        assert result.strike_count == todo.strike_count + len(operation.implied_strikes())
-        assert all(read.read() == () for read in OrderEditsRead.for_commander(case.comms, "lead"))
-    checkout = Path(result.order.checked().check.directory)
-    tree = Repo.git(checkout, "rev-parse", f"{case.row.head}^{{tree}}").strip()
-    next_head = Repo.git(checkout, "commit-tree", tree, "-p", case.row.head, "-m", "New review head").strip()
-    Repo.git(checkout, "push", "origin", f"{next_head}:refs/pull/{case.row.number}/head")
-    case.write(replace(case.row, head=next_head, head_time=stamp(time.time())))
-    new, = Unjudged.violations(case.comms, "lead")
-    assert new.request.head == next_head
-    assert new.refusal(case.comms, ()) == ()
-    assert result.head_verdict(operation.head) == operation
+def test_a_moved_head_is_refused_and_posts_nothing(gh: Gh) -> None:
+    with pytest.raises(ToolRefusedError, match="moved"):
+        PullRequestHead(RepositoryName.from_wire("org/repo"), 7, "a" * 9).current()
+    assert gh.posts == []
 
 
-def test_overdue_head_refuses_say_but_not_judgment(review_case):
-    case = review_case
-    with pytest.raises(SystemExit, match=f"PR #{case.row.number}.*head {case.row.head}"):
-        SayVerb(units="worker", body_file="unused").apply(case.ctx)
-    verb = OkVerb(problem="P1", why="The declared parent now owns the shared behavior",
-                  serves="Repair the existing owner", lines=("+class Member(Parent):",))
-    verb.apply(case.ctx)
-    assert Unjudged.violations(case.comms, "lead") == ()
-    assert "state=success" in case.posts()[-1]
-
-
-def test_back_posts_failure_roast_and_strike_without_replaying_unknown(review_case, capsys):
-    case = review_case
-    before = case.comms.goals.todos.get("P1")
-    inputs = InputDispositions(case.comms.root)
-    unresolved = inputs.lookup("unresolved-input")
-    BackVerb(problem="P1", why="The member copies behavior instead of deriving it from its parent",
-        serves="Repair the existing owner", lines=("+class Member(Parent):",),
-        roast="This is stupid because Member copies the shared behavior that Parent already owns and should supply.",
-        fix="Delete the member copy and inherit shared behavior from Parent.",
-        pattern="IMPL-12", fact="the owner of the shared behavior", at="owner.py:4",
-        derive="delete-copy", by="owner.py:2").apply(case.ctx)
-    saved = case.comms.goals.todos.get("P1")
-    assert "state=failure" in case.posts()[-1]
-    assert saved.head_verdict(case.row.head).head == case.row.head
-    assert saved.strike_count == before.strike_count + 1
-    assert inputs.lookup("unresolved-input") == unresolved
-    assert Unjudged.violations(case.comms, "lead") == ()
-    assert "roast sent to" in capsys.readouterr().out
-    with case.comms.bus.log.opened_wire_snapshot() as source:
-        bodies = tuple(message.body for message in source.newest_messages(1024 * 1024))
-    assert any("The slop:" in body and "What replaces it:" in body for body in bodies)
-    assert any("On the record:" in body and "strike 1 on P1" in body for body in bodies)
-
-
-def test_show_names_linked_head_and_diff_quotes_cannot_judge_other_code(review_case, capsys):
-    case = review_case
-    ShowVerb().run(case.ctx)
-    assert f"PR #{case.row.number} head {case.row.head}: unreviewed" in capsys.readouterr().out
-    with pytest.raises(SystemExit, match="every --line"):
-        OkVerb(problem="P1", why="This claim quotes code outside the linked request",
-               serves="Repair the existing owner", lines=("not in this diff",)).run(case.ctx)
-    assert case.comms.goals.todos.get("P1").verdicts == ()
-    assert case.posts() == []
-    todo = case.comms.goals.todos.get("P1")
-    historical = AcceptedVerdict(todo.revision, todo.creator_identity, todo.held(),
-                                "old-edit", quote="Repair the existing owner")
-    encoded = FieldCodec.encode(historical)
-    assert FieldCodec.decode(OrderVerdict, encoded) == historical
-    with pytest.raises(MalformedRecord):
-        FieldCodec.decode(TodoOperation, encoded)
+def test_the_current_head_is_posted_in_full(gh: Gh) -> None:
+    repo = RepositoryName.from_wire("org/repo")
+    head = PullRequestHead(repo, 7, CURRENT[:9]).current()
+    AcceptedHeadReview().post(repo, head, "claude-ai", "#7")
+    (post,) = gh.posts
+    assert f"repos/org/repo/statuses/{CURRENT}" in post
+    assert "state=success" in post

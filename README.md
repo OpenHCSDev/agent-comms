@@ -99,10 +99,18 @@ Skill edits belong in [OpenHCSDev/refactor-audit](https://github.com/OpenHCSDev/
 then the submodule pin is advanced here. The development install above also
 uses that same checkout for the shared audit measures.
 
-Tests use the native package of the checkout's own pin, `stack/.pi-native-<pin>/`,
-never the installed one. When it is missing, the pytest session runs
-`stack/bin/prepare-pi-native` before any worker starts, so a changed pin rebuilds
-on the next run.
+Tests that launch native Pi must run inside the checkout's built runtime, not
+against an editable source package. With uv on PATH and Node/npm available, run:
+
+```bash
+python -m agent_comms.installer.test_runtime tests/test_native_input_bus_path.py
+```
+
+The installer resolves and builds the checkout in a disposable private home,
+installs its dev dependencies, and runs pytest against that runtime's packages.
+It does not publish the runtime or change the live installation. Pass `--home DIR`
+to retain a private test build for inspection. The pytest basetemp is disposable,
+named for the checkout's HEAD, and the test run is limited to 300 seconds.
 
 Pytest uses separate `pytest-xdist` worker processes (automatic CPU detection,
 capped at eight) with work stealing and combined coverage. Use `pytest -n 0`

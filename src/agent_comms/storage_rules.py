@@ -5,37 +5,40 @@ import getopt
 import json
 import math
 import re
-import shlex
 import shutil
 import subprocess
 import time
 from abc import abstractmethod
-from collections.abc import Iterator, Sequence
+from collections.abc import Iterable, Iterator, Sequence
 from dataclasses import dataclass, replace
 from enum import StrEnum
 from functools import cached_property
-from itertools import groupby
 from pathlib import Path
 from typing import TYPE_CHECKING, Annotated, ClassVar, Self
 
 from agent_comms.field_codec import FieldCodec, PathText
+from agent_comms.locked_store import DurableFile
 from agent_comms.native_tool_call import SelectedToolDenied
+from agent_comms.problem_number import ProblemNumber
 from agent_comms.repo import Repo
 from agent_comms.repository_name import RepositoryName
-from agent_comms.standing_rules import UndatedStandingRule
-from agent_comms.work_branches import WorkBranches
+from agent_comms.standing_rules import StandingRule, UndatedStandingRule
 from agent_comms.storage_room import (
     AllocationRoomWork,
     BuildRoomWork,
     RoomAllocation,
     TestGateRoomWork,
 )
+from agent_comms.work_branches import WorkBranches
+from agent_comms_hooks.shell import ShellCommand
 
 if TYPE_CHECKING:
     from agent_comms.comms import Comms
     from agent_comms.registration import Registration
+    from agent_comms.thread_identity import ThreadIncarnation
     from agent_comms.threads import Thread
     from agent_comms.todos import Todo, TodoStore
+    from agent_comms.ui_model.unit_state import UnitState
 
 StoragePath = Annotated[Path, PathText]
 
@@ -70,7 +73,8 @@ class MemoryUse:
 
 
 @dataclass(frozen=True)
-class StorageRule(RoomAllocation):
+class StorageRule(RoomAllocation, DurableFile):
+    filename: ClassVar[str] = "storage.json"
     floor_gib: float = 5.0  # under this nothing that allocates may run
     cleanup_gib: float = 30.0  # under this a cleanup owner is due; it does not stop builds
     memory_gib: float = 3.0  # available memory under this makes a cleanup owner due
@@ -93,7 +97,7 @@ class StorageRule(RoomAllocation):
 
     @classmethod
     def load(cls, root: Path):
-        path = root / 'storage.json'
+        path = cls.path_in(root)
         return FieldCodec.decode(cls, json.loads(path.read_text()) if path.exists() else {})
 
     def initial_roots(self, name):
@@ -140,24 +144,26 @@ class StorageRule(RoomAllocation):
                     found.append(work)
         return tuple(found)
 
-    def owns_checkout(self, owner: Thread, path: Path) -> bool:
-        """A checkout of another repository is named for the repository its origin declares."""
+    def owns_checkout(self, owner: Thread, path: Path, source: Path) -> bool:
+        """A checkout of another repository is named for the repository its origin declares.
+        `source` is a checkout of the repository `path` holds: `path` itself once it exists, or
+        the checkout a new worktree is added from, so a destination is judged before it exists."""
         if path == owner.project_path:
             return True
         problem, _, repository = path.name.removeprefix(f'{owner.name}--').partition('--')
-        if not re.fullmatch(r'P[1-9][0-9]*', problem):
+        if not ProblemNumber.accepts(problem):
             return False
         if not repository:
             return path == self.order_checkout(owner.name, problem)
-        return ((path / '.git').exists()
-                and path == self.repository_checkout(owner.name, problem, Repo.of(path).github))
+        return ((source / '.git').exists()
+                and path == self.repository_checkout(owner.name, problem, Repo.of(source).github))
 
     def checkout_paths(self, owner: Thread) -> tuple[Path, ...]:
         """Declared home and order locations; Git metadata supplies their branches."""
         ordered = self.order_checkout(owner.name, 'P*')
         return tuple(path for path in (owner.project_path,
                                        *sorted(ordered.parent.glob(ordered.name)))
-                     if path.is_dir() and self.owns_checkout(owner, path))
+                     if path.is_dir() and self.owns_checkout(owner, path, path))
 
     def checkouts_of(self, thread: Thread) -> tuple[Path, ...]:
         """Read each repository now; directories and names do not register ownership."""
@@ -176,7 +182,7 @@ class StorageRule(RoomAllocation):
                             for field in output.split('\0') if field.startswith('worktree '))
             listed.update(entries)
             checkouts.update(path for path in entries
-                             if path.is_dir() and self.owns_checkout(thread, path))
+                             if path.is_dir() and self.owns_checkout(thread, path, path))
         return (home, *sorted(checkouts - {home}))
 
     def deny(self, reason):
@@ -246,7 +252,9 @@ class StorageRule(RoomAllocation):
         self.require_floor()
         self.require_quota(thread, *proposed)
 
-    def require_path(self, thread: Thread, path):
+    def require_path(self, thread: Thread, path: Path, source: Path):
+        """`source` is a checkout of the repository `path` holds when `path` is a checkout itself
+        (see owns_checkout); a path inside a checkout is judged by that checkout."""
         if '.artifacts' in path.parts:
             self.deny('writes inside .artifacts are forbidden')
         if path.is_relative_to(self.scratch_base) and not path.is_relative_to(thread.storage_roots.scratch):
@@ -254,7 +262,8 @@ class StorageRule(RoomAllocation):
         base = self.checkout_base.resolve()
         if path.is_relative_to(base) and path != base:
             checkout = base / path.relative_to(base).parts[0]
-            if not self.owns_checkout(thread, checkout):
+            judged_by = source if checkout == path else checkout
+            if not self.owns_checkout(thread, checkout, judged_by):
                 self.deny(f'{checkout} is not a checkout of {thread.name}')
 
     def render(self, roots):
@@ -336,14 +345,22 @@ class StorageViolation(UndatedStandingRule, declared_name=None):
         return __class__
 
     @classmethod
-    def violations(cls, comms: Comms, commander: str) -> tuple[Self, ...]:
-        todos = cls.todos(comms, commander)
-        units = sorted({todo.holder for todo in todos if todo.state.open and todo.holder})
+    def scan_observed(cls, comms: Comms, commander: str,
+                      observed: Sequence[UnitState]) -> tuple[Self, ...]:
+        held = StandingRule.holders(comms, commander)
+        return cls.for_units(comms, (unit for state in observed
+                                    for unit in state.readable_units() if unit in held))
+
+    @classmethod
+    def for_units(cls, comms: Comms, units: Iterable[ThreadIncarnation]) -> tuple[Self, ...]:
         registry = comms.registry
         members = cls.members_with(cls)
         found = []
-        for unit in units:
-            storage = UnitStorage.read(registry.storage_rule, registry.require(unit))
+        for unit in sorted(set(units), key=lambda unit: unit.name):
+            thread = registry.require(unit.name)
+            if thread.incarnation != unit:
+                raise ValueError("Observed unit incarnation changed")
+            storage = UnitStorage.read(registry.storage_rule, thread)
             found.extend(member(storage) for member in members if member.violated(storage))
         return tuple(found)
 
@@ -423,7 +440,7 @@ class WriteStorageEffect(StorageEffect):
     path: Path
 
     def check(self, projection: StorageProjection):
-        projection.rule.require_path(projection.thread, self.path)
+        projection.rule.require_path(projection.thread, self.path, self.path)
 
 
 @dataclass(frozen=True)
@@ -453,12 +470,15 @@ class TestGateStorageEffect(AllocateStorageEffect):
 
 @dataclass(frozen=True)
 class CheckoutStorageEffect(AllocateStorageEffect):
+    """A new worktree at `path`, added from the repository checked out at `source`."""
+
     path: Path
+    source: Path
 
     def check(self, projection: StorageProjection):
         rule, thread = projection.rule, projection.thread
-        rule.require_path(thread, self.path)
-        if not rule.owns_checkout(thread, self.path):
+        rule.require_path(thread, self.path, self.source)
+        if not rule.owns_checkout(thread, self.path, self.source):
             destination = rule.order_checkout(thread.name, "P<number>")
             rule.deny(f'checkout destination must be {destination}')
         super().check(projection)
@@ -483,32 +503,20 @@ def physical_path(value, cwd):
 
 
 @dataclass(frozen=True)
-class ShellInvocation:
+class ShellInvocation(ShellCommand):
     """One decoded shell command and the directory its preceding commands select."""
 
-    words: tuple[str, ...]
     cwd: Path
-
-    @property
-    def program(self) -> str:
-        return Path(self.words[0]).name
-
-    @property
-    def args(self) -> list[str]:
-        return list(self.words[1:])
 
     @classmethod
     def parse(cls, command: str, cwd: Path) -> Iterator[ShellInvocation]:
-        for words in shell_commands(command):
-            while words and '=' in words[0]:
-                words.pop(0)
-            if not words:
-                continue
-            if Path(words[0]).name == 'cd' and len(words) > 1:
+        for decoded in ShellCommand.split(command):
+            words = decoded.words
+            if decoded.program == 'cd' and len(words) > 1:
                 target = words[2] if words[1] == '--' and len(words) > 2 else words[1]
                 cwd = physical_path(target, cwd)
                 continue
-            yield cls(tuple(words), cwd)
+            yield cls(words, cwd)
 
 
 class GitWriteOperation(StrEnum):
@@ -525,29 +533,6 @@ class GitInvocation:
     @property
     def writes_source(self) -> bool:
         return bool(self.args) and self.args[0] in GitWriteOperation
-
-
-def shell_commands(command):
-    """Shell words, not matches in quoted code or here-document bodies."""
-    body = []
-    lines = iter(command.splitlines(keepends=True))
-    for line in lines:
-        body.append(line)
-        lex = shlex.shlex(line, posix=False, punctuation_chars='<>')
-        lex.whitespace_split = True
-        words = list(lex)
-        for index, word in enumerate(words[:-1]):
-            if word in ('<<', '<<-'):
-                delimiter = shlex.split(words[index + 1])[0]
-                for line in lines:
-                    if line.rstrip('\r\n').lstrip('\t') == delimiter:
-                        break
-    lex = shlex.shlex(''.join(body), posix=True, punctuation_chars=';&|><()\n')
-    lex.whitespace = ' \t\r'
-    lex.whitespace_split = True
-    for separator, words in groupby(lex, key=lambda word: bool(word) and set(word) <= set(';&|()\n')):
-        if not separator:
-            yield list(words)
 
 
 class ForbidsCommands(ShellProgram):
@@ -608,7 +593,7 @@ class AddsCheckout(ShellProgram):
             tail = tail[2:] if tail[0] in ('-b', '-B', '--reason') else tail[1:]
         if not tail:
             raise StorageDenied('StorageRule: worktree destination is missing')
-        return (CheckoutStorageEffect(physical_path(tail[0], cwd)),)
+        return (CheckoutStorageEffect(physical_path(tail[0], cwd), cwd),)
 
 
 class RemovesCheckout(ShellProgram):

@@ -12,7 +12,7 @@ from .context_reading import ContextReading, UnmeasuredContext
 from .declared_family import DeclaredFamily
 from .errors import RelationViolationError
 from .field_codec import FieldCodec, SingleFieldValue, WireName, WireRequired
-from .locked_store import DurableFile, LockedStore
+from .maintenance_barrier import CarriedDocument
 from .pi_counts import PiCount, UnreportedCount
 from .thread_model import ThreadModel, UndeclaredModel
 from .thread_owned_state import ThreadOwnedState
@@ -80,7 +80,7 @@ class RuntimeInfoDocument(SingleFieldValue):
 
 
 @dataclass(frozen=True, slots=True)
-class RuntimeInfoStore(DurableFile, ThreadOwnedState, LockedStore[RuntimeInfoDocument]):
+class RuntimeInfoStore(ThreadOwnedState, CarriedDocument[RuntimeInfoDocument]):
     """Latest observations, independently committed from the registry/log."""
 
     filename: ClassVar[str] = "runtime_info.json"

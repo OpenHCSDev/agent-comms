@@ -13,7 +13,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import ClassVar
 
-from agent_comms.commander.standing import PlanIdle
+from agent_comms.commander.standing import PlanIdle, PlanStalled
 
 from .child_process import CountPrinted, NoIntegerPrinted
 from .declared_family import DeclaredFamily
@@ -304,6 +304,82 @@ class UnansweredAskFailure(PostmortemFailure):
     )
 
 
+class HeldPlanFailure(PostmortemFailure):
+    number = 23
+    title = "It held plan work for hours while nothing reached main"
+    evidence = (
+        "October 21: every virtual bus step had a holder and none merged for 22 hours, because "
+        "the steps only land together and nobody owned integrating them; Tristan caught it "
+        "(claude-ai #comms 2dde16189509)."
+    )
+
+
+class KeptDeadCopyFailure(PostmortemFailure):
+    number = 24
+    title = "It kept a dead copy and called it a legacy case"
+    evidence = (
+        "October 21: claude-ai kept ten finished carry steps and a schema step as legacy cases "
+        "although the one bus had run them all; their dry runs broke installs and tests until "
+        "Tristan asked what legacy case there could be with zero users (#2578)."
+    )
+
+
+class NotedSlopFailure(PostmortemFailure):
+    number = 25
+    title = "It noted slop for later instead of deleting it"
+    evidence = (
+        "October 21: three-minute commander CLI calls sat on claude-ai's list as something to "
+        "profile later; Tristan called it mega slop, and the profile showed the answer gate "
+        "re-reading every directive (#2579)."
+    )
+
+
+class RestatedOwnerFailure(PostmortemFailure):
+    number = 26
+    title = "It restated an owner's rule in a second file"
+    evidence = (
+        "October 21: claude-ai added 'name slop as slop' to its own skill while the commander "
+        "skill and indictment already owned it, and kept its habits in a file only it read."
+    )
+
+
+class GuessedOrderFailure(PostmortemFailure):
+    number = 27
+    title = "It gave an order from a guess about code it had not read"
+    evidence = (
+        "October 21: claude-ai told the commander one chokehold id answers the burst; the gate "
+        "it had not read still required every line, and the answer was refused (#2573)."
+    )
+
+
+class WorkaroundAsFixFailure(PostmortemFailure):
+    number = 28
+    title = "It called a workaround a fix"
+    evidence = (
+        "October 21: claude-ai reported a workaround for a stalled root fix as the fix while "
+        "the root fix had not landed and nothing showed its progress."
+    )
+
+
+class SoftenedSlopFailure(PostmortemFailure):
+    number = 29
+    title = "It softened slop into neutral words"
+    evidence = (
+        "October 21: claude-ai wrote legacy, kept for safety and paused where the true word was "
+        "slop; Tristan: handwritten is slop, use the word."
+    )
+
+
+class PaddedWithChecksFailure(PostmortemFailure):
+    number = 30
+    title = "It waited on checks that test nothing it changed"
+    evidence = (
+        "October 21: claude-ai held diagnosed fixes about ten minutes per push for smoke runs "
+        "that never ran the changed tests, and the tests it had broken stayed broken on main "
+        "anyway (#2572)."
+    )
+
+
 @dataclass(frozen=True)
 class CommanderRule(PatternSource):
     lead: str
@@ -395,6 +471,15 @@ class PlanIdlePattern(BehaviourPattern):
     )
     checks = (RuleCheck(PlanIdle),)
     sources = (ProblemFix("P83", "34ba68c81"),)
+
+
+class PlanStalledPattern(BehaviourPattern):
+    signature = (
+        "A plan phase whose earlier phases are all done is held by a unit, and main still lacks"
+        " it two hours after the phase was first ordered."
+    )
+    checks = (RuleCheck(PlanStalled),)
+    sources = (HeldPlanFailure(),)
 
 
 class BoardDisagreesPattern(BehaviourPattern):

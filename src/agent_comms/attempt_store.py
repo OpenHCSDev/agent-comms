@@ -18,15 +18,13 @@ from agent_comms.coordination_results import AlreadyApplied, Applied
 from agent_comms.coordination_session import CoordinationSession, NativeBoundary
 from agent_comms.coordination_snapshot import RecoverySnapshot
 from agent_comms.coordination_tables.assignments import WakeAssignment
-from agent_comms.coordination_tables.attempts import AttemptRecord, ReplayAssessments, ReplayFact
+from agent_comms.coordination_tables.attempts import AttemptRecord, ReplayFact
 from agent_comms.coordination_tables.recovery import (
     ACPClientConnectivity,
     ConnectivityFacet,
     OwnerConnectivity,
     RecoveryAudit,
 )
-from agent_comms.coordination_tables.responses import ResponseObligation
-from agent_comms.obligation_states import PendingResponse
 from agent_comms.owner_fence import OwnerFence
 from agent_comms.participant_store import ParticipantStore
 from agent_comms.turn_failure import TurnFailure
@@ -59,7 +57,7 @@ class AttemptStore:
         attempt = snapshot.require_current_attempt()
         if (
             attempt.authority != fence.authority
-            or self.participants.get(attempt.owner_lookup).participant_generation
+            or self.participants.get(attempt.owner_lookup).owner_identity.generation
             != attempt.owner_generation
         ):
             raise StaleFence("attempt fence is not current")
@@ -87,13 +85,7 @@ class AttemptStore:
         """Revoke prior replay proof and reengage coupled response/claim state atomically."""
         db, execution = self.session._connection, snapshot.execution
         for obligation in snapshot.obligations:
-            if obligation.lifecycle.deferred:
-                ResponseObligation.update(
-                    db, where="execution_id=? AND exact_target=?",
-                    parameters=(request.execution_id, obligation.exact_target),
-                    lifecycle=PendingResponse(), revision=obligation.revision + 1,
-                    reason_code=NoReasonCode(), updated_at_ms=self.session.now(obligation.updated_at_ms),
-                )
+            obligation.lifecycle.resume_response(self.session, obligation, request.execution_id)
         if execution.lifecycle.retry:
             for assignment in snapshot.assignments:
                 WakeAssignment.update(
@@ -150,7 +142,7 @@ class AttemptStore:
     ) -> Applied[StartResult]:
         if any(type(value) is not bool for value in (backend_done, process_dead, progress)):
             raise ValueError("attempt finality and progress must be booleans")
-        if phase.terminal:
+        if phase.items_with(TerminalAttempt, phase):
             raise IdentityConflict("terminal phases require atomic settlement")
         with self.session.writing():
             snapshot, attempt = self.require_fence(fence)
@@ -187,18 +179,13 @@ class AttemptStore:
             if snapshot.pointer_revision != expected_pointer_revision:
                 raise StaleRevision("pointer revision changed")
             before = snapshot.replay
-            if (before.revision if before else None) != expected_replay_revision:
-                raise StaleRevision("replay assessment revision changed")
-            after = ReplayAssessments(
-                fence.execution_id,
-                facts,
-                replay_safe,
-                side_effects_possible,
-                1 if before is None else before.revision + 1,
-            )
-            if not after.record(self.session._connection, snapshot.replay):
+            before.require_revision(expected_replay_revision)
+            if not before.observe(
+                self.session._connection, fence.execution_id, facts=facts,
+                replay_safe=replay_safe, side_effects_possible=side_effects_possible,
+            ):
                 return AlreadyApplied(snapshot)
-            return Applied(self.snapshots.get(after.execution_id))
+            return Applied(self.snapshots.get(fence.execution_id))
 
     def fail_unknown(
         self,

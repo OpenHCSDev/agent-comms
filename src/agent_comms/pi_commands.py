@@ -2,23 +2,27 @@
 
 from __future__ import annotations
 
-from .native_failures import NativePiUnavailable
-
 import asyncio
 from abc import abstractmethod
-from collections.abc import Iterable, Sequence
+from collections.abc import Iterable, Mapping, Sequence
 from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, ClassVar, Literal, Annotated
+from typing import TYPE_CHECKING, Annotated, Any, ClassVar, Literal
 from uuid import uuid4
-
 
 from . import agent_events as events
 from . import turn_phase as phases
 from .declared_family import DeclaredFamily, UnknownFamilyMember
-from .field_codec import FieldCodec, WireAbsentNone, WireName, WireOmitDefault
+from .field_codec import (
+    FieldCodec,
+    MalformedRecord,
+    WireAbsentNone,
+    WireName,
+    WireOmitDefault,
+)
 from .image_inputs import ImageInput
+from .native_failures import NativePiUnavailable
 from .native_package import VerifiedNativePackage
 from .native_session_reopen import NativeSessionIdentity
 from .native_tool_call import OwnerToolConnection
@@ -67,7 +71,6 @@ class MutatesSession:
 @dataclass(frozen=True, kw_only=True)
 class PiCommand(DeclaredFamily):
     response_payload: ClassVar[type[PiResponseData]] = EmptyData
-    strict_response: ClassVar[bool] = False
     # The answering child appends to its own session file (a retained child stays current).
     writes_session: ClassVar[bool] = False
     id: Annotated[PiRequestId, WireAbsentNone()] = field(
@@ -122,17 +125,38 @@ class PiCommand(DeclaredFamily):
         return FieldCodec.decode(cls, {"kind": kind, **data})
 
     @classmethod
-    def response_owner(cls, name: str) -> type[PiCommand]:
+    def response_owner(cls, name: object) -> type[PiCommand]:
         try:
-            return cls.member_named(name)
+            return cls.member_named(FieldCodec.decode(str, name))
         except UnknownFamilyMember:
             return UnknownCommand
+
+    @classmethod
+    def decode_response_data(cls, value: object) -> object:
+        return cls.response_payload.decode_external(value, {})
+
+    @staticmethod
+    def validate_response(record: Mapping[str, object], response: type[Response]) -> None:
+        pass
 
     @classmethod
     def on_response(
         cls, response: Response, session: TurnSession
     ) -> Iterable[events.AgentEvent]:
         return ()
+
+
+class ExactResponse:
+    """A selected operation's response contains exactly its declared success or error envelope."""
+
+    @staticmethod
+    def validate_response(record: Mapping[str, object], response: type[Response]) -> None:
+        outcome = response.outcome(record)
+        expected = {key for _, key in FieldCodec.record_fields(response)} | {response.wire_tag}
+        expected.difference_update(outcome.excluded_fields())
+        if set(record) != expected:
+            raise MalformedRecord("Unexpected selected response envelope")
+        outcome.validate_payload(record)
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -396,9 +420,8 @@ class NewSession(MutatesSession, PiCommand):
 
 
 @dataclass(frozen=True, kw_only=True)
-class SwitchSession(MutatesSession, NativeQuery):
+class SwitchSession(ExactResponse, MutatesSession, NativeQuery):
     response_payload = SessionSwitchData
-    strict_response = True
     session_path: Annotated[str, WireName("sessionPath")]
 
 

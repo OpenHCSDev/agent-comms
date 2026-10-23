@@ -158,11 +158,8 @@ class ItemKey:
     item_id: str
 
 
-class KeyedItem:
+class KeyedItem(ItemKey):
     """An update about one item, named by the turn that holds it and its producer's item id."""
-
-    turn_id: str
-    item_id: str
 
     @property
     def key(self) -> ItemKey:
@@ -282,8 +279,6 @@ class TurnEnded(StatusUpdate):
 class ActiveItem(KeyedItem, StatusUpdate):
     """An item the CLI started producing: what it is doing now."""
 
-    turn_id: str
-    item_id: str
     phase: TurnPhase
 
     def publish(self, output: ThreadOutput) -> None:
@@ -297,8 +292,6 @@ class ActiveItem(KeyedItem, StatusUpdate):
 class FinishedItem(KeyedItem, RuntimeUpdate):
     """One CLI item's complete presentation, identified by its producer."""
 
-    turn_id: str
-    item_id: str
     events: tuple[TranscriptEvent, ...]
 
     def publish(self, output: ThreadOutput) -> None:
@@ -316,11 +309,9 @@ class FinishedItem(KeyedItem, RuntimeUpdate):
 
 
 @dataclass(frozen=True)
-class PageItem:
+class PageItem(ItemKey):
     """An item-list identity survives even when its update is invisible in the live view."""
 
-    turn_id: str
-    item_id: str
     update: RuntimeUpdate
 
 
@@ -424,8 +415,6 @@ class HistoryNotice(RuntimeUpdate):
 class DraftItem(KeyedItem, RuntimeUpdate):
     """A pending item's events, materialized only if this preview survives coalescing."""
 
-    turn_id: str
-    item_id: str
     accumulator: PresentableDraft
 
     @property
@@ -467,8 +456,6 @@ class StartedItem(DraftUpdate, ActiveItem):
 
 @dataclass(frozen=True)
 class AppendDraftItem(KeyedItem, DraftUpdate):
-    turn_id: str
-    item_id: str
     text: str
     section: int = 0
 

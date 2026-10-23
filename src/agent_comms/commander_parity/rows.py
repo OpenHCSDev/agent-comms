@@ -99,9 +99,9 @@ class StrikeLimitParityRow(ParityRow):
 
 class VerdictParityRow(ParityRow):
     number = 8
-    capability = "Verdicts on linked pull request heads"
+    capability = "Verdicts on a unit's tool calls"
     current = "`judge.py ok`, `back`; both invoke `CommsVerdictTool`"
-    native = "`HeadVerdict`: one review status, verdict and rejection Goal revision"
+    native = "`CommsVerdictTool`, `SendBackVerdict`: one retained event and Goal revision"
     phases = ()
     comparison = VerdictComparison.read
 
@@ -197,7 +197,7 @@ class StorageHygieneParityRow(ParityRow):
     number = 19
     capability = "Storage hygiene"
     current = "`StandingRule.broken` storage delivery (formerly `storage.py`)"
-    native = "`StorageViolation.violations`, `DiskLow.violations`; live `StorageRule` thresholds"
+    native = "`StorageViolation.scan_observed`, `DiskLow.violations`; live `StorageRule` thresholds"
     phases = (ControlPlanePhase,)
 
     @classmethod
@@ -292,7 +292,7 @@ class MeasuredLoadParityRow(ParityRow):
     capability = "Measured load and self-report"
     current = "`capacity.py` unit count"
     native = (
-        "`commander.capacity.Load.of` reports orders, review timers up, edits and forks; "
+        "`commander.capacity.Load.of` reports orders, review timers up and edits; "
         "self-report comparison unverified"
     )
     phases = (ControlPlanePhase,)

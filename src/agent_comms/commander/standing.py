@@ -4,54 +4,74 @@ from __future__ import annotations
 
 import time
 from collections.abc import Iterable, Sequence
+from contextlib import closing
 from dataclasses import dataclass, field
 from typing import ClassVar, Self
 
 from agent_comms.build_identity import RecordedBuildIdentity
+from agent_comms.bus_page_index import BusPageIndex
+from agent_comms.channel_targets import ThreadTarget
+from agent_comms.commander.config import CommanderConfig
+from agent_comms.commander_heartbeat import CommanderHeartbeat
 from agent_comms.comms import Comms
 from agent_comms.goal_actions import ReissuedOrderGoalAction
 from agent_comms.goals import Goal
-from agent_comms.message_reference import MessageReference
 from agent_comms.message_bus import WatchPass
-from agent_comms.standing_rules import (
-    DatedStandingRule, OrderRefusingStandingRule, StandingRule, UndatedStandingRule,
-)
-from agent_comms.storage_rules import OrderCheckoutWork
-from agent_comms.thread_identity import CoreWatcherIncarnation, ThreadIncarnation
-from agent_comms.threads import Thread
-from agent_comms.todos import PullRequest, PullRequests, Todo, UnmergedListedPullRequest
-from agent_comms.turn_digests import TurnDigestRead, TurnsSince
-from agent_comms.work_dispatch import ReusedWorkDispatch, WorkDispatch
-from agent_comms.commander.config import CommanderConfig
-from agent_comms.channel_targets import ThreadTarget
-from agent_comms.commander_heartbeat import CommanderHeartbeat
-from agent_comms.message_page import PageBounds
-from agent_comms.read_basis import NamedViewer
-from agent_comms.recorded_time import RecordedEventTime
-from agent_comms.work_branches import WorkBranches
-from agent_comms.ui_model.unit_state import UnitState
+from agent_comms.message_page import MessageReadRequest, PageBounds
+from agent_comms.message_reference import MessageReference
+from agent_comms.messages import Message
 from agent_comms.phase_evidence import PlanReading
 from agent_comms.plan_phases import PlanPhase
+from agent_comms.read_basis import NamedViewer, RepliesDisplayScope
+from agent_comms.recorded_time import RecordedEventTime
+from agent_comms.standing_rules import (
+    DatedStandingRule,
+    IndependentStandingRule,
+    OwedAnswer,
+    ReasonedStandingRule,
+    StandingRule,
+    UndatedStandingRule,
+)
+from agent_comms.storage_rules import OrderCheckoutWork
+from agent_comms.threads import Thread
+from agent_comms.todos import PullRequests, Todo
+from agent_comms.turn_digests import OrderEditCountRead, TurnDigestRead, TurnsSince
+from agent_comms.ui_model.unit_state import UnitState
+from agent_comms.wire_log import WireSnapshot
+from agent_comms.work_dispatch import ReusedWorkDispatch, WorkDispatch
 
 
 @dataclass(frozen=True)
-class InstallDue(UndatedStandingRule):
-    """Each configured main not contained in the installed build needs an install."""
+class InstallDue(IndependentStandingRule, UndatedStandingRule):
+    """A configured main not contained in the installed build needs an install once its
+    oldest uninstalled merge has stood for the settle window.
+
+    Every install stops every running unit, so merges batch into one install instead of
+    one install each. The window is read from the merges' own git times, not a schedule.
+    """
 
     why: str
+    settle: ClassVar[float] = 30 * 60
 
     @classmethod
     def violations(cls, comms: Comms, commander: str) -> tuple[Self, ...]:
         config = CommanderConfig.read_root(comms.root)
         installed = RecordedBuildIdentity.installed()
+        now = time.time()
         due: list[Self] = []
         for repo in config.repos:
             repo.git(repo.checkout, "fetch", "-q", "origin", "main")
             main = repo.git(repo.checkout, "rev-parse", "origin/main").strip()
-            if not installed.contains(main, repo.checkout):
-                recorded = installed.for_repository(repo)
+            if installed.contains(main, repo.checkout):
+                continue
+            recorded = installed.for_repository(repo)
+            merged = repo.git(repo.checkout, "log", "--first-parent", "--format=%ct",
+                              f"{recorded.commit}..{main}").split()
+            waited = now - min(map(int, merged), default=now - cls.settle)
+            if waited >= cls.settle:
                 due.append(cls(
-                    f"{repo.github.to_wire()}: main {main}, installed {recorded.commit}"))
+                    f"{repo.github.to_wire()}: main {main}, installed {recorded.commit}, "
+                    f"{len(merged)} commits, oldest {int(waited // 60)} min"))
         return tuple(due)
 
     def line(self) -> str:
@@ -59,9 +79,8 @@ class InstallDue(UndatedStandingRule):
                 "agent-comms install and posts the result to the commander")
 
 
-
 @dataclass(frozen=True)
-class RequestStalled(UndatedStandingRule):
+class RequestStalled(IndependentStandingRule, UndatedStandingRule):
     goal: Goal
 
     @classmethod
@@ -78,7 +97,41 @@ class RequestStalled(UndatedStandingRule):
 
 
 @dataclass(frozen=True)
-class PlanIdle(UndatedStandingRule):
+class AnswersTo(MessageReadRequest[tuple[Message, ...]]):
+    """The first participant's replies that answer a second participant's message, newest
+    first; the page is read newest first, so an answer is seen before what it answers."""
+
+    scope: RepliesDisplayScope
+    since: float
+    empty: ClassVar[tuple[Message, ...]] = ()
+
+    def indexed(self, index: BusPageIndex, source: WireSnapshot) -> tuple[Message, ...]:
+        replies: list[Message] = []
+        asked: set[MessageReference] = set()
+        with closing(index.recent_offsets(
+            self.since, predicate=self.scope.index_predicate, before_offset=source.boundary,
+        )) as offsets:
+            for row in self.indexed_records(source, offsets):
+                message = row.message
+                if message.sender in self.scope.first_names:
+                    replies.append(message)
+                else:
+                    asked.add(message.reference)
+        return tuple(reply for reply in replies if asked.intersection(reply.answers))
+
+
+class PlanRule(IndependentStandingRule, UndatedStandingRule, declared_name=None):
+    """A rule read from one look at the plans and the commander's orders."""
+
+    @staticmethod
+    def plan_reading(comms: Comms, commander: str) -> PlanReading:
+        return CommanderConfig.read_root(comms.root).plan_reading(
+            comms.goals.todos.history_for_commander(comms.registry.require(commander).incarnation)
+        )
+
+
+@dataclass(frozen=True)
+class PlanIdle(PlanRule):
     """A phase whose dependencies are done stalls unnoticed unless some order serves it."""
 
     phase: type[PlanPhase]
@@ -86,9 +139,7 @@ class PlanIdle(UndatedStandingRule):
 
     @classmethod
     def violations(cls, comms: Comms, commander: str) -> tuple[Self, ...]:
-        reading = CommanderConfig.read_root(comms.root).plan_reading(
-            comms.goals.todos.history_for_commander(comms.registry.require(commander).incarnation)
-        )
+        reading = cls.plan_reading(comms, commander)
         return tuple(
             cls(phase, reading)
             for phase in PlanPhase.members_with(PlanPhase)
@@ -107,7 +158,66 @@ class PlanIdle(UndatedStandingRule):
 
 
 @dataclass(frozen=True)
-class UnownedWheelSpin(UndatedStandingRule):
+class PlanStalled(PlanRule):
+    """A ready phase that a unit has held past the window while main still lacks it. Holding an
+    order is not moving the plan: something structural keeps it still (steps that only land
+    together, a blocked holder, a missing owner), and re-sending the order changes nothing."""
+
+    phase: type[PlanPhase]
+    since: float
+    window: ClassVar[int] = 2 * 60 * 60
+
+    @classmethod
+    def violations(cls, comms: Comms, commander: str) -> tuple[Self, ...]:
+        reading, now = cls.plan_reading(comms, commander), time.time()
+        return tuple(
+            cls(phase, since)
+            for phase in PlanPhase.members_with(PlanPhase)
+            if phase.ready(reading) and phase.ordered(reading)
+            for since in (phase.ordered_since(reading),)
+            if now - since >= cls.window
+        )
+
+    def line(self) -> str:
+        hours = (time.time() - self.since) / 3600
+        return (
+            f"PLAN STALLED: {self.phase.plan.declared_name} phase {self.phase.declared_name}"
+            f" held {hours:.1f}h and not on main ({self.phase.plan.document}) -> find what holds"
+            " it still and change that this wake: integrate steps that only land together,"
+            " take it over, or reassign it"
+        )
+
+
+@dataclass(frozen=True)
+class UnitAskUnanswered(OwedAnswer, UndatedStandingRule):
+    """Per-message gate entries derived from the unit frame, not another unit scan."""
+
+    unit: str
+
+    @classmethod
+    def scan_observed(cls, comms: Comms, commander: str,
+                      observed: Sequence[UnitState]) -> tuple[Self, ...]:
+        return tuple(cls(message, state.unit.name) for state in observed for message in state.owed)
+
+    @classmethod
+    def violations(cls, comms: Comms, commander: str) -> tuple[Self, ...]:
+        return tuple(cls(message, source.thread.name)
+                     for source in UnitState.observations(comms, commander, PullRequests())
+                     for message in source.due_questions)
+
+    @classmethod
+    def open_messages(cls, comms: Comms, commander: str) -> tuple[Message, ...]:
+        return tuple(message for source in UnitState.observations(comms, commander, PullRequests())
+                     for message in source.questions)
+
+    def line(self) -> str:
+        age = max(0, int((time.time() - self.message.timestamp) // 60))
+        return (f"UNANSWERED {self.unit}: message {self.cited}, "
+                f"{age} min old -> commander must answer")
+
+
+@dataclass(frozen=True)
+class UnownedWheelSpin(IndependentStandingRule, UndatedStandingRule):
     """A unit holds no next order while the board has unowned rows; Core hands the row to it
     without a commander turn, restarting the row's review window at the handoff."""
 
@@ -118,22 +228,13 @@ class UnownedWheelSpin(UndatedStandingRule):
     @classmethod
     def idle(cls, comms: Comms, commander: str) -> list[Thread]:
         """Units with a recent turn in their own transcript and no order, parked threads aside."""
-        held = {owner.name for owner in UnitState.holders(comms, commander)}
+        held = {todo.holder for todo in cls.todos(comms, commander)}
         excluded = held | CommanderConfig.read_root(comms.root).parked | {commander, ""}
         bound = TurnsSince(time.time() - cls.recent)
         return sorted((thread for thread in comms.registry.all_threads().values()
                        if thread.name not in excluded
                        and TurnDigestRead(comms.root, thread, bound).read().turns),
                       key=lambda thread: thread.name)
-
-    @staticmethod
-    def order_for(todo: Todo, commander: str, assigner: ThreadIncarnation) -> ReissuedOrderGoalAction:
-        now = time.time()
-        return ReissuedOrderGoalAction(
-            problem=todo.id, expected_revision=todo.revision,
-            order=todo.order.reissued(now), request=todo.goal.request(),
-            review_at=todo.reissued_review(now), commander=commander, assigner=assigner,
-            traced=todo.order.owner)
 
     def _identity(self) -> tuple[object, ...]:
         # Observation times and proposed idle units change; the row and its disposition do not.
@@ -150,11 +251,11 @@ class UnownedWheelSpin(UndatedStandingRule):
         actor = comms.registry.require(commander).incarnation
         rows = tuple(todo for todo in comms.goals.todos.for_commander(actor)
                      if not todo.holder_state.current_assignments())
-        return cls.paired(comms, commander, rows, actor)
+        return cls.paired(comms, commander, rows)
 
     @classmethod
-    def paired(cls, comms: Comms, commander: str, todos: Iterable[Todo],
-               assigner: ThreadIncarnation) -> tuple[UnownedWheelSpin, ...]:
+    def paired(cls, comms: Comms, commander: str,
+               todos: Iterable[Todo]) -> tuple[UnownedWheelSpin, ...]:
         """Both the heartbeat and automatic watcher preserve work before any dispatch."""
         rows = tuple(todo for todo in todos if todo.pending)
         retained = tuple(CheckoutHeldWheelSpin(todo, work)
@@ -168,7 +269,7 @@ class UnownedWheelSpin(UndatedStandingRule):
                 if not todo.live_strikes(unit.name):
                     idle.remove(unit)
                     found.append(ReassignedWheelSpin(todo, ReusedWorkDispatch.for_unit(
-                        cls.order_for(todo, commander, assigner), unit)))
+                        ReissuedOrderGoalAction.for_todo(todo, commander), unit)))
                     break
         covered = {rule.todo.id for rule in (*retained, *found)}
         return (*retained, *found,
@@ -225,9 +326,7 @@ class UnownedOrderWatch(WatchPass[tuple[UnownedObservation, ...]]):
             mine = (todo for todo in available if todo.creator_identity.name == name)
             observed.extend(
                 UnownedObservation(commander, rule)
-                for rule in UnownedWheelSpin.paired(
-                    comms, name, mine, CoreWatcherIncarnation.watcher()
-                )
+                for rule in UnownedWheelSpin.paired(comms, name, mine)
             )
         return tuple(observed)
 
@@ -239,31 +338,22 @@ class UnownedOrderWatch(WatchPass[tuple[UnownedObservation, ...]]):
 class WaitingUnownedWheelSpin(UnownedWheelSpin, declared_name=None):
     """A row needs a new unit; a proposed dispatch name is not an idle thread."""
 
+    def heartbeat_group(self) -> object:
+        return type(self)
+
+    def heartbeat_line(self, current: Sequence[WaitingUnownedWheelSpin]) -> str:
+        rows = ", ".join(sorted(rule.todo.id for rule in current))
+        return f"{len(current)} unowned rows wait for a new unit: {rows}"
 
 
 @dataclass(frozen=True)
-class CheckoutUnreadable(UndatedStandingRule):
-    """A holder's checkout git cannot open, without hiding every other unit."""
-    unit: str
-    checkout: Path
-    error: str = field(compare=False)
+class HeartbeatSilent(IndependentStandingRule, DatedStandingRule):
+    """A commander the heartbeat serves whose newest beat is older than the cadence allows.
 
-    @classmethod
-    def violations(cls, comms: Comms, commander: str) -> tuple[Self, ...]:
-        storage = comms.registry.storage_rule
-        holders = sorted({todo.held().owner for todo in cls.pending_todos(comms, commander)})
-        return tuple(cls(holder, path, error) for holder in holders
-                     for path in storage.checkout_paths(comms.registry.require(holder))
-                     for error in WorkBranches(path).read_checkout().errors())
+    The heartbeat beats on every pass, so its silence is the failure; this rule reads the
+    bus in the commander's own tool process, where a dead heartbeat cannot hide it.
+    """
 
-    def line(self) -> str:
-        return (f"CHECKOUT UNREADABLE: {self.unit} {self.checkout}: {self.error}"
-                " -> order the unit to repair its checkout; its work stays retained")
-
-
-@dataclass(frozen=True)
-class HeartbeatSilent(DatedStandingRule):
-    """Main's liveness check; P433 must move this read to non-waking pass observations."""
     seconds: ClassVar[int] = 180
     beat: int
     since: float
@@ -289,31 +379,13 @@ class HeartbeatSilent(DatedStandingRule):
                 f"{RecordedEventTime(self.since).clock()}"
                 " -> read the connector journal for the failing pass and fix its owner")
 
-
 @dataclass(frozen=True)
-class Unjudged(OrderRefusingStandingRule, DatedStandingRule):
-    """One ready current head without a verdict on its held problem."""
-    problem: str
-    holder: str
-    request: PullRequest
-    seconds: ClassVar[int] = 10 * 60
+class Unjudged(ReasonedStandingRule, UndatedStandingRule):
+    limit: ClassVar[int] = 30
+    text = ("UNJUDGED {why} edits -> accept each reviewed PR head with judge head (one verdict"
+            " judges every edit before it), or fork judges for the rest")
 
     @classmethod
-    def violations(cls, comms: Comms, commander: str) -> tuple[Unjudged, ...]:
-        held = cls.todos(comms, commander)
-        pulls = PullRequests(held)
-        return tuple(cls(todo.id, todo.holder, request) for todo in held
-                     for request in pulls.listed(todo.repo, UnmergedListedPullRequest, todo)
-                     if request.status.reviewable and todo.head_verdict(request.head) is None)
-
-    def began(self) -> float:
-        return self.request.reviewable_at
-
-    def line(self) -> str:
-        age = max(0, int((time.time() - self.began()) / 60))
-        return (f"UNJUDGED {self.problem} {self.holder} PR #{self.request.number} "
-                f"head {self.request.head} ({age} min) "
-                f"-> judge ok {self.problem} or judge back {self.problem}")
-
-    def refusal(self, comms: Comms, answers: Sequence[MessageReference]) -> tuple[str, ...]:
-        return (self.line(),) if time.time() - self.began() >= self.seconds else ()
+    def reason(cls, comms: Comms, commander: str) -> str | None:
+        total = OrderEditCountRead.count(comms, commander)
+        return str(total) if total > cls.limit else None

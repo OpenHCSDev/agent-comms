@@ -10,7 +10,6 @@ import os
 import shlex
 import subprocess
 import sys
-import time
 from abc import ABC, abstractmethod
 from collections.abc import Iterator
 from dataclasses import dataclass, replace
@@ -28,7 +27,6 @@ from agent_comms.commander.config import CommanderConfig
 from agent_comms.commander.order import Commander, OrderFile
 from agent_comms.commander.request import RequestAddVerb
 from agent_comms.commander_parity import ParityComparison, UnverifiedParity
-from agent_comms.commander_parity.github_fixture import GithubFixture, GithubFixtureRequest
 from agent_comms.field_codec import FieldCodec
 from agent_comms.goals import CountCheckResult, OrderCheck, ProblemGoalOrder
 from agent_comms.order_runs import ApplicationOrderRun
@@ -39,12 +37,8 @@ from agent_comms.todos import (
     FileDeliveryEvidence,
     FixScope,
     FixShape,
-    GithubPullRequest,
     OperationDelivery,
     PendingProblemOrder,
-    PullRequestLink,
-    PullRequests,
-    RecordPullRequest,
     Todo,
 )
 from agent_comms.tool_caller import ThreadCaller, ToolCaller
@@ -112,7 +106,6 @@ class LifecycleRun:
     decisions: Path
     document: Path
     artifact: Path
-    source_repository: Repo
 
     @classmethod
     @contextlib.contextmanager
@@ -195,8 +188,7 @@ class LifecycleRun:
                     )
                 )
             )
-            yield cls(commander, worker.name, decisions, document, root / "application.json",
-                      Repo.of(Path(worker.worktree)))
+            yield cls(commander, worker.name, decisions, document, root / "application.json")
 
     @staticmethod
     def python_environment() -> dict[str, str]:
@@ -221,31 +213,6 @@ class LifecycleRun:
         if len(rows) != 1:
             raise ValueError(f"A fresh copied workflow must create one problem, got {len(rows)}")
         return rows[0]
-
-    @contextlib.contextmanager
-    def forge(self, todo: Todo, diff: str) -> Iterator[None]:
-        """Real linked code/source with controlled gh responses, never real status writes."""
-        repository = self.source_repository
-        if repository.github != todo.repo:
-            raise ValueError("The copied order must cite the code repository being compared.")
-        branch = Repo.git(repository.checkout, "branch", "--show-current").strip()
-        link = PullRequestLink.created(todo.repo, branch)
-        saved = self.commander.comms.goals.todos.apply(todo.id, RecordPullRequest(
-            todo.revision, self.commander.incarnation, link, todo.held().generation))
-        request = PullRequests((saved,)).current(saved)
-        clock = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
-        row = GithubPullRequest(number=request.number, branch=request.branch, head=request.head,
-            updated=clock, base=request.base, created=clock, head_time=clock, ready_events=(),
-            closed=False, isDraft=False, mergeStateStatus="CLEAN", checks="SUCCESS", queued=False,
-            merge=None, merged=None)
-        directory = self.commander.root / "forge"
-        GithubFixture(todo.repo, (GithubFixtureRequest(row, ""),), diff).write(directory)
-        previous = os.environ["PATH"]
-        os.environ["PATH"] = os.pathsep.join((str(directory), previous))
-        try:
-            yield
-        finally:
-            os.environ["PATH"] = previous
 
     def complete(self, todo: Todo) -> Todo:
         goal = self.commander.comms.registry.require(self.worker).goal

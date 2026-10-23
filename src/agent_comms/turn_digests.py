@@ -181,12 +181,12 @@ class OrderRead[Result](TranscriptRead[Result]):
             if holder.incarnation != assignment.owner_identity:
                 raise ToolRefusedError(f"Order {todo.id} holder incarnation no longer exists")
             yield cls(
-                root, holder, TurnsSince(todo.evidence_since), todo
+                root, holder, TurnsSince(todo.order.checked().at.recorded_at("An order")), todo
             )
 
     def edits_from_turns(self, turns: tuple[TurnDigest, ...]) -> tuple[EditCall, ...]:
-        judged = set(self.todo.judged_call_ids)
-        since = self.todo.evidence_since
+        judged = frozenset(self.todo.judged_calls)
+        since = self.todo.unjudged_since
         edits = {edit.id: edit for turn in reversed(turns)
                  for event in turn.events
                  for edit in event.edit_calls(self.thread.name, self.todo.id, since)
@@ -195,10 +195,24 @@ class OrderRead[Result](TranscriptRead[Result]):
 
 
 class OrderEditsRead(OrderRead[tuple[EditCall, ...]]):
-    """Original edits since the head verdict; external events are selected before decoding."""
+    """Original unjudged calls; external events are selected before decoding."""
 
     def from_turns(self, turns: tuple[TurnDigest, ...]) -> tuple[EditCall, ...]:
         return self.edits_from_turns(turns)
 
     def from_external(self, source) -> tuple[EditCall, ...]:
         return tuple(source.unjudged(self.todo))
+
+
+class OrderEditCountRead(OrderRead[int]):
+    """Load needs a count, never external event bodies or edit hunks."""
+
+    @classmethod
+    def count(cls, comms: Comms, commander: str) -> int:
+        return sum(read.read() for read in cls.for_commander(comms, commander))
+
+    def from_turns(self, turns: tuple[TurnDigest, ...]) -> int:
+        return len(self.edits_from_turns(turns))
+
+    def from_external(self, source) -> int:
+        return source.unjudged_count(self.todo)
