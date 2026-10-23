@@ -114,7 +114,7 @@ class PiRpcChannel(JsonlStreamReader, Sealed):
     def command_bytes(command: PiCommand) -> bytes:
         return (json.dumps(command.to_rpc()) + "\n").encode()
 
-    def correlate(self, response) -> PiCommand:
+    def correlate(self, response: Response) -> PiCommand:
         command = response.id.take_from(self.pending, response.command, response)
         if command is None:
             raise MalformedRecord("Pi RPC response has no pending command")

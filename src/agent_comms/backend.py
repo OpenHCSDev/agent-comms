@@ -78,10 +78,8 @@ if TYPE_CHECKING:
     from .pi_payloads import AssistantMessage, UserMessage
 
 
-def compaction_summary(value: Any) -> str:
+def compaction_summary(value: str) -> str:
     """Preserve saved Markdown, excluding terminal control codes."""
-    if not isinstance(value, str):
-        return ""
     return "".join(
         char if char in "\n\t" or not unicodedata.category(char).startswith("C") else " "
         for char in value.replace("\r\n", "\n")
@@ -99,7 +97,7 @@ PROMPT_START_TIMEOUT_SECONDS = 180.0
 _IDENTITY_FAILURE_TEXT = "Pi session identity changed during this turn."
 
 
-async def terminate_task_process(task: asyncio.Task[Any]) -> None:
+async def terminate_task_process[Result](task: asyncio.Task[Result]) -> None:
     """Terminate the backend subprocess owned by an agent turn task."""
     session = TurnSession.active.get(task)
     if session is not None:
