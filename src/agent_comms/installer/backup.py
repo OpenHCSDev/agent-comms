@@ -25,6 +25,7 @@ from agent_comms.field_codec import FieldCodec
 from agent_comms.installer.interpreter_operation import RouteSelection
 from agent_comms.locked_store import LockedStore, RootFile, RuntimeFile, SQLiteFile
 from agent_comms.private_path import FileObservation, FileRevision, MissingFile
+from agent_comms.registry_store import RegistryStore
 from agent_comms.store_files import AtomicFile
 
 
@@ -351,7 +352,15 @@ class StoreBackup(ResourceBackup):
 
     def restore(self) -> None:
         saved = self.files()
-        for name in json.loads((self.path / 'selected.json').read_text()):
+        selected = json.loads((self.path / 'selected.json').read_text())
+        registry = tuple(str(path.relative_to(self.root)) for path in RegistryStore.at(self.root).written)
+        # The registry owns this ordering: restore its snapshot before publishing
+        # the matching guard, after every unrelated selected file.
+        ordered = (
+            *(name for name in selected if name not in registry),
+            *(name for name in registry if name in selected),
+        )
+        for name in ordered:
             if self.file_original(name, saved):
                 continue
             target = self.root / name
