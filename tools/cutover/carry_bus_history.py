@@ -791,7 +791,6 @@ class HistoryInput:
             # original may remain outside this practice copy indefinitely.
             for _ in FileRevision.capture(bus.path).revisions():
                 with bus.observing() as db:
-                    BusSchema.require_schema(db)
                     if HistoryOffset.present(db):
                         raise RelationViolationError(
                             "History input was already staged; restore its backup "

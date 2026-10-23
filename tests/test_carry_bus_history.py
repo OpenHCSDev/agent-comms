@@ -290,5 +290,47 @@ def test_predecessor_publisher_history_round_trips_into_bus(tmp_path):
         BusHistory(fresh, fresh, spill).carry(apply=True)
 
 
+def test_absent_history_leaves_schema_repair_to_reconcile(tmp_path):
+    from cutover.carry_bus_history import BusHistory, HistoryOffset
+
+    from agent_comms.bus import Bus, BusSchema, PublicRecord
+    from agent_comms.bus_tables import Addressed
+    from agent_comms.errors import RelationViolationError
+    from agent_comms.installer.backup import bus_files
+    from agent_comms.installer.carry import Carried
+    from agent_comms.messages import InfoKind, Message
+    from agent_comms.typed_table import Index
+    from conftest import maintenance_held
+    from test_reconcile_stores import reconcile
+
+    root = tmp_path / "wire"
+    bus = Bus.install(Bus.path_in(root))
+    original = bus.append(lambda seq, db: PublicRecord.from_message(
+        Message("author", "worker", "Keep this original", InfoKind, seq=seq),
+    ))
+    index = Index(("target",)).name(Addressed.table)
+    with bus.writing() as db:
+        db.execute(f'DROP INDEX "{index}"')
+    request = BusHistory(root, root, tmp_path / "spill")
+
+    with maintenance_held(root) as nonce:
+        before = bus_files(root)
+        assert request.carry(apply=False) == request.carry(apply=True) == Carried(0)
+        assert bus_files(root) == before
+        completed = reconcile(root, nonce)
+        assert completed.returncode == 0, completed.stdout + completed.stderr
+        assert json.loads(completed.stdout)["rewritten"] == [bus.path.name]
+        with bus.observing() as db:
+            BusSchema.require_schema(db)
+    assert bus.lookup(original.seq) == original
+
+    with bus.writing() as db:
+        HistoryOffset.create(db)
+        db.execute(f'DROP INDEX "{index}"')
+    for apply in (False, True):
+        with pytest.raises(RelationViolationError, match="already staged"):
+            request.carry(apply=apply)
+
+
 if __name__ == "__main__":
     publish_predecessor_history(Path(sys.argv[1]))
