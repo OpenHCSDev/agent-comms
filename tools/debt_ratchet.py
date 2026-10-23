@@ -27,6 +27,7 @@ import tokenize
 import tomllib
 import types
 import typing
+import typing_extensions
 from typing import Annotated
 from abc import abstractmethod
 from collections import Counter
@@ -1766,6 +1767,10 @@ class TypingImports(MroDispatch):
     bindings conservatively disqualify a name rather than inferring its flow.
     """
 
+    typing_modules: typing.ClassVar[dict[str, types.ModuleType]] = {
+        module.__name__: module for module in (typing, typing_extensions)
+    }
+
     def __init__(self, declarations: set[ast.AST]) -> None:
         self.declarations = declarations
         self.values: dict[str, object] = {}
@@ -1780,14 +1785,15 @@ class TypingImports(MroDispatch):
     def modules(self, node: ast.Import) -> None:
         for item in node.names:
             self.bind(node, item.asname or item.name.split(".")[0],
-                      typing if item.name == typing.__name__ else None)
+                      self.typing_modules.get(item.name))
 
     @handles(ast.ImportFrom)
     def members(self, node: ast.ImportFrom) -> None:
         for item in node.names:
             declaration = None
-            if node.level == 0 and node.module == typing.__name__:
-                declaration = vars(typing).get(item.name)
+            module = self.typing_modules.get(node.module) if node.level == 0 else None
+            if module is not None:
+                declaration = vars(module).get(item.name)
             self.bind(node, item.asname or item.name, declaration)
 
     @handles(ast.Name)
@@ -1860,8 +1866,9 @@ class TypingReference(MroDispatch):
     def member(self, node: ast.Attribute) -> None:
         parent = TypingReference(self.imports)
         parent.dispatch_sync(node.value)
-        if parent.value is typing:
-            self.value = vars(typing).get(node.attr)
+        for module in TypingImports.typing_modules.values():
+            if parent.value is module:
+                self.value = vars(module).get(node.attr)
 
     def raw_access_count(self) -> int:
         """Typing declarations contribute no raw-record operation; unknowns do."""
@@ -2033,9 +2040,9 @@ class AnyName(PerFileMeasure):
     def uses(cls, source: bytes, filename: str) -> tuple[ast.Name | ast.Attribute, ...]:
         tree = ast.parse(source, filename)
         imports = TypingImports.at_any_depth(tree)
-        found = []
+        found: list[ast.Name | ast.Attribute] = []
         for node in ast.walk(tree):
-            if isinstance(node, (ast.Name, ast.Attribute)):
+            if isinstance(node, (ast.Name, ast.Attribute)) and isinstance(node.ctx, ast.Load):
                 reference = TypingReference(imports)
                 reference.dispatch_sync(node)
                 if reference.value is typing.Any:
