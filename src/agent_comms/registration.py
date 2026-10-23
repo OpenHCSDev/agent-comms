@@ -168,14 +168,36 @@ class Registration:
         Native session identity and context proof remain with their producers.
         """
         with self.store.editing() as edit:
-            change = edit.prepare_native_source(original, session_file)
-            change = self._commit_registration(edit, change)
-            # The document owns the next turn's selection. Publishing an
-            # observed source must not rewrite this authorized turn's settings.
-            observed = replace(change.thread,
-                worktree=original.thread.worktree, model=original.thread.model,
-                thinking_level=original.thread.thinking_level)
-            return replace(original, thread=observed)
+            return self._attach_native_session(edit, original, session_file)
+
+    def claim_fresh_session(self, original: RegistryOwner) -> RegistryOwner:
+        """Create and record the first session while the registry owns its selection.
+
+        An execution captured before the first claim joins the recorded session;
+        its process, incarnation, claim and turn must still pass the source fence.
+        RuntimeLocation.new_location already retains saved locations and creates
+        only for UnstartedRuntime, so selection has no second absence test here.
+        """
+        with self.store.editing() as edit:
+            current = edit.document.require(original.thread.name)
+            joined = replace(original, thread=replace(
+                original.thread, session_file=original.thread.session_file.applied(current.session_file)))
+            current = joined.require_source_snapshot(edit.original.snapshot)
+            location = current.writable_runtime.new_location(
+                self.store.path.parent, original.thread.worktree)
+            return self._attach_native_session(edit, joined, location.path)
+
+    def _attach_native_session(
+        self, edit: RegistryEdit, original: RegistryOwner, session_file: str,
+    ) -> RegistryOwner:
+        change = edit.prepare_native_source(original, session_file)
+        change = self._commit_registration(edit, change)
+        # The document owns the next turn's selection. Publishing an
+        # observed source must not rewrite this authorized turn's settings.
+        observed = replace(change.thread,
+            worktree=original.thread.worktree, model=original.thread.model,
+            thinking_level=original.thread.thinking_level)
+        return replace(original, thread=observed)
 
     def declare(self, thread: Thread, status: ThreadStatus = _RUNNING_STATUS) -> Thread:
         """Operational declaration and channel provenance use one locked current owner.
