@@ -26,7 +26,7 @@ from abc import ABC, abstractmethod
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass, replace
 from pathlib import Path
-from typing import TYPE_CHECKING, Annotated
+from typing import TYPE_CHECKING, Annotated, NoReturn
 
 from . import store_files
 from .coordination_database import CoordinationStore
@@ -38,14 +38,14 @@ from .native_runtime_input import NativeRuntimeInput, NativeRuntimeTable
 from .private_path import fsync_directory
 
 if TYPE_CHECKING:
-    from .typed_table import TableSchema
-    from .bus_publication import Delivered
-    from .notification_assignment import NotificationAssignmentRead
     from .acp_extension import CursorAdvancedUpdate, CursorScope
+    from .bus_publication import Delivered
     from .cursor_publication import CursorPublication
+    from .notification_assignment import NotificationAssignmentRead
     from .private_nk_entrypoint import RootLaunch
     from .registry_document import RegistrySnapshot
     from .threads import Thread
+    from .typed_table import TableSchema
 
 _MAGIC = b"ACRG"
 _VERSION = 1
@@ -58,9 +58,7 @@ _SIZE = _HEADER.size + 32
 _EMPTY = hashlib.sha256(b"absent\0").digest()
 
 
-def _reject(detail: str) -> None:
-    from .errors import RelationViolationError
-
+def _reject(detail: str) -> NoReturn:
     raise RelationViolationError(f"Private registry guard {detail}")
 
 
@@ -245,7 +243,7 @@ class PrivateRegistryGuard(DurableFile, WireWakeFile, RegistryPrivacy):
         from .private_runtime_schema import PrivateCoordinatorTable
 
         PrivateCoordinatorTable.declarations()
-        with Coordination(CoordinationStore.path_in(self.registry_path.parent)) as store:
+        with Coordination(str(CoordinationStore.path_in(self.registry_path.parent))) as store:
             PrivateCoordinatorTable.install(store)
 
     def notification_context_sql(self, connection: sqlite3.Connection) -> str:

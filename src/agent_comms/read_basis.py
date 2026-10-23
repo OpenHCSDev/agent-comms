@@ -31,6 +31,7 @@ from .private_path import FileObservation, MissingFile
 from .recorded_bus import RecordedBus, RecordedBusIdentity
 from .store_files import SharedLock
 from .thread_identity import RecordedThreadIncarnation, ThreadIncarnation
+from .typed_table import sql_literal
 
 
 class DisplayViewer(SubclassUnion, affix="Viewer"):
@@ -949,8 +950,8 @@ class RepliesDisplayScope(AnyTargetDisplayScope, DMDisplayScope):
         conditions, selected = [], []
         for member in ResponsePolicy.members_with(ResponsePolicy):
             condition, values = member.recipients_sql(mentions, first)
-            conditions.append(f"({policy}=? AND ({condition}))")
-            selected.extend((member.declared_name, *values))
+            conditions.append(f"({policy}={sql_literal(member)} AND ({condition}))")
+            selected.extend(values)
         return (
             f"({sender} IN ({a}) OR ({direct}) OR "
             f"({sender} IN ({b}) AND ({' OR '.join(conditions)})))",

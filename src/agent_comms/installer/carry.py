@@ -17,15 +17,15 @@ import subprocess
 from abc import ABC, abstractmethod
 from collections.abc import Callable
 from dataclasses import dataclass, field
-from importlib import import_module
 from graphlib import TopologicalSorter
+from importlib import import_module
 from pathlib import Path
 from typing import Annotated, ClassVar
 
 from agent_comms.declared_family import DeclaredFamily
+from agent_comms.errors import RelationViolationError
 from agent_comms.field_codec import PathText
 from agent_comms.installer.interpreter_operation import InterpreterOperation
-from agent_comms.errors import RelationViolationError
 
 STEPS = Path("tools/cutover")
 
@@ -86,7 +86,7 @@ class Carry(ABC):
         if not path.is_relative_to(root) or path.resolve() != path:
             raise RelationViolationError(f"Carry refuses an unconfined path: {path}")
 
-class CarryOperation[Answer](InterpreterOperation[Answer], DeclaredFamily, affix="Operation"):
+class CarryOperation[Answer](InterpreterOperation[Answer, Carry], DeclaredFamily, affix="Operation"):
     """One step invocation, including its arguments and its declared answer type."""
 
     @abstractmethod
@@ -135,7 +135,7 @@ class CarryChain:
         if unordered:
             raise ValueError(f"{unordered} are not on the main line, so nothing orders them")
         ordered = sorted(steps, key=lambda step: added[step.name()])
-        dependencies = {step: set() for step in ordered}
+        dependencies: dict[type[Carry], set[type[Carry]]] = {step: set() for step in ordered}
         for step in ordered:
             for later in step.precedes:
                 if later in dependencies:

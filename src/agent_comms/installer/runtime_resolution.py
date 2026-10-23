@@ -16,9 +16,13 @@ from pydantic import BaseModel, Field
 
 from agent_comms.declared_family import DeclaredFamily
 from agent_comms.installer.commands import InstallCommands
-from agent_comms.installer.interpreter_operation import DistributionVersionsProbe
-from agent_comms.installer.installed_packages import (
-    ArchivePin, GitPin, InstalledPackagesProbe, PackagePin, PackageRecord,
+from agent_comms.installer.interpreter_operation import (
+    ArchivePin,
+    DistributionVersionsProbe,
+    GitPin,
+    InstalledPackagesProbe,
+    PackagePin,
+    PackageRecord,
 )
 from agent_comms.launch_runtime import LaunchRuntime
 from agent_comms.repository_name import RepositoryName

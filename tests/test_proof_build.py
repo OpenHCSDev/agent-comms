@@ -1,7 +1,5 @@
 """Build-bound close uses real repositories and a retained-history bus copy."""
 
-from agent_comms.bus import Bus
-
 import subprocess
 import sys
 import time
@@ -16,6 +14,7 @@ from agent_comms.build_identity import (
     RecordedBuildIdentity,
     UninstalledRepositoryError,
 )
+from agent_comms.bus import Bus
 from agent_comms.check_root import CheckRoot
 from agent_comms.commander.config import CommanderConfig
 from agent_comms.commander.standing import InstallDue
@@ -23,7 +22,7 @@ from agent_comms.comms import Comms
 from agent_comms.field_codec import FieldCodec
 from agent_comms.goal_actions import CreateProblemGoalAction, SetGoalAction
 from agent_comms.goals import CountCheckResult, OrderCheck
-from agent_comms.installer.installed_packages import (
+from agent_comms.installer.interpreter_operation import (
     ArchiveRecord,
     CommitRecord,
     GitRecord,
@@ -35,13 +34,13 @@ from agent_comms.order_runs import ApplicationOrderRun, MechanicalOrderRun
 from agent_comms.progress_claims import WorkingClaim
 from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.repo import Repo
-from agent_comms.standing_rules import StandingRule
 from agent_comms.repository_name import RepositoryName
+from agent_comms.standing_rules import StandingRule
 from agent_comms.todos import (
     CommitDelivery,
     DoneTodoState,
-    OpenTodoState,
     FileDeliveryEvidence,
+    OpenTodoState,
     OperationDelivery,
     PendingProblemOrder,
     Todo,

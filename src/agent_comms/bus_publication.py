@@ -11,22 +11,23 @@ from typing import TYPE_CHECKING, ClassVar, Self
 from agent_comms.audience_manifest import FrozenAudience
 from agent_comms.bus_tables import BusRow
 from agent_comms.errors import (
-    HumanSendRefusedError,
     CommittedMessageError,
+    HumanSendRefusedError,
     RelationViolationError,
 )
 from agent_comms.messages import BusRecord, Message
 from agent_comms.response_acknowledgement import (
     KeyedResponseAcknowledgement,
 )
+from agent_comms.typed_table import Column, Generated, sql_literal
 
 from .field_codec import FieldCodec
 from .wake_policy import RecipientDecision
-from agent_comms.typed_table import Column, Generated, sql_literal
 
 if TYPE_CHECKING:
-    from .goal_management import Goals
     from agent_comms.bus import Bus, BusReader, RecordBuilder
+
+    from .goal_management import Goals
     from .registry_document import RegistrySnapshot
     from .threads import Thread
 
@@ -120,6 +121,14 @@ class InitialOrigin(ABC):
     @abstractmethod
     def published(self, goals: Goals, message: Message) -> None:
         """What a committed message from this origin records beyond the bus."""
+
+    def complete(self, goals: Goals, record: BusRecord) -> BusRecord:
+        """Keep the actual committed record when an origin's remaining work fails."""
+        try:
+            self.published(goals, record.message)
+        except BaseException as error:
+            raise CommittedMessageError(record) from error
+        return record
 
 
 class OwnerVoiceOrigin(InitialOrigin):
