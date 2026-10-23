@@ -11,7 +11,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass, field, replace
 from functools import partial
 from pathlib import Path
-from typing import TYPE_CHECKING, Annotated, ClassVar, Literal, NoReturn, TextIO, Type
+from typing import TYPE_CHECKING, Annotated, ClassVar, Literal, NoReturn, Type
 
 from pydantic import JsonValue
 
@@ -55,7 +55,7 @@ from .cli_commands import (
     ThreadsCliCommand,
     ThreadStoppedResult,
 )
-from .cli_result import ToolCatalogResult
+from .cli_result import CliResult, ToolCatalogResult
 from .commander.vibe_check import OverloadDegradation
 from .commander_hud import CommanderHud
 from .coordination_tables.refusals import SendRefusal
@@ -1703,8 +1703,18 @@ class ToolsCliCommand(CliCommand):
         return self.name.catalog(ctx, tuple(NativeRequestTools.catalog()))
 
 
+@dataclass(frozen=True)
+class ToolReplyResult(CliResult):
+    """The tool protocol's own reply, the one every adapter receives, written unwrapped."""
+
+    reply: dict[str, JsonValue]
+
+    def to_wire(self) -> dict[str, JsonValue]:
+        return self.reply
+
+
 @dataclass(frozen=True, kw_only=True)
-class InvokeCliCommand(CliCommand, declared_name="tool"):
+class InvokeCliCommand(CliCommand[ToolReplyResult], declared_name="tool"):
     help = "Invoke one declared adapter tool, as --from THREAD when given"
     caller: Annotated[
         ThreadCaller | NoThreadCaller,
@@ -1729,14 +1739,8 @@ class InvokeCliCommand(CliCommand, declared_name="tool"):
                 self.declared_name, *self.caller.from_flag(), '--tool', self.tool,
                 '--arguments', json.dumps(self.arguments))
 
-    def apply(self, ctx: Comms) -> dict[str, JsonValue]:
-        return invoke_tool(ctx, self.tool, self.arguments, caller=self.caller)
-
-    def run(self, ctx: Comms, output: TextIO) -> int:
-        """The tool protocol's own reply, the one every adapter receives, not a CLI result."""
-        json.dump(self.apply(ctx), output, indent=2)
-        output.write("\n")
-        return 0
+    def apply(self, ctx: Comms) -> ToolReplyResult:
+        return ToolReplyResult(invoke_tool(ctx, self.tool, self.arguments, caller=self.caller))
 
 
 def context_tool_catalog(context: str) -> list[dict[str, object]]:
