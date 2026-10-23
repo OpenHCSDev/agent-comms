@@ -12,7 +12,7 @@ from types import MappingProxyType
 from typing import TYPE_CHECKING, Annotated, ClassVar, Literal
 
 
-from .projection_source import ProjectionSource
+from .projection_source import ProducedRow, ProjectionSource
 from .coordination_errors import IdentityConflict
 from .field_codec import (
     BoundedText,
@@ -141,7 +141,7 @@ class ClaimScope(SubclassUnion, ABC, ProjectionSource, affix=""):
     """What one acquisition belongs to; its member answers reuse, liveness and operation use."""
 
     @ClassFact
-    def writes(cls) -> tuple[type, ...]:
+    def writes(cls) -> tuple[type[ProducedRow], ...]:
         from .messages import ClaimOperations
         return (ClaimOperations,)
 
@@ -288,7 +288,7 @@ class ClaimTransition(ClaimIdentity, SubclassUnion, ABC, ProjectionSource, affix
     """One original resource transition; its member declares what it changes."""
 
     @ClassFact
-    def writes(cls) -> tuple[type, ...]:
+    def writes(cls) -> tuple[type[ProducedRow], ...]:
         from .messages import HeldResources, ClaimOperations
         return (HeldResources, ClaimOperations)
 
@@ -477,7 +477,7 @@ class ClaimProjection(Mapping[str, ClaimOwner], ProjectionSource):
     """Immutable sorted claim table plus the last processed envelope sequence."""
 
     @ClassFact
-    def writes(cls) -> tuple[type, ...]:
+    def writes(cls) -> tuple[type[ProducedRow], ...]:
         from .messages import HeldResources
         return (HeldResources,)
 

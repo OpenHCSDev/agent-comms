@@ -12,7 +12,7 @@ from .declared_family import DeclaredFamily
 from .errors import HumanSendRefusedError, RelationViolationError, UnregisteredThreadError
 from .field_codec import NullMember, SingleFieldValue, SubclassUnion
 from .history_result import DmHistoryPageResult, HistoryPageResult
-from .projection_source import ProjectionSource
+from .projection_source import ProducedRow, ProjectionSource
 from .response_policy import DirectPolicy, MentionedOnlyPolicy
 from .wake_policy import BoundedTriageWake, FullWake, MessageAudience, UnmentionedWake
 
@@ -109,7 +109,7 @@ class CommandTarget(ABC, ProjectionSource):
     """A command destination owns its binding and catalog participation."""
 
     @ClassFact
-    def writes(cls) -> tuple[type, ...]:
+    def writes(cls) -> tuple[type[ProducedRow], ...]:
         from .bus_display_index import BusDisplayIndex
         from .bus_tables import AwaitingAnswerSource
         return (BusDisplayIndex, AwaitingAnswerSource)

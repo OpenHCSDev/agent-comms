@@ -2,7 +2,18 @@
 
 from __future__ import annotations
 
+from abc import ABC, abstractmethod
 from typing import ClassVar
+
+
+class ProducedRow(ABC):
+    """Rows rebuilt when the source of a class producing them changes."""
+
+    @classmethod
+    @abstractmethod
+    def producer_digest(cls) -> str: ...
+
+
 
 class ProjectionSource:
     """A writer declares ``writes`` as table classes, inherited by its members.
@@ -14,7 +25,7 @@ class ProjectionSource:
     """
 
     __slots__ = ()
-    writes: ClassVar[tuple[type, ...]]
+    writes: ClassVar[tuple[type[ProducedRow], ...]]
     _declarations: ClassVar[dict[type[ProjectionSource], set[type]]] = {}
 
     def __init_subclass__(cls, **kwargs: object) -> None:
@@ -28,7 +39,7 @@ class ProjectionSource:
         return tuple(parent for parent in cls.__mro__ if "writes" in vars(parent))
 
     @staticmethod
-    def writers_for(table: type) -> set[type]:
+    def writers_for(table: type[ProducedRow]) -> set[type[ProjectionSource]]:
         """Reverse the writers' declarations, without discovering unrelated modules."""
         return {
             writer

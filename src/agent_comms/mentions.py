@@ -1,7 +1,7 @@
 """Portable thread mentions: textual addressees, independent of message delivery."""
 
 from .class_fact import ClassFact
-from .projection_source import ProjectionSource
+from .projection_source import ProducedRow, ProjectionSource
 import re
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
@@ -22,7 +22,7 @@ class MentionCandidate:
 class ThreadMention(ProjectionSource):
 
     @ClassFact
-    def writes(cls) -> tuple[type, ...]:
+    def writes(cls) -> tuple[type[ProducedRow], ...]:
         from .bus_display_index import BusDisplayIndex
         return (BusDisplayIndex,)
 

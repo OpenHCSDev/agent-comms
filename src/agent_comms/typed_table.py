@@ -65,7 +65,7 @@ from .locked_store import (
 )
 from .maintenance_barrier import MaintenanceBarrier, MaintenanceHolder
 from .package_stamp import STAMP
-from .projection_source import ProjectionSource
+from .projection_source import ProducedRow, ProjectionSource
 from .store_files import (
     UNBOUNDED_CONTENTION, StoreLockContention, StoreLockFile, _store_lock,
 )
@@ -1459,12 +1459,6 @@ class ProjectionProducerTables(SharedFileTables, DerivedTables):
     """Verification metadata recreated with its projections when its schema changes."""
 
 
-class ProducedRow(ABC):
-    """Rows rebuilt when the source of a class producing them changes."""
-
-    @classmethod
-    @abstractmethod
-    def producer_digest(cls) -> str: ...
 
 
 @dataclass(frozen=True)

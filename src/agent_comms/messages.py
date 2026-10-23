@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from .class_fact import ClassFact
-from .projection_source import ProjectionSource
+from .projection_source import ProducedRow, ProjectionSource
 from .turn_origin import TurnOrigin
 import builtins
 import hashlib
@@ -130,7 +130,7 @@ class HeldResources(BusProjectionTables):
     """Current membership references the canonical transition, never a copy."""
 
     @ClassFact
-    def writes(cls) -> tuple[type, ...]:
+    def writes(cls) -> tuple[type[ProducedRow], ...]:
         return (HeldResources, ClaimOperations)
 
 
@@ -384,7 +384,7 @@ class MessageKind(DeclaredFamily, ProjectionSource, affix="Kind"):
     """
 
     @ClassFact
-    def writes(cls) -> tuple[type, ...]:
+    def writes(cls) -> tuple[type[ProducedRow], ...]:
         from .bus_route_counts import BusRouteCounts
         from .bus_tables import AwaitingAnswerSource
         return (BusRouteCounts, AwaitingAnswerSource)
@@ -420,7 +420,7 @@ class ClaimNoticeKind(MessageKind, declared_name="claim-notice"):
     """A claim-owner record, not a delivery to a reader."""
 
     @ClassFact
-    def writes(cls) -> tuple[type, ...]:
+    def writes(cls) -> tuple[type[ProducedRow], ...]:
         from .bus_route_counts import BusRouteCounts
         from .bus_tables import AwaitingAnswerSource
         return (BusRouteCounts, AwaitingAnswerSource)
@@ -505,7 +505,7 @@ class ChangeReportKind(SendableMessageKind, declared_name="change-report"):
 
 class MembershipTransition(DeclaredFamily, ProjectionSource, affix="Membership"):
     @ClassFact
-    def writes(cls) -> tuple[type, ...]:
+    def writes(cls) -> tuple[type[ProducedRow], ...]:
         from .bus_activity_index import SentActivity
         from .bus_tables import AwaitingAnswerSource
         return (SentActivity, AwaitingAnswerSource)
@@ -539,7 +539,7 @@ class LeftMembership(MembershipTransition):
 class NoMembershipChange(NullMember, ProjectionSource):
 
     @ClassFact
-    def writes(cls) -> tuple[type, ...]:
+    def writes(cls) -> tuple[type[ProducedRow], ...]:
         from .bus_activity_index import SentActivity
         from .bus_tables import AwaitingAnswerSource
         return (SentActivity, AwaitingAnswerSource)
@@ -553,7 +553,7 @@ class MessageRoleWire(ProjectionSource):
     """The unchanged external fields, decoded once into a message role."""
 
     @ClassFact
-    def writes(cls) -> tuple[type, ...]:
+    def writes(cls) -> tuple[type[ProducedRow], ...]:
         from .bus_activity_index import SentActivity
         from .bus_tables import AwaitingAnswerSource
         return (SentActivity, AwaitingAnswerSource)
@@ -574,7 +574,7 @@ class MessageRoleWire(ProjectionSource):
 class MessageRole(InlineRecord, ProjectionSource):
 
     @ClassFact
-    def writes(cls) -> tuple[type, ...]:
+    def writes(cls) -> tuple[type[ProducedRow], ...]:
         from .bus_activity_index import SentActivity
         from .bus_tables import AwaitingAnswerSource
         return (SentActivity, AwaitingAnswerSource)
@@ -621,7 +621,7 @@ class SendableRole(MessageRole, DeclaredFamily, affix="Role"):
 class InformationalMessage(ProjectionSource):
 
     @ClassFact
-    def writes(cls) -> tuple[type, ...]:
+    def writes(cls) -> tuple[type[ProducedRow], ...]:
         from .bus_activity_index import SentActivity
         from .bus_tables import AwaitingAnswerSource
         return (SentActivity, AwaitingAnswerSource)
@@ -643,7 +643,7 @@ class ConversationActivity(ProjectionSource):
     """Conversation activity owns its rows independently of reply eligibility."""
 
     @ClassFact
-    def writes(cls) -> tuple[type, ...]:
+    def writes(cls) -> tuple[type[ProducedRow], ...]:
         from .bus_activity_index import SentActivity
         return (SentActivity,)
 
@@ -657,7 +657,7 @@ class ConversationActivity(ProjectionSource):
 class ConversationRole(ConversationActivity, SendableRole):
 
     @ClassFact
-    def writes(cls) -> tuple[type, ...]:
+    def writes(cls) -> tuple[type[ProducedRow], ...]:
         from .bus_tables import AwaitingAnswerSource
         return (AwaitingAnswerSource,)
 
@@ -981,7 +981,7 @@ class BusRecord(Message, DeclaredFamily, affix="Record"):
     """Every record declaration owns its frozen value and derived tables."""
 
     @ClassFact
-    def writes(cls) -> tuple[type, ...]:
+    def writes(cls) -> tuple[type[ProducedRow], ...]:
         from .bus_activity_index import BusActivityIndex, SentActivity
         from .bus_display_index import BusDisplayIndex
         from .bus_route_counts import BusRouteCounts
@@ -1043,7 +1043,7 @@ class Claimed(BusCapability):
     """The transition attesting this row, stored in its append transaction."""
 
     @ClassFact
-    def writes(cls) -> tuple[type, ...]:
+    def writes(cls) -> tuple[type[ProducedRow], ...]:
         return (HeldResources, ClaimOperations)
 
 

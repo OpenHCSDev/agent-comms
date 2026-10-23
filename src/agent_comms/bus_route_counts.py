@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from .class_fact import ClassFact
+from .projection_source import ProducedRow
 import json
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Annotated, ClassVar
@@ -19,7 +20,7 @@ if TYPE_CHECKING:
 class BusRouteCounts(BusProjectionTables):
 
     @ClassFact
-    def writes(cls) -> tuple[type, ...]:
+    def writes(cls) -> tuple[type[ProducedRow], ...]:
         return (BusRouteCounts,)
 
     seq: Annotated[int, Column(primary_key=True)]

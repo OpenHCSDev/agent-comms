@@ -31,7 +31,7 @@ from .field_codec import (
     WireName,
     WireValue,
 )
-from .projection_source import ProjectionSource
+from .projection_source import ProducedRow, ProjectionSource
 from .response_policy import CollectivePolicy, InformationalPolicy, ResponsePolicy
 
 if TYPE_CHECKING:
@@ -592,7 +592,7 @@ class ThreadRole(DeclaredFamily, ProjectionSource, affix="ThreadRole"):
     """Whether a thread executes turns is the member's type; its wire name is its spelling."""
 
     @ClassFact
-    def writes(cls) -> tuple[type, ...]:
+    def writes(cls) -> tuple[type[ProducedRow], ...]:
         from .bus_activity_index import BusActivityIndex
         from .bus_display_index import BusDisplayIndex
         return (BusActivityIndex, BusDisplayIndex)

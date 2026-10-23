@@ -29,7 +29,7 @@ from .field_codec import FieldCodec, NullMember, SingleFieldValue, SubclassUnion
 from .mentions import ThreadMention
 from .message_reference import MessageReference
 from .private_path import FileObservation, MissingFile
-from .projection_source import ProjectionSource
+from .projection_source import ProducedRow, ProjectionSource
 from .recorded_bus import RecordedBus, RecordedBusIdentity
 from .store_files import SharedLock
 from .thread_identity import RecordedThreadIncarnation, ThreadIncarnation
@@ -944,7 +944,7 @@ class RepliesDisplayScope(AnyTargetDisplayScope, DMDisplayScope):
     """Peer requests, direct or channel-addressed, and every reply by the first participant."""
 
     @ClassFact
-    def writes(cls) -> tuple[type, ...]:
+    def writes(cls) -> tuple[type[ProducedRow], ...]:
         from .bus_tables import AwaitingAnswerSource
         return (AwaitingAnswerSource,)
 

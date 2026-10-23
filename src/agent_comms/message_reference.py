@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from .class_fact import ClassFact
-from .projection_source import ProjectionSource
+from .projection_source import ProducedRow, ProjectionSource
 from abc import abstractmethod
 from dataclasses import dataclass
 
@@ -15,7 +15,7 @@ from .page_traversal import LiveCursor, NewestCursor, PageCursor, PageTraversal
 class MessageReference(ProjectionSource):
 
     @ClassFact
-    def writes(cls) -> tuple[type, ...]:
+    def writes(cls) -> tuple[type[ProducedRow], ...]:
         from .bus_tables import MessageIdentitySource, AnsweredSource
         return (MessageIdentitySource, AnsweredSource)
 

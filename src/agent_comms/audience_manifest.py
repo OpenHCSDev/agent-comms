@@ -21,7 +21,7 @@ from agent_comms.coordination_contracts import MAX_IDENTIFIER_CHARS
 from .channel_targets import exact_stored_target
 from .field_codec import FieldCodec, MalformedRecord, Sha256Text
 from .messages import Message
-from .projection_source import ProjectionSource
+from .projection_source import ProducedRow, ProjectionSource
 
 AUDIENCE_VERSION: Final = 1
 MAX_RECIPIENTS: Final = 4096
@@ -63,7 +63,7 @@ class FrozenRecipient(ProjectionSource):
     """Stable coordination lookup paired with its send-time canonical name."""
 
     @ClassFact
-    def writes(cls) -> tuple[type, ...]:
+    def writes(cls) -> tuple[type[ProducedRow], ...]:
         from .bus_tables import ReceivedSource, AwaitingAnswerSource
         return (ReceivedSource, AwaitingAnswerSource)
 
@@ -85,7 +85,7 @@ class FrozenAudience(ProjectionSource):
     """
 
     @ClassFact
-    def writes(cls) -> tuple[type, ...]:
+    def writes(cls) -> tuple[type[ProducedRow], ...]:
         from .bus_tables import SentSource, ReceivedSource, AwaitingAnswerSource
         from .bus_route_counts import BusRouteCounts
         return (SentSource, ReceivedSource, AwaitingAnswerSource, BusRouteCounts)

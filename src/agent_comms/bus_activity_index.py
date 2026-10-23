@@ -6,6 +6,7 @@ from dataclasses import dataclass, field
 from typing import Annotated
 
 from .class_fact import ClassFact
+from .projection_source import ProducedRow
 from . import activity_clocks
 from .messages import BusProjectionTables
 from .typed_table import Column
@@ -15,7 +16,7 @@ class ActivityMaximum(BusProjectionTables, declared_name=None):
     """The declared non-key values are maxima, not independently writable clocks."""
 
     @ClassFact
-    def writes(cls) -> tuple[type, ...]:
+    def writes(cls) -> tuple[type[ProducedRow], ...]:
         from .bus_display_index import BusDisplayIndex
 
         return (BusActivityIndex, SentActivity, BusDisplayIndex)

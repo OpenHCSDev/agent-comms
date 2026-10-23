@@ -10,7 +10,7 @@ from functools import cache
 from typing import TYPE_CHECKING
 
 from .declared_family import DeclaredFamily
-from .projection_source import ProjectionSource
+from .projection_source import ProducedRow, ProjectionSource
 
 if TYPE_CHECKING:
     from .messages import Message
@@ -21,7 +21,7 @@ if TYPE_CHECKING:
 class ResponsePolicy(DeclaredFamily, ProjectionSource, affix="Policy"):
 
     @ClassFact
-    def writes(cls) -> tuple[type, ...]:
+    def writes(cls) -> tuple[type[ProducedRow], ...]:
         from .bus_tables import AwaitingAnswerSource
         return (AwaitingAnswerSource,)
 
@@ -130,7 +130,7 @@ class InformationalPolicy(NoChannelRecipients, ResponsePolicy):
 class ResponseEligibility(ProjectionSource):
 
     @ClassFact
-    def writes(cls) -> tuple[type, ...]:
+    def writes(cls) -> tuple[type[ProducedRow], ...]:
         from .bus_tables import AwaitingAnswerSource
         return (AwaitingAnswerSource,)
 
