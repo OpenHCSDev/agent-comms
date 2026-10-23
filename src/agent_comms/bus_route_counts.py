@@ -88,8 +88,7 @@ class RouteCounts:
                 AND row.sender_lookup=route.sender_lookup
                 AND row.seq>(SELECT after FROM arguments)
                 AND row.seq<=(SELECT through FROM arguments)
-                AND row.seq>coalesce((SELECT max(high_water) FROM actor_floor AS floor
-                    WHERE floor.actor=owner.key AND floor.target IN (row.target,'')),0)
+                AND {ReadCursor.above_floor("row.seq", "owner.key", "row.target")}
         )
     ), candidates AS MATERIALIZED (
         SELECT route.actor,row.*,
@@ -100,8 +99,7 @@ class RouteCounts:
         LEFT JOIN "{ReceivedSource.declared_name}" AS addressed
             ON addressed.lookup=route.recipient_lookup AND addressed.seq=row.seq
         WHERE row.seq>(SELECT after FROM arguments) AND row.seq<=(SELECT through FROM arguments)
-            AND row.seq>coalesce((SELECT max(high_water) FROM actor_floor AS floor
-                WHERE floor.actor=route.actor AND floor.target IN (row.target,'')),0)
+            AND {ReadCursor.above_floor("row.seq", "route.actor", "row.target")}
     ), requests AS MATERIALIZED (
         SELECT * FROM candidates WHERE since IS NOT NULL AND timestamp>=since
     )'''
@@ -127,10 +125,8 @@ class RouteCounts:
                 *parameters,
             )
             return row_type.read(db.execute(
-                f'''WITH {ReadCursor.sql("?")}, actor_floor AS MATERIALIZED (
-                    SELECT actor,target,max(high_water) AS high_water
-                    FROM read_cursors WHERE sender='' GROUP BY actor,target
-                ), {self._requests}, {ReadCursor.joined_sql} {query}''',
+                f'''WITH {ReadCursor.sql("?")}, {ReadCursor.floor_sql},
+                {self._requests}, {ReadCursor.joined_sql} {query}''',
                 bindings))
 
     def unseen_counts(self, registry, deliveries, seen, *, after: int = 0):

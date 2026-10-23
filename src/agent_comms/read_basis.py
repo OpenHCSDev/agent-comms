@@ -395,6 +395,20 @@ class ReadCursor:
 
     unread_sql = "seq > high_water AND seq NOT IN (SELECT value FROM json_each(exceptions))"
 
+    floor_sql = """actor_floor AS MATERIALIZED (
+        SELECT actor,target,max(high_water) AS high_water
+        FROM read_cursors WHERE sender='' GROUP BY actor,target
+    )"""
+    """The broad-cursor part of joined_sql's rule, grouped by actor and target."""
+
+    @staticmethod
+    def above_floor(seq: str, actor: str, target: str) -> str:
+        """Apply the broad-cursor part of joined_sql's rule to a candidate row."""
+        return (
+            f"{seq}>coalesce((SELECT max(high_water) FROM actor_floor AS floor "
+            f"WHERE floor.actor={actor} AND floor.target IN ({target},'')),0)"
+        )
+
     joined_sql = """cursors AS MATERIALIZED (
         SELECT row.*,max(coalesce(read.high_water,0),coalesce(all_read.high_water,0)) AS high_water,
             coalesce(read.exceptions,'[]') AS exceptions FROM requests AS row
