@@ -168,7 +168,6 @@ def snapshot(
         obligations=(response,) if record.origin is ExecutionOrigin.WIRE and response else (),
         publication_intents=(),
         publication_evidence=(),
-        connectivity=None,
         last_recovery=None,
         current_execution_id=PointedExecution(record.execution_id) if current else NoPointedExecution(),
         current_attempt_ordinal=(PointedAttempt(record.lifecycle.current_attempt_ordinal) if current
@@ -954,7 +953,6 @@ def test_missing_replay_cannot_later_reauthorize_failed(db):
             obligations=(),
             publication_intents=(),
             publication_evidence=(),
-            connectivity=None,
             last_recovery=None,
             current_execution_id=NoPointedExecution(),
             current_attempt_ordinal=NoPointedAttempt(),
@@ -1258,7 +1256,6 @@ def test_populated_durable_authorities_reject_delete_and_survive_reopen(db):
     activate(c)
     c.execute("INSERT INTO participant_aliases VALUES ('old-worker','p',100)")
     c.execute("INSERT INTO replay_assessments VALUES ('e',0,1,0,1)")
-    c.execute("INSERT INTO connectivity VALUES ('e','connected','connected',1,100)")
     c.execute(
         "INSERT INTO recovery_audit (execution_id,kind,reason_code,"
         "sanitized_detail,attempt,elapsed_ms,observed_at_ms) "
@@ -1275,7 +1272,6 @@ def test_populated_durable_authorities_reject_delete_and_survive_reopen(db):
         "execution_claims",
         "replay_assessments",
         "obligations",
-        "connectivity",
         "recovery_audit",
     )
     for table in tables:
@@ -1366,19 +1362,10 @@ def test_obligation_same_state_rewrite_is_rejected_including_terminal(db):
 
 
 
-def test_recovery_and_connectivity_monotonic_reopen(db):
+def test_recovery_audit_immutable_reopen(db):
     c, path = db
     sql_execution(c)
     activate(c)
-    c.execute("INSERT INTO connectivity VALUES ('e','connected','connected',1,100)")
-    for sql in (
-        "UPDATE connectivity SET revision=0 WHERE execution_id='e'",
-        "UPDATE connectivity SET revision=3 WHERE execution_id='e'",
-        "UPDATE connectivity SET revision=2,observed_at_ms=99 WHERE execution_id='e'",
-    ):
-        with pytest.raises(sqlite3.IntegrityError):
-            c.execute(sql)
-    c.execute("UPDATE connectivity SET revision=2,observed_at_ms=101 WHERE execution_id='e'")
     c.execute(
         "INSERT INTO recovery_audit (execution_id,kind,reason_code,"
         "sanitized_detail,attempt,elapsed_ms,observed_at_ms) "
@@ -1392,9 +1379,6 @@ def test_recovery_and_connectivity_monotonic_reopen(db):
             c.execute(sql)
     with CoordinationStore(path) as reopened:
         reopened._connection.row_factory = None
-        assert reopened._connection.execute(
-            "SELECT revision,observed_at_ms FROM connectivity"
-        ).fetchone() == (2, 101)
         assert (
             reopened._connection.execute("SELECT kind FROM recovery_audit").fetchone()[0]
             == "model_stalled"
@@ -1415,7 +1399,6 @@ def test_recovery_and_connectivity_monotonic_reopen(db):
         "obligations",
         "publication_intents",
         "publication_receipts",
-        "connectivity",
         "recovery_audit",
         "participant_aliases",
     ],

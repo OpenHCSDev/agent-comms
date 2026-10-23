@@ -24,6 +24,7 @@ from .declared_family import DeclaredFamily
 from .display_order import CreatedThreadSort, LastActivityThreadSort, ThreadSort
 from .errors import RelationViolationError, UnregisteredThreadError
 from .goals import Goal, GoalMentionBinding
+from .locked_store import DocumentChange
 from .maintenance_barrier import CarriedDocument
 from .messages import Message
 from .peer_relevance import (
@@ -664,15 +665,17 @@ class RelationshipStore(ThreadOwnedState, CarriedDocument[RelationshipDocument])
         """A collaboration or order ends with either deleted incarnation."""
         deleted = {thread.incarnation for thread in threads}
 
-        def remove(document: RelationshipDocument) -> RelationshipDocument:
+        def remove(
+            document: RelationshipDocument,
+        ) -> DocumentChange[RelationshipDocument, RelationshipDocument]:
             collaborations = tuple(
                 edge for edge in document.collaborations
                 if not {edge.owner_incarnation, edge.peer_incarnation} & deleted
             )
             orders = tuple(order for order in document.orders if order.incarnation not in deleted)
             if (collaborations, orders) == (document.collaborations, document.orders):
-                return document
-            return replace(document, collaborations=collaborations, orders=orders)
+                return DocumentChange.to(document)
+            return DocumentChange.to(replace(document, collaborations=collaborations, orders=orders))
 
         self.update(remove)
 
@@ -827,25 +830,24 @@ class ThreadRelationships:
         first.role.require_executable(ValueError("Collaborations relate agent threads"))
         registry = self.registry.snapshot()
         peer = registry.canonical_name(peer)
-        result = None
 
-        def change(document: RelationshipDocument) -> RelationshipDocument:
-            nonlocal result
+        def change(
+            document: RelationshipDocument,
+        ) -> DocumentChange[RelationshipDocument, Collaboration | None]:
             resolved = document.resolved(registry)
             changed, result = command.apply(
                 RelationshipEditContext(resolved, first, peer, registry.threads.get(peer))
             )
-            return document if changed == document else changed
+            return DocumentChange(document if changed == document else changed, result)
 
-        self.store.update(change)
-        return result
+        return self.store.update(change)
 
     def set_order(self, owner: str, group: type[SortableRelationshipGroup],
                   order: type[ThreadSort]) -> type[ThreadSort]:
         thread = self.registry.require(owner)
         registry = self.registry.snapshot()
         self.store.update(
-            lambda document: group.ordered(document.resolved(registry), thread, order)
+            lambda document: DocumentChange.to(group.ordered(document.resolved(registry), thread, order))
         )
         return order
 

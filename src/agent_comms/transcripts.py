@@ -14,10 +14,8 @@ from typing import Annotated, Callable, ClassVar
 
 from .agent_backend import RuntimeLocation
 from .bus_publication import Delivered
-from agent_comms.native_runtime_input import NativeRuntimeTable
 from .coordination_database import CoordinationStore
 from .coordination_errors import CoordinationReadUnavailable, StaleRevision, TranscriptChanged
-from .coordination_response import ResponseTable
 from .declared_family import DeclaredFamily
 from .errors import RelationViolationError
 from .external_transcript import ExternalTranscript
@@ -30,6 +28,7 @@ from .native_runtime_input import PublishedReplyRevision
 from .native_transcript import NativeTranscript, RecordsCut
 from .presentation import MessageNotification
 from .private_path import FileObservation, FileRevision
+from .private_registry_guard import RegistryPrivacy
 from .recorded_bus import RecordedBusIdentity
 from .registration import Registration
 from .routing import TurnRouting
@@ -394,21 +393,20 @@ class TranscriptRead:
     @classmethod
     @contextmanager
     def publication_source(cls, root):
-        with CoordinationStore.observed(CoordinationStore.path_in(root)).observing(cls) as db:
+        privacy = RegistryPrivacy.capture(root)
+        with CoordinationStore.observed(CoordinationStore.path_in(root)).observing(cls, privacy) as db:
             yield db
 
     @classmethod
-    def capture(cls, db):
-        NativeRuntimeTable.require_installed(db)
-        ResponseTable.require_installed(db)
-        return db
+    def capture(cls, db, privacy: RegistryPrivacy):
+        return privacy.publication_connection(db)
 
     @classmethod
-    def missing_store(cls, store):
+    def missing_store(cls, store, privacy: RegistryPrivacy):
         return None
 
     @classmethod
-    def invalid_store(cls, store):
+    def invalid_store(cls, store, privacy: RegistryPrivacy):
         raise RelationViolationError("Native reply source has an invalid coordinator")
 
     def current(self) -> bool:

@@ -203,10 +203,10 @@ class ClaimBatchMembers(GuardedInserts, ImmutableRows, CohortTable, TypedTable):
     @classmethod
     def references(cls):
         return (
-            ForeignKey(("claim_id",), WakeAssignment, ("assignment_id",)),
-            ForeignKey(("recipient_lookup",), Participants, ("participant_lookup",)),
+            ForeignKey(columns=("claim_id",), target=WakeAssignment, target_columns=("assignment_id",)),
+            ForeignKey(columns=("recipient_lookup",), target=Participants, target_columns=("participant_lookup",)),
             ForeignKey(
-                ("wire_root_id", "wire_seq"), ClaimBatchAcknowledgements, ("wire_root_id", "wire_seq")
+                columns=("wire_root_id", "wire_seq"), target=ClaimBatchAcknowledgements, target_columns=("wire_root_id", "wire_seq")
             ),
         )
 
@@ -282,10 +282,10 @@ class CohortDeliveries(
     @classmethod
     def references(cls):
         return (
-            ForeignKey(("recipient_lookup",), Participants, ("participant_lookup",)),
-            ForeignKey(("claim_id",), WakeAssignment, ("assignment_id",)),
+            ForeignKey(columns=("recipient_lookup",), target=Participants, target_columns=("participant_lookup",)),
+            ForeignKey(columns=("claim_id",), target=WakeAssignment, target_columns=("assignment_id",)),
             ForeignKey(
-                ("wire_root_id", "wire_seq"), ClaimBatchAcknowledgements, ("wire_root_id", "wire_seq")
+                columns=("wire_root_id", "wire_seq"), target=ClaimBatchAcknowledgements, target_columns=("wire_root_id", "wire_seq")
             ),
         )
 
@@ -359,12 +359,12 @@ class AwarenessClaimGenerations(
     @classmethod
     def references(cls):
         return (
-            ForeignKey(("claim_id",), WakeAssignment, ("assignment_id",)),
-            ForeignKey(("owner_lookup",), Participants, ("participant_lookup",)),
+            ForeignKey(columns=("claim_id",), target=WakeAssignment, target_columns=("assignment_id",)),
+            ForeignKey(columns=("owner_lookup",), target=Participants, target_columns=("participant_lookup",)),
             ForeignKey(
-                ("wire_root_id", "wire_seq", "claim_id"),
-                ClaimBatchMembers,
-                ("wire_root_id", "wire_seq", "claim_id"),
+                columns=("wire_root_id", "wire_seq", "claim_id"),
+                target=ClaimBatchMembers,
+                target_columns=("wire_root_id", "wire_seq", "claim_id"),
             ),
         )
 

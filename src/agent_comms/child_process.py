@@ -34,6 +34,7 @@ from contextlib import (
 from dataclasses import dataclass
 from functools import partial
 from pathlib import Path
+from tempfile import TemporaryDirectory
 from typing import TYPE_CHECKING, Any, ClassVar, NoReturn
 
 from .declared_family import DeclaredFamily
@@ -356,7 +357,22 @@ class Platform(DeclaredFamily, affix="Platform"):
     def is_private(self, info: os.stat_result, permissions: int) -> bool: ...
 
     @abstractmethod
+    def is_owned(self, info: os.stat_result) -> bool: ...
+
+    @abstractmethod
     def make_private(self, path: Path, permissions: int) -> None: ...
+
+    @abstractmethod
+    def make_private_descriptor(self, descriptor: int, permissions: int) -> None: ...
+
+    @contextmanager
+    def socket_address(self, path: Path, descriptor: int) -> Generator[Path, None, None]:
+        with TemporaryDirectory(prefix="ac-socket-", dir="/tmp") as directory:
+            parent = Path(directory) / "d"
+            parent.symlink_to(path.parent, target_is_directory=True)
+            if not os.path.samestat(os.stat(parent), os.fstat(descriptor)):
+                raise ValueError("Socket directory changed during address acquisition")
+            yield parent / path.name
 
     @abstractmethod
     def try_store_lock(self, descriptor: int, *, mode: LockMode) -> None:
@@ -434,12 +450,19 @@ class PosixPlatform(Platform):
             os.close(descriptor)
 
     def is_private(self, info: os.stat_result, permissions: int) -> bool:
-        return stat.S_IMODE(info.st_mode) == permissions and info.st_uid == os.geteuid()
+        return stat.S_IMODE(info.st_mode) == permissions and self.is_owned(info)
+
+    def is_owned(self, info: os.stat_result) -> bool:
+        return info.st_uid == os.geteuid()
 
     def make_private(self, path: Path, permissions: int) -> None:
         with suppress(FileNotFoundError):
             if stat.S_IMODE(path.lstat().st_mode) != permissions:
                 os.chmod(path, permissions, follow_symlinks=False)
+
+    def make_private_descriptor(self, descriptor: int, permissions: int) -> None:
+        if stat.S_IMODE(os.fstat(descriptor).st_mode) != permissions:
+            os.fchmod(descriptor, permissions)
 
     def acquire_store_lock(self, descriptor: int, *, mode: LockMode, blocking: bool) -> None:
         import fcntl
@@ -486,6 +509,10 @@ class LinuxProcessRecord:
 
 
 class LinuxPlatform(PidfdHandles, PosixPlatform):
+    @contextmanager
+    def socket_address(self, path: Path, descriptor: int) -> Generator[Path, None, None]:
+        yield Path(f"/proc/{os.getpid()}/fd/{descriptor}") / path.name
+
     def parent_death_binding(self) -> int:
         """The exec gate arms PR_SET_PDEATHSIG and binds to this launcher's PID."""
         return os.getpid()
@@ -655,7 +682,13 @@ class Win32Platform(Platform):
         # NTFS ACLs, not POSIX mode bits, determine privacy.
         return True
 
+    def is_owned(self, info: os.stat_result) -> bool:
+        return True
+
     def make_private(self, path: Path, permissions: int) -> None:
+        pass
+
+    def make_private_descriptor(self, descriptor: int, permissions: int) -> None:
         pass
 
     def try_store_lock(self, descriptor: int, *, mode: LockMode) -> None:
@@ -1785,24 +1818,24 @@ class SpawnedProcess(SynchronousProcess):
         self.process = process
 
     @classmethod
-    def launch(
+    @contextmanager
+    def launching(
         cls,
         command: tuple[str, ...],
         *,
         cwd: str | Path | None = None,
         env: Mapping[str, str] = INHERITED_ENVIRONMENT,
         output: Any = subprocess.DEVNULL,
-        before_start: Callable[[ProcessIdentity], None] | None = None,
         runtime: LaunchRuntime = LaunchRuntime.running(),
         lifetime: type[ChildLifetime] = DiesWithLauncherLifetime,
-    ) -> SpawnedProcess:
+    ) -> Generator[SpawnedProcess]:
+        """Yield the child before it executes; leaving the body releases it, raising reaps it."""
         if not command:
             raise ValueError("A child command is required")
         with Platform.current().launch(command, (), runtime, lifetime) as launch:
             child = launch.spawn(cwd=cwd, env=env, stdout=output, stderr=output)
             try:
-                if before_start is not None:
-                    before_start(child.identity)
+                yield child
             except BaseException:
                 launch.cancel_before_release(child.identity)
                 child.reap()
@@ -1814,7 +1847,12 @@ class SpawnedProcess(SynchronousProcess):
             except BaseException:
                 child.close()
                 raise
-        return child
+
+    @classmethod
+    def launch(cls, command: tuple[str, ...], **options: Any) -> SpawnedProcess:
+        """Launch with nothing to reserve before the child executes."""
+        with cls.launching(command, **options) as child:
+            return child
 
     def collect(self, *, timeout: float) -> subprocess.CompletedProcess[bytes]:
         """Collect within the caller's owned context; its exit retires descendants."""

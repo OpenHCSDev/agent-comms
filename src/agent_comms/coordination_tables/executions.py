@@ -159,17 +159,17 @@ class CurrentExecutions(
         from agent_comms.coordination_tables.participants import Participants
 
         return (
-            ForeignKey(("owner_lookup",), Participants, ("participant_lookup",)),
+            ForeignKey(columns=("owner_lookup",), target=Participants, target_columns=("participant_lookup",)),
             ForeignKey(
-                ("execution_id", "attempt_ordinal", "owner_lookup", "required_active"),
-                ExecutionRecord,
-                ("execution_id", "current_attempt_ordinal", "owner_lookup", "status"),
+                columns=("execution_id", "attempt_ordinal", "owner_lookup", "required_active"),
+                target=ExecutionRecord,
+                target_columns=("execution_id", "current_attempt_ordinal", "owner_lookup", "status"),
                 deferred=True,
             ),
             ForeignKey(
-                ("execution_id", "attempt_ordinal", "owner_lookup", "required_active"),
-                AttemptRecord,
-                ("execution_id", "attempt_ordinal", "owner_lookup", "phase_kind"),
+                columns=("execution_id", "attempt_ordinal", "owner_lookup", "required_active"),
+                target=AttemptRecord,
+                target_columns=("execution_id", "attempt_ordinal", "owner_lookup", "phase_kind"),
                 deferred=True,
             ),
         )
@@ -398,34 +398,34 @@ class ExecutionRecord(
         from agent_comms.coordination_tables.participants import Participants
 
         return (
-            ForeignKey(("owner_lookup",), Participants, ("participant_lookup",)),
+            ForeignKey(columns=("owner_lookup",), target=Participants, target_columns=("participant_lookup",)),
             ForeignKey(
-                (
+                columns=(
                     "execution_id",
                     "current_attempt_ordinal",
                     "owner_lookup",
                     "required_attempt_kind",
                 ),
-                AttemptRecord,
-                ("execution_id", "attempt_ordinal", "owner_lookup", "phase_kind"),
+                target=AttemptRecord,
+                target_columns=("execution_id", "attempt_ordinal", "owner_lookup", "phase_kind"),
                 deferred=True,
             ),
             ForeignKey(
-                ("owner_lookup", "active_execution_id", "active_attempt_ordinal"),
-                CurrentExecutions,
-                ("owner_lookup", "execution_id", "attempt_ordinal"),
+                columns=("owner_lookup", "active_execution_id", "active_attempt_ordinal"),
+                target=CurrentExecutions,
+                target_columns=("owner_lookup", "execution_id", "attempt_ordinal"),
                 deferred=True,
             ),
             ForeignKey(
-                ("wire_execution_id", "wire_claim_ordinal"),
-                ExecutionAssignmentLink,
-                ("execution_id", "ordinal"),
+                columns=("wire_execution_id", "wire_claim_ordinal"),
+                target=ExecutionAssignmentLink,
+                target_columns=("execution_id", "ordinal"),
                 deferred=True,
             ),
             ForeignKey(
-                ("deferred_replay_id", "deferred_replay_required"),
-                ReplayAssessments,
-                ("execution_id", "retry_authorized"),
+                columns=("deferred_replay_id", "deferred_replay_required"),
+                target=ReplayAssessments,
+                target_columns=("execution_id", "retry_authorized"),
                 deferred=True,
             ),
         )
@@ -437,7 +437,7 @@ class ExecutionReference:
     @classmethod
     def references(cls) -> tuple[ForeignKey, ...]:
         return (
-            ForeignKey(("execution_id",), ExecutionRecord, ("execution_id",), on_delete="RESTRICT"),
+            ForeignKey(columns=("execution_id",), target=ExecutionRecord, target_columns=("execution_id",), on_delete="RESTRICT"),
         )
 
 

@@ -55,7 +55,6 @@ from agent_comms.coordination_tables.executions import ExecutionOrigin
 from agent_comms.coordination_tables.publications import (
     PublicationIntents,
 )
-from agent_comms.coordination_tables.recovery import ACPClientConnectivity, OwnerConnectivity
 from agent_comms.coordinator import StandaloneCoordination
 from agent_comms.response_acknowledgement import canonical_publication_key
 from agent_comms.execution_states import (
@@ -886,26 +885,9 @@ def test_ambiguity_forces_failed_partition(db_path: Path) -> None:
         assert settled.value.replay.require_assessment().facts == ReplayFact.TOOL_EXECUTED
 
 
-def test_fenced_connectivity_audit_and_monotone_replay(db_path: Path) -> None:
+def test_fenced_recovery_audit_and_monotone_replay(db_path: Path) -> None:
     with ready(db_path) as db:
         _, fence = started(db)
-        observed = db.observe_connectivity(
-            fence,
-            expected_pointer_revision=1,
-            expected_revision=None,
-            owner=OwnerConnectivity.RECONNECTING,
-            acp_client=ACPClientConnectivity.DISCONNECTED,
-        )
-        assert observed.value.connectivity is not None
-        assert observed.value.connectivity.revision == 1
-        with pytest.raises(StaleRevision):
-            db.observe_connectivity(
-                fence,
-                expected_pointer_revision=1,
-                expected_revision=None,
-                owner=OwnerConnectivity.OFFLINE,
-                acp_client=ACPClientConnectivity.DISCONNECTED,
-            )
         with pytest.raises(IdentityConflict):
             db.append_recovery_audit(
                 fence, expected_pointer_revision=1, kind=FailedRecovery, reason_code=GivenReasonCode("invented")

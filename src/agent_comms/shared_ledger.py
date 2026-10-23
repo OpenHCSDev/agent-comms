@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING, ClassVar, Self
 from agent_comms.cli_result import CliResult
 from agent_comms.declared_family import DeclaredFamily
 from agent_comms.field_codec import FieldCodec, JsonShapeFamily, JsonShapeMember
+from agent_comms.locked_store import DocumentChange
 from agent_comms.maintenance_barrier import CarriedDocument
 from agent_comms.thread_owned_state import ThreadOwnedState
 
@@ -115,22 +116,18 @@ class SharedLedger(ThreadOwnedState, CarriedDocument[LedgerDocument]):
 
     def merge(self, updates: Mapping[str, object], author: str) -> None:
         changes = FieldCodec.decode(LedgerDocument, dict(updates))
-        self.update(lambda document: LedgerDocument(
-            {**document.value, **changes.value, "last_updated_by": TextLedgerValue(author)}))
+        self.update(lambda document: DocumentChange.to(LedgerDocument(
+            {**document.value, **changes.value, "last_updated_by": TextLedgerValue(author)})))
 
     def remove_threads(self, threads: Sequence[Thread]) -> None:
         names = frozenset(thread.name for thread in threads)
-        self.update(lambda document: document.without_threads(names))
+        self.update(lambda document: DocumentChange.to(document.without_threads(names)))
 
     def rename_thread(self, old_name: str, new_name: str) -> int:
         """Replace exact structural references without touching free text."""
-        changed = 0
 
-        def change(document: LedgerDocument) -> LedgerDocument:
-            nonlocal changed
+        def change(document: LedgerDocument) -> DocumentChange[LedgerDocument, int]:
             renamed = document.renamed_thread(old_name, new_name)
-            changed = renamed.count
-            return renamed.value if changed else document
+            return DocumentChange(renamed.value if renamed.count else document, renamed.count)
 
-        self.update(change)
-        return changed
+        return self.update(change)

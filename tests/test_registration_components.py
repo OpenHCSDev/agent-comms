@@ -12,7 +12,7 @@ import pytest
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.errors import RelationViolationError, UnregisteredThreadError
 from agent_comms.field_codec import FieldCodec
-from agent_comms.locked_store import LockedStore
+from agent_comms.locked_store import DocumentChange, LockedStore
 from agent_comms.registration import Registration
 from agent_comms.registry_document import RegistryDocument, ThreadSlice
 from agent_comms.registry_store import RegistryStore, UncachedRegistry
@@ -94,7 +94,7 @@ def test_registry_update_persists_across_reopen(tmp_path):
     def change(original):
         modified = original.copy()
         modified.threads["owner"] = replace(modified.threads["owner"], title=GivenThreadText("a8 update"))
-        return modified
+        return DocumentChange.to(modified)
 
     registry.store.update(change)
     assert Registration(registry.store.path).require("owner").title == GivenThreadText("a8 update")

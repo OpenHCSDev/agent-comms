@@ -18,6 +18,7 @@ from .bus import Bus, BusReader
 from .channel_targets import CommandTarget
 from .coordination_errors import DMScopeChanged
 from .field_codec import FieldCodec, NullMember, SubclassUnion
+from .locked_store import DocumentChange
 from .maintenance_barrier import CarriedDocument
 from .private_path import ObservedPath
 from .read_basis import (
@@ -79,17 +80,12 @@ class PendingReadNotice(ReadNotice):
         return FieldCodec.value_schema(str)
 
     def take(self, ledger: ReadLedger) -> ReadNotice:
-        taken: ReadNotice = NoReadNotice()
-
-        def clear(document: ReadDocument) -> ReadDocument:
-            nonlocal taken
+        def clear(document: ReadDocument) -> DocumentChange[ReadDocument, ReadNotice]:
             if document.notice != self:
-                return document
-            taken = self
-            return replace(document, notice=NoReadNotice())
+                return DocumentChange(document, NoReadNotice())
+            return DocumentChange(replace(document, notice=NoReadNotice()), self)
 
-        ledger.update(clear)
-        return taken
+        return ledger.update(clear)
 
     def notify_if_new(self, previous: ReadNotice, notify: Callable[[str], object]) -> None:
         if self != previous:
@@ -187,7 +183,7 @@ class ReadLedger(Sealed, ThreadOwnedState, CarriedDocument[ReadDocument]):
         if viewer != displayed.viewer:
             raise DMScopeChanged("Display belongs to a different viewer.")
 
-        def advance(document: ReadDocument) -> ReadDocument:
+        def advance(document: ReadDocument) -> DocumentChange[ReadDocument, ReadDocument]:
             messages = (
                 dict(document.messages)
                 if document.bus_identity.matches(displayed.bus_identity) else {}
@@ -195,7 +191,7 @@ class ReadLedger(Sealed, ThreadOwnedState, CarriedDocument[ReadDocument]):
             messages[displayed.viewer_identity] = messages.get(
                 displayed.viewer_identity, ReadCursor(),
             ).add(displayed.conversations)
-            return (
+            return DocumentChange.to(
                 replace(document, messages=messages, bus_identity=displayed.bus_identity)
                 if messages != document.messages
                 or not document.bus_identity.matches(displayed.bus_identity)
@@ -260,12 +256,12 @@ class ReadLedger(Sealed, ThreadOwnedState, CarriedDocument[ReadDocument]):
         for thread in threads:
             sources.update(thread.runtime.read_keys())
 
-        def remove(document: ReadDocument) -> ReadDocument:
+        def remove(document: ReadDocument) -> DocumentChange[ReadDocument, ReadDocument]:
             messages = {k: v for k, v in document.messages.items() if k not in viewers}
             transcripts = {k: v for k, v in document.transcripts.items() if k[1] not in sources and k[0] not in viewer_names}
             if messages == document.messages and transcripts == document.transcripts:
-                return document
-            return replace(document, messages=messages, transcripts=transcripts)
+                return DocumentChange.to(document)
+            return DocumentChange.to(replace(document, messages=messages, transcripts=transcripts))
 
         self.update(remove)
 
@@ -284,10 +280,10 @@ class ReadLedger(Sealed, ThreadOwnedState, CarriedDocument[ReadDocument]):
     ) -> None:
         key = self._transcript_key(viewer, source, inode)
 
-        def advance(document: ReadDocument) -> ReadDocument:
+        def advance(document: ReadDocument) -> DocumentChange[ReadDocument, ReadDocument]:
             previous = document.transcripts.get(key, 0)
             if previous <= size and previous >= through:
-                return document
-            return replace(document, transcripts={**document.transcripts, key: through})
+                return DocumentChange.to(document)
+            return DocumentChange.to(replace(document, transcripts={**document.transcripts, key: through}))
 
         self.update(advance)

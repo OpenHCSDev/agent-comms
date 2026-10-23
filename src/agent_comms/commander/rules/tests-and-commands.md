@@ -12,5 +12,5 @@ type: feedback
 - Refactor tests with the code: per-member copies become one family test, hand-built setup one fixture owner. Tristan, 2026-10-18: "no stupid test theater, refactor the slop out of tests as you go, they're fucking sloppy".
 - A red test or failure you meet is fixed at its owner in the change at hand, or handed the same tick to the agent whose open work touches that code, named with its PR. "Not my change" without a named owner is a hidden failure, and every later run pays for it by asking whether a red is real. Tristan, 2026-10-22: "imagine if it doesn't get fixed and in the future you always end up checking oh is this a real failure?"; "not my change is valid if another agent is touching it, but they must be named".
 - An order check counts over the whole source tree (`grep -r ... src`), never one file.
-- Run verb gate loops under `bash -c`: zsh passes a quoted "order board" as one argument.
+- Run verb gate loops under `bash -c`: zsh passes a quoted "order idle" as one argument.
 - A wait or kill by process pattern brackets its first letter (`grep -q "[v]erify"`) or waits on a file or PID, or it matches itself.

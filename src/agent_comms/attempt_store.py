@@ -19,12 +19,7 @@ from agent_comms.coordination_session import NativeBoundary
 from agent_comms.coordination_snapshot import RecoverySnapshot
 from agent_comms.coordination_tables.assignments import WakeAssignment
 from agent_comms.coordination_tables.attempts import AttemptRecord, ReplayFact
-from agent_comms.coordination_tables.recovery import (
-    ACPClientConnectivity,
-    ConnectivityFacet,
-    OwnerConnectivity,
-    RecoveryAudit,
-)
+from agent_comms.coordination_tables.recovery import RecoveryAudit
 from agent_comms.owner_fence import OwnerFence
 from agent_comms.turn_failure import TurnFailure
 from agent_comms.recovery_reader import RecoveryReader
@@ -206,34 +201,6 @@ class AttemptStore(RecoveryReader):
             self.get(fence.execution_id).settle(
                 self.session, UnknownOutcomeAttempt(), GivenReasonCode("native_unknown"), acquired
             )
-            return Applied(self.get(fence.execution_id))
-
-    def observe_connectivity(
-        self,
-        fence: OwnerFence,
-        *,
-        expected_pointer_revision: int,
-        expected_revision: int | None,
-        owner: OwnerConnectivity,
-        acp_client: ACPClientConnectivity,
-    ) -> Applied[RecoverySnapshot]:
-        owner, acp_client = OwnerConnectivity(owner), ACPClientConnectivity(acp_client)
-        with self.session.writing() as db:
-            snapshot, _ = self.require_fence(fence)
-            before = snapshot.connectivity
-            if (
-                snapshot.pointer_revision != expected_pointer_revision
-                or (before.revision if before else None) != expected_revision
-            ):
-                raise StaleRevision("connectivity or pointer revision changed")
-            now = self.session.now(before.observed_at_ms if before else 0)
-            ConnectivityFacet(
-                fence.execution_id,
-                owner,
-                acp_client,
-                before.revision + 1 if before else 1,
-                now,
-            ).upsert(db)
             return Applied(self.get(fence.execution_id))
 
     def append_recovery_audit(
