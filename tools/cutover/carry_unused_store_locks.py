@@ -61,5 +61,4 @@ class UnusedStoreLocks(Carry):
                 "kept": len(locks) - len(siblings) + len(declared) - len(unused),
                 "unknown": len(siblings) - len(declared),
             },
-            rewritten=tuple(path.relative_to(self.root) for path in unused) if apply else (),
         )
