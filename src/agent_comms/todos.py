@@ -16,7 +16,7 @@ import subprocess
 import sys
 import time
 from abc import ABC, abstractmethod
-from collections.abc import Callable, Iterator, Mapping, Sequence
+from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
 from contextlib import contextmanager
 from dataclasses import dataclass, field, fields, replace
 from functools import cached_property, partial
@@ -614,6 +614,10 @@ class ListedPullRequest(DeclaredFamily, affix="ListedPullRequest"):
     draft: bool = field(default=False, kw_only=True)
     status_contexts: tuple[str, ...] = field(default=(), kw_only=True)
 
+    @classmethod
+    def selected(cls, rows: Iterable[ListedPullRequest]) -> tuple[Self, ...]:
+        return tuple(candidate for candidate in rows if isinstance(candidate, cls))
+
     @cached_property
     def updated_at(self) -> float:
         return _github_time(self.updated)
@@ -708,9 +712,9 @@ class PullRequests:
                                      for line in result.stdout.splitlines())
         numbers = tuple(dict.fromkeys((*self._open[repo], *self.linked(repo))))
         self.rows(repo, numbers)
-        return tuple(row for number in self._open[repo]
-                     for row in (self._read[repo, number],)
-                     if isinstance(row, UnmergedListedPullRequest))
+        return UnmergedListedPullRequest.selected(
+            self._read[repo, number] for number in self._open[repo]
+        )
 
     def listed(self, repo: RepositoryName, kind: type[ListedPullRequest],
                todo: Todo) -> tuple[PullRequest, ...]:
@@ -721,7 +725,7 @@ class PullRequests:
             tuple(dict.fromkeys(order.id for candidate in linked[row.number]
                                 for order in candidate.order.declarations
                                 if PullRequestLink(repo, row.number) in order.pull_requests)))
-            for row in self.rows(repo, tuple(linked)) if isinstance(row, kind))
+            for row in kind.selected(self.rows(repo, tuple(linked))))
         return tuple(sorted((request for request in requests if request.belongs_to(todo)),
                             key=lambda request: request.updated_at, reverse=True))
 
