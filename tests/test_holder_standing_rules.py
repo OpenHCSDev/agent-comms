@@ -1,7 +1,6 @@
 """Held-order recovery and unanswered DMs on an independently copied bus."""
 
 
-from agent_comms.channel_targets import CommandTarget
 import asyncio
 import json
 import os
@@ -13,24 +12,23 @@ from uuid import uuid4
 
 import pytest
 
-from agent_comms.store_files import StoreLockContention
-
 from agent_comms import agent_events as events
 from agent_comms.bus_publication import AgentOrigin, HumanOrigin
+from agent_comms.channel_targets import CommandTarget
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.commander.order import Commander, OrderFile, SayVerb, SendVerb
 from agent_comms.commander.questions import UnansweredBurst, UnansweredUnitAsks
 from agent_comms.commander.standing import (
-    HeartbeatSilent,
-    HeartbeatNotStarted,
-    MissedHeartbeat,
     AnswersTo,
+    HeartbeatNotStarted,
+    HeartbeatSilent,
+    HolderGone,
+    MissedHeartbeat,
     UnitAskUnanswered,
 )
-from agent_comms.comms import wire
 from agent_comms.commander_heartbeat import CommanderHeartbeat
 from agent_comms.commander_pings import CommanderUpdate
-from agent_comms.service_passes import ServicePassStore
+from agent_comms.comms import wire
 from agent_comms.coordinator import Coordination
 from agent_comms.errors import CommittedMessageError, HumanSendRefusedError, RelationViolationError
 from agent_comms.field_codec import FieldCodec, MessageId, TurnId
@@ -41,23 +39,29 @@ from agent_comms.goal_actions import (
 from agent_comms.goal_presentation import RunnableExecution
 from agent_comms.goal_states import ActiveGoal
 from agent_comms.goals import CountCheckResult, OrderCheck
-from agent_comms.owner_requests import NewestOpenRequest, RequestDirective
+from agent_comms.heartbeat_frame import HeartbeatFrame
+from agent_comms.held_orders import HeldOrders
 from agent_comms.input_disposition import InputDispositions
 from agent_comms.installer.backup import StoreBackup
 from agent_comms.launch_root import LaunchRoot
 from agent_comms.message_page import MessagePageRequest
-from agent_comms.messages import ConversationRole, InfoKind, Message, NoticeRole, QuestionKind
 from agent_comms.message_reference import MessageReference
+from agent_comms.messages import ConversationRole, InfoKind, Message, NoticeRole, QuestionKind
 from agent_comms.native_arguments import GivenBinary
 from agent_comms.order_runs import MechanicalOrderRun
+from agent_comms.order_story import FleetStory
+from agent_comms.order_tools import CommsFleetStoryTool, CommsTodoListTool, TodoList
+from agent_comms.owner_requests import NewestOpenRequest, RequestDirective
 from agent_comms.read_basis import DMDisplayScope, RepliesDisplayScope
 from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.repository_name import RepositoryName
-from agent_comms.heartbeat_frame import HeartbeatFrame
-from agent_comms.standing_rules import StandingRule, StandingScan
+from agent_comms.service_passes import ServicePassStore
+from agent_comms.standing_rules import StandingRule
+from agent_comms.store_files import StoreLockContention
 from agent_comms.thread_identity import CoreWatcherIncarnation
 from agent_comms.thread_model import DeclaredModel
 from agent_comms.thread_status import StoppedThreadStatus
+from agent_comms.threads import Thread
 from agent_comms.todos import (
     ClaimOrder,
     OrderClaim,
@@ -66,12 +70,13 @@ from agent_comms.todos import (
     ProgressRead,
     TodoConflict,
 )
+from agent_comms.tool_caller import NoThreadCaller
+from agent_comms.turn_digests import OrderEditCountRead
 from agent_comms.ui_model.unit_state import AwaitingCommander, Blocked, Detached, UnitState
 from cli_command import commander
 from conftest import declare_test_bus
 from native_backend_fixture import native_backend_fixture, wait_for
 from test_goal_execution import turn_on
-from agent_comms.threads import Thread
 
 
 @pytest.fixture
@@ -261,6 +266,49 @@ def test_an_active_goal_with_an_unresolved_attempt_is_reported_never_retried(hel
     assert held_bus.registry.require("worker").goal.require() == goal
     assert isinstance(goal.state, ActiveGoal)
     assert store.require_generation(goal.id) == reserved
+
+
+def test_holds_whose_holder_was_deleted_or_registered_again_are_reported_by_every_reader(
+    held_bus, installed_runtime,
+):
+    """One registry split owns orphaned holds: the heartbeat's standing read names each one
+    with what clears it, and the fleet story, todo list and edit counts read the same split."""
+    comms = held_bus
+    original = comms.goals.todos.get("P1")
+    comms.goals.update_goal("outsider", CreateProblemGoalAction(
+        problem="P3", commander="lead", request=original.request,
+        assigner=comms.registry.require("lead").incarnation, repo=original.repo,
+        text="Repair P3", review_at=original.review_at,
+        order=replace(original.order, id="order-P3"),
+    ))
+    merged = comms.goals.todos.get("P2")
+    with comms.goals.todos.writing() as db:
+        replace(merged, order=merged.order.merged("b" * 40), revision=merged.revision + 1).upsert(db)
+    worker = comms.registry.require("worker")
+    for name in ("worker", "outsider"):
+        comms.registry.unregister(name)
+        comms.registry.remove(name)
+    comms.registry.declare(Thread("worker", frozenset({"comms"}), worker.worktree))
+
+    frame = HeartbeatFrame.read(comms, "lead", ProgressRead())
+    broken = StandingRule.broken(
+        comms, "lead", observed=UnitState.current(comms, "lead", frame), frame=frame)
+    gone = {rule.todo.id: rule.line() for rule in broken if isinstance(rule, HolderGone)}
+    assert set(gone) == {"P1", "P2", "P3"}
+    assert "order withdraw P1" in gone["P1"] and "order close P2" in gone["P2"]
+    assert {rule.todo.id for rule in HolderGone.violations(comms, "lead")} == set(gone)
+    assert frame.todos == ()
+    fleet, = FieldCodec.decode(FleetStory, CommsFleetStoryTool.invoke(
+        comms, {"thread": "lead"}, caller=NoThreadCaller())).lines
+    count, named = fleet.split(": ")
+    assert count == "3 orders held by units no longer registered"
+    assert set(named.split(", ")) == {"P1 worker", "P2 worker", "P3 outsider"}
+    listed = FieldCodec.decode(TodoList, CommsTodoListTool.invoke(
+        comms, {"thread": "lead"}, caller=NoThreadCaller()))
+    assert {"P1", "P2", "P3"} <= {todo.id for todo in listed.todos} and listed.progress == {}
+    assert OrderEditCountRead.count(comms, "lead") == 0
+    with pytest.raises(ValueError, match="pass --artifact FILE"):
+        comms.goals.todos.get("P2").order.closing_artifact()
 
 
 def publish(comms, sender, target, timestamp, *, answers=()):
@@ -565,7 +613,7 @@ def test_channel_messages_without_a_commander_addressee_are_not_a_question(held_
     with held_bus.bus.bus.reading() as source:
         questions = UnansweredUnitAsks.for_orders(
             source, held_bus.registry.snapshot(), 'lead',
-            StandingScan.read(held_bus, 'lead').holders, time.time(),
+            HeldOrders.read(held_bus, 'lead').holders, time.time(),
         )
     assert not any(questions.values())
 

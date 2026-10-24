@@ -63,9 +63,6 @@ class UnansweredUnitAsks(SenderMessages):
 
         if not held:
             return {}
-        for owner in held:
-            if snapshot.require(owner.name).incarnation != owner:
-                raise ValueError("Held order owner incarnation changed")
         peers = frozenset(name for owner in held for name in snapshot.names_for(owner.name))
         since = min(
             order.at.recorded_at("A held order")

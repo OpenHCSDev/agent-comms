@@ -37,6 +37,7 @@ from .goal_actions import CreateProblemGoalAction, OrderGoalAction
 from .goals import Goal, OrderCheck
 from .heartbeat_frame import HeartbeatFrame
 from .head_review import PullRequestHead
+from .held_orders import HeldOrders
 from .order_story import FleetStory, OrderStory
 from .order_work import OrderWork
 from .plan_phases import OrderPhase
@@ -261,11 +262,14 @@ class CommsTodoListTool(ThreadReadTool):
     description = "Read the commander's canonical Todo orders, review timers, strikes and hunts."
 
     def apply(self, comms: Comms, caller: ToolCaller) -> TodoList:
-        actor = comms.registry.require(caller.subject(self.thread)).incarnation
+        snapshot = comms.registry.snapshot()
+        actor = snapshot.require(caller.subject(self.thread)).incarnation
         listed = tuple(comms.goals.todos.for_commander(actor))
         pulls = ProgressRead(listed)
+        # An orphaned hold has no unit checkout to read; HolderGone reports it.
+        held = HeldOrders.split(tuple(todo for todo in listed if todo.holder), snapshot)
         return TodoList(listed, {todo.id: OrderProgress.read(todo, comms.registry, pulls)
-                                 for todo in listed if todo.holder})
+                                 for todo in held.todos})
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -458,12 +462,10 @@ class CommsOrderStoryTool(ReadTool, ToolRequest):
 class CommsFleetStoryTool(ThreadReadTool):
     label = "Fleet story"
     description = ("Read what each order this commander holds out is doing now, one line per "
-                   "order; orders held by units that no longer read collapse into one line.")
+                   "order; orders held by units no longer registered collapse into one line.")
 
     def apply(self, comms: Comms, caller: ToolCaller) -> FleetStory:
-        snapshot = comms.registry.snapshot()
-        actor = snapshot.require(caller.subject(self.thread)).incarnation
-        return FleetStory.collect(comms.goals.todos.held_for_commander(actor), snapshot)
+        return FleetStory.collect(HeldOrders.read(comms, caller.subject(self.thread)))
 
 
 @dataclass(frozen=True, kw_only=True)

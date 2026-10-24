@@ -38,10 +38,10 @@ from agent_comms.standing_rules import (
     OwedAnswer,
     ReviewTimerUp,
     StandingRule,
-    StandingScan,
     UndatedStandingRule,
 )
 from agent_comms.thread_identity import ThreadIncarnation
+from agent_comms.held_orders import HeldOrders
 from agent_comms.todos import OwnerRequest, ProgressRead, Todo
 from agent_comms.tool_result import ToolResult
 from agent_comms.ui_model.unit_state import UnitState
@@ -282,7 +282,7 @@ class Chokehold(IndependentStandingRule, UndatedStandingRule):
 
     @classmethod
     def violations(cls, comms: Comms, commander: str) -> tuple[Self, ...]:
-        return cls.scan_checks(comms, commander, StandingScan.read(comms, commander))
+        return cls.scan_checks(comms, commander, HeldOrders.read(comms, commander))
 
     @classmethod
     def scan_observed(cls, comms: Comms, commander: str,
@@ -290,7 +290,7 @@ class Chokehold(IndependentStandingRule, UndatedStandingRule):
         return cls.scan_checks(comms, commander, frame)
 
     @classmethod
-    def scan_checks(cls, comms: Comms, commander: str, scan: StandingScan) -> tuple[Self, ...]:
+    def scan_checks(cls, comms: Comms, commander: str, scan: HeldOrders) -> tuple[Self, ...]:
         snapshot = comms.registry.snapshot()
         with comms.bus.bus.reading() as source:
             ignored = VibeCheckSender.unanswered(source, snapshot, commander, time.time() - cls.after)

@@ -8,7 +8,7 @@ from dataclasses import replace
 import pytest
 
 from agent_comms.comms import wire
-from agent_comms.field_codec import FieldCodec
+from agent_comms.field_codec import FieldCodec, MessageId
 from agent_comms.goal_actions import CreateProblemGoalAction, OrderGoalAction
 from agent_comms.order_story import FleetStory, OrderStory
 from agent_comms.recorded_time import RecordedEventTime
@@ -66,7 +66,7 @@ def test_order_story_copied_bus_strike_and_send_back_once(comms, tmp_path):
     current = comms.goals.todos.get("P1")
     with pytest.raises(ValueError):
         current.latest_message
-    for message_id in ("initial-order-message", "current-order-message"):
+    for message_id in map(MessageId.mint, ("initial order", "current order")):
         caller.invoke(CommsChangeProblemTool(problem=current.id, operation=OrderMessage(
             current.revision, actor, message_id)), comms)
         current = comms.goals.todos.get(current.id)

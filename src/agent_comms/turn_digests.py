@@ -11,6 +11,7 @@ from typing import TYPE_CHECKING, Self
 from .declared_family import DeclaredFamily
 from .errors import ToolRefusedError
 from .external_transcript import ExternalTranscript, StoreRead
+from .held_orders import HeldOrders, LiveHold
 from .order_work import OrderWork
 from .thread_execution import ConversationPreparation
 from .thread_identity import ThreadIncarnation
@@ -22,7 +23,6 @@ from .transcript_events import IncomingTranscript, TurnDigest
 
 if TYPE_CHECKING:
     from .comms import Comms
-    from .registry_document import RegistrySnapshot
     from .threads import Thread
     from .transcript_sources import TranscriptSource
     from .todos import Todo
@@ -189,27 +189,17 @@ class OrderRead[Result](TranscriptRead[Result]):
 
     @classmethod
     def for_commander(cls, comms: Comms, commander: str) -> Iterator[Self]:
-        snapshot = comms.registry.snapshot()
-        actor = snapshot.require(commander).incarnation
-        yield from cls.for_orders(
-            comms.root, snapshot, comms.goals.todos.held_for_commander(actor)
-        )
+        yield from cls.for_orders(comms.root, HeldOrders.read(comms, commander).live)
 
     @classmethod
-    def for_orders(
-        cls, root: Path, snapshot: RegistrySnapshot, todos: Iterable[Todo]
-    ) -> Iterator[Self]:
-        """Read these orders against their captured roster and canonical review cut."""
+    def for_orders(cls, root: Path, holds: Iterable[LiveHold]) -> Iterator[Self]:
+        """Read each live hold's transcript from its canonical review cut."""
         from .todos import TodoStore
 
         store = TodoStore(root)
-        for todo in todos:
-            assignment = todo.held()
-            holder = snapshot.require(assignment.owner)
-            if holder.incarnation != assignment.owner_identity:
-                raise ToolRefusedError(f"Order {todo.id} holder incarnation no longer exists")
+        for hold in holds:
             yield cls(
-                root, holder, TurnsSince(store.unjudged_since(todo)), todo
+                root, hold.holder, TurnsSince(store.unjudged_since(hold.todo)), hold.todo
             )
 
     def edits_from_turns(self, turns: tuple[TurnDigest, ...]) -> tuple[EditCall, ...]:

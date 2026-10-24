@@ -4,6 +4,7 @@ from dataclasses import replace
 import pytest
 
 from agent_comms.commander.order import main
+from agent_comms.commander.standing import HolderGone
 from agent_comms.goals import CountCheckResult, OrderCheck
 from agent_comms.order_runs import ApplicationOrderRun
 from agent_comms.todos import (
@@ -100,10 +101,15 @@ class TestOrderCompletion:
             main(['done', 'worker', 'P1', '--op'], ctx)
         assert ctx.comms.goals.todos.get('P1') == original
 
+    @pytest.mark.parametrize('holder', [
+        lambda registry: None,
+        lambda registry: (registry.unregister('worker'), registry.remove('worker')),
+    ], ids=['registered', 'removed'])
     def test_merged_close_accepts_the_explicit_artifact(
-        self, held_commander, proof_build_checkouts,
+        self, held_commander, proof_build_checkouts, holder,
     ):
         ctx = held_commander
+        holder(ctx.comms.registry)
         graph = next(graph for graph in proof_build_checkouts
                      if graph.repository.github == ctx.repos[0].github)
         works = 'Open retained workflow and confirm its report stays visible'
@@ -116,3 +122,4 @@ class TestOrderCompletion:
         assert closed.state is DoneTodoState
         assert isinstance(closed.order, InstalledMergedProblemOrder)
         assert closed.order.artifact == str(artifact)
+        assert HolderGone.violations(ctx.comms, ctx.commander) == ()

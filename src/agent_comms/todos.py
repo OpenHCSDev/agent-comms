@@ -129,6 +129,7 @@ if TYPE_CHECKING:
     from agent_comms.comms import Comms
     from agent_comms.goal_management import Goals
     from agent_comms.registration import Registration
+    from agent_comms.registry_document import RegistrySnapshot
 
 
 @dataclass(frozen=True)
@@ -1633,6 +1634,11 @@ class ProblemOrder(LifecycleCapability, DeclaredFamily, StorySource, affix="Prob
     def closing_artifact(self) -> str:
         raise ValueError("Only a delivered order has closing evidence.")
 
+    def orphan_clearing(self, todo: Todo) -> str:
+        """What clears this order once its holder is no longer registered."""
+        return (f"no live unit can deliver it; send it to a live unit with `order send UNIT "
+                f"ORDER.json` naming {todo.id}, or retire it with `order withdraw {todo.id}`")
+
     def linked(self, order: PendingProblemOrder) -> PendingProblemOrder:
         raise ValueError("This problem already has an order; drop it before linking another.")
 
@@ -2060,6 +2066,10 @@ class AwaitingInstallationProblemOrder(OpenProblemOrder, declared_name=None):
     def waiting_on_install(self, todo: Todo, read: dict[str, OrderProgress]) -> tuple[Todo, ...]:
         return (todo,)
 
+    def orphan_clearing(self, todo: Todo) -> str:
+        return (f"its work is done and waits on install; once installed, close it with "
+                f"`order close {todo.id} --works WHAT-RAN --artifact FILE`")
+
 
 @dataclass(frozen=True, kw_only=True)
 class MergedProblemOrder(AwaitingInstallationProblemOrder):
@@ -2093,6 +2103,10 @@ class MergedProblemOrder(AwaitingInstallationProblemOrder):
     def installed(self, works: str, artifact: str) -> ProblemOrder:
         self.run.require_closing(works)
         return self.copy_as(InstalledMergedProblemOrder, works=works, artifact=artifact)
+
+    def closing_artifact(self) -> str:
+        raise ValueError("A merged order records no delivered run; pass --artifact FILE "
+                         "showing the run on the installed build.")
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -2623,6 +2637,11 @@ class Assignment(TodoHolder):
     @property
     def owner_identity(self) -> ThreadIncarnation:
         return RecordedThreadIncarnation(self.owner, self.owner_created)
+
+    def holder_in(self, snapshot: RegistrySnapshot) -> tuple[Thread, ...]:
+        """The registered thread born as this hold's recorded holder; empty once that thread
+        was deleted or registered again under a new birth."""
+        return snapshot.threads_for(self.owner_identity.require_recorded())
 
     @property
     def parent_identity(self) -> ThreadIncarnation:

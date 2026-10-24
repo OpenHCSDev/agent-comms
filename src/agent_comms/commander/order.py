@@ -63,9 +63,10 @@ from agent_comms.problem_number import ProblemNumber
 from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.repo import Repo
 from agent_comms.registry_document import RegisteredCommanderProject
-from agent_comms.standing_rules import HuntDue, OwedAnswer, StandingScan
+from agent_comms.standing_rules import HuntDue, OwedAnswer
 from agent_comms.storage_rules import UnitStorage
 from agent_comms.thread_identity import ThreadIncarnation
+from agent_comms.held_orders import HeldOrders
 from agent_comms.todos import (
     BluntText,
     CheckedDelivery,
@@ -1260,7 +1261,7 @@ class NextHuntVerb(OrderVerb, declared_name="next-hunt"):
 
     def run(self, ctx: Commander) -> None:
         for path in HuntDue.next_hunt(ctx.comms, ctx.commander,
-                                      StandingScan.read(ctx.comms, ctx.commander).todos):
+                                      HeldOrders.read(ctx.comms, ctx.commander).todos):
             print(path)
 
 
@@ -1268,7 +1269,7 @@ class IdleVerb(OrderVerb):
     help = "print the units Core counts idle: a recent turn and no order"
 
     def run(self, ctx: Commander) -> None:
-        scan = StandingScan.read(ctx.comms, ctx.commander)
+        scan = HeldOrders.read(ctx.comms, ctx.commander)
         for thread in UnownedWheelSpin.idle(ctx.comms, ctx.commander, scan):
             print(thread.name)
 

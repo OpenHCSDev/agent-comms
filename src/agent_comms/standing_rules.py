@@ -23,6 +23,7 @@ from agent_comms.recorded_time import EventTime, RecordedEventTime
 from agent_comms.repo import Repo
 from agent_comms.repository_name import RepositoryName
 from agent_comms.head_review import PullRequestHead
+from agent_comms.held_orders import HeldOrders
 from agent_comms.thread_identity import ThreadIncarnation
 from agent_comms.work_branches import BranchDifference
 from agent_comms.service_passes import ServicePassStore
@@ -72,26 +73,6 @@ class Degradation(DeclaredFamily, affix="Degradation"):
 class BlocksRelease:
     """A degraded signal the commander clears this turn, so a chokehold holds its units until
     the signal is gone: a quote is the answer, never the relief."""
-
-
-@dataclass(frozen=True)
-class StandingScan:
-    """The held orders captured once for this scan; filtering never reopens the store."""
-
-    todos: tuple[Todo, ...]
-
-    @classmethod
-    def read(cls, comms: Comms, commander: str) -> Self:
-        return cls(comms.goals.todos.held_for_commander(
-            comms.registry.require(commander).incarnation,
-        ))
-
-    @property
-    def holders(self) -> dict[ThreadIncarnation, list[Todo]]:
-        held: dict[ThreadIncarnation, list[Todo]] = {}
-        for todo in self.todos:
-            held.setdefault(todo.held().owner_identity, []).append(todo)
-        return held
 
 
 class StandingRule(DeclaredFamily, affix="StandingRule", discovery_package="agent_comms.commander"):
@@ -404,10 +385,10 @@ class OwedAnswer(IndependentStandingRule, declared_name=None):
 
     @classmethod
     def opened(cls, comms: Comms, commander: str) -> tuple[Self, ...]:
-        return cls.read_scan(comms, commander, StandingScan.read(comms, commander))
+        return cls.read_scan(comms, commander, HeldOrders.read(comms, commander))
 
     @classmethod
-    def read_scan(cls, comms: Comms, commander: str, scan: StandingScan) -> tuple[Self, ...]:
+    def read_scan(cls, comms: Comms, commander: str, scan: HeldOrders) -> tuple[Self, ...]:
         # Capture committed order/directive references before the bus cut.
         snapshot = comms.registry.snapshot()
         requests = comms.goals.todos.open_requests(snapshot.require(commander).incarnation)
