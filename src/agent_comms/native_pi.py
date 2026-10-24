@@ -486,8 +486,6 @@ class NativePiRpcLaunch:
         runtime = LaunchRuntime.running()
         cls._command_selection(command, runtime, package)
         cwd = worktree.resolve(strict=True)
-        if not cwd.is_dir():
-            raise NativePiUnavailable("Native Pi worktree is unavailable")
         return cls._managed(package, (*arguments, "--no-extensions", "--no-skills",
             "--no-context-files", "--no-session"), cwd, None, SelectedSession(cwd), runtime, cwd)
 
@@ -608,16 +606,6 @@ class NativePiRpcLaunch:
             arguments.extend(("--session", str(session_file)))
         env, configuration = session.launch_environment(agent_dir, environment)
         return cls._build(package, tuple(arguments), worktree, env, session, configuration, runtime, root)
-
-
-def _read_private_file(path: Path):
-    """Yield strict private evidence rows, checking the same opened revision.
-
-    Historical bytes do not set the live input budget. A bounded byte snapshot is
-    validated before decoding; callers must exhaust the resulting observation.
-    """
-    with PrivateEvidenceRead.open(path) as evidence:
-        yield from evidence.rows()
 
 
 class NativeEvidencePrefixChanged(NativePiUnavailable):
