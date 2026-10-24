@@ -453,6 +453,7 @@ def revert(home: Path, root: Path) -> int:
         if manifest.is_file():
             backup = FieldCodec.decode(DirectoryBackup, json.loads(manifest.read_text()))
             if backup.root != root:
+                print(f'left backup: {directory} (other root {backup.root})')
                 continue
             changed += backup.restore()
             shutil.rmtree(directory)
