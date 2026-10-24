@@ -103,7 +103,7 @@ def held_bus(comms, tmp_path, source_repository, configured_repository):
             review_at=RecordedEventTime(now + 3600),
             order=PendingProblemOrder(
                 id=f"order-{problem}", owner=scope.shape.parents[0], scope=scope, run=MechanicalOrderRun(),
-                check=OrderCheck(str(source.checkout), "printf 1", CountCheckResult(1)),
+                check=OrderCheck(str(source.checkout), "printf 0", CountCheckResult(1)),
                 edits=("Repair the existing owner",), banned=("No second store",),
                 report="Report the result", at=RecordedEventTime(now - 3600),
                 first_call_deadline=RecordedEventTime(now + 3600),
