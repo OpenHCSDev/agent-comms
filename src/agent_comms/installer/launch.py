@@ -182,7 +182,7 @@ class InstallUnit(SystemdUnit):
 
     def due(self) -> type[standing.InstallDue]:
         """A run whose unit is gone without printing a result died; any other was launched."""
-        gone = self.shown(self.unit, "ActiveState") in ("inactive", "failed")
+        gone = self.activity(self.unit).ended()
         return (standing.DiedInstallDue if gone and not self.result.read_text()
                 else standing.LaunchedInstallDue)
 

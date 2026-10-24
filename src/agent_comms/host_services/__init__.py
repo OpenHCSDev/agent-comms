@@ -123,6 +123,45 @@ class HostService(DeclaredFamily, affix="Service", discovery_package=__name__):
         raise ServiceNotServingError(failure)
 
 
+class UnitActivity(DeclaredFamily, affix="Unit"):
+    """systemd's ActiveState of a unit, an external contract decoded once by its spelling."""
+
+    @classmethod
+    def ended(cls) -> bool:
+        """Whether the unit has stopped running, cleanly or not."""
+        return False
+
+
+class EndedUnit(UnitActivity, declared_name=None):
+    @classmethod
+    def ended(cls) -> bool:
+        return True
+
+
+class ActiveUnit(UnitActivity): ...
+
+
+class ReloadingUnit(UnitActivity): ...
+
+
+class RefreshingUnit(UnitActivity): ...
+
+
+class ActivatingUnit(UnitActivity): ...
+
+
+class DeactivatingUnit(UnitActivity): ...
+
+
+class MaintenanceUnit(UnitActivity): ...
+
+
+class InactiveUnit(EndedUnit): ...
+
+
+class FailedUnit(EndedUnit): ...
+
+
 class SystemdUnit:
     """A unit of the user's systemd manager: systemd, never its caller, owns its processes,
     so stopping the caller's own unit cannot reach them."""
@@ -130,8 +169,13 @@ class SystemdUnit:
     @staticmethod
     def shown(unit: str, name: str) -> str:
         return subprocess.check_output(
-            ("systemctl", "--user", "show", "-p", name, "--value", unit), text=True,
+            ("systemctl", "--user", "show", "-p", name, "--value", unit),
+            text=True,
         ).strip()
+
+    @classmethod
+    def activity(cls, unit: str) -> type[UnitActivity]:
+        return UnitActivity.member_named(cls.shown(unit, "ActiveState"))
 
 
 @dataclass(frozen=True)
