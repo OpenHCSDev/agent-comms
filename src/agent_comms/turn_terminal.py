@@ -14,6 +14,7 @@ from .goal_failure_observation import FailedTurnObservation
 if TYPE_CHECKING:
     from .agent_events import Done
     from .goal_attempts import LaunchPermit
+    from .maintenance_barrier import MaintenanceBarrier
     from .turn_goal_account import TurnGoalAccount
     from .turn_progress import TurnProgress
 
@@ -105,7 +106,15 @@ class OperatorStopped(TurnTerminal):
 
 
 class OwnerStop(asyncio.Future[TurnTerminal], TurnInterruption):
-    """The worker's existing stop wait carries the operator's actual reason."""
+    """The worker's existing stop wait carries the operator's actual reason.
+
+    An install holds maintenance before it signals owners, so a turn that ends in
+    that window reads the hold, not a backend failure the signal has not yet named.
+    """
+
+    def __init__(self, maintenance: MaintenanceBarrier) -> None:
+        super().__init__()
+        self.maintenance = maintenance
 
     def interrupting(self, prior: TurnTerminal) -> TurnTerminal:
         return self.terminal.interrupting(prior)
@@ -116,4 +125,4 @@ class OwnerStop(asyncio.Future[TurnTerminal], TurnInterruption):
 
     @property
     def terminal(self) -> TurnTerminal:
-        return self.result() if self.done() else EndedWithoutResult()
+        return self.result() if self.done() else self.maintenance.read().interruption

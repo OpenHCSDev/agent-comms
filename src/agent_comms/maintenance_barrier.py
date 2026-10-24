@@ -15,7 +15,7 @@ from collections.abc import AsyncIterator, Iterator, Mapping, MutableMapping
 from contextlib import AbstractAsyncContextManager, asynccontextmanager, contextmanager
 from dataclasses import dataclass, field, replace
 from pathlib import Path
-from typing import Annotated, Literal, Self
+from typing import TYPE_CHECKING, Annotated, Literal, Self
 
 from .child_process import ProcessIdentity
 from .private_path import PrivateFileRole
@@ -40,6 +40,9 @@ from .store_files import (
     _async_store_lock,
     _store_lock,
 )
+
+if TYPE_CHECKING:
+    from .turn_terminal import TurnInterruption
 
 
 class MaintenanceHeldError(RelationViolationError, ToolRefusedError):
@@ -69,6 +72,13 @@ class HeldSends:
     def require_open():
         raise MaintenanceHeldError("Maintenance holds ingress: the bus is under maintenance")
 
+    @staticmethod
+    def interruption() -> TurnInterruption:
+        """A hold is the planned stop declared before any owner is signalled."""
+        from .turn_terminal import OperatorStopped
+
+        return OperatorStopped()
+
 
 class GrantedSends:
     @staticmethod
@@ -86,6 +96,12 @@ class GrantedSends:
     @staticmethod
     def require_open():
         pass
+
+    @staticmethod
+    def interruption() -> TurnInterruption:
+        from .turn_terminal import EndedWithoutResult
+
+        return EndedWithoutResult()
 
 
 class MaintenanceTarget(SubclassUnion):
@@ -290,6 +306,10 @@ class MaintenanceStatus:
 
     def require_open(self) -> None:
         self.phase.new_sends.require_open()
+
+    @property
+    def interruption(self) -> TurnInterruption:
+        return self.phase.new_sends.interruption()
 
     def require_open_to(self, holder: MaintenanceHolder) -> None:
         """Open, or held by ``holder``: the operation holding maintenance still runs its own reads."""
