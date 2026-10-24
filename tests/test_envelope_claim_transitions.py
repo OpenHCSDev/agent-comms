@@ -5,6 +5,7 @@ from dataclasses import replace
 from pathlib import Path
 
 import pytest
+from bus_record_fixture import RECIPIENT_LOOKUP, ROOT_ID
 
 from agent_comms.bus import ClaimRecord
 from agent_comms.envelope_claim_transitions import (
@@ -79,12 +80,12 @@ def test_same_name_can_take_a_previous_birth_only_with_current_registry_evidence
 def test_selected_wake_binding_survives_claim_projection(tmp_path):
     _, resource, _ = resources(tmp_path)
     claim_scope = WakeClaim(
-        wire_root_id="c" * 32,
+        wire_root_id=ROOT_ID,
         source_seq=7,
         source_message_id=MessageId.mint("source-7"),
         wake_assignment_id="cohort-v1:" + "d" * 64,
         wake_revision=3,
-        recipient_lookup="e" * 32,
+        recipient_lookup=RECIPIENT_LOOKUP,
         execution_id="execution-7",
         operation_id=ClaimId("f" * 32),
         owner_claimed_generation=2,

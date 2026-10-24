@@ -9,11 +9,15 @@ from pathlib import Path
 
 import pytest
 
+from bus_record_fixture import OWNER_LOOKUP, RECIPIENT_LOOKUP, SENDER_LOOKUP
+
 from agent_comms.cohort_schema import CohortTable
+from agent_comms.field_codec import ThreadLookup
 from agent_comms.coordination_tables.participants import Participants
 from agent_comms.coordinator import Coordination
 from agent_comms.coordination_database import CoordinationStore
 
+A, B, C = SENDER_LOOKUP, RECIPIENT_LOOKUP, OWNER_LOOKUP
 ROOT = "a" * 32
 SEQ = 7
 
@@ -59,13 +63,13 @@ def _receipt(
 
 
 def _assignment(db: sqlite3.Connection) -> None:
-    Participants(participant_lookup="a", committed=True).insert(db)
-    Participants(participant_lookup="b", committed=True).insert(db)
+    Participants(participant_lookup=A, committed=True).insert(db)
+    Participants(participant_lookup=B, committed=True).insert(db)
     db.execute(
         (
             "INSERT INTO wake_claims (assignment_id,recipient,recipient_lookup,wire_seq,m"
             "essage_id,lifecycle,audience,resolver_version,policy_version,accepted_at_ms,"
-            "updated_at_ms,revision) VALUES ('claim-a','Alice','a',7,'msg',json_object('k"
+            f"updated_at_ms,revision) VALUES ('claim-a','Alice','{A}',7,'msg',json_object('k"
             "ind','triage_pending'),'collective','r1','p1',100,100,1)"
         )
     )
@@ -73,7 +77,7 @@ def _assignment(db: sqlite3.Connection) -> None:
 
 def _member(db: sqlite3.Connection) -> None:
     db.execute(
-        "INSERT INTO claim_batch_members VALUES (?,?,0,'claim-a','a')",
+        f"INSERT INTO claim_batch_members VALUES (?,?,0,'claim-a','{A}')",
         (ROOT, SEQ),
     )
 
@@ -82,7 +86,7 @@ def _delivery(
     db: sqlite3.Connection,
     *,
     ordinal: int,
-    lookup: str,
+    lookup: ThreadLookup,
     name: str,
     kind: str,
     assignment_id: str | None,
@@ -102,32 +106,32 @@ def _seal(db: sqlite3.Connection) -> None:
 
 def _seal_two_selected_with_observer(db: sqlite3.Connection, *, reverse_claims: bool) -> None:
     _assignment(db)
-    Participants(participant_lookup="c", committed=True).insert(db)
+    Participants(participant_lookup=C, committed=True).insert(db)
     db.execute(
         (
             "INSERT INTO wake_claims (assignment_id,recipient,recipient_lookup,wire_seq,m"
             "essage_id,lifecycle,audience,resolver_version,policy_version,accepted_at_ms,"
-            "updated_at_ms,revision) SELECT 'claim-b','Bob','b',wire_seq,message_id,lifec"
+            f"updated_at_ms,revision) SELECT 'claim-b','Bob','{B}',wire_seq,message_id,lifec"
             "ycle,audience,resolver_version,policy_version,accepted_at_ms,updated_at_ms,r"
             "evision FROM wake_claims WHERE assignment_id='claim-a'"
         )
     )
     _receipt(db, n=3, k=2)
     ordered = (
-        (("claim-b", "b"), ("claim-a", "a"))
+        (("claim-b", B), ("claim-a", A))
         if reverse_claims
-        else (("claim-a", "a"), ("claim-b", "b"))
+        else (("claim-a", A), ("claim-b", B))
     )
     for ordinal, (assignment_id, lookup) in enumerate(ordered):
         db.execute(
             "INSERT INTO claim_batch_members VALUES (?,?,?,?,?)",
             (ROOT, SEQ, ordinal, assignment_id, lookup),
         )
-    _delivery(db, ordinal=0, lookup="a", name="Alice", kind="selected", assignment_id="claim-a")
+    _delivery(db, ordinal=0, lookup=A, name="Alice", kind="selected", assignment_id="claim-a")
     _delivery(
-        db, ordinal=1, lookup="c", name="Cara", kind="unmentioned_observer", assignment_id=None
+        db, ordinal=1, lookup=C, name="Cara", kind="unmentioned_observer", assignment_id=None
     )
-    _delivery(db, ordinal=2, lookup="b", name="Bob", kind="selected", assignment_id="claim-b")
+    _delivery(db, ordinal=2, lookup=B, name="Bob", kind="selected", assignment_id="claim-b")
     _seal(db)
 
 
@@ -192,7 +196,8 @@ def test_seal_rejects_observer_with_preexisting_legacy_singleton_claim(private_c
                 (
                     "INSERT INTO wake_claims (assignment_id,recipient,recipient_lookup,wire_seq,m"
                     "essage_id,lifecycle,audience,resolver_version,policy_version,accepted_at_ms,"
-                    "updated_at_ms,revision) SELECT 'legacy-b','Bob','b',wire_seq,message_id,life"
+                    "updated_at_ms,revision) "
+                    f"SELECT 'legacy-b','Bob','{B}',wire_seq,message_id,life"
                     "cycle,audience,resolver_version,policy_version,accepted_at_ms,updated_at_ms,"
                     "revision FROM wake_claims WHERE assignment_id='claim-a'"
                 )
@@ -204,12 +209,12 @@ def test_seal_rejects_observer_with_preexisting_legacy_singleton_claim(private_c
             _receipt(db, n=2, k=1)
             _member(db)
             _delivery(
-                db, ordinal=0, lookup="a", name="Alice", kind="selected", assignment_id="claim-a"
+                db, ordinal=0, lookup=A, name="Alice", kind="selected", assignment_id="claim-a"
             )
             _delivery(
                 db,
                 ordinal=1,
-                lookup="b",
+                lookup=B,
                 name="Bob",
                 kind="unmentioned_observer",
                 assignment_id=None,
@@ -231,12 +236,12 @@ def test_selected_and_observer_receipts_are_distinct_immutable_rows(private_comm
             _receipt(db, n=2, k=1)
             _member(db)
             _delivery(
-                db, ordinal=0, lookup="a", name="Alice", kind="selected", assignment_id="claim-a"
+                db, ordinal=0, lookup=A, name="Alice", kind="selected", assignment_id="claim-a"
             )
             _delivery(
                 db,
                 ordinal=1,
-                lookup="b",
+                lookup=B,
                 name="Bob",
                 kind="unmentioned_observer",
                 assignment_id=None,
@@ -249,7 +254,7 @@ def test_selected_and_observer_receipts_are_distinct_immutable_rows(private_comm
                 "SELECT ordinal,recipient_lookup,kind,claim_id "
                 "FROM cohort_delivery_receipts ORDER BY ordinal"
             )
-        ] == [(0, "a", "selected", "claim-a"), (1, "b", "unmentioned_observer", None)]
+        ] == [(0, A, "selected", "claim-a"), (1, B, "unmentioned_observer", None)]
         assert db.execute("SELECT COUNT(*) FROM claim_batch_members").fetchone()[0] == 1
         for row in CohortDeliveries.select(db, order_by=("ordinal",)):
             encoded = FieldCodec.encode(row)
@@ -261,7 +266,7 @@ def test_selected_and_observer_receipts_are_distinct_immutable_rows(private_comm
             "DELETE FROM claim_batch_receipts",
             "UPDATE cohort_delivery_receipts SET canonical_thread='Other'",
             "DELETE FROM claim_batch_members",
-            "UPDATE claim_batch_members SET recipient_lookup='b'",
+            f"UPDATE claim_batch_members SET recipient_lookup='{B}'",
         ):
             with pytest.raises(sqlite3.IntegrityError):
                 db.execute(statement)
@@ -277,7 +282,7 @@ def test_seal_rejects_missing_rows_and_rolls_back_entire_cohort(private_comms) -
                 _delivery(
                     db,
                     ordinal=0,
-                    lookup="a",
+                    lookup=A,
                     name="Alice",
                     kind="selected",
                     assignment_id="claim-a",
@@ -322,7 +327,7 @@ def test_foreign_claim_lookup_and_kind_shape_fail_before_seal(private_comms) -> 
         with store.session.writing() as db:
             _assignment(db)
             _receipt(db, n=2, k=1)
-            for assignment_id, lookup in (("missing", "a"), ("claim-a", "b")):
+            for assignment_id, lookup in (("missing", A), ("claim-a", B)):
                 with pytest.raises(
                     sqlite3.IntegrityError
                 ):
@@ -336,32 +341,32 @@ def test_foreign_claim_lookup_and_kind_shape_fail_before_seal(private_comms) -> 
                     _delivery(
                         db,
                         ordinal=0,
-                        lookup="a",
+                        lookup=A,
                         name="Alice",
                         kind=kind,
                         assignment_id=assignment_id,
                     )
             with pytest.raises(sqlite3.IntegrityError):
                 _delivery(
-                    db, ordinal=0, lookup="b", name="Bob", kind="selected", assignment_id="claim-a"
+                    db, ordinal=0, lookup=B, name="Bob", kind="selected", assignment_id="claim-a"
                 )
             with pytest.raises(sqlite3.IntegrityError):
                 _delivery(
                     db,
                     ordinal=0,
-                    lookup="a",
+                    lookup=A,
                     name="Mallory",
                     kind="selected",
                     assignment_id="claim-a",
                 )
             _delivery(
-                db, ordinal=0, lookup="a", name="Alice", kind="selected", assignment_id="claim-a"
+                db, ordinal=0, lookup=A, name="Alice", kind="selected", assignment_id="claim-a"
             )
             with pytest.raises(sqlite3.IntegrityError):
                 _delivery(
                     db,
                     ordinal=1,
-                    lookup="a",
+                    lookup=A,
                     name="Other",
                     kind="unmentioned_observer",
                     assignment_id=None,
@@ -370,7 +375,7 @@ def test_foreign_claim_lookup_and_kind_shape_fail_before_seal(private_comms) -> 
                 _delivery(
                     db,
                     ordinal=1,
-                    lookup="b",
+                    lookup=B,
                     name="Alice",
                     kind="unmentioned_observer",
                     assignment_id=None,
@@ -378,7 +383,7 @@ def test_foreign_claim_lookup_and_kind_shape_fail_before_seal(private_comms) -> 
             _delivery(
                 db,
                 ordinal=1,
-                lookup="b",
+                lookup=B,
                 name="Bob",
                 kind="unmentioned_observer",
                 assignment_id=None,
@@ -402,7 +407,7 @@ def test_seal_cannot_adopt_claim_with_conflicting_immutable_acceptance(
             _receipt(db, n=1, k=1, **{field: override})
             _member(db)
             _delivery(
-                db, ordinal=0, lookup="a", name="Alice", kind="selected", assignment_id="claim-a"
+                db, ordinal=0, lookup=A, name="Alice", kind="selected", assignment_id="claim-a"
             )
             _seal(db)
         assert store.session._connection.execute("SELECT COUNT(*) FROM wake_claims").fetchone()[0] == 0
@@ -419,13 +424,13 @@ def test_one_claim_cannot_be_sealed_by_two_wire_roots(private_comms) -> None:
             _receipt(db, n=1, k=1)
             _member(db)
             _delivery(
-                db, ordinal=0, lookup="a", name="Alice", kind="selected", assignment_id="claim-a"
+                db, ordinal=0, lookup=A, name="Alice", kind="selected", assignment_id="claim-a"
             )
             _seal(db)
         with pytest.raises(sqlite3.IntegrityError), store.session.writing() as db:
             _receipt(db, n=1, k=1, root="b" * 32)
             db.execute(
-                "INSERT INTO claim_batch_members VALUES (?,?,0,'claim-a','a')",
+                f"INSERT INTO claim_batch_members VALUES (?,?,0,'claim-a','{A}')",
                 ("b" * 32, SEQ),
             )
         assert (
