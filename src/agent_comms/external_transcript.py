@@ -18,7 +18,6 @@ from sqlite3 import Connection
 from typing import TYPE_CHECKING, Annotated, ClassVar
 from uuid import uuid4
 
-from .turn_item import NativeTurnId
 from .declared_family import DeclaredFamily
 from .field_codec import FieldCodec
 from .locked_store import RegistryFile
@@ -28,6 +27,7 @@ from .thread_identity import ThreadIncarnation
 from .tool_declaration import ToolDeclaration
 from .transcript_events import ToolStartTranscript, TranscriptEvent, TurnDigest
 from .transcript_sources import TranscriptDraft, TranscriptRecord, TranscriptSource
+from .turn_item import NativeTurnId
 from .typed_table import (
     Column,
     DurableStore,

@@ -9,7 +9,6 @@ from pydantic import ConfigDict, Field, JsonValue, model_validator
 
 from agent_comms.cli_protocol import TaggedWire, TextWire, WireHeader
 from agent_comms.field_codec import FieldCodec
-from agent_comms.turn_item import NativeTurnId
 from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.runtime_updates import (
     CompletedItem,
@@ -29,6 +28,7 @@ from agent_comms.transcript_events import (
     ThinkingTranscript,
     UserTranscript,
 )
+from agent_comms.turn_item import NativeTurnId
 from agent_comms.turn_phase import ModelWaitPhase, ToolRunningPhase, TurnPhase
 
 from ..wire_models import WireModel

@@ -11,7 +11,6 @@ from urllib.parse import quote
 
 from pydantic import JsonValue
 
-from .turn_item import NativeTurnId
 from . import tool_declaration
 from .declared_family import DeclaredFamily
 from .field_codec import FieldCodec, NullMember, PresentMember, WireBind, WireOmitDefault
@@ -21,6 +20,7 @@ from .recorded_time import EventTime, UnrecordedEventTime
 from .routing import MessageRoute, TurnRouting
 from .tool_results import SENT_MESSAGE_MIME, NoSentMessage, NoToolDiff, ToolDiff, ToolText
 from .transcript_merge import EventMerge, StreamingMerge
+from .turn_item import NativeTurnId
 from .ui_model.message_category import (
     AgentCategory,
     InboundCategory,

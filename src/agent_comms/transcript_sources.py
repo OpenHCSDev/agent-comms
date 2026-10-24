@@ -21,10 +21,10 @@ if TYPE_CHECKING:
     from .native_entries import TranscriptProjection
     from .native_transcript import NativeRecord, NativeTranscript
     from .threads import Thread, ThreadProvenance
-    from .turn_context import SegmentManifest
     from .transcript_events import TextTranscript, TranscriptEvent
     from .transcript_routes import TranscriptRoutes, _SessionRoutes
     from .transcripts import NativeTranscriptCursor, TranscriptCursor
+    from .turn_context import SegmentManifest
     from .turn_digests import TurnBound
 
 from .bus import Bus
@@ -32,7 +32,6 @@ from .bus_publication import Delivered
 from .coordination_errors import StaleRevision, TranscriptChanged
 from .declared_family import DeclaredFamily
 from .field_codec import FieldCodec, MalformedRecord
-from .turn_item import NativeTurnId
 from .native_runtime_input import NativeRuntimeInput, PublishedReplyRevision
 from .recorded_time import EventTime, UnrecordedEventTime
 from .routing import TurnRouting
@@ -43,6 +42,7 @@ from .transcript_events import (
     SentTranscript,
     TurnDigest,
 )
+from .turn_item import NativeTurnId
 from .typed_table import StoreWriter
 
 
