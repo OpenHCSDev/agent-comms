@@ -17,7 +17,7 @@ from agent_comms.commander_heartbeat import CommanderHeartbeat
 from agent_comms.field_codec import FieldCodec
 from agent_comms.messages import Addressed
 from agent_comms.thread_execution import ExternalThreadExecution
-from agent_comms.thread_status import ConnectedThreadStatus, NoBridgeThreadStatus
+from agent_comms.thread_status import ConnectedThreadStatus
 from agent_comms_hooks.watch import WatchClaim
 
 pytest_plugins = ("test_holder_standing_rules",)
@@ -113,7 +113,9 @@ async def test_unconfirmed_monitor_reports_commander_deaf_once(
             await unready.confirm_probe(bridge, probe)
             assert not held_bus.registry.snapshot().status("lead").receiving
             dead = replace(commander, process_identity=NoProcess())
-            assert type(snapshot.statuses["lead"].registered(dead, paused)) is NoBridgeThreadStatus
+            assert (
+                snapshot.statuses["lead"].registered(dead, paused).paused_since(paused) == (paused,)
+            )
         finally:
             serving.cancel()
             with suppress(asyncio.CancelledError):
