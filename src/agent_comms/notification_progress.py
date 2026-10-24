@@ -59,15 +59,13 @@ class UnrecordedProgress(WaitingDelivery, PendingDelivery, DeliveryProgress):
 
 
 @dataclass(frozen=True)
-class AcknowledgedProgress(SettledDelivery, DeliveryProgress):
-    label = "Acknowledged"
-    delivered: ClassVar[bool] = True
-    read: ClassVar[bool] = False
+class HumanReadProgress(ReadDelivery, DeliveryProgress):
+    """Human display is not model-context input."""
 
 
 @dataclass(frozen=True)
-class HumanReadProgress(ReadDelivery, DeliveryProgress):
-    """Human display is not model-context input."""
+class InboxReadProgress(ReadDelivery, DeliveryProgress):
+    """An external agent's inbox display is its model read: delivery and read are one fact."""
 
 
 @dataclass(frozen=True)
