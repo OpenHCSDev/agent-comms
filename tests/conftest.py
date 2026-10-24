@@ -3,7 +3,6 @@
 
 import asyncio
 import fcntl
-import json
 import os
 import sqlite3
 import subprocess
@@ -416,8 +415,9 @@ def installed_comms(root: Path) -> Comms:
     from agent_comms.storage_rules import StorageRule
 
     Bus.install(Bus.path_in(root))
-    if not StorageRule.path_in(root).exists():
-        StorageRule.path_in(root).write_text(json.dumps({'floor_gib': 0}))
+    StorageRule.path_in(root).write_text(FieldCodec.compact(FieldCodec.encode(StorageRule(
+        volume=root, scratch_base=root / 'scratch', checkout_base=root / 'checkouts',
+        floor_gib=0))))
     return wire(root)
 
 
