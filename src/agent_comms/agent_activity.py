@@ -11,7 +11,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from .native_input_owner import RegistryOwner
-from .notification_progress import AcknowledgedProgress
+from .notification_progress import InboxReadProgress
 
 if TYPE_CHECKING:
     from .agent_backend import AgentBackend
@@ -90,7 +90,7 @@ class ExternalRecipientActivity(RecipientActivity):
         ):
             return replace(
                 notification,
-                state=AcknowledgedProgress(),
+                state=InboxReadProgress(),
 
                 changed=True,
             )

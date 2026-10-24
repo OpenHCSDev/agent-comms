@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import asyncio
 import builtins
 from abc import ABC, abstractmethod
 from collections.abc import AsyncIterator
@@ -139,11 +140,15 @@ class Outcome(DeclaredFamily, affix="Outcome"):
     """Stored spellings stay the same; their owners perform confirmation."""
 
     @classmethod
+    async def record(cls, bridge: CliBridge, delivery: DeliveryRow) -> None:
+        with bridge.db:
+            replace(delivery, outcome=cls).upsert(bridge.db)
+
+    @classmethod
     async def finish(
         cls, bridge: CliBridge, delivery: DeliveryRow, observation: type[Outcome]
     ) -> None:
-        with bridge.db:
-            replace(delivery, outcome=observation).upsert(bridge.db)
+        await observation.record(bridge, delivery)
 
 
 class FilteredOutcome(Outcome):
@@ -159,7 +164,13 @@ class UnconfirmedOutcome(Outcome):
 
 
 class DeliveredOutcome(FilteredOutcome):
-    pass
+    @classmethod
+    async def record(cls, bridge: CliBridge, delivery: DeliveryRow) -> None:
+        await asyncio.to_thread(
+            bridge.comms.bus.mark_delivered, bridge.binding.bus, (delivery.message.reference,),
+        )
+        with bridge.db:
+            delivery.upsert(bridge.db)
 
 
 class EmittedOutcome(UnconfirmedOutcome):

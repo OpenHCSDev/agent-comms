@@ -371,7 +371,7 @@ def test_live_cli_ack_does_not_become_archived_ack(archived_notification):
     current, = old.views.message_notifications_for_references((messages[0].reference,))[
         messages[0].seq, messages[0].message_id
     ]
-    assert current.label == "Acknowledged" and not current.displayed_to
+    assert current.label == "Read" and not current.displayed_to
     with live.bus.history.read_sources() as sources:
         archived, = source.notification_references(sources, (messages[0].reference,))[
             messages[0].seq, messages[0].message_id
