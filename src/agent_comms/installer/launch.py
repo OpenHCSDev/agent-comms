@@ -25,20 +25,30 @@ import agent_comms.installer
 from agent_comms.cli_bridges.shared import SessionBridgeResumes
 from agent_comms.cli_commands import InstallCliCommand
 from agent_comms.commander import standing
-from agent_comms.installer.probes.harnesses import InstallResult
 from agent_comms.field_codec import FieldCodec, Id128, PathText
 from agent_comms.installer.backup import StoreBackup
-from agent_comms.installer.refusals import UpgradeRefused
 from agent_comms.installer.commands import InstallCommands
 from agent_comms.installer.interpreter_operation import (
-    InstallClock, LauncherPhase, PhaseTiming, PreparePhase, PublicationPhase, TreeClosePhase,
+    FailureReportPublicationPhase,
+    FinishedReportPublicationPhase,
+    InstallClock,
+    LauncherPhase,
+    PhaseTiming,
+    TargetCheckoutPreparePhase,
+    TreeClosePhase,
 )
+from agent_comms.installer.probes.harnesses import HarnessesProbe, InstallResult
+from agent_comms.installer.refusals import UpgradeRefused
 from agent_comms.installer.reporting import (
-    FailedInstall, FinishedInstall, InstallOutcome, ObservedInstall, RootWriter,
-    UnfinishedInstall, UnpostedWriter,
+    FailedInstall,
+    FinishedInstall,
+    InstallOutcome,
+    ObservedInstall,
+    RootWriter,
+    UnfinishedInstall,
+    UnpostedWriter,
 )
 from agent_comms.installer.runtime_resolution import CorePackage
-from agent_comms.installer.probes.harnesses import HarnessesProbe
 from agent_comms.installer.upgrade import (
     LiveRun,
     RehearsedUpgrade,
@@ -109,14 +119,14 @@ class InstallReport(MroDispatch):
         except BaseException as error:
             self.outcome = FailedInstall(self.outcome, next(self.handlers_for(error))(error))
             try:
-                with PublicationPhase("failure report").running(clock):
+                with FailureReportPublicationPhase().running(clock):
                     self.writer.post((*self.outcome.lines(), *self.bridges.lines()))
             except BaseException as publication_error:
                 error.add_note(f"Install failure report also failed: {publication_error}")
                 print(f"install: failure report also failed: {publication_error}", file=sys.stderr)
             raise
         else:
-            with PublicationPhase("finished report").running(clock):
+            with FinishedReportPublicationPhase().running(clock):
                 self.writer.post(lines)
 
 
@@ -190,7 +200,7 @@ class InstallRun:
         parent = command.installer.scratch(StorageRule.load(root))
         parent.mkdir(mode=0o700, parents=True, exist_ok=True)
         scratch = Path(tempfile.mkdtemp(dir=parent, prefix="install-"))
-        with PreparePhase("target checkout").running(commands.clock):
+        with TargetCheckoutPreparePhase().running(commands.clock):
             TargetTree(checkout, scratch, target).add()
         return cls(command, root, scratch, target, commands.clock.phases)
 

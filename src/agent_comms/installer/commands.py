@@ -25,6 +25,7 @@ from agent_comms.installer.interpreter_operation import (
     ProbeReply,
     ProbeRequest,
     RuntimeProbe,
+    RuntimeWorkerClosePhase,
     SourceProgram,
     WorkerClosePhase,
 )
@@ -140,7 +141,7 @@ class InstallCommands:
                     outcome.report_forced(key.print_forced)
 
     def close_runtime(self, python: Path) -> None:
-        with WorkerClosePhase(str(python)).running(self.clock):
+        with RuntimeWorkerClosePhase(python).running(self.clock):
             self.close_workers(tuple(key for key in self.workers if key.python == python))
 
     def close(self) -> None:
@@ -161,9 +162,10 @@ class InstallCommands:
         print("=", measured.line(), file=sys.stderr, flush=True)
 
     def run(self, *command: str | Path, cwd: Path = Path(),
-            env: Mapping[str, str] = os.environ, label: str = "") -> str:
-        with self.timing(CommandPhase(label or " ".join(map(str, command)))):
-            completed = subprocess.run([str(part) for part in command], cwd=cwd, env=env,
+            env: Mapping[str, str] = os.environ) -> str:
+        argv = tuple(map(str, command))
+        with self.timing(CommandPhase(argv)):
+            completed = subprocess.run(argv, cwd=cwd, env=env,
                                        capture_output=True, text=True)
         if completed.returncode:
             raise UpgradeRefused(f"{command[0]} failed: {completed.stdout.strip()}\n"
@@ -172,7 +174,7 @@ class InstallCommands:
 
     def git(self, checkout: Path, *args: str) -> str:
         """Git through the one runner (``Repo.git``), timed like every install command."""
-        with self.timing(GitPhase(f"git -C {checkout} {' '.join(args)}")):
+        with self.timing(GitPhase(checkout, args)):
             try:
                 return Repo.git(checkout, *args)
             except GitCommandError as error:
