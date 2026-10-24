@@ -476,7 +476,7 @@ class ContextStore(DurableStore):
 
     def entries(
         self, identity: NativeSessionIdentity, entry_ids: Iterable[NativeItemId],
-    ) -> dict[str, SegmentManifest]:
+    ) -> dict[NativeItemId, SegmentManifest]:
         """The recorded manifest of each named journal entry that has one."""
         with self.snapshot() as db:
             return {row.entry_id: row.manifest for entry_id in entry_ids

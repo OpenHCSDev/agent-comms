@@ -274,7 +274,7 @@ class ThreadManagement:
         first, so one inbox never has two deliverers.
         """
         snapshot = ImportSnapshot.read(history, limits or ImportLimits())
-        session_path = ImportedSessionWriter.path_in(self.root, session_id=uuid4().hex)
+        session_path = ImportedSessionWriter.path_in(self.root, session_id=PiSessionId.fresh())
         with self.registry.store.locked():
             current = self.registry.snapshot().threads.get(name)
             if current is None:

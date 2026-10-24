@@ -38,7 +38,7 @@ from .pi_vocabulary import PendingStopReason, ThinkingLevel
 from .recorded_time import GeneratedTimestamp
 from .routing import TurnRouting
 from .transcript_events import ImportedMessage, NoticeTranscript, TranscriptEvent
-from .transcript_routes import InputDisplay
+from .transcript_routes import InputDisplay, _SessionRoutes
 from .turn_item import PiSessionId
 
 
@@ -82,6 +82,9 @@ class RecordedEntry(PiPayload):
 
     def require_entry_id(self) -> str:
         return self.source_coordinates.original_id
+
+    def routing_in(self, routes: _SessionRoutes) -> TurnRouting | None:
+        return routes.get(self.id)
 
     @property
     def source_coordinates(self):
@@ -490,6 +493,10 @@ class NativeEvidenceScope(ExitStack):
 @dataclass(frozen=True, kw_only=True)
 class SessionEntry(NativeEntry):
     id: PiSessionId | None = None
+
+    def routing_in(self, routes: _SessionRoutes) -> TurnRouting | None:
+        """A session header is not an entry and holds no turn annotation."""
+        return None
 
     @property
     def child_parent(self) -> object:
