@@ -392,23 +392,26 @@ class MonitorService:
         path = WatchClaim(self.bridge.binding.thread).socket_path
         path.unlink(missing_ok=True)
         try:
-            def connected(reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:
+            server = await asyncio.start_unix_server(
+                lambda reader, writer: clients.create_task(self.accept(reader, writer)),
+                str(path), start_serving=False,
+            )
+            async with server:
                 try:
-                    clients.create_task(self.accept(reader, writer))
-                except RuntimeError:
-                    # The group is shutting down. An unowned transport would keep
-                    # Server.wait_closed waiting forever, so the connection is closed.
-                    writer.close()
-
-            server = await asyncio.start_unix_server(connected, str(path), start_serving=False)
-            # Clients retire before Server.wait_closed waits for their transports.
-            async with server, asyncio.TaskGroup() as clients:
-                await server.start_serving()
-                self.bridge.log(f"Session bridge ready for Claude PID {self.owner.pid}.")
-                try:
-                    await self.owner.wait_exited()
+                    async with asyncio.TaskGroup() as clients:
+                        await server.start_serving()
+                        self.bridge.log(f"Session bridge ready for Claude PID {self.owner.pid}.")
+                        try:
+                            await self.owner.wait_exited()
+                        finally:
+                            # The listener stops before the clients retire, so no new
+                            # connection reaches a group that is shutting down.
+                            server.close()
+                            self.stop()
                 finally:
-                    self.stop()
+                    # A connection accepted in the same loop step as close has no client
+                    # task; closing it keeps Server.wait_closed from waiting forever.
+                    server.close_clients()
         finally:
             path.unlink(missing_ok=True)
 
