@@ -3752,7 +3752,7 @@ class CorrectOrderTodo(TodoOperation, declared_name=None):
         _text(self.reason, "Correction reason", 2000)
         return replace(current, order=current.order.corrected(self), revision=current.revision + 1)
 
-    def corrected(self, order: OpenProblemOrder) -> OpenProblemOrder:
+    def corrected[Order: OpenProblemOrder](self, order: Order) -> Order:
         if self.previous != self.part(order):
             raise TodoError("The corrected part changed since it was read; read it again.")
         return replace(self.replaced(order), corrections=(*order.corrections, self))
@@ -3762,7 +3762,7 @@ class CorrectOrderTodo(TodoOperation, declared_name=None):
         """The order's current value of the part this correction replaces."""
 
     @abstractmethod
-    def replaced(self, order: OpenProblemOrder) -> OpenProblemOrder:
+    def replaced[Order: OpenProblemOrder](self, order: Order) -> Order:
         """The order with this correction's part replaced."""
 
 
@@ -3782,7 +3782,7 @@ class CorrectCheckTodo(CorrectOrderTodo):
     def part(self, order: OpenProblemOrder) -> OrderCheck:
         return order.check
 
-    def replaced(self, order: OpenProblemOrder) -> OpenProblemOrder:
+    def replaced[Order: OpenProblemOrder](self, order: Order) -> Order:
         self.check.require_writable()
         return replace(order, check=self.check)
 
@@ -3796,7 +3796,7 @@ class CorrectRunTodo(CorrectOrderTodo):
     def part(self, order: OpenProblemOrder) -> OrderRun:
         return order.run
 
-    def replaced(self, order: OpenProblemOrder) -> OpenProblemOrder:
+    def replaced[Order: OpenProblemOrder](self, order: Order) -> Order:
         return replace(order, run=self.run)
 
 

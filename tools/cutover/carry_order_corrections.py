@@ -25,16 +25,17 @@ RETIRED = "check_corrections"
 HISTORY = FieldCodec.record_key(CheckedProblemOrder, "corrections")
 
 
-def carried(wire: JsonValue) -> JsonValue:
+def carried(wire: object) -> object:
     """The stored JSON with every order's check corrections moved into its history."""
     if isinstance(wire, list):
         return [carried(value) for value in wire]
     if not isinstance(wire, dict):
         return wire
-    moved = {key: carried(value) for key, value in wire.items() if key != RETIRED}
-    if RETIRED in wire:
-        moved[HISTORY] = [FieldCodec.encode(FieldCodec.decode(CorrectCheckTodo, entry))
-                          for entry in wire[RETIRED]]
+    moved = {key: carried(value) for key, value in wire.items()}
+    if RETIRED in moved:
+        moved[HISTORY] = FieldCodec.encode(
+            FieldCodec.decode(tuple[CorrectCheckTodo, ...], moved.pop(RETIRED))
+        )
     return moved
 
 
@@ -55,19 +56,31 @@ class OrderCorrections(Carry):
             return Carried(0)
         if apply:
             MaintenanceBarrier(RegistryStore.path_in(self.root)).read().require_held_by(
-                MaintenanceHolder.current().nonce, "Carry stored order check corrections")
+                MaintenanceHolder.current(), "Carry stored order check corrections"
+            )
         marker = json.dumps(RETIRED)
         with TodoStore.observing(path) as db:
-            rows = StoredOrders.read(db.execute(
-                f'SELECT id,"order",prior_orders FROM "{Todo.declared_name}" '
-                'WHERE instr("order",?) OR instr(prior_orders,?)', (marker, marker)))
-        prepared = tuple((row.id, carried(row.order), carried(list(row.prior_orders)))
-                         for row in rows)
+            rows = StoredOrders.read(
+                db.execute(
+                    f'SELECT id,"order",prior_orders FROM "{Todo.declared_name}" '
+                    'WHERE instr("order",?) OR instr(prior_orders,?)',
+                    (marker, marker),
+                )
+            )
+        prepared = tuple(
+            (row.id, carried(row.order), carried(list(row.prior_orders))) for row in rows
+        )
         if apply and prepared:
             with closing(TodoStore.writer(path)) as db, db:
                 db.execute("BEGIN IMMEDIATE")
                 for problem, order, prior_orders in prepared:
-                    db.execute(f'UPDATE "{Todo.declared_name}" SET "order"=?, prior_orders=? '
-                               "WHERE id=?", (json.dumps(order), json.dumps(prior_orders), problem))
-        return Carried(len(prepared), detail={"todos": len(prepared)},
-                       rewritten=(path.relative_to(self.root),) if apply and prepared else ())
+                    db.execute(
+                        f'UPDATE "{Todo.declared_name}" SET "order"=?, prior_orders=? '
+                        "WHERE id=?",
+                        (json.dumps(order), json.dumps(prior_orders), problem),
+                    )
+        return Carried(
+            len(prepared),
+            detail={"todos": len(prepared)},
+            rewritten=(path.relative_to(self.root),) if apply and prepared else (),
+        )
