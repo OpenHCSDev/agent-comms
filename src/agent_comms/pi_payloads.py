@@ -60,6 +60,7 @@ from .pi_vocabulary import (
     UnreportedStopReason,
 )
 from .recorded_time import EventMilliseconds, EventTime, UnrecordedEventTime
+from .recovery_states import FailedRecovery, RecoveredRecovery
 from .send_result import CorrectionResult, CorrectionUnreported
 from .thread_model import ThreadModel, UndeclaredModel
 from .tool_declaration import ToolDeclaration
@@ -349,7 +350,7 @@ class SucceededProviderRetry(ProviderRetryOutcome, declared_name="succeeded"):
         from .turn_phase import ModelWaitPhase
 
         return (session.watchdog.state(
-            "recovered", "provider_auto_retry_progress", 0, phase=ModelWaitPhase()
+            RecoveredRecovery, "provider_auto_retry_progress", 0, phase=ModelWaitPhase()
         ),)
 
     def finish_request(self, session) -> None:
@@ -380,7 +381,7 @@ class FailedProviderRetry(ProviderRetryOutcome, declared_name="failed"):
         return (
             *event.exhausted(session),
             session.watchdog.state(
-                "failed", "provider_retry_exhausted", 0,
+                FailedRecovery, "provider_retry_exhausted", 0,
                 phase=FailedPhase(error=CodelessProviderDiagnosticError(
                     session.output.redact(self.final_error))),
             ),

@@ -14,6 +14,13 @@ from . import turn_phase as phases
 from .declared_family import DeclaredFamily
 from .mro_dispatch import MroDispatch, handles
 from .native_startup import SessionLoad
+from .recovery_states import (
+    AbortingRecovery,
+    FailedRecovery,
+    ModelStalledRecovery,
+    RecoveredRecovery,
+    RecoveryCondition,
+)
 
 if TYPE_CHECKING:
     from .backend import TurnSession
@@ -134,12 +141,14 @@ class ModelWait(TurnWait):
         stalled_phase = watchdog.phase.stalled(watchdog.prompt_accepted)
         reason_code = stalled_phase.stall_reason
         if watchdog.prompt_accepted:
-            yield watchdog.state("model_stalled", reason_code, elapsed_ms, phase=stalled_phase)
-        yield watchdog.state("aborting", reason_code, elapsed_ms, phase=phases.ShutdownPhase())
+            yield watchdog.state(
+                ModelStalledRecovery, reason_code, elapsed_ms, phase=stalled_phase
+            )
+        yield watchdog.state(AbortingRecovery, reason_code, elapsed_ms, phase=phases.ShutdownPhase())
         await session.abort_stalled_rpc()
         for started in session.started_during_abort:
             yield started
-        yield watchdog.state("failed", reason_code, elapsed_ms, phase=phases.ShutdownPhase())
+        yield watchdog.state(FailedRecovery, reason_code, elapsed_ms, phase=phases.ShutdownPhase())
         session.output.record_failure(
             failures.ModelStalled(
                 f"Model produced no RPC progress for {self.budget:g} seconds."
@@ -235,7 +244,7 @@ class ProgressWatchdog(MroDispatch):
         if self.retry_recovery_pending and event.retry_progress:
             self.retry_recovery_pending = False
             yield self.state(
-                "recovered", self.retry_recovery_reason, 0, phase=phases.ModelWaitPhase()
+                RecoveredRecovery, self.retry_recovery_reason, 0, phase=phases.ModelWaitPhase()
             )
         self.dispatch_sync(event, session)
 
@@ -261,7 +270,7 @@ class ProgressWatchdog(MroDispatch):
 
     def state(
         self,
-        state: str,
+        state: type[RecoveryCondition],
         reason_code: str,
         elapsed_ms: int,
         *,

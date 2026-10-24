@@ -61,6 +61,7 @@ from .native_tool_transport import ToolTransport, UnboundToolTransport
 from .pi_rpc import PiRpcChannel
 from .prompt_state import UnwrittenPrompt
 from .request_progress import NO_REQUEST_OBSERVER, RequestObserver, RequestProgress
+from .recovery_states import FailedRecovery
 from .send_outcome import NO_SEND_BOUNDARY, SendBoundary
 from .tool_denial import SelectedToolDenied
 from .turn_context import InputContributionCoordinates
@@ -525,7 +526,7 @@ class NativeSession(MroDispatch, ABC):
         self.usage.invalidate()
         self.output.discard_text()
         updates = (self.context_info(), events.TurnState(
-            state="failed",
+            state=FailedRecovery,
             reason_code=failures.IdentityUncertain.declared_name,
             elapsed_ms=0,
             phase=ShutdownPhase(),
@@ -615,7 +616,7 @@ class TurnSession(NativeSession):
         error = self.output.error(response.error.text_or("Prompt was rejected"),
                                   source=UnrecordedFailureSource())
         yield self.watchdog.state(
-            "failed", "prompt_rejected", 0, phase=ShutdownPhase()
+            FailedRecovery, "prompt_rejected", 0, phase=ShutdownPhase()
         )
         yield error
         self.finish_request()

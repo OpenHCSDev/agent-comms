@@ -34,6 +34,7 @@ from .pi_vocabulary import (
     ThinkingLevelField,
     UnknownCompactionReason,
 )
+from .recovery_states import RecoveryCondition
 from .thread_model import ThreadModel, UndeclaredModel
 from .tool_declaration import OtherAction, ToolAction, ToolDeclaration
 from .tool_results import NoSentMessage, NoToolDiff, ToolDiff
@@ -445,7 +446,7 @@ class TurnState(AgentEvent):
     tuple, session copy or interpretation of that data here.
     """
 
-    state: str
+    state: type[RecoveryCondition]
     reason_code: str
     elapsed_ms: int
     phase: TurnPhase

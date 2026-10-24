@@ -6,8 +6,9 @@ from agent_comms.native_arguments import SelectedModel
 from agent_comms.native_failures import NativePiUnavailable
 from agent_comms.native_pi import NativeEmptyAnswer, NativePiTerminalFailure
 from agent_comms.native_startup import NativeStartupPolicy
-from agent_comms.pi_events import NativeRetryEnd
+from agent_comms.pi_events import NativeRetryEnd, PiEvent
 from agent_comms.pi_payloads import FailedProviderRetry, PiMessage, SucceededProviderRetry
+from agent_comms.recovery_states import RecoveredRecovery, RetryingRecovery
 from agent_comms.tracked_turn import (
     CompletedTrackedTerminal,
     PendingTrackedTerminal,
@@ -34,6 +35,21 @@ def tracked_turn(output, terminal):
     turn.watchdog.launching(lambda: 0.0, None)
     turn.watchdog.tick()
     return turn
+
+
+async def test_provider_retry_observations_keep_declared_conditions():
+    turn = tracked_turn(TurnOutput(), PendingTrackedTerminal())
+    retry = PiEvent.from_wire({"type": "auto_retry_start", "attempt": 1})
+    retrying, = [event async for event in retry.apply(turn)]
+    assert retrying.state is RetryingRecovery
+    assert turn.watchdog.retry_recovery_pending
+
+    progress = PiEvent.from_wire({"type": "agent_start"})
+    recovered, = [event async for event in turn.watchdog.observe(progress, turn)]
+    assert recovered.state is RecoveredRecovery
+    assert not turn.watchdog.retry_recovery_pending
+    assert not turn.finished
+    assert [event async for event in turn.watchdog.observe(progress, turn)] == []
 
 
 async def test_recovered_native_request_replaces_prior_refusal_terminal():
