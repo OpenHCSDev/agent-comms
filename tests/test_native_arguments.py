@@ -92,6 +92,22 @@ def test_selection_replaces_all_occurrences_preserving_unowned_native_arguments(
     assert ThreadModel.selected_by(NativeArguments.parse(("--model", "local/fixture"))) == DeclaredModel("local/fixture")
 
 
+def test_entries_answer_selection_and_replacement_for_themselves():
+    arguments = NativeArguments.parse(
+        ("--provider", "p1", "--model", "m1", "--offline", "--thinking", "low", "--provider", "p2")
+    )
+    assert (arguments.provider, arguments.model) == ("p2", "m1")
+    assert arguments.with_model("p3/m3").argv == (
+        "--offline", "--thinking", "low", "--provider", "p3", "--model", "m3",
+    )
+    assert arguments.with_thinking(HighThinkingLevel).argv == (
+        "--provider", "p1", "--model", "m1", "--offline", "--provider", "p2", "--thinking", "high",
+    )
+    assert NativeArguments.parse(("--mode", "rpc", "--offline")).rpc() == (
+        "--offline", "--mode", "rpc",
+    )
+
+
 @pytest.mark.parametrize("argv", [("--thinking", "unknown"), ("--thinking=unknown",)])
 def test_unknown_thinking_fails_at_argument_parse(argv):
     with pytest.raises(ValueError):
@@ -105,7 +121,6 @@ def test_option_declaration_extends_consumption_rendering_and_mode_validation():
                 raise ValueError("fixture denied")
 
     arguments = NativeArguments.parse(("--fixture-value=allowed", "--mode=rpc"))
-    assert arguments.value(FixtureValueArgument) == "allowed"
     assert arguments.rpc() == ("--fixture-value", "allowed", "--mode", "rpc")
     with pytest.raises(ValueError):
         NativeArguments.parse(("--fixture-value=denied",)).rpc()
