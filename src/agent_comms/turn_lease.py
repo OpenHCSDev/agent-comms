@@ -100,6 +100,10 @@ class TurnDeclaration(LifecycleCapability, SubclassUnion, affix=""):
     @abstractmethod
     def matches(self, turn_id: TurnId) -> bool: ...
 
+    @abstractmethod
+    def settled_by(self, state: TurnState) -> bool:
+        """Whether an idle publication settles this held turn."""
+
 
 @dataclass(frozen=True)
 class NoTurn(NullMember, TurnDeclaration):
@@ -145,6 +149,9 @@ class NoTurn(NullMember, TurnDeclaration):
 
     def matches(self, turn_id: TurnId) -> bool:
         return False
+
+    def settled_by(self, state: TurnState) -> bool:
+        return True
 
 
 class TurnGeneration(SubclassUnion, affix="Generation"):
@@ -266,6 +273,9 @@ class ActiveTurn(Executing, RecordMember, TurnDeclaration):
 
     def matches(self, turn_id: TurnId) -> bool:
         return self.id == turn_id
+
+    def settled_by(self, state: TurnState) -> bool:
+        return state.active.matches(self.id) or state.finished.names(self.id)
 
     def without_claim(self) -> ActiveTurn:
         return replace(self, claimed_generation=UnrecordedGeneration())
@@ -487,6 +497,9 @@ class TurnRecord(LifecycleCapability, SubclassUnion, affix=""):
     def require_generation(self, generation: int) -> None:
         pass
 
+    def names(self, turn_id: TurnId) -> bool:
+        return False
+
 
     @abstractmethod
     def observed_turn(self, identity: TurnIdentity, claim_scope: int) -> ObservedTurn: ...
@@ -525,6 +538,9 @@ class FinishedTurn(RecordMember, TurnRecord):
 
     def state(self) -> TurnState:
         return TurnState(finished=self)
+
+    def names(self, turn_id: TurnId) -> bool:
+        return self.turn_id == turn_id
 
     def without_claim(self) -> None:
         pass
@@ -653,6 +669,10 @@ class TurnState:
 
     def native_phase_effects(self, phase: TurnPhase) -> Iterator[TurnState]:
         yield from self.phase_effects(self.active.phase.observed(phase))
+
+    def settles(self, held: TurnDeclaration) -> bool:
+        """A busy publication always replaces the held turn; an idle one only settles its own."""
+        return self.active.phase.busy or held.settled_by(self)
 
 
 class TurnCompletion(ABC):

@@ -20,6 +20,7 @@ from .child_process import NO_PROCESS, ProcessIdentity, ProcessState
 from .cli_result import CliResult
 from .native_entries import ImportedSessionWriter
 from .registration import Registration
+from .thread_execution import NativeThreadExecution
 from .thread_status import StoppedThreadStatus
 
 if TYPE_CHECKING:
@@ -252,16 +253,7 @@ class ThreadManagement:
             if self.registry.snapshot().taken(name):
                 raise ValueError(f"Thread name {name!r} is already reserved.")
             self.registry.require_declaration_available(thread, StoppedThreadStatus())
-            session_path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
-            # Session output must remain in an owner-controlled directory.
-            info = session_path.parent.lstat()
-            if (
-                not stat.S_ISDIR(info.st_mode)
-                or info.st_uid != os.geteuid()
-                or stat.S_IMODE(info.st_mode) != 0o700
-            ):
-                raise ValueError("Imported session directory is not owner-controlled.")
-            AtomicFile(session_path).write_text(snapshot.pi_session(project))
+            self._write_imported_session(session_path, snapshot, project)
             try:
                 self.registry._declare_unlocked(thread, StoppedThreadStatus())
                 self.bus.mark_delivered_through(name, self.bus.bus.revision())
@@ -270,17 +262,52 @@ class ThreadManagement:
                     self.registry.remove(name)
                 session_path.unlink(missing_ok=True)
                 raise
-        return ThreadImported(
-            name,
-            str(session_path),
-            snapshot.harness,
-            snapshot.source_id,
-            len(snapshot.messages),
-            snapshot.messages_seen - len(snapshot.messages),
-            snapshot.truncated_messages,
-            snapshot.notices,
-            snapshot.historical_instructions,
-        )
+        return ThreadImported.of(name, session_path, snapshot)
+
+    def rehome_thread(
+        self, history: History, *, name: str, limits: ImportLimits | None = None,
+    ) -> ThreadImported:
+        """Move an external unit onto native Pi on its existing declaration.
+
+        The birth (``created_at``), goal, orders, storage roots and inbox cursor stay;
+        only the execution and the session change. The harness's own bridge is retired
+        first, so one inbox never has two deliverers.
+        """
+        snapshot = ImportSnapshot.read(history, limits or ImportLimits())
+        session_path = ImportedSessionWriter.path_in(self.root, session_id=uuid4().hex)
+        with self.registry.store.locked():
+            current = self.registry.snapshot().threads.get(name)
+            if current is None:
+                raise ValueError(f"No thread named {name!r} to re-home.")
+            current.execution.require_external()
+            self._write_imported_session(session_path, snapshot, Path(current.worktree))
+            rehomed = replace(
+                current, execution=NativeThreadExecution, process_identity=NO_PROCESS,
+                session_file=RegistrySessionLocation.from_path(session_path, self.root),
+            )
+            self.registry.require_declaration_available(rehomed, StoppedThreadStatus())
+            bridge = snapshot.harness.retire_session(snapshot.source_id)
+            try:
+                self.registry._declare_unlocked(rehomed, StoppedThreadStatus())
+            except (OSError, ValueError, CoordinationError, RelationViolationError):
+                bridge.restore()
+                session_path.unlink(missing_ok=True)
+                raise
+        return ThreadImported.of(name, session_path, snapshot)
+
+    def _write_imported_session(
+        self, session_path: Path, snapshot: ImportSnapshot, project: Path,
+    ) -> None:
+        session_path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+        # Session output must remain in an owner-controlled directory.
+        info = session_path.parent.lstat()
+        if (
+            not stat.S_ISDIR(info.st_mode)
+            or info.st_uid != os.geteuid()
+            or stat.S_IMODE(info.st_mode) != 0o700
+        ):
+            raise ValueError("Imported session directory is not owner-controlled.")
+        AtomicFile(session_path).write_text(snapshot.pi_session(project))
 
     def claim_thread(
         self,

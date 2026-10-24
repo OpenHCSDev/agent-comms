@@ -1072,7 +1072,26 @@ class CheckRootCliCommand(CliCommand, declared_name="check-root"):
 
 
 @dataclass(frozen=True, kw_only=True)
-class ImportingCliCommand(CliCommand):
+class ConversationLimitsCliCommand(CliCommand):
+    """How much of a source conversation an imported Pi session keeps."""
+
+    max_messages: Annotated[int, Argument(flags=("--max-messages",))] = (
+        200
+    )
+    max_characters: Annotated[int, Argument(flags=("--max-characters",))] = (
+        120000
+    )
+    max_message_characters: Annotated[
+        int, Argument(flags=("--max-message-characters",))
+    ] = 12000
+
+    @property
+    def limits(self) -> ImportLimits:
+        return ImportLimits(self.max_messages, self.max_characters, self.max_message_characters)
+
+
+@dataclass(frozen=True, kw_only=True)
+class ImportingCliCommand(ConversationLimitsCliCommand):
     """Where an imported thread works and how much of its source conversation it keeps."""
 
     worktree: Annotated[
@@ -1093,20 +1112,11 @@ class ImportingCliCommand(CliCommand):
         Normalize(_tags),
         Argument(flags=("--tags",)),
     ] = dataclasses.field(default_factory=frozenset)
-    max_messages: Annotated[int, Argument(flags=("--max-messages",))] = (
-        200
-    )
-    max_characters: Annotated[int, Argument(flags=("--max-characters",))] = (
-        120000
-    )
-    max_message_characters: Annotated[
-        int, Argument(flags=("--max-message-characters",))
-    ] = 12000
 
     def imported(self, ctx: Comms, history: History, name: str) -> ThreadImported:
         return ctx.threads.import_thread(
             history, name=name, worktree=self.worktree, model=self.model, tags=self.tags,
-            limits=ImportLimits(self.max_messages, self.max_characters, self.max_message_characters),
+            limits=self.limits,
         )
 
 
@@ -1145,8 +1155,9 @@ class ImportThreadCliCommand(ImportingCliCommand, declared_name="import-thread")
 
 
 @dataclass(frozen=True, kw_only=True)
-class ImportRunningThreadCliCommand(ImportingCliCommand, declared_name="import-running-thread"):
-    help = "Import a session a running Claude Code, Codex or OpenCode holds, as a stopped thread"
+class RunningSessionCliCommand(CliCommand):
+    """A session a running harness holds, asked for by the harness's own id."""
+
     harness: Annotated[
         type[Harness],
         Editor(ChoiceTargetField),
@@ -1165,14 +1176,40 @@ class ImportRunningThreadCliCommand(ImportingCliCommand, declared_name="import-r
             options={"help": "Codex app-server socket, or OpenCode server URL"},
         ),
     ] = DefaultAddress()
+
+    def history(self, directory: Path) -> OnlineHistory:
+        return OnlineHistory.of(self.harness, self.thread, self.address, directory)
+
+
+@dataclass(frozen=True, kw_only=True)
+class ImportRunningThreadCliCommand(
+    RunningSessionCliCommand, ImportingCliCommand, declared_name="import-running-thread",
+):
+    help = "Import a session a running Claude Code, Codex or OpenCode holds, as a stopped thread"
     name: Annotated[
         str,
         Argument(flags=("--name",), options={"help": "New agent-comms thread name"}),
     ]
 
     def apply(self, ctx: Comms) -> CliResult:
-        return self.imported(ctx, OnlineHistory.of(
-            self.harness, self.thread, self.address, self.worktree.local_directory()), self.name)
+        return self.imported(ctx, self.history(self.worktree.local_directory()), self.name)
+
+
+@dataclass(frozen=True, kw_only=True)
+class RehomeThreadCliCommand(
+    RunningSessionCliCommand, ConversationLimitsCliCommand, declared_name="rehome-thread",
+):
+    help = ("Move an existing unit from its harness onto native Pi, keeping its birth, goal, "
+            "orders and inbox; retires the harness's bridge for that session")
+    name: Annotated[
+        str,
+        Argument(flags=("--name",), options={"help": "The existing agent-comms thread to move"}),
+    ]
+
+    def apply(self, ctx: Comms) -> CliResult:
+        worktree = ctx.registry.require(self.name).worktree
+        return ctx.threads.rehome_thread(
+            self.history(Path(worktree)), name=self.name, limits=self.limits)
 
 
 @dataclass(frozen=True, kw_only=True)

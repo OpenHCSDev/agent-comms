@@ -47,6 +47,9 @@ from agent_comms.ui_model.message_category import AgentCategory, UserCategory
 from agent_comms.turn_context import CodexRolloutProvenance
 from agent_comms.thread_text import GivenThreadText, NoThreadText
 from agent_comms.threads import Thread
+from agent_comms.child_process import NO_PROCESS
+from agent_comms.errors import RelationViolationError
+from agent_comms.thread_execution import ExternalThreadExecution, NativeThreadExecution
 
 
 def lines(path: Path, records: Iterable[dict[str, JsonValue]], tail: str = "") -> Path:
@@ -378,6 +381,37 @@ def test_codex_import_uses_requested_name_not_rollout_filename(tmp_path: Path, c
     assert source.read_bytes() == original
 
 
+
+
+def test_rehome_moves_a_codex_unit_to_pi_on_its_own_birth(
+    tmp_path: Path, comms: Comms, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import agent_comms.host_services as host_services
+
+    systemctl: list[tuple[str, ...]] = []
+    monkeypatch.setattr(host_services.subprocess, "run", lambda argv, **_: systemctl.append(argv))
+    worktree = tmp_path / "unit-worktree"
+    worktree.mkdir()
+    before = comms.registry.declare(Thread(
+        "unit-x", frozenset({"units"}), str(worktree), execution=ExternalThreadExecution))
+    source = codex_lines(tmp_path / "rollout.jsonl", [
+        codex_meta("codex-session", tmp_path), codex_message("user", "Keep going")])
+
+    rehomed = comms.threads.rehome_thread(
+        OfflineHistory.of(CodexHarness, source, AnySession()), name="unit-x")
+
+    after = comms.registry.require("unit-x")
+    assert after.incarnation == before.incarnation and after.created_at == before.created_at
+    assert (after.tags, after.worktree, after.storage_roots) == (
+        before.tags, before.worktree, before.storage_roots)
+    assert after.execution is NativeThreadExecution and after.process_identity == NO_PROCESS
+    assert comms.registry.status("unit-x") == StoppedThreadStatus()
+    assert Path(rehomed.session_file).is_file() and rehomed.source_id == "codex-session"
+    assert systemctl == [("systemctl", "--user", "disable", "--now",
+                          "codex-comms-inbox@codex-session.service")]
+    with pytest.raises(RelationViolationError):
+        comms.threads.rehome_thread(
+            OfflineHistory.of(CodexHarness, source, AnySession()), name="unit-x")
 
 
 def test_codex_uses_response_items_not_mirrored_events_and_keeps_recent_budget(tmp_path: Path) -> None:
