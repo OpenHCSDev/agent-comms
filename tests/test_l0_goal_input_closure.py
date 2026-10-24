@@ -8,6 +8,7 @@ from pathlib import Path
 import pytest
 
 from agent_comms.child_process import ProcessIdentity
+from agent_comms.input_key import BusInputKey
 from agent_comms.comms import wire
 from agent_comms.field_codec import FieldCodec, GoalId, InputId, TurnId
 from agent_comms.goal_actions import (
@@ -118,7 +119,7 @@ def test_standby_uses_native_receipts_and_explicit_reviews_not_read_ack(tmp_path
     message = comms.messaging.send("peer", "owner", "Review this uncertain reply").message
     store = InputDispositions(tmp_path)
     claim_scope = comms.registry.snapshot().claim_generation("owner")
-    key = f"bus:{message.seq}"
+    key = BusInputKey(message.seq)
     store.record(
         key, seq=message.seq, owner="owner", claim_scope=claim_scope, target="owner", text=message.body
     )
@@ -135,7 +136,7 @@ def test_standby_uses_native_receipts_and_explicit_reviews_not_read_ack(tmp_path
     assert not (tmp_path / "acp_delivery_cursors.json").exists()
     # A later native-started reply is already handled, regardless of display reads.
     second = comms.messaging.send("peer", "owner", "Native reply").message
-    second_key = f"bus:{second.seq}"
+    second_key = BusInputKey(second.seq)
     store.record(
         second_key,
         seq=second.seq,

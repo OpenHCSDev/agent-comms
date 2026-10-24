@@ -149,7 +149,7 @@ def test_large_standby_review_returns_complete_messages_without_files(
         text="Uncertain owner follow-up",
     )
     dispositions.review_for_goal(
-        (f"bus:{messages[1].seq}",),
+        (BusInputKey(messages[1].seq),),
         owners=frozenset({"b"}),
         goal_id=goal.id,
         goal_revision=goal.revision,
@@ -230,7 +230,7 @@ def test_dependency_review_and_ack_survive_large_excluded_history(
             text=message.body,
         )
     dispositions.review_for_goal(
-        (f"bus:{messages[0].seq}",),
+        (BusInputKey(messages[0].seq),),
         owners=frozenset({"b"}),
         goal_id=goal.id,
         goal_revision=goal.revision,
@@ -268,7 +268,7 @@ def test_dependency_review_and_ack_survive_large_excluded_history(
     # A reply arriving after this snapshot still blocks standby atomically.
     late = comms.messaging.send("a", "b", "New evidence after inbox inspection").message
     dispositions.record(
-        f"bus:{late.seq}", seq=late.seq, owner="b", claim_scope=1, target="b", text=late.body
+        BusInputKey(late.seq), seq=late.seq, owner="b", claim_scope=1, target="b", text=late.body
     )
     after_arrival = stored_inputs(dispositions.root)
     with pytest.raises(ValueError):

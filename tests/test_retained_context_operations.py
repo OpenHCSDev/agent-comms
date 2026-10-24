@@ -169,7 +169,7 @@ async def original_input_consumer_journey(tmp_path, command):
 
     pins = []
     for row in (originals[0], originals[0], originals[1]):
-        code, result = invoke("pin-input-constraint", "beta", "--source", row.key,
+        code, result = invoke("pin-input-constraint", "beta", "--source", str(row.key),
                               "--worktree", origin.project)
         assert code == 0
         pinned = FieldCodec.decode(ConstraintPinnedResult, result)
@@ -181,8 +181,9 @@ async def original_input_consumer_journey(tmp_path, command):
     # delivery evidence cannot decide that they are one human instruction.
     retained_inputs = [fact.source for fact in snapshot.retained.facts
                        if isinstance(fact, InputTaskFact)]
-    assert sorted(row.key for row in retained_inputs if row.source_text == wording) == sorted(
-        row.key for row in originals)
+    assert sorted(
+        (row.key for row in retained_inputs if row.source_text == wording), key=str,
+    ) == sorted((row.key for row in originals), key=str)
     assert all(row.context_provenance() in snapshot.provenance for row in originals)
 
     destination = comms.root / "original-input-context.md"
@@ -190,14 +191,14 @@ async def original_input_consumer_journey(tmp_path, command):
     assert code == 0 and result["exported_messages"] == 2
     artifact = destination.read_bytes()
     assert artifact.count(wording.encode()) == 2
-    assert all(row.key.encode() in artifact for row in originals)
+    assert all(str(row.key).encode() in artifact for row in originals)
     assert b'"author":"user"' in artifact and b'"author_role":"user"' in artifact
     code, _ = invoke("export-retained", "beta", "--output", str(destination))
     assert code == 1 and destination.read_bytes() == artifact
     before_refusal = read_history(comms)
     for recipient, key in ((other.name, originals[0].key), ("beta", "absent"),
                            ("beta", "neutral-original")):
-        code, _ = invoke("pin-input-constraint", recipient, "--source", key,
+        code, _ = invoke("pin-input-constraint", recipient, "--source", str(key),
                          "--worktree", origin.project)
         assert code == 1
         assert read_history(comms) == before_refusal

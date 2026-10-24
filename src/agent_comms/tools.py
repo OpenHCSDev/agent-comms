@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from .input_key import InputKey, InputKeyText
+from .input_key import InputKeyText
 
 from .tool_request import ListedNames, LiveOwnerTool, OmittedNames, PublishingTool, PublishingToolRequest, ReadTool, SubjectBinding, ThreadReadTool, ThreadToolRequest, ToolRequest, tool_field
 from .order_tools import MessagePublished
@@ -583,8 +583,8 @@ class CommsGoalTool(ThreadToolRequest):
             self.status(progress=self.progress),
             expect=self.status.model_precondition(self.goal_id),
             **{key: names for key, names in (
-                ("wait_for", self.wait_for.names), ("reviewed_inputs", FieldCodec.decode(
-                    tuple[Annotated[InputKey, InputKeyText], ...], self.reviewed_inputs.names,
+                ("wait_for", self.wait_for.names), ("reviewed_inputs", tuple(
+                    InputKeyText.from_text(key) for key in self.reviewed_inputs.names
                 )),
             ) if names},
         )

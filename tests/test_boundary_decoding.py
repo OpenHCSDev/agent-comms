@@ -5,6 +5,7 @@ import hashlib
 import pytest
 
 from agent_comms.channel_coding_tools import CodingToolRequest
+from agent_comms.input_key import BusInputKey
 from agent_comms.cli_bridges.claude_protocol import ClaudeHeader
 from agent_comms.field_codec import FieldCodec
 from agent_comms.input_attempt import (
@@ -29,8 +30,8 @@ def test_coding_socket_record_keeps_object_arguments_and_strict_fields():
 
 
 def test_delivery_uses_declared_overview_and_preserves_typed_rows():
-    current = UnresolvedInput(4, 'worker', 'retained input', 'input-1', 'unknown')
-    historical = HistoricalInput(3, 'worker', 'earlier input', 'input-0', 'unknown',
+    current = UnresolvedInput(4, 'worker', 'retained input', BusInputKey(4), 'unknown')
+    historical = HistoricalInput(3, 'worker', 'earlier input', BusInputKey(3), 'unknown',
                                  notice_dismissed=True)
     overview = DeliveryOverview((current,), 1, 2, (historical,), OwnerQueueInputDeliveryScope)
     wire = FieldCodec.encode(overview)

@@ -224,7 +224,8 @@ class InputDispositionRow(InputDispositionsRows, TypedTable):
 
 
 def _members(column: str, values) -> tuple[str, tuple]:
-    values = tuple(values)
+    plan, = InputDispositionRow._fields_named((column,))
+    values = tuple(plan.encode(value) for value in values)
     return f'"{column}" IN ({", ".join("?" for _ in values)})', values
 
 
@@ -259,7 +260,7 @@ class InputDispositions(DurableStore):
             return changed.result
 
     def read(self, keys: tuple[InputKey, ...]) -> InputDocument:
-        return self._select(*_members("key", (InputKeyText.encode(key) for key in keys)))
+        return self._select(*_members("key", keys))
 
     def lookup(self, key: InputKey) -> InputAttempt:
         return self.read((key,)).lookup(key)
@@ -301,7 +302,7 @@ class InputDispositions(DurableStore):
             return DocumentChange.to(changed)
 
         return self._update(
-            *_members("key", (InputKeyText.encode(row.key) for row in originals)), reserve,
+            *_members("key", (row.key for row in originals)), reserve,
         )
 
     def reserve_turn(
@@ -330,11 +331,11 @@ class InputDispositions(DurableStore):
             successor = document.transition((key,), change)
             return DocumentChange(successor, successor is not document)
 
-        return self._update(*_members("key", (InputKeyText.encode(key),)), update)
+        return self._update(*_members("key", (key,)), update)
 
     def clear_unbound(self, keys: tuple[InputKey, ...]) -> InputDocument:
         return self._update(
-            *_members("key", (InputKeyText.encode(key) for key in keys)),
+            *_members("key", keys),
             lambda document: DocumentChange.to(
                 document.transition(keys, lambda row: row.clear_unbound())
             ),
@@ -389,7 +390,7 @@ class InputDispositions(DurableStore):
                 return DocumentChange(document, False)
             return DocumentChange(replace(document, rows={**document.rows, **successors}), True)
 
-        return self._update(*_members("key", (InputKeyText.encode(key) for key in keys)), change)
+        return self._update(*_members("key", keys), change)
 
     def started(self, key: InputKey, *, turn_id: TurnId, native_id: InputId, text: str) -> bool:
         return self._transition(
@@ -399,7 +400,7 @@ class InputDispositions(DurableStore):
     def settle_unbound(self, keys: tuple[InputKey, ...]) -> InputDocument:
         """Publish one complete retirement and return that exact document cut."""
         return self._update(
-            *_members("key", (InputKeyText.encode(key) for key in keys)),
+            *_members("key", keys),
             lambda document: DocumentChange.to(document.settle_unbound(keys)),
         )
 
@@ -433,7 +434,7 @@ class InputDispositions(DurableStore):
                 rows={**rows, **{key: rows[key].review(goal_id, decision) for key in keys}},
             ))
 
-        self._update(*_members("key", (InputKeyText.encode(key) for key in keys)), review)
+        self._update(*_members("key", keys), review)
 
     def dismiss_historical(
         self,

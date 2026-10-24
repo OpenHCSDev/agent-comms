@@ -11,7 +11,7 @@ from agent_comms.child_process import ProcessIdentity
 from agent_comms.comms import wire
 from conftest import installed_comms
 from agent_comms.field_codec import FieldCodec, InputId, MalformedRecord, TurnId
-from agent_comms.input_key import AcpInputKey, BusInputKey
+from agent_comms.input_key import AcpInputKey, BusInputKey, InputKeyText
 from agent_comms.goal_presentation import GoalExecution
 from agent_comms.goal_actions import (
     ActiveGoalAction,
@@ -105,7 +105,7 @@ def test_inspected_canonical_dependencies_allow_standby_without_replay(tmp_path,
     assert again.reviewed_inputs == ()
     assert [str(row.input_id) for row in again.already_reviewed_inputs] == keys
     for message, key in zip(messages, keys, strict=True):
-        row = stored_inputs(ledger.root).rows[key]
+        row = stored_inputs(ledger.root).rows[InputKeyText.from_text(key)]
         row.require(Unresolved, ValueError("review required"))
         assert row.accepts_reservation
         assert not hasattr(row, "native_id") and not hasattr(row, "turn_id")
@@ -122,7 +122,7 @@ def test_inspected_canonical_dependencies_allow_standby_without_replay(tmp_path,
     )
     fresh = comms.messaging.send("parent", "worker", "New result").message
     assert reopened.goals.goal_input_review("worker", goal.id, ["parent"]).reviewed_inputs == (
-        f"bus:{fresh.seq}",
+        BusInputKey(fresh.seq),
     )
     comms.goals.update_goal(
         "worker", PausedGoalAction(expect=GoalPrecondition(goal_id=goal.id)), actor=OwnerInvocable

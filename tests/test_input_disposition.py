@@ -35,6 +35,17 @@ LATER_KEY = AcpInputKey(InputId.mint())
 KEY_KEY = AcpInputKey(InputId.mint())
 
 
+@pytest.mark.parametrize("invalid_text", [["list"], [], {"text": "dict"}, 7, False, None])
+def test_record_rejects_nonstring_before_durable_unknown(tmp_path: Path, invalid_text) -> None:
+    store = InputDispositions(tmp_path)
+    with pytest.raises(ValueError):
+        store.record(
+            AcpInputKey(InputId.mint()), seq=None, owner="kid", claim_scope=1,
+            target="kid", text=invalid_text,
+        )
+    assert not store.path.exists()
+
+
 def test_unknown_is_durable_and_native_start_is_a_cas(tmp_path: Path) -> None:
     store = InputDispositions(tmp_path)
     assert store.record(BusInputKey(7), seq=7, owner="kid", claim_scope=3, target="kid", text="ask")

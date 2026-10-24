@@ -46,7 +46,7 @@ class AcpInputKey(InputKey):
 
     @classmethod
     def parse(cls, text: str) -> AcpInputKey | None:
-        if match := re.fullmatch(f"acp:({InputId.spelled_by.spelling.pattern})", text):
+        if match := re.fullmatch("acp:(" + InputId.spelled_by.spelling.pattern + ")", text):
             return cls(FieldCodec.decode(InputId, match[1]))
         return None
 
