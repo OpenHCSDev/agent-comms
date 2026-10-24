@@ -113,7 +113,9 @@ async def test_unconfirmed_monitor_reports_commander_deaf_once(
             await unready.confirm_probe(bridge, probe)
             assert not held_bus.registry.snapshot().status("lead").receiving
             dead = replace(commander, process_identity=NoProcess())
-            assert snapshot.statuses["lead"].registered(dead, paused).paused_since(paused) == (paused,)
+            assert (
+                snapshot.statuses["lead"].registered(dead, paused).paused_since(paused) == (paused,)
+            )
         finally:
             serving.cancel()
             with suppress(asyncio.CancelledError):
