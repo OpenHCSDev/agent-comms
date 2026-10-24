@@ -14,12 +14,13 @@ import pytest
 
 from agent_comms import agent_events as events
 from agent_comms.bus_publication import AgentOrigin, HumanOrigin
-from agent_comms.channel_targets import CommandTarget
+from agent_comms.channel_targets import CommandTarget, CommsTag
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.commander.order import Commander, OrderFile, SayVerb, SendVerb
 from agent_comms.commander.questions import UnansweredBurst, UnansweredUnitAsks
 from agent_comms.commander.standing import (
     AnswersTo,
+    CommanderDeaf,
     HeartbeatNotStarted,
     HeartbeatSilent,
     HolderGone,
@@ -759,6 +760,42 @@ def test_pass_missing_a_restarting_commander_keeps_its_completion(held_bus, inst
     held_bus.registry.register(alive)
     assert passes.read().commander_completed[commander.incarnation] == completed
     assert HeartbeatSilent.violations(held_bus, "lead") == ()
+
+
+def test_unconfirmed_heartbeat_tells_comms_the_commander_is_deaf_once(
+        held_bus, installed_runtime, monkeypatch):
+    """A paused bridge keeps a live process, so only the read ledger shows the commander deaf."""
+    commander = held_bus.registry.require("lead")
+    alive = ProcessIdentity.capture(os.getpid())
+    held_bus.registry.register(replace(commander, process_identity=alive))
+    heartbeat = CommanderHeartbeat()
+
+    def beat() -> None:
+        heartbeat.pass_body(held_bus, heartbeat.observe(held_bus))
+
+    def comms_alarms() -> tuple[Message, ...]:
+        return tuple(message for message in held_bus.bus.bus.latest_addressed(
+            frozenset({heartbeat.sender}), frozenset({CommsTag.channel()}), 10)
+            if "COMMANDER DEAF" in message.body)
+
+    beat()
+    sent = CommanderUpdate.unconfirmed(held_bus, commander.incarnation)[0]
+    assert CommanderDeaf.violations(held_bus, "lead") == ()
+    monkeypatch.setattr(time, "time", lambda: sent.timestamp + CommanderDeaf.seconds + 1)
+    deaf, = CommanderDeaf.violations(held_bus, "lead")
+    assert deaf.since == sent.timestamp + CommanderDeaf.seconds
+    beat()
+    beat()
+    alarm, = comms_alarms()
+    assert alarm.body == f"lead: {deaf.line()}"
+    assert "agent-comms-claude-bridge watch" in alarm.body
+    unread = CommanderUpdate.unconfirmed(held_bus, commander.incarnation)
+    held_bus.messaging.acknowledge("lead", tuple(message.reference for message in unread))
+    assert CommanderDeaf.violations(held_bus, "lead") == ()
+    beat()
+    assert len(comms_alarms()) == 1
+    update, = held_bus.bus.bus.latest_addressed(frozenset({heartbeat.sender}), frozenset({"lead"}))
+    assert f"NO LONGER CURRENT: {deaf.line()}" in update.body
 
 
 def test_first_pass_is_owed_from_oldest_request_and_survives_renames(held_bus, monkeypatch):
