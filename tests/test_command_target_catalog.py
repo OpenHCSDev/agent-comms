@@ -21,8 +21,8 @@ def test_batch_completed_result_round_trips_with_its_command_result_type():
 
 
 @pytest.mark.parametrize("selection,target,resolvable", [
-    (OneTarget, CommandTarget.named("first"), True),
-    (OneTarget, CommandTarget.named("ghost"), False),
+    (OneTarget, (CommandTarget.named("first"),), True),
+    (OneTarget, (CommandTarget.named("ghost"),), False),
     (TargetBatch, (CommandTarget.named("first"),), True),
     (TargetBatch, (CommandTarget.named("ghost"),), False),
 ])
@@ -31,12 +31,11 @@ def test_each_selection_returns_its_own_result(comms, tmp_path, selection, targe
     from agent_comms.thread_status import RunningThreadStatus
 
     comms.registry.declare(Thread("first", frozenset(), str(tmp_path)), RunningThreadStatus())
-    assert type(StopCliCommand.selected_targets(target)) is selection
     if selection is OneTarget and not resolvable:
         with pytest.raises(ValueError):
-            StopCliCommand.execute_target(comms, StopCliCommand.selected_targets(target), {})
+            StopCliCommand.execute_target(comms, selection(target), {})
         return
-    result = StopCliCommand.execute_target(comms, StopCliCommand.selected_targets(target), {})
+    result = StopCliCommand.execute_target(comms, selection(target), {})
     if selection is OneTarget:
         assert result.stopped == "first"
     else:

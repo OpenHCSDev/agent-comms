@@ -368,14 +368,9 @@ class TargetSelection(ABC):
     """The targets one execution runs on; each kind owns how its result comes back."""
     targets: tuple[CommandTarget, ...]
 
-    @staticmethod
-    def decode(raw: CommandTarget | tuple[CommandTarget, ...], *, multiple: bool) -> TargetSelection:
-        if isinstance(raw, tuple):
-            if not raw:
-                raise ValueError('Select at least one target')
-            names = tuple(dict.fromkeys(raw))
-            return (OneTarget if len(names) == 1 and not multiple else TargetBatch)(names)
-        return OneTarget((raw,))
+    def __post_init__(self) -> None:
+        if not self.targets:
+            raise ValueError('Select at least one target')
 
     def command_members(self, family: type[CliCommand]) -> tuple[type[CliCommand], ...]:
         """Derive menu membership from cardinality and declared capability."""
@@ -390,6 +385,11 @@ class TargetSelection(ABC):
 
 class OneTarget(TargetSelection):
     """A single target: resolve errors raise and the bound command's own result returns."""
+
+    def __post_init__(self) -> None:
+        super().__post_init__()
+        if len(self.targets) != 1:
+            raise ValueError('This action requires a single target')
 
     def run(self, declaration: type[CliCommand], comms: Comms, arguments, *, confirmed: bool, channel: ChannelSelection, project: str, snapshot: RegistrySnapshot, catalog: CatalogDocument | None) -> CliResult:
         name, = self.targets
@@ -799,10 +799,9 @@ class MultipleTargets:
     """Commands accepting a batch own its decoding and execution permission."""
 
     @classmethod
-    def selected_targets(
-        cls, raw: CommandTarget | tuple[CommandTarget, ...]
-    ) -> TargetSelection:
-        return TargetSelection.decode(raw, multiple=True)
+    def selected_targets(cls, targets: tuple[CommandTarget, ...]) -> TargetSelection:
+        """A batch command answers every selection, even of one target, with its batch result."""
+        return TargetBatch(tuple(dict.fromkeys(targets)))
 
     @classmethod
     def require_batch(cls) -> None:
@@ -860,9 +859,11 @@ class CliCommand[Answer: CliResult = CliResult](
         return (cls.declared_name, *arguments)
 
     @classmethod
-    def selected_targets(cls, raw: CommandTarget | tuple[CommandTarget, ...]) -> TargetSelection:
-        """Decode a CLI or menu target input once, before command execution."""
-        return TargetSelection.decode(raw, multiple=False)
+    def selected_targets(cls, targets: tuple[CommandTarget, ...]) -> TargetSelection:
+        """A single-target command runs on one target; a wider selection is a batch its
+        run refuses (``require_batch``) and the menu catalog lists batch actions for."""
+        distinct = tuple(dict.fromkeys(targets))
+        return (OneTarget if len(distinct) == 1 else TargetBatch)(distinct)
 
     @classmethod
     def require_batch(cls) -> None:

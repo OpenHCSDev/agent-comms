@@ -223,8 +223,9 @@ async def test_new_tag_disposition_is_declared_in_original_editor_and_tool_catal
     from agent_comms.native_tools import NativeRequestTools
 
     comms = setup_wire(tmp_path)
-    action = next(action for action in CliCommand.target_catalog(comms, CliCommand.selected_targets(CommandTarget.named('#api')), project=str(tmp_path))
-                  if action.declaration.declared_name == 'delete-tag')
+    selected = CliCommand.selected_targets((CommandTarget.named('#api'),))
+    catalog = CliCommand.target_catalog(comms, selected, project=str(tmp_path))
+    action = next(action for action in catalog if action.declaration.declared_name == 'delete-tag')
     disposition = DeleteExclusiveInactiveThreadsTagDisposition()
     editor_value = compile_decoder(TagDisposition).encode_editor(disposition)
     from agent_comms.launch_root import LaunchRoot

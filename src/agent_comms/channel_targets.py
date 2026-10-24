@@ -126,9 +126,8 @@ class CommandTarget(ABC, ProjectionSource):
         return ChannelTarget(name) if ChannelTarget.names_channel(name) else ThreadTarget(name)
 
     @staticmethod
-    def arguments(names: tuple[str, ...], project: str):
-        selected = tuple(CommandTarget.named(name) for name in names) or (ProjectTarget(project),)
-        return selected[0] if len(selected) == 1 else selected
+    def arguments(names: tuple[str, ...], project: str) -> tuple[CommandTarget, ...]:
+        return tuple(CommandTarget.named(name) for name in names) or (ProjectTarget(project),)
 
     @property
     @abstractmethod
