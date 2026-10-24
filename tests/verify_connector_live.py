@@ -92,7 +92,7 @@ def main(scratch: Path):
                 # the real connector path, not a fabricated refusal-table entry.
                 before = comms.bus.bus.revision()
                 output = curl_call(port, token, "", arguments={
-                    "from": "claude-ai", "to": "#missing-channel", "body": "Fix this now",
+                    "to": "#missing-channel", "body": "Fix this now",
                 })
                 response, status = output.strip().rsplit("\n", 1)
                 result = json.loads(response)["result"]
