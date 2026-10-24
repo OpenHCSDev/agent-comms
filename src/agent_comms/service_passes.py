@@ -55,9 +55,11 @@ class ServicePassStore(DurableFile, LockedStore[ServicePasses], DependentStateTi
                 ))
             )
 
-    def heartbeat_passed(self, commanders: Iterable[ThreadIncarnation],
-                         observed: Iterable[ThreadIncarnation]) -> None:
-        current = frozenset(observed)
+    def heartbeat_passed(
+        self, commanders: Iterable[ThreadIncarnation], registered: Iterable[ThreadIncarnation]
+    ) -> None:
+        """Only a retired incarnation loses its completion; a missed live one keeps it."""
+        current = frozenset(registered)
         completed = {owner.require_recorded(): time.time() for owner in commanders}
 
         def change(passes: ServicePasses) -> DocumentChange[ServicePasses, ServicePasses]:
