@@ -45,7 +45,7 @@ pytestmark = pytest.mark.refactor_guard
 
 
 def test_measure_owner_rejects_a_new_absence() -> None:
-    name = f"{NoneAbsence.__name__}:tools/example.py"
+    name = NoneAbsence.at("tools/example.py")
     result = Comparison("tools", "base", "head", (), {name: 0}, {name: 1}, {}, {})
     assert result.delta[name] == 1
     assert result.failed
@@ -88,7 +88,7 @@ def test_plain_str_id_annotations_block_growth_per_file(source, expected):
     path = "src/example.py"
     before = PlainStrIdAnnotation.snapshot([(path, b"description: str")])
     after = PlainStrIdAnnotation.snapshot([(path, source.encode())])
-    identity = f"{PlainStrIdAnnotation.__name__}:{path}"
+    identity = PlainStrIdAnnotation.at(path)
     comparison = Comparison("src", "base", "head", (path,), before, after, {}, {})
     assert comparison.delta[identity] == expected
     assert comparison.failed == bool(expected)

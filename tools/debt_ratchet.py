@@ -51,7 +51,7 @@ from agent_comms.core_stamp import WheelStamp
 from agent_comms.declared_family import DeclaredFamily
 from agent_comms.installer.carry import STEPS
 from stored_formats import StoredForm
-from agent_comms.field_codec import FieldCodec, boundary_decoder, projected
+from agent_comms.field_codec import FieldCodec, ViewExclusion, boundary_decoder, projected
 from agent_comms.mro_dispatch import MroDispatch, handles
 
 AUDIT_SCRIPTS = Path(audit.__path__[0]).parent
@@ -141,12 +141,20 @@ class Side(enum.Enum):
 
 class Measure(DeclaredFamily, affix="Measure"):
     @classmethod
-    def owns(cls, key: str) -> bool:
-        """Whether a report key is one of this measure's."""
-        return key.partition(":")[0] == cls.__name__
+    def owns(cls, key: MeasureCount) -> bool:
+        """Whether a count is one of this measure's."""
+        return key.measure is cls
 
     @classmethod
-    def blocks(cls, delta: dict[str, int]) -> bool:
+    def total(cls) -> MeasureCount:
+        return MeasureCount(cls)
+
+    @classmethod
+    def at(cls, path: str) -> FileCount:
+        return FileCount(cls, path)
+
+    @classmethod
+    def blocks(cls, delta: Counts) -> bool:
         return any(value > 0 for key, value in delta.items() if cls.owns(key))
 
     @classmethod
@@ -176,11 +184,11 @@ class Measure(DeclaredFamily, affix="Measure"):
     @classmethod
     @abstractmethod
     def combine(cls, results: list, repo: Path, base: str, head: str, changed: set[str],
-                root: str) -> tuple[dict[str, int], dict[str, int]]:
+                root: str) -> tuple[Counts, Counts]:
         """The before/after measurements from the results of parts(), in order."""
 
     @classmethod
-    def align(cls, base: dict[str, int], head: dict[str, int]) -> tuple[dict[str, int], dict[str, int]]:
+    def align(cls, base: Counts, head: Counts) -> tuple[Counts, Counts]:
         return base, head
 
     @classmethod
@@ -190,13 +198,62 @@ class Measure(DeclaredFamily, affix="Measure"):
         return cls.combine([part() for part in parts], repo, base, head, changed, root)
 
 
+@dataclass(frozen=True)
+class MeasureCount:
+    """What one reported count counts: here, a measure's total over the change. Its text is
+    only the report's key; the comparison matches the record."""
+
+    measure: type[Measure]
+
+    @property
+    def text(self) -> str:
+        return self.measure.__name__
+
+    def moved(self, moved: dict[str, str]) -> MeasureCount:
+        """The count at its head path; a total belongs to no path."""
+        return self
+
+
+@dataclass(frozen=True)
+class FileCount(MeasureCount):
+    """A measure's count in one file, so an improvement in one file cannot hide a regression
+    in another."""
+
+    path: str
+
+    @property
+    def text(self) -> str:
+        return f"{super().text}:{self.path}"
+
+    def moved(self, moved: dict[str, str]) -> FileCount:
+        return dataclasses.replace(self, path=moved.get(self.path, self.path))
+
+    def member(self, name: str) -> MemberCount:
+        return MemberCount(self.measure, self.path, name)
+
+
+@dataclass(frozen=True)
+class MemberCount(FileCount):
+    """A measure's count for one declaration in a file, named by its dotted scope."""
+
+    name: str
+
+    @property
+    def text(self) -> str:
+        return f"{super().text}::{self.name}"
+
+
+# One revision's counts, each under the record of what it counts.
+type Counts = dict[MeasureCount, int]
+
+
 class ChangeMeasure(Measure):
     """A count of the change as a whole, taken in one piece."""
 
     @classmethod
     @abstractmethod
     def counted(cls, repo: Path, base: str, head: str, changed: set[str],
-                root: str) -> tuple[dict[str, int], dict[str, int]]:
+                root: str) -> tuple[Counts, Counts]:
         """The before/after counts."""
 
     @classmethod
@@ -206,7 +263,7 @@ class ChangeMeasure(Measure):
 
     @classmethod
     def combine(cls, results: list, repo: Path, base: str, head: str, changed: set[str],
-                root: str) -> tuple[dict[str, int], dict[str, int]]:
+                root: str) -> tuple[Counts, Counts]:
         before, after = results[0]
         return before, after
 
@@ -229,7 +286,7 @@ class InventoryMeasure[Reading](Measure):
     @classmethod
     @abstractmethod
     def measured(cls, repo: Path, ref: str, base: str, head: str, readings: dict[str, Reading],
-                 root: str) -> dict[str, int]:
+                 root: str) -> Counts:
         """This revision's measurements from its files' readings, in path order."""
 
     @classmethod
@@ -266,7 +323,7 @@ class InventoryMeasure[Reading](Measure):
 
     @classmethod
     def combine(cls, results: list, repo: Path, base: str, head: str, changed: set[str],
-                root: str) -> tuple[dict[str, int], dict[str, int]]:
+                root: str) -> tuple[Counts, Counts]:
         before, after, *shards = results
         shared = {path: reading for shard in shards for path, reading in shard.items()}
         return cls.align(*(cls.measured(repo, ref, base, head,
@@ -330,11 +387,11 @@ class CountedSource(GitMeasure):
 
     @classmethod
     @abstractmethod
-    def tally(cls, counts: list[tuple[str, int]]) -> dict[str, int]:
+    def tally(cls, counts: list[tuple[str, int]]) -> Counts:
         """A revision's measurements from each selected file's count, in path order."""
 
     @classmethod
-    def snapshot(cls, sources: list[tuple[str, bytes]]) -> dict[str, int]:
+    def snapshot(cls, sources: list[tuple[str, bytes]]) -> Counts:
         return cls.tally([(path, cls.count(source, path)) for path, source in sources])
 
     @staticmethod
@@ -354,7 +411,7 @@ class CountedSource(GitMeasure):
 
     @classmethod
     def combine(cls, results: list, repo: Path, base: str, head: str, changed: set[str],
-                root: str) -> tuple[dict[str, int], dict[str, int]]:
+                root: str) -> tuple[Counts, Counts]:
         before, after = SyntaxPasses.combine(results, repo, base, head, changed, root)
         return ({key: value for key, value in before.items() if cls.owns(key)},
                 {key: value for key, value in after.items() if cls.owns(key)})
@@ -379,20 +436,20 @@ class OccurrenceMeasure(CountedSource):
         return sum(cls.occurrences(node) for node in cls.sites(tree, filename))
 
     @classmethod
-    def tally(cls, counts: list[tuple[str, int]]) -> dict[str, int]:
-        return {cls.__name__: sum(count for _, count in counts)}
+    def tally(cls, counts: list[tuple[str, int]]) -> Counts:
+        return {cls.total(): sum(count for _, count in counts)}
 
 
 class PerFileMeasure(CountedSource):
     """An improvement in one file cannot hide a regression in another."""
 
     @classmethod
-    def tally(cls, counts: list[tuple[str, int]]) -> dict[str, int]:
-        return {f"{cls.__name__}:{path}": count for path, count in counts}
+    def tally(cls, counts: list[tuple[str, int]]) -> Counts:
+        return {cls.at(path): count for path, count in counts}
 
     @classmethod
-    def align(cls, base: dict[str, int], head: dict[str, int]) -> tuple[dict[str, int], dict[str, int]]:
-        identities = sorted(base.keys() | head.keys())
+    def align(cls, base: Counts, head: Counts) -> tuple[Counts, Counts]:
+        identities = sorted(base.keys() | head.keys(), key=lambda identity: identity.text)
         return ({key: base.get(key, 0) for key in identities},
                 {key: head.get(key, 0) for key in identities})
 
@@ -422,7 +479,7 @@ class SyntaxPasses(InventoryMeasure[dict[type[CountedSource], int]]):
 
     @classmethod
     def measured(cls, repo: Path, ref: str, base: str, head: str,
-                 readings: dict[str, dict[type[CountedSource], int]], root: str) -> dict[str, int]:
+                 readings: dict[str, dict[type[CountedSource], int]], root: str) -> Counts:
         return {key: value for measure in cls.passes() for key, value in measure.tally(
             [(path, reading[measure]) for path, reading in readings.items()]).items()}
 
@@ -442,7 +499,7 @@ class SyntaxPasses(InventoryMeasure[dict[type[CountedSource], int]]):
 
     @classmethod
     def combine(cls, results: list, repo: Path, base: str, head: str, changed: set[str],
-                root: str) -> tuple[dict[str, int], dict[str, int]]:
+                root: str) -> tuple[Counts, Counts]:
         readings: dict[Side, dict[str, dict[type[CountedSource], int]]] = {
             side: {} for side in Side}
         for side, read in results:
@@ -606,13 +663,13 @@ class CheckedRevision(Measure):
 
     @classmethod
     def combine(cls, results: list, repo: Path, base: str, head: str, changed: set[str],
-                root: str) -> tuple[dict[str, int], dict[str, int]]:
+                root: str) -> tuple[Counts, Counts]:
         found: dict[Side, Counter[str]] = {side: Counter() for side in Side}
         for side, counted in results:
             found[side] += counted
-        before, after = ({f"{cls.__name__}:{path}": found[side][path] for path in sorted(changed)}
-                         for side in Side)
-        return before, after
+        def counts(side: Side) -> Counts:
+            return {cls.at(path): found[side][path] for path in sorted(changed)}
+        return counts(Side.BASE), counts(Side.HEAD)
 
 
 class Unformatted(CheckedRevision):
@@ -783,13 +840,13 @@ class CleanChangedLines(OccurrenceMeasure):
     @staticmethod
     def introduced(
         repo: Path, base: str, head: str, paths: tuple[str, ...], departed_from: tuple[str, ...],
-    ) -> dict[str, list[int]]:
+    ) -> dict[FileCount, list[int]]:
         """Each strict measure's sites on each path's changed lines. Occurrences that left the
         changed modules in ``departed_from`` (those present at the base) pay for the same
         occurrences arriving elsewhere."""
         sources = [ChangedSource.read(repo, base, head, path) for path in paths]
         left = [ChangedSource.departed(repo, base, head, path) for path in departed_from]
-        found: dict[str, list[int]] = {}
+        found: dict[FileCount, list[int]] = {}
         for measure in Measure.members_with(CleanChangedLines):
             departed: Counter[tuple[str, str]] = Counter()
             for source in left:
@@ -797,7 +854,7 @@ class CleanChangedLines(OccurrenceMeasure):
                 gone.subtract(measure.identities(source.tree, source.path))
                 departed.update(+gone)
             for source in sources:
-                found[f"{measure.__name__}:{source.path}"] = measure.changed_sites(source, departed)
+                found[measure.at(source.path)] = measure.changed_sites(source, departed)
         return found
 
     @staticmethod
@@ -1423,10 +1480,10 @@ class StringIdentity(InventoryMeasure[ModuleDeclarations]):
 
     @classmethod
     def measured(cls, repo: Path, ref: str, base: str, head: str,
-                 readings: dict[str, ModuleDeclarations], root: str) -> dict[str, int]:
+                 readings: dict[str, ModuleDeclarations], root: str) -> Counts:
         spellings = DeclaredSpellings.read(readings)
         selected = readings.keys() & ChangedPaths.of(repo, base, head).touched
-        return {f"{cls.__name__}:{path}": len(spellings.sites(source, path))
+        return {cls.at(path): len(spellings.sites(source, path))
                 for path, source in GitMeasure.sources(repo, ref, selected)}
 
     align = PerFileMeasure.align
@@ -1809,14 +1866,14 @@ class OwnTypeTest(InventoryMeasure[ModuleDeclarations]):
 
     @classmethod
     def measured(cls, repo: Path, ref: str, base: str, head: str,
-                 readings: dict[str, ModuleDeclarations], root: str) -> dict[str, int]:
+                 readings: dict[str, ModuleDeclarations], root: str) -> Counts:
         declared = {name for module in readings.values() for name, _ in module.classes}
         # A script outside every package, such as one in tools, is imported by its stem.
         ours = frozenset((dotted or Path(path).stem).partition(".")[0]
                          for path, dotted in DeclaredSpellings.import_names(readings).items())
         selected = {path for path in readings.keys() & ChangedPaths.of(repo, base, head).touched
                     if path.startswith(root)}
-        return {f"{cls.__name__}:{path}": sum(name in declared for _, name in
+        return {cls.at(path): sum(name in declared for _, name in
                                               OwnTypeTests.of(source, path, ours))
                 for path, source in GitMeasure.sources(repo, ref, selected)}
 
@@ -1833,7 +1890,7 @@ class BuiltinHandlerTypeSwitch(BuiltinHandlerDeclarations, PerFileMeasure):
         return cls.count_module(cls.tree(source, filename))
 
 
-class GodClassExcess(InventoryMeasure[dict[str, int]]):
+class GodClassExcess(InventoryMeasure[dict[MemberCount, int]]):
     """Independent class lines beyond 500 in Black's layout, including newly introduced classes.
     Lines are counted after the revision's own Black configuration formats the file, so
     formatting a class never reads as growth while Unformatted asks for exactly that."""
@@ -1852,7 +1909,7 @@ class GodClassExcess(InventoryMeasure[dict[str, int]]):
         return CheckedRevision.configuration(repo, ref)
 
     @classmethod
-    def read_fresh(cls, repo: Path, ref: str, paths: list[str]) -> dict[str, dict[str, int]]:
+    def read_fresh(cls, repo: Path, ref: str, paths: list[str]) -> dict[str, dict[MemberCount, int]]:
         if not paths:
             return {}
         with tempfile.TemporaryDirectory(prefix="debt-ratchet-layout-") as scratch:
@@ -1870,19 +1927,19 @@ class GodClassExcess(InventoryMeasure[dict[str, int]]):
 
     @classmethod
     def measured(cls, repo: Path, ref: str, base: str, head: str,
-                 readings: dict[str, dict[str, int]], root: str) -> dict[str, int]:
+                 readings: dict[str, dict[MemberCount, int]], root: str) -> Counts:
         return {identity: value
                 for values in readings.values() for identity, value in values.items()}
 
     @classmethod
-    def reading(cls, path: str, source: bytes) -> dict[str, int]:
+    def reading(cls, path: str, source: bytes) -> dict[MemberCount, int]:
         values = {}
         def visit(node: ast.AST, path: str, scope: tuple[str, ...]) -> None:
             match node:
                 case ast.ClassDef(name=name, lineno=start, end_lineno=end, decorator_list=decorators):
                     scope = (*scope, name)
                     start = min([start, *(decorator.lineno for decorator in decorators)])
-                    values[f"{cls.__name__}:{path}::{'.'.join(scope)}"] = max(0, end - start + 1 - cls.threshold)
+                    values[cls.at(path).member(".".join(scope))] = max(0, end - start + 1 - cls.threshold)
                 case ast.FunctionDef(name=name) | ast.AsyncFunctionDef(name=name):
                     scope = (*scope, name)
             for child in ast.iter_child_nodes(node):
@@ -1890,12 +1947,17 @@ class GodClassExcess(InventoryMeasure[dict[str, int]]):
         visit(ast.parse(source, path), path, ())
         return values
 
+    @staticmethod
+    def declaration(identity: MeasureCount) -> str:
+        """The class a count measures; reading() keys every count by its declaration."""
+        return typing.cast(MemberCount, identity).name
+
     @classmethod
-    def align(cls, base: dict[str, int], head: dict[str, int]) -> tuple[dict[str, int], dict[str, int]]:
+    def align(cls, base: Counts, head: Counts) -> tuple[Counts, Counts]:
         def names(values):
             result = {}
             for identity in values:
-                result.setdefault(identity.rsplit("::", 1)[1], []).append(identity)
+                result.setdefault(cls.declaration(identity), []).append(identity)
             return result
         before, after = names(base), names(head)
         matched = {}
@@ -1905,7 +1967,7 @@ class GodClassExcess(InventoryMeasure[dict[str, int]]):
                 matched[identity] = base[identity]
                 consumed.add(identity)
                 continue
-            name = identity.rsplit("::", 1)[1]
+            name = cls.declaration(identity)
             previous = before.get(name, ())
             if len(previous) == 1 and len(after[name]) == 1:
                 matched[identity] = base[previous[0]]
@@ -1914,7 +1976,7 @@ class GodClassExcess(InventoryMeasure[dict[str, int]]):
                 # A new declaration must not introduce any god-class excess.
                 matched[identity] = 0
         current = dict(head)
-        for identity in base.keys() - consumed:
+        for identity in [identity for identity in base if identity not in consumed]:
             matched[identity] = base[identity]
             current[identity] = 0
         return matched, current
@@ -2386,7 +2448,7 @@ class UncarriedRecordFormat(ChangeMeasure):
         after = cls.formats(repo, head, root, changed)
         uncarried = sum(before[name].version == form.version or not carried
                         for name, form in after.items() if name in before and before[name] != form)
-        return {cls.__name__: 0}, {cls.__name__: uncarried}
+        return {cls.total(): 0}, {cls.total(): uncarried}
 
 
 def git(repo: Path, *args: str, input: bytes = b"") -> bytes:
@@ -2436,17 +2498,18 @@ class ChangedPaths:
             touched.update(paths)
         return ChangedPaths(frozenset(touched), tuple(moved))
 
-    def paired(self, counts: dict[str, int]) -> dict[str, int]:
-        """Per-file counts ("Measure:path" or "Measure:path::member") keyed by head path."""
+    def paired(self, counts: Counts) -> Counts:
+        """Counts at their head paths; a moved file's key zero-filled at its other path adds 0."""
         moved = dict(self.moved)
-        result: dict[str, int] = {}
+        result: Counts = {}
         for identity, count in counts.items():
-            measure, _, rest = identity.partition(":")
-            path, separator, member = rest.partition("::")
-            if path in moved:
-                identity = f"{measure}:{moved[path]}{separator}{member}"
-            result[identity] = result.get(identity, 0) + count
+            at = identity.moved(moved)
+            result[at] = result.get(at, 0) + count
         return result
+
+
+class ReportExclude(ViewExclusion):
+    """A field the report shows in another form."""
 
 
 @dataclass(frozen=True)
@@ -2455,14 +2518,39 @@ class Comparison:
     base_revision: str
     head_revision: str
     paths: tuple[str, ...]
-    base: dict[str, int]
-    head: dict[str, int]
-    introduced: dict[str, int]
-    introduced_lines: dict[str, list[int]]
+    base: Annotated[dict[MeasureCount, int], ReportExclude()]
+    head: Annotated[dict[MeasureCount, int], ReportExclude()]
+    introduced: Annotated[dict[FileCount, int], ReportExclude()]
+    introduced_lines: Annotated[dict[FileCount, list[int]], ReportExclude()]
 
-    @projected(view="report")
-    def delta(self) -> dict[str, int]:
+    @property
+    def delta(self) -> dict[MeasureCount, int]:
         return {name: value - self.base[name] for name, value in self.head.items()}
+
+    @staticmethod
+    def keyed[Count: MeasureCount, Value](counts: dict[Count, Value]) -> dict[str, Value]:
+        """The report's JSON keys: the one place a count's record becomes text."""
+        return {identity.text: value for identity, value in counts.items()}
+
+    @projected(view="report", name="base")
+    def base_report(self) -> dict[str, int]:
+        return self.keyed(self.base)
+
+    @projected(view="report", name="head")
+    def head_report(self) -> dict[str, int]:
+        return self.keyed(self.head)
+
+    @projected(view="report", name="introduced")
+    def introduced_report(self) -> dict[str, int]:
+        return self.keyed(self.introduced)
+
+    @projected(view="report", name="introduced_lines")
+    def introduced_lines_report(self) -> dict[str, list[int]]:
+        return self.keyed(self.introduced_lines)
+
+    @projected(view="report", name="delta")
+    def delta_report(self) -> dict[str, int]:
+        return self.keyed(self.delta)
 
     @property
     def failed(self) -> bool:
@@ -2479,10 +2567,10 @@ def compare(repo: Path, base: str, head: str, root: str, workers: int) -> Compar
     changed = ChangedPaths.of(repo, base, head)
     touched = changed.touched
     paths = set(touched & (python_paths(repo, base, root) | python_paths(repo, head, root)))
-    before: dict[str, int] = {}
-    after: dict[str, int] = {}
-    introduced: dict[str, int] = {}
-    introduced_lines: dict[str, list[int]] = {}
+    before: Counts = {}
+    after: Counts = {}
+    introduced: dict[FileCount, int] = {}
+    introduced_lines: dict[FileCount, list[int]] = {}
     # Every measure reads production Python paths only, so with none touched each would
     # report no change.
     if not touched & (production_paths(repo, base) | production_paths(repo, head)):
@@ -2538,10 +2626,10 @@ def main() -> int:
     print(json.dumps(FieldCodec.project(result, "report"), indent=2), flush=True)
     # The failing step's last lines become check annotations (.github/run-step.sh merges
     # stderr), so what grew goes to stderr last; stdout stays the one JSON report.
-    for name, grown in sorted(result.delta.items()):
+    for name, grown in sorted(result.delta_report.items()):
         if grown > 0:
             print(f"grew {name} +{grown}", file=sys.stderr)
-    for identity, lines in sorted(result.introduced_lines.items()):
+    for identity, lines in sorted(result.introduced_lines_report.items()):
         print(f"introduced {identity} at lines {lines}", file=sys.stderr)
     return int(result.failed)
 
