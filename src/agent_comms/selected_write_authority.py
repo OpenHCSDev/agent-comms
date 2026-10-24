@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 from .coordination_errors import IdentityConflict
+from .field_codec import ClaimId
 from .selected_write_plan import SelectedWritePlans
 
 if TYPE_CHECKING:
@@ -31,11 +32,11 @@ class NoSelectedWritePlans(SelectedWriteAuthority):
 class BoundSelectedWriteAuthority(SelectedWriteAuthority):
     @abstractmethod
     def require_current(
-        self, assignment: WakeAssignment, owner: Thread, operation_id: str
+        self, assignment: WakeAssignment, owner: Thread, operation_id: ClaimId
     ) -> None: ...
 
     @abstractmethod
-    def applied(self, assignment: WakeAssignment, owner: Thread, operation_id: str) -> None: ...
+    def applied(self, assignment: WakeAssignment, owner: Thread, operation_id: ClaimId) -> None: ...
 
 
 @dataclass
@@ -51,13 +52,13 @@ class AcpSelectedWriteAuthority(BoundSelectedWriteAuthority):
         self.require_current(assignment, owner, plan.operation_id)
         return action.with_plan(self, plan, assignment, owner)
 
-    def require_current(self, assignment, owner, operation_id):
+    def require_current(self, assignment, owner, operation_id: ClaimId):
         bound = self.agent._selected_write_controllers.get((owner.name, assignment.wire_seq))
         if bound is None or bound[0] != operation_id:
             raise IdentityConflict("Selected write original controller is no longer bound")
         controller = bound[1]
         controller.require_current(self, self.session_id)
 
-    def applied(self, assignment, owner, operation_id):
+    def applied(self, assignment, owner, operation_id: ClaimId):
         self.plans.applied(assignment, owner, operation_id)
         self.agent._selected_write_controllers.pop((owner.name, assignment.wire_seq), None)
