@@ -54,6 +54,7 @@ from agent_comms.transcript_events import ToolStartTranscript
 from agent_comms.turn_item import NativeTurnId
 from agent_comms.work_branches import BranchDifference, UnpushedHead
 from conftest import declare_test_bus
+from fixture_git import IDENTITY
 from source_revision_fixture import SourceRepository
 from github_fixture import GitHubFixture
 
@@ -90,7 +91,7 @@ class Fleet:
         if at is not None:
             environment["GIT_AUTHOR_DATE"] = environment["GIT_COMMITTER_DATE"] = f"@{int(at)}"
         return subprocess.run(
-            ("git", "-C", str(checkout), *arguments),
+            ("git", *IDENTITY, "-C", str(checkout), *arguments),
             env=environment,
             capture_output=True,
             text=True,

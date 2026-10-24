@@ -25,11 +25,13 @@ from agent_comms.acp import CommsAgent
 from agent_comms.acp_extension import CompactionChangedUpdate, decode_updates
 from agent_comms.activity import ActivityState
 from agent_comms.comms import wire
+from agent_comms.launch_root import LaunchRoot
 from agent_comms.launch_runtime import RestartEnvironment
 from agent_comms.pi_native_backend import PersistentPiSession
 from agent_comms.selected_actions import NoSelectedTools
 from agent_comms.pi_vocabulary import OverflowCompactionReason, ThresholdCompactionReason
 from agent_comms.native_arguments import GivenArguments, GivenBinary
+from bus_record_fixture import prepare_native_comms
 from stored_inputs import stored_inputs
 from native_backend_fixture import AnnouncedInputStart, NativeBackendFixture
 
@@ -84,7 +86,8 @@ def _is_summary(request: dict) -> bool:
     "threshold", "cap_disabled", "acp_threshold", "overflow", "compacted_resume",
     "summary_failure", "post_compaction_tool_rounds",
 ])
-async def test_pi_engine_compacts_inside_a_core_turn(case: str, monkeypatch, native_runtime_package) -> None:
+async def test_pi_engine_compacts_inside_a_core_turn(
+        case: str, monkeypatch, native_runtime_package, private_directory) -> None:
     native_bin = os.environ.get("AC_NATIVE_STACK_BIN")
     if not native_bin:
         pytest.skip("Set AC_NATIVE_STACK_BIN to the prepared pinned Pi launcher")
@@ -198,8 +201,10 @@ async def test_pi_engine_compacts_inside_a_core_turn(case: str, monkeypatch, nat
                 "PI_TASK": "TASK_BRIEF_SENTINEL",
             }
             if case in {"acp_threshold", "post_compaction_tool_rounds"}:
-                await _acp_threshold(root, project, session, native_bin, native_args, child_env,
-                                     summary_entered, release_summary, monkeypatch)
+                comms = prepare_native_comms(wire(private_directory / "wire"))
+                with LaunchRoot.from_path(comms.root).selected():
+                    await _acp_threshold(comms, project, session, native_bin, native_args,
+                                         child_env, summary_entered, release_summary, monkeypatch)
                 assert len(summaries) >= 1
                 assert "TASK_BRIEF_SENTINEL" in json.dumps(summaries[0]["messages"])
                 if case == "acp_threshold":
@@ -292,12 +297,11 @@ async def test_pi_engine_compacts_inside_a_core_turn(case: str, monkeypatch, nat
             return
 
 
-async def _acp_threshold(root, project, session, native_bin, native_args, child_env,
+async def _acp_threshold(comms, project, session, native_bin, native_args, child_env,
                          summary_entered, release_summary, monkeypatch) -> None:
     """The owner's turn shows 'Compacting context' while Pi summarizes, then replies."""
     for key, value in child_env.items():
         monkeypatch.setenv(key, value)
-    comms = wire(root / "wire")
     monkeypatch.setenv("AGENT_COMMS_ROOT", str(comms.root))
     owner = CommsAgent(
         comms, agent_bin=GivenBinary(native_bin), agent_args=GivenArguments(tuple(native_args)), runtime_enabled=True,
