@@ -701,7 +701,7 @@ class FileChange(WireModel):
     def events(self, call_id: str, ok: bool, timestamp: float) -> tuple[TranscriptEvent, ...]:
         call = self.call(call_id)
         diff = self.kind.patch(self.path, self.diff)
-        return diff.patch(call).finished('', ok, call_id, timestamp)
+        return diff.patch(call).finished('', ok, NativeItemId(call_id), timestamp)
 
 
 class FileChangeItem(Item):
@@ -713,7 +713,7 @@ class FileChangeItem(Item):
     def accumulator(self, started_at: EventTime) -> ToolDraft:
         timestamp = started_at.recorded_at('Codex file change start')
         return ToolDraft(started_at, tuple(
-            change.call(f'{self.id}:{index}').started(f'{self.id}:{index}', timestamp)
+            change.call(f'{self.id}:{index}').started(NativeItemId(f'{self.id}:{index}'), timestamp)
             for index, change in enumerate(self.changes)))
 
     def events(self, timestamp: float) -> tuple[TranscriptEvent, ...]:

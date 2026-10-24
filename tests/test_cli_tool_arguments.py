@@ -12,6 +12,7 @@ from agent_comms.cli_bridges.claude_protocol import ToolUse
 from agent_comms.cli_bridges.opencode_parts import ToolPart
 from agent_comms.native_tools import BashTool, EditTool, GlobTool, GrepTool, ReadTool, WriteTool
 from agent_comms.tool_calls import CliToolArguments, ToolCall
+from agent_comms.turn_item import NativeItemId
 
 
 @pytest.mark.parametrize('name,arguments,tool', [
@@ -32,7 +33,7 @@ def test_opencode_spellings_reach_native_records_with_extra_input(name, argument
     assert type(call.tool) is tool
     assert call.id == 'call'
     assert call.arguments['provider_detail'] == ['retained']
-    started = call.started('part', 1.0)
+    started = call.started(NativeItemId('part'), 1.0)
     assert started.tool_call_id == call.id
     assert started.tool == call.tool
 

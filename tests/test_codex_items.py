@@ -144,12 +144,25 @@ def test_coalescing_preserves_completion_and_unrelated_updates():
     from agent_comms.recorded_time import UnrecordedEventTime
     from agent_comms.transcript_events import AssistantTranscript
 
-    first = DraftItem(t_turn_id, "a", TextDraft.from_parts(AssistantTranscript, ("H",),
-        UnrecordedEventTime(), "a"))
-    newer = DraftItem(t_turn_id, "a", TextDraft.from_parts(AssistantTranscript, ("Hello",),
-        UnrecordedEventTime(), "a"))
-    other = DraftItem(t_turn_id, "b", TextDraft.from_parts(AssistantTranscript, ("Other",),
-        UnrecordedEventTime(), "b"))
+    first = DraftItem(
+        t_turn_id,
+        NativeItemId("a"),
+        TextDraft.from_parts(AssistantTranscript, ("H",), UnrecordedEventTime(), NativeItemId("a")),
+    )
+    newer = DraftItem(
+        t_turn_id,
+        NativeItemId("a"),
+        TextDraft.from_parts(
+            AssistantTranscript, ("Hello",), UnrecordedEventTime(), NativeItemId("a")
+        ),
+    )
+    other = DraftItem(
+        t_turn_id,
+        NativeItemId("b"),
+        TextDraft.from_parts(
+            AssistantTranscript, ("Other",), UnrecordedEventTime(), NativeItemId("b")
+        ),
+    )
     final = FinishedItem(t_turn_id, NativeItemId("a"), (AssistantTranscript("Hello!", timestamp=1.0,
         position=NativeItemId("a")),))
     end = TurnEnded()

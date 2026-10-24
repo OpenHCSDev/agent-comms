@@ -15,11 +15,12 @@ from agent_comms.attempt_resolution import (
     OperatorStopped,
     OrderDecision,
     RetryDecision,
+    VerifiedTurnDecision,
     WorkDecision,
 )
 from agent_comms.bus import Bus
 from agent_comms.bus_tables import MessageIdentitySource
-from agent_comms.field_codec import GoalId, MessageId, RetryDecisionId
+from agent_comms.field_codec import GoalId, MessageId, RetryDecisionId, TurnId
 from agent_comms.goal_attempts import AttemptRecord, GoalAttemptStore, GoalWorkDecision
 from agent_comms.installer.probes.carry import Carried, Carry
 from agent_comms.locked_store import RootFile
@@ -55,6 +56,8 @@ class StoredDecision(TypedRow):
     def carried(self, bus: Connection, orders: set[str]) -> WorkDecision | None:
         if re.fullmatch("[0-9a-f]{32}", self.decision_id):
             return RetryDecision(RetryDecisionId(self.decision_id))
+        if re.fullmatch("verified-turn:[0-9a-f]{32}", self.decision_id):
+            return VerifiedTurnDecision(TurnId(self.decision_id.removeprefix("verified-turn:")))
         if not re.fullmatch("[0-9a-f]{12}", self.decision_id):
             raise ValueError(f"Unknown legacy decision shape: {self}")
         answer = MessageIdentitySource.exists(bus, message_id=MessageId(self.decision_id))

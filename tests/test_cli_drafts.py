@@ -17,8 +17,14 @@ from test_codex_items import _output
 def start(
     turn: NativeTurnId, item: str, text: str = '', accumulator: type[TextDraft] = TextDraft,
 ) -> StartedItem:
-    return StartedItem(turn, NativeItemId(item), ModelWaitPhase('Replying'),
-                       accumulator.from_parts(AssistantTranscript, (text,), RecordedEventTime(1.0), item))
+    return StartedItem(
+        turn,
+        NativeItemId(item),
+        ModelWaitPhase("Replying"),
+        accumulator.from_parts(
+            AssistantTranscript, (text,), RecordedEventTime(1.0), NativeItemId(item)
+        ),
+    )
 
 
 def test_batched_deltas_materialize_only_the_surviving_view(tmp_path):
@@ -121,7 +127,9 @@ def test_paragraph_identity_not_arrival_order_owns_summary_joining(tmp_path):
     from agent_comms.cli_bridges.codex_protocol import ReasoningItem
 
     output = _output(tmp_path)
-    accumulator = ParagraphDraft.from_parts(ThinkingTranscript, [], RecordedEventTime(2.0), 'r')
+    accumulator = ParagraphDraft.from_parts(
+        ThinkingTranscript, [], RecordedEventTime(2.0), NativeItemId("r")
+    )
     output.publish_batch(
         [
             StartedItem(t_turn_id, NativeItemId("r"), ModelWaitPhase(), accumulator),
@@ -140,19 +148,25 @@ def test_tool_start_is_one_draft_row_then_one_completed_row(tmp_path):
     t_turn_id = NativeTurnId('t')
     output = _output(tmp_path)
     call = ToolCall('call', 'read', {'path': 'a.py'})
-    start_event = call.started('call', 1.0)
+    start_event = call.started(NativeItemId('call'), 1.0)
     output.publish_batch([StartedItem(
         t_turn_id, NativeItemId('call'), ToolRunningPhase(tools=(('call', 'Read a.py'),)),
         ToolDraft(RecordedEventTime(1.0), (start_event,)))])
     draft = output.transcript.current_draft(output.transcript.root, output.transcript.incarnation)
     assert draft.events == (start_event,)
     output.publish_batch(
-        [CompletedItem(t_turn_id, NativeItemId("call"), call.finished("done", True, "call", 2.0))]
+        [
+            CompletedItem(
+                t_turn_id,
+                NativeItemId("call"),
+                call.finished("done", True, NativeItemId("call"), 2.0),
+            )
+        ]
     )
     assert output.transcript.current_draft(output.transcript.root, output.transcript.incarnation) == NoDraft()
     with output.transcript.reading() as snapshot:
         row, = snapshot.forward(0, snapshot.cut().offset)
-        assert row.events == call.finished('done', True, 'call', 2.0)
+        assert row.events == call.finished('done', True, NativeItemId('call'), 2.0)
 
 
 def test_empty_tool_collection_has_activity_but_no_blank_row(tmp_path):
