@@ -16,7 +16,7 @@ from pydantic import (
 )
 
 from agent_comms.agent_events import TranscriptModelUsage
-from agent_comms.cli_protocol import TaggedWire, TextWire, TimestampedWire, WireHeader
+from agent_comms.cli_protocol import OpenWire, TaggedWire, TextWire, TimestampedWire, WireHeader
 from agent_comms.field_codec import FieldCodec, MalformedRecord, MessageId
 from agent_comms.pi_counts import PiCount, PiCountWire
 from agent_comms.recorded_time import EventTime
@@ -469,12 +469,17 @@ class KindHeader(WireHeader):
 
 
 class PromptOrigin(TaggedWire, ABC, affix=""):
-    """Who wrote a user record. Only a person's prompt is shown live as input;
+    """Who wrote a prompt. Only a person's prompt is shown live as input;
     another agent's message is conversation history the live view hides."""
     header = KindHeader
 
     def prompt(self, record: TimedRecord, text: str,
                session: ClaudeSession) -> tuple[RuntimeUpdate, ...]:
+        return ()
+
+    def absorbed(self, record: TimedRecord, text: str,
+                 session: ClaudeSession) -> tuple[RuntimeUpdate, ...]:
+        """The prompt Claude folded into the turn already running."""
         return ()
 
     def request(self, text: str) -> str:
@@ -487,26 +492,40 @@ class Prompting(PromptOrigin, ABC, declared_name=None):
     def request(self, text: str) -> str:
         return text
 
+    def prompt(self, record: TimedRecord, text: str,
+               session: ClaudeSession) -> tuple[RuntimeUpdate, ...]:
+        return (TurnStarted(), *self.absorbed(record, text, session))
+
+    def absorbed(self, record: TimedRecord, text: str,
+                 session: ClaudeSession) -> tuple[RuntimeUpdate, ...]:
+        return (HiddenItem((UserTranscript(text, timestamp=record.timestamp, position=record.position),)),)
+
 
 class AgentPrompt(Prompting, declared_name=None):
-    """Input another agent wrote: the commanding session, or a peer session."""
+    """Input another agent wrote: the commanding session, or a peer session. It never
+    starts a turn of its own."""
 
     def prompt(self, record: TimedRecord, text: str,
                session: ClaudeSession) -> tuple[RuntimeUpdate, ...]:
-        return (HiddenItem((UserTranscript(text, timestamp=record.timestamp, position=record.position),)),)
+        return self.absorbed(record, text, session)
 
 
 class HumanPrompt(Prompting, declared_name='human'):
 
-    def prompt(self, record: TimedRecord, text: str,
-               session: ClaudeSession) -> tuple[RuntimeUpdate, ...]:
-        return (TurnStarted(), *session.finished(
-            record.uuid, (UserTranscript(text, timestamp=record.timestamp, position=record.position),)))
+    def absorbed(self, record: TimedRecord, text: str,
+                 session: ClaudeSession) -> tuple[RuntimeUpdate, ...]:
+        return session.finished(
+            record.uuid, (UserTranscript(text, timestamp=record.timestamp, position=record.position),))
 
 
 class TaskNotification(PromptOrigin, declared_name='task-notification'):
-    """Its specialized user record owns task-envelope decoding."""
+    """Its specialized user record owns task-envelope decoding; queued into a running
+    turn, the envelope arrives as the prompt."""
     kind: Literal['task-notification']
+
+    def absorbed(self, record: TimedRecord, text: str,
+                 session: ClaudeSession) -> tuple[RuntimeUpdate, ...]:
+        return TaskEnvelope.from_text(text).updates(record)
 
 
 class PeerMessage(AgentPrompt, declared_name='peer'):
@@ -525,9 +544,10 @@ class ToolSupplied(Prompting, declared_name=None):
     """Text Claude records without a sender: a subagent's task, or a local command's echo.
     It starts a turn; the live view does not show it as the person's prompt."""
 
-    def prompt(self, record: TimedRecord, text: str,
-               session: ClaudeSession) -> tuple[RuntimeUpdate, ...]:
-        return (TurnStarted(), HiddenItem((UserTranscript(text, timestamp=record.timestamp, position=record.position),)))
+
+class Originated(WireModel):
+    """Who wrote a prompt, whether it opened a user record or was queued into a running turn."""
+    origin: PromptOrigin.declared_union() = Field(default_factory=ToolSupplied)
 
 
 class UserBlock(TaggedWire, ABC, affix=""):
@@ -634,11 +654,13 @@ class ToolResult(UserBlock, ContentBlocks, declared_name='tool_result'):
 class UserMessage(ContentBlocks):
     content: list[UserBlock.declared_union()]
 
+    def text(self) -> str:
+        return '\n'.join(text for block in self.content if (text := block.prompt_text()))
 
-class UserRecord(ClaudeRecord, TimedRecord, declared_name='user'):
+
+class UserRecord(ClaudeRecord, TimedRecord, Originated, declared_name='user'):
     promptId: str
     message: UserMessage
-    origin: PromptOrigin.declared_union() = Field(default_factory=ToolSupplied)
 
     def updates(self, session: ClaudeSession) -> tuple[RuntimeUpdate, ...]:
         session.turn = KnownTurn(FieldCodec.decode(NativeTurnId, self.promptId))
@@ -646,7 +668,7 @@ class UserRecord(ClaudeRecord, TimedRecord, declared_name='user'):
 
     @property
     def text(self) -> str:
-        return '\n'.join(text for block in self.message.content if (text := block.prompt_text()))
+        return self.message.text()
 
     def request(self) -> str:
         return self.origin.request(self.text)
@@ -749,31 +771,29 @@ class MetadataRecord(ClaudeRecord, ABC, declared_name=None):
     pass
 
 
-class AttachmentHeader(WireHeader):
-    @model_validator(mode='before')
-    @classmethod
-    def task_notification(cls, value: dict) -> dict:
-        if (value.get('type') == QueuedTaskNotification.declared_name
-                and value.get('origin', {}).get('kind') == TaskNotification.declared_name):
-            return value
-        return {'type': ForeignAttachment.declared_name}
-
-
-class AttachmentPayload(TaggedWire, ABC, affix=""):
-    header = AttachmentHeader
+class AttachmentPayload(OpenWire, ABC, affix=""):
 
     @abstractmethod
-    def updates(self, record: TimedRecord) -> tuple[RuntimeUpdate, ...]: ...
+    def updates(self, record: TimedRecord, session: ClaudeSession) -> tuple[RuntimeUpdate, ...]: ...
 
 
-class QueuedTaskNotification(TaskContent, AttachmentPayload, declared_name='queued_command'):
-    text: TaskEnvelope = Field(alias='prompt')
-    origin: TaskNotification
+class QueuedCommand(Originated, AttachmentPayload, declared_name='queued_command'):
+    """A prompt sent while a turn runs: its origin decides what the folded-in text is."""
+    prompt: UserMessage
+
+    @field_validator('prompt', mode='before')
+    @classmethod
+    def message(cls, value: str | list) -> dict:
+        # Claude stores the queued prompt as a bare user message content.
+        return {'content': value}
+
+    def updates(self, record: TimedRecord, session: ClaudeSession) -> tuple[RuntimeUpdate, ...]:
+        return self.origin.absorbed(record, self.prompt.text(), session)
 
 
 class ForeignAttachment(AttachmentPayload, declared_name='foreign'):
 
-    def updates(self, record: TimedRecord) -> tuple[RuntimeUpdate, ...]:
+    def updates(self, record: TimedRecord, session: ClaudeSession) -> tuple[RuntimeUpdate, ...]:
         return ()
 
 
@@ -781,7 +801,7 @@ class Attachment(ClaudeRecord, TimedRecord, declared_name='attachment'):
     attachment: AttachmentPayload.declared_union()
 
     def updates(self, session: ClaudeSession) -> tuple[RuntimeUpdate, ...]:
-        return self.attachment.updates(self)
+        return self.attachment.updates(self, session)
 
 
 class QueueOperation(MetadataRecord, declared_name='queue-operation'):
