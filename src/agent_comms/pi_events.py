@@ -41,6 +41,7 @@ from .pi_payloads import (
 )
 from .pi_vocabulary import CompactionReason, UnknownCompactionReason
 from .request_progress import RequestProgress
+from .recovery_states import RecoveredRecovery, RetryingRecovery
 from .tool_declaration import ToolDeclaration
 
 if TYPE_CHECKING:
@@ -334,7 +335,7 @@ class RetryAttemptEvent(NativePiEvent):
         self.prepare_retry(session)
         session.watchdog.progress()
         yield session.watchdog.state(
-            "retrying", self.retry_reason_code, elapsed_ms,
+            RetryingRecovery, self.retry_reason_code, elapsed_ms,
             phase=phases.ModelWaitPhase(), attempt=self,
         )
 
@@ -410,7 +411,7 @@ class CompactionEnd(ReasonedCompaction, ends=phases.CompactionPhase):
             session.watchdog.retry_recovery_pending = True
             session.watchdog.retry_recovery_reason = "overflow_retry_progress"
             yield session.watchdog.state(
-                "retrying", "overflow_compaction_retry", 0, phase=phases.ModelWaitPhase()
+                RetryingRecovery, "overflow_compaction_retry", 0, phase=phases.ModelWaitPhase()
             )
 
 
@@ -849,7 +850,7 @@ class SummarizationRetryFinished(NativePiEvent, ends=phases.SummarizationRetryPh
         session.watchdog.progress()
         if self.success.value_or(False) or self.result.reported:
             yield session.watchdog.state(
-                "recovered", "summarization_retry_succeeded", 0, phase=phases.ModelWaitPhase()
+                RecoveredRecovery, "summarization_retry_succeeded", 0, phase=phases.ModelWaitPhase()
             )
 
 
