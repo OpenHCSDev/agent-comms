@@ -711,6 +711,7 @@ class Stack:
     def start_services(self, stopped: tuple[HostService, ...]) -> tuple[RestartedService, ...]:
         with StartServicesPhase().running(self.commands.clock):
             services = tuple(service.start_onto(self.python) for service in stopped)
+            HostService.start_enabled()
             self.probe(ServingProbe())
             return services
 

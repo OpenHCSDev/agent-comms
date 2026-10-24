@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from abc import abstractmethod
 from collections.abc import Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from functools import partial
 from typing import Annotated, ClassVar, NoReturn
 
@@ -82,6 +82,15 @@ class OmittedNames(NullMember):
     names: ClassVar[tuple[str, ...]] = ()
 
 
+@dataclass(frozen=True)
+class ToolCall:
+    """The MCP tools/call parameters: a tool by the name the connector exposes it under."""
+
+    name: str
+    arguments: dict[str, object] = field(default_factory=dict)
+    meta: Annotated[dict[str, object], WireName("_meta")] = field(default_factory=dict)
+
+
 @dataclass(frozen=True, kw_only=True)
 class ToolRequest[Caller: ToolCaller = ToolCaller](
     ArgumentTool, ThreadCommandAvailability, NativeRequestTools, NativeToolDeclaration
@@ -100,6 +109,11 @@ class ToolRequest[Caller: ToolCaller = ToolCaller](
             for plan in FieldCodec.field_plans(cls)
             for binding in ContextSource.single(plan.annotation)
         }
+
+    @classmethod
+    def called(cls) -> ToolCall:
+        """A connector call of this tool; the connector exposes it under its declared name."""
+        return ToolCall(cls.declared_name)
 
     @classmethod
     def schema(cls) -> dict[str, object]:
