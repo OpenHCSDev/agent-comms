@@ -6,7 +6,7 @@ import time
 from abc import abstractmethod
 from collections.abc import Callable
 from dataclasses import dataclass, replace
-from typing import TYPE_CHECKING, ClassVar
+from typing import TYPE_CHECKING, ClassVar, Self
 
 from .child_process import ProcessIdentity, ProcessState
 from .declared_family import DeclaredFamily
@@ -70,6 +70,12 @@ class ThreadStatus(LifecycleCapability, DeclaredFamily, affix="ThreadStatus"):
 
     def declaration(self) -> ThreadStatus:
         return self
+
+    def external_registered(self, thread: Thread, now: float) -> ThreadStatus:
+        return NoBridgeThreadStatus().registered(thread, now)
+
+    def paused_since(self, last_seen: float) -> tuple[float, ...]:
+        return ()
 
     def require_visible(self, message: str = "Initial direct target must be visible.") -> None:
         raise RelationViolationError(message)
@@ -294,9 +300,6 @@ class CliInboxPresence(AlwaysListed):
         return (ConnectedThreadStatus() if thread.process_identity.alive()
                 else NoBridgeThreadStatus())
 
-    def declaration(self) -> ThreadStatus:
-        return NoBridgeThreadStatus()
-
     def restored(self) -> ThreadStatus:
         """Restoration preserves the inbox declaration, never a liveness answer."""
         return NoBridgeThreadStatus()
@@ -307,8 +310,28 @@ class CliInboxPresence(AlwaysListed):
         return self
 
 
-class ConnectedThreadStatus(CliInboxPresence, RunningThreadStatus):
+class DeclaredReaderPresence(CliInboxPresence):
+    """The session bridge's reader state survives registration and storage."""
+
+    def declaration(self) -> Self:
+        return self
+
+    def external_registered(self, thread: Thread, now: float) -> ThreadStatus:
+        return self.registered(thread, now)
+
+
+class ConnectedThreadStatus(DeclaredReaderPresence, RunningThreadStatus):
     """A CLI inbox whose bridge process is watching it."""
+
+
+class PausedBridgeThreadStatus(SelfRenaming, DeclaredReaderPresence, StoppedThreadStatus):
+    """A live session bridge waiting for a Monitor to confirm its probe."""
+
+    def registered(self, thread: Thread, last_seen: float) -> ThreadStatus:
+        return self if thread.process_identity.alive() else NoBridgeThreadStatus()
+
+    def paused_since(self, last_seen: float) -> tuple[float, ...]:
+        return (last_seen,)
 
 
 class NoBridgeThreadStatus(SelfRenaming, CliInboxPresence, StoppedThreadStatus):

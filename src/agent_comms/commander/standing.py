@@ -11,6 +11,7 @@ from typing import ClassVar, Self
 
 from agent_comms.build_identity import RecordedBuildIdentity
 from agent_comms.bus import BusReader
+from agent_comms.channel_targets import CommsTag
 from agent_comms.commander.questions import UnansweredUnitAsks
 from agent_comms.commander_heartbeat import CommanderHeartbeat
 from agent_comms.comms import Comms
@@ -444,6 +445,37 @@ class HeartbeatNotStarted(HeartbeatSilent):
         return (f"HEARTBEAT NOT STARTED: no beat for request {self.request.value}, overdue since "
                 f"{RecordedEventTime(self.since).clock()}"
                 " -> start the connector heartbeat and fix its failing pass")
+
+
+@dataclass(frozen=True)
+class CommanderDeaf(IndependentStandingRule, DatedStandingRule):
+    """The session bridge has no confirmed Monitor; its own registration dates the pause."""
+
+    seconds: ClassVar[int] = 300
+    since: float = field(compare=False)
+
+    @classmethod
+    def violations(cls, comms: Comms, commander: str) -> tuple[CommanderDeaf, ...]:
+        snapshot = comms.registry.snapshot()
+        now = time.time()
+        pauses = snapshot.status(commander).paused_since(snapshot.seen_at(commander))
+        return tuple(cls(paused + cls.seconds)
+                     for paused in pauses
+                     if paused + cls.seconds < now)
+
+    def began(self) -> float:
+        return self.since
+
+    def line(self) -> str:
+        return (f"COMMANDER DEAF: its bridge has no confirmed Monitor since "
+                f"{RecordedEventTime(self.since - self.seconds).clock()}, so every Core line"
+                " to it waits unread -> re-arm its watch:"
+                " agent-comms-claude-bridge watch (bare, no pipe)")
+
+    def enforce(self, comms: Comms, commander: str) -> None:
+        """The commander's own inbox is the dead path, so #comms hears it instead."""
+        comms.messaging.send(
+            CommanderHeartbeat.sender, CommsTag.channel(), f"{commander}: {self.line()}")
 
 @dataclass(frozen=True)
 class Unjudged(ReasonedStandingRule, UndatedStandingRule):
