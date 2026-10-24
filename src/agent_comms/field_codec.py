@@ -1263,7 +1263,55 @@ class StructuralRepresentation(FieldRepresentation):
 
     @classmethod
     def schema_for(cls, annotation: object) -> dict[str, JsonValue]:
-        return FieldCodec._structure_schema(annotation)
+        origin, args = get_origin(annotation), get_args(annotation)
+        if origin in (Union, types.UnionType):
+            members = list(args)
+            if len(members) == 1:
+                return FieldCodec.value_schema(members[0])
+            return FieldCodec.alternatives_schema(
+                "anyOf", [FieldCodec.value_schema(item) for item in members],
+            )
+        if origin is Literal:
+            return {
+                **FieldCodec.value_schema(type(args[0])),
+                "enum": [value for _, value in compile_decoder(annotation).editor_choices()],
+            }
+        if origin in (list, tuple, frozenset):
+            return {"type": "array", "items": FieldCodec.value_schema(args[0])}
+        if origin is dict:
+            if args[0] is str:
+                return {"type": "object", "additionalProperties": FieldCodec.value_schema(args[1])}
+            return {
+                "type": "array",
+                "items": {
+                    "type": "array",
+                    "prefixItems": [FieldCodec.value_schema(arg) for arg in args],
+                    "minItems": 2,
+                    "maxItems": 2,
+                },
+            }
+        if origin is type and args and issubclass(args[0], DeclaredFamily):
+            return {
+                "type": "string",
+                "enum": [value for _, value in compile_decoder(annotation).editor_choices()],
+            }
+        if isinstance(annotation, type) and issubclass(annotation, Enum):
+            values = [value for _, value in compile_decoder(annotation).editor_choices()]
+            return {**FieldCodec.value_schema(type(values[0])), "enum": values}
+        primitive = {
+            str: "string",
+            bool: "boolean",
+            int: "integer",
+            float: "number",
+            type(None): "null",
+        }
+        if annotation in primitive:
+            return {"type": primitive[annotation]}
+        if isinstance(annotation, type) and issubclass(annotation, DeclaredFamily):
+            return FieldCodec._family_schema(annotation)
+        if isinstance(annotation, type) and is_dataclass(annotation):
+            return FieldCodec.record_schema(annotation)
+        raise TypeError(f"No declared JSON schema for {annotation}")
 
 
 class AcceptsNull[T](FieldRepresentation[T]):
@@ -2200,42 +2248,6 @@ class FieldCodec(MroDispatch, Sealed):
         """Derive external scalar/array choices from the same decode declarations."""
         annotation, representation = cls.representation(annotation)
         return representation.schema_for(annotation)
-
-    @classmethod
-    def _structure_schema(cls, annotation: object) -> dict[str, JsonValue]:
-        origin, args = get_origin(annotation), get_args(annotation)
-        if origin in (Union, types.UnionType):
-            members = list(args)
-            if len(members) == 1:
-                return cls.value_schema(members[0])
-            return cls.alternatives_schema("anyOf", [cls.value_schema(item) for item in members])
-        if origin is Literal:
-            return {**cls.value_schema(type(args[0])), "enum": [value for _, value in compile_decoder(annotation).editor_choices()]}
-        if origin in (list, tuple, frozenset):
-            return {"type": "array", "items": cls.value_schema(args[0])}
-        if origin is dict:
-            if args[0] is str:
-                return {"type": "object", "additionalProperties": cls.value_schema(args[1])}
-            return {"type": "array", "items": {"type": "array", "prefixItems": [cls.value_schema(arg) for arg in args], "minItems": 2, "maxItems": 2}}
-        if origin is type and args and issubclass(cast(type, args[0]), DeclaredFamily):
-            return {"type": "string", "enum": [value for _, value in compile_decoder(annotation).editor_choices()]}
-        if isinstance(annotation, type) and issubclass(annotation, Enum):
-            values = [value for _, value in compile_decoder(annotation).editor_choices()]
-            return {**cls.value_schema(type(values[0])), "enum": values}
-        primitive = {
-            str: "string",
-            bool: "boolean",
-            int: "integer",
-            float: "number",
-            type(None): "null",
-        }
-        if annotation in primitive:
-            return {"type": primitive[annotation]}
-        if isinstance(annotation, type) and issubclass(annotation, DeclaredFamily):
-            return cls._family_schema(annotation)
-        if isinstance(annotation, type) and is_dataclass(annotation):
-            return cls.record_schema(annotation)
-        raise TypeError(f"No declared JSON schema for {annotation}")
 
     @classmethod
     def project(cls, value: object, view: str, annotation: object = None) -> JsonValue:
