@@ -1967,7 +1967,9 @@ class FieldCodec(MroDispatch, Sealed):
         return target, StructuralRepresentation
 
     @classmethod
-    def _value_representation(cls, value: object, annotation: object):
+    def _value_representation(
+        cls, value: object, annotation: object,
+    ) -> type[FieldRepresentation]:
         return cls.representation(annotation)[1].for_value(value)
 
     @classmethod
