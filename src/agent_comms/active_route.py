@@ -9,7 +9,6 @@ from __future__ import annotations
 import json
 import os
 import time
-import uuid
 from abc import ABC
 from collections.abc import Iterator
 from contextlib import contextmanager
@@ -20,7 +19,7 @@ from typing import TYPE_CHECKING, Annotated, ClassVar
 from .child_process import Platform
 from .declared_family import DeclaredFamily
 from .errors import RelationViolationError
-from .field_codec import FieldCodec, MalformedRecord, PathText
+from .field_codec import FieldCodec, MalformedRecord, PathText, ScratchName
 from .launch_root import LaunchRoot
 from .private_nk_entrypoint import PrivateNkLaunch, RootLaunch
 from .private_path import ObservedPath, OwnedDirectoryRole, PrivateDirectoryRole, PrivateFileRole
@@ -338,7 +337,7 @@ class RouteFile(ABC):
     def replace(self, route: ActiveRoute, path: Path, directory: int) -> Path:
         name = Path(self.filename)
         backup = path.with_name(
-            f"{name.stem}.{time.strftime('%Y%m%dT%H%M%S')}-{uuid.uuid4().hex}.bak{name.suffix}")
+            f"{name.stem}.{time.strftime('%Y%m%dT%H%M%S')}-{ScratchName.mint()}.bak{name.suffix}")
         _publish_active_route_locked(route, path, directory, backup=backup)
         return backup
 
@@ -427,7 +426,7 @@ def _publish_active_route_locked(
         if backup is None and read_active_route(path) is not None:
             raise ValueError("active comms route is already installed")
         payload = route.encoded()
-        temporary = f".active-route-{uuid.uuid4().hex}.tmp"
+        temporary = f".active-route-{ScratchName.mint()}.tmp"
         fd = PrivateFileRole.create(
             temporary, RouteFileNotPrivate(),
             dir_fd=directory)

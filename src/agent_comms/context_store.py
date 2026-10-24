@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import json
 import sqlite3
-import uuid
 from abc import ABC, abstractmethod
 from collections.abc import Iterable, Iterator
 from contextlib import contextmanager
@@ -13,12 +12,7 @@ from pathlib import Path
 from typing import Annotated, ClassVar, Self, cast
 
 from .errors import RelationViolationError, StoredHistoryUnreadable
-from .field_codec import (
-    FieldCodec,
-    Id128Text,
-    MalformedRecord,
-    NullMember,
-)
+from .field_codec import ContextStoreId, FieldCodec, MalformedRecord, NullMember
 from .native_session_reopen import NativeSessionIdentity
 from .registration import Registration
 from .thread_identity import ThreadIncarnation
@@ -40,10 +34,7 @@ from .typed_table import StoreRows, Column, DurableStore, Generated, Index, Sing
 
 @dataclass(frozen=True)
 class ContextStoreIdentity:
-    value: str
-
-    def __post_init__(self) -> None:
-        Id128Text.from_text(self.value)
+    value: ContextStoreId
 
 
 class ContextSourceState(ABC):
@@ -69,7 +60,7 @@ class ContextSourceState(ABC):
 
 class UnrecordedContextSource(ContextSourceState):
     def initialized(self, db: sqlite3.Connection) -> ContextStoreInfo:
-        stored = ContextStoreInfo(1, ContextStoreIdentity(uuid.uuid4().hex))
+        stored = ContextStoreInfo(1, ContextStoreIdentity(ContextStoreId.mint()))
         stored.insert(db)
         return stored
 

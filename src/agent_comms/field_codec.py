@@ -1868,6 +1868,50 @@ class SlotId(Id128):
     """The consumed tool slot, distinct from the input that produced it."""
 
 
+class GoalWaitId(Id128):
+    """One recorded dependency wait for a goal."""
+
+
+class AttemptId(Id128):
+    """One reserved execution attempt of a goal generation."""
+
+
+class AttemptToken(Id128):
+    """The authority held by the owner of a reserved attempt."""
+
+
+class RetryDecisionId(Id128):
+    """One explicit authorization to retry goal work."""
+
+
+class PageRequestId(Id128):
+    """One request for an earlier transcript page."""
+
+
+class RestartId(Id128):
+    """One queued owner restart."""
+
+
+class RoomTicket(Id128):
+    """One storage-room claim."""
+
+
+class HuntId(Id128):
+    """One recorded commander hunt."""
+
+
+class ContextStoreId(Id128):
+    """The original context store shared by its recorded turns."""
+
+
+class ScratchName(Id128):
+    """A unique suffix for a disposable file."""
+
+
+class OwnerRequestKey(Id128):
+    """One original owner directive and the work serving it."""
+
+
 class Id128Text(NominalSpelling[Id128]):
     """A 128-bit identity: an input, turn, bus root, recipient lookup or claim generation."""
 

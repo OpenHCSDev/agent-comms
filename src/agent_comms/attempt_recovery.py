@@ -16,7 +16,6 @@ from contextlib import contextmanager
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import TYPE_CHECKING, Self
-from uuid import uuid4
 
 from agent_comms.reason_codes import GivenReasonCode, NoDetail
 from agent_comms.attempt_states import UnknownOutcomeAttempt, UnsuccessfulTerminal
@@ -46,7 +45,7 @@ from .native_input_record import FullNativeExecution, TriageNativeExecution
 from .private_send_stage import TriageNativeSend
 from .lifecycle_capability import Deferred
 from agent_comms.typed_table import RowNotFoundError
-from .field_codec import MalformedRecord, ThreadLookup
+from .field_codec import MalformedRecord, ScratchName, ThreadLookup
 from .input_disposition import InputDispositions
 from .locked_store import RegistryFile
 from .registration import Registration
@@ -372,7 +371,7 @@ class RecoveryMonitorCapability:
             names = frozenset(Registration(RegistryFile.path_in(root)).snapshot().threads)
             uncertain = uncertain or bool(inputs.unresolved(names).rows)
         if uncertain:
-            destination = root.with_name(f"{root.name}.unknown-{uuid4().hex}")
+            destination = root.with_name(f"{root.name}.unknown-{ScratchName.mint()}")
             root.rename(destination)
             raise RecoveryBlocked(
                 f"Check directory removed; uncertain work kept at {destination}; do not replay"

@@ -11,7 +11,6 @@ import os
 import shutil
 import subprocess
 import sys
-import uuid
 from abc import abstractmethod
 from dataclasses import dataclass
 from importlib.resources import files
@@ -23,6 +22,7 @@ from agent_comms_hooks import ClaudeHookProgram
 from .child_process import Platform
 from .declared_family import DeclaredFamily
 from .errors import RelationViolationError
+from .field_codec import ScratchName
 from .host_services import SystemdUserService
 from .host_services.codex_inbox import CodexInboxService
 
@@ -32,7 +32,7 @@ def replace_link(link: Path, target: Path) -> None:
     if link.exists() and not link.is_symlink():
         raise FileExistsError(f"Install cannot replace a regular file: {link}")
     link.parent.mkdir(parents=True, exist_ok=True)
-    temporary = link.with_name(f".{link.name}.{uuid.uuid4().hex}")
+    temporary = link.with_name(f".{link.name}.{ScratchName.mint()}")
     try:
         temporary.symlink_to(target)
         os.replace(temporary, link)
