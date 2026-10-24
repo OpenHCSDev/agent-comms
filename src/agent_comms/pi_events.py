@@ -320,7 +320,7 @@ class AutoRetryStart(RetryAttemptEvent, DurablePiEvent, starts=phases.ProviderRe
 class NativeRetryStart(AutoRetryStart):
     """The native turn recovery re-requests a refused empty response.
 
-    stack/native-turn-recovery.mjs owns whether a provider refusal is retryable
+    stack/native/native-turn-recovery.mjs owns whether a provider refusal is retryable
     and how many times (RecoveryBudget); this wire kind carries that decision
     before the refused assistant message, so Core reports only the recovery's
     final outcome and never counts a refusal itself.

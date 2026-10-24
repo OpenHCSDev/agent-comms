@@ -19,6 +19,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Annotated, ClassVar
 
 
+from .cli_result import CliResult, ResultShower
 from .child_process import OutlivesLauncherLifetime, Platform, ProcessIdentity, SpawnedProcess
 from .comms import Comms, wire
 from .coordination_errors import CoordinationError
@@ -39,6 +40,7 @@ from .restart_refusals import RestartRefusal
 from .restart_scope import OwnersNamed
 from .store_files import AtomicFile, StoreLockFile, _store_lock
 from .thread_identity import RecordedThreadIncarnation
+from .tool_result import ToolResult
 from .watched import ChangeSignal, DirectorySource, FileSource
 
 if TYPE_CHECKING:
@@ -188,6 +190,14 @@ class QueuedRestart(DurableFile, PatternFile):
 
     def transition(self, state: RestartState):
         return replace(self, state=state)
+
+
+@dataclass(frozen=True)
+class RestartQueued(CliResult, ToolResult):
+    restart: QueuedRestart
+
+    def show(self, shower: ResultShower, label: str, title: str) -> None:
+        shower.show_done(f"{label}: runs when {self.restart.name} is idle", title)
 
 
 class RestartQueueLock(RuntimeFile, StoreLockFile):

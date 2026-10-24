@@ -14,7 +14,7 @@ const dist = join(root, 'dist');
 const entry = join(root, 'extensions/approved/index.mjs');
 function put(path, data) { fs.mkdirSync(dirname(path), { recursive: true }); fs.writeFileSync(path, data); }
 put(join(root, 'package.json'), '{"type":"module"}');
-put(join(dist, 'agent-comms-import-fence.mjs'), fs.readFileSync(join(source, 'native-import-fence.mjs')));
+put(join(dist, 'agent-comms-import-fence.mjs'), fs.readFileSync(join(source, 'native', 'native-import-fence.mjs')));
 put(join(dist, 'index.js'), 'export const identity = "committed-host-sdk";');
 put(entry, 'import {identity} from "@earendil-works/pi-coding-agent"; export default () => identity;');
 const sourceEntry = join(base, 'user-extension/index.ts');

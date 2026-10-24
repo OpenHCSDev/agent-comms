@@ -78,7 +78,7 @@ def pinned_location() -> Path:
 def pinned_native_package() -> Path:
     if not (package := pinned_location()).is_dir():
         raise NativePackageMissing(f"Pinned native package directory is missing: {package}; "
-                                   f"run {MANIFEST.parent / 'bin/prepare-pi-native'} first")
+                                   f"run {MANIFEST.parent / 'native/prepare-pi-native'} first")
     return package.resolve(strict=True)
 
 
