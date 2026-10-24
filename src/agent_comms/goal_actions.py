@@ -8,7 +8,7 @@ from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field, replace
 from typing import TYPE_CHECKING, Annotated, ClassVar, Self
 
-from agent_comms.field_codec import DecisionKey, GoalId, GoalWaitId, MessageId, RetryDecisionId
+from agent_comms.field_codec import GoalId, GoalWaitId, MessageId, RetryDecisionId
 from agent_comms import field_codec
 from agent_comms.goals import (
     Goal,
@@ -52,19 +52,12 @@ from .repository_name import RepositoryName
 from .thread_identity import ThreadIncarnation
 from .threads import Thread
 from .reported_turn import ReportedTurnState
-from .attempt_resolution import ComplianceDecision, RetryDecision, WorkDecision
+from .attempt_resolution import ComplianceDecision, OrderDecision, RetryDecision
 
 if TYPE_CHECKING:
     from .goal_management import Goals
     from .goal_presentation import GoalSnapshot
 
-
-@dataclass(frozen=True)
-class OrderDecision(WorkDecision):
-    order: PendingProblemOrder
-
-    def key(self) -> DecisionKey:
-        return DecisionKey(self.order.id)
 
 
 class ModelInvocable:
@@ -562,7 +555,7 @@ class ProblemOrderGoalAction(GoalAction[Goal], RuntimeInvocable):
         self.reserve(ctx, goal.id)
         store = ctx.goals.open_goal_store()
         generation = store.require_generation(goal.id)
-        generation.lifecycle.continue_work(store, generation, OrderDecision(self.order))
+        generation.lifecycle.continue_work(store, generation, OrderDecision(self.order.id))
         revision = goal.revision + 1
         return replace(goal, order=ProblemGoalOrder(), text=ProblemGoalOrder.text, progress="",
                        revision=revision, mention_source=bind_goal_mentions(

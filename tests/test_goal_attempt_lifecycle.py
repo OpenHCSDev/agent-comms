@@ -4,11 +4,13 @@ import sqlite3
 
 import pytest
 
+from agent_comms.turn_failure import BackendFailed
+
 from agent_comms.field_codec import GoalId, RetryDecisionId
 from agent_comms.goal_attempts import AttemptRecord, GoalAttemptStore, GoalWorkDecision
 from agent_comms.errors import UnresolvedAttemptError
 from agent_comms.goal_generation import BlockedGeneration, CancelledGeneration, ReadyGeneration
-from agent_comms.attempt_resolution import DecidedResolution, FailureDiagnostic, RetryDecision
+from agent_comms.attempt_resolution import DecidedResolution, FailedTurnResolution, RetryDecision
 
 
 @pytest.fixture
@@ -24,7 +26,7 @@ def test_current_saved_failure_and_history_survive_retry_and_retirement(store):
     store.create_goal(goal_id)
     attempt = store.reserve(goal_id, 1)
     store.claim_launch(attempt)
-    attempt.fail(store, FailureDiagnostic("provider outcome UNKNOWN"))
+    attempt.fail(store, FailedTurnResolution(BackendFailed))
     reopened = GoalAttemptStore(store.root)
     assert reopened.snapshot(goal_id).lifecycle == BlockedGeneration()
     with pytest.raises(UnresolvedAttemptError):
@@ -45,6 +47,6 @@ def test_current_saved_failure_and_history_survive_retry_and_retirement(store):
             (attempt, "resolved", DecidedResolution(_decision_0))
         ]
         decisions = GoalWorkDecision.select(conn)
-        assert [(row.decision_id, row.generation) for row in decisions] == [(_decision_0.key(), 1)]
+        assert [(row.decision, row.generation) for row in decisions] == [(_decision_0, 1)]
     with pytest.raises(UnresolvedAttemptError):
         reopened.ready_grant(goal_id, 2)

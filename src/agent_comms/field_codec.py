@@ -1931,14 +1931,6 @@ class OwnerRequestKey(Id128):
     """One original owner directive and the work serving it."""
 
 
-class DecisionKey(NominalText):
-    """The exact opaque uniqueness key an original work decision recorded."""
-
-
-class DecisionKeyText(NominalSpelling[DecisionKey]):
-    spelling = re.compile(r"[0-9a-f]{12}|[0-9a-f]{32}|verified-turn:[0-9a-f]{32}")
-
-
 class Id128Text(NominalSpelling[Id128]):
     """A 128-bit identity: an input, turn, bus root, recipient lookup or claim generation."""
 

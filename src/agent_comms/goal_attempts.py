@@ -34,7 +34,6 @@ from .declared_family import DeclaredFamily
 from .field_codec import (
     AttemptId,
     AttemptToken,
-    DecisionKey,
     FieldCodec,
     GoalId,
     MalformedRecord,
@@ -436,7 +435,7 @@ class GoalWorkDecision(GoalLedgerTable, TypedTable):
     goal_id: Annotated[
         GoalId, Column(primary_key=True, references=TableReference(Generation, ("goal_id",)))
     ]
-    decision_id: Annotated[DecisionKey, Column(primary_key=True)]
+    decision: Annotated[WorkDecision, Column(primary_key=True, renamed_from=("decision_id",))]
     generation: int
 
     def claim(self, conn: sqlite3.Connection) -> None:
@@ -976,7 +975,7 @@ class GoalAttemptStore(DurableFile, PublishedSQLiteFile, WireWakeFile):
                 goal_id, expected_generation, ReservedGeneration(), attempt_id
             ) or not attempt.phase.may_become(FailedAttempt()):
                 raise changed
-            GoalWorkDecision(goal_id, decision.key(), expected_generation).claim(conn)
+            GoalWorkDecision(goal_id, decision, expected_generation).claim(conn)
             attempt.advance(conn, FailedAttempt(), resolution=DecidedResolution(decision))
             return goal.advance(
                 conn,
@@ -1024,7 +1023,7 @@ class GoalAttemptStore(DurableFile, PublishedSQLiteFile, WireWakeFile):
                 raise errors.UnresolvedAttemptError(
                     "Goal is not ready; an attempt may already be unresolved."
                 )
-            GoalWorkDecision(goal_id, decision.key(), expected_generation).claim(conn)
+            GoalWorkDecision(goal_id, decision, expected_generation).claim(conn)
             return current.advance(
                 conn,
                 Generation(
@@ -1063,7 +1062,7 @@ class GoalAttemptStore(DurableFile, PublishedSQLiteFile, WireWakeFile):
                 GoalAttemptIdentity(goal_id, expected_generation, attempt_id), unrecorded
             )
             attempt.phase.require_retryable()
-            GoalWorkDecision(goal_id, decision.key(), expected_generation).claim(conn)
+            GoalWorkDecision(goal_id, decision, expected_generation).claim(conn)
             attempt.advance(conn, ResolvedAttempt(), resolution=DecidedResolution(decision))
             return current.advance(
                 conn,
