@@ -208,7 +208,7 @@ def test_rehearsal_refuses_changed_native_inputs(installed_comms, installed_home
     declare_test_bus(installed_comms, channels=("comms",))
     current = subprocess.check_output(
         ["git", "-C", checkout, "rev-parse", "HEAD"], text=True).strip()
-    patch = checkout / "stack/stale-pin-test.py"
+    patch = checkout / "stack/native/stale-pin-test.py"
     patch.write_text("# A native build input changed without rebuilding the pin.\n")
     subprocess.run(["git", "-C", checkout, "add", patch], check=True)
     subprocess.run(["git", "-C", checkout, "-c", "user.name=Installer test",

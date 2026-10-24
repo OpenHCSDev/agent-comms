@@ -220,7 +220,7 @@ def pinned_native() -> Path:
     try:
         fcntl.flock(held, fcntl.LOCK_EX)
         if not pinned_location().is_dir():
-            subprocess.run([str(stack / "bin/prepare-pi-native"), "--python", sys.executable], check=True)
+            subprocess.run([str(stack / "native/prepare-pi-native"), "--python", sys.executable], check=True)
     finally:
         os.close(held)
     return pinned_native_package()

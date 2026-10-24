@@ -578,7 +578,7 @@ class Stack:
         store = NativePackageStore.at_home(self.home)
         native = store.package_for(manifest)
         if not native.is_dir():
-            self.commands.run(self.checkout / "stack/bin/prepare-pi-native", "--python",
+            self.commands.run(self.checkout / "stack/native/prepare-pi-native", "--python",
                               self.python, cwd=self.checkout,
                               env=self.environment(self.checkout / "src"))
         store.link(manifest, manifest.parent)

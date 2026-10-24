@@ -14,7 +14,7 @@ From the repository root:
 uv sync --project stack --locked --python 3.14
 uv run --project stack --locked agent-comms --help
 uv run --project stack --locked toad
-stack/bin/prepare-pi-native
+stack/native/prepare-pi-native
 ```
 
 `agent-comms install` updates the declared source packages before syncing the
