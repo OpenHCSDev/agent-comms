@@ -12,6 +12,7 @@ from typing import TYPE_CHECKING, Annotated, Self
 
 from pydantic import BaseModel, ConfigDict, InstanceOf, PlainSerializer, PlainValidator
 
+from .declared_family import DeclaredFamily
 from .errors import MissingSourceLine
 from .field_codec import FieldCodec, WireValue
 from .repository_name import RepositoryName
@@ -279,6 +280,44 @@ class PinnedSubmodule:
         self.path.mkdir(parents=True)
 
 
+class CheckoutStart(DeclaredFamily, affix="CheckoutStart"):
+    """The declared way a tree starts, selected before it is added and prepared."""
+
+    @abstractmethod
+    def worktree_arguments(self, path: Path) -> tuple[str, ...]: ...
+
+    @classmethod
+    def of(cls, repository: Path, branch: str, base: str) -> CheckoutStart:
+        if Repo.answers(repository, "show-ref", "--verify", "--quiet", f"refs/heads/{branch}"):
+            return KeptBranchStart(branch)
+        return NewBranchStart(branch, base)
+
+
+@dataclass(frozen=True)
+class DetachedStart(CheckoutStart):
+    revision: str
+
+    def worktree_arguments(self, path: Path) -> tuple[str, ...]:
+        return ("--detach", "-q", str(path), self.revision)
+
+
+@dataclass(frozen=True)
+class NewBranchStart(CheckoutStart):
+    branch: str
+    base: str
+
+    def worktree_arguments(self, path: Path) -> tuple[str, ...]:
+        return ("-q", "-b", self.branch, str(path), self.base)
+
+
+@dataclass(frozen=True)
+class KeptBranchStart(CheckoutStart):
+    branch: str
+
+    def worktree_arguments(self, path: Path) -> tuple[str, ...]:
+        return ("-q", str(path), self.branch)
+
+
 @dataclass(frozen=True)
 class Checkout:
     """A working tree of one of our repositories, ready to run.
@@ -290,8 +329,8 @@ class Checkout:
     path: Path
 
     @classmethod
-    def add(cls, repository: Path | str, path: Path | str, revision: str, *options: str) -> Self:
-        Repo.git(repository, "worktree", "add", *options, str(path), revision)
+    def add(cls, repository: Path | str, path: Path | str, start: CheckoutStart) -> Self:
+        Repo.git(repository, "worktree", "add", *start.worktree_arguments(Path(path)))
         return cls.prepared(Path(path))
 
     @classmethod

@@ -23,7 +23,7 @@ from agent_comms.owner_requests import NewestOpenRequest
 from .native_settings import NativeThreadDefaults
 from .phase_tasks import PhaseTask
 from .recorded_time import RecordedEventTime
-from .repo import Checkout, Repo
+from .repo import Checkout, CheckoutStart, Repo
 from .repository_name import RepositoryName
 from .storage_rules import CheckoutStorageEffect, StorageProjection
 from .thread_status import StoppedThreadStatus
@@ -76,7 +76,8 @@ class WorkDispatch:
         )
         Repo.git(self.action.order.check.directory, "fetch", "origin", "main")
         Checkout.add(
-            self.action.order.check.directory, checkout, "origin/main", "-b", f"auto/{name}"
+            self.action.order.check.directory, checkout,
+            CheckoutStart.of(self.action.order.check.directory, f"auto/{name}", "origin/main"),
         )
         location = candidate.runtime.new_location(comms.root, checkout)
         child = comms.registry.declare(
