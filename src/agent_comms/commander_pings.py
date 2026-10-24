@@ -129,26 +129,6 @@ class CommanderUpdate(TaskAttachment, declared_name=None):
         return update if update.commander == commander else None
 
     @classmethod
-    def unconfirmed(cls, comms: Comms, commander: ThreadIncarnation,
-                    window: int = 20) -> tuple[Message, ...]:
-        """The heartbeat's newest messages to ``commander`` that its bridge has not confirmed,
-        oldest first; the read ledger the bridge's acknowledgment writes is the evidence."""
-        snapshot = comms.registry.snapshot()
-        reads = comms.bus.reads
-        sent = comms.bus.bus.latest_addressed(
-            snapshot.names_for(CommanderService.sender), snapshot.names_for(commander.name), window,
-        )
-        # Every message here is one DM conversation, so its cursor is read once.
-        documents = tuple(
-            reads.read_conversation(commander.name, reads.conversation(message, snapshot), snapshot)
-            for message in sent[:1])
-        return tuple(
-            message for message in reversed(sent) for document in documents
-            if message.timestamp >= commander.wire_birth
-            and not reads.displayed_incarnation(message, commander, snapshot, document=document)
-        )
-
-    @classmethod
     def derive(cls, commander: ThreadIncarnation, states: tuple[UnitState, ...],
                rules: tuple[StandingRule, ...],
                previous: CommanderUpdate | None, *,

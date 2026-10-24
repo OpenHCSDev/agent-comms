@@ -98,14 +98,13 @@ class AddressedRow(Addressed, BusRow, declared_name=None):
     @classmethod
     def latest(
         cls, db: sqlite3.Connection, senders: frozenset[str], targets: frozenset[str],
-        limit: int = 1,
     ) -> tuple[Message, ...]:
-        """The newest ``limit`` messages, newest first, from indexed candidates per alias pair."""
-        positions = nlargest(limit, (
+        """One indexed candidate per alias pair; an empty selection stays empty."""
+        positions = nlargest(1, (
             row.seq for sender, target in product(senders, targets)
             for row in Addressed.table.select(
                 db, sender=sender, target=target,
-                order_by=("seq",), descending=True, limit=limit,
+                order_by=("seq",), descending=True, limit=1,
             )
         ))
         headers = (BusRow.require(db, seq=seq) for seq in positions)
@@ -267,10 +266,10 @@ class BusReader(RouteCounts, ABC):
             )
 
     def latest_addressed(
-        self, senders: frozenset[str], targets: frozenset[str], limit: int = 1,
+        self, senders: frozenset[str], targets: frozenset[str],
     ) -> tuple[Message, ...]:
         with self.observing() as db:
-            return AddressedRow.latest(db, senders, targets, limit)
+            return AddressedRow.latest(db, senders, targets)
 
     def messages_for_references(
         self, references: Iterable[MessageReference],

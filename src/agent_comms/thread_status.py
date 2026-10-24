@@ -71,6 +71,12 @@ class ThreadStatus(LifecycleCapability, DeclaredFamily, affix="ThreadStatus"):
     def declaration(self) -> ThreadStatus:
         return self
 
+    def external_registered(self, thread: Thread, now: float) -> ThreadStatus:
+        return NoBridgeThreadStatus().registered(thread, now)
+
+    def paused_since(self, last_seen: float) -> tuple[float, ...]:
+        return ()
+
     def require_visible(self, message: str = "Initial direct target must be visible.") -> None:
         raise RelationViolationError(message)
 
@@ -309,6 +315,28 @@ class CliInboxPresence(AlwaysListed):
 
 class ConnectedThreadStatus(CliInboxPresence, RunningThreadStatus):
     """A CLI inbox whose bridge process is watching it."""
+
+    def declaration(self) -> ThreadStatus:
+        return ConnectedThreadStatus()
+
+    def external_registered(self, thread: Thread, now: float) -> ThreadStatus:
+        return self.registered(thread, now)
+
+
+class PausedBridgeThreadStatus(SelfRenaming, CliInboxPresence, StoppedThreadStatus):
+    """A live session bridge waiting for a Monitor to confirm its probe."""
+
+    def declaration(self) -> ThreadStatus:
+        return self
+
+    def registered(self, thread: Thread, last_seen: float) -> ThreadStatus:
+        return self if thread.process_identity.alive() else NoBridgeThreadStatus()
+
+    def external_registered(self, thread: Thread, now: float) -> ThreadStatus:
+        return self.registered(thread, now)
+
+    def paused_since(self, last_seen: float) -> tuple[float, ...]:
+        return (last_seen,)
 
 
 class NoBridgeThreadStatus(SelfRenaming, CliInboxPresence, StoppedThreadStatus):

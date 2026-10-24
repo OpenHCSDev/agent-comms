@@ -14,7 +14,6 @@ from agent_comms.bus import BusReader
 from agent_comms.channel_targets import CommsTag
 from agent_comms.commander.questions import UnansweredUnitAsks
 from agent_comms.commander_heartbeat import CommanderHeartbeat
-from agent_comms.commander_pings import CommanderUpdate
 from agent_comms.comms import Comms
 from agent_comms.goal_actions import ReissuedOrderGoalAction
 from agent_comms.heartbeat_frame import HeartbeatFrame
@@ -450,26 +449,25 @@ class HeartbeatNotStarted(HeartbeatSilent):
 
 @dataclass(frozen=True)
 class CommanderDeaf(IndependentStandingRule, DatedStandingRule):
-    """The commander's bridge confirmed no heartbeat update for minutes, so every line Core
-    sends it waits unread. The read ledger its acknowledgment writes is the evidence; the
-    registry status is not, since a paused bridge keeps a live process."""
+    """The session bridge has no confirmed Monitor; its own registration dates the pause."""
 
     seconds: ClassVar[int] = 300
     since: float = field(compare=False)
 
     @classmethod
     def violations(cls, comms: Comms, commander: str) -> tuple[CommanderDeaf, ...]:
-        owner = comms.registry.require(commander)
+        snapshot = comms.registry.snapshot()
         now = time.time()
-        return tuple(cls(message.timestamp + cls.seconds)
-                     for message in CommanderUpdate.unconfirmed(comms, owner.incarnation)[:1]
-                     if message.timestamp + cls.seconds < now)
+        pauses = snapshot.status(commander).paused_since(snapshot.seen_at(commander))
+        return tuple(cls(paused + cls.seconds)
+                     for paused in pauses
+                     if paused + cls.seconds < now)
 
     def began(self) -> float:
         return self.since
 
     def line(self) -> str:
-        return (f"COMMANDER DEAF: its bridge has confirmed no heartbeat update since "
+        return (f"COMMANDER DEAF: its bridge has no confirmed Monitor since "
                 f"{RecordedEventTime(self.since - self.seconds).clock()}, so every Core line"
                 " to it waits unread -> re-arm its watch:"
                 " agent-comms-claude-bridge watch (bare, no pipe)")

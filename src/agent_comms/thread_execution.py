@@ -9,7 +9,7 @@ from typing import TYPE_CHECKING
 from .child_process import ProcessState
 from .declared_family import DeclaredFamily
 from .errors import RelationViolationError
-from .thread_status import NoBridgeThreadStatus, ThreadStatus
+from .thread_status import ThreadStatus
 
 if TYPE_CHECKING:
     from .registry_document import RegistrySnapshot
@@ -162,7 +162,7 @@ class ExternalThreadExecution(ThreadExecution):
 
     @classmethod
     def registered_status(cls, thread: Thread, requested: ThreadStatus) -> ThreadStatus:
-        return NoBridgeThreadStatus().registered(thread, time.time())
+        return requested.external_registered(thread, time.time())
 
     @classmethod
     def presentation(cls, thread: Thread, status: ThreadStatus, ordinary: ThreadPresentation,
