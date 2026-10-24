@@ -12,6 +12,7 @@ from agent_comms.todos import (
     ClaimOrder,
     CorrectCheckTodo,
     DeliverTodo,
+    DeliveryReport,
     InstallTodo,
     OrderClaim,
     OrderDelivery,
@@ -333,7 +334,10 @@ class CommsOrderDeliverTool(PublishingToolRequest[ThreadCaller], ThreadToolReque
     problem: Annotated[str, *tool_field("Held problem ID")]
     pull_request: Annotated[int, *tool_field("Pull request number in the problem's repository")]
     head: Annotated[str, *tool_field("Claimed head commit")]
-    report: Annotated[str, *tool_field("Delivery report text")]
+    report: Annotated[DeliveryReport, *tool_field(
+        "Delivery report: the slop you killed or the broken thing you fixed, with file:line, "
+        "in the owner's voice"
+    )]
 
     def publish(self, comms: Comms, caller: ThreadCaller) -> TodoChanged:
         todo = comms.goals.todos.get(self.problem)
@@ -342,7 +346,7 @@ class CommsOrderDeliverTool(PublishingToolRequest[ThreadCaller], ThreadToolReque
         todo.require_assignee(actor, generation)
         original = comms.bus.bus.lookup_message(todo.latest_message.message_id)
         claim = OrderClaim.for_order(
-            todo, actor, self.pull_request, self.head, self.report,
+            todo, actor, self.pull_request, self.head, self.report.text,
             original.reference, store=comms.goals.todos,
         )
         changed = ClaimOrder(

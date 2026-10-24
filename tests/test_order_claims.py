@@ -10,6 +10,8 @@ import pytest
 from agent_comms.commander.order import OrderFile, main
 from agent_comms.field_codec import FieldCodec, GoalId
 from agent_comms.goal_actions import SetGoalAction
+from agent_comms.commander.package import CommanderPackage
+from agent_comms.errors import ToolRefusedError
 from agent_comms.goals import OrderCheck, ProblemGoalOrder
 from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.todos import (
@@ -19,6 +21,7 @@ from agent_comms.todos import (
     DoneTodoState,
     FailedCheckStrike,
     DeliveredProblemOrder,
+    DeliveryReport,
     PendingProblemOrder,
     OrderClaim,
     SendBackVerdict,
@@ -37,6 +40,18 @@ from test_todos import order, thread
 pytest_plugins = ("test_held_problem_orders",)
 
 
+def test_delivery_report_refuses_a_flat_status_memo():
+    with pytest.raises(ToolRefusedError, match="name the slop you killed"):
+        DeliveryReport("Ready at abc; check 13 -> 0; tests pass")
+    blunt = "Killed the string slop at turn_watchdog.py:137; the typed state answers it now."
+    assert DeliveryReport(blunt).text == blunt
+
+
+def test_work_instructions_carry_the_owner_voice(source_repository):
+    heading = CommanderPackage.voice().read_text(encoding="utf-8").splitlines()[0]
+    assert any(line.startswith(heading) for line in order(source_repository).work_instructions())
+
+
 def test_claim_verdict_family_on_retained_copy(held_commander):
     ctx = held_commander
     comms = ctx.comms
@@ -47,9 +62,9 @@ def test_claim_verdict_family_on_retained_copy(held_commander):
     ))
     sha = ctx.repos[0].git(ctx.repos[0].checkout, "rev-parse", "HEAD").strip()
     report = ctx.root / "report.txt"
-    report.write_text("The source change is published; inspect its actual diff before accepting it.")
+    report.write_text("Killed the broken count copy; inspect its actual diff before accepting it.")
     request = CommsOrderDeliverTool(
-        problem="P1", pull_request=1, head=sha, report=report.read_text(),
+        problem="P1", pull_request=1, head=sha, report=DeliveryReport(report.read_text()),
     )
     with pytest.raises(TodoConflict):
         ThreadCaller(ctx.commander).invoke(request, comms)
@@ -113,7 +128,7 @@ def test_claimed_check_correction_reads_the_base_the_fix_was_built_on(
     head = cited_source.git(cited_source.checkout, "rev-parse", "fix/4").strip()
     ThreadCaller("worker").invoke(CommsOrderDeliverTool(
         problem="P1", pull_request=4, head=head,
-        report="The count fix is merged; check the merged tree.",
+        report=DeliveryReport("The wrong count is dead and merged; check the merged tree."),
     ), comms)
     claimed = comms.goals.todos.get("P1")
     assert claimed.order.check_base(cited_source.checkout) == base
@@ -159,9 +174,9 @@ def claimed_by_worker(ctx) -> Todo:
     ))
     sha = ctx.repos[0].git(ctx.repos[0].checkout, "rev-parse", "HEAD").strip()
     report = ctx.root / "report.txt"
-    report.write_text("The source change is published; inspect its actual diff before accepting it.")
+    report.write_text("Killed the broken count copy; inspect its actual diff before accepting it.")
     ThreadCaller("worker").invoke(CommsOrderDeliverTool(
-        problem="P1", pull_request=1, head=sha, report=report.read_text(),
+        problem="P1", pull_request=1, head=sha, report=DeliveryReport(report.read_text()),
     ), ctx.comms)
     claimed = ctx.comms.goals.todos.get("P1")
     assert isinstance(claimed.order, ClaimedProblemOrder)

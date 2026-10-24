@@ -1481,6 +1481,17 @@ class BluntText(BluntWords, OrderWords):
         return not found
 
 
+class DeliveryReport(BluntText):
+    """A unit's delivery names the slop it killed or the broken thing it fixed, in the owner's
+    voice; a status memo with no verdict in it is half a report."""
+
+    refusal: ClassVar[str] = (
+        "Flat report refused: name the slop you killed or the broken thing you fixed, with "
+        "file:line, in the owner's voice (blunt, colorful, deadpan). A report with no opinion "
+        "in it is half a report."
+    )
+
+
 class FairText(DirectiveWords):
     """The OOPSLA paper proves multiple parents derive every required pair with nothing outside, which composition and
     forwarding supply outside (Fig 3, Thm 4.6): faulting inheritance itself is dogma, not a restated fact.
@@ -2107,8 +2118,9 @@ class CheckedProblemOrder(ProblemOrder, declared_name=None):
                 *self.deletes.instructions(), *self.run.instructions(),
                 *(f"{n}. {edit}" for n, edit in enumerate(self.edits, 1)),
                 "Banned: " + "; ".join(self.banned), "Report: " + self.report,
-                f"Standing rules for this order: reply in the voice of {CommanderPackage.voice()}; "
-                f"follow the fleet rules {fleet_rules} in {CommanderPackage.rules()}.")
+                CommanderPackage.voice().read_text(encoding="utf-8").strip(),
+                f"Standing rules for this order: follow the fleet rules {fleet_rules} in "
+                f"{CommanderPackage.rules()}.")
 
     def instructions(self, todo):
         return "\n".join((f"Problem: {todo.id}: {todo.text}", *self.finding.instructions(),
