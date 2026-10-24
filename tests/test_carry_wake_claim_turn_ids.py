@@ -19,7 +19,8 @@ def old_claim_bus(root: Path, *, turn_id: str = "a" * 32) -> Path:
     path = Bus.path_in(root)
     path.touch(mode=0o600)
     claim = WakeClaims(
-        "owner", "epoch-1", 1, "message-1", claims=("src/worker.py",),
+        "owner", "epoch-1", 1, "message-1",
+        claims=(str((root / "src" / "worker.py").resolve()),),
         generation="b" * 32,
         resource_scope=WakeClaim(
             owner_claimed_generation=1, operation_id="c" * 32, turn_id=TurnId("a" * 32),
