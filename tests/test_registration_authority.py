@@ -103,3 +103,14 @@ def test_a_superseded_generation_is_deleted_and_its_late_transition_changes_noth
     assert stale.record.transition(stale, PreparingPhase()) == ()
     assert stale.record.observe_native_phase(stale, PreparingPhase()) == ()
     assert second.turn_record.read().id == '16367aacb67a4a017c8da8ab95682ccb'
+
+
+def test_an_older_snapshot_reads_the_turn_its_thread_names_now(tmp_path):
+    registry = registered(tmp_path)
+    registry.live_owner_with_claim('owner')
+    first, _ = registry.lease_local_turn('owner', TurnId('a7937b64b8caa58f03721bb6bacf5c78'))
+    assert registry.release_turn(first.turn_lease)[0]
+    second, _ = registry.lease_local_turn('owner', TurnId('16367aacb67a4a017c8da8ab95682ccb'))
+    assert not first.turn_record.path.exists()
+    assert first.turn_state.active.id == '16367aacb67a4a017c8da8ab95682ccb'
+    assert first.turn_record.read() == second.turn_record.read()
