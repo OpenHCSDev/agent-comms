@@ -1051,7 +1051,10 @@ class RegistrySnapshot(RegistryPresence[Mapping[str, ThreadStatus]], RegistryPro
         return tuple(name for name in self._claimed_generations if name not in self.threads)
 
     def threads_for(self, incarnation: RecordedThreadIncarnation) -> tuple[Thread, ...]:
-        return tuple(self.by_lookup[key] for key in (incarnation.lookup,) if key in self.by_lookup)
+        return (
+            (self.threads[self.canonical_name(incarnation.name)],)
+            if incarnation.current(self) else ()
+        )
 
     def holds_turn(self, identity: TurnIdentity) -> bool:
         """Whether its thread still names this turn generation; a superseded lease does not."""
