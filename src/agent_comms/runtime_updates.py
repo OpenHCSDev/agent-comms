@@ -104,7 +104,7 @@ class ToolDraft(PresentableDraft):
 class TextDraft(PresentableDraft):
     event_type: type[LiveTextTranscript]
     sections: dict[int, list[str]]
-    position: int | str
+    position: int | NativeItemId
     separator: ClassVar[str] = ""
 
     @classmethod
@@ -113,7 +113,7 @@ class TextDraft(PresentableDraft):
         event_type: type[LiveTextTranscript],
         parts: Iterable[str],
         started_at: EventTime,
-        position: int | str,
+        position: int | NativeItemId,
     ) -> Self:
         return cls(
             started_at, event_type, {index: [text] for index, text in enumerate(parts)}, position

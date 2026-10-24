@@ -1,17 +1,13 @@
-"""Original work authority and attempt outcomes, with their historical text spelling."""
+"""Original work authority and the declared outcome of an attempt."""
 
 from __future__ import annotations
 
 from abc import abstractmethod
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, ClassVar
 
 from .declared_family import DeclaredFamily
 from .field_codec import DecisionKey, MessageId, RetryDecisionId, TurnId
 from .turn_failure import TurnFailure
-
-if TYPE_CHECKING:
-    from .todos import PendingProblemOrder
 
 
 class WorkDecision(DeclaredFamily, affix="Decision"):
@@ -38,14 +34,6 @@ class ComplianceDecision(WorkDecision):
 
 
 @dataclass(frozen=True)
-class OrderDecision(WorkDecision):
-    order: PendingProblemOrder
-
-    def key(self) -> DecisionKey:
-        return DecisionKey(self.order.id)
-
-
-@dataclass(frozen=True)
 class VerifiedTurnDecision(WorkDecision):
     turn: TurnId
 
@@ -54,53 +42,39 @@ class VerifiedTurnDecision(WorkDecision):
 
 
 class AttemptResolution(DeclaredFamily, affix="Resolution"):
-    """The reason is typed by its writer; its historical column stays plain text."""
-
-    @abstractmethod
-    def recorded(self) -> str: ...
+    """Why an attempt ended, retained as the declared member."""
 
 
 @dataclass(frozen=True)
 class DecidedResolution(AttemptResolution):
     decision: WorkDecision
 
-    def recorded(self) -> str:
-        return str(self.decision.key())
-
 
 @dataclass(frozen=True)
 class FailureDiagnostic(AttemptResolution):
     text: str
 
-    def recorded(self) -> str:
-        return self.text
+
+@dataclass(frozen=True)
+class GoalCleared(AttemptResolution):
+    pass
 
 
 @dataclass(frozen=True)
-class GoalCleared(FailureDiagnostic):
-    text: ClassVar[str] = "goal cleared"
+class OperatorStopped(AttemptResolution):
+    pass
 
 
 @dataclass(frozen=True)
-class OperatorStopped(FailureDiagnostic):
-    text: ClassVar[str] = "Operator stopped goal turn."
+class OriginFailed(AttemptResolution):
+    pass
 
 
 @dataclass(frozen=True)
-class OriginFailed(FailureDiagnostic):
-    text: ClassVar[str] = "Goal origin turn did not finish successfully."
-
-
-@dataclass(frozen=True)
-class UnverifiedLaunchRetired(FailureDiagnostic):
-    text: ClassVar[str] = "Launch claim retired without verified terminal progress."
+class UnverifiedLaunchRetired(AttemptResolution):
+    pass
 
 
 @dataclass(frozen=True)
 class FailedTurnResolution(AttemptResolution):
-    kind: type[TurnFailure]
-
-    def recorded(self) -> str:
-        return self.kind.declared_name
-
-
+    failure: type[TurnFailure]

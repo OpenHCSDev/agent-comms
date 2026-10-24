@@ -38,7 +38,9 @@ def test_batched_deltas_materialize_only_the_surviving_view(tmp_path):
     )
     assert begun.accumulator.reads == 1
     draft = output.transcript.current_draft(output.transcript.root, output.transcript.incarnation)
-    assert draft.events == (AssistantTranscript('x' * 1000, timestamp=1.0, position='a'),)
+    assert draft.events == (
+        AssistantTranscript("x" * 1000, timestamp=1.0, position=NativeItemId("a")),
+    )
 
 
 def test_prefix_required_and_completion_rejects_overlapping_start_and_suffix(tmp_path):
@@ -54,13 +56,15 @@ def test_prefix_required_and_completion_rejects_overlapping_start_and_suffix(tmp
     )
     output.publish_batch([
         CompletedItem(t_turn_id, NativeItemId('a'), (AssistantTranscript('Hello!', timestamp=9.0,
-            position='a'),)),
+            position=NativeItemId('a')),)),
         start(t_turn_id, 'a', 'stale'), AppendDraftItem(t_turn_id, NativeItemId('a'), ' late'),
     ])
     assert output.transcript.current_draft(output.transcript.root, output.transcript.incarnation) == NoDraft()
     with output.transcript.reading() as snapshot:
         row, = snapshot.forward(0, snapshot.cut().offset)
-        assert row.events == (AssistantTranscript('Hello!', timestamp=9.0, position='a'),)
+        assert row.events == (
+            AssistantTranscript("Hello!", timestamp=9.0, position=NativeItemId("a")),
+        )
     assert (
         ActiveItem(t_turn_id, NativeItemId("a"), ModelWaitPhase("stale")).accumulate(output) == ()
     )
@@ -75,7 +79,7 @@ def test_saved_completion_survives_initial_idle_snapshot_until_ordered_end(tmp_p
             CompletedItem(
                 old_turn_id,
                 NativeItemId("a"),
-                (AssistantTranscript("saved", timestamp=9.0, position="a"),),
+                (AssistantTranscript("saved", timestamp=9.0, position=NativeItemId("a")),),
             ),
             TurnEnded(),
             start(old_turn_id, "a", "overlapping snapshot"),
@@ -85,7 +89,9 @@ def test_saved_completion_survives_initial_idle_snapshot_until_ordered_end(tmp_p
     assert output.transcript.current_draft(output.transcript.root, output.transcript.incarnation) == NoDraft()
     with output.transcript.reading() as snapshot:
         row, = snapshot.forward(0, snapshot.cut().offset)
-        assert row.events == (AssistantTranscript('saved', timestamp=9.0, position='a'),)
+        assert row.events == (
+            AssistantTranscript("saved", timestamp=9.0, position=NativeItemId("a")),
+        )
     output.publish_batch([AllTurnsEnded(), start(new_turn_id, 'a', 'new identity')])
     assert output.transcript.current_draft(output.transcript.root, output.transcript.incarnation).turn_id == 'new'
 
@@ -177,7 +183,7 @@ def test_completion_keeps_its_original_clock_for_every_start_time(tmp_path, star
     output.publish_batch([
         StartedItem(t_turn_id, NativeItemId('a'), ModelWaitPhase(), DraftAccumulator(started_at)),
         CompletedItem(t_turn_id, NativeItemId('a'), (AssistantTranscript('finished', timestamp=9.0,
-            position='a'),)),
+            position=NativeItemId('a')),)),
     ])
     with output.transcript.reading() as snapshot:
         row, = snapshot.forward(0, snapshot.cut().offset)
@@ -223,7 +229,7 @@ def test_completed_only_sources_do_not_retain_draft_state(tmp_path):
             FinishedItem(
                 t_turn_id,
                 NativeItemId("a"),
-                (AssistantTranscript("complete", timestamp=1.0, position="a"),),
+                (AssistantTranscript("complete", timestamp=1.0, position=NativeItemId("a")),),
             )
         ]
     )

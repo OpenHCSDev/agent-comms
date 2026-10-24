@@ -23,6 +23,7 @@ from .tool_declaration import ReplacementEdit, ToolDeclaration
 from .tool_results import ToolDiff
 from .transcript_events import ToolEndTranscript, ToolStartTranscript
 from .wire_models import DeclaredWireFamily, WireModel
+from .turn_item import NativeItemId
 
 
 @dataclass(frozen=True)
@@ -37,18 +38,20 @@ class ToolCall:
     def title(self) -> str:
         return ToolDeclaration.for_name(self.name).label
 
-    def started(self, position: int | str, timestamp: float) -> ToolStartTranscript:
+    def started(self, position: int | NativeItemId, timestamp: float) -> ToolStartTranscript:
         return ToolStartTranscript(
             position=position, timestamp=timestamp, tool_call_id=self.id, tool_name=self.name, raw_input=self.arguments
         )
 
-    def ended(self, text: str, ok: bool, position: int | str, timestamp: float) -> ToolEndTranscript:
+    def ended(
+        self, text: str, ok: bool, position: int | NativeItemId, timestamp: float
+    ) -> ToolEndTranscript:
         return ToolEndTranscript(
             position=position, timestamp=timestamp, tool_call_id=self.id, tool_name=self.name, text=text, ok=ok
         )
 
     def finished(
-        self, text: str, ok: bool, position: int | str, timestamp: float,
+        self, text: str, ok: bool, position: int | NativeItemId, timestamp: float,
     ) -> tuple[ToolStartTranscript, ToolEndTranscript]:
         return self.started(position, timestamp), self.ended(text, ok, position, timestamp)
 
@@ -66,7 +69,7 @@ class DecodedToolCall(ToolCall):
     def title(self) -> str:
         return ToolDeclaration.caption(self.name, self.tool)
 
-    def started(self, position: int | str, timestamp: float) -> ToolStartTranscript:
+    def started(self, position: int | NativeItemId, timestamp: float) -> ToolStartTranscript:
         return replace(super().started(position, timestamp), tool=self.tool)
 
     def patched(self, diff: ToolDiff) -> PatchedToolCall:
@@ -79,7 +82,9 @@ class PatchedToolCall(DecodedToolCall):
 
     diff: ToolDiff
 
-    def ended(self, text: str, ok: bool, position: int | str, timestamp: float) -> ToolEndTranscript:
+    def ended(
+        self, text: str, ok: bool, position: int | NativeItemId, timestamp: float
+    ) -> ToolEndTranscript:
         return replace(super().ended(text, ok, position, timestamp), diff=self.diff)
 
 

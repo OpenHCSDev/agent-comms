@@ -27,7 +27,7 @@ from agent_comms.transcript_events import AssistantTranscript, TurnDigest
 from agent_comms.turn_context import JournalProvenance, SegmentManifest, TranscriptSegment, WireProvenance
 from agent_comms.turn_digests import LastTurns, TurnBound, TurnsOlderThan, TurnsBefore, TurnsSince
 from agent_comms.bus import Bus
-from agent_comms.turn_item import NativeItemId, NativeTurnId
+from agent_comms.turn_item import NativeItemId, NativeTurnId, PiSessionId
 from agent_comms.watched import FileSource
 from agent_comms.threads import Thread
 
@@ -77,8 +77,15 @@ def test_external_turns_preserve_interleaving_and_the_whole_selected_turn(tmp_pa
     for at, (turn, item, text) in enumerate([
             (old_turn_id, 'a', 'older'), (one_turn_id, 'b', 'first'),
             (two_turn_id, 'c', 'other'), (one_turn_id, 'd', 'continued')], start=1):
-        source.finish(turn_id=turn, item_id=item,
-                      events=(AssistantTranscript(text, position=item, timestamp=float(at)),))
+        source.finish(
+            turn_id=turn,
+            item_id=NativeItemId(item),
+            events=(
+                AssistantTranscript(
+                    text, position=FieldCodec.decode(int | NativeItemId, item), timestamp=float(at)
+                ),
+            ),
+        )
     answer = endpoint(comms, 'cli', LastTurns(2))
     assert [turn['turn_id'] for turn in answer['turns']] == ['two', 'one']
     assert [event['text'] for event in answer['turns'][0]['events']] == ['other']
@@ -151,7 +158,9 @@ def test_woken_native_turn_reads_its_selected_messages_not_the_stored_frame(tmp_
     entry = SegmentManifest(TranscriptSegment, (JournalProvenance(str(source), ('u1',)),),
                             digest, len(frame), 1, contributors=(wake,))
     with comms.contexts.writing() as db:
-        ContextEntry('source', str(source), 'u1', entry).insert_if_absent(db)
+        ContextEntry(
+            PiSessionId("source"), str(source), NativeItemId("u1"), entry
+        ).insert_if_absent(db)
     turn, = endpoint(comms, 'native', LastTurns(1))['turns']
     assert [(event['kind'], event['message']['text'] if 'message' in event else event['text'])
             for event in turn['events']] == [

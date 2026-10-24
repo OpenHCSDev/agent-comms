@@ -24,8 +24,15 @@ def test_finished_cli_items_append_once_and_page(tmp_path):
     comms = wire(tmp_path / "wire")
     comms.registry.declare(Thread('codex', frozenset(), str(tmp_path)))
     transcript = comms.transcripts.external("codex")
-    transcript.finish(turn_id=t1_turn_id, item_id="compaction",
-                      events=(NoticeTranscript("Compacting context…", timestamp=2.0, position='compaction'),))
+    transcript.finish(
+        turn_id=t1_turn_id,
+        item_id=NativeItemId("compaction"),
+        events=(
+            NoticeTranscript(
+                "Compacting context…", timestamp=2.0, position=NativeItemId("compaction")
+            ),
+        ),
+    )
     read = comms.transcripts.capture_page_read("codex")
     assert read.content_current()
     # The identity crosses the ACP and observation wires.
@@ -35,12 +42,18 @@ def test_finished_cli_items_append_once_and_page(tmp_path):
         == ["Compacting context…"]
 
     # Finishing appends after what the read captured; the read stays current.
-    transcript.finish(turn_id=t1_turn_id, item_id="reply",
-                      events=(AssistantTranscript("Hello", timestamp=1.0, position='reply'),))
+    transcript.finish(
+        turn_id=t1_turn_id,
+        item_id=NativeItemId("reply"),
+        events=(AssistantTranscript("Hello", timestamp=1.0, position=NativeItemId("reply")),),
+    )
     # A watch that starts again republishes what Codex already finished.
-    transcript.finish(turn_id=t1_turn_id, item_id="reply",
-                      events=(AssistantTranscript("Hello", timestamp=1.0, position='reply'),))
-    transcript.finish(turn_id=t1_turn_id, item_id="hook", events=())
+    transcript.finish(
+        turn_id=t1_turn_id,
+        item_id=NativeItemId("reply"),
+        events=(AssistantTranscript("Hello", timestamp=1.0, position=NativeItemId("reply")),),
+    )
+    transcript.finish(turn_id=t1_turn_id, item_id=NativeItemId("hook"), events=())
     assert read.content_current()
     page = comms.transcripts.thread_transcript_page("codex")
     assert [event.text for event in page.events] == ["Compacting context…", "Hello"]
@@ -77,12 +90,18 @@ def test_captured_draft_cannot_delete_a_later_turns_draft(tmp_path):
     comms = wire(tmp_path / "wire")
     comms.registry.declare(Thread("cli", frozenset(), str(tmp_path)))
     transcript = comms.transcripts.external("cli")
-    transcript.draft(turn_id=old_turn_id, item_id="draft", events=(AssistantTranscript("old",
-        timestamp=1.0, position='draft'),))
+    transcript.draft(
+        turn_id=old_turn_id,
+        item_id=NativeItemId("draft"),
+        events=(AssistantTranscript("old", timestamp=1.0, position=NativeItemId("draft")),),
+    )
     with transcript.reading() as records:
         old = records.current_draft(transcript.root, transcript.incarnation)
-    transcript.draft(turn_id=new_turn_id, item_id="draft", events=(AssistantTranscript("new",
-        timestamp=1.0, position='draft'),))
+    transcript.draft(
+        turn_id=new_turn_id,
+        item_id=NativeItemId("draft"),
+        events=(AssistantTranscript("new", timestamp=1.0, position=NativeItemId("draft")),),
+    )
     old.end_turn(transcript)
     with transcript.reading() as records:
         assert records.current_draft(transcript.root, transcript.incarnation).turn_id == "new"
@@ -161,15 +180,24 @@ def test_draft_is_current_state_and_finishes_atomically(tmp_path):
     comms = wire(tmp_path / "wire")
     comms.registry.declare(Thread('codex', frozenset(), str(tmp_path)))
     transcript = comms.transcripts.external("codex")
-    transcript.draft(turn_id=t_turn_id, item_id="a", events=(AssistantTranscript("Hel",
-        timestamp=1.0, position='a'),))
+    transcript.draft(
+        turn_id=t_turn_id,
+        item_id=NativeItemId("a"),
+        events=(AssistantTranscript("Hel", timestamp=1.0, position=NativeItemId("a")),),
+    )
     with transcript.reading() as records:
         assert records.current_draft(transcript.root, transcript.incarnation).events[0].text == "Hel"
         assert records.cut().offset == 0
-    transcript.draft(turn_id=t_turn_id, item_id="a", events=(AssistantTranscript("Hello",
-        timestamp=1.0, position='a'),))
-    transcript.finish(turn_id=t_turn_id, item_id="other", events=(NoticeTranscript("Tool",
-        timestamp=1.0, position='other'),))
+    transcript.draft(
+        turn_id=t_turn_id,
+        item_id=NativeItemId("a"),
+        events=(AssistantTranscript("Hello", timestamp=1.0, position=NativeItemId("a")),),
+    )
+    transcript.finish(
+        turn_id=t_turn_id,
+        item_id=NativeItemId("other"),
+        events=(NoticeTranscript("Tool", timestamp=1.0, position=NativeItemId("other")),),
+    )
     with transcript.reading() as records:
         assert records.current_draft(transcript.root, transcript.incarnation).item_id == "a"
     read = comms.transcripts.capture_page_read("codex")
@@ -177,8 +205,11 @@ def test_draft_is_current_state_and_finishes_atomically(tmp_path):
     assert snapshot.draft.events[0].text == "Hello"
     assert [e.text for e in snapshot.page.events] == ["Tool"]
     assert decode_updates(encode_updates(snapshot)) == (snapshot,)
-    transcript.finish(turn_id=t_turn_id, item_id="a", events=(AssistantTranscript("Hello!",
-        timestamp=1.0, position='a'),))
+    transcript.finish(
+        turn_id=t_turn_id,
+        item_id=NativeItemId("a"),
+        events=(AssistantTranscript("Hello!", timestamp=1.0, position=NativeItemId("a")),),
+    )
     with pytest.raises(StaleRevision):
         read.current_draft()
     with transcript.reading() as records:
@@ -187,8 +218,11 @@ def test_draft_is_current_state_and_finishes_atomically(tmp_path):
         "Tool",
         "Hello!",
     ]
-    transcript.draft(turn_id=t2_turn_id, item_id="b", events=(AssistantTranscript("Interrupted",
-        timestamp=1.0, position='b'),))
+    transcript.draft(
+        turn_id=t2_turn_id,
+        item_id=NativeItemId("b"),
+        events=(AssistantTranscript("Interrupted", timestamp=1.0, position=NativeItemId("b")),),
+    )
     transcript.end_turn()
     with transcript.reading() as records:
         assert records.current_draft(transcript.root, transcript.incarnation).external_row() is None
@@ -200,8 +234,17 @@ def test_a_thread_with_nothing_read_pages_older_and_newer_from_its_cursor(tmp_pa
     comms.registry.declare(Thread('codex', frozenset(), str(tmp_path)))
     transcript = comms.transcripts.external("codex")
     for index, text in enumerate(("first", "second", "third")):
-        transcript.finish(turn_id=t1_turn_id, item_id=text,
-                          events=(AssistantTranscript(text, timestamp=float(index), position=text),))
+        transcript.finish(
+            turn_id=t1_turn_id,
+            item_id=NativeItemId(text),
+            events=(
+                AssistantTranscript(
+                    text,
+                    timestamp=float(index),
+                    position=FieldCodec.decode(int | NativeItemId, text),
+                ),
+            ),
+        )
 
     async def loader(**bounds):
         return comms.transcripts.thread_transcript_page("codex", max_messages=1, **bounds)

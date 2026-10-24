@@ -8,7 +8,6 @@ import builtins
 from abc import ABC, abstractmethod
 from collections.abc import AsyncIterator, Mapping
 from dataclasses import replace
-from functools import partial
 from graphlib import TopologicalSorter
 from itertools import groupby
 from typing import TYPE_CHECKING, Annotated, ClassVar, NoReturn, Self, Union
@@ -245,11 +244,7 @@ class ArrivedMessage(WatchLine, declared_name="message"):
 class EarlierItems(WatchLine, TurnItem, declared_name="earlier-items"):
     """The pager's outstanding continuation, handled only by its socket-owning bridge."""
 
-    turn_id: Annotated[
-        NativeTurnId,
-        PlainValidator(partial(FieldCodec.decode, NativeTurnId)),
-        PlainSerializer(str),
-    ]
+    turn_id: NativeTurnId
     request: RequestedEarlierPage
 
     @classmethod

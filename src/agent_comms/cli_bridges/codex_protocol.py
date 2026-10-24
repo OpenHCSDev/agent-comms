@@ -325,7 +325,9 @@ class TextBody(WireModel):
     text: str
 
     def accumulator(self, started_at: EventTime) -> TextDraft:
-        return TextDraft.from_parts(AssistantTranscript, (self.text,), started_at, self.id)
+        return TextDraft.from_parts(
+            AssistantTranscript, (self.text,), started_at, NativeItemId(self.id)
+        )
 
 
 class AssistantItem(TextBody, AccumulatedItem):
@@ -344,7 +346,9 @@ class ReasoningItem(AccumulatedItem):
 
     def accumulator(self, started_at: EventTime) -> ParagraphDraft:
         # Only public summaries; private/raw reasoning is never projected.
-        return ParagraphDraft.from_parts(ThinkingTranscript, self.summary, started_at, self.id)
+        return ParagraphDraft.from_parts(
+            ThinkingTranscript, self.summary, started_at, NativeItemId(self.id)
+        )
 
 
 class UserItem(Item):
@@ -353,7 +357,13 @@ class UserItem(Item):
     clientId: str | None = None
 
     def events(self, timestamp: float) -> tuple[TranscriptEvent, ...]:
-        return (UserTranscript('\n'.join(part.display for part in self.content), position=self.id, timestamp=timestamp),)
+        return (
+            UserTranscript(
+                "\n".join(part.display for part in self.content),
+                position=NativeItemId(self.id),
+                timestamp=timestamp,
+            ),
+        )
 
     def completed(
         self, turn_id: NativeTurnId, events: tuple[TranscriptEvent, ...]
@@ -366,7 +376,10 @@ class UserItem(Item):
 
 class ToolItem(Item, ABC):
     def accumulator(self, started_at: EventTime) -> ToolDraft:
-        return ToolDraft(started_at, (self.call.started(self.id, started_at.recorded_at('Codex tool start')),))
+        return ToolDraft(
+            started_at,
+            (self.call.started(NativeItemId(self.id), started_at.recorded_at("Codex tool start")),),
+        )
 
     @property
     @abstractmethod
@@ -390,7 +403,7 @@ class ToolItem(Item, ABC):
         return ToolDeclaration.record(self.tool_name, self.arguments, call_id=self.id).recorded_call(shown)
 
     def events(self, timestamp: float) -> tuple[TranscriptEvent, ...]:
-        return self.call.finished(self.output, self.succeeded, self.id, timestamp)
+        return self.call.finished(self.output, self.succeeded, NativeItemId(self.id), timestamp)
 
     @property
     def phase(self) -> TurnPhase:
@@ -530,7 +543,15 @@ class FunctionOutputItem(Item):
     output: str
 
     def events(self, timestamp: float) -> tuple[TranscriptEvent, ...]:
-        return (ToolEndTranscript(position=self.id, timestamp=timestamp, tool_call_id=self.id, tool_name=self.name, text=self.output),)
+        return (
+            ToolEndTranscript(
+                position=NativeItemId(self.id),
+                timestamp=timestamp,
+                tool_call_id=self.id,
+                tool_name=self.name,
+                text=self.output,
+            ),
+        )
 
 
 class SendOutputItem(NoTranscript, FunctionOutputItem):
@@ -546,7 +567,11 @@ class CompactionItem(Item):
         return CompactionPhase()
 
     def events(self, timestamp: float) -> tuple[TranscriptEvent, ...]:
-        return (NoticeTranscript('Context compacted.', position=self.id, timestamp=timestamp),)
+        return (
+            NoticeTranscript(
+                "Context compacted.", position=NativeItemId(self.id), timestamp=timestamp
+            ),
+        )
 
 
 class HookPromptItem(NoTranscript, Item):
@@ -558,7 +583,7 @@ class ReviewBody(WireModel):
     review: str
 
     def events(self, timestamp: float) -> tuple[TranscriptEvent, ...]:
-        return (NoticeTranscript(self.review, position=self.id, timestamp=timestamp),)
+        return (NoticeTranscript(self.review, position=NativeItemId(self.id), timestamp=timestamp),)
 
 
 class EnteredReviewItem(ReviewBody, Item):
@@ -574,7 +599,13 @@ class SleepItem(Item):
     durationMs: int
 
     def events(self, timestamp: float) -> tuple[TranscriptEvent, ...]:
-        return (NoticeTranscript(f'Waited ({self.durationMs} ms requested).', position=self.id, timestamp=timestamp),)
+        return (
+            NoticeTranscript(
+                f"Waited ({self.durationMs} ms requested).",
+                position=NativeItemId(self.id),
+                timestamp=timestamp,
+            ),
+        )
 
     @property
     def phase(self) -> TurnPhase:
@@ -586,7 +617,11 @@ class ImageViewItem(Item):
     path: str
 
     def events(self, timestamp: float) -> tuple[TranscriptEvent, ...]:
-        return (NoticeTranscript(f'Image: {self.path}', position=self.id, timestamp=timestamp),)
+        return (
+            NoticeTranscript(
+                f"Image: {self.path}", position=NativeItemId(self.id), timestamp=timestamp
+            ),
+        )
 
 
 class ImageGenerationItem(Item):
@@ -596,8 +631,14 @@ class ImageGenerationItem(Item):
     savedPath: str | None = None
 
     def events(self, timestamp: float) -> tuple[TranscriptEvent, ...]:
-        return (NoticeTranscript(f'Image generation: {self.status}' +
-                                 (f' — {self.savedPath}' if self.savedPath else ''), position=self.id, timestamp=timestamp),)
+        return (
+            NoticeTranscript(
+                f"Image generation: {self.status}"
+                + (f" — {self.savedPath}" if self.savedPath else ""),
+                position=NativeItemId(self.id),
+                timestamp=timestamp,
+            ),
+        )
 
 
 class WebSearchItem(Item):
@@ -608,7 +649,11 @@ class WebSearchItem(Item):
 
     def events(self, timestamp: float) -> tuple[TranscriptEvent, ...]:
         # Search status carries no success flag. Do not invent a successful end.
-        return (NoticeTranscript(f'Web search: {self.query}', position=self.id, timestamp=timestamp),)
+        return (
+            NoticeTranscript(
+                f"Web search: {self.query}", position=NativeItemId(self.id), timestamp=timestamp
+            ),
+        )
 
     @property
     def phase(self) -> TurnPhase:
@@ -691,9 +736,17 @@ class AgentToolItem(Item):
     agentsStates: dict[str, AgentState]
 
     def events(self, timestamp: float) -> tuple[TranscriptEvent, ...]:
-        return (NoticeTranscript(f'{self.tool}: {self.status}\n' + '\n'.join(
-            f'{name}: {state.status}' + (f' — {state.message}' if state.message else '')
-            for name, state in self.agentsStates.items()), position=self.id, timestamp=timestamp),)
+        return (
+            NoticeTranscript(
+                f"{self.tool}: {self.status}\n"
+                + "\n".join(
+                    f"{name}: {state.status}" + (f" — {state.message}" if state.message else "")
+                    for name, state in self.agentsStates.items()
+                ),
+                position=NativeItemId(self.id),
+                timestamp=timestamp,
+            ),
+        )
 
 
 class AgentActivityItem(Item):
@@ -703,7 +756,13 @@ class AgentActivityItem(Item):
     kind: str
 
     def events(self, timestamp: float) -> tuple[TranscriptEvent, ...]:
-        return (NoticeTranscript(f'{self.agentPath}: {self.kind}', position=self.id, timestamp=timestamp),)
+        return (
+            NoticeTranscript(
+                f"{self.agentPath}: {self.kind}",
+                position=NativeItemId(self.id),
+                timestamp=timestamp,
+            ),
+        )
 
 
 # The existing registration owner derives this wire grammar from declarations.

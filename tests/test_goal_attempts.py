@@ -38,7 +38,7 @@ from agent_comms.pi_counts import PiCount, UnreportedCount
 from agent_comms.pi_payloads import PiUsage
 from agent_comms.threads import Thread
 from agent_comms.thread_creation import RecordedCreationTime
-from agent_comms.attempt_resolution import FailureDiagnostic, RetryDecision
+from agent_comms.attempt_resolution import FailureDiagnostic, OperatorStopped, RetryDecision
 
 pytestmark = pytest.mark.skipif(
     os.name != "posix", reason="POSIX fork and directory fsync crash instrumentation."
@@ -498,7 +498,7 @@ def test_stop_recovers_claim_after_owner_exits_without_turn_cleanup(comms, claim
     with closing(store._connect()) as conn:
         attempt = AttemptRecord.one(conn, attempt_id=before.attempt_id)
         assert attempt.phase == FailedAttempt()
-        assert attempt.resolution == "Operator stopped goal turn."
+        assert attempt.resolution == OperatorStopped()
         assert attempt.progress_witness is None
         assert FailedTurnEvidence.count(conn) == 0
     assert stopped.goal == claimed_owner.goal

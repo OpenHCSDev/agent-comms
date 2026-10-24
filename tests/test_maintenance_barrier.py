@@ -392,7 +392,11 @@ async def test_bus_waits_before_mutating_a_transcript_batch(tmp_path: Path) -> N
         barrier.clear(hold)
     await asyncio.wait_for(pending, 3)
     with output.transcript.reading() as source:
-        assert source.current_draft(output.transcript.root, output.transcript.incarnation).external_row().events == (AssistantTranscript('prefix once', timestamp=1., position='item'),)
+        assert source.current_draft(
+            output.transcript.root, output.transcript.incarnation
+        ).external_row().events == (
+            AssistantTranscript("prefix once", timestamp=1.0, position=NativeItemId("item")),
+        )
 
 
 def test_a_registry_write_is_refused_to_all_but_the_maintenance_holder(tmp_path: Path, monkeypatch) -> None:

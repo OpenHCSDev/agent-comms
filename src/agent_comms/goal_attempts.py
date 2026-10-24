@@ -265,7 +265,7 @@ class AttemptRecord(GoalLedgerTable, TypedTable):
     reservation: Annotated[Reservation, Column(primary_key=True)]
     phase: GoalAttemptPhase
     progress_witness: str | None
-    resolution: str | None
+    resolution: AttemptResolution | None
 
     attempt_id: ClassVar[Generated] = Generated(
         AttemptId,
@@ -314,7 +314,7 @@ class AttemptRecord(GoalLedgerTable, TypedTable):
             parameters=(self.reservation.attempt_id,),
             phase=phase,
             progress_witness=progress_witness,
-            resolution=resolution.recorded() if resolution is not None else None,
+            resolution=resolution,
         )
 
     @classmethod
@@ -377,7 +377,7 @@ class RecordedAttempt(LedgerAttempt):
         return self.record.reservation == reservation and self.record.phase == phase
 
     def resolved_as(self, phase: GoalAttemptPhase, resolution: AttemptResolution) -> bool:
-        return self.record.phase == phase and self.record.resolution == resolution.recorded()
+        return self.record.phase == phase and self.record.resolution == resolution
 
     def retire(
         self, conn: sqlite3.Connection, lifecycle: GenerationState, goal_id: GoalId, generation: int

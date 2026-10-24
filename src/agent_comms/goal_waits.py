@@ -13,7 +13,7 @@ from .bus import BusReader
 from .bus_publication import Delivered
 from .declared_family import DeclaredFamily
 from .errors import UnregisteredThreadError
-from .field_codec import GoalId, GoalWaitId, NullMember, TurnId
+from .field_codec import GoalId, GoalWaitId, NullMember, ThreadLookup, TurnId
 from .goal_presentation import GoalExecution, GoalExecutionSource, GoalWaitTarget, StandbyExecution
 from .goals import Goal, GoalDeclaration
 from .input_key import InputKey, InputKeyText
@@ -402,7 +402,7 @@ class StoredGoalWaitRow(GoalWaitsRows, TypedTable):
 class GoalWaitTargetRow(GoalWaitsRows, TypedTable):
     goal_id: Annotated[GoalId, Column(primary_key=True)]
     position: Annotated[int, Column(primary_key=True)]
-    target_lookup: str
+    target_lookup: ThreadLookup
     indexes = (Index(("target_lookup", "goal_id")),)
 
     @classmethod

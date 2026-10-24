@@ -133,8 +133,12 @@ class TextualPart(Part, ABC, declared_name=None):
         return (self.time.start if self.time is not None else message.time.created) / 1000
 
     def accumulator(self, message: MessageInfo) -> TextDraft:
-        return TextDraft.from_parts(self.event_type, (self.text,),
-                                    RecordedEventTime(self.timestamp(message)), self.id)
+        return TextDraft.from_parts(
+            self.event_type,
+            (self.text,),
+            RecordedEventTime(self.timestamp(message)),
+            NativeItemId(self.id),
+        )
 
     def finished(self, message: MessageInfo) -> bool:
         return super().finished(message) or (self.time is not None and self.time.end is not None)
@@ -154,7 +158,15 @@ class TextPart(TextWire, TextualPart, declared_name='text'):
         return self.sessionID == session and self.text == text
 
     def prompted(self, message: UserMessage) -> tuple[RuntimeUpdate, ...]:
-        return (HiddenItem((UserTranscript(self.text, position=self.id, timestamp=self.timestamp(message)),)),)
+        return (
+            HiddenItem(
+                (
+                    UserTranscript(
+                        self.text, position=NativeItemId(self.id), timestamp=self.timestamp(message)
+                    ),
+                )
+            ),
+        )
 
     def summarized(self) -> tuple[RuntimeUpdate, ...]:
         return (Summarized(self.text),)
@@ -198,9 +210,14 @@ class PendingTool(ToolState, declared_name='pending'):
     def present(self, part: ToolPart, message: AssistantMessage) -> tuple[RuntimeUpdate, ...]:
         call = self.call(part)
         started_at = self.started_at(message)
-        return (StartedItem(message.turn, NativeItemId(part.id),
-                            ToolRunningPhase(tools=((part.callID, call.title),)),
-                            ToolDraft(started_at, (call.started(part.id, started_at.at),))),)
+        return (
+            StartedItem(
+                message.turn,
+                NativeItemId(part.id),
+                ToolRunningPhase(tools=((part.callID, call.title),)),
+                ToolDraft(started_at, (call.started(NativeItemId(part.id), started_at.at),)),
+            ),
+        )
 
 
 class RunningTool(PendingTool, declared_name='running'):
@@ -226,8 +243,8 @@ class EndedTool(ToolState, ABC):
     def present(self, part: ToolPart, message: AssistantMessage) -> tuple[RuntimeUpdate, ...]:
         call = self.call(part)
         return (CompletedItem(message.turn, NativeItemId(part.id), (
-            call.started(part.id, self.time.start / 1000),
-            call.ended(self.result, self.ok, part.id, self.time.end / 1000),
+            call.started(NativeItemId(part.id), self.time.start / 1000),
+            call.ended(self.result, self.ok, NativeItemId(part.id), self.time.end / 1000),
         )),)
 
 
@@ -272,9 +289,18 @@ class FilePart(StructuralPart, declared_name='file'):
     mime: str = ''
 
     def prompted(self, message: UserMessage) -> tuple[RuntimeUpdate, ...]:
-        return (HistoryNotice('Attachment contents are not imported; source references are retained.'),
-                HiddenItem((ContextTranscript(f'[Historical attachment: {self.filename or self.mime}]',
-                                              position=self.id, timestamp=message.time.created / 1000),)))
+        return (
+            HistoryNotice("Attachment contents are not imported; source references are retained."),
+            HiddenItem(
+                (
+                    ContextTranscript(
+                        f"[Historical attachment: {self.filename or self.mime}]",
+                        position=NativeItemId(self.id),
+                        timestamp=message.time.created / 1000,
+                    ),
+                )
+            ),
+        )
 
 
 class AgentPart(StructuralPart, declared_name='agent'):

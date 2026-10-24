@@ -51,7 +51,7 @@ from agent_comms.todos import (
     UnmergedListedPullRequest,
 )
 from agent_comms.transcript_events import ToolStartTranscript
-from agent_comms.turn_item import NativeTurnId
+from agent_comms.turn_item import NativeItemId, NativeTurnId
 from agent_comms.work_branches import BranchDifference, UnpushedHead
 from conftest import declare_test_bus
 from source_revision_fixture import SourceRepository
@@ -353,7 +353,7 @@ class SpinningUnitSeed(IncidentSeed):
         for call in range(SpinningUnit.calls):
             transcript.finish(
                 turn_id=spinning_turn_id,
-                item_id=f"call-{call}",
+                item_id=NativeItemId(f"call-{call}"),
                 events=(
                     ToolStartTranscript(
                         position=0,

@@ -8,7 +8,7 @@ from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field, replace
 from typing import TYPE_CHECKING, Annotated, ClassVar, Self
 
-from agent_comms.field_codec import GoalId, GoalWaitId, MessageId, RetryDecisionId
+from agent_comms.field_codec import DecisionKey, GoalId, GoalWaitId, MessageId, RetryDecisionId
 from agent_comms import field_codec
 from agent_comms.goals import (
     Goal,
@@ -52,11 +52,19 @@ from .repository_name import RepositoryName
 from .thread_identity import ThreadIncarnation
 from .threads import Thread
 from .reported_turn import ReportedTurnState
-from .attempt_resolution import ComplianceDecision, OrderDecision, RetryDecision
+from .attempt_resolution import ComplianceDecision, RetryDecision, WorkDecision
 
 if TYPE_CHECKING:
     from .goal_management import Goals
     from .goal_presentation import GoalSnapshot
+
+
+@dataclass(frozen=True)
+class OrderDecision(WorkDecision):
+    order: PendingProblemOrder
+
+    def key(self) -> DecisionKey:
+        return DecisionKey(self.order.id)
 
 
 class ModelInvocable:

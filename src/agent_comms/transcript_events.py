@@ -20,7 +20,7 @@ from .recorded_time import EventTime, UnrecordedEventTime
 from .routing import MessageRoute, TurnRouting
 from .tool_results import SENT_MESSAGE_MIME, NoSentMessage, NoToolDiff, ToolDiff, ToolText
 from .transcript_merge import EventMerge, StreamingMerge
-from .turn_item import NativeTurnId
+from .turn_item import NativeItemId, NativeTurnId
 from .ui_model.message_category import (
     AgentCategory,
     InboundCategory,
@@ -108,7 +108,7 @@ class ImportedReply(ImportedMessage):
 @dataclass(frozen=True, kw_only=True)
 class TranscriptEvent(EventMerge, DeclaredFamily, affix="Transcript"):
     category: ClassVar[type[MessageCategory]]
-    position: int | str
+    position: int | NativeItemId
     timestamp: float
     routing = None
     source = None

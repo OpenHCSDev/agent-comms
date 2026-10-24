@@ -14,7 +14,7 @@ from collections.abc import Callable, Iterable, Iterator, Mapping
 from dataclasses import MISSING, Field, dataclass, field, fields, is_dataclass
 from datetime import datetime
 from enum import Enum
-from functools import cache, cached_property, lru_cache, reduce
+from functools import cache, cached_property, lru_cache, partial, reduce
 from operator import or_
 from pathlib import Path
 from typing import (
@@ -36,7 +36,8 @@ from typing import (
 from uuid import uuid4
 from weakref import WeakKeyDictionary
 
-from pydantic import BaseModel, JsonValue
+from pydantic import BaseModel, GetCoreSchemaHandler, JsonValue
+from pydantic_core import core_schema
 from typing_extensions import TypeAliasType, TypeForm
 
 from .declared_family import DeclaredFamily
@@ -1692,7 +1693,7 @@ class SpelledText(TextRepresentation[str], ValidatedScalar):
         return {"type": cls.command_line}
 
     @classmethod
-    def schema(cls) -> dict[str, object]:
+    def schema(cls) -> dict[str, str]:
         return {"type": "string", "pattern": f"^(?:{cls.spelling.pattern})$"}
 
 
@@ -1705,6 +1706,18 @@ class NominalText(str):
     @classmethod
     def representation(cls) -> type[FieldRepresentation]:
         return cls.spelled_by
+
+    @classmethod
+    def __get_pydantic_core_schema__(
+        cls, _source: object, _handler: GetCoreSchemaHandler
+    ) -> core_schema.CoreSchema:
+        return core_schema.no_info_plain_validator_function(
+            partial(FieldCodec.decode, cls),
+            json_schema_input_schema=core_schema.str_schema(
+                strict=True, pattern=cls.spelled_by.schema()["pattern"]
+            ),
+            serialization=core_schema.plain_serializer_function_ser_schema(cls.spelled_by.encode),
+        )
 
 
 class NominalSpelling[V: NominalText](SpelledText):
