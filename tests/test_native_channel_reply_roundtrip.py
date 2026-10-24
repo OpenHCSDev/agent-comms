@@ -327,18 +327,21 @@ async def test_native_channel_reply_automatically_reaches_original_sender(tmp_pa
                             for path in (comms.root / "diagnostics").glob("*.requests.jsonl")
                             for line in path.read_text().splitlines()]
             native = [row for row in observations if "native" in row]
-            assert {row["native"]["inputId"] for row in native} == {
-                row["input_id"] for row in request_inputs
-            }
-            for index, original in enumerate(request_inputs):
-                samples = [row for row in native
-                           if row["native"]["inputId"] == original["input_id"]]
+            # Samples group by their own request. Which input a request carries
+            # is owned by its committed context, never copied into its timing.
+            requests_observed = {}
+            for row in native:
+                requests_observed.setdefault(row["native"]["requestId"], []).append(row)
+            assert sorted(group[0]["turn"]["identity"]["incarnation"]["name"]
+                          for group in requests_observed.values()) == sorted(
+                row["owner"] for row in request_inputs)
+            for samples in requests_observed.values():
                 assert {"preparing", "dispatch", "first_event", "finished"} <= {
                     row["native"]["stage"] for row in samples
                 }
-                assert all(row["turn"]["identity"]["incarnation"]["name"] == original["owner"]
-                           for row in samples)
+                assert len({json.dumps(row["turn"], sort_keys=True) for row in samples}) == 1
                 assert len({tuple(row["native_process"].items()) for row in samples}) == 1
+            for index, original in enumerate(request_inputs):
                 acquisitions = [row["acquisition"] for row in observations
                                 if row.get("input_id") == original["input_id"]
                                 and "acquisition" in row]
