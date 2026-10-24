@@ -335,10 +335,12 @@ class ToolDescription:
     annotations: ToolAnnotations
 
     @classmethod
-    def of(cls, name: str, tool: type[ToolRequest] | type[ConnectorTool]) -> ToolDescription:
+    def of(
+        cls, name: str, tool: type[ToolRequest] | type[ConnectorTool], caller: ConnectorCaller
+    ) -> ToolDescription:
         """The name is the key tools/call dispatches on, so listing and calling share it."""
         return cls(name, tool.label, f"{tool.description} {tool.bus_effect}",
-                   FieldCodec.record_schema(tool), ToolAnnotations(issubclass(tool, ReadTool)))
+                   caller.input_schema(tool), ToolAnnotations(issubclass(tool, ReadTool)))
 
 
 @dataclass(frozen=True)
@@ -438,7 +440,7 @@ class ToolsListMessage(McpRequest, declared_name="tools/list"):
 
     async def result(self, connector: Connector, caller: ConnectorCaller) -> ToolsListResult:
         return ToolsListResult(tuple(
-            ToolDescription.of(name, tool) for name, tool in caller.exposed().items()
+            ToolDescription.of(name, tool, caller) for name, tool in caller.exposed().items()
         ))
 
 
@@ -531,7 +533,9 @@ class Connector:
         caller: ConnectorCaller,
     ) -> dict[str, JsonValue]:
         with self.opened_wire() as comms:
-            return tool.invoke(comms, arguments, caller=caller)
+            acting, rest = caller.acting(arguments)
+            acting.commanding(comms, caller.own_thread())
+            return tool.invoke(comms, rest, caller=acting)
 
     def application(self) -> web.Application:
         self.store.read()  # Refuse an unreadable store before binding any port.

@@ -2224,21 +2224,22 @@ class FieldCodec(MroDispatch, Sealed):
         for member in target.members_with(target):
             tag = member.family_discriminator
             alternatives.append(cls._record_schema(
-                member, {tag: {"type": "string", "const": member.declared_name}}, [tag]
+                (member,), {tag: {"type": "string", "const": member.declared_name}}, [tag]
             ))
         return cls.alternatives_schema("oneOf", alternatives)
 
     @classmethod
-    def record_schema(cls, target: type) -> dict[str, JsonValue]:
+    def record_schema(cls, *targets: type) -> dict[str, JsonValue]:
         """Named request fields; external tool/CLI selection remains separate."""
-        return cls._record_schema(target, {}, [])
+        return cls._record_schema(targets, {}, [])
 
     @classmethod
     def _record_schema(
-        cls, target: type, properties: dict[str, JsonValue], required: list[str]
+        cls, targets: tuple[type, ...], properties: dict[str, JsonValue], required: list[str]
     ) -> dict[str, JsonValue]:
         """Build fields once, including an internally supplied family selector."""
-        cls._record_plan(target).schema_fields(properties, required)
+        for target in targets:
+            cls._record_plan(target).schema_fields(properties, required)
         return {
             "type": "object",
             "properties": properties,

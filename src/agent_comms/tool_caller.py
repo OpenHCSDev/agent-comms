@@ -31,6 +31,9 @@ class ThreadListing(ToolResult):
 
 
 class ToolCaller(ABC):
+    def acting_caller(self, grant: ToolCaller) -> ToolCaller:
+        return self
+
     @classmethod
     def from_actor(cls, actor: str | None) -> ToolCaller:
         """Each entry boundary (CLI --from, context action) names its actor explicitly."""
@@ -86,6 +89,9 @@ class ToolCaller(ABC):
 
 @dataclass(frozen=True)
 class NoThreadCaller(ToolCaller):
+    def acting_caller(self, grant: ToolCaller) -> ToolCaller:
+        return grant
+
     def as_thread(self, commander: str) -> ThreadCaller:
         return ThreadCaller(commander)
 
