@@ -11,6 +11,7 @@ from agent_comms.turn_lease import NoFinishedTurn
 
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.comms import wire
+from agent_comms.field_codec import TurnId
 from agent_comms.goal_actions import (
     EditGoalAction,
     GoalPrecondition,
@@ -56,10 +57,10 @@ def _waiting(tmp_path, *, second=False):
     comms._test_leases = {}
     _thread(comms, "owner", tmp_path)
     _thread(comms, "child", tmp_path)
-    _begin(comms, "child", "child-turn")
+    _begin(comms, "child", TurnId('9782df8c75cffb6a483d963ccaefc23b'))
     if second:
         _thread(comms, "other", tmp_path)
-        _begin(comms, "other", "other-turn")
+        _begin(comms, "other", TurnId('e2141dc9c71046570fc0e6a19ad6f5c1'))
     goal = comms.goals.update_goal("owner", SetGoalAction(text="Review the delegated work"))
     assert goal is not None
     targets = ["child", "other"] if second else ["child"]
@@ -96,7 +97,7 @@ def test_stopped_target_refusal_is_side_effect_free(tmp_path):
 
 def test_mixed_targets_project_idle_without_suppressing_active_alternative(tmp_path):
     comms, goal = _waiting(tmp_path, second=True)
-    other_fence = _finish(comms, "other", "other-turn")
+    other_fence = _finish(comms, "other", TurnId('e2141dc9c71046570fc0e6a19ad6f5c1'))
     execution = comms.goals.goal_execution("owner")
     assert [target.incarnation.name for target in execution.inactive_wait_for] == ["other"]
     assert "no active turn: @other" in execution.presentation("owner").summary
@@ -108,9 +109,9 @@ def test_mixed_targets_project_idle_without_suppressing_active_alternative(tmp_p
 
 def test_last_target_finishes_silently_releases_once_and_reopens(tmp_path):
     comms, goal = _waiting(tmp_path, second=True)
-    other_fence = _finish(comms, "other", "other-turn")
+    other_fence = _finish(comms, "other", TurnId('e2141dc9c71046570fc0e6a19ad6f5c1'))
     assert comms.goals.release_waits_after_terminal_turn(other_fence) == ()
-    child_fence = _finish(comms, "child", "child-turn")
+    child_fence = _finish(comms, "child", TurnId('9782df8c75cffb6a483d963ccaefc23b'))
     assert comms.goals.release_waits_after_terminal_turn(child_fence) == ("owner",)
     reopened = wire(comms.root)
     continued = reopened.registry.require("owner").goal
@@ -136,7 +137,7 @@ def test_only_substantive_direct_reply_prevents_release(
 ):
     comms, _goal = _waiting(tmp_path)
     comms.messaging.send("child", "owner", body, role=role).message
-    child_fence = _finish(comms, "child", "child-turn")
+    child_fence = _finish(comms, "child", TurnId('9782df8c75cffb6a483d963ccaefc23b'))
     changed = comms.goals.release_waits_after_terminal_turn(child_fence)
     assert changed == expected_changed
     assert comms.registry.require("owner").goal.state.declared_name == "active"
@@ -146,7 +147,7 @@ def test_only_substantive_direct_reply_prevents_release(
 def test_renamed_target_keeps_incarnation_but_replacement_fails_closed(tmp_path):
     comms, goal = _waiting(tmp_path)
     comms.registry.rename("child", "renamed-child")
-    child_fence = _finish(comms, "renamed-child", "child-turn")
+    child_fence = _finish(comms, "renamed-child", TurnId('9782df8c75cffb6a483d963ccaefc23b'))
     assert comms.goals.release_waits_after_terminal_turn(child_fence) == ("owner",)
     assert comms.registry.require("owner").goal.state.declared_name == "active"
     assert comms.registry.require("owner").goal.id == goal.id
@@ -171,7 +172,7 @@ def test_renamed_target_keeps_incarnation_but_replacement_fails_closed(tmp_path)
 def test_replaced_target_cannot_report_for_old_incarnation(tmp_path):
     comms, goal = _waiting(tmp_path)
     old = comms.registry.require("child")
-    old_fence = _finish(comms, "child", "child-turn")
+    old_fence = _finish(comms, "child", TurnId('9782df8c75cffb6a483d963ccaefc23b'))
     comms.registry.unregister("child")
     comms.registry.remove("child")
     _thread(comms, "child", tmp_path)
@@ -191,7 +192,7 @@ def test_owner_pause_still_prevents_quiet_dependency_release(tmp_path):
         "owner", PausedGoalAction(expect=GoalPrecondition(goal_id=goal.id)), actor=OwnerInvocable
     )
     assert paused is not None
-    fence = _finish(comms, "child", "child-turn")
+    fence = _finish(comms, "child", TurnId('9782df8c75cffb6a483d963ccaefc23b'))
     assert comms.goals.release_waits_after_terminal_turn(fence) == ()
     assert comms.registry.require("owner").goal == paused
     assert comms.registry.require("owner").goal.state.pause_source.declared_name == "owner"
@@ -200,7 +201,7 @@ def test_owner_pause_still_prevents_quiet_dependency_release(tmp_path):
 
 def test_terminal_hook_rechecks_goal_and_owner_identity(tmp_path):
     comms, goal = _waiting(tmp_path)
-    child_fence = _finish(comms, "child", "child-turn")
+    child_fence = _finish(comms, "child", TurnId('9782df8c75cffb6a483d963ccaefc23b'))
     newer = comms.goals.update_goal(
         "owner",
         EditGoalAction(expect=GoalPrecondition(goal_id=goal.id), text="new exact objective"),
@@ -217,7 +218,7 @@ def test_stopped_dependency_cannot_be_declared_live(tmp_path):
     comms = canonical_goal_wire(tmp_path / "wire")
     _thread(comms, "owner", tmp_path)
     _thread(comms, "child", tmp_path)
-    comms.agents.begin_turn("child", "work")
+    comms.agents.begin_turn("child", TurnId('00e13ed7af55b27622f1d6eab5bec014'))
     child = comms.registry.require("child")
     comms.registry.register(child.without_turn(), StoppedThreadStatus())
     goal = comms.goals.update_goal("owner", SetGoalAction(text="Review"))
@@ -232,8 +233,8 @@ def test_stopped_dependency_cannot_be_declared_live(tmp_path):
 def test_delayed_old_finish_cannot_release_new_active_same_id(tmp_path):
     comms, _goal = _waiting(tmp_path)
     old_claim = comms._test_leases["child"]
-    old_fence = _finish(comms, "child", "child-turn")
-    new_claim = _begin(comms, "child", "child-turn")
+    old_fence = _finish(comms, "child", TurnId('9782df8c75cffb6a483d963ccaefc23b'))
+    new_claim = _begin(comms, "child", TurnId('9782df8c75cffb6a483d963ccaefc23b'))
     assert new_claim.identity.generation == old_claim.identity.generation + 1
     active = comms.registry.require("child").turn_record.read()
     assert comms.agents.finish_turn(old_claim) == NoFinishedTurn()
@@ -249,9 +250,9 @@ def test_delayed_old_finish_cannot_release_new_active_same_id(tmp_path):
 @pytest.mark.parametrize("reuse_turn_id", [False, True])
 def test_delayed_old_terminal_cannot_release_newer_turn_before_reply(tmp_path, reuse_turn_id):
     comms, goal = _waiting(tmp_path)
-    old_fence = _finish(comms, "child", "child-turn")
+    old_fence = _finish(comms, "child", TurnId('9782df8c75cffb6a483d963ccaefc23b'))
     assert old_fence is not None
-    newer_id = "child-turn" if reuse_turn_id else "new-child-turn"
+    newer_id = old_fence.turn_id if reuse_turn_id else TurnId.mint()
     _begin(comms, "child", newer_id)
     new_fence = _finish(comms, "child", newer_id)
     assert new_fence is not None
@@ -269,9 +270,9 @@ def test_delayed_old_terminal_cannot_release_newer_turn_before_reply(tmp_path, r
 
 def test_newer_silent_terminal_releases_waiter(tmp_path):
     comms, _goal = _waiting(tmp_path)
-    old_fence = _finish(comms, "child", "child-turn")
-    _begin(comms, "child", "new-child-turn")
-    new_fence = _finish(comms, "child", "new-child-turn")
+    old_fence = _finish(comms, "child", TurnId('9782df8c75cffb6a483d963ccaefc23b'))
+    _begin(comms, "child", TurnId('25b63a30f24cf9d67463f931d800c73a'))
+    new_fence = _finish(comms, "child", TurnId('25b63a30f24cf9d67463f931d800c73a'))
     assert comms.goals.release_waits_after_terminal_turn(old_fence) == ()
     assert comms.goals.release_waits_after_terminal_turn(new_fence) == ("owner",)
     assert isinstance(comms.goals.goal_wait("owner"), NoGoalWait)
@@ -279,7 +280,7 @@ def test_newer_silent_terminal_releases_waiter(tmp_path):
 
 def test_terminal_fence_survives_rename_not_stop_or_metadata_edit(tmp_path):
     comms, _goal = _waiting(tmp_path)
-    fence = _finish(comms, "child", "child-turn")
+    fence = _finish(comms, "child", TurnId('9782df8c75cffb6a483d963ccaefc23b'))
     assert fence is not None
     child = comms.registry.require("child")
     comms.registry.register(replace(child, title=GivenThreadText("New title")), RunningThreadStatus())
@@ -293,7 +294,7 @@ def test_terminal_fence_survives_rename_not_stop_or_metadata_edit(tmp_path):
     assert comms.goals.release_waits_after_terminal_turn(fence) == ("owner",)
 
     another, _goal = _waiting(tmp_path / "stop")
-    stale = _finish(another, "child", "child-turn")
+    stale = _finish(another, "child", TurnId('9782df8c75cffb6a483d963ccaefc23b'))
     child = another.registry.require("child")
     another.registry.unregister("child")
     another.registry.register(child.without_turn(), RunningThreadStatus())

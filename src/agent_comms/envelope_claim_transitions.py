@@ -19,6 +19,8 @@ from .field_codec import (
     EnvelopeSequence,
     FieldCodec,
     Id128Text,
+    MessageId,
+    TurnId,
     NullMember,
     ProjectionSequence,
     RecordMember,
@@ -30,7 +32,7 @@ from .field_codec import (
     WireRequired,
 )
 from .message_reference import MessageReference
-from .thread_identity import GenerationCounter, RecordedThreadIncarnation, TurnId
+from .thread_identity import GenerationCounter, RecordedThreadIncarnation
 
 if TYPE_CHECKING:
     from .coordination_tables.attempts import AttemptRecord
@@ -178,11 +180,10 @@ class RecordedScope(ClaimScope, declared_name=None):
 
     owner_claimed_generation: int
     operation_id: Annotated[str, Id128Text]
-    turn_id: str
+    turn_id: TurnId
 
     def __post_init__(self) -> None:
         GenerationCounter.require_positive(self.owner_claimed_generation)
-        TurnId.for_registration(self.turn_id)
 
     def held_at(self, claimed_generation: int) -> bool:
         return claimed_generation == self.owner_claimed_generation
@@ -208,14 +209,14 @@ class WakeClaim(RecordMember, RecordedScope):
 
     wire_root_id: Annotated[str, Id128Text]
     source_seq: int
-    source_message_id: Annotated[str, BoundedText]
+    source_message_id: MessageId
     wake_assignment_id: Annotated[str, BoundedText, WireName("wake_claim_id")]
     wake_revision: int
     recipient_lookup: Annotated[str, Id128Text]
     execution_id: Annotated[str, BoundedText]
     participant_generation: int
     attempt_ordinal: int
-    version: Annotated[Literal[1], WireRequired()] = 1
+    version: Annotated[Literal[2], WireRequired()] = 2
 
     def belongs_to(self, attempt: AttemptRecord) -> bool:
         # The attempts table's primary key fixes its immutable participant identity.

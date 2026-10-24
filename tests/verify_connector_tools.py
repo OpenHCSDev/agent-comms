@@ -29,7 +29,7 @@ from agent_comms.child_process import ProcessIdentity
 from agent_comms.comms import Comms, wire
 from agent_comms.connector import Connector
 from agent_comms.connector_store import ConnectorStore
-from agent_comms.field_codec import FieldCodec
+from agent_comms.field_codec import FieldCodec, TurnId
 from agent_comms.goal_actions import CreateProblemGoalAction, PausedGoalAction, SetGoalAction
 from agent_comms.goals import CountCheckResult, OrderCheck
 from agent_comms.owner_requests import NewestOpenRequest
@@ -138,7 +138,9 @@ def arguments(comms: Comms, name: str, project: Path, checkout: Path) -> dict:
             replace(thread, process_identity=ProcessIdentity.capture(os.getpid()))
         )
         owner, claim = comms.registry.live_owner_with_claim("claude-ai")
-        comms.registry.lease_live_turn_with_claim(owner, "probe-turn", expected_generation=claim)
+        comms.registry.lease_live_turn_with_claim(
+            owner, TurnId('5e1f1a1948276272eb5c186e77e8285b'), expected_generation=claim
+        )
     cases = {
         "comms_pin_channel": {"name": "#probe", "pinned": True},
         "comms_pin_thread": {"channel": "#probe", "name": "worker", "pinned": True},

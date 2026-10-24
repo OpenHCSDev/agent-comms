@@ -8,7 +8,7 @@ import pytest
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.comms import wire
 from agent_comms.lifecycle_capability import Active
-from agent_comms.field_codec import FieldCodec
+from agent_comms.field_codec import FieldCodec, TurnId
 from agent_comms.goal_actions import (
     ActiveGoalAction,
     BlockedGoalAction,
@@ -61,7 +61,7 @@ def test_second_goal_report_in_one_turn_is_rejected(comms, monkeypatch, tmp_path
         Thread('owner', frozenset(), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid()))
     )
     goal = invoke_tool(comms, "comms_set_goal", {"text": "finish this"})["goal"]
-    comms.agents.begin_turn("owner", "same-assistant-turn")
+    comms.agents.begin_turn("owner", TurnId('d7f9429f60abc2787fc3e9717054ea41'))
 
     first = invoke_tool(
         comms,
@@ -84,7 +84,8 @@ def test_replacing_or_clearing_goal_cannot_reset_turn_report_guard(comms, monkey
         Thread('owner', frozenset(), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid()))
     )
     first = invoke_tool(comms, "comms_set_goal", {"text": "first"})["goal"]
-    comms.agents.begin_turn("owner", "same-assistant-turn")
+    turn = TurnId('d7f9429f60abc2787fc3e9717054ea41')
+    comms.agents.begin_turn("owner", turn)
     invoke_tool(
         comms,
         "comms_goal",
@@ -105,7 +106,7 @@ def test_replacing_or_clearing_goal_cannot_reset_turn_report_guard(comms, monkey
     after_clear = invoke_tool(comms, "comms_set_goal", {"text": "after clear"})["goal"]
     reopened = wire(comms.root)
     assert any(
-        entry.reports_turn("same-assistant-turn")
+        entry.reports_turn(turn)
         for entry in reopened.registry.goal_history("owner")
     )
     with pytest.raises(ValueError):

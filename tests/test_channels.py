@@ -17,7 +17,7 @@ from agent_comms.channel_management import (
 from agent_comms.bus import Bus
 from agent_comms.comms import wire
 from conftest import installed_comms
-from agent_comms.field_codec import FieldCodec
+from agent_comms.field_codec import FieldCodec, TurnId
 from agent_comms.display_order import (
     ChannelSort, CreatedThreadSort, LastActivityThreadSort, LastMessageThreadSort, ThreadSort,
 )
@@ -505,7 +505,7 @@ def test_membership_notices_follow_exact_membership_and_do_not_wake(tmp_path):
     assert [message.role.change.declared_name for message in history] == ["joined", "left"]
     assert all(not message.role.response_policy(message).starts_turn for message in history)
     assert not comms.views.viewer_snapshot(str(tmp_path)).participants("#api")
-    comms.agents.begin_turn("peer", "active-turn")
+    comms.agents.begin_turn("peer", TurnId('e99af36cdfcffbc191cce98c5d771afb'))
     assert [
         person.thread.name for person in comms.views.viewer_snapshot(str(tmp_path)).participants("#api")
     ] == ["peer"]

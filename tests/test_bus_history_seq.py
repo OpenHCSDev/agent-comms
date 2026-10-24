@@ -15,7 +15,7 @@ from agent_comms.bus_tables import MessageIdentitySource
 from agent_comms.messages import BusRow, InfoKind, Message
 from agent_comms.comms import wire
 from agent_comms.errors import HumanSendRefusedError
-from agent_comms.field_codec import FieldCodec, MalformedRecord
+from agent_comms.field_codec import FieldCodec, MalformedRecord, MessageId
 from agent_comms.historical_views import HistoryArchive
 from agent_comms.locked_store import RegistryFile
 from agent_comms.message_bus import MessageBus
@@ -104,7 +104,7 @@ def test_message_identity_lookup_preserves_missing_and_ambiguous_refusal(tmp_pat
     original = messages.bus.lookup(1)
     assert messages.bus.lookup_message(original.message_id).reference == original.reference
     with pytest.raises(RowNotFoundError):
-        messages.bus.lookup_message("missing")
+        messages.bus.lookup_message(MessageId.mint("missing"))
     messages.bus.append(lambda seq, db: replace(original, seq=seq))
     with pytest.raises(MalformedRecord, match="Expected one"):
         messages.bus.lookup_message(original.message_id)

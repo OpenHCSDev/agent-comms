@@ -33,7 +33,7 @@ from agent_comms.commander_pings import CommanderUpdate
 from agent_comms.service_passes import ServicePassStore
 from agent_comms.coordinator import Coordination
 from agent_comms.errors import CommittedMessageError, HumanSendRefusedError, RelationViolationError
-from agent_comms.field_codec import FieldCodec
+from agent_comms.field_codec import FieldCodec, MessageId, TurnId
 from agent_comms.goal_actions import (
     CreateProblemGoalAction,
     ReissuedOrderGoalAction,
@@ -107,8 +107,13 @@ def held_bus(comms, tmp_path, source_repository, configured_repository):
     inputs = InputDispositions(comms.root)
     inputs.record("unresolved-input", seq=None, owner="worker", claim_scope=1,
                   target="worker", text="Do not replay this input")
-    assert inputs.bind("unresolved-input", claim_scope=1, turn_id="old-turn",
-                       native_id=uuid4().hex, text="Do not replay this input")
+    assert inputs.bind(
+        "unresolved-input",
+        claim_scope=1,
+        turn_id=TurnId('310c74d7ac243239a928d4021c709acb'),
+        native_id=uuid4().hex,
+        text="Do not replay this input",
+    )
     configured_repository(comms)
     copied = tmp_path / "copied-bus"
     StoreBackup.copy_tree(comms.root, copied)
@@ -342,7 +347,7 @@ def test_a_running_turn_is_not_a_stalled_holder(held_bus):
     blocked_holder(held_bus)
     thread = held_bus.registry.require("worker")
     held_bus.registry.register(replace(thread, process_identity=ProcessIdentity.capture(os.getpid())))
-    owner = held_bus.agents.begin_turn("worker", "current-direct-task")
+    owner = held_bus.agents.begin_turn("worker", TurnId('3e748b426825aaaad5def94520fa5858'))
     lease = owner.thread.turn_lease
     assert lease is not None
     try:
@@ -378,7 +383,7 @@ def test_latest_answer_uses_the_complete_original_reference_and_time_cut(held_bu
     publish(held_bus, "lead", "worker", since + 3)
     with pytest.raises(RelationViolationError):
         publish(held_bus, "lead", "worker", since + 4,
-                answers=(MessageReference(question.seq, "wrong-original"),))
+                answers=(MessageReference(question.seq, MessageId.mint("wrong-original")),))
     expired = publish(held_bus, "worker", "lead", since - 1)
     publish(held_bus, "lead", "worker", since + 5, answers=(expired.reference,))
     scope = RepliesDisplayScope(frozenset({"lead"}), frozenset({"worker"}))
@@ -401,7 +406,8 @@ def test_unanswered_pages_match_the_complete_answer_reference(held_bus):
                       for offset in range(105))
     with pytest.raises(RelationViolationError):
         publish(held_bus, "lead", "worker", now,
-                answers=(MessageReference(questions[0].seq, "not-the-original-hash"),))
+                answers=(MessageReference(
+                    questions[0].seq, MessageId.mint("not-the-original-hash")),))
     answered = (questions[1].reference, questions[-1].reference)
     held_bus.messaging.send("lead", "outsider", "Answers retain their original references",
                             answers=answered)

@@ -16,8 +16,8 @@ from .owner_requests import OwnerRequestId, RequestDirective
 from .projection_source import ProjectionSource
 from .thread_identity import (
     RecordedThreadIncarnation,
+    RegisteredTurn,
     ThreadIncarnation,
-    TurnId,
     TurnIdentity,
     UserThreadRole,
 )
@@ -406,14 +406,14 @@ class ScopedTaskDeclaration(TaskAttachment):
 @dataclass(frozen=True, kw_only=True)
 class ModelTaskDeclaration(ScopedTaskDeclaration):
     source_turn: TurnIdentity
-    source_turn_id: TurnId
+    source_turn_id: RegisteredTurn
     permits_agent_revision = True
 
     @classmethod
     def from_claim(cls, owner: Thread, scope: TaskScopeSelection, change: TaskChange, **content) -> Self:
         lease = owner.require_turn_lease()
         return cls(scope=scope.select(owner), source_turn=lease.identity,
-                   source_turn_id=TurnId(lease.turn_id), change=change, **content)
+                   source_turn_id=RegisteredTurn(lease.turn_id), change=change, **content)
 
     def __post_init__(self):
         self.author.require_recorded()

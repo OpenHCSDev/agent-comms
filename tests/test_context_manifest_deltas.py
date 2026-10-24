@@ -9,9 +9,9 @@ import pytest
 from agent_comms.context_store import ContextRequest
 import json
 
-from agent_comms.field_codec import FieldCodec
+from agent_comms.field_codec import FieldCodec, TurnId
 from agent_comms.native_session_reopen import NativeSessionIdentity
-from agent_comms.thread_identity import TurnId, TurnIdentity
+from agent_comms.thread_identity import RegisteredTurn, TurnIdentity
 from agent_comms.turn_context import ObservedDispatchRequest
 from agent_comms.turn_context import (
     ContextManifest, JournalProvenance, NativeProvenance, RecordedContextPredecessor,
@@ -33,11 +33,19 @@ def context(owner, path, count, turn):
         for i in range(count))
     transcript = segment(TranscriptSegment, '\n'.join(f'Entry {i}' for i in range(count)),
                          contributors=contributors)
-    return ContextManifest(owner.incarnation,
-        RecordedContextTurn(TurnId(f'turn-{turn}'), TurnIdentity(owner.incarnation, turn)),
-        (segment(SystemLayerSegment, 's' * 27000),
-         segment(ToolCatalogSegment, 't' * 64000), transcript), 'counter',
-        ObservedDispatchRequest(f'request-{turn}'))
+    return ContextManifest(
+        owner.incarnation,
+        RecordedContextTurn(
+            RegisteredTurn(TurnId(f"{turn:032x}")), TurnIdentity(owner.incarnation, turn)
+        ),
+        (
+            segment(SystemLayerSegment, 's' * 27000),
+            segment(ToolCatalogSegment, 't' * 64000),
+            transcript,
+        ),
+        'counter',
+        ObservedDispatchRequest(f'request-{turn}'),
+    )
 
 
 def test_context_deltas_restore_original_text_and_incremental_membership(tmp_path):
@@ -46,8 +54,17 @@ def test_context_deltas_restore_original_text_and_incremental_membership(tmp_pat
     first = context(owner, tmp_path, 328, 1)
     second = context(owner, tmp_path, 330, 2)
     prior = UNREAD_CONTEXT
-    for manifest in (first, second, replace(second, turn=replace(second.turn, identity=TurnId('turn-3')),
-                                          request_id=ObservedDispatchRequest('request-3'))):
+    for manifest in (
+        first,
+        second,
+        replace(
+            second,
+            turn=replace(
+                second.turn, identity=RegisteredTurn(TurnId('431ad49b3e0129a11ea5a0320c188024'))
+            ),
+            request_id=ObservedDispatchRequest('request-3'),
+        ),
+    ):
         # The writer keeps the request it recorded as the next request's prior.
         prior = comms.contexts.record_after(prior, manifest)
     page = comms.contexts.page(owner.name, comms.registry)

@@ -4,22 +4,22 @@ import asyncio
 import json
 import sys
 from pathlib import Path
-from uuid import uuid4
 
 import pytest
 
 import agent_comms.agent_events as ae
 import agent_comms.backend as backend
-from agent_comms.agent_backend import InputContent, InputId, InputRequest, SteerInputPolicy
+from agent_comms.agent_backend import InputContent, InputRequest, SteerInputPolicy
+from agent_comms.field_codec import InputId
 from agent_comms.pi_rpc import PiRpcChannel
 from agent_comms.turn_watchdog import ModelWait
 from pi_session_turn import one_turn_events
 
 
-def steer(text: str, input_id: str | None = None) -> InputRequest:
+def steer(text: str, input_id: InputId | None = None) -> InputRequest:
     """A queued steering input as Core hands it to the running turn."""
     return InputRequest(
-        input_id=InputId(input_id or f"agent-comms-steer-{uuid4().hex}"),
+        input_id=InputId.mint() if input_id is None else input_id,
         content=InputContent(text=text),
         when_busy=SteerInputPolicy,
     )

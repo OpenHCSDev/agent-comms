@@ -13,7 +13,7 @@ from agent_comms.child_process import NoProcess, ProcessIdentity
 from agent_comms.comms import wire
 from conftest import installed_comms
 from agent_comms.errors import RelationViolationError
-from agent_comms.field_codec import FieldCodec
+from agent_comms.field_codec import FieldCodec, TurnId
 from agent_comms.read_basis import Conversation
 from agent_comms.turn_lease import NoTurnLease
 from agent_comms.read_ledger import ReadDocument
@@ -70,7 +70,9 @@ def test_metadata_and_turns_do_not_replace_process_owner(tmp_path):
     identity = before.owner_identity("owner")
     registry.register(replace(owner, title=GivenThreadText("new metadata")))
     registry.heartbeat("owner")
-    leased, generation = registry.lease_local_turn("owner", "turn")
+    leased, generation = registry.lease_local_turn(
+        "owner", TurnId('9b473845f684444f80a26586ae298d2b')
+    )
     assert generation == identity.generation
     assert leased.require_turn_lease().identity == TurnIdentity(identity.incarnation, 1)
     assert registry.snapshot().owner_identity("owner") == identity
@@ -87,7 +89,7 @@ def test_metadata_and_turns_do_not_replace_process_owner(tmp_path):
 
 def test_owner_replacement_preserves_turn_counter_and_historical_incarnation(tmp_path):
     registry = registry_with_owner(tmp_path)
-    registry.lease_local_turn("owner", "turn")
+    registry.lease_local_turn("owner", TurnId('9b473845f684444f80a26586ae298d2b'))
     registry.release_turn(registry.require("owner").turn_lease)[0]
     before = registry.snapshot()
     registry.register(before.threads["owner"], new_owner=True)
@@ -102,7 +104,7 @@ def test_registry_cannot_forge_turn_counter(tmp_path):
     registry = registry_with_owner(tmp_path)
     registry.register(replace(registry.require("owner"), turn_generation=300))
     assert registry.require("owner").turn_generation == 0
-    registry.lease_local_turn("owner", "turn")
+    registry.lease_local_turn("owner", TurnId('9b473845f684444f80a26586ae298d2b'))
     registry.release_turn(registry.require("owner").turn_lease)[0]
     registry.register(replace(registry.require("owner"), turn_generation=500))
     assert registry.require("owner").turn_generation == 1
@@ -132,11 +134,13 @@ def test_same_process_idle_presence_does_not_rotate_identity(tmp_path):
 def test_exact_turn_identity_survives_alias_but_not_reused_turn_id(tmp_path):
     comms = wire(tmp_path)
     comms.registry.declare(Thread('owner', frozenset(), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid())))
-    first = comms.agents.begin_turn("owner", "reused").turn_lease
+    first = comms.agents.begin_turn("owner", TurnId('7ad47c54939ef72323893e6c952c5f3a')).turn_lease
     assert first.identity.incarnation == comms.registry.require("owner").incarnation
     comms.registry.rename("owner", "renamed")
     assert isinstance(comms.agents.finish_turn(first), FinishedTurnFence)
-    second = comms.agents.begin_turn("renamed", "reused").turn_lease
+    second = comms.agents.begin_turn(
+        "renamed", TurnId('7ad47c54939ef72323893e6c952c5f3a')
+    ).turn_lease
     assert second.identity.generation == first.identity.generation + 1
     assert isinstance(comms.agents.finish_turn(first), NoFinishedTurn)
     assert isinstance(comms.agents.finish_turn(second), FinishedTurnFence)
@@ -145,7 +149,7 @@ def test_exact_turn_identity_survives_alias_but_not_reused_turn_id(tmp_path):
 @pytest.mark.parametrize("revocation", ["finish", "stop"])
 def test_restored_active_turn_has_no_claim_authority(tmp_path, revocation):
     registry = registry_with_owner(tmp_path)
-    saved, _ = registry.lease_local_turn("owner", "old")
+    saved, _ = registry.lease_local_turn("owner", TurnId('cba06b5736faf67e54b07b561eae9439'))
     if revocation == "stop":
         registry.unregister("owner")
     else:
@@ -162,7 +166,7 @@ def test_read_ledger_roundtrip_preserves_historical_identity(tmp_path, *, thread
     conversation = FieldCodec.decode(Conversation, original)
     assert conversation.participants == (owner.incarnation,)
     assert FieldCodec.decode(Conversation, FieldCodec.encode(conversation)) == conversation
-    registry.lease_local_turn("owner", "new")
+    registry.lease_local_turn("owner", TurnId('11507a0e2f5e69d5dfa40a62a1bd7b6e'))
     assert conversation.current(registry.snapshot())
     registry.release_turn(registry.require("owner").turn_lease)[0]
     registry.register(registry.require("owner"), new_owner=True)

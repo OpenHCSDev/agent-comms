@@ -20,7 +20,7 @@ from .coordination_errors import IdentityConflict, RetryScheduled, StaleFence
 from .coordination_tables.assignments import WakeAssignment
 from .coordinator import Coordination
 from .durable_turn import DurableTurn
-from .field_codec import Id128Text
+from .field_codec import InputId
 from .private_send_rules import (
     NativeBindingCheck,
     NativeClaimCheck,
@@ -73,7 +73,7 @@ class NativeSendStage(ABC):
         self,
         store: Coordination,
         owner: ParticipantOwner,
-        input_id: str,
+        input_id: InputId,
         token_digest: str,
         context: NativeContextProof,
         failure: TurnFailure,
@@ -92,7 +92,7 @@ class NativeSendStage(ABC):
         await Coordination.run_worker(lambda: owner.require_registry(bus._registry))
 
     def reserve(self, store: Coordination, owner: ParticipantOwner, token_digest: str) -> str:
-        input_id = Id128Text.mint()
+        input_id = InputId.mint()
         with store.session.writing() as db:
             NativeRuntimeTable.require_installed(db)
             owner.require(store, self.recipient_lookup)
@@ -108,13 +108,13 @@ class NativeSendStage(ABC):
             self.execution.record_sources(db, input_id, self.assignments)
         return input_id
 
-    def identity(self, input_id: str, owner) -> NativeInputIdentity:
+    def identity(self, input_id: InputId, owner) -> NativeInputIdentity:
         return NativeInputIdentity(
             input_id, self.execution, owner,
         )
 
     def pending_input(
-        self, store: Coordination, input_id: str, owner: ParticipantOwner, token_digest: str
+        self, store: Coordination, input_id: InputId, owner: ParticipantOwner, token_digest: str
     ) -> NativeRuntimeInput:
         """Read current durable ownership inside the caller's read/write transaction."""
         db = store.session._connection
@@ -139,7 +139,7 @@ class NativeSendStage(ABC):
         self,
         store: Coordination,
         owner: ParticipantOwner,
-        input_id: str,
+        input_id: InputId,
         token_digest: str,
         context: NativeContextProof,
         *,
@@ -181,7 +181,7 @@ class NativeSendStage(ABC):
             self.require_phase(store, current)
 
     def require_reservation(
-        self, db: sqlite3.Connection, input_id: str, owner: ParticipantOwner, token_digest: str
+        self, db: sqlite3.Connection, input_id: InputId, owner: ParticipantOwner, token_digest: str
     ) -> NativeRuntimeInput:
         reserved = NativeRuntimeInput.one(db, input_id=input_id)
         if reserved is None:
@@ -206,7 +206,7 @@ class NativeSendStage(ABC):
 
     @contextmanager
     def bound_prompt(
-        self, store: Coordination, input_id: str, owner: ParticipantOwner,
+        self, store: Coordination, input_id: InputId, owner: ParticipantOwner,
         wire_root_id: str, prompt: str,
     ) -> Iterator[PromptBinding]:
         with expected_prompt_bindings(store, (input_id,)) as bindings:
@@ -303,7 +303,7 @@ class TriageNativeSend(NativeSendStage):
         self,
         store: Coordination,
         owner: ParticipantOwner,
-        input_id: str,
+        input_id: InputId,
         token_digest: str,
         context: NativeContextProof,
         decision: SelectedTriage,
@@ -385,7 +385,7 @@ class FullNativeSend(NativeSendStage):
         self,
         store: Coordination,
         owner: ParticipantOwner,
-        input_id: str,
+        input_id: InputId,
         token_digest: str,
         context: NativeContextProof,
     ) -> None:

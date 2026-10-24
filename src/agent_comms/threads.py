@@ -62,12 +62,13 @@ from .thread_creation import CreationSeconds, CreationTime, GeneratedCreationTim
 from .thread_execution import NativeThreadExecution, ThreadExecution
 from .thread_identity import (
     AgentThreadRole,
+    ObservedTurn,
     OfferedTools,
+    RegisteredTurn,
     ThreadIncarnation,
     ThreadIncarnationRecord,
     ThreadRole,
     TurnFence,
-    TurnId,
     TurnIdentity,
     UnobservedTools,
 )
@@ -488,7 +489,7 @@ class Thread(ThreadProvenance):
     def require_current_turn(self, claim_scope: int) -> None:
         self.turn_record.read().require_current(claim_scope, self.turn_generation)
 
-    def require_turn(self, turn_id: TurnId, claim_scope: int) -> None:
+    def require_turn(self, turn_id: RegisteredTurn, claim_scope: int) -> None:
         if not self.turn_lease.attests(claim_scope, turn_id):
             raise RelationViolationError("live owner does not hold the requested turn")
 
@@ -576,10 +577,10 @@ class Thread(ThreadProvenance):
     def require_turn_lease(self) -> TurnLeaseFence:
         return self.turn_lease.require(RelationViolationError("An authorized original turn is required"))
 
-    def has_authored_turn(self, identity: TurnIdentity, turn: TurnId) -> bool:
+    def has_authored_turn(self, identity: TurnIdentity, turn: RegisteredTurn) -> bool:
         return self.turn_lease.authored(identity, turn)
 
-    def has_observed_task_turn(self, identity: TurnIdentity, turn: TurnId) -> bool:
+    def has_observed_task_turn(self, identity: TurnIdentity, turn: RegisteredTurn) -> bool:
         """Check whether a task record can refer to this thread's current or preceding turn.
 
         Reject a different thread registration. During a turn, accept its exact
@@ -599,12 +600,11 @@ class Thread(ThreadProvenance):
         """The turn generation this thread's registry entry currently names."""
         return TurnIdentity(self.incarnation, self.turn_generation)
 
-    def observed_turn(self, claim_scope: int) -> TurnFence | None:
+    def observed_turn(self, claim_scope: int) -> ObservedTurn:
         """Passive current/last-completed witness; never a begin-turn grant."""
-        turn_id = self.turn_state.observed_id()
-        if turn_id is None:
-            return None
-        return TurnFence(self.turn_identity, turn_id, claim_scope)
+        return self.turn_state.active.observed_turn(
+            self.turn_state.finished, self.turn_identity, claim_scope,
+        )
 
     def latest_idle_turn(self, fence: TurnFence, claim_scope: int) -> bool:
         """Only the exact latest completed turn can release a dependency."""

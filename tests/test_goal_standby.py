@@ -6,6 +6,7 @@ from dataclasses import replace
 import pytest
 
 from agent_comms.child_process import ProcessIdentity
+from agent_comms.field_codec import TurnId
 from agent_comms.goal_actions import (
     EditGoalAction,
     GoalPrecondition,
@@ -40,7 +41,7 @@ def test_standby_rejects_closed_wait_cycle_while_both_turns_are_active(tmp_path)
         comms.registry.declare(
             Thread(name, frozenset(), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid()))
         )
-        comms.agents.begin_turn(name, f"{name}-turn")
+        comms.agents.begin_turn(name, TurnId.mint())
     alice = comms.goals.update_goal("alice", SetGoalAction(text="Wait for Bob"))
     bob = comms.goals.update_goal("bob", SetGoalAction(text="Wait for Alice"))
     assert alice is not None and bob is not None
@@ -50,7 +51,7 @@ def test_standby_rejects_closed_wait_cycle_while_both_turns_are_active(tmp_path)
     )
     alice_wait = comms.goals.goal_wait("alice")
     assert alice_wait is not None
-    assert alice_wait.report_turn_id == "alice-turn"
+    assert alice_wait.report_turn_id == comms.registry.require("alice").turn_lease.turn_id
     assert alice_wait.report_turn_generation == comms.registry.require("alice").turn_generation
     with pytest.raises(ValueError):
         comms.goals.update_goal(
@@ -68,7 +69,7 @@ def test_standby_allows_independent_alternative_to_wait_cycle(tmp_path):
         comms.registry.declare(
             Thread(name, frozenset(), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid()))
         )
-        comms.agents.begin_turn(name, f"{name}-turn")
+        comms.agents.begin_turn(name, TurnId.mint())
     alice = comms.goals.update_goal("alice", SetGoalAction(text="Wait for Bob or Carol"))
     bob = comms.goals.update_goal("bob", SetGoalAction(text="Wait for Alice"))
     assert alice is not None and bob is not None
@@ -92,7 +93,7 @@ def test_idle_live_alternative_keeps_wait_cycle_open(tmp_path):
             Thread(name, frozenset(), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid()))
         )
     for name in ("alice", "bob"):
-        comms.agents.begin_turn(name, f"{name}-turn")
+        comms.agents.begin_turn(name, TurnId.mint())
     alice = comms.goals.update_goal("alice", SetGoalAction(text="Wait for Bob or Carol"))
     bob = comms.goals.update_goal("bob", SetGoalAction(text="Wait for Alice"))
     carol = comms.goals.update_goal("carol", SetGoalAction(text="Idle goal"))
@@ -116,11 +117,11 @@ def test_dead_active_turn_does_not_make_wait_cycle_runnable(tmp_path):
         comms.registry.declare(
             Thread(name, frozenset(), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid()))
         )
-        comms.agents.begin_turn(name, f"{name}-turn")
+        comms.agents.begin_turn(name, TurnId.mint())
     comms.registry.declare(
         Thread('carol', frozenset(), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid()))
     )
-    comms.agents.begin_turn("carol", "carol-turn")
+    comms.agents.begin_turn("carol", TurnId('91a3ae9c092f86bc92b86f06b3eb613a'))
     carol_thread = comms.registry.require("carol")
     assert carol_thread.executing
     record = carol_thread.require_turn_lease().record
@@ -169,7 +170,7 @@ def test_idle_live_dependency_keeps_wait_group_open(tmp_path):
         comms.registry.declare(Thread(
             name, frozenset(), str(tmp_path),
             process_identity=ProcessIdentity.capture(os.getpid())))
-        comms.agents.begin_turn(name, f"{name}-turn")
+        comms.agents.begin_turn(name, TurnId.mint())
     alice = comms.goals.update_goal("alice", SetGoalAction(text="Wait for Bob"))
     comms.goals.update_goal("bob", SetGoalAction(text="Finish work and answer later"))
     comms.goals.update_goal("alice", StandbyGoalAction(
@@ -192,7 +193,7 @@ def test_liveness_check_releases_preexisting_closed_wait_group(tmp_path, pending
         comms.registry.declare(
             Thread(name, frozenset(), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid()))
         )
-        comms.agents.begin_turn(name, f"{name}-turn")
+        comms.agents.begin_turn(name, TurnId.mint())
     alice = comms.goals.update_goal("alice", SetGoalAction(text="Wait for Bob"))
     bob = comms.goals.update_goal("bob", SetGoalAction(text="Wait for Alice"))
     assert alice is not None and bob is not None
@@ -240,7 +241,7 @@ def test_new_live_dependency_turn_keeps_old_wait_group_open(tmp_path, bound_old_
         comms.registry.declare(
             Thread(name, frozenset(), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid()))
         )
-        comms.agents.begin_turn(name, f"{name}-first")
+        comms.agents.begin_turn(name, TurnId.mint())
     alice = comms.goals.update_goal("alice", SetGoalAction(text="Wait for Bob"))
     bob = comms.goals.update_goal("bob", SetGoalAction(text="Wait for Alice"))
     assert alice is not None and bob is not None
@@ -258,13 +259,13 @@ def test_new_live_dependency_turn_keeps_old_wait_group_open(tmp_path, bound_old_
             (GoalWaitTarget(peer.incarnation.require_recorded()),),
             owner=owner.incarnation.require_recorded(),
             target_turn_generations=(peer.turn_generation,),
-            report_turn_id="bob-first" if bound_old_turn else None,
+            report_turn_id=owner.turn_lease.turn_id if bound_old_turn else None,
             report_turn_generation=owner.turn_generation if bound_old_turn else None,
         )
     )
     comms.agents.finish_turn(comms.registry.require("alice").turn_lease)
     comms.agents.finish_turn(comms.registry.require("bob").turn_lease)
-    comms.agents.begin_turn("bob", "bob-independent-new")
+    comms.agents.begin_turn("bob", TurnId('51baa1dde83052cee4eb9bef5397a63c'))
     wait = comms.goals.goal_wait("alice")
     assert wait is not None
     assert comms.goals.recover_closed_goal_wait("alice") == ()

@@ -13,7 +13,7 @@ import pytest
 from agent_comms.session_file import RegistrySessionLocation
 from agent_comms.cli import main
 from agent_comms.cli_commands import ConstraintPinnedResult
-from agent_comms.field_codec import FieldCodec
+from agent_comms.field_codec import InputId, FieldCodec
 from agent_comms.context_segments.retained import RetainedSegment
 from agent_comms.turn_lease import NoTurnLease
 from stored_inputs import stored_inputs
@@ -142,7 +142,7 @@ async def original_input_consumer_journey(tmp_path, command):
         async with QueuedInput.reserve(
             agent.inputs, "beta", "beta", text=wording, prompt=wording, echo=True,
             images=(), controller=Client(), origin=origin,
-        ) as reservation:
+         input_id=InputId.mint()) as reservation:
             originals.append(reservation.source)
             reservation.release()
     assert agent.inputs.dispositions.record(

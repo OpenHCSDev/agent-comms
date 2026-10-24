@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import secrets
 from collections.abc import Awaitable, Callable, Generator, Sequence
 from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
@@ -24,6 +23,7 @@ from .coordination_tables.executions import WireOrigin
 from .coordinator import Coordination
 from .cursor_publication import CursorDelivery
 from .errors import RelationViolationError
+from .field_codec import TurnId
 from .message_bus import MessageBus
 from .message_reference import MessageReference
 from .mro_dispatch import MroDispatch, handles
@@ -268,7 +268,7 @@ class SelectedParticipant(MroDispatch):
             owner.thread.turn_record.read().require_idle()
             thread, generation = comms.registry.lease_live_turn_with_claim(
                 owner.thread,
-                secrets.token_hex(16),
+                TurnId.mint(),
                 expected_generation=owner.claimed_generation,
             )
         except RelationViolationError as error:

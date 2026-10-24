@@ -9,6 +9,7 @@ from contextlib import closing
 from pathlib import Path
 
 import pytest
+from agent_comms.field_codec import TurnId
 from agent_comms.threads import ParkedThreadWorkState
 
 from agent_comms.active_route import ActiveRoute, read_active_route, route_new_bus
@@ -246,7 +247,7 @@ def test_practice_copy_takes_turn_files_in_the_registry_cut(private_directory):
     (root / "storage.json").write_text(json.dumps({"floor_gib": 0}))
     comms.registry.declare(Thread(
         "owner", frozenset(), str(root), process_identity=ProcessIdentity.capture(os.getpid())))
-    lease = comms.agents.begin_turn("owner", "turn").turn_lease
+    lease = comms.agents.begin_turn("owner", TurnId('9b473845f684444f80a26586ae298d2b')).turn_lease
     turn = comms.registry.require("owner").turn_record.path
     assert turn in comms.registry.store.cut_paths
 

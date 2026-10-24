@@ -13,7 +13,7 @@ from agent_comms.coordination_contracts import (
 )
 from agent_comms.coordination_schema import CoordinatorRow
 from agent_comms.coordination_tables.executions import ExecutionReference, RetryPartition, WireOrigin
-from agent_comms.field_codec import SnapshotExclude, WireName, projected
+from agent_comms.field_codec import MessageId, SnapshotExclude, WireName, projected
 from agent_comms.obligation_states import ResponseState
 from agent_comms.reason_codes import ReasonCode
 from agent_comms.typed_table import (
@@ -123,7 +123,7 @@ class ResponseObligation(
         Column(generated="json_extract(lifecycle, '$.kind')", check="state IN ({response_names})"),
     )
     published_message_id: ClassVar[Generated] = Generated(
-        Annotated[str, WireName("receipt_message_id")],
+        Annotated[MessageId, WireName("receipt_message_id")],
         Column(
             record_key=True,
             generated="json_extract(lifecycle, '$.message_id')",

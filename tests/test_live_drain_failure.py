@@ -17,6 +17,7 @@ from agent_comms.activity import (
 from agent_comms.comms import wire
 from agent_comms.coordinator import Coordination
 from agent_comms.drain_failures import drain_failures
+from agent_comms.field_codec import TurnId
 from test_acp_private_nk_delivery import _session
 from test_coordinated_runtime import tmp_path as private_root_fixture
 
@@ -85,7 +86,9 @@ async def test_live_drain_schema_failure_visible_until_real_recovery(tmp_path, b
             replace(failed.activity.source_event(), timestamp=time.time() - 1000)
         )
         assert owner_view(comms).presentation.status.details == (diagnostic.summary,)
-        lease = comms.agents.begin_turn("beta", "ordinary-unrelated-turn").turn_lease
+        lease = comms.agents.begin_turn(
+            "beta", TurnId('8cd49e85997e272cc5c54e3ea84e658d')
+        ).turn_lease
         comms.agents.finish_turn(lease)
         assert owner_view(comms).presentation.status.details == (diagnostic.summary,)
         # An explicit operator restores the actual current schema; readers do no repair.
@@ -109,7 +112,7 @@ async def test_successful_drain_clears_failure_during_active_turn(tmp_path):
     with pytest.raises(OSError):
         async with drain_failures(comms, "beta", owner):
             raise OSError("past drain failed")
-    lease = comms.agents.begin_turn("beta", "later-successful-turn").turn_lease
+    lease = comms.agents.begin_turn("beta", TurnId('028a74a690b644b1557f0f9b70b9d9a2')).turn_lease
     try:
         async with drain_failures(comms, "beta", owner):
             await agent.inputs.drain_inbox("beta")

@@ -21,7 +21,7 @@ from .acp_extension import (
     encode_updates,
 )
 from .activity import FailedWakeDiagnostic
-from .agent_backend import ClearQueue, InputContent, InputId, SendNow, TurnInbox, TurnInboxItem
+from .agent_backend import ClearQueue, InputContent, SendNow, TurnInbox, TurnInboxItem
 from .bus import Bus
 from .child_process import join_retirement
 from .cohort_schema import AcceptanceFrontier
@@ -38,6 +38,7 @@ from .drain_failures import (
     record_drain_failure,
 )
 from .errors import RelationViolationError, UnregisteredThreadError
+from .field_codec import InputId
 from .image_input import ImageInput
 from .input_attempt import (
     UNOBSERVED_DELIVERY_SCOPE,
@@ -419,9 +420,9 @@ class DrainedSession:
     wake_task: asyncio.Task[WakeOutcome] | None = None
     observation_watcher: ChangeSignal | None = None
     turn: DrainTurn = field(default_factory=NoDrainTurn)
-    queued: dict[str, QueuedInput] = field(default_factory=dict)
-    restored: dict[str, QueuedInput] = field(default_factory=dict)
-    following: dict[str, AcceptedFollowingInput] = field(default_factory=dict)
+    queued: dict[InputId, QueuedInput] = field(default_factory=dict)
+    restored: dict[InputId, QueuedInput] = field(default_factory=dict)
+    following: dict[InputId, AcceptedFollowingInput] = field(default_factory=dict)
     queue_revision: int = 0
     pending_turns: list[ScheduledTurn] = field(default_factory=list)
     # Only a completed, quiescent observation can suppress another scan.
@@ -579,7 +580,7 @@ class InputDrain(InputObservation):
                 ))
             state.queued = retained
             if cleared:
-                state.to_turn(ClearQueue(tuple(InputId(item.input_id) for item in cleared)))
+                state.to_turn(ClearQueue(tuple(item.input_id for item in cleared)))
             state.restored = {}
         await self.emit_queue_state(session_id)
 
@@ -749,7 +750,7 @@ class InputDrain(InputObservation):
         async with self.queue_lock:
             state = self.state(session_id)
             if state.queued:
-                state.to_turn(SendNow(tuple(InputId(input_id) for input_id in state.queued)))
+                state.to_turn(SendNow(tuple(state.queued)))
 
     async def close(self) -> None:
         """Retire input producers; their turns settle from the runner's owner stop."""
@@ -763,7 +764,7 @@ class InputDrain(InputObservation):
             for state in self.drained.values():
                 state.retire_producers()
 
-    async def input_refused(self, session_id: str, input_id: str) -> None:
+    async def input_refused(self, session_id: str, input_id: InputId) -> None:
         state = self.state(session_id)
         source = state.following.pop(input_id, None)
         if source is not None:
@@ -774,7 +775,7 @@ class InputDrain(InputObservation):
             await self.emit_queue_state(session_id)
 
     async def input_cleared(
-        self, session_id: str, input_id: str, native_id: str, text: str,
+        self, session_id: str, input_id: InputId, native_id: str, text: str,
     ) -> None:
         source = self.state(session_id).following.get(input_id)
         if source is not None:

@@ -17,7 +17,7 @@ from .coordination_tables.participants import OwnerGenerations, OwnerRecord
 from .declared_family import DeclaredFamily
 from .field_codec import (
     FieldCodec,
-    Id128Text,
+    InputId,
     JsonShapeFamily,
     JsonShapeMember,
     MalformedRecord,
@@ -46,8 +46,7 @@ class NativeInputCommit:
     """Original emitted input identity shared with its assembled context."""
 
     input_id: Annotated[
-        str,
-        Id128Text,
+        InputId,
         WireName("inputId"),
         Column(primary_key=True, check="length(input_id)=32 AND input_id NOT GLOB '*[^a-f0-9]*'"),
     ]
@@ -208,7 +207,7 @@ class NativeInputExecution(DeclaredFamily, affix="NativeExecution"):
     def source_membership_sql(cls) -> str:
         """Select the assignments included in this stage's input."""
 
-    def source_assignment_ids(self, db: Connection, input_id: str) -> tuple[str, ...]:
+    def source_assignment_ids(self, db: Connection, input_id: InputId) -> tuple[str, ...]:
         from .coordination_tables.assignments import WakeAssignment
 
         columns = ",".join(f"c.{column}" for column in WakeAssignment.columns())
@@ -220,7 +219,9 @@ class NativeInputExecution(DeclaredFamily, affix="NativeExecution"):
         return tuple(original.assignment_id for original in originals)
 
     @abstractmethod
-    def record_sources(self, db: Connection, input_id: str, assignments: tuple[WakeAssignment, ...]) -> None:
+    def record_sources(
+        self, db: Connection, input_id: InputId, assignments: tuple[WakeAssignment, ...],
+    ) -> None:
         """Record only membership which is not already owned by execution claims."""
 
     @abstractmethod
@@ -258,7 +259,9 @@ class TriageNativeExecution(NativeInputExecution):
         return (f"SELECT s.input_id, member.value AS assignment_id, CAST(member.key AS INTEGER) AS ordinal "
                 f"FROM {TriageNativeSources.declared_name} s, json_each(s.assignment_ids) member")
 
-    def record_sources(self, db: Connection, input_id: str, assignments: tuple[WakeAssignment, ...]) -> None:
+    def record_sources(
+        self, db: Connection, input_id: InputId, assignments: tuple[WakeAssignment, ...],
+    ) -> None:
         from .triage_native_sources import TriageNativeSources
 
         TriageNativeSources(input_id, tuple(row.assignment_id for row in assignments)).insert(db)
@@ -294,7 +297,9 @@ class FullNativeExecution(NativeInputExecution):
                 f"JOIN {ExecutionAssignmentLink.declared_name} c ON c.execution_id=n.execution_id "
                 f"WHERE n.stage='{cls.declared_name}'")
 
-    def record_sources(self, db: Connection, input_id: str, assignments: tuple[WakeAssignment, ...]) -> None:
+    def record_sources(
+        self, db: Connection, input_id: InputId, assignments: tuple[WakeAssignment, ...],
+    ) -> None:
         if self.source_assignment_ids(db, input_id) != tuple(row.assignment_id for row in assignments):
             raise IdentityConflict("Full native input differs from its original execution membership")
 
@@ -367,7 +372,7 @@ class FullNativeExecution(NativeInputExecution):
 class NativeInputIdentity:
     """Original reservation identity, independent of registry allocation domains."""
 
-    input_id: str
+    input_id: InputId
     execution: NativeInputExecution
     owner: OwnerGenerations
 
@@ -393,7 +398,7 @@ class UnrecordedNativeInputReference(NativeContextReference):
 class NativeInputReference(NativeContextReference):
     """A cursor's bounded reference to original recorded native context."""
 
-    input_id: Annotated[str, Id128Text]
+    input_id: InputId
     stage: type[NativeInputExecution]
     session_id: str
     request_generation: int
@@ -427,7 +432,7 @@ class NativeInputReference(NativeContextReference):
 
 
 class NativeInputRecord(OwnerRecord, ABC):
-    input_id: str
+    input_id: InputId
     execution: NativeInputExecution
     owner_lookup: str
     owner_generation: int
@@ -446,7 +451,7 @@ class NativeInputRecord(OwnerRecord, ABC):
 class NativeInputContext:
     """Decode the declared nullable SQL context group into its original state."""
 
-    input_id: str | NativeColumn
+    input_id: InputId | NativeColumn
     stage: type[NativeInputExecution] | NativeColumn
     session_id: str | NativeColumn
     request_generation: NativeColumn

@@ -18,7 +18,7 @@ from .acp_failure import (
     FailureSource,
     UnrecordedFailureSource,
 )
-from .agent_backend import InputId, SendNow, TurnInbox
+from .agent_backend import SendNow, TurnInbox
 from .agent_events import CompactionEvent
 from .child_process import ProcessIdentity
 from .context_reading import ContextReading
@@ -29,6 +29,7 @@ from .field_codec import (
     ExternalJsonShape,
     FieldCodec,
     Id128Text,
+    InputId,
     MalformedRecord,
     WireValue,
     WireName,
@@ -672,7 +673,7 @@ class CommsRequest(DeclaredFamily, affix="Request"):
 class PromptRequest(CommsRequest):
     user_text: str | None = None
     defer_display: bool = False
-    input_id: Annotated[str, Id128Text] = field(default_factory=Id128Text.mint)
+    input_id: InputId = field(default_factory=InputId.mint)
     origin: Annotated[InputOrigin, WireOmitDefault()] = field(
         default_factory=UnattributedInputOrigin, kw_only=True
     )
@@ -685,20 +686,20 @@ class PromptRequest(CommsRequest):
         return self.user_text
 
     @abstractmethod
-    def enqueue_control(self, inbox: TurnInbox, input_id: str) -> None: ...
+    def enqueue_control(self, inbox: TurnInbox, input_id: InputId) -> None: ...
 
     async def publish_acceptance(self, inputs: InputDrain, session_id: str) -> None:
         await inputs.emit_queue_state(session_id)
 
 
 class QueuePromptRequest(PromptRequest):
-    def enqueue_control(self, inbox: TurnInbox, input_id: str) -> None:
+    def enqueue_control(self, inbox: TurnInbox, input_id: InputId) -> None:
         pass
 
 
 class SteerPromptRequest(PromptRequest):
-    def enqueue_control(self, inbox: TurnInbox, input_id: str) -> None:
-        inbox.put_nowait(SendNow((InputId(input_id),)))
+    def enqueue_control(self, inbox: TurnInbox, input_id: InputId) -> None:
+        inbox.put_nowait(SendNow((input_id,)))
 
 
 @dataclass(frozen=True)

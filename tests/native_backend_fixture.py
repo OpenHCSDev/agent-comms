@@ -1,37 +1,41 @@
 """Acquired original native fixture shared by pytest and installed drivers."""
 
-
-from agent_comms.native_package import VerifiedNativePackage
-from agent_comms.native_arguments import NativeArguments
-
 import asyncio
 import json
 import os
-from pathlib import Path
 from contextlib import AsyncExitStack, asynccontextmanager
 from functools import partial
+from pathlib import Path
 from unittest.mock import patch
 
 import agent_comms.agent_events as events
 import agent_comms.backend as backend
-from agent_comms.agent_backend import InputContent, InputId, InputRequest, TurnInbox, SteerInputPolicy
-from agent_comms.comms import wire
-from agent_comms.fresh_private_session import create_fresh_private_session
+from agent_comms.agent_backend import (
+    InputContent,
+    InputRequest,
+    NoInputStartListener,
+    SteerInputPolicy,
+    TurnInbox,
+)
 from agent_comms.child_process import BoundedRun, join_retirement
+from agent_comms.comms import wire
 from agent_comms.coordinator import Coordination
-from agent_comms.field_codec import FieldCodec
-from agent_comms.pi_native_backend import PersistentPiSession
+from agent_comms.field_codec import FieldCodec, InputId
+from agent_comms.fresh_private_session import create_fresh_private_session
+from agent_comms.native_arguments import GivenArguments, GivenBinary, NativeArguments
 from agent_comms.native_child import PiSessionChild
-from agent_comms.selected_actions import NoSelectedTools
+from agent_comms.native_package import VerifiedNativePackage
 from agent_comms.owned_turn import OwnedTurn
-from agent_comms.thread_identity import RecordedThreadIncarnation
+from agent_comms.pi_native_backend import PersistentPiSession
 from agent_comms.queued_input import InitialInput
+from agent_comms.selected_actions import NoSelectedTools
 from agent_comms.storage_rules import StorageRule
-from agent_comms.native_arguments import GivenArguments, GivenBinary
-from delivery_owner_fixture import canonical_agent
-from compaction_loopback import LoopbackProvider
-from native_proof_cases import read_proof_rows
+from agent_comms.thread_identity import RecordedThreadIncarnation
 from agent_comms.threads import Thread
+from agent_comms.turn_input_source import AcceptedTurn
+from compaction_loopback import LoopbackProvider
+from delivery_owner_fixture import canonical_agent
+from native_proof_cases import read_proof_rows
 
 
 async def wait_for(predicate):
@@ -40,7 +44,11 @@ async def wait_for(predicate):
             await asyncio.sleep(0.01)
 
 
-class NativeBackendFixture:
+class AnnouncedInputStart(NoInputStartListener):
+    started_events = (events.OriginalInputStarted(),)
+
+
+class NativeBackendFixture(AnnouncedInputStart):
     @staticmethod
     def participant_at(root: Path, project: Path) -> RecordedThreadIncarnation:
         """The real thread incarnation used by a direct native turn on this bus."""
@@ -134,6 +142,7 @@ manager.appendMessage({role:'assistant',content:[{type:'text',text:'Original sav
             async with InitialInput.reserve(
                 agent.inputs, session_id, agent.sessions.require(session_id),
                 text=text, prompt=text, echo=True, images=(), controller=None,
+                input_id=InputId.mint(),
             ) as reservation:
                 item = reservation.item
                 resources.push_async_callback(reservation.release().aclose)
@@ -143,6 +152,7 @@ manager.appendMessage({role:'assistant',content:[{type:'text',text:'Original sav
                 agent.turns, session_id, agent.sessions.require(session_id), text,
                 original_keys=(item.key,), initial_display_text=text,
                 original_owner_input=True, original_goal_id=item.context.active_goal_id,
+                acceptance=AcceptedTurn(item.input_id),
             )
             async with AsyncExitStack() as permits:
                 assert await turn.acquire(resources, permits)
@@ -153,7 +163,13 @@ manager.appendMessage({role:'assistant',content:[{type:'text',text:'Original sav
         self.persistent.child_state.child.attestation.require_identity()
         await self.persistent.close_idle()
 
-    def started(self, public_id, native_id, text):
+    def original(self, native_id: str, text: str) -> bool:
+        return self._observe_start(None, native_id, text)
+
+    def following(self, public_id: InputId, native_id: str, text: str) -> bool:
+        return self._observe_start(public_id, native_id, text)
+
+    def _observe_start(self, public_id, native_id, text):
         self.starts.append((public_id, native_id, text))
         child = backend.TurnSession.active[asyncio.current_task()].native
         # Cleanup already belongs to the saved-session owner at native input start;
@@ -178,14 +194,14 @@ manager.appendMessage({role:'assistant',content:[{type:'text',text:'Original sav
                 package=self.package,
                 tool_mode=NoSelectedTools(),
                 steering_queue=queue,
-                native_start=self.started,
+                input_start=self,
                 **options,
              session_directory=self.root):
                 result.append(event)
                 self.observed.append(event)
                 if followup is not None and isinstance(event, events.InputStarted):
                     queue.put_nowait(InputRequest(
-                        input_id=InputId("queued"),
+                        input_id=InputId.mint(),
                         content=InputContent(text=followup),
                         when_busy=SteerInputPolicy,
                     ))

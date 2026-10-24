@@ -9,6 +9,7 @@ from pathlib import Path
 
 import pytest
 
+from agent_comms.field_codec import FieldCodec, MessageId, TurnId
 from agent_comms.session_file import RegistrySessionLocation
 from agent_comms.channel_targets import CommandTarget, PerTargetChannels
 from agent_comms.cli import main
@@ -126,7 +127,8 @@ class TestCliSuccess:
             code, sent = cli(comms.root, "send", "--from", "sender", "--to", "#comms",
                              "--body", "public record", "--role", role)
             assert code == 0
-            delivery, = comms.bus.bus.lookup_message(sent["id"]).deliveries()
+            message_id = FieldCodec.decode(MessageId, sent["id"])
+            delivery, = comms.bus.bus.lookup_message(message_id).deliveries()
             assert len(delivery.audience.recipients) == 2
             assert [decision.wake_policy() for decision in delivery.decisions] == [expected] * 2
         parser = argparse.ArgumentParser()
@@ -374,8 +376,13 @@ class TestSelectedTargetActions:
         assert not RestartCliCommand.thread_bindings(comms, owner, StoppedThreadStatus())
         busy = TurnIdentity(owner.incarnation, owner.turn_generation + 1)
         record = StoredTurnRecord.begin(
-            comms.registry.store.path, busy,
-            ActiveTurn('busy', owner.require_process(), turn_generation=RecordedGeneration(busy.generation)),
+            comms.registry.store.path,
+            busy,
+            ActiveTurn(
+                TurnId('c9bc072f4fa8189466c2a8f2c36a56a4'),
+                owner.require_process(),
+                turn_generation=RecordedGeneration(busy.generation),
+            ),
         )
         assert not RestartCliCommand.thread_bindings(comms,
             replace(owner, turn_record=record, turn_generation=busy.generation), status)

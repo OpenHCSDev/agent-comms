@@ -1,18 +1,26 @@
 import pytest
 
-from agent_comms.native_arguments import SelectedModel
-from agent_comms.native_startup import NativeStartupPolicy
-
 from agent_comms.agent_backend import SteerInputPolicy
+from agent_comms.field_codec import InputId
+from agent_comms.native_arguments import SelectedModel
+from agent_comms.native_failures import NativePiUnavailable
+from agent_comms.native_pi import NativeEmptyAnswer, NativePiTerminalFailure
+from agent_comms.native_startup import NativeStartupPolicy
 from agent_comms.pi_events import NativeRetryEnd
 from agent_comms.pi_payloads import FailedProviderRetry, PiMessage, SucceededProviderRetry
-from agent_comms.tracked_turn import CompletedTrackedTerminal, PendingTrackedTerminal, TrackedTurnSession
-from agent_comms.turn_input_source import AcceptedFollowingInput, DeliveredFollowingInput
-from agent_comms.turn_goal_permission import InactiveGoalPermission, TurnGoalPermission
-from agent_comms.native_pi import NativeEmptyAnswer, NativePiTerminalFailure
-from agent_comms.native_failures import NativePiUnavailable
-from agent_comms.turn_output import TurnOutput
+from agent_comms.tracked_turn import (
+    CompletedTrackedTerminal,
+    PendingTrackedTerminal,
+    TrackedTurnSession,
+)
 from agent_comms.turn_failure import ModelRequestFailed, RetryableProviderFailure
+from agent_comms.turn_goal_permission import InactiveGoalPermission, TurnGoalPermission
+from agent_comms.turn_input_source import (
+    AcceptedFollowingInput,
+    AcceptedTurn,
+    DeliveredFollowingInput,
+)
+from agent_comms.turn_output import TurnOutput
 from agent_comms.turn_usage import UsageAccount
 from agent_comms.turn_watchdog import DEFAULT_MODEL_WAIT, ProgressWatchdog
 
@@ -87,7 +95,7 @@ def test_failed_native_retry_end_requires_final_error_at_decode():
 
 
 def following(kind):
-    values = dict(keys=(), accepted_id="fresh-following",
+    values = dict(keys=(), acceptance=AcceptedTurn(InputId.mint()),
                   goal_permission=TurnGoalPermission(InactiveGoalPermission()))
     return kind(**values, origins=()) if kind is DeliveredFollowingInput else kind(**values)
 

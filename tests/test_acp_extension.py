@@ -1,7 +1,9 @@
+"""Declared extension decoding is strict and shares its owner with consumers."""
+
 from agent_comms.child_process import ProcessIdentity
+from agent_comms.field_codec import TurnId
 from agent_comms.acp_failure import ACPFailure
 
-"""Declared extension decoding is strict and shares its owner with consumers."""
 import pytest
 from agent_comms.goal_presentation import IdleGoalExecution
 from agent_comms.goals import NoGoal
@@ -43,7 +45,7 @@ from agent_comms.pi_payloads import McpLiveAcknowledgement
 from agent_comms.thread_identity import ClaimedIdentity
 from agent_comms.thread_identity import RecordedThreadIncarnation
 from agent_comms.transcripts import NativeTranscriptCursor, TranscriptPage
-from agent_comms.turn_lease import ActiveTurn, TurnState
+from agent_comms.turn_lease import ActiveTurn, FinishedTurn, TurnState
 from agent_comms.turn_context import ContextManifest, NextContextTurn
 from agent_comms.threads import Thread
 
@@ -59,18 +61,22 @@ def test_declared_family_roundtrip_and_strict_boundary(tmp_path):
     )
     samples = (
         ContextAnnotatedUpdate(
-            ContextManifest(
-                owner.incarnation, NextContextTurn(), (), "source-codec-control"
-            ), (),
+            ContextManifest(owner.incarnation, NextContextTurn(), (), "source-codec-control"),
+            (),
         ),
         RequestFailedUpdate(ACPFailure.from_detail(-32603, "The usage limit has been reached")),
         PromptCancelledUpdate(None),
         SelectedWriteAcceptedUpdate("operation", 1, "claim"),
         CursorAdvancedUpdate(
             CursorEnvelope(
-                LiveCursorScope(session_id="pilot", wire_root_id="a" * 32,
-                                claimed_identity=owner, owner=ProcessIdentity(123, 1)),
-                1, UnavailableCursorObservation()
+                LiveCursorScope(
+                    session_id="pilot",
+                    wire_root_id="a" * 32,
+                    claimed_identity=owner,
+                    owner=ProcessIdentity(123, 1),
+                ),
+                1,
+                UnavailableCursorObservation(),
             )
         ),
         QueueChangedUpdate(queue_scope, 1, AvailableQueueProjection((QueueItem("input", "text"),))),
@@ -88,16 +94,22 @@ def test_declared_family_roundtrip_and_strict_boundary(tmp_path):
         GoalChangedUpdate(NoGoal(), IdleGoalExecution()),
         CompactionChangedUpdate(CompactionStart()),
         CompactionCommittedUpdate("summary", "first-kept"),
-        TranscriptSnapshotUpdate(
-            read.read(), read.identity
-        ),
+        TranscriptSnapshotUpdate(read.read(), read.identity),
         TranscriptDraftUpdate(read.identity, None),
         InputDeliveryChangedUpdate("input"),
         McpClientAcknowledgementUpdate(
             "turn", McpLiveAcknowledgement(1, "pi-mcp-client", "a" * 32, "running", "turn", ())
         ),
-        TurnChangedUpdate(TurnState(ActiveTurn("turn", ProcessIdentity(123, 1), started_at=1.0))),
-        TurnChangedUpdate(TurnState(finished_turn_id="turn")),
+        TurnChangedUpdate(
+            TurnState(
+                ActiveTurn(
+                    TurnId('9b473845f684444f80a26586ae298d2b'),
+                    ProcessIdentity(123, 1),
+                    started_at=1.0,
+                )
+            )
+        ),
+        TurnChangedUpdate(TurnState(finished=FinishedTurn(TurnId('9b473845f684444f80a26586ae298d2b')))),
         TextRouteUpdate(None),
         TranscriptChangedUpdate(NativeTranscriptCursor("session.jsonl", 42)),
         InputFailedUpdate("prompt", BackendDeliveryFailure("provider refused")),

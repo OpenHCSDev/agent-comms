@@ -25,6 +25,7 @@ from types import MappingProxyType
 from typing import TYPE_CHECKING, ClassVar, Self
 
 from .declared_family import DeclaredFamily
+from .field_codec import InputId
 from .pi_counts import PiCount
 from .pi_vocabulary import CompactionReason, ThinkingLevelField
 from .send_outcome import SendBoundary
@@ -108,17 +109,6 @@ class RuntimeLocation(DeclaredFamily, affix="Runtime"):
 # ---------------------------------------------------------------------------
 # Records Core owns. Every backend converts its runtime's values to these.
 # ---------------------------------------------------------------------------
-
-
-@dataclass(frozen=True)
-class InputId:
-    """Core's identity for one input; a durable backend uses it as its request ID."""
-
-    value: str
-
-    def __post_init__(self) -> None:
-        if type(self.value) is not str or not self.value:
-            raise ValueError("An input ID must be a nonempty string")
 
 
 class BusyInputPolicy(DeclaredFamily, affix="InputPolicy"):
@@ -291,14 +281,39 @@ class StaleCompaction(CompactionOutcome):
 # ---------------------------------------------------------------------------
 
 
+class InputStartListener(ABC):
+    """The listener owns acknowledgement and the corresponding start notification."""
+
+    started_events: tuple[AgentEvent, ...]
+
+    @abstractmethod
+    def original(self, native_id: str, text: str) -> bool: ...
+
+    @abstractmethod
+    def following(self, public_id: InputId, native_id: str, text: str) -> bool: ...
+
+
+class NoInputStartListener(InputStartListener):
+    started_events = ()
+
+    def original(self, native_id: str, text: str) -> bool:
+        return True
+
+    def following(self, public_id: InputId, native_id: str, text: str) -> bool:
+        return True
+
+
+NO_INPUT_START_LISTENER = NoInputStartListener()
+
+
 @dataclass(frozen=True, kw_only=True)
 class TurnDelivery:
     """Core's bindings for one turn, handed to the backend that runs it.
 
     ``inbox`` carries :class:`InputRequest` and :class:`SendNow` records that
     arrive while the turn runs. Core checks input permission at these boundaries: the
-    backend enters ``send_boundary`` around writing each input and
-    ``interrupt_boundary`` around a send-now; ``input_started`` reports that the
+    backend asks ``send_boundary`` before writing each input or interrupt;
+    ``input_start`` reports that the
     runtime began an input; ``request_progress`` and ``ui_request`` observe
     provider progress and answer runtime dialogs.
     """
@@ -308,8 +323,7 @@ class TurnDelivery:
     inbox: TurnInbox
     finish_event: asyncio.Event
     send_boundary: SendBoundary
-    interrupt_boundary: SendBoundary
-    input_started: Callable[..., bool]
+    input_start: InputStartListener
     request_progress: Callable[..., None]
     ui_request: Callable[[DialogUiRequest], Awaitable[ExtensionUiChoice]]
     tool_mode: NativeToolMode

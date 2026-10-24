@@ -10,7 +10,7 @@ from conftest import publish_initial
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.comms import wire
 from conftest import installed_comms
-from agent_comms.field_codec import FieldCodec, MalformedRecord
+from agent_comms.field_codec import FieldCodec, MalformedRecord, TurnId
 from agent_comms.goal_presentation import GoalExecution
 from agent_comms.goal_actions import (
     ActiveGoalAction,
@@ -36,7 +36,7 @@ def test_inspected_canonical_dependencies_allow_standby_without_replay(tmp_path,
         comms.registry.declare(
             Thread(name, frozenset(), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid()))
         )
-    comms.agents.begin_turn("parent", "parent-delegation-in-flight")
+    comms.agents.begin_turn("parent", TurnId('aa7988bb017ade70857b6b2966e64ea2'))
     goal = comms.goals.update_goal("worker", SetGoalAction(text="Delegate and wait"))
     messages = [
         publish_initial(comms, "parent", "worker", text)
@@ -141,7 +141,7 @@ def test_standby_excludes_retained_rebound_history_but_retains_rename(tmp_path, 
     comms.registry.declare(
         Thread(rebound, frozenset(), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid()))
     )
-    comms.agents.begin_turn("parent", "new-turn")
+    comms.agents.begin_turn("parent", TurnId('18ab1892f9f48635ac465d11156044ce'))
     goal = comms.goals.update_goal("worker", SetGoalAction(text="Current goal"))
     assert comms.goals.goal_input_review("worker", goal.id, ["parent"]).reviewed_inputs == ()
     action = StandbyGoalAction(expect=GoalPrecondition(goal_id=goal.id), wait_for=("parent",))

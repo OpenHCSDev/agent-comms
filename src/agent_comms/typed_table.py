@@ -17,7 +17,7 @@ import types
 from abc import ABC, abstractmethod
 from collections.abc import Callable, Generator, Iterable, Iterator, Mapping, Sequence
 from contextlib import AbstractContextManager, ExitStack, closing, contextmanager
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, is_dataclass
 from enum import Enum, IntEnum, IntFlag
 from functools import cache
 from importlib import import_module
@@ -45,8 +45,11 @@ from .field_codec import (
     FieldCodec,
     FieldDirective,
     FieldPlan,
+    FieldRepresentation,
     MalformedRecord,
+    NominalText,
     NullMember,
+    TextRepresentation,
     ValueDecoder,
     WireName,
     WireValue,
@@ -180,7 +183,10 @@ class TextStorage(SqlStorage):
 
     @classmethod
     def accepts(cls, annotation: object) -> bool:
-        return annotation is str
+        if annotation is str:
+            return True
+        _, representation = FieldCodec.representation(annotation)
+        return issubclass(representation, TextRepresentation)
 
 
 class IntegerStorage(SqlStorage):
@@ -2084,7 +2090,7 @@ class ProducedTable(ProducedRow, TypedTable, ProjectionSource, declared_name=Non
 
     @classmethod
     def producer_owners(cls) -> tuple[type, ...]:
-        """Only this table's writers and their inherited implementations.
+        """This table's writers, column values and their inherited implementations.
 
         An ancestor declaring other outputs owns those outputs alone. Inherited
         producer capabilities follow the writer; unrelated mechanisms do not.
@@ -2102,6 +2108,18 @@ class ProducedTable(ProducedRow, TypedTable, ProjectionSource, declared_name=Non
                 if issubclass(parent, ProjectionSource)
                 and ("writes" not in vars(parent) or parent in writers)
             )
+        annotations: list[object] = (
+            [column.annotation for column in cls._columns] if is_dataclass(cls) else []
+        )
+        while annotations:
+            value, representation = FieldCodec.representation(annotations.pop())
+            annotations.extend(get_args(value))
+            if isinstance(value, type):
+                owners.update(
+                    parent for parent in value.__mro__
+                    if issubclass(parent, (FieldRepresentation, NominalText))
+                )
+            owners.update(representation.producer_owners())
         return tuple(sorted(owners, key=lambda owner: (owner.__module__, owner.__qualname__)))
 
 

@@ -7,6 +7,7 @@ import sqlite3
 
 import pytest
 
+from agent_comms.field_codec import InputId, TurnId
 from agent_comms.installer.backup import bus_files
 from bus_record_fixture import prepare_native_comms
 from agent_comms.native_pi import NativeContextJournal
@@ -51,11 +52,14 @@ def test_every_bus_file_is_a_declared_root_file(tmp_path: Path, source_repositor
     with NativeBoundary(comms.bus) as boundary:
         owner = boundary.registry.require("owner")
         claim = comms.bus.publisher._publish_acquisition_unlocked(
-            boundary.registry, owner,
+            boundary.registry,
+            owner,
             ExistingFileClaim(resource).normalized(tmp_path),
             NativeClaim(
                 owner_claimed_generation=boundary.registry.claim_generation(owner.name),
-                operation_id="a" * 32, turn_id="declared-files", input_id="declared-file-input",
+                operation_id="a" * 32,
+                turn_id=TurnId('76716892c3b5bb4cc8b0f07da1976c7e'),
+                input_id="declared-file-input",
             ),
             activity=boundary.activity,
         )
@@ -88,7 +92,7 @@ def test_parameterized_sqlite_resources_follow_their_file_owner(tmp_path: Path, 
             db.execute(statement)
         db.commit()
         NativeContextJournal(
-            input_id="b" * 32, session_id="session", session_entry_id="entry",
+            input_id=InputId.mint(), session_id="session", session_entry_id="entry",
             request_generation=1, llm_context_digest="c" * 64,
             committed_at_ms=1_791_964_800_001, schema=2, type="context_committed",
         ).insert(db)
@@ -105,7 +109,7 @@ def test_installer_reconciles_a_native_proof_journal_onto_its_declaration(tmp_pa
         for statement in NativeContextJournal.schema_objects().values():
             db.execute(statement)
         NativeContextJournal(
-            input_id="b" * 32, session_id="session", session_entry_id="entry",
+            input_id=InputId.mint(), session_id="session", session_entry_id="entry",
             request_generation=1, llm_context_digest="c" * 64,
             committed_at_ms=1_791_964_800_001, schema=2, type="context_committed",
         ).insert(db)

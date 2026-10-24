@@ -27,6 +27,7 @@ from .declared_family import (
 from .errors import RelationViolationError
 from .field_codec import (
     FieldCodec,
+    TurnId,
     SingleFieldValue,
     WireName,
     WireValue,
@@ -442,19 +443,8 @@ class ThreadIncarnationRecord:
 
 
 @dataclass(frozen=True, slots=True)
-class TurnId(ProjectionSource):
-    value: str
-
-    @classmethod
-    def for_registration(cls, value: str) -> TurnId:
-        value = FieldCodec.decode(str, value)
-        if not 0 < len(value) <= 128:
-            raise ValueError("live owner turn requires a bounded ID")
-        return cls(value)
-
-    def __post_init__(self) -> None:
-        if not self.value:
-            raise ValueError("Turn ID cannot be empty")
+class RegisteredTurn(ProjectionSource):
+    value: TurnId
 
 
 @dataclass(frozen=True, slots=True)
@@ -519,12 +509,19 @@ class TurnIdentity:
         return replace(self, incarnation=self.incarnation.resolved(snapshot))
 
 
+class ObservedTurn(ABC):
+    """What a thread can witness about its current or last-completed turn."""
+
+    @abstractmethod
+    def can_attest(self, claim_scope: int) -> bool: ...
+
+
 @dataclass(frozen=True, slots=True)
-class TurnFence:
+class TurnFence(ObservedTurn):
     """One exact turn identity and its recorded input generation."""
 
     identity: TurnIdentity
-    turn_id: str
+    turn_id: TurnId
     claimed_generation: int
 
     def renamed(self, name: str) -> Self:
@@ -552,6 +549,14 @@ class TurnFence:
             and self.turn_id == other.turn_id
             and self.claimed_generation == other.claimed_generation
         )
+
+
+@dataclass(frozen=True, slots=True)
+class NoObservedTurn(ObservedTurn):
+    """No turn has run on this thread; it attests nothing and matches no fence."""
+
+    def can_attest(self, claim_scope: int) -> bool:
+        return False
 
 
 @dataclass(slots=True)

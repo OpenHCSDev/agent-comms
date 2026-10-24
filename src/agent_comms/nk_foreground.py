@@ -31,7 +31,7 @@ from .comms import wire
 from .coordinated_runtime import SelectedExecution
 from .cursor_publication import CursorDelivery
 from .errors import RelationViolationError
-from .field_codec import FieldCodec, MalformedRecord
+from .field_codec import FieldCodec, MalformedRecord, RootId
 from agent_comms.native_session_files import NativeSessionFiles
 from .native_package import VerifiedNativePackage
 from .selected_result import CoordinatedTurn
@@ -74,7 +74,7 @@ class ForegroundOwner:
 def reserve_foreground_owner(
     root: Path,
     *,
-    wire_root_id: str,
+    wire_root_id: RootId,
     name: str,
     task: str,
     tags: frozenset[str],
@@ -95,7 +95,7 @@ def reserve_foreground_owner(
     ):
         raise PublicationActivationBlocked("Foreground N/K requires a private /var/tmp root")
     NativeSessionFiles.require_private_directory(root)
-    if type(wire_root_id) is not str or not wire_root_id:
+    if not wire_root_id:
         raise MalformedRecord("A private wire-root ID is required")
     worktree = root / "work"
     NativeSessionFiles.require_private_directory(worktree)

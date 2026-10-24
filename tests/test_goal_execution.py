@@ -27,8 +27,9 @@ from agent_comms.goal_presentation import (
 )
 from agent_comms.goal_states import ActiveGoal
 from agent_comms.owned_turn import OwnedTurn
-from agent_comms.turn_terminal import OwnerStop
 from agent_comms.threads import Thread
+from agent_comms.turn_input_source import NoTurnAcceptance
+from agent_comms.turn_terminal import OwnerStop
 
 
 @pytest.fixture
@@ -66,6 +67,7 @@ async def turn_on(comms, *, original_owner_input=False):
     turn = OwnedTurn(
         agent.turns, session, owner.name, "Continue original work",
         original_owner_input=original_owner_input, original_goal_id=owner.goal.require().id,
+        acceptance=NoTurnAcceptance(),
     )
     async with AsyncExitStack() as resources, AsyncExitStack() as permits:
         assert await turn.acquire(resources, permits)

@@ -15,11 +15,11 @@ import pytest
 
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.errors import RelationViolationError
-from agent_comms.field_codec import FieldCodec
+from agent_comms.field_codec import FieldCodec, TurnId
 from agent_comms.goals import Goal
 from agent_comms.messages import Message, InfoKind
 from agent_comms.task_sources import Decision
-from agent_comms.thread_identity import TurnId
+from agent_comms.thread_identity import RegisteredTurn
 from agent_comms.tools import invoke_tool
 from agent_comms.tool_caller import ThreadCaller
 from agent_comms.turn_lease import NoTurnLease
@@ -46,7 +46,7 @@ def admit(comms, name):
     comms.registry.declare(Thread(name, frozenset({'team'}), str(comms.root), process_identity=ProcessIdentity.capture(os.getpid())))
     owner, claim_scope = comms.registry.live_owner_with_claim(name)
     owner, _ = comms.registry.lease_live_turn_with_claim(
-        owner, name + "-turn", expected_generation=claim_scope
+        owner, TurnId.mint(), expected_generation=claim_scope
     )
     return owner
 
@@ -298,7 +298,7 @@ def test_stale_goal_scope_cannot_publish_even_through_original_publisher(comms):
     declaration = Decision(
         chosen="A", rejected=("B",), scope=owner.task_scope,
         source_turn=owner.require_turn_lease().identity,
-        source_turn_id=TurnId(owner.require_turn_lease().turn_id),
+        source_turn_id=RegisteredTurn(owner.require_turn_lease().turn_id),
     )
     comms.registry.register(replace(owner, goal=replace(owner.goal, revision=2)))
     message = Message("alpha", "#team", declaration.text, InfoKind, task=declaration)
@@ -323,7 +323,9 @@ def test_turn_scope_correction_cannot_revive_a_finished_turn_choice(comms, monke
     first = invoke_tool(comms, "comms_decision", request)
     comms.registry.release_turn(owner.turn_lease)
     owner, claim_scope = comms.registry.live_owner_with_claim("alpha")
-    comms.registry.lease_live_turn_with_claim(owner, "next-turn", expected_generation=claim_scope)
+    comms.registry.lease_live_turn_with_claim(
+        owner, TurnId('bf5eb504b7221133c4f3cf2aa87008a3'), expected_generation=claim_scope
+    )
     before = read_history(comms)
     with pytest.raises(RelationViolationError):
         invoke_tool(comms, "comms_decision", {

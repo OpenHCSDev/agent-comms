@@ -24,7 +24,7 @@ import agent_comms.installer
 from agent_comms.cli_bridges.shared import SessionBridgeResumes
 from agent_comms.cli_commands import InstallCliCommand
 from agent_comms.installer.probes.harnesses import InstallResult
-from agent_comms.field_codec import FieldCodec, Id128Text, PathText
+from agent_comms.field_codec import FieldCodec, Id128, PathText
 from agent_comms.installer.backup import StoreBackup
 from agent_comms.installer.refusals import UpgradeRefused
 from agent_comms.installer.commands import InstallCommands
@@ -129,7 +129,7 @@ class InstallLogs:
 
     def minted(self) -> Path:
         """A new install's own directory; older ones past the backups' count are retired."""
-        logs = self.root.parent / f"{self.prefix}{Id128Text.mint()}"
+        logs = self.root.parent / f"{self.prefix}{Id128.mint()}"
         logs.mkdir(mode=0o700)
         self.retire()
         return logs

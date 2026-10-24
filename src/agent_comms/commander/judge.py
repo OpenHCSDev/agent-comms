@@ -32,7 +32,7 @@ from functools import cached_property
 
 from agent_comms.comms import Comms
 from agent_comms.change_report import FileLine
-from agent_comms.field_codec import Argument, FieldCodec
+from agent_comms.field_codec import Argument, FieldCodec, MessageId
 from agent_comms.declared_family import DeclaredFamily
 from agent_comms.head_review import PullRequestHead
 from agent_comms.repo import Repo
@@ -323,8 +323,10 @@ class OkVerb(HeadVerdictVerb):
     def operation(self, ctx: order.Commander, todo: Todo, edit: Edit) -> AcceptedVerdict:
         actor = ctx.actor_identity
         if self.peer:
-            return PeerAcceptedVerdict(todo.revision, actor, todo.held(), edit.id,
-                                       quote=self.serves, peer=self.peer)
+            return PeerAcceptedVerdict(
+                todo.revision, actor, todo.held(), edit.id,
+                quote=self.serves, peer=FieldCodec.decode(MessageId, self.peer),
+            )
         return AcceptedVerdict(todo.revision, actor, todo.held(), edit.id, quote=self.serves)
 
     def check_edits(self, edits: list[Edit]) -> None:

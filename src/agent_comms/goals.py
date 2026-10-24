@@ -45,7 +45,7 @@ if TYPE_CHECKING:
     from .goal_management import Goals
     from .goal_attempts import GoalAttemptStore, LaunchPermit
     from .turn_goal_account import VerifiedGoalSettlement
-    from .thread_identity import TurnId
+    from .thread_identity import RegisteredTurn
     from .todos import Todo
 
 
@@ -588,7 +588,7 @@ class GoalDeclaration(GoalDisplay, SubclassUnion, RegistrationInheritance["GoalD
 
     @abstractmethod
     def settle(self, settlement: type[VerifiedGoalSettlement], store: GoalAttemptStore,
-               permit: LaunchPermit, turn: TurnId) -> None: ...
+               permit: LaunchPermit, turn: RegisteredTurn) -> None: ...
 
     @abstractmethod
     def instructions_for(self, goals: Goals, owner: ThreadIncarnation) -> tuple[str, ...]: ...
@@ -678,7 +678,7 @@ class NoGoal(NullMember, GoalDeclaration):
         return previous
 
     def settle(self, settlement: type[VerifiedGoalSettlement], store: GoalAttemptStore,
-               permit: LaunchPermit, turn: TurnId) -> None:
+               permit: LaunchPermit, turn: RegisteredTurn) -> None:
         pass
 
     def instructions_for(self, goals: Goals, owner: ThreadIncarnation) -> tuple[str, ...]:
@@ -785,7 +785,7 @@ class Goal(RecordMember, GoalDeclaration):
         return self
 
     def settle(self, settlement: type[VerifiedGoalSettlement], store: GoalAttemptStore,
-               permit: LaunchPermit, turn: TurnId) -> None:
+               permit: LaunchPermit, turn: RegisteredTurn) -> None:
         settlement(store, permit, self, turn).dispatch_sync(self.state)
 
     def instructions_for(self, goals: Goals, owner: ThreadIncarnation) -> tuple[str, ...]:

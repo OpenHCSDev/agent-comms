@@ -14,6 +14,7 @@ from functools import partial
 from typing import TYPE_CHECKING, Generic, Self, TypeVar
 
 
+from .agent_backend import InputRequest
 from .assignment_states import DeferredAssignment, DeliveredAssignment
 from .child_process import ProcessIdentity
 from .controller import Controller
@@ -23,7 +24,7 @@ from .coordination_errors import IdentityConflict, RequestRefused, StaleRevision
 from .coordination_session import ReadNativeCoordinationSession
 from .coordinator import Coordination
 from .errors import RelationViolationError
-from .field_codec import Id128Text
+from .field_codec import InputId
 from .goals import GoalDeclaration, NoGoal
 from .image_input import ImageInput
 from .input_attempt import InputAttempt, ReservedInput
@@ -32,7 +33,7 @@ from .input_origin import InputOrigin, UnattributedInputOrigin, WireInputOrigin
 from .thread_identity import ClaimedIdentity, ClaimScoped
 from .threads import Thread
 from .turn_goal_permission import AcceptedGoalPermission, TurnGoalPermission
-from .turn_input_source import AcceptedFollowingInput, DeliveredFollowingInput
+from .turn_input_source import AcceptedFollowingInput, AcceptedTurn, DeliveredFollowingInput
 
 if TYPE_CHECKING:
     from .acp_extension import QueueItem, QueueScope
@@ -83,7 +84,7 @@ class QueuedInput:
     text: str
     echo: bool
     context: QueuedInputContext
-    input_id: str
+    input_id: InputId
     prompt: str
     images: tuple[ImageInput, ...] = ()
     controller: Controller | None = None
@@ -101,7 +102,7 @@ class QueuedInput:
     def source(self) -> AcceptedFollowingInput:
         return AcceptedFollowingInput(
             keys=(self.key,),
-            accepted_id=self.input_id,
+            acceptance=AcceptedTurn(self.input_id),
             goal_permission=TurnGoalPermission(AcceptedGoalPermission(self.context.active_goal_id)),
         )
 
@@ -117,7 +118,7 @@ class QueuedInput:
         images: tuple[ImageInput, ...],
         controller: Controller | None,
         ownership: ExitStack,
-        input_id: str | None = None,
+        input_id: InputId,
         origin: InputOrigin = UnattributedInputOrigin(),
     ) -> tuple[Self, InputAttempt]:
         """Called under the registry lock; acceptance follows the durable reservation."""
@@ -133,7 +134,7 @@ class QueuedInput:
             text or prompt or "[image prompt]",
             echo,
             context,
-            Id128Text.mint() if input_id is None else input_id,
+            input_id,
             prompt,
             images,
             controller,
@@ -164,7 +165,7 @@ class QueuedInput:
     async def reserve(
         cls, inputs: InputDrain, session_id: str, name: str, *, text: str, prompt: str,
         echo: bool, images: tuple[ImageInput, ...], controller: Controller | None,
-        input_id: str | None = None,
+        input_id: InputId,
         origin: InputOrigin = UnattributedInputOrigin(),
     ) -> AsyncIterator[InputReservation[Self]]:
         """Serialize local queue placement; reserve durable input in a worker."""
@@ -191,14 +192,12 @@ class QueuedInput:
         inbox: TurnInbox, content: InputContent,
     ) -> None:
         """The accepted input owns transfer into this turn's existing native queue."""
-        from .agent_backend import InputId, InputRequest
-
         inputs.require_inbox(session_id, inbox)
         source = self.source()
         inputs.state(session_id).following[self.input_id] = source
         inputs.state(session_id).queued[self.input_id] = self
         inbox.put_nowait(InputRequest(
-            input_id=InputId(self.input_id), content=content, when_busy=source.when_busy,
+            input_id=self.input_id, content=content, when_busy=source.when_busy,
         ))
 
     async def dispatch(self, turns: TurnRunner, session_id: str, name: str) -> None:
@@ -229,7 +228,7 @@ class QueuedInput:
             initial_display_text=self.text if self.echo else None,
             original_owner_input=True,
             original_goal_id=self.context.active_goal_id,
-            accepted_input_id=self.input_id,
+            acceptance=AcceptedTurn(self.input_id),
         )
 
     def is_live(self, inputs: InputDrain, session_id: str) -> bool:
@@ -316,7 +315,7 @@ class DeliveredInput(QueuedInput):
     def source(self) -> DeliveredFollowingInput:
         return DeliveredFollowingInput(
             keys=(self.key,),
-            accepted_id=self.input_id,
+            acceptance=AcceptedTurn(self.input_id),
             goal_permission=TurnGoalPermission(AcceptedGoalPermission(self.context.active_goal_id)),
             origins=(self.message,),
         )
@@ -375,7 +374,7 @@ class DeliveredInput(QueuedInput):
                         reserved.append((
                             cls(
                                 text=row.source_text, echo=False, context=context,
-                                input_id=Id128Text.mint(), prompt=rendered.text,
+                                input_id=InputId.mint(), prompt=rendered.text,
                                 bus_key=key, message=message, assignment=paused,
                             ),
                             InputContent(text=rendered.text, contributions=rendered.contributions),
@@ -548,7 +547,7 @@ class InitialInput(QueuedInput):
     async def run(
         cls, inputs: InputDrain, session_id: str, thread_name: str, task: str, *,
         images: tuple[ImageInput, ...] = (), display_text: str | None = None,
-        input_id: str | None = None,
+        input_id: InputId,
         origin: InputOrigin = UnattributedInputOrigin(),
     ) -> None:
         """Own original reservation, dispatch and unbound retirement as one lifetime."""

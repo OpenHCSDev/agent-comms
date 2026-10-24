@@ -10,7 +10,7 @@ from agent_comms.channel_targets import CommandTarget, ThreadTarget
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.comms import wire
 from agent_comms.coordination_errors import DMPaintedBoundChanged, StaleRevision
-from agent_comms.field_codec import FieldCodec
+from agent_comms.field_codec import FieldCodec, TurnId
 from agent_comms.message_page import MessagePageRequest, PageBounds
 from agent_comms.page_traversal import PageCursor
 from agent_comms.presentation import ReadThrough
@@ -190,7 +190,7 @@ def test_turn_lease_and_unrelated_registry_changes_do_not_invalidate_dm(tmp_path
     comms.messaging.send("alice", viewer, "painted").message.message_id
     page = comms.views.dm_display_page(ThreadTarget("alice"), worktree=str(tmp_path))
     assert page.selection.basis.peer_identity == peer.incarnation
-    comms.registry.lease_local_turn("alice", "ordinary-turn")
+    comms.registry.lease_local_turn("alice", TurnId('0b225c32b06b9107d59b5d92d13b83a3'))
     fresh = comms.views.dm_display_page(ThreadTarget("alice"), worktree=str(tmp_path))
     assert fresh.selection.basis.peer_identity == page.selection.basis.peer_identity
     comms.registry.register(Thread('unrelated', frozenset(), str(tmp_path)))

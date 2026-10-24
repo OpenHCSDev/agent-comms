@@ -58,6 +58,7 @@ from agent_comms.field_codec import (
     FieldCodec,
     GitCommitText,
     MalformedRecord,
+    MessageId,
     NullMember,
     SingleFieldValue,
     SubclassUnion,
@@ -3268,7 +3269,7 @@ class RecordOrderHeadVerdict(TodoCommand):
 
 @dataclass(frozen=True)
 class PeerAcceptedVerdict(AcceptedVerdict):
-    peer: str
+    peer: MessageId
 
     def prepare(self, goals, current):
         message = goals.bus.bus.lookup_message(self.peer)
@@ -3452,7 +3453,7 @@ class CorrectCheckTodo(TodoOperation):
 @dataclass(frozen=True)
 class WordingCorrection(TodoOperation):
     """Core's answer to a published unit message whose words hide what happened; no strike."""
-    message_id: str
+    message_id: MessageId
     words: tuple[str, ...]
 
     def authored_by(self, actor: ThreadIncarnation) -> Self:
@@ -3467,11 +3468,10 @@ class WordingCorrection(TodoOperation):
 class OrderMessage(TodoOperation):
     """The bus message the commander sent this order in; a verdict citing it lands here."""
     actor: ThreadIncarnation
-    message_id: str
+    message_id: MessageId
 
     def changed(self, current: Todo) -> Todo:
         current.require_commander(self.actor)
-        _text(self.message_id, "Order message ID", 200)
         return replace(current, messages=(*current.messages, self), revision=current.revision + 1)
 
 
@@ -4374,7 +4374,9 @@ class TodoStore(OwnerRequestStore):
             command.write(db, current, self)
             return self._current(db, todo_id)
 
-    def correct(self, unit: ThreadIncarnation, message_id: str, text: str) -> tuple[Todo, ...]:
+    def correct(
+        self, unit: ThreadIncarnation, message_id: MessageId, text: str,
+    ) -> tuple[Todo, ...]:
         """Correct every open order the unit holds when its published text uses jargon."""
         if not self.path.exists() or not (words := tuple(PlainText.found(text))):
             return ()

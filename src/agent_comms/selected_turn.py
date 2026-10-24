@@ -29,7 +29,7 @@ from .selected_triage import SelectedTriageOutcome
 from .wake_candidate_index import WakeCandidateIndex
 from .context_segments.wake import SelectedWakeSegment
 from .context_segments.selected import SelectedTriageSegment, SelectedWorkSegment
-from .thread_identity import TurnId
+from .thread_identity import RegisteredTurn
 from .turn_context import RecordedContextTurn, RenderedInput, TurnContext
 from .turn_phase import PreparingPhase, PromptAcceptancePhase, PublishingPhase
 
@@ -43,7 +43,7 @@ class SelectedPrompt:
         lease = owner.require_turn_lease()
         return TurnContext(
             owner.incarnation,
-            RecordedContextTurn(TurnId(lease.turn_id), lease.identity),
+            RecordedContextTurn(RegisteredTurn(lease.turn_id), lease.identity),
             tuple(segments),
         )
 

@@ -11,6 +11,7 @@ from agent_comms.assignment_states import DeferredAssignment, FullPendingAssignm
 from agent_comms.cohort_foreground import _accept_visible_deliveries
 from agent_comms.coordination_cohort import pending_sealed_assignments
 from agent_comms.coordinator import Coordination
+from agent_comms.field_codec import TurnId
 from agent_comms.input_attempt import NotSentInput
 from agent_comms.queued_input import DeliveredInput
 from test_acp_private_nk_delivery import _session
@@ -59,7 +60,7 @@ async def test_interrupted_following_delivery_recovers_only_before_native_send(
     row = stored_inputs(agent.inputs.dispositions.root).lookup(item.key)
     assert not row.has_native_binding
     if native_bound:
-        leased = comms.agents.begin_turn(owner.name, "interrupted-turn")
+        leased = comms.agents.begin_turn(owner.name, TurnId('9c4c7984ba66b4cb4fc11ce230b963d3'))
         assert agent.inputs.dispositions.bind(
             item.key,
             claim_scope=row.claim_generation,

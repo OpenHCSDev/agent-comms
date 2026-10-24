@@ -12,7 +12,7 @@ from agent_comms.coordination_tables.executions import NoPointedExecution
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.comms import wire
 from agent_comms.coordinator import Coordination
-from agent_comms.field_codec import FieldCodec
+from agent_comms.field_codec import FieldCodec, TurnId
 from agent_comms.messages import Message, InfoKind
 from agent_comms.turn_phase import CancellingPhase
 from native_backend_fixture import native_backend_fixture
@@ -36,7 +36,7 @@ def test_project_change_while_idle_owes_no_turn(tmp_path):
 
 def test_project_change_during_turn_is_recorded_until_the_next_turn_starts(tmp_path):
     comms, old, new = declared_owner(tmp_path)
-    turn = comms.agents.begin_turn("owner", "changing-turn")
+    turn = comms.agents.begin_turn("owner", TurnId('1056fa0e005902e019b8d1d4fd75d3cb'))
     comms.threads.set_project("owner", str(new))
     assert comms.registry.require("owner").project_resume_due
     assert comms.agents.finish_turn(turn.turn_lease)
@@ -46,7 +46,7 @@ def test_project_change_during_turn_is_recorded_until_the_next_turn_starts(tmp_p
     current = comms.registry.require("owner")
     assert current.project_resume_due and current.worktree == str(new)
     assert json.loads(comms.registry.store.path.read_text())["threads"]["owner"]["project_resume_due"]
-    following = comms.agents.begin_turn("owner", "next-turn")
+    following = comms.agents.begin_turn("owner", TurnId('bf5eb504b7221133c4f3cf2aa87008a3'))
     assert following.thread.worktree == str(new)
     assert not comms.registry.require("owner").project_resume_due
     assert comms.agents.finish_turn(following.turn_lease)
@@ -56,7 +56,7 @@ def test_project_change_during_turn_is_recorded_until_the_next_turn_starts(tmp_p
 
 def test_cancelled_turn_withdraws_the_recorded_resume(tmp_path):
     comms, _old, new = declared_owner(tmp_path)
-    turn = comms.agents.begin_turn("owner", "changing-turn")
+    turn = comms.agents.begin_turn("owner", TurnId('1056fa0e005902e019b8d1d4fd75d3cb'))
     comms.threads.set_project("owner", str(new))
     comms.agents.transition_turn(turn.turn_lease, CancellingPhase())
     assert comms.agents.finish_turn(turn.turn_lease)

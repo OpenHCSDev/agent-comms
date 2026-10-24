@@ -31,7 +31,7 @@ from .goals import Goal, NoGoal
 from .message_reference import MessageReference
 from .native_session_reopen import NativeSessionIdentity
 from .peer_relevance import AlwaysListed, GoalShown, PeerRelevance
-from .thread_identity import ThreadIncarnation, TurnId, TurnIdentity
+from .thread_identity import ThreadIncarnation, RegisteredTurn, TurnIdentity
 from .tool_result import DeclaredReply
 
 if TYPE_CHECKING:
@@ -1194,7 +1194,7 @@ class ContextTurn(DeclaredFamily, affix="ContextTurn"):
 
 @dataclass(frozen=True)
 class RecordedContextTurn(ContextTurn):
-    identity: TurnId
+    identity: RegisteredTurn
     occurrence: TurnIdentity
 
     def __post_init__(self):

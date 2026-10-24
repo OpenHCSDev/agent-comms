@@ -13,11 +13,11 @@ from .activity import ObservedActivity
 from .child_process import ProcessIdentity, ProcessState
 from .errors import RelationViolationError
 from .field_codec import (
-    MalformedRecord,
     NullMember,
     RecordMember,
     SingleFieldValue,
     SubclassUnion,
+    TurnId,
     WireTransient,
     boundary_decoder,
 )
@@ -26,7 +26,14 @@ from .lifecycle_capability import Executing, LifecycleCapability
 from .locked_store import DurableFile, JsonDocument, PatternFile
 from .routing import TurnRouting
 from .store_files import _store_lock
-from .thread_identity import ThreadIncarnation, TurnFence, TurnId, TurnIdentity
+from .thread_identity import (
+    NoObservedTurn,
+    ObservedTurn,
+    RegisteredTurn,
+    ThreadIncarnation,
+    TurnFence,
+    TurnIdentity,
+)
 from .turn_phase import IdlePhase, PreparingPhase, TurnPhase
 
 if TYPE_CHECKING:
@@ -68,13 +75,15 @@ class TurnDeclaration(LifecycleCapability, SubclassUnion, affix=""):
     def require_current(self, claim_scope: int, generation: int) -> None: ...
 
     @abstractmethod
-    def require_turn(self, turn_id: TurnId) -> None: ...
+    def require_turn(self, turn_id: RegisteredTurn) -> None: ...
 
     @abstractmethod
     def without_claim(self) -> TurnDeclaration: ...
 
     @abstractmethod
-    def observed_id(self, finished: str | None) -> str | None: ...
+    def observed_turn(
+        self, finished: TurnRecord, identity: TurnIdentity, claim_scope: int,
+    ) -> ObservedTurn: ...
 
     @abstractmethod
     def started_by(self, updated_at_ms: int) -> bool: ...
@@ -83,7 +92,7 @@ class TurnDeclaration(LifecycleCapability, SubclassUnion, affix=""):
     def phase_effects(self, phase: TurnPhase) -> Iterator[TurnDeclaration]: ...
 
     @abstractmethod
-    def matches(self, turn_id: TurnId) -> bool: ...
+    def matches(self, turn_id: RegisteredTurn) -> bool: ...
 
 
 @dataclass(frozen=True)
@@ -111,14 +120,16 @@ class NoTurn(NullMember, TurnDeclaration):
     def require_current(self, claim_scope: int, generation: int) -> None:
         pass
 
-    def require_turn(self, turn_id: TurnId) -> None:
+    def require_turn(self, turn_id: RegisteredTurn) -> None:
         raise RelationViolationError("live owner does not hold the requested turn")
 
     def without_claim(self) -> NoTurn:
         return self
 
-    def observed_id(self, finished: str | None) -> str | None:
-        return finished
+    def observed_turn(
+        self, finished: TurnRecord, identity: TurnIdentity, claim_scope: int,
+    ) -> ObservedTurn:
+        return finished.observed_turn(identity, claim_scope)
 
     def started_by(self, updated_at_ms: int) -> bool:
         return False
@@ -126,7 +137,7 @@ class NoTurn(NullMember, TurnDeclaration):
     def phase_effects(self, phase: TurnPhase) -> Iterator[TurnDeclaration]:
         return iter(())
 
-    def matches(self, turn_id: TurnId) -> bool:
+    def matches(self, turn_id: RegisteredTurn) -> bool:
         return False
 
 
@@ -146,13 +157,13 @@ class TurnGeneration(SubclassUnion, affix="Generation"):
 
     @abstractmethod
     def fence(
-        self, claimed: TurnGeneration, incarnation: ThreadIncarnation, turn_id: str,
+        self, claimed: TurnGeneration, incarnation: ThreadIncarnation, turn_id: TurnId,
         record: StoredTurnRecord,
     ) -> TurnLease: ...
 
     @abstractmethod
     def claim_fence(
-        self, identity: TurnIdentity, turn_id: str, record: StoredTurnRecord,
+        self, identity: TurnIdentity, turn_id: TurnId, record: StoredTurnRecord,
     ) -> TurnLease: ...
 
 
@@ -170,13 +181,13 @@ class RecordedGeneration(SingleFieldValue, TurnGeneration):
         return self
 
     def fence(
-        self, claimed: TurnGeneration, incarnation: ThreadIncarnation, turn_id: str,
+        self, claimed: TurnGeneration, incarnation: ThreadIncarnation, turn_id: TurnId,
         record: StoredTurnRecord,
     ) -> TurnLease:
         return claimed.claim_fence(TurnIdentity(incarnation, self.value), turn_id, record)
 
     def claim_fence(
-        self, identity: TurnIdentity, turn_id: str, record: StoredTurnRecord,
+        self, identity: TurnIdentity, turn_id: TurnId, record: StoredTurnRecord,
     ) -> TurnLeaseFence:
         return TurnLeaseFence(identity, turn_id, self.value, record=record)
 
@@ -195,20 +206,20 @@ class UnrecordedGeneration(NullMember, TurnGeneration):
         return RecordedGeneration(claimed)
 
     def fence(
-        self, claimed: TurnGeneration, incarnation: ThreadIncarnation, turn_id: str,
+        self, claimed: TurnGeneration, incarnation: ThreadIncarnation, turn_id: TurnId,
         record: StoredTurnRecord,
     ) -> NoTurnLease:
         return NoTurnLease()
 
     def claim_fence(
-        self, identity: TurnIdentity, turn_id: str, record: StoredTurnRecord,
+        self, identity: TurnIdentity, turn_id: TurnId, record: StoredTurnRecord,
     ) -> NoTurnLease:
         return NoTurnLease()
 
 
 @dataclass(frozen=True)
 class ActiveTurn(Executing, RecordMember, TurnDeclaration):
-    id: str
+    id: TurnId
     owner: ProcessIdentity
     started_at: float = field(default_factory=time.time)
     routing: TurnRouting | None = None
@@ -243,12 +254,12 @@ class ActiveTurn(Executing, RecordMember, TurnDeclaration):
         if not self.current(claim_scope, generation):
             raise RelationViolationError("live owner turn claim_scope is no longer current")
 
-    def require_turn(self, turn_id: TurnId) -> None:
+    def require_turn(self, turn_id: RegisteredTurn) -> None:
         if not self.matches(turn_id):
             raise RelationViolationError("live owner does not hold the requested turn")
 
-    def matches(self, turn_id: TurnId) -> bool:
-        return TurnId(self.id) == turn_id
+    def matches(self, turn_id: RegisteredTurn) -> bool:
+        return RegisteredTurn(self.id) == turn_id
 
     def without_claim(self) -> ActiveTurn:
         return replace(self, claimed_generation=UnrecordedGeneration())
@@ -266,8 +277,10 @@ class ActiveTurn(Executing, RecordMember, TurnDeclaration):
     ) -> TurnLease:
         return self.turn_generation.fence(self.claimed_generation, incarnation, self.id, record)
 
-    def observed_id(self, finished: str | None) -> str:
-        return self.id
+    def observed_turn(
+        self, finished: TurnRecord, identity: TurnIdentity, claim_scope: int,
+    ) -> TurnFence:
+        return TurnFence(identity, self.id, claim_scope)
 
     def started_by(self, updated_at_ms: int) -> bool:
         return self.started_at * 1000 <= updated_at_ms + 1
@@ -297,27 +310,6 @@ class ActiveTurn(Executing, RecordMember, TurnDeclaration):
         )
 
 
-@dataclass(frozen=True)
-class TurnState:
-    """Read-only capture of the existing lease, not another state store."""
-
-    active: TurnDeclaration = field(default_factory=NoTurn)
-    finished_turn_id: str | None = None
-
-    def phase_effects(self, phase: TurnPhase) -> Iterator[TurnState]:
-        for active in self.active.phase_effects(phase):
-            yield replace(self, active=active)
-
-    def native_phase_effects(self, phase: TurnPhase) -> Iterator[TurnState]:
-        yield from self.phase_effects(self.active.phase.observed(phase))
-
-    def observed_id(self) -> str | None:
-        return self.active.observed_id(self.finished_turn_id)
-
-    def matches(self, turn_id: str | None) -> bool:
-        return turn_id is None or self.observed_id() == turn_id
-
-
 class TurnLease(ABC):
     """A thread's exact local turn lease, or the declared absence of one."""
 
@@ -330,14 +322,14 @@ class TurnLease(ABC):
     def held(self) -> tuple[TurnLeaseFence, ...]: ...
 
     @abstractmethod
-    def attests(self, claim_scope: int, turn_id: TurnId) -> bool:
+    def attests(self, claim_scope: int, turn_id: RegisteredTurn) -> bool:
         """This lease holds ``turn_id`` under ``claim_scope``."""
 
     @abstractmethod
-    def authored(self, identity: TurnIdentity, turn: TurnId) -> bool: ...
+    def authored(self, identity: TurnIdentity, turn: RegisteredTurn) -> bool: ...
 
     @abstractmethod
-    def observes_task_turn(self, identity: TurnIdentity, turn: TurnId, idle: bool) -> bool:
+    def observes_task_turn(self, identity: TurnIdentity, turn: RegisteredTurn, idle: bool) -> bool:
         """During a turn, its exact ID or the preceding generation; idle, the caller's answer."""
 
     @abstractmethod
@@ -368,13 +360,13 @@ class NoTurnLease(NullMember, TurnLease):
     def held(self) -> tuple[TurnLeaseFence, ...]:
         return ()
 
-    def attests(self, claim_scope: int, turn_id: TurnId) -> bool:
+    def attests(self, claim_scope: int, turn_id: RegisteredTurn) -> bool:
         return False
 
-    def authored(self, identity: TurnIdentity, turn: TurnId) -> bool:
+    def authored(self, identity: TurnIdentity, turn: RegisteredTurn) -> bool:
         return False
 
-    def observes_task_turn(self, identity: TurnIdentity, turn: TurnId, idle: bool) -> bool:
+    def observes_task_turn(self, identity: TurnIdentity, turn: RegisteredTurn, idle: bool) -> bool:
         return idle
 
     @boundary_decoder
@@ -403,13 +395,13 @@ class TurnLeaseFence(TurnFence, TurnLease):
     def held(self) -> tuple[TurnLeaseFence, ...]:
         return (self,)
 
-    def attests(self, claim_scope: int, turn_id: TurnId) -> bool:
-        return self.can_attest(claim_scope) and TurnId(self.turn_id) == turn_id
+    def attests(self, claim_scope: int, turn_id: RegisteredTurn) -> bool:
+        return self.can_attest(claim_scope) and RegisteredTurn(self.turn_id) == turn_id
 
-    def authored(self, identity: TurnIdentity, turn: TurnId) -> bool:
+    def authored(self, identity: TurnIdentity, turn: RegisteredTurn) -> bool:
         return (self.identity, self.turn_id) == (identity, turn.value)
 
-    def observes_task_turn(self, identity: TurnIdentity, turn: TurnId, idle: bool) -> bool:
+    def observes_task_turn(self, identity: TurnIdentity, turn: RegisteredTurn, idle: bool) -> bool:
         return self.authored(identity, turn) or identity.generation == self.identity.generation - 1
 
     @boundary_decoder
@@ -452,6 +444,9 @@ class TurnRecord(LifecycleCapability, SubclassUnion, affix=""):
         pass
 
 
+    @abstractmethod
+    def observed_turn(self, identity: TurnIdentity, claim_scope: int) -> ObservedTurn: ...
+
 @dataclass(frozen=True)
 class NoTurnRecord(NullMember, TurnRecord):
 
@@ -469,15 +464,14 @@ class NoTurnRecord(NullMember, TurnRecord):
         return NoTurnLease()
 
 
+    def observed_turn(self, identity: TurnIdentity, claim_scope: int) -> NoObservedTurn:
+        return NoObservedTurn()
+
 @dataclass(frozen=True)
 class FinishedTurn(RecordMember, TurnRecord):
     """No live turn; the last one finished with this ID."""
 
-    turn_id: str
-
-    def __post_init__(self) -> None:
-        if type(self.turn_id) is not str or not self.turn_id:
-            raise MalformedRecord("Finished turn requires its ID.")
+    turn_id: TurnId
 
     def bound_to(self, registry_path: Path, identity: TurnIdentity) -> FinishedTurn:
         return self
@@ -486,7 +480,7 @@ class FinishedTurn(RecordMember, TurnRecord):
         return NoTurn()
 
     def state(self) -> TurnState:
-        return TurnState(finished_turn_id=self.turn_id)
+        return TurnState(finished=self)
 
     def without_claim(self) -> None:
         pass
@@ -499,6 +493,9 @@ class FinishedTurn(RecordMember, TurnRecord):
         if generation == 0:
             raise ValueError("Finished turn requires a prior turn generation.")
 
+
+    def observed_turn(self, identity: TurnIdentity, claim_scope: int) -> TurnFence:
+        return TurnFence(identity, self.turn_id, claim_scope)
 
 @dataclass(frozen=True)
 class StoredTurnReference(RecordMember, TurnRecord):
@@ -520,6 +517,9 @@ class StoredTurnReference(RecordMember, TurnRecord):
               generation: int) -> TurnLease:
         raise RelationViolationError("Turn reference must be bound by its registry")
 
+
+    def observed_turn(self, identity: TurnIdentity, claim_scope: int) -> TurnFence:
+        raise RelationViolationError("Turn reference must be bound by its registry")
 
 @dataclass(frozen=True)
 class StoredTurnRecord(Executing, DurableFile, PatternFile, JsonDocument[ActiveTurn],
@@ -594,6 +594,21 @@ class StoredTurnRecord(Executing, DurableFile, PatternFile, JsonDocument[ActiveT
         self, lease: TurnLeaseFence, phase: TurnPhase,
     ) -> tuple[TurnState, ...]:
         return self._turn_effects(lease, lambda state: state.native_phase_effects(phase))
+
+
+@dataclass(frozen=True)
+class TurnState:
+    """Read-only capture of the existing lease, not another state store."""
+
+    active: TurnDeclaration = field(default_factory=NoTurn)
+    finished: TurnRecord = field(default_factory=NoTurnRecord)
+
+    def phase_effects(self, phase: TurnPhase) -> Iterator[TurnState]:
+        for active in self.active.phase_effects(phase):
+            yield replace(self, active=active)
+
+    def native_phase_effects(self, phase: TurnPhase) -> Iterator[TurnState]:
+        yield from self.phase_effects(self.active.phase.observed(phase))
 
 
 class TurnCompletion(ABC):

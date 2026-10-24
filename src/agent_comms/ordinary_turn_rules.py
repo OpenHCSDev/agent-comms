@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 from .reservation_rules import ReservationRule, RuleCheck
-from .thread_identity import TurnId
+from .thread_identity import RegisteredTurn
 
 if TYPE_CHECKING:
     from .comms import Comms
@@ -39,7 +39,7 @@ class OrdinaryOwnerCheck(RuleCheck):
     registry: RegistrySnapshot
     canonical: str
     claim_generation: int
-    turn: TurnId
+    turn: RegisteredTurn
 
 
 class OrdinaryIncarnationRule(ReservationRule):

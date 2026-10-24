@@ -9,6 +9,7 @@ from dataclasses import replace
 import pytest
 
 from agent_comms.child_process import ProcessIdentity
+from agent_comms.field_codec import TurnId
 from agent_comms.turn_failure import BackendFailed, FinalStopMissing
 from agent_comms.goal_attempts import AttemptRecord, GoalAttemptStore
 from agent_comms.errors import UnresolvedAttemptError
@@ -29,13 +30,13 @@ def bound(tmp_path, *, thread_registration):
     owner = Thread(
         'owner', frozenset(), '/private-worktree',
         process_identity=ProcessIdentity.capture(os.getpid()), created_at=10.0,
-        goal=goal, turn_generation=7, turn_record=FinishedTurn('a' * 32),
+        goal=goal, turn_generation=7, turn_record=FinishedTurn(TurnId('a' * 32)),
     )
     store.create_goal(goal.id)
     permit = store.claim_launch(store.reserve(goal.id, 1))
     identity = TurnIdentity(owner.incarnation, 7)
     lease = TurnLeaseFence(
-        identity, "a" * 32, 3,
+        identity, TurnId('aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'), 3,
         record=StoredTurnRecord.for_identity(thread_registration.store.path, identity),
     )
     observation = FailedTurnObservation.from_terminal(

@@ -8,6 +8,7 @@ import pytest
 from agent_comms.child_process import NoProcess, ProcessIdentity, SpawnedProcess
 from agent_comms.comms import wire
 from agent_comms.errors import RelationViolationError
+from agent_comms.field_codec import TurnId
 from agent_comms.registry_document import RegistryDocument
 from agent_comms.runtime_requests import ProjectRuntimeRequest
 from agent_comms.thread_execution import ExternalThreadExecution
@@ -124,7 +125,7 @@ def test_same_pid_different_birth_advances_both_authority_domains(tmp_path):
     with pytest.raises(RelationViolationError):
         comms.registry.live_owner_with_claim(owner.name)
     with pytest.raises(RelationViolationError):
-        comms.registry.lease_local_turn(owner.name, "reused-pid")
+        comms.registry.lease_local_turn(owner.name, TurnId('b777bd9e97665a2b2def8639667b0e72'))
     with pytest.raises(RelationViolationError):
         comms.threads.rename_managed_thread(owner.name, "renamed", owner=ProcessIdentity.capture(os.getpid()))
     assert identity.alive()
@@ -153,7 +154,9 @@ def test_active_executor_cannot_be_replaced_by_same_pid_different_birth(tmp_path
     owner = comms.threads.claim_thread(
         "owner", tags=frozenset(), worktree=str(tmp_path), process=identity
     )
-    leased, _ = comms.registry.lease_local_turn(owner.name, "active-turn")
+    leased, _ = comms.registry.lease_local_turn(
+        owner.name, TurnId('e99af36cdfcffbc191cce98c5d771afb')
+    )
     stale = replace(identity, start_time=identity.start_time + 1)
     with pytest.raises(RelationViolationError):
         comms.registry.declare(replace(owner, process_identity=stale))
@@ -161,5 +164,5 @@ def test_active_executor_cannot_be_replaced_by_same_pid_different_birth(tmp_path
     comms.registry.declare(Thread('owner', frozenset(), str(tmp_path), title=GivenThreadText('metadata')))
     current = comms.registry.require(owner.name)
     assert current.process_identity == identity and current.turn_record == leased.turn_record
-    assert current.turn_record.read().id == 'active-turn'
+    assert current.turn_record.read().id == 'e99af36cdfcffbc191cce98c5d771afb'
     comms.registry.release_turn(current.turn_lease)

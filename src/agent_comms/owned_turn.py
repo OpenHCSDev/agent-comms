@@ -18,7 +18,7 @@ from . import agent_events as events
 from .agent_backend import InputContent, TurnDelivery
 from .channel_input_batch import InputBatch
 from .coordinator import Coordination
-from .field_codec import Id128Text
+from .field_codec import TurnId
 from .goals import Goal
 from .image_input import ImageInput
 from .input_attempt import ReservedInput
@@ -28,7 +28,7 @@ from .native_failures import NativeRequestFailure
 from .native_input_owner import RegistryOwner
 from .owned_send import OwnedSend
 from .routing import MessageRoute, ScheduledTurn, TurnRouting
-from .thread_identity import TurnId
+from .thread_identity import RegisteredTurn
 from .turn_goal_account import TurnGoalAccount
 from .turn_goal_permission import (
     OwnerGoalPermission,
@@ -41,6 +41,7 @@ from .turn_input_source import (
     OwnerOriginalInput,
     RoutedOriginalInput,
     ScheduledOriginalInput,
+    TurnAcceptance,
 )
 from .turn_phase import CancellingPhase, PromptAcceptancePhase
 from .turn_progress import TurnProgress
@@ -90,7 +91,7 @@ class OwnedTurn:
         autonomous_goal: bool = False,
         original_owner_input: bool = False,
         original_goal_id: str | None = None,
-        accepted_input_id: str | None = None,
+        acceptance: TurnAcceptance,
         dependency_wait_id: str | None = None,
     ) -> None:
         self.runner = runner
@@ -104,7 +105,7 @@ class OwnedTurn:
         self.autonomous_goal = autonomous_goal
         self.original_owner_input = original_owner_input
         self.original_goal_id = original_goal_id
-        self.accepted_input_id = accepted_input_id
+        self.acceptance = acceptance
         self.dependency_wait_id = dependency_wait_id
         self.terminal: TurnTerminal = EndedWithoutResult()
 
@@ -131,7 +132,7 @@ class OwnedTurn:
         return True
 
     def begin(self, resources: AsyncExitStack, permits: ExitStack) -> bool:
-        self.turn_id = Id128Text.mint()
+        self.turn_id = TurnId.mint()
         self.routing = TurnRouting(
             tuple(origin.reference for origin in self.origins),
             MessageRoute(self.thread_name, self.reply_targets) if self.reply_targets else None,
@@ -152,7 +153,7 @@ class OwnedTurn:
         origin_claims = ExitStack()
         permits.callback(origin_claims.close)
         self.goals = TurnGoalAccount(
-            comms=self.runner.comms, owner=self.thread, turn=TurnId(self.turn_id),
+            comms=self.runner.comms, owner=self.thread, turn=RegisteredTurn(self.turn_id),
             lease=self.turn_lease, permit=self.goal_permit,
             pending_origins=self.runner.goals.pending_goal_origins, claims=origin_claims,
         )
@@ -220,7 +221,7 @@ class OwnedTurn:
         self.relations = self.runner.comms.relationships.context_relations(self.thread.name)
         self.context = TurnContext.for_owner(
             self.thread,
-            RecordedContextTurn(TurnId(self.turn_id), self.turn_lease.identity),
+            RecordedContextTurn(RegisteredTurn(self.turn_id), self.turn_lease.identity),
             self.task,
             self.runner.comms.views.thread_views(),
             self.relations,
@@ -253,7 +254,7 @@ class OwnedTurn:
         else:
             source_type = RoutedOriginalInput
         original = source_type(
-            accepted_id=self.accepted_input_id,
+            acceptance=self.acceptance,
             goal_permission=TurnGoalPermission(permission),
             prompt=self.context.render().text,
             original_display=self.original_display,
@@ -269,7 +270,7 @@ class OwnedTurn:
             self.original = original.reserve(
                 self.runner.inputs.dispositions,
                 self.thread,
-                TurnId(self.turn_id),
+                RegisteredTurn(self.turn_id),
                 self.turn_lease.claimed_generation,
                 ownership=reservation,
             )
@@ -284,10 +285,8 @@ class OwnedTurn:
             self.runner.inputs.bind_native_turn(self.session_id, self.thread),
         )
         self.finish_event = asyncio.Event()
-        self.controller = (
-            self.runner.inputs.state(self.session_id).queued[self.accepted_input_id].controller
-            if self.accepted_input_id is not None
-            else self.runner.runtime.controller.get()
+        self.controller = self.acceptance.controller(
+            self.runner.inputs.state(self.session_id), self.runner.runtime,
         )
         if self.controller is not None:
             self.controller = self.controller.attached(None)  # Autonomous/channel/goal turns have no controller.
@@ -345,10 +344,10 @@ class OwnedTurn:
             goal_store=await Coordination.run_worker(self.runner.comms.goals.open_goal_store),
             session_id=self.session_id,
             thread=self.thread,
-            turn=TurnId(self.turn_id),
+            turn=RegisteredTurn(self.turn_id),
             claim_generation=self.turn_lease.claimed_generation,
             goal_permit=self.goal_permit,
-            original=replace(self.original, prompt=rendered.text),
+            original_source=replace(self.original, prompt=rendered.text),
         )
         from .channel_coding_tools import CodingToolMode
 
@@ -359,10 +358,7 @@ class OwnedTurn:
             inbox=self.following.inbox,
             finish_event=self.finish_event,
             send_boundary=sender,
-            interrupt_boundary=lambda public_id, native_id, text: sender(
-                public_id, native_id, text, already_bound=True
-            ),
-            input_started=sender.native_start,
+            input_start=sender,
             request_progress=self.progress.record_request_progress,
             ui_request=lambda request: self.runner.extension_ui_permission(
                 self.session_id, self.turn_id, self.controller, request

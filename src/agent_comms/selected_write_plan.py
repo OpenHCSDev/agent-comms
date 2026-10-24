@@ -33,7 +33,7 @@ from .child_process import Platform
 from .coordination_cohort import sealed_cohort_assignments
 from .declared_family import DeclaredFamily
 from .envelope_claim_transitions import ExistingFileClaim
-from .field_codec import FieldCodec, Id128Text, MalformedRecord
+from .field_codec import ClaimId, FieldCodec, Id128Text, MalformedRecord, MessageId
 from .message_reference import MessageReference
 from .private_path import PrivateDirectoryRole, PrivateFileRole
 from .thread_identity import ClaimedIdentity, ClaimScoped, RecordedThreadIncarnation
@@ -63,7 +63,7 @@ class SelectedWriteIntent(DeclaredFamily, affix="WriteIntent"):
     schema: Literal[1]
     root_id: str
     source_seq: int
-    source_message_id: str
+    source_message_id: MessageId
     claim_id: str
     owner: RecordedThreadIncarnation
     claim_epoch: int
@@ -172,7 +172,7 @@ class SelectedWritePlans(DurableFile, PatternFile):
         if type(source_seq) is not int or source_seq <= 0:
             raise IdentityConflict("Selected write requires a positive source sequence")
         try:
-            FieldCodec.decode(str, source_message_id)
+            source_message_id = FieldCodec.decode(MessageId, source_message_id)
             FieldCodec.decode(str, resource)
             FieldCodec.decode(str, contents)
         except MalformedRecord as error:
@@ -207,7 +207,7 @@ class SelectedWritePlans(DurableFile, PatternFile):
             path = ExistingFileClaim(Path(resource)).normalized(Path(owner.worktree))
             self._prepare_dir()
             record_path = self.path_in(self.directory, source_seq=str(source_seq), lookup=lookup)
-            operation_id = Id128Text.mint()
+            operation_id = ClaimId.mint()
             record = AcceptedWriteIntent(
                 schema=1, root_id=self.root_id, source_seq=source_seq,
                 source_message_id=source_message_id, claim_id=selected[0].assignment_id,

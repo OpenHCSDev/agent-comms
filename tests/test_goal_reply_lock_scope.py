@@ -13,6 +13,7 @@ from agent_comms.bus_publication import Delivered
 from agent_comms.bus_tables import ReceivedSource
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.coordination_errors import StaleFence
+from agent_comms.field_codec import TurnId
 from agent_comms.goal_actions import (
     EditGoalAction,
     GoalActionContext,
@@ -90,7 +91,7 @@ def reviewing(tmp_path):
             name, frozenset(), str(tmp_path),
             process_identity=ProcessIdentity.capture(os.getpid()),
         ))
-    comms.agents.begin_turn("child", "child-work")
+    comms.agents.begin_turn("child", TurnId('83dcc89110e0b7e93d50dfc4d8f66d0f'))
     comms.goals.update_goal("owner", SetGoalAction(text="Review the child's work"))
     return comms
 
@@ -137,7 +138,7 @@ def test_completed_reply_is_decoded_without_holding_registry(probed):
     probed.goals.update_goal("owner", standby(probed))
     reply = probed.messaging.send("child", "owner", "Finished").message
     probed.bus.bus.checks.clear()
-    witness = probed.agents.begin_turn("owner", "handling-reply")
+    witness = probed.agents.begin_turn("owner", TurnId('8443600f04e8b6b0a977082a8a88321d'))
     assert probed.goals.consume_reply_wait(witness, reply.reference)
     assert probed.bus.bus.checks == [0]
 
@@ -174,12 +175,12 @@ def replace_wait(comms, prepared):
 
 
 def begin_owner_turn(comms, prepared):
-    comms.agents.begin_turn("owner", "new-owner-turn")
+    comms.agents.begin_turn("owner", TurnId('85a98504553ba87ec3fe28eb889fab23'))
 
 
 def begin_dependency_turn(comms, prepared):
     comms.agents.finish_turn(comms.registry.require("child").require_turn_lease())
-    comms.agents.begin_turn("child", "new-child-turn")
+    comms.agents.begin_turn("child", TurnId('25b63a30f24cf9d67463f931d800c73a'))
 
 
 def review_inputs(comms, prepared):
@@ -263,7 +264,7 @@ def test_terminal_reply_read_cannot_clear_a_newer_wait(reviewing):
 def completed_reply(comms):
     comms.goals.update_goal("owner", standby(comms))
     reply = comms.messaging.send("child", "owner", "The actual completed reply").message
-    witness = comms.agents.begin_turn("owner", "original-handling-turn")
+    witness = comms.agents.begin_turn("owner", TurnId('14ef4c75692efd61f1b3f105c8af23d2'))
     return witness, reply, comms.goals.goal_wait("owner")
 
 
@@ -282,7 +283,7 @@ def test_completed_reply_rechecks_its_original_turn(reviewing):
 
     def advance_turn():
         reviewing.agents.finish_turn(witness.thread.require_turn_lease())
-        reviewing.agents.begin_turn("owner", "a-later-turn")
+        reviewing.agents.begin_turn("owner", TurnId('13e021d6bd76f1eca99b0268508e0542'))
 
     reviewing.bus.bus = AfterReadBus(reviewing.bus.bus.path, advance_turn)
     with pytest.raises(StaleFence):
@@ -412,7 +413,7 @@ def test_new_dependency_turn_during_silence_read_keeps_wait(reviewing):
     wait = reviewing.goals.goal_wait("owner")
     fence = reviewing.agents.finish_turn(reviewing.registry.require("child").require_turn_lease())
     reviewing.bus.bus = AfterReadBus(
-        reviewing.bus.bus.path, partial(reviewing.agents.begin_turn, "child", "new-child-turn"),
+        reviewing.bus.bus.path, partial(reviewing.agents.begin_turn, "child", TurnId.mint()),
     )
     assert reviewing.goals.release_waits_after_terminal_turn(fence) == ()
     assert reviewing.bus.bus.changed
@@ -426,7 +427,7 @@ def test_terminal_callback_reobserves_same_wait_after_waiter_turn_changes(review
     fence = reviewing.agents.finish_turn(reviewing.registry.require("child").require_turn_lease())
 
     def finish_waiter_turn():
-        witness = reviewing.agents.begin_turn("owner", "intervening-owner-turn")
+        witness = reviewing.agents.begin_turn("owner", TurnId('0ab2ad7eead38307a0a663568aed1d8b'))
         reviewing.agents.finish_turn(witness.thread.require_turn_lease())
         assert reviewing.goals.goal_wait("owner") == wait
 

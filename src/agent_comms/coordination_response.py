@@ -57,6 +57,7 @@ from agent_comms.typed_table import (
     WithoutRowid,
 )
 
+from .field_codec import MessageId
 from .locked_store import RegistryFile
 
 
@@ -194,7 +195,7 @@ class PublicationAppendDispatches(ResponseTable, WithoutRowid):
 
 @dataclass(frozen=True)
 class SelectedResponseRoute(TypedRow):
-    message_id: str
+    message_id: MessageId
     exact_target: str
     envelope_digest: str
     audience_digest: str

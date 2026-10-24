@@ -17,7 +17,7 @@ from agent_comms.coordination_contracts import (
 )
 from agent_comms.coordination_schema import CoordinatorRow
 from agent_comms.envelope_claim_transitions import AssignmentBinding
-from agent_comms.field_codec import SnapshotExclude, WireName, projected
+from agent_comms.field_codec import MessageId, SnapshotExclude, WireName, projected
 from agent_comms.message_reference import MessageReference
 from agent_comms.typed_table import (
     Column,
@@ -144,7 +144,7 @@ class WakeAssignment(
     recipient: Annotated[str, FrozenColumn(check="length(recipient) BETWEEN 1 AND 256")]
     recipient_lookup: Annotated[str, FrozenColumn()]
     wire_seq: Annotated[int, FrozenColumn(check="wire_seq > 0")]
-    message_id: Annotated[str, FrozenColumn(check="length(message_id) BETWEEN 1 AND 256")]
+    message_id: Annotated[MessageId, FrozenColumn(check="length(message_id) BETWEEN 1 AND 256")]
     audience: Annotated[MessageAudience, FrozenColumn()]
     lifecycle: Annotated[AssignmentState, SnapshotExclude()]
     accepted_at_ms: Annotated[int, FrozenColumn(check="accepted_at_ms >= 0")]

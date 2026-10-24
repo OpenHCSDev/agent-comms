@@ -6,6 +6,7 @@ from dataclasses import replace
 
 
 from agent_comms.child_process import ProcessIdentity
+from agent_comms.field_codec import TurnId
 from agent_comms.goal_actions import GoalPrecondition, SetGoalAction, StandbyGoalAction
 from agent_comms.goal_presentation import GoalWaitTarget
 from goal_owner_fixture import canonical_goal_wire
@@ -66,7 +67,7 @@ def test_original_reply_is_not_reassigned_to_same_name_replacement(tmp_path):
     comms = canonical_goal_wire(tmp_path / "wire")
     owner = register(comms, "owner")
     peer = register(comms, "peer")
-    lease = comms.agents.begin_turn("peer", "original-work").turn_lease
+    lease = comms.agents.begin_turn("peer", TurnId('6f42e257badc3c5ab4a67e743d8ab487')).turn_lease
     goal = comms.goals.update_goal("owner", SetGoalAction(text="Wait for original peer"))
     comms.goals.update_goal(
         "owner", StandbyGoalAction(expect=GoalPrecondition(goal_id=goal.id), wait_for=("peer",))
@@ -101,7 +102,7 @@ def test_original_recipient_and_direct_reply_semantics_cannot_be_replaced(tmp_pa
     owner = register(comms, "owner")
     register(comms, "other")
     register(comms, "peer")
-    comms.agents.begin_turn("peer", "original-work")
+    comms.agents.begin_turn("peer", TurnId('6f42e257badc3c5ab4a67e743d8ab487'))
     goal = comms.goals.update_goal("owner", SetGoalAction(text="Wait for original owner reply"))
     comms.goals.update_goal(
         "owner", StandbyGoalAction(expect=GoalPrecondition(goal_id=goal.id), wait_for=("peer",))
