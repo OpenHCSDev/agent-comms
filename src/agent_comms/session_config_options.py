@@ -209,8 +209,9 @@ class SessionConfigOptions(ConfigOptions):
         self, session_id: str,
     ) -> list[SessionConfigOptionSelect | SessionConfigOptionBoolean]:
         name = self.sessions.require(session_id)
-        thread = await Coordination.run_worker(partial(self.comms.registry.require, name))
-        return await self.options(thread)
+        return await self.options(
+            await Coordination.run_worker(partial(self.comms.threads.running_selection, name)),
+        )
 
     def stop_observing_configuration(self, session_id: str) -> None:
         self._publication_sessions.discard(session_id)

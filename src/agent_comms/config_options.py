@@ -45,6 +45,13 @@ class CatalogSelection(Protocol):
 
 
 @dataclass(frozen=True, slots=True)
+class RunningSelection:
+    """What a thread runs: its stored choice, otherwise the model its runtime reports."""
+    model: ThreadModel
+    thinking_level: type[ThinkingChoice]
+
+
+@dataclass(frozen=True, slots=True)
 class CatalogChoice:
     """A catalog value; only the ACP view needs a string for an unset value."""
     name: str
