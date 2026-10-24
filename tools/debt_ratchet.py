@@ -386,7 +386,7 @@ class PerFileOccurrenceMeasure(PerFileMeasure, OccurrenceMeasure):
     """A per-node count, kept separately for each file."""
 
 
-class SyntaxPasses(InventoryMeasure[dict[str, int]]):
+class SyntaxPasses(InventoryMeasure[dict[type[CountedSource], int]]):
     """The front end of every CountedSource pass, as a compiler runs its passes over one tree.
 
     Each changed file is read and parsed once per revision and every pass counts that tree;
@@ -395,25 +395,25 @@ class SyntaxPasses(InventoryMeasure[dict[str, int]]):
 
     @staticmethod
     def passes() -> tuple[type[CountedSource], ...]:
-        return Measure.members_with(CountedSource)
+        return CountedSource.members_with(CountedSource)
 
     @classmethod
     def inventory(cls, repo: Path, ref: str, root: str) -> frozenset[str]:
         return python_paths(repo, ref, root)
 
     @classmethod
-    def reading(cls, path: str, source: bytes) -> dict[str, int]:
-        return {measure.__name__: measure.count(source, path) for measure in cls.passes()}
+    def reading(cls, path: str, source: bytes) -> dict[type[CountedSource], int]:
+        return {measure: measure.count(source, path) for measure in cls.passes()}
 
     @classmethod
     def measured(cls, repo: Path, ref: str, base: str, head: str,
-                 readings: dict[str, dict[str, int]], root: str) -> dict[str, int]:
+                 readings: dict[str, dict[type[CountedSource], int]], root: str) -> dict[str, int]:
         return {key: value for measure in cls.passes() for key, value in measure.tally(
-            [(path, reading[measure.__name__]) for path, reading in readings.items()]).items()}
+            [(path, reading[measure]) for path, reading in readings.items()]).items()}
 
     @classmethod
     def side(cls, side: Side, repo: Path, ref: str,
-             paths: list[str]) -> tuple[Side, dict[str, dict[str, int]]]:
+             paths: list[str]) -> tuple[Side, dict[str, dict[type[CountedSource], int]]]:
         return side, cls.read(repo, ref, paths)
 
     @classmethod
@@ -428,7 +428,8 @@ class SyntaxPasses(InventoryMeasure[dict[str, int]]):
     @classmethod
     def combine(cls, results: list, repo: Path, base: str, head: str, changed: set[str],
                 root: str) -> tuple[dict[str, int], dict[str, int]]:
-        readings: dict[Side, dict[str, dict[str, int]]] = {side: {} for side in Side}
+        readings: dict[Side, dict[str, dict[type[CountedSource], int]]] = {
+            side: {} for side in Side}
         for side, read in results:
             readings[side].update(read)
         return PerFileMeasure.align(*(cls.measured(repo, ref, base, head,
@@ -1245,6 +1246,12 @@ class DeclaredSpellings:
         return ".".join(parts[:-1] if module.name == Path(DeclaredSpellings.package_marker).stem else parts)
 
     @classmethod
+    def import_names(cls, paths: typing.Collection[str]) -> dict[str, str]:
+        """Each path's dotted import name inside a package; empty outside every package."""
+        packages = {Path(path).parent for path in paths if Path(path).name == cls.package_marker}
+        return {path: cls.dotted_name(Path(path).with_suffix(""), packages) for path in paths}
+
+    @classmethod
     def declarations(cls, path: str, source: bytes) -> ModuleDeclarations:
         tree = ast.parse(source, path)
         functions = (node.name for node in tree.body
@@ -1262,12 +1269,12 @@ class DeclaredSpellings:
         """The spellings declared by the modules, taken in the dictionary's order."""
         names: dict[str, str] = {}
         bases: dict[str, set[str]] = {}
-        packages = {Path(path).parent for path in modules if Path(path).name == cls.package_marker}
+        dotted_names = cls.import_names(modules)
         for path, declared in modules.items():
             module = Path(path).with_suffix("")
             if cls.multiword(module.stem):
                 names[module.stem] = f"module {path}"
-            if dotted := cls.dotted_name(module, packages):
+            if dotted := dotted_names[path]:
                 names[dotted] = f"module {path}"
             for function in declared.functions:
                 names.setdefault(function, f"function {path}:{function}")
@@ -1628,39 +1635,56 @@ class LiteralDispatchCases(DispatchCases):
                 self.add(node.subject, repr(case.pattern.value.value))
 
 
-class TypeDispatchCases(DispatchCases):
+class TypeTests(MroDispatch):
+    """Every test of a value's type in Python syntax: isinstance, issubclass, ``type(x) is``,
+    ``x is C``, ``x in (A, B)`` and class patterns. A reader decides what a test means."""
+
+    instance_checks: typing.ClassVar[frozenset[str]] = frozenset(
+        check.__name__ for check in (isinstance, issubclass))
+    exact: typing.ClassVar[str] = type.__name__
+
+    @abstractmethod
+    def tested(self, subject: ast.expr, kind: ast.expr, at: ast.expr | ast.pattern) -> None:
+        """One test of ``subject`` against ``kind``, spelled at ``at``."""
+
     @handles(ast.Call)
     def instance_check(self, node: ast.Call) -> None:
         match node:
-            case ast.Call(func=ast.Name(id="isinstance" | "issubclass"), args=[subject, kind],
-                          keywords=[]):
-                self.add(subject, ast.dump(kind))
+            case ast.Call(func=ast.Name(id=check), args=[subject, kind],
+                          keywords=[]) if check in self.instance_checks:
+                self.tested(subject, kind, node)
 
     @handles(ast.Compare)
-    def exact_type(self, node: ast.Compare) -> None:
+    def comparison(self, node: ast.Compare) -> None:
         match node:
-            case ast.Compare(left=ast.Call(func=ast.Name(id="type"), args=[subject]), comparators=[kind]):
-                self.add(subject, ast.dump(kind))
-
-    @handles(ast.Compare)
-    def identity(self, node: ast.Compare) -> None:
-        """``origin is Literal`` and ``origin in (list, tuple)``: a type chosen by identity."""
-        match node:
-            case ast.Compare(left=ast.Call(func=ast.Name(id="type"))):
-                pass  # exact_type reads ``type(x) is C`` as a test of x
+            case ast.Compare(left=ast.Call(func=ast.Name(id=called), args=[subject]),
+                             comparators=[kind]) if called == self.exact:
+                self.tested(subject, kind, node)
             case ast.Compare(left=subject, ops=[ast.Is()],
                              comparators=[ast.Name() | ast.Attribute() as kind]):
-                self.add(subject, ast.dump(kind))
+                self.tested(subject, kind, node)
             case ast.Compare(left=subject, ops=[ast.In()], comparators=[ast.Tuple(elts=kinds)]) if (
                     kinds and all(isinstance(kind, (ast.Name, ast.Attribute)) for kind in kinds)):
                 for kind in kinds:
-                    self.add(subject, ast.dump(kind))
+                    self.tested(subject, kind, node)
 
     @handles(ast.Match)
     def match_cases(self, node: ast.Match) -> None:
         for case in node.cases:
-            if isinstance(case.pattern, ast.MatchClass):
-                self.add(node.subject, ast.dump(case.pattern.cls))
+            match case.pattern:
+                case ast.MatchOr(patterns=alternatives):
+                    pass
+                case pattern:
+                    alternatives = [pattern]
+            for alternative in alternatives:
+                match alternative:
+                    case ast.MatchClass(cls=kind):
+                        self.tested(node.subject, kind, alternative)
+
+
+class TypeDispatchCases(TypeTests, DispatchCases):
+    def tested(self, subject: ast.expr, kind: ast.expr, at: ast.expr | ast.pattern) -> None:
+        self.add(subject, ast.dump(kind))
 
 
 class DispatchMeasure(PerFileOccurrenceMeasure):
@@ -1715,20 +1739,19 @@ class TypeSwitchArms(DispatchArms, TypeSwitch):
     pass
 
 
-class OwnTypeTests(MroDispatch):
-    """The classes one module tests a value against: isinstance, issubclass, ``type(x) is``
-    and class patterns, each reported by the final name it spells."""
+class OwnTypeTests(TypeTests):
+    """The classes one module tests a value against, each reported by the final name it spells."""
 
     def __init__(self, foreign: frozenset[str]) -> None:
         self.foreign = foreign
-        self.tested: list[tuple[int, str]] = []
+        self.found: list[tuple[int, str]] = []
 
-    def add(self, node: ast.AST, kind: ast.expr) -> None:
+    def tested(self, subject: ast.expr, kind: ast.expr, at: ast.expr | ast.pattern) -> None:
         for spelled in kind.elts if isinstance(kind, ast.Tuple) else (kind,):
             match spelled:
                 case ast.Name(id=name) | ast.Attribute(attr=name) if (
                         ast.unparse(spelled).partition(".")[0] not in self.foreign):
-                    self.tested.append((node.lineno, name))
+                    self.found.append((at.lineno, name))
 
     @staticmethod
     def foreign_bindings(tree: ast.Module, ours: frozenset[str]) -> frozenset[str]:
@@ -1744,29 +1767,13 @@ class OwnTypeTests(MroDispatch):
                     bound.update(alias.asname or alias.name for alias in names)
         return frozenset(bound)
 
-    @handles(ast.Call)
-    def instance_check(self, node: ast.Call) -> None:
-        match node:
-            case ast.Call(func=ast.Name(id="isinstance" | "issubclass"), args=[_, kind]):
-                self.add(node, kind)
-
-    @handles(ast.Compare)
-    def exact_type(self, node: ast.Compare) -> None:
-        match node:
-            case ast.Compare(left=ast.Call(func=ast.Name(id="type")), comparators=[kind]):
-                self.add(node, kind)
-
-    @handles(ast.MatchClass)
-    def class_pattern(self, node: ast.MatchClass) -> None:
-        self.add(node, node.cls)
-
     @classmethod
     def of(cls, source: bytes, path: str, ours: frozenset[str]) -> list[tuple[int, str]]:
         tree = ast.parse(source, path)
         tests = cls(cls.foreign_bindings(tree, ours))
         for node in ast.walk(tree):
             tests.dispatch_sync(node)
-        return tests.tested
+        return tests.found
 
 
 class OwnTypeTest(InventoryMeasure[ModuleDeclarations]):
@@ -1789,19 +1796,14 @@ class OwnTypeTest(InventoryMeasure[ModuleDeclarations]):
     def measured(cls, repo: Path, ref: str, base: str, head: str,
                  readings: dict[str, ModuleDeclarations], root: str) -> dict[str, int]:
         declared = {name for module in readings.values() for name, _ in module.classes}
-        ours = frozenset(cls.top_level(path) for path in readings)
+        # A script outside every package, such as one in tools, is imported by its stem.
+        ours = frozenset((dotted or Path(path).stem).partition(".")[0]
+                         for path, dotted in DeclaredSpellings.import_names(readings).items())
         selected = {path for path in readings.keys() & touched_paths(repo, base, head)
                     if path.startswith(root)}
         return {f"{cls.__name__}:{path}": sum(name in declared for _, name in
                                               OwnTypeTests.of(source, path, ours))
                 for path, source in GitMeasure.sources(repo, ref, selected)}
-
-    @staticmethod
-    def top_level(path: str) -> str:
-        """The import name a production file is reached under: its package below ``src``, or
-        its own stem for a script directory such as ``tools``."""
-        parts = Path(path).with_suffix("").parts
-        return parts[1] if parts[0] == "src" and len(parts) > 1 else parts[-1]
 
     align = PerFileMeasure.align
 
