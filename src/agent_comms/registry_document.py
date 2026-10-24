@@ -65,7 +65,10 @@ from .thread_status import (
 )
 from .thread_text import ForkedParent, NoParent
 from .threads import Thread, ThreadWorkState
-from .turn_lease import FinishedTurn, FinishedTurnFence, NoFinishedTurn, TurnCompletion, TurnLeaseFence
+from .turn_lease import (
+    FinishedTurn, FinishedTurnFence, NoFinishedTurn, StoredTurnRecord, TurnCompletion, TurnLeaseFence,
+    TurnRecord,
+)
 
 if TYPE_CHECKING:
     from .activity import ObservedActivity
@@ -1065,6 +1068,12 @@ class RegistrySnapshot(RegistryPresence[Mapping[str, ThreadStatus]], RegistryPro
         """Whether its thread still names this turn generation; a superseded lease does not."""
         return any(thread.turn_identity == identity
                    for thread in self.threads_for(identity.incarnation.require_recorded()))
+
+    def current_turn(self, held: StoredTurnRecord) -> TurnRecord:
+        """What the held record's thread names now: the record itself, or its successor once a
+        newer lease superseded it; a thread no longer here leaves the held record to refuse."""
+        return next((thread.turn_record for thread in
+                     self.threads_for(held.identity.incarnation.require_recorded())), held)
 
     def idle_after(self, fence: FinishedTurnFence) -> tuple[Thread, ...]:
         return tuple(
