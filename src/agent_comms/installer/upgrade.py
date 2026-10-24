@@ -472,10 +472,10 @@ class OwnersStopped:
     give_back: ExitStack = field(default_factory=ExitStack)
 
     def stop(self, stack: Stack, root: Path) -> None:
-        """Each owner is remembered before its batch, so a partly refused stop still
-        starts again every owner it stopped."""
+        """Each owner is remembered once, before its batch, so a partly refused stop still
+        starts again every owner it stopped, and one restarted since is not started twice."""
         running = stack.running_owners(root)
-        self.stopped.extend(running)
+        self.stopped.extend(name for name in running if name not in self.stopped)
         stack.owners(root, StopCliCommand, running).require_success(UpgradeRefused)
 
     def start_on(self, stack: Stack, root: Path) -> tuple[OwnerStart, ...]:
