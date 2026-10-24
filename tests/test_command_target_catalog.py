@@ -3,21 +3,30 @@
 import pytest
 
 from agent_comms.cli_commands import OneTarget, TargetBatch
-from agent_comms.channel_targets import CommandTarget
+from agent_comms.channel_targets import CommandTarget, ProjectTarget
 from agent_comms.threads import Thread
 
 
-def test_batch_completed_result_round_trips_with_its_command_result_type():
+@pytest.mark.parametrize("target", [
+    CommandTarget.named("first"), CommandTarget.named("#team"), ProjectTarget("/project"),
+])
+def test_batch_completed_result_round_trips_with_its_command_result_type(target):
     from agent_comms.cli_commands import (
         StopCliCommand, TargetBatchResult, TargetCompleted, TargetFailed, ThreadStoppedResult,
     )
     from agent_comms.field_codec import FieldCodec
 
     original = TargetBatchResult((
-        TargetCompleted("first", StopCliCommand(name="first"), ThreadStoppedResult("first")),
-        TargetFailed("missing", "UnregisteredThreadError", "Thread 'missing' is not registered."),
+        TargetCompleted(target, StopCliCommand(name="first"), ThreadStoppedResult("first")),
+        TargetFailed(target, "UnregisteredThreadError", "Thread 'missing' is not registered."),
     ))
-    assert FieldCodec.decode(TargetBatchResult, FieldCodec.encode(original)) == original
+    assert original.outcomes[0].target is target
+    assert original.outcomes[1].target is target
+    decoded = FieldCodec.decode(TargetBatchResult, FieldCodec.encode(original))
+    assert decoded == original
+    assert decoded.outcomes[0].owner_start().name == target.display_name()
+    assert decoded.outcomes[1].owner_start().name == target.display_name()
+    assert str(decoded.outcomes[1]).startswith(target.display_name())
 
 
 @pytest.mark.parametrize("selection,target,resolvable", [
@@ -65,7 +74,8 @@ def test_batch_capability_owns_selection_catalog_and_execution(comms, tmp_path):
     result = ArchiveCliCommand.execute_target(
         comms, ArchiveCliCommand.selected_targets(tuple(CommandTarget.named(name) for name in names)), {}, confirmed=True)
     assert len(result.outcomes) == 2 and result.exit_code() == 0
-    assert tuple(outcome.target for outcome in result.outcomes) == names
+    assert tuple(outcome.target for outcome in result.outcomes) == tuple(
+        CommandTarget.named(name) for name in names)
     assert all(comms.registry.status(name) == ArchivedThreadStatus() for name in names)
 
 
