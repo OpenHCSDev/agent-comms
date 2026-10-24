@@ -15,6 +15,7 @@ from functools import cached_property
 from subprocess import TimeoutExpired
 from typing import TYPE_CHECKING, ClassVar, Self
 
+from agent_comms.declared_family import DeclaredFamily
 from agent_comms.field_codec import MalformedRecord
 from agent_comms.goal_presentation import GoalSnapshot
 from agent_comms.messages import Message
@@ -39,6 +40,37 @@ if TYPE_CHECKING:
     from agent_comms.comms import Comms
     from agent_comms.heartbeat_frame import HeartbeatFrame
     from agent_comms.threads import Thread
+
+
+class UnitClock(DeclaredFamily, affix="Clock"):
+    """When a holder last acted and last committed on its pending orders."""
+
+    @abstractmethod
+    def line(self, now: float) -> str: ...
+
+
+@dataclass(frozen=True)
+class PendingClock(UnitClock):
+    last_call_at: float
+    last_commit_at: float
+
+    def line(self, now: float) -> str:
+        return (f"last call {round((now - self.last_call_at) / 60)} min ago, "
+                f"last commit {round((now - self.last_commit_at) / 60)} min ago")
+
+
+@dataclass(frozen=True)
+class NoPendingClock(UnitClock):
+    def line(self, now: float) -> str:
+        return "no pending order"
+
+
+@dataclass(frozen=True)
+class UnreadableClock(UnitClock):
+    """Its checkout cannot be read, so neither time is known."""
+
+    def line(self, now: float) -> str:
+        return "times unreadable"
 
 
 @dataclass(frozen=True)
@@ -90,6 +122,26 @@ class UnitObservation:
     @cached_property
     def since(self) -> float:
         return min(todo.order.checked().at.recorded_at("A held order") for todo in self.pending)
+
+    @cached_property
+    def last_call_at(self) -> float:
+        """The newest recorded event of its last turns, or the order's start without one."""
+        return max(
+            (event.timestamp for turn in self.turns for event in turn.events), default=self.since
+        )
+
+    @cached_property
+    def last_commit_at(self) -> float:
+        return max(
+            (commit.at for origin in self.sources for commit in origin.commits()),
+            default=self.since,
+        )
+
+    @cached_property
+    def clock(self) -> UnitClock:
+        if self.pending:
+            return PendingClock(self.last_call_at, self.last_commit_at)
+        return NoPendingClock()
 
     @cached_property
     def sources(self) -> tuple[ProgressSource, ...]:
@@ -210,6 +262,9 @@ class UnitState(UndatedStandingRule, declared_name=None):
     def readable_units(self) -> tuple[ThreadIncarnation, ...]:
         return (self.unit,)
 
+    def clock(self) -> UnitClock:
+        return self.source.clock
+
     def attention(self) -> bool:
         return False
 
@@ -259,6 +314,9 @@ class Unreadable(NeedsCommanderAttention, UnitState):
 
     def readable_units(self) -> tuple[ThreadIncarnation, ...]:
         return ()
+
+    def clock(self) -> UnitClock:
+        return UnreadableClock()
 
     def detail(self) -> str:
         return f"{super().detail()}; {self.reason}"
@@ -332,10 +390,6 @@ class Stuck(NeedsCommanderAttention, PendingWorkState, UnitState):
     @classmethod
     def matches(cls, source: UnitObservation) -> bool:
         calls = source.calls
-        latest = max(
-            (event.timestamp for turn in source.turns for event in turn.events),
-            default=source.since,
-        )
         return bool(
             not calls
             and any(
@@ -343,7 +397,7 @@ class Stuck(NeedsCommanderAttention, PendingWorkState, UnitState):
                 for todo in source.pending
             )
             or calls
-            and latest < source.now - cls.seconds
+            and source.last_call_at < source.now - cls.seconds
         )
 
 
@@ -362,10 +416,7 @@ class Spinning(NeedsCommanderAttention, PendingWorkState, UnitState):
         repeats = len(calls) >= 2 and calls[-1].digest == calls[-2].digest
         if len(sends) < 2 and not repeats:
             return False
-        commit_at = max(
-            (commit.at for origin in source.sources for commit in origin.commits()),
-            default=source.since,
-        )
+        commit_at = source.last_commit_at
         return (
             len(sends) >= 2
             and sends[-2] > commit_at
