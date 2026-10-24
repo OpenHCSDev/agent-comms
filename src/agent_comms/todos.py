@@ -1501,7 +1501,7 @@ class DeliveryReport(BluntText):
 
     refusal: ClassVar[str] = (
         "Flat report refused: name the slop you killed or the broken thing you fixed, with "
-        "file:line, in the owner's voice (blunt, colorful, deadpan). A report with no opinion "
+        "file:line, in the owner's voice (blunt, colorful, deadpan, and funny: land one joke on the code). A report with no opinion "
         "in it is half a report."
     )
 
