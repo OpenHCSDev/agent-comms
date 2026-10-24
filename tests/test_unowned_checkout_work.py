@@ -120,7 +120,7 @@ def checkout_bus(tmp_path: Path, configured_repository, installed_runtime) -> Co
     git(home, 'remote', 'add', 'origin', str(remote))
     git(home, 'push', '-q', '-u', 'origin', 'main')
     rule = StorageRule(checkout_base=tmp_path / 'checkouts',
-                       scratch_base=tmp_path / 'scratch', volume=tmp_path)
+                       scratch_base=tmp_path / 'scratch', volume=tmp_path, floor_gib=0)
     checkout = rule.order_checkout('worker', 'P1')
     checkout.parent.mkdir()
     git(home, 'worktree', 'add', '-q', '-b', 'worker-work', str(checkout))
