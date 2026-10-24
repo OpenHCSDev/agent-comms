@@ -632,12 +632,13 @@ class BindingStartCutover:
     staged: Stack
     checkout: Path
     home: Path
+    root: Path
 
     def run(self, phase: BridgePhase, *arguments: str) -> None:
         with phase.running(self.staged.commands.clock):
             self.staged.commands.run(
                 self.staged.python, self.checkout / STEPS / 'binding_start.py',
-                '--home', self.home, *arguments,
+                '--home', self.home, '--root', self.root, *arguments,
                 cwd=self.home, env=self.staged.environment(),
             )
 
@@ -1060,7 +1061,7 @@ class ChangedInstall(ExistingBusInstall[RehearsedFiles]):
                     holder.close()
                     maintenance.clear(held)
                 restarted_services = BindingStartCutover(
-                    self.staged, self.checkout, self.installed.home,
+                    self.staged, self.checkout, self.installed.home, self.root,
                 ).around(lambda: self.staged.start_services(services))
             except BaseException as error:
                 print(f"install: install failed ({type(error).__name__}: {error}); "

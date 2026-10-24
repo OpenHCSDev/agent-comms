@@ -92,6 +92,11 @@ class ClaudeBridge(RunningClaude, LineMonitorBridge, declared_name=None):
     incoming_frame = ClaudeMonitorFrame
     window_bytes = ClaudeMonitorFrame.BATCH_CHARS * 2
     RECENT_BYTES = 4 * 1024 * 1024
+    state_directory = Path('.local/state/claude-comms-inbox')
+
+    @classmethod
+    def environment_session(cls) -> str:
+        return SessionHook.environment_session()
 
     def __init__(self, options: Options, binding: Binding, db: sqlite3.Connection) -> None:
         LineMonitorBridge.__init__(self, options, binding, db)
@@ -148,4 +153,5 @@ class Connect(Enrol):
 
 
 def main() -> None:
-    run_bridge(ClaudeBridge, Options.parse(__doc__, Path.home() / '.local/state/claude-comms-inbox', ClaudeBridge))
+    run_bridge(ClaudeBridge, Options.parse(
+        __doc__, Path.home() / ClaudeBridge.state_directory, ClaudeBridge))

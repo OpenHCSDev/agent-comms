@@ -15,12 +15,20 @@ from agent_comms_hooks.watch import WatchClaim
 
 @dataclass(frozen=True)
 class SessionHook(ClaudeTranscriptHook):
+    @staticmethod
+    def environment_session() -> str:
+        """Claude exports the identity shared by its hook and bare Monitor command."""
+        session = os.environ.get("CLAUDE_CODE_SESSION_ID", "")
+        if not session:
+            raise ValueError("Claude did not export CLAUDE_CODE_SESSION_ID")
+        return session
+
     @classmethod
     def current(cls, session: str, transcript: str) -> SessionHook:
         return cls(session_id=session, hook_event_name="SessionStart", transcript_path=transcript)
 
     def owner(self) -> ProcessIdentity:
-        if os.environ.get("CLAUDE_CODE_SESSION_ID") != self.session_id:
+        if self.environment_session() != self.session_id:
             raise ValueError("Claude hook session and CLAUDE_CODE_SESSION_ID disagree")
         pid = os.environ.get("CLAUDE_PID", "")
         if not pid:

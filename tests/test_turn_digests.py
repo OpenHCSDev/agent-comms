@@ -191,7 +191,7 @@ def test_recorded_claude_transcript_pages_through_tool_without_loss(tmp_path, mo
     with pytest.raises(ValueError):
         Watch().transcript_source()
     operation = Serve(owner=ProcessIdentity.capture(os.getpid()), transcript=path)
-    bridge = ClaudeBridge(Options(operation, binding, state), binding, db)
+    bridge = ClaudeBridge(Options(operation, binding, state, state.parent), binding, db)
 
     async def publish():
         task = asyncio.create_task(bridge.publish_transcript())

@@ -159,7 +159,7 @@ def test_a_session_bound_to_another_bus_thread_gets_no_commander_sources(
     transcript = tmp_path / "session.jsonl"
     transcript.write_text("")
     record = {"hook_event_name": "SessionStart", "session_id": "s", "transcript_path": str(transcript)}
-    WatchClaim("s").enrol(WatchRecord("unit-x", str(commander_bus.root), ()))
+    WatchClaim("s").enrol(WatchRecord("unit-x", str(commander_bus.root), (), tmp_path))
     assert CommanderStart.decode(record).take() == ()
     assert not CommanderStart.decode(record).parts.exists()
 
@@ -168,6 +168,6 @@ def test_the_commander_session_gets_its_sources(tmp_path, monkeypatch, commander
     monkeypatch.setenv("HOME", str(tmp_path / "home"))
     transcript = tmp_path / "session.jsonl"
     transcript.write_text("")
-    WatchClaim("s").enrol(WatchRecord("claude-code", str(commander_bus.root), ()))
+    WatchClaim("s").enrol(WatchRecord("claude-code", str(commander_bus.root), (), tmp_path))
     assert CommanderStart.decode(
         {"hook_event_name": "SessionStart", "session_id": "s", "transcript_path": str(transcript)}).take()

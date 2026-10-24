@@ -67,7 +67,9 @@ async def test_pager_requests_two_older_pages_through_the_bridges_real_socket(tm
     try:
         binding = Binding(str(comms.root), 'cli', 'thread', Binding.bus_head(str(comms.root)))
         with Binding.open(tmp_path / 'bridge') as db:
-            bridge = CodexBridge(CodexOptions(Watch(), binding, tmp_path / 'bridge', str(socket_path)), binding, db)
+            options = CodexOptions(
+                Watch(), binding, tmp_path / 'bridge', tmp_path, str(socket_path))
+            bridge = CodexBridge(options, binding, db)
             output = ThreadOutput(transcript, comms.agents)
             output.publish_batch([update async for update in bridge.history()])
             assert seen == [None]
