@@ -25,7 +25,7 @@ from ..cohort_schema import (
     ClaimBatchMembers,
     CohortDeliveries,
 )
-from ..field_codec import FieldCodec
+from ..field_codec import FieldCodec, ThreadLookup
 from ..turn_context import ContextSegment, InstructionFile, InstructionSegment, TurnContext
 from ..wake_candidate_index import ProjectionUnavailableError
 
@@ -155,7 +155,7 @@ class OmittedAwareness(InstructionSegment, OptionalAwarenessResult):
 
 @dataclass(frozen=True)
 class CompleteAwareness(Complete, ContextSegment, OptionalAwarenessResult):
-    recipient_lookup: str
+    recipient_lookup: ThreadLookup
     through_seq: int
     selected: tuple[_SelectedDecision, ...]
     open_obligations: tuple[_OpenObligation, ...]

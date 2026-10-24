@@ -19,6 +19,7 @@ from agent_comms.field_codec import (
     NullMember,
     RecordMember,
     SubclassUnion,
+    RootId,
 )
 
 
@@ -73,7 +74,7 @@ class NoResponseAcknowledgement(NullMember, ResponseAcknowledgement):
 
 @dataclass(frozen=True)
 class KeyedResponseAcknowledgement(RecordMember, ResponseAcknowledgement):
-    wire_root_id: str
+    wire_root_id: RootId
     execution_id: str
     publication_key: str
     envelope_digest: str

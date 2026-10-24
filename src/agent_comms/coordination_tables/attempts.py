@@ -17,7 +17,7 @@ from agent_comms.coordination_contracts import (
 from agent_comms.coordination_errors import RecoveryBlocked, StaleFence
 from agent_comms.coordination_schema import CoordinatorRow
 from agent_comms.coordination_tables.participants import OwnerGenerations, OwnerRecord
-from agent_comms.field_codec import SnapshotExclude, projected
+from agent_comms.field_codec import SnapshotExclude, projected, ThreadLookup
 from agent_comms.owner_fence import AttemptAuthority
 from agent_comms.reason_codes import ReasonCode
 from agent_comms.typed_table import (
@@ -176,7 +176,7 @@ class AttemptRecord(
 
     execution_id: Annotated[str, SnapshotExclude(), FrozenColumn(primary_key=True)]
     attempt_ordinal: Annotated[int, FrozenColumn(primary_key=True, check="attempt_ordinal > 0")]
-    owner_lookup: Annotated[str, FrozenColumn()]
+    owner_lookup: Annotated[ThreadLookup, FrozenColumn()]
     owner_generation: Annotated[int, FrozenColumn(check="owner_generation > 0")]
     owner_token_digest: Annotated[
         str,

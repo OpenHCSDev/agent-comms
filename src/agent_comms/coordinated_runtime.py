@@ -7,6 +7,8 @@ orders those lifetimes and cannot represent a half-initialized native attempt.
 
 from __future__ import annotations
 
+from agent_comms.field_codec import RootId
+
 
 import threading
 from abc import ABC, abstractmethod
@@ -65,7 +67,7 @@ class SelectedExecution(NativeExecution):
     max_attempts: ClassVar[int] = RetryableProviderFailure.max_retries + 1
 
     root: Path
-    wire_root_id: str
+    wire_root_id: RootId
     owner_name: str
     native_package: VerifiedNativePackage
     opt_in: bool = True

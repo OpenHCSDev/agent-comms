@@ -23,7 +23,7 @@ from .coordination_tables.executions import WireOrigin
 from .coordinator import Coordination
 from .cursor_publication import CursorDelivery
 from .errors import RelationViolationError
-from .field_codec import TurnId
+from .field_codec import TurnId, RootId, ThreadLookup
 from .message_bus import MessageBus
 from .message_reference import MessageReference
 from .mro_dispatch import MroDispatch, handles
@@ -47,10 +47,10 @@ class SelectedParticipant(MroDispatch):
     comms: Comms
     bus: MessageBus
     store: Coordination
-    root_id: str
+    root_id: RootId
     owner: RegistryOwner
     identity: ParticipantOwner
-    lookup: str
+    lookup: ThreadLookup
     batch: SelectedSourceBatch
     sent_outcomes: tuple[SentMessageOutcome, ...]
     model: SelectedModel
@@ -149,7 +149,11 @@ class SelectedParticipant(MroDispatch):
 
     @classmethod
     @asynccontextmanager
-    async def select(cls, comms: Comms, store: Coordination, root_id: str, name: str, after_seq: int, *, cursor_delivery: CursorDelivery, on_compaction: Callable[[CompactionEvent], Awaitable[None]] | None = None):
+    async def select(
+        cls, comms: Comms, store: Coordination, root_id: RootId, name: str, after_seq: int,
+        *, cursor_delivery: CursorDelivery,
+        on_compaction: Callable[[CompactionEvent], Awaitable[None]] | None = None,
+    ):
         bus = MessageBus(comms.root, comms.registry, ParticipantPublisher)
         with cursor_delivery.measurements.operation("claim_prepare"):
             owner, participant, pending, sent_outcomes = await Coordination.run_async(
@@ -212,7 +216,7 @@ class SelectedParticipant(MroDispatch):
     @staticmethod
     def prepare(
         comms: Comms, bus: MessageBus, store: Coordination,
-        root_id: str, name: str, after_seq: int,
+        root_id: RootId, name: str, after_seq: int,
     ) -> tuple[
         RegistryOwner, ParticipantSnapshot, tuple[WakeAssignment, ...],
         tuple[MessageNotification, ...],

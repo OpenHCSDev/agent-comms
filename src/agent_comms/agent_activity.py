@@ -34,7 +34,7 @@ from .audience_manifest import FrozenRecipient
 from .coordinator import Coordination
 from .declared_family import DeclaredFamily
 from .errors import RelationViolationError
-from .field_codec import TurnId
+from .field_codec import ThreadLookup, TurnId
 from .routing import TurnRouting
 from .runtime_info import RuntimeInfo, RuntimeInfoStore
 from .thread_identity import OwnerIdentity, ThreadIncarnation
@@ -162,9 +162,9 @@ class AgentActivity:
     def observe_recipients(
         self, recipients: Iterable[tuple[Delivered, FrozenRecipient]], *,
         snapshot: RegistrySnapshot,
-    ) -> Mapping[str, RecipientActivity]:
+    ) -> Mapping[ThreadLookup, RecipientActivity]:
         """Acquire one bounded window's recipients from the original sends."""
-        observations: dict[str, RecipientActivity] = {}
+        observations: dict[ThreadLookup, RecipientActivity] = {}
         for original, recipient in recipients:
             lookup = recipient.recipient_lookup
             if lookup in observations:

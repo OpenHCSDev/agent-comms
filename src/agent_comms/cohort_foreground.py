@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from agent_comms.field_codec import RootId, ThreadLookup
+
 from collections.abc import Callable
 from pathlib import Path
 
@@ -17,9 +19,9 @@ from .message_bus import MessageBus
 
 async def _accept_visible_deliveries(
     bus: MessageBus,
-    root_id: str,
+    root_id: RootId,
     store_path: Path,
-    lookup: str,
+    lookup: ThreadLookup,
     *,
     owner_name: str,
     acquire_package: Callable[[], None] | None = None,

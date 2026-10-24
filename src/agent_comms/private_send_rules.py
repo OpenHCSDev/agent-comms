@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from agent_comms.field_codec import RootId
+
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
@@ -194,7 +196,7 @@ class NativeReservationCheck(NativeIdentityCheck):
 @dataclass(frozen=True, kw_only=True)
 class NativeBindingCheck(NativeIdentityCheck):
     row: PromptBinding
-    wire_root_id: str
+    wire_root_id: RootId
     prompt_digest: TextDigest
 
 
