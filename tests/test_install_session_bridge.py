@@ -98,11 +98,15 @@ def probe(child):
 
 
 def test_real_monitor_survives_bridge_retirement_and_requires_a_fresh_probe(tmp_path, bridge_home):
-    with session_bridge(tmp_path, bridge_home) as (home, claim, _, child, log, env), ExitStack() as cleanup:
+    with (
+        session_bridge(tmp_path, bridge_home) as (home, claim, _, child, log, env),
+        ExitStack() as cleanup,
+    ):
         monitor = subprocess.Popen(
             (sys.executable, '-c',
              'import asyncio; from agent_comms.cli_bridges.monitor import read_monitor; '
-             'from agent_comms.cli_bridges.shared import MonitorBridgeStopped, MonitorBridgeSwapping; '
+             'from agent_comms.cli_bridges.shared import '
+             'MonitorBridgeStopped, MonitorBridgeSwapping; '
              'from agent_comms_hooks.watch import WatchClaim; '
              'asyncio.run(read_monitor(WatchClaim("copied-session"), '
              'MonitorBridgeStopped.announce, MonitorBridgeSwapping.announce))'),
