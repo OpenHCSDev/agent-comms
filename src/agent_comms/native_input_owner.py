@@ -24,7 +24,6 @@ from .private_send_rules import (
 )
 from .reservation_rules import ReservationViolationError
 from .threads import Thread
-from .thread_identity import OwnerIdentity
 from .turn_goal_permission import GoalPermission, OwnerGoalPermission
 
 if TYPE_CHECKING:
@@ -57,18 +56,6 @@ class RegistryOwner:
         claim_scope = snapshot.claim_generation(thread.name)
         thread.turn_record.read().require_current(claim_scope, thread.turn_generation)
         return cls(thread=thread, claimed_generation=claim_scope)
-
-    def require_exact(
-        self, snapshot: RegistrySnapshot, expected: Thread, owner_generation: int
-    ) -> None:
-        if snapshot.owner_identity(self.thread.name) != OwnerIdentity(expected.incarnation, owner_generation):
-            raise RelationViolationError("live owner generation changed")
-        try:
-            RegistryOwner(
-                thread=expected, claimed_generation=self.claimed_generation
-            ).require_snapshot(snapshot, "live owner source changed")
-        except StaleFence as error:
-            raise RelationViolationError(str(error)) from error
 
     def require_claim(self, expected: Thread, claim_scope: int) -> None:
         try:

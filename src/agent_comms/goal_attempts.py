@@ -934,55 +934,6 @@ class GoalAttemptStore(DurableFile, PublishedSQLiteFile, WireWakeFile):
             # Even an uncertain claim cannot be used twice in this process.
             self._owned.discard(reservation.attempt_id)
 
-    def authorize_abandon_attempt(
-        self,
-        goal_id: GoalId,
-        *,
-        expected_generation: int,
-        attempt_id: str,
-        user_decision_id: str,
-    ) -> Generation:
-        """A human records an orphaned reservation/claim as uncertain and blocked.
-
-        A claimed attempt may have reached a provider: this does not cancel a
-        request or authorize replay. Another explicit decision is necessary
-        before `authorize_retry` can create a new READY generation.
-        """
-        if not user_decision_id.strip():
-            raise ValueError("An explicit user abandonment decision ID is required.")
-
-        def write(conn: sqlite3.Connection) -> Generation:
-            goal = Generation.read_in(conn, goal_id)
-            changed = errors.StaleAttemptError("Attempt changed before human abandonment decision.")
-            attempt = AttemptRecord.read_in(conn, attempt_id).identified(
-                GoalAttemptIdentity(goal_id, expected_generation, attempt_id), changed
-            )
-            if goal != Generation(
-                goal_id, expected_generation, ReservedGeneration(), attempt_id
-            ) or not attempt.phase.may_become(FailedAttempt()):
-                raise changed
-            GoalWorkDecision(goal_id, user_decision_id, expected_generation).claim(conn)
-            attempt.advance(conn, FailedAttempt(), resolution=user_decision_id)
-            return goal.advance(
-                conn,
-                Generation(
-                    goal_id,
-                    expected_generation,
-                    BlockedGeneration(),
-                    attempt_id,
-                ),
-            )
-
-        return self._change(
-            write,
-            lambda value: (
-                self.snapshot(value.goal_id) == value
-                and AttemptRecord.matches_resolution(
-                    self, attempt_id, FailedAttempt(), user_decision_id
-                )
-            ),
-        )
-
     def resume(self, goal_id: GoalId, expected_generation: int) -> Generation:
         """Ordinary same-ID resume never resolves a reserved or blocked attempt."""
         current = self.snapshot(goal_id)

@@ -48,7 +48,6 @@ def test_response_authority_cannot_restore_an_optional_or_pid_only_path():
     for operation in (
         coordination_response.prepare_fenced_response,
         coordination_response.publish_fenced_response,
-        coordination_response.resolve_existing_response,
     ):
         parameters = inspect.signature(operation).parameters
         assert "owner_pid" not in parameters
