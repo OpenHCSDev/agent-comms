@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from .input_key import InputKey
+
 from . import turn_origin
 from collections.abc import Callable, Iterator, Mapping
 from dataclasses import dataclass
@@ -36,7 +38,7 @@ class NoTurnOrigin(NullMember, turn_origin.TurnOrigin):
     def batch_target(self) -> NoTurnOrigin:
         return self
 
-    def bus_keys(self, dispositions: InputDispositions, owner: Thread) -> tuple[str, ...]:
+    def bus_keys(self, dispositions: InputDispositions, owner: Thread) -> tuple[InputKey, ...]:
         return ()
 
 

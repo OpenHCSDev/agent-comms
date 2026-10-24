@@ -124,6 +124,7 @@ from .history_result import HistoryPageResult
 from .history_views import CallingThreadTarget, NamedThreadTarget, PollTarget
 from .importing import ImportedSessionMetadata, ImportLimits, ThreadImported
 from .input_origin import InputProvenance
+from .input_key import InputKey, InputKeyText
 from .install_choices import InstallerChoice, LiveMode, RehearsalMode, RunMode, UnnamedInstaller
 from .maintenance_barrier import MaintenanceHeldError
 from .message_page import PageBounds
@@ -1271,7 +1272,7 @@ class PinConstraintCliCommand(WorktreeArgument, CliCommand, declared_name="pin-c
 class PinInputConstraintCliCommand(PinConstraintCliCommand, declared_name="pin-input-constraint"):
     help = "Pin an original human input for its recipient"
     source: Annotated[
-        str,
+        InputKey, InputKeyText,
         Argument(flags=("--source",), options={"help": "Original durable input key"}),
     ]
 

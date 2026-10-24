@@ -11,7 +11,6 @@ from dataclasses import dataclass, field, replace
 from functools import cached_property, partial
 from pathlib import Path
 from typing import TYPE_CHECKING, Annotated
-from uuid import uuid4
 
 
 from .active_route import resolve_comms_route
@@ -30,6 +29,8 @@ from .commander_service import CommanderService
 from .diagnostics import OwnerProcessOutput
 from .errors import RelationViolationError
 from .launch_root import LaunchRoot
+from .input_key import AcpInputKey, InputKey
+from .field_codec import InputId
 from .input_disposition import InputDispositions
 from .launch_runtime import LaunchRuntime, RestartEnvironment, SetVariable, ThreadLaunch
 from .maintenance_barrier import MaintenanceBarrier
@@ -78,13 +79,13 @@ class LaunchInput:
 @dataclass(frozen=True)
 class TaskLaunchInput(LaunchInput):
     text: str = field()
-    input_key: str = field(default_factory=lambda: f"acp:{uuid4().hex}", init=False)
+    input_key: InputKey = field(default_factory=lambda: AcpInputKey(InputId.mint()), init=False)
 
     def thread_text(self) -> GivenThreadText:
         return GivenThreadText(self.text)
 
     def launch(self, launch: ThreadLaunch) -> ThreadLaunch:
-        return replace(launch, startup_input=SetVariable(self.input_key))
+        return replace(launch, startup_input=SetVariable(str(self.input_key)))
 
     def record_first_input(self, record) -> None:
         record(self.input_key, seq=None, text=self.text)

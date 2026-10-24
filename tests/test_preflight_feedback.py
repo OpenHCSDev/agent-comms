@@ -1,6 +1,7 @@
 """Failure diagnostics and durable delivery projection remain independent authorities."""
 import pytest
 
+from agent_comms.input_key import AcpInputKey
 from agent_comms.field_codec import InputId, TurnId
 from agent_comms.input_attempt import MissingInput, NotSentInput, ReservedInput
 from agent_comms.input_disposition import InputDocument
@@ -12,6 +13,9 @@ from agent_comms.turn_failure import (
 )
 from agent_comms.turn_output import TurnOutput
 from stored_inputs import stored_inputs
+
+
+PARTIAL_WRITE_KEY = AcpInputKey(InputId.mint())
 
 
 @pytest.mark.parametrize('kind', [NativePreflightExit, NativePreflightTimeout])
@@ -32,12 +36,13 @@ def test_preflight_diagnostics_keep_original_phase(kind):
     assert ordinary.failure_text == 'Transport cause'
 
 def test_delivery_projection_requires_complete_homogeneous_actual_rows():
-    reserved = ReservedInput('a', None, 'owner', 1, 'owner', 'input')
+    key, missing = AcpInputKey(InputId.mint()), AcpInputKey(InputId.mint())
+    reserved = ReservedInput(key, None, 'owner', 1, 'owner', 'input')
     unsent = reserved.finish_unbound().require_moved('Reserved input stayed reserved').state
     assert isinstance(unsent, NotSentInput)
-    document = InputDocument(rows={'a': unsent})
-    assert document.shared_state(('a',)) is NotSentInput
-    assert document.shared_state(('a', 'missing')) is None
+    document = InputDocument(rows={key: unsent})
+    assert document.shared_state((key,)) is NotSentInput
+    assert document.shared_state((key, missing)) is None
     assert document.shared_state(()) is None
     assert document.shared_state(('missing',)) is None
 
@@ -48,27 +53,27 @@ def test_post_dispatch_failure_preserves_bound_uncertainty(tmp_path):
     from agent_comms.input_disposition import InputDispositions
 
     store = InputDispositions(tmp_path)
-    store.record('acp:partial-write', seq=None, owner='owner', claim_scope=1,
+    store.record(PARTIAL_WRITE_KEY, seq=None, owner='owner', claim_scope=1,
                  target='owner', text='original input')
     assert store.bind(
-        'acp:partial-write',
+        PARTIAL_WRITE_KEY,
         claim_scope=1,
         turn_id=TurnId('9b473845f684444f80a26586ae298d2b'),
         native_id=InputId('a' * 32),
         text='original input',
     )
-    before = stored_inputs(store.root).lookup('acp:partial-write')
+    before = stored_inputs(store.root).lookup(PARTIAL_WRITE_KEY)
     assert isinstance(before, SentInput)
     assert isinstance(before, BoundUnknownInput)
     output = TurnOutput(failure=InputIdUnavailable('Native prompt write failed after dispatch'))
     output.startup_error('BrokenPipeError: pipe closed during write')
     assert 'not sent' not in output.failure_text.lower()
     assert 'BrokenPipeError' in output.failure_text
-    after = store.settle_unbound(('acp:partial-write',))
-    assert after.lookup('acp:partial-write') == before
+    after = store.settle_unbound((PARTIAL_WRITE_KEY,))
+    assert after.lookup(PARTIAL_WRITE_KEY) == before
     from dataclasses import replace
     feedback = replace(ACPFailure.from_detail(-32603, output.failure_text),
-                       input_state=after.shared_state(('acp:partial-write',)))
+                       input_state=after.shared_state((PARTIAL_WRITE_KEY,)))
     assert feedback.input_state is BoundUnknownInput
     assert 'Unknown' in feedback.feedback
     assert 'not sent' not in feedback.feedback.lower()

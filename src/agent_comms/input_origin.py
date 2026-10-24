@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from abc import abstractmethod
 from dataclasses import dataclass
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Annotated
 
 
 from .bus_publication import HumanOrigin
@@ -12,6 +12,7 @@ from .declared_family import DeclaredFamily
 from .errors import RelationViolationError
 from .field_codec import RootId
 from .goals import GoalCheckpoint
+from .input_key import InputKey, InputKeyText
 from .message_reference import MessageReference
 from .thread_identity import ClaimScoped, ClaimedIdentity
 from .turn_context import Provenance
@@ -73,7 +74,7 @@ class InputOrigin(DeclaredFamily, affix="InputOrigin"):
 @dataclass(frozen=True)
 class InputProvenance(Provenance):
     """Original identity and author coordinate, independent of disposition."""
-    key: str
+    key: Annotated[InputKey, InputKeyText]
     origin: InputOrigin
 
     def public_description(self) -> str:

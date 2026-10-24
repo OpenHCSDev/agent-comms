@@ -10,6 +10,7 @@ from conftest import maintenance_held
 from agent_comms.errors import RelationViolationError
 from agent_comms.external_transcript import ExternalTranscript
 from agent_comms.input_disposition import InputDispositionRow, InputDispositions
+from agent_comms.input_key import BusInputKey
 from agent_comms.maintenance_barrier import MaintenanceNotHeldError
 from agent_comms.owner_lifecycle import OwnerReleaseStore
 from agent_comms.thread_identity import RecordedThreadIncarnation
@@ -43,11 +44,11 @@ def test_first_write_does_not_change_the_opened_empty_snapshot(tmp_path):
     store = InputDispositions(tmp_path / "new")
     with ThreadPoolExecutor(max_workers=1) as writer:
         with store.snapshot() as connection:
-            recorded = writer.submit(store.record, "first", seq=None, owner="kid",
+            recorded = writer.submit(store.record, BusInputKey(1), seq=1, owner="kid",
                                      claim_scope=1, target="kid", text="first")
             assert recorded.result(timeout=2)
             assert InputDispositionRow.select(connection) == []
-    assert store.lookup("first").source_text == "first"
+    assert store.lookup(BusInputKey(1)).source_text == "first"
 
 
 def test_change_marker_publishes_only_committed_row_changes(tmp_path):
@@ -57,7 +58,7 @@ def test_change_marker_publishes_only_committed_row_changes(tmp_path):
         assert connection.execute("PRAGMA journal_mode").fetchone()[0] == "wal"
         assert connection.execute("PRAGMA foreign_keys").fetchone()[0] == 1
     assert not marker.exists()
-    store.record("first", seq=None, owner="kid", claim_scope=1, target="kid", text="first")
+    store.record(BusInputKey(1), seq=1, owner="kid", claim_scope=1, target="kid", text="first")
     changed = marker.stat().st_mtime_ns
     with store.snapshot() as connection:
         assert InputDispositionRow.select(connection)
@@ -68,8 +69,9 @@ def test_change_marker_publishes_only_committed_row_changes(tmp_path):
         with store.writing() as connection:
             InputDispositionRow.delete(connection)
             raise ValueError("rollback")
-    assert marker.stat().st_mtime_ns == changed and store.lookup("first").source_text == "first"
-    store.record("second", seq=None, owner="kid", claim_scope=1, target="kid", text="second")
+    assert marker.stat().st_mtime_ns == changed
+    assert store.lookup(BusInputKey(1)).source_text == "first"
+    store.record(BusInputKey(2), seq=2, owner="kid", claim_scope=1, target="kid", text="second")
     assert marker.stat().st_mtime_ns != changed
 
 
@@ -86,7 +88,8 @@ def test_a_durable_writer_derives_declared_objects_and_refuses_an_undeclared_col
     """Under maintenance, a writer restores declared indexes while preserving rows;
     an undeclared column remains a refusal because its meaning is unknown."""
     store = InputDispositions(tmp_path)
-    assert store.record("first", seq=None, owner="kid", claim_scope=1, target="kid", text="first")
+    assert store.record(
+        BusInputKey(1), seq=1, owner="kid", claim_scope=1, target="kid", text="first")
     declared = store.declared_schema()
     with store.writing() as connection:
         for name, sql in declared.items():
@@ -96,7 +99,7 @@ def test_a_durable_writer_derives_declared_objects_and_refuses_an_undeclared_col
         pytest.fail("Only a maintenance holder may restore a declared index")
     with maintenance_held(tmp_path), store.writing() as connection:
         assert not store.schema_differs(connection)
-    assert store.lookup("first").source_text == "first"
+    assert store.lookup(BusInputKey(1)).source_text == "first"
     with store.writing() as connection:
         connection.execute(
             f'ALTER TABLE "{InputDispositionRow.declared_name}" ADD COLUMN extra TEXT DEFAULT "kept"')

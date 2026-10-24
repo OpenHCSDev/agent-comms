@@ -14,10 +14,14 @@ from agent_comms.session_file import RegistrySessionLocation
 from agent_comms.cli import main
 from agent_comms.cli_commands import ConstraintPinnedResult
 from agent_comms.field_codec import InputId, FieldCodec, GoalId
+from agent_comms.input_key import AcpInputKey
 from agent_comms.context_segments.retained import RetainedSegment
 from agent_comms.turn_lease import NoTurnLease
 from stored_inputs import stored_inputs
 from agent_comms.threads import Thread
+
+
+ORIGINAL_UNKNOWN_KEY = AcpInputKey(InputId.mint())
 
 
 pytestmark = pytest.mark.usefixtures("durable_home")
@@ -40,7 +44,7 @@ def test_original_retained_source_narrow_export(comms, tmp_path, capsys):
     original = comms.messaging.send_user_message(CommandTarget.named(owner.name), wording, worktree=owner.worktree)
     comms.messaging.pin_user_constraint(owner.name, original.reference, worktree=owner.worktree)
     inputs = InputDispositions(comms.root)
-    inputs.record("acp:original-unknown", seq=None, owner=owner.name, claim_scope=1,
+    inputs.record(ORIGINAL_UNKNOWN_KEY, seq=None, owner=owner.name, claim_scope=1,
                   target=owner.name, text="Unpinned original UNKNOWN input; never export/replay")
 
     def command(*args):
@@ -148,7 +152,7 @@ async def original_input_consumer_journey(tmp_path, command):
             originals.append(reservation.source)
             reservation.release()
     assert agent.inputs.dispositions.record(
-        "neutral-original", seq=None, owner="beta",
+        AcpInputKey(InputId.mint()), seq=None, owner="beta",
         claim_scope=origin.claimed_identity.claimed_generation, target="beta", text=wording)
     inputs = agent.inputs.dispositions
     original_inputs = inputs.path.read_bytes()
@@ -165,7 +169,7 @@ async def original_input_consumer_journey(tmp_path, command):
 
     pins = []
     for row in (originals[0], originals[0], originals[1]):
-        code, result = invoke("pin-input-constraint", "beta", "--source", row.key,
+        code, result = invoke("pin-input-constraint", "beta", "--source", str(row.key),
                               "--worktree", origin.project)
         assert code == 0
         pinned = FieldCodec.decode(ConstraintPinnedResult, result)
@@ -177,8 +181,9 @@ async def original_input_consumer_journey(tmp_path, command):
     # delivery evidence cannot decide that they are one human instruction.
     retained_inputs = [fact.source for fact in snapshot.retained.facts
                        if isinstance(fact, InputTaskFact)]
-    assert sorted(row.key for row in retained_inputs if row.source_text == wording) == sorted(
-        row.key for row in originals)
+    assert sorted(
+        (row.key for row in retained_inputs if row.source_text == wording), key=str,
+    ) == sorted((row.key for row in originals), key=str)
     assert all(row.context_provenance() in snapshot.provenance for row in originals)
 
     destination = comms.root / "original-input-context.md"
@@ -186,14 +191,14 @@ async def original_input_consumer_journey(tmp_path, command):
     assert code == 0 and result["exported_messages"] == 2
     artifact = destination.read_bytes()
     assert artifact.count(wording.encode()) == 2
-    assert all(row.key.encode() in artifact for row in originals)
+    assert all(str(row.key).encode() in artifact for row in originals)
     assert b'"author":"user"' in artifact and b'"author_role":"user"' in artifact
     code, _ = invoke("export-retained", "beta", "--output", str(destination))
     assert code == 1 and destination.read_bytes() == artifact
     before_refusal = read_history(comms)
     for recipient, key in ((other.name, originals[0].key), ("beta", "absent"),
                            ("beta", "neutral-original")):
-        code, _ = invoke("pin-input-constraint", recipient, "--source", key,
+        code, _ = invoke("pin-input-constraint", recipient, "--source", str(key),
                          "--worktree", origin.project)
         assert code == 1
         assert read_history(comms) == before_refusal

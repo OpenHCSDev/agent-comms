@@ -11,6 +11,8 @@ from typing import TYPE_CHECKING
 
 from acp.schema import PromptResponse
 
+from .input_key import InputKey
+
 from .acp_extension import (
     InputDeliveryChangedUpdate,
     LiveQueueScope,
@@ -625,18 +627,18 @@ class InputDrain(InputObservation):
     async def emit_input_disposition(
         self, session_id: str, row: InputAttempt, client: SessionUpdateSink | None = None
     ) -> None:
-        await self.emit_input_delivery_changed(session_id, public_id=row.public_id, client=client)
+        await self.emit_input_delivery_changed(session_id, client=client)
 
     async def emit_input_delivery_changed(
-        self, session_id: str, *, public_id: str | None = None,
+        self, session_id: str, *,
         client: SessionUpdateSink | None = None,
     ) -> None:
         await (client or self.runtime).publish_update(
             session_id=session_id,
-            update=InputDeliveryChangedUpdate(public_id).acp_chunk(),
+            update=InputDeliveryChangedUpdate().acp_chunk(),
         )
 
-    def input_keys(self, session_id: str) -> frozenset[str]:
+    def input_keys(self, session_id: str) -> frozenset[InputKey]:
         """Live captured source membership, never rebuilt from durable notices."""
         state = self.state(session_id)
         following = frozenset(
@@ -733,7 +735,7 @@ class InputDrain(InputObservation):
         await request.publish_acceptance(self, session_id)
         return PromptResponse(
             stop_reason="end_turn",
-            field_meta=encode_updates(InputDeliveryChangedUpdate(item.input_id)),
+            field_meta=encode_updates(InputDeliveryChangedUpdate()),
         )
 
     def require_inbox(self, session_id: str, inbox: TurnInbox) -> None:
@@ -787,7 +789,7 @@ class InputDrain(InputObservation):
             await Coordination.run_worker(record)
         await self.input_refused(session_id, input_id)
 
-    def finish_original_inputs(self, keys: tuple[str, ...]) -> InputDocument:
+    def finish_original_inputs(self, keys: tuple[InputKey, ...]) -> InputDocument:
         """Commit selected input retirement before turn cleanup finishes."""
         return self.dispositions.settle_unbound(keys)
 
