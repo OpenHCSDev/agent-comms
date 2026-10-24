@@ -359,6 +359,14 @@ class OrderCheck(CheckCommand):
         reader runs in that repository's absolute checkout, whatever directory it was sent from."""
         return replace(self, directory=Repo.selected(repos, str(self.directory)).checkout)
 
+    def require_writable(self) -> None:
+        """A relative directory means the cwd of whoever reads it next: the connector's
+        heartbeat, a unit's checkout, a commander in another shell. New checks bind it first."""
+        super().require_writable()
+        if not self.directory.is_absolute():
+            raise ValueError(f"The order check directory {str(self.directory)!r} is relative; "
+                             "name a registered repository so the sender binds its checkout.")
+
     def require_directory(self):
         if not self.directory.is_dir():
             raise ValueError("The order check directory does not exist.")

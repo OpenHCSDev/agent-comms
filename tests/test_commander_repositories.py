@@ -54,6 +54,10 @@ def test_order_check_named_by_repository_binds_its_checkout_from_any_directory(
     monkeypatch.chdir(elsewhere)
     agent_comms, _ = configured_repositories
     written = OrderCheck(Path("agent-comms"), "grep -c x src")
-    assert written.registered(configured_repositories).directory == agent_comms.checkout
+    with pytest.raises(ValueError):
+        written.require_writable()
+    bound = written.registered(configured_repositories)
+    assert bound.directory == agent_comms.checkout
+    bound.require_writable()
     with pytest.raises(ValueError):
         OrderCheck(Path("unregistered"), "grep -c x src").registered(configured_repositories)
