@@ -22,8 +22,9 @@ class InputKey(DeclaredFamily):
     @abstractmethod
     def parse(cls, text: str) -> InputKey | None: ...
 
-    @abstractmethod
-    def require_sequence(self, sequence: int | None) -> None: ...
+    def require_sequence(self, sequence: int | None) -> None:
+        if sequence is not None:
+            raise ValueError("Input key cannot have a bus sequence")
 
     def public_text(self) -> str:
         return str(self)
@@ -41,23 +42,19 @@ class AcpInputKey(InputKey):
     input_id: InputId
 
     def __str__(self) -> str:
-        return f"acp:{self.input_id}"
+        return "acp:" + self.input_id
 
     @classmethod
     def parse(cls, text: str) -> AcpInputKey | None:
-        if match := re.fullmatch(r"acp:([0-9a-f]{32})", text):
+        if match := re.fullmatch(f"acp:({InputId.spelled_by.spelling.pattern})", text):
             return cls(FieldCodec.decode(InputId, match[1]))
         return None
 
     @classmethod
     def parse_public(cls, text: str) -> AcpInputKey | None:
-        if re.fullmatch(r"[0-9a-f]{32}", text):
+        if re.fullmatch(InputId.spelled_by.spelling.pattern, text):
             return cls(FieldCodec.decode(InputId, text))
         return None
-
-    def require_sequence(self, sequence: int | None) -> None:
-        if sequence is not None:
-            raise ValueError("ACP input cannot have a bus sequence")
 
     def public_text(self) -> str:
         return self.input_id
@@ -71,7 +68,7 @@ class BusInputKey(InputKey):
     sequence: int
 
     def __str__(self) -> str:
-        return f"bus:{self.sequence}"
+        return "bus:" + str(self.sequence)
 
     @classmethod
     def parse(cls, text: str) -> BusInputKey | None:
@@ -85,12 +82,11 @@ class BusInputKey(InputKey):
 
 
 @dataclass(frozen=True)
-class OwnedBusInputKey(InputKey):
-    sequence: int
+class OwnedBusInputKey(BusInputKey):
     owner_created: float
 
     def __str__(self) -> str:
-        return f"bus:{self.sequence}:owner:{self.owner_created.hex()}"
+        return super().__str__() + ":owner:" + self.owner_created.hex()
 
     @classmethod
     def parse(cls, text: str) -> OwnedBusInputKey | None:
@@ -98,28 +94,18 @@ class OwnedBusInputKey(InputKey):
             return cls(int(match[1]), float.fromhex(match[2]))
         return None
 
-    def require_sequence(self, sequence: int | None) -> None:
-        if sequence != self.sequence or self.sequence <= 0:
-            raise ValueError("Bus input key and sequence disagree")
-
-
 @dataclass(frozen=True)
 class TurnInputKey(InputKey):
     turn_id: TurnId
 
     def __str__(self) -> str:
-        return f"turn:{self.turn_id}"
+        return "turn:" + self.turn_id
 
     @classmethod
     def parse(cls, text: str) -> TurnInputKey | None:
-        if match := re.fullmatch(r"turn:([0-9a-f]{32})", text):
+        if match := re.fullmatch(f"turn:({TurnId.spelled_by.spelling.pattern})", text):
             return cls(FieldCodec.decode(TurnId, match[1]))
         return None
-
-    def require_sequence(self, sequence: int | None) -> None:
-        if sequence is not None:
-            raise ValueError("Turn input cannot have a bus sequence")
-
 
 class InputKeyText(TextRepresentation[InputKey]):
     @classmethod
@@ -129,9 +115,13 @@ class InputKeyText(TextRepresentation[InputKey]):
     @classmethod
     def from_text(cls, value: str) -> InputKey:
         for member in InputKey.members_with(InputKey):
-            if (key := member.parse(value)) is not None:
+            if (key := cls.parse_member(member, value)) is not None:
                 return key
         raise MalformedRecord("Expected a declared input key")
+
+    @classmethod
+    def parse_member(cls, member: type[InputKey], value: str) -> InputKey | None:
+        return member.parse(value)
 
     @classmethod
     def schema(cls) -> dict[str, str]:
@@ -144,8 +134,5 @@ class PublicInputKeyText(InputKeyText):
         return value.public_text()
 
     @classmethod
-    def from_text(cls, value: str) -> InputKey:
-        for member in InputKey.members_with(InputKey):
-            if (key := member.parse_public(value)) is not None:
-                return key
-        raise MalformedRecord("Expected a declared public input key")
+    def parse_member(cls, member: type[InputKey], value: str) -> InputKey | None:
+        return member.parse_public(value)

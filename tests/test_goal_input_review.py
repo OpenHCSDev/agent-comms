@@ -10,7 +10,8 @@ from conftest import publish_initial
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.comms import wire
 from conftest import installed_comms
-from agent_comms.field_codec import FieldCodec, MalformedRecord, TurnId
+from agent_comms.field_codec import FieldCodec, InputId, MalformedRecord, TurnId
+from agent_comms.input_key import AcpInputKey, BusInputKey
 from agent_comms.goal_presentation import GoalExecution
 from agent_comms.goal_actions import (
     ActiveGoalAction,
@@ -29,6 +30,9 @@ from stored_inputs import stored_inputs
 from agent_comms.threads import Thread
 
 
+OWNER_INPUT_KEY = AcpInputKey(InputId.mint())
+
+
 def test_inspected_canonical_dependencies_allow_standby_without_replay(tmp_path, monkeypatch):
     monkeypatch.setenv("AGENT_COMMS_THREAD", "worker")
     comms = wire(tmp_path / "wire")
@@ -45,7 +49,7 @@ def test_inspected_canonical_dependencies_allow_standby_without_replay(tmp_path,
     ledger = InputDispositions(comms.root)
     claim_scope = comms.registry.snapshot().claim_generation("worker")
     ledger.record(
-        "acp:owner-input",
+        OWNER_INPUT_KEY,
         seq=None,
         owner="worker",
         claim_scope=claim_scope,
@@ -76,7 +80,7 @@ def test_inspected_canonical_dependencies_allow_standby_without_replay(tmp_path,
     assert review["excluded_inputs"][0]["reason"] == "owner_input_without_bus_sequence"
     assert ledger.path.read_bytes() == before  # Inspection cannot adopt or schedule inputs.
     keys = review["reviewed_inputs"]
-    for invalid in (["acp:owner-input"], ["bus:999999"]):
+    for invalid in ([str(OWNER_INPUT_KEY)], [str(BusInputKey(999999))]):
         with pytest.raises(ValueError):
             report.invoke(comms, {**args, "reviewed_inputs": invalid}, caller=ThreadCaller("worker"))
     with pytest.raises(ValueError):
@@ -84,7 +88,7 @@ def test_inspected_canonical_dependencies_allow_standby_without_replay(tmp_path,
     assert ledger.path.read_bytes() == before  # Failed partial review commits nothing.
     unrelated = comms.messaging.send("other", "worker", "Not a declared dependency").message
     ledger.record(
-        f"bus:{unrelated.seq}",
+        BusInputKey(unrelated.seq),
         seq=unrelated.seq,
         owner="worker",
         claim_scope=claim_scope,
@@ -92,14 +96,14 @@ def test_inspected_canonical_dependencies_allow_standby_without_replay(tmp_path,
         text=unrelated.body,
     )
     scoped = comms.goals.goal_input_review("worker", goal.id, ["parent"])
-    assert list(scoped.reviewed_inputs) == keys and len(scoped.excluded_inputs) == 2
+    assert [str(key) for key in scoped.reviewed_inputs] == keys and len(scoped.excluded_inputs) == 2
     with pytest.raises(ValueError):
         report.invoke(comms, {**args, "reviewed_inputs": [*keys, f"bus:{unrelated.seq}"]}, caller=ThreadCaller("worker"))
     result = report.invoke(comms, {**args, "reviewed_inputs": keys}, caller=ThreadCaller("worker"))
     assert FieldCodec.decode(GoalExecution, result["goal_execution"]).standby()
     again = comms.goals.goal_input_review("worker", goal.id, ["parent"])
     assert again.reviewed_inputs == ()
-    assert [row.input_id for row in again.already_reviewed_inputs] == keys
+    assert [str(row.input_id) for row in again.already_reviewed_inputs] == keys
     for message, key in zip(messages, keys, strict=True):
         row = stored_inputs(ledger.root).rows[key]
         row.require(Unresolved, ValueError("review required"))
@@ -107,7 +111,7 @@ def test_inspected_canonical_dependencies_allow_standby_without_replay(tmp_path,
         assert not hasattr(row, "native_id") and not hasattr(row, "turn_id")
         assert row.source_text == message.body and not hasattr(row, "sent_text")
         assert row.claim_generation == claim_scope and row.reviewed_for_goal(goal.id)
-    assert not stored_inputs(ledger.root).rows["acp:owner-input"].goal_reviews
+    assert not stored_inputs(ledger.root).rows[OWNER_INPUT_KEY].goal_reviews
     generation = comms.goals.open_goal_store().snapshot(goal.id)
     assert generation is not None and generation.lifecycle.ready
     assert generation.attempt_id is None
@@ -149,7 +153,7 @@ def test_standby_excludes_retained_rebound_history_but_retains_rename(tmp_path, 
     current = comms.messaging.send("parent", "worker", "Current incarnation").message
     comms.registry.rename("parent", "renamed-parent")
     review = comms.goals.goal_input_review("worker", goal.id, ["renamed-parent"])
-    assert review.reviewed_inputs == (f"bus:{current.seq}",)
+    assert review.reviewed_inputs == (BusInputKey(current.seq),)
     assert old in list(comms.views.history_page(CommandTarget.named("worker"), viewer=NamedViewer("renamed-parent")).messages)
 
 

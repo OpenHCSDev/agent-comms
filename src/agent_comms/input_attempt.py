@@ -188,7 +188,7 @@ class UnobservedInputDeliveryScope(NullMember, InputDeliveryScope, declared_name
 
 @dataclass(frozen=True)
 class OwnerQueueInputDeliveryScope(InputDeliveryScope, declared_name="owner_queue"):
-    keys: frozenset[InputKey]
+    keys: frozenset[Annotated[InputKey, InputKeyText]]
     pending_label: ClassVar[str] = "awaiting start"
     notices_label: ClassVar[str] = "earlier notices"
 

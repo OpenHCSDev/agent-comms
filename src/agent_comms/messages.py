@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from .input_key import InputKey
+
 from .class_fact import ClassFact
 from .projection_source import ProducedRow, ProjectionSource
 from .turn_origin import TurnOrigin
@@ -999,7 +1001,7 @@ class Message(Addressed, BusCapability, TurnOrigin):
     def batch_target(self) -> str:
         return self.exact_reply_target
 
-    def bus_keys(self, dispositions: InputDispositions, owner: Thread) -> tuple[str, ...]:
+    def bus_keys(self, dispositions: InputDispositions, owner: Thread) -> tuple[InputKey, ...]:
         return (dispositions.bus_key(self, owner),)
 
     @property

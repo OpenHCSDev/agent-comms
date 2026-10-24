@@ -14,10 +14,14 @@ from agent_comms.session_file import RegistrySessionLocation
 from agent_comms.cli import main
 from agent_comms.cli_commands import ConstraintPinnedResult
 from agent_comms.field_codec import InputId, FieldCodec, GoalId
+from agent_comms.input_key import AcpInputKey
 from agent_comms.context_segments.retained import RetainedSegment
 from agent_comms.turn_lease import NoTurnLease
 from stored_inputs import stored_inputs
 from agent_comms.threads import Thread
+
+
+ORIGINAL_UNKNOWN_KEY = AcpInputKey(InputId.mint())
 
 
 pytestmark = pytest.mark.usefixtures("durable_home")
@@ -40,7 +44,7 @@ def test_original_retained_source_narrow_export(comms, tmp_path, capsys):
     original = comms.messaging.send_user_message(CommandTarget.named(owner.name), wording, worktree=owner.worktree)
     comms.messaging.pin_user_constraint(owner.name, original.reference, worktree=owner.worktree)
     inputs = InputDispositions(comms.root)
-    inputs.record("acp:original-unknown", seq=None, owner=owner.name, claim_scope=1,
+    inputs.record(ORIGINAL_UNKNOWN_KEY, seq=None, owner=owner.name, claim_scope=1,
                   target=owner.name, text="Unpinned original UNKNOWN input; never export/replay")
 
     def command(*args):
@@ -148,7 +152,7 @@ async def original_input_consumer_journey(tmp_path, command):
             originals.append(reservation.source)
             reservation.release()
     assert agent.inputs.dispositions.record(
-        "neutral-original", seq=None, owner="beta",
+        AcpInputKey(InputId.mint()), seq=None, owner="beta",
         claim_scope=origin.claimed_identity.claimed_generation, target="beta", text=wording)
     inputs = agent.inputs.dispositions
     original_inputs = inputs.path.read_bytes()

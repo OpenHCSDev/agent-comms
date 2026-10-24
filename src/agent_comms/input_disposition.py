@@ -34,7 +34,9 @@ from .message_reference import MessageReference
 from .messages import Message
 from .reported_turn import ReportedTurnState
 from .tool_result import ToolResult
-from .typed_table import Column, DurableStore, Generated, Index, StoreRows, TypedTable, sql_literal
+from .typed_table import (
+    Column, DurableStore, Generated, Index, StoreRows, TextStorage, TypedTable, sql_literal,
+)
 
 if TYPE_CHECKING:
     from .bus import BusReader
@@ -199,7 +201,7 @@ class InputDispositionsRows(StoreRows):
 class InputDispositionRow(InputDispositionsRows, TypedTable):
     """One stored input; its lookup columns are generated from the stored row."""
 
-    key: Annotated[InputKey, InputKeyText, Column(primary_key=True)]
+    key: Annotated[InputKey, InputKeyText, Column(primary_key=True, storage=TextStorage)]
     attempt: StoredInput
     owner: ClassVar[Generated] = Generated(str, Column(generated="json_extract(attempt,'$.owner')"))
     turn_id: ClassVar[Generated] = Generated(
