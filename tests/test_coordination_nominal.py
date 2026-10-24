@@ -16,7 +16,7 @@ from agent_comms.execution_states import (
     ExecutionState,
     PendingExecution,
 )
-from agent_comms.field_codec import FieldCodec
+from agent_comms.field_codec import FieldCodec, MessageId
 from agent_comms.obligation_states import PublishedResponse, ResponseState, SilentResponse
 from agent_comms.wake_policy import FullWake, MessageAudience
 
@@ -203,7 +203,7 @@ def test_original_target_and_receipt_legality_is_owned_by_current_variants():
             FieldCodec.decode(AssignmentState, damaged)
 
     # A publication has a complete acknowledgement; non-publication variants have none.
-    published = FieldCodec.encode(PublishedResponse("message", 1))
+    published = FieldCodec.encode(PublishedResponse(MessageId.mint("message"), 1))
     for field in ("message_id", "seq"):
         damaged = dict(published)
         del damaged[field]

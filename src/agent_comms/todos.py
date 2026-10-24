@@ -3269,7 +3269,7 @@ class RecordOrderHeadVerdict(TodoCommand):
 
 @dataclass(frozen=True)
 class PeerAcceptedVerdict(AcceptedVerdict):
-    peer: str
+    peer: MessageId
 
     def prepare(self, goals, current):
         message = goals.bus.bus.lookup_message(self.peer)

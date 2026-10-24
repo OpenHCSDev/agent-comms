@@ -9,7 +9,7 @@ from pathlib import Path
 
 import pytest
 
-from agent_comms.field_codec import TurnId
+from agent_comms.field_codec import FieldCodec, MessageId, TurnId
 from agent_comms.session_file import RegistrySessionLocation
 from agent_comms.channel_targets import CommandTarget, PerTargetChannels
 from agent_comms.cli import main
@@ -127,7 +127,8 @@ class TestCliSuccess:
             code, sent = cli(comms.root, "send", "--from", "sender", "--to", "#comms",
                              "--body", "public record", "--role", role)
             assert code == 0
-            delivery, = comms.bus.bus.lookup_message(sent["id"]).deliveries()
+            message_id = FieldCodec.decode(MessageId, sent["id"])
+            delivery, = comms.bus.bus.lookup_message(message_id).deliveries()
             assert len(delivery.audience.recipients) == 2
             assert [decision.wake_policy() for decision in delivery.decisions] == [expected] * 2
         parser = argparse.ArgumentParser()

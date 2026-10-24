@@ -18,7 +18,7 @@ from agent_comms.cursor_owner import (
     RecordedCursor,
     UnstartedCursor,
 )
-from agent_comms.field_codec import InputId
+from agent_comms.field_codec import FieldCodec, InputId
 from agent_comms.historical_native_inputs import (
     FullHistoricalNativeInput,
     TriageHistoricalNativeInput,
@@ -70,7 +70,8 @@ def test_native_cursor_state_owns_start_observation_and_input_proof(
 
 def reservation():
     return NativeRuntimeInput(
-        input_id="c" * 32, stage=TriageNativeExecution, execution_id=UnrecordedNativeColumn(), attempt_ordinal=UnrecordedNativeColumn(),
+        input_id=FieldCodec.decode(InputId, "c" * 32), stage=TriageNativeExecution,
+        execution_id=UnrecordedNativeColumn(), attempt_ordinal=UnrecordedNativeColumn(),
         owner_lookup="b" * 32,  owner_generation=1,
         owner_token_digest="e" * 64,
     )
@@ -167,7 +168,7 @@ def test_original_native_sql_acquires_required_triage_or_full_recorded_proof(rec
         with pytest.raises((TypeError, ValueError)):
             missing.execution.historical_proof(missing, lifecycle=TriagePendingAssignment(), **source)
         for identity, decision in (("9", IgnoreSelectedTriage), ("8", FullSelectedTriage)):
-            original = replace(recorded, input_id=identity * 32,
+            original = replace(recorded, input_id=FieldCodec.decode(InputId, identity * 32),
                                verdict=DecidedTriageRecord(decision))
             original.insert(db)
             assert db.execute("SELECT verdict FROM native_runtime_input WHERE input_id=?",
@@ -183,7 +184,7 @@ def test_original_native_sql_acquires_required_triage_or_full_recorded_proof(rec
             with pytest.raises(sqlite3.IntegrityError):
                 NativeRuntimeInput.update(db, where="input_id=?", parameters=(original.input_id,),
                                           verdict=AbsentTriageDecisionRecord())
-        full = replace(recorded, input_id="7" * 32,
+        full = replace(recorded, input_id=FieldCodec.decode(InputId, "7" * 32),
                        stage=FullNativeExecution, **FullNativeExecution("5" * 32, 1).binding_fields(),
                        verdict=AbsentTriageDecisionRecord())
         full.insert(db)

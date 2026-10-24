@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 
-from agent_comms.field_codec import TurnId
+from agent_comms.field_codec import InputId, TurnId
 from agent_comms.lifecycle_capability import Failed
 import asyncio
 import multiprocessing
@@ -233,7 +233,7 @@ def test_recover_owner_refuses_a_conflicting_input_identity(released_starting, c
         before = store.get(execution_id)
         with store.session.writing() as db:
             NativeRuntimeInput(
-                input_id="c" * 32, stage=FullNativeExecution,
+                input_id=InputId.mint(), stage=FullNativeExecution,
                 execution_id=TextNativeColumn(execution_id),
                 attempt_ordinal=NumberNativeColumn(before.attempt.attempt_ordinal),
                 owner_lookup=owner.incarnation.lookup,

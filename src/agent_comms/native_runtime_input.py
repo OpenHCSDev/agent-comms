@@ -436,7 +436,7 @@ class CurrentNativeCursor(
     input_id: Annotated[
         NativeColumn,
         Column(references=TableReference(NativeRuntimeInput, ("input_id",)), storage=TextStorage, nullable=True),
-        NativeContext(str),
+        NativeContext(InputId),
     ]
     stage: Annotated[
         NativeColumn,
