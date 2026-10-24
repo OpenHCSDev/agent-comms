@@ -76,6 +76,16 @@ class BusProjectionTables(ProducedTable, SharedFileTables, DerivedTables, declar
     """Reverse lookups are derived from the record, in its append transaction."""
 
     @classmethod
+    def changed_rows(
+        cls, db: sqlite3.Connection, sharing: tuple[type[TypedTable], ...] = (),
+    ) -> tuple[type[TypedTable], ...]:
+        changed = set(super().changed_rows(db, sharing))
+        coupled = ClaimHolders.writes
+        if changed.intersection(coupled):
+            changed.update(coupled)
+        return tuple(row for row in cls.schema_rows() if row in changed)
+
+    @classmethod
     def create_schema(
         cls, db: sqlite3.Connection, rows: tuple[type[TypedTable], ...] | None = None,
     ) -> None:
@@ -133,7 +143,7 @@ class HeldResources(BusProjectionTables):
 
     @ClassFact
     def writes(cls) -> tuple[type[ProducedRow], ...]:
-        return (HeldResources, ClaimOperations)
+        return ClaimHolders.writes
 
 
     resource: Annotated[str, Column(primary_key=True)]
@@ -193,15 +203,22 @@ class HeldResources(BusProjectionTables):
             raise RelationViolationError("Committed claim transition is inconsistent.") from error
 
 
+@dataclass
 class ProjectionPass(ABC, ProjectionSource):
-    """How one projection pass writes the rows its records derive: an append writes its
-    few rows at once."""
+    """A projection pass owns its selected tables and admits every write through them."""
+
+    tables: frozenset[type[TypedTable]] = field(
+        default_factory=lambda: frozenset(BusProjectionTables.schema_rows()))
 
     @ClassFact
     def writes(cls) -> tuple[type[ProducedRow], ...]:
         return BusProjectionTables.projection_rows()
 
     def write(self, db: sqlite3.Connection, row: TypedTable) -> None:
+        if type(row) in self.tables:
+            self.store(db, row)
+
+    def store(self, db: sqlite3.Connection, row: TypedTable) -> None:
         row.insert(db)
 
     def flush(self, db: sqlite3.Connection) -> None:
@@ -210,6 +227,15 @@ class ProjectionPass(ABC, ProjectionSource):
 
 class ClaimHolders(ProjectionPass):
     """The current holders a claim transition projects from, before it is applied."""
+
+    @ClassFact
+    def writes(cls) -> tuple[type[BusProjectionTables], ...]:  # noqa: N805 — ClassFact binds cls
+        return (HeldResources, ClaimOperations)
+
+    def project(self, db: sqlite3.Connection, transition: ClaimTransition) -> None:
+        if self.tables.intersection(self.writes):
+            projected = HeldResources.project(db, transition, self)
+            self.apply(db, transition, projected)
 
     @abstractmethod
     def before(self, db: sqlite3.Connection, transition: ClaimTransition) -> ClaimProjection: ...
@@ -248,8 +274,6 @@ class ReplayedHolders(ClaimHolders):
     transition projects from is validated again, as one ``ClaimProjection``.
     """
 
-    tables: frozenset[type[TypedTable]] = field(
-        default_factory=lambda: frozenset(BusProjectionTables.schema_rows()))
     last_seq: int = 0
     owners: dict[str, ClaimOwner] = field(default_factory=dict)
     operations: set[ClaimId] = field(default_factory=set)
@@ -257,10 +281,9 @@ class ReplayedHolders(ClaimHolders):
     """Derived rows by insert statement; nothing in the rebuild reads them back before
     ``flush``, which inserts each statement's rows with one ``executemany``."""
 
-    def write(self, db: sqlite3.Connection, row: TypedTable) -> None:
-        if type(row) in self.tables:
-            statement, values = row.insertion()
-            self.rows.setdefault(statement, []).append(values)
+    def store(self, db: sqlite3.Connection, row: TypedTable) -> None:
+        statement, values = row.insertion()
+        self.rows.setdefault(statement, []).append(values)
 
     def apply(
         self, db: sqlite3.Connection, transition: ClaimTransition, projected: ClaimProjection,
@@ -1085,7 +1108,7 @@ class Claimed(BusCapability):
 
     @ClassFact
     def writes(cls) -> tuple[type[ProducedRow], ...]:
-        return (HeldResources, ClaimOperations)
+        return ClaimHolders.writes
 
 
     claim_transition: Annotated[ClaimTransition, WireOrder(11)]
@@ -1096,8 +1119,7 @@ class Claimed(BusCapability):
     def project_into(self, db: sqlite3.Connection, holders: ClaimHolders) -> None:
         """Append and the shared derived rebuild replay this same original transition."""
         super().project_into(db, holders)
-        projected = HeldResources.project(db, self.claim_transition, holders)
-        holders.apply(db, self.claim_transition, projected)
+        holders.project(db, self.claim_transition)
 
 
 @dataclass(frozen=True, kw_only=True)

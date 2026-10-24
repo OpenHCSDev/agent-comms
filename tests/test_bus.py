@@ -187,11 +187,6 @@ def test_nominal_message_id_column_stores_plain_text() -> None:
         ),
         (
             "messages.py",
-            "holders.apply(db, self.claim_transition, projected)",
-            "holders.apply(db, self.claim_transition, projected)\n        del projected",
-        ),
-        (
-            "messages.py",
             "return (SentActivity(message.sender, message.timestamp),)",
             "return (SentActivity(message.target, message.timestamp),)",
         ),
