@@ -8,7 +8,7 @@ import os
 import pytest
 from acp.schema import SessionNotification
 
-from agent_comms.field_codec import FieldCodec
+from agent_comms.field_codec import FieldCodec, GoalId
 from agent_comms.goal_attempts import GoalAttemptStore
 from agent_comms.goal_generation import BlockedGeneration, ReadyGeneration, ReservedGeneration
 from agent_comms.goals import Goal
@@ -66,7 +66,7 @@ async def test_native_cancelled_goal_resume_requires_retry_before_fresh_input(tm
             # the actual goal scheduler through Set Goal and explicit Retry.
             objective = "Continue the owner objective"
             created = await proxy.request("set_goal", text=objective)
-            goal_id = created["goal"]["id"]
+            goal_id = FieldCodec.decode(GoalId, created["goal"]["id"])
             store = comms.goals.open_goal_store()
             turn = fresh_turn = None
             try:
