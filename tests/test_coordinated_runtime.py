@@ -10,6 +10,7 @@ from pathlib import Path
 
 import pytest
 
+from agent_comms.field_codec import GoalId
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.comms import wire
 from agent_comms.context_segments.wake import SelectedWakeSegment
@@ -104,12 +105,13 @@ def test_triage_frame_is_read_only_and_does_not_promote_message_body(tmp_path: P
 
 
 def test_channel_wake_frame_carries_declared_goal_state(tmp_path: Path) -> None:
+    wake_goal_id = GoalId.mint()
     from agent_comms.goals import Goal
 
     root, _root_id, comms, initial, people = _root(tmp_path)
     owner = comms.registry.require("alpha")
     comms.registry.register(replace(owner, goal=Goal(
-        text="Restore subscribers", id="wake-goal", published_seq=0,
+        text="Restore subscribers", id=wake_goal_id, published_seq=0,
         progress="Routing fixed",
     )))
     with Coordination(str(root / "coordination.sqlite3")) as store:

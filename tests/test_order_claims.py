@@ -8,7 +8,7 @@ import time
 import pytest
 
 from agent_comms.commander.order import OrderFile, main
-from agent_comms.field_codec import FieldCodec
+from agent_comms.field_codec import FieldCodec, GoalId
 from agent_comms.goal_actions import SetGoalAction
 from agent_comms.goals import OrderCheck, ProblemGoalOrder
 from agent_comms.recorded_time import RecordedEventTime
@@ -201,6 +201,7 @@ def test_corrected_order_to_the_claimant_replaces_its_claim(held_commander, cite
 def test_two_delivery_claims_warn_without_deadlocking_other_orders(
     held_commander, cited_source, capsys,
 ):
+    other_order_goal_id = GoalId.mint()
     ctx = held_commander
     comms = ctx.comms
     store = comms.goals.todos
@@ -214,7 +215,7 @@ def test_two_delivery_claims_warn_without_deadlocking_other_orders(
     original = store.get("P1")
     second = store.create(
         "P2", original.repo, "Repair the other held workflow", creator=lead,
-        assigner=ctx.incarnation, owner=other, generation="other-order",
+        assigner=ctx.incarnation, owner=other, generation=other_order_goal_id,
         request=original.request.require(), review_at=RecordedEventTime(time.time() + 1000),
         order=replace(original.order.checked(), id="other-order"),
     )

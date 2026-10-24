@@ -13,7 +13,7 @@ import pytest
 from agent_comms.session_file import RegistrySessionLocation
 from agent_comms.cli import main
 from agent_comms.cli_commands import ConstraintPinnedResult
-from agent_comms.field_codec import InputId, FieldCodec
+from agent_comms.field_codec import InputId, FieldCodec, GoalId
 from agent_comms.context_segments.retained import RetainedSegment
 from agent_comms.turn_lease import NoTurnLease
 from stored_inputs import stored_inputs
@@ -25,6 +25,7 @@ pytestmark = pytest.mark.usefixtures("durable_home")
 
 def test_original_retained_source_narrow_export(comms, tmp_path, capsys):
     """Export carries only the pinned human constraint; it neither admits nor rewrites facts."""
+    original_goal_id = GoalId.mint()
     from agent_comms.goals import Goal
     from agent_comms.input_disposition import InputDispositions
     from test_task_decisions import saved_source
@@ -32,7 +33,8 @@ def test_original_retained_source_narrow_export(comms, tmp_path, capsys):
 
     saved = tmp_path / "original.jsonl"
     saved_source(saved)
-    goal = Goal("Original task goal, not an exported human constraint", "original-goal", published_seq=0, revision=7)
+    goal = Goal("Original task goal, not an exported human constraint", original_goal_id,
+        published_seq=0, revision=7)
     owner = comms.registry.declare(Thread('reader', frozenset(), str(tmp_path), session_file=RegistrySessionLocation.from_path(str(saved), comms.root), goal=goal))
     wording = "Original human constraint λ; preserve UNKNOWN and its source."
     original = comms.messaging.send_user_message(CommandTarget.named(owner.name), wording, worktree=owner.worktree)

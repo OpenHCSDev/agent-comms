@@ -8,7 +8,7 @@ import pytest
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.comms import wire
 from agent_comms.lifecycle_capability import Active
-from agent_comms.field_codec import FieldCodec, TurnId
+from agent_comms.field_codec import FieldCodec, TurnId, GoalId
 from agent_comms.goal_actions import (
     ActiveGoalAction,
     BlockedGoalAction,
@@ -216,14 +216,16 @@ def test_same_value_goal_transition_bumps_durable_revision(comms, monkeypatch):
 
 
 def test_exhausted_goal_revision_refuses_transition_without_write(comms):
+    goal_id = GoalId.mint()
     comms.registry.declare(
-        Thread(name='owner', tags=frozenset(), worktree='/wt', goal=Goal('work', 'goal-id', published_seq=0, revision=(1 << 63) - 1))
+        Thread(name='owner', tags=frozenset(), worktree='/wt', goal=Goal('work', goal_id,
+            published_seq=0, revision=(1 << 63) - 1))
     )
     before = (comms.root / "registry.json").read_bytes()
     with pytest.raises(ValueError):
         comms.goals.update_goal(
             "owner",
-            BlockedGoalAction(expect=GoalPrecondition(goal_id="goal-id"), progress="do not write"),
+            BlockedGoalAction(expect=GoalPrecondition(goal_id=goal_id), progress="do not write"),
         )
     assert (comms.root / "registry.json").read_bytes() == before
 

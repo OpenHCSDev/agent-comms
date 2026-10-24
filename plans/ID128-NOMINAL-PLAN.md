@@ -74,7 +74,7 @@ The kind patterns count fields and parameters together, so each kind phase cover
 
 ### 3-8. One id kind per phase, smallest first
 
-For each kind: retype its fields and parameters to that kind (`ClaimId`/`MessageId`, `TurnId`, `GoalId`, `RootId`/`ThreadLookup`, `InputId`, respectively) and its `Optional`s to the same kind unioned with `None`. Delete its re-decodes and constructor checks, citing the boundary line each value already passed. Route its hand-written `uuid4().hex` mints through that kind's inherited mint. Count both plain `str` and bare `Id128` annotations: neither states the kind, and both must reach zero in that phase. A parameter fed by raw text (a CLI argument, a file name, a foreign record) is a boundary: it decodes once there and nowhere downstream.
+For each kind: retype its fields and parameters to that kind (`ClaimId`, `MessageId`, `TurnId`, `GoalId`, `RootId`/`ThreadLookup`, `InputId`, respectively) and its `Optional`s to the same kind unioned with `None`. Delete its re-decodes and constructor checks, citing the boundary line each value already passed. Route its hand-written `uuid4().hex` mints through that kind's inherited mint. Count both plain `str` and bare `Id128` annotations: neither states the kind, and both must reach zero in that phase. A parameter fed by raw text (a CLI argument, a file name, a foreign record) is a boundary: it decodes once there and nowhere downstream.
 
 - Assignment.generation is the holder's goal id (goal_actions.py:540, :578), so it is GoalId; `ClaimId` names an envelope claim generation (publisher.py:176). `ThreadLookup` names a thread incarnation lookup (registry_provenance.py:79); `RootId` names the bus root. Phase 1 declares the additional kind; the kind phases retype their use sites.
 

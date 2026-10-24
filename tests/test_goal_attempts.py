@@ -20,7 +20,7 @@ from agent_comms.child_process import ProcessIdentity
 from agent_comms.cli_commands import StopCliCommand
 from agent_comms.coordination_database import CoordinationStore
 from agent_comms.coordination_errors import RecoveryBlocked
-from agent_comms.field_codec import MalformedRecord
+from agent_comms.field_codec import MalformedRecord, GoalId
 from agent_comms.goal_actions import SetGoalAction
 from agent_comms.goal_attempt_phase import ClaimedAttempt, FailedAttempt, SucceededAttempt
 from agent_comms.goal_failure_observation import FailedTurnEvidence
@@ -44,32 +44,32 @@ pytestmark = pytest.mark.skipif(
 )
 
 
-def _competing_reserve(root: str, grant: str, start, results) -> None:
+def _competing_reserve(root: str, goal_id: GoalId, grant: str, start, results) -> None:
     store = GoalAttemptStore(root)
     start.wait(5)
     try:
-        reservation = store.reserve("goal", 1, ready_grant=grant)
+        reservation = store.reserve(goal_id, 1, ready_grant=grant)
         results.put(("reserved", reservation.attempt_id))
     except ReservationConflictError:
         results.put(("conflict", ""))
 
 
-def _die_after_reservation(root: str, grant: str) -> None:
-    GoalAttemptStore(root).reserve("goal", 1, ready_grant=grant)
+def _die_after_reservation(root: str, goal_id: GoalId, grant: str) -> None:
+    GoalAttemptStore(root).reserve(goal_id, 1, ready_grant=grant)
     os._exit(0)
 
 
-def _die_after_claim(root: str, grant: str) -> None:
+def _die_after_claim(root: str, goal_id: GoalId, grant: str) -> None:
     store = GoalAttemptStore(root)
-    reservation = store.reserve("goal", 1, ready_grant=grant)
+    reservation = store.reserve(goal_id, 1, ready_grant=grant)
     store.claim_launch(reservation)
     os._exit(0)
 
 
-def _die_before_ready_ack(root: str) -> None:
+def _die_before_ready_ack(root: str, goal_id: GoalId) -> None:
     store = GoalAttemptStore(root)
     store._sync = lambda: os._exit(0)
-    store.create_goal("goal")
+    store.create_goal(goal_id)
     os._exit(1)
 
 
@@ -81,24 +81,26 @@ def store(tmp_path) -> Iterator[GoalAttemptStore]:
 
 
 def test_setup_requires_explicit_owner_private_root_and_0600_db(tmp_path):
+    missing_goal_id = GoalId.mint()
     with pytest.raises(StorageUncertainError):
         GoalAttemptStore.initialize(tmp_path / "missing")
     root = tmp_path / "root"
     root.mkdir(mode=0o700)
     store = GoalAttemptStore.initialize(root)
     assert store.path.stat().st_mode & 0o777 == 0o600
-    assert GoalAttemptStore(root).snapshot("missing") is None
+    assert GoalAttemptStore(root).snapshot(missing_goal_id) is None
 
 
 def test_one_reservation_across_two_independent_supervisors(store):
-    store.create_goal("goal")
+    goal_id = GoalId.mint()
+    store.create_goal(goal_id)
     ctx = multiprocessing.get_context("spawn")
     start = ctx.Event()
     results = ctx.Queue()
     children = [
         ctx.Process(
             target=_competing_reserve,
-            args=(str(store.root), store.ready_grant("goal", 1), start, results),
+            args=(str(store.root), goal_id, store.ready_grant(goal_id, 1), start, results),
         )
         for _ in range(2)
     ]
@@ -119,12 +121,13 @@ def test_one_reservation_across_two_independent_supervisors(store):
                 child.join(timeout=5)
     assert sorted(outcomes) == ["conflict", "reserved"]
     assert all(child.exitcode == 0 for child in children)
-    assert store.snapshot("goal").lifecycle == ReservedGeneration()
+    assert store.snapshot(goal_id).lifecycle == ReservedGeneration()
 
 
 def test_claim_is_one_shot_and_reopened_store_cannot_replay(store):
-    store.create_goal("goal")
-    reservation = store.reserve("goal", 1)
+    goal_id = GoalId.mint()
+    store.create_goal(goal_id)
+    reservation = store.reserve(goal_id, 1)
     reopened = GoalAttemptStore(store.root)
     with pytest.raises(UnresolvedAttemptError):
         reopened.claim_launch(reservation)
@@ -133,45 +136,48 @@ def test_claim_is_one_shot_and_reopened_store_cannot_replay(store):
     with pytest.raises(UnresolvedAttemptError):
         store.claim_launch(reservation)
     with pytest.raises(ReservationConflictError):
-        reopened.reserve("goal", 1)
+        reopened.reserve(goal_id, 1)
 
 
 def test_owner_can_rotate_only_unused_ready_grant_without_changing_generation(store):
-    initial = store.create_goal("goal")
-    old_grant = store.ready_grant("goal", 1)
+    goal_id = GoalId.mint()
+    initial = store.create_goal(goal_id)
+    old_grant = store.ready_grant(goal_id, 1)
     reopened = GoalAttemptStore(store.root)
-    assert reopened.recover_unreserved_ready("goal", 1) == initial
+    assert reopened.recover_unreserved_ready(goal_id, 1) == initial
     with pytest.raises(UnresolvedAttemptError):
-        store.reserve("goal", 1, ready_grant=old_grant)
-    attempt = reopened.reserve("goal", 1)
+        store.reserve(goal_id, 1, ready_grant=old_grant)
+    attempt = reopened.reserve(goal_id, 1)
     assert attempt.generation == 1
     with pytest.raises(ReservationConflictError):
-        reopened.recover_unreserved_ready("goal", 1)
+        reopened.recover_unreserved_ready(goal_id, 1)
 
 
 @pytest.mark.parametrize("phase", ["reserved", "claimed", "failed", "completed"])
 def test_ready_recovery_never_replays_an_existing_attempt(store, phase):
-    store.create_goal("goal")
-    reservation = store.reserve("goal", 1)
+    goal_id = GoalId.mint()
+    store.create_goal(goal_id)
+    reservation = store.reserve(goal_id, 1)
     if phase != "reserved":
         permit = store.claim_launch(reservation)
         if phase == "failed":
             reservation.fail(store, "Uncertain provider outcome")
         elif phase == "completed":
             permit.record_verified_completion(store, "verified terminal")
-    before = store.snapshot("goal")
+    before = store.snapshot(goal_id)
     reopened = GoalAttemptStore(store.root)
     with pytest.raises(ReservationConflictError):
-        reopened.recover_unreserved_ready("goal", 1)
-    assert reopened.snapshot("goal") == before
+        reopened.recover_unreserved_ready(goal_id, 1)
+    assert reopened.snapshot(goal_id) == before
 
 
 def test_crash_after_reservation_before_outcome_never_auto_reissues(store):
-    store.create_goal("goal")
+    goal_id = GoalId.mint()
+    store.create_goal(goal_id)
     ctx = multiprocessing.get_context("spawn")
     child = ctx.Process(
         target=_die_after_reservation,
-        args=(str(store.root), store.ready_grant("goal", 1)),
+        args=(str(store.root), goal_id, store.ready_grant(goal_id, 1)),
     )
     child.start()
     child.join(timeout=12)
@@ -180,19 +186,20 @@ def test_crash_after_reservation_before_outcome_never_auto_reissues(store):
         child.join(timeout=5)
     assert child.exitcode == 0
     reopened = GoalAttemptStore(store.root)
-    assert reopened.snapshot("goal").lifecycle == ReservedGeneration()
+    assert reopened.snapshot(goal_id).lifecycle == ReservedGeneration()
     with pytest.raises(ReservationConflictError):
-        reopened.reserve("goal", 1)
+        reopened.reserve(goal_id, 1)
     with pytest.raises(UnresolvedAttemptError):
-        reopened.resume("goal", 1)
+        reopened.resume(goal_id, 1)
 
 
 def test_claimed_crash_requires_separate_human_abandon_and_retry(store):
-    store.create_goal("goal")
+    goal_id = GoalId.mint()
+    store.create_goal(goal_id)
     ctx = multiprocessing.get_context("spawn")
     child = ctx.Process(
         target=_die_after_claim,
-        args=(str(store.root), store.ready_grant("goal", 1)),
+        args=(str(store.root), goal_id, store.ready_grant(goal_id, 1)),
     )
     child.start()
     child.join(timeout=12)
@@ -201,46 +208,47 @@ def test_claimed_crash_requires_separate_human_abandon_and_retry(store):
         child.join(timeout=5)
     assert child.exitcode == 0
     reopened = GoalAttemptStore(store.root)
-    current = reopened.snapshot("goal")
+    current = reopened.snapshot(goal_id)
     assert current is not None and current.lifecycle == ReservedGeneration()
     assert current.attempt_id is not None
     with pytest.raises(UnresolvedAttemptError):
-        reopened.resume("goal", 1)
+        reopened.resume(goal_id, 1)
     with pytest.raises(ReservationConflictError):
-        reopened.reserve("goal", 1)
+        reopened.reserve(goal_id, 1)
     with pytest.raises(ValueError):
         reopened.authorize_abandon_attempt(
-            "goal", expected_generation=1, attempt_id=current.attempt_id, user_decision_id=""
+            goal_id, expected_generation=1, attempt_id=current.attempt_id, user_decision_id=""
         )
     blocked = reopened.authorize_abandon_attempt(
-        "goal",
+        goal_id,
         expected_generation=1,
         attempt_id=current.attempt_id,
         user_decision_id="human-marked-uncertain-1",
     )
     assert blocked.lifecycle == BlockedGeneration()
     with pytest.raises(UnresolvedAttemptError):
-        reopened.resume("goal", 1)
+        reopened.resume(goal_id, 1)
     with pytest.raises(StaleAttemptError):
         reopened.authorize_abandon_attempt(
-            "goal",
+            goal_id,
             expected_generation=1,
             attempt_id=current.attempt_id,
             user_decision_id="human-marked-uncertain-1",
         )
     next_generation = reopened.authorize_retry(
-        "goal",
+        goal_id,
         expected_generation=1,
         attempt_id=current.attempt_id,
         user_decision_id="separate-human-retry-1",
     )
     assert next_generation.number == 2
-    assert reopened.reserve("goal", 2).generation == 2
+    assert reopened.reserve(goal_id, 2).generation == 2
 
 
 def test_crash_after_ready_commit_before_ack_requires_explicit_human_recovery(store):
+    goal_id = GoalId.mint()
     ctx = multiprocessing.get_context("spawn")
-    child = ctx.Process(target=_die_before_ready_ack, args=(str(store.root),))
+    child = ctx.Process(target=_die_before_ready_ack, args=(str(store.root), goal_id))
     child.start()
     child.join(timeout=12)
     if child.is_alive():
@@ -248,85 +256,89 @@ def test_crash_after_ready_commit_before_ack_requires_explicit_human_recovery(st
         child.join(timeout=5)
     assert child.exitcode == 0
     reopened = GoalAttemptStore(store.root)
-    assert reopened.snapshot("goal").lifecycle == ReadyGeneration()
+    assert reopened.snapshot(goal_id).lifecycle == ReadyGeneration()
     with pytest.raises(UnresolvedAttemptError):
-        reopened.reserve("goal", 1)
+        reopened.reserve(goal_id, 1)
     with pytest.raises(UnresolvedAttemptError):
-        reopened.resume("goal", 1)
+        reopened.resume(goal_id, 1)
     assert (
         reopened.authorize_ready_recovery(
-            "goal", expected_generation=1, user_decision_id="human-recover-after-crash"
+            goal_id, expected_generation=1, user_decision_id="human-recover-after-crash"
         ).number
         == 2
     )
-    assert reopened.reserve("goal", 2).generation == 2
+    assert reopened.reserve(goal_id, 2).generation == 2
 
 
 def test_failure_blocks_resume_until_explicit_separate_retry_decision(store):
-    store.create_goal("goal")
-    reservation = store.reserve("goal", 1)
+    goal_id = GoalId.mint()
+    store.create_goal(goal_id)
+    reservation = store.reserve(goal_id, 1)
     store.claim_launch(reservation)
     blocked = reservation.fail(store, "outcome unknown; no automatic replay")
     assert blocked.lifecycle == BlockedGeneration() and blocked.attempt_id == reservation.attempt_id
     with pytest.raises(UnresolvedAttemptError):
-        store.resume("goal", 1)
+        store.resume(goal_id, 1)
     with pytest.raises(ReservationConflictError):
-        store.reserve("goal", 1)
+        store.reserve(goal_id, 1)
     with pytest.raises(ValueError):
         store.authorize_retry(
-            "goal",
+            goal_id,
             expected_generation=1,
             attempt_id=reservation.attempt_id,
             user_decision_id="",
         )
     resumed = store.authorize_retry(
-        "goal",
+        goal_id,
         expected_generation=1,
         attempt_id=reservation.attempt_id,
         user_decision_id="visible-user-decision-1",
     )
     assert resumed.number == 2 and resumed.lifecycle == ReadyGeneration()
-    assert store.resume("goal", 2) == resumed
-    next_attempt = store.reserve("goal", 2)
+    assert store.resume(goal_id, 2) == resumed
+    next_attempt = store.reserve(goal_id, 2)
     assert next_attempt.attempt_id != reservation.attempt_id
     with pytest.raises(StaleAttemptError):
         reservation.fail(store, "late previous turn")
-    assert store.snapshot("goal").attempt_id == next_attempt.attempt_id
+    assert store.snapshot(goal_id).attempt_id == next_attempt.attempt_id
 
 
 def test_stale_old_done_cannot_block_or_overwrite_new_generation(store):
-    store.create_goal("goal")
-    prior = store.reserve("goal", 1)
+    goal_id = GoalId.mint()
+    store.create_goal(goal_id)
+    prior = store.reserve(goal_id, 1)
     permit = store.claim_launch(prior)
     next_generation = permit.record_verified_progress(store, "registry-progress-witness-1")
     assert next_generation.number == 2 and next_generation.lifecycle == ReadyGeneration()
-    newer = store.reserve("goal", 2)
+    newer = store.reserve(goal_id, 2)
     with pytest.raises(StaleAttemptError):
         prior.fail(store, "late old failure")
     with pytest.raises(StaleAttemptError):
         permit.record_verified_progress(store, "late old success")
-    assert store.snapshot("goal").attempt_id == newer.attempt_id
+    assert store.snapshot(goal_id).attempt_id == newer.attempt_id
     with pytest.raises(ReservationConflictError):
-        store.reserve("goal", 2)
+        store.reserve(goal_id, 2)
 
 
 def test_verified_completion_is_terminal_without_a_new_ready_grant(store):
-    store.create_goal("goal")
-    reservation = store.reserve("goal", 1)
+    goal_id = GoalId.mint()
+    store.create_goal(goal_id)
+    reservation = store.reserve(goal_id, 1)
     permit = store.claim_launch(reservation)
     completed = permit.record_verified_completion(store, "registry-completed-revision-2")
     assert completed.lifecycle == CompletedGeneration()
     assert completed.attempt_id == reservation.attempt_id
-    assert store.snapshot("goal") == completed
+    assert store.snapshot(goal_id) == completed
     with pytest.raises((ReservationConflictError, UnresolvedAttemptError)):
-        store.reserve("goal", completed.number)
+        store.reserve(goal_id, completed.number)
     with pytest.raises(UnresolvedAttemptError):
-        store.ready_grant("goal", completed.number + 1)
+        store.ready_grant(goal_id, completed.number + 1)
 
 
 def test_provider_reported_responses_are_attributed_once_and_survive_reopen(store):
-    store.create_goal("goal")
-    reservation = store.reserve("goal", 1)
+    goal_id = GoalId.mint()
+    store.create_goal(goal_id)
+    reservation = store.reserve(goal_id, 1)
     permit = store.claim_launch(reservation)
     first = PiUsage.from_wire(
         {"input": 100, "output": 20, "totalTokens": 120, "cost": {"total": 0.1}})
@@ -340,7 +352,7 @@ def test_provider_reported_responses_are_attributed_once_and_survive_reopen(stor
         permit.record_provider_usage(store, "response-1", second)
 
     reopened = GoalAttemptStore(store.root)
-    totals = ProviderUsageTotal.for_goal(reopened, "goal")
+    totals = ProviderUsageTotal.for_goal(reopened, goal_id)
     assert totals.responses == 2
     assert totals.input_tokens == PiCount.from_wire(140)
     assert totals.output_tokens == PiCount.from_wire(30)
@@ -360,69 +372,72 @@ def test_a_negative_token_count_decodes_as_unreported():
 
 @pytest.mark.parametrize("phase", ["reserved", "claimed"])
 def test_clearing_goal_retires_reserved_attempt_without_replay(store, phase):
-    store.create_goal("goal")
-    reservation = store.reserve("goal", 1)
+    goal_id = GoalId.mint()
+    store.create_goal(goal_id)
+    reservation = store.reserve(goal_id, 1)
     if phase == "claimed":
         store.claim_launch(reservation)
-    retired = store.retire_goal("goal", expected_generation=1, attempt_id=reservation.attempt_id)
+    retired = store.retire_goal(goal_id, expected_generation=1, attempt_id=reservation.attempt_id)
     assert retired.lifecycle == CancelledGeneration()
-    assert store.snapshot("goal") == retired
+    assert store.snapshot(goal_id) == retired
     with pytest.raises((StaleAttemptError, UnresolvedAttemptError)):
         store.claim_launch(reservation)
     with pytest.raises((ReservationConflictError, UnresolvedAttemptError)):
-        store.reserve("goal", 1)
+        store.reserve(goal_id, 1)
 
 
 def test_ready_grant_is_not_persisted_and_stale_decisions_cannot_launch(store):
-    store.create_goal("goal")
-    grant = store.ready_grant("goal", 1)
+    goal_id = GoalId.mint()
+    store.create_goal(goal_id)
+    grant = store.ready_grant(goal_id, 1)
     assert grant.encode() not in store.path.read_bytes()
     reopened = GoalAttemptStore(store.root)
     with pytest.raises(UnresolvedAttemptError):
-        reopened.reserve("goal", 1)
+        reopened.reserve(goal_id, 1)
     rotated = reopened.authorize_ready_recovery(
-        "goal", expected_generation=1, user_decision_id="visible-human-recovery-1"
+        goal_id, expected_generation=1, user_decision_id="visible-human-recovery-1"
     )
     assert rotated.number == 2
-    assert reopened.ready_grant("goal", 2).encode() not in store.path.read_bytes()
+    assert reopened.ready_grant(goal_id, 2).encode() not in store.path.read_bytes()
     with pytest.raises(ReservationConflictError):
-        store.reserve("goal", 1, ready_grant=grant)
+        store.reserve(goal_id, 1, ready_grant=grant)
     with pytest.raises(UnresolvedAttemptError):
         reopened.authorize_ready_recovery(
-            "goal", expected_generation=2, user_decision_id="visible-human-recovery-1"
+            goal_id, expected_generation=2, user_decision_id="visible-human-recovery-1"
         )
     with pytest.raises(UnresolvedAttemptError):
-        reopened.reserve("goal", 2, ready_grant=grant)
-    assert reopened.reserve("goal", 2).generation == 2
+        reopened.reserve(goal_id, 2, ready_grant=grant)
+    assert reopened.reserve(goal_id, 2).generation == 2
 
 
 def test_one_human_decision_id_cannot_authorize_two_attempts(store):
-    store.create_goal("goal")
-    first = store.reserve("goal", 1)
+    goal_id = GoalId.mint()
+    store.create_goal(goal_id)
+    first = store.reserve(goal_id, 1)
     first.fail(store, "outcome unknown")
     store.authorize_retry(
-        "goal",
+        goal_id,
         expected_generation=1,
         attempt_id=first.attempt_id,
         user_decision_id="single-human-decision",
     )
-    second = store.reserve("goal", 2)
+    second = store.reserve(goal_id, 2)
     second.fail(store, "second outcome unknown")
     with pytest.raises(UnresolvedAttemptError):
         store.authorize_retry(
-            "goal",
+            goal_id,
             expected_generation=2,
             attempt_id=second.attempt_id,
             user_decision_id="single-human-decision",
         )
-    assert store.snapshot("goal").lifecycle == BlockedGeneration()
+    assert store.snapshot(goal_id).lifecycle == BlockedGeneration()
     store.authorize_retry(
-        "goal",
+        goal_id,
         expected_generation=2,
         attempt_id=second.attempt_id,
         user_decision_id="different-human-decision",
     )
-    assert store.reserve("goal", 3).generation == 3
+    assert store.reserve(goal_id, 3).generation == 3
 
 
 @pytest.fixture
@@ -504,14 +519,16 @@ def test_stop_preserves_already_verified_goal_progress(comms, claimed_owner):
 
 
 def test_stopped_reserved_generation_refuses_its_missing_attempt(store):
+    goal_id = GoalId.mint()
     attempt_id = "a" * 32
-    generation = Generation("goal", 1, ReservedGeneration(), attempt_id)
+    generation = Generation(goal_id, 1, ReservedGeneration(), attempt_id)
     with pytest.raises(StorageUncertainError, match=attempt_id):
         generation.lifecycle.stopped_permit(store, generation)
 
 
 def test_incomplete_current_schema_is_not_repaired_or_regranted(store):
-    store.create_goal("goal")
+    goal_id = GoalId.mint()
+    store.create_goal(goal_id)
     with sqlite3.connect(store.path) as conn:
         GoalWorkDecision.drop(conn)
     before = store.path.read_bytes()

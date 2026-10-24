@@ -27,7 +27,7 @@ from agent_comms.ui_model.unit_state import AwaitingCommander
 from agent_comms.commander.standing import UnownedOrderWatch
 from agent_comms.commander_heartbeat import CommanderHeartbeat
 from agent_comms.comms import wire
-from agent_comms.field_codec import FieldCodec
+from agent_comms.field_codec import FieldCodec, GoalId
 from agent_comms.goal_actions import SetGoalAction
 from agent_comms.goals import OrderCheck
 from agent_comms.installer.practice import PracticeCopy
@@ -96,13 +96,14 @@ def test_order_factory_preserves_the_callers_directory_without_creating_source(s
 
 
 def _assign_process(root: str, checkout: str, name: str, created: float, gate) -> tuple[str, str]:
+    assignment_goal_id = GoalId.mint()
     store = TodoStore(Path(root))
     gate.wait(timeout=5)
     try:
         row = store.assign(
             "P1", expected_revision=1,
             owner=thread(name, Path(root), created), assigner=thread("lead", Path(root), 1.0).incarnation,
-            generation=f"generation-{name}", request=store.get("P1").request.require(),
+            generation=assignment_goal_id, request=store.get("P1").request.require(),
             review_at=RecordedEventTime(1000.0), order=order(SourceRepository.of(Path(checkout))),
         )
         return "won", row.assignment.owner
@@ -111,27 +112,31 @@ def _assign_process(root: str, checkout: str, name: str, created: float, gate) -
 
 
 def test_create_is_idempotent_and_request_link_is_historical(tmp_path: Path, source_repository) -> None:
+    initial_goal_id = GoalId.mint()
     store = TodoStore(tmp_path)
     lead = thread("lead", tmp_path, 1.0)
     request = store.add_request(lead.incarnation, "Repair the sidebar").id
     original = store.create(
         "P1", RepositoryName.from_wire("OpenHCSDev/agent-comms"), "Fix the sidebar", creator=lead, assigner=lead.incarnation, request=request,
-        owner=lead, generation="initial", review_at=RecordedEventTime(1000.0), order=order(source_repository),
+        owner=lead, generation=initial_goal_id, review_at=RecordedEventTime(1000.0),
+            order=order(source_repository),
     )
     assert original.repo == RepositoryName.from_wire("OPENHCSDEV/agent-comms")
     assert original.revision == 1
-    assert original.assignment == Assignment("lead", 1.0, "lead", 1.0, "initial")
+    assert original.assignment == Assignment("lead", 1.0, "lead", 1.0, initial_goal_id)
     assert (
         store.create(
             "P1", RepositoryName.from_wire("openhcsdev/agent-comms"), "Fix the sidebar", creator=lead, assigner=lead.incarnation, request=request,
-            owner=lead, generation="initial", review_at=RecordedEventTime(1000.0), order=order(source_repository),
+            owner=lead, generation=initial_goal_id, review_at=RecordedEventTime(1000.0),
+                order=order(source_repository),
         )
         == original
     )
     with pytest.raises(TodoConflict):
         store.create(
             "P1", RepositoryName.from_wire("openhcsdev/agent-comms"), "A different task", creator=lead, assigner=lead.incarnation, request=request,
-            owner=lead, generation="initial", review_at=RecordedEventTime(1000.0), order=order(source_repository),
+            owner=lead, generation=initial_goal_id, review_at=RecordedEventTime(1000.0),
+                order=order(source_repository),
         )
     assert TodoStore(tmp_path).list(RepositoryName.from_wire("openhcsdev/agent-comms")) == (original,)
     newer = thread("lead", tmp_path, 2.0)
@@ -142,6 +147,7 @@ def test_create_is_idempotent_and_request_link_is_historical(tmp_path: Path, sou
 
 
 def test_new_mutation_inherits_revision_admission(tmp_path, source_repository):
+    first_goal_id = GoalId.mint()
     mutations = []
 
     @dataclass(frozen=True)
@@ -156,7 +162,7 @@ def test_new_mutation_inherits_revision_admission(tmp_path, source_repository):
     request = store.add_request(lead.incarnation, "Repair the inherited revision admission")
     original = store.create(
         "P1", RepositoryName.from_wire("org/repo"), "Original title",
-        creator=lead, assigner=lead.incarnation, owner=lead, generation="first",
+        creator=lead, assigner=lead.incarnation, owner=lead, generation=first_goal_id,
         request=request.id, review_at=RecordedEventTime(1000),
         order=order(source_repository),
     )
@@ -170,12 +176,15 @@ def test_new_mutation_inherits_revision_admission(tmp_path, source_repository):
 
 
 def test_withdraw_retires_a_released_problem(tmp_path, source_repository):
+    first_goal_id = GoalId.mint()
+    wrong_goal_id = GoalId.mint()
     store = TodoStore(tmp_path)
     lead = thread("lead", tmp_path, 1.0)
     worker = thread("worker", tmp_path, 2.0)
     request = store.add_request(lead.incarnation, "Withdraw obsolete work").id
     todo = store.create("P1", RepositoryName.from_wire("org/repo"), "Obsolete problem",
-        creator=lead, assigner=lead.incarnation, owner=worker, generation="first", request=request,
+        creator=lead, assigner=lead.incarnation, owner=worker, generation=first_goal_id,
+            request=request,
         review_at=RecordedEventTime(1000), order=order(source_repository))
     released = store.apply(todo.id, ReleaseTodo(todo.revision, lead.incarnation, todo.held(),
         StrikeReason("The previous worker stopped before completing this assigned repair on main.")))
@@ -184,7 +193,7 @@ def test_withdraw_retires_a_released_problem(tmp_path, source_repository):
     why = "The requested repair already merged into main through another problem."
     with pytest.raises(TodoConflict):
         store.apply(todo.id, WithdrawTodo(released.revision, lead.incarnation,
-            replace(previous, generation="wrong"), why))
+            replace(previous, generation=wrong_goal_id), why))
     withdrawn = store.apply(todo.id, WithdrawTodo(released.revision, lead.incarnation,
         previous, why))
     assert store.for_commander(lead.incarnation) == ()
@@ -197,11 +206,13 @@ def test_withdraw_retires_a_released_problem(tmp_path, source_repository):
 
 @pytest.mark.parametrize("released", (False, True))
 def test_withdraw_refuses_a_delivered_problem(tmp_path, released, source_repository):
+    first_goal_id = GoalId.mint()
     store = TodoStore(tmp_path)
     lead = thread("lead", tmp_path, 1.0)
     request = store.add_request(lead.incarnation, "Retain delivered work").id
     todo = store.create("P1", RepositoryName.from_wire("org/repo"), "Delivered problem",
-        creator=lead, assigner=lead.incarnation, owner=lead, generation="first", request=request,
+        creator=lead, assigner=lead.incarnation, owner=lead, generation=first_goal_id,
+            request=request,
         review_at=RecordedEventTime(1000), order=order(source_repository))
     delivered = store.apply(todo.id, DeliverTodo(todo.revision, lead.incarnation,
         OperationDelivery(at=RecordedEventTime(20)), todo.order.id))
@@ -215,12 +226,14 @@ def test_withdraw_refuses_a_delivered_problem(tmp_path, released, source_reposit
 
 
 def test_two_processes_assign_one_todo_before_any_worker_is_started(tmp_path: Path, source_repository) -> None:
+    initial_goal_id = GoalId.mint()
     store = TodoStore(tmp_path)
     lead = thread("lead", tmp_path, 1.0)
     request = store.add_request(lead.incarnation, "Assign one implementation").id
     store.create(
         "P1", RepositoryName.from_wire("OpenHCSDev/agent-comms"), "One implementation", creator=lead, assigner=lead.incarnation, request=request,
-        owner=lead, generation="initial", review_at=RecordedEventTime(1000.0), order=order(source_repository),
+        owner=lead, generation=initial_goal_id, review_at=RecordedEventTime(1000.0),
+            order=order(source_repository),
     )
     with Manager() as manager, ProcessPoolExecutor(max_workers=2) as pool:
         gate = manager.Event()
@@ -239,6 +252,7 @@ def test_two_processes_assign_one_todo_before_any_worker_is_started(tmp_path: Pa
 
 
 def test_validation_rejects_ambiguous_identity_and_bad_state(tmp_path: Path, source_repository) -> None:
+    initial_goal_id = GoalId.mint()
     store = TodoStore(tmp_path)
     lead = thread("lead", tmp_path, 1.0)
     request = store.add_request(lead.incarnation, "Validate the repository and state").id
@@ -246,23 +260,27 @@ def test_validation_rejects_ambiguous_identity_and_bad_state(tmp_path: Path, sou
         with pytest.raises(ValueError):
             store.create(
                 f"invalid-{index}", RepositoryName.from_wire(repo), "task", creator=lead, assigner=lead.incarnation, request=request,
-                owner=lead, generation="initial", review_at=RecordedEventTime(1000.0), order=order(source_repository),
+                owner=lead, generation=initial_goal_id, review_at=RecordedEventTime(1000.0),
+                    order=order(source_repository),
             )
     store.create(
         "P1", RepositoryName.from_wire("org/repo"), "task", creator=lead, assigner=lead.incarnation, request=request,
-        owner=lead, generation="initial", review_at=RecordedEventTime(1000.0), order=order(source_repository),
+        owner=lead, generation=initial_goal_id, review_at=RecordedEventTime(1000.0),
+            order=order(source_repository),
     )
     with pytest.raises(ValueError):
         FieldCodec.decode(type[TodoState], "unverified")
 
 
 def test_merged_order_keeps_its_checked_fields(tmp_path: Path, source_repository) -> None:
+    initial_goal_id = GoalId.mint()
     store = TodoStore(tmp_path)
     lead = thread("lead", tmp_path, 1.0)
     request = store.add_request(lead.incarnation, "Repair the sidebar").id
     todo = store.create(
         "P1", RepositoryName.from_wire("OpenHCSDev/agent-comms"), "Fix the sidebar", creator=lead, assigner=lead.incarnation, request=request,
-        owner=lead, generation="initial", review_at=RecordedEventTime(1000.0), order=order(source_repository))
+        owner=lead, generation=initial_goal_id, review_at=RecordedEventTime(1000.0),
+            order=order(source_repository))
     merged = replace(todo, order=todo.order.checked().merged("2b9c1f1ab"))
     assert merged.order.checked().check == todo.order.checked().check
     assert merged.order.checked().copy_as(PendingProblemOrder) == todo.order
@@ -314,13 +332,18 @@ def pr_commander(tmp_path, monkeypatch, proof_build_checkouts, durable_home, git
     return Commander.read_root(tmp_path)
 
 
-def pr_order(ctx, pid, run: OrderRun = MechanicalOrderRun(), *, owner: Thread | None = None):
+def pr_order(
+    ctx, pid, run: OrderRun = MechanicalOrderRun(), *, owner: Thread | None = None,
+    goal_id: GoalId | None = None,
+):
+    pr_work_goal_id = goal_id if goal_id is not None else GoalId.mint()
     source = ctx.repos[0]
     lead = ctx.comms.registry.require(ctx.commander)
     return ctx.comms.goals.todos.create(
         pid, source.github, "Fix the sidebar", creator=lead, assigner=lead.incarnation,
         owner=owner if owner is not None else lead,
-        generation="pr-work", request=NewestOpenRequest().for_order(ctx.comms.goals.todos, lead.incarnation),
+        generation=pr_work_goal_id, request=NewestOpenRequest().for_order(ctx.comms.goals.todos,
+            lead.incarnation),
         review_at=RecordedEventTime(1000),
         order=replace(order(source), id=f"order-{pid}", run=run))
 
@@ -356,6 +379,7 @@ def test_recorded_closed_request_is_not_open_or_merged(pr_commander):
 
 def test_watcher_git_and_github_reads_leave_wire_free(pr_commander, monkeypatch):
     """Both real watcher entrypoints, a copied bus, real Git and the external forge stub."""
+    pr_work_goal_id = GoalId.mint()
     print("WATCHPASS SOURCE:", CommanderHeartbeat.watch_pass.__code__.co_filename)
     ctx = pr_commander
     source = ctx.repos[0]
@@ -363,7 +387,7 @@ def test_watcher_git_and_github_reads_leave_wire_free(pr_commander, monkeypatch)
         c = ctx.comms
         c.goals.update_goal(ctx.commander, SetGoalAction(
             text="Keep the commander request active for both watcher passes",
-            goal_id="pr-work"))
+            goal_id=pr_work_goal_id))
         lead = c.registry.require(ctx.commander)
         c.registry.register(replace(lead, process_identity=ProcessIdentity.capture(os.getpid())))
         worker_checkout = ctx.root.parent / "worker-checkout"
@@ -372,7 +396,7 @@ def test_watcher_git_and_github_reads_leave_wire_free(pr_commander, monkeypatch)
         c.registry.register(worker)
         original = adopt_pr(ctx, pr_order(ctx, "P1", ApplicationOrderRun(
             'Read the copied board and confirm the application order remains assigned',
-        ), owner=worker).id, 1)
+        ), owner=worker, goal_id=pr_work_goal_id).id, 1)
         merged = PullRequests((original,)).listed(
             source.github, MergedListedPullRequest, original,
         )[0].merge
@@ -390,7 +414,7 @@ def test_watcher_git_and_github_reads_leave_wire_free(pr_commander, monkeypatch)
         ).record(c.goals, original.id)
         assert any(rule.message.message_id == claim.message.message_id
                    for rule in OwedAnswer.opened(c, ctx.commander))
-        released = pr_order(ctx, "P3")
+        released = pr_order(ctx, "P3", goal_id=pr_work_goal_id)
         c.goals.todos.apply(released.id, ReleaseTodo(
             released.revision, CoreWatcherIncarnation.watcher(), released.held(),
             StrikeReason("The worker stopped before this order was completed and published.")))

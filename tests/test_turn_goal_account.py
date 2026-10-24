@@ -5,7 +5,7 @@ from agent_comms.lifecycle_capability import Terminal
 
 
 from agent_comms.goal_attempts import GoalAttemptStore
-from agent_comms.field_codec import TurnId
+from agent_comms.field_codec import TurnId, GoalId
 from agent_comms.goal_generation import (
     CompletedGeneration, ReadyGeneration,
 )
@@ -24,9 +24,10 @@ def test_goal_settlement_and_new_state_subclass_use_same_durable_owner(tmp_path)
     turn = TurnId('9b473845f684444f80a26586ae298d2b')
     for settlement in (VerifiedGoalSettlement, OriginGoalSettlement):
         for state in (ActiveGoal(), PausedGoal(), CompletedGoal(), SpecializedPausedGoal()):
+            goal_id = GoalId.mint()
             goal = Goal(
                 "work",
-                f"{settlement.__name__}-{state.declared_name}",
+                goal_id,
                 published_seq=0,
                 reported_turn=ReportedTurn(turn),
                 state=state,

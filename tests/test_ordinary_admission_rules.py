@@ -6,12 +6,14 @@ import pytest
 
 
 import agent_comms.ordinary_turn_rules as rules
+from agent_comms.field_codec import GoalId
 from agent_comms.reservation_rules import ReservationViolationError
 from agent_comms.goal_waits import NoGoalWait, RecordedGoalWait
 from agent_comms.threads import Thread
 
 
 def test_routed_dependency_source_uses_existing_goal_and_wait_authorities(tmp_path):
+    goal_id = GoalId.mint()
     from agent_comms.channel_input_batch import SingleInputBatch
     from agent_comms.goal_presentation import GoalWaitTarget
     from agent_comms.goals import Goal
@@ -31,7 +33,7 @@ def test_routed_dependency_source_uses_existing_goal_and_wait_authorities(tmp_pa
     peer = Thread(name='peer', tags=frozenset(), worktree=str(tmp_path))
     comms.registry.declare(peer)
     peer = comms.registry.require("peer")
-    goal = Goal("Wait for peer", "goal", published_seq=0)
+    goal = Goal("Wait for peer", goal_id, published_seq=0)
     message = comms.messaging.send("peer", "owner", "Result").message
     wait = RecordedGoalWait(
         goal_id=goal.id,

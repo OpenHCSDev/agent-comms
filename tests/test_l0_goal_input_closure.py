@@ -9,7 +9,7 @@ import pytest
 
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.comms import wire
-from agent_comms.field_codec import FieldCodec, TurnId
+from agent_comms.field_codec import FieldCodec, TurnId, GoalId
 from agent_comms.goal_actions import (
     GoalPrecondition,
     OwnerInvocable,
@@ -75,9 +75,10 @@ def test_unknown_reason_survives_real_history_without_inventing_provenance(tmp_p
     "state", [BlockedGoal("Inspect the failed attempt"), UnrecordedBlockGoal()]
 )
 def test_retry_requires_existing_private_generation_and_never_adopts(tmp_path, state):
+    goal_id = GoalId.mint()
     comms = wire(tmp_path / "wire")
     register(comms, "owner")
-    goal = Goal("Objective", "goal", published_seq=0, state=state)
+    goal = Goal("Objective", goal_id, published_seq=0, state=state)
     comms.registry.register(replace(comms.registry.require("owner"), goal=goal))
     store = comms.goals.open_goal_store()
     retry = RetryGoalAction(

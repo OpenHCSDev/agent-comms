@@ -9,7 +9,7 @@ from dataclasses import replace
 import pytest
 
 from agent_comms.child_process import ProcessIdentity
-from agent_comms.field_codec import TurnId
+from agent_comms.field_codec import TurnId, GoalId
 from agent_comms.turn_failure import BackendFailed, FinalStopMissing
 from agent_comms.goal_attempts import AttemptRecord, GoalAttemptStore
 from agent_comms.errors import UnresolvedAttemptError
@@ -26,7 +26,8 @@ def bound(tmp_path, *, thread_registration):
     root = tmp_path / "private"
     root.mkdir(mode=0o700)
     store = GoalAttemptStore.initialize(root)
-    goal = Goal("private goal prose", "goal", published_seq=0, revision=2)
+    goal_id = GoalId.mint()
+    goal = Goal("private goal prose", goal_id, published_seq=0, revision=2)
     owner = Thread(
         'owner', frozenset(), '/private-worktree',
         process_identity=ProcessIdentity.capture(os.getpid()), created_at=10.0,
@@ -84,36 +85,39 @@ def test_mismatched_turn_lease_is_not_bound(bound, mutation):
     )
     assert rejected is None
     observation.reservation.fail(store, "failed anyway", observation=rejected)
-    assert store.snapshot("goal").lifecycle == BlockedGeneration()
-    assert store.require_generation("goal").failure_evidence(store) == NoFailedTurnEvidence()
+    assert store.snapshot(owner.goal.id).lifecycle == BlockedGeneration()
+    assert store.require_generation(owner.goal.id).failure_evidence(store) == NoFailedTurnEvidence()
 
 
 @pytest.mark.parametrize("binding", ["token", "evidence_identity"])
 def test_mismatched_permit_cannot_attach_observation_or_weaken_failure(bound, binding):
     store, owner, _, observation = bound
+    another_goal_id = GoalId.mint()
     forged = (
         replace(observation, reservation=replace(observation.reservation, token="wrong"))
         if binding == "token"
-        else replace(observation, evidence=replace(observation.evidence, goal_id="another"))
+        else replace(observation, evidence=replace(observation.evidence, goal_id=another_goal_id))
     )
     observation.reservation.fail(store, "failed", observation=forged)
     assert rows(store, "failed_turn_evidence") == []
-    assert store.snapshot("goal").lifecycle == BlockedGeneration()
-    assert store.require_generation("goal").failure_evidence(store) == NoFailedTurnEvidence()
+    assert store.snapshot(owner.goal.id).lifecycle == BlockedGeneration()
+    assert store.require_generation(owner.goal.id).failure_evidence(store) == NoFailedTurnEvidence()
 
 
 def test_unclaimed_attempt_failure_has_no_backend_incident(bound):
+    unclaimed_goal_id = GoalId.mint()
     store, owner, _, observation = bound
-    store.create_goal("unclaimed")
-    reservation = store.reserve("unclaimed", 1)
+    store.create_goal(unclaimed_goal_id)
+    reservation = store.reserve(unclaimed_goal_id, 1)
     reservation.fail(store, "prelaunch failure", observation=replace(observation, reservation=reservation))
-    assert store.snapshot("unclaimed").lifecycle == BlockedGeneration()
+    assert store.snapshot(unclaimed_goal_id).lifecycle == BlockedGeneration()
     assert rows(store, "failed_turn_evidence") == []
 
 
 def test_stale_attempt_cannot_record_an_incident(bound):
     store, owner, _, observation = bound
-    store.retire_goal("goal", expected_generation=1, attempt_id=observation.reservation.attempt_id)
+    store.retire_goal(owner.goal.id, expected_generation=1,
+        attempt_id=observation.reservation.attempt_id)
     before = store.path.read_bytes()
     with pytest.raises(StaleAttemptError):
         observation.reservation.fail(store, "late", observation=observation)
@@ -129,9 +133,9 @@ def test_observation_insert_error_does_not_rollback_failure_fence(bound):
             "BEGIN SELECT RAISE(ABORT,'injected observation failure'); END"
         )
     observation.reservation.fail(store, "failed", observation=observation)
-    assert store.snapshot("goal").lifecycle == BlockedGeneration()
+    assert store.snapshot(owner.goal.id).lifecycle == BlockedGeneration()
     with sqlite3.connect(store.path) as conn:
         assert AttemptRecord.one(conn, attempt_id=observation.reservation.attempt_id).phase.declared_name == "failed"
     assert rows(store, "failed_turn_evidence") == []
     with pytest.raises(UnresolvedAttemptError):
-        store.resume("goal", 1)
+        store.resume(owner.goal.id, 1)

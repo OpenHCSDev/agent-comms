@@ -4,7 +4,7 @@ from dataclasses import replace
 
 
 from agent_comms.comms import wire
-from agent_comms.field_codec import TurnId
+from agent_comms.field_codec import TurnId, GoalId
 from agent_comms.input_attempt import (
     OwnerQueueInputDeliveryScope, UnobservedInputDeliveryScope, UnresolvedInput,
 )
@@ -14,6 +14,7 @@ from agent_comms.threads import Thread
 
 
 def seed(comms, name):
+    goal_id = GoalId.mint()
     owners = frozenset({name})
     ledger = InputDispositions(comms.root)
     for key, seq in [("bus:1", 1), ("bus:2", 2), ("bus:7", 7), ("bus:8", 8), ("acp:ui", None)]:
@@ -25,7 +26,7 @@ def seed(comms, name):
         native_id="a" * 32,
         text="Text bus:2",
     )
-    ledger.review_for_goal(("bus:1",), owners=owners, goal_id="goal", goal_revision=1, turn_id="t")
+    ledger.review_for_goal(("bus:1",), owners=owners, goal_id=goal_id, goal_revision=1, turn_id="t")
     return ledger
 
 
