@@ -16,9 +16,10 @@ import tempfile
 from collections.abc import Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass, field
+from functools import cached_property
 from pathlib import Path
 from traceback import extract_tb
-from typing import Annotated, TextIO
+from typing import Annotated, ClassVar, TextIO
 
 import agent_comms.installer
 from agent_comms.cli_bridges.shared import SessionBridgeResumes
@@ -122,6 +123,19 @@ class InstallLogs:
     """Each install's diagnostics beside the bus, kept as long as its data backups are."""
 
     root: Path
+    target_file: ClassVar[str] = "target"
+
+    def launched(self, target: str) -> bool:
+        """The existing diagnostics record each target whose installer was spawned."""
+        return any(
+            marker.is_file() and marker.read_text(encoding="ascii").strip() == target
+            for path in self.root.parent.glob(f"{glob.escape(self.prefix)}*")
+            if path.is_dir()
+            for marker in (path / self.target_file,)
+        )
+
+    def record(self, logs: Path, target: str) -> None:
+        (logs / self.target_file).write_text(target, encoding="ascii")
 
     @property
     def prefix(self) -> str:
@@ -166,27 +180,40 @@ class InstallRun:
             TargetTree(checkout, scratch, target).add()
         return cls(command, root, scratch, target, commands.clock.phases)
 
-    def launch(self, output: TextIO) -> int:
+    @cached_property
+    def logs(self) -> Path:
+        return InstallLogs(self.root).minted()
+
+    def spawn(self) -> subprocess.Popen[bytes]:
         """The install outlives its caller: a new session, its output in files beside the bus.
         Retiring the caller's process group must not cut an install short."""
         tree = TargetTree(self.command.checkout, self.scratch, self.target)
-        logs = InstallLogs(self.root).minted()
-        result, errors = logs / "result.json", logs / "stderr.log"
-        with result.open("xb") as stdout, errors.open("xb") as stderr:
+        result, errors = self.logs / "result.json", self.logs / "stderr.log"
+        request_read, request_write = os.pipe()
+        with (os.fdopen(request_read, "rb") as stdin,
+              os.fdopen(request_write, "wb") as requests,
+              result.open("xb") as stdout, errors.open("xb") as stderr):
             process = subprocess.Popen(
                 [sys.executable, "-m", agent_comms.installer.__name__], cwd=tree.path,
                 env={**os.environ, "PYTHONPATH": os.pathsep.join(map(str, tree.source_paths()))},
-                stdin=subprocess.PIPE, stdout=stdout, stderr=stderr, start_new_session=True,
+                stdin=stdin, stdout=stdout, stderr=stderr, start_new_session=True,
             )
+            InstallLogs(self.root).record(self.logs, self.target)
+            requests.write(json.dumps(FieldCodec.encode(self)).encode())
         print(f"install: pid {process.pid} runs {self.target[:12]}; diagnostics {errors}",
               file=sys.stderr, flush=True)
-        process.communicate(json.dumps(FieldCodec.encode(self)).encode())
-        if process.returncode:
-            print(f"install failed ({process.returncode}): {errors.read_text().strip()}",
+        return process
+
+    def launch(self, output: TextIO) -> int:
+        process = self.spawn()
+        status = process.wait()
+        result, errors = self.logs / "result.json", self.logs / "stderr.log"
+        if status:
+            print(f"install failed ({status}): {errors.read_text().strip()}",
                   file=sys.stderr)
         else:
             output.write(result.read_text())
-        return process.returncode
+        return status
 
     def run(self) -> Upgrade:
         command = self.command
