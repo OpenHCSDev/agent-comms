@@ -2176,9 +2176,8 @@ class DeliverableProblemOrder(FreshMainCheck, OpenProblemOrder, declared_name=No
         main = Repo.git(
             repo, "rev-parse", f"{FreshMainCheck.check_base(self, repo)}^{{commit}}"
         ).strip()
-        try:
-            self.check.result.require(self.check.at(main, self.check.directory, checkout_base))
-        except OrderCheckFailedError:
+        ran = self.check.at(main, self.check.directory, checkout_base)
+        if not self.check.result.distance(ran).project(lambda away: away == 0, lambda _: False):
             return ()
         return (self.run.after_merge(todo, self.merged(main)),)
 
