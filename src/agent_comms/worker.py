@@ -35,7 +35,7 @@ async def run_owner(comms: Comms) -> None:
     async with Coordination.worker(CoordinationStore.path_in(comms.root)):
         name = ThreadLaunch.current().name
         thread = await Coordination.run_worker(partial(comms.registry.require, name))
-        stopped = OwnerStop()
+        stopped = OwnerStop(comms.owners.maintenance)
         agent = CommsAgent(
             comms,
             runtime_enabled=True,
