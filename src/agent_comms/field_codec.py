@@ -2148,13 +2148,6 @@ class FieldCodec(MroDispatch, Sealed):
         return cast(T, compile_decoder(target).decode_bound(data, {}))
 
     @classmethod
-    def record_member[Member: DeclaredFamily](
-        cls, family: type[Member], data: object
-    ) -> tuple[type[Member], dict]:
-        """Read a record's declared selector without decoding its payload."""
-        return _FamilyRecordDecoder(family).member(data)
-
-    @classmethod
     def field_plan(cls, record: type, name: str) -> FieldPlan:
         return next(item for item in cls._record_plan(record).bindings if item.name == name)
 

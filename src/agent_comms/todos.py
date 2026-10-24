@@ -3107,11 +3107,13 @@ class StrikeTodo(CitedStrike, StoryEvent):
 
     def taken_away(self, struck: Todo) -> Todo:
         """The strike that reaches StrikeLimit takes the task away in the same write, through
-        the release `order fire` records."""
+        the release `order fire` records. The release states its own reason, the limit; the
+        strike already carries what the unit did."""
         if not struck.struck_out(self.previous.owner):
             return struck
-        return ReleaseTodo(struck.revision, self.actor, self.previous,
-                           StrikeReason(self.reason), self.at).apply(struck)
+        limit = StrikeReason(f"{self.previous.owner} took {ProblemGoalOrder.StrikeLimit} strikes "
+                             f"on {struck.id}, so the task goes to another unit.")
+        return ReleaseTodo(struck.revision, self.actor, self.previous, limit, self.at).apply(struck)
 
     @classmethod
     def send_back(cls, current: Todo, actor: ThreadIncarnation, previous: Assignment,
