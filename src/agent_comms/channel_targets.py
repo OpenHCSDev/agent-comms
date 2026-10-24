@@ -1,19 +1,20 @@
 """Named destinations own route behavior; strings are decoded at the boundary."""
 from __future__ import annotations
 
-from .class_fact import ClassFact
 from abc import ABC, abstractmethod
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, ClassVar
 
 from .activity_clocks import ActivityClocks
+from .class_fact import ClassFact
 from .declared_family import DeclaredFamily
 from .errors import HumanSendRefusedError, RelationViolationError, UnregisteredThreadError
 from .field_codec import NullMember, SingleFieldValue, SubclassUnion
 from .history_result import DmHistoryPageResult, HistoryPageResult
 from .projection_source import ProducedRow, ProjectionSource
 from .response_policy import DirectPolicy, MentionedOnlyPolicy
+from .thread_identity import ThreadIncarnation
 from .wake_policy import BoundedTriageWake, FullWake, MessageAudience, UnmentionedWake
 
 if TYPE_CHECKING:
@@ -38,7 +39,6 @@ if TYPE_CHECKING:
     from .registry_document import RegistrySnapshot
     from .registry_provenance import RegistryProvenance
     from .response_policy import ResponsePolicy
-    from .thread_identity import ThreadIncarnation
     from .thread_status import ThreadStatus
     from .threads import Thread
     from .wake_policy import WakePolicy
