@@ -1,5 +1,4 @@
 {
-  "version": 1,
   "package_files": [
     {"source": "src/agent_comms/pi_project_bootstrap.mjs", "target": "dist/agent-comms-project-bootstrap.mjs"},
     {"source": "src/agent_comms/owner_tool_socket.mjs", "target": "dist/owner_tool_socket.mjs"},

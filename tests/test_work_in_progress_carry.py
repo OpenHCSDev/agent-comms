@@ -5,7 +5,7 @@ import re
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-PATCH = ROOT / "stack" / "patch-native-compaction-wip.py"
+PATCH = ROOT / "stack/native" / "patch-native-compaction-wip.py"
 INSTRUCTION = ROOT / "src" / "agent_comms" / "instructions" / "coordination.md"
 
 

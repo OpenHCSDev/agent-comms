@@ -1,5 +1,7 @@
 """The source inventory and pinned identity of a native package build."""
 
+from __future__ import annotations
+
 import hashlib
 import json
 import os
@@ -48,10 +50,8 @@ class NativeRepositoryInputs:
     compaction_instruction: str
 
     @classmethod
-    def of(cls, root: Path) -> "NativeRepositoryInputs":
+    def of(cls, root: Path) -> NativeRepositoryInputs:
         data = json.loads((root / "stack/native/repository-inputs.json").read_text())
-        if data["version"] != 1:
-            raise ValueError("Unsupported native repository inputs version")
         mcp = data["mcp_client"]
         return cls(
             tuple(PackageFile(**item) for item in data["package_files"]),
@@ -74,7 +74,9 @@ class NativeBuildInputs:
     root: Path
 
     def paths(self) -> tuple[Path, ...]:
-        """The files the recipe in stack/native reads: that directory and the repository inputs it declares."""
+        """The files the recipe in stack/native reads: that directory and the
+        repository inputs it declares.
+        """
         environment = dict(os.environ)
         for name in ("GIT_DIR", "GIT_INDEX_FILE", "GIT_WORK_TREE"):
             environment.pop(name, None)

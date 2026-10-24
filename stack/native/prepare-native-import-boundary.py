@@ -13,6 +13,7 @@ import sys
 import tempfile
 from pathlib import Path
 
+from agent_comms.native_build_inputs import McpClientSource, NativeRepositoryInputs
 from agent_comms.private_path import PrivateDirectoryRole
 
 LOADER_SHA = "a1393de916487a2c47107ac7239f3139dcdb938705f88ba1ea5a954b3c8bb483"
@@ -155,7 +156,9 @@ def materialize(source: Path, target: Path) -> None:
 def main(package: Path, dependency_package: Path | None = None) -> None:
     os.umask(0o077)
     stack = Path(__file__).resolve().parent
-    extension = stack.parent / "extensions/pi-mcp-client"
+    repo = stack.parents[1]
+    inputs = NativeRepositoryInputs.of(repo)
+    extension = repo / inputs.mcp_client.root
     destination = package / "agent-comms-extensions/pi-mcp-client"
     if destination.exists():
         raise SystemExit("Import-boundary destination already exists; never repair in place")
@@ -171,15 +174,15 @@ def main(package: Path, dependency_package: Path | None = None) -> None:
         # directory. The existing owner checks its current native tree pin.
         dependency_package = dependency_package.resolve(strict=True)
         subprocess.run(
-            [str(stack / "bin/native-source"), sys.executable, "qualify", str(dependency_package)],
+            [str(stack / "native-source"), sys.executable, "qualify", str(dependency_package)],
             env=environment,
             check=True,
         )
         staging = dependency_package / "agent-comms-extensions/pi-mcp-client"
-        for name in ("package.json", "package-lock.json", "index.mjs", "README.md"):
+        for name in (*inputs.mcp_client.install, *inputs.mcp_client.files):
             if (extension / name).read_bytes() != (staging / name).read_bytes():
                 raise SystemExit(f"Committed MCP source differs: {name}")
-        for name in ("src", "bin"):
+        for name in inputs.mcp_client.trees:
             selected = sorted(p.relative_to(extension) for p in (extension / name).rglob("*") if p.is_file())
             committed = sorted(p.relative_to(staging) for p in (staging / name).rglob("*") if p.is_file())
             if selected != committed or any(
@@ -190,27 +193,26 @@ def main(package: Path, dependency_package: Path | None = None) -> None:
         destination.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
         materialize(staging, destination)
     else:
-        prepare_mcp_dependencies(extension, destination, environment)
+        prepare_mcp_dependencies(extension, destination, environment, inputs.mcp_client)
     for source, target in (
         ("native-import-fence.mjs", "agent-comms-import-fence.mjs"),
         ("native-import-manifest.json", "agent-comms-imports.json"),
     ):
         shutil.copyfile(stack / source, package / "dist" / target)
-    for name in (
-        "owner_tool_socket.mjs", "selected_claimed_write.mjs", "channel_coding_tools.mjs",
-        "pi_login_control.mjs",
-    ):
-        shutil.copyfile(stack.parent / "src/agent_comms" / name, package / "dist" / name)
+    for item in inputs.package_files:
+        shutil.copyfile(repo / item.source, package / item.target)
     subprocess.run(
         ["node", str(stack / "prepare-native-global-extensions.mjs"), str(package)],
         env=environment, check=True, timeout=60,
     )
 
 
-def prepare_mcp_dependencies(extension: Path, destination: Path, environment: dict[str, str]) -> None:
+def prepare_mcp_dependencies(
+    extension: Path, destination: Path, environment: dict[str, str], inputs: McpClientSource,
+) -> None:
     with tempfile.TemporaryDirectory(prefix="pr95-mcp-deps-") as scratch:
         staging = Path(scratch)
-        for name in ("package.json", "package-lock.json"):
+        for name in inputs.install:
             shutil.copyfile(extension / name, staging / name)
         subprocess.run(
             [
@@ -235,9 +237,9 @@ def prepare_mcp_dependencies(extension: Path, destination: Path, environment: di
         for path in sorted((staging / "node_modules").rglob("*"), reverse=True):
             if path.is_dir() and not path.is_symlink() and not any(path.iterdir()):
                 path.rmdir()
-        for name in ("index.mjs", "README.md"):
+        for name in inputs.files:
             shutil.copyfile(extension / name, staging / name)
-        for name in ("src", "bin"):
+        for name in inputs.trees:
             shutil.copytree(extension / name, staging / name, symlinks=True)
         destination.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
         materialize(staging, destination)

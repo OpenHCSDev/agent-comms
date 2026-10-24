@@ -31,20 +31,32 @@ def test_unbuilt_pin_is_native_pi_unavailable_and_names_its_preparation(tmp_path
     manifest.parent.mkdir()
     manifest.write_text(f"{'0' * 64}  dist/cli.js\n")
     monkeypatch.setattr(native_package, "MANIFEST", manifest)
-    with pytest.raises(NativePiUnavailable, match="run .*/stack/bin/prepare-pi-native first"):
+    with pytest.raises(NativePiUnavailable, match="run .*/stack/native/prepare-pi-native first"):
         native_package.pinned_native_package()
 
 
 def test_pinned_inputs_refuse_changed_patch(tmp_path):
     stack = tmp_path / "stack"
-    stack.mkdir()
-    patch = stack / "patch-native-example.py"
+    (stack / "native").mkdir(parents=True)
+    (stack / "native/repository-inputs.json").write_text(json.dumps({
+        "package_files": [],
+        "mcp_client": {"root": "extensions/mcp", "install": [], "files": [], "trees": []},
+        "compaction_instruction": "instruction.md",
+    }))
+    patch = stack / "native/patch-native-example.py"
     patch.write_bytes(b"first patch byte\n")
     manifest = stack / "pi-native.sha256"
     stock = "# agent-comms-native-stock-v1 fixture@1\n"
     manifest.write_text(stock)
+    subprocess.run(["git", "init", "-q", str(tmp_path)], check=True)
+    subprocess.run(["git", "-C", str(tmp_path), "add", "-A"], check=True)
     inputs = NativeBuildInputs(tmp_path)
     manifest.write_text(stock + INPUTS_PREFIX + inputs.digest(manifest) + "\n")
+    inputs.require_pinned(manifest)
+    (stack / "bin").mkdir()
+    launcher = stack / "bin/launcher"
+    launcher.write_text("# launcher comment\n")
+    subprocess.run(["git", "-C", str(tmp_path), "add", "-A"], check=True)
     inputs.require_pinned(manifest)
     patch.write_bytes(b"First patch byte\n")
     with pytest.raises(ValueError):
@@ -148,8 +160,10 @@ def launcher(tmp_path, monkeypatch):
     interpreter.parent.mkdir(parents=True)
     interpreter.write_text(f'#!/bin/sh\nexec {sys.executable} "$@"\n')
     interpreter.chmod(0o755)
-    for name in ("pi-native", "prepare-pi-native", "native-source"):
-        shutil.copy2(repo / "stack/bin" / name, stack / "bin" / name)
+    shutil.copy2(repo / "stack/bin/pi-native", stack / "bin/pi-native")
+    (stack / "native").mkdir()
+    for name in ("prepare-pi-native", "native-source", "repository-inputs.json"):
+        shutil.copy2(repo / "stack/native" / name, stack / "native" / name)
     shutil.copyfile(repo / "stack/APPEND_SYSTEM.md", stack / "APPEND_SYSTEM.md")
     staged = tmp_path / "staged"
     (staged / "dist").mkdir(parents=True)
@@ -161,7 +175,7 @@ def launcher(tmp_path, monkeypatch):
         "process.env.COPIED_BOOTSTRAP = 'trusted';\n"
     )
     shutil.copyfile(
-        repo / "stack/native-import-fence.mjs", staged / "dist/agent-comms-import-fence.mjs"
+        repo / "stack/native/native-import-fence.mjs", staged / "dist/agent-comms-import-fence.mjs"
     )
     (staged / "dist/agent-comms-imports.json").write_text(
         json.dumps({"version": 2, "extensionEntries": [], "peerAliases": {}})
@@ -180,6 +194,8 @@ def launcher(tmp_path, monkeypatch):
     package.parent.mkdir(parents=True)
     staged.rename(package)
     store.link(stack / "pi-native.sha256", stack)
+    subprocess.run(["git", "init", "-q", str(tmp_path)], check=True)
+    subprocess.run(["git", "-C", str(tmp_path), "add", "-A"], check=True)
     stamp_prepared(stack, dict(os.environ))
     return stack, package
 

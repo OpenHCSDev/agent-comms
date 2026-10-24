@@ -17,4 +17,4 @@ runs:
       run: npm ci --ignore-scripts --no-audit --no-fund
     - name: Prepare pinned native Pi
       shell: bash
-      run: stack/bin/prepare-pi-native --python "$(command -v '${{ inputs.python }}')"
+      run: stack/native/prepare-pi-native --python "$(command -v '${{ inputs.python }}')"

@@ -1,7 +1,4 @@
-"""Render the native proof writer's schema into a built tree from NativeContextJournal.
-
-The build renders it from the checkout it builds; no copy is kept in the repository.
-"""
+"""Render the committed native proof schema from NativeContextJournal."""
 
 import json
 import sys
@@ -11,7 +8,9 @@ from agent_comms.native_pi import NativeContextJournal
 
 
 def main() -> None:
-    Path(sys.argv[1]).write_text(
+    target = (Path(sys.argv[1]) if len(sys.argv) > 1 else
+              Path(__file__).resolve().parents[1] / "stack/native/native-proof-schema.mjs")
+    target.write_text(
         "// Rendered at build from NativeContextJournal; never edited.\n"
         "export const nativeProofSchema = "
         + json.dumps(NativeContextJournal.native_contract(), indent=2)
