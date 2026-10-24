@@ -65,28 +65,6 @@ class MalformedRecord(ValueError):  # noqa: N818 - names the refused data
     def located(self, name: str, fix: str) -> dict[str, str]:
         return {name: f"{self}; fix: {fix}"}
 
-    class _Refusal:
-        """Convert refused values using the error class and its boundary subject."""
-
-        __slots__ = ("error_cls", "subject")
-
-        def __init__(self, error_cls: type[MalformedRecord], subject: str) -> None:
-            self.error_cls = error_cls
-            self.subject = subject
-
-        def __enter__(self) -> None:
-            return None
-
-        def __exit__(
-            self, _exc_type: type[BaseException] | None, exc: BaseException | None,
-            _traceback: types.TracebackType | None,
-        ) -> Literal[False]:
-            if exc is None or isinstance(exc, self.error_cls):
-                return False
-            if isinstance(exc, ValueError):
-                raise self.error_cls(f"{self.subject}: {exc}") from exc
-            return False
-
     @staticmethod
     @contextmanager
     def gathering(problems: dict[str, str], name: str, fix: str) -> Iterator[None]:
@@ -97,12 +75,18 @@ class MalformedRecord(ValueError):  # noqa: N818 - names the refused data
             problems.update(refused.located(name, fix))
 
     @classmethod
-    def refusing(cls, subject: str) -> MalformedRecord._Refusal:
+    @contextmanager
+    def refusing(cls, subject: str) -> Iterator[None]:
         """Each check that refuses decoded data with ValueError refuses a malformed record.
 
         A domain error raised by the record's own checks stays the cause.
         """
-        return cls._Refusal(cls, subject)
+        try:
+            yield
+        except cls:
+            raise
+        except ValueError as error:
+            raise cls(f"{subject}: {error}") from error
 
 
 class RecordProblems(MalformedRecord):
