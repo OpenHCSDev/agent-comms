@@ -4,6 +4,7 @@
 
 import pytest
 
+from agent_comms.input_key import AcpInputKey
 from agent_comms.field_codec import FieldCodec, InputId, TurnId
 from agent_comms.input_disposition import InputDispositions
 from agent_comms.native_session_files import NativeSessionFiles
@@ -11,6 +12,10 @@ from agent_comms.native_session_reopen import NativeSessionIdentity
 from agent_comms.session_revision import SessionRevision
 from agent_comms.thread_identity import RecordedThreadIncarnation
 from stored_inputs import stored_inputs
+
+
+FIRST_KEY = AcpInputKey(InputId.mint())
+SECOND_KEY = AcpInputKey(InputId.mint())
 
 
 def test_session_observation_preserves_source_and_distinguishes_unreadable_proof(tmp_path):
@@ -66,7 +71,7 @@ def test_session_observation_preserves_source_and_distinguishes_unreadable_proof
 def test_plural_originals_preserve_order_and_bind_without_partial_transition(tmp_path):
     owner = "project"
     inputs = InputDispositions(tmp_path)
-    keys = ("acp:first", "acp:second")
+    keys = (FIRST_KEY, SECOND_KEY)
     for key, text in zip(keys, ("first", "second"), strict=True):
         inputs.record(key, seq=None, owner=owner, claim_scope=1, target=owner, text=text)
     assert tuple(row.source_text for row in stored_inputs(inputs.root).originals(keys)) == ("first", "second")
