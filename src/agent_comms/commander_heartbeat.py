@@ -37,7 +37,11 @@ class CommanderObservation:
             pulls.open(repo)
         states = UnitState.current(comms, thread.name, frame)
         rules = StandingRule.broken(comms, thread.name, observed=states, frame=frame)
-        merged = tuple(todo for state in states for todo in state.merged_orders(comms, pulls))
+        merged = tuple(
+            closed
+            for todo in comms.goals.todos.for_commander(thread.incarnation)
+            for closed in todo.order.closed_by_merge(todo, pulls)
+        )
         return cls(thread, merged, rules, states)
 
 

@@ -261,5 +261,6 @@ def test_order_closed_after_the_frame_read_does_not_fail_the_merge_read(
         c.goals.todos.apply('P1', ReleaseTodo(
             row.revision, CoreWatcherIncarnation.watcher(), row.held(),
             StrikeReason('The commander closed this order after the heartbeat frame was read.')))
-        c.goals.todos.record_merges(worker.merged_orders(c, frame.pulls))
+        c.goals.todos.record_merges(
+            CommanderObservation.read(c, c.registry.require('lead'), ProgressRead).merged)
         assert c.goals.todos.get('P1').holder is None
