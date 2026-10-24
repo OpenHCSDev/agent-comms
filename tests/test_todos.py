@@ -321,7 +321,8 @@ def pr_commander(tmp_path, monkeypatch, proof_build_checkouts, durable_home, git
     Bus.install(Bus.path_in(tmp_path))
     lead = Thread(
         'lead', frozenset(), str(source.checkout), created_at=1.0)
-    rule = StorageRule(checkout_base=source.checkout.parent)
+    # The volume is the tmp_path HOME; the machine's floor belongs to the live bus's rule.
+    rule = StorageRule(checkout_base=source.checkout.parent, floor_gib=0)
     (tmp_path / "storage.json").write_text(json.dumps(FieldCodec.encode(rule)))
     Registration(tmp_path / "registry.json").register(lead)
     # The source carries the copied plans; a second checkout of its repository would
