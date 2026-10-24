@@ -236,14 +236,17 @@ async def test_cancelled_drain_keeps_original_failure(tmp_path):
     (UnavailableDrainDiagnostic, True), (StoppedDrainDiagnostic, True),
     (NativeInputDrainDiagnostic, False),
 ])
-def test_unit_deaf_is_dated_by_the_drain_that_cannot_read_its_inbox(tmp_path, monkeypatch, kind, deaf):
+def test_unit_deaf_is_dated_by_the_drain_that_cannot_read_its_inbox(
+    tmp_path, monkeypatch, kind, deaf,
+):
     from agent_comms.commander.standing import InboxUnavailable, UnitDeaf
     from test_acp_private_nk_delivery import _private_comms
 
     comms, _ = _private_comms(tmp_path)
     owner = comms.registry.snapshot().owner_identity("beta")
     assert UnitDeaf.violations(comms, "lead") == ()
-    comms.agents.set_drain_diagnostic("beta", owner, kind(owner, "OSError", "inbox read failed", recorded_at=100.0))
+    diagnostic = kind(owner, "OSError", "inbox read failed", recorded_at=100.0)
+    comms.agents.set_drain_diagnostic("beta", owner, diagnostic)
     monkeypatch.setattr(time, "time", lambda: 100.0 + InboxUnavailable.seconds - 1)
     assert UnitDeaf.violations(comms, "lead") == ()
     monkeypatch.setattr(time, "time", lambda: 100.0 + InboxUnavailable.seconds + 1)

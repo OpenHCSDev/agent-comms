@@ -591,9 +591,11 @@ class UnitDeaf(InboxUnavailable):
     @classmethod
     def paused(cls, comms: Comms, commander: str) -> tuple[Self, ...]:
         snapshot = comms.registry.snapshot()
-        units = [thread for name, thread in comms.registry.active_threads().items() if name != commander]
+        units = [thread for name, thread in comms.registry.active_threads().items()
+                 if name != commander]
+        activity = comms.agents.all_activity(units, snapshot=snapshot)
         return tuple(cls(paused + cls.seconds, name)
-                     for name, observed in comms.agents.all_activity(units, snapshot=snapshot).items()
+                     for name, observed in activity.items()
                      for paused in observed.readiness.unavailable_since())
 
     def line(self) -> str:
