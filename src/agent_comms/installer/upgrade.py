@@ -1034,8 +1034,7 @@ class ChangedInstall(ExistingBusInstall[RehearsedFiles]):
                       "restoring original installation", file=sys.stderr)
                 # A running service writes the root (the connector its passes), so none may
                 # run while the backup is restored; they start again on the original runtime.
-                for service in services:
-                    service.stop()
+                HostService.stop_running()
                 state = maintenance.read()
                 recovery = state.phase.hold_for(maintenance, state, MaintenanceOperator.current())
                 holder.close()
@@ -1133,8 +1132,7 @@ class FreshInstall(Install[FreshRehearsal]):
             route = self.publish(backup, selected_route)
             services = self.staged.start_services(stopped)
         except BaseException:
-            for service in stopped:
-                service.stop()
+            HostService.stop_running()
             backup.restore_route()
             self.installed.publish(self.root)
             self.installed.start_services(stopped)

@@ -18,7 +18,7 @@ from agent_comms.installer.probes.carry import Carried, Carry
 from agent_comms.installer.launch import InstallReport
 from agent_comms.installer.upgrade import upgrade
 from agent_comms.locked_store import RegistryFile
-from agent_comms.repo import GitCommandError
+from agent_comms.installer.refusals import UpgradeRefused
 from agent_comms.registry_store import RegistryStore
 from agent_comms.thread_text import GivenThreadText
 from bus_record_fixture import prepare_native_comms
@@ -83,7 +83,7 @@ def test_next_install_completes_a_killed_registry_restore(tmp_path, installed_ru
     assert killed.returncode == -signal.SIGKILL, killed.stdout + killed.stderr
     # Enter the real installer. Its next Git command deliberately fails: rollback
     # recovery must finish even before the checkout can be inspected or a stack built.
-    with pytest.raises(GitCommandError):
+    with pytest.raises(UpgradeRefused, match="missing-checkout"):
         upgrade(
             tmp_path / "missing-checkout", comms.root, "HEAD", UnnamedInstaller(), RehearsalMode(),
             False, spill, tmp_path / "install-scratch", lambda: None, InstallReport(),
@@ -106,7 +106,7 @@ def test_next_install_leaves_a_completed_installs_backup_alone(tmp_path, install
     RegistryTitleCarry(comms.root, comms.root, spill).carry(apply=True)
     carried = {path: RegistryStore.digest(path) for path in registry.written}
     assert not backup.original()
-    with pytest.raises(GitCommandError):
+    with pytest.raises(UpgradeRefused, match="missing-checkout"):
         upgrade(
             tmp_path / "missing-checkout", comms.root, "HEAD", UnnamedInstaller(), RehearsalMode(),
             False, spill, tmp_path / "install-scratch", lambda: None, InstallReport(),
