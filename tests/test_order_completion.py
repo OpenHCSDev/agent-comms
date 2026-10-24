@@ -3,9 +3,12 @@ from dataclasses import replace
 
 import pytest
 
+from agent_comms.build_identity import RecordedBuildIdentity
 from agent_comms.commander.order import main
 from agent_comms.commander.standing import HolderGone
 from agent_comms.goals import CountCheckResult, OrderCheck
+from agent_comms.installer.runtime_resolution import CorePackage, RuntimeResolution
+from agent_comms.launch_runtime import LaunchRuntime
 from agent_comms.order_runs import ApplicationOrderRun
 from agent_comms.todos import (
     DeliveredProblemOrder,
@@ -14,6 +17,7 @@ from agent_comms.todos import (
     MergedProblemOrder,
     OperationDelivery,
     PullRequestLink,
+    ReportDelivery,
     ReportedProblemOrder,
     TriageScope,
 )
@@ -92,6 +96,46 @@ class TestOrderCompletion:
         delivered = ctx.comms.goals.todos.get('P1')
         assert isinstance(delivered.order.delivery, OperationDelivery)
         assert delivered.order.delivery.evidence.artifact() == str(evidence)
+
+    def test_delivered_work_can_be_proved_again_on_a_newer_build(
+        self, held_commander, proof_build_checkouts,
+    ):
+        ctx = held_commander
+        repo = ctx.repos[0]
+        graph = next(graph for graph in proof_build_checkouts
+                     if graph.repository.github == repo.github)
+        original = ctx.comms.goals.todos.get('P1').order
+        self.record(ctx, replace(original, pull_requests=(PullRequestLink(repo.github, 1),))
+                    .merged(graph.installed))
+        previous_evidence = ctx.root / 'previous-proof.txt'
+        previous_evidence.write_text('The delivered work passed on the previous build.')
+        previous_build = RecordedBuildIdentity.installed()
+        main(['done', 'worker', 'P1', '--seen', str(previous_evidence)], ctx)
+        previous = ctx.comms.goals.todos.get('P1').order.delivery
+        assert previous.proof_build == previous_build
+
+        core = next(graph for graph in proof_build_checkouts
+                    if graph.repository.github == CorePackage.repository)
+        runtime = LaunchRuntime.installed()
+        resolution = RuntimeResolution.at(runtime.prefix)
+        resolution.model_copy(update={'core_commit': core.newer}).save(runtime.prefix)
+        current_build = RecordedBuildIdentity.installed()
+        assert current_build != previous_build
+        current_evidence = ctx.root / 'current-proof.txt'
+        current_evidence.write_text('The same delivered work passed on the current build.')
+        main(['done', 'worker', 'P1', '--seen', str(current_evidence)], ctx)
+        current = ctx.comms.goals.todos.get('P1').order
+        assert current.delivery.proof_build == current_build
+        assert current.delivery.evidence.artifact() == str(current_evidence)
+        assert current.delivery.commit == previous.commit
+        assert current.delivery.delivered == previous.delivered
+        assert current.delivered(current.delivery) == current
+
+        different_work = replace(current.delivery, delivered_commit=graph.newer)
+        with pytest.raises(ValueError, match=r'^The order already records a different delivery\.$'):
+            current.delivered(different_work)
+        with pytest.raises(ValueError, match=r'^The order already records a different delivery\.$'):
+            current.delivered(ReportDelivery(report="A report is different delivered work."))
 
     def test_triage_rejects_an_operation_without_recording(self, held_commander):
         ctx = held_commander

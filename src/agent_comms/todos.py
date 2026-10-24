@@ -187,6 +187,15 @@ class BranchPointCheck:
 class OrderDelivery(DeclaredFamily, StoryEvent, affix="Delivery"):
     at: EventTime = field(default_factory=UnrecordedEventTime)
 
+    def unobserved(self) -> OrderDelivery:
+        """The delivered work without the observations of the proof that recorded it."""
+        return replace(self, at=UnrecordedEventTime())
+
+    def reproved(self, delivery: OrderDelivery) -> OrderDelivery:
+        if delivery.unobserved() == self.unobserved():
+            return delivery
+        raise ValueError("The order already records a different delivery.")
+
     def check_base(self, repo: Path) -> str:
         raise ValueError("This delivery has no source commit to establish a check base.")
 
@@ -243,6 +252,10 @@ class CheckedDelivery(OrderDelivery, declared_name=None):
     proof_build: Annotated[BuildIdentity, WireOmitDefault()] = field(
         default_factory=UnrecordedBuildIdentity
     )
+
+    def unobserved(self) -> OrderDelivery:
+        return replace(self, at=UnrecordedEventTime(), evidence=NoDeliveryEvidence(),
+                       proof_build=UnrecordedBuildIdentity())
 
     def closing_artifact(self) -> str:
         return self.evidence.artifact()
@@ -2362,9 +2375,7 @@ class DeliveredProblemOrder(AwaitingInstallationProblemOrder):
         raise TodoError(f"{owner} already has {self.delivery.work}; {owner} merges it.")
 
     def delivered(self, delivery):
-        if delivery != self.delivery:
-            raise ValueError("The order already records a different delivery.")
-        return self
+        return replace(self, delivery=self.delivery.reproved(delivery))
 
     def observed_merges(self, repo: Repo, source: ProgressSource) -> tuple[MergedProblemOrder, ...]:
         commits = self.delivery.merged_commits(repo)
