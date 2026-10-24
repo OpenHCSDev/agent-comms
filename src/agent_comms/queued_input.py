@@ -248,7 +248,7 @@ class QueuedInput:
         snapshot: RegistrySnapshot,
         name: str,
         row: InputAttempt,
-        input_id: str,
+        input_id: InputId,
     ) -> None:
         owner = snapshot.require_active(name)
         snapshot.status(owner.name).require_running()

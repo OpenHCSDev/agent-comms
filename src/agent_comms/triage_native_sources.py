@@ -8,12 +8,13 @@ from dataclasses import dataclass
 from typing import Annotated
 
 from .coordination_errors import IdentityConflict
+from .field_codec import InputId
 from .native_runtime_input import NativeRuntimeInput, NativeRuntimeTable
 from .typed_table import (
-    TableReference,
     Column,
     GuardedInserts,
     ImmutableRows,
+    TableReference,
     WithoutRowid,
 )
 
@@ -35,7 +36,8 @@ class TriageNativeSources(
         JOIN json_each(NEW.assignment_ids) member ON member.value=previous.value))"""
 
     input_id: Annotated[
-        str, Column(primary_key=True, references=TableReference(NativeRuntimeInput, ("input_id",)))
+        InputId,
+        Column(primary_key=True, references=TableReference(NativeRuntimeInput, ("input_id",)))
     ]
     assignment_ids: tuple[str, ...]
 

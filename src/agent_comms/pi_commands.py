@@ -19,6 +19,7 @@ from .agent_backend import StreamingInputPolicy
 from .declared_family import DeclaredFamily, UnknownFamilyMember
 from .field_codec import (
     FieldCodec,
+    InputId,
     MalformedRecord,
     WireAbsentNone,
     WireName,
@@ -171,7 +172,7 @@ class UnknownCommand(PiCommand):
 @dataclass(frozen=True, kw_only=True)
 class Prompt(PiCommand):
     input_id: Annotated[
-        str | PiOmitted, WireOmitDefault(), WireName("inputId")
+        InputId | PiOmitted, WireOmitDefault(), WireName("inputId")
     ] = PiOmitted()
     message: Annotated[str, WireOmitDefault()] = None
     # Pi never receives an empty image list: no images and omission are one value.

@@ -19,15 +19,15 @@ from .agent_events import AgentEvent
 from .backend import TurnSession
 from .coordinator import Coordination
 from .errors import RelationViolationError
-from .field_codec import MalformedRecord
 from .external_transcript import DraftRow
+from .field_codec import InputId, MalformedRecord
 from .following_inputs import FollowingInputs
 from .maintenance_barrier import UNCOORDINATED_INGRESS, MaintenanceIngress
 from .mro_dispatch import handles
 from .native_arguments import SelectedModel
 from .native_attestation import AttestationError, ObservedAttestation
-from .native_package import VerifiedNativePackage
 from .native_failures import NativePiUnavailable
+from .native_package import VerifiedNativePackage
 from .native_pi import (
     NativeContextProof,
     NativeEmptyAnswer,
@@ -36,14 +36,14 @@ from .native_pi import (
     _verify_context,
 )
 from .native_prompt_send import UNGUARDED_PROMPT, PromptBoundary, PromptSendFailure
-from .native_startup import NativeStartup
 from .native_session_reopen import SessionRetention
+from .native_startup import NativeStartup
 from .native_tool_call import NativeToolMode
-from .tool_denial import SelectedToolDenied
 from .pi_rpc import PiRpcChannel
 from .pi_vocabulary import NoThinkingOverride, ThinkingChoice
 from .request_progress import NO_REQUEST_OBSERVER, RequestObserver
 from .selected_session import SelectedSession
+from .tool_denial import SelectedToolDenied
 from .turn_context import InputContributionCoordinates
 from .turn_watchdog import DEFAULT_MODEL_WAIT, TurnWait
 
@@ -272,7 +272,7 @@ class TrackedTurnSession(TurnSession):
         cls,
         package: VerifiedNativePackage,
         *,
-        input_id: str,
+        input_id: InputId,
         prompt: str,
         context_contributions: tuple[InputContributionCoordinates, ...] = (),
         worktree: Path,

@@ -64,7 +64,7 @@ class InputForwarding(MroDispatch):
                     self.accepted.add(item.input_id)
         self.changed.set()
 
-    def retire(self, native_id: str) -> InputRequest:
+    def retire(self, native_id: InputId) -> InputRequest:
         """Remove one exact native identity from the sole pending index."""
         item = self.pending.pop(native_id)
         self.accepted.discard(item.input_id)
