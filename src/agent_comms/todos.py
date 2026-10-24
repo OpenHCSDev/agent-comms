@@ -1307,8 +1307,10 @@ class MergedProgress(FoundProgress):
 
     @classmethod
     def found(cls, source: PullRequestSource) -> Iterator[Self]:
-        return (cls(sha) for pr in source.requests(MergedListedPullRequest)
-                for sha in pr.merged_commits(source.since))
+        """Merged only once every linked request has merged; one still open holds the order."""
+        merged = (() if source.requests(UnmergedListedPullRequest)
+                  else source.requests(MergedListedPullRequest))
+        return (cls(sha) for pr in merged for sha in pr.merged_commits(source.since))
 
     @property
     def state(self) -> str:
