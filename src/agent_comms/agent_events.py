@@ -398,15 +398,26 @@ class ContextInfo(ContextUsageObservation, ContextSizeObservation):
 
 
 @dataclass(frozen=True, kw_only=True)
-class NativeMetadataObservation(RuntimeInfoObservation):
-    """Only native state snapshots carry identity/configuration observations."""
+class ModelObservation(RuntimeInfoObservation):
+    """Observe the model that answers the thread."""
 
     model: ThreadModel = UndeclaredModel()
-    session_file: str | None = None
-    thinking_level: ThinkingLevelField = NoThinkingOverride
 
     def project_runtime_info(self, current: AgentRuntimeInfo) -> AgentRuntimeInfo:
         return replace(super().project_runtime_info(current), model=self.model)
+
+
+@dataclass(frozen=True, kw_only=True)
+class TranscriptModelUsage(ModelObservation, ContextUsageObservation):
+    """A CLI transcript's answer names its model and context usage, never the window."""
+
+
+@dataclass(frozen=True, kw_only=True)
+class NativeMetadataObservation(ModelObservation):
+    """Only native state snapshots carry identity/configuration observations."""
+
+    session_file: str | None = None
+    thinking_level: ThinkingLevelField = NoThinkingOverride
 
     async def record_in(self, consumer: AgentEventConsumer) -> None:
         await consumer.before_native_metadata(self)

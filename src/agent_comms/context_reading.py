@@ -41,3 +41,16 @@ class UnmeasuredContext(ContextReading):
 
     def status_text(self) -> str:
         return "Native owner has not reported context usage"
+
+
+@dataclass(frozen=True)
+class UnsizedContextUsage(UnmeasuredContext):
+    """Usage a runtime reports without its context window, so no share of it is known."""
+
+    used: int
+
+    def label_parts(self) -> tuple[str, ...]:
+        return (f"{self.used:,} tokens",)
+
+    def status_text(self) -> str:
+        return f"{self.used:,} tokens"
