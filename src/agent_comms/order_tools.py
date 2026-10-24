@@ -7,6 +7,8 @@ from collections.abc import Mapping
 from dataclasses import dataclass, field
 from typing import Annotated, Literal
 
+from pydantic import JsonValue
+
 from agent_comms.todos import (
     ClaimOrder,
     CorrectCheckTodo,
@@ -194,7 +196,16 @@ class CommsUnjudgedTool(ThreadReadTool):
 
 
 @dataclass(frozen=True, kw_only=True)
-class CommsCommanderLoadTool(ThreadReadTool):
+class BoardReadTool(ThreadReadTool, declared_name=None):
+    """A read of one commander's board. An omitted thread reads the caller's own, and an
+    empty board looks like a broken reader, so the reply names whose board it read."""
+
+    def reply(self, read: dict[str, JsonValue], caller: ToolCaller) -> dict[str, JsonValue]:
+        return {"board": caller.subject(self.thread), **read}
+
+
+@dataclass(frozen=True, kw_only=True)
+class CommsCommanderLoadTool(BoardReadTool):
     label = "Measured commander load"
     description = "Read open orders, review timers and unjudged edits used by the overload rule."
 
@@ -257,7 +268,7 @@ class CommsCorrectWordingTool(ThreadToolRequest):
 
 
 @dataclass(frozen=True, kw_only=True)
-class CommsTodoListTool(ThreadReadTool):
+class CommsTodoListTool(BoardReadTool):
     label = "Read problems"
     description = "Read the commander's canonical Todo orders, review timers, strikes and hunts."
 
@@ -462,7 +473,7 @@ class CommsOrderStoryTool(ReadTool, ToolRequest):
 
 
 @dataclass(frozen=True, kw_only=True)
-class CommsFleetStoryTool(ThreadReadTool):
+class CommsFleetStoryTool(BoardReadTool):
     label = "Fleet story"
     description = ("Read what each order this commander holds out is doing now, one line per "
                    "order; orders held by units no longer registered collapse into one line.")

@@ -81,6 +81,13 @@ from test_goal_execution import turn_on
 
 UNRESOLVED_INPUT_KEY = AcpInputKey(InputId.mint())
 
+def board_read(tool, comms, caller, thread="lead"):
+    """A board tool's reply names whose board it read; the rest is that board's record."""
+    reply = tool.invoke(comms, {"thread": thread}, caller=caller)
+    assert reply.pop("board") == thread
+    return reply
+
+
 
 @pytest.fixture
 def held_bus(comms, tmp_path, source_repository, configured_repository):
@@ -301,13 +308,12 @@ def test_holds_whose_holder_was_deleted_or_registered_again_are_reported_by_ever
     assert "order withdraw P1" in gone["P1"] and "order close P2" in gone["P2"]
     assert {rule.todo.id for rule in HolderGone.violations(comms, "lead")} == set(gone)
     assert frame.todos == ()
-    fleet, = FieldCodec.decode(FleetStory, CommsFleetStoryTool.invoke(
-        comms, {"thread": "lead"}, caller=NoThreadCaller())).lines
+    fleet, = FieldCodec.decode(
+        FleetStory, board_read(CommsFleetStoryTool, comms, NoThreadCaller())).lines
     count, named = fleet.split(": ")
     assert count == "3 orders held by units no longer registered"
     assert set(named.split(", ")) == {"P1 worker", "P2 worker", "P3 outsider"}
-    listed = FieldCodec.decode(TodoList, CommsTodoListTool.invoke(
-        comms, {"thread": "lead"}, caller=NoThreadCaller()))
+    listed = FieldCodec.decode(TodoList, board_read(CommsTodoListTool, comms, NoThreadCaller()))
     assert {"P1", "P2", "P3"} <= {todo.id for todo in listed.todos} and listed.progress == {}
     assert OrderEditCountRead.count(comms, "lead") == 0
     with pytest.raises(ValueError, match="pass --artifact FILE"):

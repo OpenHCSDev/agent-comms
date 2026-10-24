@@ -135,7 +135,12 @@ class ToolRequest[Caller: ToolCaller = ToolCaller](
             raise ToolArgumentsRefusedError(
                 f"Invalid {cls.declared_name} arguments: {error}"
             ) from error
-        return FieldCodec.encode(caller.invoke(request, comms).to_wire())
+        return request.reply(FieldCodec.encode(caller.invoke(request, comms).to_wire()), caller)
+
+    def reply(self, read: dict[str, JsonValue], caller: ToolCaller) -> dict[str, JsonValue]:
+        """The encoded result as every adapter receives it; a tool whose reply must name
+        what it read overrides this."""
+        return read
 
     @classmethod
     def context_types(cls, comms: Comms, arguments: Mapping[str, object]) -> Mapping[str, type[object]]:
