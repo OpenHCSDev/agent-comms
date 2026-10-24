@@ -11,6 +11,7 @@ from agent_comms.bus import Bus, PublicRecord
 from agent_comms.channel_targets import CommandTarget, ThreadTarget
 from agent_comms.comms import wire
 from agent_comms.coordination_errors import HistoricalSourceChanged
+from agent_comms.field_codec import InputId
 from agent_comms.historical_views import HistoricalMessage, HistoryArchive
 from agent_comms.installer.backup import bus_files
 from agent_comms.message_page import MessagePageRequest, PageBounds
@@ -177,6 +178,7 @@ def test_duplicate_and_newer_incarnations_sessions(tmp_path):
     # Author the recorded ambiguous namespace through the original typed store;
     # a raw registry overwrite would invalidate its private integrity guard.
     session = tmp_path / "saved.jsonl"
+    native_id = InputId("a" * 32)
     records = [
         {"type": "session", "version": 3, "id": "saved", "timestamp": "2026-09-20T00:00:00Z"},
         {
@@ -185,7 +187,7 @@ def test_duplicate_and_newer_incarnations_sessions(tmp_path):
             "id": "one",
             "message": {
                 "role": "user",
-                "inputId": "a" * 32,
+                "inputId": native_id,
                 "content": [{"type": "text", "text": "old question"}],
             },
         },
@@ -203,7 +205,7 @@ def test_duplicate_and_newer_incarnations_sessions(tmp_path):
         edit.commit()
     routing = TurnRouting(reply=MessageRoute("alice", ("#team",)))
     old.transcripts.routes.record(str(session), ("two",), routing)
-    old.transcripts.routes.record_input_display("a" * 32, "original owner question")
+    old.transcripts.routes.record_input_display(native_id, "original owner question")
     live = setup(tmp_path / "live", 0)
     newer = replace(live.registry.require("alice"), created_at=20.0)
     live.registry.unregister("alice")

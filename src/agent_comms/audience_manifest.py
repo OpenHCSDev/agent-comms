@@ -21,7 +21,7 @@ from agent_comms.coordination_contracts import MAX_IDENTIFIER_CHARS
 
 from .channel_targets import exact_stored_target
 from .field_codec import FieldCodec, MalformedRecord, ThreadLookup
-from .messages import BusCapability, Message
+from .messages import BusCapability, CarriesEnvelope, Message
 from .projection_source import ProducedRow, ProjectionSource
 
 AUDIENCE_VERSION: Final = 1
@@ -96,7 +96,7 @@ class Audience(BusCapability):
 
 
 @dataclass(frozen=True, kw_only=True)
-class AudiencedMessage(Message, Audience):
+class AudiencedMessage(CarriesEnvelope, Message, Audience):
     """A prepared message and its frozen participants, with one content identity."""
 
     def __post_init__(self) -> None:
