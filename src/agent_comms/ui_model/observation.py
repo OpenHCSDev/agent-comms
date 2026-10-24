@@ -43,6 +43,7 @@ from agent_comms.coordination_errors import (
     StaleRevision,
 )
 from agent_comms.errors import RelationViolationError, ToolRefusedError
+from agent_comms.commander_hud import CommanderFrame, CommanderHud
 from agent_comms.field_codec import FieldCodec
 from agent_comms.presentation import NoRevision, ReadState, WireRevision
 from agent_comms.registry_document import RosterVisibility
@@ -69,7 +70,6 @@ if TYPE_CHECKING:
     from multiprocessing.connection import Connection
 
     from agent_comms.acp_extension import GoalSnapshotReply
-    from agent_comms.commander_hud import CommanderHud
     from agent_comms.comms import Comms
     from agent_comms.history_views import RetiredViews
     from agent_comms.message_reference import MessageReference
@@ -789,8 +789,6 @@ class CommanderHudReading(ReadingObservation[ObserveCommanderHud]):
         self.revision: ReadState = NoRevision()
 
     def read(self, comms: Comms, revision: WireRevision) -> Generator[ObservationStep]:
-        from agent_comms.commander_hud import CommanderFrame
-
         if not self.revision.changed_since(CommanderFramesView(), revision):
             return
         self.revision = revision

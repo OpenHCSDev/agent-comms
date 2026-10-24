@@ -55,8 +55,10 @@ class PendingClock(UnitClock):
     last_commit_at: float
 
     def line(self, now: float) -> str:
-        return (f"last call {round((now - self.last_call_at) / 60)} min ago, "
-                f"last commit {round((now - self.last_commit_at) / 60)} min ago")
+        return (
+            f"last call {round((now - self.last_call_at) / 60)} min ago, "
+            f"last commit {round((now - self.last_commit_at) / 60)} min ago"
+        )
 
 
 @dataclass(frozen=True)
@@ -232,8 +234,12 @@ class UnitState(UndatedStandingRule, declared_name=None):
             )
             for thread in snapshot.threads.values()
         )
-        candidates = tuple(reading for reading in readings if reading.thread.name != commander
-                           for _ in reading.thread.execution.commanded_units(reading.thread))
+        candidates = tuple(
+            reading
+            for reading in readings
+            if reading.thread.name != commander
+            for _ in reading.thread.execution.commanded_units(reading.thread)
+        )
         eligible = set(held)
         eligible.update(
             reading.thread.incarnation

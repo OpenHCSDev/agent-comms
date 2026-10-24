@@ -8,10 +8,11 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from agent_comms.commander.vibe_check import OverloadDegradation
+from agent_comms.commander_frame_file import CommanderFrameFile
 from agent_comms.commander_pings import LoadPing, PhaseRowPing, Ping, UnitRowPing
 from agent_comms.field_codec import projected
 from agent_comms.heartbeat_frame import HeartbeatFrame
-from agent_comms.locked_store import JsonDocument, PatternFile, RuntimeFile
+from agent_comms.locked_store import JsonDocument
 from agent_comms.plan_phases import PlanPhase
 from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.thread_identity import ThreadIncarnation
@@ -167,7 +168,7 @@ class CommanderHud(ToolResult):
 
 
 @dataclass(frozen=True)
-class CommanderFrame(RuntimeFile, PatternFile, JsonDocument[CommanderHud]):
+class CommanderFrame(CommanderFrameFile, JsonDocument[CommanderHud]):
     """The newest CommanderHud of each beating commander, for views that only show it.
 
     One writer, the heartbeat, replaces every commander's file each beat from the same
@@ -178,7 +179,6 @@ class CommanderFrame(RuntimeFile, PatternFile, JsonDocument[CommanderHud]):
     path: Path
 
     record_type = CommanderHud
-    filename = "commander_frames/{lookup}.json"
 
     def empty(self) -> CommanderHud:
         raise FileNotFoundError(self.path)

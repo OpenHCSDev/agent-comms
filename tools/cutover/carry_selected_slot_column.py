@@ -27,12 +27,17 @@ class SelectedSlotColumn(Carry):
             if self.declared in stored:
                 raise RelationViolationError(
                     f"{path}: {self.previous} and {self.declared} could each hold the slot;"
-                    " refusing to choose")
+                    " refusing to choose"
+                )
             renamed.append(path)
         if apply:
             for path in renamed:
-                with (closing(CoordinationStore.writer(path)) as db,
-                      CoordinationStore.write_transaction(db)):
+                with (
+                    closing(CoordinationStore.writer(path)) as db,
+                    CoordinationStore.write_transaction(db),
+                ):
                     SelectedToolSlot.rename_stored_column(db, self.previous, self.declared)
-        return Carried(len(renamed), rewritten=tuple(
-            path.relative_to(self.root) for path in renamed) if apply else ())
+        return Carried(
+            len(renamed),
+            rewritten=tuple(path.relative_to(self.root) for path in renamed) if apply else (),
+        )

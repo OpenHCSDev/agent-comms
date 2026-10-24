@@ -143,9 +143,7 @@ class ProviderArgument(NamedOption, ValueArgument, ProviderChoice):
 
 class ModelArgument(NamedOption, ValueArgument):
     def apply_model(self, current: ThreadModel) -> ThreadModel:
-        from .thread_model import DeclaredModel
-
-        return DeclaredModel(self.value)
+        return current.declared(self.value)
 
     def kept_on_model_change(self) -> tuple[NativeArgument, ...]:
         return ()

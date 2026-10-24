@@ -242,7 +242,6 @@ class CommanderPagePhase(CommanderNativePhase):
         (
             ClassDeclared("CommanderHud", ("src",)),
             PatternPresent(r"\bcomms_hud\b", ("src",)),
-            ClassDeclared("ObserveCommanderHud", ("src",)),
         )
     )
 

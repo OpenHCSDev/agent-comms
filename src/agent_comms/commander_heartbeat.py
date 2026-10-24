@@ -50,7 +50,8 @@ class CommanderObservation:
             for closed in todo.order.closed_by_merge(
                 todo, pulls, comms.registry.storage_rule.checkout_base)
         )
-        return cls(thread, merged, rules, states, CommanderHud.of(comms, thread.name, frame, states))
+        hud = CommanderHud.of(comms, thread.name, frame, states)
+        return cls(thread, merged, rules, states, hud)
 
 
 class CommanderHeartbeat(CommanderService, WatchPass[tuple[CommanderObservation, ...]]):

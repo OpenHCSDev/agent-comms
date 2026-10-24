@@ -266,7 +266,7 @@ class MaintenanceClaimHolder(RecordMember, MaintenanceHolder):
         environment[HOLDER_NONCE] = self.request_text()
 
     def request_text(self) -> str:
-        return FieldCodec.encode(self.nonce)
+        return self.nonce
 
 
 class MaintenanceStatus:

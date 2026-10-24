@@ -38,6 +38,10 @@ class ThreadModel(SubclassUnion, TextChoice, affix="Model"):
         """A saved session's provider and model, or none."""
         return UndeclaredModel() if choice is None else DeclaredModel("/".join(choice))
 
+    def declared(self, text: str) -> DeclaredModel:
+        """The model a launch argument names, replacing this one."""
+        return DeclaredModel(text)
+
     @abstractmethod
     def native(self, arguments: NativeArguments) -> NativeArguments:
         """The native arguments selecting this model."""

@@ -59,6 +59,7 @@ from .read_basis import (
     NamedViewer,
 )
 from .read_ledger import NoReadNotice, ReadLedger, ReadNotice
+from .commander_frame_file import CommanderFrameFile
 from .recorded_bus import NoRecordedBus, RecordedBusIdentity
 from .registry_document import DEFAULT_ROSTER, RosterVisibility
 from .revision_views import (
@@ -801,9 +802,7 @@ def external_transcript_paths(views: HistoryViews) -> tuple[Path, ...]:
 
 
 def commander_frame_paths(views: HistoryViews) -> tuple[Path, ...]:
-    from .commander_hud import CommanderFrame  # The HUD reads presentation's stores.
-
-    return tuple(sorted(CommanderFrame.matching_in(views.root)))
+    return tuple(sorted(CommanderFrameFile.matching_in(views.root)))
 
 
 def expiry_period_changed(before: int, now: int) -> bool:
