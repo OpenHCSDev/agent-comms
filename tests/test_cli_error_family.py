@@ -11,13 +11,18 @@ from pydantic import ValidationError
 
 from agent_comms.cli import _fail, main
 from agent_comms.cli_bridges.shared import Binding, DeliveryRow, GivenBinding, StoredBinding
-from agent_comms.field_codec import RecordProblems
 from agent_comms.cli_protocol import (
-    WATCH_LINE, FailedCoreError, UnavailableCoreError, UnconfirmedOutcome, DeliveredOutcome,
+    WATCH_LINE,
+    DeliveredOutcome,
+    FailedCoreError,
+    UnavailableCoreError,
+    UnconfirmedOutcome,
 )
-from agent_comms.locked_store import SQLiteFile
 from agent_comms.coordination_errors import CoordinationReadUnavailable
+from agent_comms.field_codec import RecordProblems
+from agent_comms.locked_store import SQLiteFile
 from agent_comms.messages import InfoKind, Message
+from agent_comms.thread_identity import RecordedThreadIncarnation
 
 
 @pytest.mark.parametrize('error,expected', [
@@ -109,7 +114,8 @@ print('opened', flush=True)
                 await child.wait()
 
     await open_together(fresh=True)
-    binding = Binding(str(tmp_path), 'viewer', 'external-session', Binding.bus_head(str(tmp_path)))
+    binding = Binding(root=str(tmp_path), owner=RecordedThreadIncarnation('viewer', 1.0),
+                      thread='external-session', start=Binding.bus_head(str(tmp_path)))
     message = Message(sender='peer', target='viewer', type=InfoKind,
                       body='retained delivery', timestamp=1.0, seq=1)
     pending = DeliveryRow(message.message_id, json.dumps(message.to_wire()), UnconfirmedOutcome)
@@ -128,9 +134,10 @@ def test_concurrent_initial_binding_preserves_one_identity_and_pending_delivery(
         tmp_path, conflicting, bus):
     from journal_binding_cases import concurrent_bindings
 
-    first = Binding(str(tmp_path), 'viewer', 'external-session', Binding.bus_head(str(tmp_path)))
-    other = Binding(
-        str(tmp_path), 'other-viewer', 'external-session', Binding.bus_head(str(tmp_path)))
+    first = Binding(root=str(tmp_path), owner=RecordedThreadIncarnation('viewer', 1.0),
+                    thread='external-session', start=Binding.bus_head(str(tmp_path)))
+    other = Binding(root=str(tmp_path), owner=RecordedThreadIncarnation('other-viewer', 2.0),
+                    thread='external-session', start=Binding.bus_head(str(tmp_path)))
     message = Message(sender='peer', target='viewer', type=InfoKind,
                       body='retained delivery', timestamp=1.0, seq=1)
     pending = DeliveryRow(message.message_id, json.dumps(message.to_wire()), UnconfirmedOutcome)
@@ -153,7 +160,8 @@ def test_concurrent_initial_binding_preserves_one_identity_and_pending_delivery(
 
 
 def test_existing_binding_lookup_does_not_acquire_a_writer(tmp_path, bus):
-    binding = Binding(str(tmp_path), 'viewer', 'external-session', Binding.bus_head(str(tmp_path)))
+    binding = Binding(root=str(tmp_path), owner=RecordedThreadIncarnation('viewer', 1.0),
+                      thread='external-session', start=Binding.bus_head(str(tmp_path)))
     with Binding.open(tmp_path) as db:
         assert binding.bind(db) == binding
         statements = []
@@ -197,8 +205,8 @@ def test_given_binding_fields_override_the_stored_binding(tmp_path, bus):
     with Binding.open(tmp_path) as db:
         with pytest.raises(RecordProblems, match='bus_thread'):
             GivenBinding({**type_key, 'root': str(tmp_path)}).bind(db)
-        stored = Binding(
-            str(tmp_path), 'viewer', 'external-session', Binding.bus_head(str(tmp_path))).bind(db)
+        stored = Binding(root=str(tmp_path), owner=RecordedThreadIncarnation('viewer', 1.0),
+                         thread='external-session', start=Binding.bus_head(str(tmp_path))).bind(db)
         assert GivenBinding({**type_key, 'root': str(tmp_path)}).bind(db) == stored
         with pytest.raises(ValueError, match='another Core/CLI conversation'):
             GivenBinding({**type_key, 'bus_thread': 'other-viewer'}).bind(db)

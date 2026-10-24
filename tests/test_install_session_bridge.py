@@ -46,8 +46,8 @@ def session_bridge(tmp_path, home, program=SERVE_FROM_SOURCE, *, state_directory
              if state_directory is None else state_directory)
     base_state = state
     state = base_state / 'bridge-copy'
-    binding = Binding(
-        str(comms.root), 'bridge-copy', transcript.stem, Binding.bus_head(str(comms.root)))
+    binding = Binding(root=str(comms.root), owner=comms.registry.require('bridge-copy').incarnation,
+                      thread=transcript.stem, start=Binding.bus_head(str(comms.root)))
     with Binding.open(state) as db:
         binding.bind(db)
     claim = WatchClaim(binding.thread, home)

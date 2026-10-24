@@ -1,37 +1,49 @@
 """Session-owned parts, not stdout writes, confirm monitor delivery."""
-from contextlib import closing, suppress
 import asyncio
+import json
 import os
 import socket
-from html import escape
-import json
 import sqlite3
-
 from collections import Counter
+from contextlib import closing, suppress
+from html import escape
 
 import pytest
 
-from conftest import declare_test_bus
-
+from agent_comms.child_process import ProcessIdentity
+from agent_comms.cli_bridges.claude import ClaudeBridge, ClaudeJsonLines
+from agent_comms.cli_bridges.claude_protocol import (
+    ClaudeMonitorFrame,
+    ClaudeSession,
+    ForeignAttachment,
+    ForeignTaskNotification,
+)
+from agent_comms.cli_bridges.monitor import MonitorPeer, MonitorService
+from agent_comms.cli_bridges.shared import (
+    MONITOR_FRAME,
+    Binding,
+    BridgeStateTable,
+    DeliveryRow,
+    ForeignMonitorFrame,
+    GivenBinding,
+    MismatchedMonitor,
+    MonitorPart,
+    ObservedMonitor,
+    ObservedPart,
+    Options,
+    ReceivingMonitor,
+    StoredBinding,
+    UnrecordedMonitor,
+    Watch,
+)
+from agent_comms.cli_protocol import DeliveredOutcome, EmittedOutcome, UnconfirmedOutcome
+from agent_comms.comms import wire
 from agent_comms.installer.practice import PracticeCopy
 from agent_comms.locked_store import RootFile
-
-from agent_comms.cli_bridges.claude import ClaudeBridge, ClaudeJsonLines
-from agent_comms.child_process import ProcessIdentity
-from agent_comms.cli_bridges.monitor import MonitorPeer, MonitorService
-from agent_comms.cli_bridges.claude_protocol import (
-    ClaudeSession, ClaudeMonitorFrame, ForeignTaskNotification,
-    ForeignAttachment,
-)
-from agent_comms.cli_bridges.shared import (
-    BridgeStateTable, Binding, DeliveryRow, ObservedPart, ReceivingMonitor, UnrecordedMonitor, MonitorPart,
-    ForeignMonitorFrame, Options, ObservedMonitor, MismatchedMonitor, Watch, StoredBinding,
-    GivenBinding, MONITOR_FRAME,
-)
-from agent_comms.cli_protocol import UnconfirmedOutcome, EmittedOutcome, DeliveredOutcome
 from agent_comms.messages import InfoKind, Message
 from agent_comms.read_basis import ExplicitWatchAcknowledgment
 from agent_comms.threads import Thread
+from conftest import declare_test_bus
 
 
 @pytest.mark.asyncio
@@ -106,7 +118,8 @@ def bridge(comms, tmp_path):
     practice.include(tuple(RootFile.existing_in(practice.root)))
     (root, _measurement) = practice.path, practice.measurement
     state = tmp_path / 'bridge-state'
-    binding = Binding(str(root), 'viewer', 'session', Binding.bus_head(str(root)))
+    binding = Binding(root=str(root), owner=wire(root).registry.require('viewer').incarnation,
+                      thread='session', start=Binding.bus_head(str(root)))
     with Binding.open(state) as db:
         binding.bind(db)
         yield ClaudeBridge(Options(Watch(), StoredBinding(), state, state.parent), binding, db)

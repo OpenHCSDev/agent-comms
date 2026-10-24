@@ -13,12 +13,11 @@ import shutil
 import sqlite3
 from abc import ABC, abstractmethod
 from contextlib import closing
-from dataclasses import dataclass, fields, replace
+from dataclasses import dataclass, replace
 from importlib.metadata import entry_points
 from pathlib import Path
 from typing import Annotated
 
-from agent_comms.bus import Bus
 from agent_comms.cli_bridges.claude import ClaudeBridge
 from agent_comms.cli_bridges.codex import CodexBridge
 from agent_comms.cli_bridges.opencode import OpenCodeBridge
@@ -31,23 +30,60 @@ from agent_comms.cli_bridges.shared import (
     ObservedPart,
 )
 from agent_comms.cli_protocol import FilteredOutcome, Outcome
-from agent_comms.field_codec import FieldCodec, PathText
+from agent_comms.field_codec import FieldCodec, PathText, WireName
 from agent_comms.locked_store import SQLiteFile
 from agent_comms.message_reference import BridgePosition, BridgeStart
 from agent_comms.registry_document import RegistrySnapshot
 from agent_comms.registry_store import RegistryStore
-from agent_comms.typed_table import TypedTable
+from agent_comms.thread_identity import ThreadIncarnation
+from agent_comms.typed_table import TypedRow
 from agent_comms_hooks.watch import WatchClaim, WatchRecord
 
 
 @dataclass(frozen=True)
-class PreviousBinding(BindingIdentity, TypedTable):
+class PreviousBinding(TypedRow):
     """The three fields the bridge stored before it declared its start."""
+
+    root: str
+    bus: Annotated[str, WireName("bus_thread")]
+    thread: Annotated[str, WireName("session")]
 
     @classmethod
     def read_binding(cls, db: sqlite3.Connection) -> list[PreviousBinding]:
-        columns = Binding._column_list(tuple(item.name for item in fields(BindingIdentity)))
+        owner, = Binding._fields_named(("owner",))
+        if owner.wire_name in Binding.stored_columns(db):
+            return [cls(row.root, row.bus, row.thread) for row in Binding.select(db)]
+        columns = ', '.join(f'"{item}"' for item in cls.columns())
         return cls.read(db.execute(f'SELECT {columns} FROM "{Binding.declared_name}"'))
+
+    def registered(self, db: sqlite3.Connection) -> Binding:
+        owner, = Binding._fields_named(("owner",))
+        if owner.wire_name in Binding.stored_columns(db):
+            binding, = Binding.select(db)
+            return binding
+        with RegistryStore(RegistryStore.path_in(Path(self.root))).reading_snapshot() as registry:
+            current = registry.threads.get(registry.canonical_name(self.bus))
+        first, = db.execute(
+            f'SELECT MIN(json_extract(payload, \'$.timestamp\')) FROM "{DeliveryRow.declared_name}"'
+        ).fetchone()
+        if current is None or first is None or current.incarnation.wire_birth > first:
+            raise ValueError(
+                f"Refused binding {self.root}/{self.bus}/{self.thread}: "
+                f"no current birth proven before first delivery {first}; "
+                "journal retained for explicit rebinding"
+            )
+        start, = Binding._fields_named(("start",))
+        if start.wire_name in Binding.stored_columns(db):
+            raw, = db.execute(
+                f'SELECT "{start.wire_name}" FROM "{Binding.declared_name}"'
+            ).fetchone()
+            position = FieldCodec.decode(BridgePosition, json.loads(raw))
+        else:
+            latest = DeliveryRow.latest(db)
+            position = (BridgeStart(latest[0].message.reference) if latest
+                        else Binding.bus_head(self.root))
+        return Binding(root=self.root, owner=current.incarnation,
+                       thread=self.thread, start=position)
 
 
 class BindingMigration(ABC):
@@ -61,15 +97,6 @@ class MigratedBindings(BindingMigration):
 
     def report(self) -> int:
         return self.changed
-
-
-@dataclass(frozen=True)
-class DeadBinding(BindingMigration):
-    path: Path
-
-    def report(self) -> int:
-        print(f"dead binding, bus missing: {self.path}")
-        return 0
 
 
 @dataclass(frozen=True)
@@ -241,27 +268,15 @@ def migrate(state: Path) -> BindingMigration:
     if not path.is_file():
         raise FileNotFoundError(path)
     with closing(SQLiteFile.writer(path)) as db, SQLiteFile.write_transaction(db):
-        (start,) = Binding._fields_named(("start",))
-        if start.wire_name in Binding.stored_columns(db):
+        owner, = Binding._fields_named(("owner",))
+        if owner.wire_name in Binding.stored_columns(db):
             return MigratedBindings(0)
-        previous = PreviousBinding.read_binding(db)
-        latest = DeliveryRow.latest(db)
-        bindings = []
-        for row in previous:
-            position: BridgePosition
-            if latest:
-                position = BridgeStart(latest[0].message.reference)
-            else:
-                try:
-                    position = Binding.bus_head(row.root)
-                except FileNotFoundError:
-                    return DeadBinding(Bus.path_in(Path(row.root)))
-            bindings.append(Binding(row.root, row.bus, row.thread, position))
+        previous = [row.registered(db) for row in PreviousBinding.read_binding(db)]
         Binding.drop(db)
         Binding.create(db)
-        for binding in bindings:
+        for binding in previous:
             binding.insert(db)
-    return MigratedBindings(len(bindings))
+    return MigratedBindings(len(previous))
 
 
 @dataclass(frozen=True)
@@ -421,7 +436,8 @@ class ReaderDirectories:
                                         DeliveryRow.delete(target, id=incoming.id)
                                     deliveries[incoming.id] = incoming
                                 target.execute(table.insertion_statement(), values)
-                Binding(self.identity.root, self.identity.bus, selected.session, position).insert(
+                Binding(root=self.identity.root, owner=self.identity.owner,
+                        thread=selected.session, start=position).insert(
                     target
                 )
             destination.mkdir(parents=True, exist_ok=True)
@@ -445,21 +461,21 @@ class ReaderDirectories:
 
 def merge_directories(home: Path, root: Path) -> int:
     watches = recorded_watches(home)
-    groups: dict[tuple[str, str], list[Path]] = {}
+    groups: dict[tuple[str, ThreadIncarnation], list[Path]] = {}
     identities = {}
     unbound = []
     for state in state_directories(home, watches):
         with closing(
             sqlite3.connect((state / BridgeStateTable.filename).as_uri() + "?mode=ro", uri=True)
         ) as db:
-            bindings = PreviousBinding.read_binding(db)
+            bindings = [row.registered(db) for row in PreviousBinding.read_binding(db)]
             if not bindings and DeliveryRow.count(db):
                 raise ValueError(f"Journal rows without a binding: {state}")
         if not bindings:
             unbound.append(state)
             continue
-        (identity,) = bindings
-        key = (identity.root, identity.bus)
+        identity, = bindings
+        key = (identity.root, identity.owner)
         identities[key] = identity
         groups.setdefault(key, []).append(state)
     readers = tuple(
@@ -470,7 +486,12 @@ def merge_directories(home: Path, root: Path) -> int:
                 directory
                 for watch in watches
                 for directory in watch.directories()
-                if (directory.record.root, directory.record.bus) == key
+                if directory.record.root == key[0]
+                and key[1].matches_recorded_name(
+                    directory.record.bus,
+                    RegistrySnapshot.capture(
+                        RegistryStore(RegistryStore.path_in(Path(key[0]))).read()),
+                )
             ),
         )
         for key, states in groups.items()

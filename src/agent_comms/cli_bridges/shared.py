@@ -71,6 +71,7 @@ from agent_comms.read_basis import ExplicitWatchAcknowledgment
 from agent_comms.runtime_updates import ReplyingThreadOutput, RuntimeUpdate, ThreadOutput
 from agent_comms.send_result import SendResult
 from agent_comms.thread_execution import ExternalThreadExecution
+from agent_comms.thread_identity import ThreadIncarnation
 from agent_comms.thread_status import ThreadStatus
 from agent_comms.thread_text import AbsentText, GivenText, TextChoice
 from agent_comms.threads import Thread
@@ -118,7 +119,7 @@ class BindingRequest(ABC):
     """What the command line asks of the state directory's one binding."""
 
     @abstractmethod
-    def bind(self, db: sqlite3.Connection) -> Binding: ...
+    def bind(self, db: sqlite3.Connection) -> SessionBinding: ...
 
 
 class BindingSession(ABC):
@@ -184,26 +185,25 @@ class GivenBinding(BindingRequest):
 
     @classmethod
     def from_arguments(cls, arguments: CliArguments, bridge: type[CliBridge]) -> Self:
-        keys = {key for _, key in FieldCodec.record_fields(BindingIdentity)}
+        keys = {key for _, key in FieldCodec.record_fields(BindingAddress)}
         values = {key: value for key, value in vars(arguments).items() if key in keys}
         arguments.base_state = arguments.state
         arguments.state = arguments.state / arguments.binding_thread.thread
         return cls({Binding.family_discriminator: Binding.declared_name,
                     **values, **arguments.binding_session.supplied(),
-                    FieldCodec.record_key(BindingIdentity, 'bus'): arguments.binding_thread.thread})
+                    FieldCodec.record_key(BindingAddress, 'bus'): arguments.binding_thread.thread})
 
-    def bind(self, db: sqlite3.Connection) -> Binding:
-        stored = tuple(FieldCodec.encode(row) for row in Binding.select(db))
+    def bind(self, db: sqlite3.Connection) -> BindingAddress:
+        stored = tuple(FieldCodec.encode(row.address()) for row in Binding.select(db))
         if stored:
             payload = stored[0]
         else:
-            identity = FieldCodec.decode(BindingIdentity, {
-                key: value for key, value in self.given.items()
-                if key != Binding.family_discriminator
-            })
-            payload = {'start': FieldCodec.encode(Binding.bus_head(identity.root))}
-        requested = FieldCodec.decode(Binding, {**payload, **self.given})
-        return requested.bind(db)
+            root = self.given[FieldCodec.record_key(BindingAddress, 'root')]
+            payload = {'start': FieldCodec.encode(Binding.bus_head(root))}
+        return FieldCodec.decode(BindingAddress, {
+            **payload, **{key: value for key, value in self.given.items()
+                         if key != Binding.family_discriminator},
+        })
 
 
 class ResolvedBinding(GivenBinding):
@@ -257,20 +257,62 @@ class ResolvedThread(BindingThread):
         raise ValueError('Resolve the enrolled binding before reading its thread')
 
 
-@dataclass(frozen=True)
-class BindingIdentity:
+@dataclass(frozen=True, kw_only=True)
+class SessionBinding(ABC):
+    """The session and start shared by a requested address and a registered reader."""
+
     root: str
-    bus: Annotated[str, field_codec.WireName("bus_thread")]
     thread: Annotated[str, field_codec.WireName("session")]
+    start: BridgePosition
+
+    @property
+    @abstractmethod
+    def bus(self) -> str: ...
+
+    @abstractmethod
+    def recipient(self, comms: Comms) -> ThreadIncarnation: ...
+
+    def registered(self, comms: Comms) -> Binding:
+        return Binding(root=self.root, owner=self.recipient(comms),
+                       thread=self.thread, start=self.start)
+
+    async def prepared(self, bridge: CliBridge, operation: Operation) -> Binding:
+        await operation.register(bridge)
+        return self.registered(bridge.comms).bind(bridge.db)
+
+
+@dataclass(frozen=True, kw_only=True, slots=True)
+class BindingAddress(SessionBinding):
+    """A command-line address, resolved only after the operation registers its thread."""
+
+    bus: Annotated[str, field_codec.WireName("bus_thread")] = field()
+
+    def recipient(self, comms: Comms) -> ThreadIncarnation:
+        return comms.registry.require(self.bus).incarnation
+
+
+@dataclass(frozen=True, kw_only=True)
+class BindingIdentity(SessionBinding):
+    owner: ThreadIncarnation
+
+    @property
+    def bus(self) -> str:
+        return self.owner.name
+
+    def address(self) -> BindingAddress:
+        return BindingAddress(root=self.root, bus=self.bus, thread=self.thread, start=self.start)
+
+    def recipient(self, comms: Comms) -> ThreadIncarnation:
+        current = comms.registry.snapshot().by_lookup[self.owner.require_recorded().lookup]
+        return current.incarnation
 
     def same_reader(self, other: BindingIdentity) -> bool:
         """A transport session may change without changing the bus reader."""
-        return (self.root, self.bus) == (other.root, other.bus)
+        return self.owner == other.owner
 
 
 @dataclass(frozen=True)
 class Binding(BindingIdentity, BridgeStateTable, TypedTable, BindingRequest):
-    start: BridgePosition
 
     @staticmethod
     def bus_head(root: str) -> BridgePosition:
@@ -310,8 +352,8 @@ class Binding(BindingIdentity, BridgeStateTable, TypedTable, BindingRequest):
             stored = StoredBinding().bind(db)
             if not stored.same_reader(self):
                 raise ValueError('This state directory belongs to another Core/CLI conversation')
-            Binding.update(db, where='1', thread=self.thread)
-            return replace(stored, thread=self.thread)
+            Binding.update(db, where='1', root=self.root, thread=self.thread, owner=self.owner)
+            return replace(stored, root=self.root, thread=self.thread, owner=self.owner)
 
 
 @dataclass
@@ -429,7 +471,7 @@ class DeliveryRow(JournalMessage, BridgeStateTable, TypedTable):
             f'ORDER BY {cls._sql(cls.sequence_sql)} DESC LIMIT 1')))
 
     @classmethod
-    def resume_after(cls, db: sqlite3.Connection, binding: Binding) -> InboxStart:
+    def resume_after(cls, db: sqlite3.Connection, binding: SessionBinding) -> InboxStart:
         """The binding and journal own progress, including uncertain emissions."""
         latest = cls.latest(db)
         return max((binding.start, *(BridgeStart(row.message.reference) for row in latest)),
@@ -458,6 +500,9 @@ class Operation(DeclaredOptions, ABC, Generic[OperationBridge]):
 
     @abstractmethod
     async def execute(self, bridge: OperationBridge) -> None: ...
+
+    async def register(self, bridge: CliBridge) -> None:
+        """Most operations require an already registered reader."""
 
     def transcript_source(self) -> Path:
         raise ValueError('This command does not own a live transcript subscription')
@@ -653,14 +698,14 @@ class BindingCommander(SubclassUnion, TextChoice, affix="BindingCommander"):
     """Who commands a newly bound session, or an independent user's session."""
 
     @abstractmethod
-    async def register(self, bridge: TranscriptBridge) -> None: ...
+    async def register(self, bridge: CliBridge) -> None: ...
 
 
 @dataclass(frozen=True, slots=True)
 class CommandedBy(GivenText, BindingCommander):
     text: str
 
-    async def register(self, bridge: TranscriptBridge) -> None:
+    async def register(self, bridge: CliBridge) -> None:
         worktree = str(await bridge.session_worktree())
         await bridge.comms.bus.when_open(partial(
             bridge.comms.registry.register_commanded_unit,
@@ -672,7 +717,7 @@ class CommandedBy(GivenText, BindingCommander):
 class Uncommanded(AbsentText, BindingCommander):
     """A user's own session has no commanded audience or fork parent."""
 
-    async def register(self, bridge: TranscriptBridge) -> None:
+    async def register(self, bridge: CliBridge) -> None:
         thread = Thread(
             bridge.binding.bus, frozenset(), str(await bridge.session_worktree()),
             process_identity=bridge.session_process(), execution=ExternalThreadExecution,
@@ -695,10 +740,12 @@ class Watch(Inbox):
     async def execute(self, bridge: OperationBridge) -> None:
         await bridge.watch_operation(self)
 
-    async def start(self, bridge: TranscriptBridge, tasks: asyncio.TaskGroup,
-                    endpoint: ExitStack) -> None:
+    async def register(self, bridge: CliBridge) -> None:
         if not bridge.comms.registry.snapshot().taken(bridge.binding.bus):
             await self.commander.register(bridge)
+
+    async def start(self, bridge: TranscriptBridge, tasks: asyncio.TaskGroup,
+                    endpoint: ExitStack) -> None:
         await super().start(bridge, tasks, endpoint)
         tasks.create_task(bridge.publish_transcript())
 
@@ -1064,7 +1111,7 @@ class CliBridge(ExternalRuntime, DeliversInput, Generic[BridgeOptions]):
         raise ValueError('Supply --session or a complete bus binding')
 
     options: BridgeOptions
-    binding: Binding
+    binding: SessionBinding
     db: sqlite3.Connection
 
     @cached_property
@@ -1408,6 +1455,7 @@ def run_bridge(bridge_type: type[CliBridge[BridgeOptions]], options: BridgeOptio
     try:
         with Binding.open(options.state) as db, asyncio.Runner() as runner:
             bridge = bridge_type(options, options.binding.bind(db), db)
+            bridge.binding = runner.run(bridge.binding.prepared(bridge, options.operation))
             with suppress(asyncio.CancelledError):
                 runner.run(bridge.run())
         options.operation.retired(bridge)

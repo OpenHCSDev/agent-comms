@@ -37,7 +37,8 @@ def test_session_start_hook_exit_preserves_the_recorded_owner_for_install_pause(
     transcript.write_text('')
     base_state = WatchClaim.directory(home).parent / 'claude-bridge-owner'
     state = base_state / 'bridge-copy'
-    binding = Binding(str(comms.root), 'bridge-copy', session, Binding.bus_head(str(comms.root)))
+    binding = Binding(root=str(comms.root), owner=comms.registry.require('bridge-copy').incarnation,
+                      thread=session, start=Binding.bus_head(str(comms.root)))
     with Binding.open(state) as db:
         binding.bind(db)
     claim = WatchClaim(session, home)
