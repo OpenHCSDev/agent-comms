@@ -132,7 +132,7 @@ class SelectedToolRequest(NativeToolCall):
     declared_name: ClassVar[str] = "selected_claimed_write"
 
     def commit_terminal(
-        self, is_error: bool, coordination_path: Path, input_id: str, round_number: int
+        self, is_error: bool, coordination_path: Path, input_id: InputId, round_number: int
     ) -> None:
         if is_error:
             raise SelectedToolDenied("Native Pi selected tool did not finish successfully")
@@ -169,7 +169,7 @@ def selected_extension(package: Path) -> Path:
     return source
 
 
-def consume_selected_slot(store: Coordination, input_id: str, call_id: str) -> None:
+def consume_selected_slot(store: Coordination, input_id: InputId, call_id: str) -> None:
     """Commit consumption BEFORE any action; a failed commit is UNKNOWN, never retried."""
     if type(call_id) is not str or not _CALL_ID.fullmatch(call_id):
         raise SelectedToolDenied("Selected tool call identity is invalid")
@@ -180,7 +180,7 @@ def consume_selected_slot(store: Coordination, input_id: str, call_id: str) -> N
         raise SelectedToolDenied("Selected tool consumption UNKNOWN; do not retry") from error
 
 
-def record_selected_terminal(coordination_path: Path, input_id: str, call_id: str) -> None:
+def record_selected_terminal(coordination_path: Path, input_id: InputId, call_id: str) -> None:
     """Only a committed terminal acknowledgement lets the tool return success."""
     try:
         with Coordination(str(coordination_path)) as store, store.session.writing() as db:
@@ -264,7 +264,7 @@ def _require_sent_full_input(
         raise SelectedToolDenied("Selected input was already settled")
 
 
-def verify_selected_terminal(coordination_path: Path, input_id: str, call_id: str) -> None:
+def verify_selected_terminal(coordination_path: Path, input_id: InputId, call_id: str) -> None:
     """Corroborate a live owner result; a persisted acknowledgement alone grants nothing."""
     with Coordination(str(coordination_path), session_type=ReadNativeCoordinationSession) as store, store.session.read():
         SelectedToolSlot.require(store.session._connection, input_id=input_id).verify(call_id)
@@ -275,7 +275,7 @@ def perform_selected_write(
     store: Coordination,
     claim_scope: WakeClaim,
     owner_name: str,
-    input_id: str,
+    input_id: InputId,
     request: SelectedToolRequest,
 ) -> None:
     """Only the owner calls the existing selected claim and writer boundaries."""

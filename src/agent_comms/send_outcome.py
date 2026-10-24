@@ -60,16 +60,18 @@ class SendBoundary(ABC):
     """Permission to write original, following and interrupt commands."""
 
     @abstractmethod
-    def send_original(self, native_id: str, text: str) -> AbstractContextManager[SendOutcome]: ...
+    def send_original(
+        self, native_id: InputId, text: str
+    ) -> AbstractContextManager[SendOutcome]: ...
 
     @abstractmethod
     def send_following(
-        self, public_id: InputId, native_id: str, text: str,
+        self, public_id: InputId, native_id: InputId, text: str,
     ) -> AbstractContextManager[SendOutcome]: ...
 
     @abstractmethod
     def send_interrupt(
-        self, public_id: InputId, native_id: str, text: str,
+        self, public_id: InputId, native_id: InputId, text: str,
     ) -> AbstractContextManager[SendOutcome]: ...
 
 
@@ -80,16 +82,16 @@ class NoSendBoundary(SendBoundary):
     def _granted(self) -> Iterator[SendOutcome]:
         yield GrantedSend()
 
-    def send_original(self, native_id: str, text: str) -> AbstractContextManager[SendOutcome]:
+    def send_original(self, native_id: InputId, text: str) -> AbstractContextManager[SendOutcome]:
         return self._granted()
 
     def send_following(
-        self, public_id: InputId, native_id: str, text: str,
+        self, public_id: InputId, native_id: InputId, text: str,
     ) -> AbstractContextManager[SendOutcome]:
         return self._granted()
 
     def send_interrupt(
-        self, public_id: InputId, native_id: str, text: str,
+        self, public_id: InputId, native_id: InputId, text: str,
     ) -> AbstractContextManager[SendOutcome]:
         return self._granted()
 

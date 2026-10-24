@@ -101,16 +101,16 @@ class OwnedSend(CodingToolOwner, InputStartListener, SendBoundary):
         _LOG.info("Ordinary input refused: %s", ReservationViolationError(rule))
         return AuthorityChangedSend()
 
-    def send_original(self, native_id: str, text: str) -> AbstractContextManager[SendOutcome]:
+    def send_original(self, native_id: InputId, text: str) -> AbstractContextManager[SendOutcome]:
         return self.original_source.prepare_send(self, native_id, text)
 
     def send_following(
-        self, public_id: InputId, native_id: str, text: str,
+        self, public_id: InputId, native_id: InputId, text: str,
     ) -> AbstractContextManager[SendOutcome]:
         return self.source(public_id).prepare_send(self, native_id, text)
 
     def send_interrupt(
-        self, public_id: InputId, native_id: str, text: str,
+        self, public_id: InputId, native_id: InputId, text: str,
     ) -> AbstractContextManager[SendOutcome]:
         return self.source(public_id).prepare_send(
             self, native_id, text, already_bound=True,
@@ -160,13 +160,13 @@ class OwnedSend(CodingToolOwner, InputStartListener, SendBoundary):
 
         await Coordination.run_worker(release)
 
-    def original(self, native_id: str, text: str) -> bool:
+    def original(self, native_id: InputId, text: str) -> bool:
         return self._started(self.original_source, native_id, text)
 
-    def following(self, public_id: InputId, native_id: str, text: str) -> bool:
+    def following(self, public_id: InputId, native_id: InputId, text: str) -> bool:
         return self._started(self.source(public_id), native_id, text)
 
-    def _started(self, source: TurnInputSource, native_id: str, sent_text: str) -> bool:
+    def _started(self, source: TurnInputSource, native_id: InputId, sent_text: str) -> bool:
         return source.valid_keys(sent_text) and all(
             self.inputs.dispositions.started(
                 key, turn_id=self.turn, native_id=native_id, text=sent_text

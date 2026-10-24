@@ -13,7 +13,7 @@ from agent_comms import field_codec
 
 from .channel_targets import CommandTarget
 from .errors import RelationViolationError
-from .field_codec import TurnId, GoalId
+from .field_codec import GoalId, InputId, TurnId
 from .input_attempt import (
     UNOBSERVED_DELIVERY_SCOPE,
     GoalInputDecision,
@@ -31,9 +31,9 @@ from .lifecycle_capability import Unresolved
 from .locked_store import DocumentChange
 from .message_reference import MessageReference
 from .messages import Message
+from .reported_turn import ReportedTurnState
 from .threads import Thread
 from .tool_result import ToolResult
-from .reported_turn import ReportedTurnState
 from .typed_table import Column, DurableStore, Generated, Index, StoreRows, TypedTable, sql_literal
 
 if TYPE_CHECKING:
@@ -103,7 +103,7 @@ class InputDocument:
         return self.transition(keys, lambda row: row.finish_unbound())
 
     def started_for_native(
-        self, lease: TurnLeaseFence, native_id: str, sent_text: str,
+        self, lease: TurnLeaseFence, native_id: InputId, sent_text: str,
         *, snapshot: RegistrySnapshot,
     ) -> tuple[StartedInput, ...]:
         """Original rows for one actual native user, including grouped inputs.
@@ -334,13 +334,13 @@ class InputDispositions(DurableStore):
             ),
         )
 
-    def clear_native(self, key: str, native_id: str, text: str) -> None:
+    def clear_native(self, key: str, native_id: InputId, text: str) -> None:
         """Clear only the matching native input; publish nothing if it differs."""
         refusal = "Native clear differs from its original input"
         self._transition(key, lambda row: row.clear_native(native_id, text).require_moved(refusal))
 
     def bind(
-        self, key: str, *, claim_scope: int, turn_id: TurnId, native_id: str, text: str
+        self, key: str, *, claim_scope: int, turn_id: TurnId, native_id: InputId, text: str
     ) -> bool:
         return self.bind_originals(
             (key,), claim_scope=claim_scope, turn_id=turn_id, native_id=native_id, text=text
@@ -348,7 +348,7 @@ class InputDispositions(DurableStore):
 
     def bind_turn_input(
         self, keys: tuple[str, ...], *, claim_scope: int, turn_id: TurnId,
-        native_id: str, text: str,
+        native_id: InputId, text: str,
         already_bound: bool,
     ) -> bool:
         """Bind a turn's unresolved inputs to the native input carrying them.
@@ -369,7 +369,8 @@ class InputDispositions(DurableStore):
         )
 
     def bind_originals(
-        self, keys: tuple[str, ...], *, claim_scope: int, turn_id: TurnId, native_id: str, text: str
+        self, keys: tuple[str, ...], *, claim_scope: int, turn_id: TurnId,
+        native_id: InputId, text: str,
     ) -> bool:
         """Bind the complete captured original atomically; no partial batch grant."""
         def change(document: InputDocument) -> DocumentChange[InputDocument, bool]:
@@ -384,7 +385,7 @@ class InputDispositions(DurableStore):
 
         return self._update(*_members("key", keys), change)
 
-    def started(self, key: str, *, turn_id: TurnId, native_id: str, text: str) -> bool:
+    def started(self, key: str, *, turn_id: TurnId, native_id: InputId, text: str) -> bool:
         return self._transition(
             key, lambda row: row.started(turn_id=turn_id, native_id=native_id, text=text)
         )

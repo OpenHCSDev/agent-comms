@@ -287,19 +287,19 @@ class InputStartListener(ABC):
     started_events: tuple[AgentEvent, ...]
 
     @abstractmethod
-    def original(self, native_id: str, text: str) -> bool: ...
+    def original(self, native_id: InputId, text: str) -> bool: ...
 
     @abstractmethod
-    def following(self, public_id: InputId, native_id: str, text: str) -> bool: ...
+    def following(self, public_id: InputId, native_id: InputId, text: str) -> bool: ...
 
 
 class NoInputStartListener(InputStartListener):
     started_events = ()
 
-    def original(self, native_id: str, text: str) -> bool:
+    def original(self, native_id: InputId, text: str) -> bool:
         return True
 
-    def following(self, public_id: InputId, native_id: str, text: str) -> bool:
+    def following(self, public_id: InputId, native_id: InputId, text: str) -> bool:
         return True
 
 

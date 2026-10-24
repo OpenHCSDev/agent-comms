@@ -15,11 +15,10 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, ClassVar, Never
 
+from .field_codec import InputId
 from .lifecycle_capability import Complete, Executing, LifecycleCapability
 from .storage_rules import StorageProjection, StorageRule
 from .tool_denial import SelectedToolDenied
-
-
 
 if TYPE_CHECKING:
     from .native_tool_transport import UnboundToolTransport
@@ -76,7 +75,7 @@ class CallObservation(LifecycleCapability, ABC):  # noqa: B024 - shared rejectio
 
     def finish(
         self, call: NativeToolCall, is_error: bool, coordination_path: Path,
-        input_id: str, round_number: int,
+        input_id: InputId, round_number: int,
     ) -> None:
         raise SelectedToolDenied("Native tool terminal is missing or repeated")
 
@@ -99,7 +98,7 @@ class ExecutingCall(Executing, CallObservation):
 
     def finish(
         self, call: NativeToolCall, is_error: bool, coordination_path: Path,
-        input_id: str, round_number: int,
+        input_id: InputId, round_number: int,
     ) -> None:
         # A failed terminal commit cannot be retried or converted to a completed
         # error by a subsequent event. The live acknowledgement must succeed exactly once.
@@ -125,7 +124,7 @@ class CallClaim(ABC):  # noqa: B024 - shared rejection; leaves override valid tr
 
     def finish(
         self, call: NativeToolCall, is_error: bool, coordination_path: Path,
-        input_id: str, round_number: int,
+        input_id: InputId, round_number: int,
     ) -> None:
         raise SelectedToolDenied("Native tool ran without owner claim_scope")
 
@@ -145,7 +144,7 @@ class AwaitingClaim(CallClaim):
 class AuthorizedCall(CallClaim):
     def finish(
         self, call: NativeToolCall, is_error: bool, coordination_path: Path,
-        input_id: str, round_number: int,
+        input_id: InputId, round_number: int,
     ) -> None:
         call.commit_terminal(is_error, coordination_path, input_id, round_number)
 
@@ -157,7 +156,7 @@ class UncertainClaim(CallClaim):
 
     def finish(
         self, call: NativeToolCall, is_error: bool, coordination_path: Path,
-        input_id: str, round_number: int,
+        input_id: InputId, round_number: int,
     ) -> None:
         if not is_error:
             raise SelectedToolDenied("Native tool succeeded without owner claim_scope")
@@ -223,7 +222,7 @@ class NativeToolCall(ABC):
 
     def finish(
         self, name: str, is_error: bool | None, coordination_path: Path,
-        input_id: str, round_number: int,
+        input_id: InputId, round_number: int,
     ) -> None:
         if name != self.declared_name or type(is_error) is not bool:
             raise SelectedToolDenied("Native tool terminal identity/result changed")
@@ -234,7 +233,7 @@ class NativeToolCall(ABC):
 
     @abstractmethod
     def commit_terminal(
-        self, is_error: bool, coordination_path: Path, input_id: str, round_number: int
+        self, is_error: bool, coordination_path: Path, input_id: InputId, round_number: int
     ) -> None: ...
 
     @abstractmethod
@@ -264,7 +263,7 @@ class CodingCall(NativeToolCall):
         return effects
 
     def commit_terminal(
-        self, is_error: bool, coordination_path: Path, input_id: str, round_number: int
+        self, is_error: bool, coordination_path: Path, input_id: InputId, round_number: int
     ) -> None:
         from .selected_tool_broker import record_selected_terminal
 
@@ -293,7 +292,7 @@ class CodingCall(NativeToolCall):
         except MalformedRecord as error:
             return RefusedCodingCall(call_id, name, arguments, str(error))
 
-    def slot(self, input_id: str, round_number: int) -> str:
+    def slot(self, input_id: InputId, round_number: int) -> str:
         identity = f"{input_id}\0{round_number}\0{self.call_id}"
         return hashlib.sha256(identity.encode()).hexdigest()[:32]
 

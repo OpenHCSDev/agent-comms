@@ -20,7 +20,7 @@ from agent_comms.coordination_tables.assignments import WakeAssignment
 from agent_comms.coordinator import Coordination
 
 from .cohort_schema import CohortTable
-from .field_codec import FieldCodec, Id128Text, InputId, MalformedRecord
+from .field_codec import FieldCodec, InputId, MalformedRecord
 from .locked_store import DurableFile, SQLiteFile
 from .native_entries import NativeEvidenceRead
 from .native_input_owner import ParticipantOwner
@@ -120,7 +120,6 @@ def bind_expected_prompt(
     envelope exactly as ``AgentSession._claimNativeInput`` computes it — NOT
     the bare prompt bytes.
     """
-    Id128Text.decode(input_id)
     if not FieldCodec.decode(str, prompt):
         raise ValueError("prompt binding requires nonempty original text")
     digest = native_request_digest(prompt)

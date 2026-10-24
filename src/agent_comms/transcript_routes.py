@@ -11,7 +11,7 @@ from agent_comms.native_session_files import NativeSessionFiles
 from agent_comms.native_session_reopen import NativeSessionIdentity
 
 from .errors import RelationViolationError
-from .field_codec import MalformedRecord
+from .field_codec import InputId, MalformedRecord
 from .private_path import FileObservation, FileRevision
 from .routing import TurnRouting
 from .typed_table import Column, DurableStore, StoreRows, WithoutRowid
@@ -36,7 +36,7 @@ class TranscriptRoute(TranscriptRoutesRows, WithoutRowid):
 class InputDisplay(TranscriptRoutesRows, WithoutRowid):
     """Owner-authored presentation for one native input; None text means internal."""
 
-    native_id: Annotated[str, Column(primary_key=True)]
+    native_id: Annotated[InputId, Column(primary_key=True)]
     text: str | None
     routing: TurnRouting | None = None
     sent_text_digest: str | None = None
@@ -69,7 +69,7 @@ class _SessionRoutes:
             self._cache[entry_id] = row.routing if row else None
         return self._cache[entry_id]
 
-    def input_display(self, native_id: str | None) -> InputDisplay | None:
+    def input_display(self, native_id: InputId | None) -> InputDisplay | None:
         if native_id is None:
             return None
         if native_id not in self._input_cache:
@@ -213,7 +213,7 @@ class TranscriptRoutes(DurableStore):
 
     def record_input_display(
         self,
-        native_id: str,
+        native_id: InputId,
         display_text: str | None,
         *,
         sent_text: str | None = None,

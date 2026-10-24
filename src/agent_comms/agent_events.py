@@ -22,7 +22,7 @@ from .acp_failure import (
 )
 from .child_process import ProcessIdentity
 from .declared_family import DeclaredFamily
-from .field_codec import NullMember, TurnId
+from .field_codec import InputId, NullMember, TurnId
 from .input_attempt import InputAttempt
 from .mro_dispatch import MroDispatch, handles
 from .native_failures import NativePiUnavailable
@@ -155,7 +155,7 @@ class InputCleared(InputRefused):
     """The native queue positively confirmed removal of this exact input."""
 
     id: str
-    native_id: str
+    native_id: InputId
     text: str
 
     async def apply_to(self, inputs: InputDrain, session_id: str) -> None:

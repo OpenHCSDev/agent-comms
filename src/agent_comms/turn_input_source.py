@@ -135,7 +135,7 @@ class TurnInputSource(StartedInput, ABC):
 
     @contextmanager
     def prepare_send(
-        self, sender: OwnedSend, native_id: str, sent_text: str,
+        self, sender: OwnedSend, native_id: InputId, sent_text: str,
         *, already_bound: bool = False,
     ) -> Iterator[SendOutcome]:
         try:
@@ -145,7 +145,7 @@ class TurnInputSource(StartedInput, ABC):
         yield decision
 
     def _prepare(
-        self, sender: OwnedSend, native_id: str, sent_text: str,
+        self, sender: OwnedSend, native_id: InputId, sent_text: str,
         *, already_bound: bool = False,
     ) -> SendOutcome:
         # Backend input handling holds shared locks through this check and write.

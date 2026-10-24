@@ -227,7 +227,7 @@ class CursorState(ABC):
     def observation(self) -> CursorObservation: ...
 
     @abstractmethod
-    def proves_input(self, input_id: str) -> bool: ...
+    def proves_input(self, input_id: InputId) -> bool: ...
 
     @abstractmethod
     def require_input_progress(self, proof: HistoricalNativeInput) -> None: ...
@@ -256,7 +256,7 @@ class UnstartedCursor(CursorState):
     def injected_seq(self) -> int:
         return 0  # No injected native input; cursor presence is this state's type.
 
-    def proves_input(self, input_id: str) -> bool:
+    def proves_input(self, input_id: InputId) -> bool:
         return False
 
     def require_input_progress(self, proof: HistoricalNativeInput) -> None:
@@ -304,7 +304,7 @@ class RecordedCursor(CursorState):
     def observation(self) -> CursorObservation:
         return VerifiedCursorObservation(self.row)
 
-    def proves_input(self, input_id: str) -> bool:
+    def proves_input(self, input_id: InputId) -> bool:
         return self.row.input_id.holds(input_id)
 
     def require_progress(self, owner: CursorOwner, coverage: ProvenSourceCoverage, injected: int) -> None:

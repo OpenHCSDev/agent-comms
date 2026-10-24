@@ -6,12 +6,13 @@ tools. Recovery-only historical phases remain readable without manufacturing
 recovery events from a successful result.
 """
 
-from contextlib import contextmanager
 from collections.abc import Iterable
+from contextlib import contextmanager
 from dataclasses import dataclass
 from functools import partial
 
 from agent_comms.reason_codes import GivenReasonCode
+
 from . import pi_events as pi
 from .agent_events import NativePhaseChanged, PromptAccepted
 from .attempt_states import (
@@ -24,10 +25,11 @@ from .attempt_states import (
 )
 from .attempt_store import AttemptStore
 from .coordination_errors import IdentityConflict
+from .coordination_session import NativeBoundary
 from .coordination_tables.attempts import ReplayFact
 from .coordination_tables.executions import ReplayAssessments
-from .coordination_session import NativeBoundary
 from .coordinator import Coordination
+from .field_codec import InputId
 from .mro_dispatch import Handler, MroDispatch, Value, handles
 from .owner_fence import OwnerFence
 from .turn_failure import TurnFailure
@@ -39,7 +41,7 @@ class DurableTurn(MroDispatch):
     attempts: AttemptStore
     fence: OwnerFence
     pointer_revision: int
-    input_id: str
+    input_id: InputId
 
     @contextmanager
     def using_attempts(self, attempts):

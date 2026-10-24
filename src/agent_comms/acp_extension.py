@@ -432,7 +432,7 @@ class QueueScope(AttachmentScope):
     def accepts_request(self, projection: QueueProjection) -> bool:
         return True
 
-    def unidentified_start(self, input_id: str | None) -> bool:
+    def unidentified_start(self, input_id: InputId | None) -> bool:
         return input_id is None
 
 
@@ -471,13 +471,13 @@ class LiveQueueScope(QueueScope, LiveAttachmentScope):
     def accepts_request(self, projection: QueueProjection) -> bool:
         return projection.status == 'available'
 
-    def unidentified_start(self, input_id: str | None) -> bool:
+    def unidentified_start(self, input_id: InputId | None) -> bool:
         return False
 
 
 @dataclass(frozen=True)
 class QueueItem:
-    input_id: str
+    input_id: InputId
     text: str
 
 
@@ -572,11 +572,11 @@ class QueueChangedUpdate(AgentCommsUpdate):
 
 @dataclass(frozen=True)
 class InputStartedUpdate(AgentCommsUpdate):
-    input_id: str | None
+    input_id: InputId | None
     text: str | None
     scope: QueueScope
     revision: int | None
-    native_id: str | None
+    native_id: InputId | None
 
     def for_session(self, session_id: str) -> InputStartedUpdate:
         return replace(self, scope=self.scope.for_session(session_id))
@@ -652,7 +652,7 @@ class TranscriptSnapshotUpdate(AgentCommsUpdate):
 
 @dataclass(frozen=True)
 class InputDeliveryChangedUpdate(AgentCommsUpdate):
-    input_id: str | None = None
+    input_id: InputId | None = None
 
 
 @dataclass(frozen=True)
@@ -680,9 +680,6 @@ class PromptRequest(CommsRequest):
     origin: Annotated[InputOrigin, WireOmitDefault()] = field(
         default_factory=UnattributedInputOrigin, kw_only=True
     )
-
-    def __post_init__(self):
-        Id128Text.decode(self.input_id)
 
     @property
     def draft_text(self) -> str | None:

@@ -775,7 +775,7 @@ class InputDrain(InputObservation):
             await self.emit_queue_state(session_id)
 
     async def input_cleared(
-        self, session_id: str, input_id: InputId, native_id: str, text: str,
+        self, session_id: str, input_id: InputId, native_id: InputId, text: str,
     ) -> None:
         source = self.state(session_id).following.get(input_id)
         if source is not None:

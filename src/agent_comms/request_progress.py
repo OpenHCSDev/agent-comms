@@ -1,12 +1,13 @@
 """Native request measurements do not permit input, confirm completion or allow retry."""
 
-from typing import Annotated
 from collections.abc import Callable
 from dataclasses import dataclass
+from typing import Annotated
 
 from agent_comms import field_codec
 
 from .child_process import ProcessIdentity
+from .field_codec import InputId
 from .pi_counts import PiCount, UnreportedCount
 from .pi_payloads import PiModel, PiPayload, UnreportedModel
 
@@ -20,7 +21,7 @@ class UnreportedText(field_codec.NullMember):
 class RequestProgress(PiPayload):
     request_id: Annotated[str, field_codec.WireName("requestId")]
     session_id: Annotated[str, field_codec.WireName("sessionId")]
-    input_id: Annotated[str, field_codec.WireName("inputId")]
+    input_id: Annotated[InputId, field_codec.WireName("inputId")]
     started_at_ms: Annotated[int, field_codec.WireName("startedAtMs")]
     observed_at_ms: Annotated[int, field_codec.WireName("observedAtMs")]
     monotonic_ns: Annotated[str, field_codec.WireName("monotonicNs")]
