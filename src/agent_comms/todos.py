@@ -1607,7 +1607,9 @@ class ProblemOrder(LifecycleCapability, DeclaredFamily, StorySource, affix="Prob
     def declarations(self) -> tuple[CheckedProblemOrder, ...]:
         return ()
 
-    def closed_by_merge(self, todo: Todo, pulls: ProgressRead) -> tuple[Todo, ...]:
+    def closed_by_merge(
+        self, todo: Todo, pulls: ProgressRead, checkout_base: Path
+    ) -> tuple[Todo, ...]:
         return ()
 
     def reissued(self, at: float) -> PendingProblemOrder:
@@ -2012,7 +2014,9 @@ class CheckedProblemOrder(ProblemOrder, declared_name=None):
     def merged(self, sha: str) -> MergedProblemOrder:
         return self.copy_as(MergedProblemOrder, sha=sha)
 
-    def closed_by_merge(self, todo: Todo, pulls: ProgressRead) -> tuple[Todo, ...]:
+    def closed_by_merge(
+        self, todo: Todo, pulls: ProgressRead, checkout_base: Path
+    ) -> tuple[Todo, ...]:
         repo = Repo(checkout=Path(self.check.directory), github=todo.repo)
         source = PullRequestSource(todo, pulls)
         return tuple(self.run.after_merge(todo, merged)
@@ -2158,6 +2162,24 @@ class DeliverableProblemOrder(FreshMainCheck, OpenProblemOrder, declared_name=No
             PendingProblemOrder, id=uuid4().hex[:12], at=RecordedEventTime(at),
             first_call_deadline=RecordedEventTime(at + window), edits=edits,
         )
+
+    def closed_by_merge(
+        self, todo: Todo, pulls: ProgressRead, checkout_base: Path
+    ) -> tuple[Todo, ...]:
+        """An undelivered order whose check already passes on fresh main is already fixed:
+        it merges at that main commit, never reissued.
+        """
+        merged = super().closed_by_merge(todo, pulls, checkout_base)
+        if merged:
+            return merged
+        repo = Path(self.check.directory)
+        main = Repo.git(
+            repo, "rev-parse", f"{FreshMainCheck.check_base(self, repo)}^{{commit}}"
+        ).strip()
+        ran = self.check.at(main, self.check.directory, checkout_base)
+        if not self.check.result.distance(ran).project(lambda away: away == 0, lambda _: False):
+            return ()
+        return (self.run.after_merge(todo, self.merged(main)),)
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -2375,8 +2397,10 @@ class ClaimedProblemOrder(BranchPointCheck, DeliverableProblemOrder):
     def commander_claims(self) -> tuple[OrderClaim, ...]:
         return (self.claim,)
 
-    def closed_by_merge(self, todo: Todo, pulls: ProgressRead) -> tuple[Todo, ...]:
-        merged = super().closed_by_merge(todo, pulls)
+    def closed_by_merge(
+        self, todo: Todo, pulls: ProgressRead, checkout_base: Path
+    ) -> tuple[Todo, ...]:
+        merged = super().closed_by_merge(todo, pulls, checkout_base)
         if merged:
             return merged
         if any(

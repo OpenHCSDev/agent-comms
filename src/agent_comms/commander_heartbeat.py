@@ -40,7 +40,8 @@ class CommanderObservation:
         merged = tuple(
             closed
             for todo in comms.goals.todos.for_commander(thread.incarnation)
-            for closed in todo.order.closed_by_merge(todo, pulls)
+            for closed in todo.order.closed_by_merge(
+                todo, pulls, comms.registry.storage_rule.checkout_base)
         )
         return cls(thread, merged, rules, states)
 
