@@ -864,11 +864,10 @@ class Message(Addressed, BusCapability, TurnOrigin):
 
     @property
     def envelope(self) -> Message:
-        public = self.envelope_type()
-        if type(self) is public:
-            return self
-        return FieldCodec.construct(public, {item.name: getattr(self, item.name)
-                                             for item in fields(public)})
+        return self
+
+    def require_envelope(self) -> None:
+        pass
 
     def messages(self) -> tuple[Self, ...]:
         return (self,)
@@ -1010,8 +1009,19 @@ class Message(Addressed, BusCapability, TurnOrigin):
         return self.sender_role.reply_target(self)
 
 
+class CarriesEnvelope(Message):
+    """A message carrying extra capabilities exposes only its declared public envelope."""
+
+    @property
+    def envelope(self) -> Message:
+        return self.envelope_type().from_message(self)
+
+    def require_envelope(self) -> None:
+        raise TypeError(f"{type(self).__name__} is a record; pass its envelope")
+
+
 @dataclass_transform(frozen_default=True, kw_only_default=True)
-class BusRecord(Message, DeclaredFamily, affix="Record"):
+class BusRecord(CarriesEnvelope, Message, DeclaredFamily, affix="Record"):
     """Every record declaration owns its frozen value and derived tables."""
 
     @ClassFact
@@ -1063,10 +1073,6 @@ class BusRecord(Message, DeclaredFamily, affix="Record"):
         """A record carries the envelope of the message declaration after it in the MRO."""
         return super().envelope_type()
 
-    def to_wire(self) -> dict:
-        """The public envelope; delivery and publication capabilities stay in their tables."""
-        return self.envelope.to_wire()
-
     def __init_subclass__(cls) -> None:
         super().__init_subclass__()
         dataclass(cls, frozen=True, kw_only=True)
@@ -1116,10 +1122,7 @@ class ClaimMessage(Claimed, Message):
     @property
     def history_snapshot(self) -> Message:
         """A copied history keeps the envelope's display facts and drops its claim."""
-        return Message(**{
-            **{item.name: getattr(self, item.name) for item in fields(Message)},
-            "type": ClaimHistoryKind,
-        })
+        return Message.from_message(self, type=ClaimHistoryKind)
 
     def retained_task_facts(self) -> Iterator[ExactTaskFact]:
         from .retained_task_facts import ClaimTaskFact

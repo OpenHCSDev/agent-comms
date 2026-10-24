@@ -7,7 +7,7 @@ from abc import ABC, abstractmethod
 from collections import deque
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
-from dataclasses import dataclass, fields, replace
+from dataclasses import dataclass, replace
 from functools import partial
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -26,7 +26,7 @@ from .message_page import (
     MessagePageRequest,
     PageBounds,
 )
-from .messages import Message
+from .messages import CarriesEnvelope, Message
 from .page_traversal import HistoryCursor, OlderTraversal
 from .private_path import FileObservation, FileRevision, ObservedPath
 from .read_basis import (
@@ -329,7 +329,7 @@ class HistorySource:
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
-class HistoricalMessage(Message):
+class HistoricalMessage(CarriesEnvelope, Message):
     source: HistorySource
     source_order: int
     sender_created_at: float | None
@@ -351,9 +351,9 @@ class HistoricalMessage(Message):
                 else None
             )
 
-        return cls(
-            **{**{f.name: getattr(message, f.name) for f in fields(Message)},
-               "role": message.role.as_historical()},
+        return cls.from_message(
+            message,
+            role=message.role.as_historical(),
             source=source,
             source_order=order,
             sender_created_at=creation(message.sender),
@@ -386,10 +386,6 @@ class HistoricalMessage(Message):
                 "target_created_at": self.target_created_at,
             },
         }
-
-    def to_wire(self) -> dict:
-        # Provenance is a view, never a change to the original public message.
-        return Message(**{f.name: getattr(self, f.name) for f in fields(Message)}).to_wire()
 
 
 @dataclass(frozen=True, slots=True)
