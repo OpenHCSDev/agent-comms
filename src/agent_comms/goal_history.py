@@ -8,10 +8,8 @@ snapshots can change without erasing this journal.
 
 from __future__ import annotations
 
-import json
 import os
 import sqlite3
-import stat
 import time
 from collections.abc import Iterator
 from contextlib import closing, contextmanager
@@ -20,7 +18,7 @@ from pathlib import Path
 from typing import Annotated
 
 from agent_comms.field_codec import WireOmitDefault, GoalId
-from agent_comms.owner_requests import NoRequestRevision, RequestAtRevision, RequestRevision
+from agent_comms.owner_requests import NoRequestRevision, RequestRevision
 
 from .child_process import Platform
 from .declared_family import DeclaredFamily
@@ -115,15 +113,6 @@ class RequestHistory:
         RequestRevision, Column(storage=JsonStorage, nullable=True), WireOmitDefault(),
     ] = NoRequestRevision()
 
-    @classmethod
-    def endpoint_columns(cls) -> dict[str, str]:
-        """Request-prefix fields declare the goal endpoint each preserves."""
-        return {entry.name.removeprefix("request_"): entry.name for entry in fields(RequestHistory)}
-
-    @property
-    def request_revisions(self) -> tuple[RequestRevision, ...]:
-        return tuple(getattr(self, entry.name) for entry in fields(RequestHistory))
-
 
 @dataclass(frozen=True)
 class RecordedGoalRevision(RequestHistory):
@@ -145,35 +134,6 @@ class GoalHistoryEntry(RecordedGoalRevision, TypedTable, DurableTables):
     )
     state: Annotated[type[JournalState], HistoryExclude()] = field(kw_only=True)
     indexes = (Index(("owner_created_at", "sequence")),)
-
-    @classmethod
-    def orders_with_replacement(
-        cls, db: sqlite3.Connection, column: str, replacement: str, *,
-        order_kind: str, where: str = "1",
-    ) -> sqlite3.Cursor:
-        """Read matching endpoint orders through this table's column declaration."""
-        selected = cls._column_list((column,))
-        return db.execute(
-            f'SELECT {cls._column_list(("sequence", "observed_at", "owner_created_at"))}, '
-            f"json_set({selected}, '$.order', json(?)) AS goal, "
-            f"coalesce(json_extract({selected}, '$.order.directives'), '[]') AS directives "
-            f'FROM "{cls.declared_name}" '
-            f"WHERE json_extract({selected}, '$.order.kind')=? AND ({where}) "
-            f'ORDER BY {cls._column_list(("sequence",))}', (replacement, order_kind))
-
-    @classmethod
-    def move_request_order(
-        cls, db: sqlite3.Connection, column: str, sequence: int,
-        request: RequestAtRevision, replacement: str,
-    ) -> None:
-        """Move an endpoint's request to its prefix without dropping the goal observation."""
-        goal_column = cls._column_list((column,))
-        prefix_column = cls._column_list((cls.endpoint_columns()[column],))
-        db.execute(
-            f'UPDATE "{cls.declared_name}" '
-            f"SET {goal_column}=json_set({goal_column}, '$.order', json(?)), {prefix_column}=? "
-            f'WHERE {cls._column_list(("sequence",))}=?',
-            (replacement, json.dumps(FieldCodec.encode(request)), sequence))
 
     def reports_turn(self, turn: ReportedTurnState) -> bool:
         """A committed goal revision records its original model reporting turn."""
@@ -201,30 +161,6 @@ class GoalHistoryStore(DurableFile, ReconciledFile):
         self.registry_path = registry_path
         self.path = self.path_in(registry_path.parent)
         self._initialize()
-
-    @classmethod
-    def acquire_read_only(cls, registry_path: Path) -> tuple[GoalHistoryEntry, ...]:
-        """Read the full stored rows while the caller holds the registry lock.
-
-        This boundary never constructs a store, initializes a database, observes
-        current goals or reconciles pending writes. Missing/foreign storage is a
-        refusal, not permission to manufacture a history baseline.
-        """
-        path = cls.path_in(registry_path.parent)
-        try:
-            before = path.lstat()
-            if not stat.S_ISREG(before.st_mode) or not Platform.current().is_private(before, 0o600):
-                raise GoalHistoryError("Original goal history must be a private regular file.")
-            with closing(cls.read_snapshot(path)) as connection:
-                GoalHistoryEntry.require_schema(connection)
-                rows = tuple(GoalHistoryEntry.select(connection, order_by=("sequence",)))
-            after = path.lstat()
-            if ((before.st_dev, before.st_ino, before.st_size, before.st_mtime_ns, before.st_ctime_ns)
-                    != (after.st_dev, after.st_ino, after.st_size, after.st_mtime_ns, after.st_ctime_ns)):
-                raise GoalHistoryError("Original goal history changed during acquisition.")
-            return rows
-        except (OSError, sqlite3.Error, MalformedRecord) as error:
-            raise GoalHistoryError("Cannot acquire original goal history read-only.") from error
 
     def _connect(self) -> sqlite3.Connection:
         try:

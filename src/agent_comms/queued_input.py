@@ -14,13 +14,15 @@ from functools import partial
 from typing import TYPE_CHECKING, Generic, Self, TypeVar
 
 
+from acp.exceptions import RequestError
+
 from .agent_backend import InputRequest
 from .assignment_states import DeferredAssignment, DeliveredAssignment
 from .child_process import ProcessIdentity
 from .controller import Controller
 from .coordination_cohort import pending_sealed_assignments
 from .coordination_database import CoordinationStore
-from .coordination_errors import IdentityConflict, RequestRefused, StaleRevision
+from .coordination_errors import IdentityConflict, StaleRevision
 from .coordination_session import ReadNativeCoordinationSession
 from .coordinator import Coordination
 from .errors import RelationViolationError
@@ -157,7 +159,7 @@ class QueuedInput:
     def require_capacity(cls, inputs: InputDrain, sources: tuple[TurnInputSource, ...]) -> None:
         """Follow-ups cannot exceed the original live awaiting-start allowance."""
         if cls.remaining_capacity(inputs, sources) <= 0:
-            raise RequestRefused.invalid_params(
+            raise RequestError.invalid_params(
                 {"reason": "Too many follow-up inputs awaiting their own user start."}
             )
 
@@ -567,7 +569,7 @@ class InitialInput(QueuedInput):
                 inputs.state(session_id).queued[item.input_id] = item
                 resources.push_async_callback(item.finish, inputs, session_id)
                 reservation.release()
-            await inputs.emit_input_disposition(session_id, reservation.source)
+            await inputs.emit_input_delivery_changed(session_id)
             await inputs.emit_queue_state(session_id)
             await item.dispatch(inputs.effects.turns, session_id, thread_name)
 

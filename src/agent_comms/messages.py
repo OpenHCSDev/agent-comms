@@ -549,13 +549,19 @@ class ChangeReportKind(SendableMessageKind, declared_name="change-report"):
         message.report.require_references_exist(worktree)
 
 
-class MembershipTransition(DeclaredFamily, ProjectionSource, affix="Membership"):
+class RoleActivitySource(ProjectionSource):
+    """A message's role and membership write its sender's activity and its awaited answers."""
+
+    __slots__ = ()
+
     @ClassFact
     def writes(cls) -> tuple[type[ProducedRow], ...]:
         from .bus_activity_index import SentActivity
         from .bus_tables import AwaitingAnswerSource
         return (SentActivity, AwaitingAnswerSource)
 
+
+class MembershipTransition(DeclaredFamily, RoleActivitySource, affix="Membership"):
     @classmethod
     def conversation_role(cls) -> MembershipConversationRole:
         return MembershipConversationRole(cls)
@@ -582,28 +588,15 @@ class LeftMembership(MembershipTransition):
 
 
 @dataclass(frozen=True, slots=True)
-class NoMembershipChange(NullMember, ProjectionSource):
-
-    @ClassFact
-    def writes(cls) -> tuple[type[ProducedRow], ...]:
-        from .bus_activity_index import SentActivity
-        from .bus_tables import AwaitingAnswerSource
-        return (SentActivity, AwaitingAnswerSource)
+class NoMembershipChange(NullMember, RoleActivitySource):
 
     def conversation_role(self):
         return ConversationRole()
 
 
 @dataclass(frozen=True, slots=True)
-class MessageRoleWire(ProjectionSource):
+class MessageRoleWire(RoleActivitySource):
     """The unchanged external fields, decoded once into a message role."""
-
-    @ClassFact
-    def writes(cls) -> tuple[type[ProducedRow], ...]:
-        from .bus_activity_index import SentActivity
-        from .bus_tables import AwaitingAnswerSource
-        return (SentActivity, AwaitingAnswerSource)
-
 
     change: Annotated[
         type[MembershipTransition] | NoMembershipChange,
@@ -617,13 +610,7 @@ class MessageRoleWire(ProjectionSource):
         return role.as_notice() if self.notice else role
 
 
-class MessageRole(InlineRecord, ProjectionSource):
-
-    @ClassFact
-    def writes(cls) -> tuple[type[ProducedRow], ...]:
-        from .bus_activity_index import SentActivity
-        from .bus_tables import AwaitingAnswerSource
-        return (SentActivity, AwaitingAnswerSource)
+class MessageRole(InlineRecord, RoleActivitySource):
 
     category: ClassVar[type[MessageCategory]]
 
@@ -664,13 +651,7 @@ class SendableRole(MessageRole, DeclaredFamily, affix="Role"):
     pass
 
 
-class InformationalMessage(ProjectionSource):
-
-    @ClassFact
-    def writes(cls) -> tuple[type[ProducedRow], ...]:
-        from .bus_activity_index import SentActivity
-        from .bus_tables import AwaitingAnswerSource
-        return (SentActivity, AwaitingAnswerSource)
+class InformationalMessage(RoleActivitySource):
 
     def response_policy(self, message):
         return InformationalPolicy.instance()
@@ -701,11 +682,6 @@ class ConversationActivity(ProjectionSource):
 
 @dataclass(frozen=True, slots=True)
 class ConversationRole(ConversationActivity, SendableRole):
-
-    @ClassFact
-    def writes(cls) -> tuple[type[ProducedRow], ...]:
-        from .bus_tables import AwaitingAnswerSource
-        return (AwaitingAnswerSource,)
 
     category = InboundCategory
 

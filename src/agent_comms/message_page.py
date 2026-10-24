@@ -46,10 +46,6 @@ class MessagePage:
         return page if page.selection.has_evidence else None
 
     @property
-    def newest_evidence(self) -> MessagePage | None:
-        return self.evidence_for(self.messages[-1]) if self.messages else None
-
-    @property
     def oldest_cursor(self) -> PageCursor | None:
         return self.messages[0].view_cursor if self.messages else None
 
