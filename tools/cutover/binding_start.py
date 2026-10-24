@@ -34,6 +34,7 @@ from agent_comms.cli_protocol import FilteredOutcome, Outcome
 from agent_comms.field_codec import FieldCodec, PathText
 from agent_comms.locked_store import SQLiteFile
 from agent_comms.message_reference import BridgePosition, BridgeStart
+from agent_comms.registry_document import RegistrySnapshot
 from agent_comms.registry_store import RegistryStore
 from agent_comms.typed_table import TypedTable
 from agent_comms_hooks.watch import WatchClaim, WatchRecord
@@ -366,7 +367,9 @@ class ReaderDirectories:
         position = max(
             (binding.start for binding in bindings.values()), key=lambda start: start.cursor()
         )
-        registry = RegistryStore(Path(self.identity.root) / "registry.json").snapshot()
+        registry = RegistrySnapshot.capture(
+            RegistryStore(RegistryStore.path_in(Path(self.identity.root))).read()
+        )
         commander = registry.commander_project.commanders(registry)
         reader = registry.require(self.identity.bus)
         if any(reader.incarnation == thread.incarnation for thread in commander):
