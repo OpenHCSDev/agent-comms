@@ -237,8 +237,7 @@ class NativeTranscript(TranscriptSource):
         """
         revision = FileRevision.from_stat(self.path.stat())
         with self.path.open("rb") as stream:
-            header = SessionEntry.read(stream.readline())
-            header.require_header()
+            SessionEntry.read(stream.readline())
             sources = []
             for raw in stream:
                 entry = NativeEntry.read(raw)
@@ -324,7 +323,6 @@ class NativeTranscript(TranscriptSource):
         files.require_private_directory(self.path.parent)
         with self.path.open("rb") as stream:
             header = SessionEntry.read(stream.readline())
-        header.require_header()
         with NativeContextJournal.open_evidence(files) as db:
             proof = NativeContextJournal.for_input(db, user.input_id)
             if proof is None:

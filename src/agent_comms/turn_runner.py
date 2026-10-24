@@ -23,7 +23,7 @@ from .channel_targets import NamedTarget
 from .channels import AllChannel
 from .controller import Controller
 from .coordinator import Coordination
-from .field_codec import InputId, TurnId, GoalId
+from .field_codec import GoalId, GoalWaitId, InputId, TurnId
 from .errors import RelationViolationError
 from .following_inputs import OwnerFollowingInputs
 from .goal_actions import (
@@ -444,7 +444,7 @@ class TurnRunner:
         original_owner_input: bool = False,
         original_goal_id: GoalId | None = None,
         acceptance: TurnAcceptance,
-        dependency_wait_id: str | None = None,
+        dependency_wait_id: GoalWaitId | None = None,
     ) -> None:
         from .owned_turn import OwnedTurn
 

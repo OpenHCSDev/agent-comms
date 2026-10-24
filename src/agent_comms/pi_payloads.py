@@ -1183,7 +1183,8 @@ class NativeSessionSnapshot(PiPayload):
         if len(known) != len(fields(NativeSessionIdentity)):
             return None
         return NativeSessionIdentity(
-            FieldCodec.decode(PiSessionId, known["session_id"]), known["session_file"]
+            FieldCodec.decode(PiSessionId, self.session_id.text_or("")),
+            self.session_file.text_or(""),
         )
 
     def conflicts(self, other: NativeSessionSnapshot) -> bool:

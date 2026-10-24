@@ -30,6 +30,19 @@ from agent_comms.turn_failure import BackendFailed
 from agent_comms.typed_table import TypedRow
 
 
+class OrphanedDecisionError(Exception):
+    """A retired decision that no message or order owns."""
+
+
+# The owner's explicit cutover decision maps the retired generic text
+# to EndedWithoutResult.failure_kind (turn_terminal.py), BackendFailed.
+RETIRED_TEXT: dict[str, AttemptResolution] = {
+    "Operator stopped goal turn.": OperatorStopped(),
+    "backend_failed": FailedTurnResolution(BackendFailed),
+    "Goal turn ended without verified terminal progress.": FailedTurnResolution(BackendFailed),
+}
+
+
 @dataclass(frozen=True)
 class StoredResolution(TypedRow):
     key: str
@@ -37,56 +50,49 @@ class StoredResolution(TypedRow):
     goal_id: GoalId
     generation: int
 
-    def carried(self, bus: Connection, orders: set[str]) -> AttemptResolution | None:
-        if self.resolution == "Operator stopped goal turn.":
-            return OperatorStopped()
-        if self.resolution in (
-            "backend_failed",
-            "Goal turn ended without verified terminal progress.",
-        ):
-            # The owner's explicit cutover decision maps the retired generic text
-            # to EndedWithoutResult.failure_kind (turn_terminal.py), BackendFailed.
-            return FailedTurnResolution(BackendFailed)
-        decision = StoredDecision(self.goal_id, self.resolution, self.generation).carried(
-            bus, orders
-        )
-        return DecidedResolution(decision) if decision is not None else None
+    def carried(self, bus: Connection, orders: set[str]) -> AttemptResolution:
+        if self.resolution in RETIRED_TEXT:
+            return RETIRED_TEXT[self.resolution]
+        legacy = StoredDecision(self.goal_id, self.resolution, self.generation)
+        return DecidedResolution(legacy.carried(bus, orders))
 
 
 @dataclass(frozen=True)
 class StoredDecision(TypedRow):
     goal_id: GoalId
-    decision_id: str
+    legacy: str
     generation: int
 
-    def carried(self, bus: Connection, orders: set[str]) -> WorkDecision | None:
-        if re.fullmatch("[0-9a-f]{32}", self.decision_id):
-            return RetryDecision(RetryDecisionId(self.decision_id))
-        if re.fullmatch("verified-turn:[0-9a-f]{32}", self.decision_id):
-            return VerifiedTurnDecision(TurnId(self.decision_id.removeprefix("verified-turn:")))
-        if not re.fullmatch("[0-9a-f]{12}", self.decision_id):
+    def carried(self, bus: Connection, orders: set[str]) -> WorkDecision:
+        if re.fullmatch("[0-9a-f]{32}", self.legacy):
+            return RetryDecision(RetryDecisionId(self.legacy))
+        if re.fullmatch("verified-turn:[0-9a-f]{32}", self.legacy):
+            return VerifiedTurnDecision(TurnId(self.legacy.removeprefix("verified-turn:")))
+        if not re.fullmatch("[0-9a-f]{12}", self.legacy):
             raise ValueError(f"Unknown legacy decision shape: {self}")
-        answer = MessageIdentitySource.exists(bus, message_id=MessageId(self.decision_id))
-        order = self.decision_id in orders
+        answer = MessageIdentitySource.exists(bus, message_id=MessageId(self.legacy))
+        order = self.legacy in orders
         if answer and order:
             raise ValueError(f"Both an order and a message own legacy decision: {self}")
         if answer:
-            return ComplianceDecision(MessageId(self.decision_id))
+            return ComplianceDecision(MessageId(self.legacy))
         if order:
-            return OrderDecision(self.decision_id)
-        if (self.goal_id, self.decision_id, self.generation) == (
-            GoalId("ba27e8c4c496427f8bda1094c9ed1c0c"), "c484f0fc45a6", 37,
-        ):
-            return None
+            return OrderDecision(self.legacy)
+        if self == KNOWN_ORPHAN:
+            raise OrphanedDecisionError(self)
         raise ValueError(f"No message or order owns legacy decision: {self}")
+
+
+# The one live decision no message or order owns; the owner chose to drop it.
+KNOWN_ORPHAN = StoredDecision(GoalId("ba27e8c4c496427f8bda1094c9ed1c0c"), "c484f0fc45a6", 37)
 
 
 class AttemptResolutions(Carry):
     opened_files: ClassVar[tuple[type[RootFile], ...]] = (GoalAttemptStore, TodoStore, Bus)
 
     def carry(self, *, apply: bool) -> Carried:
-        column, = AttemptRecord._fields_named(("resolution",))
-        decision_column, = GoalWorkDecision._fields_named(("decision",))
+        (column,) = AttemptRecord._fields_named(("resolution",))
+        (decision_column,) = GoalWorkDecision._fields_named(("decision",))
         counts: Counter[str] = Counter()
         rewritten: list[Path] = []
         changed = 0
@@ -94,21 +100,33 @@ class AttemptResolutions(Carry):
             with closing(GoalAttemptStore.read_snapshot(path)) as db:
                 if not AttemptRecord.present(db):
                     continue
-                legacy = tuple(StoredResolution.read(db.execute(AttemptRecord._sql(
-                    f'SELECT {{reservation}} AS key,{{resolution}},{{goal_id}},{{generation}} '
-                    f'FROM "{AttemptRecord.declared_name}" '
-                    'WHERE {resolution} IS NOT NULL AND CASE '
-                    "WHEN json_valid({resolution}) THEN json_type({resolution})!='object' "
-                    'ELSE 1 END'
-                ))))
-                decisions = ()
+                legacy = tuple(
+                    StoredResolution.read(
+                        db.execute(
+                            AttemptRecord._sql(
+                                "SELECT {reservation} AS key,{resolution},"
+                                "{goal_id},{generation} "
+                                f'FROM "{AttemptRecord.declared_name}" '
+                                "WHERE {resolution} IS NOT NULL AND CASE "
+                                "WHEN json_valid({resolution}) "
+                                "THEN json_type({resolution})!='object' "
+                                "ELSE 1 END"
+                            )
+                        )
+                    )
+                )
+                decisions: tuple[StoredDecision, ...] = ()
                 if "decision_id" in GoalWorkDecision.stored_columns(db):
-                    decisions = tuple(StoredDecision.read(db.execute(
-                        f'SELECT goal_id,decision_id,generation '
-                        f'FROM "{GoalWorkDecision.declared_name}"'
-                    )))
+                    decisions = tuple(
+                        StoredDecision.read(
+                            db.execute(
+                                f"SELECT goal_id,decision_id AS legacy,generation "
+                                f'FROM "{GoalWorkDecision.declared_name}"'
+                            )
+                        )
+                    )
             updates: list[tuple[object, object]] = []
-            mapped: dict[str, object] = {}
+            mapped: dict[str, str] = {}
             dropped: list[StoredDecision] = []
             if legacy or decisions:
                 root = GoalAttemptStore.bus_root(path)
@@ -123,24 +141,24 @@ class AttemptResolutions(Carry):
                     orders = {
                         order.id for todo in Todo.select(todos) for order in todo.order_history
                     }
-                    for row in legacy:
-                        resolution = row.carried(bus, orders)
-                        label = type(resolution).declared_name if resolution is not None else (
-                            f"orphan resolution goal={row.goal_id} id={row.resolution} "
-                            f"generation={row.generation}"
-                        )
-                        counts[label] += 1
-                        updates.append((column.encode(resolution), row.key))
+                    for stored in legacy:
+                        try:
+                            resolution = stored.carried(bus, orders)
+                        except OrphanedDecisionError:
+                            counts.update((f"orphan resolution {stored}",))
+                            updates.append((None, stored.key))
+                            continue
+                        counts.update(("resolutions",))
+                        updates.append((column.encode(resolution), stored.key))
                     for row in decisions:
-                        decision = row.carried(bus, orders)
-                        if decision is None:
+                        try:
+                            decision = row.carried(bus, orders)
+                        except OrphanedDecisionError:
                             dropped.append(row)
-                            counts["decisions_dropped"] += 1
-                            counts[f"dropped goal={row.goal_id} id={row.decision_id} "
-                                   f"generation={row.generation}"] += 1
-                        else:
-                            counts[f"decisions_{type(decision).declared_name}"] += 1
-                            mapped[row.decision_id] = decision_column.encode(decision)
+                            counts.update(("decisions_dropped", f"dropped {row}"))
+                            continue
+                        counts.update(("decisions",))
+                        mapped[row.legacy] = str(decision_column.encode(decision))
             changed += len(updates) + len(decisions)
             if apply and (updates or decisions):
                 with (
@@ -152,12 +170,14 @@ class AttemptResolutions(Carry):
                     if decisions:
                         for row in dropped:
                             GoalWorkDecision.delete(
-                                db, where="goal_id=? AND decision_id=?",
-                                parameters=(row.goal_id, row.decision_id),
+                                db,
+                                where="goal_id=? AND decision_id=?",
+                                parameters=(row.goal_id, row.legacy),
                             )
                         db.create_function("carried_decision", 1, mapped.__getitem__)
                         GoalWorkDecision.rebuild(
-                            db, {"decision": 'carried_decision("decision_id")'},
+                            db,
+                            {"decision": 'carried_decision("decision_id")'},
                         )
                         db.create_function("carried_decision", 1, None)
                 rewritten.append(path.relative_to(self.root))

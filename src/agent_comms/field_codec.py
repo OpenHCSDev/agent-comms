@@ -1626,8 +1626,13 @@ class SpelledText(TextRepresentation[str], ValidatedScalar):
         return {"type": cls.command_line}
 
     @classmethod
-    def schema(cls) -> dict[str, str]:
-        return {"type": "string", "pattern": f"^(?:{cls.spelling.pattern})$"}
+    def anchored(cls) -> str:
+        """The whole-value pattern every schema of this spelling declares."""
+        return f"^(?:{cls.spelling.pattern})$"
+
+    @classmethod
+    def schema(cls) -> dict[str, object]:
+        return {"type": "string", "pattern": cls.anchored()}
 
 
 class NominalText(str):
@@ -1647,7 +1652,7 @@ class NominalText(str):
         return core_schema.no_info_plain_validator_function(
             partial(FieldCodec.decode, cls),
             json_schema_input_schema=core_schema.str_schema(
-                strict=True, pattern=cls.spelled_by.schema()["pattern"]
+                strict=True, pattern=cls.spelled_by.anchored()
             ),
             serialization=core_schema.plain_serializer_function_ser_schema(cls.spelled_by.encode),
         )
@@ -1679,8 +1684,8 @@ class NominalSpelling[V: NominalText](SpelledText):
         return cls.from_text(value)
 
     @classmethod
-    def encode(cls, value: V) -> str:
-        return str(cls.from_text(value))
+    def encode(cls, value: object) -> str:
+        return str(cls.decode(value))
 
 
 class PathText(TextRepresentation[Path]):

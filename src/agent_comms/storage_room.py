@@ -118,7 +118,7 @@ class RoomLedger(DurableStore):
             claims = RoomClaim.select(db)
         return tuple(claim.ticket for claim in claims if not claim.process.alive())
 
-    def release(self, ticket: RoomTicket, peak=None):
+    def release(self, ticket, peak=None):
         with self.writing() as db:
             claim = RoomClaim.one(db, ticket=ticket)
             if claim is not None and peak is not None:
@@ -245,7 +245,7 @@ class RoomAllocation:
     def room_floor(self):
         return RoomNeed(int(self.memory_gib * 2**30), int(self.floor_gib * 2**30))
 
-    def _admit(self, ticket: RoomTicket):
+    def _admit(self, ticket):
         ledger = self.room_ledger
         # OS reads and /proc traversal never hold the writer transaction.
         free = self.free_room()

@@ -38,7 +38,7 @@ from .pi_vocabulary import PendingStopReason, ThinkingLevel
 from .recorded_time import GeneratedTimestamp
 from .routing import TurnRouting
 from .transcript_events import ImportedMessage, NoticeTranscript, TranscriptEvent
-from .transcript_routes import InputDisplay, _SessionRoutes
+from .transcript_routes import InputDisplay
 from .turn_item import PiSessionId
 
 
@@ -82,9 +82,6 @@ class RecordedEntry(PiPayload):
 
     def require_entry_id(self) -> str:
         return self.source_coordinates.original_id
-
-    def routing_in(self, routes: _SessionRoutes) -> TurnRouting | None:
-        return routes.get(self.id)
 
     @property
     def source_coordinates(self):
@@ -235,7 +232,6 @@ class NativeEvidenceState(ABC):
 class UnreadNativeEvidence(NativeEvidenceState):
     def read(self, reader: NativeEvidenceRead) -> SessionEntry:
         header = SessionEntry.from_wire(reader.source.consume_header())
-        header.require_header()
         reader.entries = (header,)
         reader.state = HeaderNativeEvidence()
         return header
@@ -492,11 +488,7 @@ class NativeEvidenceScope(ExitStack):
 
 @dataclass(frozen=True, kw_only=True)
 class SessionEntry(NativeEntry):
-    id: PiSessionId | None = None
-
-    def routing_in(self, routes: _SessionRoutes) -> TurnRouting | None:
-        """A session header is not an entry and holds no turn annotation."""
-        return None
+    id: PiSessionId
 
     @property
     def child_parent(self) -> object:
@@ -512,17 +504,11 @@ class SessionEntry(NativeEntry):
     def input_evidence(cls, raw: dict) -> tuple[NativeEntry, ...]:
         return (cls.from_evidence(raw),)
 
-    def require_header(self) -> PiSessionId:
-        if self.id is None:
-            raise MalformedRecord("Native Pi session header is invalid")
-        return self.id
-
     def require_reopen(self) -> PiSessionId:
         """Saved native execution supports v3; display may decode older headers."""
-        session_id = self.require_header()
         if self.version != 3:
             raise MalformedRecord("Strict native v3 session header required")
-        return session_id
+        return self.id
 
 
 @dataclass(frozen=True, kw_only=True)
