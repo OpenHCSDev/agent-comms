@@ -1396,6 +1396,15 @@ class PlainText(DirectiveWords):
         return False
 
 
+class CheckCorrectionReason(PlainText):
+    """Why the recorded check was wrong, in enough words to stand on the record."""
+
+    refusal = (
+        "Say what was wrong with the recorded check in {}+ words; jargon {} hides what happened."
+    )
+    least_words = 8
+
+
 class StrikeReason(PlainText):
     """What a unit did, plainly, in enough words to stand on the public record. A unit's
     wording is answered by a correction, never a strike: a reason whose every quoted span
@@ -3580,6 +3589,14 @@ class CorrectCheckTodo(TodoOperation):
     check: OrderCheck
     reason: str
     at: EventTime = field(default_factory=lambda: EventTime.capture(time.time()))
+
+    def prepare(self, goals: Goals, current: Todo) -> Self:
+        CheckCorrectionReason(self.reason)
+        self.check.require_directory()
+        current.order.checked().require_check_acceptance(
+            self.check, goals.registry.storage_rule.checkout_base
+        )
+        return self
 
     def changed(self, current: Todo) -> Todo:
         current.require_commander(self.actor)
