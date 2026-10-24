@@ -197,9 +197,7 @@ class UnitState(UndatedStandingRule, declared_name=None):
     @classmethod
     def current(cls, comms: Comms, commander: str, frame: HeartbeatFrame) -> tuple[UnitState, ...]:
         states = tuple(cls.read(source) for source in cls.observations(comms, commander, frame))
-        return tuple(
-            state for member in cls.worst_first() for state in states if isinstance(state, member)
-        )
+        return tuple(sorted(states, key=lambda state: state.declared_position()))
 
     @classmethod
     @abstractmethod
