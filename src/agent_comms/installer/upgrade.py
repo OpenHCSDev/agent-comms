@@ -32,7 +32,7 @@ from collections.abc import Callable, Iterator
 from contextlib import AbstractContextManager, ExitStack, contextmanager
 from dataclasses import dataclass, field, fields, replace
 from pathlib import Path
-from typing import TYPE_CHECKING, Annotated, ClassVar, Self, TypeVar
+from typing import TYPE_CHECKING, Annotated, ClassVar, Self
 
 from pydantic import TypeAdapter
 
@@ -81,9 +81,6 @@ from agent_comms.installer.interpreter_operation import (
     BackupRetirePhase,
     BeforeMigrationFileScanPhase,
     BeginMaintenancePhase,
-    BindingStartBridgePhase,
-    BindingStartRevertBridgePhase,
-    BridgePhase,
     BuildPhase,
     ClearMaintenancePhase,
     ConfirmBridgePhase,
@@ -693,35 +690,6 @@ class Stack:
             return self.cli(root, ReadBackCliCommand)
 
 
-T = TypeVar('T')
-
-
-@dataclass(frozen=True)
-class BindingStartCutover:
-    """Undo the host-only binding conversion before the bus/runtime restore path."""
-
-    staged: Stack
-    checkout: Path
-    home: Path
-    root: Path
-
-    def run(self, phase: BridgePhase, *arguments: str) -> None:
-        with phase.running(self.staged.commands.clock):
-            self.staged.commands.run(
-                self.staged.python, self.checkout / STEPS / 'binding_start.py',
-                '--home', self.home, '--root', self.root, *arguments,
-                cwd=self.home, env=self.staged.environment(),
-            )
-
-    def around(self, start: Callable[[], T]) -> T:
-        try:
-            self.run(BindingStartBridgePhase())
-            return start()
-        except BaseException:
-            self.run(BindingStartRevertBridgePhase(), '--revert')
-            raise
-
-
 @dataclass(frozen=True)
 class TargetTree(AbstractContextManager):
     """The temporary worktree of the target revision the install runs from."""
@@ -1133,9 +1101,7 @@ class ChangedInstall(ExistingBusInstall[RehearsedFiles]):
                     with ClearMaintenancePhase().running(self.staged.commands.clock):
                         holder.close()
                         maintenance.clear(held)
-                    restarted_services = BindingStartCutover(
-                        self.staged, self.checkout, self.installed.home, self.root,
-                    ).around(lambda: stopped.start_on(self.staged))
+                    restarted_services = stopped.start_on(self.staged)
                 except BaseException as error:
                     print(f"install: install failed ({type(error).__name__}: {error}); "
                           "restoring original installation", file=sys.stderr)
