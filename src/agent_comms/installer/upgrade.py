@@ -51,6 +51,7 @@ from agent_comms.cli_commands import (
     ReconcileStoresCliCommand,
     StartCliCommand,
     StopCliCommand,
+    TargetActionCliCommand,
 )
 from agent_comms.cli_result import CliResult
 from agent_comms.comms import wire
@@ -132,7 +133,7 @@ from agent_comms.installer.probes.commands import (
 from agent_comms.installer.probes.harnesses import InstallResult
 from agent_comms.installer.probes.imports import ClientImportsProbe
 from agent_comms.installer.probes.native import PrepareNativeProbe, PrepareProducerDigestsProbe
-from agent_comms.installer.probes.owners import OwnersProbe, RunningOwnersProbe
+from agent_comms.installer.probes.owners import OwnerActionsProbe, RunningOwnersProbe
 from agent_comms.installer.probes.publication import PublicationProbe, SelectedRouteProbe
 from agent_comms.installer.probes.services import ServingProbe
 from agent_comms.installer.refusals import InstallRolledBack, UpgradeRefused
@@ -704,7 +705,10 @@ class Stack:
         if not names:
             return ()
         with OwnersPhase(command=command).running(self.commands.clock):
-            return self.probe(OwnersProbe(root, command, tuple(names)))
+            invocation = TargetActionCliCommand.invocation(
+                "--operation", command.declared_name, "--targets", *names)
+            completed = self.probe(OwnerActionsProbe(("--root", str(root), *invocation)))
+            return FieldCodec.decode(tuple[OwnerStart, ...], FieldCodec.parse(completed.stdout))
 
     @contextmanager
     def services_stopped(self, restore_on: Stack) -> Iterator[ServicesStopped]:

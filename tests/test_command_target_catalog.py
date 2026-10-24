@@ -1,18 +1,39 @@
 """Target families never disguise a broken binding as an unavailable command."""
 
+from dataclasses import dataclass, field
+
 import pytest
 
+from agent_comms.channel_targets import CommandTarget, IncarnationThreadTarget, ProjectTarget
 from agent_comms.cli_commands import OneTarget, TargetBatch
-from agent_comms.channel_targets import CommandTarget, ProjectTarget
+from agent_comms.cli_result import ResultShower
+from agent_comms.thread_identity import RecordedThreadIncarnation
 from agent_comms.threads import Thread
+
+
+@dataclass
+class RecordingShower(ResultShower):
+    done: list[tuple[str, str]] = field(default_factory=list)
+    errors: list[tuple[Exception | str, str]] = field(default_factory=list)
+
+    def show_done(self, text: str, title: str) -> None:
+        self.done.append((text, title))
+
+    def show_error(self, error: Exception | str, title: str) -> None:
+        self.errors.append((error, title))
 
 
 @pytest.mark.parametrize("target", [
     CommandTarget.named("first"), CommandTarget.named("#team"), ProjectTarget("/project"),
+    IncarnationThreadTarget(RecordedThreadIncarnation("first", 1.0)),
 ])
 def test_batch_completed_result_round_trips_with_its_command_result_type(target):
     from agent_comms.cli_commands import (
-        StopCliCommand, TargetBatchResult, TargetCompleted, TargetFailed, ThreadStoppedResult,
+        StopCliCommand,
+        TargetBatchResult,
+        TargetCompleted,
+        TargetFailed,
+        ThreadStoppedResult,
     )
     from agent_comms.field_codec import FieldCodec
 
@@ -27,6 +48,10 @@ def test_batch_completed_result_round_trips_with_its_command_result_type(target)
     assert decoded.outcomes[0].owner_start().name == target.display_name()
     assert decoded.outcomes[1].owner_start().name == target.display_name()
     assert str(decoded.outcomes[1]).startswith(target.display_name())
+    shower = RecordingShower()
+    decoded.show(shower, "Stop", "Action")
+    assert shower.done == [(f"Stop: {target.display_name()}", "Action")]
+    assert shower.errors == [(str(decoded.outcomes[1]), "Action")]
 
 
 @pytest.mark.parametrize("selection,target,resolvable", [

@@ -76,10 +76,18 @@ class CliCommandProbe(RuntimeProbe[CliOutput]):
     def install_phase(self) -> CliProbePhase:
         return CliProbePhase(probe=type(self), arguments=self.arguments)
 
+    def entry(self) -> tuple[str, ...]:
+        return "-m", "agent_comms.cli"
+
+    def source(self) -> str | None:
+        """Ordinary CLI invocations run the installed module, not supplied source."""
+        return None
+
     def run(self) -> CliOutput:
         completed = subprocess.run(
-            (sys.executable, "-m", "agent_comms.cli", *self.arguments),
+            (sys.executable, *self.entry(), *self.arguments),
             capture_output=True,
+            input=self.source(),
             text=True,
             check=False,
         )

@@ -1,18 +1,23 @@
 import io
 import os
 from dataclasses import dataclass
+from pathlib import Path
 
 import pytest
 
 from agent_comms.cli_commands import StartCliCommand, StopCliCommand
 from agent_comms.field_codec import ClaimId, FieldCodec
 from agent_comms.installer.commands import InstallCommands
+from agent_comms.installer.interpreter_operation import (
+    ProbeReply,
+    ProbeRequest,
+    RuntimeProbe,
+    serve,
+)
 from agent_comms.installer.owner_starts import RefusedOwner, StartedOwner
-from agent_comms.installer.probes.owners import OwnersProbe
-from agent_comms.installer.refusals import UpgradeRefused
-from agent_comms.installer.refusals import InterpreterWorkerDied
 from agent_comms.installer.probes.packages import DistributionVersionsProbe, InstalledPackagesProbe
-from agent_comms.installer.interpreter_operation import ProbeReply, ProbeRequest, RuntimeProbe, serve
+from agent_comms.installer.refusals import InterpreterWorkerDied, UpgradeRefused
+from agent_comms.installer.upgrade import Stack
 from agent_comms.launch_runtime import LaunchRuntime
 from agent_comms.maintenance_barrier import HOLDER_NONCE, MaintenanceClaimHolder
 
@@ -27,9 +32,8 @@ class HolderSeenProbe(RuntimeProbe[str]):
 def test_owner_actions_decode_in_the_selected_worker(comms, command):
     runtime = LaunchRuntime.running()
     with InstallCommands() as commands:
-        outcomes = commands.probe(
-            OwnersProbe(comms.root, command, ("missing-owner",)), runtime.interpreter,
-            env=runtime.environment(os.environ))
+        stack = Stack(Path(__file__).resolve().parents[1], commands, runtime=runtime)
+        outcomes = stack.owners(comms.root, command, ["missing-owner"])
     assert len(outcomes) == 1
     assert outcomes[0].name == "missing-owner"
     with pytest.raises(UpgradeRefused):
