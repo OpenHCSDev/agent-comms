@@ -175,13 +175,14 @@ class GivenBinding(BindingRequest):
     given: dict[str, str]
 
     @classmethod
-    def from_arguments(cls, arguments: argparse.Namespace) -> Self:
+    def from_arguments(cls, arguments: argparse.Namespace, bridge: type[CliBridge]) -> Self:
         keys = {key for _, key in FieldCodec.record_fields(BindingIdentity)}
         values = {key: value for key, value in vars(arguments).items() if key in keys}
         arguments.base_state = arguments.state
-        arguments.state = arguments.state / arguments.bus_thread
+        arguments.state = arguments.state / arguments.binding_thread.thread
         return cls({Binding.family_discriminator: Binding.declared_name,
-                    **values, **arguments.binding_session.supplied()})
+                    **values, **arguments.binding_session.supplied(),
+                    FieldCodec.record_key(BindingIdentity, 'bus'): arguments.binding_thread.thread})
 
     def bind(self, db: sqlite3.Connection) -> Binding:
         stored = tuple(FieldCodec.encode(row) for row in Binding.select(db))
@@ -201,8 +202,8 @@ class ResolvedBinding(GivenBinding):
     """A bare command resolves its reader from the harness session's enrolment."""
 
     @classmethod
-    def from_arguments(cls, arguments: argparse.Namespace) -> Self:
-        session = arguments.binding_session.resolve(arguments.bridge_type)
+    def from_arguments(cls, arguments: argparse.Namespace, bridge: type[CliBridge]) -> Self:
+        session = arguments.binding_session.resolve(bridge)
         bindings = WatchClaim(session).state().bindings()
         if len(bindings) != 1:
             raise ValueError(
@@ -211,19 +212,25 @@ class ResolvedBinding(GivenBinding):
             )
         record, = bindings
         arguments.root = record.root
-        arguments.bus_thread = record.bus
+        arguments.binding_thread = GivenThread(record.bus)
         arguments.state = record.base_state
         arguments.binding_session = SuppliedSession(session)
-        return super().from_arguments(arguments)
+        return super().from_arguments(arguments, bridge)
 
 
-class GivenBindingArgument(argparse.Action):
-    """The explicit bus flag selects its binding request at the CLI boundary."""
+@dataclass(frozen=True)
+class GivenThread:
+    """An explicit bus flag selects the explicit binding request."""
 
-    def __call__(self, parser: argparse.ArgumentParser, namespace: argparse.Namespace,
-                 values: str, option_string: str | None = None) -> None:
-        setattr(namespace, self.dest, values)
-        namespace.binding_request = GivenBinding
+    thread: str
+    request: ClassVar[type[GivenBinding]] = GivenBinding
+
+
+@dataclass(frozen=True)
+class ResolvedThread:
+    """Without a bus flag, the operation owns how its reader is resolved."""
+
+    request: type[GivenBinding]
 
 
 @dataclass(frozen=True)
@@ -258,9 +265,9 @@ class Binding(BindingIdentity, BridgeStateTable, TypedTable, BindingRequest):
         group = parser.add_argument_group(
             'Core/CLI binding (each given field overrides the stored binding)')
         group.add_argument('--root', default=argparse.SUPPRESS)
-        group.add_argument('--bus-thread', default=argparse.SUPPRESS, action=GivenBindingArgument)
+        group.add_argument('--bus-thread', dest='binding_thread', type=GivenThread,
+                           default=ResolvedThread(request))
         session.add_arguments(group)
-        parser.set_defaults(binding_request=request)
 
     @classmethod
     @contextmanager
@@ -305,8 +312,9 @@ class Options:
             operation.add_arguments(command)
             command.set_defaults(operation=operation)
         arguments = parser.parse_args(namespace=CliArguments())
+        arguments.binding_request = arguments.binding_thread.request
         arguments.operation = arguments.operation.from_arguments(arguments)
-        arguments.binding = bridge_type.binding_arguments(arguments)
+        arguments.binding = arguments.binding_request.from_arguments(arguments, bridge_type)
         return cls(**{declared.name: vars(arguments)[key]
                       for declared, key in FieldCodec.record_fields(cls)})
 
@@ -995,12 +1003,6 @@ class CliBridge(ExternalRuntime, DeliversInput, Generic[BridgeOptions]):
     @classmethod
     def add_arguments(cls, parser: argparse.ArgumentParser) -> None:
         """Declare the options this harness's transport needs."""
-
-    @classmethod
-    def binding_arguments(cls, arguments: argparse.Namespace) -> BindingRequest:
-        """Every bare bridge command resolves the session's declared reader binding."""
-        arguments.bridge_type = cls
-        return arguments.binding_request.from_arguments(arguments)
 
     @classmethod
     def environment_session(cls) -> str:

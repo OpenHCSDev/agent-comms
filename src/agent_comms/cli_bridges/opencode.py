@@ -20,7 +20,7 @@ from agent_comms.cli_protocol import Outcome, DeliveredOutcome
 
 from .history import HarnessAddress, OnlineHistory, OpenCodeHistory
 from .shared import (
-    Binding, CliBridge, GivenBinding, IncomingFrame, Options, SuppliedSession,
+    Binding, CliBridge, GivenBinding, GivenThread, IncomingFrame, Options, SuppliedSession,
     TranscriptBridge, Watch, run_bridge,
 )
 from agent_comms.runtime_updates import RuntimeUpdate
@@ -63,9 +63,9 @@ class AttachedBinding(GivenBinding):
     """The selected native session supplies its bus name unless one was given."""
 
     @classmethod
-    def from_arguments(cls, arguments: argparse.Namespace) -> Self:
-        arguments.bus_thread = f'opencode-{arguments.binding_session.session}'
-        return super().from_arguments(arguments)
+    def from_arguments(cls, arguments: argparse.Namespace, bridge: type[CliBridge]) -> Self:
+        arguments.binding_thread = GivenThread(f'opencode-{arguments.binding_session.session}')
+        return super().from_arguments(arguments, bridge)
 
 
 @dataclass(frozen=True)

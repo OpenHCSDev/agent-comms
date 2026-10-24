@@ -36,7 +36,7 @@ from .wire_models import DeclaredWireFamily, WireModel
 
 if TYPE_CHECKING:
     from .child_process import AttachedChild
-    from .cli_bridges.shared import CliBridge, DeliveryRow
+    from .cli_bridges.shared import CliBridge, DeliveryRow, GivenBinding
 
 
 CLI_FAILURES = (ValueError, OSError, CoordinationError, GitCommandError)
@@ -50,6 +50,7 @@ async def raise_child_exit(child: AttachedChild, reason: str) -> NoReturn:
 
 class CliArguments(argparse.Namespace):
     command: str
+    binding_request: type[GivenBinding]
 
 
 class TimestampedWire(WireModel):
