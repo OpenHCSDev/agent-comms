@@ -410,8 +410,14 @@ def declare_test_bus(
 
 
 def installed_comms(root: Path) -> Comms:
-    """A root as the installer leaves it: its bus exists before any reader opens it."""
+    """A root as the installer leaves it: its bus exists before any reader opens it. A test
+    bus of a few megabytes declares no storage floor; tests of the floor declare their own."""
+    from agent_comms.storage_rules import StorageRule
+
     Bus.install(Bus.path_in(root))
+    StorageRule.path_in(root).write_text(FieldCodec.compact(FieldCodec.encode(StorageRule(
+        volume=root, scratch_base=root / 'scratch', checkout_base=root / 'checkouts',
+        floor_gib=0))))
     return wire(root)
 
 

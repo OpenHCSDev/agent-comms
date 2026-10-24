@@ -57,10 +57,12 @@ def test_killed_holder_leaves_a_lapsed_claim_with_its_record(tmp_path, monkeypat
 
 def test_reader_waits_for_a_held_claims_socket_until_its_holder_dies(bridge_home):
     claim = WatchClaim("session", bridge_home)
+    swaps = []
     with held_elsewhere(claim) as child, ThreadPoolExecutor(1) as pool:
-        reader = pool.submit(InspectSession().awaited, claim)
+        reader = pool.submit(InspectSession().awaited, claim, swaps.append)
         with pytest.raises(TimeoutError):
             reader.result(timeout=1)
+        assert swaps == [claim]
         killed(child)
         with pytest.raises(NoSessionBridge) as stopped:
             reader.result(timeout=5)
