@@ -11,7 +11,7 @@ export class NativeRequestObservation {
         this.observer = config.onRequestProgress;
         this.requestId = randomUUID();
         this.sessionId = config.sessionId ?? "";
-        this.inputId = context.messages.findLast(message => message.role === "user")?.inputId ?? "";
+        this.attribution = this.attribute(context);
         this.started = process.hrtime.bigint();
         this.startedAtMs = Date.now();
         this.callbackNs = 0n;
@@ -19,10 +19,17 @@ export class NativeRequestObservation {
         this.callbackMaxNs = 0n;
     }
 
+    /** An agent-loop request answers the newest user input; one without it is a broken turn. */
+    attribute(context) {
+        const inputId = context.messages.findLast(message => message.role === "user")?.inputId;
+        if (!inputId) throw new Error("Native model request has no user input to answer");
+        return { inputId };
+    }
+
     observe = (record) => {
         const now = process.hrtime.bigint();
         const progress = { requestId: this.requestId, sessionId: this.sessionId,
-            inputId: this.inputId, startedAtMs: this.startedAtMs,
+            ...this.attribution, startedAtMs: this.startedAtMs,
             observedAtMs: Date.now(), monotonicNs: now.toString(),
             elapsedMs: Number(now - this.started) / 1e6,
             callbackMs: Number(this.callbackNs) / 1e6,
@@ -68,6 +75,11 @@ export class NativeRequestObservation {
     async emit(event, publish) {
         return this.callback(event.type, () => publish(event), event.type !== "message_update");
     }
+}
+
+/** A compaction or branch summary request answers no input, so it reports none. */
+export class NativeSummaryObservation extends NativeRequestObservation {
+    attribute() { return {}; }
 }
 
 /** Observe the original provider event iterator, before message projection.

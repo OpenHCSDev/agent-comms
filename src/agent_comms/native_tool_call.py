@@ -54,7 +54,7 @@ class ToolOutcomeUnknown(SelectedToolDenied):
 class DuplicateToolCallIdentity(SelectedToolDenied):
     """One assistant tool round declared the same provider call identity twice."""
 
-    def __init__(self, call_id: str) -> None:
+    def __init__(self, call_id: ToolCallId) -> None:
         super().__init__(f"Native tool round repeats call identity {call_id!r}")
 
 

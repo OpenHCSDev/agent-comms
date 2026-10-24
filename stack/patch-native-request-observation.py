@@ -56,7 +56,7 @@ def main(package):
             onRequestProgress: this.agent.onRequestProgress,""")
     summary = package / "dist/core/compaction/compaction.js"
     summary.write_text(
-        'import { NativeRequestObservation } from "../../../node_modules/@earendil-works/pi-ai/dist/utils/agent-comms-request-observation.js";\n'
+        'import { NativeSummaryObservation } from "../../../node_modules/@earendil-works/pi-ai/dist/utils/agent-comms-request-observation.js";\n'
         + summary.read_text()
     )
     replace_once(summary, 'import { completeSimple } from "@earendil-works/pi-ai/compat";',
@@ -65,7 +65,7 @@ def main(package):
         ? (await streamFn(model, context, requestOptions)).result()
         : completeSimple(model, context, requestOptions);
     return retryAssistantCall(produce, retry, requestOptions.signal, callbacks);
-}""", """    const request = new NativeRequestObservation({ ...requestOptions,
+}""", """    const request = new NativeSummaryObservation({ ...requestOptions,
         onRequestProgress: callbacks?.onRequestProgress }, context);
     request.observe({ stage: "preparing", detail: "Preparing compaction request" });
     try {
