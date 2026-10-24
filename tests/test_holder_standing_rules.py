@@ -672,7 +672,7 @@ def test_send_and_check_accept_a_deletion_check_on_fresh_main(
     assert current.order.check.result == CountCheckResult(0)
     # Done's result rule remains the inverse: the delivered commit must meet the target.
     current.order.check.result.require(current.order.check.at(
-        source.branch_commit, str(source.checkout), worktrees))
+        source.branch_commit, source.checkout, worktrees))
     with pytest.raises(ValueError):
         current.order.check.result.require(current.order.check.at(main, source.checkout, worktrees))
     assert source.git(source.checkout, 'rev-parse', 'HEAD') == head

@@ -24,6 +24,7 @@ from .field_codec import (
     FieldCodec,
     MalformedRecord,
     NullMember,
+    PathText,
     PresenceExclude,
     RecordMember,
     SubclassUnion,
@@ -348,7 +349,7 @@ class CheckCommand:
 
 @dataclass(frozen=True)
 class OrderCheck(CheckCommand):
-    directory: Path
+    directory: Annotated[Path, PathText]
     command: str
     result: CheckResult = field(default_factory=SilentCheckResult)
     timeout: ClassVar[int] = 300
