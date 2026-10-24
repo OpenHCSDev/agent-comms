@@ -65,7 +65,7 @@ async def test_pager_requests_two_older_pages_through_the_bridges_real_socket(tm
     watching = asyncio.create_task(transcript.watch_requests(
         lambda row: frames.put_nowait(EarlierItems.from_row(row))))
     try:
-        binding = Binding(str(comms.root), 'cli', 'thread')
+        binding = Binding(str(comms.root), 'cli', 'thread', Binding.bus_head(str(comms.root)))
         with Binding.open(tmp_path / 'bridge') as db:
             bridge = CodexBridge(CodexOptions(Watch(), binding, tmp_path / 'bridge', str(socket_path)), binding, db)
             output = ThreadOutput(transcript, comms.agents)

@@ -61,7 +61,7 @@ def test_argument_errors_use_the_same_single_line(arguments, capsys):
 
 
 @pytest.mark.asyncio
-async def test_journal_concurrent_initialization_and_reopen_preserve_rows(tmp_path):
+async def test_journal_concurrent_initialization_and_reopen_preserve_rows(tmp_path, bus):
     worker = r'''
 import sqlite3
 import sys
@@ -109,7 +109,7 @@ print('opened', flush=True)
                 await child.wait()
 
     await open_together(fresh=True)
-    binding = Binding(str(tmp_path), 'viewer', 'external-session')
+    binding = Binding(str(tmp_path), 'viewer', 'external-session', Binding.bus_head(str(tmp_path)))
     message = Message(sender='peer', target='viewer', type=InfoKind,
                       body='retained delivery', timestamp=1.0, seq=1)
     pending = DeliveryRow(message.message_id, json.dumps(message.to_wire()), UnconfirmedOutcome)
@@ -124,11 +124,13 @@ print('opened', flush=True)
 
 
 @pytest.mark.parametrize('conflicting', [False, True])
-def test_concurrent_initial_binding_preserves_one_identity_and_pending_delivery(tmp_path, conflicting):
+def test_concurrent_initial_binding_preserves_one_identity_and_pending_delivery(
+        tmp_path, conflicting, bus):
     from journal_binding_cases import concurrent_bindings
 
-    first = Binding(str(tmp_path), 'viewer', 'external-session')
-    other = Binding(str(tmp_path), 'other-viewer', 'external-session')
+    first = Binding(str(tmp_path), 'viewer', 'external-session', Binding.bus_head(str(tmp_path)))
+    other = Binding(
+        str(tmp_path), 'other-viewer', 'external-session', Binding.bus_head(str(tmp_path)))
     message = Message(sender='peer', target='viewer', type=InfoKind,
                       body='retained delivery', timestamp=1.0, seq=1)
     pending = DeliveryRow(message.message_id, json.dumps(message.to_wire()), UnconfirmedOutcome)
@@ -150,8 +152,8 @@ def test_concurrent_initial_binding_preserves_one_identity_and_pending_delivery(
         assert Binding.select(db) == [winner]
 
 
-def test_existing_binding_lookup_does_not_acquire_a_writer(tmp_path):
-    binding = Binding(str(tmp_path), 'viewer', 'external-session')
+def test_existing_binding_lookup_does_not_acquire_a_writer(tmp_path, bus):
+    binding = Binding(str(tmp_path), 'viewer', 'external-session', Binding.bus_head(str(tmp_path)))
     with Binding.open(tmp_path) as db:
         assert binding.bind(db) == binding
         statements = []
@@ -188,14 +190,15 @@ async def test_watched_record_crosses_the_watch_line_as_its_envelope(root):
     assert line.message.to_wire() == sent.to_wire() == record.to_wire()
 
 
-def test_given_binding_fields_override_the_stored_binding(tmp_path):
+def test_given_binding_fields_override_the_stored_binding(tmp_path, bus):
     """A partial binding takes each missing field from the stored one; a field absent from
     both is refused by name, and a changed field still claims another conversation."""
     type_key = {Binding.family_discriminator: Binding.declared_name}
     with Binding.open(tmp_path) as db:
         with pytest.raises(RecordProblems, match='bus_thread'):
             GivenBinding({**type_key, 'root': str(tmp_path)}).bind(db)
-        stored = Binding(str(tmp_path), 'viewer', 'external-session').bind(db)
+        stored = Binding(
+            str(tmp_path), 'viewer', 'external-session', Binding.bus_head(str(tmp_path))).bind(db)
         assert GivenBinding({**type_key, 'root': str(tmp_path)}).bind(db) == stored
         with pytest.raises(ValueError, match='another Core/CLI conversation'):
             GivenBinding({**type_key, 'bus_thread': 'other-viewer'}).bind(db)

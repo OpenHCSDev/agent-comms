@@ -187,7 +187,7 @@ def test_recorded_claude_transcript_pages_through_tool_without_loss(tmp_path, mo
     state = tmp_path / 'state'
     store = Binding.open(state)
     db = store.__enter__()
-    binding = Binding(str(comms.root), 'claude', 'session')
+    binding = Binding(str(comms.root), 'claude', 'session', Binding.bus_head(str(comms.root)))
     with pytest.raises(ValueError):
         Watch().transcript_source()
     operation = Serve(owner=ProcessIdentity.capture(os.getpid()), transcript=path)

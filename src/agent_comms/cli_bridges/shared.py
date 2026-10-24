@@ -27,6 +27,7 @@ from pydantic import Field, model_validator
 
 from agent_comms import field_codec, messages
 from agent_comms.agent_runtime import DeliversInput, ExternalRuntime, PublishesTranscript
+from agent_comms.bus import Bus
 from agent_comms.change_report import NoChangeReport, ReportEvidence
 from agent_comms.child_process import (
     AttachedChild,
@@ -53,7 +54,7 @@ from agent_comms.declared_family import DeclaredFamily
 from agent_comms.declared_verb import DeclaredOptions
 from agent_comms.field_codec import FieldCodec, PathText
 from agent_comms.launch_runtime import LaunchRuntime
-from agent_comms.message_reference import AfterMessageStart, FirstUnreadStart, InboxStart
+from agent_comms.message_reference import BridgeBeginning, BridgePosition, BridgeStart, InboxStart
 from agent_comms.read_basis import ExplicitWatchAcknowledgment
 from agent_comms.runtime_updates import RuntimeUpdate, ThreadOutput
 from agent_comms.send_result import SendResult
@@ -62,6 +63,7 @@ from agent_comms.typed_table import (
     Column,
     DurableTables,
     ExpressionIndex,
+    TypedRow,
     TypedTable,
     WriterOwnedFile,
 )
@@ -124,26 +126,48 @@ class GivenBinding(BindingRequest):
 
     def bind(self, db: sqlite3.Connection) -> Binding:
         stored = tuple(FieldCodec.encode(row) for row in Binding.select(db))
-        requested = FieldCodec.decode(Binding, {**(stored[0] if stored else {}), **self.given})
+        if stored:
+            payload = stored[0]
+        else:
+            identity = FieldCodec.decode(BindingIdentity, {
+                key: value for key, value in self.given.items()
+                if key != Binding.family_discriminator
+            })
+            payload = {'start': FieldCodec.encode(Binding.bus_head(identity.root))}
+        requested = FieldCodec.decode(Binding, {**payload, **self.given})
         return requested.bind(db)
 
 
 @dataclass(frozen=True)
-class Binding(BridgeStateTable, TypedTable, BindingRequest):
+class BindingIdentity:
     root: str
     bus: Annotated[str, field_codec.WireName("bus_thread")]
     thread: Annotated[str, field_codec.WireName("session")]
+
+
+@dataclass(frozen=True)
+class Binding(BindingIdentity, BridgeStateTable, TypedTable, BindingRequest):
+    start: BridgePosition
+
+    @staticmethod
+    def bus_head(root: str) -> BridgePosition:
+        bus = Bus(Bus.path_in(Path(root)))
+        if not bus.path.is_file():
+            raise FileNotFoundError(bus.path)
+        with bus.reading() as source:
+            latest = source.page(source.revision() + 1, 1)
+            return BridgeStart(latest[0].reference) if latest else BridgeBeginning()
 
     @classmethod
     def add_arguments(cls, parser: argparse.ArgumentParser) -> None:
         group = parser.add_argument_group(
             'Core/CLI binding (each given field overrides the stored binding)')
-        for _, key in FieldCodec.record_fields(cls):
+        for _, key in FieldCodec.record_fields(BindingIdentity):
             group.add_argument('--' + key.replace('_', '-'))
 
     @classmethod
     def from_arguments(cls, arguments: argparse.Namespace) -> BindingRequest:
-        values = {key: vars(arguments)[key] for _, key in FieldCodec.record_fields(cls)
+        values = {key: vars(arguments)[key] for _, key in FieldCodec.record_fields(BindingIdentity)
                   if vars(arguments)[key] is not None}
         return GivenBinding({cls.family_discriminator: cls.declared_name, **values}) if values else StoredBinding()
 
@@ -255,26 +279,38 @@ class ObservedPart(BridgeStateTable, TypedTable):
 
 
 @dataclass(frozen=True)
-class DeliveryRow(BridgeStateTable, TypedTable):
-    sequence_sql: ClassVar[str] = "json_extract({payload}, '$.seq')"
-    indexes = (ExpressionIndex((sequence_sql,)),)
-
-    @classmethod
-    def resume_after(cls, db: sqlite3.Connection) -> InboxStart:
-        """The existing journal owns attempted progress, including uncertain emissions."""
-        latest = cls.read(db.execute(
-            f'SELECT {cls._column_list(tuple(cls.column_projection()))} FROM "{cls.declared_name}" '
-            f'ORDER BY {cls._sql(cls.sequence_sql)} DESC LIMIT 1'))
-        return AfterMessageStart(latest[0].message.reference) if latest else FirstUnreadStart()
+class JournalMessage(TypedRow):
+    """Journal identity and payload are enough to recover a delivery position."""
 
     id: Annotated[str, Column(primary_key=True)]
     payload: str
-    outcome: Annotated[type[Outcome], Column(index=True)]
-    monitor: MonitorEvidence = field(default_factory=UnrecordedMonitor)
 
     @cached_property
     def message(self) -> messages.Message:
         return messages.Message.from_wire(json.loads(self.payload))
+
+
+@dataclass(frozen=True)
+class DeliveryRow(JournalMessage, BridgeStateTable, TypedTable):
+    sequence_sql: ClassVar[str] = "json_extract({payload}, '$.seq')"
+    indexes = (ExpressionIndex((sequence_sql,)),)
+
+    @classmethod
+    def latest(cls, db: sqlite3.Connection) -> tuple[JournalMessage, ...]:
+        """The sequence index selects the newest attempt, including uncertain emissions."""
+        return tuple(JournalMessage.read(db.execute(
+            f'SELECT {JournalMessage._select_list(cls)} FROM "{cls.declared_name}" '
+            f'ORDER BY {cls._sql(cls.sequence_sql)} DESC LIMIT 1')))
+
+    @classmethod
+    def resume_after(cls, db: sqlite3.Connection, binding: Binding) -> InboxStart:
+        """The binding and journal own progress, including uncertain emissions."""
+        latest = cls.latest(db)
+        return max((binding.start, *(BridgeStart(row.message.reference) for row in latest)),
+                   key=lambda point: point.cursor())
+
+    outcome: Annotated[type[Outcome], Column(index=True)]
+    monitor: MonitorEvidence = field(default_factory=UnrecordedMonitor)
 
     async def finish(self, bridge: CliBridge, outcome: type[Outcome]) -> None:
         await self.outcome.finish(bridge, self, outcome)
@@ -944,7 +980,8 @@ class CliBridge(ExternalRuntime, DeliversInput, Generic[BridgeOptions]):
         child = await AttachedChild.start((
             str(LaunchRuntime.running().interpreter.with_name('agent-comms')),
             '--root', self.binding.root, 'watch', '--thread', self.binding.bus,
-            '--after', json.dumps(FieldCodec.encode(DeliveryRow.resume_after(self.db))),
+            '--after', json.dumps(FieldCodec.encode(
+                DeliveryRow.resume_after(self.db, self.binding))),
             '--acknowledgment', FieldCodec.encode(ExplicitWatchAcknowledgment)),
             stdio=StreamingChildStdio(input_enabled=False))
         try:
