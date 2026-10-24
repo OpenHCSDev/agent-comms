@@ -975,6 +975,7 @@ class ExistingBusInstall[Rehearsed: Rehearsal](Install[Rehearsed]):
     def rehearsed(cls, checkout: Path, root: Path, current: str, target: str,
                   chain: CarryChain, installed: Stack, staged: Stack, tree: TargetTree,
                   installer: InstallerChoice, spill_dir: Path) -> tuple[Install, Rehearsal]:
+        CarryChain.require_crossed(checkout, current, target)
         with PracticeBus.of(root, installer, spill_dir, staged.commands.clock) as practice:
             pending = practice.pending(chain, staged)
             reconciled = staged.cli(root, PlannedReconcileCliCommand).rewritten
