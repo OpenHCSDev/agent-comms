@@ -24,7 +24,7 @@ from agent_comms.repository_name import RepositoryName
 from agent_comms.head_review import PullRequestHead
 from agent_comms.held_orders import HeldOrders
 from agent_comms.thread_identity import ThreadIncarnation
-from agent_comms.work_branches import BranchDifference
+from agent_comms.work_branches import BranchDifference, SourceGrowth
 from agent_comms.service_passes import ServicePassStore
 
 if TYPE_CHECKING:
@@ -288,7 +288,7 @@ class BranchGrowth(HeldBranchRule):
     repository: RepositoryName
     branch: str
     growth: int = field(compare=False)
-    limit: ClassVar[int] = 40
+    limit: ClassVar[int] = SourceGrowth.limit
 
     @classmethod
     def derive(cls, branches: tuple[HeldBranch, ...]) -> tuple[Self, ...]:

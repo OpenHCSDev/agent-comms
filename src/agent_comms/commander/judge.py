@@ -42,6 +42,8 @@ from agent_comms.todos import (
     DirectiveText,
     DroppedVerdict,
     PeerAcceptedVerdict,
+    GrownHeadVerdict,
+    GrowthReason,
     ReviewedHeadVerdict,
     RejectedHeadVerdict,
     HeadVerdict,
@@ -52,6 +54,7 @@ from agent_comms.todos import (
     Todo,
     ToolCallVerdict,
     UnderReviewHeadVerdict,
+    VerdictReason,
 )
 from agent_comms.slop import Derivation, Slop
 from agent_comms.order_tools import CommsHeadVerdictTool, CommsUnjudgedTool, CommsVerdictTool
@@ -306,7 +309,13 @@ class OkVerb(HeadVerdictVerb):
     help = "the edit or exact PR head is accepted"
 
     def head_operation(self) -> HeadVerdict:
-        return ReviewedHeadVerdict()
+        reason = VerdictReason(self.why)
+        return (GrownHeadVerdict(reason, GrowthReason(self.growth)) if self.growth
+                else ReviewedHeadVerdict(reason))
+    growth: Annotated[
+        str,
+        Argument(options={"help": "12+ words naming each growing src file and its need"}),
+    ] = ""
     no_owner: Annotated[
         str,
         Argument(
