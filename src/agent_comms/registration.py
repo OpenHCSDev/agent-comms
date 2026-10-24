@@ -96,6 +96,7 @@ class Registration:
         """Declare or resume one child and its own goal under the registry's lock."""
         with self.store.editing() as edit:
             parent = edit.document.require(parent_name)
+            parent.require_commander()
             if edit.document.canonical_name(name) != name:
                 raise RelationViolationError(f"Commander fork {name!r} is an alias.")
             if edit.document.taken(name):

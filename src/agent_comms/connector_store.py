@@ -11,7 +11,7 @@ from pathlib import Path
 from typing import ClassVar, Literal, Self, get_args
 from urllib.parse import urlencode
 
-from .connector_caller import CALLER, ConnectorCaller
+from .connector_caller import CALLER, ConnectorCaller, ForkingCaller
 from .errors import ToolRefusedError
 from .field_codec import FieldCodec
 from .locked_store import DocumentChange
@@ -114,7 +114,7 @@ class ThreadGrant:
     thread: str
 
     def caller(self) -> ConnectorCaller:
-        return ConnectorCaller(self.thread)
+        return ForkingCaller(self.thread)
 
 
 @dataclass(frozen=True)
