@@ -144,3 +144,19 @@ def test_latest_observation_follows_commander_and_service_rename_aliases(notific
     comms.threads._rename_thread(CommanderHeartbeat.sender, "renamed-heartbeat")
     previous = CommanderUpdate.latest(comms, comms.registry.require("renamed-lead").incarnation)
     assert previous == first.task
+
+
+def test_new_local_commit_on_an_unpushed_branch_is_not_a_resolution(notification_bus, tmp_path):
+    from agent_comms.commander.publication_rules import UnpushedBranch
+    from agent_comms.work_branches import UnpushedHead
+
+    comms = notification_bus
+    holder = comms.registry.require("worker").incarnation
+    first, moved = (UnpushedBranch("P594", "order", holder, tmp_path,
+                                   UnpushedHead(head, commits, ""))
+                    for head, commits in (("a" * 40, 54), ("b" * 40, 57)))
+    assert RulePing.capture(first) == RulePing.capture(moved)
+    beat(comms, (first,))
+    beat(comms, (moved,))
+    announced, = notifications(comms)
+    assert "NO LONGER CURRENT" not in announced.body

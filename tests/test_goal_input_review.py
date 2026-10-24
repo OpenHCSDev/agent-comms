@@ -168,3 +168,42 @@ def test_inbox_standby_is_one_record(wired, monkeypatch):
     result = CommsInboxTool.invoke(wired, {"thread": "fixer", "standby": standby}, caller=ThreadCaller("fixer"))
     assert len(result["messages"]) == 1  # A refused half record read nothing.
     assert (result["standby_review"]["goal_id"], result["standby_review"]["wait_for"]) == (goal.id, ["PR111"])
+
+
+def test_standby_accepts_inbox_keys_delivered_since_the_inbox_cut(tmp_path, monkeypatch):
+    monkeypatch.setenv("AGENT_COMMS_THREAD", "worker")
+    comms = wire(tmp_path / "wire")
+    for name in ("worker", "parent"):
+        comms.registry.declare(
+            Thread(name, frozenset(), str(tmp_path),
+                   process_identity=ProcessIdentity.capture(os.getpid()))
+        )
+    comms.agents.begin_turn("parent", TurnId('aa7988bb017ade70857b6b2966e64ea2'))
+    goal = comms.goals.update_goal("worker", SetGoalAction(text="Delegate and wait"))
+    early = publish_initial(comms, "parent", "worker", "Early answer")
+    late = comms.messaging.send("parent", "worker", "Steered into the turn").message
+    ledger = InputDispositions(comms.root)
+    claim_scope = comms.registry.snapshot().claim_generation("worker")
+    ledger.record(BusInputKey(late.seq), seq=late.seq, owner="worker", claim_scope=claim_scope,
+                  target="worker", text=late.body)
+    review = CommsInboxTool.invoke(
+        comms, {"thread": "worker", "ack": False,
+                "standby": {"goal_id": goal.id, "wait_for": ["parent"]}},
+        caller=ThreadCaller("worker"))["standby_review"]
+    keys = review["reviewed_inputs"]
+    assert keys == [str(BusInputKey(early.seq)), str(BusInputKey(late.seq))]
+    # pi-mi 10-24: bus:21929 was steered into its turn between comms_inbox and comms_goal.
+    turn, native = TurnId('5d0c1f2bd8a64e0f9a7b3c2d1e0f4a5b'), InputId("c" * 32)
+    assert ledger.bind(BusInputKey(late.seq), claim_scope=claim_scope, turn_id=turn,
+                       native_id=native, text=late.body)
+    assert ledger.started(BusInputKey(late.seq), turn_id=turn, native_id=native, text=late.body)
+    report = next(
+        t for t in ToolRequest.members_with(ToolRequest) if t.declared_name == "comms_goal"
+    )
+    args = {"goal_id": goal.id, "status": "standby", "progress": "Waiting", "wait_for": ["parent"]}
+    with pytest.raises(ValueError):
+        report.invoke(comms, {**args, "reviewed_inputs": [str(BusInputKey(999999))]},
+                      caller=ThreadCaller("worker"))
+    result = report.invoke(comms, {**args, "reviewed_inputs": keys}, caller=ThreadCaller("worker"))
+    assert FieldCodec.decode(GoalExecution, result["goal_execution"]).standby()
+    assert stored_inputs(ledger.root).rows[BusInputKey(early.seq)].reviewed_for_goal(goal.id)

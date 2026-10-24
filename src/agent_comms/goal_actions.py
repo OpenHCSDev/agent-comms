@@ -310,7 +310,11 @@ class PreparedStandbyGoalAction(StandbyGoalAction, declared_name=None):
         aliases = review.owners
         dispositions = InputDispositions(ctx.goals.root)
         unknown = {row.key: row for row in review.unknown}
-        reviewed_keys = tuple(dict.fromkeys(self.reviewed_inputs))
+        # An input delivered into this recipient's turn after the inbox cut is already handled.
+        delivered = dispositions.read(
+            tuple(key for key in self.reviewed_inputs if key not in unknown)).started_for(aliases)
+        reviewed_keys = tuple(key for key in dict.fromkeys(self.reviewed_inputs)
+                              if key not in delivered)
         if any(key not in unknown or unknown[key].sequence is None for key in reviewed_keys):
             raise ValueError("Review only this recipient's exact unresolved bus input keys.")
         if not set(reviewed_keys) <= review.eligible_keys:

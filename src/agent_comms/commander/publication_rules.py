@@ -19,7 +19,8 @@ class UnpushedBranch(HeldBranchRule):
     order: str
     holder: ThreadIncarnation
     worktree: Annotated[Path, PathText]
-    unpublished: UnpushedHead
+    # One decision per order branch: a new local commit moves the head, never the decision.
+    unpublished: UnpushedHead = field(compare=False)
 
     @classmethod
     def derive(cls, branches: tuple[HeldBranch, ...]) -> tuple[Self, ...]:

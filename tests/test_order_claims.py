@@ -310,3 +310,22 @@ def test_closed_problem_refuses_a_check_correction_and_writes_nothing(held_comma
     with pytest.raises(TodoError, match="is done"):
         correction.apply(closed)
     assert ctx.comms.goals.todos.get("P1") == claimed
+
+
+def test_say_without_answers_answers_the_target_units_open_asks(held_commander, capsys):
+    from test_holder_standing_rules import publish
+
+    ctx = held_commander
+    comms = ctx.comms
+    reply = ctx.root / "answer.txt"
+    reply.write_text("Take the owner fix at the declaration and push it.")
+    named = publish(comms, "worker", ctx.commander, time.time() - 960)
+    capsys.readouterr()
+    main(["say", "worker", str(reply), "--answers", named.message_id], ctx)
+    assert "answers:" not in capsys.readouterr().out  # an explicit list overrides
+    unnamed = publish(comms, "worker", ctx.commander, time.time() - 930)
+    main(["say", "worker", str(reply)], ctx)
+    assert f"answers: {unnamed.message_id}" in capsys.readouterr().out
+    history = ThreadCaller(ctx.commander).invoke(CommsHistoryTool(peer="worker"), comms)
+    assert [message.answers for message in history.messages
+            if message.sender == ctx.commander][:2] == [(unnamed.reference,), (named.reference,)]

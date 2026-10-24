@@ -546,16 +546,16 @@ def test_commander_say_answers_an_unanswered_unit_message(held_bus, target, body
     assert held_bus.bus.bus.lookup(held_bus.bus.bus.revision()).answers == ()
 
 
-def test_an_unanswered_unit_message_gates_send_and_say_until_answered(held_bus, tmp_path):
+def test_an_unanswered_unit_message_gates_send_until_a_say_answers_it(held_bus, tmp_path):
     question = publish(held_bus, "worker", "lead", time.time() - AwaitingCommander.seconds - 1)
     ctx = Commander.read_root(held_bus.root)
     reply = tmp_path / "reply.txt"
     reply.write_text("Waiting on the merge queue, owner unit-goalblock")
-    for verb in (SendVerb(unit="worker", body_file="unused"),
-                 SayVerb(units="worker", body_file=str(reply))):
-        with pytest.raises(SystemExit, match=question.message_id):
-            verb.apply(ctx)
-    SayVerb(units="worker", body_file=str(reply), answers=(question.message_id,)).apply(ctx)
+    with pytest.raises(SystemExit, match=question.message_id):
+        SendVerb(unit="worker", body_file="unused").apply(ctx)
+    # A reply to the asker answers its open asks without naming them.
+    SayVerb(units="worker", body_file=str(reply)).apply(ctx)
+    assert held_bus.bus.bus.lookup(held_bus.bus.bus.revision()).answers == (question.reference,)
     assert unanswered(held_bus) == ()
     # Naming it again after it was answered names nothing open, so it answers nothing.
     SayVerb(units="worker", body_file=str(reply), answers=(question.message_id,)).apply(ctx)
