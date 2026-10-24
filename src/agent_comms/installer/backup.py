@@ -54,10 +54,6 @@ class SavedFile:
         observed = path.stat()
         return cls(observed.st_size, observed.st_mtime_ns, observed.st_ino)
 
-    def matches_extraction(self, copied: SavedFile) -> bool:
-        """Extraction allocates a new inode and tar loses nanosecond mtime; compare size only."""
-        return self.size == copied.size
-
 
 def observed_files(root: Path) -> dict[Path, os.stat_result]:
     """Every regular file an installation carries, with its metadata."""

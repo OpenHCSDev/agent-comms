@@ -79,6 +79,28 @@ class WorkBranch:
 
 
 @dataclass(frozen=True)
+class SourceGrowth:
+    """Code lines each changed src module gains between two commits."""
+
+    files: tuple[tuple[str, int], ...]
+    limit: ClassVar[int] = 40
+
+    @property
+    def total(self) -> int:
+        return sum(lines for _path, lines in self.files)
+
+    @property
+    def exceeds(self) -> bool:
+        return self.total > self.limit
+
+    def growing(self) -> tuple[str, ...]:
+        return tuple(path for path, lines in self.files if lines > 0)
+
+    def listing(self) -> str:
+        return ", ".join(f"{path} {lines:+d}" for path, lines in self.files if lines)
+
+
+@dataclass(frozen=True)
 class BranchDifference:
     """One branch against an immutable origin/main cut, shared by its consumers."""
 
@@ -89,7 +111,7 @@ class BranchDifference:
     main: str
     behind: int
     files: frozenset[str]
-    code_growth: int
+    growth: SourceGrowth
 
 
 class ForgeAnswer(WireModel):
@@ -370,30 +392,30 @@ query($owner: String!, $name: String!, $after: String) {
         branch = self._git("rev-parse", "--abbrev-ref", "HEAD").strip()
         base = self._git("merge-base", main, head).strip()
         behind = int(self._git("rev-list", "--count", f"{base}..{main}"))
-        files = frozenset(
-            path
-            for path in self._git(
-                "diff",
-                "--name-only",
-                "-z",
-                "--no-renames",
-                base,
-                head,
-            ).split("\0")
-            if path
+        files = self.changed(base, head)
+        return BranchDifference(
+            RepositoryName(*self.repository), branch, head, moved_at, main, behind, files,
+            self.source_growth(base, head, files),
         )
+
+    def changed(self, base: str, head: str) -> frozenset[str]:
+        return frozenset(path for path in self._git(
+            "diff", "--name-only", "-z", "--no-renames", base, head).split("\0") if path)
+
+    def source_growth(self, base: str, head: str, files: frozenset[str]) -> SourceGrowth:
+        """Git owns both trees; each changed src module is counted once on each side."""
         sources = tuple(
-            (f"{commit}:{path}", weight)
+            (path, f"{commit}:{path}", weight)
             for path in sorted(files) if path.startswith("src/") and path.endswith(".py")
             for commit, weight in ((base, -1), (head, 1))
         )
         batch = Repo.git_bytes(
             self.checkout, "cat-file", "--batch", "-Z", timeout=self.timeout,
-            input="".join(f"{expression}\0" for expression, _weight in sources),
+            input="".join(f"{expression}\0" for _path, expression, _weight in sources),
         )
         offset = 0
-        code_growth = 0
-        for _expression, weight in sources:
+        growth = dict.fromkeys((path for path, _expression, _weight in sources), 0)
+        for path, _expression, weight in sources:
             end = batch.index(b"\0", offset)
             header = batch[offset:end]
             offset = end + 1
@@ -402,11 +424,15 @@ query($owner: String!, $name: String!, $after: String) {
             size = int(header.rsplit(b" ", 1)[1])
             source = batch[offset:offset + size].decode()
             offset += size + 1
-            code_growth += weight * CodeLines.of(source)
-        return BranchDifference(
-            RepositoryName(*self.repository), branch, head, moved_at, main, behind, files,
-            code_growth,
-        )
+            growth[path] += weight * CodeLines.of(source)
+        return SourceGrowth(tuple(growth.items()))
+
+    def reviewed_growth(self, pr: int, head: str) -> SourceGrowth:
+        """A pull request head against current main, fetched without touching FETCH_HEAD."""
+        self._git("fetch", "-q", "--no-write-fetch-head", "origin",
+                  self.main, f"refs/pull/{pr}/head")
+        base = self._git("merge-base", f"refs/remotes/origin/{self.main}", head).strip()
+        return self.source_growth(base, head, self.changed(base, head))
 
     def _pages(self, query: str, answer: type[ForgeQuery], **variables: str):
         pages: list[tuple[str, ...]] = [()]

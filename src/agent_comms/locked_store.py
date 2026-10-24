@@ -341,9 +341,6 @@ class DeclaredFile(RootFile):
     path: Path
     declared: ClassVar[bool] = True
 
-    def takes_store_lock(self) -> bool:
-        return issubclass(self.owner, StoreLockFile)
-
 
 @dataclass(frozen=True)
 class UndeclaredFile(RootFile):
@@ -352,9 +349,6 @@ class UndeclaredFile(RootFile):
     path: Path
     declared: ClassVar[bool] = False
     """No declaration answers whether its writers take a lock, so a lock beside it is unknown."""
-
-    def takes_store_lock(self) -> bool:
-        return False
 
 
 class LockedFile(RootFile, StoreLockOwner, declared_name=None):
