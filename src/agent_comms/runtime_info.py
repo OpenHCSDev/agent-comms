@@ -29,9 +29,6 @@ class RuntimeInfo(DeclaredFamily, affix="RuntimeInfo"):
     @abstractmethod
     def context_reading(self) -> ContextReading: ...
 
-    def model_or(self, default: str) -> str:
-        return self.model.otherwise(default)
-
     model: ThreadModel
     context_used: PiCount
     context_size: PiCount

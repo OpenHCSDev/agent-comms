@@ -831,6 +831,9 @@ class ResumableBridge(ABC):
     @abstractmethod
     def release(self) -> ConfirmableBridge: ...
 
+    def require_paused(self) -> None:  # noqa: B027 - default hook
+        """A pause the bridge acknowledged, or one with nothing left to pause, refuses nothing."""
+
 
 @dataclass(frozen=True)
 class BridgeResume(ResumableBridge, ConfirmableBridge, DeclaredFamily, affix="Bridge"):
@@ -868,6 +871,21 @@ class ResumedBridge(BridgeResume):
     def lines(self) -> tuple[str, ...]:
         return (f"Session bridge {self.name}: {self.from_runtime.prefix} -> "
                 f"{self.to_runtime.prefix}",)
+
+
+@dataclass(frozen=True)
+class UnacknowledgedPause(UnresumedBridge):
+    """A bridge that never answered pause may still hold bus resources: install refuses."""
+
+    socket: Path
+    timeout: float
+
+    def require_paused(self) -> None:
+        raise self
+
+    def lines(self) -> tuple[str, ...]:
+        return (f"Session bridge {self.name} at {self.socket} did not acknowledge pause "
+                f"within {self.timeout:g} s",)
 
 
 @dataclass(frozen=True)
@@ -911,7 +929,10 @@ class SessionBridge:
         request = PauseSession(owner=self.observed.owner, process=self.observed.process)
         peer = resources.enter_context(request.connection(self.claim.socket_path))
         stream = resources.enter_context(peer.makefile('rb'))
-        request.decode_reply(stream.readline(4096))
+        try:
+            request.decode_reply(stream.readline(4096))
+        except TimeoutError:
+            return UnacknowledgedPause(self.claim.thread, self.claim.socket_path, peer.gettimeout())
         return PausedSessionBridge(self, peer)
 
 
@@ -926,6 +947,7 @@ class SessionBridgeResumes:
 
     def pause(self, bridge: SessionBridge, resources: ExitStack) -> None:
         self.paused.append(bridge.pause(resources))
+        self.paused[-1].require_paused()
 
     def release(self) -> None:
         """Give every paused peer its selected runtime before waiting for any successor."""

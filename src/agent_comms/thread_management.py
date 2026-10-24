@@ -29,6 +29,7 @@ from .agent_activity import AgentActivity
 from .agent_backend import RuntimeLocation
 from .catalog_store import ChannelCatalog
 from .collaboration_ledger import CollaborationLedger
+from .config_options import RunningSelection
 from .errors import RelationViolationError
 from .field_codec import DeclaredWireType, FieldCodec, NullMember, RecordMember, SingleFieldValue, SubclassUnion
 from .importing import ImportLimits, ImportSnapshot, ThreadImported
@@ -440,12 +441,18 @@ class ThreadManagement:
                 self.registry.register(updated, self.registry.status(thread.name))
             return updated
 
+    def running_selection(self, name: str) -> RunningSelection:
+        thread = self.registry.require(name)
+        return RunningSelection(
+            thread.model.applied(self.agents.agent_info_of(thread.name).model),
+            thread.thinking_level,
+        )
+
     def resolve_thread_model(
         self, name: str, default: DeclaredModel = NativeThreadDefaults.model,
     ) -> str:
-        """Prefer the registered choice, then runtime observation, then default."""
-        thread = self.registry.require(name)
-        return thread.model.otherwise(self.agents.agent_info_of(thread.name).model_or(default.text))
+        """The running model, otherwise the declared default."""
+        return self.running_selection(name).model.otherwise(default.text)
 
     def attach_session(
         self, original: Thread, source_path: str, *, process: ProcessState,
