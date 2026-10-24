@@ -6,7 +6,8 @@ import pytest
 
 from source_revision_fixture import SourceRepository
 from test_todos import order
-from agent_comms.change_report import FileLine, MainRevision, MissingSourceLine, PullRequestHeadRevision
+from agent_comms.change_report import FileLine, MainRevision, PullRequestHeadRevision
+from agent_comms.errors import MissingSourceLine
 from agent_comms.field_codec import MalformedRecord
 from agent_comms.goal_actions import OrderGoalAction
 from agent_comms.repo import GitCommandError

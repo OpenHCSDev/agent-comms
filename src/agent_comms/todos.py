@@ -16,7 +16,7 @@ import subprocess
 import sys
 import time
 from abc import ABC, abstractmethod
-from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
+from collections.abc import Callable, Iterator, Mapping, Sequence
 from contextlib import contextmanager
 from dataclasses import dataclass, field, fields, replace
 from functools import cached_property, partial
@@ -614,9 +614,18 @@ class ListedPullRequest(DeclaredFamily, affix="ListedPullRequest"):
     draft: bool = field(default=False, kw_only=True)
     status_contexts: tuple[str, ...] = field(default=(), kw_only=True)
 
+    def as_unmerged(self) -> tuple[UnmergedListedPullRequest, ...]:
+        return ()
+
+    def as_merged(self) -> tuple[MergedListedPullRequest, ...]:
+        return ()
+
+    def as_closed(self) -> tuple[ClosedListedPullRequest, ...]:
+        return ()
+
     @classmethod
-    def selected(cls, rows: Iterable[ListedPullRequest]) -> tuple[Self, ...]:
-        return tuple(candidate for candidate in rows if isinstance(candidate, cls))
+    @abstractmethod
+    def picked(cls, row: ListedPullRequest) -> tuple[Self, ...]: ...
 
     @cached_property
     def updated_at(self) -> float:
@@ -639,15 +648,36 @@ class ListedPullRequest(DeclaredFamily, affix="ListedPullRequest"):
 class UnmergedListedPullRequest(ListedPullRequest):
     """An open request, selected by its declared member rather than a state string."""
 
+    def as_unmerged(self) -> tuple[UnmergedListedPullRequest, ...]:
+        return (self,)
+
+    @classmethod
+    def picked(cls, row: ListedPullRequest) -> tuple[UnmergedListedPullRequest, ...]:
+        return row.as_unmerged()
+
 
 class ClosedListedPullRequest(ListedPullRequest):
     """Closed without merging; never selected as an open request."""
+
+    def as_closed(self) -> tuple[ClosedListedPullRequest, ...]:
+        return (self,)
+
+    @classmethod
+    def picked(cls, row: ListedPullRequest) -> tuple[ClosedListedPullRequest, ...]:
+        return row.as_closed()
 
 
 @dataclass(frozen=True, kw_only=True)
 class MergedListedPullRequest(ListedPullRequest):
     merge: PullRequestCommit
     merged: str
+
+    def as_merged(self) -> tuple[MergedListedPullRequest, ...]:
+        return (self,)
+
+    @classmethod
+    def picked(cls, row: ListedPullRequest) -> tuple[MergedListedPullRequest, ...]:
+        return row.as_merged()
 
     def parsed(self, problems: tuple[str, ...], orders: tuple[str, ...]) -> MergedPullRequest:
         return MergedPullRequest(self.number, self.branch, self.head, self.updated_at,
@@ -712,20 +742,19 @@ class PullRequests:
                                      for line in result.stdout.splitlines())
         numbers = tuple(dict.fromkeys((*self._open[repo], *self.linked(repo))))
         self.rows(repo, numbers)
-        return UnmergedListedPullRequest.selected(
-            self._read[repo, number] for number in self._open[repo]
-        )
+        return tuple(picked for number in self._open[repo]
+                     for picked in self._read[repo, number].as_unmerged())
 
     def listed(self, repo: RepositoryName, kind: type[ListedPullRequest],
                todo: Todo) -> tuple[PullRequest, ...]:
         self.register((todo,))
         linked = self.linked(repo)
-        requests = tuple(row.parsed(
-            tuple(candidate.id for candidate in linked[row.number]),
-            tuple(dict.fromkeys(order.id for candidate in linked[row.number]
+        requests = tuple(picked.parsed(
+            tuple(candidate.id for candidate in linked[picked.number]),
+            tuple(dict.fromkeys(order.id for candidate in linked[picked.number]
                                 for order in candidate.order.declarations
-                                if PullRequestLink(repo, row.number) in order.pull_requests)))
-            for row in kind.selected(self.rows(repo, tuple(linked))))
+                                if PullRequestLink(repo, picked.number) in order.pull_requests)))
+            for row in self.rows(repo, tuple(linked)) for picked in kind.picked(row))
         return tuple(sorted((request for request in requests if request.belongs_to(todo)),
                             key=lambda request: request.updated_at, reverse=True))
 
