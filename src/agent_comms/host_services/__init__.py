@@ -8,6 +8,7 @@ service has no instance of it and contributes nothing: there is no list of servi
 from __future__ import annotations
 
 import json
+import shlex
 import subprocess
 import time
 from abc import abstractmethod
@@ -47,6 +48,11 @@ class HostService(DeclaredFamily, affix="Service", discovery_package=__name__):
     @abstractmethod
     def running(cls) -> tuple[Self, ...]:
         """This service's instances on this host; none when the host does not run it."""
+
+    @classmethod
+    def installed(cls) -> tuple[Self, ...]:
+        """The instances an install leaves serving: by default, the ones running now."""
+        return cls.running()
 
     @classmethod
     @abstractmethod
@@ -89,10 +95,12 @@ class HostService(DeclaredFamily, affix="Service", discovery_package=__name__):
 
     @classmethod
     def stop_running(cls) -> tuple[HostService, ...]:
-        """Stop every running service, so nothing writes the root while it is restored."""
-        stopped = cls.instances()
-        cls.stop_all(stopped)
-        return stopped
+        """Stop every running service, so nothing writes the root while it is restored,
+        and answer every installed one, so a service already dead is started again too."""
+        installed = tuple(instance for member in cls.members_with(cls)
+                          for instance in member.installed())
+        cls.stop_all(cls.instances())
+        return installed
 
     def start_onto(self, installed: Path) -> RestartedService:
         self.start()
@@ -113,8 +121,20 @@ class HostService(DeclaredFamily, affix="Service", discovery_package=__name__):
         raise ServiceNotServingError(failure)
 
 
+class SystemdUnit:
+    """A unit of the user's systemd manager: systemd, never the caller, owns its processes,
+    so stopping the caller's own unit cannot reach them."""
+
+    @staticmethod
+    def shown(unit: str, name: str) -> str:
+        """One property of the unit as its manager reports it."""
+        return subprocess.check_output(
+            ("systemctl", "--user", "show", "-p", name, "--value", unit), text=True,
+        ).strip()
+
+
 @dataclass(frozen=True)
-class SystemdUserService(HostService, declared_name=None):
+class SystemdUserService(SystemdUnit, HostService, declared_name=None):
     """Systemd owns the unit's process; its definition starts that process again.
 
     Each member declares its readiness options. Systemd, not this configuration,
@@ -140,6 +160,19 @@ class SystemdUserService(HostService, declared_name=None):
         return " ".join(
             json.dumps(word.replace("%", "%%").replace("$", "$$"), ensure_ascii=False)
             for word in (str(executable), *arguments)
+        )
+
+    @classmethod
+    def enabled_commands(cls) -> tuple[tuple[str, ...], ...]:
+        """The command this home's enabled unit declares, read back from ``command_line``;
+        enabling links the unit into ``default.target``, which ``render_unit`` wants."""
+        unit = cls.unit_file(Path.home())
+        return tuple(
+            tuple(word.replace("%%", "%").replace("$$", "$")
+                  for word in shlex.split(line.removeprefix("ExecStart=")))
+            for wanted in (unit.parent / "default.target.wants" / cls.unit,) if wanted.exists()
+            for line in unit.read_text(encoding="utf-8").splitlines()
+            if line.startswith("ExecStart=")
         )
 
     @classmethod
@@ -184,18 +217,9 @@ class SystemdUserService(HostService, declared_name=None):
         unit = cls.unit_file(Path.home())
         if not unit.is_file():
             return 0
-        loaded = subprocess.check_output(
-            ("systemctl", "--user", "show", "-p", "FragmentPath", "--value", name),
-            text=True,
-        ).strip()
-        if Path(loaded).resolve() != unit.resolve():
+        if Path(cls.shown(name, "FragmentPath")).resolve() != unit.resolve():
             return 0
-        return int(
-            subprocess.check_output(
-                ("systemctl", "--user", "show", "-p", "MainPID", "--value", name),
-                text=True,
-            )
-        )
+        return int(cls.shown(name, "MainPID"))
 
     def pid(self) -> int:
         return self._pid_for(self.unit_name())

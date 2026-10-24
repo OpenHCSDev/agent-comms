@@ -104,9 +104,20 @@ class SystemdConnectorService(ConnectorService, SystemdUserService):
         return () if pid == 0 else (cls.from_process(pid),)
 
     @classmethod
+    def installed(cls) -> tuple[Self, ...]:
+        """An enabled connector is started again even when the install found it dead."""
+        return tuple(dict.fromkeys((
+            *cls.running(), *(cls.from_arguments(command[1:]) for command in cls.enabled_commands()),
+        )))
+
+    @classmethod
     def from_process(cls, pid: int) -> Self:
         # Our installed console script's argv is interpreter, script, verb, options.
-        endpoint = ServeVerb.parse(cls.running_arguments(pid)[2:])
+        return cls.from_arguments(cls.running_arguments(pid)[2:])
+
+    @classmethod
+    def from_arguments(cls, arguments: tuple[str, ...]) -> Self:
+        endpoint = ServeVerb.parse(arguments)
         return cls(launch=LaunchRoot.from_path(endpoint.root), port=endpoint.port)
 
     def exec_arguments(self, issuer: str) -> tuple[str, ...]:
