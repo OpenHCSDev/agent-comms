@@ -28,6 +28,7 @@ from pydantic import Field, model_validator
 from agent_comms import field_codec, messages
 from agent_comms.agent_runtime import DeliversInput, ExternalRuntime, PublishesTranscript
 from agent_comms.bus import Bus
+from agent_comms.bus_tables import MessageIdentitySource
 from agent_comms.change_report import NoChangeReport, ReportEvidence
 from agent_comms.child_process import (
     AttachedChild,
@@ -54,7 +55,13 @@ from agent_comms.declared_family import DeclaredFamily
 from agent_comms.declared_verb import DeclaredOptions
 from agent_comms.field_codec import FieldCodec, PathText
 from agent_comms.launch_runtime import LaunchRuntime
-from agent_comms.message_reference import BridgeBeginning, BridgePosition, BridgeStart, InboxStart
+from agent_comms.message_reference import (
+    BridgeBeginning,
+    BridgePosition,
+    BridgeStart,
+    InboxStart,
+    MessageReference,
+)
 from agent_comms.read_basis import ExplicitWatchAcknowledgment
 from agent_comms.runtime_updates import RuntimeUpdate, ThreadOutput
 from agent_comms.send_result import SendResult
@@ -158,9 +165,11 @@ class Binding(BindingIdentity, BridgeStateTable, TypedTable, BindingRequest):
         bus = Bus(Bus.path_in(Path(root)))
         if not bus.path.is_file():
             raise FileNotFoundError(bus.path)
-        with bus.reading() as source:
-            latest = source.page(source.revision() + 1, 1)
-            return BridgeStart(latest[0].reference) if latest else BridgeBeginning()
+        with bus.observing() as db:
+            latest = MessageIdentitySource.select(
+                db, order_by=('seq',), descending=True, limit=1)
+            return (BridgeStart(MessageReference(latest[0].seq, latest[0].message_id))
+                    if latest else BridgeBeginning())
 
     @classmethod
     def add_arguments(cls, parser: argparse.ArgumentParser) -> None:
@@ -907,13 +916,33 @@ class BridgeLog(io.TextIOBase):
 class CliBridge(ExternalRuntime, DeliversInput, Generic[BridgeOptions]):
     """Core delivery and lifetime shared by CLI-specific transports."""
 
+    state_directory: ClassVar[Path]
+
     @classmethod
     def add_arguments(cls, parser: argparse.ArgumentParser) -> None:
         """Declare the options this harness's transport needs."""
 
     @classmethod
     def binding_arguments(cls, arguments: argparse.Namespace) -> None:
-        """Most transports receive the binding explicitly on their command line."""
+        """Every bare bridge command resolves the session's declared reader binding."""
+        if arguments.bus_thread is not None:
+            return
+        session = arguments.session or cls.environment_session()
+        bindings = WatchClaim(session).state().bindings()
+        if len(bindings) != 1:
+            raise ValueError(
+                f'Expected one enrolled binding for session {session}; '
+                f'found {[record.bus for record in bindings]}'
+            )
+        record, = bindings
+        arguments.root = record.root
+        arguments.bus_thread = record.bus
+        arguments.state = record.base_state
+        arguments.session = session
+
+    @classmethod
+    def environment_session(cls) -> str:
+        raise ValueError('Supply --session or a complete bus binding')
 
     options: BridgeOptions
     binding: Binding

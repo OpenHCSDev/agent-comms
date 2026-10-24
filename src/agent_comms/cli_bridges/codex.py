@@ -128,6 +128,7 @@ class CodexAppServer(CodexHistory, OnlineHistory):
 
 
 class CodexBridge(CodexAppServer, TranscriptBridge[CodexOptions], declared_name=None):
+    state_directory = Path('.local/state/codex-comms-inbox')
 
     def __init__(self, options: CodexOptions, binding: Binding, db: sqlite3.Connection) -> None:
         TranscriptBridge.__init__(self, options, binding, db)
@@ -186,5 +187,6 @@ class CodexBridge(CodexAppServer, TranscriptBridge[CodexOptions], declared_name=
 
 
 def main() -> None:
-    run_bridge(CodexBridge, CodexOptions.parse(__doc__, Path.home() / '.local/state/codex-comms-inbox', CodexBridge))
+    run_bridge(CodexBridge, CodexOptions.parse(
+        __doc__, Path.home() / CodexBridge.state_directory, CodexBridge))
 

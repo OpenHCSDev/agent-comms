@@ -188,6 +188,7 @@ class OpenCodeServer(OpenCodeHistory, OnlineHistory):
 
 
 class OpenCodeBridge(OpenCodeServer, TranscriptBridge[OpenCodeOptions], declared_name=None):
+    state_directory = Path('.local/state/opencode-comms-inbox')
     query = {'limit': '20'}  # A restarted bridge publishes again only the newest messages.
 
     def __init__(self, options: OpenCodeOptions, binding: Binding, db: sqlite3.Connection) -> None:
@@ -234,5 +235,6 @@ class OpenCodeBridge(OpenCodeServer, TranscriptBridge[OpenCodeOptions], declared
 
 
 def main() -> None:
-    run_bridge(OpenCodeBridge, OpenCodeOptions.parse(__doc__, Path.home() / '.local/state/opencode-comms-inbox', OpenCodeBridge))
+    run_bridge(OpenCodeBridge, OpenCodeOptions.parse(
+        __doc__, Path.home() / OpenCodeBridge.state_directory, OpenCodeBridge))
 

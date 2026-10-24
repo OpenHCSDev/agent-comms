@@ -1,7 +1,6 @@
 """Claude Code sessions: their stored transcripts, and the live bridge that follows one."""
 from __future__ import annotations
 
-import argparse
 import json
 import sqlite3
 from collections.abc import Iterator
@@ -16,7 +15,6 @@ from agent_comms.runtime_updates import RuntimeUpdate, SessionFacts
 from agent_comms.thread_text import NoThreadText, ThreadText
 from agent_comms.watched import FileSource
 from agent_comms_hooks.session import SessionHook
-from agent_comms_hooks.watch import WatchClaim
 
 from ..wire_models import WireModel
 from .claude_protocol import CLAUDE_RECORD, ClaudeMonitorFrame, ClaudeRecord, ClaudeSession
@@ -94,24 +92,11 @@ class ClaudeBridge(RunningClaude, LineMonitorBridge, declared_name=None):
     incoming_frame = ClaudeMonitorFrame
     window_bytes = ClaudeMonitorFrame.BATCH_CHARS * 2
     RECENT_BYTES = 4 * 1024 * 1024
+    state_directory = Path('.local/state/claude-comms-inbox')
 
     @classmethod
-    def binding_arguments(cls, arguments: argparse.Namespace) -> None:
-        """A bare Monitor command uses the binding enrolled for this Claude session."""
-        if arguments.bus_thread is not None:
-            return
-        session = arguments.session or SessionHook.environment_session()
-        bindings = WatchClaim(session).state().bindings()
-        if len(bindings) != 1:
-            raise ValueError(
-                f'Expected one enrolled binding for session {session}; '
-                f'found {[record.bus for record in bindings]}'
-            )
-        record, = bindings
-        arguments.root = record.root
-        arguments.bus_thread = record.bus
-        arguments.state = record.base_state
-        arguments.session = session
+    def environment_session(cls) -> str:
+        return SessionHook.environment_session()
 
     def __init__(self, options: Options, binding: Binding, db: sqlite3.Connection) -> None:
         LineMonitorBridge.__init__(self, options, binding, db)
@@ -168,4 +153,5 @@ class Connect(Enrol):
 
 
 def main() -> None:
-    run_bridge(ClaudeBridge, Options.parse(__doc__, Path.home() / '.local/state/claude-comms-inbox', ClaudeBridge))
+    run_bridge(ClaudeBridge, Options.parse(
+        __doc__, Path.home() / ClaudeBridge.state_directory, ClaudeBridge))
