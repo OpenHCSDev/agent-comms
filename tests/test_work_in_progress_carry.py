@@ -29,8 +29,9 @@ def test_the_instruction_and_the_compaction_reader_declare_one_format(monkeypatc
                          "Now: a\nNext: b\nUncommitted: c")
     assert not re.search(module.WORK_IN_PROGRESS_PATTERN, "Now: a\nUncommitted: c")
     # Labels elsewhere in the instruction never become compaction markers.
+    read_text = Path.read_text
     monkeypatch.setattr(Path, "read_text", lambda self: "`Other:` unrelated\n\n" + prose
-                        + "\n`Later:` unrelated\n")
+                        + "\n`Later:` unrelated\n" if self == INSTRUCTION else read_text(self))
     assert _patch_module().WORK_IN_PROGRESS_MARKERS == module.WORK_IN_PROGRESS_MARKERS
 
 

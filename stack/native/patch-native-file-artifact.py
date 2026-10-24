@@ -1,7 +1,29 @@
 #!/usr/bin/env python3
 """Attach original local write evidence to the same successful SDK tool result."""
-from pathlib import Path
 import sys
+from dataclasses import dataclass
+from pathlib import Path
+
+
+@dataclass(frozen=True)
+class SdkFileTool:
+    """One Pi SDK file tool: its module, kept fs imports, written value and result details."""
+
+    name: str
+    imports: str
+    content: str
+    original: str
+
+
+SDK_FILE_TOOLS = (
+    SdkFileTool("write", "mkdir as fsMkdir", "content", "undefined"),
+    SdkFileTool(
+        "edit",
+        "access as fsAccess, readFile as fsReadFile",
+        "finalContent",
+        "{ diff: diffResult.diff, patch, firstChangedLine: diffResult.firstChangedLine }",
+    ),
+)
 
 
 def replace_once(path, before, after):
@@ -17,21 +39,19 @@ def main(package):
         Path(__file__).with_name("native-file-artifact.mjs").read_bytes())
     (tools / "native-file-artifact-schema.mjs").write_bytes(
         Path(__file__).with_name("native-file-artifact-schema.mjs").read_bytes())
-    for name in ("write", "edit"):
-        path = tools / f"{name}.js"
-        imports = "mkdir as fsMkdir" if name == "write" else "access as fsAccess, readFile as fsReadFile"
+    for tool in SDK_FILE_TOOLS:
+        path = tools / f"{tool.name}.js"
         replace_once(path,
-            f'import {{ {imports}, writeFile as fsWriteFile }} from "fs/promises";',
-            f'import {{ {imports} }} from "fs/promises";')
+            f'import {{ {tool.imports}, writeFile as fsWriteFile }} from "fs/promises";',
+            f'import {{ {tool.imports} }} from "fs/promises";')
         replace_once(path,
             '    writeFile: (path, content) => fsWriteFile(path, content, "utf-8"),',
             '    writeFile: (path, content) => CompletedFileMutation.write(path, content),')
-        content = "content" if name == "write" else "finalContent"
-        replace_once(path, f"                await ops.writeFile(absolutePath, {content});",
-            f"                const mutation = await ops.writeFile(absolutePath, {content});")
-        original = "undefined" if name == "write" else "{ diff: diffResult.diff, patch, firstChangedLine: diffResult.firstChangedLine }"
-        replace_once(path, f"                    details: {original},",
-            f"                    details: CompletedFileMutation.resultDetails(mutation, {original}),")
+        replace_once(path, f"                await ops.writeFile(absolutePath, {tool.content});",
+            f"                const mutation = await ops.writeFile(absolutePath, {tool.content});")
+        details = f"CompletedFileMutation.resultDetails(mutation, {tool.original})"
+        replace_once(path, f"                    details: {tool.original},",
+            f"                    details: {details},")
         path.write_text('import { CompletedFileMutation } from "./agent-comms-file-artifact.js";\n' + path.read_text())
 
 

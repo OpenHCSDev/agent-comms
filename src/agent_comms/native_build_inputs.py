@@ -99,9 +99,10 @@ class NativeBuildInputs:
         """The files the recipe in stack/native reads: that directory and the
         repository inputs it declares.
         """
-        environment = dict(os.environ)
-        for name in ("GIT_DIR", "GIT_INDEX_FILE", "GIT_WORK_TREE"):
-            environment.pop(name, None)
+        # A hook's or bisect's GIT_* variables would point git at another repository.
+        environment = {
+            name: value for name, value in os.environ.items() if not name.startswith("GIT_")
+        }
         tracked = subprocess.run(
             [
                 "git",

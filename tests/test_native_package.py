@@ -261,7 +261,7 @@ def test_publication_installs_declared_source_with_one_link(launcher, tmp_path):
     prepared = store.package_for(stack / "pi-native.sha256").parents[2]
     package.parents[2].rename(prepared)
     deployments = tmp_path / "deployments"
-    launch = [str(stack / "bin/prepare-pi-native"), "--publish", str(deployments)]
+    launch = [str(stack / "native/prepare-pi-native"), "--publish", str(deployments)]
 
     # Keep this publication fixture independent of the ambient Node installation.
     interpreter = tmp_path / "interpreter"
@@ -303,7 +303,7 @@ def test_prepare_imports_agent_comms_with_the_stack_interpreter_not_path_python3
     env = dict(os.environ, PATH=f"{bare}:{os.environ['PATH']}")
     assert subprocess.run(["python3", "-c", "import metaclass_registry"], env=env,
                           capture_output=True).returncode
-    result = subprocess.run([str(stack / "bin/prepare-pi-native")], env=env,
+    result = subprocess.run([str(stack / "native/prepare-pi-native")], env=env,
                             capture_output=True, text=True, timeout=15)
     assert result.returncode == 0, result.stderr
     assert result.stdout == f"PI_NATIVE_BIN={stack}/bin/pi-native\n"
@@ -321,7 +321,7 @@ def test_publication_refuses_unlisted_dependency_drift(launcher, tmp_path):
     other.mkdir()
     deployments = tmp_path / "deployments"
     result = subprocess.run(
-        [str(stack / "bin/prepare-pi-native"), "--publish", str(deployments)],
+        [str(stack / "native/prepare-pi-native"), "--publish", str(deployments)],
         capture_output=True, timeout=300,
     )
     assert deployments.is_dir()

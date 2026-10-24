@@ -8,8 +8,11 @@ from agent_comms.native_pi import NativeContextJournal
 
 
 def main() -> None:
-    target = (Path(sys.argv[1]) if len(sys.argv) > 1 else
-              Path(__file__).resolve().parents[1] / "stack/native/native-proof-schema.mjs")
+    target = (
+        Path(sys.argv[1])
+        if len(sys.argv) > 1
+        else Path(__file__).resolve().parents[1] / "stack/native/native-proof-schema.mjs"
+    )
     target.write_text(
         "// Rendered at build from NativeContextJournal; never edited.\n"
         "export const nativeProofSchema = "

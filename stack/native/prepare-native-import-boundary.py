@@ -17,6 +17,8 @@ from agent_comms.native_build_inputs import McpClientSource, NativeRepositoryInp
 from agent_comms.private_path import PrivateDirectoryRole
 
 LOADER_SHA = "a1393de916487a2c47107ac7239f3139dcdb938705f88ba1ea5a954b3c8bb483"
+# Pi's own session store; a dependency shipping another is a second writer.
+NATIVE_SESSION_MANAGER = "session-manager.js"
 
 
 def patch_loader(path: Path) -> None:
@@ -136,7 +138,7 @@ def materialize(source: Path, target: Path) -> None:
                     not actual.is_relative_to(source) or not actual.is_file()
                 ):
                     raise ValueError("MCP copy contains external or directory alias")
-                if path.name == "session-manager.js":
+                if path.name == NATIVE_SESSION_MANAGER:
                     raise ValueError("MCP dependencies contain another native session manager")
                 if actual.is_file():
                     size += actual.stat().st_size
