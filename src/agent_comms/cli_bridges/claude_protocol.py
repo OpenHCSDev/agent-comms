@@ -115,8 +115,10 @@ class ClaudeMonitorFrame(MonitorIncomingFrame):
         decoded = cls.JSON_TEXT.validate_json(line)
         header, _, body = decoded.partition('\n')
         sender, message_id, _ = header.removeprefix(cls.HEADER + ' · ').rsplit(' · ', 2)
-        return MonitorPart(id=message_id, sender=sender, number=int(number),
-                           total=int(total), body=body)
+        return MonitorPart.model_validate({
+            'id': message_id, 'sender': sender, 'number': int(number),
+            'total': int(total), 'body': body,
+        })
 
     @classmethod
     def decode_event(cls, event: str) -> tuple[MonitorFrame, ...]:

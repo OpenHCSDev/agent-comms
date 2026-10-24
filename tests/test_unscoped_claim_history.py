@@ -7,7 +7,7 @@ from agent_comms.envelope_claim_transitions import (
     ClaimProjection, ClaimRelease, ClaimTransition, NativeClaim, ReleasedClaims,
     UnrecordedScope, UnscopedClaims, WakeClaims,
 )
-from agent_comms.field_codec import FieldCodec, MalformedRecord, TurnId
+from agent_comms.field_codec import FieldCodec, MalformedRecord, MessageId, TurnId
 from agent_comms.thread_status import RunningThreadStatus
 from agent_comms.threads import Thread
 
@@ -21,9 +21,12 @@ def test_unscoped_history_row_decodes_projects_never_live_and_releases(tmp_path)
     comms.registry.declare(Thread("peer", frozenset(), str(tmp_path)))
     owner = comms.registry.require("owner")
     resource = str(tmp_path / "held.py")
+    message_id = MessageId.mint("msg-1")
+    next_message_id = MessageId.mint("msg-2")
     # The row exactly as the writer before native claim scopes stored it.
     stored = {"owner": "owner", "incarnation": str(owner.created_at), "seq": 1,
-              "message_id": "msg-1", "claims": [resource], "releases": [], "generation": G1}
+              "message_id": FieldCodec.encode(message_id), "claims": [resource],
+              "releases": [], "generation": G1}
 
     transition = FieldCodec.decode(ClaimTransition, stored)
     assert type(transition) is UnscopedClaims
@@ -40,7 +43,7 @@ def test_unscoped_history_row_decodes_projects_never_live_and_releases(tmp_path)
         owner="peer",
         incarnation=str(peer.created_at),
         seq=2,
-        message_id="msg-2",
+        message_id=next_message_id,
         claims=(resource,),
         generation=G2,
         resource_scope=NativeClaim(
@@ -54,7 +57,7 @@ def test_unscoped_history_row_decodes_projects_never_live_and_releases(tmp_path)
 
     # The owner's recorded release of its unscoped generation still replays.
     released = ReleasedClaims(owner="owner", incarnation=str(owner.created_at), seq=2,
-                              message_id="msg-2", releases=(ClaimRelease(resource, G1),))
+                              message_id=next_message_id, releases=(ClaimRelease(resource, G1),))
     assert dict(released.project(held)) == {}
 
     # A row published today records its scope; history rows carry none.

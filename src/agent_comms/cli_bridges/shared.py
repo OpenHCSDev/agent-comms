@@ -23,7 +23,7 @@ from functools import cached_property, partial
 from pathlib import Path
 from typing import Annotated, ClassVar, Generic, Literal, Self, TextIO, TypeVar
 
-from pydantic import Field, model_validator
+from pydantic import Field, InstanceOf, PlainSerializer, PlainValidator, model_validator
 
 from agent_comms import field_codec, messages
 from agent_comms.agent_runtime import DeliversInput, ExternalRuntime, PublishesTranscript
@@ -1224,7 +1224,13 @@ class MonitorBridgeSwapping(MonitorProtocolFrame, declared_name='bridge-swapping
 
 
 class MonitorPart(MonitorFrame, declared_name='part'):
-    id: str
+    id: InstanceOf[
+        Annotated[
+            MessageId,
+            PlainValidator(partial(FieldCodec.decode, MessageId)),
+            PlainSerializer(FieldCodec.encode),
+        ]
+    ]
     sender: str
     number: int = Field(ge=1)
     total: int = Field(ge=1)
