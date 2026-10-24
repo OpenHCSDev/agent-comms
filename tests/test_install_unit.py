@@ -59,7 +59,8 @@ def test_spawn_starts_a_unit_whose_request_round_trips(tmp_path, systemd):
     assert f"--property=StandardInput=file:{run.unit.request}" in argv
     assert f"--property=StandardOutput=file:{run.unit.result}" in argv
     assert f"--property=StandardError=file:{run.unit.errors}" in argv
-    assert "--property=KillMode=process" in argv
+    # Owners leave by their own scope, so ending the unit still cleans up its own children.
+    assert not any(word.startswith("--property=KillMode") for word in argv)
     assert argv[-3:] == [sys.executable, "-m", "agent_comms.installer"]
     assert FieldCodec.decode(InstallRun, FieldCodec.parse(run.unit.request.read_text())) == run
 
