@@ -18,7 +18,7 @@ from typing import TYPE_CHECKING, Annotated, ClassVar, Self, cast
 from pydantic import JsonValue
 
 from agent_comms.declared_family import DeclaredFamily
-from agent_comms.errors import RelationViolationError
+from agent_comms.errors import RelationViolationError, ToolRefusedError
 from agent_comms.field_codec import (
     FieldCodec,
     FieldRepresentation,
@@ -477,6 +477,14 @@ class UnitStorage:
         if self.over_checkouts:
             self.rule.deny(f'at most {self.rule.max_checkouts} checkouts besides the home checkout')
 
+    def require_retired(self, problem: str) -> None:
+        for path in self.rule.problem_checkouts(self.unit, problem):
+            if path in self.extra_checkouts:
+                self.rule.deny(
+                    f'{self.unit} still has the checkout {path} for this order; '
+                    'it removes it before the order counts as done')
+        self.require_quota()
+
 
 @dataclass(frozen=True)
 class StorageViolation(UndatedStandingRule, declared_name=None):
@@ -576,7 +584,7 @@ class ShellProgram:
                      for effect in decode(self, args, cwd))
 
 
-class StorageDenied(SelectedToolDenied):
+class StorageDenied(SelectedToolDenied, ToolRefusedError):  # noqa: N818 - existing nominal refusal
     """The storage preflight refused an operation before it executed."""
 
 
