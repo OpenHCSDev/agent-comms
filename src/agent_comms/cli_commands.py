@@ -239,12 +239,8 @@ class TargetAction:
     """A selection keeps the bound commands, not a separate permission list."""
     bound: tuple[CliCommand, ...]
     targets: tuple[str, ...]
+    declaration: type[CliCommand]
     channels: ChannelSelection = NoChannel()
-
-    @property
-    def declaration(self) -> type[CliCommand]:
-        member = type(self.bound[0])
-        return member.catalog_declaration() if len(self.targets) > 1 else member
 
     @property
     def editable_fields(self) -> tuple[TargetField, ...]:
@@ -368,18 +364,17 @@ class TargetSelection(ABC):
     """The targets one execution runs on; each kind owns how its result comes back."""
     targets: tuple[CommandTarget, ...]
 
-    @staticmethod
-    def decode(raw: CommandTarget | tuple[CommandTarget, ...], *, multiple: bool) -> TargetSelection:
-        if isinstance(raw, tuple):
-            if not raw:
-                raise ValueError('Select at least one target')
-            names = tuple(dict.fromkeys(raw))
-            return (OneTarget if len(names) == 1 and not multiple else TargetBatch)(names)
-        return OneTarget((raw,))
+    def __post_init__(self) -> None:
+        if not self.targets:
+            raise ValueError('Select at least one target')
 
     def command_members(self, family: type[CliCommand]) -> tuple[type[CliCommand], ...]:
-        """Derive menu membership from cardinality and declared capability."""
-        return family.members_with(MultipleTargets if len(self.targets) > 1 else family)
+        """Menu membership on one target: every member of the family."""
+        return family.members_with(family)
+
+    def listed_declaration(self, member: type[CliCommand]) -> type[CliCommand]:
+        """The declaration a catalog lists for a member bound on this selection."""
+        return member
 
     @abstractmethod
     def run(self, declaration: type[CliCommand], comms: Comms, arguments: dict[str, object],
@@ -390,6 +385,11 @@ class TargetSelection(ABC):
 
 class OneTarget(TargetSelection):
     """A single target: resolve errors raise and the bound command's own result returns."""
+
+    def __post_init__(self) -> None:
+        super().__post_init__()
+        if len(self.targets) != 1:
+            raise ValueError('This action requires a single target')
 
     def run(self, declaration: type[CliCommand], comms: Comms, arguments, *, confirmed: bool, channel: ChannelSelection, project: str, snapshot: RegistrySnapshot, catalog: CatalogDocument | None) -> CliResult:
         name, = self.targets
@@ -420,6 +420,12 @@ class TargetBatchSchedule:
 
 class TargetBatch(TargetSelection):
     """Every other selection: each target's failure is collected and a TargetBatchResult returns."""
+
+    def command_members(self, family: type[CliCommand]) -> tuple[type[CliCommand], ...]:
+        return family.members_with(MultipleTargets)
+
+    def listed_declaration(self, member: type[CliCommand]) -> type[CliCommand]:
+        return member.catalog_declaration()
 
     def run(self, declaration: type[CliCommand], comms: Comms, arguments, *, confirmed: bool, channel: ChannelSelection, project: str, snapshot: RegistrySnapshot, catalog: CatalogDocument | None) -> CliResult:
         declaration.require_batch()
@@ -799,10 +805,9 @@ class MultipleTargets:
     """Commands accepting a batch own its decoding and execution permission."""
 
     @classmethod
-    def selected_targets(
-        cls, raw: CommandTarget | tuple[CommandTarget, ...]
-    ) -> TargetSelection:
-        return TargetSelection.decode(raw, multiple=True)
+    def selected_targets(cls, targets: tuple[CommandTarget, ...]) -> TargetSelection:
+        """A batch command answers every selection, even of one target, with its batch result."""
+        return TargetBatch(tuple(dict.fromkeys(targets)))
 
     @classmethod
     def require_batch(cls) -> None:
@@ -860,9 +865,11 @@ class CliCommand[Answer: CliResult = CliResult](
         return (cls.declared_name, *arguments)
 
     @classmethod
-    def selected_targets(cls, raw: CommandTarget | tuple[CommandTarget, ...]) -> TargetSelection:
-        """Decode a CLI or menu target input once, before command execution."""
-        return TargetSelection.decode(raw, multiple=False)
+    def selected_targets(cls, targets: tuple[CommandTarget, ...]) -> TargetSelection:
+        """A single-target command runs on one target; a wider selection is a batch its
+        run refuses (``require_batch``) and the menu catalog lists batch actions for."""
+        distinct = tuple(dict.fromkeys(targets))
+        return (OneTarget if len(distinct) == 1 else TargetBatch)(distinct)
 
     @classmethod
     def require_batch(cls) -> None:
@@ -925,11 +932,11 @@ class CliCommand[Answer: CliResult = CliResult](
                     available = member.bindings(
                         comms, name, context, snapshot=snapshot, catalog=catalog, resolved=resolved)
                     if available:
-                        declaration = member.catalog_declaration() if len(selected) > 1 else member
+                        declaration = target.listed_declaration(member)
                         grouped.setdefault(declaration, {}).update(dict.fromkeys(
                             command.for_editor(comms, name.name, project) for command in available))
         names = tuple(name for item in selected for name in item.names)
-        return tuple(TargetAction(tuple(commands), names,
+        return tuple(TargetAction(tuple(commands), names, declaration,
                                   channel if declaration.channel_fields() else NoChannel())
                      for declaration, commands in grouped.items())
 
@@ -953,7 +960,7 @@ class CliCommand[Answer: CliResult = CliResult](
         bound = self.for_editor(comms, target.name, project)
         channels = next((OneChannel(getattr(bound, item.name))
                          for item in bound.channel_fields()), NoChannel())
-        return TargetAction((bound,), target.names, channels)
+        return TargetAction((bound,), target.names, type(bound), channels)
 
     def run(self, ctx: Comms, output: TextIO) -> int:
         """Run this command and write its declared result."""

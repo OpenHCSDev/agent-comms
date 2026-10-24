@@ -298,8 +298,10 @@ class TestDeclaredTargetActions:
         code, refused = cli(tmp_path, 'target-action', '--target', '#renamed', '--operation', 'delete-tag')
         assert code == 1 and 'Remove #renamed' in refused['error']
         code, deleted = cli(tmp_path, 'target-action', '--target', '#renamed', '--operation', 'delete-tag', '--confirmed')
-        assert code == 0 and deleted['tag'] == 'renamed' and deleted['removed_tag']
-        assert deleted['removed_threads'] == []
+        outcome, = deleted['outcomes']
+        assert code == 0 and outcome['result']['tag'] == 'renamed'
+        assert outcome['result']['removed_tag']
+        assert outcome['result']['removed_threads'] == []
         _, detail = cli(tmp_path, 'thread', '--name', 'tagged')
         assert detail['tags'] == ['first']
         _, builtins = cli(tmp_path, 'target-actions', '--target', '#all')
@@ -325,12 +327,18 @@ class TestSelectedTargetActions:
         from agent_comms.thread_status import StoppedThreadStatus
 
         comms = self.declared(tmp_path)
-        assert CliCommand.target_catalog(comms, CliCommand.selected_targets(CommandTarget.named('project')), project=str(tmp_path)) == ()
-        assert CliCommand.target_catalog(comms, CliCommand.selected_targets(CommandTarget.named('missing')), project=str(tmp_path)) == ()
-        with pytest.raises(UnregisteredThreadError):
-            TargetEdit(ArchiveCliCommand, ArchiveCliCommand.selected_targets(CommandTarget.named('project')), {}).apply(comms)
+        for name in ('project', 'missing'):
+            selected = CliCommand.selected_targets((CommandTarget.named(name),))
+            assert CliCommand.target_catalog(comms, selected, project=str(tmp_path)) == ()
+        refused = TargetEdit(ArchiveCliCommand,
+                             ArchiveCliCommand.selected_targets((CommandTarget.named('project'),)),
+                             {}).apply(comms)
+        failed, = refused.outcomes
+        assert failed.error_type == UnregisteredThreadError.__name__
         comms.registry.declare(Thread('project', frozenset(), str(tmp_path)), StoppedThreadStatus())
-        actions = CliCommand.target_catalog(comms, CliCommand.selected_targets(CommandTarget.named('project')), project=str(tmp_path))
+        actions = CliCommand.target_catalog(
+            comms, CliCommand.selected_targets((CommandTarget.named('project'),)),
+            project=str(tmp_path))
         assert any(action.declaration is ArchiveCliCommand for action in actions)
 
     def test_restart_catalog_uses_original_owner_and_idle_requirements(self, tmp_path):
@@ -351,7 +359,8 @@ class TestSelectedTargetActions:
         status = RunningThreadStatus()
         comms.registry.register(owner, status)
         action = next(action for action in CliCommand.target_catalog(
-            comms, CliCommand.selected_targets(CommandTarget.named('alpha')), project=str(tmp_path))
+            comms, CliCommand.selected_targets((CommandTarget.named('alpha'),)),
+            project=str(tmp_path))
             if action.declaration is RestartCliCommand)
         assert action.bound == (RestartCliCommand(name=OneOwner('alpha')),)
         assert action.editable_fields == ()
@@ -361,7 +370,9 @@ class TestSelectedTargetActions:
             with pytest.raises(ValueError):
                 action.edited(arguments)
             with pytest.raises(ValueError):
-                RestartCliCommand.execute_target(comms, RestartCliCommand.selected_targets(CommandTarget.named('alpha')), arguments)
+                RestartCliCommand.execute_target(
+                    comms, RestartCliCommand.selected_targets((CommandTarget.named('alpha'),)),
+                    arguments)
         explicit = RestartCliCommand(name=OneOwner('alpha'), agent_bin=GivenBinary('/operator/native'),
                                       agent_args=GivenArguments(('--no-extensions',)))
         from agent_comms.cli import build_parser
