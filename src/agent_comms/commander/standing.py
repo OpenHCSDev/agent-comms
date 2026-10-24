@@ -14,7 +14,7 @@ from agent_comms.bus import BusReader
 from agent_comms.channel_targets import CommsTag
 from agent_comms.cli_commands import InstallCliCommand
 from agent_comms.commander.questions import UnansweredUnitAsks
-from agent_comms.commander_heartbeat import CommanderHeartbeat
+from agent_comms.commander_service import CommanderService
 from agent_comms.comms import Comms
 from agent_comms.goal_actions import ReissuedOrderGoalAction
 from agent_comms.heartbeat_frame import HeartbeatFrame
@@ -501,7 +501,7 @@ class HeartbeatSilent(IndependentStandingRule, DatedStandingRule, declared_name=
         completed = ServicePassStore.at(comms.root).read().commander_completed.get(owner.incarnation)
         now = time.time()
         found = []
-        for request in CommanderHeartbeat.requested_by(owner, comms.goals):
+        for request in CommanderService.requested_by(owner, comms.goals):
             if completed is None or completed < request.created_at:
                 rule = HeartbeatNotStarted(request.created_at + cls.seconds, request.id)
             else:
@@ -561,7 +561,7 @@ class CommanderDeaf(IndependentStandingRule, DatedStandingRule):
     def enforce(self, comms: Comms, commander: str) -> None:
         """The commander's own inbox is the dead path, so #comms hears it instead."""
         comms.messaging.send(
-            CommanderHeartbeat.sender, CommsTag.channel(), f"{commander}: {self.line()}")
+            CommanderService.sender, CommsTag.channel(), f"{commander}: {self.line()}")
 
 @dataclass(frozen=True)
 class Unjudged(ReasonedStandingRule, UndatedStandingRule):
