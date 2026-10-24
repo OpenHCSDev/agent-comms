@@ -16,7 +16,6 @@ from .coordination_snapshot import RecoverySnapshot
 from .coordination_tables.responses import ResponseObligation
 from .durable_turn import DurableTurn
 from .envelope_claim_transitions import WakeClaim
-from .field_codec import FieldCodec, MessageId
 from .optional_awareness_projection import OptionalAwarenessProjection
 from .native_failures import NativePiUnavailable
 from .owner_fence import prepare_fence_token
@@ -152,7 +151,7 @@ class SelectedAttempt:
         claim_scope = WakeClaim(
             wire_root_id=participant.root_id,
             source_seq=assignment.wire_seq,
-            source_message_id=FieldCodec.decode(MessageId, assignment.message_id),
+            source_message_id=assignment.message_id,
             wake_assignment_id=assignment.assignment_id,
             wake_revision=assignment.revision,
             recipient_lookup=participant.lookup,

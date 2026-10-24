@@ -112,7 +112,7 @@ def assignment():
         recipient="worker",
         recipient_lookup="owner-1",
         wire_seq=2,
-        message_id="message-1",
+        message_id=MessageId.mint("message-1"),
         audience=MessageAudience.DIRECT,
         accepted_at_ms=100,
         updated_at_ms=100,
@@ -202,7 +202,7 @@ def sql_wire_execution(db, *, pending=True, name="e", target="requester"):
     sql_execution(db, name=name, status="queued", origin="wire")
     WakeAssignment(
         assignment_id="a", recipient="worker", recipient_lookup="p",
-        wire_seq=2, message_id="m", audience=MessageAudience.DIRECT,
+        wire_seq=2, message_id=MessageId.mint("m"), audience=MessageAudience.DIRECT,
         lifecycle=EngagedAssignment.build(FullWake(), name, target),
         accepted_at_ms=0, updated_at_ms=0, revision=1,
     ).insert(db)

@@ -70,7 +70,7 @@ from agent_comms.execution_states import (
     FailedExecution,
     PendingExecution,
 )
-from agent_comms.field_codec import FieldCodec
+from agent_comms.field_codec import FieldCodec, MessageId
 from agent_comms.messages import Message, InfoKind
 from agent_comms.owner_fence import prepare_fence_token
 from agent_comms.recovery_states import FailedRecovery, ModelStalledRecovery, RecoveredRecovery
@@ -280,7 +280,7 @@ def test_claim_acceptance_requires_initial_mode_decision(db_path: Path) -> None:
                 recipient="Owner",
                 recipient_lookup="owner",
                 wire_seq=index,
-                message_id=f"message-{index}",
+                message_id=MessageId.mint(f"message-{index}"),
                 audience=MessageAudience.DIRECT,
                 accepted_at_ms=1_000,
                 updated_at_ms=1_000,
@@ -1073,7 +1073,7 @@ def test_unstarted_failure_and_claim_requeue(db_path: Path) -> None:
                 recipient="Owner",
                 recipient_lookup="owner",
                 wire_seq=1,
-                message_id="message",
+                message_id=MessageId.mint("message"),
                 audience=MessageAudience.DIRECT,
                 accepted_at_ms=1_000,
                 updated_at_ms=1_000,

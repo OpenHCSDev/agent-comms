@@ -13,6 +13,7 @@ from agent_comms import field_codec
 
 from .channel_targets import CommandTarget
 from .errors import RelationViolationError
+from .field_codec import TurnId
 from .input_attempt import (
     UNOBSERVED_DELIVERY_SCOPE,
     GoalInputDecision,
@@ -264,7 +265,7 @@ class InputDispositions(DurableStore):
         where, parameters = _members("owner", sorted(owners))
         return self._select(f"unresolved = 1 AND {where}", parameters)
 
-    def in_turn(self, turn_id: str) -> InputDocument:
+    def in_turn(self, turn_id: TurnId) -> InputDocument:
         return self._select('"turn_id" = ?', (turn_id,))
 
 

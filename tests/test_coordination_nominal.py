@@ -126,7 +126,7 @@ def test_new_response_state_roundtrips_real_store(tmp_path):
                 ).insert(db)
                 WakeAssignment(
                     assignment_id="c", recipient="owner", recipient_lookup="p",
-                    wire_seq=1, message_id="m", audience=MessageAudience.DIRECT,
+                    wire_seq=1, message_id=MessageId.mint("m"), audience=MessageAudience.DIRECT,
                     lifecycle=EngagedAssignment.build(FullWake(), "e", "requester"),
                     accepted_at_ms=0, updated_at_ms=0,
                 ).insert(db)
@@ -163,7 +163,7 @@ def test_assignment_extension_derives_sql_projection_and_transitions(tmp_path):
                 recipient="owner",
                 recipient_lookup="owner",
                 wire_seq=1,
-                message_id="message",
+                message_id=MessageId.mint("message"),
                 audience=MessageAudience.DIRECT,
                 lifecycle=AwaitingAssignment(),
                 accepted_at_ms=0,

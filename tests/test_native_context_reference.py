@@ -18,7 +18,7 @@ from agent_comms.cursor_owner import (
     RecordedCursor,
     UnstartedCursor,
 )
-from agent_comms.field_codec import FieldCodec, InputId
+from agent_comms.field_codec import FieldCodec, InputId, MessageId
 from agent_comms.historical_native_inputs import (
     FullHistoricalNativeInput,
     TriageHistoricalNativeInput,
@@ -121,7 +121,7 @@ def test_original_unrecorded_context_and_reserved_input_remain_distinct_from_cor
 @pytest.fixture
 def historical_source(recorded):
     return dict(
-        wire_root_id="a" * 32, source_seq=1, source_message_id="original-message",
+        wire_root_id="a" * 32, source_seq=1, source_message_id=MessageId.mint("original-message"),
         assignment_id="d" * 32, input_id=recorded.input_id,
         owner_lookup=recorded.owner_lookup,
         owner_generation=recorded.owner_generation,
