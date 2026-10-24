@@ -16,7 +16,7 @@ from typing import TYPE_CHECKING, ClassVar
 
 from pydantic import JsonValue
 
-from agent_comms.errors import ToolRefusedError
+from agent_comms.errors import MissingSourceLine
 
 from .field_codec import (
     MalformedRecord,
@@ -25,14 +25,10 @@ from .field_codec import (
     SubclassUnion,
     WireValue,
 )
-from .repo import GitCommandError, Repo
+from .repo import Checkout, GitCommandError, Repo
 
 if TYPE_CHECKING:
     from .todos import PullRequestLink
-
-
-class MissingSourceLine(ToolRefusedError):
-    """A cited file:line is not in its declared source revision."""
 
 
 @dataclass(frozen=True)
@@ -65,6 +61,9 @@ class SourceRevision(ABC):
             return tuple(text.splitlines())
         except GitCommandError as error:
             if error.source_path_absent(commit, path):
+                for submodule in Checkout(repository).submodules():
+                    if submodule.contains(path):
+                        return submodule.lines(commit, path)
                 raise MissingSourceLine(
                     f'Source file {file} does not exist at {commit}.'
                 ) from error
