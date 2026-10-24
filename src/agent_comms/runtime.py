@@ -15,8 +15,8 @@ import logging
 import os
 import secrets
 import socket
-from collections.abc import Coroutine, Iterator
-from contextlib import ExitStack, contextmanager, suppress
+from collections.abc import Coroutine
+from contextlib import ExitStack, suppress
 from contextvars import ContextVar
 from dataclasses import dataclass
 from pathlib import Path
@@ -50,7 +50,7 @@ from .owner_protocol import (
 from .owner_connection import OwnerConnection, OwnerIdentityChangedError, socket_path
 from .runtime_requests import RuntimeRequest, SubscribeRuntimeRequest
 from .errors import RelationViolationError
-from .coordination_errors import CoordinationError, IdentityConflict, RequestRefused
+from .coordination_errors import CoordinationError, IdentityConflict
 from .native_failures import NativeRequestFailure
 from .private_path import PrivateSocketRole
 
@@ -58,15 +58,6 @@ if TYPE_CHECKING:
     from .acp import CommsAgent
     from .selected_write_authority import AcpSelectedWriteAuthority
     from .turn_runner import TurnRunner
-
-
-@contextmanager
-def client_refusals() -> Iterator[None]:
-    """Client-side ACP errors enter Core as refusals."""
-    try:
-        yield
-    except RequestError as error:
-        raise RequestRefused(error.code, str(error), error.data) from error
 
 
 class UnboundClient(SessionUpdateSink):
@@ -311,8 +302,7 @@ class RuntimeServer(SessionUpdateSink):
         delivered = False
         client = self.agent.sessions.client
         if client is not None:
-            with client_refusals():
-                delivered = await client.publish_update(session_id=session_id, update=update)
+            delivered = await client.publish_update(session_id=session_id, update=update)
         # Do not re-resolve the recipient set after an awaited handoff. A
         # socket reattach has a new identity even with the same session ID.
         sockets = (
@@ -358,7 +348,7 @@ class RuntimeServer(SessionUpdateSink):
             pass
         except asyncio.CancelledError:
             pass
-        except RequestRefused as error:
+        except RequestError as error:
             # Reply to this requester, then propagate the original failure to the server task.
             with suppress(SubscriberClosed):
                 await client.send(OwnerFailure.refused(error))
@@ -500,10 +490,9 @@ class RuntimeProxy(RuntimeConnection):
         notification = SessionNotification.model_validate({
             "session_id": self.session_id, "update": {**line.update, "_meta": metadata},
         })
-        with client_refusals():
-            await client.publish_update(
-                session_id=notification.session_id, update=notification.update
-            )
+        await client.publish_update(
+            session_id=notification.session_id, update=notification.update
+        )
 
     def ask(self, request: OwnerPermissionRequest) -> None:
         if len(self._permission_tasks) >= 4 or request.id in self._permission_tasks:
@@ -514,18 +503,17 @@ class RuntimeProxy(RuntimeConnection):
             response = ClientPermissionResponse.cancelled(request.id)
             try:
                 if self.agent.sessions.client is not None and token == self._controller_token:
-                    with client_refusals():
-                        reply = await asyncio.wait_for(
-                            self.agent.sessions.client.request_permission(
-                                session_id=self.session_id,
-                                tool_call=ToolCallUpdate.model_validate(request.tool_call),
-                                options=[
-                                    PermissionOption.model_validate(option)
-                                    for option in request.options
-                                ],
-                            ),
-                            timeout=ACP_PERMISSION_TIMEOUT_SECONDS,
-                        )
+                    reply = await asyncio.wait_for(
+                        self.agent.sessions.client.request_permission(
+                            session_id=self.session_id,
+                            tool_call=ToolCallUpdate.model_validate(request.tool_call),
+                            options=[
+                                PermissionOption.model_validate(option)
+                                for option in request.options
+                            ],
+                        ),
+                        timeout=ACP_PERMISSION_TIMEOUT_SECONDS,
+                    )
                     response = ClientPermissionResponse.of(
                         request.id, RequestPermissionResponse.model_validate(reply)
                     )
@@ -550,7 +538,7 @@ class RuntimeProxy(RuntimeConnection):
                     await OwnerLine.read(line).deliver(self)
             except ConnectionResetError:
                 pass  # The transport reports the closed subscription, not a decoder defect.
-            except (ValueError, RuntimeError, RequestRefused):
+            except (ValueError, RuntimeError, RequestError):
                 # The owner is our component: an undecodable or unexpected line,
                 # or the owner's failure line, is a defect, not an end of stream.
                 # Record it before this subscription dies.
