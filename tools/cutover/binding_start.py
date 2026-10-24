@@ -36,7 +36,9 @@ def state_directories(home: Path) -> tuple[Path, ...]:
         record = WatchRecord.decode(**json.loads(text))
         arguments, _ = parser.parse_known_args(record.command[1:])
         if arguments.state is not None:
-            states.add(arguments.state / arguments.session if arguments.session else arguments.state)
+            state = arguments.state / arguments.session if arguments.session else arguments.state
+            if (state / BridgeStateTable.filename).is_file():
+                states.add(state)
     for name in ('claude-comms-inbox', 'codex-comms-inbox', 'opencode-comms-inbox'):
         base = home / '.local/state' / name
         states.update(path.parent for path in base.rglob(BridgeStateTable.filename))
@@ -46,6 +48,8 @@ def state_directories(home: Path) -> tuple[Path, ...]:
 def migrate(state: Path) -> int:
     """Carry the binding table atomically, preserving every journal and observation row."""
     path = state / BridgeStateTable.filename
+    if not path.is_file():
+        raise FileNotFoundError(path)
     with closing(SQLiteFile.writer(path)) as db, SQLiteFile.write_transaction(db):
         start, = Binding._fields_named(('start',))
         if start.wire_name in Binding.stored_columns(db):
@@ -67,10 +71,8 @@ def migrate(state: Path) -> int:
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--home', type=Path, required=True)
-    parser.add_argument('--state', type=Path, action='append', default=[])
     arguments = parser.parse_args()
-    states = set(state_directories(arguments.home)) | set(arguments.state)
-    changed = sum(migrate(state) for state in sorted(states))
+    changed = sum(migrate(state) for state in state_directories(arguments.home))
     print(f'Binding starts carried: {changed}')
 
 

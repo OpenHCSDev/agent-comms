@@ -852,19 +852,13 @@ class Install[Rehearsed: Rehearsal](ABC):
         with ExitStack() as resources:
             try:
                 with BridgePhase("discover and pause").running(self.staged.commands.clock):
-                    paused = Serve.running(self.installed.home)
-                    for bridge in paused:
+                    for bridge in Serve.running(self.installed.home):
                         bridges.pause(bridge, resources)
                 live = self.live(rehearsal, report)
                 with BridgePhase("binding start").running(self.staged.commands.clock):
-                    records = tuple(record for bridge in paused
-                                    for record in bridge.claim.state().bindings())
-                    states = tuple(Path(record.command[record.command.index('--state') + 1])
-                                   for record in records)
                     self.staged.commands.run(
                         self.staged.python, self.checkout / STEPS / 'binding_start.py',
                         '--home', self.installed.home,
-                        *(argument for state in states for argument in ('--state', str(state))),
                         cwd=self.installed.home, env=self.staged.environment(),
                     )
                 return report.record_live(live)

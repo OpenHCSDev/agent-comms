@@ -63,6 +63,7 @@ from agent_comms.typed_table import (
     DurableTables,
     ExpressionIndex,
     TypedTable,
+    TypedRow,
     WriterOwnedFile,
 )
 from agent_comms.wire_models import WireModel
@@ -277,15 +278,27 @@ class ObservedPart(BridgeStateTable, TypedTable):
 
 
 @dataclass(frozen=True)
-class DeliveryRow(BridgeStateTable, TypedTable):
+class JournalMessage(TypedRow):
+    """Journal identity and payload are enough to recover a delivery position."""
+
+    id: Annotated[str, Column(primary_key=True)]
+    payload: str
+
+    @cached_property
+    def message(self) -> messages.Message:
+        return messages.Message.from_wire(json.loads(self.payload))
+
+
+@dataclass(frozen=True)
+class DeliveryRow(JournalMessage, BridgeStateTable, TypedTable):
     sequence_sql: ClassVar[str] = "json_extract({payload}, '$.seq')"
     indexes = (ExpressionIndex((sequence_sql,)),)
 
     @classmethod
-    def latest(cls, db: sqlite3.Connection) -> tuple[Self, ...]:
+    def latest(cls, db: sqlite3.Connection) -> tuple[JournalMessage, ...]:
         """The sequence index selects the newest attempt, including uncertain emissions."""
-        return tuple(cls.read(db.execute(
-            f'SELECT {cls._column_list(tuple(cls.column_projection()))} FROM "{cls.declared_name}" '
+        return tuple(JournalMessage.read(db.execute(
+            f'SELECT {JournalMessage._select_list(cls)} FROM "{cls.declared_name}" '
             f'ORDER BY {cls._sql(cls.sequence_sql)} DESC LIMIT 1')))
 
     @classmethod
@@ -295,14 +308,8 @@ class DeliveryRow(BridgeStateTable, TypedTable):
         return max((binding.start, *(BridgeStart(row.message.reference) for row in latest)),
                    key=lambda point: point.cursor())
 
-    id: Annotated[str, Column(primary_key=True)]
-    payload: str
     outcome: Annotated[type[Outcome], Column(index=True)]
     monitor: MonitorEvidence = field(default_factory=UnrecordedMonitor)
-
-    @cached_property
-    def message(self) -> messages.Message:
-        return messages.Message.from_wire(json.loads(self.payload))
 
     async def finish(self, bridge: CliBridge, outcome: type[Outcome]) -> None:
         await self.outcome.finish(bridge, self, outcome)
