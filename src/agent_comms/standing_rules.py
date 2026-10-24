@@ -653,8 +653,8 @@ class DirectiveUnacted(OwedAnswer, DatedStandingRule):
         )
 
     def clearing_action(self) -> str:
-        return (f"Order the next step of request {self.request.value} with --answers "
-                f"{self.message.message_id}, or mark that request done.")
+        return (f"Reply to {self.message.sender} in the session or on the bus, "
+                f"or mark request {self.request.value} done.")
 
     def due(self, now: float) -> bool:
         return self.directive.deadline < now

@@ -198,7 +198,7 @@ class RecordedScope(ClaimScope, declared_name=None):
 class NativeClaim(RecordMember, RecordedScope):
     """A tool acquisition belongs to one ordinary native input."""
 
-    input_id: Annotated[InputId, BoundedText]
+    input_id: InputId
 
     def reuses(self, other: RecordedScope) -> bool:
         return replace(self, operation_id=other.operation_id) == other

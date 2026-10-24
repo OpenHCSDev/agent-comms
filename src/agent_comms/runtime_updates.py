@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from collections.abc import Callable, Iterable
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import TYPE_CHECKING, ClassVar, Self
 
 from . import activity
@@ -30,6 +30,8 @@ from .turn_item import NativeTurnId, TurnItem
 if TYPE_CHECKING:
     from .cli_bridges.shared import TranscriptBridge
     from .importing import ImportBuffer
+    from .comms import Comms
+    from .messaging import Messaging
 
 
 @dataclass
@@ -160,10 +162,30 @@ class ThreadOutput(activity.ThreadOutput):
     agents: AgentActivity
     drafts: dict[TurnItem, DraftAccumulator] = field(default_factory=dict)
 
-    def publish_batch(self, updates: list[RuntimeUpdate]) -> None:
-        assembled = [part for update in updates for part in update.accumulate(self)]
-        for update in RuntimeUpdate.coalesced(assembled):
+    @classmethod
+    def for_comms(cls, transcript: ExternalTranscript, comms: Comms) -> Self:
+        return cls(transcript, comms.agents)
+
+    def delivered_targets(self, targets: tuple[str, ...]) -> None:
+        """Ordinary transcript outputs do not publish session replies."""
+        return None
+
+    def publish_item(self, item: FinishedItem) -> None:
+        self.transcript.finish(turn_id=item.turn_id, item_id=item.item_id, events=item.events)
+
+    def publish_draft(self, item: DraftItem) -> None:
+        self.transcript.draft(turn_id=item.turn_id, item_id=item.item_id, events=item.events)
+
+    def publish_pending(self, pending: list[RuntimeUpdate]) -> None:
+        for update in RuntimeUpdate.coalesced(pending):
             update.publish(self)
+        pending.clear()
+
+    def publish_batch(self, updates: list[RuntimeUpdate]) -> None:
+        pending: list[RuntimeUpdate] = []
+        for update in updates:
+            update.accumulate_into(self, pending)
+        self.publish_pending(pending)
 
     def draft(self, key: TurnItem) -> DraftAccumulator:
         return self.drafts.get(key, NO_PREFIX)
@@ -197,6 +219,63 @@ class ThreadOutput(activity.ThreadOutput):
         return self.transcript.incarnation.name
 
 
+@dataclass(frozen=True)
+class ReplyingThreadOutput(ThreadOutput):
+    """The last finished assistant item replies to this turn's confirmed deliveries."""
+
+    messaging: Messaging = field(kw_only=True)
+    reply_targets: set[str] = field(default_factory=set)
+    pending: dict[TurnItem, FinishedItem] = field(default_factory=dict)
+
+    @classmethod
+    def for_comms(cls, transcript: ExternalTranscript, comms: Comms) -> Self:
+        return cls(transcript, comms.agents, messaging=comms.messaging)
+
+    def delivered_targets(self, targets: tuple[str, ...]) -> None:
+        self.reply_targets.update(targets)
+
+    def flush_before(self, key: TurnItem) -> None:
+        for previous in tuple(self.pending):
+            if previous != key:
+                super().publish_item(self.pending.pop(previous))
+
+    def publish_item(self, item: FinishedItem) -> None:
+        self.flush_before(item.key)
+        if self.reply_targets and item.assistant_text:
+            self.pending[item.key] = item
+            self.transcript.draft(turn_id=item.turn_id, item_id=item.item_id, events=item.events)
+        else:
+            super().publish_item(item)
+
+    def publish_draft(self, item: DraftItem) -> None:
+        self.flush_before(item.key)
+        super().publish_draft(item)
+
+    def end_turn(self, turn_id: NativeTurnId) -> None:
+        for key in tuple(self.pending):
+            if key.turn_id != turn_id:
+                continue
+            item = self.pending[key]
+            publications = tuple(
+                self.messaging.send(
+                    sender=self.activity_thread, target=target, body=item.assistant_text,
+                ).message.reference
+                for target in sorted(self.reply_targets)
+            )
+            super().publish_item(replace(item, events=tuple(
+                event.with_publications(publications) for event in item.events
+            )))
+            del self.pending[key]
+        self.reply_targets.clear()
+        super().end_turn(turn_id)
+
+    def end_all_turns(self) -> None:
+        for turn_id in dict.fromkeys(key.turn_id for key in self.pending):
+            self.end_turn(turn_id)
+        self.reply_targets.clear()
+        super().end_all_turns()
+
+
 class ReadingPhase(ABC):
     """Where a reader is in its source: catching up on what was already written, or following it."""
 
@@ -224,8 +303,12 @@ class RuntimeUpdate(ABC):
     def accumulate(self, output: ThreadOutput) -> tuple[RuntimeUpdate, ...]:
         return (self,)
 
-    async def observed(self, bridge: TranscriptBridge) -> None:  # noqa: B027 - default hook
-        """A source-owned notification may confirm delivery before publication."""
+    def accumulate_into(self, output: ThreadOutput, pending: list[RuntimeUpdate]) -> None:
+        pending.extend(self.accumulate(output))
+
+    async def observed(self, bridge: TranscriptBridge) -> RuntimeUpdate:
+        """Carry source-owned confirmation into the ordered publication stream."""
+        return self
 
     def retain_before(self, later: set[TurnItem]) -> bool:
         """Whether this update still needs publication before later updates."""
@@ -273,7 +356,15 @@ class TurnStarted(StatusUpdate):
 
 @dataclass(frozen=True)
 class TurnEnded(StatusUpdate):
+    def accumulate_into(self, output: ThreadOutput, pending: list[RuntimeUpdate]) -> None:
+        output.publish_pending(pending)
+        self.publish(output)
+
+    def retire(self, output: ThreadOutput) -> None:
+        output.end_all_turns()
+
     def publish(self, output: ThreadOutput) -> None:
+        self.retire(output)
         output.transcript.end_turn()
         output.enter(IdlePhase())
 
@@ -297,11 +388,15 @@ class FinishedItem(TurnItem, RuntimeUpdate):
 
     events: tuple[TranscriptEvent, ...]
 
+    @property
+    def assistant_text(self) -> str:
+        return "".join(part for event in self.events for part in event.assistant_parts())
+
     def trail_events(self) -> tuple[object, ...]:
         return self.events
 
     def publish(self, output: ThreadOutput) -> None:
-        output.transcript.finish(turn_id=self.turn_id, item_id=self.item_id, events=self.events)
+        output.publish_item(self)
 
     def retain_before(self, later: set[TurnItem]) -> bool:
         later.add(self.key)
@@ -428,7 +523,7 @@ class DraftItem(TurnItem, RuntimeUpdate):
         return self.accumulator.events
 
     def publish(self, output: ThreadOutput) -> None:
-        output.transcript.draft(turn_id=self.turn_id, item_id=self.item_id, events=self.events)
+        output.publish_draft(self)
 
     def retain_before(self, later: set[TurnItem]) -> bool:
         keep = self.key not in later
@@ -470,16 +565,13 @@ class AppendDraftItem(TurnItem, DraftUpdate):
 
 
 @dataclass(frozen=True)
-class FinishedTurn(DraftUpdate, TurnEnded):
+class FinishedTurn(TurnEnded):
     turn_id: NativeTurnId
 
-    def accumulate(self, output: ThreadOutput) -> tuple[RuntimeUpdate, ...]:
+    def retire(self, output: ThreadOutput) -> None:
         output.end_turn(self.turn_id)
-        return (TurnEnded(),)
 
 
 @dataclass(frozen=True)
-class AllTurnsEnded(DraftUpdate, TurnEnded):
-    def accumulate(self, output: ThreadOutput) -> tuple[RuntimeUpdate, ...]:
-        output.end_all_turns()
-        return (TurnEnded(),)
+class AllTurnsEnded(TurnEnded):
+    """The source ended every open turn; publication owns their retirement."""

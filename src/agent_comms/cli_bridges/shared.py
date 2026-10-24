@@ -63,7 +63,7 @@ from agent_comms.message_reference import (
     MessageReference,
 )
 from agent_comms.read_basis import ExplicitWatchAcknowledgment
-from agent_comms.runtime_updates import RuntimeUpdate, ThreadOutput
+from agent_comms.runtime_updates import ReplyingThreadOutput, RuntimeUpdate, ThreadOutput
 from agent_comms.send_result import SendResult
 from agent_comms.thread_status import ThreadStatus
 from agent_comms.typed_table import (
@@ -339,8 +339,8 @@ class MonitorEvidence(DeclaredFamily):
     """Unsent and terminal observations cannot accept another delivery."""
 
     async def confirm(self, bridge: LineMonitorBridge, delivery: DeliveryRow,
-                      notification: MonitorPart, record: ObservedMonitor) -> None:
-        pass
+                      notification: MonitorPart, record: ObservedMonitor) -> tuple[str, ...]:
+        return ()
 
 
 @dataclass(frozen=True)
@@ -353,16 +353,16 @@ class ReceivingMonitor(MonitorEvidence):
     total: int
 
     async def confirm(self, bridge: LineMonitorBridge, delivery: DeliveryRow,
-                      notification: MonitorPart, record: ObservedMonitor) -> None:
+                      notification: MonitorPart, record: ObservedMonitor) -> tuple[str, ...]:
         if notification.total != self.total:
-            return
+            return ()
         part = ObservedPart(delivery.id, notification.number, notification.sender,
                             notification.body, record.record_id, record.timestamp)
         with bridge.db:
             part.insert_if_absent(bridge.db)
         await bridge.part_observed(delivery.id, notification.number)
         if ObservedPart.count(bridge.db, id=delivery.id) != self.total:
-            return
+            return ()
         parts = ObservedPart.select(bridge.db, id=delivery.id, order_by=('number',))
         message = delivery.message
         if (''.join(part.body for part in parts) != message.body
@@ -370,8 +370,9 @@ class ReceivingMonitor(MonitorEvidence):
             with bridge.db:
                 replace(delivery, monitor=MismatchedMonitor('Observed parts do not equal the original message')).upsert(bridge.db)
             bridge.log(f'Monitor parts mismatch; message remains pending: {delivery.id}')
-            return
+            return ()
         await replace(delivery, monitor=record).finish(bridge, DeliveredOutcome)
+        return (message.exact_reply_target,)
 
 
 @dataclass(frozen=True)
@@ -1137,10 +1138,12 @@ class CliBridge(ExternalRuntime, DeliversInput, Generic[BridgeOptions]):
 class TranscriptBridge(PublishesTranscript, CliBridge[BridgeOptions]):
     """A CLI with an event subscription also publishes whole transcript items."""
 
+    output_type: ClassVar[type[ThreadOutput]] = ThreadOutput
+
     async def publish_transcript(self) -> None:
         comms = self.comms
-        output = ThreadOutput(
-            await asyncio.to_thread(comms.transcripts.external, self.binding.bus), comms.agents)
+        output = self.output_type.for_comms(
+            await asyncio.to_thread(comms.transcripts.external, self.binding.bus), comms)
         # This subscription can assemble only items whose start it receives.
         # A prefix from the previous subscription cannot stand for that stream.
         await comms.bus.when_open(output.transcript.end_turn)
@@ -1151,8 +1154,7 @@ class TranscriptBridge(PublishesTranscript, CliBridge[BridgeOptions]):
         async def read() -> None:
             try:
                 async for update in self.transcript():
-                    await update.observed(self)
-                    queue.put_nowait(update)
+                    queue.put_nowait(await update.observed(self))
             finally:
                 queue.shutdown()
 
@@ -1171,7 +1173,9 @@ class TranscriptBridge(PublishesTranscript, CliBridge[BridgeOptions]):
 class MonitorFrame(TaggedWire, ABC, affix=""):
     """Our line protocol inside the harness's task-notification envelope."""
     @abstractmethod
-    async def confirm(self, bridge: LineMonitorBridge, record: ObservedMonitor) -> None: ...
+    async def confirm(
+        self, bridge: LineMonitorBridge, record: ObservedMonitor,
+    ) -> tuple[str, ...]: ...
 
 
 class MonitorProtocolFrame(MonitorFrame, declared_name=None):
@@ -1188,8 +1192,9 @@ class MonitorProbe(MonitorProtocolFrame, declared_name='probe'):
     session: str
     token: str
 
-    async def confirm(self, bridge: LineMonitorBridge, record: ObservedMonitor) -> None:
+    async def confirm(self, bridge: LineMonitorBridge, record: ObservedMonitor) -> tuple[str, ...]:
         await bridge.confirm_probe(self)
+        return ()
 
 
 class MonitorBridgeStopped(MonitorProtocolFrame, declared_name='bridge-stopped'):
@@ -1205,8 +1210,9 @@ class MonitorBridgeStopped(MonitorProtocolFrame, declared_name='bridge-stopped')
             'agent-comms-claude-bridge connect restarts it and this Monitor resumes.'))
         stopped.emit()
 
-    async def confirm(self, bridge: LineMonitorBridge, record: ObservedMonitor) -> None:
+    async def confirm(self, bridge: LineMonitorBridge, record: ObservedMonitor) -> tuple[str, ...]:
         """A notice carries no delivery to confirm."""
+        return ()
 
 
 class MonitorBridgeSwapping(MonitorProtocolFrame, declared_name='bridge-swapping'):
@@ -1219,8 +1225,9 @@ class MonitorBridgeSwapping(MonitorProtocolFrame, declared_name='bridge-swapping
             'an install holds its claim and is replacing it.'
         )).emit()
 
-    async def confirm(self, bridge: LineMonitorBridge, record: ObservedMonitor) -> None:
+    async def confirm(self, bridge: LineMonitorBridge, record: ObservedMonitor) -> tuple[str, ...]:
         """A notice carries no delivery to confirm."""
+        return ()
 
 
 class MonitorPart(MonitorFrame, declared_name='part'):
@@ -1242,16 +1249,19 @@ class MonitorPart(MonitorFrame, declared_name='part'):
             raise ValueError('Monitor part number exceeds total')
         return self
 
-    async def confirm(self, bridge: LineMonitorBridge, record: ObservedMonitor) -> None:
+    async def confirm(self, bridge: LineMonitorBridge, record: ObservedMonitor) -> tuple[str, ...]:
+        targets = []
         for delivery in DeliveryRow.select(bridge.db, id=self.id):
-            await delivery.monitor.confirm(bridge, delivery, self, record)
+            targets.extend(await delivery.monitor.confirm(bridge, delivery, self, record))
+        return tuple(targets)
 
 
 class ForeignMonitorFrame(MonitorFrame, declared_name='foreign'):
     text: str
 
-    async def confirm(self, bridge: LineMonitorBridge, record: ObservedMonitor) -> None:
+    async def confirm(self, bridge: LineMonitorBridge, record: ObservedMonitor) -> tuple[str, ...]:
         """Another monitor's output is not comms delivery evidence."""
+        return ()
 
 
 MONITOR_FRAME = WireModel.adapter(MonitorFrame.declared_union())
@@ -1261,12 +1271,14 @@ MONITOR_FRAME = WireModel.adapter(MonitorFrame.declared_union())
 class MonitorObservation(RuntimeUpdate):
     frame: MonitorFrame
     record: ObservedMonitor
+    targets: tuple[str, ...] = ()
 
-    async def observed(self, bridge: LineMonitorBridge) -> None:
-        await self.frame.confirm(bridge, self.record)
+    async def observed(self, bridge: LineMonitorBridge) -> RuntimeUpdate:
+        return replace(self, targets=await self.frame.confirm(bridge, self.record))
 
     def publish(self, output: ThreadOutput) -> None:
-        """Delivery is not a second conversation item."""
+        """Keep confirmed reply routes in transcript order, without a second input row."""
+        output.delivered_targets(self.targets)
 
 
 class TranscriptConfirmsDelivery:
@@ -1282,6 +1294,7 @@ class MonitorIncomingFrame(IncomingFrame):
 class LineMonitorBridge(TranscriptConfirmsDelivery, TranscriptBridge[Options]):
     """Session-owned subscription and delivery journal, with replaceable readers."""
 
+    output_type: ClassVar[type[ThreadOutput]] = ReplyingThreadOutput
     incoming_frame: ClassVar[type[MonitorIncomingFrame]]
     window_bytes: ClassVar[int]
 
