@@ -15,7 +15,7 @@ from agent_comms.child_process import IdentityMismatchError, ProcessIdentity
 from agent_comms.cli_bridges import claude
 from agent_comms.cli_bridges.monitor import InspectSession, VerifySession
 from agent_comms.cli_bridges.shared import Binding, Serve
-from agent_comms.comms import wire
+from conftest import installed_comms
 from agent_comms.launch_runtime import LaunchRuntime
 from agent_comms.root_runtime import RootRuntime
 from agent_comms.thread_execution import ExternalThreadExecution
@@ -28,7 +28,7 @@ def test_session_start_hook_exit_preserves_the_recorded_owner_for_install_pause(
         tmp_path, bridge_home, source_programs):
     home = bridge_home
     session = 'copied-session'
-    comms = wire(tmp_path / 'bus')
+    comms = installed_comms(tmp_path / 'bus')
     # The source programs run the hook's bridge, so their runtime owns the root it attaches to.
     RootRuntime.publish(comms.root, source_programs.runtime)
     comms.registry.declare(Thread(
@@ -36,7 +36,7 @@ def test_session_start_hook_exit_preserves_the_recorded_owner_for_install_pause(
     transcript = tmp_path / f'{session}.jsonl'
     transcript.write_text('')
     state = WatchClaim.directory(home).parent / 'claude-bridge-owner'
-    binding = Binding(str(comms.root), 'bridge-copy', session)
+    binding = Binding(str(comms.root), 'bridge-copy', session, Binding.bus_head(str(comms.root)))
     with Binding.open(state) as db:
         binding.bind(db)
     claim = WatchClaim(session, home)

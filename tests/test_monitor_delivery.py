@@ -49,6 +49,7 @@ async def test_empty_journal_starts_at_binding_and_ignores_user_reads(comms, tmp
         selected = ClaudeBridge(Options(Watch(), StoredBinding(), state), binding, db)
         fresh = comms.messaging.send('peer', 'viewer', 'after binding, already read in Toad').message
         comms.messaging.acknowledge('viewer', (fresh.reference,))
+        user_reads = comms.bus.reads.read()
         bridge_socket, monitor_socket = socket.socketpair()
         bridge_peer = MonitorPeer(*await asyncio.open_connection(sock=bridge_socket))
         monitor_reader, monitor_writer = await asyncio.open_connection(sock=monitor_socket)
@@ -61,12 +62,22 @@ async def test_empty_journal_starts_at_binding_and_ignores_user_reads(comms, tmp
                 probe = MONITOR_FRAME.validate_json(await monitor_reader.readline())
                 await probe.confirm(selected, ObservedMonitor('probe', 1.))
                 watching = asyncio.create_task(selected.watch_child())
-                line = json.loads(await monitor_reader.readline())
+                line = (await monitor_reader.readline()).decode().rstrip('\n')
                 for update in notification(line).updates(ClaudeSession()):
                     await update.observed(selected)
                 row, = DeliveryRow.select(db)
                 assert row.message.reference == fresh.reference
                 assert row.outcome is DeliveredOutcome
+                assert comms.bus.reads.read() == user_reads
+                unread = comms.messaging.send('peer', 'viewer', 'delivery must not mark this read').message
+                line = (await monitor_reader.readline()).decode().rstrip('\n')
+                for update in notification(line, record_id='second-delivery').updates(ClaudeSession()):
+                    await update.observed(selected)
+                assert {row.message.reference for row in DeliveryRow.select(db)} == {
+                    fresh.reference, unread.reference,
+                }
+                assert all(row.outcome is DeliveredOutcome for row in DeliveryRow.select(db))
+                assert comms.bus.reads.read() == user_reads
         finally:
             if watching is not None:
                 watching.cancel()
@@ -88,7 +99,7 @@ def bridge(comms, tmp_path):
     practice.include(tuple(RootFile.existing_in(practice.root)))
     (root, _measurement) = practice.path, practice.measurement
     state = tmp_path / 'bridge-state'
-    binding = Binding(str(root), 'viewer', 'session')
+    binding = Binding(str(root), 'viewer', 'session', Binding.bus_head(str(root)))
     with Binding.open(state) as db:
         binding.bind(db)
         yield ClaudeBridge(Options(Watch(), StoredBinding(), state), binding, db)

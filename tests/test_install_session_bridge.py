@@ -19,7 +19,7 @@ from agent_comms.cli_bridges import claude
 from agent_comms.cli_bridges.shared import (
     MONITOR_FRAME, Binding, MonitorBridgeStopped, MonitorBridgeSwapping, MonitorProbe, Serve, SessionBridgeResumes,
 )
-from agent_comms.comms import wire
+from conftest import installed_comms
 from agent_comms.field_codec import FieldCodec
 from agent_comms.launch_runtime import LaunchRuntime
 from agent_comms.root_runtime import RootRuntime
@@ -36,7 +36,7 @@ SERVE_FROM_SOURCE = (sys.executable, '-c', 'from agent_comms.cli_bridges.claude 
 def session_bridge(tmp_path, home, program=SERVE_FROM_SOURCE, *, state_directory=None,
                    runtime=LaunchRuntime.running()):
     """``runtime`` serves ``program`` and so owns the bus it attaches to."""
-    comms = wire(tmp_path / 'bus')
+    comms = installed_comms(tmp_path / 'bus')
     RootRuntime.publish(comms.root, runtime)
     comms.registry.declare(Thread(
         'bridge-copy', frozenset(), str(tmp_path), execution=ExternalThreadExecution))
@@ -44,7 +44,7 @@ def session_bridge(tmp_path, home, program=SERVE_FROM_SOURCE, *, state_directory
     transcript.write_text('')
     state = (home / '.local/state/agent-comms/claude-bridge-copy'
              if state_directory is None else state_directory)
-    binding = Binding(str(comms.root), 'bridge-copy', transcript.stem)
+    binding = Binding(str(comms.root), 'bridge-copy', transcript.stem, Binding.bus_head(str(comms.root)))
     with Binding.open(state) as db:
         binding.bind(db)
     claim = WatchClaim(binding.thread, home)

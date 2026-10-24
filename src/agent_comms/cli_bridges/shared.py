@@ -54,7 +54,7 @@ from agent_comms.declared_family import DeclaredFamily
 from agent_comms.declared_verb import DeclaredOptions
 from agent_comms.field_codec import FieldCodec, PathText
 from agent_comms.launch_runtime import LaunchRuntime
-from agent_comms.message_reference import BridgeStart, InboxStart, MessageReference
+from agent_comms.message_reference import BridgeBeginning, BridgePosition, BridgeStart, InboxStart
 from agent_comms.read_basis import ExplicitWatchAcknowledgment
 from agent_comms.runtime_updates import RuntimeUpdate, ThreadOutput
 from agent_comms.send_result import SendResult
@@ -145,17 +145,16 @@ class BindingIdentity:
 
 @dataclass(frozen=True)
 class Binding(BindingIdentity, BridgeStateTable, TypedTable, BindingRequest):
-    start: MessageReference
+    start: BridgePosition
 
     @staticmethod
-    def bus_head(root: str) -> MessageReference:
+    def bus_head(root: str) -> BridgePosition:
         bus = Bus(Bus.path_in(Path(root)))
         if not bus.path.is_file():
-            return MessageReference(0, field_codec.MessageId.mint(''))
+            raise FileNotFoundError(bus.path)
         with bus.reading() as source:
             latest = source.page(source.revision() + 1, 1)
-            return (latest[0].reference if latest else
-                    MessageReference(0, field_codec.MessageId.mint('')))
+            return BridgeStart(latest[0].reference) if latest else BridgeBeginning()
 
     @classmethod
     def add_arguments(cls, parser: argparse.ArgumentParser) -> None:
@@ -288,9 +287,8 @@ class DeliveryRow(BridgeStateTable, TypedTable):
         latest = cls.read(db.execute(
             f'SELECT {cls._column_list(tuple(cls.column_projection()))} FROM "{cls.declared_name}" '
             f'ORDER BY {cls._sql(cls.sequence_sql)} DESC LIMIT 1'))
-        reference = max((binding.start, *(row.message.reference for row in latest)),
-                        key=lambda point: point.seq)
-        return BridgeStart(reference)
+        return max((binding.start, *(BridgeStart(row.message.reference) for row in latest)),
+                   key=lambda point: point.cursor())
 
     id: Annotated[str, Column(primary_key=True)]
     payload: str

@@ -63,16 +63,8 @@ class AfterMessageStart(SingleFieldValue, InboxStart):
     def cursor(self) -> int:
         return self.reference.seq
 
-    def advanced(self, reference: MessageReference) -> AfterMessageStart:
-        return AfterMessageStart(reference)
-
-
-@dataclass(frozen=True, slots=True)
-class BridgeStart(RecordMember, AfterMessageStart):
+class BridgePosition(InboxStart, declared_name=None):
     """The binding and journal own delivery position; human reads do not."""
-
-    def references(self) -> tuple[MessageReference, ...]:
-        return ()
 
     def advanced(self, reference: MessageReference) -> BridgeStart:
         return BridgeStart(reference)
@@ -81,6 +73,22 @@ class BridgeStart(RecordMember, AfterMessageStart):
                    ) -> tuple[ReadDocument, ReadCursor]:
         document = reads.empty()
         return document, reads.cursor(actor, snapshot, document=document)
+
+
+@dataclass(frozen=True, slots=True)
+class BridgeStart(RecordMember, AfterMessageStart, BridgePosition):
+    """A bridge position backed by a real, validated bus reference."""
+
+
+@dataclass(frozen=True, slots=True)
+class BridgeBeginning(RecordMember, NullMember, BridgePosition):
+    """An empty bus starts the bridge stream before its first message."""
+
+    def references(self) -> tuple[MessageReference, ...]:
+        return ()
+
+    def cursor(self) -> int:
+        return 0
 
 
 @dataclass(frozen=True, slots=True)
