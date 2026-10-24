@@ -1118,6 +1118,9 @@ class CliBridge(ExternalRuntime, DeliversInput, Generic[BridgeOptions]):
         conversation = message.type.conversation_message
         outcome = UnconfirmedOutcome if conversation else FilteredOutcome
         delivery = DeliveryRow(message.message_id, FieldCodec.compact(message.to_wire()) + '\n', outcome)
+        # The thread's claim leaves the native queue before the journal row exists,
+        # so no crash between them lets a later native owner replay this message.
+        await asyncio.to_thread(self.comms.bus.hand_to_harness, self.binding.bus, (message.reference,))
         with self.db:
             first = delivery.insert_if_absent(self.db).rowcount
         if not first:

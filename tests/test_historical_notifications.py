@@ -19,7 +19,7 @@ from agent_comms.assignment_states import (
 )
 from agent_comms.comms import wire
 from agent_comms.coordination_errors import DMScopeChanged, SchemaVersionError
-from agent_comms.field_codec import MessageId, TurnId
+from agent_comms.field_codec import InputId, MessageId, TurnId
 from agent_comms.read_basis import HistoricalDisplay, ReadCursor
 from agent_comms.read_ledger import ReadLedger
 from agent_comms.thread_identity import AgentThreadRole, UserThreadRole
@@ -291,7 +291,7 @@ def test_delivered_assignment_uses_its_recorded_conversation_response(archived_n
         text=source_text,
         origin=WireInputOrigin(root_id, original.reference),
     )
-    native_id = uuid4().hex
+    native_id = InputId(uuid4().hex)
     assert inputs.bind(
         key,
         claim_scope=lease.claimed_generation,

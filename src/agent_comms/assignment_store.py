@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from agent_comms.field_codec import ThreadLookup
 
+from collections.abc import Callable, Sequence
 from dataclasses import replace
 
 from agent_comms.assignment_states import AssignmentState, DeferredAssignment
@@ -84,6 +85,32 @@ class AssignmentStore:
             current.lifecycle.mode.initial_state(),
             expected_revision=current.revision,
         ).value
+
+    def settle_harness_inputs(
+        self,
+        recipient_lookup: ThreadLookup,
+        sources: Sequence[MessageReference],
+        steps: Callable[[AssignmentState], tuple[type[AssignmentState], ...]],
+    ) -> None:
+        """Record on the recipient's own claims what a harness outside Core did.
+
+        The claim is the thread's one record of delivery, so it survives a move
+        to another execution; each claim walks the steps its own state declares.
+        """
+        with self.session.read():
+            claims = WakeAssignment.select(
+                self.session._connection,
+                where=f"recipient_lookup=? AND wire_seq IN ({','.join('?' * len(sources))})",
+                parameters=(recipient_lookup, *(source.seq for source in sources)),
+            )
+        for claim in claims:
+            if claim.source not in sources:
+                raise IdentityConflict("harness delivery names another message at this sequence")
+            for disposition in steps(claim.lifecycle):
+                # The revision fence refuses a step if the native owner moved the claim meanwhile.
+                claim = self.transition_preengagement(
+                    claim.assignment_id, disposition, expected_revision=claim.revision,
+                ).value
 
     def transition_preengagement(
         self,
