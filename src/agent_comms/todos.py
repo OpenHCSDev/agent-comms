@@ -1403,12 +1403,8 @@ class OrderWords(WireValue):
     def from_wire(cls, data: object) -> Self:
         if not isinstance(data, str):
             raise MalformedRecord(f"Expected {cls.__name__}, received {type(data).__name__}")
-        try:
+        with MalformedRecord.refusing(f"Invalid {cls.__name__}"):
             return cls(data)
-        except MalformedRecord:
-            raise
-        except ValueError as error:
-            raise MalformedRecord.refused(f"Invalid {cls.__name__}", error) from error
 
     @classmethod
     def schema(cls) -> dict[str, object]:
@@ -1957,14 +1953,10 @@ class CheckedProblemOrder(ProblemOrder, declared_name=None):
     def check_refusals(self, worktrees: Path) -> tuple[str, ...]:
         """Send and correction use the check owner's clean-main acceptance rule."""
         try:
-            try:
+            with MalformedRecord.refusing('order.check'):
                 self.require_writable()
                 if self.check.directory.is_dir():
                     self.require_check_acceptance(self.check, worktrees)
-            except MalformedRecord:
-                raise
-            except ValueError as error:
-                raise MalformedRecord.refused('order.check', error) from error
         except MalformedRecord as error:
             return (f'order.check: {error}; fix: supply a focused measurable command',)
         return ()
@@ -1982,12 +1974,8 @@ class CheckedProblemOrder(ProblemOrder, declared_name=None):
         for label, validate in (('order.source', self.require_references),
                                 ('order.check.directory', check.require_directory)):
             try:
-                try:
+                with MalformedRecord.refusing(label):
                     validate()
-                except MalformedRecord:
-                    raise
-                except ValueError as error:
-                    raise MalformedRecord.refused(label, error) from error
             except MalformedRecord as error:
                 problems.append(f'{label}: {error}; fix: name an existing source location or directory')
         references = tuple(dict.fromkeys(
@@ -2005,12 +1993,8 @@ class CheckedProblemOrder(ProblemOrder, declared_name=None):
                             'the check must also count their `from agent_comms` imports')
         for reference in references:
             try:
-                try:
+                with MalformedRecord.refusing(reference.to_wire()):
                     reference.require_exists(check.directory, self.cited_revision)
-                except MalformedRecord:
-                    raise
-                except ValueError as error:
-                    raise MalformedRecord.refused(reference.to_wire(), error) from error
             except MalformedRecord as error:
                 problems.append(f'{error}; fix: cite an existing source line')
         body = '\n'.join((document.prose, *self.edits, self.report))
@@ -2072,12 +2056,8 @@ class CheckedProblemOrder(ProblemOrder, declared_name=None):
         for check in (lambda: self.at.require_recorded("An order"),
                       lambda: self.first_call_deadline.require_recorded("A first-call deadline")):
             try:
-                try:
+                with MalformedRecord.refusing('order time'):
                     check()
-                except MalformedRecord:
-                    raise
-                except ValueError as error:
-                    raise MalformedRecord.refused('order time', error) from error
             except MalformedRecord as error:
                 problems.append(str(error))
         if problems:
@@ -2323,13 +2303,9 @@ class PendingProblemOrder(Pending, DeliverableProblemOrder):
         problems.extend(target.refusals(document, group, listed))
         for pid in group:
             try:
-                try:
+                with MalformedRecord.refusing(pid):
                     if pid in listed:
                         listed[pid].holder_state.require_trace(unit, traced)
-                except MalformedRecord:
-                    raise
-                except ValueError as error:
-                    raise MalformedRecord.refused(pid, error) from error
             except MalformedRecord as error:
                 problems.append(str(error))
         return problems

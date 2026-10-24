@@ -66,9 +66,27 @@ class MalformedRecord(ValueError):  # noqa: N818 - names the refused data
         return {name: f"{self}; fix: {fix}"}
 
     @classmethod
-    def refused(cls, subject: str, error: ValueError) -> Self:
-        """Locate a data refusal only after a decoder has failed."""
-        return cls(f"{subject}: {error}")
+    def refusing(cls, subject: str) -> Refusing:
+        return Refusing(subject)
+
+
+@dataclass(frozen=True, slots=True)
+class Refusing:
+    """One non-generator boundary preserves malformed records and locates domain errors."""
+
+    subject: str
+
+    def __enter__(self) -> None:
+        return None
+
+    def __exit__(
+        self, kind: type[BaseException] | None, error: BaseException | None,
+        trace: types.TracebackType | None,
+    ) -> Literal[False]:
+        if (kind is not None and issubclass(kind, ValueError)
+                and not issubclass(kind, MalformedRecord)):
+            raise MalformedRecord(f"{self.subject}: {error}") from error
+        return False
 
 
 class RecordProblems(MalformedRecord):
@@ -1175,12 +1193,8 @@ class FieldRepresentation[T](MroDispatch, ABC, JsonSchemaOwner):
     @classmethod
     def decode_field(cls, data: object, structural: ValueDecoder[T]) -> T:
         handler: Callable[[object, ValueDecoder[T]], T] = cls.handler_for(type(data))
-        try:
+        with MalformedRecord.refusing(f"Invalid {cls.__name__}"):
             return handler(data, structural)
-        except MalformedRecord:
-            raise
-        except ValueError as error:
-            raise MalformedRecord.refused(f"Invalid {cls.__name__}", error) from error
 
     @handles(type(None))
     @classmethod
@@ -1630,12 +1644,8 @@ class TextRepresentation[V](FieldRepresentation[V]):
 
     @classmethod
     def decode(cls, value: object) -> V:
-        try:
+        with MalformedRecord.refusing(f"Invalid {cls.__name__}"):
             return cls.from_text(FieldCodec.decode(str, value))
-        except MalformedRecord:
-            raise
-        except ValueError as error:
-            raise MalformedRecord.refused(f"Invalid {cls.__name__}", error) from error
 
     @classmethod
     @abstractmethod
@@ -2151,15 +2161,11 @@ class FieldCodec(MroDispatch, Sealed):
     @staticmethod
     def parse(text: str | bytes) -> object:
         """External JSON text is data: strict UTF-8, syntax and duplicate keys refuse it."""
-        try:
+        with MalformedRecord.refusing("Invalid JSON"):
             return json.loads(
                 text.decode("utf-8") if isinstance(text, bytes) else text,
                 object_pairs_hook=_unique_object,
             )
-        except MalformedRecord:
-            raise
-        except ValueError as error:
-            raise MalformedRecord.refused("Invalid JSON", error) from error
 
     @classmethod
     def require_fields(cls, record: DataclassInstance, *names: str) -> None:
@@ -2181,12 +2187,8 @@ class FieldCodec(MroDispatch, Sealed):
     @staticmethod
     def construct(target: Callable[..., T], values: dict[str, object]) -> T:
         """A record built from decoded data refuses its values as a malformed record."""
-        try:
+        with MalformedRecord.refusing(f"Invalid {target.__name__}"):
             return target(**values)
-        except MalformedRecord:
-            raise
-        except ValueError as error:
-            raise MalformedRecord.refused(f"Invalid {target.__name__}", error) from error
 
     @staticmethod
     def alternatives_schema(
@@ -2515,14 +2517,8 @@ class _JsonValueRepresentation(FieldRepresentation[JsonValue]):
 
     @classmethod
     def decode(cls, data):
-        try:
+        with MalformedRecord.refusing("Expected a JSON value with string keys and finite numbers"):
             return cls.validator().validate_python(data, strict=True)
-        except MalformedRecord:
-            raise
-        except ValueError as error:
-            raise MalformedRecord.refused(
-                "Expected a JSON value with string keys and finite numbers", error,
-            ) from error
 
     @classmethod
     def encode(cls, value):
@@ -3229,12 +3225,8 @@ class _EnumDecoder(_ChoiceDecoder[Enum]):
         return tuple((str(member.value), member.value) for member in self.target)
 
     def decode(self, data):
-        try:
+        with MalformedRecord.refusing(f"Invalid {self.target.__name__}"):
             return self.target(data)
-        except MalformedRecord:
-            raise
-        except ValueError as error:
-            raise MalformedRecord.refused(f"Invalid {self.target.__name__}", error) from error
 
 
 @overload
@@ -3273,12 +3265,8 @@ class _PydanticDecoder(ValueDecoder[object]):
 
     @boundary_decoder
     def decode(self, data: object) -> BaseModel:
-        try:
+        with MalformedRecord.refusing(f"Invalid {self.target.__name__}"):
             return self.target.model_validate(data)
-        except MalformedRecord:
-            raise
-        except ValueError as error:
-            raise MalformedRecord.refused(f"Invalid {self.target.__name__}", error) from error
 
     def encode(self, value: object) -> object:
         if not isinstance(value, self.target):
