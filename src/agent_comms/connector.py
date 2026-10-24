@@ -24,8 +24,10 @@ import hashlib
 import html
 import json
 import logging
+import os
 import secrets
 import signal
+import socket
 import sys
 import time
 from abc import abstractmethod
@@ -55,7 +57,7 @@ from .field_codec import (
 )
 from agent_comms.channel_targets import NamedTarget
 from agent_comms.owner_requests import NewestOpenRequest, RequestSelection
-from .host_services import HostService, SystemdSite
+from .host_services import HostService
 from .connector_store import (
     CODE_SECONDS, ApprovalQueueFull, ApprovalRefused, AuthorizationQuery,
     AuthorizationRequest, ClaudeCallback,
@@ -96,6 +98,20 @@ class DirectorCaller(ThreadCaller):
     def head_review_actor(self, comms: Comms, request: PullRequestHead,
                           order: HeadReviewOrder):
         return order.director_identity(comms.goals, self.identity(comms))
+
+
+class SystemdSite(web.TCPSite):
+    """The listening site notifies its supervisor only after binding succeeds."""
+
+    notify_variable: ClassVar[str] = "NOTIFY_SOCKET"  # systemd's supervisor socket
+
+    async def start(self) -> None:
+        await super().start()
+        address = os.environ[self.notify_variable]
+        target = "\0" + address[1:] if address.startswith("@") else address
+        with socket.socket(socket.AF_UNIX, socket.SOCK_DGRAM) as notify:
+            notify.connect(target)
+            notify.sendall(b"READY=1")
 
 
 class ConnectorTool(ToolRequest[DirectorCaller], affix="ConnectorTool"):

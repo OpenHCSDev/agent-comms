@@ -23,13 +23,12 @@ from agent_comms.active_route import (
 )
 from agent_comms.bus import Bus
 from agent_comms.comms import client_wire
-from agent_comms.connector import ConnectorVerb
+from agent_comms.connector import ConnectorVerb, SystemdSite
 from agent_comms.connector_store import ConnectorStore
 from agent_comms.harness_install import CodexHarness
 from agent_comms.host_services import (
     HostService,
     ServiceNotServingError,
-    SystemdSite,
 )
 from agent_comms.host_services.codex_inbox import CodexInboxService
 from agent_comms.host_services.connector import (

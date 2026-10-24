@@ -8,16 +8,12 @@ service has no instance of it and contributes nothing: there is no list of servi
 from __future__ import annotations
 
 import json
-import os
-import socket
 import subprocess
 import time
 from abc import abstractmethod
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Annotated, ClassVar, Self
-
-from aiohttp.web import TCPSite
 
 from ..child_process import ProcessIdentity
 from ..declared_family import DeclaredFamily
@@ -27,20 +23,6 @@ from ..launch_runtime import LaunchRuntime
 
 class ServiceNotServingError(RuntimeError):
     """A restarted service did not serve its installed runtime's contract."""
-
-
-class SystemdSite(TCPSite):
-    """The listening site notifies its supervisor only after binding succeeds."""
-
-    notify_variable: ClassVar[str] = "NOTIFY_SOCKET"  # systemd's supervisor socket
-
-    async def start(self) -> None:
-        await super().start()
-        address = os.environ[self.notify_variable]
-        target = "\0" + address[1:] if address.startswith("@") else address
-        with socket.socket(socket.AF_UNIX, socket.SOCK_DGRAM) as notify:
-            notify.connect(target)
-            notify.sendall(b"READY=1")
 
 
 @dataclass(frozen=True)
