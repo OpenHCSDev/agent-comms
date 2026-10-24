@@ -23,9 +23,9 @@ import os
 import re
 import sys
 import time
-from collections.abc import Awaitable, Callable, Sequence
+from collections.abc import Sequence
 from contextlib import AsyncExitStack
-from functools import partial, wraps
+from functools import partial
 from typing import TYPE_CHECKING
 
 from acp import RequestError
@@ -52,7 +52,7 @@ from acp.schema import (
 from acp.stdio import stdio_streams
 from pydantic import BaseModel, JsonValue, ValidationError
 
-from agent_comms.coordination_errors import IdentityConflict, RequestRefused
+from agent_comms.coordination_errors import IdentityConflict
 from agent_comms.coordinator import Coordination
 
 from . import acp_extension
@@ -82,7 +82,6 @@ from .queued_input import DeliveredInput
 from .runtime import (
     RuntimeProxy,
     RuntimeServer,
-    client_refusals,
     socket_path,
 )
 from .schedule_rules import SelectedWakeCheck
@@ -99,20 +98,6 @@ if TYPE_CHECKING:
 
 from .native_arguments import ConfiguredBinary, InheritedArguments, LaunchArguments, LaunchBinary
 from .turn_runner import RELAY_PREFIX
-
-
-def answers_refusals[**Parameters, Answer](
-    method: Callable[Parameters, Awaitable[Answer]],
-) -> Callable[Parameters, Awaitable[Answer]]:
-    """Only declared ACP entries translate Core refusals into SDK wire errors."""
-    @wraps(method)
-    async def answer(*args: Parameters.args, **kwargs: Parameters.kwargs) -> Answer:
-        try:
-            return await method(*args, **kwargs)
-        except RequestRefused as error:
-            raise RequestError(error.code, error.message, error.data) from error
-
-    return answer
 
 
 class SdkSessionConnection(AgentSideConnection, Controller, SessionUpdateSink):
@@ -133,13 +118,12 @@ class SdkSessionConnection(AgentSideConnection, Controller, SessionUpdateSink):
     ) -> dict[str, object] | None:
         tool_call, options = request
         if self is runner.sessions.client:
-            with client_refusals():
-                response = await asyncio.wait_for(
-                    self.request_permission(
-                        session_id=session_id, tool_call=tool_call, options=options
-                    ),
-                    timeout=ACP_PERMISSION_TIMEOUT_SECONDS,
-                )
+            response = await asyncio.wait_for(
+                self.request_permission(
+                    session_id=session_id, tool_call=tool_call, options=options
+                ),
+                timeout=ACP_PERMISSION_TIMEOUT_SECONDS,
+            )
             return RequestPermissionResponse.model_validate(response).outcome.model_dump(
                 by_alias=True, exclude_none=True
             )
@@ -217,7 +201,6 @@ class CommsAgent(SessionEffects, InputEffects, TurnEffects):
 
     # ─── ACP methods ─────────────────────────────────────────────────────────
 
-    @answers_refusals
     async def initialize(
         self,
         protocol_version: int,
@@ -233,7 +216,7 @@ class CommsAgent(SessionEffects, InputEffects, TurnEffects):
         """Reassemble SDK fields and expanded metadata using the SDK declaration."""
         metadata = parameters.pop("_meta", None) or parameters.pop("field_meta", None) or {}
         if not isinstance(metadata, dict):
-            raise RequestRefused.invalid_params(
+            raise RequestError.invalid_params(
                 {"reason": "ACP metadata must be an object"}
             )
         fields = {name: value for name, value in parameters.items() if name in model.model_fields}
@@ -243,9 +226,8 @@ class CommsAgent(SessionEffects, InputEffects, TurnEffects):
         try:
             return model.model_validate({**fields, "field_meta": {**metadata, **expanded}})
         except ValidationError as error:
-            raise RequestRefused.invalid_params({"reason": str(error)}) from error
+            raise RequestError.invalid_params({"reason": str(error)}) from error
 
-    @answers_refusals
     async def new_session(
         self, cwd: str, mcp_servers: Sequence[BaseModel] | None = None, **kwargs: JsonValue
     ) -> NewSessionResponse:
@@ -257,7 +239,6 @@ class CommsAgent(SessionEffects, InputEffects, TurnEffects):
         )
         return await self.sessions.new_session(request)
 
-    @answers_refusals
     async def load_session(
         self,
         cwd: str,
@@ -274,7 +255,6 @@ class CommsAgent(SessionEffects, InputEffects, TurnEffects):
         )
         return await self.sessions.load_session(request)
 
-    @answers_refusals
     async def prompt(
         self, session_id: str, prompt: Sequence[BaseModel], **kwargs: JsonValue
     ) -> PromptResponse:
@@ -288,7 +268,7 @@ class CommsAgent(SessionEffects, InputEffects, TurnEffects):
         try:
             command = decode_request(request.field_meta)
         except MalformedRecord as error:
-            raise RequestRefused.invalid_params({"reason": str(error)}) from error
+            raise RequestError.invalid_params({"reason": str(error)}) from error
         # Literal /compact is the external ACP text command; ours uses a record.
         text = self._prompt_text(request).strip()
         if re.match(r"^/compact(?:\s|$)", text):
@@ -297,7 +277,7 @@ class CommsAgent(SessionEffects, InputEffects, TurnEffects):
         try:
             return await AcpRequestConsumer(self, request).run(command)
         except NativeTurnError as error:
-            raise RequestRefused.internal_error(error.request.error_data()) from error.__cause__
+            raise RequestError.internal_error(error.request.error_data()) from error.__cause__
 
     async def _compact_request(self, session_id: str, instructions: str | None) -> PromptResponse:
         from . import manual_compaction_bridge
@@ -324,7 +304,7 @@ class CommsAgent(SessionEffects, InputEffects, TurnEffects):
         controller = self._runtime.controller.get()
         attached = controller.attached(self.sessions.client) if controller is not None else None
         if attached is None:
-            raise RequestRefused.invalid_params(
+            raise RequestError.invalid_params(
                 {"reason": "Selected write requires attached ACP controller"}
             )
         scope = await Coordination.run_worker(partial(self.cursors.scope, owner, session_id))
@@ -354,9 +334,9 @@ class CommsAgent(SessionEffects, InputEffects, TurnEffects):
         try:
             images = prompt_images(request)
         except ValueError as error:
-            raise RequestRefused.invalid_params({"reason": str(error)}) from error
+            raise RequestError.invalid_params({"reason": str(error)}) from error
         if images and text.lstrip().startswith((*NamedTarget.sigils(), RELAY_PREFIX)):
-            raise RequestRefused.invalid_params(
+            raise RequestError.invalid_params(
                 {"reason": "Send images to an agent thread, not as a coordination relay."}
             )
         if (
@@ -395,11 +375,11 @@ class CommsAgent(SessionEffects, InputEffects, TurnEffects):
     @staticmethod
     def _require_compaction_text(request: PromptRequest) -> None:
         if len(request.prompt) != 1:
-            raise RequestRefused.invalid_params(
+            raise RequestError.invalid_params(
                 {"reason": "/compact requires one text block."}
             )
         if not isinstance(request.prompt[0], TextContentBlock):
-            raise RequestRefused.invalid_params(
+            raise RequestError.invalid_params(
                 {"reason": "/compact requires text only."}
             )
 
@@ -422,23 +402,19 @@ class CommsAgent(SessionEffects, InputEffects, TurnEffects):
             with open(debug_path, "a") as debug_log:
                 debug_log.write(f"[{time.time():.3f}] {message}\n")
 
-    @answers_refusals
     async def cancel(self, session_id: str, **kwargs: JsonValue) -> None:
         return await self.turns.cancel(session_id, **kwargs)
 
-    @answers_refusals
     async def close_session(self, session_id: str, **kwargs: JsonValue):
         return await self.sessions.close_session(session_id)
 
-    @answers_refusals
     async def set_config_option(
         self, config_id: str, session_id: str, value: str | bool, **kwargs: JsonValue
     ) -> SetSessionConfigOptionResponse:
         return await self.sessions.config.set_option(config_id, session_id, value)
 
-    @answers_refusals
     async def authenticate(self, method_id: str, **kwargs: JsonValue) -> None:
-        raise RequestRefused.auth_required({"reason": "agent-comms requires no authentication"})
+        raise RequestError.auth_required({"reason": "agent-comms requires no authentication"})
 
     # ─── Helpers ─────────────────────────────────────────────────────────────
 

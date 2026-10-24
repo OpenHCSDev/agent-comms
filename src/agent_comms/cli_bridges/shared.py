@@ -83,7 +83,7 @@ from agent_comms.typed_table import (
     WriterOwnedFile,
 )
 from agent_comms.wire_models import WireModel
-from agent_comms_hooks.watch import HeldClaim, WatchClaim, WatchRecord
+from agent_comms_hooks.watch import HeldClaim, NoSessionBridge, WatchClaim, WatchRecord
 
 from ..locked_store import RegistryFile, SQLiteFile
 from .monitor import (
@@ -831,6 +831,9 @@ class ResumableBridge(ABC):
     @abstractmethod
     def release(self) -> ConfirmableBridge: ...
 
+    def require_paused(self) -> None:  # noqa: B027 - default hook
+        """A pause the bridge acknowledged, or one with nothing left to pause, refuses nothing."""
+
 
 @dataclass(frozen=True)
 class BridgeResume(ResumableBridge, ConfirmableBridge, DeclaredFamily, affix="Bridge"):
@@ -868,6 +871,21 @@ class ResumedBridge(BridgeResume):
     def lines(self) -> tuple[str, ...]:
         return (f"Session bridge {self.name}: {self.from_runtime.prefix} -> "
                 f"{self.to_runtime.prefix}",)
+
+
+@dataclass(frozen=True)
+class UnacknowledgedPause(UnresumedBridge):
+    """A bridge that never answered pause may still hold bus resources: install refuses."""
+
+    socket: Path
+    timeout: float
+
+    def require_paused(self) -> None:
+        raise self
+
+    def lines(self) -> tuple[str, ...]:
+        return (f"Session bridge {self.name} at {self.socket} did not acknowledge pause "
+                f"within {self.timeout:g} s",)
 
 
 @dataclass(frozen=True)
@@ -911,7 +929,10 @@ class SessionBridge:
         request = PauseSession(owner=self.observed.owner, process=self.observed.process)
         peer = resources.enter_context(request.connection(self.claim.socket_path))
         stream = resources.enter_context(peer.makefile('rb'))
-        request.decode_reply(stream.readline(4096))
+        try:
+            request.decode_reply(stream.readline(4096))
+        except TimeoutError:
+            return UnacknowledgedPause(self.claim.thread, self.claim.socket_path, peer.gettimeout())
         return PausedSessionBridge(self, peer)
 
 
@@ -926,6 +947,7 @@ class SessionBridgeResumes:
 
     def pause(self, bridge: SessionBridge, resources: ExitStack) -> None:
         self.paused.append(bridge.pause(resources))
+        self.paused[-1].require_paused()
 
     def release(self) -> None:
         """Give every paused peer its selected runtime before waiting for any successor."""
@@ -978,25 +1000,28 @@ class ReleasedSessionBridge(ConfirmableBridge):
     runtime: LaunchRuntime
 
     def confirm(self) -> BridgeResume:
+        """The claim says whether the successor is still starting: its lock outlives the exec
+        and is released only when the process exits, so no deadline guesses it."""
         observed = self.bridge.observed
-        name = self.bridge.claim.thread
+        claim = self.bridge.claim
         runtime = self.runtime
-        deadline = time.monotonic() + 30
-        while observed.process.alive() and time.monotonic() < deadline:
-            try:
-                current = InspectSession().information(self.bridge.claim.socket_path)
-            except (FileNotFoundError, ConnectionRefusedError):
-                time.sleep(.05)
-                continue
-            except OSError as error:
-                return UnobservedBridge(name, f"{type(error).__name__}: {error}")
-            if current.process != observed.process or current.owner != observed.owner:
-                return ReplacedBridge(name, observed.process, current.process)
-            if current.runtime.prefix != runtime.prefix:
-                return UnobservedBridge(
-                    name, f"observed {current.runtime.prefix}, expected {runtime.prefix}")
-            return ResumedBridge(name, observed.runtime, current.runtime)
-        return UnobservedBridge(name, f"process exited or resume deadline expired for {runtime.prefix}")
+        try:
+            current = InspectSession().awaited(claim, self.announce)
+        except NoSessionBridge:
+            return UnobservedBridge(
+                claim.thread, f"process exited before serving {runtime.prefix}")
+        except OSError as error:
+            return UnobservedBridge(claim.thread, f"{type(error).__name__}: {error}")
+        if current.process != observed.process or current.owner != observed.owner:
+            return ReplacedBridge(claim.thread, observed.process, current.process)
+        if current.runtime.prefix != runtime.prefix:
+            return UnobservedBridge(
+                claim.thread, f"observed {current.runtime.prefix}, expected {runtime.prefix}")
+        return ResumedBridge(claim.thread, observed.runtime, current.runtime)
+
+    def announce(self, claim: WatchClaim) -> None:
+        print(f"Waiting for session bridge {claim.thread} to serve {self.runtime.prefix}",
+              file=sys.stderr, flush=True)
 
 
 class Enrol(Operation):
