@@ -92,7 +92,7 @@ class OwnerFollowingInputs(FollowingInputs):
             thread=thread,
             turn=RegisteredTurn(lease.turn_id),
             claim_generation=lease.claimed_generation,
-            original=original,
+            original_source=original,
             goal_permit=NoLaunchPermit(),
         )
         self.scope = LiveQueueScope(

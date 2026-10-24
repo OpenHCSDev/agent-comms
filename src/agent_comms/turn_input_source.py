@@ -7,25 +7,117 @@ from contextlib import ExitStack
 from dataclasses import dataclass, replace
 from typing import TYPE_CHECKING, ClassVar
 
-from .field_codec import InputId
-from .agent_backend import BusyInputPolicy, SteerInputPolicy
-from .channel_input_batch import InputBatch, SingleInputBatch
-from .messages import Message
-from .started_input import StartedInput
 from agent_comms.turn_goal_permission import GoalPermission, TurnGoalPermission
 
+from . import input_attempt
+from .acp_extension import InputStartedUpdate, NoQueueScope
+from .agent_backend import BusyInputPolicy, SteerInputPolicy
+from .channel_input_batch import InputBatch, SingleInputBatch
+from .field_codec import InputId
+from .messages import Message
+from .ordinary_turn_rules import AcceptedInputCheck, MissingAcceptedInputCheck
+from .started_input import StartedInput
+
 if TYPE_CHECKING:
+    from .acp_extension import QueueScope
     from .comms import Comms
+    from .controller import Controller
     from .goal_waits import GoalWait
     from .goals import GoalDeclaration
     from .input_disposition import InputDispositions
+    from .input_drain import DrainedSession, InputDrain
+    from .runtime import RuntimeServer
     from .thread_identity import RecordedThreadIncarnation, RegisteredTurn
     from .threads import Thread
 
 
+class TurnAcceptance(ABC):
+    """The live ACP acknowledgement, when this turn has one."""
+
+    def controller(self, state: DrainedSession, runtime: RuntimeServer) -> Controller | None:
+        return runtime.controller.get()
+
+    @abstractmethod
+    def require_current(
+        self, inputs: InputDrain, session_id: str, source: TurnInputSource,
+        current: Thread, claim_generation: int,
+    ) -> None: ...
+
+    async def started_update(
+        self, source: TurnInputSource, inputs: InputDrain, session_id: str,
+        row: input_attempt.StartedInput, scope: QueueScope,
+    ) -> InputStartedUpdate:
+        current = await inputs.queue_binding(session_id)
+        if not scope.current_for(current):
+            current = NoQueueScope()
+        return InputStartedUpdate(
+            row.public_id if source.notice_keys else None, source.notice_text,
+            current, current.start_revision(inputs, session_id), row.native_id,
+        )
+
+    @abstractmethod
+    def release(self, inputs: InputDrain, session_id: str) -> None: ...
+
+
+class NoTurnAcceptance(TurnAcceptance):
+    """A scheduled or selected turn has no queued ACP acceptance."""
+
+    def require_current(
+        self, inputs: InputDrain, session_id: str, source: TurnInputSource,
+        current: Thread, claim_generation: int,
+    ) -> None:
+        return
+
+    def release(self, inputs: InputDrain, session_id: str) -> None:
+        return
+
+
+@dataclass(frozen=True)
+class AcceptedTurn(TurnAcceptance):
+    input_id: InputId
+
+    def controller(self, state: DrainedSession, runtime: RuntimeServer) -> Controller | None:
+        return state.queued[self.input_id].controller
+
+    def require_current(
+        self, inputs: InputDrain, session_id: str, source: TurnInputSource,
+        current: Thread, claim_generation: int,
+    ) -> None:
+        try:
+            accepted = inputs.state(session_id).queued[self.input_id]
+        except KeyError:
+            for row in inputs.dispositions.read(source.keys).rows.values():
+                row.require_not_cleared()
+            MissingAcceptedInputCheck().require_valid()
+            raise
+        AcceptedInputCheck(
+            acknowledgement=accepted, current=current, claim_generation=claim_generation,
+            input_id=self.input_id, keys=source.keys, inputs=inputs, session_id=session_id,
+        ).require_valid()
+
+    async def started_update(
+        self, source: TurnInputSource, inputs: InputDrain, session_id: str,
+        row: input_attempt.StartedInput, scope: QueueScope,
+    ) -> InputStartedUpdate:
+        text = source.notice_text
+        try:
+            item = inputs.state(session_id).queued[self.input_id]
+        except KeyError:
+            pass
+        else:
+            text = await item.started(inputs)
+        update = await super().started_update(source, inputs, session_id, row, scope)
+        return replace(
+            update, input_id=row.public_id if source.notice_keys else self.input_id, text=text,
+        )
+
+    def release(self, inputs: InputDrain, session_id: str) -> None:
+        inputs.state(session_id).queued.pop(self.input_id, None)
+
+
 @dataclass(frozen=True, kw_only=True)
 class TurnInputSource(StartedInput, ABC):
-    accepted_id: InputId | None
+    acceptance: TurnAcceptance
     goal_permission: TurnGoalPermission
     bypasses_goal_permit: ClassVar[bool] = False
     origins: ClassVar[tuple[Message, ...]] = ()
@@ -184,7 +276,7 @@ class SelectedOriginalInput(RoutedOriginalInput):
     @classmethod
     def answering(cls, prompt: str, permission: TurnGoalPermission) -> SelectedOriginalInput:
         return cls(
-            accepted_id=None,
+            acceptance=NoTurnAcceptance(),
             goal_permission=permission,
             prompt=prompt,
             original_display=None,

@@ -1,5 +1,7 @@
 """Idle observations avoid repeated work without becoming delivery authority."""
 
+from agent_comms.turn_input_source import NoTurnAcceptance
+
 from bus_history import read_history
 from conftest import publish_initial
 from agent_comms.messages import NoticeRole
@@ -84,7 +86,8 @@ async def test_turn_publication_joins_cancellation_before_lease_release(tmp_path
     comms, agent, _root_id = _session(tmp_path)
     origin = Message("user", "#team", "publication ownership", InfoKind)
     execution = OwnedTurn(
-        agent.turns, "beta", "beta", "publication ownership", origins=(origin,)
+        agent.turns, "beta", "beta", "publication ownership", origins=(origin,),
+        acceptance=NoTurnAcceptance(),
     )
     async with AsyncExitStack() as resources:
         async with AsyncExitStack() as permits:

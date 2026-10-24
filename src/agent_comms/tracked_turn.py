@@ -16,7 +16,7 @@ from typing import TYPE_CHECKING, Generic, TypeVar
 from . import pi_commands as commands
 from . import pi_events as pi
 from .agent_events import AgentEvent
-from .backend import InputStartListener, TurnSession
+from .backend import TurnSession
 from .coordinator import Coordination
 from .errors import RelationViolationError
 from .field_codec import MalformedRecord
@@ -475,7 +475,7 @@ class TrackedTurnSession(TurnSession):
         self.inputs.queue = inbox
         self.send_boundary = sender
         self.interrupt_boundary = partial(sender, already_bound=True)
-        self.input_start = InputStartListener.from_callback(sender.native_start)
+        self.input_start = sender
         self.ensure_input_forwarding()
 
     async def accept_user_message(

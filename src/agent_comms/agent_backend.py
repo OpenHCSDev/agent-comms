@@ -281,6 +281,31 @@ class StaleCompaction(CompactionOutcome):
 # ---------------------------------------------------------------------------
 
 
+class InputStartListener(ABC):
+    """The listener owns acknowledgement and the corresponding start notification."""
+
+    started_events: tuple[AgentEvent, ...]
+
+    @abstractmethod
+    def original(self, native_id: str, text: str) -> bool: ...
+
+    @abstractmethod
+    def following(self, public_id: InputId, native_id: str, text: str) -> bool: ...
+
+
+class NoInputStartListener(InputStartListener):
+    started_events = ()
+
+    def original(self, native_id: str, text: str) -> bool:
+        return True
+
+    def following(self, public_id: InputId, native_id: str, text: str) -> bool:
+        return True
+
+
+NO_INPUT_START_LISTENER = NoInputStartListener()
+
+
 @dataclass(frozen=True, kw_only=True)
 class TurnDelivery:
     """Core's bindings for one turn, handed to the backend that runs it.
@@ -299,7 +324,7 @@ class TurnDelivery:
     finish_event: asyncio.Event
     send_boundary: SendBoundary
     interrupt_boundary: SendBoundary
-    input_started: Callable[..., bool]
+    input_start: InputStartListener
     request_progress: Callable[..., None]
     ui_request: Callable[[DialogUiRequest], Awaitable[ExtensionUiChoice]]
     tool_mode: NativeToolMode

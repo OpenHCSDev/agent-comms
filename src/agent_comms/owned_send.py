@@ -10,15 +10,15 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from .field_codec import InputId
+from .agent_backend import InputStartListener
+from . import agent_events as events
 from .channel_coding_tools import CodingToolOwner
 from .coordination_session import NativeBoundary
 from .coordinator import Coordination
 from .envelope_claim_transitions import NativeClaim
 from .input_attempt import InputAlreadyCleared
 from agent_comms.ordinary_turn_rules import (
-    AcceptedInputCheck,
     InputKeysCheck,
-    MissingAcceptedInputCheck,
     MissingAcceptedInputRule,
     MissingTurnOwnerCheck,
     OrdinaryContextCheck,
@@ -48,19 +48,21 @@ _LOG = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True, kw_only=True)
-class OwnedSend(CodingToolOwner):
+class OwnedSend(CodingToolOwner, InputStartListener):
+    started_events = (events.OriginalInputStarted(),)
+
     inputs: InputDrain
     goal_store: GoalAttemptStore
     session_id: str
     thread: Thread
     turn: RegisteredTurn
     claim_generation: int
-    original: OriginalTurnInput
+    original_source: OriginalTurnInput
     goal_permit: GoalTurnPermit
 
     def source(self, public_id: InputId | None) -> TurnInputSource:
         if public_id is None:
-            return self.original
+            return self.original_source
         try:
             return self.inputs.state(self.session_id).following[public_id]
         except KeyError as error:
@@ -112,24 +114,12 @@ class OwnedSend(CodingToolOwner):
             self._check_owner(current, snapshot, canonical, source, sent_text)
             # The queue grants a send, not a running tool's lifetime. Once Pi
             # starts this exact input, StartedInput removes its queue entry.
-            if source.accepted_id is not None:
-                accepted = self.inputs.state(self.session_id).queued.get(source.accepted_id)
-                if accepted is None:
-                    for row in self.inputs.dispositions.read(source.keys).rows.values():
-                        row.require_not_cleared()
-                    MissingAcceptedInputCheck().require_valid()
-                AcceptedInputCheck(
-                    acknowledgement=accepted,
-                    current=current,
-                    claim_generation=self.claim_generation,
-                    input_id=source.accepted_id,
-                    keys=source.keys,
-                    inputs=self.inputs,
-                    session_id=self.session_id,
-                ).require_valid()
+            source.acceptance.require_current(
+                self.inputs, self.session_id, source, current, self.claim_generation,
+            )
         except ReservationViolationError as error:
             return self._refusal(error.rule)
-        if source.defers_for_goal(self.original.goal_permission, current.goal):
+        if source.defers_for_goal(self.original_source.goal_permission, current.goal):
             return DeferredSend()
         wait = self.comms.goals.goal_wait(canonical)
         try:
@@ -172,7 +162,7 @@ class OwnedSend(CodingToolOwner):
 
     @property
     def goal_permission(self) -> TurnGoalPermission:
-        return self.original.goal_permission
+        return self.original_source.goal_permission
 
     def verify(self, store, turn, snapshot) -> None:
         """Recheck the running original without binding it or consuming its wait again."""
@@ -183,8 +173,12 @@ class OwnedSend(CodingToolOwner):
         canonical = snapshot.canonical_name(self.thread.name)
         current = snapshot.threads.get(canonical)
         try:
-            self._check_owner(current, snapshot, canonical, self.original, turn.command.message)
-            self._require_context(self.original, current, self.comms.goals.goal_wait(canonical))
+            self._check_owner(
+                current, snapshot, canonical, self.original_source, turn.command.message,
+            )
+            self._require_context(
+                self.original_source, current, self.comms.goals.goal_wait(canonical),
+            )
         except (ReservationViolationError, InputAlreadyCleared) as error:
             raise SelectedToolDenied(str(error)) from error
 
@@ -210,8 +204,13 @@ class OwnedSend(CodingToolOwner):
 
         await Coordination.run_worker(release)
 
-    def native_start(self, public_id: InputId | None, native_id: str, sent_text: str) -> bool:
-        source = self.source(public_id)
+    def original(self, native_id: str, text: str) -> bool:
+        return self._started(self.original_source, native_id, text)
+
+    def following(self, public_id: InputId, native_id: str, text: str) -> bool:
+        return self._started(self.source(public_id), native_id, text)
+
+    def _started(self, source: TurnInputSource, native_id: str, sent_text: str) -> bool:
         return source.valid_keys(sent_text) and all(
             self.inputs.dispositions.started(
                 key, turn_id=self.turn.value, native_id=native_id, text=sent_text

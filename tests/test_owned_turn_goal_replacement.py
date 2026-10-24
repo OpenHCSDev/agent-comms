@@ -1,5 +1,7 @@
 """A replaced order keeps the running turn's authority, so following input joins that turn; a new original captures the current goal."""
 
+from agent_comms.turn_input_source import NoTurnAcceptance
+
 import asyncio
 import os
 from contextlib import AsyncExitStack
@@ -132,7 +134,8 @@ async def test_goal_published_during_preparation_is_current_at_reservation(tmp_p
     actor = comms.registry.require('lead').incarnation
     agent = CommsAgent(comms, auto_wake=False)
     old = OwnedTurn(agent.turns, 'worker-session', 'worker', 'first input',
-                    original_owner_input=True, original_goal_id=initial.id)
+                    original_owner_input=True, original_goal_id=initial.id,
+                    acceptance=NoTurnAcceptance())
     async with AsyncExitStack() as resources, AsyncExitStack() as permits:
         assert await old.acquire(resources, permits)
         old.original.goal_permission.require_current(initial)
@@ -147,7 +150,8 @@ async def test_goal_published_during_preparation_is_current_at_reservation(tmp_p
     # Exercise the real lease-to-reservation boundary without replacing any methods.
     # A second commander publication during preparation makes the leased snapshot stale.
     current = OwnedTurn(agent.turns, 'worker-session', 'worker', 'next input',
-                        original_owner_input=True, original_goal_id=replaced.id)
+                        original_owner_input=True, original_goal_id=replaced.id,
+                        acceptance=NoTurnAcceptance())
     assert current.authorize()
     current.turn_id = TurnId.mint()
     async with AsyncExitStack() as resources:
@@ -201,7 +205,7 @@ async def test_order_reactivating_a_blocked_goal_keeps_the_running_turn(tmp_path
     # QueuedInputContext.active_goal_id of a blocked goal, as queued_input.py passes it.
     turn = OwnedTurn(agent.turns, 'worker-session', 'worker', 'retry order message',
                      original_owner_input=True,
-                     original_goal_id=blocked.active().reported_id())
+                     original_goal_id=blocked.active().reported_id(), acceptance=NoTurnAcceptance())
     async with AsyncExitStack() as resources, AsyncExitStack() as permits:
         assert await turn.acquire(resources, permits)
         todo = comms.goals.todos.get('P1')

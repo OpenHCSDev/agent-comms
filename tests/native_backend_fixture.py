@@ -1,5 +1,7 @@
 """Acquired original native fixture shared by pytest and installed drivers."""
 
+from agent_comms.turn_input_source import AcceptedTurn
+
 
 from agent_comms.native_package import VerifiedNativePackage
 from agent_comms.native_arguments import NativeArguments
@@ -14,7 +16,9 @@ from unittest.mock import patch
 
 import agent_comms.agent_events as events
 import agent_comms.backend as backend
-from agent_comms.agent_backend import InputContent, InputRequest, TurnInbox, SteerInputPolicy
+from agent_comms.agent_backend import (
+    InputContent, InputRequest, NoInputStartListener, TurnInbox, SteerInputPolicy,
+)
 from agent_comms.field_codec import InputId
 from agent_comms.comms import wire
 from agent_comms.fresh_private_session import create_fresh_private_session
@@ -41,7 +45,11 @@ async def wait_for(predicate):
             await asyncio.sleep(0.01)
 
 
-class NativeBackendFixture:
+class AnnouncedInputStart(NoInputStartListener):
+    started_events = (events.OriginalInputStarted(),)
+
+
+class NativeBackendFixture(AnnouncedInputStart):
     @staticmethod
     def participant_at(root: Path, project: Path) -> RecordedThreadIncarnation:
         """The real thread incarnation used by a direct native turn on this bus."""
@@ -135,6 +143,7 @@ manager.appendMessage({role:'assistant',content:[{type:'text',text:'Original sav
             async with InitialInput.reserve(
                 agent.inputs, session_id, agent.sessions.require(session_id),
                 text=text, prompt=text, echo=True, images=(), controller=None,
+                input_id=InputId.mint(),
             ) as reservation:
                 item = reservation.item
                 resources.push_async_callback(reservation.release().aclose)
@@ -144,6 +153,7 @@ manager.appendMessage({role:'assistant',content:[{type:'text',text:'Original sav
                 agent.turns, session_id, agent.sessions.require(session_id), text,
                 original_keys=(item.key,), initial_display_text=text,
                 original_owner_input=True, original_goal_id=item.context.active_goal_id,
+                acceptance=AcceptedTurn(item.input_id),
             )
             async with AsyncExitStack() as permits:
                 assert await turn.acquire(resources, permits)
@@ -154,7 +164,13 @@ manager.appendMessage({role:'assistant',content:[{type:'text',text:'Original sav
         self.persistent.child_state.child.attestation.require_identity()
         await self.persistent.close_idle()
 
-    def started(self, public_id, native_id, text):
+    def original(self, native_id: str, text: str) -> bool:
+        return self._observe_start(None, native_id, text)
+
+    def following(self, public_id: InputId, native_id: str, text: str) -> bool:
+        return self._observe_start(public_id, native_id, text)
+
+    def _observe_start(self, public_id, native_id, text):
         self.starts.append((public_id, native_id, text))
         child = backend.TurnSession.active[asyncio.current_task()].native
         # Cleanup already belongs to the saved-session owner at native input start;
@@ -179,7 +195,7 @@ manager.appendMessage({role:'assistant',content:[{type:'text',text:'Original sav
                 package=self.package,
                 tool_mode=NoSelectedTools(),
                 steering_queue=queue,
-                native_start=self.started,
+                input_start=self,
                 **options,
              session_directory=self.root):
                 result.append(event)

@@ -921,7 +921,7 @@ class InputIdsPhase(Id128NominalPhase):
     evidence = AllEvidence(
         (
             PatternAbsent(
-                r"\b(input_id|accepted_input_id|native_id): "
+                r"\b(input_id|native_id): "
                 r"(str\b|Id128\b|Annotated\[(str|Id128)\b)",
                 Id128NominalPhase.paths,
             ),

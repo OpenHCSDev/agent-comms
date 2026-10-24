@@ -43,7 +43,7 @@ from . import pi_commands as commands
 from . import pi_events as pi
 from . import turn_failure as failures
 from .acp_failure import UnrecordedFailureSource
-from .agent_backend import TurnInbox
+from .agent_backend import NO_INPUT_START_LISTENER, InputStartListener, TurnInbox
 from .coordinator import Coordination
 from .extension_ui import ExtensionUiSession
 from .field_codec import InputId, MalformedRecord, boundary_decoder
@@ -118,8 +118,8 @@ async def stream_agent_events(
     rpc_abort_grace: float = RPC_ABORT_GRACE_SECONDS,
     send_boundary: SendBoundary | None = None,
     interrupt_boundary: SendBoundary | None = None,
-    native_start: Callable[[str | None, str, str], bool] | None = None,
     *,
+    input_start: InputStartListener,
     persistent_session: PersistentPiSession,
     package: VerifiedNativePackage,
     root: Path,
@@ -171,7 +171,7 @@ async def stream_agent_events(
                     model_wait=model_wait,
                     rpc_abort_grace=rpc_abort_grace,
                     send_boundary=send_boundary,
-                    input_start=InputStartListener.from_callback(native_start),
+                    input_start=input_start,
                     interrupt_boundary=interrupt_boundary,
                     native_session=persistent_session,
                     ui_request=ui_request,
@@ -181,53 +181,6 @@ async def stream_agent_events(
             ) as stream:
                 async for event in stream:
                     yield event
-
-
-class InputStartListener(ABC):
-    """The listener owns acknowledgement and the corresponding start notification."""
-
-    started_events: tuple[events.AgentEvent, ...]
-
-    @classmethod
-    @boundary_decoder
-    def from_callback(
-        cls, report: Callable[[str | None, str, str], bool] | None,
-    ) -> InputStartListener:
-        if report is None:
-            return NoInputStartListener()
-        return ReportInputStart(partial(report, None), report)
-
-    @abstractmethod
-    def original(self, native_id: str, text: str) -> bool: ...
-
-    @abstractmethod
-    def following(self, public_id: str, native_id: str, text: str) -> bool: ...
-
-
-class NoInputStartListener(InputStartListener):
-    started_events = ()
-
-    def original(self, native_id: str, text: str) -> bool:
-        return True
-
-    def following(self, public_id: str, native_id: str, text: str) -> bool:
-        return True
-
-
-@dataclass(frozen=True)
-class ReportInputStart(InputStartListener):
-    on_original: Callable[[str, str], bool]
-    on_following: Callable[[str, str, str], bool]
-    started_events = (events.OriginalInputStarted(),)
-
-    def original(self, native_id: str, text: str) -> bool:
-        return self.on_original(native_id, text)
-
-    def following(self, public_id: str, native_id: str, text: str) -> bool:
-        return self.on_following(public_id, native_id, text)
-
-
-NO_INPUT_START_LISTENER = NoInputStartListener()
 
 
 class FinishSignal(ABC):

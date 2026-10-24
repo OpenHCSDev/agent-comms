@@ -47,6 +47,7 @@ from .threads import Thread
 from .transcript_updates import TurnTranscriptUpdate
 from .turn_effects import TurnEffects
 from .turn_lease import TurnLeaseFence, TurnState
+from .turn_input_source import TurnAcceptance
 from .turn_outcome import TurnOutcome
 from .turn_phase import CancellingPhase, TurnPhase
 from .turn_terminal import TurnInterruption
@@ -440,7 +441,7 @@ class TurnRunner:
         autonomous_goal: bool = False,
         original_owner_input: bool = False,
         original_goal_id: str | None = None,
-        accepted_input_id: InputId | None = None,
+        acceptance: TurnAcceptance,
         dependency_wait_id: str | None = None,
     ) -> None:
         from .owned_turn import OwnedTurn
@@ -457,7 +458,7 @@ class TurnRunner:
             autonomous_goal=autonomous_goal,
             original_owner_input=original_owner_input,
             original_goal_id=original_goal_id,
-            accepted_input_id=accepted_input_id,
+            acceptance=acceptance,
             dependency_wait_id=dependency_wait_id,
         ).run()
 

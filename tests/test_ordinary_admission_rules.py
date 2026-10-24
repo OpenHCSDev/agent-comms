@@ -20,6 +20,7 @@ def test_routed_dependency_source_uses_existing_goal_and_wait_authorities(tmp_pa
         CapturedInputDependency,
         DependencyOriginalInput,
         NoInputDependency,
+        NoTurnAcceptance,
         RoutedOriginalInput,
     )
 
@@ -44,7 +45,7 @@ def test_routed_dependency_source_uses_existing_goal_and_wait_authorities(tmp_pa
         report_turn_generation=None,
     )
     common = dict(
-        accepted_id=None,
+        acceptance=NoTurnAcceptance(),
         goal_permission=TurnGoalPermission(ContinuationGoalPermission(goal)),
         prompt="Result",
         original_display="Result",

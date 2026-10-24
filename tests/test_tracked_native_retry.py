@@ -1,3 +1,5 @@
+from agent_comms.field_codec import InputId
+from agent_comms.turn_input_source import AcceptedTurn
 import pytest
 
 from agent_comms.native_arguments import SelectedModel
@@ -87,7 +89,7 @@ def test_failed_native_retry_end_requires_final_error_at_decode():
 
 
 def following(kind):
-    values = dict(keys=(), accepted_id="fresh-following",
+    values = dict(keys=(), acceptance=AcceptedTurn(InputId.mint()),
                   goal_permission=TurnGoalPermission(InactiveGoalPermission()))
     return kind(**values, origins=()) if kind is DeliveredFollowingInput else kind(**values)
 

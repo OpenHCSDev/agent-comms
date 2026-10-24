@@ -1,4 +1,6 @@
 """Installed native 429 exhaustion reaches one completed user-visible failure."""
+
+from agent_comms.turn_input_source import NoTurnAcceptance
 from agent_comms.controller import SessionUpdateSink
 import asyncio
 import json
@@ -94,7 +96,7 @@ async def test_installed_429_exhaustion_publishes_one_retry_owned_failure(
             with pytest.raises(NativeTurnError) as caught:
                 await agent.turns.run_agent_turn(
                     "project", "project", "One isolated request that remains rate limited",
-                    original_owner_input=True,
+                    original_owner_input=True, acceptance=NoTurnAcceptance(),
                 )
         reports = [item for update in updates for item in decode_updates(update.field_meta)
                    if isinstance(item, RequestFailedUpdate)]

@@ -1,5 +1,7 @@
 """Real turn acquisition and terminal handling share the execution owner."""
 
+from agent_comms.turn_input_source import NoTurnAcceptance
+
 import os
 import sqlite3
 from contextlib import AsyncExitStack, asynccontextmanager, closing
@@ -66,6 +68,7 @@ async def turn_on(comms, *, original_owner_input=False):
     turn = OwnedTurn(
         agent.turns, session, owner.name, "Continue original work",
         original_owner_input=original_owner_input, original_goal_id=owner.goal.require().id,
+        acceptance=NoTurnAcceptance(),
     )
     async with AsyncExitStack() as resources, AsyncExitStack() as permits:
         assert await turn.acquire(resources, permits)

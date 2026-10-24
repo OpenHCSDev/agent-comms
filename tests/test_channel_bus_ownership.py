@@ -1,5 +1,7 @@
 """Channel membership and notifications have one canonical bus authority."""
 
+from agent_comms.turn_input_source import NoTurnAcceptance
+
 from bus_history import read_history
 from dataclasses import replace
 from contextlib import AsyncExitStack
@@ -82,7 +84,10 @@ async def test_natural_owned_turn_prepares_observer_pointer_without_native_start
         agent_bin=GivenBinary("pi"),
         auto_wake=False,
     )
-    turn = OwnedTurn(agent.turns, "alpha", "alpha", "Independently authorized task")
+    turn = OwnedTurn(
+        agent.turns, "alpha", "alpha", "Independently authorized task",
+        acceptance=NoTurnAcceptance(),
+    )
     try:
         async with AsyncExitStack() as resources:
             async with AsyncExitStack() as permits:

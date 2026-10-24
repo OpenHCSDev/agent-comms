@@ -274,7 +274,7 @@ class PiNativeBackend(
             finish_event=delivery.finish_event,
             send_boundary=delivery.send_boundary,
             interrupt_boundary=delivery.interrupt_boundary,
-            native_start=delivery.input_started,
+            input_start=delivery.input_start,
             request_observer=delivery.request_progress,
             persistent_session=self,
             package=package,

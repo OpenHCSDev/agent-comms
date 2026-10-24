@@ -1,5 +1,7 @@
 """Original begin/attachment ownership with real registry and callback resources."""
 
+from agent_comms.turn_input_source import NoTurnAcceptance
+
 
 from contextlib import AsyncExitStack
 import os
@@ -30,7 +32,9 @@ async def test_begin_callback_and_native_attachment_share_original_owner(tmp_pat
     comms = installed_comms(tmp_path)
     comms.registry.declare(Thread('owner', frozenset(), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid())))
     agent = CommsAgent(comms, auto_wake=False)
-    turn = OwnedTurn(agent.turns, "owner-session", "owner", "new original input")
+    turn = OwnedTurn(
+        agent.turns, "owner-session", "owner", "new original input", acceptance=NoTurnAcceptance(),
+    )
     async with AsyncExitStack() as resources:
         async with AsyncExitStack() as permits:
             assert comms.registry.require("owner").turn_lease == NoTurnLease()
