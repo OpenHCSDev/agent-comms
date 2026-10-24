@@ -22,7 +22,7 @@ from agent_comms.field_codec import (
     MalformedRecord,
 )
 from agent_comms.native_startup import NativeStartupPolicy
-from agent_comms.pi_events import AgentStart, PiEvent, QueueUpdate, RetryProgress
+from agent_comms.pi_events import AgentStart, PiEvent, QueueUpdate
 from agent_comms.pi_payloads import (
     ContentDelta,
     NativeToolDetails,
@@ -156,8 +156,6 @@ async def test_delta_siblings_share_progress_and_inherit_default_emission():
     for kind in ("toolcall_start", "toolcall_delta", "toolcall_end", "future_delta"):
         delta = PiDelta.from_wire({"type": kind})
         assert await delta.emit(None) == delta.events() == ()
-    for member in PiEvent.members_with(RetryProgress):
-        assert member().retry_progress
     phase = ModelWaitPhase(detail="retained")
     assert phase.model_progress() is phase
 
@@ -382,7 +380,7 @@ class WatchdogSession:
     output: TurnOutput = field(default_factory=lambda: TurnOutput(final_assistant_stop=True))
 
 
-async def test_accepts_prompt_dispatch_restarts_progress_without_accepting_unowned_events():
+def test_accepts_prompt_dispatch_restarts_progress_without_accepting_unowned_events():
     assert AgentStart in PiEvent.members_with(AcceptsPrompt)
     assert QueueUpdate not in PiEvent.members_with(AcceptsPrompt)
     watchdog = ProgressWatchdog(ModelWait(), 10, 10, NativeStartupPolicy())
@@ -390,12 +388,12 @@ async def test_accepts_prompt_dispatch_restarts_progress_without_accepting_unown
     watchdog.model_wait.elapsed = watchdog.input_wait.elapsed = 2.0
     session = WatchdogSession()
     unowned = PiEvent.from_wire({"type": "queue_update", "pending": 1})
-    assert [event async for event in watchdog.observe(unowned, session)] == []
+    watchdog.dispatch_sync(unowned, session)
     assert not watchdog.prompt_accepted
     assert session.output.final_assistant_stop
     assert watchdog.model_wait.elapsed == watchdog.input_wait.elapsed == 2.0
     accepted = PiEvent.from_wire({"type": "agent_start"})
-    assert [event async for event in watchdog.observe(accepted, session)] == []
+    watchdog.dispatch_sync(accepted, session)
     assert watchdog.prompt_accepted
     assert not session.output.final_assistant_stop
     assert watchdog.model_wait.elapsed == watchdog.input_wait.elapsed == 0.0

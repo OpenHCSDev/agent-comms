@@ -14,18 +14,11 @@ from . import turn_phase as phases
 from .declared_family import DeclaredFamily
 from .mro_dispatch import MroDispatch, handles
 from .native_startup import SessionLoad
-from .recovery_states import (
-    AbortingRecovery,
-    FailedRecovery,
-    ModelStalledRecovery,
-    RecoveredRecovery,
-    RecoveryCondition,
-)
 
 if TYPE_CHECKING:
     from .backend import TurnSession
     from .native_startup import NativeStartupPolicy
-    from .pi_events import PiEvent, RetryAttemptEvent
+    from .pi_events import PiEvent
 
 
 class TurnWaitExpired(TimeoutError):
@@ -136,21 +129,9 @@ class ModelWait(TurnWait):
         return f"{stalled.stall_reason}: phase={stalled.declared_name}"
 
     async def expire(self, session: TurnSession) -> AsyncIterator[events.AgentEvent]:
-        watchdog = session.watchdog
-        elapsed_ms = round(self.elapsed * 1000)
-        stalled_phase = watchdog.phase.stalled(watchdog.prompt_accepted)
-        reason_code = stalled_phase.stall_reason
-        if watchdog.prompt_accepted:
-            yield watchdog.state(
-                ModelStalledRecovery, reason_code, elapsed_ms, phase=stalled_phase
-            )
-        yield watchdog.state(
-            AbortingRecovery, reason_code, elapsed_ms, phase=phases.ShutdownPhase()
-        )
         await session.abort_stalled_rpc()
         for started in session.started_during_abort:
             yield started
-        yield watchdog.state(FailedRecovery, reason_code, elapsed_ms, phase=phases.ShutdownPhase())
         session.output.record_failure(
             failures.ModelStalled(
                 f"Model produced no RPC progress for {self.budget:g} seconds."
@@ -204,8 +185,6 @@ class ProgressWatchdog(MroDispatch):
         self.unbounded_wait = UnboundedWait()
         self.prompt_accepted = False
         self.phase: phases.TurnPhase = phases.PromptAcceptancePhase()
-        self.retry_recovery_pending = False
-        self.retry_recovery_reason = "provider_auto_retry_progress"
 
     def launching(self, clock: Callable[[], float], session_file: str | None) -> None:
         self.clock = clock
@@ -220,7 +199,6 @@ class ProgressWatchdog(MroDispatch):
             self.session_load, base_seconds=self.preflight_wait.budget
         )
         self.preflight_wait.restart()
-        self.now = self.last_model_progress = self.clock()
 
     def await_input(self) -> None:
         self.input_wait.restart()
@@ -229,26 +207,11 @@ class ProgressWatchdog(MroDispatch):
         if not input_started:
             self.input_wait.restart()
 
-    def tick(self) -> None:
-        self.now = self.clock()
-
     def progress(self) -> None:
         # Both budgets measure native silence: an input queued behind a run
         # that keeps producing events is waiting its turn, not lost.
-        self.last_model_progress = self.now
         self.model_wait.restart()
         self.input_wait.restart()
-
-    async def observe(
-        self, event: PiEvent, session: TurnSession
-    ) -> AsyncIterator[events.AgentEvent]:
-        self.tick()
-        if self.retry_recovery_pending and event.retry_progress:
-            self.retry_recovery_pending = False
-            yield self.state(
-                RecoveredRecovery, self.retry_recovery_reason, 0, phase=phases.ModelWaitPhase()
-            )
-        self.dispatch_sync(event, session)
 
     @handles(phases.AcceptsPrompt)
     def accept_prompt(self, event: PiEvent, session: TurnSession) -> None:
@@ -269,23 +232,6 @@ class ProgressWatchdog(MroDispatch):
         if session.prompt_state.awaiting_start and not self.phase.pauses_input_clock:
             return self.input_wait
         return self.phase.model_wait(self.model_wait, self.unbounded_wait)
-
-    def state(
-        self,
-        state: type[RecoveryCondition],
-        reason_code: str,
-        elapsed_ms: int,
-        *,
-        phase: phases.TurnPhase,
-        attempt: RetryAttemptEvent | None = None,
-    ) -> events.TurnState:
-        return events.TurnState(
-            state=state,
-            reason_code=reason_code,
-            elapsed_ms=max(0, elapsed_ms),
-            phase=phase,
-            attempt=attempt,
-        )
 
     async def read(self, session: TurnSession) -> bytes:
         if session.rejected_signal.is_set():

@@ -60,7 +60,6 @@ from .pi_vocabulary import (
     UnreportedStopReason,
 )
 from .recorded_time import EventMilliseconds, EventTime, UnrecordedEventTime
-from .recovery_states import FailedRecovery, RecoveredRecovery
 from .send_result import CorrectionResult, CorrectionUnreported
 from .thread_model import ThreadModel, UndeclaredModel
 from .tool_declaration import ToolDeclaration
@@ -332,9 +331,6 @@ class ProviderRetryOutcome(PiPayload, DeclaredFamily, affix="ProviderRetry"):
         return ()
 
     @abstractmethod
-    def recovery_events(self, session): ...
-
-    @abstractmethod
     def finish_request(self, session) -> None: ...
 
     @abstractmethod
@@ -347,13 +343,6 @@ class SucceededProviderRetry(ProviderRetryOutcome, declared_name="succeeded"):
         from .acp_failure import RecoveredRetry
 
         return RecoveredRetry(attempt=attempt)
-
-    def recovery_events(self, session):
-        from .turn_phase import ModelWaitPhase
-
-        return (session.watchdog.state(
-            RecoveredRecovery, "provider_auto_retry_progress", 0, phase=ModelWaitPhase()
-        ),)
 
     def finish_request(self, session) -> None:
         session.request_retried()
@@ -376,21 +365,8 @@ class FailedProviderRetry(ProviderRetryOutcome, declared_name="failed"):
         return ExhaustedRetry(attempt=attempt, final_error=redact(self.final_error))
 
     def apply(self, event, session):
-        from .turn_phase import FailedPhase
-
         super().apply(event, session)
-        session.watchdog.retry_recovery_pending = False
-        return (
-            *event.exhausted(session),
-            session.watchdog.state(
-                FailedRecovery, "provider_retry_exhausted", 0,
-                phase=FailedPhase(error=CodelessProviderDiagnosticError(
-                    session.output.redact(self.final_error))),
-            ),
-        )
-
-    def recovery_events(self, session):
-        return ()
+        return event.exhausted(session)
 
     def finish_request(self, session) -> None:
         from .turn_failure import ModelRequestFailed
@@ -853,10 +829,6 @@ class PiMessage(WithheldAnnotations, ExternalNull, OpenPayload, affix="Message")
         return self.assistant
 
     @property
-    def retry_progress(self):
-        return False
-
-    @property
     def text(self) -> str:
         if self.content is None:
             return ""
@@ -900,10 +872,6 @@ class AssistantMessage(PublicInstructionAnnotations, PiMessage):
     async def apply_start(self, session, event):
         await session.assistant_started()
         return ()
-
-    @property
-    def retry_progress(self):
-        return self.stop_reason.permits_progress()
 
     def require_failed_terminal(self):
         self.stop_reason.require_failed_terminal()
