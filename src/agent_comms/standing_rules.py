@@ -206,12 +206,15 @@ class LostTools(UndatedStandingRule):
 
 @dataclass(frozen=True)
 class HeldBranch:
-    """One open order joined to its own allocated checkout."""
+    """One open order joined to its own allocated checkout. Only the branch difference reads
+    that worktree; its unit may retire it mid-frame, so every later Git read goes through the
+    order's repository, which owns the branch refs and remote heads and outlives the worktree."""
 
     todo: Todo
     holder: ThreadIncarnation
     difference: BranchDifference
-    checkout: PresentCheckout = field(compare=False, repr=False)
+    worktree: Path
+    repository: PresentCheckout = field(compare=False, repr=False)
     source: UnitObservation = field(compare=False, repr=False)
 
     @property
@@ -237,8 +240,9 @@ class HeldBranchRule(UndatedStandingRule, declared_name=None):
                     path = storage.order_checkout(unit.name, todo.id)
                     if path.is_dir():
                         branches.append(HeldBranch(
-                            todo, unit, frame.pulls.branch_difference(path),
-                            frame.pulls.checkout(path), state.source,
+                            todo, unit, frame.pulls.branch_difference(path), path,
+                            frame.pulls.checkout(Path(todo.order.checked().check.directory)),
+                            state.source,
                         ))
         ordered = tuple(sorted(branches, key=lambda held: (
             held.difference.repository.to_wire(), held.difference.branch,
