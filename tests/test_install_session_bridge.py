@@ -98,36 +98,34 @@ def probe(child):
 
 
 def test_real_monitor_survives_bridge_retirement_and_requires_a_fresh_probe(tmp_path, bridge_home):
-    with session_bridge(tmp_path, bridge_home) as (home, claim, _, child, log, env):
-        with ExitStack() as cleanup:
-            monitor = subprocess.Popen(
-                (sys.executable, '-c',
-                 'import asyncio; from agent_comms.cli_bridges.monitor import read_monitor; '
-                 'from agent_comms.cli_bridges.shared import MonitorBridgeStopped, MonitorBridgeSwapping; '
-                 'from agent_comms_hooks.watch import WatchClaim; '
-                 'asyncio.run(read_monitor(WatchClaim("copied-session"), '
-                 'MonitorBridgeStopped.announce, MonitorBridgeSwapping.announce))'),
-                env=env, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-            )
-            cleanup.callback(stop, monitor)
-            first = probe(monitor)
-            (bridge,) = Serve.running(home)
-            with ExitStack() as resources:
-                bridge.pause(resources)
-                assert monitor.poll() is None
-            assert child.wait(timeout=15) == 0, log.read_text()
-            # A stopped bridge is an outage the session hears about, once, from the reader.
-            notice = frame(monitor)
-            assert isinstance(notice, MonitorBridgeStopped)
-            assert str(claim.path.with_suffix('.log')) in notice.notice
-            with log.open('ab') as output:
-                successor = subprocess.Popen(child.args, env=env, stdout=output, stderr=output)
-            cleanup.callback(stop, successor)
-            second = probe(monitor)
-            assert second.session == first.session
-            assert second.token != first.token
+    with session_bridge(tmp_path, bridge_home) as (home, claim, _, child, log, env), ExitStack() as cleanup:
+        monitor = subprocess.Popen(
+            (sys.executable, '-c',
+             'import asyncio; from agent_comms.cli_bridges.monitor import read_monitor; '
+             'from agent_comms.cli_bridges.shared import MonitorBridgeStopped, MonitorBridgeSwapping; '
+             'from agent_comms_hooks.watch import WatchClaim; '
+             'asyncio.run(read_monitor(WatchClaim("copied-session"), '
+             'MonitorBridgeStopped.announce, MonitorBridgeSwapping.announce))'),
+            env=env, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+        )
+        cleanup.callback(stop, monitor)
+        first = probe(monitor)
+        (bridge,) = Serve.running(home)
+        with ExitStack() as resources:
+            bridge.pause(resources)
             assert monitor.poll() is None
-
+        assert child.wait(timeout=15) == 0, log.read_text()
+        # A stopped bridge is an outage the session hears about, once, from the reader.
+        notice = frame(monitor)
+        assert isinstance(notice, MonitorBridgeStopped)
+        assert str(claim.path.with_suffix('.log')) in notice.notice
+        with log.open('ab') as output:
+            successor = subprocess.Popen(child.args, env=env, stdout=output, stderr=output)
+        cleanup.callback(stop, successor)
+        second = probe(monitor)
+        assert second.session == first.session
+        assert second.token != first.token
+        assert monitor.poll() is None
 
 @pytest.mark.parametrize('wrong_identity', ('owner', 'process'))
 def test_wrong_pause_identity_cannot_stop_the_real_session_bridge(
