@@ -17,6 +17,7 @@ from typing import TYPE_CHECKING, Annotated, ClassVar, Self, cast
 
 from pydantic import JsonValue
 
+from agent_comms.declared_family import DeclaredFamily
 from agent_comms.errors import RelationViolationError
 from agent_comms.field_codec import (
     FieldCodec,
@@ -28,7 +29,7 @@ from agent_comms.field_codec import (
 )
 from agent_comms.locked_store import DurableFile
 from agent_comms.problem_number import ProblemNumber
-from agent_comms.repo import Repo
+from agent_comms.repo import GitCommandError, Repo
 from agent_comms.repository_name import RepositoryName
 from agent_comms.standing_rules import UndatedStandingRule
 from agent_comms.storage_room import (
@@ -130,6 +131,94 @@ class MemoryUse:
     processes: tuple[MemoryHolder, ...]
 
 
+class CheckoutAllocation(DeclaredFamily, affix="CheckoutAllocation"):
+    """A path's declared allocation; each member owns its interpretation and Git needs."""
+
+    @classmethod
+    def for_path(cls, owner: Thread, path: Path) -> Iterator[CheckoutAllocation]:
+        problem, _, suffix = path.name.removeprefix(f'{owner.name}--').partition('--')
+        for member in cls.members_with(cls):
+            yield from member.read(owner, path, problem, suffix)
+
+    @classmethod
+    @abstractmethod
+    def read(cls, owner: Thread, path: Path, problem: str,
+             suffix: str) -> Iterator[CheckoutAllocation]: ...
+
+    @abstractmethod
+    def owns_present(self, rule: StorageRule, owner: Thread, path: Path) -> bool: ...
+
+    def owns_declared(self, rule: StorageRule, owner: Thread, path: Path,
+                      repository: RepositoryName) -> bool:
+        return self.owns_present(rule, owner, path)
+
+
+@dataclass(frozen=True)
+class HomeCheckoutAllocation(CheckoutAllocation):
+    @classmethod
+    def read(cls, owner: Thread, path: Path, problem: str,
+             suffix: str) -> Iterator[CheckoutAllocation]:
+        if path == owner.project_path:
+            yield cls()
+
+    def owns_present(self, rule: StorageRule, owner: Thread, path: Path) -> bool:
+        return True
+
+
+class ProblemCheckoutAllocation(CheckoutAllocation):
+    """A checkout allocated to one problem; ``verb`` is the command that creates it."""
+
+    verb: ClassVar[str]
+
+    @classmethod
+    def read(cls, owner: Thread, path: Path, problem: str,
+             suffix: str) -> Iterator[CheckoutAllocation]:
+        if path != owner.project_path and ProblemNumber.accepts(problem):
+            yield from cls.allocated(problem, suffix)
+
+    @classmethod
+    @abstractmethod
+    def allocated(cls, problem: str, suffix: str) -> Iterator[CheckoutAllocation]: ...
+
+
+@dataclass(frozen=True)
+class OrderCheckoutAllocation(ProblemCheckoutAllocation):
+    verb: ClassVar[str] = 'checkout'
+    problem: str
+
+    @classmethod
+    def allocated(cls, problem: str, suffix: str) -> Iterator[CheckoutAllocation]:
+        if not suffix:
+            yield cls(problem)
+
+    def owns_present(self, rule: StorageRule, owner: Thread, path: Path) -> bool:
+        return path == rule.order_checkout(owner.name, self.problem)
+
+
+@dataclass(frozen=True)
+class RepositoryCheckoutAllocation(ProblemCheckoutAllocation):
+    verb: ClassVar[str] = 'repository-checkout'
+    problem: str
+    suffix: str
+
+    @classmethod
+    def allocated(cls, problem: str, suffix: str) -> Iterator[CheckoutAllocation]:
+        if suffix:
+            yield cls(problem, suffix)
+
+    def owns_present(self, rule: StorageRule, owner: Thread, path: Path) -> bool:
+        try:
+            repository = Repo.of(path).github
+        except GitCommandError as error:
+            raise StorageDenied(
+                f'Cannot read repository {self.suffix} of checkout {path}: {error}') from error
+        return self.owns_declared(rule, owner, path, repository)
+
+    def owns_declared(self, rule: StorageRule, owner: Thread, path: Path,
+                      repository: RepositoryName) -> bool:
+        return path == rule.repository_checkout(owner.name, self.problem, repository)
+
+
 @dataclass(frozen=True)
 class StorageRule(RoomAllocation, DurableFile):
     filename: ClassVar[str] = "storage.json"
@@ -204,26 +293,23 @@ class StorageRule(RoomAllocation, DurableFile):
                     found.append(work)
         return tuple(found)
 
-    def owns_checkout(self, owner: Thread, path: Path, source: Path) -> bool:
-        """A checkout of another repository is named for the repository its origin declares.
-        `source` is a checkout of the repository `path` holds: `path` itself once it exists, or
-        the checkout a new worktree is added from, so a destination is judged before it exists."""
-        if path == owner.project_path:
-            return True
-        problem, _, repository = path.name.removeprefix(f'{owner.name}--').partition('--')
-        if not ProblemNumber.accepts(problem):
-            return False
-        if not repository:
-            return path == self.order_checkout(owner.name, problem)
-        return ((source / '.git').exists()
-                and path == self.repository_checkout(owner.name, problem, Repo.of(source).github))
+    def owns_checkout(self, owner: Thread, path: Path,
+                      repository: RepositoryName) -> bool:
+        """Ownership follows the declared repository allocation, before its checkout exists."""
+        return any(allocation.owns_declared(self, owner, path, repository)
+                   for allocation in CheckoutAllocation.for_path(owner, path))
+
+    def owns_present_checkout(self, owner: Thread, path: Path) -> bool:
+        """Only a repository-suffixed allocation needs its existing Git origin read."""
+        return any(allocation.owns_present(self, owner, path)
+                   for allocation in CheckoutAllocation.for_path(owner, path))
 
     def checkout_paths(self, owner: Thread) -> tuple[Path, ...]:
         """Declared home and order locations; Git metadata supplies their branches."""
         ordered = self.order_checkout(owner.name, 'P*')
         return tuple(path for path in (owner.project_path,
                                        *sorted(ordered.parent.glob(ordered.name)))
-                     if path.is_dir() and self.owns_checkout(owner, path, path))
+                     if path.is_dir() and self.owns_present_checkout(owner, path))
 
     def checkouts_of(self, thread: Thread) -> tuple[Path, ...]:
         """Read each repository now; directories and names do not register ownership."""
@@ -237,7 +323,7 @@ class StorageRule(RoomAllocation, DurableFile):
             entries = WorkBranches(repository).read_checkout().worktrees()
             listed.update(entries)
             checkouts.update(path for path in entries
-                             if path.is_dir() and self.owns_checkout(thread, path, path))
+                             if path.is_dir() and self.owns_present_checkout(thread, path))
         return (home, *sorted(checkouts - {home}))
 
     def deny(self, reason):
@@ -307,19 +393,21 @@ class StorageRule(RoomAllocation, DurableFile):
         self.require_floor()
         self.require_quota(thread, *proposed)
 
-    def require_path(self, thread: Thread, path: Path, source: Path):
-        """`source` is a checkout of the repository `path` holds when `path` is a checkout itself
-        (see owns_checkout); a path inside a checkout is judged by that checkout."""
+    def require_destination(self, thread: Thread, path: Path) -> None:
+        """Every destination obeys artifact and scratch ownership, without reading Git."""
         if '.artifacts' in path.parts:
             self.deny('writes inside .artifacts are forbidden')
         scratch = thread.storage_roots.assigned(self, thread.name).scratch
         if path.is_relative_to(self.scratch_base) and not path.is_relative_to(scratch):
             self.deny(f'foreign scratch destination {path}; registered scratch is {scratch}')
+
+    def require_path(self, thread: Thread, path: Path) -> None:
+        """A write in a present checkout follows that checkout's allocation."""
+        self.require_destination(thread, path)
         base = self.checkout_base.resolve()
         if path.is_relative_to(base) and path != base:
             checkout = base / path.relative_to(base).parts[0]
-            judged_by = source if checkout == path else checkout
-            if not self.owns_checkout(thread, checkout, judged_by):
+            if not self.owns_present_checkout(thread, checkout):
                 self.deny(f'{checkout} is not a checkout of {thread.name}')
 
     def order_text(self, thread: Thread, pythons: Sequence[str]) -> str:
@@ -329,6 +417,9 @@ class StorageRule(RoomAllocation, DurableFile):
             f'{self.order_checkout(thread.name, "P<n>")} (another repository changed in the '
             f'same problem: {self.order_checkout(thread.name, "P<n>")}--<repository name>), '
             f'at most {self.max_checkouts} besides your home checkout {thread.project_path}, '
+            f'created with agent-comms {OrderCheckoutAllocation.verb} add PROBLEM '
+            f'(another repository: agent-comms {RepositoryCheckoutAllocation.verb} add '
+            'PROBLEM OWNER/REPO), '
             'removed with git worktree remove in the same order that created them; '
             'your only scratch dir is '
             f'{thread.storage_roots.assigned(self, thread.name).scratch}/, '
@@ -502,7 +593,7 @@ class WriteStorageEffect(StorageEffect):
     path: Path
 
     def check(self, projection: StorageProjection):
-        projection.rule.require_path(projection.thread, self.path, self.path)
+        projection.rule.require_path(projection.thread, self.path)
 
 
 @dataclass(frozen=True)
@@ -532,15 +623,15 @@ class TestGateStorageEffect(AllocateStorageEffect):
 
 @dataclass(frozen=True)
 class CheckoutStorageEffect(AllocateStorageEffect):
-    """A new worktree at `path`, added from the repository checked out at `source`."""
+    """A checkout allocated to a declared repository, before Git creates its directory."""
 
     path: Path
-    source: Path
+    repository: RepositoryName
 
     def check(self, projection: StorageProjection):
         rule, thread = projection.rule, projection.thread
-        rule.require_path(thread, self.path, self.source)
-        if not rule.owns_checkout(thread, self.path, self.source):
+        rule.require_destination(thread, self.path)
+        if not rule.owns_checkout(thread, self.path, self.repository):
             destination = rule.order_checkout(thread.name, "P<number>")
             rule.deny(f'checkout destination must be {destination}')
         super().check(projection)
@@ -646,18 +737,6 @@ class WritesTargets(ShellProgram):
         return tuple(WriteStorageEffect(physical_path(p, cwd)) for p in paths[self.targets]) if len(paths) >= self.minimum else ()
 
 
-class AddsCheckout(ShellProgram):
-    def decode(self, args, cwd):
-        if args[:2] != ['worktree', 'add']:
-            return ()
-        tail = args[2:]
-        while tail and tail[0].startswith('-'):
-            tail = tail[2:] if tail[0] in ('-b', '-B', '--reason') else tail[1:]
-        if not tail:
-            raise StorageDenied('StorageRule: worktree destination is missing')
-        return (CheckoutStorageEffect(physical_path(tail[0], cwd), cwd),)
-
-
 class RemovesCheckout(ShellProgram):
     def decode(self, args, cwd):
         paths = [p for p in args[2:] if not p.startswith('-')] if args[:2] == ['worktree', 'remove'] else []
@@ -672,10 +751,11 @@ class WritesWorkingTree(ShellProgram):
         return (WriteStorageEffect(cwd),) if self.matches(args, self.verbs) else ()
 
 
-class GitProgram(ForbidsCommands, AddsCheckout, RemovesCheckout, WritesWorkingTree):
+class GitProgram(ForbidsCommands, RemovesCheckout, WritesWorkingTree):
     names = frozenset({'git'})
-    forbidden = (('clone',), ('worktree', 'move'))
-    reason = 'git clone and git worktree move are forbidden; add and remove worktrees instead'
+    forbidden = (('clone',), ('worktree', 'add'), ('worktree', 'move'))
+    reason = ('git clone, git worktree add and git worktree move are forbidden; '
+              'run agent-comms checkout add PROBLEM, which prepares the pinned submodules')
 
     chdir_option = '-C'
     directory_options = frozenset({chdir_option, '--git-dir', '--work-tree'})

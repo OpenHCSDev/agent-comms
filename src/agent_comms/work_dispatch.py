@@ -71,7 +71,8 @@ class WorkDispatch:
         self.action.require_reviewed(comms.goals)
         self.action.require_ready(GoalActionContext(comms.goals, candidate))
         comms.registry.require_declaration_available(candidate, StoppedThreadStatus())
-        CheckoutStorageEffect(checkout, Path(self.action.order.check.directory)).check(
+        repository = Repo.of(Path(self.action.order.check.directory))
+        CheckoutStorageEffect(checkout, repository.github).check(
             StorageProjection(storage, candidate)
         )
         Repo.git(self.action.order.check.directory, "fetch", "origin", "main")

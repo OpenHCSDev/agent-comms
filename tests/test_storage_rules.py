@@ -11,6 +11,7 @@ from agent_comms.comms import wire
 from agent_comms.errors import RelationViolationError
 from agent_comms.field_codec import FieldCodec, RecordProblems
 from agent_comms.tool_denial import SelectedToolDenied
+from agent_comms.repository_name import RepositoryName
 from agent_comms.storage_rules import (
     CheckoutStorageEffect, RemoveCheckoutStorageEffect, StorageRoots, StorageRule,
     StorageDenied, StorageProjection, UnassignedThreadStorage, UnitStorage, shell_storage_effects,
@@ -87,16 +88,19 @@ def test_removed_worktree_frees_quota_and_another_home_cannot_claim_its_parent(t
     assert storage.home == home
     assert storage.extra_checkouts == (old,)
     assert storage.adding(home) == storage
-    assert rule.owns_checkout(thread, home, home)
-    assert not rule.owns_checkout(other, old, old)
+    assert rule.owns_present_checkout(thread, home)
+    assert not rule.owns_present_checkout(other, old)
     with pytest.raises(StorageDenied):
-        StorageProjection(comms.registry.storage_rule, comms.registry.require(other.name)).check((CheckoutStorageEffect(new, home),))
+        StorageProjection(comms.registry.storage_rule, comms.registry.require(other.name)).check((
+            CheckoutStorageEffect(new, RepositoryName('OpenHCSDev', 'agent-comms')),))
     with pytest.raises(SelectedToolDenied):
-        StorageProjection(comms.registry.storage_rule, comms.registry.require('worker')).check((CheckoutStorageEffect(new, home),))
+        StorageProjection(comms.registry.storage_rule, comms.registry.require('worker')).check((
+            CheckoutStorageEffect(new, RepositoryName('OpenHCSDev', 'agent-comms')),))
     StorageProjection(comms.registry.storage_rule, comms.registry.require('worker')).check((RemoveCheckoutStorageEffect(old),))
     shutil.rmtree(old)
     assert rule.checkouts_of(thread) == (home,)
-    StorageProjection(comms.registry.storage_rule, comms.registry.require('worker')).check((CheckoutStorageEffect(new, home),))
+    StorageProjection(comms.registry.storage_rule, comms.registry.require('worker')).check((
+        CheckoutStorageEffect(new, RepositoryName('OpenHCSDev', 'agent-comms')),))
     assert comms.registry.require('worker').storage_roots == thread.storage_roots
 
 
@@ -128,7 +132,9 @@ def test_cannot_remove_current_project_but_can_remove_another_checkout(tmp_path)
     assert current.is_dir()
 
 
-@pytest.mark.parametrize('command', ['git clone remote target', 'python -m venv env', 'uv sync',
+@pytest.mark.parametrize('command', ['git clone remote target',
+                                     'git worktree add target origin/main',
+                                     'python -m venv env', 'uv sync',
                                      'git -C ~/wt/other--P3 reset --hard', 'touch ~/wt/x-check/file'])
 def test_forbidden_shell_operations_use_declared_rule(tmp_path, command):
     rule = StorageRule()
@@ -150,7 +156,7 @@ def test_programs_do_not_claim_to_be_effect_values():
     ('uv pip install package', 'AllocateStorageEffect'),
     ('npm ci', 'AllocateStorageEffect'),
     ('ffmpeg -i input output', 'AllocateStorageEffect'),
-    ('git -C repo worktree add --detach extra origin/main', 'CheckoutStorageEffect'),
+    ('git -C repo worktree add --detach extra origin/main', 'ForbiddenStorageEffect'),
     ('git worktree remove --force extra', 'RemoveCheckoutStorageEffect'),
     ('git worktree move extra elsewhere', 'ForbiddenStorageEffect'),
     ('git -C ../other--P3 reset --hard', 'WriteStorageEffect'),

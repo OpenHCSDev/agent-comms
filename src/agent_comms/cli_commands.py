@@ -147,7 +147,11 @@ from .read_basis import (
 from .recorded_bus import RecordedBusIdentity
 from .registry_document import CommanderProject, RegistrySnapshot
 from .registry_store import RegistryStore
-from .repo import GitCommandError, Repo
+from .repo import Checkout, GitCommandError, Repo
+from .repository_name import RepositoryName
+from .storage_rules import (
+    CheckoutStorageEffect, OrderCheckoutAllocation, RepositoryCheckoutAllocation, StorageProjection,
+)
 from .restart_scope import AllOwners, OneOwner, RestartTarget
 from .owner_connection import OwnerConnection, socket_path
 from .schema_report import StoreSchemaReport, StoreSchemaReports
@@ -176,6 +180,7 @@ from .thread_model import ThreadModel
 from .thread_status import ThreadStatus
 from .thread_text import NoParent, NoThreadText, ThreadParent, ThreadText
 from .threads import KeptModel, ModelChoice, NextTurnConfiguration, Thread
+from .todos import Todo
 from .tool_result import ToolResult
 from .turn_context import (
     CodexRolloutProvenance,
@@ -1880,6 +1885,63 @@ class PlannedReconcileCliCommand(StoreReconcileCliCommand, declared_name="planne
         schema = owner.schema_at(path)
         with closing(owner.read_snapshot(path)) as db:
             return schema.reconcile_writes(db)
+
+@dataclass(frozen=True)
+class CheckoutResult(CliResult):
+    checkout: Annotated[Path, PathText]
+
+
+@dataclass(frozen=True, kw_only=True)
+class PreparedCheckoutCliCommand(CliCommand):
+    operation: Annotated[Literal["add"], Argument(flags=("operation",))]
+    problem: Annotated[str, Argument(flags=("problem",))]
+
+    @abstractmethod
+    def allocation(self, ctx: Comms, thread: Thread, todo: Todo) -> tuple[Repo, Path]: ...
+
+    def apply(self, ctx: Comms) -> CliResult:
+        thread = CallingThreadTarget().thread(ctx.registry)
+        todo = ctx.goals.todos.get(self.problem)
+        todo.require_assignee(thread.incarnation, todo.held().generation)
+        storage = ctx.registry.storage_rule
+        repository, destination = self.allocation(ctx, thread, todo)
+        CheckoutStorageEffect(destination, repository.github).check(
+            StorageProjection(storage, thread))
+        if destination.exists():
+            Checkout(destination).prepare()
+        else:
+            Repo.git(repository.checkout, "fetch", "origin", "main")
+            Checkout.add(repository.checkout, destination, "origin/main", "-b",
+                         f"work/{destination.name}")
+        return CheckoutResult(destination)
+
+
+@dataclass(frozen=True, kw_only=True)
+class CheckoutCliCommand(PreparedCheckoutCliCommand,
+                         declared_name=OrderCheckoutAllocation.verb):
+    help = "Create or repair an owned problem checkout with its pinned submodules"
+
+    def allocation(self, ctx: Comms, thread: Thread, todo: Todo) -> tuple[Repo, Path]:
+        repository = Repo(checkout=Path(todo.order.checked().check.directory), github=todo.repo)
+        return repository, ctx.registry.storage_rule.order_checkout(thread.name, todo.id)
+
+
+@dataclass(frozen=True, kw_only=True)
+class RepositoryCheckoutCliCommand(PreparedCheckoutCliCommand,
+                                   declared_name=RepositoryCheckoutAllocation.verb):
+    help = "Create or repair an owned problem checkout of a registered OWNER/REPO"
+    repository: Annotated[RepositoryName, Argument(flags=("repository",))]
+
+    def allocation(self, ctx: Comms, thread: Thread, todo: Todo) -> tuple[Repo, Path]:
+        repositories = ctx.registry.snapshot().commander_project.require().repos
+        selected = [repository for repository in repositories
+                    if repository.github == self.repository]
+        if not selected:
+            raise ValueError(f'{self.repository.to_wire()} is not a registered repository.')
+        repository, = selected
+        return repository, ctx.registry.storage_rule.repository_checkout(
+            thread.name, todo.id, repository.github)
+
 
 @dataclass(frozen=True, kw_only=True)
 class CheckpointCliCommand(NameArgument, CliCommand, declared_name="checkpoint"):
