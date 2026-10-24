@@ -11,7 +11,7 @@ from . import agent_events as events
 from . import turn_phase as phases
 from .acp_failure import UnrecordedFailureSource
 from .declared_family import DeclaredFamily
-from .field_codec import FieldCodec, FieldPlan, WireName, WireNullDefault, WireOmitDefault
+from .field_codec import FieldCodec, FieldPlan, TurnId, WireName, WireNullDefault, WireOmitDefault
 from .native_input_record import NativeInputCommit, NativeInputLocation
 from .native_pi import NativePiOperationFailed
 from .native_turn_context import NativeContextManifestData
@@ -542,7 +542,7 @@ class DialogUiRequest(ExtensionUiRequest):
     def select(self, value: str) -> ExtensionUiResponse:
         return CancelledUiChoice().response(self)
 
-    def permission(self, turn_id: str):
+    def permission(self, turn_id: TurnId):
         return None
 
     def choice(self, option_id: str) -> ExtensionUiChoice:
@@ -560,7 +560,7 @@ class PermissionUiRequest(DialogUiRequest):
     @abstractmethod
     def permission_options(self): ...
 
-    def permission(self, turn_id: str):
+    def permission(self, turn_id: TurnId):
         from acp.schema import ContentToolCallContent, TextContentBlock, ToolCallUpdate
 
         if self.title is None or not 0 < len(self.title) <= 160:

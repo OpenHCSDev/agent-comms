@@ -20,6 +20,7 @@ from agent_comms.text_digest import TextDigest
 from stored_inputs import insert_inputs, stored_inputs
 from agent_comms.goal_waits import RecordedGoalWait
 from agent_comms.threads import Thread
+from agent_comms.reported_turn import ReportedTurn
 
 
 def seed_unknown(comms, count, text):
@@ -148,7 +149,7 @@ def test_large_standby_review_returns_complete_messages_without_files(
         owners=frozenset({"b"}),
         goal_id=goal.id,
         goal_revision=goal.revision,
-        turn_id=turn_id,
+        turn_id=ReportedTurn(turn_id),
     )
     review = comms.goals.goal_input_review("b", goal.id, ["a"])
     before = stored_inputs(dispositions.root)
@@ -229,7 +230,7 @@ def test_dependency_review_and_ack_survive_large_excluded_history(
         owners=frozenset({"b"}),
         goal_id=goal.id,
         goal_revision=goal.revision,
-        turn_id=turn_id,
+        turn_id=ReportedTurn(turn_id),
     )
     before = stored_inputs(dispositions.root)
     result = invoke_tool(

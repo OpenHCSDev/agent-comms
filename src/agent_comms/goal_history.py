@@ -28,6 +28,7 @@ from .goals import GoalDeclaration, NoGoal
 from .locked_store import DurableFile
 from .private_registry_guard import PrivateRegistryGuard
 from .store_files import AtomicFile
+from .reported_turn import ReportedTurnState
 from .typed_table import (
     Column,
     DurableTables,
@@ -115,9 +116,9 @@ class GoalHistoryEntry(RecordedGoalRevision, TypedTable, DurableTables):
             f'WHERE {cls._column_list(("sequence",))}=?',
             (replacement, json.dumps(FieldCodec.encode(request)), sequence))
 
-    def reports_turn(self, turn_id: str) -> bool:
+    def reports_turn(self, turn: ReportedTurnState) -> bool:
         """A committed goal revision records its original model reporting turn."""
-        return self.after.reports_turn(turn_id)
+        return self.after.reports_turn(turn)
 
     def recorded(self) -> RecordedGoalRevision:
         return FieldCodec.construct(RecordedGoalRevision, {

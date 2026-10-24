@@ -98,7 +98,9 @@ def test_declared_family_roundtrip_and_strict_boundary(tmp_path):
         TranscriptDraftUpdate(read.identity, None),
         InputDeliveryChangedUpdate("input"),
         McpClientAcknowledgementUpdate(
-            "turn", McpLiveAcknowledgement(1, "pi-mcp-client", "a" * 32, "running", "turn", ())
+            TurnId.mint(), McpLiveAcknowledgement(
+                1, "pi-mcp-client", "a" * 32, "running", "turn", ()
+            )
         ),
         TurnChangedUpdate(
             TurnState(

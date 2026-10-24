@@ -1628,7 +1628,14 @@ class JsonShapeFamily(AcceptsNull, ExternalJsonShape, SingleValueEncoding):
         shape = get_origin(annotation) or annotation
         if shape in (tuple, frozenset):
             shape = list
-        if shape not in (dict, list, str, int, float, bool, type(None)):
+        if not isinstance(shape, type):
+            raise TypeError(f"Unsupported JSON shape declaration: {cls.__name__}")
+        shape = next(
+            (base for base in shape.__mro__
+             if base in (dict, list, str, int, float, bool, type(None))),
+            None,
+        )
+        if shape is None:
             raise TypeError(f"Unsupported JSON shape declaration: {cls.__name__}")
         return shape, annotation
 
