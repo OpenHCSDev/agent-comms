@@ -454,15 +454,6 @@ class ExternalTranscript(TranscriptSource, DurableStore):
     def lookup(self) -> ThreadLookup:
         return self.incarnation.require_recorded().lookup
 
-    def tool_call_between(self, since: float, through: float) -> bool:
-        """Original tool timestamps decide first-call timeliness, not the last watcher tick."""
-        with self.snapshot() as connection:
-            return bool(connection.execute(
-                f'SELECT EXISTS(SELECT 1 FROM "{ExternalEventRow.declared_name}" '
-                'WHERE thread=? AND kind=? AND timestamp>=? AND timestamp<=?)',
-                (self.lookup, FieldCodec.encode(ToolStartTranscript), since, through),
-            ).fetchone()[0])
-
     def last_tool_call(self) -> EventTime:
         with self.snapshot() as connection:
             timestamp = connection.execute(

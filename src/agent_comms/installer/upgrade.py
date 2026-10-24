@@ -242,14 +242,6 @@ def carried(
                           for file in before[key].values()))
 
 
-
-
-
-
-
-
-
-
 @dataclass(frozen=True)
 class Extendable:
     """A record a subclass extends with facts of its own; the shared ones carry over."""
@@ -675,15 +667,19 @@ class Stack:
 
     @contextmanager
     def services_stopped(self, restore_on: Stack) -> Iterator[ServicesStopped]:
-        with StopServicesPhase().running(self.commands.clock):
-            stopped = HostService.stop_running()
+        """The restart is registered before the stop, so a stop interrupted after systemd
+        acted (a SIGTERM to an installer inside the stopped unit) still starts them again."""
+        stopped = HostService.instances()
         with ExitStack() as give_back:
             give_back.callback(restore_on.start_services, stopped)
+            with StopServicesPhase().running(self.commands.clock):
+                HostService.stop_all(stopped)
             yield ServicesStopped(stopped, give_back)
 
     def start_services(self, stopped: tuple[HostService, ...]) -> tuple[RestartedService, ...]:
         with StartServicesPhase().running(self.commands.clock):
             services = tuple(service.start_onto(self.python) for service in stopped)
+            HostService.start_enabled()
             self.probe(ServingProbe())
             return services
 
@@ -888,6 +884,12 @@ class Install[Rehearsed: Rehearsal](ABC):
                 backup.require_route_revision()
                 selected = self.staged.probe(SelectedRouteProbe())
             return backup, selected
+
+    def checkout_target(self) -> None:
+        """The live checkout moves to the target before anything runs from it."""
+        with LiveCheckoutPreparePhase().running(self.staged.commands.clock):
+            self.staged.commands.git(self.checkout, "merge", "--ff-only", "-q", self.target)
+            Checkout(self.checkout).prepare()
 
     def publish(self, backup: StoreBackup, selected: RouteFileSelection) -> str:
         """The converted bus's route is ready before new runtime entrypoints open it."""
@@ -1123,10 +1125,7 @@ class ChangedInstall(ExistingBusInstall[RehearsedFiles]):
                         f"maintenance cleared; owners: {started}", file=sys.stderr)
                     raise
                 try:
-                    with LiveCheckoutPreparePhase().running(self.staged.commands.clock):
-                        self.staged.commands.git(
-                            self.checkout, "merge", "--ff-only", "-q", self.target)
-                        Checkout(self.checkout).prepare()
+                    self.checkout_target()
                     passed = migration.carry(self.pending, self.staged)
                     passed.files.require_rehearsal(rehearsal.files)
                     self.publish(migration.backup, selected_route)
@@ -1141,17 +1140,19 @@ class ChangedInstall(ExistingBusInstall[RehearsedFiles]):
                           "restoring original installation", file=sys.stderr)
                     # Only the services this run stopped may write the root on its behalf.
                     HostService.stop_all(stopped.services)
-                    state = maintenance.read()
-                    recovery = state.phase.hold_for(
-                        maintenance, state, MaintenanceOperator.current())
-                    holder.close()
-                    holder.enter_context(recovery.holding())
+
+                    def rehold() -> MaintenanceState:
+                        """Hold the root again in whatever phase it is now in."""
+                        state = maintenance.read()
+                        hold = state.phase.hold_for(
+                            maintenance, state, MaintenanceOperator.current())
+                        holder.close()
+                        holder.enter_context(hold.holding())
+                        return hold
+
+                    rehold()
                     migration.restore()
-                    restored = maintenance.read()
-                    restored_hold = restored.phase.hold_for(
-                        maintenance, restored, MaintenanceOperator.current())
-                    holder.close()
-                    holder.enter_context(restored_hold.holding())
+                    restored_hold = rehold()
                     head = self.installed.commands.git(
                         self.checkout, "rev-parse", "HEAD").strip()
                     if head != self.current:
@@ -1228,10 +1229,7 @@ class FreshInstall(Install[FreshRehearsal]):
         return FreshRehearsal()
 
     def live(self, rehearsal: FreshRehearsal, report: InstallReport) -> CreatedRun:
-        with LiveCheckoutPreparePhase().running(self.staged.commands.clock):
-            self.staged.commands.git(self.checkout, "merge", "--ff-only", "-q",
-                                     self.target)
-            Checkout(self.checkout).prepare()
+        self.checkout_target()
         self.root.mkdir(mode=0o700, parents=True, exist_ok=True)
         wire(self.root).registry.prepare_native_root()
         report.writer = RuntimeWriter(self.root, self.staged)

@@ -1,4 +1,4 @@
-"""One install, run from the target revision's own source in a session of its own.
+"""One install, run from the target revision's own source in a systemd unit of its own.
 
 The installed CLI only fetches, resolves the target and checks its tree out; the install
 itself runs that tree's ``src`` (``python -m agent_comms.installer``), so its carries,
@@ -26,6 +26,7 @@ from agent_comms.cli_bridges.shared import SessionBridgeResumes
 from agent_comms.cli_commands import InstallCliCommand
 from agent_comms.commander import standing
 from agent_comms.field_codec import FieldCodec, Id128, PathText
+from agent_comms.host_services import SystemdUnit
 from agent_comms.installer.backup import StoreBackup
 from agent_comms.installer.commands import InstallCommands
 from agent_comms.installer.interpreter_operation import (
@@ -92,13 +93,15 @@ class InstallReport(MroDispatch):
 
     @handles(BaseException)
     def crashed(self, error: BaseException) -> tuple[str, ...]:
-        package = Path(agent_comms.__file__).resolve().parent
+        # The target tree is already removed here, so paths are compared as imported, never
+        # resolved: a removed working directory makes even a non-strict resolve raise.
+        package = Path(agent_comms.__file__).parent
         frame = next(
             frame for frame in reversed(extract_tb(error.__traceback__))
-            if Path(frame.filename).resolve().is_relative_to(package)
+            if Path(frame.filename).is_relative_to(package)
         )
         module = ".".join(
-            Path(frame.filename).resolve().relative_to(package.parent).with_suffix("").parts
+            Path(frame.filename).relative_to(package.parent).with_suffix("").parts
         )
         location = self.source.module_file(module)
         return (f"Install failed: {type(error).__name__}: {error}",
@@ -140,24 +143,86 @@ class InstallCause:
 
 
 @dataclass(frozen=True)
+class InstallUnit(SystemdUnit):
+    """One install as a transient user unit, named by its diagnostics directory.
+
+    Systemd owns its lifetime exactly as it owns the connector's, so an install the heartbeat
+    starts from inside the connector's unit survives stopping that unit."""
+
+    identity: Id128
+    logs: Path
+    inherited: ClassVar[tuple[str, ...]] = (
+        "HOME", "PATH", "XDG_RUNTIME_DIR", "XDG_CONFIG_HOME", "XDG_DATA_HOME", "XDG_STATE_HOME",
+        "XDG_CACHE_HOME", "AGENT_COMMS_DEBUG_LOG",
+    )
+    """The caller's variables the install reads; systemd-run copies each value itself, so
+    none is spelled on a command line."""
+
+    @property
+    def unit(self) -> str:
+        return f"agent-comms-install-{self.identity}.service"
+
+    @property
+    def result(self) -> Path:
+        return self.logs / "result.json"
+
+    @property
+    def errors(self) -> Path:
+        return self.logs / "stderr.log"
+
+    @property
+    def request(self) -> Path:
+        """The ``InstallRun`` the unit reads on its standard input, as every runtime's launcher
+        has sent it: the launcher is the installed runtime, older than the tree it starts."""
+        return self.logs / "request.json"
+
+    def start(self, tree: Path, command: tuple[str, ...], pythonpath: str,
+              *options: str) -> None:
+        """Start the unit; ``--wait`` follows it to its end and raises on its failure."""
+        subprocess.run(
+            ("systemd-run", "--user", "--quiet", "--collect", *options, f"--unit={self.unit}",
+             f"--working-directory={tree}", f"--property=StandardInput=file:{self.request}",
+             f"--property=StandardOutput=file:{self.result}",
+             f"--property=StandardError=file:{self.errors}",
+             *(f"--setenv={name}" for name in self.inherited),
+             f"--setenv=PYTHONPATH={pythonpath}", *command),
+            check=True,
+        )
+
+    def due(self) -> type[standing.InstallDue]:
+        """A run whose unit is gone without printing a result died; any other was launched."""
+        gone = self.activity(self.unit).ended()
+        return (standing.DiedInstallDue if gone and not self.result.read_text()
+                else standing.LaunchedInstallDue)
+
+    def last_error(self) -> str:
+        return next((line for line in reversed(self.errors.read_text().splitlines())
+                     if line.strip()), "no output")
+
+
+@dataclass(frozen=True)
 class InstallLogs:
     """Each install's diagnostics beside the bus, kept as long as its data backups are."""
 
     root: Path
     cause_file: ClassVar[str] = "cause.json"
 
-    def member(self, repo: RepositoryName, main: str) -> type[standing.InstallDue]:
-        """Decode the merge's launch record once into its standing-rule member."""
+    def launched(self, repo: RepositoryName, main: str) -> tuple[InstallUnit, ...]:
+        """The runs launched for this merge, decoded once from their launch records."""
         cause = InstallCause(repo, main)
-        if any(
-            marker.is_file()
-            and FieldCodec.decode(InstallCause, FieldCodec.parse(marker.read_text())) == cause
+        return tuple(
+            InstallUnit(Id128(path.name.removeprefix(self.prefix)), path)
             for path in self.root.parent.glob(f"{glob.escape(self.prefix)}*")
             if path.is_dir()
             for marker in (path / self.cause_file,)
-        ):
-            return standing.LaunchedInstallDue
-        return standing.PendingInstallDue
+            if marker.is_file()
+            and FieldCodec.decode(InstallCause, FieldCodec.parse(marker.read_text())) == cause
+        )
+
+    def member(self, repo: RepositoryName, main: str) -> type[standing.InstallDue]:
+        """The merge's launched run selects its standing-rule member; none is pending."""
+        return next((run.due() for run in self.launched(repo, main)),
+                    standing.PendingInstallDue)
 
     def record(self, logs: Path, repo: RepositoryName, main: str) -> None:
         (logs / self.cause_file).write_text(json.dumps(FieldCodec.encode(InstallCause(repo, main))))
@@ -166,12 +231,13 @@ class InstallLogs:
     def prefix(self) -> str:
         return f".{self.root.name}.installer-"
 
-    def minted(self) -> Path:
-        """A new install's own directory; older ones past the backups' count are retired."""
-        logs = self.root.parent / f"{self.prefix}{Id128.mint()}"
-        logs.mkdir(mode=0o700)
+    def minted(self) -> InstallUnit:
+        """A new install's own unit and directory; older ones past the backups' count are
+        retired."""
+        unit = InstallUnit(identity := Id128.mint(), self.root.parent / f"{self.prefix}{identity}")
+        unit.logs.mkdir(mode=0o700)
         self.retire()
-        return logs
+        return unit
 
     def retire(self) -> tuple[Path, ...]:
         """The names carry no time, so age is each directory's own modification time."""
@@ -207,44 +273,30 @@ class InstallRun:
                    [timing.launched() for timing in commands.clock.phases])
 
     @cached_property
-    def logs(self) -> Path:
+    def unit(self) -> InstallUnit:
         return InstallLogs(self.root).minted()
 
-    @property
-    def result(self) -> Path:
-        return self.logs / "result.json"
-
-    @property
-    def errors(self) -> Path:
-        return self.logs / "stderr.log"
-
-    def spawn(self) -> subprocess.Popen[bytes]:
-        """The install outlives its caller: a new session, its output in files beside the bus.
-        Retiring the caller's process group must not cut an install short."""
+    def spawn(self, *options: str) -> None:
+        """The install runs in its own unit and reads its request from a file beside the bus,
+        so stopping the caller's unit, the connector's included, cannot cut it short."""
         tree = TargetTree(self.command.checkout, self.scratch, self.target)
-        request_read, request_write = os.pipe()
-        with (os.fdopen(request_read, "rb") as stdin,
-              os.fdopen(request_write, "wb") as requests,
-              self.result.open("xb") as stdout, self.errors.open("xb") as stderr):
-            process = subprocess.Popen(
-                [sys.executable, "-m", agent_comms.installer.__name__], cwd=tree.path,
-                env={**os.environ, "PYTHONPATH": os.pathsep.join(map(str, tree.source_paths()))},
-                stdin=stdin, stdout=stdout, stderr=stderr, start_new_session=True,
-            )
-            requests.write(json.dumps(FieldCodec.encode(self)).encode())
-        print(f"install: pid {process.pid} runs {self.target[:12]}; diagnostics {self.errors}",
-              file=sys.stderr, flush=True)
-        return process
+        self.unit.request.write_text(json.dumps(FieldCodec.encode(self)))
+        print(f"install: {self.unit.unit} runs {self.target[:12]}; "
+              f"diagnostics {self.unit.errors}", file=sys.stderr, flush=True)
+        self.unit.start(
+            tree.path, (sys.executable, "-m", agent_comms.installer.__name__),
+            os.pathsep.join(map(str, tree.source_paths())), *options,
+        )
 
     def launch(self, output: TextIO) -> int:
-        process = self.spawn()
-        status = process.wait()
-        if status:
-            print(f"install failed ({status}): {self.errors.read_text().strip()}",
+        try:
+            self.spawn("--wait")
+        except subprocess.CalledProcessError as failed:
+            print(f"install failed ({failed.returncode}): {self.unit.errors.read_text().strip()}",
                   file=sys.stderr)
-        else:
-            output.write(self.result.read_text())
-        return status
+            return failed.returncode
+        output.write(self.unit.result.read_text())
+        return 0
 
     def run(self) -> Upgrade:
         command = self.command

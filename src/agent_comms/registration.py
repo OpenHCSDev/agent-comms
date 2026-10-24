@@ -347,26 +347,6 @@ class Registration:
             edit.commit()
             return leased, generation
 
-    def lease_live_turn_with_generation(
-        self,
-        expected: Thread,
-        turn_id: TurnId,
-        *,
-        expected_owner_generation: int,
-        routing: TurnRouting | None = None,
-    ) -> tuple[Thread, int]:
-        """Claim against the exact captured declaration and stable owner generation."""
-        Thread.require_declaration(expected)
-        generation = GenerationCounter.require_positive(expected_owner_generation)
-        with self.store.editing() as edit:
-            snapshot = edit.original.snapshot
-            owner = RegistryOwner.capture_local(snapshot, expected.name)
-            owner.require_exact(snapshot, expected, generation)
-            owner.thread.turn_record.read().require_idle()
-            result = edit.lease_turn(owner.thread, turn_id, routing)
-            edit.commit()
-            return result
-
     def lease_local_turn(
         self, name: str, turn_id: TurnId, *, routing: TurnRouting | None = None
     ) -> tuple[Thread, int]:

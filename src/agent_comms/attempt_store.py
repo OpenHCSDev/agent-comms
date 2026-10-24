@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, replace
 
-from agent_comms.reason_codes import GivenReasonCode, NoDetail, NoReasonCode, ReasonCode, RecoveryDetail
+from agent_comms.reason_codes import GivenReasonCode, NoReasonCode, ReasonCode
 from agent_comms.assignment_states import EngagedAssignment
 from agent_comms.attempt_start import AttemptStart
 from agent_comms.attempt_states import AttemptState, TerminalAttempt, UnknownOutcomeAttempt
@@ -19,11 +19,9 @@ from agent_comms.coordination_session import NativeBoundary
 from agent_comms.coordination_snapshot import RecoverySnapshot
 from agent_comms.coordination_tables.assignments import WakeAssignment
 from agent_comms.coordination_tables.attempts import AttemptRecord, ReplayFact
-from agent_comms.coordination_tables.recovery import RecoveryAudit
 from agent_comms.owner_fence import OwnerFence
 from agent_comms.turn_failure import TurnFailure
 from agent_comms.recovery_reader import RecoveryReader
-from agent_comms.recovery_states import RecoveryCondition
 
 
 @dataclass(frozen=True, slots=True)
@@ -201,34 +199,6 @@ class AttemptStore(RecoveryReader):
             self.get(fence.execution_id).settle(
                 self.session, UnknownOutcomeAttempt(), GivenReasonCode("native_unknown"), acquired
             )
-            return Applied(self.get(fence.execution_id))
-
-    def append_recovery_audit(
-        self,
-        fence: OwnerFence,
-        *,
-        expected_pointer_revision: int,
-        kind: type[RecoveryCondition],
-        reason_code: GivenReasonCode,
-        sanitized_detail: RecoveryDetail = NoDetail(),
-        elapsed_ms: int = 0,
-    ) -> Applied[RecoverySnapshot]:
-        if elapsed_ms < 0:
-            raise ValueError("invalid recovery audit")
-        with self.session.writing() as db:
-            snapshot, attempt = self.require_fence(fence)
-            if snapshot.pointer_revision != expected_pointer_revision:
-                raise StaleRevision("pointer revision changed")
-            kind.validate_audit(snapshot, attempt)
-            RecoveryAudit(
-                execution_id=fence.execution_id,
-                kind=kind,
-                reason_code=reason_code,
-                sanitized_detail=sanitized_detail,
-                attempt=attempt.attempt_ordinal,
-                elapsed_ms=elapsed_ms,
-                observed_at_ms=self.session.now(attempt.updated_at_ms),
-            ).insert(db)
             return Applied(self.get(fence.execution_id))
 
     def settle_nonpublication(

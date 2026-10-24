@@ -60,7 +60,7 @@ def test_unknown_reason_survives_real_history_without_inventing_provenance(tmp_p
         ).fetchall()
     reopened = wire(tmp_path)
     assert reopened.goals.goal_history("owner") == history
-    assert not reopened.relationships._goal_contacts(reopened.registry.snapshot())[0]
+    assert not reopened.relationships.goal_contacts("owner")[0]
     with sqlite3.connect(tmp_path / "goal_history.sqlite3") as database:
         assert (
             database.execute(

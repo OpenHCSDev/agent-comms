@@ -13,6 +13,7 @@ import pytest
 
 from agent_comms.change_report import FileLine
 from agent_comms.commander.order import CommanderContext, OrderFile
+from agent_comms.commander.standing import Unjudged
 from agent_comms.comms import wire
 from agent_comms.external_transcript import ExternalTranscript
 from agent_comms.field_codec import FieldCodec, GoalId
@@ -233,38 +234,50 @@ def test_registered_fork_sends_parent_problem_with_fork_actor(fork_bus, tmp_path
         store.require_unit_in(db, saved.held().owner_identity, parent.incarnation)
 
 
-def test_fork_and_parent_judge_show_same_unjudged_edits(fork_bus):
-    parent_work_turn_id = NativeTurnId('parent-work')
-    comms, source, order = fork_bus
+def record_edits(comms, source, count):
+    """One retained-holder transcript turn with ``count`` original edit calls."""
     actor = comms.registry.require("retained").incarnation
-    declaration = ToolDeclaration.record(
-        "edit",
-        {
-            "path": str(source.checkout / "owner.py"),
-            "edits": [{"oldText": "", "newText": "class ReviewedOwner: pass"}],
-        },
-        call_id=ToolCallId("parent-edit"),
-    )
     ExternalTranscript(comms.root, actor).finish(
-        turn_id=parent_work_turn_id,
+        turn_id=NativeTurnId("parent-work"),
         item_id=NativeItemId("parent-edit"),
-        events=(
+        events=tuple(
             ToolStartTranscript(
-                position=0,
-                tool_call_id=ToolCallId("parent-edit"),
+                position=position,
+                tool_call_id=ToolCallId(f"parent-edit-{position}"),
                 tool_name="edit",
                 timestamp=time.time(),
-                tool=declaration,
-            ),
+                tool=ToolDeclaration.record(
+                    "edit",
+                    {
+                        "path": str(source.checkout / "owner.py"),
+                        "edits": [{"oldText": "", "newText": f"class ReviewedOwner{position}: pass"}],
+                    },
+                    call_id=ToolCallId(f"parent-edit-{position}"),
+                ),
+            )
+            for position in range(count)
         ),
     )
+
+
+def test_fork_and_parent_judge_show_same_unjudged_edits(fork_bus):
+    comms, source, order = fork_bus
+    record_edits(comms, source, 1)
     own = command(comms, "judge", "show")
     fork = command(comms, "judge", "show", "--fork", "review-fork")
     for result in (own, fork):
         assert result.returncode == 0, result.stderr
         assert result.stdout.splitlines()[-1] == "1 unjudged"
-        assert "parent-edit" in result.stdout
+        assert "parent-edit-0" in result.stdout
     print("judge show: 1 unjudged; judge show --fork review-fork: 1 unjudged")
+
+
+def test_unjudged_reminder_names_each_order_with_edits(fork_bus):
+    comms, source, _ = fork_bus
+    record_edits(comms, source, Unjudged.limit + 1)
+    assert Unjudged.reason(comms, "lead") == (
+        f"{Unjudged.limit + 1} edits since each order's last head verdict: "
+        f"retained P40 {Unjudged.limit + 1}")
 
 
 def test_open_unit_consumers_agree_on_one_assignment(fork_bus):

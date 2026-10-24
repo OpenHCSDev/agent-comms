@@ -196,63 +196,6 @@ def test_crash_after_reservation_before_outcome_never_auto_reissues(store):
         reopened.resume(goal_id, 1)
 
 
-def test_claimed_crash_requires_separate_human_abandon_and_retry(store):
-    _decision_0 = RetryDecision(RetryDecisionId.mint())
-    _decision_1 = RetryDecision(RetryDecisionId.mint())
-    goal_id = GoalId.mint()
-    store.create_goal(goal_id)
-    ctx = multiprocessing.get_context("spawn")
-    child = ctx.Process(
-        target=_die_after_claim,
-        args=(str(store.root), goal_id, store.ready_grant(goal_id, 1)),
-    )
-    child.start()
-    child.join(timeout=12)
-    if child.is_alive():
-        child.terminate()
-        child.join(timeout=5)
-    assert child.exitcode == 0
-    reopened = GoalAttemptStore(store.root)
-    current = reopened.snapshot(goal_id)
-    assert current is not None and current.lifecycle == ReservedGeneration()
-    assert current.attempt_id is not None
-    with pytest.raises(UnresolvedAttemptError):
-        reopened.resume(goal_id, 1)
-    with pytest.raises(ReservationConflictError):
-        reopened.reserve(goal_id, 1)
-    with pytest.raises(ValueError):
-        reopened.authorize_abandon_attempt(
-            goal_id,
-            expected_generation=1,
-            attempt_id=current.attempt_id,
-            decision=RetryDecision(RetryDecisionId("")),
-        )
-    blocked = reopened.authorize_abandon_attempt(
-        goal_id,
-        expected_generation=1,
-        attempt_id=current.attempt_id,
-        decision=_decision_0,
-    )
-    assert blocked.lifecycle == BlockedGeneration()
-    with pytest.raises(UnresolvedAttemptError):
-        reopened.resume(goal_id, 1)
-    with pytest.raises(StaleAttemptError):
-        reopened.authorize_abandon_attempt(
-            goal_id,
-            expected_generation=1,
-            attempt_id=current.attempt_id,
-            decision=_decision_0,
-        )
-    next_generation = reopened.authorize_retry(
-        goal_id,
-        expected_generation=1,
-        attempt_id=current.attempt_id,
-        decision=_decision_1,
-    )
-    assert next_generation.number == 2
-    assert reopened.reserve(goal_id, 2).generation == 2
-
-
 def test_crash_after_ready_commit_before_ack_requires_explicit_human_recovery(store):
     _decision_0 = RetryDecision(RetryDecisionId.mint())
     goal_id = GoalId.mint()

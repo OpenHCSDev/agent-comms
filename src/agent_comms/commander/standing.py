@@ -73,6 +73,7 @@ class InstallDue(IndependentStandingRule, UndatedStandingRule):
     core: Repo = field(compare=False)
     target: str = field(compare=False)
     settle: ClassVar[float] = 30 * 60
+    headline: ClassVar[str] = "INSTALL DUE"
 
     @property
     @abstractmethod
@@ -111,7 +112,7 @@ class InstallDue(IndependentStandingRule, UndatedStandingRule):
         """An already-launched merge needs no second attempt."""
 
     def line(self) -> str:
-        return (f"INSTALL DUE ({self.repo.to_wire()}: main {self.main}, installed "
+        return (f"{self.headline} ({self.repo.to_wire()}: main {self.main}, installed "
                 f"{self.installed}, {self.commits} commits, oldest {self.oldest_minutes} min) "
                 f"-> {self.action}")
 
@@ -126,13 +127,24 @@ class PendingInstallDue(InstallDue):
                                     project=self.core.checkout)
         run = installer_launch.InstallRun.start(command, comms.root)
         run.spawn()
-        self.logs.record(run.logs, self.repo, self.main)
+        self.logs.record(run.unit.logs, self.repo, self.main)
 
 
 class LaunchedInstallDue(InstallDue):
     @property
     def action(self) -> str:
         return "an install for this merge was already launched"
+
+
+class DiedInstallDue(InstallDue):
+    """Its unit ended without a result; nothing relaunches it until main moves."""
+
+    headline = "INSTALL DIED"
+
+    @property
+    def action(self) -> str:
+        run = self.logs.launched(self.repo, self.main)[0]
+        return f"target {self.target[:12]}; {run.errors}: {run.last_error()}"
 
 
 @dataclass(frozen=True)
@@ -607,10 +619,17 @@ class UnitDeaf(InboxUnavailable):
 @dataclass(frozen=True)
 class Unjudged(ReasonedStandingRule, UndatedStandingRule):
     limit: ClassVar[int] = 30
-    text = ("UNJUDGED {why} edits -> accept each reviewed PR head with judge ok --pr N --head SHA"
+    text = ("UNJUDGED {why} -> accept each reviewed PR head with judge ok --pr N --head SHA"
             " (one verdict judges every edit before it), or fork judges for the rest")
 
     @classmethod
     def reason(cls, comms: Comms, commander: str) -> str | None:
-        total = OrderEditCountRead.count(comms, commander)
-        return str(total) if total > cls.limit else None
+        """The total, then each order's edits made since its last head verdict."""
+        counts = tuple((read, read.read())
+                       for read in OrderEditCountRead.for_commander(comms, commander))
+        total = sum(count for _, count in counts)
+        if total <= cls.limit:
+            return None
+        named = ", ".join(f"{read.thread.name} {read.todo.id} {count}"
+                          for read, count in counts if count)
+        return f"{total} edits since each order's last head verdict: {named}"

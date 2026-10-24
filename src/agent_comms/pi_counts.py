@@ -74,9 +74,6 @@ class PiCount(AcceptsNull, ExternalJsonShape, WireValue):
     def matches(self, count: int) -> bool:
         return False
 
-    def require_count(self) -> int:
-        raise ValueError("Pi has not reported this count")
-
     def observe_size(self, account: UsageAccount) -> None:
         account.size = self
 
@@ -125,9 +122,6 @@ class ReportedCount(PiCount):
 
     def matches(self, count: int) -> bool:
         return self.count == count
-
-    def require_count(self) -> int:
-        return self.count
 
     def update_size(self, account: UsageAccount) -> None:
         account.size = self

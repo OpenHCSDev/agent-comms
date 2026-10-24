@@ -12,6 +12,7 @@ from pydantic import JsonValue
 from agent_comms.todos import (
     ClaimOrder,
     CorrectCheckTodo,
+    CorrectRunTodo,
     DeliverTodo,
     DeliveryReport,
     InstallTodo,
@@ -410,7 +411,25 @@ class CommsOrderCheckTool(CommsTodoTool):
     why: Annotated[str, *tool_field("Why the recorded check was wrong")]
 
     def operation_for(self, todo: Todo, actor: ThreadIncarnation, comms: Comms) -> TodoOperation:
-        return CorrectCheckTodo(todo.revision, actor, todo.order.check, self.check, self.why)
+        return CorrectCheckTodo(todo.revision, actor, self.why,
+                                previous=todo.order.check, check=self.check)
+
+
+@dataclass(frozen=True, kw_only=True)
+class CommsOrderRunTool(CommsTodoTool):
+    label = "Correct order run"
+    description = (
+        "Replace the run text that closes an open application order, recording the old run "
+        "and why; only its commander may invoke this tool, and the order keeps its review "
+        "timer and strikes."
+    )
+    run: Annotated[str, *tool_field("The corrected run: what the installed app must show")]
+    why: Annotated[str, *tool_field("Why the recorded run was wrong")]
+
+    def operation_for(self, todo: Todo, actor: ThreadIncarnation, comms: Comms) -> TodoOperation:
+        previous = todo.order.checked().run
+        return CorrectRunTodo(todo.revision, actor, self.why,
+                              previous=previous, run=previous.retexted(self.run))
 
 
 @dataclass(frozen=True, kw_only=True)

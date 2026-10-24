@@ -374,9 +374,6 @@ class TranscriptSource:
         """A source without original producer tool times cannot prove activity."""
         return UnrecordedEventTime()
 
-    def tool_call_between(self, since: float, through: float) -> bool:
-        return False
-
     def has_records(self, through: int) -> bool:
         return through > 0
 

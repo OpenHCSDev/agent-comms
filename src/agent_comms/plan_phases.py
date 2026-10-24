@@ -12,6 +12,11 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, ClassVar
 
 from agent_comms.declared_family import DeclaredFamily
+from agent_comms.installer.probes.carry import Carry
+from agent_comms.pi_events import PiEvent
+from agent_comms.private_registry_guard import RegistryPrivacy
+from agent_comms.thread_identity import BirthlessIncarnation
+from agent_comms.tool_calls import CliToolArguments
 from agent_comms.field_codec import Id128, MessageId, NominalSpelling, NominalText
 from agent_comms.phase_evidence import (
     AllEvidence,
@@ -149,6 +154,15 @@ class RemainingSlopPhase(PlanPhase, declared_name=None):
 class Id128NominalPhase(PlanPhase, declared_name=None):
     plan = Id128NominalPlan
     paths: ClassVar[tuple[str, ...]] = ("src", ":!src/agent_comms/skills/")
+
+    @classmethod
+    def absent(cls, pattern: str) -> PatternAbsent:
+        return PatternAbsent(pattern, cls.paths)
+
+    @classmethod
+    def plain(cls, names: str) -> PatternAbsent:
+        """No field or parameter named ``names`` keeps a plain ``str`` or bare ``Id128``."""
+        return cls.absent(rf"\b({names}): (str\b|Id128\b|Annotated\[(str|Id128)\b)")
 
 
 class RetainedStorePhase(CommanderNativePhase):
@@ -501,15 +515,8 @@ class ClaimIdsPhase(Id128NominalPhase):
     after = (NominalIdTypePhase,)
     evidence = AllEvidence(
         (
-            PatternAbsent(
-                r"\b(nonce|operation_id|generation): "
-                r"(str\b|Id128\b|Annotated\[(str|Id128)\b)",
-                Id128NominalPhase.paths,
-            ),
-            PatternAbsent(
-                r"Id128Text\.decode\(self\.(nonce|operation_id)\)",
-                Id128NominalPhase.paths,
-            ),
+            Id128NominalPhase.plain("nonce|operation_id|generation"),
+            Id128NominalPhase.absent(r"Id128Text\.decode\(self\.(nonce|operation_id)\)"),
         )
     )
 
@@ -520,15 +527,8 @@ class MessageIdsPhase(Id128NominalPhase):
     after = (NominalIdTypePhase,)
     evidence = AllEvidence(
         (
-            PatternAbsent(
-                r"\b(message_id|source_message_id): "
-                r"(str\b|Id128\b|Annotated\[(str|Id128)\b)",
-                Id128NominalPhase.paths,
-            ),
-            PatternAbsent(
-                r"Annotated\[str, *MessageIdText\]",
-                Id128NominalPhase.paths,
-            ),
+            Id128NominalPhase.plain("message_id|source_message_id"),
+            Id128NominalPhase.absent(r"Annotated\[str, *MessageIdText\]"),
         )
     )
 
@@ -539,15 +539,8 @@ class TurnIdsPhase(Id128NominalPhase):
     after = (NominalIdTypePhase,)
     evidence = AllEvidence(
         (
-            PatternAbsent(
-                r"\b(turn_id|finished_turn_id|report_turn_id|current_turn_id)"
-                r": (str\b|Id128\b|Annotated\[(str|Id128)\b)",
-                Id128NominalPhase.paths,
-            ),
-            PatternAbsent(
-                r"Id128Text\.(decode|from_text)\((self\.)?turn_id\)",
-                Id128NominalPhase.paths,
-            ),
+            Id128NominalPhase.plain("turn_id|finished_turn_id|report_turn_id|current_turn_id"),
+            Id128NominalPhase.absent(r"Id128Text\.(decode|from_text)\((self\.)?turn_id\)"),
         )
     )
 
@@ -556,10 +549,7 @@ class GoalIdsPhase(Id128NominalPhase):
     """6: goal ids are ``GoalId``, minted by it, never minted by hand."""
 
     after = (NominalIdTypePhase,)
-    evidence = PatternAbsent(
-        r"\b(goal_id|original_goal_id): (str\b|Id128\b|Annotated\[(str|Id128)\b)",
-        Id128NominalPhase.paths,
-    )
+    evidence = Id128NominalPhase.plain("goal_id|original_goal_id")
 
 
 class RootIdsPhase(Id128NominalPhase):
@@ -568,19 +558,10 @@ class RootIdsPhase(Id128NominalPhase):
     after = (NominalIdTypePhase,)
     evidence = AllEvidence(
         (
-            PatternAbsent(
-                r"\b(wire_root_id|root_id|lookup|recipient_lookup): "
-                r"(str\b|Id128\b|Annotated\[(str|Id128)\b)",
-                Id128NominalPhase.paths,
-            ),
-            PatternAbsent(
-                r"Id128Text\.decode\((self\.)?(owner\.)?(wire_root_id|root_id|lookup)\)",
-                Id128NominalPhase.paths,
-            ),
-            PatternAbsent(
-                r"FieldCodec\.decode\(Annotated\[str, *Id128Text\]",
-                Id128NominalPhase.paths,
-            ),
+            Id128NominalPhase.plain("wire_root_id|root_id|lookup|recipient_lookup"),
+            Id128NominalPhase.absent(
+                r"Id128Text\.decode\((self\.)?(owner\.)?(wire_root_id|root_id|lookup)\)"),
+            Id128NominalPhase.absent(r"FieldCodec\.decode\(Annotated\[str, *Id128Text\]"),
         )
     )
 
@@ -591,15 +572,9 @@ class InputIdsPhase(Id128NominalPhase):
     after = (NominalIdTypePhase,)
     evidence = AllEvidence(
         (
-            PatternAbsent(
-                r"\b(input_id|native_id): "
-                r"(str\b|Id128\b|Annotated\[(str|Id128)\b)",
-                Id128NominalPhase.paths,
-            ),
-            PatternAbsent(
-                r"Id128Text\.(decode|from_text)\((self\.)?(input_id|native_id)\)",
-                Id128NominalPhase.paths,
-            ),
+            Id128NominalPhase.plain("input_id|native_id"),
+            Id128NominalPhase.absent(
+                r"Id128Text\.(decode|from_text)\((self\.)?(input_id|native_id)\)"),
         )
     )
 
@@ -847,12 +822,12 @@ class RostersPhase(RemainingSlopPhase):
             *(
                 ClassFlagsAbsent(r"^\s*" + attribute + r"\s*[:=]", owners=(owner,))
                 for owner, attribute in (
-                    (QualifiedName.of("agent_comms.installer.probes.carry.Carry"), "declared"),
-                    (QualifiedName.of("agent_comms.private_registry_guard.RegistryPrivacy"), "kinds"),
-                    (QualifiedName.of("agent_comms.thread_identity.BirthlessIncarnation"), "members"),
-                    (QualifiedName.of("agent_comms.tool_calls.CliToolArguments"), "types"),
-                    (QualifiedName.of("agent_comms.pi_events.PiEvent"), "_start_phases"),
-                    (QualifiedName.of("agent_comms.pi_events.PiEvent"), "_end_events"),
+                    (QualifiedName.of_class(Carry), "declared"),
+                    (QualifiedName.of_class(RegistryPrivacy), "kinds"),
+                    (QualifiedName.of_class(BirthlessIncarnation), "members"),
+                    (QualifiedName.of_class(CliToolArguments), "types"),
+                    (QualifiedName.of_class(PiEvent), "_start_phases"),
+                    (QualifiedName.of_class(PiEvent), "_end_events"),
                 )
             ),
         )

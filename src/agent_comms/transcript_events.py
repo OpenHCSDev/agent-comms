@@ -219,11 +219,6 @@ class SilentTranscript:
 class OutgoingRoute:
     """Route capability shared by native output and original wire projection."""
 
-    def require_reply_route(self) -> MessageRoute:
-        if not self.routed:
-            raise ValueError("Outgoing message evidence requires a reply route")
-        return self.routing.reply
-
     @property
     def routed(self) -> bool:
         return self.routing is not None and self.routing.reply is not None

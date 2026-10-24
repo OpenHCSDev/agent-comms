@@ -5,7 +5,7 @@ import pytest
 from agent_comms.channel_targets import CommandTarget
 from agent_comms.channels import AnyChannel
 from agent_comms.tool_caller import ThreadCaller, NoThreadCaller
-from agent_comms.tools import context_tool_catalog, invoke_tool
+from agent_comms.tools import invoke_tool
 from agent_comms.native_tools import NativeRequestTools
 from agent_comms.threads import Thread
 
@@ -89,18 +89,6 @@ class TestToolCatalog:
             "comms_archive",
         } <= set(names)
         assert all(tool["parameters"]["additionalProperties"] is False for tool in catalog)
-
-    @pytest.mark.refactor_guard
-    def test_thread_context_actions_are_declared_in_display_order(self):
-        actions = context_tool_catalog("thread")
-        assert [action["name"] for action in actions] == [
-            "comms_fork",
-            "comms_stop",
-            "comms_start",
-            "comms_queue_restart",
-            "comms_archive",
-        ]
-        assert actions[0]["context_bindings"] == {"parent": "subject"}
 
     def test_inbox_ack_behavior_is_owned_by_declared_tool(self, comms):
         comms.registry.declare(Thread(name='a', tags=frozenset(), worktree='/wt'))

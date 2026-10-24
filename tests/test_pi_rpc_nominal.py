@@ -197,7 +197,9 @@ for line in sys.stdin:
         response["id"] = request["id"]
     print(json.dumps(response), flush=True)
 """
-    async with BoundedRun.session((sys.executable, "-u", "-c", responder), cwd=tmp_path, timeout=2) as proc:
+    async with BoundedRun.session(
+        (sys.executable, "-u", "-c", responder), cwd=tmp_path, timeout=commands.CATALOG_TIMEOUT
+    ) as proc:
         child = PiChild(proc, PiRpcChannel(proc.stdout))
         for index in range(2):
             request = commands.SetSteeringMode(

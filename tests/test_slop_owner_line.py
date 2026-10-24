@@ -40,9 +40,6 @@ def test_each_member_owns_its_send_and_done_lines():
     existing, created = ExistingLine(FileLine('owner.py', 2)), CreatedLine(CREATED)
     assert (existing.cited(), existing.owed()) == ((existing.line,), ())
     assert (created.cited(), created.owed()) == ((), (CREATED,))
-    assert existing.unnamed_by(('Edit nothing here.',)) == ()
-    assert created.unnamed_by(('Create branch.py declaring BranchOnly.',)) == ()
-    assert 'an edit must create branch.py' in created.unnamed_by(('Edit owner.py only.',))[0]
 
 
 def test_the_order_file_derives_what_the_order_creates_from_its_citations(source_repository):

@@ -320,7 +320,6 @@ class TestThreadOps:
         assert attached.session_file == RegistrySessionLocation.from_path(str(session_file.resolve()), wired.root)
         assert wired.registry.status("fixer").declared_name == "running"
 
-
     def test_release_only_allows_the_calling_thread(self, wired: Comms, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setenv("AGENT_COMMS_THREAD", "fixer")
 
@@ -570,13 +569,6 @@ class TestPollAndWire:
         snap = FieldCodec.decode(dict[str, JsonValue], wired.views.poll(CallingThreadTarget()).to_wire())
         thread = FieldCodec.decode(dict[str, JsonValue], snap["thread"])
         assert thread["name"] == "fixer"
-
-    def test_adopt_current_registers_from_env(self, comms: Comms, monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
-        monkeypatch.setenv("AGENT_COMMS_THREAD", "me")
-        monkeypatch.setenv("PI_WORKTREE", str(tmp_path))
-        thread = comms.threads.adopt_current()
-        assert thread.name == "me"
-        assert comms.registry.status("me").declared_name == "running"
 
     def test_runtime_files_created_on_demand(self, tmp_path: Path) -> None:
         comms = wire(tmp_path / "fresh")
