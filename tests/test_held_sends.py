@@ -107,7 +107,7 @@ async def test_native_thread_caller_waits_then_publishes_once(held_bus):
     before = comms.bus.bus.revision()
     pending = asyncio.create_task(asyncio.to_thread(
         invoke_tool, comms, 'comms_send',
-        {'from': 'sender', 'to': 'recipient', 'body': 'held publication'},
+        {'to': 'recipient', 'body': 'held publication'},
         caller=ThreadCaller('sender')))
     with pytest.raises(TimeoutError):
         await asyncio.wait_for(asyncio.shield(pending), .25)

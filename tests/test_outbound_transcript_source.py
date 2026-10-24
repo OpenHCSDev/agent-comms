@@ -19,7 +19,7 @@ from agent_comms.notification_progress import (
     UnrecordedProgress,
 )
 from agent_comms.pi_payloads import PublishedMessageToolDetails
-from agent_comms.tool_caller import NoThreadCaller
+from agent_comms.tool_caller import ThreadCaller
 from agent_comms.tools import invoke_tool
 from agent_comms.transcripts import TranscriptRead
 from test_coordinated_runtime import _root, tmp_path  # noqa: F401
@@ -170,8 +170,8 @@ def test_open_sender_source_advances_without_a_native_tool_copy(tmp_path):  # no
     before = comms.transcripts.capture_page_read("beta")
     acknowledgement = PublishedMessageToolDetails.from_wire(invoke_tool(
         comms, "comms_send",
-        {"from": "beta", "to": "sender", "body": "Original outgoing ownership reply"},
-        caller=NoThreadCaller(),
+        {"to": "sender", "body": "Original outgoing ownership reply"},
+        caller=ThreadCaller("beta"),
     ))
     message, = comms.bus.bus.messages_for_references((acknowledgement.message.source,))
     after = comms.transcripts.capture_page_read("beta")

@@ -164,7 +164,7 @@ def test_core_commands_share_native_identity_without_changing_external_decode():
         set(CodingTool.members_with(CodingTool)) | set(ToolRequest.members_with(ToolRequest))
     )
     for request in ToolRequest.members_with(ToolRequest):
-        arguments = {"from": "source", "to": "destination", "body": "decode-only"}
+        arguments = {"to": "destination", "body": "decode-only"}
         call = CodingCall.decode("isolated-call", request.declared_name, arguments)
         assert isinstance(call, NativeExecutableTool) and call.declared_name == request.declared_name
         assert call.call_id == "isolated-call" and call.arguments == arguments
@@ -172,7 +172,7 @@ def test_core_commands_share_native_identity_without_changing_external_decode():
         assert call.digest() == f'{request.declared_name} {json.dumps(arguments)}'
     from agent_comms.field_codec import FieldCodec
 
-    assert isinstance(FieldCodec.decode(ToolRequest, {"tool": "comms_send", "from": "source",
+    assert isinstance(FieldCodec.decode(ToolRequest, {"tool": "comms_send",
         "to": "destination", "body": "decode-only"}), CommsSendTool)
     with pytest.raises(ValueError):
         ToolRequest.member_named("read")

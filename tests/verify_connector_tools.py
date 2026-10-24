@@ -241,7 +241,6 @@ def arguments(comms: Comms, name: str, project: Path, checkout: Path) -> dict:
         "comms_rename_self": {"new_name": "claude-ai"},
         "comms_send_refusals": {},
         "comms_send": {
-            "from": "claude-ai",
             "to": "worker",
             "body": "Read the saved source and report what worked.",
         },

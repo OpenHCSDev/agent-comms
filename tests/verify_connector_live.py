@@ -26,7 +26,7 @@ from agent_comms.threads import Thread
 def curl_call(port, token, body, *, arguments=None):
     call = {"jsonrpc": "2.0", "id": 7, "method": "tools/call", "params": {
         "name": "comms_send", "arguments": arguments if arguments is not None else {
-            "from": "claude-ai", "to": "worker", "body": body}}}
+            "to": "worker", "body": body}}}
     return subprocess.run([
         "curl", "--silent", "--show-error", "--max-time", "15", "-w", "\n%{http_code} %{time_total}\n",
         "-H", "Content-Type: application/json", "-H", f"Authorization: Bearer {token}",

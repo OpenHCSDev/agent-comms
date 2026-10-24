@@ -94,14 +94,12 @@ def test_independent_requests_orders_and_directives(comms: Comms, durable_home, 
     assert store.serving_orders(first.id) == (todo,)
 
     ConnectorSendTool(
-        sender="claude-ai",
         target="commander",
         request=first.id,
         body="Read the request records and report the result.",
     ).apply(comms, CALLER)
     named = comms.bus.bus.revision()
     ConnectorSendTool(
-        sender="claude-ai",
         target="commander",
         body="Read the stored orders and report the result.",
     ).apply(comms, CALLER)
@@ -138,7 +136,6 @@ def test_independent_requests_orders_and_directives(comms: Comms, durable_home, 
         assert not renamed.directive_messages(source, comms.registry.snapshot().names_for(commander.name))
 
     CommsSendTool(
-        sender="worker",
         target="commander",
         body="The source records are available.",
     ).apply(comms, ThreadCaller("worker"))
@@ -147,14 +144,12 @@ def test_independent_requests_orders_and_directives(comms: Comms, durable_home, 
     before = comms.bus.bus.revision()
     with pytest.raises(ValueError):
         ConnectorSendTool(
-            sender="claude-ai",
             target="#any",
             request=first.id,
             body="Read the request records and report the result.",
         ).apply(comms, CALLER)
     with pytest.raises(ToolRefusedError):
         ConnectorSendTool(
-            sender="claude-ai",
             target="worker",
             request=first.id,
             body="Read the request records and report the result.",
