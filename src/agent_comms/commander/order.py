@@ -256,7 +256,7 @@ class CheckRequest(CheckCommand):
         return request
 
     def resolve(self, repos: tuple[Repo, ...]) -> OrderCheck:
-        return OrderCheck(Repo.selected(repos, self.repository).checkout, self.command, self.result)
+        return OrderCheck(Path(self.repository), self.command, self.result).registered(repos)
 
 
 @dataclass(frozen=True)
@@ -302,6 +302,9 @@ class OrderFile:
 
     def resolved(self, finding: ProblemFinding) -> OrderFile:
         return replace(self, order=replace(self.order, finding=finding))
+
+    def registered(self, repos: tuple[Repo, ...]) -> OrderFile:
+        return replace(self, order=replace(self.order, check=self.order.check.registered(repos)))
 STAGES = (
     "tool call",
     "review",
@@ -348,6 +351,14 @@ class CommanderContext(BaseModel):
     @property
     def repos(self) -> tuple[Repo, ...]:
         return self.comms.registry.snapshot().commander_project.require().repos
+
+    def order_file(self, path: str) -> OrderFile:
+        """The order file with its check bound to a registered checkout, once, where it enters."""
+        document = OrderFile.read(Path(path).read_text())
+        try:
+            return document.registered(self.repos)
+        except ValueError as error:
+            sys.exit(f'Refused order, nothing recorded:\n{error}')
 
     def plan_reading(self, todos: tuple[Todo, ...]) -> PlanReading:
         repository = Repo.declaring(self.repos, PlanPhase.__module__)
@@ -891,7 +902,7 @@ class SendVerb(RequestedOrderVerb):
                 and problem in OrderFile.read(Path(self.body_file).read_text()).problems)
 
     def respond(self, ctx: Commander, references: tuple[MessageReference, ...]) -> None:
-        ctx.send(self.unit, OrderFile.read(Path(self.body_file).read_text()), clean=self.clean,
+        ctx.send(self.unit, ctx.order_file(self.body_file), clean=self.clean,
              reassign=self.reassign, traced=self.traced,
              disk=self.disk, answers=references, request=self.request)
 
@@ -1166,7 +1177,7 @@ class ProblemVerb(RequestedOrderVerb):
         return (self.to,)
 
     def respond(self, ctx: Commander, references: tuple[MessageReference, ...]) -> None:
-        document = OrderFile.read(Path(self.order).read_text())
+        document = ctx.order_file(self.order)
         location = FileLine.from_wire(self.where)
         checkout = document.order.check.directory
         if checkout.is_dir():

@@ -3,6 +3,7 @@ from pathlib import Path
 
 import pytest
 
+from agent_comms.goals import OrderCheck
 from agent_comms.repo import Repo
 from agent_comms.repository_name import RepositoryName
 
@@ -43,3 +44,20 @@ def test_existing_unconfigured_worktree_is_refused_with_configured_choices(
         assert repo.github.name in message
         assert str(repo.checkout) in message
     assert "agent-comms install" in message and "--repos" in message
+
+
+def test_order_check_named_by_repository_binds_its_checkout_from_any_directory(
+    configured_repositories, tmp_path, monkeypatch,
+):
+    elsewhere = tmp_path / "elsewhere"
+    elsewhere.mkdir()
+    monkeypatch.chdir(elsewhere)
+    agent_comms, _ = configured_repositories
+    written = OrderCheck(Path("agent-comms"), "grep -c x src")
+    with pytest.raises(ValueError):
+        written.require_writable()
+    bound = written.registered(configured_repositories)
+    assert bound.directory == agent_comms.checkout
+    bound.require_writable()
+    with pytest.raises(ValueError):
+        OrderCheck(Path("unregistered"), "grep -c x src").registered(configured_repositories)
