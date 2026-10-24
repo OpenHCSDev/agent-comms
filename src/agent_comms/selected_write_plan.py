@@ -33,7 +33,7 @@ from .child_process import Platform
 from .coordination_cohort import sealed_cohort_assignments
 from .declared_family import DeclaredFamily
 from .envelope_claim_transitions import ExistingFileClaim
-from .field_codec import ClaimId, FieldCodec, Id128Text, MalformedRecord, MessageId
+from .field_codec import ClaimId, FieldCodec, MalformedRecord, MessageId
 from .message_reference import MessageReference
 from .private_path import PrivateDirectoryRole, PrivateFileRole
 from .thread_identity import ClaimedIdentity, ClaimScoped, RecordedThreadIncarnation
@@ -45,7 +45,7 @@ _MAX_BYTES = 1024 * 1024
 class PlannedWrite:
     resource: ExistingFileClaim
     contents: bytes
-    operation_id: str
+    operation_id: ClaimId
 
 
 @dataclass(frozen=True, slots=True)
@@ -68,7 +68,7 @@ class SelectedWriteIntent(DeclaredFamily, affix="WriteIntent"):
     owner: RecordedThreadIncarnation
     claim_epoch: int
     expected_attempt_ordinal: Literal[1]
-    operation_id: str
+    operation_id: ClaimId
     resource: str
     contents_b64: str
     digest: str
@@ -83,13 +83,6 @@ class SelectedWriteIntent(DeclaredFamily, affix="WriteIntent"):
 
     def require_accepted(self):
         raise IdentityConflict("Selected write intent is already applied or uncertain")
-
-    def __post_init__(self):
-        try:
-            Id128Text.decode(self.operation_id)
-        except ValueError as error:
-            raise IdentityConflict("Selected write intent operation is invalid") from error
-
 
 class AcceptedWriteIntent(SelectedWriteIntent, declared_name="accepted"):
     def require_accepted(self):
@@ -254,7 +247,7 @@ class SelectedWritePlans(DurableFile, PatternFile):
             raise IdentityConflict("Selected write intent is stale or uncertain")
         return row.planned(owner.worktree)
 
-    def applied(self, assignment: WakeAssignment, owner: Thread, operation_id: str) -> None:
+    def applied(self, assignment: WakeAssignment, owner: Thread, operation_id: ClaimId) -> None:
         path = self.path_in(self.directory, source_seq=str(assignment.wire_seq),
                             lookup=owner.incarnation.lookup)
         row = self._read(path)

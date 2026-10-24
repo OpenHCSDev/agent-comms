@@ -3,6 +3,7 @@
 from dataclasses import replace
 
 
+from agent_comms.field_codec import ClaimId
 from agent_comms.selected_claim import publish_selected_resource_claim
 from agent_comms.envelope_claim_transitions import ExistingFileClaim
 from test_claim_bus_read import claim_originals, settle_failed
@@ -16,7 +17,7 @@ def test_terminal_release_spans_the_existing_envelope_bound(selected_turn):
         file = resource.parent / f"file-{index}.py"
         file.write_text("original\n")
         publish_selected_resource_claim(
-            comms, store, replace(selected, operation_id=f"{index:032x}"), "Alice",
+            comms, store, replace(selected, operation_id=ClaimId(f"{index:032x}")), "Alice",
             ExistingFileClaim(file),
         )
     settle_failed(store)

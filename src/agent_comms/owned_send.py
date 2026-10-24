@@ -23,7 +23,7 @@ from .channel_coding_tools import CodingToolOwner
 from .coordination_session import NativeBoundary
 from .coordinator import Coordination
 from .envelope_claim_transitions import NativeClaim
-from .field_codec import InputId, TurnId
+from .field_codec import ClaimId, InputId, TurnId
 from .input_attempt import InputAlreadyCleared
 from .reservation_rules import ReservationRule, ReservationViolationError
 from .turn_input_source import (
@@ -138,7 +138,7 @@ class OwnedSend(CodingToolOwner, InputStartListener, SendBoundary):
         except (ReservationViolationError, InputAlreadyCleared) as error:
             raise SelectedToolDenied(str(error)) from error
 
-    def claim_resource(self, store, turn, resource, slot):
+    def claim_resource(self, store, turn, resource, slot: ClaimId):
         with NativeBoundary(self.comms.bus) as boundary:
             snapshot = boundary.registry
             self.verify(store, turn, snapshot)

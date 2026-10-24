@@ -12,11 +12,11 @@ from agent_comms.envelope_claim_transitions import (
     ClaimTransitionError, ExistingFileClaim, NativeClaim, ReleasedClaims,
     UnscopedClaims, WakeClaim, WakeClaims,
 )
-from agent_comms.field_codec import FieldCodec, MalformedRecord, MessageId, TurnId
+from agent_comms.field_codec import ClaimId, FieldCodec, MalformedRecord, MessageId, TurnId
 from agent_comms.messages import ClaimMessage, ClaimNoticeKind, Message
 
-G1 = "a" * 32
-G2 = "b" * 32
+G1 = ClaimId("a" * 32)
+G2 = ClaimId("b" * 32)
 
 
 def append_transition(bus, transition):
@@ -41,7 +41,7 @@ def test_same_name_can_take_a_previous_birth_only_with_current_registry_evidence
     comms.registry.declare(replace(thread("foreign", comms.root, 3.0),
                                    process_identity=ProcessIdentity.capture(os.getpid())), RunningThreadStatus())
     registry = comms.registry.snapshot()
-    scope = NativeClaim(owner_claimed_generation=1, operation_id="c" * 32,
+    scope = NativeClaim(owner_claimed_generation=1, operation_id=ClaimId("c" * 32),
                         turn_id=TurnId('5d1970910e79a04eb98c8e9533701156'), input_id="input-owner")
     held = WakeClaims("owner", "1.0", 1, "msg-1", claims=(resource,),
                       generation=G1, resource_scope=scope).project(ClaimProjection())
@@ -76,7 +76,7 @@ def test_selected_wake_binding_survives_claim_projection(tmp_path):
         wake_revision=3,
         recipient_lookup="e" * 32,
         execution_id="execution-7",
-        operation_id="f" * 32,
+        operation_id=ClaimId("f" * 32),
         owner_claimed_generation=2,
         turn_id=TurnId('c8196fb128b89f486c374c42dba8df8e'),
         participant_generation=1,
