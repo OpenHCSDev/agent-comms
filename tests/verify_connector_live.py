@@ -26,7 +26,7 @@ from agent_comms.threads import Thread
 def curl_call(port, token, body, *, arguments=None):
     call = {"jsonrpc": "2.0", "id": 7, "method": "tools/call", "params": {
         "name": "comms_send", "arguments": arguments if arguments is not None else {
-            "from": "claude-ai", "to": "worker", "body": body}}}
+            "to": "worker", "body": body}}}
     return subprocess.run([
         "curl", "--silent", "--show-error", "--max-time", "15", "-w", "\n%{http_code} %{time_total}\n",
         "-H", "Content-Type: application/json", "-H", f"Authorization: Bearer {token}",
@@ -92,7 +92,7 @@ def main(scratch: Path):
                 # the real connector path, not a fabricated refusal-table entry.
                 before = comms.bus.bus.revision()
                 output = curl_call(port, token, "", arguments={
-                    "from": "claude-ai", "to": "#missing-channel", "body": "Fix this now",
+                    "to": "#missing-channel", "body": "Fix this now",
                 })
                 response, status = output.strip().rsplit("\n", 1)
                 result = json.loads(response)["result"]

@@ -499,7 +499,8 @@ async def test_connector_channel_history_on_a_copy_leaves_unread_unchanged(
 async def test_connector_thread_tools_act_as_claude_ai(client, store, comms):
     headers = {"Authorization": f"Bearer {await approved_token(client, comms)}"}
     calls = ({"name": "comms_set_goal", "arguments": {"text": "Ship the connector"}},
-             {"name": "comms_send", "arguments": {"from": "claude-ai", "to": "worker", "body": "Owner said go"}})
+             {"name": "comms_send", "arguments": {
+                 "to": "worker", "body": "Owner said go"}})
     for call in calls:
         reply = await (await client.post("/mcp", headers=headers, json={
             "jsonrpc": "2.0", "id": 3, "method": "tools/call", "params": call})).json()
@@ -551,7 +552,7 @@ async def test_maintenance_refuses_before_locked_stores_on_a_copied_bus(
             response = await reader.post("/mcp", headers=headers, timeout=2, json={
                 "jsonrpc": "2.0", "id": 1, "method": "tools/call",
                 "params": {"name": "comms_send", "arguments": {
-                    "from": "claude-ai", "to": "worker", "body": "Please read this message"}},
+                    "to": "worker", "body": "Please read this message"}},
             })
             reply = await response.json()
             elapsed = time.monotonic() - started

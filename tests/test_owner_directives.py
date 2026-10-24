@@ -52,7 +52,7 @@ def test_an_owner_message_to_a_channel_records_no_directive(tmp_path):
 def test_claude_ai_send_records_exactly_one_directive(tmp_path):
     comms = requesting_lead(tmp_path)
     invoke_tool(comms, "comms_send",
-                {"from": "claude-ai", "to": "lead", "body": "Send the order now."},
+                {"to": "lead", "body": "Send the order now."},
                 caller=DirectorCaller("claude-ai"))
     request, = comms.goals.todos.open_requests(comms.registry.require("lead").incarnation)
     directives = request.directives
@@ -68,7 +68,7 @@ def test_connector_keeps_the_selected_request_when_notification_fails(tmp_path):
     comms.bus.bus.path.with_suffix(".changed").mkdir()
     with pytest.raises(CommittedMessageError) as failed:
         ConnectorSendTool(
-            sender="claude-ai", target="lead", request=original.id,
+            target="lead", request=original.id,
             body="Read the request owner and report the result.",
         ).apply(comms, DirectorCaller("claude-ai"))
     committed = failed.value.record.message

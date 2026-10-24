@@ -744,7 +744,7 @@ def test_saved_tool_start_decodes_its_own_tool_tag_and_nullable_arguments() -> N
     from agent_comms.tool_declaration import ToolDeclaration
     from agent_comms.transcript_events import ToolStartTranscript
 
-    arguments: dict[str, JsonValue] = {"from": "sender", "to": "receiver", "body": "hello"}
+    arguments: dict[str, JsonValue] = {"to": "receiver", "body": "hello"}
     event = transcript_records.event(
         ToolStartTranscript,
         position=0,
