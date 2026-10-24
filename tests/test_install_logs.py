@@ -16,7 +16,7 @@ def test_a_new_install_keeps_only_as_many_log_directories_as_backups(tmp_path):
     unrelated = tmp_path / ".bus.retired-1"
     unrelated.mkdir()
 
-    minted = logs.minted()
+    minted = logs.minted().logs
 
     kept = sorted(path for path in tmp_path.iterdir() if path.name.startswith(logs.prefix))
     assert minted in kept
