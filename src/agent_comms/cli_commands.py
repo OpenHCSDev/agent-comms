@@ -239,12 +239,8 @@ class TargetAction:
     """A selection keeps the bound commands, not a separate permission list."""
     bound: tuple[CliCommand, ...]
     targets: tuple[str, ...]
+    declaration: type[CliCommand]
     channels: ChannelSelection = NoChannel()
-
-    @property
-    def declaration(self) -> type[CliCommand]:
-        member = type(self.bound[0])
-        return member.catalog_declaration() if len(self.targets) > 1 else member
 
     @property
     def editable_fields(self) -> tuple[TargetField, ...]:
@@ -373,8 +369,12 @@ class TargetSelection(ABC):
             raise ValueError('Select at least one target')
 
     def command_members(self, family: type[CliCommand]) -> tuple[type[CliCommand], ...]:
-        """Derive menu membership from cardinality and declared capability."""
-        return family.members_with(MultipleTargets if len(self.targets) > 1 else family)
+        """Menu membership on one target: every member of the family."""
+        return family.members_with(family)
+
+    def listed_declaration(self, member: type[CliCommand]) -> type[CliCommand]:
+        """The declaration a catalog lists for a member bound on this selection."""
+        return member
 
     @abstractmethod
     def run(self, declaration: type[CliCommand], comms: Comms, arguments: dict[str, object],
@@ -420,6 +420,12 @@ class TargetBatchSchedule:
 
 class TargetBatch(TargetSelection):
     """Every other selection: each target's failure is collected and a TargetBatchResult returns."""
+
+    def command_members(self, family: type[CliCommand]) -> tuple[type[CliCommand], ...]:
+        return family.members_with(MultipleTargets)
+
+    def listed_declaration(self, member: type[CliCommand]) -> type[CliCommand]:
+        return member.catalog_declaration()
 
     def run(self, declaration: type[CliCommand], comms: Comms, arguments, *, confirmed: bool, channel: ChannelSelection, project: str, snapshot: RegistrySnapshot, catalog: CatalogDocument | None) -> CliResult:
         declaration.require_batch()
@@ -926,11 +932,11 @@ class CliCommand[Answer: CliResult = CliResult](
                     available = member.bindings(
                         comms, name, context, snapshot=snapshot, catalog=catalog, resolved=resolved)
                     if available:
-                        declaration = member.catalog_declaration() if len(selected) > 1 else member
+                        declaration = target.listed_declaration(member)
                         grouped.setdefault(declaration, {}).update(dict.fromkeys(
                             command.for_editor(comms, name.name, project) for command in available))
         names = tuple(name for item in selected for name in item.names)
-        return tuple(TargetAction(tuple(commands), names,
+        return tuple(TargetAction(tuple(commands), names, declaration,
                                   channel if declaration.channel_fields() else NoChannel())
                      for declaration, commands in grouped.items())
 
@@ -954,7 +960,7 @@ class CliCommand[Answer: CliResult = CliResult](
         bound = self.for_editor(comms, target.name, project)
         channels = next((OneChannel(getattr(bound, item.name))
                          for item in bound.channel_fields()), NoChannel())
-        return TargetAction((bound,), target.names, channels)
+        return TargetAction((bound,), target.names, type(bound), channels)
 
     def run(self, ctx: Comms, output: TextIO) -> int:
         """Run this command and write its declared result."""
