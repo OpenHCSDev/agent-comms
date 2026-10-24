@@ -1,4 +1,5 @@
 """A manual /compact runs Pi's own engine in the retained child, which keeps serving."""
+from agent_comms.field_codec import InputId
 from agent_comms.controller import SessionUpdateSink
 
 import asyncio
@@ -224,12 +225,22 @@ async def test_manual_compaction_keeps_the_retained_child_serving(monkeypatch, n
         try:
             await owner.new_session(str(project))
             comms.threads.attach_session((attachment_owner := comms.registry.require("worker")), str(session), process=attachment_owner.process_identity)
-            await asyncio.wait_for(InitialInput.run(owner.inputs, "worker", "worker", "WARMUP"), 20)
+            await asyncio.wait_for(
+                InitialInput.run(
+                    owner.inputs, "worker", "worker", "WARMUP", input_id=InputId.mint()
+                ),
+                20,
+            )
             retained = owner.turns.persistent_backends["worker"].child_state.idle().child.proc
             assert retained is not None and retained.returncode is None, json.dumps(
                 updates, indent=2
             )
-            await asyncio.wait_for(InitialInput.run(owner.inputs, "worker", "worker", "REUSE"), 20)
+            await asyncio.wait_for(
+                InitialInput.run(
+                    owner.inputs, "worker", "worker", "REUSE", input_id=InputId.mint()
+                ),
+                20,
+            )
             assert owner.turns.persistent_backends["worker"].child_state.idle().child.proc is retained
             assert retained.returncode is None
             assert len(requests) == 2
@@ -297,7 +308,10 @@ async def test_manual_compaction_keeps_the_retained_child_serving(monkeypatch, n
             assert summary in compactions[0]["summary"]
             assert compactions[0]["firstKeptEntryId"] == committed[0].first_kept
             await asyncio.wait_for(
-                InitialInput.run(owner.inputs, "worker", "worker", "AFTER_COMPACT"), 20
+                InitialInput.run(
+                    owner.inputs, "worker", "worker", "AFTER_COMPACT", input_id=InputId.mint()
+                ),
+                20,
             )
             resumed = owner.turns.persistent_backends["worker"].child_state.idle().child.proc
             assert resumed is retained and resumed.returncode is None

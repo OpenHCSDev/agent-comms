@@ -33,6 +33,7 @@ from agent_comms.owner_restart import OwnerRestartRequest
 from agent_comms.pi_vocabulary import OffThinkingLevel
 from agent_comms.restart_scope import OwnersNamed
 from agent_comms.thread_model import DeclaredModel
+from agent_comms.thread_identity import NoObservedTurn
 from agent_comms.threads import Thread
 from bus_history import read_history
 from bus_record_fixture import prepare_native_comms
@@ -392,7 +393,7 @@ async def test_native_channel_reply_automatically_reaches_original_sender(tmp_pa
                 not bool(state.active.items_with(Executing, state.active))
                 and state.active.observed_turn(
                     state.finished, owner.turn_identity, owner.claimed_generation,
-                ) is not None
+                ) != NoObservedTurn()
                 for state in states
             )
 

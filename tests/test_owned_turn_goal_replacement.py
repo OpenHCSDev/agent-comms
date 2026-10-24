@@ -13,7 +13,7 @@ from agent_comms.agent_backend import InputContent
 from agent_comms.channel_input_batch import InputBatch
 from agent_comms.child_process import ProcessIdentity
 from conftest import installed_comms
-from agent_comms.field_codec import TurnId
+from agent_comms.field_codec import InputId, TurnId
 from agent_comms.goal_actions import (
     BlockedGoalAction, CreateProblemGoalAction, OrderGoalAction,
 )
@@ -67,7 +67,7 @@ async def test_turn_after_order_replacement_is_allowed(tmp_path, native_runtime_
             task = asyncio.create_task(InitialInput.run(
                 agent.inputs, session_id, worker, 'Original input before replacement',
                 display_text='Original input before replacement',
-            ))
+             input_id=InputId.mint()))
             try:
                 await wait_for(lambda: saved.provider.posts == 1)
                 sender = backend.TurnSession.active[task].send_boundary
@@ -86,7 +86,7 @@ async def test_turn_after_order_replacement_is_allowed(tmp_path, native_runtime_
                 async with QueuedInput.reserve(
                     agent.inputs, session_id, worker, text='Following input after replacement',
                     prompt='Following input after replacement', echo=True, images=(), controller=None,
-                ) as reservation:
+                 input_id=InputId.mint()) as reservation:
                     item = reservation.item
                     item.place(agent.inputs, session_id, agent.inputs.state(session_id).require_inbox(),
                                InputContent(text=item.prompt))

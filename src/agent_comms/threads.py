@@ -62,6 +62,7 @@ from .thread_creation import CreationSeconds, CreationTime, GeneratedCreationTim
 from .thread_execution import NativeThreadExecution, ThreadExecution
 from .thread_identity import (
     AgentThreadRole,
+    ObservedTurn,
     OfferedTools,
     RegisteredTurn,
     ThreadIncarnation,
@@ -599,7 +600,7 @@ class Thread(ThreadProvenance):
         """The turn generation this thread's registry entry currently names."""
         return TurnIdentity(self.incarnation, self.turn_generation)
 
-    def observed_turn(self, claim_scope: int) -> TurnFence | None:
+    def observed_turn(self, claim_scope: int) -> ObservedTurn:
         """Passive current/last-completed witness; never a begin-turn grant."""
         return self.turn_state.active.observed_turn(
             self.turn_state.finished, self.turn_identity, claim_scope,

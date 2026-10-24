@@ -26,7 +26,14 @@ from .lifecycle_capability import Executing, LifecycleCapability
 from .locked_store import DurableFile, JsonDocument, PatternFile
 from .routing import TurnRouting
 from .store_files import _store_lock
-from .thread_identity import RegisteredTurn, ThreadIncarnation, TurnFence, TurnIdentity
+from .thread_identity import (
+    NoObservedTurn,
+    ObservedTurn,
+    RegisteredTurn,
+    ThreadIncarnation,
+    TurnFence,
+    TurnIdentity,
+)
 from .turn_phase import IdlePhase, PreparingPhase, TurnPhase
 
 if TYPE_CHECKING:
@@ -76,7 +83,7 @@ class TurnDeclaration(LifecycleCapability, SubclassUnion, affix=""):
     @abstractmethod
     def observed_turn(
         self, finished: TurnRecord, identity: TurnIdentity, claim_scope: int,
-    ) -> TurnFence | None: ...
+    ) -> ObservedTurn: ...
 
     @abstractmethod
     def started_by(self, updated_at_ms: int) -> bool: ...
@@ -121,7 +128,7 @@ class NoTurn(NullMember, TurnDeclaration):
 
     def observed_turn(
         self, finished: TurnRecord, identity: TurnIdentity, claim_scope: int,
-    ) -> TurnFence | None:
+    ) -> ObservedTurn:
         return finished.observed_turn(identity, claim_scope)
 
     def started_by(self, updated_at_ms: int) -> bool:
@@ -438,7 +445,7 @@ class TurnRecord(LifecycleCapability, SubclassUnion, affix=""):
 
 
     @abstractmethod
-    def observed_turn(self, identity: TurnIdentity, claim_scope: int) -> TurnFence | None: ...
+    def observed_turn(self, identity: TurnIdentity, claim_scope: int) -> ObservedTurn: ...
 
 @dataclass(frozen=True)
 class NoTurnRecord(NullMember, TurnRecord):
@@ -457,8 +464,8 @@ class NoTurnRecord(NullMember, TurnRecord):
         return NoTurnLease()
 
 
-    def observed_turn(self, identity: TurnIdentity, claim_scope: int) -> None:
-        return None
+    def observed_turn(self, identity: TurnIdentity, claim_scope: int) -> NoObservedTurn:
+        return NoObservedTurn()
 
 @dataclass(frozen=True)
 class FinishedTurn(RecordMember, TurnRecord):

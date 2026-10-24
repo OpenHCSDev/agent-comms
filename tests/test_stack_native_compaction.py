@@ -1,6 +1,7 @@
 """Pi's own compaction engine, seen through Core's turn path: pinned Pi + localhost provider."""
 
 from __future__ import annotations
+from agent_comms.field_codec import InputId
 from agent_comms.controller import SessionUpdateSink
 
 from agent_comms.lifecycle_capability import Unresolved
@@ -319,7 +320,9 @@ async def _acp_threshold(root, project, session, native_bin, native_args, child_
     owner.inputs.state("project").drain_task.cancel()
     await asyncio.gather(owner.inputs.state("project").drain_task, return_exceptions=True)
     comms.threads.attach_session((attachment_owner := comms.registry.require("project")), str(session), process=attachment_owner.process_identity)
-    turn = asyncio.create_task(InitialInput.run(owner.inputs, "project", "project", "Reply OK."))
+    turn = asyncio.create_task(
+        InitialInput.run(owner.inputs, "project", "project", "Reply OK.", input_id=InputId.mint())
+    )
     try:
         entered = await asyncio.to_thread(summary_entered.wait, 10)
         assert entered

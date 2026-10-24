@@ -14,7 +14,7 @@ from acp.schema import TextContentBlock
 
 from agent_comms.acp_extension import QueuePromptRequest, decode_request, encode_request
 from agent_comms.errors import RelationViolationError
-from agent_comms.field_codec import FieldCodec, TurnId
+from agent_comms.field_codec import InputId, FieldCodec, TurnId
 from agent_comms.goal_states import ActiveGoal, CompletedGoal, PausedGoal
 from agent_comms.goals import AbsentGoalCheckpoint, Goal, GoalRevision, NoGoal, PresentGoalCheckpoint
 from agent_comms.input_attempt import ReservedInput
@@ -137,13 +137,33 @@ async def test_foreign_or_changed_origin_refused_before_any_reservation(live_own
     for witness in invalid:
         with comms.registry.store.locked(), pytest.raises(RelationViolationError):
             with ExitStack() as ownership:
-                QueuedInput.capture(agent.inputs, "beta", text="Original", prompt="Original",
-                                    echo=True, images=(), controller=Client(), origin=witness, ownership=ownership)
+                QueuedInput.capture(
+                    agent.inputs,
+                    "beta",
+                    text="Original",
+                    prompt="Original",
+                    echo=True,
+                    images=(),
+                    controller=Client(),
+                    origin=witness,
+                    ownership=ownership,
+                    input_id=InputId.mint(),
+                )
                 ownership.pop_all()
     with comms.registry.store.locked(), pytest.raises(RelationViolationError):
         with ExitStack() as ownership:
-            QueuedInput.capture(agent.inputs, "beta", text="Original", prompt="Original",
-                                echo=True, images=(), controller=None, origin=origin, ownership=ownership)
+            QueuedInput.capture(
+                agent.inputs,
+                "beta",
+                text="Original",
+                prompt="Original",
+                echo=True,
+                images=(),
+                controller=None,
+                origin=origin,
+                ownership=ownership,
+                input_id=InputId.mint(),
+            )
             ownership.pop_all()
     assert stored_inputs(agent.inputs.dispositions.root).rows == {}
 
@@ -199,15 +219,25 @@ async def test_original_goal_checkpoint_survives_codec_and_refuses_changed_scope
 
     with comms.registry.store.locked(), pytest.raises(RelationViolationError):
         with ExitStack() as ownership:
-            QueuedInput.capture(agent.inputs, "beta", text="Original", prompt="Original",
-                                echo=True, images=(), controller=Client(), origin=absent, ownership=ownership)
+            QueuedInput.capture(
+                agent.inputs,
+                "beta",
+                text="Original",
+                prompt="Original",
+                echo=True,
+                images=(),
+                controller=Client(),
+                origin=absent,
+                ownership=ownership,
+                input_id=InputId.mint(),
+            )
             ownership.pop_all()
     assert stored_inputs(agent.inputs.dispositions.root).rows == {}
 
     async with QueuedInput.reserve(
         agent.inputs, "beta", "beta", text="Original", prompt="Original",
         echo=True, images=(), controller=Client(), origin=restored,
-    ) as reservation:
+     input_id=InputId.mint()) as reservation:
         queued = reservation.item
         reservation.release()
     assert stored_inputs(agent.inputs.dispositions.root).lookup(queued.key).origin == restored
@@ -232,7 +262,7 @@ async def test_direct_human_input_pin_shares_original_source_lineage_without_rep
     async with QueuedInput.reserve(
         agent.inputs, "beta", "beta", text=exact, prompt=exact,
         echo=True, images=(), controller=Client(), origin=origin,
-    ) as reservation:
+     input_id=InputId.mint()) as reservation:
         queued = reservation.item
         reservation.release()
     inputs = agent.inputs.dispositions
@@ -281,7 +311,7 @@ async def test_direct_human_input_pin_shares_original_source_lineage_without_rep
     async with QueuedInput.reserve(
         agent.inputs, "beta", "beta", text=exact, prompt=exact,
         echo=True, images=(), controller=Client(), origin=origin,
-    ) as reservation:
+     input_id=InputId.mint()) as reservation:
         second = reservation.item
         reservation.release()
     second_subject = stored_inputs(inputs.root).lookup(second.key).context_provenance()

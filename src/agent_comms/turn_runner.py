@@ -184,7 +184,7 @@ class TurnRunner:
         *,
         images: tuple[ImageInput, ...],
         display_text: str | None = None,
-        input_id: InputId | None = None,
+        input_id: InputId,
         origin: InputOrigin = UnattributedInputOrigin(),
     ) -> PromptResponse:
         session_id = request.session_id

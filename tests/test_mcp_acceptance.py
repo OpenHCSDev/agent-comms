@@ -39,6 +39,7 @@ from agent_comms.coordinator import Coordination
 from agent_comms.field_codec import FieldCodec
 from agent_comms.native_arguments import GivenArguments, GivenBinary
 from agent_comms.runtime import RuntimeProxy
+from agent_comms.thread_identity import NoObservedTurn, TurnFence
 from delivery_owner_fixture import canonical_agent
 
 pytestmark = pytest.mark.skipif(sys.platform == "win32", reason="POSIX PTY acceptance")
@@ -358,7 +359,7 @@ async def test_real_pi_mcp_acp_link(case, tmp_path, monkeypatch, native_runtime_
     if case != "revoke_midturn":
         release_final.set()
     attachment_settled = asyncio.Event()
-    attachment_turn = None
+    attachment_turn = NoObservedTurn()
     updates, permissions = [], []
     entered, release = asyncio.Event(), asyncio.Event()
     task = proxy = owner = None
@@ -456,11 +457,11 @@ async def test_real_pi_mcp_acp_link(case, tmp_path, monkeypatch, native_runtime_
                                     thread.claimed_generation,
                                 )
                                 if fact.state.active.phase.busy:
-                                    if attachment_turn is None:
+                                    if attachment_turn == NoObservedTurn():
                                         attachment_turn = observed
                                     else:
                                         assert observed == attachment_turn
-                                elif attachment_turn is not None:
+                                elif attachment_turn != NoObservedTurn():
                                     assert observed == attachment_turn
                                     attachment_settled.set()
                         return True
@@ -569,7 +570,7 @@ async def test_real_pi_mcp_acp_link(case, tmp_path, monkeypatch, native_runtime_
                 assert calls.exists() == (case == "allow")
                 if calls.exists():
                     assert calls.read_text().splitlines() == ["ACCEPTANCE_ECHO"]
-                active, receipts, settlements = None, [], []
+                active, receipts, settlements = NoObservedTurn(), [], []
                 for row in updates:
                     assert row["sessionId"] == session_id
                     for fact in decode_updates(row["update"].get("_meta")):
@@ -582,18 +583,23 @@ async def test_real_pi_mcp_acp_link(case, tmp_path, monkeypatch, native_runtime_
                                 thread.claimed_generation,
                             )
                             if fact.state.active.phase.busy:
-                                if active is None:
+                                if active == NoObservedTurn():
                                     active = observed
                                 else:
                                     assert observed == active
-                            elif active is not None:
+                            elif active != NoObservedTurn():
                                 assert observed == active
                                 settlements.append(fact.state)
-                                active = None
+                                active = NoObservedTurn()
                         if isinstance(fact, McpClientAcknowledgementUpdate):
-                            assert active is not None and active.turn_id == fact.turn_id
+                            assert active != NoObservedTurn()
+                            assert active == TurnFence(
+                                thread.turn_identity, fact.turn_id, thread.claimed_generation,
+                            )
                             receipts.append(fact.acknowledgement)
-                assert active is None and len(settlements) == len(receipts) == 1, updates
+                assert (
+                    active == NoObservedTurn() and len(settlements) == len(receipts) == 1
+                ), updates
                 assert [FieldCodec.encode(server) for server in receipts[0].servers] == [
                     {
                         "id": "fixture",
