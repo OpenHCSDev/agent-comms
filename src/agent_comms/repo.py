@@ -12,6 +12,7 @@ from typing import TYPE_CHECKING, Annotated, Self
 
 from pydantic import BaseModel, ConfigDict, InstanceOf, PlainSerializer, PlainValidator
 
+from .errors import MissingSourceLine
 from .field_codec import FieldCodec, WireValue
 from .repository_name import RepositoryName
 
@@ -211,6 +212,29 @@ class PinnedSubmodule:
     checkout: Path
     name: str
     path: Path
+
+    def contains(self, file: str) -> bool:
+        """Whether the checkout-relative file belongs under this pinned module."""
+        return (self.checkout / file).is_relative_to(self.path)
+
+    def lines(self, commit: str, file: str) -> tuple[str, ...]:
+        """Read the parent's pinned object, independent of the module's working tree."""
+        module = self.path.relative_to(self.checkout).as_posix()
+        pinned = Repo.git(self.checkout, 'rev-parse', f'{commit}:{module}').strip()
+        relative = (self.checkout / file).relative_to(self.path).as_posix()
+        store = self.store
+        Repo.git(self.checkout, '--git-dir', str(store), 'rev-parse', '--verify',
+                 f'{pinned}^{{commit}}')
+        try:
+            text = Repo.git(self.checkout, '--git-dir', str(store),
+                            'show', f'{pinned}:{relative}')
+            return tuple(text.splitlines())
+        except GitCommandError as error:
+            if error.source_path_absent(pinned, relative):
+                raise MissingSourceLine(
+                    f'Source file {file} does not exist at {commit}.'
+                ) from error
+            raise
 
     @property
     def store(self) -> Path:

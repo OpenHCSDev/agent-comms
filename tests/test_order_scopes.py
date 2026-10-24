@@ -7,7 +7,8 @@ import pytest
 from order_scope_fixture import FIX_SCOPE
 from test_todos import order
 from source_revision_fixture import SourceRepository
-from agent_comms.change_report import FileLine, MissingSourceLine, PullRequestHeadRevision
+from agent_comms.change_report import FileLine, PullRequestHeadRevision
+from agent_comms.errors import MissingSourceLine
 from agent_comms.check_root import CheckRoot
 from agent_comms.commander.order import OrderFile
 from cli_command import core

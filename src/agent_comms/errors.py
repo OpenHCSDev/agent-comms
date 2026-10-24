@@ -21,6 +21,10 @@ class ToolRefusedError(ValueError):
     """An intentional refusal safe to return as a tool answer, not a transport failure."""
 
 
+class MissingSourceLine(ToolRefusedError):  # noqa: N818 - existing source refusal name
+    """A cited file:line is not in its declared source revision."""
+
+
 class UnregisteredThreadError(ToolRefusedError):
     """A reference does not resolve to a registered thread."""
 
