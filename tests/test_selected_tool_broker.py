@@ -18,11 +18,12 @@ from agent_comms.channel_coding_tools import CodingToolSocket
 from agent_comms.coordinator import Coordination
 from agent_comms.coordination_database import CoordinationStore
 from agent_comms.envelope_claim_transitions import WakeClaim
-from agent_comms.field_codec import ClaimId, InputId, MessageId, TurnId
+from agent_comms.field_codec import ClaimId, FieldCodec, InputId, MessageId, TurnId
 from agent_comms.native_tool_call import (
     CodingCall,
     DuplicateToolCallIdentity,
     OwnerToolConnection,
+    ToolCallId,
 )
 from agent_comms.tool_denial import SelectedToolDenied
 from agent_comms.pi_events import ToolExecutionEnd, ToolExecutionStart
@@ -81,26 +82,27 @@ def test_pre_turn_intent_is_distinct_from_owner_bound_mode() -> None:
 
 
 def test_consumption_is_once_only_and_terminal_is_separate(slot_store) -> None:
+    call_1, call_2 = (FieldCodec.decode(ToolCallId, text) for text in ("call_1", "call_2"))
     request = broker.SelectedToolRequest(
-        "call_1", broker.SelectedWriteArguments("notes.txt", "write"),
+        call_1, broker.SelectedWriteArguments("notes.txt", "write"),
     )
     slot_id = request.slot(InputId.mint(), 0)
-    broker.consume_selected_slot(slot_store, slot_id, "call_1")
+    broker.consume_selected_slot(slot_store, slot_id, call_1)
     row = SelectedToolSlot.require(slot_store.session._connection, slot_id=slot_id)
     assert row.call_id == "call_1"
     assert row.state is ConsumedSlot
     with pytest.raises(SelectedToolDenied):
-        broker.verify_selected_terminal(slot_store.session.path, slot_id, "call_1")
+        broker.verify_selected_terminal(slot_store.session.path, slot_id, call_1)
     with pytest.raises(SelectedToolDenied):
-        broker.consume_selected_slot(slot_store, slot_id, "call_2")
-    broker.record_selected_terminal(slot_store.session.path, slot_id, "call_1")
-    broker.verify_selected_terminal(slot_store.session.path, slot_id, "call_1")
+        broker.consume_selected_slot(slot_store, slot_id, call_2)
+    broker.record_selected_terminal(slot_store.session.path, slot_id, call_1)
+    broker.verify_selected_terminal(slot_store.session.path, slot_id, call_1)
     assert (
         SelectedToolSlot.require(slot_store.session._connection, slot_id=slot_id).state
         is AcknowledgedSlot
     )
     with pytest.raises(SelectedToolDenied):
-        broker.record_selected_terminal(slot_store.session.path, slot_id, "call_1")
+        broker.record_selected_terminal(slot_store.session.path, slot_id, call_1)
 
 
 def test_openai_responses_call_id_is_consumed_as_the_provider_spells_it(slot_store) -> None:

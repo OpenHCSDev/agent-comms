@@ -9,6 +9,7 @@ from typing import Annotated, ClassVar, Self
 
 from .declared_family import DeclaredFamily, UnknownFamilyMember
 from .field_codec import FieldCodec, MalformedRecord, NullMember, WireName
+from .native_tool_call import ToolCallId
 from .recorded_time import EventTime
 from .tool_denial import SelectedToolDenied
 from .tool_results import NoToolDiff
@@ -92,7 +93,7 @@ class ToolDeclaration(DeclaredFamily, affix="Tool"):
             return UndeclaredTool(name)
 
     @classmethod
-    def parse_arguments(cls, arguments: Mapping[str, object], *, call_id: str) -> Self:
+    def parse_arguments(cls, arguments: Mapping[str, object], *, call_id: ToolCallId) -> Self:
         if cls.family_discriminator in arguments:
             raise SelectedToolDenied("Native arguments cannot contain a family selector")
         selected = {cls.family_discriminator: cls.declared_name}
@@ -105,7 +106,8 @@ class ToolDeclaration(DeclaredFamily, affix="Tool"):
         """The call decoded once as Core's tool record, or no record when Core does not decode it."""
         try:
             decoded = FieldCodec.decode(dict[str, object], arguments)
-            return cls.for_name(name).parse_arguments(decoded, call_id=call_id)
+            return cls.for_name(name).parse_arguments(
+                decoded, call_id=FieldCodec.decode(ToolCallId, call_id))
         except MalformedRecord, SelectedToolDenied:
             return NoToolRecord()
 
