@@ -47,10 +47,9 @@ class NativeContextManifestData(StrictFields, PiResponseData):
         """Publish the original SDK observation under its leased owner turn, after the
         prior this turn holds; the result is the turn's next prior."""
         from .coordinator import Coordination
-        from .thread_identity import RegisteredTurn
         from .turn_context import RecordedContextTurn
 
-        turn = RecordedContextTurn(RegisteredTurn(lease.turn_id), lease.identity)
+        turn = RecordedContextTurn(lease.turn_id, lease.identity)
         manifest = self.for_turn(thread.incarnation, turn)
         return await Coordination.run_worker(
             partial(contexts.record_after, prior, manifest)

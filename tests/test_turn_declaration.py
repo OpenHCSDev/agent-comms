@@ -8,7 +8,6 @@ from agent_comms.field_codec import FieldCodec, TurnId
 from agent_comms.thread_identity import (
     NoObservedTurn,
     RecordedThreadIncarnation,
-    RegisteredTurn,
     TurnFence,
     TurnIdentity,
 )
@@ -32,7 +31,7 @@ def test_idle_turn_answers_without_an_active_record():
     assert FieldCodec.encode(idle) is None
     idle.require_idle()
     assert idle.report_turn == ''
-    assert not idle.matches(RegisteredTurn(TurnId('9b473845f684444f80a26586ae298d2b')))
+    assert not idle.matches(TurnId('9b473845f684444f80a26586ae298d2b'))
     assert not idle.started_by(10000)
     identity = TurnIdentity(RecordedThreadIncarnation("owner", 1.0), 1)
     turn_id = TurnId.mint()
@@ -50,6 +49,6 @@ def test_idle_turn_answers_without_an_active_record():
     with pytest.raises(RelationViolationError):
         idle.require_active()
     with pytest.raises(RelationViolationError):
-        idle.require_turn(RegisteredTurn(TurnId('9b473845f684444f80a26586ae298d2b')))
+        idle.require_turn(TurnId('9b473845f684444f80a26586ae298d2b'))
 
 

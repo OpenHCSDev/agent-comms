@@ -5,8 +5,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
+from .field_codec import TurnId
 from .reservation_rules import ReservationRule, RuleCheck
-from .thread_identity import RegisteredTurn
 
 if TYPE_CHECKING:
     from .comms import Comms
@@ -39,7 +39,7 @@ class OrdinaryOwnerCheck(RuleCheck):
     registry: RegistrySnapshot
     canonical: str
     claim_generation: int
-    turn: RegisteredTurn
+    turn: TurnId
 
 
 class OrdinaryIncarnationRule(ReservationRule):

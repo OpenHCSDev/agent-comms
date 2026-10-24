@@ -13,6 +13,7 @@ from typing import TYPE_CHECKING
 
 from agent_comms.coordination_errors import RequestRefused
 
+from .field_codec import TurnId
 from agent_comms.goal_turn_permit import GoalTurnPermit, NoLaunchPermit
 from .goal_states import ActiveGoal, CompletedGoal, PausedGoal
 from .mro_dispatch import MroDispatch, handles
@@ -24,7 +25,6 @@ if TYPE_CHECKING:
     from .comms import Comms
     from .goals import Goal, GoalDeclaration
     from .pi_payloads import PiUsage
-    from .thread_identity import RegisteredTurn
     from .threads import Thread
     from .turn_lease import TurnLeaseFence
 
@@ -34,7 +34,7 @@ class VerifiedGoalSettlement(MroDispatch):
     store: GoalAttemptStore
     permit: LaunchPermit
     goal: Goal
-    turn: RegisteredTurn
+    turn: TurnId
 
     @classmethod
     def settle_current(cls, account: TurnGoalAccount) -> None:
@@ -47,12 +47,12 @@ class VerifiedGoalSettlement(MroDispatch):
                 store = comms.goals.open_goal_store()
                 generation = store.require_generation(goal.id)
                 generation.lifecycle.continue_work(
-                    store, generation, f"verified-turn:{account.turn.value}"
+                    store, generation, f"verified-turn:{account.turn}"
                 )
 
     @property
     def progress_witness(self) -> str:
-        return f"native-terminal:{self.turn.value}"
+        return f"native-terminal:{self.turn}"
 
     @property
     def completion_witness(self) -> str:
@@ -65,14 +65,14 @@ class VerifiedGoalSettlement(MroDispatch):
 
     @handles(CompletedGoal)
     def completion(self, state: CompletedGoal) -> None:
-        if self.goal.reports_turn(self.turn.value):
+        if self.goal.reports_turn(self.turn):
             self.permit.record_verified_completion(self.store, self.completion_witness)
 
 
 class OriginGoalSettlement(VerifiedGoalSettlement):
     @property
     def progress_witness(self) -> str:
-        return f"origin-final:{self.turn.value}"
+        return f"origin-final:{self.turn}"
 
     @property
     def completion_witness(self) -> str:
@@ -83,7 +83,7 @@ class OriginGoalSettlement(VerifiedGoalSettlement):
 class TurnGoalAccount:
     comms: Comms
     owner: Thread
-    turn: RegisteredTurn
+    turn: TurnId
     lease: TurnLeaseFence
     permit: GoalTurnPermit
     pending_origins: dict[str, str]

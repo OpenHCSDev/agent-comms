@@ -13,7 +13,6 @@ from agent_comms.goal_attempts import ProviderUsageTotal
 from agent_comms.goal_turn_permit import NoLaunchPermit
 from agent_comms.goals import NoGoal
 from agent_comms.pi_payloads import PiUsage
-from agent_comms.thread_identity import RegisteredTurn
 from agent_comms.turn_goal_account import TurnGoalAccount
 from agent_comms.turn_terminal import EndedWithoutResult, OperatorStopped
 from agent_comms.threads import Thread
@@ -27,8 +26,8 @@ def goal_turn(comms, original_goal):
     ))
     if original_goal:
         goal = comms.goals.update_goal("worker", SetGoalAction(text="Original work"))
-    turn = RegisteredTurn(TurnId.mint())
-    owner = comms.agents.begin_turn("worker", turn.value)
+    turn = TurnId.mint()
+    owner = comms.agents.begin_turn("worker", turn)
     lease = owner.thread.require_turn_lease()
     try:
         with ExitStack() as claims:

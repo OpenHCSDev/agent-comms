@@ -21,7 +21,7 @@ from .registry_store import RegistryEdit, RegistryEntryRevision, RegistryStore
 from .routing import TurnRouting
 from .storage_rules import StorageRule
 from .thread_execution import CommanderForkExecution
-from .thread_identity import GenerationCounter, RegisteredTurn
+from .thread_identity import GenerationCounter
 from .thread_status import (
     ConnectedThreadStatus,
     NoBridgeThreadStatus,
@@ -326,12 +326,11 @@ class Registration:
     ) -> tuple[Thread, int]:
         """Claim a turn against the input generation, allowing unrelated metadata changes."""
         Thread.require_declaration(expected)
-        turn = RegisteredTurn(turn_id)
         generation = GenerationCounter.require_positive(expected_generation)
         with self.store.editing() as edit:
             owner = RegistryOwner.capture_local(edit.original.snapshot, expected.name)
             owner.require_claim(expected, generation)
-            leased, _ = edit.lease_turn(owner.thread, turn.value, None)
+            leased, _ = edit.lease_turn(owner.thread, turn_id, None)
             edit.commit()
             return leased, generation
 
@@ -345,14 +344,13 @@ class Registration:
     ) -> tuple[Thread, int]:
         """Claim against the exact captured declaration and stable owner generation."""
         Thread.require_declaration(expected)
-        turn = RegisteredTurn(turn_id)
         generation = GenerationCounter.require_positive(expected_owner_generation)
         with self.store.editing() as edit:
             snapshot = edit.original.snapshot
             owner = RegistryOwner.capture_local(snapshot, expected.name)
             owner.require_exact(snapshot, expected, generation)
             owner.thread.turn_record.read().require_idle()
-            result = edit.lease_turn(owner.thread, turn.value, routing)
+            result = edit.lease_turn(owner.thread, turn_id, routing)
             edit.commit()
             return result
 
@@ -360,11 +358,10 @@ class Registration:
         self, name: str, turn_id: TurnId, *, routing: TurnRouting | None = None
     ) -> tuple[Thread, int]:
         """Atomic local begin-turn, never reviving a stopped or replaced owner."""
-        turn = RegisteredTurn(turn_id)
         with self.store.editing() as edit:
             owner = RegistryOwner.capture_local(edit.original.snapshot, name)
             owner.thread.turn_record.read().require_idle()
-            result = edit.lease_turn(owner.thread, turn.value, routing)
+            result = edit.lease_turn(owner.thread, turn_id, routing)
             edit.commit()
             return result
 

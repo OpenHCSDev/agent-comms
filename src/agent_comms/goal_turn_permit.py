@@ -8,12 +8,13 @@ from typing import TYPE_CHECKING, ClassVar
 
 from agent_comms.ordinary_turn_rules import OrdinaryGoalGrantCheck
 
+from .field_codec import TurnId
+
 if TYPE_CHECKING:
     from agent_comms.goal_attempts import GoalAttemptStore, LaunchPermit
     from agent_comms.goal_management import Goals
     from agent_comms.goals import GoalDeclaration
     from agent_comms.pi_payloads import PiUsage
-    from agent_comms.thread_identity import RegisteredTurn
     from agent_comms.threads import Thread
     from agent_comms.turn_context import TurnContext
     from agent_comms.turn_goal_account import TurnGoalAccount, VerifiedGoalSettlement
@@ -45,7 +46,7 @@ class GoalTurnPermit(ABC):
             permit.stop(store)
 
     def settle_goal(self, settlement: type[VerifiedGoalSettlement], store: GoalAttemptStore,
-                    goal: GoalDeclaration, turn: RegisteredTurn) -> None:
+                    goal: GoalDeclaration, turn: TurnId) -> None:
         for permit in self.claims:
             goal.settle(settlement, store, permit, turn)
 

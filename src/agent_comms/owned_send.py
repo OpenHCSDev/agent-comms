@@ -23,10 +23,9 @@ from .channel_coding_tools import CodingToolOwner
 from .coordination_session import NativeBoundary
 from .coordinator import Coordination
 from .envelope_claim_transitions import NativeClaim
-from .field_codec import InputId
+from .field_codec import InputId, TurnId
 from .input_attempt import InputAlreadyCleared
 from .reservation_rules import ReservationRule, ReservationViolationError
-from .thread_identity import RegisteredTurn
 from .turn_input_source import (
     OriginalTurnInput,
     TurnInputSource,
@@ -53,7 +52,7 @@ class OwnedSend(CodingToolOwner, InputStartListener, SendBoundary):
     goal_store: GoalAttemptStore
     session_id: str
     thread: Thread
-    turn: RegisteredTurn
+    turn: TurnId
     claim_generation: int
     original_source: OriginalTurnInput
     goal_permit: GoalTurnPermit
@@ -146,7 +145,7 @@ class OwnedSend(CodingToolOwner, InputStartListener, SendBoundary):
             owner = snapshot.require(self.owner_name)
             canonical = resource.normalized(Path(owner.worktree))
             scope = NativeClaim(owner_claimed_generation=self.claim_generation,
-                                operation_id=slot, turn_id=self.turn.value,
+                                operation_id=slot, turn_id=self.turn,
                                 input_id=turn.command.input_id)
             return boundary.bus.publisher._publish_acquisition_unlocked(
                 snapshot, owner, canonical, scope, activity=boundary.activity)
@@ -170,7 +169,7 @@ class OwnedSend(CodingToolOwner, InputStartListener, SendBoundary):
     def _started(self, source: TurnInputSource, native_id: str, sent_text: str) -> bool:
         return source.valid_keys(sent_text) and all(
             self.inputs.dispositions.started(
-                key, turn_id=self.turn.value, native_id=native_id, text=sent_text
+                key, turn_id=self.turn, native_id=native_id, text=sent_text
             )
             for key in source.keys
         )

@@ -75,7 +75,7 @@ async def test_turn_after_order_replacement_is_allowed(tmp_path, native_runtime_
                 await wait_for(lambda: saved.provider.posts == 1)
                 sender = backend.TurnSession.active[task].send_boundary
                 assert isinstance(sender, OwnedSend)
-                original_turn = sender.turn.value
+                original_turn = sender.turn
                 original_process = comms.registry.require(worker).process_identity
                 todo = comms.goals.todos.get('P1')
                 replaced = comms.goals.update_goal(worker, OrderGoalAction(

@@ -21,7 +21,6 @@ from agent_comms.input_attempt import (
 )
 from agent_comms.input_disposition import InputDispositionRow, InputDispositions, InputDocument
 from agent_comms.errors import RelationViolationError
-from agent_comms.thread_identity import RegisteredTurn
 from agent_comms.thread_identity import RecordedThreadIncarnation
 from stored_inputs import insert_inputs, stored_inputs
 from agent_comms.threads import Thread
@@ -81,7 +80,7 @@ def test_failure_after_original_publication_retires_the_batch_and_schedule(tmp_p
     with pytest.raises(OSError), ExitStack() as ownership:
         store.reserve_turn(
             "worker",
-            RegisteredTurn(TurnId('6aef76c6cb359f6ffaf9c6e9881c902b')),
+            TurnId('6aef76c6cb359f6ffaf9c6e9881c902b'),
             1,
             "Original schedule",
             ownership=ownership,
@@ -92,7 +91,7 @@ def test_failure_after_original_publication_retires_the_batch_and_schedule(tmp_p
     with ExitStack() as ownership, pytest.raises(RelationViolationError):
         store.reserve_turn(
             "worker",
-            RegisteredTurn(TurnId('6aef76c6cb359f6ffaf9c6e9881c902b')),
+            TurnId('6aef76c6cb359f6ffaf9c6e9881c902b'),
             1,
             "Replacement",
             ownership=ownership,

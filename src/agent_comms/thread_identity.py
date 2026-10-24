@@ -442,9 +442,6 @@ class ThreadIncarnationRecord:
         return FieldCodec.decode(cls, {"name": name, "created_at": birth}).incarnation()
 
 
-@dataclass(frozen=True, slots=True)
-class RegisteredTurn(ProjectionSource):
-    value: TurnId
 
 
 @dataclass(frozen=True, slots=True)

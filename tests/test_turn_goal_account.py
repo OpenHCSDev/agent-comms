@@ -11,7 +11,6 @@ from agent_comms.goal_generation import (
 )
 from agent_comms.goal_states import ActiveGoal, CompletedGoal, PausedGoal
 from agent_comms.goals import Goal, ReportedTurn
-from agent_comms.thread_identity import RegisteredTurn
 from agent_comms.turn_goal_account import OriginGoalSettlement, VerifiedGoalSettlement
 
 
@@ -22,14 +21,14 @@ def test_goal_settlement_and_new_state_subclass_use_same_durable_owner(tmp_path)
 
     (tmp_path / "attempts").mkdir(mode=0o700)
     store = GoalAttemptStore.initialize(tmp_path / "attempts")
-    turn = RegisteredTurn(TurnId('9b473845f684444f80a26586ae298d2b'))
+    turn = TurnId('9b473845f684444f80a26586ae298d2b')
     for settlement in (VerifiedGoalSettlement, OriginGoalSettlement):
         for state in (ActiveGoal(), PausedGoal(), CompletedGoal(), SpecializedPausedGoal()):
             goal = Goal(
                 "work",
                 f"{settlement.__name__}-{state.declared_name}",
                 published_seq=0,
-                reported_turn=ReportedTurn(turn.value),
+                reported_turn=ReportedTurn(turn),
                 state=state,
             )
             store.create_goal(goal.id)

@@ -14,7 +14,7 @@ from . import input_attempt
 from .acp_extension import InputStartedUpdate, NoQueueScope
 from .agent_backend import BusyInputPolicy, SteerInputPolicy
 from .channel_input_batch import InputBatch, SingleInputBatch
-from .field_codec import InputId
+from .field_codec import InputId, TurnId
 from .input_attempt import InputAlreadyCleared
 from .messages import Message
 from .ordinary_turn_rules import (
@@ -38,7 +38,7 @@ if TYPE_CHECKING:
     from .input_drain import DrainedSession, InputDrain
     from .owned_send import OwnedSend
     from .runtime import RuntimeServer
-    from .thread_identity import RecordedThreadIncarnation, RegisteredTurn
+    from .thread_identity import RecordedThreadIncarnation
     from .threads import Thread
 
 
@@ -173,7 +173,7 @@ class TurnInputSource(StartedInput, ABC):
         if not sender.inputs.dispositions.bind_turn_input(
             self.keys,
             claim_scope=sender.claim_generation,
-            turn_id=sender.turn.value,
+            turn_id=sender.turn,
             native_id=native_id,
             text=sent_text,
             already_bound=already_bound,
@@ -278,7 +278,7 @@ class OriginalTurnInput(TurnInputSource):
         return super().valid_keys(text) or (self.batch.allows_multiple and text == self.prompt)
 
     def reserve(
-        self, dispositions: InputDispositions, owner: Thread, turn: RegisteredTurn,
+        self, dispositions: InputDispositions, owner: Thread, turn: TurnId,
         claim_scope: int,
         *, ownership: ExitStack,
     ) -> OriginalTurnInput:

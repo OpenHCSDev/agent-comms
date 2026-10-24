@@ -19,7 +19,6 @@ from agent_comms.field_codec import FieldCodec, TurnId
 from agent_comms.goals import Goal
 from agent_comms.messages import Message, InfoKind
 from agent_comms.task_sources import Decision
-from agent_comms.thread_identity import RegisteredTurn
 from agent_comms.tools import invoke_tool
 from agent_comms.tool_caller import ThreadCaller
 from agent_comms.turn_lease import NoTurnLease
@@ -298,7 +297,7 @@ def test_stale_goal_scope_cannot_publish_even_through_original_publisher(comms):
     declaration = Decision(
         chosen="A", rejected=("B",), scope=owner.task_scope,
         source_turn=owner.require_turn_lease().identity,
-        source_turn_id=RegisteredTurn(owner.require_turn_lease().turn_id),
+        source_turn_id=owner.require_turn_lease().turn_id,
     )
     comms.registry.register(replace(owner, goal=replace(owner.goal, revision=2)))
     message = Message("alpha", "#team", declaration.text, InfoKind, task=declaration)
