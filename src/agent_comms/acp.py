@@ -71,7 +71,7 @@ from .coordination_cohort import next_sealed_assignment
 from .coordination_database import CoordinationStore
 from .cursor_owner import CursorOwner
 from .cursor_publication import CursorPublication
-from .field_codec import FieldCodec, MalformedRecord
+from .field_codec import ClaimId, FieldCodec, MalformedRecord
 from .image_inputs import prompt_images
 from .input_drain import InputDrain
 from .input_effects import InputEffects
@@ -201,7 +201,7 @@ class CommsAgent(SessionEffects, InputEffects, TurnEffects):
         self.turns.bind(self.sessions, self.inputs)
         # A preplanned write is valid only while its original ACP controller
         # remains attached. Never restore this binding after a process crash.
-        self._selected_write_controllers: dict[tuple[str, int], tuple[str, Controller]] = {}
+        self._selected_write_controllers: dict[tuple[str, int], tuple[ClaimId, Controller]] = {}
 
     def _create_runtime_proxy(self, thread: Thread, session_id: str) -> RuntimeProxy:
         return RuntimeProxy(

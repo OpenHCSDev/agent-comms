@@ -18,6 +18,7 @@ from pydantic import (
 from agent_comms.cli_protocol import TaggedWire, TextWire
 from agent_comms.declared_family import UnknownFamilyMember
 from agent_comms.external_transcript import EarlierPage, NoEarlierPage
+from agent_comms.field_codec import MessageId
 from agent_comms.native_tools import FilePatchTool
 from agent_comms.recorded_time import EventTime, UnrecordedEventTime
 from agent_comms.runtime_updates import (
@@ -142,7 +143,7 @@ class BusInput(MessageInput):
     client_prefix: ClassVar[str] = 'comms:'
 
     @classmethod
-    def for_message(cls, thread: str, message_id: str, text: str) -> BusInput:
+    def for_message(cls, thread: str, message_id: MessageId, text: str) -> BusInput:
         return cls(threadId=thread, clientUserMessageId=cls.client_prefix + message_id,
                    input=(TextInput(text=text),))
 

@@ -3,17 +3,18 @@ from abc import abstractmethod
 from dataclasses import dataclass
 
 from .declared_family import DeclaredFamily
+from .field_codec import MessageId
 from .messages import Message
 
 
 class CorrectionResult(DeclaredFamily):
     @abstractmethod
-    def notices(self, message_id: str) -> tuple[str, ...]: ...
+    def notices(self, message_id: MessageId) -> tuple[str, ...]: ...
 
 
 @dataclass(frozen=True)
 class CorrectionComplete(CorrectionResult, declared_name="complete"):
-    def notices(self, message_id: str) -> tuple[str, ...]:
+    def notices(self, message_id: MessageId) -> tuple[str, ...]:
         return ()
 
 
@@ -21,14 +22,14 @@ class CorrectionComplete(CorrectionResult, declared_name="complete"):
 class CorrectionFailed(CorrectionResult, declared_name="failed"):
     error: str
 
-    def notices(self, message_id: str) -> tuple[str, ...]:
+    def notices(self, message_id: MessageId) -> tuple[str, ...]:
         return (f"Message {message_id} was sent; wording correction failed: {self.error}",)
 
 
 @dataclass(frozen=True)
 class CorrectionUnreported(CorrectionResult, declared_name="unreported"):
     """Older retained tool replies did not report their correction outcome."""
-    def notices(self, message_id: str) -> tuple[str, ...]:
+    def notices(self, message_id: MessageId) -> tuple[str, ...]:
         return ()
 
 

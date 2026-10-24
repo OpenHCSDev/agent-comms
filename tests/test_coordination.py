@@ -71,6 +71,7 @@ from agent_comms.typed_table import JsonStorage
 from agent_comms.messages import InfoKind, Message
 from agent_comms.obligation_states import (
     PendingResponse,
+    ResponseState,
     SilentResponse,
 )
 from agent_comms.wake_policy import FullWake
@@ -129,7 +130,9 @@ def obligation(state=PendingResponse):
         created_at_ms=100,
         updated_at_ms=100,
         revision=1,
-        lifecycle=state.load(None, None),
+        lifecycle=FieldCodec.decode(ResponseState, {
+            ResponseState.family_discriminator: state.declared_name,
+        }),
     )
 
 

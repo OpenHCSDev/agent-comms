@@ -30,7 +30,7 @@ from agent_comms.envelope_claim_transitions import (
     UnclaimedResource, WakeClaims,
 )
 from agent_comms.errors import CommittedMessageError
-from agent_comms.field_codec import TurnId
+from agent_comms.field_codec import ClaimId, TurnId
 from agent_comms.locked_store import RegistryFile
 from agent_comms.registration import Registration
 from agent_comms.store_files import store_lock_path
@@ -47,7 +47,7 @@ class ClaimBus:
     registry: Registration
     turns: dict[str, TurnId]
 
-    def scope(self, name: str, operation: str) -> NativeClaim:
+    def scope(self, name: str, operation: ClaimId) -> NativeClaim:
         return NativeClaim(
             owner_claimed_generation=self.registry.snapshot().claim_generation(name),
             operation_id=operation, turn_id=self.turns[name], input_id=f"input-{name}",
@@ -106,7 +106,7 @@ def claims(tmp_path: Path) -> ClaimBus:
 
 def test_existing_owner_allocates_nothing_and_never_invokes_builder(claims: ClaimBus, tmp_path: Path):
     resource = str(tmp_path / "owned.py")
-    scope = claims.scope("alice", "a" * 32)
+    scope = claims.scope("alice", ClaimId("a" * 32))
     owner = claims.acquire("alice", resource, scope)
     before = claims.counts()
     signal = Bus.source_paths(claims.bus.path.parent)[0].stat().st_mtime_ns
@@ -134,11 +134,11 @@ def test_existing_owner_allocates_nothing_and_never_invokes_builder(claims: Clai
 
 def test_conflict_release_and_consumed_operation_share_the_original(claims: ClaimBus, tmp_path: Path):
     resource = str(tmp_path / "owned.py")
-    scope = claims.scope("alice", "a" * 32)
+    scope = claims.scope("alice", ClaimId("a" * 32))
     owner = claims.acquire("alice", resource, scope)
     before = claims.counts()
     with pytest.raises(ClaimConflict) as lost:
-        claims.acquire("bob", resource, claims.scope("bob", "b" * 32))
+        claims.acquire("bob", resource, claims.scope("bob", ClaimId("b" * 32)))
     assert lost.value.existing == owner
     assert claims.counts() == before
     claims.release(owner)
@@ -148,15 +148,15 @@ def test_conflict_release_and_consumed_operation_share_the_original(claims: Clai
         assert Claimed.table.require(db, seq=owner.seq).claim_transition.claimed(resource) == owner
     with pytest.raises(IdentityConflict):
         claims.acquire("alice", resource, scope)
-    successor = claims.acquire("bob", resource, claims.scope("bob", "c" * 32))
+    successor = claims.acquire("bob", resource, claims.scope("bob", ClaimId("c" * 32)))
     assert successor.owner == "bob" and successor.seq > owner.seq
     assert dict(claims.bus.claim_projection()) == {resource: successor}
 
 
 def test_conflicting_set_does_not_acquire_its_uncontested_resource(claims: ClaimBus, tmp_path: Path):
     resources = tuple(str(tmp_path / name) for name in ("a.py", "b.py"))
-    held = claims.acquire("bob", resources[1], claims.scope("bob", "a" * 32))
-    scope = claims.scope("alice", "b" * 32)
+    held = claims.acquire("bob", resources[1], claims.scope("bob", ClaimId("a" * 32)))
+    scope = claims.scope("alice", ClaimId("b" * 32))
     before = claims.counts()
     with pytest.raises(ClaimConflict):
         claims.bus.append(claims.acquisition("alice", resources, scope))
@@ -170,7 +170,8 @@ def test_conflicting_set_does_not_acquire_its_uncontested_resource(claims: Claim
 
 
 def test_claim_then_keyed_response_share_original_sequence_and_identity(claims: ClaimBus, tmp_path: Path):
-    owner = claims.acquire("alice", str(tmp_path / "owned.py"), claims.scope("alice", "a" * 32))
+    owner = claims.acquire("alice", str(tmp_path / "owned.py"),
+                           claims.scope("alice", ClaimId("a" * 32)))
     original = claims.bus.lookup(owner.seq)
     response = claims.bus.append(lambda seq, db: record_from(
         KeyedPrivateRecord,
@@ -184,16 +185,16 @@ def test_claim_then_keyed_response_share_original_sequence_and_identity(claims: 
 
 def test_expiry_and_rebuild_use_claimed_replay_not_a_checkpoint(claims: ClaimBus, tmp_path: Path):
     stale = tuple(str(tmp_path / name) for name in ("a.py", "b.py"))
-    scope = claims.scope("alice", "a" * 32)
+    scope = claims.scope("alice", ClaimId("a" * 32))
     claims.bus.append(claims.acquisition("alice", stale, scope))
     claims.registry.register(replace(
         claims.registry.require("alice"), process_identity=NoProcess(),
     ), StoppedThreadStatus())
     resource = str(tmp_path / "c.py")
-    current = claims.acquire("bob", resource, claims.scope("bob", "b" * 32))
+    current = claims.acquire("bob", resource, claims.scope("bob", ClaimId("b" * 32)))
     assert set(claims.bus.claim(current.seq).expired) == set(stale)
     claims.release(current)
-    claims.acquire("bob", resource, claims.scope("bob", "c" * 32))
+    claims.acquire("bob", resource, claims.scope("bob", ClaimId("c" * 32)))
     before = claims.bus.claim_projection()
     counts = claims.counts()
     with claims.bus.writing() as db:
@@ -209,7 +210,7 @@ def test_expiry_and_rebuild_use_claimed_replay_not_a_checkpoint(claims: ClaimBus
 
 def test_failed_projection_rolls_back_original_operations_and_sequence(claims: ClaimBus, tmp_path: Path):
     resource = str(tmp_path / "owned.py")
-    scope = claims.scope("alice", "a" * 32)
+    scope = claims.scope("alice", ClaimId("a" * 32))
     build = claims.acquisition("alice", (resource,), scope)
     before = claims.counts()
 
@@ -227,7 +228,7 @@ def test_failed_projection_rolls_back_original_operations_and_sequence(claims: C
 
 def test_admitted_snapshot_keeps_its_claim_while_another_writer_releases(claims: ClaimBus, tmp_path: Path):
     resource = str(tmp_path / "owned.py")
-    owner = claims.acquire("alice", resource, claims.scope("alice", "a" * 32))
+    owner = claims.acquire("alice", resource, claims.scope("alice", ClaimId("a" * 32)))
     with claims.bus.reading() as snapshot:
         assert snapshot.resource_owner(resource) == owner
         claims.release(owner)
@@ -260,7 +261,7 @@ def append_until_projected(
 def test_sigkill_after_projection_leaves_no_original_or_derived_claim(claims: ClaimBus, tmp_path: Path):
     before = claims.counts()
     resource = str(tmp_path / "owned.py")
-    scope = claims.scope("alice", "a" * 32)
+    scope = claims.scope("alice", ClaimId("a" * 32))
     reader, writer = publication_processes.Pipe(duplex=False)
     child = publication_processes.Process(target=append_until_projected,
                             args=(claims.bus.path.parent, claims.turns, scope, resource, writer))

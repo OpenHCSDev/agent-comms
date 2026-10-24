@@ -25,12 +25,14 @@ from .context_reading import ContextReading
 from .declared_family import DeclaredFamily
 from .external_transcript import DraftRow
 from .field_codec import (
+    ClaimId,
     AcceptsNull,
     ExternalJsonShape,
     FieldCodec,
     Id128Text,
     InputId,
     MalformedRecord,
+    MessageId,
     WireValue,
     WireName,
     WireOmitDefault,
@@ -724,18 +726,18 @@ class CompactRequest(CommsRequest):
 @dataclass(frozen=True)
 class SelectedWriteRequest(CommsRequest):
     source_seq: int
-    source_message_id: str
+    source_message_id: MessageId
     resource: str
     contents: str
 
     def __post_init__(self):
-        if self.source_seq <= 0 or not self.source_message_id or not self.resource:
+        if self.source_seq <= 0 or not self.resource:
             raise ValueError("Selected write requires actual source and resource identity")
 
 
 @dataclass(frozen=True)
 class SelectedWriteAcceptedUpdate(AgentCommsUpdate):
-    operation_id: str
+    operation_id: ClaimId
     source_seq: int
     claim_id: str
 

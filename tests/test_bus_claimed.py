@@ -3,6 +3,7 @@ from dataclasses import replace
 
 import pytest
 
+from agent_comms.field_codec import ClaimId
 from agent_comms.bus import Bus, ClaimRecord, PublicRecord
 from agent_comms.messages import BusRow, Claimed, InfoKind, Message
 from agent_comms.envelope_claim_transitions import UnscopedClaims
@@ -13,7 +14,7 @@ def claim_record(seq):
     message = Message("author", "worker", f"claim {seq}", InfoKind, seq=seq)
     transition = UnscopedClaims(
         owner=message.sender, incarnation="1", seq=seq, message_id=message.message_id,
-        claims=("/owned/resource",), generation="f" * 32,
+        claims=("/owned/resource",), generation=ClaimId("f" * 32),
     )
     return ClaimRecord.of(message, transition)
 

@@ -9,7 +9,7 @@ from pathlib import Path
 from .bus import Bus
 from .bus_publication import Delivered
 from .bus_source_page import CandidateQuery
-from .field_codec import MalformedRecord
+from .field_codec import MalformedRecord, MessageId
 from .wake_policy import WakePolicy
 
 
@@ -20,7 +20,7 @@ class ProjectionUnavailableError(RuntimeError):
 @dataclass(frozen=True, slots=True)
 class Candidate:
     source_seq: int
-    message_id: str
+    message_id: MessageId
     recipient_lookup: str
     sender: str
     target: str

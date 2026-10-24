@@ -5,6 +5,7 @@ import os
 from multiprocessing.context import ForkServerContext
 from pathlib import Path
 
+from agent_comms.field_codec import ClaimId
 from agent_comms.audience_manifest import FrozenRecipient, freeze_audience
 from agent_comms.bus import PrivateRecord
 from agent_comms.comms import Comms, wire
@@ -79,7 +80,7 @@ def record_from(declaration, message, *, sender_lookup="a" * 32, recipient_looku
                 seq=message.seq,
                 message_id=message.message_id,
                 claims=("/owned/resource",),
-                generation="f" * 32,
+                generation=ClaimId("f" * 32),
             ),
         )
     return declaration.from_message(message, **capabilities)

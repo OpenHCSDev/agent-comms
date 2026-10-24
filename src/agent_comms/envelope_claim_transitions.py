@@ -15,6 +15,7 @@ from typing import TYPE_CHECKING, Annotated, ClassVar, Literal
 from .projection_source import ProducedRow, ProjectionSource
 from .coordination_errors import IdentityConflict
 from .field_codec import (
+    ClaimId,
     BoundedText,
     EnvelopeSequence,
     FieldCodec,
@@ -158,7 +159,7 @@ class ClaimScope(SubclassUnion, ABC, ProjectionSource, affix=""):
         """Whether the owner's current claimed generation still holds this acquisition."""
 
     @property
-    def operation_ids(self) -> tuple[str, ...]:
+    def operation_ids(self) -> tuple[ClaimId, ...]:
         return ()
 
 
@@ -179,7 +180,7 @@ class RecordedScope(ClaimScope, declared_name=None):
     """Every acquisition published today records the input generation and operation it serves."""
 
     owner_claimed_generation: int
-    operation_id: Annotated[str, Id128Text]
+    operation_id: ClaimId
     turn_id: TurnId
 
     def __post_init__(self) -> None:
@@ -189,7 +190,7 @@ class RecordedScope(ClaimScope, declared_name=None):
         return claimed_generation == self.owner_claimed_generation
 
     @property
-    def operation_ids(self) -> tuple[str, ...]:
+    def operation_ids(self) -> tuple[ClaimId, ...]:
         return (self.operation_id,)
 
 
@@ -262,7 +263,7 @@ class WakeClaim(RecordMember, RecordedScope):
 @dataclass(frozen=True, slots=True)
 class ClaimRelease(ProjectionSource):
     resource: Annotated[str, ResourcePathText]
-    generation: Annotated[str, Id128Text]
+    generation: ClaimId
 
 
 @dataclass(frozen=True)
@@ -270,12 +271,12 @@ class ClaimIdentity:
     owner: Annotated[str, BoundedText]
     incarnation: Annotated[str, BoundedText]
     seq: Annotated[int, EnvelopeSequence]
-    message_id: Annotated[str, BoundedText]
+    message_id: MessageId
 
 
 @dataclass(frozen=True)
 class AcquiringClaim(ClaimIdentity):
-    generation: Annotated[str, Id128Text]
+    generation: ClaimId
     resource_scope: ClaimScope
 
 
@@ -305,11 +306,11 @@ class ClaimTransition(ClaimIdentity, SubclassUnion, ABC, ProjectionSource, affix
     def resources(self) -> tuple[str, ...]: ...
 
     @property
-    def operation_ids(self) -> tuple[str, ...]:
+    def operation_ids(self) -> tuple[ClaimId, ...]:
         """A release consumes no acquisition operation."""
         return ()
 
-    def require_new_operation(self, is_used: Callable[[str], bool]) -> None:
+    def require_new_operation(self, is_used: Callable[[ClaimId], bool]) -> None:
         for operation_id in self.operation_ids:
             if is_used(operation_id):
                 raise IdentityConflict("Claim operation was already consumed")
@@ -357,7 +358,7 @@ class Acquisition(ClaimTransition, declared_name=None):
     releases: Annotated[tuple[ClaimRelease, ...], WireRequired()] = field(
         default=(), kw_only=True
     )
-    generation: Annotated[str, Id128Text] = field(kw_only=True)
+    generation: ClaimId = field(kw_only=True)
     resource_scope: ClassVar[ClaimScope]
 
     def __post_init__(self) -> None:
@@ -378,7 +379,7 @@ class Acquisition(ClaimTransition, declared_name=None):
         )
 
     @property
-    def operation_ids(self) -> tuple[str, ...]:
+    def operation_ids(self) -> tuple[ClaimId, ...]:
         return self.resource_scope.operation_ids
 
     def require_holders(self, previous: ClaimProjection) -> None:

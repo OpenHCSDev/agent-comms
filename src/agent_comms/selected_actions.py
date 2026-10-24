@@ -37,7 +37,7 @@ class SelectedAction(ABC):
         """Validate and bind action-owned resources before any native request."""
         return self
 
-    def operation_id(self) -> str:
+    def operation_id(self) -> ClaimId:
         return ClaimId.mint()
 
     def with_plan(
@@ -169,7 +169,7 @@ class PlannedSelectedWrite(NoSelectedTools):
     assignment: WakeAssignment
     thread: Thread
 
-    def operation_id(self) -> str:
+    def operation_id(self) -> ClaimId:
         return self.plan.operation_id
 
     def apply(self, owner: CodingToolOwner) -> None:
