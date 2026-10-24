@@ -11,7 +11,7 @@ from functools import partial
 from typing import Annotated
 
 from agent_comms import field_codec
-from agent_comms.commander.order import Commander, CommanderVerb
+from agent_comms.commander.order import Commander, CommanderVerb, Reasoned
 from agent_comms.message_bus import HeldBusWrite
 from agent_comms.owner_requests import OwnerRequestId
 
@@ -39,10 +39,9 @@ class RequestAddVerb(RequestMutation, declared_name="add"):
 
 
 @dataclass(frozen=True, kw_only=True)
-class RequestCompleteVerb(RequestMutation, declared_name="complete"):
+class RequestCompleteVerb(Reasoned, RequestMutation, declared_name="complete"):
     help = "close a request; refused while an order serving it is pending"
     id: Annotated[OwnerRequestId, field_codec.Argument(flags=("id",))]
-    why: Annotated[str, field_codec.Argument(flags=("--why",))]
 
     def run(self, ctx: Commander) -> None:
         commander = ctx.comms.registry.require(self.who(ctx)).incarnation

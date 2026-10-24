@@ -840,6 +840,13 @@ class OrderVerb(CommanderVerb):
 
 
 @dataclass(frozen=True, kw_only=True)
+class Reasoned:
+    """A verb that records why the commander acted."""
+
+    why: Annotated[str, Argument(flags=("--why",))]
+
+
+@dataclass(frozen=True, kw_only=True)
 class RequestedOrderVerb(OrderVerb, DirectiveVerb, declared_name=None):
     request: Annotated[
         RequestSelection, Argument(flags=("--request",),
@@ -899,7 +906,7 @@ class SendVerb(RequestedOrderVerb):
 
 
 @dataclass(frozen=True, kw_only=True)
-class StrikeVerb(OrderVerb, DirectiveVerb):
+class StrikeVerb(Reasoned, OrderVerb, DirectiveVerb):
     help = "a send-back or a false claim"
     unit: Annotated[str, Argument(flags=("unit",))]
     pid: Annotated[str, Argument(flags=("pid",), options={"help": "the struck problem"})]
@@ -909,7 +916,6 @@ class StrikeVerb(OrderVerb, DirectiveVerb):
             flags=("where",), options={"help": "the source file:line that explains the strike"}
         ),
     ]
-    why: Annotated[str, Argument(flags=("--why",))]
     caught: Annotated[
         str,
         Argument(
@@ -929,20 +935,18 @@ class StrikeVerb(OrderVerb, DirectiveVerb):
 
 
 @dataclass(frozen=True, kw_only=True)
-class FireVerb(OrderVerb):
+class FireVerb(Reasoned, OrderVerb):
     help = "take every open problem off a unit; their orders and strikes stay"
     unit: Annotated[str, Argument(flags=("unit",))]
-    why: Annotated[str, Argument(flags=("--why",))]
 
     def run(self, ctx: Commander) -> None:
         ctx.fire(self.unit, self.why)
 
 
 @dataclass(frozen=True, kw_only=True)
-class UnstrikeVerb(OrderVerb):
+class UnstrikeVerb(Reasoned, OrderVerb):
     help = "void a strike recorded in error; it stays on the record and stops counting"
     pid: Annotated[str, Argument(flags=("pid",))]
-    why: Annotated[str, Argument(flags=("--why",))]
     at: Annotated[
         StrikeSelector,
         Argument(
@@ -955,10 +959,9 @@ class UnstrikeVerb(OrderVerb):
 
 
 @dataclass(frozen=True, kw_only=True)
-class WithdrawVerb(OrderVerb):
+class WithdrawVerb(Reasoned, OrderVerb):
     help = "retire an undelivered order sent in error; its problem closes with no strike"
     pid: Annotated[str, Argument(flags=("pid",))]
-    why: Annotated[str, Argument(flags=("--why",))]
     superseded_by: Annotated[
         Successor,
         Argument(
@@ -1205,11 +1208,10 @@ class DropVerb(OrderVerb):
 
 
 @dataclass(frozen=True, kw_only=True)
-class FoldVerb(OrderVerb):
+class FoldVerb(Reasoned, OrderVerb):
     help = "join duplicate open problems without losing their text"
     pid: Annotated[str, Argument(flags=("pid",))]
     into: Annotated[str, Argument(flags=("--into",))]
-    why: Annotated[str, Argument(flags=("--why",))]
 
     def run(self, ctx: Commander) -> None:
         ctx.comms.goals.todos.fold(ctx.incarnation, self.pid, self.into, self.why)
@@ -1251,12 +1253,11 @@ class CloseVerb(OrderVerb):
 
 
 @dataclass(frozen=True, kw_only=True)
-class HuntVerb(OrderVerb):
+class HuntVerb(Reasoned, OrderVerb):
     help = "a hot-path read: clean unless --sent names the order it became"
     where: Annotated[
         str, Argument(flags=("where",), options={"metavar": "FILE:LINE"})
     ]
-    why: Annotated[str, Argument(flags=("--why",))]
     sent: Annotated[
         str,
         Argument(
