@@ -128,4 +128,5 @@ class OwnerStop(asyncio.Future[TurnTerminal], TurnInterruption):
         if self.done():
             return self.result()
         # A held ingress is the install's stop, declared before any owner is signalled.
-        return self.maintenance.read().selected(held=OperatorStopped(), granted=EndedWithoutResult())
+        return self.maintenance.read().selected(
+            held=OperatorStopped(), granted=EndedWithoutResult())
