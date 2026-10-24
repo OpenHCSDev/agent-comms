@@ -51,7 +51,9 @@ def verify() -> None:
     comms = wire(ROOT)
     todo = comms.goals.todos.get("P6")
     check = todo.order.checked().check
-    checkout = comms.registry.storage_rule.order_checkout(todo.held().owner, todo.id)
+    rule = comms.registry.storage_rule
+    holder = comms.registry.require(todo.held().owner)
+    checkout = rule.order_checkout(rule.roots_of(holder), todo.id)
     if checkout.exists() or MARKER.exists():
         raise RuntimeError("Proof resources already exist; inspect before another attempt")
     subprocess.run(

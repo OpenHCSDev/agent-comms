@@ -80,6 +80,12 @@ class StorageRoots(RecordMember, ThreadStorage):
     def stored(self) -> StorageRoots:
         return self
 
+    @property
+    def allocation_name(self) -> str:
+        """The name the registry gave this thread's storage at registration. Its checkouts
+        carry it, so a renamed thread still owns the work it allocated."""
+        return self.scratch.name
+
 
 @dataclass(frozen=True, slots=True)
 class UnassignedThreadStorage(NullMember, ThreadStorage):
@@ -135,8 +141,10 @@ class CheckoutAllocation(DeclaredFamily, affix="CheckoutAllocation"):
     """A path's declared allocation; each member owns its interpretation and Git needs."""
 
     @classmethod
-    def for_path(cls, owner: Thread, path: Path) -> Iterator[CheckoutAllocation]:
-        problem, _, suffix = path.name.removeprefix(f'{owner.name}--').partition('--')
+    def for_path(cls, rule: StorageRule, owner: Thread,
+                 path: Path) -> Iterator[CheckoutAllocation]:
+        allocated = rule.roots_of(owner).allocation_name
+        problem, _, suffix = path.name.removeprefix(f'{allocated}--').partition('--')
         for member in cls.members_with(cls):
             yield from member.read(owner, path, problem, suffix)
 
@@ -192,7 +200,7 @@ class OrderCheckoutAllocation(ProblemCheckoutAllocation):
             yield cls(problem)
 
     def owns_present(self, rule: StorageRule, owner: Thread, path: Path) -> bool:
-        return path == rule.order_checkout(owner.name, self.problem)
+        return path == rule.order_checkout(rule.roots_of(owner), self.problem)
 
 
 @dataclass(frozen=True)
@@ -216,7 +224,7 @@ class RepositoryCheckoutAllocation(ProblemCheckoutAllocation):
 
     def owns_declared(self, rule: StorageRule, owner: Thread, path: Path,
                       repository: RepositoryName) -> bool:
-        return path == rule.repository_checkout(owner.name, self.problem, repository)
+        return path == rule.repository_checkout(rule.roots_of(owner), self.problem, repository)
 
 
 @dataclass(frozen=True)
@@ -252,18 +260,23 @@ class StorageRule(RoomAllocation, DurableFile):
     def initial_roots(self, name: str) -> StorageRoots:
         return StorageRoots(self.scratch_base / name)
 
-    def order_checkout(self, name: str, problem: str) -> Path:
+    def roots_of(self, thread: Thread) -> StorageRoots:
+        return thread.storage_roots.assigned(self, thread.name)
+
+    def order_checkout(self, roots: StorageRoots, problem: str) -> Path:
         """Allocation path for a new problem checkout of its order's check repository; an
         existing source may be reused."""
-        return self.checkout_base.resolve() / f'{name}--{problem}'
+        return self.checkout_base.resolve() / f'{roots.allocation_name}--{problem}'
 
-    def repository_checkout(self, name: str, problem: str, repository: RepositoryName) -> Path:
+    def repository_checkout(self, roots: StorageRoots, problem: str,
+                            repository: RepositoryName) -> Path:
         """The same problem's checkout of another repository, changed in lockstep with it."""
-        return self.order_checkout(name, problem).with_name(f'{name}--{problem}--{repository.name}')
+        checkout = self.order_checkout(roots, problem)
+        return checkout.with_name(f'{checkout.name}--{repository.name}')
 
-    def problem_checkouts(self, name: str, problem: str) -> tuple[Path, ...]:
+    def problem_checkouts(self, roots: StorageRoots, problem: str) -> tuple[Path, ...]:
         """Every checkout allocated to one problem: its check repository's, then each other's."""
-        checkout = self.order_checkout(name, problem)
+        checkout = self.order_checkout(roots, problem)
         return (checkout, *sorted(checkout.parent.glob(f'{checkout.name}--*')))
 
     def work_for_problem(
@@ -274,7 +287,7 @@ class StorageRule(RoomAllocation, DurableFile):
         found = []
         for owner in registry.all_threads().values():
             paths = tuple(path for row in related
-                          for path in self.problem_checkouts(owner.name, row.id))
+                          for path in self.problem_checkouts(self.roots_of(owner), row.id))
             present = []
             for path in paths:
                 try:
@@ -297,16 +310,16 @@ class StorageRule(RoomAllocation, DurableFile):
                       repository: RepositoryName) -> bool:
         """Ownership follows the declared repository allocation, before its checkout exists."""
         return any(allocation.owns_declared(self, owner, path, repository)
-                   for allocation in CheckoutAllocation.for_path(owner, path))
+                   for allocation in CheckoutAllocation.for_path(self, owner, path))
 
     def owns_present_checkout(self, owner: Thread, path: Path) -> bool:
         """Only a repository-suffixed allocation needs its existing Git origin read."""
         return any(allocation.owns_present(self, owner, path)
-                   for allocation in CheckoutAllocation.for_path(owner, path))
+                   for allocation in CheckoutAllocation.for_path(self, owner, path))
 
     def checkout_paths(self, owner: Thread) -> tuple[Path, ...]:
         """Declared home and order locations; Git metadata supplies their branches."""
-        ordered = self.order_checkout(owner.name, 'P*')
+        ordered = self.order_checkout(self.roots_of(owner), 'P*')
         return tuple(path for path in (owner.project_path,
                                        *sorted(ordered.parent.glob(ordered.name)))
                      if path.is_dir() and self.owns_present_checkout(owner, path))
@@ -397,7 +410,7 @@ class StorageRule(RoomAllocation, DurableFile):
         """Every destination obeys artifact and scratch ownership, without reading Git."""
         if '.artifacts' in path.parts:
             self.deny('writes inside .artifacts are forbidden')
-        scratch = thread.storage_roots.assigned(self, thread.name).scratch
+        scratch = self.roots_of(thread).scratch
         if path.is_relative_to(self.scratch_base) and not path.is_relative_to(scratch):
             self.deny(f'foreign scratch destination {path}; registered scratch is {scratch}')
 
@@ -412,10 +425,11 @@ class StorageRule(RoomAllocation, DurableFile):
 
     def order_text(self, thread: Thread, pythons: Sequence[str]) -> str:
         """The rule uses the same declared paths as storage enforcement."""
+        checkout = self.order_checkout(self.roots_of(thread), "P<n>")
         return (
             f'Storage (refused without a strike): your checkouts are '
-            f'{self.order_checkout(thread.name, "P<n>")} (another repository changed in the '
-            f'same problem: {self.order_checkout(thread.name, "P<n>")}--<repository name>), '
+            f'{checkout} (another repository changed in the '
+            f'same problem: {checkout}--<repository name>), '
             f'at most {self.max_checkouts} besides your home checkout {thread.project_path}, '
             f'created with agent-comms {OrderCheckoutAllocation.verb} add PROBLEM '
             f'(another repository: agent-comms {RepositoryCheckoutAllocation.verb} add '
@@ -423,7 +437,7 @@ class StorageRule(RoomAllocation, DurableFile):
             f'removed with agent-comms {OrderCheckoutAllocation.verb} remove PROBLEM in the '
             'same order that created them; '
             'your only scratch dir is '
-            f'{thread.storage_roots.assigned(self, thread.name).scratch}/, '
+            f'{self.roots_of(thread).scratch}/, '
             f'capped at {self.scratch_cap_gib:g} GB together with '
             f'your checkouts. Run tests with PYTHONPATH=src on the shared {" or ".join(pythons)}; '
             'never create a venv, never uv sync, never write .artifacts, never git clone. '
@@ -444,14 +458,14 @@ class UnitStorage:
     """The declared home (possibly non-Git) and separately counted extra Git checkouts."""
 
     rule: StorageRule
-    unit: str
+    unit: Thread
     home: Path
     extra_checkouts: tuple[Path, ...]
 
     @classmethod
     def read(cls, rule: StorageRule, thread: Thread, *proposed: Path) -> UnitStorage:
         home, *extras = rule.checkouts_of(thread)
-        return cls(rule, thread.name, home,
+        return cls(rule, thread, home,
                    tuple(dict.fromkeys(path for path in (*extras, *proposed) if path != home)))
 
     @property
@@ -478,10 +492,10 @@ class UnitStorage:
             self.rule.deny(f'at most {self.rule.max_checkouts} checkouts besides the home checkout')
 
     def require_retired(self, problem: str) -> None:
-        for path in self.rule.problem_checkouts(self.unit, problem):
+        for path in self.rule.problem_checkouts(self.rule.roots_of(self.unit), problem):
             if path in self.extra_checkouts:
                 self.rule.deny(
-                    f'{self.unit} still has the checkout {path} for this order; '
+                    f'{self.unit.name} still has the checkout {path} for this order; '
                     'it removes it before the order counts as done')
         self.require_quota()
 
@@ -528,7 +542,7 @@ class StorageOverQuota(StorageViolation):
         return storage.over_checkouts
 
     def line(self) -> str:
-        return (f'VIOLATION storage quota: {self.storage.unit} holds '
+        return (f'VIOLATION storage quota: {self.storage.unit.name} holds '
                 f'{len(self.storage.extra_checkouts)} checkouts besides home, '
                 f'limit {self.storage.rule.max_checkouts} -> order the cleanup')
 
@@ -539,7 +553,7 @@ class StorageHomeMissing(StorageViolation):
         return storage.missing_home
 
     def line(self) -> str:
-        return (f'VIOLATION storage home: {self.storage.unit} declared home '
+        return (f'VIOLATION storage home: {self.storage.unit.name} declared home '
                 f'{self.storage.home} is missing -> restore the home checkout')
 
 
@@ -641,7 +655,7 @@ class CheckoutStorageEffect(AllocateStorageEffect):
         rule, thread = projection.rule, projection.thread
         rule.require_destination(thread, self.path)
         if not rule.owns_checkout(thread, self.path, self.repository):
-            destination = rule.order_checkout(thread.name, "P<number>")
+            destination = rule.order_checkout(rule.roots_of(thread), "P<number>")
             rule.deny(f'checkout destination must be {destination}')
         super().check(projection)
         projection.storage = projection.storage.adding(self.path)

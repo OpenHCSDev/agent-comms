@@ -104,7 +104,8 @@ def test_checkout_add_prepares_the_order_repository_submodule(checkout_command_b
     comms = checkout_command_bus
     result = core("--root", str(comms.root), "checkout", "add", "P1")
     assert result.returncode == 0, result.stderr
-    path = comms.registry.storage_rule.order_checkout("worker", "P1")
+    rule = comms.registry.storage_rule
+    path = rule.order_checkout(rule.initial_roots("worker"), "P1")
     assert (path / "pinned" / "catalog.md").read_text() == "patterns\n"
 
 
@@ -112,7 +113,8 @@ def test_checkout_add_repairs_an_existing_checkout_with_a_missing_store(checkout
     comms = checkout_command_bus
     first = core("--root", str(comms.root), "checkout", "add", "P1")
     assert first.returncode == 0, first.stderr
-    checkout = Checkout(comms.registry.storage_rule.order_checkout("worker", "P1"))
+    rule = comms.registry.storage_rule
+    checkout = Checkout(rule.order_checkout(rule.initial_roots("worker"), "P1"))
     pointer_without_store(checkout)
     repaired = core("--root", str(comms.root), "checkout", "add", "P1")
     assert repaired.returncode == 0, repaired.stderr
@@ -127,7 +129,8 @@ def test_checkout_remove_retires_the_order_checkout_with_its_submodule(
     comms = checkout_command_bus
     added = core("--root", str(comms.root), "checkout", "add", "P1")
     assert added.returncode == 0, added.stderr
-    path = comms.registry.storage_rule.order_checkout("worker", "P1")
+    rule = comms.registry.storage_rule
+    path = rule.order_checkout(rule.initial_roots("worker"), "P1")
     # The commander may close the problem before its unit retires the checkout.
     current = comms.goals.todos.get("P1")
     closed = comms.goals.todos.apply("P1", WithdrawTodo(
@@ -148,7 +151,8 @@ def test_checkout_remove_retires_the_order_checkout_with_its_submodule(
 
 def test_checkout_add_reopens_retired_order_branch_with_its_commits(checkout_command_bus):
     comms = checkout_command_bus
-    path = comms.registry.storage_rule.order_checkout("worker", "P1")
+    rule = comms.registry.storage_rule
+    path = rule.order_checkout(rule.initial_roots("worker"), "P1")
     added = core("--root", str(comms.root), "checkout", "add", "P1")
     assert added.returncode == 0, added.stderr
     (path / "unit-change.py").write_text("kept work\n")
@@ -178,7 +182,7 @@ def test_checkout_add_allocates_a_declared_sibling_repository_before_it_exists(
         project.commander, (*project.repos, sibling)))
     rule = comms.registry.storage_rule
     worker = comms.registry.require("worker")
-    destination = rule.repository_checkout(worker.name, "P1", sibling.github)
+    destination = rule.repository_checkout(rule.initial_roots(worker.name), "P1", sibling.github)
     assert not destination.exists()
     assert rule.owns_checkout(worker, destination, sibling.github)
     assert not rule.owns_checkout(worker, destination, RepositoryName("OpenHCSDev", "textual"))

@@ -130,7 +130,8 @@ class Fleet:
             threads=(Thread(name=name, tags=frozenset({"comms"}), worktree=str(worktree)),),
         )
         todo = self.order(name, worktree, at=time.time() if at is None else at)
-        checkout = self.comms.registry.storage_rule.order_checkout(name, todo.id)
+        rule = self.comms.registry.storage_rule
+        checkout = rule.order_checkout(rule.initial_roots(name), todo.id)
         branch = self.git(worktree, 'rev-parse', '--abbrev-ref', 'HEAD')
         self.git(worktree, 'switch', '--detach', at=at)
         self.git(worktree, 'worktree', 'add', '-q', str(checkout), branch, at=at)
@@ -285,7 +286,8 @@ class UnpushedBranchSeed(IncidentSeed):
             todo.id,
             todo.order.checked().id,
             unit.incarnation,
-            fleet.comms.registry.storage_rule.order_checkout(unit.name, todo.id),
+            fleet.comms.registry.storage_rule.order_checkout(
+                fleet.comms.registry.storage_rule.initial_roots(unit.name), todo.id),
             UnpushedHead(head, 1, ""),
         )
 
@@ -437,7 +439,8 @@ def test_branch_rules_read_the_order_checkout_instead_of_the_behind_home(fleet):
     built, _ = fleet
     home = built.worktree('old-home', base=built.old_main)
     todo = built.unit('order-worker', home)
-    checkout = built.comms.registry.storage_rule.order_checkout('order-worker', todo.id)
+    rule = built.comms.registry.storage_rule
+    checkout = rule.order_checkout(rule.initial_roots('order-worker'), todo.id)
     behind_line = f'BRANCH BEHIND MAIN: {todo.id} '
     built.git(built.source.checkout, 'worktree', 'remove', str(checkout))
     assert not any(rule.line().startswith(behind_line) for rule in built.observe().rules)
@@ -458,7 +461,8 @@ def test_held_branch_rules_survive_an_order_checkout_retired_mid_frame(fleet):
     """A unit retires its checkout before reporting; the heartbeat reading it must not crash."""
     built, expected = fleet
     storage = built.comms.registry.storage_rule
-    allocated = {storage.order_checkout(name, problem) for name, problem in built.problems.items()}
+    allocated = {storage.order_checkout(storage.initial_roots(name), problem)
+                 for name, problem in built.problems.items()}
 
     class RetiringRead(ProgressRead):
         def branch_difference(self, path: Path) -> BranchDifference:
