@@ -1,6 +1,6 @@
 8189b66abc4f9f431dbb70941dcba690d76d040de1fbfff212886be35a53639d  dist/cli.js
 eca50755ac75e4074966c0ef88f36ddf604f6ec4e9d353fd33003de5c426db58  dist/core/agent-session.js
-b8674b58effdc932d8031eb00385524386398b0f88c2b5511520d1d370bf8e38  dist/core/compaction/compaction.js
+d6138b2559dfd16dc3a47c1659b7a17f9112ab2fc4f1442db0e31d7bed4b7326  dist/core/compaction/compaction.js
 117da12529fbbd66a5f8c19aae82a19db24b3aff58fccbe740427040ae6202b3  dist/core/compaction/compaction.d.ts
 218e0f0450479f4e88f190ccb7596fd074019a3e11bcfee1317bea9647eeb26a  dist/core/session-manager.js
 0da3a510c9d75c2ab48aa9d9479696dba2abfe0a139dc80a5671d496e146a289  dist/modes/rpc/rpc-mode.js
@@ -8,7 +8,7 @@ ac52652495785bb0bd20a3469b527b5815bc3b54e3907738e9045fc5424aace1  dist/core/agen
 317463b70aaeb401056dd0711291fcabc7d77c53a79266f98d42ca834f1a2cfe  dist/core/session-manager.d.ts
 72c670ea423a3a71524ddf6a9fa5a06943676f4a70123881fbef2191698da8b3  dist/modes/rpc/rpc-types.d.ts
 6b22850eca4a77319b4fd28b73dc9f56995b49c28073d86717cfed4c3073ba60  node_modules/@earendil-works/pi-agent-core/dist/agent.js
-97c1ab4b6eeb2ceef2b20d2b439109c316fae3aa96e4ee1519cc68d02bd06a06  node_modules/@earendil-works/pi-agent-core/dist/agent-loop.js
+d7b6cd6f47971a319c2f7661953b5232db6387ae87db06a4d5eeec802b7682eb  node_modules/@earendil-works/pi-agent-core/dist/agent-loop.js
 03e58e63cb12b22295524c61d9b0d1b59ec901d8d5ecd4c74dd0692dbc4c7ff5  node_modules/@earendil-works/pi-agent-core/dist/agent.d.ts
 e5e62ee12c9267ac10b6708fb62afdb4f4e32cf5d98aa07cd2631263c62ae799  node_modules/@earendil-works/pi-agent-core/dist/types.d.ts
 845edb9a4509f79bf973310a37dafa7adb1110dd77e88bfbe5e1c00292dbac68  node_modules/@earendil-works/pi-ai/dist/types.d.ts
@@ -26,8 +26,8 @@ d7ad93bcb341424fa79014ce2fec4226326cfab1e8d5fee27c1859138e120161  dist/core/sdk.
 aae7f609bfa65d29ed16e311456921a88221622e08cf6a1f5c7aab8e58bd69e6  node_modules/@earendil-works/pi-ai/dist/api/openai-completions.js
 bd6cfc604781d55db4dc34a0463544c1f323611429ac8d5fc5ebde31642132fb  agent-comms-extensions/global-agent-comms/index.mjs
 7162c92d37ec9d070f918ce05c4be8c8c191cf3e1559351d56c4cd4e6e050dba  dist/agent-comms-imports.json
-6b9ed9a836702718a6f15d4a14b07ecd2012b4ab689df214f8bf3131db138b00  node_modules/@earendil-works/pi-ai/dist/utils/agent-comms-request-observation.js
-6e8da39a78205f319dfb892980c1f7f109ebc32ae5329dd8075bf6fad4aa09ed  node_modules/@earendil-works/pi-ai/dist/utils/agent-comms-request-observation.d.ts
+10ccd96a00f55297e7f644e9b0d5b9af29dbef2916e005aad28415437398ff42  node_modules/@earendil-works/pi-ai/dist/utils/agent-comms-request-observation.js
+54bd040f59d41a7a53766ed28206e2e5528bbb0704a350a8e01abeab2f6d4c6d  node_modules/@earendil-works/pi-ai/dist/utils/agent-comms-request-observation.d.ts
 e87b99fc294377e78a6bc6019a6b21816d9ba27012f109fb2626105e0c3f1ceb  node_modules/@earendil-works/pi-ai/dist/utils/provider-retry.js
 21d23e4671b0d98af353253b4fcb33d4cabc018df9737a018660e29c72ebd333  node_modules/@earendil-works/pi-ai/dist/utils/provider-retry.d.ts
 a7d2f09e1c671842d0e80e1aea016af8f18e405863beb61e6c46c07d823abedc  node_modules/@earendil-works/pi-ai/dist/api/anthropic-messages.js
@@ -56,5 +56,5 @@ d64e8c05c7932d377034820b1db0df45612afe64885c0765f8f348a12e1bc955  dist/core/skil
 8e8276bbabcd898136d431345611928626fad6b6f03ac572f1d8506e6ece326f  dist/core/system-prompt.d.ts
 0391543cf703a93a0163b37b3ccebe53e0f12bff6f6162b86d56fb017fe49011  dist/core/system-prompt.js
 # agent-comms-native-stock-v1 @earendil-works/pi-coding-agent@0.85.1
-# agent-comms-native-tree-v1 515e5812901d858622cdf3337a372a7b6f8f0911c45372b99df3d14003d01d69
-# agent-comms-native-inputs-v1 aaaa71a53ad1520cf1af04d5a5fe9296bfd6564e61e0acf966e57ae9f9261b12
+# agent-comms-native-tree-v1 bfc0abd887f0e21b7f7037f84ca12f1a348a065b54b9cc962c5247897c25c4f6
+# agent-comms-native-inputs-v1 789e6c666aa8354111f6eea0c049f2f560db6c8f4222ac1142a35cb5a22e941c
