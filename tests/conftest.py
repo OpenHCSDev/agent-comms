@@ -29,7 +29,9 @@ from agent_comms.bus_publication import AgentOrigin
 from agent_comms.channel_targets import CommandTarget
 from agent_comms.comms import Comms, wire
 from agent_comms.locked_store import RegistryFile
-from agent_comms.maintenance_barrier import MaintenanceBarrier, MaintenanceOperator
+from agent_comms.maintenance_barrier import (
+    MaintenanceBarrier, MaintenanceClaimHolder, MaintenanceHolder, MaintenanceOperator,
+)
 from agent_comms.message_bus import MessageBus
 from agent_comms.messages import ConversationRole, InfoKind, Message, MessageKind, MessageRole
 from agent_comms.native_package import pinned_location, pinned_native_package
@@ -386,14 +388,14 @@ def installed_runtime(durable_home: Path, tmp_path: Path) -> LaunchRuntime:
 
 
 @contextmanager
-def maintenance_held(root: Path) -> Iterator[str]:
+def maintenance_held(root: Path) -> Iterator[MaintenanceHolder]:
     """This process holds ``root``'s maintenance the way an install does, nonce in its
     environment for its children, so a stored schema may change here and nowhere else."""
     barrier = MaintenanceBarrier(RegistryFile.path_in(root))
     held = barrier.begin(MaintenanceOperator.current())
     try:
         with held.holding():
-            yield held.nonce
+            yield MaintenanceClaimHolder(held.nonce)
     finally:
         barrier.clear(held)
 
