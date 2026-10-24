@@ -44,7 +44,6 @@ from .field_codec import InputId, RootId, ThreadLookup
 from .image_input import ImageInput
 from .input_attempt import (
     UNOBSERVED_DELIVERY_SCOPE,
-    InputAttempt,
     InputDeliveryScope,
     OwnerQueueInputDeliveryScope,
 )
@@ -623,11 +622,6 @@ class InputDrain(InputObservation):
             session_id=session_id,
             update=(await self.queue_state(session_id)).acp_chunk(),
         )
-
-    async def emit_input_disposition(
-        self, session_id: str, row: InputAttempt, client: SessionUpdateSink | None = None
-    ) -> None:
-        await self.emit_input_delivery_changed(session_id, client=client)
 
     async def emit_input_delivery_changed(
         self, session_id: str, *,
