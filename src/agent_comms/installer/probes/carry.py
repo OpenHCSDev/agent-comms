@@ -90,11 +90,12 @@ class Carry(DeclaredFamily, affix="", discovery_package="cutover"):
     ) -> None:
         """Inside the caller's write transaction, carry stored values of a guarded row:
         its declared mutation guards are lifted and recreated from the same declaration."""
+        (key,) = (field.name for field in row._fields if field.column.primary_key)
         guards = row.triggers()
         for name in guards:
             TriggerKind.drop(db, name)
         db.executemany(
-            row._sql(f'UPDATE "{row.declared_name}" SET {{{column.name}}}=? WHERE {{seq}}=?'),
+            row._sql(f'UPDATE "{row.declared_name}" SET {{{column.name}}}=? WHERE {{{key}}}=?'),
             updates,
         )
         for sql in guards.values():
