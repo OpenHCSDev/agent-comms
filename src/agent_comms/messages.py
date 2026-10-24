@@ -364,7 +364,7 @@ class BusCapability(TypedRow, ProjectionSource):
     def assembled(cls, rows: Iterable[CapabilityRow]) -> Self:
         """This declared value from one stored row of each of its capability tables."""
         return FieldCodec.construct(cls, {
-            item.name: getattr(row, item.name) for row in rows for item in fields(row)})
+            item.name: getattr(row, item.name) for row in rows for item in type(row)._fields})
 
     @staticmethod
     def history(

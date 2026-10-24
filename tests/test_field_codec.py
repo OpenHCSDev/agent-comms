@@ -45,6 +45,22 @@ from agent_comms.field_codec import (
 from agent_comms.messages import ConversationRole, InfoKind, MembershipConversationRole, MembershipNoticeRole, Message, MessageRole, NoticeRole, JoinedMembership, LeftMembership
 
 
+@pytest.mark.parametrize("error", [ValueError("rejected"), MalformedRecord("already located")])
+def test_construct_keeps_domain_failure_and_existing_malformed_record(error: ValueError) -> None:
+    @dataclass
+    class Record:
+        def __post_init__(self) -> None:
+            raise error
+
+    with pytest.raises(MalformedRecord) as failure:
+        FieldCodec.construct(Record, {})
+    if type(error) is MalformedRecord:
+        assert failure.value is error
+    else:
+        assert str(failure.value) == "Invalid Record: rejected"
+        assert failure.value.__cause__ is error
+
+
 def test_registered_value_decoders_own_their_json_schema() -> None:
     for annotation in (*ValueDecoder._by_annotation, Path):
         decoder = ValueDecoder.represented_class(annotation)
