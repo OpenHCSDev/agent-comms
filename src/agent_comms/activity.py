@@ -402,12 +402,6 @@ class ActivityStore(ThreadOwnedState, DerivedStore):
             return Activity(thread=thread, state=ActivityState.IDLE, timestamp=latest.timestamp)
         return latest
 
-    def all_current(self, *, active: frozenset[str] = frozenset()) -> dict[str, Activity]:
-        """Latest activity for every observed thread."""
-        with self.snapshot() as db:
-            latest = {row.thread: row for row in ActivityRow.stream(db)}
-        return self._current_for(latest, latest, active)
-
     def current_for(self, threads: Iterable[str], *,
                     active: frozenset[str] = frozenset()) -> dict[str, Activity]:
         """Read only the requested threads, including absent ones."""

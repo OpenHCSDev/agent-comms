@@ -270,10 +270,5 @@ class MessageBus[Writes: Publisher]:
             rows, key=lambda row: (row.sender_lookup not in first, row.seq)))
         return (AwarenessSegment.capture(self.bus.path, rows),) if rows else ()
 
-    def incoming_page(self, name: str, *, after: int) -> MessagePage:
-        snapshot = self._registry.snapshot()
-        delivery = DeliveryScope.capture(name, snapshot, self._channels.read())
-        return MessagePageRequest(delivery, PageBounds(LiveCursor(after).newer())).read_opened(self.bus)
-
     def channels(self) -> Sequence[str]:
         return list(self.channel_declarations())

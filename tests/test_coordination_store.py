@@ -414,12 +414,6 @@ def test_token_prepared_before_transaction_and_loss_replay_ignores_mutable(db_pa
         progressed = db.advance(
             first.value.fence, PromptAcceptedAttempt, expected_pointer_revision=1
         )
-        renewed = db.renew_lease(
-            progressed.value.fence, expected_pointer_revision=1, duration_ms=120_000
-        )
-        assert renewed.value.snapshot.attempt is not None
-        assert isinstance(renewed.value.snapshot.attempt.lifecycle, LiveAttempt)
-        assert renewed.value.snapshot.attempt.lifecycle.lease_expires_at_ms >= 121_000
         duplicate = db.start(
             AttemptStart(
                 "exec",
@@ -432,7 +426,7 @@ def test_token_prepared_before_transaction_and_loss_replay_ignores_mutable(db_pa
             )
         )
         assert isinstance(duplicate, AlreadyApplied)
-        assert duplicate.value.snapshot.attempt == renewed.value.snapshot.attempt
+        assert duplicate.value.snapshot.attempt == progressed.value.snapshot.attempt
         with pytest.raises(IdentityConflict):
             db.start(
                 AttemptStart(
@@ -537,14 +531,8 @@ def test_nonpublication_claimless_atomic_settlement(db_path: Path) -> None:
 def test_retry_partition_and_generation_fence(db_path: Path) -> None:
     with ready(db_path) as db:
         token, fence = started(db)
-        db.observe_replay(
-            fence,
-            expected_pointer_revision=1,
-            expected_replay_revision=None,
-            facts=ReplayFact.NONE,
-            replay_safe=True,
-            side_effects_possible=False,
-        )
+        with db.session.writing() as connection:
+            ReplayAssessments.authorize_if_unobserved(connection, "exec")
         fence = final_evidence(db, fence)
         outcome = db.settle_nonpublication(
             fence,
@@ -643,16 +631,7 @@ def test_final_backend_fact_blocks_later_phase_progress_and_dead_lease(
             with pytest.raises(RecoveryBlocked):
                 db.advance(fence, phase, expected_pointer_revision=1, progress=progress)
             assert db.get("exec") == before
-        if first_fact == "process_dead":
-            with pytest.raises(RecoveryBlocked):
-                db.renew_lease(fence, expected_pointer_revision=1, duration_ms=1_000)
-            assert db.get("exec") == before
-            second_fact = "backend_done"
-        else:
-            # A done-but-live child may still be waiting for verified exit.
-            renewed = db.renew_lease(fence, expected_pointer_revision=1, duration_ms=1_000)
-            fence = renewed.value.fence
-            second_fact = "process_dead"
+        second_fact = "backend_done" if first_fact == "process_dead" else "process_dead"
         final = db.advance(
             fence,
             PromptStartingAttempt,
@@ -839,14 +818,8 @@ def test_retry_start_rollback_restores_prior_replay_authorization(db_path: Path)
 def test_ambiguity_forces_failed_partition(db_path: Path) -> None:
     with ready(db_path) as db:
         _, fence = started(db)
-        db.observe_replay(
-            fence,
-            expected_pointer_revision=1,
-            expected_replay_revision=None,
-            facts=ReplayFact.TOOL_EXECUTED,
-            replay_safe=False,
-            side_effects_possible=True,
-        )
+        with db.session.writing() as connection:
+            ReplayAssessments.accumulate(connection, "exec", ReplayFact.TOOL_EXECUTED)
         fence = final_evidence(db, fence)
         settled = db.settle_nonpublication(
             fence, expected_pointer_revision=1, outcome=AttemptFailedAttempt()

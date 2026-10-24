@@ -83,8 +83,8 @@ def test_incomplete_durable_annotation_schema_is_not_repaired(tmp_path):
     reopened = wire(comms.root)
     with pytest.raises(ValueError):
         reopened.transcripts.routes.record_input_display(SECOND_INPUT_ID, None)
-    with pytest.raises(ValueError):
-        reopened.transcripts.routes.input_bindings()
+    with pytest.raises(ValueError), reopened.transcripts.routes.for_session("session") as routes:
+        routes.input_display(FIRST_INPUT_ID)
     assert path.read_bytes() == before
 
 

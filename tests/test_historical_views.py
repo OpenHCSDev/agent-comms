@@ -119,7 +119,7 @@ def test_original_identity_and_no_delivery_authority(migrated):
     original = list(old.views.history_page(CommandTarget.named("#team")).messages)
     assert [m.to_wire() for m in historical] == [Message.from_message(m).to_wire() for m in original]
     assert all(m.sender_created_at == 10.0 for m in historical)
-    assert len(live.bus.incoming_page("bob", after=0).messages) == 2
+    assert len(live.bus.inbox("bob").page.messages) == 2
     assert live.bus.bus.revision() == 4
     assert live.views.attach_history(old.root) == source
     assert len(live.bus.history.sources()) == 2
