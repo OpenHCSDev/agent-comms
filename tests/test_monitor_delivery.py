@@ -25,7 +25,8 @@ from agent_comms.cli_bridges.claude_protocol import (
 )
 from agent_comms.cli_bridges.shared import (
     BridgeStateTable, Binding, DeliveryRow, ObservedPart, ReceivingMonitor, UnrecordedMonitor, MonitorPart,
-    ForeignMonitorFrame, Options, ObservedMonitor, MismatchedMonitor, Watch, StoredBinding, GivenBinding, MONITOR_FRAME,
+    ForeignMonitorFrame, Options, ObservedMonitor, MismatchedMonitor, Watch, StoredBinding,
+    GivenBinding, MONITOR_FRAME,
 )
 from agent_comms.cli_protocol import UnconfirmedOutcome, EmittedOutcome, DeliveredOutcome
 from agent_comms.messages import InfoKind, Message
@@ -46,7 +47,8 @@ async def test_empty_journal_starts_at_binding_and_ignores_user_reads(comms, tmp
             'root': str(comms.root), 'bus_thread': 'viewer', 'session': 'session',
         }).bind(db)
         selected = ClaudeBridge(Options(Watch(), StoredBinding(), state), binding, db)
-        fresh = comms.messaging.send('peer', 'viewer', 'after binding, already read in Toad').message
+        fresh = comms.messaging.send(
+            'peer', 'viewer', 'after binding, already read in Toad').message
         comms.messaging.acknowledge('viewer', (fresh.reference,))
         user_reads = comms.bus.reads.read()
         bridge_socket, monitor_socket = socket.socketpair()
@@ -68,9 +70,11 @@ async def test_empty_journal_starts_at_binding_and_ignores_user_reads(comms, tmp
                 assert row.message.reference == fresh.reference
                 assert row.outcome is DeliveredOutcome
                 assert comms.bus.reads.read() == user_reads
-                unread = comms.messaging.send('peer', 'viewer', 'delivery must not mark this read').message
+                unread = comms.messaging.send(
+                    'peer', 'viewer', 'delivery must not mark this read').message
                 line = (await monitor_reader.readline()).decode().rstrip('\n')
-                for update in notification(line, record_id='second-delivery').updates(ClaudeSession()):
+                for update in notification(line, record_id='second-delivery').updates(
+                        ClaudeSession()):
                     await update.observed(selected)
                 assert {row.message.reference for row in DeliveryRow.select(db)} == {
                     fresh.reference, unread.reference,
@@ -157,11 +161,13 @@ async def test_parts_require_complete_exact_body_then_reopen(bridge, emitted_del
         for number in (0, 4):
             for update in record_factory(lines[number], record_id=f'record-{number}').updates(ClaudeSession()):
                 await update.observed(reopened)
-        assert [item.reference for item in reopened.comms.bus.inbox(binding.bus).page.messages] == [message.reference]
+        assert [item.reference for item in reopened.comms.bus.inbox(binding.bus).page.messages] == [
+            message.reference]
         for line in lines:
             for update in record_factory(line, record_id='later-overlap').updates(ClaudeSession()):
                 await update.observed(reopened)
-        assert [item.reference for item in reopened.comms.bus.inbox(binding.bus).page.messages] == [message.reference]
+        assert [item.reference for item in reopened.comms.bus.inbox(binding.bus).page.messages] == [
+            message.reference]
         # Confirmation can beat the final socket-drain emission report.
         confirmed, = DeliveryRow.select(db, id=message.message_id)
         await confirmed.finish(reopened, EmittedOutcome)
@@ -271,13 +277,17 @@ _OLD_DELIVERY_FILE = (
 )
 
 
-_OLD_FIRST = Message(sender='peer', target='viewer', body='first', type=InfoKind, timestamp=1., seq=7)
-_OLD_SECOND = Message(sender='peer', target='viewer', body='second', type=InfoKind, timestamp=2., seq=8)
+_OLD_FIRST = Message(
+    sender='peer', target='viewer', body='first', type=InfoKind, timestamp=1., seq=7)
+_OLD_SECOND = Message(
+    sender='peer', target='viewer', body='second', type=InfoKind, timestamp=2., seq=8)
 
 _OLD_DELIVERY_ROWS = (
     ('binding', ('/root', 'viewer', 'session')),
-    ('delivery', (_OLD_FIRST.message_id, json.dumps(_OLD_FIRST.to_wire()), 'unconfirmed', '{"kind":"receiving","total":1}')),
-    ('delivery', (_OLD_SECOND.message_id, json.dumps(_OLD_SECOND.to_wire()), 'emitted', '{"kind":"unrecorded"}')),
+    ('delivery', (_OLD_FIRST.message_id, json.dumps(_OLD_FIRST.to_wire()),
+                  'unconfirmed', '{"kind":"receiving","total":1}')),
+    ('delivery', (_OLD_SECOND.message_id, json.dumps(_OLD_SECOND.to_wire()),
+                  'emitted', '{"kind":"unrecorded"}')),
     ('observed_part', (_OLD_FIRST.message_id, 1, 'peer', 'part one', 'record-1', 12.5)),
 )
 

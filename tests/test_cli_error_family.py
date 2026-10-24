@@ -124,11 +124,13 @@ print('opened', flush=True)
 
 
 @pytest.mark.parametrize('conflicting', [False, True])
-def test_concurrent_initial_binding_preserves_one_identity_and_pending_delivery(tmp_path, conflicting, bus):
+def test_concurrent_initial_binding_preserves_one_identity_and_pending_delivery(
+        tmp_path, conflicting, bus):
     from journal_binding_cases import concurrent_bindings
 
     first = Binding(str(tmp_path), 'viewer', 'external-session', Binding.bus_head(str(tmp_path)))
-    other = Binding(str(tmp_path), 'other-viewer', 'external-session', Binding.bus_head(str(tmp_path)))
+    other = Binding(
+        str(tmp_path), 'other-viewer', 'external-session', Binding.bus_head(str(tmp_path)))
     message = Message(sender='peer', target='viewer', type=InfoKind,
                       body='retained delivery', timestamp=1.0, seq=1)
     pending = DeliveryRow(message.message_id, json.dumps(message.to_wire()), UnconfirmedOutcome)
@@ -195,7 +197,8 @@ def test_given_binding_fields_override_the_stored_binding(tmp_path, bus):
     with Binding.open(tmp_path) as db:
         with pytest.raises(RecordProblems, match='bus_thread'):
             GivenBinding({**type_key, 'root': str(tmp_path)}).bind(db)
-        stored = Binding(str(tmp_path), 'viewer', 'external-session', Binding.bus_head(str(tmp_path))).bind(db)
+        stored = Binding(
+            str(tmp_path), 'viewer', 'external-session', Binding.bus_head(str(tmp_path))).bind(db)
         assert GivenBinding({**type_key, 'root': str(tmp_path)}).bind(db) == stored
         with pytest.raises(ValueError, match='another Core/CLI conversation'):
             GivenBinding({**type_key, 'bus_thread': 'other-viewer'}).bind(db)

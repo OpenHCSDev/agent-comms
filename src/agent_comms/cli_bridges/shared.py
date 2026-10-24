@@ -26,8 +26,8 @@ from typing import Annotated, ClassVar, Generic, Literal, Self, TextIO, TypeVar
 from pydantic import Field, model_validator
 
 from agent_comms import field_codec, messages
-from agent_comms.bus import Bus
 from agent_comms.agent_runtime import DeliversInput, ExternalRuntime, PublishesTranscript
+from agent_comms.bus import Bus
 from agent_comms.change_report import NoChangeReport, ReportEvidence
 from agent_comms.child_process import (
     AttachedChild,
@@ -62,8 +62,8 @@ from agent_comms.typed_table import (
     Column,
     DurableTables,
     ExpressionIndex,
-    TypedTable,
     TypedRow,
+    TypedTable,
     WriterOwnedFile,
 )
 from agent_comms.wire_models import WireModel
@@ -979,7 +979,8 @@ class CliBridge(ExternalRuntime, DeliversInput, Generic[BridgeOptions]):
         child = await AttachedChild.start((
             str(LaunchRuntime.running().interpreter.with_name('agent-comms')),
             '--root', self.binding.root, 'watch', '--thread', self.binding.bus,
-            '--after', json.dumps(FieldCodec.encode(DeliveryRow.resume_after(self.db, self.binding))),
+            '--after', json.dumps(FieldCodec.encode(
+                DeliveryRow.resume_after(self.db, self.binding))),
             '--acknowledgment', FieldCodec.encode(ExplicitWatchAcknowledgment)),
             stdio=StreamingChildStdio(input_enabled=False))
         try:

@@ -64,7 +64,7 @@ class AfterMessageStart(SingleFieldValue, InboxStart):
         return self.reference.seq
 
 
-class StreamBeginning(NullMember, InboxStart, declared_name=None):
+class StreamBeginning(InboxStart, declared_name=None):
     """Before the first message, there is no reference and the sequence is zero."""
 
     def references(self) -> tuple[MessageReference, ...]:
@@ -96,7 +96,7 @@ class BridgeBeginning(RecordMember, StreamBeginning, BridgePosition):
     """An empty bus starts the bridge stream before its first message."""
 
 @dataclass(frozen=True, slots=True)
-class FirstUnreadStart(StreamBeginning):
+class FirstUnreadStart(NullMember, StreamBeginning):
     """The first unread message is selected by the user's read ledger."""
 
 

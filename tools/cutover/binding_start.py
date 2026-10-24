@@ -3,6 +3,7 @@
 Run only after host bridges pause, before they resume; never in a bus rehearsal.
 Delete this tool and its host call after the installation that runs it.
 """
+
 from __future__ import annotations
 
 import argparse
@@ -13,10 +14,10 @@ from contextlib import closing
 from dataclasses import dataclass, fields
 from pathlib import Path
 
-from agent_comms.cli_bridges.shared import Binding, BindingIdentity, BridgeStateTable, DeliveryRow
 from agent_comms.bus import Bus
-from agent_comms.message_reference import BridgeStart
+from agent_comms.cli_bridges.shared import Binding, BindingIdentity, BridgeStateTable, DeliveryRow
 from agent_comms.locked_store import SQLiteFile
+from agent_comms.message_reference import BridgePosition, BridgeStart
 from agent_comms.typed_table import TypedTable
 from agent_comms_hooks.watch import WatchClaim, WatchRecord
 
@@ -49,7 +50,7 @@ class DeadBinding(BindingMigration):
     path: Path
 
     def report(self) -> int:
-        print(f'dead binding, bus missing: {self.path}')
+        print(f"dead binding, bus missing: {self.path}")
         return 0
 
 
@@ -57,20 +58,19 @@ def state_directories(home: Path) -> tuple[Path, ...]:
     """Recorded commands retain custom state paths; default roots retain inactive bindings."""
     states = set()
     parser = argparse.ArgumentParser(add_help=False)
-    parser.add_argument('--state', type=Path)
-    parser.add_argument('--session')
-    for path in WatchClaim.directory(home).glob('*.lock'):
+    parser.add_argument("--state", type=Path, action="append", default=[])
+    parser.add_argument("--session", action="append", default=[])
+    for path in WatchClaim.directory(home).glob("*.lock"):
         text = path.read_text()
         if not text:
             continue
         record = WatchRecord.decode(**json.loads(text))
         arguments, _ = parser.parse_known_args(record.command[1:])
-        if arguments.state is not None:
-            state = arguments.state / arguments.session if arguments.session else arguments.state
-            if (state / BridgeStateTable.filename).is_file():
-                states.add(state)
-    for name in ('claude-comms-inbox', 'codex-comms-inbox', 'opencode-comms-inbox'):
-        base = home / '.local/state' / name
+        for root in arguments.state:
+            state = root.joinpath(*arguments.session)
+            states.update(path.parent for path in state.glob(BridgeStateTable.filename))
+    for name in ("claude-comms-inbox", "codex-comms-inbox", "opencode-comms-inbox"):
+        base = home / ".local/state" / name
         states.update(path.parent for path in base.rglob(BridgeStateTable.filename))
     return tuple(sorted(states))
 
@@ -81,13 +81,14 @@ def migrate(state: Path) -> BindingMigration:
     if not path.is_file():
         raise FileNotFoundError(path)
     with closing(SQLiteFile.writer(path)) as db, SQLiteFile.write_transaction(db):
-        start, = Binding._fields_named(('start',))
+        (start,) = Binding._fields_named(("start",))
         if start.wire_name in Binding.stored_columns(db):
             return MigratedBindings(0)
         previous = PreviousBinding.read_binding(db)
         latest = DeliveryRow.latest(db)
         bindings = []
         for row in previous:
+            position: BridgePosition
             if latest:
                 position = BridgeStart(latest[0].message.reference)
             else:
@@ -109,7 +110,7 @@ def revert(state: Path) -> BindingMigration:
     if not path.is_file():
         raise FileNotFoundError(path)
     with closing(SQLiteFile.writer(path)) as db, SQLiteFile.write_transaction(db):
-        start, = Binding._fields_named(('start',))
+        (start,) = Binding._fields_named(("start",))
         if start.wire_name not in Binding.stored_columns(db):
             if not DeliveryRow.latest(db):
                 for binding in PreviousBinding.read_binding(db):
@@ -123,21 +124,24 @@ def revert(state: Path) -> BindingMigration:
         PreviousBinding.create(db)
         for binding in previous:
             binding.insert(db)
-        db.execute(f'ALTER TABLE "{PreviousBinding.declared_name}" '
-                   f'RENAME TO "{Binding.declared_name}"')
+        db.execute(
+            f'ALTER TABLE "{PreviousBinding.declared_name}" RENAME TO "{Binding.declared_name}"'
+        )
     return MigratedBindings(len(previous))
 
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--home', type=Path, required=True)
-    parser.add_argument('--revert', dest='operation', action='store_const',
-                        const=revert, default=migrate)
+    parser.add_argument("--home", type=Path, required=True)
+    parser.add_argument(
+        "--revert", dest="operation", action="store_const", const=revert, default=migrate
+    )
     arguments = parser.parse_args()
-    changed = sum(arguments.operation(state).report()
-                  for state in state_directories(arguments.home))
-    print(f'Binding rows changed: {changed}')
+    changed = sum(
+        arguments.operation(state).report() for state in state_directories(arguments.home)
+    )
+    print(f"Binding rows changed: {changed}")
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

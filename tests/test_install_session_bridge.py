@@ -44,7 +44,8 @@ def session_bridge(tmp_path, home, program=SERVE_FROM_SOURCE, *, state_directory
     transcript.write_text('')
     state = (home / '.local/state/agent-comms/claude-bridge-copy'
              if state_directory is None else state_directory)
-    binding = Binding(str(comms.root), 'bridge-copy', transcript.stem, Binding.bus_head(str(comms.root)))
+    binding = Binding(
+        str(comms.root), 'bridge-copy', transcript.stem, Binding.bus_head(str(comms.root)))
     with Binding.open(state) as db:
         binding.bind(db)
     claim = WatchClaim(binding.thread, home)

@@ -32,8 +32,7 @@ from collections.abc import Callable, Iterator
 from contextlib import AbstractContextManager, ExitStack, contextmanager
 from dataclasses import dataclass, field, fields, replace
 from pathlib import Path
-from types import TracebackType
-from typing import TYPE_CHECKING, Annotated, ClassVar, Literal, Self
+from typing import TYPE_CHECKING, Annotated, ClassVar, Self
 
 from pydantic import TypeAdapter
 
@@ -624,7 +623,7 @@ class Stack:
 
 
 @dataclass(frozen=True)
-class BindingStartCutover(AbstractContextManager[None]):
+class BindingStartCutover:
     """Undo the host-only binding conversion before the bus/runtime restore path."""
 
     staged: Stack
@@ -639,18 +638,13 @@ class BindingStartCutover(AbstractContextManager[None]):
                 cwd=self.home, env=self.staged.environment(),
             )
 
-    def __enter__(self) -> None:
+    def around[Result](self, start: Callable[[], Result]) -> Result:
         try:
             self.run(BridgePhase('binding start'))
-        except BaseException as error:
-            self.__exit__(type(error), error, error.__traceback__)
-            raise
-
-    def __exit__(self, exception_type: type[BaseException] | None,
-                 exception: BaseException | None, traceback: TracebackType | None) -> Literal[False]:
-        if exception_type is not None:
+            return start()
+        except BaseException:
             self.run(BridgePhase('binding start revert'), '--revert')
-        return False
+            raise
 
 
 @dataclass(frozen=True)
@@ -1062,8 +1056,9 @@ class ChangedInstall(ExistingBusInstall[RehearsedFiles]):
                 with MaintenancePhase("clear").running(self.staged.commands.clock):
                     holder.close()
                     maintenance.clear(held)
-                with BindingStartCutover(self.staged, self.checkout, self.installed.home):
-                    restarted_services = self.staged.start_services(services)
+                restarted_services = BindingStartCutover(
+                    self.staged, self.checkout, self.installed.home,
+                ).around(lambda: self.staged.start_services(services))
             except BaseException as error:
                 print(f"install: install failed ({type(error).__name__}: {error}); "
                       "restoring original installation", file=sys.stderr)

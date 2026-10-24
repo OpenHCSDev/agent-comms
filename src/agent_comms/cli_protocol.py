@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import argparse
-import asyncio
 import builtins
 from abc import ABC, abstractmethod
 from collections.abc import AsyncIterator
