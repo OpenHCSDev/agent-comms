@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import ClassVar
 
 from agent_comms.context_store import ContextRequest, ContextStore
+from agent_comms.declared_family import DeclaredFamily
 from agent_comms.field_codec import FieldCodec, MalformedRecord, TurnId
 from agent_comms.installer.probes.carry import Carried, Carry
 from agent_comms.locked_store import RootFile
@@ -21,14 +22,18 @@ class StoredRegisteredTurn:
 
 
 class CarriedContextTurn(ABC):
-    occurrence: TurnIdentity
-
     @abstractmethod
     def carried(self) -> RecordedContextTurn: ...
 
 
+class BoxedContextTurn(DeclaredFamily, CarriedContextTurn, affix="BoxedContextTurn"): ...
+
+
+class UnboxedContextTurn(DeclaredFamily, CarriedContextTurn, affix="UnboxedContextTurn"): ...
+
+
 @dataclass(frozen=True)
-class StoredContextTurn(CarriedContextTurn):
+class RecordedBoxedContextTurn(BoxedContextTurn):
     identity: StoredRegisteredTurn
     occurrence: TurnIdentity
 
@@ -37,7 +42,7 @@ class StoredContextTurn(CarriedContextTurn):
 
 
 @dataclass(frozen=True)
-class CurrentContextTurn(CarriedContextTurn):
+class RecordedUnboxedContextTurn(UnboxedContextTurn):
     identity: TurnId
     occurrence: TurnIdentity
 
@@ -53,7 +58,9 @@ class ContextTurnIds(Carry):
         try:
             return {
                 **FieldCodec.encode(
-                    FieldCodec.decode(StoredContextTurn | CurrentContextTurn, payload).carried()
+                    FieldCodec.decode(
+                        RecordedBoxedContextTurn | RecordedUnboxedContextTurn, payload
+                    ).carried()
                 )
             }
         except MalformedRecord as error:
