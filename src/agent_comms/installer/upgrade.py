@@ -827,7 +827,6 @@ def upgrade(checkout: Path, root: Path, target: str, installer: InstallerChoice,
     with InstallRunPhase().running(commands.clock), commands, report.running(tree, commands.clock):
         with PreparePhase().running(commands.clock):
             StoreBackup.complete_interrupted(root, spill_dir)
-            installed = Stack(tree.path, commands)
             current = commands.git(checkout, "rev-parse", "HEAD").strip()
             with commands.timing(GitPhase(
                 checkout, ("merge-base", "--is-ancestor", current, target),
@@ -843,6 +842,7 @@ def upgrade(checkout: Path, root: Path, target: str, installer: InstallerChoice,
             except ValueError as error:
                 raise UpgradeRefused(str(error)) from None
             member = Install.member(root, retire)
+            installed = Stack(tree.path, commands)
             installed.require_uv()
             if not installed.python.exists():
                 raise UpgradeRefused(f"No installed stack at {installed.python}")

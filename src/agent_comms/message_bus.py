@@ -22,6 +22,7 @@ from typing import TYPE_CHECKING
 from agent_comms.bus import Bus, BusSnapshot
 from agent_comms.channel_targets import NamedTarget
 from agent_comms.channels import AnyChannel
+from agent_comms.coordination_database import CoordinationStore
 from agent_comms.coordinator import Coordination
 from agent_comms.historical_views import HistoryArchive
 from agent_comms.maintenance_barrier import MaintenanceBarrier, MaintenanceHeldError
@@ -47,6 +48,7 @@ from agent_comms.routing import DeliveryScope
 from agent_comms.store_files import UNBOUNDED_CONTENTION, StoreLockContention
 
 if TYPE_CHECKING:
+    from agent_comms.assignment_states import AssignmentState
     from agent_comms.comms import Comms
     from agent_comms.registration import Registration
     from agent_comms.registry_document import RegistrySnapshot
@@ -214,10 +216,23 @@ class MessageBus[Writes: Publisher]:
             snapshot, self.bus, document=document,
         )
 
+    def hand_to_harness(self, name: str, references: Sequence[MessageReference]) -> None:
+        """A harness outside Core takes these messages before it says whether they started."""
+        self._settle_claims(name, references, lambda state: state.harness_handoff())
+
     def mark_delivered(self, name: str, references: Sequence[MessageReference]) -> int:
+        self._settle_claims(name, references, lambda state: state.harness_delivery())
         basis = self.delivered(name, references)
         self.reads.mark_displayed(basis.viewer, basis)
         return basis.message_count
+
+    def _settle_claims(
+        self, name: str, references: Sequence[MessageReference],
+        steps: Callable[[AssignmentState], tuple[type[AssignmentState], ...]],
+    ) -> None:
+        lookup = self._registry.require(name).incarnation.require_recorded().lookup
+        with Coordination(str(CoordinationStore.path_in(self.bus.path.parent))) as store:
+            store.assignments.settle_harness_inputs(lookup, references, steps)
 
     def mark_delivered_through(
         self, name: str, sequence: int, *, target: NamedTarget = AnyChannel.target(),

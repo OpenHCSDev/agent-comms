@@ -10,6 +10,7 @@ from agent_comms.todos import DroppedVerdict, TodoError
 from agent_comms.tool_declaration import ToolDeclaration
 from agent_comms.transcript_events import ToolStartTranscript
 from agent_comms.turn_item import NativeItemId, NativeTurnId
+from source_revision_fixture import SourceRepository
 
 pytest_plugins = ("test_held_problem_orders",)
 
@@ -19,8 +20,8 @@ DROPPED = "DROPPED_MARKER_LINE = 'only on the discarded formatter branch'"
 
 def committed(repo, name: str, line: str) -> None:
     (repo.checkout / name).write_text(line + "\n")
-    repo.git(repo.checkout, "add", name)
-    repo.git(repo.checkout, "commit", "-q", "-m", f"add {name}")
+    SourceRepository.git(repo.checkout, "add", name)
+    SourceRepository.git(repo.checkout, "commit", "-q", "-m", f"add {name}")
 
 
 def recorded_edit(ctx, call_id: ToolCallId, path: str, line: str) -> None:

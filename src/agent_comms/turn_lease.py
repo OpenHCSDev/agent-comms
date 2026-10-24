@@ -652,7 +652,7 @@ class StoredTurnRecord(Executing, DurableFile, PatternFile, JsonDocument[ActiveT
         with _store_lock(self.registry_path):
             if not RegistryStore(self.registry_path).read_snapshot_unlocked().holds_turn(self.identity):
                 return ()
-            active = self.read()
+            active = self._read_unlocked()
             if not active.held_by(lease):
                 return ()
             effects = tuple(observe(TurnState(active)))

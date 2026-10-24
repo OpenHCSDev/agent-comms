@@ -54,11 +54,13 @@ from agent_comms.todos import (
     DeliverTodo,
     DoneTodoState,
     MergedListedPullRequest,
+    MergedProgress,
     NotOrderCommander,
     OperationDelivery,
     PendingProblemOrder,
     ProgressRead,
     PullRequestCommit,
+    PullRequestSource,
     PullRequests,
     ReleaseTodo,
     StrikeReason,
@@ -377,6 +379,29 @@ def test_recorded_closed_request_is_not_open_or_merged(pr_commander):
     assert pulls.listed(linked.repo, UnmergedListedPullRequest, linked) == ()
     assert pulls.listed(linked.repo, MergedListedPullRequest, linked) == ()
     assert len(pulls.listed(linked.repo, ClosedListedPullRequest, linked)) == 1
+
+
+def test_order_is_merged_only_when_every_linked_request_merged(pr_commander, github_cli):
+    ctx = pr_commander
+    source = ctx.repos[0]
+    merged = subprocess.run(("git", "-C", str(source.checkout), "rev-parse", "HEAD"),
+                            capture_output=True, text=True, check=True).stdout.strip()
+    common = dict(branch="feature/orders", head=merged, updated="2099-01-01T00:00:00Z",
+                  base=WorkBranches.main, reviewable_times=("2099-01-01T00:00:00Z",))
+    for number in (5, 6):
+        github_cli.put(source.github, MergedListedPullRequest(
+            number=number, merge=PullRequestCommit(merged), merged="2099-01-01T00:00:00Z",
+            **common))
+    github_cli.put(source.github, UnmergedListedPullRequest(number=7, **common))
+
+    def found(pid, numbers):
+        todo = pr_order(ctx, pid)
+        for number in numbers:
+            todo = adopt_pr(ctx, todo.id, number)
+        return tuple(MergedProgress.found(PullRequestSource(todo, ProgressRead((todo,)))))
+
+    assert found("P1", (5, 7)) == ()
+    assert found("P2", (5, 6)) == (MergedProgress(merged), MergedProgress(merged))
 
 
 def test_watcher_git_and_github_reads_leave_wire_free(pr_commander, monkeypatch):

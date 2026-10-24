@@ -218,6 +218,10 @@ class DrainReadiness(DeclaredFamily, affix="DrainReadiness"):
     def require_available(self) -> None:
         pass
 
+    def unavailable_since(self) -> tuple[float, ...]:
+        """When nothing could reach this owner's inbox; empty while it is reachable."""
+        return ()
+
 
 @dataclass(frozen=True)
 class ReadyDrainReadiness(DrainReadiness):
@@ -248,6 +252,9 @@ class NativeInputDrainReadiness(DiagnosticDrainReadiness, ReadyDrainReadiness):
 class UnavailableDrainReadiness(DiagnosticDrainReadiness):
     def require_available(self):
         raise RelationViolationError(self.diagnostic.summary)
+
+    def unavailable_since(self) -> tuple[float, ...]:
+        return (self.diagnostic.recorded_at,)
 
 
 @dataclass(frozen=True, slots=True)

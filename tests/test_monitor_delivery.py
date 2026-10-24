@@ -327,3 +327,70 @@ def test_old_delivery_index_set_is_carried_onto_the_declaration_with_every_row(t
     with closing(sqlite3.connect(path)) as db:
         assert {table: db.execute(f'SELECT * FROM "{table}"').fetchall()
                 for table in before} == before
+
+
+@pytest.mark.asyncio
+async def test_harness_outcome_lives_on_the_threads_claim_across_a_rehome(tmp_path, monkeypatch):
+    from bus_record_fixture import prepare_native_comms
+    from conftest import publish_initial
+    from agent_comms.assignment_states import DeferredAssignment, DeliveredAssignment
+    from agent_comms.comms import wire
+    from agent_comms.coordination_cohort import accept_delivery_cohort, pending_sealed_assignments
+    from agent_comms.coordination_database import CoordinationStore
+    from agent_comms.coordination_tables.assignments import WakeAssignment
+    from agent_comms.coordinator import Coordination
+    from agent_comms.thread_execution import ExternalThreadExecution
+
+    comms = prepare_native_comms(wire(tmp_path / 'wire'))
+    comms.registry.declare(Thread('peer', frozenset(), str(tmp_path)))
+    comms.registry.declare(Thread('viewer', frozenset(), str(tmp_path),
+                                  execution=ExternalThreadExecution))
+    root_id = comms.registry.prepare_native_root().namespace
+    lookup = comms.registry.require('viewer').incarnation.require_recorded().lookup
+    with Coordination(str(CoordinationStore.path_in(comms.root))) as store:
+        store.participants.register(lookup, committed=True)
+
+        def publish(body):
+            message = publish_initial(comms, 'peer', 'viewer', body).message
+            accept_delivery_cohort(comms.bus, root_id, message.seq, store)
+            return message
+
+        taken, confirmed, waiting = (publish(body) for body in (
+            'taken, start unproved', 'taken and confirmed', 'never reached the harness'))
+
+    def claim(message):
+        with Coordination(str(CoordinationStore.path_in(comms.root))) as store:
+            row, = WakeAssignment.select(store.session._connection,
+                                         recipient_lookup=lookup, wire_seq=message.seq)
+            return row.lifecycle
+
+    def owed():
+        with Coordination(str(CoordinationStore.path_in(comms.root))) as store:
+            return tuple(row.wire_seq for row in pending_sealed_assignments(store, lookup, after_seq=0))
+
+    async def emitted(message):
+        return EmittedOutcome
+
+    async def attached():
+        pass
+
+    state = tmp_path / 'bridge-state'
+    with Binding.open(state) as db:
+        binding = Binding(str(comms.root), 'viewer', 'session', Binding.bus_head(str(comms.root)))
+        binding.bind(db)
+        bridge = ClaudeBridge(Options(Watch(), StoredBinding(), state, state.parent), binding, db)
+        monkeypatch.setattr(bridge, 'prepare_delivery', attached)
+        monkeypatch.setattr(bridge, 'deliver', emitted)
+        assert owed() == (taken.seq, confirmed.seq, waiting.seq)
+        await bridge.accept(taken)
+        await bridge.accept(confirmed)
+        row, = DeliveryRow.select(db, id=confirmed.message_id)
+        await row.finish(bridge, DeliveredOutcome)
+        await bridge.accept(taken)
+
+    # Whatever execution owns the thread next reads this one record: only the
+    # message no harness took is still owed, and the UNKNOWN one never replays.
+    assert owed() == (waiting.seq,)
+    unknown = claim(taken)
+    assert unknown == DeferredAssignment.build(unknown.mode, None, None)
+    assert type(claim(confirmed)) is DeliveredAssignment

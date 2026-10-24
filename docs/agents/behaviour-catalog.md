@@ -106,7 +106,7 @@ An order whose check line does not read `repo :: command -> integer`, prints no 
 
 Checked by:
 
-- check in `agent_comms.goals.OrderCheck.parse`
+- check in `agent_comms.commander.order.CheckRequest.parse`
 - check in `agent_comms.child_process.NoIntegerPrinted.unproven`
 - check in `agent_comms.child_process.CountPrinted.unproven`
 
