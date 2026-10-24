@@ -5,7 +5,7 @@ import os
 from multiprocessing.context import ForkServerContext
 from pathlib import Path
 
-from agent_comms.field_codec import ClaimId
+from agent_comms.field_codec import ClaimId, ThreadLookup
 from agent_comms.audience_manifest import FrozenRecipient, freeze_audience
 from agent_comms.bus import PrivateRecord
 from agent_comms.comms import Comms, wire
@@ -22,6 +22,8 @@ from agent_comms.threads import Thread
 
 publication_processes = ForkServerContext()
 publication_processes.set_forkserver_preload([ClaimMessage.__module__.partition(".")[0]])
+SENDER_LOOKUP = ThreadLookup("a" * 32)
+RECIPIENT_LOOKUP = ThreadLookup("b" * 32)
 
 
 def prepare_native_comms(comms: Comms) -> Comms:
@@ -47,7 +49,11 @@ def context_comms(directory: Path) -> Comms:
     return comms
 
 
-def record_from(declaration, message, *, sender_lookup="a" * 32, recipient_lookup="b" * 32):
+def record_from(
+    declaration, message, *,
+    sender_lookup: ThreadLookup = SENDER_LOOKUP,
+    recipient_lookup: ThreadLookup = RECIPIENT_LOOKUP,
+):
     capabilities = {}
     if issubclass(declaration, Delivered):
         audience = freeze_audience(

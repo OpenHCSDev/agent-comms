@@ -13,7 +13,7 @@ from .audience_manifest import FrozenRecipient
 from .coordination_tables.assignments import WakeAssignment
 from .coordination_tables.publications import PublicationEvidence
 from .declared_family import DeclaredFamily
-from .field_codec import FieldCodec, MalformedRecord, MessageId, boundary_decoder
+from .field_codec import FieldCodec, MalformedRecord, MessageId, ThreadLookup, boundary_decoder
 from .message_reference import MessageReference
 from .notification_progress import (
     AnsweredProgress,
@@ -202,7 +202,7 @@ class NotificationSource(DeclaredFamily, affix="NotificationSource"):
 
     @abstractmethod
     def project(self, observation: RecipientActivity,
-                sender_lookup: str) -> MessageNotification: ...
+                sender_lookup: ThreadLookup) -> MessageNotification: ...
 
 
 @dataclass(frozen=True)
@@ -210,7 +210,9 @@ class UnrecordedNotificationSource(NotificationSource):
     recipient: FrozenRecipient
     decision: RecipientDecision
 
-    def project(self, observation: RecipientActivity, sender_lookup: str) -> MessageNotification:
+    def project(
+        self, observation: RecipientActivity, sender_lookup: ThreadLookup
+    ) -> MessageNotification:
         return self.decision.initial_notification(
             self.recipient, sender_lookup, observation=observation)
 
@@ -363,7 +365,9 @@ class NotificationAssignment(NotificationSource):
     def recipient(self) -> FrozenRecipient:
         return FrozenRecipient(self.assignment.recipient_lookup, self.assignment.recipient)
 
-    def project(self, observation: RecipientActivity, sender_lookup: str) -> MessageNotification:
+    def project(
+        self, observation: RecipientActivity, sender_lookup: ThreadLookup
+    ) -> MessageNotification:
         return self.assignment.lifecycle.notification(
             self.recipient,
             sender_lookup,

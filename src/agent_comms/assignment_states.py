@@ -151,7 +151,7 @@ class AssignmentState(CoordinatorVocabulary, LifecycleState, affix="Assignment")
     def notification(
         self,
         recipient: FrozenRecipient,
-        sender_lookup: str,
+        sender_lookup: ThreadLookup,
         *,
         observation: RecipientActivity,
         activity: AssignmentActivity | None = None,
@@ -256,7 +256,7 @@ class PendingNotification(EngageableAssignment, Pending):
     def notification(
         self,
         recipient: FrozenRecipient,
-        sender_lookup: str,
+        sender_lookup: ThreadLookup,
         *,
         observation: RecipientActivity,
         activity: AssignmentActivity | None = None,
@@ -279,7 +279,7 @@ class SelectedResponseNotification:
     def notification(
         self,
         recipient: FrozenRecipient,
-        sender_lookup: str,
+        sender_lookup: ThreadLookup,
         *,
         observation: RecipientActivity,
         activity: AssignmentActivity,
@@ -301,7 +301,9 @@ class PreengagementTarget:
 
 
 class ChangedNotification:
-    def notification(self, recipient: FrozenRecipient, sender_lookup: str, **kwargs) -> MessageNotification:
+    def notification(
+        self, recipient: FrozenRecipient, sender_lookup: ThreadLookup, **kwargs
+    ) -> MessageNotification:
         return replace(
             super().notification(recipient, sender_lookup, **kwargs), changed=True
         )
@@ -440,7 +442,7 @@ class CompletedAssignment(Complete, Terminal, BoundAssignment):
     def notification(
         self,
         recipient: FrozenRecipient,
-        sender_lookup: str,
+        sender_lookup: ThreadLookup,
         *,
         observation: RecipientActivity,
         activity: AssignmentActivity,
@@ -520,7 +522,7 @@ class DeliveredAssignment(
     def notification(
         self,
         recipient: FrozenRecipient,
-        sender_lookup: str,
+        sender_lookup: ThreadLookup,
         *,
         observation: RecipientActivity,
         activity: AssignmentActivity,
@@ -553,7 +555,7 @@ class FailedAssignment(Failed, Terminal, InterruptedAssignment):
     def notification(
         self,
         recipient: FrozenRecipient,
-        sender_lookup: str,
+        sender_lookup: ThreadLookup,
         *,
         observation: RecipientActivity,
         activity: AssignmentActivity | None,

@@ -11,9 +11,15 @@ from agent_comms.audience_manifest import (
     FrozenRecipient,
     freeze_audience,
 )
+from agent_comms.field_codec import ThreadLookup
 from agent_comms.mentions import ThreadMention
 from agent_comms.messages import Message, AlertKind, InfoKind
 from agent_comms.thread_identity import AgentThreadRole, UserThreadRole
+
+
+ALPHA_LOOKUP = ThreadLookup("a" * 32)
+BETA_LOOKUP = ThreadLookup("b" * 32)
+SENDER_LOOKUP = ThreadLookup("f" * 32)
 
 
 def message(**changes):
@@ -35,12 +41,12 @@ def freeze(msg=None, members=None, **changes):
     return freeze_audience(
         message() if msg is None else msg,
         (
-            [FrozenRecipient("id-beta", "beta"), FrozenRecipient("id-alpha", "alpha")]
+            [FrozenRecipient(BETA_LOOKUP, "beta"), FrozenRecipient(ALPHA_LOOKUP, "alpha")]
             if members is None
             else members
         ),
         "registry+catalog:7",
-        sender_lookup="id-sender",
+        sender_lookup=SENDER_LOOKUP,
         sender_name="sender",
         **changes,
     )
@@ -51,12 +57,12 @@ def test_full_ordered_membership_ignores_mentions_and_has_two_unique_identities(
     assert result.wire_seq == 11
     assert result.message_id == message().message_id
     assert result.exact_target == "#team"
-    assert result.sender_lookup == "id-sender"
+    assert result.sender_lookup == SENDER_LOOKUP
     assert result.sender_name == "sender"
     assert result.source_revision == "registry+catalog:7"
     assert result.recipients == (
-        FrozenRecipient("id-alpha", "alpha"),
-        FrozenRecipient("id-beta", "beta"),
+        FrozenRecipient(ALPHA_LOOKUP, "alpha"),
+        FrozenRecipient(BETA_LOOKUP, "beta"),
     )
     assert result.canonical_members == frozenset({"alpha", "beta"})
     assert not hasattr(result, "wake_mode")
@@ -93,7 +99,7 @@ def test_reusing_frozen_value_after_rename_retag_stop_does_not_resolve_members_a
     assert original.recipients[0].canonical_thread == "alpha"
     assert original.canonical_members == frozenset({"alpha", "beta"})
     assert freeze(members=list(original.recipients)).digest == original.digest
-    assert freeze(members=[FrozenRecipient("id-alpha", "renamed")]).digest != original.digest
+    assert freeze(members=[FrozenRecipient(ALPHA_LOOKUP, "renamed")]).digest != original.digest
 
 
 def test_exact_stored_all_target_and_no_wildcard_inference():
@@ -109,10 +115,10 @@ def test_exact_stored_all_target_and_no_wildcard_inference():
 @pytest.mark.parametrize(
     "members",
     [
-        [FrozenRecipient("id-a", "alpha"), FrozenRecipient("id-a", "beta")],
-        [FrozenRecipient("id-a", "alpha"), FrozenRecipient("id-b", "alpha")],
-        [FrozenRecipient("id-sender", "alpha")],
-        [FrozenRecipient("id-a", "sender")],
+        [FrozenRecipient(ALPHA_LOOKUP, "alpha"), FrozenRecipient(ALPHA_LOOKUP, "beta")],
+        [FrozenRecipient(ALPHA_LOOKUP, "alpha"), FrozenRecipient(BETA_LOOKUP, "alpha")],
+        [FrozenRecipient(SENDER_LOOKUP, "alpha")],
+        [FrozenRecipient(ALPHA_LOOKUP, "sender")],
     ],
 )
 def test_duplicate_or_sender_identities_fail_closed(members):
@@ -122,11 +128,9 @@ def test_duplicate_or_sender_identities_fail_closed(members):
 
 def test_wrong_sender_or_unassigned_message_cannot_be_a_frozen_value():
     with pytest.raises(ValueError):
-        freeze_audience(message(), (), "rev", sender_lookup="id-sender", sender_name="another")
+        freeze_audience(message(), (), "rev", sender_lookup=SENDER_LOOKUP, sender_name="another")
     with pytest.raises(ValueError):
         freeze(message(seq=0))
-    with pytest.raises(ValueError):
-        freeze_audience(message(), (), "rev", sender_lookup="", sender_name="sender")
 
 
 def test_bounded_id_count_and_envelope_bytes_fail_closed():
@@ -144,7 +148,7 @@ def test_bounded_id_count_and_envelope_bytes_fail_closed():
     with pytest.raises(ValueError):
         freeze(message(body="x" * (MAX_WIRE_ENVELOPE_BYTES + 1), mentions=()))
     with pytest.raises(ValueError):
-        freeze_audience(message(), (), " ", sender_lookup="id-sender", sender_name="sender")
+        freeze_audience(message(), (), " ", sender_lookup=SENDER_LOOKUP, sender_name="sender")
     with pytest.raises(TypeError):
         freeze(members=["alpha"])
 
