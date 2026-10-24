@@ -22,7 +22,7 @@ from agent_comms.response_acknowledgement import (
 )
 from agent_comms.typed_table import Column, Generated, sql_literal
 
-from .field_codec import FieldCodec
+from .field_codec import FieldCodec, MessageId
 from .read_basis import RepliesDisplayScope
 from .wake_policy import RecipientDecision
 
@@ -125,7 +125,7 @@ class InitialOrigin(ABC):
         """Refuse a sender this origin cannot speak for."""
 
     @abstractmethod
-    def require_source(self, source: BusReader, sender: str, message_id: str) -> None:
+    def require_source(self, source: BusReader, sender: str, message_id: MessageId) -> None:
         """Check the sender and message ID on the actual append connection."""
 
     @abstractmethod
@@ -168,7 +168,7 @@ class AgentOrigin(InitialOrigin):
             RelationViolationError("Initial sender must be a visible registered executable.")
         )
 
-    def require_source(self, source: BusReader, sender: str, message_id: str) -> None:
+    def require_source(self, source: BusReader, sender: str, message_id: MessageId) -> None:
         """An agent's resend is idempotent, so the source holds no precondition."""
 
     def append(self, bus: Bus, build: RecordBuilder) -> BusRecord:
@@ -203,7 +203,7 @@ class HumanOrigin(OwnerVoiceOrigin):
         if message.sender != self.sender:
             raise RelationViolationError("Local USER origin differs from registered identity.")
 
-    def require_source(self, source: BusReader, sender: str, message_id: str) -> None:
+    def require_source(self, source: BusReader, sender: str, message_id: MessageId) -> None:
         from .bus_tables import MessageIdentitySource
 
         with source.observing() as db:

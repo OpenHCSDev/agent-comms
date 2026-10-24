@@ -15,7 +15,7 @@ from agent_comms.private_runtime_schema import PrivateCoordinatorTable
 
 from .audience_manifest import MAX_AUDIENCE_BYTES
 from .coordination_contracts import POLICY_VERSION, RESOLVER_VERSION
-from .field_codec import MalformedRecord, WireName
+from .field_codec import MalformedRecord, MessageId, WireName
 from .response_acknowledgement import _canonical
 from .typed_table import (
     Column,
@@ -121,7 +121,7 @@ class ClaimBatchAcknowledgements(
         ),
     ]
     wire_seq: Annotated[int, FrozenColumn(primary_key=True, check="wire_seq > 0")]
-    message_id: Annotated[str, FrozenColumn(check="length(message_id) BETWEEN 1 AND 256")]
+    message_id: Annotated[MessageId, FrozenColumn(check="length(message_id) BETWEEN 1 AND 256")]
     exact_target: Annotated[str, FrozenColumn(check="length(exact_target) BETWEEN 1 AND 256")]
     envelope_digest: Annotated[str, FrozenColumn(check="length(envelope_digest) = 64")]
     audience_digest: Annotated[str, FrozenColumn(check="length(audience_digest) = 64")]

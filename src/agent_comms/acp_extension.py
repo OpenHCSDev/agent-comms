@@ -32,6 +32,7 @@ from .field_codec import (
     Id128Text,
     InputId,
     MalformedRecord,
+    MessageId,
     WireValue,
     WireName,
     WireOmitDefault,
@@ -725,12 +726,12 @@ class CompactRequest(CommsRequest):
 @dataclass(frozen=True)
 class SelectedWriteRequest(CommsRequest):
     source_seq: int
-    source_message_id: str
+    source_message_id: MessageId
     resource: str
     contents: str
 
     def __post_init__(self):
-        if self.source_seq <= 0 or not self.source_message_id or not self.resource:
+        if self.source_seq <= 0 or not self.resource:
             raise ValueError("Selected write requires actual source and resource identity")
 
 

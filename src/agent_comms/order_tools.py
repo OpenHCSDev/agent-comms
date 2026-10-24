@@ -32,7 +32,7 @@ from .commander.vibe_check import OverloadDegradation
 from .commander_hud import CommanderHud
 from .comms import Comms
 from .errors import ToolRefusedError
-from .field_codec import FieldCodec, WireName
+from .field_codec import FieldCodec, MessageId, WireName
 from .goal_actions import CreateProblemGoalAction, OrderGoalAction
 from .goals import Goal, OrderCheck
 from .heartbeat_frame import HeartbeatFrame
@@ -236,7 +236,7 @@ class CommsCorrectWordingTool(ThreadToolRequest):
         "strikes stay as they are. Only its commander may invoke this tool."
     )
     unit: Annotated[str, *tool_field("Unit thread whose message used jargon")]
-    message_id: Annotated[str, *tool_field("The unit's message")]
+    message_id: Annotated[MessageId, *tool_field("The unit's message")]
     text: Annotated[str, *tool_field("The unit's message text")]
 
     def apply(self, comms: Comms, caller: ThreadCaller) -> MessagePublished:

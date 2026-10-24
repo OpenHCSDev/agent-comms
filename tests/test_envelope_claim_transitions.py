@@ -43,7 +43,9 @@ def test_same_name_can_take_a_previous_birth_only_with_current_registry_evidence
     registry = comms.registry.snapshot()
     scope = NativeClaim(owner_claimed_generation=1, operation_id=ClaimId("c" * 32),
                         turn_id=TurnId('5d1970910e79a04eb98c8e9533701156'), input_id="input-owner")
-    held = WakeClaims("owner", "1.0", 1, "msg-1", claims=(resource,),
+    held_message_id = MessageId.mint("msg-1")
+    successor_message_id = MessageId.mint("msg-2")
+    held = WakeClaims("owner", "1.0", 1, held_message_id, claims=(resource,),
                       generation=G1, resource_scope=scope).project(ClaimProjection())
     original = held[resource]
     assert not original.live(registry)
@@ -51,7 +53,7 @@ def test_same_name_can_take_a_previous_birth_only_with_current_registry_evidence
     for owner, incarnation in (("foreign", "3.0"), ("owner", "4.0")):
         with pytest.raises(ClaimConflict):
             original.require_holder(owner, incarnation)
-    successor = WakeClaims("owner", "2.0", 2, "msg-2", claims=(resource,),
+    successor = WakeClaims("owner", "2.0", 2, successor_message_id, claims=(resource,),
                            generation=G2, resource_scope=scope)
     saved = FieldCodec.decode(ClaimTransition, FieldCodec.encode(successor))
     moved = saved.apply(held, registry)
@@ -82,7 +84,8 @@ def test_selected_wake_binding_survives_claim_projection(tmp_path):
         participant_generation=1,
         attempt_ordinal=1,
     )
-    claimed = WakeClaims("owner", "epoch-1", 8, "msg-8", claims=(resource,),
+    message_id = MessageId.mint("msg-8")
+    claimed = WakeClaims("owner", "epoch-1", 8, message_id, claims=(resource,),
                          generation=G1, resource_scope=claim_scope)
     raw = FieldCodec.encode(claimed)
     decoded = FieldCodec.decode(ClaimTransition, raw)
@@ -102,12 +105,13 @@ def test_selected_wake_binding_survives_claim_projection(tmp_path):
 
 
 def transition(seq, *, owner="owner", incarnation="epoch-1", claims=(), releases=(), generation=None):
+    message_id = MessageId.mint(f"msg-{seq}")
     if claims:
-        return UnscopedClaims(owner, incarnation, seq, f"msg-{seq}",
+        return UnscopedClaims(owner, incarnation, seq, message_id,
                               claims=tuple(claims), generation=generation, releases=tuple(releases))
     if generation is not None:
         raise ClaimTransitionError("Releases cannot mint an acquisition generation.")
-    return ReleasedClaims(owner, incarnation, seq, f"msg-{seq}", releases=tuple(releases))
+    return ReleasedClaims(owner, incarnation, seq, message_id, releases=tuple(releases))
 
 
 def resources(tmp_path):
@@ -148,11 +152,13 @@ def test_existing_physical_worktree_files_and_aliases(tmp_path):
 def test_two_serialized_conflicting_entrants_have_one_winner_and_one_synchronous_loser(tmp_path):
     _, a, _ = resources(tmp_path)
     initial = ClaimProjection()
-    first = transition(1, claims=(a,), generation=G1).project(initial)
+    claim = transition(1, claims=(a,), generation=G1)
+    message_id = claim.message_id
+    first = claim.project(initial)
     with pytest.raises(ClaimConflict) as conflict:
         transition(2, owner="competitor", claims=(a,), generation=G2).require_holders(first)
     assert conflict.value.existing.owner == "owner" and conflict.value.existing.seq == 1
-    assert dict(initial) == {} and list(first) == [a] and first[a].message_id == "msg-1"
+    assert dict(initial) == {} and list(first) == [a] and first[a].message_id == message_id
     with pytest.raises(TypeError):
         first[a] = None
 
