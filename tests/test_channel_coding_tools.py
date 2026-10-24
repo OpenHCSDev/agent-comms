@@ -26,6 +26,7 @@ from agent_comms.envelope_claim_transitions import (
 )
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.coordination_session import NativeBoundary
+from agent_comms.field_codec import TurnId
 from agent_comms.native_tools import CodingTool
 from agent_comms.pi_events import ToolExecutionEnd, ToolExecutionStart
 from agent_comms.pi_payloads import ToolCallContent
@@ -39,7 +40,9 @@ def test_create_claim_competes_before_file_exists_and_releases_without_creation(
         work = Path(directory) / "work"
         work.mkdir()
         c = wire(root)
+        turns = {}
         for name, created in [("a", 21.0), ("b", 22.0)]:
+            turns[name] = TurnId.mint()
             thread = Thread(name, frozenset({'team'}), str(work), created_at=created)
             c.registry.declare(replace(thread, process_identity=ProcessIdentity.capture(os.getpid())))
         resource = WritableFileClaim(Path("new/nested/file.py"))
@@ -47,7 +50,7 @@ def test_create_claim_competes_before_file_exists_and_releases_without_creation(
             with NativeBoundary(c.bus) as boundary:
                 owner = boundary.registry.require(name)
                 scope = NativeClaim(owner_claimed_generation=boundary.registry.claim_generation(name),
-                                    operation_id=secrets.token_hex(16), turn_id=f"create-{name}",
+                                    operation_id=secrets.token_hex(16), turn_id=turns[name],
                                     input_id=f"create-input-{name}")
                 return c.bus.publisher._publish_acquisition_unlocked(
                     boundary.registry, owner, resource.normalized(work), scope,
@@ -73,7 +76,9 @@ def test_stopped_holder_reclaimed_in_copied_root(tmp_path, monkeypatch, existing
     if existing:
         resource.resource.write_text("original\n")
     original = wire(tmp_path / "original")
+    turns = {}
     for name in ("holder-a", "holder-b"):
+        turns[name] = TurnId.mint()
         thread = Thread(name, frozenset(), str(work))
         original.registry.declare(replace(
             thread, process_identity=ProcessIdentity.capture(os.getpid())
@@ -84,7 +89,7 @@ def test_stopped_holder_reclaimed_in_copied_root(tmp_path, monkeypatch, existing
             owner = boundary.registry.require(name)
             scope = NativeClaim(
                 owner_claimed_generation=boundary.registry.claim_generation(name),
-                operation_id=secrets.token_hex(16), turn_id=f"turn-{name}",
+                operation_id=secrets.token_hex(16), turn_id=turns[name],
                 input_id=f"input-{name}",
             )
             return comms.bus.publisher._publish_acquisition_unlocked(
