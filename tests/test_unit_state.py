@@ -1,6 +1,7 @@
 """Unit cards from real records, with unread failures isolated to their unit."""
 
 import json
+import os
 import time
 from dataclasses import replace
 from datetime import UTC, datetime
@@ -8,16 +9,21 @@ from pathlib import Path
 
 import pytest
 
+from agent_comms.activity import ActivityState
+from agent_comms.child_process import ProcessIdentity
 from agent_comms.commander_heartbeat import CommanderHeartbeat
+from agent_comms.external_transcript import ExternalTranscript
+from agent_comms.heartbeat_frame import HeartbeatFrame
 from agent_comms.launch_runtime import LaunchRoot
 from agent_comms.message_page import MessagePageRequest
 from agent_comms.read_basis import DMDisplayScope
 from agent_comms.recorded_time import RecordedEventTime
+from agent_comms.session_file import RegistrySessionLocation
+from agent_comms.thread_execution import ExternalThreadExecution
 from agent_comms.thread_status import StoppedThreadStatus
 from agent_comms.thread_text import ForkedParent
-from agent_comms.session_file import RegistrySessionLocation
-from agent_comms.heartbeat_frame import HeartbeatFrame
 from agent_comms.todos import DeliverTodo, OperationDelivery, ProgressRead
+from agent_comms.transcript_events import ToolStartTranscript
 from agent_comms.ui_model.unit_state import (
     AwaitingCommander,
     Blocked,
@@ -175,6 +181,34 @@ def test_unit_state_family_uses_real_records(held_bus, tmp_path, member):
         print(state.line())
 
 
+def test_started_turn_on_delivered_order_is_moving_not_stalled(held_bus):
+    worker = replace(held_bus.registry.require("worker"), execution=ExternalThreadExecution)
+    held_bus.registry.register(worker)
+    ExternalTranscript(held_bus.root, worker.incarnation).finish(
+        turn_id="turn",
+        item_id="call",
+        events=(
+            ToolStartTranscript(
+                position=0, tool_call_id="call", tool_name="bash", timestamp=time.time()
+            ),
+        ),
+    )
+    bridge = ProcessIdentity.capture(os.getpid())
+    with (
+        LaunchRoot.from_path(held_bus.root).selected(),
+        held_bus.registry.external_process("worker", bridge),
+    ):
+        held_bus.agents.set_activity("worker", ActivityState.WORKING, "P1")
+        (state,) = (
+            state
+            for state in UnitState.current(
+                held_bus, "lead", HeartbeatFrame.read(held_bus, "lead", ProgressRead())
+            )
+            if state.unit.name == "worker"
+        )
+        assert isinstance(state, Moving)
+
+
 def test_claim_is_a_commander_question_not_a_verified_delivery(held_bus, claim_order):
     comms = held_bus
     claim = claim_order("P1")
@@ -221,10 +255,6 @@ def test_malformed_native_source_is_unreadable_not_idle(held_bus):
 def test_heartbeat_keeps_every_unit_when_one_checkout_is_unreadable(
     held_bus, tmp_path, primary, broken_metadata, installed_runtime
 ):
-    import os
-
-    from agent_comms.child_process import ProcessIdentity
-
     if primary:
         checkout = Path(held_bus.goals.todos.get("P1").order.checked().check.directory)
         (checkout / ".git").rename(checkout / "saved-git")
