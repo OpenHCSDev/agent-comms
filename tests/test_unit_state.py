@@ -235,6 +235,14 @@ def test_stopped_child_without_lead_orders_remains_in_the_frame(held_bus):
         assert state.presence == StoppedThreadStatus()
 
 
+def test_commander_fork_gets_no_unit_card(held_bus):
+    fork = held_bus.registry.register_commander_child("judge-fork", "lead", held_bus.goals)
+    with LaunchRoot.from_path(held_bus.root).selected():
+        states = UnitState.current(
+            held_bus, "lead", HeartbeatFrame.read(held_bus, "lead", ProgressRead()))
+    assert fork.incarnation not in {state.unit for state in states}
+
+
 def test_malformed_native_source_is_unreadable_not_idle(held_bus):
     recorded_turn(held_bus, 1)
     path = held_bus.root / "state-source.jsonl"
