@@ -68,14 +68,18 @@ class Attach(Watch):
     def add_arguments(cls, parser: argparse.ArgumentParser) -> None:
         parser.add_argument('--pid', type=int, required=True)
 
+    @classmethod
+    def from_arguments(cls, arguments: argparse.Namespace) -> Self:
+        if arguments.session is None:
+            raise ValueError('Attach requires the selected native session')
+        arguments.bus_thread = arguments.bus_thread or f'opencode-{arguments.session}'
+        return super().from_arguments(arguments)
+
     def binding(self, arguments: argparse.Namespace) -> BindingRequest:
         from agent_comms.comms import wire
 
-        if arguments.session is None:
-            raise ValueError('Attach requires the selected native session')
         comms = wire(arguments.root)
         arguments.root = str(comms.root)
-        arguments.bus_thread = arguments.bus_thread or f'opencode-{arguments.session}'
         return super().binding(arguments)
 
 

@@ -168,9 +168,9 @@ def recorded_watches(home: Path) -> tuple[WatchDirectory, ...]:
     return tuple(watches)
 
 
-def state_directories(home: Path) -> tuple[Path, ...]:
+def state_directories(home: Path, watches: tuple[WatchDirectory, ...]) -> tuple[Path, ...]:
     """Recorded commands retain custom state paths; default roots retain inactive bindings."""
-    states = {watch.state for watch in recorded_watches(home)}
+    states = {watch.state for watch in watches}
     for base in default_bases(home):
         states.update(path.parent for path in base.rglob(BridgeStateTable.filename)
                       if '.binding-start-backup' not in path.parts)
@@ -246,6 +246,7 @@ class DirectoryBackup:
     journals: tuple[SavedJournal, ...]
     watches: tuple[SavedWatch, ...]
     destinations: tuple[Annotated[Path, PathText], ...]
+    root: Annotated[Path, PathText]
 
     def save(self, path: Path) -> None:
         for journal in self.journals:
@@ -369,12 +370,12 @@ class ReaderDirectories:
               f'start {position.cursor()}')
 
 
-def merge_directories(home: Path) -> int:
+def merge_directories(home: Path, root: Path) -> int:
     watches = recorded_watches(home)
     groups: dict[tuple[str, str], list[Path]] = {}
     identities = {}
     unbound = []
-    for state in state_directories(home):
+    for state in state_directories(home, watches):
         with closing(sqlite3.connect(
                 (state / BridgeStateTable.filename).as_uri() + '?mode=ro', uri=True)) as db:
             bindings = PreviousBinding.read_binding(db)
@@ -392,13 +393,13 @@ def merge_directories(home: Path) -> int:
     )) for key, states in groups.items())
     by_base: dict[Path, list[ReaderDirectories]] = {}
     for reader in readers:
-        if not reader.watches:
-            # An inactive default binding still owns its declared session.
-            raise ValueError(f'No saved watch for {reader.identity.bus}: {reader.states}')
-        try:
-            Binding.bus_head(reader.identity.root)
-        except FileNotFoundError:
-            DeadBinding(Bus.path_in(Path(reader.identity.root))).report()
+        if reader.identity.root != str(root):
+            for state in reader.states:
+                print(f'left in place: {reader.identity.bus} at {state} (other root)')
+            continue
+        if not any(watch.held() for watch in reader.watches):
+            for state in reader.states:
+                print(f'left in place: {reader.identity.bus} at {state} (no live reader)')
             continue
         by_base.setdefault(reader.destination.parent, []).append(reader)
     changed = 0
@@ -418,6 +419,7 @@ def merge_directories(home: Path) -> int:
                   for index, state in enumerate(sources)),
             tuple(SavedWatch(path, directory / 'watches' / path.name) for path in commands),
             tuple(member.destination for member in members),
+            root,
         )
         backup.save(manifest)
         for state in empty:
@@ -430,7 +432,7 @@ def merge_directories(home: Path) -> int:
     return changed
 
 
-def revert(home: Path) -> int:
+def revert(home: Path, root: Path) -> int:
     # A failed forward run may already have removed an old journal. Discover its
     # backup from the saved command without opening the journal being restored.
     bases = set(default_bases(home))
@@ -450,6 +452,8 @@ def revert(home: Path) -> int:
         manifest = directory / 'manifest.json'
         if manifest.is_file():
             backup = FieldCodec.decode(DirectoryBackup, json.loads(manifest.read_text()))
+            if backup.root != root:
+                continue
             changed += backup.restore()
             shutil.rmtree(directory)
     return changed
@@ -458,12 +462,13 @@ def revert(home: Path) -> int:
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--home", type=Path, required=True)
+    parser.add_argument('--root', type=Path, required=True)
     parser.add_argument(
         "--revert", dest="operation", action="store_const", const=revert,
         default=merge_directories
     )
     arguments = parser.parse_args()
-    changed = arguments.operation(arguments.home)
+    changed = arguments.operation(arguments.home, arguments.root)
     print(f"Binding rows changed: {changed}")
 
 
