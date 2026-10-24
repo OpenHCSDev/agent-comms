@@ -22,7 +22,7 @@ from .envelope_claim_transitions import (
     FileClaimPath,
     WakeClaim,
 )
-from .field_codec import ClaimId, FieldCodec, MalformedRecord
+from .field_codec import ClaimId, FieldCodec, InputId, MalformedRecord
 from .lifecycle_capability import Executing
 from .native_arguments import NativeArguments
 from .native_tool_call import CodingCall, NativeToolMode, ToolNotExecuting
@@ -108,7 +108,7 @@ class SelectedCodingToolOwner(CodingToolOwner):
     store: Coordination
     resource_scope: WakeClaim
     session_dir: Path
-    input_id: str
+    input_id: InputId
     goal_permission: TurnGoalPermission = field()
 
     def for_original(self, assignment: WakeAssignment, operation_id: ClaimId) -> CodingToolOwner:

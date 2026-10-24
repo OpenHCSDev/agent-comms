@@ -1,6 +1,5 @@
 """A refused coding tool call tells the agent the real reason."""
 
-import secrets
 import sqlite3
 from pathlib import Path
 
@@ -11,6 +10,7 @@ from agent_comms.channel_coding_tools import CodingToolSocket
 from agent_comms.coordinator import Coordination
 from agent_comms.coordination_database import CoordinationStore
 from agent_comms.envelope_claim_transitions import ClaimTransitionError
+from agent_comms.field_codec import InputId
 from agent_comms.native_tool_call import CoordinationBusy
 from agent_comms.tool_denial import SelectedToolDenied
 from agent_comms.selected_tool_broker import verify_sent_full_input
@@ -39,14 +39,14 @@ def test_busy_coordination_database_is_reported_as_busy(tmp_path, private_comms)
         try:
             writer.execute("BEGIN EXCLUSIVE")
             with pytest.raises(CoordinationBusy) as busy:
-                verify_sent_full_input(store, None, "owner", secrets.token_hex(16))
+                verify_sent_full_input(store, None, "owner", InputId.mint())
             writer.execute("ROLLBACK")
             message = reply(tmp_path, busy.value)
             assert "busy" in message and "did not run" in message
             assert "worktree" not in message and "UNKNOWN" not in message
             # With the database free the same call reaches the real check.
             with pytest.raises(SelectedToolDenied) as denied:
-                verify_sent_full_input(store, None, "owner", secrets.token_hex(16))
+                verify_sent_full_input(store, None, "owner", InputId.mint())
             assert not isinstance(denied.value, CoordinationBusy)
         finally:
             writer.close()
