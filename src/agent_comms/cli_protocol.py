@@ -6,7 +6,7 @@ import argparse
 import asyncio
 import builtins
 from abc import ABC, abstractmethod
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Mapping
 from dataclasses import replace
 from functools import partial
 from graphlib import TopologicalSorter
@@ -96,16 +96,13 @@ class TaggedWire(DeclaredWireFamily, WireModel, ABC, affix="", declared_name=Non
         return self.tag()
 
     @classmethod
-    def tag_of(cls, value: object) -> str:
-        return cls.header.model_validate(value).type
+    def tag_of(cls, value: Mapping[str, object] | TaggedWire) -> str:
+        if isinstance(value, Mapping):
+            return cls.header.model_validate(value).type
+        return value.type
 
     @classmethod
     def declared_union(cls) -> TypeForm[Self]:
-        def tag(value: object) -> str:
-            if isinstance(value, cls):
-                return value.tag()
-            return cls.tag_of(value)
-
         variants = []
         declarations = sorted(cls.members_with(cls), key=lambda member: member.tag())
         for wire_tag, group in groupby(declarations, key=lambda member: member.tag()):
@@ -119,7 +116,7 @@ class TaggedWire(DeclaredWireFamily, WireModel, ABC, affix="", declared_name=Non
             # An inherited specialization must precede its general parent.
             alternatives = Union[*reversed(tuple(hierarchy.static_order()))]
             variants.append(Annotated[alternatives, Tag(wire_tag)])
-        return Annotated[Union[*variants], Discriminator(tag)]
+        return Annotated[Union[*variants], Discriminator(cls.tag_of)]
 
 
 class OpenWire(TaggedWire, ABC, declared_name=None):
@@ -127,7 +124,7 @@ class OpenWire(TaggedWire, ABC, declared_name=None):
     member tagged 'foreign', which carries no conversation."""
 
     @classmethod
-    def tag_of(cls, value: object) -> str:
+    def tag_of(cls, value: Mapping[str, object] | TaggedWire) -> str:
         tag = super().tag_of(value)
         try:
             cls.member_named(tag)
