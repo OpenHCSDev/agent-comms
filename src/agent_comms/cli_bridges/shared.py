@@ -175,7 +175,7 @@ class GivenBinding(BindingRequest):
     given: dict[str, str]
 
     @classmethod
-    def from_arguments(cls, arguments: argparse.Namespace, bridge: type[CliBridge]) -> Self:
+    def from_arguments(cls, arguments: CliArguments, bridge: type[CliBridge]) -> Self:
         keys = {key for _, key in FieldCodec.record_fields(BindingIdentity)}
         values = {key: value for key, value in vars(arguments).items() if key in keys}
         arguments.base_state = arguments.state
@@ -202,7 +202,7 @@ class ResolvedBinding(GivenBinding):
     """A bare command resolves its reader from the harness session's enrolment."""
 
     @classmethod
-    def from_arguments(cls, arguments: argparse.Namespace, bridge: type[CliBridge]) -> Self:
+    def from_arguments(cls, arguments: CliArguments, bridge: type[CliBridge]) -> Self:
         session = arguments.binding_session.resolve(bridge)
         bindings = WatchClaim(session).state().bindings()
         if len(bindings) != 1:
@@ -218,19 +218,35 @@ class ResolvedBinding(GivenBinding):
         return super().from_arguments(arguments, bridge)
 
 
-@dataclass(frozen=True)
-class GivenThread:
+class BindingThread(ABC):
+    """The bus flag's binding request and its resolved thread answer."""
+
+    @property
+    @abstractmethod
+    def request(self) -> type[GivenBinding]: ...
+
+    @property
+    @abstractmethod
+    def thread(self) -> str: ...
+
+
+@dataclass(frozen=True, slots=True)
+class GivenThread(BindingThread):
     """An explicit bus flag selects the explicit binding request."""
 
-    thread: str
-    request: ClassVar[type[GivenBinding]] = GivenBinding
+    thread: str = field()
+    request = GivenBinding
 
 
-@dataclass(frozen=True)
-class ResolvedThread:
+@dataclass(frozen=True, slots=True)
+class ResolvedThread(BindingThread):
     """Without a bus flag, the operation owns how its reader is resolved."""
 
-    request: type[GivenBinding]
+    request: type[GivenBinding] = field()
+
+    @property
+    def thread(self) -> str:
+        raise ValueError('Resolve the enrolled binding before reading its thread')
 
 
 @dataclass(frozen=True)
@@ -312,9 +328,8 @@ class Options:
             operation.add_arguments(command)
             command.set_defaults(operation=operation)
         arguments = parser.parse_args(namespace=CliArguments())
-        arguments.binding_request = arguments.binding_thread.request
         arguments.operation = arguments.operation.from_arguments(arguments)
-        arguments.binding = arguments.binding_request.from_arguments(arguments, bridge_type)
+        arguments.binding = arguments.binding_thread.request.from_arguments(arguments, bridge_type)
         return cls(**{declared.name: vars(arguments)[key]
                       for declared, key in FieldCodec.record_fields(cls)})
 
