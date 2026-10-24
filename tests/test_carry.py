@@ -14,12 +14,14 @@ from tools.debt_ratchet import UncarriedRecordFormat, git
 from agent_comms.cli_commands import StopCliCommand
 from agent_comms.installer.backup import StoreBackup, bus_files
 from agent_comms.installer.refusals import UpgradeRefused
-from agent_comms.installer.carry import STEPS
+from agent_comms.installer.carry import STEPS, CarryChain, FinishedCarryStore
 from agent_comms.installer.probes.carry import Carried, Carry, MigrateOperation
 from agent_comms.installer.commands import InstallCommands
-from agent_comms.installer.interpreter_operation import TargetProgram
+from agent_comms.installer.interpreter_operation import InstallClock, TargetProgram
+from agent_comms.installer.practice import PracticeCopy
 from agent_comms.installer.upgrade import (
     BackedUpMigration,
+    PracticeBus,
     PreparedMigration,
     RehearsalFiles,
     Stack,
@@ -192,6 +194,23 @@ def test_step_answers_are_separate_from_diagnostics_and_keep_their_types(
     assert staged.call_steps((request,), MigrateOperation(True)) == (
         Carried(1, {"applied": True}, (Path("saved"),)),)
     assert (root / "saved").read_text() == "migrated"
+
+
+def test_a_bus_dry_runs_only_the_steps_it_has_not_finished(staged, tmp_path, noisy_step):
+    """A step's own dry run still says work remains, so a skipped run proves the record
+    answered; the record keeps a step that has since left the tree."""
+    _, step = noisy_step
+    root = tmp_path / "bus"
+    root.mkdir()
+    practice = PracticeBus(tmp_path, PracticeCopy(root, tmp_path / "copy"), root,
+                           tmp_path / "spill", InstallClock())
+    chain = CarryChain((step,))
+    with InstallClock().selected():
+        assert practice.pending(chain, staged) == (step,)
+        chain.finish_at(root)
+        assert practice.pending(chain, staged) == ()
+    CarryChain(()).finish_at(root)
+    assert FinishedCarryStore.at(root).read().steps == (step.declared_name,)
 
 
 def test_backed_up_migration_restores_a_real_worker_failure(comms, staged, noisy_step):

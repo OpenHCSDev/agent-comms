@@ -694,12 +694,13 @@ class PracticeBus:
 
     def pending(self, chain: CarryChain, staged: Stack) -> tuple[type[Carry], ...]:
         """Read-only dry runs in one worker stop at the first step that says work remains."""
-        if not chain.steps:
+        unfinished = chain.unfinished_at(self.original_root).steps
+        if not unfinished:
             return ()
         steps = tuple(step(self.original_root, self.original_root, self.spill_dir)
-                      for step in chain.steps)
+                      for step in unfinished)
         (position,) = staged.call_steps(steps, FirstPendingOperation())
-        return chain.steps[position:]
+        return unfinished[position:]
 
     def select(self, pending: tuple[Carry, ...], reconciled: tuple[Path, ...]) -> tuple[Path, ...]:
         # This is the one input union consumed by both rehearsal and live backup.
@@ -763,6 +764,7 @@ class Install[Rehearsed: Rehearsal](ABC):
     root: Path
     current: str
     target: str
+    chain: CarryChain
     pending: tuple[Carry, ...]
     installed: Stack
     staged: Stack
@@ -821,6 +823,7 @@ class Install[Rehearsed: Rehearsal](ABC):
             rehearsed = self.reported(rehearsal)
             try:
                 live_run = self.install(rehearsal, bridges, report)
+                self.chain.finish_at(self.root)
                 if self.installed.python != self.staged.python:
                     self.staged.commands.close_runtime(self.installed.python)
                 installed_harnesses = harnesses(self.staged)
@@ -873,14 +876,14 @@ class ExistingBusInstall[Rehearsed: Rehearsal](Install[Rehearsed]):
         with PracticeBus.of(root, installer, spill_dir, staged.commands.clock) as practice:
             pending = practice.pending(chain, staged)
             reconciled = staged.cli(root, PlannedReconcileCliCommand).rewritten
-            install = cls.of(checkout, root, current, target, pending, reconciled,
+            install = cls.of(checkout, root, current, target, chain, pending, reconciled,
                              installed, staged, tree, installer, spill_dir)
             if pending or reconciled:
                 return install, install.rehearsal(practice, reconciled)
             return install, install.uncopied()
 
     @classmethod
-    def of(cls, checkout: Path, root: Path, current: str, target: str,
+    def of(cls, checkout: Path, root: Path, current: str, target: str, chain: CarryChain,
            pending: tuple[type[Carry], ...], reconciled: tuple[Path, ...],
            installed: Stack, staged: Stack, tree: TargetTree,
            installer: InstallerChoice, spill_dir: Path) -> ExistingBusInstall:
@@ -889,7 +892,7 @@ class ExistingBusInstall[Rehearsed: Rehearsal](Install[Rehearsed]):
             staged.lock, staged, target)
         member = (ChangedInstall, UnchangedInstall)[unchanged]
         steps = tuple(step(root, root, spill_dir) for step in pending)
-        return member(checkout, root, current, target, steps, installed, staged,
+        return member(checkout, root, current, target, chain, steps, installed, staged,
                       tree, installer, spill_dir)
 
     @abstractmethod
@@ -1106,7 +1109,7 @@ class FreshInstall(Install[FreshRehearsal]):
                   chain: CarryChain, installed: Stack, staged: Stack, tree: TargetTree,
                   installer: InstallerChoice, spill_dir: Path) -> tuple[Install, Rehearsal]:
         """Nothing at the root to copy, so nothing is pending."""
-        install = cls(checkout, root, current, target, (), installed, staged,
+        install = cls(checkout, root, current, target, chain, (), installed, staged,
                       tree, installer, spill_dir)
         return install, install.rehearsal()
 
