@@ -19,7 +19,7 @@ from dataclasses import replace
 
 import pytest
 
-from agent_comms.field_codec import TurnId
+from agent_comms.field_codec import ClaimId, TurnId
 from agent_comms.reason_codes import NoReasonCode
 from agent_comms.attempt_start import AttemptStart
 from agent_comms.bus import BusReader
@@ -129,7 +129,7 @@ def selected_turn(private_comms, private_directory):
             wake_revision=store.assignments.get(assignment.assignment_id).revision,
             recipient_lookup=lookup,
             execution_id="execution",
-            operation_id="f" * 32,
+            operation_id=ClaimId("f" * 32),
             owner_claimed_generation=generation,
             turn_id=owner.require_turn_lease().turn_id,
             participant_generation=person.owner_identity.generation,
@@ -155,8 +155,12 @@ def claim_originals(comms: Comms) -> tuple[ClaimMessage, ...]:
     return tuple(record for record in records if isinstance(record, ClaimMessage))
 
 
+DEFAULT_CLAIM_OPERATION = ClaimId("e" * 32)
+
+
 def acquire_tool_claim(
-    comms: Comms, name: str, resource: Path, turn_id: TurnId, operation_id: str = "e" * 32,
+    comms: Comms, name: str, resource: Path, turn_id: TurnId,
+    operation_id: ClaimId = DEFAULT_CLAIM_OPERATION,
 ):
     with NativeBoundary(comms.bus) as boundary:
         owner = boundary.registry.require(name)
@@ -234,7 +238,7 @@ def test_claim_operation_is_refused_after_its_claim_was_released(selected_turn) 
             comms, store, claim_scope, "Alice", ExistingFileClaim(resource)
         )
     again = publish_selected_resource_claim(
-        comms, store, replace(claim_scope, operation_id="e" * 32), "Alice",
+        comms, store, replace(claim_scope, operation_id=ClaimId("e" * 32)), "Alice",
         ExistingFileClaim(resource),
     )
     assert again.generation != claimed.generation

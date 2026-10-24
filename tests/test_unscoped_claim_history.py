@@ -7,11 +7,11 @@ from agent_comms.envelope_claim_transitions import (
     ClaimProjection, ClaimRelease, ClaimTransition, NativeClaim, ReleasedClaims,
     UnrecordedScope, UnscopedClaims, WakeClaims,
 )
-from agent_comms.field_codec import FieldCodec, MalformedRecord, TurnId
+from agent_comms.field_codec import ClaimId, FieldCodec, MalformedRecord, TurnId
 from agent_comms.thread_status import RunningThreadStatus
 from agent_comms.threads import Thread
 
-G1, G2 = "a" * 32, "b" * 32
+G1, G2 = ClaimId("a" * 32), ClaimId("b" * 32)
 
 
 def test_unscoped_history_row_decodes_projects_never_live_and_releases(tmp_path):
@@ -45,7 +45,7 @@ def test_unscoped_history_row_decodes_projects_never_live_and_releases(tmp_path)
         generation=G2,
         resource_scope=NativeClaim(
             owner_claimed_generation=1,
-            operation_id="c" * 32,
+            operation_id=ClaimId("c" * 32),
             turn_id=TurnId('ff33c94032d9f01447a779689c1dff6a'),
             input_id="input-2",
         ),

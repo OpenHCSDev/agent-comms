@@ -19,6 +19,7 @@ from .comms import Comms
 from .coordination_database import CoordinationStore
 from .envelope_claim_transitions import (
     ClaimOwner,
+    FileClaimPath,
     WakeClaim,
 )
 from .field_codec import ClaimId, FieldCodec, MalformedRecord
@@ -42,6 +43,8 @@ from .tool_denial import SelectedToolDenied
 from .turn_goal_permission import TurnGoalPermission
 
 if TYPE_CHECKING:
+    from .backend import TurnSession
+    from .coordination_tables.assignments import WakeAssignment
     from .pi_payloads import PiToolResult
 
 
@@ -93,9 +96,10 @@ class CodingToolOwner(ABC):
     def verify(self, store, turn, snapshot): ...
 
     @abstractmethod
-    def claim_resource(self, store, turn, resource, slot: ClaimId): ...
+    def claim_resource(self, store: Coordination, turn: TurnSession,
+                       resource: FileClaimPath, slot: ClaimId) -> ClaimOwner: ...
 
-    def for_original(self, assignment, operation_id: ClaimId):
+    def for_original(self, assignment: WakeAssignment, operation_id: ClaimId) -> CodingToolOwner:
         raise SelectedToolDenied("An ordinary input has no selected original")
 
 
@@ -107,7 +111,7 @@ class SelectedCodingToolOwner(CodingToolOwner):
     input_id: str
     goal_permission: TurnGoalPermission = field()
 
-    def for_original(self, assignment, operation_id: ClaimId) -> CodingToolOwner:
+    def for_original(self, assignment: WakeAssignment, operation_id: ClaimId) -> CodingToolOwner:
         """Project the same native grant onto an actually included original."""
         from .native_runtime_input import NativeRuntimeInput
 
@@ -132,7 +136,8 @@ class SelectedCodingToolOwner(CodingToolOwner):
         verify_sent_full_input(store, self.resource_scope, self.owner_name, self.input_id)
         verify_selected_wake(self.comms, store, self.resource_scope, self.owner_name)
 
-    def claim_resource(self, store, turn, resource, slot: ClaimId):
+    def claim_resource(self, store: Coordination, turn: TurnSession,
+                       resource: FileClaimPath, slot: ClaimId) -> ClaimOwner:
         scope = replace(self.resource_scope, operation_id=slot)
         return publish_selected_resource_claim(self.comms, store, scope, self.owner_name, resource)
 

@@ -19,7 +19,7 @@ from agent_comms.assignment_states import FullPendingAssignment
 from agent_comms.attempt_start import AttemptStart
 from agent_comms.attempt_states import ModelRunningAttempt, PromptAcceptedAttempt, SettlingAttempt
 from agent_comms.child_process import ProcessIdentity
-from agent_comms.field_codec import TurnId
+from agent_comms.field_codec import ClaimId, TurnId
 from agent_comms.selected_claim import (
     publish_selected_resource_claim,
     verify_selected_wake,
@@ -110,7 +110,7 @@ def test_selected_wake_verifier_refuses_no_wake_and_stale_authority(
                 wake_revision=engaged.revision,
                 recipient_lookup=alice_lookup,
                 execution_id=execution_id,
-                operation_id="f" * 32,
+                operation_id=ClaimId("f" * 32),
                 owner_claimed_generation=claimed_generation,
                 turn_id=owner.require_turn_lease().turn_id,
                 participant_generation=person.owner_identity.generation,
@@ -175,7 +175,7 @@ def test_selected_wake_verifier_refuses_no_wake_and_stale_authority(
                     store,
                     claim_scope,
                     "Alice",
-                    replace(selected_owner, generation="0" * 32),
+                    replace(selected_owner, generation=ClaimId("0" * 32)),
                     b"forged\n",
                 )
             assert resource.read_bytes() == b"value = 2\n"
@@ -216,7 +216,7 @@ def test_selected_wake_verifier_refuses_no_wake_and_stale_authority(
                 publish_selected_resource_claim(
                     comms,
                     store,
-                    replace(claim_scope, operation_id="e" * 32),
+                    replace(claim_scope, operation_id=ClaimId("e" * 32)),
                     "Alice",
                     ExistingFileClaim(Path(resource)),
                 )

@@ -52,13 +52,15 @@ class AcpSelectedWriteAuthority(BoundSelectedWriteAuthority):
         self.require_current(assignment, owner, plan.operation_id)
         return action.with_plan(self, plan, assignment, owner)
 
-    def require_current(self, assignment, owner, operation_id: ClaimId):
+    def require_current(
+        self, assignment: WakeAssignment, owner: Thread, operation_id: ClaimId
+    ) -> None:
         bound = self.agent._selected_write_controllers.get((owner.name, assignment.wire_seq))
         if bound is None or bound[0] != operation_id:
             raise IdentityConflict("Selected write original controller is no longer bound")
         controller = bound[1]
         controller.require_current(self, self.session_id)
 
-    def applied(self, assignment, owner, operation_id: ClaimId):
+    def applied(self, assignment: WakeAssignment, owner: Thread, operation_id: ClaimId) -> None:
         self.plans.applied(assignment, owner, operation_id)
         self.agent._selected_write_controllers.pop((owner.name, assignment.wire_seq), None)
