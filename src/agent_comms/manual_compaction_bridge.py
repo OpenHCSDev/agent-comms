@@ -7,7 +7,7 @@ from contextlib import AsyncExitStack
 from functools import partial
 from typing import TYPE_CHECKING
 
-from agent_comms.coordination_errors import RequestRefused
+from acp.exceptions import RequestError
 from acp.schema import AgentMessageChunk, PromptResponse, TextContentBlock
 
 from . import agent_events as events
@@ -39,6 +39,11 @@ class CompactionReply(MroDispatch):
             raise TypeError(f"/compact has no reply for {type(outcome).__name__}")
         return handler(outcome)
 
+    @staticmethod
+    def refused(reason: str, message: str) -> RequestError:
+        """The SDK's internal-error code, carrying the sentence the client shows."""
+        return RequestError(RequestError.internal_error().code, message, {"reason": reason})
+
     @handles(PlacedCompaction)
     def placed(self, outcome: PlacedCompaction) -> PromptResponse:
         return PromptResponse(
@@ -48,19 +53,15 @@ class CompactionReply(MroDispatch):
 
     @handles(NothingToCompaction)
     def nothing(self, outcome: NothingToCompaction) -> PromptResponse:
-        raise RequestRefused.internal_error(
-            {"reason": "nothing_to_compact"}, message="Nothing to compact."
-        )
+        raise self.refused("nothing_to_compact", "Nothing to compact.")
 
     @handles(FailedCompaction)
     def failed(self, outcome: FailedCompaction) -> PromptResponse:
-        raise RequestRefused.internal_error({"reason": outcome.message}, message=outcome.message)
+        raise self.refused(outcome.message, outcome.message)
 
     @handles(StaleCompaction)
     def stale(self, outcome: StaleCompaction) -> PromptResponse:
-        raise RequestRefused.internal_error(
-            {"reason": "stale"}, message="The history moved past the summary."
-        )
+        raise self.refused("stale", "The history moved past the summary.")
 
 
 async def compact_context(
