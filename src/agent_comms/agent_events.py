@@ -34,7 +34,6 @@ from .pi_vocabulary import (
     ThinkingLevelField,
     UnknownCompactionReason,
 )
-from .recovery_states import RecoveryCondition
 from .thread_model import ThreadModel, UndeclaredModel
 from .tool_declaration import OtherAction, ToolAction, ToolDeclaration
 from .tool_results import NoSentMessage, NoToolDiff, ToolDiff
@@ -50,7 +49,6 @@ if TYPE_CHECKING:
     from .input_drain import InputDrain
     from .native_turn_context import NativeContextManifestData
     from .pi_commands import PiCommand
-    from .pi_events import RetryAttemptEvent
     from .runtime_info import AgentRuntimeInfo
     from .started_input import StartedInput
     from .transcript_events import SentTranscript
@@ -435,22 +433,6 @@ class SteeringInterrupted(AgentEvent):
 @dataclass(frozen=True)
 class McpLiveStatus(AgentEvent):
     acknowledgement: McpLiveAcknowledgement
-
-
-@dataclass(frozen=True)
-class TurnState(AgentEvent):
-    """Watchdog observation, not an input disposition or replay assessment.
-
-    Retry permission belongs to the original execution's ReplayAssessments.
-    The original Pi retry event carries its own attempt data without another
-    tuple, session copy or interpretation of that data here.
-    """
-
-    state: type[RecoveryCondition]
-    reason_code: str
-    elapsed_ms: int
-    phase: TurnPhase
-    attempt: RetryAttemptEvent | None = None
 
 
 @dataclass(frozen=True)

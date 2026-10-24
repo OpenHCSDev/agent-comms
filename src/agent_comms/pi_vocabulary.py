@@ -44,10 +44,6 @@ class PiStopReason(LifecycleCapability, ExternalName, affix="StopReason"):
         return UnknownOutcomeAttempt(), ReplayFact.NONE
 
     @classmethod
-    def permits_progress(cls):
-        return True
-
-    @classmethod
     def interrupted(cls, session: TurnSession) -> bool:
         """An abort the user asked for by sending now: the request was replaced, not failed."""
         return session.explicit_interrupt and cls.explicit_abort
@@ -142,10 +138,6 @@ class ToolUseStopReason(PiStopReason, declared_name="toolUse"):
 
 
 class ErrorStopReason(FailedPiStop, PiStopReason):
-    @classmethod
-    def permits_progress(cls):
-        return False
-
     @classmethod
     def measured(cls, total: PiCount) -> PiCount:
         # Pi measures context from its last message that neither errored nor

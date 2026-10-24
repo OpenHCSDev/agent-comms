@@ -61,13 +61,12 @@ from .native_tool_transport import ToolTransport, UnboundToolTransport
 from .pi_rpc import PiRpcChannel
 from .prompt_state import UnwrittenPrompt
 from .request_progress import NO_REQUEST_OBSERVER, RequestObserver, RequestProgress
-from .recovery_states import FailedRecovery
 from .send_outcome import NO_SEND_BOUNDARY, SendBoundary
 from .tool_denial import SelectedToolDenied
 from .turn_context import InputContributionCoordinates
 from .turn_inputs import InputForwarding
 from .turn_output import TurnOutput
-from .turn_phase import SettlingStatsPhase, ShutdownPhase, TurnPhase
+from .turn_phase import SettlingStatsPhase, TurnPhase
 from .turn_stats import StatsRequest
 from .turn_usage import UsageAccount
 from .turn_watchdog import DEFAULT_MODEL_WAIT, ProgressWatchdog, TurnWait, TurnWaitExpired
@@ -285,7 +284,6 @@ class NativeSession(MroDispatch, ABC):
             return ()
         self.prompt_state = self.prompt_state.settle(event)
         if not self.stats.requested:
-            self.watchdog.tick()
             self.watchdog.progress()
             self.watchdog.phase = SettlingStatsPhase()
             await self.stats.request(self)
@@ -308,8 +306,7 @@ class NativeSession(MroDispatch, ABC):
         """Observe one decoded event through the shared native lifecycle owner."""
         event.observe_request(self.record_request_progress)
         previous = self.watchdog.phase
-        async for update in self.watchdog.observe(event, self):
-            yield update
+        self.watchdog.dispatch_sync(event, self)
         for update in await self.apply_native_event(event):
             yield update
         self.watchdog.transition(event)
@@ -525,12 +522,7 @@ class NativeSession(MroDispatch, ABC):
         self.native.attestation = self.native.attestation.invalidate()
         self.usage.invalidate()
         self.output.discard_text()
-        updates = (self.context_info(), events.TurnState(
-            state=FailedRecovery,
-            reason_code=failures.IdentityUncertain.declared_name,
-            elapsed_ms=0,
-            phase=ShutdownPhase(),
-        ))
+        updates = (self.context_info(),)
         self.output.record_failure(failures.IdentityUncertain(_IDENTITY_FAILURE_TEXT))
         await self.abort_stalled_rpc()
         self.finish_request()
@@ -615,9 +607,6 @@ class TurnSession(NativeSession):
     def reject_prompt(self, response):
         error = self.output.error(response.error.text_or("Prompt was rejected"),
                                   source=UnrecordedFailureSource())
-        yield self.watchdog.state(
-            FailedRecovery, "prompt_rejected", 0, phase=ShutdownPhase()
-        )
         yield error
         self.finish_request()
 
