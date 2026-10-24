@@ -60,12 +60,6 @@ class WakeClaimTurnIds(ArchivedInputs, Carry):
             changed += len(updates)
             if apply and updates:
                 with closing(Bus.writer(path)) as db, Bus.write_transaction(db):
-                    db.executemany(
-                        table._sql(
-                            f'UPDATE "{table.declared_name}" SET '
-                            "{claim_transition}=? WHERE {seq}=?"
-                        ),
-                        updates,
-                    )
+                    self.rewrite_stored(db, table, column, updates)
                 rewritten.append(path.relative_to(self.root))
         return Carried(changed, rewritten=tuple(rewritten))

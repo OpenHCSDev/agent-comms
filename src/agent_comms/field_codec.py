@@ -984,7 +984,8 @@ class ValueDecoder[T](DecoderPlan):
     @classmethod
     def represented_class(cls, annotation: object) -> type[ValueDecoder[object]]:
         """A represented value with no registered decoder is a scalar of its representation."""
-        return next(iter(cls._registered(annotation)), _ScalarDecoder)
+        scalar: type[ValueDecoder[object]] = _ScalarDecoder
+        return next(iter(cls._registered(annotation)), scalar)
 
     @classmethod
     def with_representation(
@@ -2665,8 +2666,10 @@ class UnionDecoder[T](_ContextDecoder[T]):
     ) -> object:
         answers = []
         for alternative in self.alternatives:
+            if not alternative.fits_wire(data):
+                continue
+            current = alternative.rewrite_records(data, change, select)
             try:
-                current = alternative.rewrite_records(data, change, select)
                 alternative.decode_bound(current, {})
             except MalformedRecord:
                 continue
@@ -3131,7 +3134,7 @@ class _RecordDecoder[T](_ContextDecoder[T]):
     ) -> object:
         if not isinstance(data, dict):
             raise MalformedRecord(f"Expected {self.target.__name__} record")
-        result = change(self.target, data)
+        result = change(self.target, data) if self.selects_record(select) else data
         for entry in self.plan.bindings:
             result = entry.rewrite_wire(result, change, select)
         return result
