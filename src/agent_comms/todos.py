@@ -720,8 +720,7 @@ class PullRequests:
         linked: dict[int, list[Todo]] = {}
         for candidate in self._todos.get(repo, {}).values():
             for number in {link.number for order in candidate.order.declarations
-                           for link in (*order.pull_requests,
-                                        *(claim.pull_request for claim in order.commander_claims()))
+                           for link in order.linked_requests
                            if link.repo == repo}:
                 linked.setdefault(number, []).append(candidate)
         return linked
@@ -753,7 +752,7 @@ class PullRequests:
             tuple(candidate.id for candidate in linked[picked.number]),
             tuple(dict.fromkeys(order.id for candidate in linked[picked.number]
                                 for order in candidate.order.declarations
-                                if PullRequestLink(repo, picked.number) in order.pull_requests)))
+                                if PullRequestLink(repo, picked.number) in order.linked_requests)))
             for row in self.rows(repo, tuple(linked)) for picked in kind.picked(row))
         return tuple(sorted((request for request in requests if request.belongs_to(todo)),
                             key=lambda request: request.updated_at, reverse=True))
@@ -1881,6 +1880,10 @@ class CheckedProblemOrder(ProblemOrder, declared_name=None):
     """A checked order keeps its actual body, check and source location."""
 
     @property
+    def linked_requests(self) -> tuple[PullRequestLink, ...]:
+        return (*self.pull_requests, *(claim.pull_request for claim in self.commander_claims()))
+
+    @property
     def installation_commits(self) -> tuple[str, ...]:
         return ()
 
@@ -1914,7 +1917,7 @@ class CheckedProblemOrder(ProblemOrder, declared_name=None):
 
     @cached_property
     def cited_revision(self) -> SourceRevision:
-        return (*map(PullRequestHeadRevision, self.pull_requests), MainRevision())[0]
+        return (*map(PullRequestHeadRevision, self.linked_requests), MainRevision())[0]
 
     def require_references(self) -> None:
         root, revision = Path(self.check.directory), self.cited_revision
@@ -2005,7 +2008,7 @@ class CheckedProblemOrder(ProblemOrder, declared_name=None):
     serves: Annotated[type[OrderPhase], WireOmitDefault()] = UnplannedPhase
 
     def holds_head(self, request: PullRequestHead) -> bool:
-        return PullRequestLink(request.repo, request.pr) in self.pull_requests
+        return PullRequestLink(request.repo, request.pr) in self.linked_requests
 
     @property
     def phase(self) -> type[OrderPhase]:
