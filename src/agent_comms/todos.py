@@ -187,6 +187,11 @@ class BranchPointCheck:
 class OrderDelivery(DeclaredFamily, StoryEvent, affix="Delivery"):
     at: EventTime = field(default_factory=UnrecordedEventTime)
 
+    def reproved(self, delivery: OrderDelivery) -> OrderDelivery:
+        if delivery == self:
+            return self
+        raise ValueError("The order already records a different delivery.")
+
     def check_base(self, repo: Path) -> str:
         raise ValueError("This delivery has no source commit to establish a check base.")
 
@@ -243,6 +248,13 @@ class CheckedDelivery(OrderDelivery, declared_name=None):
     proof_build: Annotated[BuildIdentity, WireOmitDefault()] = field(
         default_factory=UnrecordedBuildIdentity
     )
+
+    def reproved(self, delivery: OrderDelivery) -> OrderDelivery:
+        """Keep the delivered work while replacing the observations of its new proof."""
+        if replace(delivery, at=self.at, evidence=self.evidence,
+                   proof_build=self.proof_build) == self:
+            return delivery
+        return super().reproved(delivery)
 
     def closing_artifact(self) -> str:
         return self.evidence.artifact()
@@ -2362,9 +2374,7 @@ class DeliveredProblemOrder(AwaitingInstallationProblemOrder):
         raise TodoError(f"{owner} already has {self.delivery.work}; {owner} merges it.")
 
     def delivered(self, delivery):
-        if delivery != self.delivery:
-            raise ValueError("The order already records a different delivery.")
-        return self
+        return replace(self, delivery=self.delivery.reproved(delivery))
 
     def observed_merges(self, repo: Repo, source: ProgressSource) -> tuple[MergedProblemOrder, ...]:
         commits = self.delivery.merged_commits(repo)
