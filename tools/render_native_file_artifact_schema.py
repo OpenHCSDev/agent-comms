@@ -12,8 +12,9 @@ def main():
     contract = {
         "discriminator": NativeToolDetails.wire_tag,
         "details_name": FileMutationToolDetails.declared_name,
-        "artifact_field": next(wire for field, wire in FieldCodec.record_fields(FileMutationToolDetails)
-                               if field.name == "artifact"),
+        "artifact_field": next(
+            wire for field, wire in FieldCodec.record_fields(FileMutationToolDetails)
+            if field.name == "artifact"),
         "artifact_name": Utf8FileWriteArtifact.declared_name,
     }
     target = (Path(sys.argv[1]) if len(sys.argv) > 1 else
