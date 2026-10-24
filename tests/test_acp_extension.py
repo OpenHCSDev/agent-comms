@@ -19,6 +19,7 @@ from agent_comms.acp_extension import (
     LiveCursorScope,
     LiveQueueScope,
     McpClientAcknowledgementUpdate,
+    NoQueueScope,
     PromptCancelledUpdate,
     QueueChangedUpdate,
     QueueItem,
@@ -164,3 +165,19 @@ def test_request_family_strict_boundary():
     ):
         with pytest.raises(ValueError):
             decode_request(value)
+
+
+def test_only_an_unidentified_start_without_a_live_queue_posts_itself():
+    owner = ClaimedIdentity(RecordedThreadIncarnation("pilot", 1.0), 1)
+    live = LiveQueueScope(session_id="pilot", claimed_identity=owner, owner=ProcessIdentity(123, 1))
+    native, input_id = InputId.mint(), InputId.mint()
+    posted = []
+    for update in (
+        UnidentifiedInputStarted("routed", NoQueueScope(), None, native),
+        UnidentifiedInputStarted("routed", live, 1, native),
+        IdentifiedInputStarted("queued", NoQueueScope(), None, native, input_id),
+        IdentifiedInputStarted("queued", live, 1, native, input_id),
+    ):
+        update.when_unidentified(lambda update=update: posted.append(update))
+    assert [(type(update), type(update.scope)) for update in posted] == [
+        (UnidentifiedInputStarted, NoQueueScope)]

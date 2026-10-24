@@ -432,8 +432,9 @@ class QueueScope(AttachmentScope):
     def accepts_request(self, projection: QueueProjection) -> bool:
         return True
 
-    def unidentified(self) -> bool:
-        return True
+    def when_unidentified(self, action: Callable[[], None]) -> None:
+        """A start with no live queue is posted as an unidentified input."""
+        action()
 
 
 @dataclass(frozen=True)
@@ -471,8 +472,8 @@ class LiveQueueScope(QueueScope, LiveAttachmentScope):
     def accepts_request(self, projection: QueueProjection) -> bool:
         return projection.status == 'available'
 
-    def unidentified(self) -> bool:
-        return False
+    def when_unidentified(self, action: Callable[[], None]) -> None:
+        pass
 
 
 @dataclass(frozen=True)
@@ -590,8 +591,8 @@ class InputStartedUpdate(AgentCommsUpdate, declared_name=None):
     def started_request(self, input_id: InputId) -> bool:
         return False
 
-    def posts_unidentified(self) -> bool:
-        return False
+    def when_unidentified(self, action: Callable[[], None]) -> None:
+        pass
 
     def for_session(self, session_id: str) -> InputStartedUpdate:
         return replace(self, scope=self.scope.for_session(session_id))
@@ -612,8 +613,8 @@ class IdentifiedInputStarted(InputStartedUpdate):
 
 @dataclass(frozen=True)
 class UnidentifiedInputStarted(InputStartedUpdate):
-    def posts_unidentified(self) -> bool:
-        return self.scope.unidentified()
+    def when_unidentified(self, action: Callable[[], None]) -> None:
+        self.scope.when_unidentified(action)
 
 
 @dataclass(frozen=True)
