@@ -60,7 +60,8 @@ def session_bridge(tmp_path, home, program=SERVE_FROM_SOURCE, *, state_directory
         child = subprocess.Popen(
             (*program, 'serve', '--state', str(state), '--owner',
              json.dumps(FieldCodec.encode_record(owner)), '--transcript', str(transcript)),
-            env={**os.environ, 'HOME': str(home)}, stdout=output, stderr=output,
+            env={**os.environ, 'HOME': str(home), 'CLAUDE_CODE_SESSION_ID': claim.thread},
+            stdout=output, stderr=output,
         )
     try:
         deadline = time.monotonic() + 20
@@ -250,7 +251,9 @@ def test_install_swap_keeps_the_claim_and_resumes_the_same_process_on_the_new_ru
                                      'CLAUDE_PID': str(os.getpid())})
                 assert hook.returncode != 0
                 assert 'No second bridge launched' in hook.stdout + hook.stderr
-                assert bridges_serving(home / '.local/state/agent-comms/claude-bridge-copy') == [child.pid]
+                assert bridges_serving(
+                    home / '.local/state/agent-comms/claude-bridge-copy' / 'bridge-copy'
+                ) == [child.pid]
                 # A Monitor started inside the gap waits for the endpoint instead of exiting.
                 monitor = subprocess.Popen(
                     (sys.executable, '-c',

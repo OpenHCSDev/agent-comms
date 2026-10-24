@@ -13,12 +13,16 @@ from urllib.parse import quote
 
 import aiohttp
 from agent_comms.child_process import ProcessIdentity
+from agent_comms.comms import wire
 from agent_comms.messages import Message
 from agent_comms.send_result import SendResult
 from agent_comms.cli_protocol import Outcome, DeliveredOutcome
 
 from .history import HarnessAddress, OnlineHistory, OpenCodeHistory
-from .shared import Binding, BindingRequest, CliBridge, IncomingFrame, Options, TranscriptBridge, Watch, run_bridge
+from .shared import (
+    Binding, CliBridge, GivenBinding, IncomingFrame, Options, SuppliedSession,
+    TranscriptBridge, Watch, run_bridge,
+)
 from agent_comms.runtime_updates import RuntimeUpdate
 from .opencode_protocol import (
     Connected, OpenCodeEvent, OpenCodeStream, Prompt, SavedInput, Session, TextInput, Toast,
@@ -55,10 +59,22 @@ class OpenCodeOptions(Options):
 
 
 @dataclass(frozen=True)
+class AttachedBinding(GivenBinding):
+    """The selected native session supplies its bus name unless one was given."""
+
+    @classmethod
+    def from_arguments(cls, arguments: argparse.Namespace) -> Self:
+        arguments.bus_thread = f'opencode-{arguments.binding_session.session}'
+        return super().from_arguments(arguments)
+
+
+@dataclass(frozen=True)
 class Attach(Watch):
     """The selected native session owns its Core thread and bridge child."""
 
     help = "Attach the running OpenCode session to its bus thread and deliver to it"
+    binding_session = SuppliedSession
+    binding_request = AttachedBinding
 
     @classmethod
     def serves(cls, bridge: type[CliBridge]) -> bool:
@@ -70,17 +86,8 @@ class Attach(Watch):
 
     @classmethod
     def from_arguments(cls, arguments: argparse.Namespace) -> Self:
-        if arguments.session is None:
-            raise ValueError('Attach requires the selected native session')
-        arguments.bus_thread = arguments.bus_thread or f'opencode-{arguments.session}'
+        arguments.root = str(wire(vars(arguments).get('root')).root)
         return super().from_arguments(arguments)
-
-    def binding(self, arguments: argparse.Namespace) -> BindingRequest:
-        from agent_comms.comms import wire
-
-        comms = wire(arguments.root)
-        arguments.root = str(comms.root)
-        return super().binding(arguments)
 
 
 class OpenCodeConnection:

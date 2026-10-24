@@ -18,7 +18,10 @@ class SessionHook(ClaudeTranscriptHook):
     @staticmethod
     def environment_session() -> str:
         """Claude exports the identity shared by its hook and bare Monitor command."""
-        return os.environ["CLAUDE_CODE_SESSION_ID"]
+        session = os.environ.get("CLAUDE_CODE_SESSION_ID", "")
+        if not session:
+            raise ValueError("Claude did not export CLAUDE_CODE_SESSION_ID")
+        return session
 
     @classmethod
     def current(cls, session: str, transcript: str) -> SessionHook:

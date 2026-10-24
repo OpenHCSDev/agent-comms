@@ -113,6 +113,49 @@ class BindingRequest(ABC):
     def bind(self, db: sqlite3.Connection) -> Binding: ...
 
 
+class BindingSession(ABC):
+    """The command line or the harness owns this session's identity."""
+
+    @classmethod
+    @abstractmethod
+    def add_arguments(cls, parser: argparse._ActionsContainer) -> None: ...
+
+    @abstractmethod
+    def resolve(self, bridge: type[CliBridge]) -> str: ...
+
+    @abstractmethod
+    def supplied(self) -> dict[str, str]: ...
+
+
+@dataclass(frozen=True)
+class SuppliedSession(BindingSession):
+    session: str
+
+    @classmethod
+    def add_arguments(cls, parser: argparse._ActionsContainer) -> None:
+        parser.add_argument('--session', dest='binding_session', type=cls, required=True)
+
+    def resolve(self, bridge: type[CliBridge]) -> str:
+        return self.session
+
+    def supplied(self) -> dict[str, str]:
+        return {FieldCodec.record_key(BindingIdentity, 'thread'): self.session}
+
+
+@dataclass(frozen=True)
+class EnvironmentSession(BindingSession):
+    @classmethod
+    def add_arguments(cls, parser: argparse._ActionsContainer) -> None:
+        parser.add_argument(
+            '--session', dest='binding_session', type=SuppliedSession, default=cls())
+
+    def resolve(self, bridge: type[CliBridge]) -> str:
+        return bridge.environment_session()
+
+    def supplied(self) -> dict[str, str]:
+        return {}
+
+
 @dataclass(frozen=True)
 class StoredBinding(BindingRequest):
     """No binding given: the directory's own, read without taking the writer."""
@@ -131,6 +174,15 @@ class GivenBinding(BindingRequest):
 
     given: dict[str, str]
 
+    @classmethod
+    def from_arguments(cls, arguments: argparse.Namespace) -> Self:
+        keys = {key for _, key in FieldCodec.record_fields(BindingIdentity)}
+        values = {key: value for key, value in vars(arguments).items() if key in keys}
+        arguments.base_state = arguments.state
+        arguments.state = arguments.state / arguments.bus_thread
+        return cls({Binding.family_discriminator: Binding.declared_name,
+                    **values, **arguments.binding_session.supplied()})
+
     def bind(self, db: sqlite3.Connection) -> Binding:
         stored = tuple(FieldCodec.encode(row) for row in Binding.select(db))
         if stored:
@@ -143,6 +195,35 @@ class GivenBinding(BindingRequest):
             payload = {'start': FieldCodec.encode(Binding.bus_head(identity.root))}
         requested = FieldCodec.decode(Binding, {**payload, **self.given})
         return requested.bind(db)
+
+
+class ResolvedBinding(GivenBinding):
+    """A bare command resolves its reader from the harness session's enrolment."""
+
+    @classmethod
+    def from_arguments(cls, arguments: argparse.Namespace) -> Self:
+        session = arguments.binding_session.resolve(arguments.bridge_type)
+        bindings = WatchClaim(session).state().bindings()
+        if len(bindings) != 1:
+            raise ValueError(
+                f'Expected one enrolled binding for session {session}; '
+                f'found {[record.bus for record in bindings]}'
+            )
+        record, = bindings
+        arguments.root = record.root
+        arguments.bus_thread = record.bus
+        arguments.state = record.base_state
+        arguments.binding_session = SuppliedSession(session)
+        return super().from_arguments(arguments)
+
+
+class GivenBindingArgument(argparse.Action):
+    """The explicit bus flag selects its binding request at the CLI boundary."""
+
+    def __call__(self, parser: argparse.ArgumentParser, namespace: argparse.Namespace,
+                 values: str, option_string: str | None = None) -> None:
+        setattr(namespace, self.dest, values)
+        namespace.binding_request = GivenBinding
 
 
 @dataclass(frozen=True)
@@ -172,17 +253,14 @@ class Binding(BindingIdentity, BridgeStateTable, TypedTable, BindingRequest):
                     if latest else BridgeBeginning())
 
     @classmethod
-    def add_arguments(cls, parser: argparse.ArgumentParser) -> None:
+    def add_arguments(cls, parser: argparse.ArgumentParser,
+                      session: type[BindingSession], request: type[GivenBinding]) -> None:
         group = parser.add_argument_group(
             'Core/CLI binding (each given field overrides the stored binding)')
-        for _, key in FieldCodec.record_fields(BindingIdentity):
-            group.add_argument('--' + key.replace('_', '-'))
-
-    @classmethod
-    def from_arguments(cls, arguments: argparse.Namespace) -> BindingRequest:
-        values = {key: vars(arguments)[key] for _, key in FieldCodec.record_fields(BindingIdentity)
-                  if vars(arguments)[key] is not None}
-        return GivenBinding({cls.family_discriminator: cls.declared_name, **values}) if values else StoredBinding()
+        group.add_argument('--root', default=argparse.SUPPRESS)
+        group.add_argument('--bus-thread', default=argparse.SUPPRESS, action=GivenBindingArgument)
+        session.add_arguments(group)
+        parser.set_defaults(binding_request=request)
 
     @classmethod
     @contextmanager
@@ -215,7 +293,6 @@ class Options:
     @classmethod
     def parse(cls, description: str | None, state: Path, bridge_type: type[CliBridge]) -> Self:
         common = argparse.ArgumentParser(add_help=False)
-        Binding.add_arguments(common)
         common.add_argument('--state', type=Path, default=state)
         bridge_type.add_arguments(common)
         parser = argparse.ArgumentParser(description=description)
@@ -224,13 +301,12 @@ class Options:
             command = commands.add_parser(
                 operation.__name__.lower(), parents=[common],
                 help=operation.help, description=operation.help)
+            Binding.add_arguments(command, operation.binding_session, operation.binding_request)
             operation.add_arguments(command)
             command.set_defaults(operation=operation)
         arguments = parser.parse_args(namespace=CliArguments())
         arguments.operation = arguments.operation.from_arguments(arguments)
-        bridge_type.binding_arguments(arguments)
-        arguments.base_state = arguments.state
-        arguments.binding = arguments.operation.binding(arguments)
+        arguments.binding = bridge_type.binding_arguments(arguments)
         return cls(**{declared.name: vars(arguments)[key]
                       for declared, key in FieldCodec.record_fields(cls)})
 
@@ -345,10 +421,8 @@ class Operation(DeclaredOptions, ABC, Generic[OperationBridge]):
     help: ClassVar[str]
     """The one line `--help` shows; every offered command declares it."""
 
-    def binding(self, arguments: argparse.Namespace) -> BindingRequest:
-        if arguments.bus_thread is not None:
-            arguments.state = arguments.state / arguments.bus_thread
-        return Binding.from_arguments(arguments)
+    binding_session: ClassVar[type[BindingSession]] = EnvironmentSession
+    binding_request: ClassVar[type[GivenBinding]] = ResolvedBinding
 
     @abstractmethod
     async def execute(self, bridge: OperationBridge) -> None: ...
@@ -923,22 +997,10 @@ class CliBridge(ExternalRuntime, DeliversInput, Generic[BridgeOptions]):
         """Declare the options this harness's transport needs."""
 
     @classmethod
-    def binding_arguments(cls, arguments: argparse.Namespace) -> None:
+    def binding_arguments(cls, arguments: argparse.Namespace) -> BindingRequest:
         """Every bare bridge command resolves the session's declared reader binding."""
-        if arguments.bus_thread is not None:
-            return
-        session = arguments.session or cls.environment_session()
-        bindings = WatchClaim(session).state().bindings()
-        if len(bindings) != 1:
-            raise ValueError(
-                f'Expected one enrolled binding for session {session}; '
-                f'found {[record.bus for record in bindings]}'
-            )
-        record, = bindings
-        arguments.root = record.root
-        arguments.bus_thread = record.bus
-        arguments.state = record.base_state
-        arguments.session = session
+        arguments.bridge_type = cls
+        return arguments.binding_request.from_arguments(arguments)
 
     @classmethod
     def environment_session(cls) -> str:
