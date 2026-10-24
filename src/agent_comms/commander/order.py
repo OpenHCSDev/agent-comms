@@ -273,9 +273,11 @@ class OrderFile:
     @classmethod
     def read(cls, text: str):
         try:
-            return FieldCodec.decode(cls, FieldCodec.parse(text))
+            document = FieldCodec.decode(cls, FieldCodec.parse(text))
         except MalformedRecord as error:
             sys.exit(f'Refused order, nothing recorded:\n{error}')
+        created = tuple(line for slop in document.slop for line in slop.by.owed())
+        return replace(document, order=replace(document.order, created=created))
 
     @property
     def prose(self) -> str:

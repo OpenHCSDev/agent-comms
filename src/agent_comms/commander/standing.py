@@ -361,7 +361,7 @@ class UnownedWheelSpin(IndependentStandingRule, UndatedStandingRule):
         bound = TurnsSince(time.time() - cls.recent)
         return sorted((candidate for thread in comms.registry.active_threads().values()
                        if thread.name not in excluded
-                       for candidate in thread.work_state.candidates(thread)
+                       for candidate in thread.execution.order_candidates(thread)
                        if TurnDigestRead(comms.root, candidate, bound).read().turns),
                       key=lambda thread: thread.name)
 

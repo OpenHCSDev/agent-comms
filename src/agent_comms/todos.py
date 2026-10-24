@@ -36,6 +36,7 @@ from agent_comms.build_identity import (
 )
 from agent_comms.bus_publication import AgentOrigin
 from agent_comms.change_report import (
+    CommitRevision,
     FileLine,
     MainRevision,
     NoSourceReference,
@@ -55,7 +56,7 @@ from agent_comms.commander.package import CommanderPackage
 from agent_comms.commander.rule_file import RuleFile
 from agent_comms.coordination_session import NativeBoundary
 from agent_comms.declared_family import DeclaredFamily
-from agent_comms.errors import ToolRefusedError
+from agent_comms.errors import MissingSourceLine, ToolRefusedError
 from agent_comms.field_codec import (
     GoalId,
     FieldCodec,
@@ -284,8 +285,18 @@ class CheckedDelivery(OrderDelivery, declared_name=None):
         for each in (check, *order.deletes.checks):
             await self.require_source(each)
             each.result.require(await self.checked(each, registry.storage_rule.checkout_base))
+        revision = self.source_revision()
+        for line in order.created:
+            try:
+                await asyncio.to_thread(line.require_exists, check.directory, revision)
+            except MissingSourceLine as error:
+                raise TodoError(f"The order creates {line.to_wire()}; {error}") from error
         return replace(self, at=await self.delivery_time(check),
                        proof_build=await asyncio.to_thread(self.proof_build.recorded))
+
+    def source_revision(self) -> SourceRevision:
+        """The tree the delivery's checks ran on."""
+        return MainRevision()
 
     @abstractmethod
     async def require_source(self, check): ...
@@ -335,6 +346,9 @@ class RecordedCommitDelivery(BranchPointCheck, CheckedDelivery, declared_name="c
         if self.commit != self.delivered:
             return  # A failed integration check is not evidence that the unit's commit failed.
         super().check_failed(goals, todo, error)
+
+    def source_revision(self) -> SourceRevision:
+        return CommitRevision(self.commit)
 
     async def require_source(self, check: OrderCheck) -> None:
         raise TodoError("A commit delivery names the unit's delivered commit and the checked one.")
@@ -1964,11 +1978,15 @@ class CheckedProblemOrder(ProblemOrder, declared_name=None):
                     validate()
             except MalformedRecord as error:
                 problems.append(f'{label}: {error}; fix: name an existing source location or directory')
-        references = tuple(dict.fromkeys((
-            *FileLine.scan('\n'.join((document.prose, *self.edits))),
-            *(reference for slop in document.slop for reference in (slop.at, slop.by)),
-            *traced.located(),
-        )))
+        references = tuple(dict.fromkeys(
+            reference for reference in (
+                *FileLine.scan('\n'.join((document.prose, *self.edits))),
+                *(reference for slop in document.slop for reference in (slop.at, *slop.by.cited())),
+                *traced.located(),
+            ) if reference not in self.created
+        ))
+        problems.extend(refusal for slop in document.slop
+                        for refusal in slop.by.unnamed_by(self.edits))
         deleted = {Path(module).stem for module in self.deletes.modules}
         if deleted and (unread := context.importers(deleted, check)):
             problems.append(f'the order deletes {sorted(deleted)}, which {unread} import; '
@@ -2017,6 +2035,7 @@ class CheckedProblemOrder(ProblemOrder, declared_name=None):
         default_factory=NoOrderDeletion
     )
     serves: Annotated[type[OrderPhase], WireOmitDefault()] = UnplannedPhase
+    created: Annotated[tuple[FileLine, ...], WireOmitDefault()] = ()
 
     def holds_head(self, request: PullRequestHead) -> bool:
         return PullRequestLink(request.repo, request.pr) in self.linked_requests
@@ -2270,8 +2289,8 @@ class PendingProblemOrder(Pending, DeliverableProblemOrder):
             idle = sorted(
                 candidate.name
                 for thread in snapshot.active_threads(snapshot.active_candidates())
-                if thread.name not in occupied and thread.role.executor(thread)
-                for candidate in thread.work_state.candidates(thread)
+                if thread.name not in occupied
+                for candidate in thread.execution.order_candidates(thread)
             )
             problems.append(f'{unit} already holds orders '
                             f'{", ".join(todo.id for todo in busy)}; '
@@ -4534,7 +4553,7 @@ class TodoStore(OwnerRequestStore):
         previous = tuple(line for todo in self.list(Repo.of(root).github)
                          for line in todo.recurrence((order.owner, where), root, now))
         if previous and not any(
-            item.derive.declaration_elsewhere(item.by, where, root) for item in slop
+            item.derive.declaration_elsewhere(item.by.line, where, root) for item in slop
         ):
             raise TodoError('\n'.join((*previous,
                 'the same file broke again, name the fact written in more than one place '

@@ -4,15 +4,26 @@ restated, the mechanism that derives it and the declaration that owns it."""
 from __future__ import annotations
 
 import re
+from abc import abstractmethod
 from dataclasses import dataclass
 from functools import cache
 from importlib.resources import files
 from pathlib import Path
 from typing import ClassVar
 
+from pydantic import JsonValue
+
 from agent_comms import skills
 from agent_comms.change_report import FileLine
 from agent_comms.declared_family import DeclaredFamily
+from agent_comms.field_codec import (
+    FieldCodec,
+    FieldRepresentation,
+    MalformedRecord,
+    StructuralRepresentation,
+    WireValue,
+)
+from agent_comms.mro_dispatch import handles
 
 
 class Derivation(DeclaredFamily, affix="Derivation"):
@@ -60,12 +71,99 @@ class DeleteCopyDerivation(Derivation, declared_name="delete-copy"):
 
 
 @dataclass(frozen=True)
+class OwnerLine(WireValue):
+    """The declaration a slop citation names as the owner of the restated fact.
+
+    A ``file.py:line`` string names a line on main; ``{"created": "file.py:line"}``
+    names a line the order itself creates."""
+
+    @property
+    @abstractmethod
+    def line(self) -> FileLine: ...
+
+    def cited(self) -> tuple[FileLine, ...]:
+        """The lines that must exist when the order is sent."""
+        return (self.line,)
+
+    def owed(self) -> tuple[FileLine, ...]:
+        """The lines that must exist on the delivered tree before the order is done."""
+        return ()
+
+    def unnamed_by(self, edits: tuple[str, ...]) -> tuple[str, ...]:
+        return ()
+
+    def spelled(self) -> str:
+        return self.line.to_wire()
+
+    @handles(str)
+    @classmethod
+    def decode_existing(cls, data: str, structural: object) -> ExistingLine:
+        return ExistingLine(FileLine.from_wire(data))
+
+    @handles(dict)
+    @classmethod
+    def decode_created(cls, data: dict, structural: object) -> CreatedLine:
+        return FieldCodec.decode(CreatedLine, data)
+
+    @classmethod
+    def from_wire(cls, data: JsonValue) -> OwnerLine:
+        raise MalformedRecord("Expected 'file.py:line' or {\"created\": \"file.py:line\"}.")
+
+    @classmethod
+    def schema(cls) -> dict[str, JsonValue]:
+        return FieldCodec.alternatives_schema(
+            "anyOf", [FileLine.schema(), FieldCodec.record_schema(CreatedLine)])
+
+
+@dataclass(frozen=True)
+class ExistingLine(OwnerLine):
+    existing: FileLine
+
+    @property
+    def line(self) -> FileLine:
+        return self.existing
+
+    def to_wire(self) -> JsonValue:
+        return self.existing.to_wire()
+
+
+@dataclass(frozen=True)
+class CreatedLine(OwnerLine):
+    created: FileLine
+
+    @property
+    def line(self) -> FileLine:
+        return self.created
+
+    def cited(self) -> tuple[FileLine, ...]:
+        return ()
+
+    def owed(self) -> tuple[FileLine, ...]:
+        return (self.created,)
+
+    def unnamed_by(self, edits: tuple[str, ...]) -> tuple[str, ...]:
+        if any(self.created.file in edit for edit in edits):
+            return ()
+        return (f"slop by {self.spelled()}: fix: an edit must create {self.created.file}",)
+
+    def spelled(self) -> str:
+        return f"{self.created.to_wire()} (this order creates it)"
+
+    @classmethod
+    def representation(cls) -> type[FieldRepresentation]:
+        return StructuralRepresentation
+
+    def to_wire(self) -> JsonValue:
+        return FieldCodec.encode(self)
+
+
+@dataclass(frozen=True)
 class Slop:
     pattern: str
     fact: str
     at: FileLine
     derive: type[Derivation]
-    by: FileLine
+    by: OwnerLine
 
     PATTERN_ENTRY: ClassVar[re.Pattern[str]] = re.compile(r"^## ([A-Z]+-\d+)\s+\S", re.M)
 
@@ -98,5 +196,5 @@ class Slop:
     def render(self) -> str:
         return (
             f"{self.at.to_wire()} restates {self.pattern}: {self.fact}. "
-            f"{self.by.to_wire()} owns it; {self.derive.sentence}, so the copy is deleted."
+            f"{self.by.spelled()} owns it; {self.derive.sentence}, so the copy is deleted."
         )
