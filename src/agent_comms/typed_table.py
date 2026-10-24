@@ -782,7 +782,7 @@ class HeldBusFile(SchemaChange):
         # Only the holder clears a hold, so a nonce this process holds cannot go stale while
         # it reads; the witness alone answers without the wire lock.
         barrier.current_unlocked().require_held_by(
-            MaintenanceHolder.current().nonce, f"Changing the schema of {self.path}")
+            MaintenanceHolder.current(), f"Changing the schema of {self.path}")
 
 
 class WriterOwnedFile(SchemaChange):

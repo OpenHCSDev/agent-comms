@@ -23,6 +23,7 @@ from agent_comms.maintenance_barrier import (
     MaintenanceHolder,
     MaintenanceOperator,
     MaintenancePhase,
+    NoMaintenanceHolder,
     PausedPhase,
     ReadyPhase,
 )
@@ -37,13 +38,18 @@ def test_nested_holds_restore_the_previous_authority_on_failure(tmp_path, monkey
                   for name in ("first", "second"))
     first, second = (gate.begin(MaintenanceOperator.current()) for gate in gates)
     with first.holding():
-        gates[0].read().require_held_by(os.environ[HOLDER_NONCE], "outer change")
+        gates[0].read().require_held_by(MaintenanceHolder.current(), "outer change")
         with pytest.raises(RuntimeError, match="failed install"):
             with second.holding():
-                gates[1].read().require_held_by(os.environ[HOLDER_NONCE], "inner change")
+                gates[1].read().require_held_by(MaintenanceHolder.current(), "inner change")
                 raise RuntimeError("failed install")
-        gates[0].read().require_held_by(os.environ[HOLDER_NONCE], "recovery")
-    assert MaintenanceHolder.current() == MaintenanceHolder("")
+        gates[0].read().require_held_by(MaintenanceHolder.current(), "recovery")
+    assert MaintenanceHolder.current() == NoMaintenanceHolder()
+
+
+def test_empty_old_runtime_environment_means_no_maintenance_holder(monkeypatch):
+    monkeypatch.setenv(HOLDER_NONCE, "")
+    assert MaintenanceHolder.current() == NoMaintenanceHolder()
 
 
 @pytest.mark.parametrize('text', [None, '', 'x' * 129, 42])

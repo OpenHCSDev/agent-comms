@@ -11,7 +11,7 @@ from __future__ import annotations
 import json
 import os
 from abc import ABC, abstractmethod
-from collections.abc import AsyncIterator, Callable, Iterator, Mapping
+from collections.abc import AsyncIterator, Callable, Iterator, Mapping, MutableMapping
 from contextlib import AbstractAsyncContextManager, asynccontextmanager, contextmanager
 from dataclasses import dataclass, field, replace
 from pathlib import Path
@@ -24,7 +24,6 @@ from .errors import RelationViolationError, ToolRefusedError
 from .field_codec import (
     FieldCodec,
     ClaimId,
-    Id128Text,
     MalformedRecord,
     NullMember,
     RecordMember,
@@ -125,8 +124,9 @@ class MaintenancePhase(DeclaredFamily, LifecycleState, affix="Phase"):
         raise MaintenanceHeldError('Another maintenance operation holds this root')
 
     @classmethod
-    def require_held_by(cls, state: MaintenanceState, holder: str, change: str) -> None:
-        if holder != state.nonce:
+    def require_held_by(cls, state: MaintenanceState, holder: MaintenanceHolder,
+                       change: str) -> None:
+        if not holder.holds(state.nonce):
             raise MaintenanceNotHeldError(
                 f"{change} needs this root's maintenance hold; another process holds it")
 
@@ -177,7 +177,8 @@ class ReadyPhase(MaintenancePhase):
     new_sends = running_sends = GrantedSends
 
     @classmethod
-    def require_held_by(cls, state: MaintenanceState, holder: str, change: str) -> None:
+    def require_held_by(cls, state: MaintenanceState, holder: MaintenanceHolder,
+                       change: str) -> None:
         raise MaintenanceNotHeldError.unheld(change)
 
     @classmethod
@@ -214,16 +215,25 @@ class DeadHolderReleasedPhase(ReadyPhase):
 HOLDER_NONCE = "AGENT_COMMS_MAINTENANCE_HOLDER"
 
 
-@dataclass(frozen=True)
-class MaintenanceHolder:
-    """The hold a process acts under; an empty nonce holds nothing. It travels in
-    ``HOLDER_NONCE`` to every child the process starts."""
+class MaintenanceHolder(SubclassUnion):
+    """A process holds a ClaimId or holds nothing; only the environment has a wire spelling."""
 
-    nonce: str
+    @abstractmethod
+    def holds(self, nonce: ClaimId) -> bool: ...
+
+    @abstractmethod
+    def exported(self, environment: MutableMapping[str, str]) -> None: ...
 
     @classmethod
     def current(cls) -> MaintenanceHolder:
-        return cls(os.environ.get(HOLDER_NONCE, ""))
+        """Decode the process's maintenance authority at its environment boundary.
+
+        An empty value is the old-runtime spelling of no holder (interpreter_operation.py:326).
+        """
+        text = os.environ.get(HOLDER_NONCE)
+        if not text:
+            return NoMaintenanceHolder()
+        return MaintenanceClaimHolder(FieldCodec.decode(ClaimId, text))
 
     @staticmethod
     def outside(environment: Mapping[str, str]) -> dict[str, str]:
@@ -238,11 +248,31 @@ class MaintenanceHolder:
         """This process, and every child it starts, acts as this holder while the block
         lasts, restoring its previous holder afterward."""
         previous = MaintenanceHolder.current()
-        os.environ[HOLDER_NONCE] = self.nonce
+        self.exported(os.environ)
         try:
             yield self
         finally:
-            os.environ[HOLDER_NONCE] = previous.nonce
+            previous.exported(os.environ)
+
+
+@dataclass(frozen=True)
+class NoMaintenanceHolder(NullMember, MaintenanceHolder):
+    def holds(self, nonce: ClaimId) -> bool:
+        return False
+
+    def exported(self, environment: MutableMapping[str, str]) -> None:
+        environment.pop(HOLDER_NONCE, None)
+
+
+@dataclass(frozen=True)
+class MaintenanceClaimHolder(RecordMember, MaintenanceHolder):
+    nonce: ClaimId
+
+    def holds(self, nonce: ClaimId) -> bool:
+        return nonce == self.nonce
+
+    def exported(self, environment: MutableMapping[str, str]) -> None:
+        environment[HOLDER_NONCE] = self.nonce
 
 
 class MaintenanceStatus:
@@ -267,11 +297,11 @@ class MaintenanceStatus:
     def require_open(self) -> None:
         self.phase.new_sends.require_open()
 
-    def require_open_to(self, holder: str) -> None:
+    def require_open_to(self, holder: MaintenanceHolder) -> None:
         """Open, or held by ``holder``: the operation holding maintenance still runs its own reads."""
         self.require_open()
 
-    def require_held_by(self, holder: str, change: str) -> None:
+    def require_held_by(self, holder: MaintenanceHolder, change: str) -> None:
         """``change`` runs only in the process holding this root's maintenance: a root that
         never enabled maintenance has no holder."""
         raise MaintenanceNotHeldError.unheld(change)
@@ -303,7 +333,7 @@ class MaintenanceMarker(DurableFile):
 class MaintenanceState(MaintenanceMarker, MaintenanceStatus):
     filename = ".maintenance-state"
     operator: MaintenanceOperator
-    nonce: str
+    nonce: ClaimId
     phase: type[MaintenancePhase]
     target: Annotated[MaintenanceTarget, WireOmitDefault()] = field(
         default_factory=NoMaintenanceTarget
@@ -311,10 +341,6 @@ class MaintenanceState(MaintenanceMarker, MaintenanceStatus):
 
     def allows_runtime(self, runtime: LaunchRuntime) -> bool:
         return self.target.allows_runtime(runtime)
-
-    def __post_init__(self):
-        super().__post_init__()
-        Id128Text.decode(self.nonce)
 
     def observed(self, barrier: MaintenanceBarrier) -> MaintenanceStatus:
         if self.phase.holder_dead(self):
@@ -341,27 +367,27 @@ class MaintenanceState(MaintenanceMarker, MaintenanceStatus):
     def holding(self) -> Iterator[Self]:
         """This process, and every child it starts, acts as this hold's holder while the
         block lasts."""
-        with MaintenanceHolder(self.nonce).acting():
+        with MaintenanceClaimHolder(self.nonce).acting():
             yield self
 
-    def successor(self, phase: type[MaintenancePhase], nonce: str) -> MaintenanceState:
+    def successor(self, phase: type[MaintenancePhase], nonce: ClaimId) -> MaintenanceState:
         if not self.phase().may_become(phase()):
             raise ValueError('Maintenance transition requires a valid expected successor')
         return self.in_phase(phase, nonce)
 
-    def in_phase(self, phase: type[MaintenancePhase], nonce: str) -> MaintenanceState:
+    def in_phase(self, phase: type[MaintenancePhase], nonce: ClaimId) -> MaintenanceState:
         """Ordinary and dead-holder transitions share the phase's target lifetime."""
         return self.advanced(nonce, phase=phase, target=phase.target_after(self.target))
 
-    def advanced(self, nonce: str, **changes: object) -> MaintenanceState:
+    def advanced(self, nonce: ClaimId, **changes: object) -> MaintenanceState:
         """Every rewrite of a hold takes the next generation and a fresh nonce."""
         return replace(self, generation=self.generation + 1, nonce=nonce, **changes)
 
-    def require_open_to(self, holder: str) -> None:
-        if holder != self.nonce:
+    def require_open_to(self, holder: MaintenanceHolder) -> None:
+        if not holder.holds(self.nonce):
             self.require_open()
 
-    def require_held_by(self, holder: str, change: str) -> None:
+    def require_held_by(self, holder: MaintenanceHolder, change: str) -> None:
         self.phase.require_held_by(self, holder, change)
 
     def require_draining(self) -> None:
@@ -378,7 +404,7 @@ class HoldTarget(DurableFile):
 
     filename = ".maintenance-target"
     generation: int
-    nonce: str
+    nonce: ClaimId
     target: MaintenanceTarget
 
     def applied_to(self, state: MaintenanceState) -> MaintenanceState:
@@ -483,7 +509,7 @@ class MaintenanceBarrier(MaintenanceIngress):
 
     def assert_open_unlocked(self) -> MaintenanceStatus:
         hold = self.current_unlocked()
-        hold.require_open_to(MaintenanceHolder.current().nonce)
+        hold.require_open_to(MaintenanceHolder.current())
         return hold
 
     def read(self) -> MaintenanceStatus:
@@ -560,7 +586,7 @@ class MaintenanceBarrier(MaintenanceIngress):
         self.current_unlocked()
         with _store_lock(self.registry_path, mode=SharedLock()):
             status = self._current_unlocked()
-            status.require_open_to(MaintenanceHolder.current().nonce)
+            status.require_open_to(MaintenanceHolder.current())
             yield status
 
     @asynccontextmanager

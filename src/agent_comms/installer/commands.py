@@ -30,7 +30,7 @@ from agent_comms.installer.interpreter_operation import (
 )
 from agent_comms.installer.refusals import InterpreterWorkerDied, UpgradeRefused
 from agent_comms.launch_runtime import RestoredRuntime
-from agent_comms.maintenance_barrier import MaintenanceHolder
+from agent_comms.maintenance_barrier import HOLDER_NONCE, MaintenanceHolder
 from agent_comms.repo import GitCommandError, Repo
 
 
@@ -191,8 +191,10 @@ class InstallCommands:
                     self.workers[key] = self.launcher.submit(InterpreterWorker.start, key).result()
                 worker = self.workers[key]
             try:
+                spelled: dict[str, str] = {}
+                MaintenanceHolder.current().exported(spelled)
                 answer = worker.exchange(FieldCodec.compact(FieldCodec.encode(
-                    ProbeRequest(probe, MaintenanceHolder.current().nonce))))
+                    ProbeRequest(probe, spelled.get(HOLDER_NONCE, "")))))
             except InterpreterWorkerDied:
                 self.close_workers((key,))
                 raise
