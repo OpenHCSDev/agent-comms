@@ -16,6 +16,7 @@ from agent_comms.field_codec import FieldCodec, ThreadLookup
 
 from .agent_activity import UnavailableRecipientActivity
 from .errors import RelationViolationError, UnregisteredThreadError
+from .messages import PublicSender
 from .routing import DeliveryScope
 from .thread_identity import ThreadIncarnation
 from .threads import ThreadProvenance
@@ -196,7 +197,10 @@ class RegistryProvenance(RegistryNames[ThreadProvenance]):
                 source.incarnation, partial(unrecorded.append, name)
             ))
         return MappingProxyType({
-            "senders": FieldCodec.compact(senders), "unrecorded": json.dumps(unrecorded),
+            "senders": FieldCodec.compact(FieldCodec.encode(
+                senders, dict[str, tuple[ThreadLookup | PublicSender, ...]]
+            )),
+            "unrecorded": json.dumps(unrecorded),
         })
 
     def retired(self, name: str) -> bool:
