@@ -224,6 +224,10 @@ class MaintenanceHolder(SubclassUnion):
     @abstractmethod
     def exported(self, environment: MutableMapping[str, str]) -> None: ...
 
+    def request_text(self) -> str:
+        """The holder a probe request carries; older workers decode empty as no holder."""
+        return ""
+
     @classmethod
     def current(cls) -> MaintenanceHolder:
         """Decode the process's maintenance authority at its environment boundary.
@@ -272,7 +276,10 @@ class MaintenanceClaimHolder(RecordMember, MaintenanceHolder):
         return nonce == self.nonce
 
     def exported(self, environment: MutableMapping[str, str]) -> None:
-        environment[HOLDER_NONCE] = self.nonce
+        environment[HOLDER_NONCE] = self.request_text()
+
+    def request_text(self) -> str:
+        return FieldCodec.encode(self.nonce)
 
 
 class MaintenanceStatus:

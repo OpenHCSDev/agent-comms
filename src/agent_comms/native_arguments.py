@@ -6,8 +6,9 @@ import os
 import re
 import shlex
 from abc import abstractmethod
-from collections.abc import Iterator, Mapping, Sequence
+from collections.abc import Callable, Iterator, Mapping, Sequence
 from dataclasses import dataclass
+from functools import reduce
 from pathlib import Path
 from typing import TYPE_CHECKING, ClassVar
 
@@ -337,26 +338,21 @@ class NativeArguments:
         provider = self.provider
         return NoSelectedModel if provider is None else ModelProvider.member_named(provider)
 
+    def last[T](self, start: T, apply: Callable[[NativeArgument], Callable[[T], T]]) -> T:
+        """Pi lets the last argument of a setting win: each entry's apply hook owns its part."""
+        return reduce(lambda selected, entry: apply(entry)(selected), self.entries, start)
+
     @property
     def provider(self) -> str | None:
-        selected: str | None = None
-        for entry in self.entries:
-            selected = entry.apply_provider(selected)
-        return selected
+        return self.last(None, lambda entry: entry.apply_provider)
 
     @property
     def model(self) -> str | None:
-        selected: str | None = None
-        for entry in self.entries:
-            selected = entry.apply_model(selected)
-        return selected
+        return self.last(None, lambda entry: entry.apply_model)
 
     @property
     def thinking(self) -> type[ThinkingChoice]:
-        selected: type[ThinkingChoice] = NoThinkingOverride
-        for entry in self.entries:
-            selected = entry.apply_thinking(selected)
-        return selected
+        return self.last(NoThinkingOverride, lambda entry: entry.apply_thinking)
 
     def with_model(self, selected: str) -> NativeArguments:
         return NativeArguments(
