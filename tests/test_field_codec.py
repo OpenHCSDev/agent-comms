@@ -41,6 +41,8 @@ from agent_comms.field_codec import (
     FlagDirective,
     WireAbsentNone,
     WireContext,
+    WireBind,
+    WireNullDefault,
     WireInline,
     WireName,
     WireNonNull,
@@ -1132,3 +1134,31 @@ def test_represented_value_projects_as_its_record_only_when_its_record_is_its_wi
     assert FieldCodec.encode(member) == {"name": "kept", "token": "secret"}
     assert FieldCodec.project(member, "snapshot") == {"name": "kept"}
     assert FieldCodec.project(CountWire(3), "snapshot") == "count=3"
+
+
+@pytest.mark.parametrize("wire, expected", [({}, 7), ({"score": None}, 7), ({"score": 0}, 0)])
+def test_plain_record_preserves_declared_null_default(wire, expected):
+    @dataclass
+    class Record:
+        score: Annotated[int, WireNullDefault()] = 7
+
+    assert FieldCodec.decode(Record, wire) == Record(expected)
+
+
+def test_record_context_stays_at_its_declared_binding():
+    @dataclass
+    class Child:
+        token: Annotated[str, WireContext()]
+
+    @dataclass
+    class Plain:
+        child: Child
+
+    @dataclass
+    class Bound:
+        outer: str
+        child: Annotated[Child, WireBind({"token": "outer"})]
+
+    with pytest.raises(MalformedRecord, match="Missing decode context: token"):
+        FieldCodec.decode_bound(Plain, {"child": {}}, token="must not leak")
+    assert FieldCodec.decode(Bound, {"outer": "kept", "child": {}}) == Bound("kept", Child("kept"))

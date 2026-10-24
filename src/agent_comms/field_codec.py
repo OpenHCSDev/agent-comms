@@ -446,6 +446,8 @@ class FieldPlan:
 
     declared: Field
     annotation: object
+    name: str
+    key: str
     directives: ClassVar[tuple[type[ValueDirective], ...]] = ()
     records: ClassVar[bool] = True
     _plans: ClassVar[list[type[FieldPlan]]] = []
@@ -457,14 +459,6 @@ class FieldPlan:
     @classmethod
     def claims(cls, declared: Field, annotation: object) -> bool:
         return any(directive.read(annotation, False) for directive in cls.directives)
-
-    @property
-    def name(self) -> str:
-        return self.declared.name
-
-    @cached_property
-    def key(self) -> str:
-        return WireName.read(self.annotation, self.name)
 
     def locate(self, problems: dict[str, str], refused: MalformedRecord) -> None:
         problems.update(refused.located(self.key, f"supply {self.annotation}"))
@@ -597,7 +591,6 @@ class FieldPlan:
             raise MalformedRecord(f"Missing required field {self.key}")
         return values[self.name]
 
-    @boundary_decoder
     def decoded(self, data: object) -> dict[str, object]:
         return self.decoded_using(data, lambda raw: self.value.decode_bound(raw, {}))
 
@@ -605,6 +598,21 @@ class FieldPlan:
         self, data: dict[str, object], context: Mapping[str, object]
     ) -> dict[str, object]:
         return self.decoded(data)
+
+    def decode_into(
+        self, data: dict[str, object], context: Mapping[str, object], out: dict[str, object],
+    ) -> None:
+        if self.key in data:
+            value = data[self.key]
+            self.require_value(value)
+            out[self.name] = self.value.decode_bound(value, {})
+
+    def require_value(self, value: object) -> None:
+        if self.reject_null and value is None:
+            raise MalformedRecord(f"Null field {self.key}")
+        if self.choices is not None and value not in self.choices:
+            raise MalformedRecord(
+                f"Field {self.key} must be one of: {', '.join(self.choices)}")
 
     def decoded_external(self, data: dict[str, object]) -> dict[str, object]:
         return self.decoded_using(data, lambda raw: self.value.decode_external(raw, data))
@@ -617,11 +625,7 @@ class FieldPlan:
         if self.name not in captured:
             return {}
         value = captured[self.name]
-        if self.reject_null and value is None:
-            raise MalformedRecord(f"Null field {self.key}")
-        if self.choices is not None and value not in self.choices:
-            raise MalformedRecord(
-                f"Field {self.key} must be one of: {', '.join(self.choices)}")
+        self.require_value(value)
         return {self.name: decode(value)}
 
     def read(self, data: object) -> object:
@@ -657,6 +661,11 @@ class NullDefaultFieldPlan(DeclaredFieldPlan):
         return {name: value for name, value in super().captured(data).items()
                 if value is not None}
 
+    def decode_into(
+        self, data: dict[str, object], context: Mapping[str, object], out: dict[str, object],
+    ) -> None:
+        out.update(self.decoded(data))
+
 
 class NullMemberOmission(DeclaredFieldPlan):
     """A declared null member is absent from the wire, as its key's absence."""
@@ -676,6 +685,11 @@ class MissingNoneFieldPlan(NullMemberOmission):
 
     def captured(self, data: object) -> dict[str, object]:
         return {self.name: super().captured(data).get(self.name)}
+
+    def decode_into(
+        self, data: dict[str, object], context: Mapping[str, object], out: dict[str, object],
+    ) -> None:
+        out.update(self.decoded(data))
 
 
 class ContextFieldPlan(DeclaredFieldPlan):
@@ -703,6 +717,11 @@ class ContextFieldPlan(DeclaredFieldPlan):
             raise MalformedRecord(f"Missing decode context: {self.name}")
         return {self.name: self.value.decode_bound(context[self.name], context)}
 
+    def decode_into(
+        self, data: dict[str, object], context: Mapping[str, object], out: dict[str, object],
+    ) -> None:
+        out.update(self.decoded_bound(data, context))
+
 
 class BoundFieldPlan(DeclaredFieldPlan):
     """A nested record receives its context from declared sibling fields."""
@@ -718,6 +737,11 @@ class BoundFieldPlan(DeclaredFieldPlan):
     ) -> dict[str, object]:
         bound = {name: data[source] for name, source in self.bound_sources.items()}
         return self.decoded_using(data, lambda raw: self.value.decode_bound(raw, bound))
+
+    def decode_into(
+        self, data: dict[str, object], context: Mapping[str, object], out: dict[str, object],
+    ) -> None:
+        out.update(self.decoded_bound(data, context))
 
 
 class InlineFieldPlan(DeclaredFieldPlan):
@@ -752,6 +776,11 @@ class InlineFieldPlan(DeclaredFieldPlan):
         if not isinstance(data, dict):
             raise MalformedRecord("Expected a record object.")
         return {self.name: {key: data[key] for key in self.wire_keys if key in data}}
+
+    def decode_into(
+        self, data: dict[str, object], context: Mapping[str, object], out: dict[str, object],
+    ) -> None:
+        out.update(self.decoded(data))
 
 
 class InlineFamilyPlan(InlineFieldPlan):
@@ -1078,7 +1107,6 @@ class _RepresentedDecoder[T](ValueDecoder[T]):
     def accepts_value(self, value: object) -> bool:
         return self.structural.accepts_value(value)
 
-    @boundary_decoder
     def decode(self, data: object) -> T:
         return self.representation.decode_field(data, self.structural)
 
@@ -2417,7 +2445,10 @@ class FieldCodec(MroDispatch, Sealed):
         """Resolve every per-row type decision for one record declaration once."""
         hints = cls._types(record)
         declarations = tuple(
-            cls._field_plan(item, hints[item.name])(declared=item, annotation=hints[item.name])
+            cls._field_plan(item, hints[item.name])(
+                declared=item, annotation=hints[item.name], name=item.name,
+                key=WireName.read(hints[item.name], item.name),
+            )
             for item in fields(record)
         )
         declared = tuple(plan for plan in declarations if plan.declared.init and plan.records)
@@ -3177,6 +3208,8 @@ class _RecordDecoder[T](_ContextDecoder[T]):
 
     def problems(self, data: dict) -> dict[str, str]:
         plan = self.plan
+        if plan.required_wire_keys <= data.keys() <= plan.accepted_keys:
+            return {}
         missing = plan.required_wire_keys.difference(data)
         # A data refusal needs the declared keys, not an expansion of every
         # reachable schema. Recursive records are valid decode declarations.
@@ -3197,7 +3230,18 @@ class _RecordDecoder[T](_ContextDecoder[T]):
         return data
 
     def decode_bound(self, data: object, context: Mapping[str, object]) -> T:
-        return self.decode_entries(data, self.plan.bindings, {}, context, {})
+        if not isinstance(data, dict):
+            raise MalformedRecord("Expected a record object; fix: supply a JSON object.")
+        problems = self.problems(data)
+        values = {}
+        for entry in self.plan.bindings:
+            try:
+                entry.decode_into(data, context, values)
+            except MalformedRecord as refused:
+                entry.locate(problems, refused)
+        if problems:
+            raise RecordProblems(problems)
+        return FieldCodec.construct(self.target, values)
 
     def decode_selected(
         self, data: object, selections: Mapping[tuple[type, str], object], *,
