@@ -185,8 +185,8 @@ class TextStorage(SqlStorage):
     def accepts(cls, annotation: object) -> bool:
         if annotation is str:
             return True
-        _, representation = FieldCodec.representation(annotation)
-        return representation is not None and issubclass(representation, TextRepresentation)
+        _, representations = FieldCodec.representation(annotation)
+        return any(issubclass(owner, TextRepresentation) for owner in representations)
 
 
 class IntegerStorage(SqlStorage):
@@ -2108,11 +2108,13 @@ class ProducedTable(ProducedRow, TypedTable, ProjectionSource, declared_name=Non
                 if issubclass(parent, ProjectionSource)
                 and ("writes" not in vars(parent) or parent in writers)
             )
-        annotations = [column.annotation for column in cls._columns] if is_dataclass(cls) else []
+        annotations: list[object] = (
+            [column.annotation for column in cls._columns] if is_dataclass(cls) else []
+        )
         while annotations:
-            value, representation = FieldCodec.representation(annotations.pop())
+            value, representations = FieldCodec.representation(annotations.pop())
             annotations.extend(get_args(value))
-            for owner in (value, representation):
+            for owner in (value, *representations):
                 if not isinstance(owner, type):
                     continue
                 owners.update(

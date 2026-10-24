@@ -659,8 +659,10 @@ class DeclaredFieldPlan(FieldPlan):
 
     @classmethod
     def claims(cls, declared: Field, annotation: object) -> bool:
-        representation = FieldCodec.representation(annotation)[1] or FieldRepresentation
-        return super().claims(declared, annotation) or representation.field_plan is cls
+        _, representations = FieldCodec.representation(annotation)
+        return super().claims(declared, annotation) or any(
+            owner.field_plan is cls for owner in (representations or (FieldRepresentation,))
+        )
 
 
 class TransientFieldPlan(DeclaredFieldPlan):
@@ -747,10 +749,10 @@ class InlineFieldPlan(DeclaredFieldPlan):
 
     @cached_property
     def inlined(self) -> type:
-        declared, representation = FieldCodec.representation(self.annotation)
-        match representation:
-            case type() as inline if issubclass(inline, InlineRecord):
-                return inline.wire_record()
+        declared, representations = FieldCodec.representation(self.annotation)
+        for representation in representations:
+            if issubclass(representation, InlineRecord):
+                return representation.wire_record()
         return cast(type, declared)
 
     @cached_property
@@ -1884,41 +1886,38 @@ class FieldCodec(MroDispatch, Sealed):
         return target.decode_external
 
     @classmethod
-    def representation(cls, annotation: object) -> tuple[object, type[FieldRepresentation] | None]:
-        """The declared value type and the codec owning its wire representation."""
+    def representation(
+        cls, annotation: object,
+    ) -> tuple[object, tuple[type[FieldRepresentation], ...]]:
+        """The value type and its zero or one declared wire representation classes."""
         if annotation is None:
-            return None, None
+            return None, ()
         if annotation is object:
-            return object, _JsonValueRepresentation
+            return object, (_JsonValueRepresentation,)
         if get_origin(annotation) is Annotated:
             target, *metadata = get_args(annotation)
         else:
             target, metadata = annotation, ()
-        representations = [
+        representations = tuple(
             item for item in metadata
             if isinstance(item, type) and issubclass(item, FieldRepresentation)
-        ]
+        )
         if len(representations) > 1:
             raise TypeError("A field must have one representation")
         if isinstance(target, TypeAliasType):
             if target is JsonValue:
-                return object, representations[0] if representations else _JsonValueRepresentation
+                return object, representations or (_JsonValueRepresentation,)
         if representations:
-            return target, representations[0]
+            return target, representations
         if target is object:
-            return object, _JsonValueRepresentation
+            return object, (_JsonValueRepresentation,)
         if isinstance(target, type) and issubclass(target, (NominalText, WireValue)):
-            return target, target.representation()
-        return target, None
+            return target, (target.representation(),)
+        return target, ()
 
     @classmethod
     def _value_representation(cls, value: object, annotation: object):
-        if annotation is None:
-            return cls.representation(type(value))[1]
-        _, representation = cls.representation(annotation)
-        if representation is None:
-            _, representation = cls.representation(type(value))
-        return representation
+        return cls.representation(annotation)[1] or cls.representation(type(value))[1]
 
     @classmethod
     def record_fields(cls, record: type) -> tuple[tuple[Field[object], str], ...]:
@@ -2065,11 +2064,6 @@ class FieldCodec(MroDispatch, Sealed):
         return _FamilyRecordDecoder(family).member(data)
 
     @classmethod
-    def record_data(cls, record: type, data: object) -> dict:
-        """Validate the envelope independently of reading its declared payloads."""
-        return _RecordDecoder(record).checked(data)
-
-    @classmethod
     def field_plan(cls, record: type, name: str) -> FieldPlan:
         return next(item for item in cls._record_plan(record).bindings if item.name == name)
 
@@ -2144,8 +2138,8 @@ class FieldCodec(MroDispatch, Sealed):
     @classmethod
     def value_schema(cls, annotation: object) -> dict[str, JsonValue]:
         """Derive external scalar/array choices from the same decode declarations."""
-        annotation, representation = cls.representation(annotation)
-        if representation is not None:
+        annotation, representations = cls.representation(annotation)
+        for representation in representations:
             schema = representation.schema()
             if type(None) in get_args(annotation):
                 return cls.alternatives_schema("anyOf", [schema, {"type": "null"}])
@@ -2193,7 +2187,7 @@ class FieldCodec(MroDispatch, Sealed):
         Projection is deliberately one way. Excluded secrets cannot be rebuilt
         from a read-only view, and a view never serves as a persistence record.
         """
-        if cls._value_representation(value, annotation) is not None:
+        if cls._value_representation(value, annotation):
             return RepresentedProjection.of(value, view, annotation)
         if is_dataclass(value) and not isinstance(value, type):
             return cls._project_record(value, view)
@@ -3172,14 +3166,14 @@ def compile_decoder(annotation: object) -> ValueDecoder[object]: ...
 @lru_cache(maxsize=None)
 def compile_decoder(annotation: object) -> ValueDecoder[object]:
     """Compile each immutable declaration once; value paths never parse it again."""
-    declared, representation = FieldCodec.representation(annotation)
-    if representation is None:
-        return _structural_decoder(declared)
-    try:
-        owner = ValueDecoder.annotation_class(declared)
-    except KeyError:
-        owner = _ScalarDecoder
-    return owner.with_representation(annotation, declared, get_args(declared), representation)
+    declared, representations = FieldCodec.representation(annotation)
+    for representation in representations:
+        try:
+            owner = ValueDecoder.annotation_class(declared)
+        except KeyError:
+            owner = _ScalarDecoder
+        return owner.with_representation(annotation, declared, get_args(declared), representation)
+    return _structural_decoder(declared)
 
 
 def _structural_decoder(annotation: object) -> ValueDecoder[object]:
