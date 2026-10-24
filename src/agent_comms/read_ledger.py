@@ -22,6 +22,7 @@ from .locked_store import DocumentChange
 from .maintenance_barrier import CarriedDocument
 from .private_path import ObservedPath
 from .read_basis import (
+    AllConversation,
     ChannelConversation,
     Conversation,
     ConversationCursor,
@@ -121,7 +122,7 @@ class ReadLedger(Sealed, ThreadOwnedState, CarriedDocument[ReadDocument], Depend
     def read_conversation(self, viewer: str, conversation: Conversation,
                           snapshot: RegistryProvenance) -> ReadDocument:
         owners = tuple(snapshot.threads[snapshot.canonical_name(viewer)].incarnation.recorded_names(snapshot))
-        conversations = tuple(conversation.recorded_keys(snapshot))
+        conversations = (AllConversation(), *conversation.recorded_keys(snapshot))
         with self.locked(mode=SharedLock()):
             return self._read_using(lambda data: FieldCodec.decode_selected(ReadDocument, data,
                 {(ReadDocument, "messages"): owners, (ReadCursor, "conversations"): conversations},

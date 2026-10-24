@@ -394,6 +394,7 @@ class ReadCursor:
         FROM json_each({parameter}))"""
 
     unread_sql = "seq > high_water AND seq NOT IN (SELECT value FROM json_each(exceptions))"
+    read_sql = f"NOT ({unread_sql})"
 
     floor_sql = """actor_floor AS MATERIALIZED (
         SELECT actor,target,max(high_water) AS high_water

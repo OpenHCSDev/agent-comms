@@ -438,7 +438,9 @@ class TranscriptSource:
     @contextmanager
     def projection(self, source: TranscriptSource, routes: TranscriptRoutes):
         def project(records, *, max_records: int, max_bytes: int):
-            return ((record, record.events) for record in records)
+            return ((record, tuple(retained for event in record.events
+                                   for retained in event.for_external_source(source)))
+                    for record in records)
         yield project
 
     def sent_messages(self, references: Iterable[MessageReference]) -> dict[MessageReference, Delivered]:

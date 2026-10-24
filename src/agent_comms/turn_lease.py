@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 import time
 from abc import ABC, abstractmethod
 from collections.abc import Callable, Iterable, Iterator
@@ -11,13 +10,11 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Annotated, ClassVar
 
 from .activity import ObservedActivity
-from .bus_tables import ReceivedSource
 from .channel_targets import CommandTarget
 from .child_process import ProcessIdentity, ProcessState
 from .coordination_session import NativeBoundary
 from .errors import RelationViolationError
 from .field_codec import (
-    FieldCodec,
     NullMember,
     RecordMember,
     SingleFieldValue,
@@ -31,7 +28,6 @@ from .input_disposition import InputDispositions
 from .lifecycle_capability import Executing, LifecycleCapability
 from .locked_store import DurableFile, JsonDocument, PatternFile
 from .message_reference import MessageReference
-from .messages import Addressed, Message
 from .read_basis import ChannelConversation, DMConversation
 from .reported_turn import NoReportedTurn, ReportedTurn, ReportedTurnState
 from .routing import TurnRouting
@@ -387,21 +383,11 @@ class NoTurnLease(NullMember, TurnLease):
             )
             reads = messaging.bus.reads
             document = reads.read_conversation(owner.name, conversation, snapshot)
-            cursor = reads.cursor(owner.name, snapshot, document=document).for_conversation(
-                conversation,
+            cursor = reads.cursor(owner.name, snapshot, document=document)
+            references = source.delivered_unanswered(
+                owner.incarnation.require_recorded(), conversation.scope(snapshot),
+                cursor, snapshot,
             )
-            predicate, parameters = conversation.scope(snapshot).index_predicate
-            received, recipients = ReceivedSource.query(owner.incarnation.require_recorded().lookup)
-            with source.observing() as db:
-                rows = db.execute(
-                    f'SELECT seq FROM "{Addressed.table.declared_name}" '
-                    f'JOIN "{Message.table.declared_name}" USING(seq) '
-                    f'WHERE ({predicate}) AND seq IN ({received}) '
-                    'AND (seq <= ? OR seq IN (SELECT value FROM json_each(?)))',
-                    (*parameters, *recipients, cursor.high_water, json.dumps(cursor.exceptions)),
-                )
-                sequences = tuple(FieldCodec.decode(int, row[0]) for row in rows)
-            references = source.unanswered_references(sequences, snapshot.names_for(owner.name))
             destination = route.canonical_name(snapshot.canonical_name)
             return tuple(
                 original.message.reference
