@@ -1,5 +1,6 @@
 """Unbox recorded context turn identities before the nominal reader opens them."""
 
+from abc import ABC, abstractmethod
 from contextlib import closing
 from dataclasses import dataclass
 from functools import partial
@@ -10,6 +11,7 @@ from agent_comms.context_store import ContextRequest, ContextStore
 from agent_comms.field_codec import FieldCodec, MalformedRecord, TurnId
 from agent_comms.installer.probes.carry import Carried, Carry
 from agent_comms.locked_store import RootFile
+from agent_comms.thread_identity import TurnIdentity
 from agent_comms.turn_context import RecordedContextTurn
 
 
@@ -18,25 +20,40 @@ class StoredRegisteredTurn:
     value: TurnId
 
 
+class CarriedContextTurn(ABC):
+    occurrence: TurnIdentity
+
+    @abstractmethod
+    def carried(self) -> RecordedContextTurn: ...
+
+
+@dataclass(frozen=True)
+class StoredContextTurn(CarriedContextTurn):
+    identity: StoredRegisteredTurn
+    occurrence: TurnIdentity
+
+    def carried(self) -> RecordedContextTurn:
+        return RecordedContextTurn(self.identity.value, self.occurrence)
+
+
+@dataclass(frozen=True)
+class CurrentContextTurn(CarriedContextTurn):
+    identity: TurnId
+    occurrence: TurnIdentity
+
+    def carried(self) -> RecordedContextTurn:
+        return RecordedContextTurn(self.identity, self.occurrence)
+
+
 class ContextTurnIds(Carry):
     opened_files: ClassVar[tuple[type[RootFile], ...]] = (ContextStore,)
 
     @staticmethod
     def rewrite(path: Path, record: type, payload: dict[str, object]) -> dict[str, object]:
         try:
-            identity = payload["identity"]
-            current = (
-                payload
-                if isinstance(identity, str)
-                else {
-                    **payload,
-                    "identity": FieldCodec.encode(
-                        FieldCodec.decode(StoredRegisteredTurn, identity).value
-                    ),
-                }
+            return FieldCodec.encode(
+                FieldCodec.decode(StoredContextTurn | CurrentContextTurn, payload).carried()
             )
-            FieldCodec.decode(RecordedContextTurn, current)
-            return current
         except MalformedRecord as error:
             error.add_note(f"{path}: {payload!r}")
             raise
