@@ -33,7 +33,7 @@ from agent_comms.commander_pings import CommanderUpdate
 from agent_comms.service_passes import ServicePassStore
 from agent_comms.coordinator import Coordination
 from agent_comms.errors import CommittedMessageError, HumanSendRefusedError, RelationViolationError
-from agent_comms.field_codec import FieldCodec, TurnId
+from agent_comms.field_codec import FieldCodec, MessageId, TurnId
 from agent_comms.goal_actions import (
     CreateProblemGoalAction,
     ReissuedOrderGoalAction,
@@ -383,7 +383,7 @@ def test_latest_answer_uses_the_complete_original_reference_and_time_cut(held_bu
     publish(held_bus, "lead", "worker", since + 3)
     with pytest.raises(RelationViolationError):
         publish(held_bus, "lead", "worker", since + 4,
-                answers=(MessageReference(question.seq, "wrong-original"),))
+                answers=(MessageReference(question.seq, MessageId.mint("wrong-original")),))
     expired = publish(held_bus, "worker", "lead", since - 1)
     publish(held_bus, "lead", "worker", since + 5, answers=(expired.reference,))
     scope = RepliesDisplayScope(frozenset({"lead"}), frozenset({"worker"}))
@@ -406,7 +406,8 @@ def test_unanswered_pages_match_the_complete_answer_reference(held_bus):
                       for offset in range(105))
     with pytest.raises(RelationViolationError):
         publish(held_bus, "lead", "worker", now,
-                answers=(MessageReference(questions[0].seq, "not-the-original-hash"),))
+                answers=(MessageReference(
+                    questions[0].seq, MessageId.mint("not-the-original-hash")),))
     answered = (questions[1].reference, questions[-1].reference)
     held_bus.messaging.send("lead", "outsider", "Answers retain their original references",
                             answers=answered)

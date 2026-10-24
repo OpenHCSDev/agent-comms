@@ -10,6 +10,7 @@ import pytest
 from agent_comms.active_route import LocalRoute
 from agent_comms.coordination_errors import StaleRevision
 from agent_comms.errors import RelationViolationError, UnregisteredThreadError
+from agent_comms.field_codec import MessageId
 from agent_comms.thread_identity import RecordedThreadIncarnation
 from agent_comms.owner_connection import OwnerIdentityChangedError
 from agent_comms.message_reference import MessageReference
@@ -63,7 +64,7 @@ async def test_an_invalid_notification_reference_does_not_kill_the_observer(comm
     with ObservationProcess.awaited(comms.route) as process:
         with pytest.raises(RelationViolationError):
             await process.read(ReadNotifications(
-                str(comms.root), (MessageReference(1, "not-the-original"),)
+                str(comms.root), (MessageReference(1, MessageId.mint("not-the-original")),)
             ))
         assert await process.read(ReadNotifications(str(comms.root), ())) == {}
 

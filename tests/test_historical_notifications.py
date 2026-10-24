@@ -19,7 +19,7 @@ from agent_comms.assignment_states import (
 )
 from agent_comms.comms import wire
 from agent_comms.coordination_errors import DMScopeChanged, SchemaVersionError
-from agent_comms.field_codec import TurnId
+from agent_comms.field_codec import MessageId, TurnId
 from agent_comms.read_basis import HistoricalDisplay, ReadCursor
 from agent_comms.read_ledger import ReadLedger
 from agent_comms.thread_identity import AgentThreadRole, UserThreadRole
@@ -192,9 +192,10 @@ def test_sent_recipient_progresses_through_durable_read_and_answer(archived_noti
         activity=read_activity,
         updated_at_ms=1_000,
     )
+    reply_id = MessageId.mint("durable-reply")
     answered_activity = replace(
         read_activity,
-        response=AnsweredResponse(MessageReference(99, "durable-reply"), 3_000),
+        response=AnsweredResponse(MessageReference(99, reply_id), 3_000),
     )
     answered = CompletedAssignment.build(
         FullWake(), "durable-execution", "sender"
@@ -219,7 +220,7 @@ def test_sent_recipient_progresses_through_durable_read_and_answer(archived_noti
         observation=RecordedRecipientActivity(),
         activity=replace(
             sent_activity,
-            response=AnsweredResponse(MessageReference(99, "durable-reply"), 3_000),
+            response=AnsweredResponse(MessageReference(99, reply_id), 3_000),
         ),
         updated_at_ms=2_000,
     )
@@ -230,7 +231,7 @@ def test_sent_recipient_progresses_through_durable_read_and_answer(archived_noti
     assert answered.label.startswith("Answered ") and answered.answered_at_ms == 3_000
     assert delivered.label.startswith("Read ") and delivered.state == ShownToModelProgress(2_000)
     assert delivered_answer.label.startswith("Answered ")
-    assert delivered_answer.answer == MessageReference(99, "durable-reply")
+    assert delivered_answer.answer == MessageReference(99, reply_id)
     assert sent.recipient_identity == read.recipient_identity == answered.recipient_identity
 
 
