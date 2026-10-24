@@ -764,7 +764,7 @@ class InputDrain(InputObservation):
             for state in self.drained.values():
                 state.retire_producers()
 
-    async def input_refused(self, session_id: str, input_id: str) -> None:
+    async def input_refused(self, session_id: str, input_id: InputId) -> None:
         state = self.state(session_id)
         source = state.following.pop(input_id, None)
         if source is not None:
@@ -775,7 +775,7 @@ class InputDrain(InputObservation):
             await self.emit_queue_state(session_id)
 
     async def input_cleared(
-        self, session_id: str, input_id: str, native_id: str, text: str,
+        self, session_id: str, input_id: InputId, native_id: str, text: str,
     ) -> None:
         source = self.state(session_id).following.get(input_id)
         if source is not None:

@@ -16,7 +16,7 @@ from agent_comms.execution_states import (
     ExecutionState,
     PendingExecution,
 )
-from agent_comms.field_codec import FieldCodec
+from agent_comms.field_codec import FieldCodec, MessageId
 from agent_comms.obligation_states import PublishedResponse, ResponseState, SilentResponse
 from agent_comms.wake_policy import FullWake, MessageAudience
 
@@ -126,7 +126,7 @@ def test_new_response_state_roundtrips_real_store(tmp_path):
                 ).insert(db)
                 WakeAssignment(
                     assignment_id="c", recipient="owner", recipient_lookup="p",
-                    wire_seq=1, message_id="m", audience=MessageAudience.DIRECT,
+                    wire_seq=1, message_id=MessageId.mint("m"), audience=MessageAudience.DIRECT,
                     lifecycle=EngagedAssignment.build(FullWake(), "e", "requester"),
                     accepted_at_ms=0, updated_at_ms=0,
                 ).insert(db)
@@ -163,7 +163,7 @@ def test_assignment_extension_derives_sql_projection_and_transitions(tmp_path):
                 recipient="owner",
                 recipient_lookup="owner",
                 wire_seq=1,
-                message_id="message",
+                message_id=MessageId.mint("message"),
                 audience=MessageAudience.DIRECT,
                 lifecycle=AwaitingAssignment(),
                 accepted_at_ms=0,
@@ -203,7 +203,7 @@ def test_original_target_and_receipt_legality_is_owned_by_current_variants():
             FieldCodec.decode(AssignmentState, damaged)
 
     # A publication has a complete acknowledgement; non-publication variants have none.
-    published = FieldCodec.encode(PublishedResponse("message", 1))
+    published = FieldCodec.encode(PublishedResponse(MessageId.mint("message"), 1))
     for field in ("message_id", "seq"):
         damaged = dict(published)
         del damaged[field]

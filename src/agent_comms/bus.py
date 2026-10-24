@@ -46,7 +46,7 @@ from agent_comms.envelope_claim_transitions import (
     ResourceClaim,
 )
 from agent_comms.errors import CommittedMessageError, RelationViolationError, UnclaimedError
-from agent_comms.field_codec import FieldCodec
+from agent_comms.field_codec import FieldCodec, MessageId
 from agent_comms.locked_store import BusFile, SQLiteFile, StoreCommittedError
 from agent_comms.message_reference import MessageReference
 from agent_comms.private_path import FileIdentity, PresentPath
@@ -181,13 +181,13 @@ class BusReader(RouteCounts, ABC):
             return delivery
         raise RelationViolationError("Bus sequence has no frozen delivery")
 
-    def message_reference(self, message_id: str) -> MessageReference:
+    def message_reference(self, message_id: MessageId) -> MessageReference:
         """Resolve one content identity; absent or ambiguous identities are refused."""
         with self.observing() as db:
             identity = MessageIdentitySource.require(db, message_id=message_id)
             return MessageReference(identity.seq, identity.message_id)
 
-    def lookup_message(self, message_id: str) -> BusRecord:
+    def lookup_message(self, message_id: MessageId) -> BusRecord:
         with self.reading() as source:
             return source.lookup(source.message_reference(message_id).seq)
 

@@ -1,10 +1,11 @@
 """Send decisions dispatch effects; their awaitables only control forwarding."""
 import asyncio
 from abc import ABC, abstractmethod
-from contextlib import AbstractContextManager
-from collections.abc import Awaitable, Callable
+from collections.abc import Awaitable, Iterator
+from contextlib import AbstractContextManager, contextmanager
 
 from . import turn_failure as failures
+from .field_codec import InputId
 
 
 class SendOutcome(ABC):
@@ -55,4 +56,42 @@ class AuthorityChangedSend(SendOutcome):
         return asyncio.sleep(0, result=False)
 
 
-SendBoundary = Callable[[str | None, str, str], AbstractContextManager[SendOutcome]]
+class SendBoundary(ABC):
+    """Permission to write original, following and interrupt commands."""
+
+    @abstractmethod
+    def send_original(self, native_id: str, text: str) -> AbstractContextManager[SendOutcome]: ...
+
+    @abstractmethod
+    def send_following(
+        self, public_id: InputId, native_id: str, text: str,
+    ) -> AbstractContextManager[SendOutcome]: ...
+
+    @abstractmethod
+    def send_interrupt(
+        self, public_id: InputId, native_id: str, text: str,
+    ) -> AbstractContextManager[SendOutcome]: ...
+
+
+class NoSendBoundary(SendBoundary):
+    """A direct native session has no ordinary-owner permission to check."""
+
+    @contextmanager
+    def _granted(self) -> Iterator[SendOutcome]:
+        yield GrantedSend()
+
+    def send_original(self, native_id: str, text: str) -> AbstractContextManager[SendOutcome]:
+        return self._granted()
+
+    def send_following(
+        self, public_id: InputId, native_id: str, text: str,
+    ) -> AbstractContextManager[SendOutcome]:
+        return self._granted()
+
+    def send_interrupt(
+        self, public_id: InputId, native_id: str, text: str,
+    ) -> AbstractContextManager[SendOutcome]:
+        return self._granted()
+
+
+NO_SEND_BOUNDARY = NoSendBoundary()

@@ -39,6 +39,7 @@ from agent_comms.errors import (
     RelationViolationError,
     UnclaimedError,
 )
+from agent_comms.field_codec import MessageId
 from agent_comms.message_reference import MessageReference
 from agent_comms.read_basis import RepliesDisplayScope
 from agent_comms.response_acknowledgement import (
@@ -129,6 +130,40 @@ def test_projection_digest_ignores_infrastructure_source(
     assert original.count(old) == 1
     path.write_text(original.replace(old, new))
     assert projection_source_digest(projection_source) == before
+
+
+def test_projection_digest_tracks_declared_column_spelling(projection_source: Path) -> None:
+    before = json.loads(projection_source_digest(projection_source))["message_identity_source"]
+    codec = projection_source / "field_codec.py"
+    original = codec.read_text()
+    related = "digits: ClassVar[int] = 12"
+    assert original.count(related) == 1
+    codec.write_text(original.replace(related, "digits: ClassVar[int] = 13"))
+    assert (
+        json.loads(projection_source_digest(projection_source))["message_identity_source"] != before
+    )
+    unrelated = 'spelling = re.compile("[0-9a-f]{7,40}")'
+    assert original.count(unrelated) == 1
+    codec.write_text(original.replace(unrelated, 'spelling = re.compile("[0-9a-f]{8,40}")'))
+    assert (
+        json.loads(projection_source_digest(projection_source))["message_identity_source"] == before
+    )
+
+
+def test_nominal_message_id_column_stores_plain_text() -> None:
+    identifier = MessageId.mint("nominal column storage")
+    row = MessageIdentitySource(seq=1, message_id=identifier, sender="sender")
+    with sqlite3.connect(":memory:") as db:
+        MessageIdentitySource.create(db)
+        row.insert(db)
+        value, storage = db.execute(
+            f'SELECT message_id, typeof(message_id) FROM "{MessageIdentitySource.declared_name}"',
+        ).fetchone()
+        assert storage == "text"
+        assert value == str(identifier)
+        restored, = MessageIdentitySource.select(db)
+        assert type(restored.message_id) is MessageId
+        assert restored == row
 
 
 @pytest.mark.parametrize(
@@ -519,7 +554,8 @@ def test_unanswered_reference_selection_requires_the_recorded_original_and_exact
     with pytest.raises(RelationViolationError):
         bus.append(lambda seq, db: PublicRecord.from_message(
             Message("lead", "#comms", "Wrong original reference", InfoKind, seq=seq,
-                    answers=(MessageReference(original.seq + offset, "wrong-hash"),))))
+                    answers=(MessageReference(
+                        original.seq + offset, MessageId.mint("wrong-hash")),))))
     assert bus.revision() == original.seq
     bus.append(lambda seq, db: PublicRecord.from_message(
         Message("another-unit", "#comms", "Someone else's answer", InfoKind, seq=seq,

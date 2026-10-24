@@ -13,7 +13,7 @@ from .audience_manifest import FrozenRecipient
 from .coordination_tables.assignments import WakeAssignment
 from .coordination_tables.publications import PublicationEvidence
 from .declared_family import DeclaredFamily
-from .field_codec import FieldCodec, MalformedRecord
+from .field_codec import FieldCodec, MalformedRecord, MessageId, boundary_decoder
 from .message_reference import MessageReference
 from .notification_progress import (
     AnsweredProgress,
@@ -71,11 +71,12 @@ class AssignmentResponse(DeclaredFamily, affix="Response"):
         return self
 
     @classmethod
+    @boundary_decoder
     def from_columns(
         cls, seq: object, message_id: object, received_at_ms: object
     ) -> AssignmentResponse:
         seq = FieldCodec.decode(int | None, seq)
-        message_id = FieldCodec.decode(str | None, message_id)
+        message_id = FieldCodec.decode(MessageId | None, message_id)
         received_at_ms = FieldCodec.decode(int | None, received_at_ms)
         if seq is None and message_id is None and received_at_ms is None:
             return UnansweredResponse()

@@ -16,6 +16,7 @@ from .coordinator import Coordination
 from .launch_root import LaunchRoot
 from .launch_runtime import LaunchRuntime, ThreadLaunch
 from .native_arguments import GivenBinary, NativeArguments
+from .turn_input_source import NoTurnAcceptance
 from .turn_terminal import OwnerStop
 
 
@@ -71,6 +72,7 @@ async def run_startup_input(agent: CommsAgent, name: str, key: str) -> None:
             name,
             name,
             row.source_text,
+            acceptance=NoTurnAcceptance(),
             original_keys=(key,),
             original_owner_input=True,
         )

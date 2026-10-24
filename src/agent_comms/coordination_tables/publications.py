@@ -15,7 +15,7 @@ from agent_comms.coordination_contracts import (
 from agent_comms.coordination_errors import CoordinationError, IntegrityViolationError
 from agent_comms.coordination_schema import CoordinatorRow
 from agent_comms.errors import RelationViolationError
-from agent_comms.field_codec import FieldCodec, MalformedRecord, WireName
+from agent_comms.field_codec import FieldCodec, MalformedRecord, MessageId, WireName
 from agent_comms.message_reference import MessageReference
 from agent_comms.messages import Message
 from agent_comms.response_acknowledgement import canonical_publication_key
@@ -102,7 +102,7 @@ class PublicationIntents(
         ),
     ]
     expected_message_id: Annotated[
-        str,
+        MessageId,
         Column(
             storage=ExactStorage,
             unique=True,
@@ -199,7 +199,7 @@ class PublicationEvidence(
     ]
     seq: Annotated[int, Column(unique=True, check="seq > 0")]
     message_id: Annotated[
-        str,
+        MessageId,
         Column(
             storage=ExactStorage,
             unique=True,

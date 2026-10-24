@@ -19,6 +19,7 @@ from .field_codec import (
     EnvelopeSequence,
     FieldCodec,
     Id128Text,
+    MessageId,
     TurnId,
     NullMember,
     ProjectionSequence,
@@ -208,7 +209,7 @@ class WakeClaim(RecordMember, RecordedScope):
 
     wire_root_id: Annotated[str, Id128Text]
     source_seq: int
-    source_message_id: Annotated[str, BoundedText]
+    source_message_id: MessageId
     wake_assignment_id: Annotated[str, BoundedText, WireName("wake_claim_id")]
     wake_revision: int
     recipient_lookup: Annotated[str, Id128Text]

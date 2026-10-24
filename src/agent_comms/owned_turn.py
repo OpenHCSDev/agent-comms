@@ -40,6 +40,7 @@ from .turn_input_source import (
     OwnerOriginalInput,
     RoutedOriginalInput,
     ScheduledOriginalInput,
+    TurnAcceptance,
 )
 from .turn_phase import CancellingPhase, PromptAcceptancePhase
 from .turn_progress import TurnProgress
@@ -89,7 +90,7 @@ class OwnedTurn:
         autonomous_goal: bool = False,
         original_owner_input: bool = False,
         original_goal_id: str | None = None,
-        accepted_input_id: str | None = None,
+        acceptance: TurnAcceptance,
         dependency_wait_id: str | None = None,
     ) -> None:
         self.runner = runner
@@ -103,7 +104,7 @@ class OwnedTurn:
         self.autonomous_goal = autonomous_goal
         self.original_owner_input = original_owner_input
         self.original_goal_id = original_goal_id
-        self.accepted_input_id = accepted_input_id
+        self.acceptance = acceptance
         self.dependency_wait_id = dependency_wait_id
         self.terminal: TurnTerminal = EndedWithoutResult()
 
@@ -252,7 +253,7 @@ class OwnedTurn:
         else:
             source_type = RoutedOriginalInput
         original = source_type(
-            accepted_id=self.accepted_input_id,
+            acceptance=self.acceptance,
             goal_permission=TurnGoalPermission(permission),
             prompt=self.context.render().text,
             original_display=self.original_display,
@@ -283,10 +284,8 @@ class OwnedTurn:
             self.runner.inputs.bind_native_turn(self.session_id, self.thread),
         )
         self.finish_event = asyncio.Event()
-        self.controller = (
-            self.runner.inputs.state(self.session_id).queued[self.accepted_input_id].controller
-            if self.accepted_input_id is not None
-            else self.runner.runtime.controller.get()
+        self.controller = self.acceptance.controller(
+            self.runner.inputs.state(self.session_id), self.runner.runtime,
         )
         if self.controller is not None:
             self.controller = self.controller.attached(None)  # Autonomous/channel/goal turns have no controller.
@@ -347,7 +346,7 @@ class OwnedTurn:
             turn=self.turn_id,
             claim_generation=self.turn_lease.claimed_generation,
             goal_permit=self.goal_permit,
-            original=replace(self.original, prompt=rendered.text),
+            original_source=replace(self.original, prompt=rendered.text),
         )
         from .channel_coding_tools import CodingToolMode
 
@@ -358,10 +357,7 @@ class OwnedTurn:
             inbox=self.following.inbox,
             finish_event=self.finish_event,
             send_boundary=sender,
-            interrupt_boundary=lambda public_id, native_id, text: sender(
-                public_id, native_id, text, already_bound=True
-            ),
-            input_started=sender.native_start,
+            input_start=sender,
             request_progress=self.progress.record_request_progress,
             ui_request=lambda request: self.runner.extension_ui_permission(
                 self.session_id, self.turn_id, self.controller, request

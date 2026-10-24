@@ -17,7 +17,7 @@ from agent_comms.private_runtime_schema import PrivateCoordinatorTable
 
 from .coordination_errors import IdentityConflict, PublicationActivationBlocked, StaleFence
 from .declared_family import DeclaredFamily
-from .field_codec import FieldCodec, MalformedRecord, NativeContext
+from .field_codec import FieldCodec, InputId, MalformedRecord, NativeContext
 from .native_claim_epoch import NativeClaimEpoch, UnrecordedNativeClaim
 from .tool_denial import SelectedToolDenied
 from .native_input_record import (
@@ -244,7 +244,7 @@ class NativeRuntimeInput(
         return self.execution.published_replies(db, owner_lookup)
 
     input_id: Annotated[
-        str,
+        InputId,
         FrozenColumn(
             primary_key=True, check="length(input_id)=32 AND input_id NOT GLOB '*[^0-9a-f]*'"
         ),
@@ -436,7 +436,7 @@ class CurrentNativeCursor(
     input_id: Annotated[
         NativeColumn,
         Column(references=TableReference(NativeRuntimeInput, ("input_id",)), storage=TextStorage, nullable=True),
-        NativeContext(str),
+        NativeContext(InputId),
     ]
     stage: Annotated[
         NativeColumn,

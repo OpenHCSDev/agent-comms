@@ -20,6 +20,7 @@ from agent_comms.native_package import VerifiedNativePackage
 from agent_comms.native_arguments import GivenArguments
 from native_backend_fixture import native_backend_fixture, wait_for
 from source_programs import SourcePrograms
+from agent_comms.thread_identity import NoObservedTurn
 from agent_comms.threads import Thread
 
 
@@ -70,12 +71,16 @@ async def stopped_goal_journey(
             def continued_turn_finished():
                 thread = comms.registry.require("stop-copy")
                 observed = thread.observed_turn(thread.claimed_generation)
-                return not thread.executing and observed is not None and observed != stopped_turn
+                return (
+                    not thread.executing
+                    and observed != NoObservedTurn()
+                    and observed != stopped_turn
+                )
 
             await wait_for(continued_turn_finished)
             continued = comms.registry.require("stop-copy")
             continued_turn = continued.observed_turn(continued.claimed_generation)
-            assert continued_turn is not None
+            assert continued_turn != NoObservedTurn()
             with closing(store._connect()) as db:
                 finished = AttemptRecord.one(db, attempt_id=resumed.attempt_id)
             assert finished is not None and isinstance(finished.phase, SucceededAttempt)

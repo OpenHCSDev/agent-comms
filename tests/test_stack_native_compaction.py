@@ -1,6 +1,7 @@
 """Pi's own compaction engine, seen through Core's turn path: pinned Pi + localhost provider."""
 
 from __future__ import annotations
+from agent_comms.field_codec import InputId
 from agent_comms.controller import SessionUpdateSink
 
 from agent_comms.lifecycle_capability import Unresolved
@@ -30,7 +31,7 @@ from agent_comms.selected_actions import NoSelectedTools
 from agent_comms.pi_vocabulary import OverflowCompactionReason, ThresholdCompactionReason
 from agent_comms.native_arguments import GivenArguments, GivenBinary
 from stored_inputs import stored_inputs
-from native_backend_fixture import NativeBackendFixture
+from native_backend_fixture import AnnouncedInputStart, NativeBackendFixture
 
 pytestmark = pytest.mark.skipif(sys.platform == "win32", reason="native Pi uses POSIX fsync")
 
@@ -223,7 +224,7 @@ async def test_pi_engine_compacts_inside_a_core_turn(case: str, monkeypatch, nat
                         native_bin, native_args, "Reply OK.", str(project),
                         root=project, owner=NativeBackendFixture.participant_at(project, project),
                         env_extra=child_env, session_file=str(session),
-                        native_start=lambda *_: True,
+                        input_start=AnnouncedInputStart(),
                         persistent_session=pi_session,
                         package=native_runtime_package,
                         tool_mode=NoSelectedTools(),
@@ -319,7 +320,9 @@ async def _acp_threshold(root, project, session, native_bin, native_args, child_
     owner.inputs.state("project").drain_task.cancel()
     await asyncio.gather(owner.inputs.state("project").drain_task, return_exceptions=True)
     comms.threads.attach_session((attachment_owner := comms.registry.require("project")), str(session), process=attachment_owner.process_identity)
-    turn = asyncio.create_task(InitialInput.run(owner.inputs, "project", "project", "Reply OK."))
+    turn = asyncio.create_task(
+        InitialInput.run(owner.inputs, "project", "project", "Reply OK.", input_id=InputId.mint())
+    )
     try:
         entered = await asyncio.to_thread(summary_entered.wait, 10)
         assert entered

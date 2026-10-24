@@ -30,8 +30,8 @@ if TYPE_CHECKING:
 @dataclass
 class InputForwarding(MroDispatch):
     queue: TurnInbox = field(default_factory=TurnInbox)
-    pending: dict[str, commands.Prompt] = field(default_factory=dict)
-    accepted: set[str] = field(default_factory=set)
+    pending: dict[str, InputRequest] = field(default_factory=dict)
+    accepted: set[InputId] = field(default_factory=set)
     changed: asyncio.Event = field(default_factory=asyncio.Event)
     current: TurnInboxItem | None = None
     generation: int = 0
@@ -60,15 +60,14 @@ class InputForwarding(MroDispatch):
     def acknowledge(self, response: Response) -> None:
         if response.succeeded:
             for item in self.pending.values():
-                public_id = item.require_id()
-                if item.id == response.id:
-                    self.accepted.add(public_id)
+                if item.input_id in response.id.present():
+                    self.accepted.add(item.input_id)
         self.changed.set()
 
-    def retire(self, native_id: str) -> commands.Prompt:
+    def retire(self, native_id: str) -> InputRequest:
         """Remove one exact native identity from the sole pending index."""
         item = self.pending.pop(native_id)
-        self.accepted.discard(item.require_id())
+        self.accepted.discard(item.input_id)
         self.changed.set()
         return item
 
@@ -99,7 +98,8 @@ class InputForwarding(MroDispatch):
         barrier = MaintenanceBarrier(RegistryFile.path_in(session.startup.root))
         async with barrier.ingress_async() as status:
             with status.phase.send_new(
-                session.send_boundary, None, session.command.input_id, session.command.message,
+                session.send_boundary.send_original,
+                session.command.input_id, session.command.message,
             ) as outcome:
                 completion = outcome.dispatch(self, session, item, write)
         return await completion
@@ -131,10 +131,10 @@ class InputForwarding(MroDispatch):
         while True:
             self.changed.clear()
             candidates = tuple(
-                key for key, entry in self.pending.items() if entry.require_id() in selected
+                key for key, entry in self.pending.items() if entry.input_id in selected
             )
             if not candidates or all(
-                self.pending[key].require_id() in self.accepted for key in candidates
+                self.pending[key].input_id in self.accepted for key in candidates
             ):
                 return candidates
             await self.changed.wait()
@@ -153,7 +153,7 @@ class InputForwarding(MroDispatch):
         for native_id in response.data.require_payload().require_requested(command.input_ids):
             removed = self.retire(native_id)
             session.rejected_commands.append(events.InputCleared(
-                id=removed.require_id(), native_id=native_id, text=removed.message,
+                id=removed.input_id, native_id=native_id, text=removed.content.text,
             ))
         session.rejected_signal.set()
         return True
@@ -178,7 +178,8 @@ class InputForwarding(MroDispatch):
         first = self.pending[candidates[0]]
         async with MaintenanceBarrier(RegistryFile.path_in(session.startup.root)).ingress_async() as status:
             with status.phase.send_running(
-                session.interrupt_boundary, first.require_id(), candidates[0], first.message,
+                session.send_boundary.send_interrupt, first.input_id,
+                candidates[0], first.content.text,
             ) as outcome:
                 completion = outcome.dispatch(self, session, item, lambda: session.native.send(
                     commands.InterruptSteering(input_ids=list(candidates))
@@ -203,11 +204,13 @@ class InputForwarding(MroDispatch):
             if command.images:
                 session.output.sensitive = True
             session.native.send(command)
-            self.pending[native_id] = command
+            self.pending[native_id] = item
             self.generation += 1
 
         async with MaintenanceBarrier(RegistryFile.path_in(session.startup.root)).ingress_async() as status:
-            with status.phase.send_running(session.send_boundary, public_id, native_id, text) as outcome:
+            with status.phase.send_running(
+                session.send_boundary.send_following, public_id, native_id, text,
+            ) as outcome:
                 completion = outcome.dispatch(self, session, item, write)
         return await completion
 
@@ -216,17 +219,19 @@ class InputForwarding(MroDispatch):
             session.rejected_commands.append(events.FollowingInputRefused(id=input_id))
             session.rejected_signal.set()
 
-    def mark_started(self, session: TurnSession, payload: MessageStart) -> tuple[bool, str | None]:
+    def mark_started(
+        self, session: TurnSession, payload: MessageStart,
+    ) -> tuple[InputId] | tuple[()]:
         message = payload.message
         if not message.user or not message.input_id.reported:
-            return False, None
+            return ()
         native_id = message.input_id.require()
         entry = self.pending.get(native_id)
-        if entry is None or message.text != entry.message:
-            return False, None
-        public_id = entry.require_id()
-        if not session.input_start.following(public_id, native_id, entry.message):
-            return False, None
+        if entry is None or message.text != entry.content.text:
+            return ()
+        public_id = entry.input_id
+        if not session.input_start.following(public_id, native_id, entry.content.text):
+            return ()
         self.retire(native_id)
         self.started = True
-        return True, public_id
+        return (public_id,)

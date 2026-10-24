@@ -1,8 +1,5 @@
 """Idle observations avoid repeated work without becoming delivery authority."""
 
-from bus_history import read_history
-from conftest import publish_initial
-from agent_comms.messages import NoticeRole
 import asyncio
 import os
 import threading
@@ -11,15 +8,18 @@ from contextlib import AsyncExitStack
 import pytest
 
 import agent_comms.agent_events as events
-from agent_comms.coordinator import Coordination
 from agent_comms.child_process import ProcessIdentity
+from agent_comms.coordinator import Coordination
+from agent_comms.messages import AlertKind, InfoKind, Message, NoticeRole
 from agent_comms.owned_turn import OwnedTurn
-from agent_comms.messages import AlertKind, InfoKind, Message
 from agent_comms.private_path import FileRevision
 from agent_comms.store_files import _store_lock
+from agent_comms.threads import Thread
+from agent_comms.turn_input_source import NoTurnAcceptance
+from bus_history import read_history
+from conftest import publish_initial
 from test_acp_private_nk_delivery import _session
 from test_coordinated_runtime import _root, tmp_path  # noqa: F401
-from agent_comms.threads import Thread
 
 
 @pytest.mark.asyncio
@@ -84,7 +84,8 @@ async def test_turn_publication_joins_cancellation_before_lease_release(tmp_path
     comms, agent, _root_id = _session(tmp_path)
     origin = Message("user", "#team", "publication ownership", InfoKind)
     execution = OwnedTurn(
-        agent.turns, "beta", "beta", "publication ownership", origins=(origin,)
+        agent.turns, "beta", "beta", "publication ownership", origins=(origin,),
+        acceptance=NoTurnAcceptance(),
     )
     async with AsyncExitStack() as resources:
         async with AsyncExitStack() as permits:

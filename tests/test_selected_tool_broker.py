@@ -18,7 +18,7 @@ from agent_comms.channel_coding_tools import CodingToolSocket
 from agent_comms.coordinator import Coordination
 from agent_comms.coordination_database import CoordinationStore
 from agent_comms.envelope_claim_transitions import WakeClaim
-from agent_comms.field_codec import TurnId
+from agent_comms.field_codec import InputId, MessageId, TurnId
 from agent_comms.native_tool_call import (
     DuplicateToolCallIdentity,
     OwnerToolConnection,
@@ -102,7 +102,7 @@ def test_owner_mode_denies_unreserved_input_before_consuming_ledger(private_comm
     claim_scope = WakeClaim(
         wire_root_id="a" * 32,
         source_seq=1,
-        source_message_id="source",
+        source_message_id=MessageId.mint("source"),
         wake_assignment_id="cohort-v1:" + "b" * 64,
         wake_revision=1,
         recipient_lookup="c" * 32,
@@ -114,7 +114,7 @@ def test_owner_mode_denies_unreserved_input_before_consuming_ledger(private_comm
         attempt_ordinal=1,
     )
     with Coordination(str(CoordinationStore.path_in(comms.root))) as store:
-        input_id = secrets.token_hex(16)
+        input_id = InputId.mint()
         mode = broker.selected_tool_mode_for_owner(
             comms, store, claim_scope, "owner", input_id
         )

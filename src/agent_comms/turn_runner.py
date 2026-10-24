@@ -21,7 +21,7 @@ from .channel_targets import NamedTarget
 from .channels import AllChannel
 from .controller import Controller
 from .coordinator import Coordination
-from .field_codec import TurnId
+from .field_codec import InputId, TurnId
 from .errors import RelationViolationError
 from .following_inputs import OwnerFollowingInputs
 from .goal_actions import (
@@ -47,6 +47,7 @@ from .threads import Thread
 from .transcript_updates import TurnTranscriptUpdate
 from .turn_effects import TurnEffects
 from .turn_lease import TurnLeaseFence, TurnState
+from .turn_input_source import TurnAcceptance
 from .turn_outcome import TurnOutcome
 from .turn_phase import CancellingPhase, TurnPhase
 from .turn_terminal import TurnInterruption
@@ -184,7 +185,7 @@ class TurnRunner:
         *,
         images: tuple[ImageInput, ...],
         display_text: str | None = None,
-        input_id: str | None = None,
+        input_id: InputId,
         origin: InputOrigin = UnattributedInputOrigin(),
     ) -> PromptResponse:
         session_id = request.session_id
@@ -440,7 +441,7 @@ class TurnRunner:
         autonomous_goal: bool = False,
         original_owner_input: bool = False,
         original_goal_id: str | None = None,
-        accepted_input_id: str | None = None,
+        acceptance: TurnAcceptance,
         dependency_wait_id: str | None = None,
     ) -> None:
         from .owned_turn import OwnedTurn
@@ -457,7 +458,7 @@ class TurnRunner:
             autonomous_goal=autonomous_goal,
             original_owner_input=original_owner_input,
             original_goal_id=original_goal_id,
-            accepted_input_id=accepted_input_id,
+            acceptance=acceptance,
             dependency_wait_id=dependency_wait_id,
         ).run()
 

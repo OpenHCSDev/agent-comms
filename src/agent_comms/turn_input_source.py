@@ -3,35 +3,193 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from contextlib import ExitStack
+from collections.abc import Iterator
+from contextlib import ExitStack, contextmanager
 from dataclasses import dataclass, replace
 from typing import TYPE_CHECKING, ClassVar
 
-from .agent_backend import BusyInputPolicy, SteerInputPolicy
-from .channel_input_batch import InputBatch, SingleInputBatch
-from .field_codec import TurnId
-from .messages import Message
-from .started_input import StartedInput
 from agent_comms.turn_goal_permission import GoalPermission, TurnGoalPermission
 
+from . import input_attempt
+from .acp_extension import InputStartedUpdate, NoQueueScope
+from .agent_backend import BusyInputPolicy, SteerInputPolicy
+from .channel_input_batch import InputBatch, SingleInputBatch
+from .field_codec import InputId, TurnId
+from .input_attempt import InputAlreadyCleared
+from .messages import Message
+from .ordinary_turn_rules import (
+    AcceptedInputCheck,
+    MissingAcceptedInputCheck,
+    UnboundOrdinaryInputRule,
+    UnconsumedDependencyRule,
+)
+from .reservation_rules import ReservationViolationError
+from .routing import TurnRouting
+from .send_outcome import DeferredSend, GrantedSend, RefusedSend, SendOutcome
+from .started_input import StartedInput
+
 if TYPE_CHECKING:
+    from .acp_extension import QueueScope
     from .comms import Comms
+    from .controller import Controller
     from .goal_waits import GoalWait
     from .goals import GoalDeclaration
     from .input_disposition import InputDispositions
+    from .input_drain import DrainedSession, InputDrain
+    from .owned_send import OwnedSend
+    from .runtime import RuntimeServer
     from .thread_identity import RecordedThreadIncarnation
     from .threads import Thread
 
 
+class TurnAcceptance(ABC):
+    """The live ACP acknowledgement, when this turn has one."""
+
+    def controller(self, state: DrainedSession, runtime: RuntimeServer) -> Controller | None:
+        return runtime.controller.get()
+
+    @abstractmethod
+    def require_current(
+        self, inputs: InputDrain, session_id: str, source: TurnInputSource,
+        current: Thread, claim_generation: int,
+    ) -> None: ...
+
+    async def started_update(
+        self, source: TurnInputSource, inputs: InputDrain, session_id: str,
+        row: input_attempt.StartedInput, scope: QueueScope,
+    ) -> InputStartedUpdate:
+        current = await inputs.queue_binding(session_id)
+        if not scope.current_for(current):
+            current = NoQueueScope()
+        return InputStartedUpdate(
+            row.public_id if source.notice_keys else None, source.notice_text,
+            current, current.start_revision(inputs, session_id), row.native_id,
+        )
+
+    @abstractmethod
+    def release(self, inputs: InputDrain, session_id: str) -> None: ...
+
+
+class NoTurnAcceptance(TurnAcceptance):
+    """A scheduled or selected turn has no queued ACP acceptance."""
+
+    def require_current(
+        self, inputs: InputDrain, session_id: str, source: TurnInputSource,
+        current: Thread, claim_generation: int,
+    ) -> None:
+        return
+
+    def release(self, inputs: InputDrain, session_id: str) -> None:
+        return
+
+
+@dataclass(frozen=True)
+class AcceptedTurn(TurnAcceptance):
+    input_id: InputId
+
+    def controller(self, state: DrainedSession, runtime: RuntimeServer) -> Controller | None:
+        return state.queued[self.input_id].controller
+
+    def require_current(
+        self, inputs: InputDrain, session_id: str, source: TurnInputSource,
+        current: Thread, claim_generation: int,
+    ) -> None:
+        try:
+            accepted = inputs.state(session_id).queued[self.input_id]
+        except KeyError:
+            for row in inputs.dispositions.read(source.keys).rows.values():
+                row.require_not_cleared()
+            MissingAcceptedInputCheck().require_valid()
+            raise
+        AcceptedInputCheck(
+            acknowledgement=accepted, current=current, claim_generation=claim_generation,
+            input_id=self.input_id, keys=source.keys, inputs=inputs, session_id=session_id,
+        ).require_valid()
+
+    async def started_update(
+        self, source: TurnInputSource, inputs: InputDrain, session_id: str,
+        row: input_attempt.StartedInput, scope: QueueScope,
+    ) -> InputStartedUpdate:
+        text = source.notice_text
+        queued = inputs.state(session_id).queued
+        if self.input_id in queued:
+            text = await queued[self.input_id].started(inputs)
+        update = await super().started_update(source, inputs, session_id, row, scope)
+        return replace(
+            update, input_id=row.public_id if source.notice_keys else self.input_id, text=text,
+        )
+
+    def release(self, inputs: InputDrain, session_id: str) -> None:
+        inputs.state(session_id).queued.pop(self.input_id, None)
+
+
 @dataclass(frozen=True, kw_only=True)
 class TurnInputSource(StartedInput, ABC):
-    accepted_id: str | None
+    acceptance: TurnAcceptance
     goal_permission: TurnGoalPermission
     bypasses_goal_permit: ClassVar[bool] = False
     origins: ClassVar[tuple[Message, ...]] = ()
 
     if TYPE_CHECKING:
         keys: tuple[str, ...]
+
+    @contextmanager
+    def prepare_send(
+        self, sender: OwnedSend, native_id: str, sent_text: str,
+        *, already_bound: bool = False,
+    ) -> Iterator[SendOutcome]:
+        try:
+            decision = self._prepare(sender, native_id, sent_text, already_bound=already_bound)
+        except InputAlreadyCleared:
+            decision = RefusedSend()
+        yield decision
+
+    def _prepare(
+        self, sender: OwnedSend, native_id: str, sent_text: str,
+        *, already_bound: bool = False,
+    ) -> SendOutcome:
+        # Backend input handling holds shared locks through this check and write.
+        snapshot = sender.comms.registry.snapshot()
+        canonical = snapshot.canonical_name(sender.thread.name)
+        try:
+            current = sender.require_owner(snapshot, canonical)
+            sender._check_owner(current, snapshot, canonical, self, sent_text)
+            # The queue grants a send, not a running tool's lifetime. Once Pi
+            # starts this exact input, StartedInput removes its queue entry.
+            self.acceptance.require_current(
+                sender.inputs, sender.session_id, self, current, sender.claim_generation,
+            )
+        except ReservationViolationError as error:
+            return sender._refusal(error.rule)
+        if self.defers_for_goal(sender.goal_permission, current.goal):
+            return DeferredSend()
+        wait = sender.comms.goals.goal_wait(canonical)
+        try:
+            sender._require_context(self, current, wait)
+        except ReservationViolationError as error:
+            return sender._refusal(error.rule)
+        # Binding failures may be uncertain. Exceptions here still propagate;
+        # never reinterpret a failed durable operation as a retryable policy refusal.
+        if not sender.inputs.dispositions.bind_turn_input(
+            self.keys,
+            claim_scope=sender.claim_generation,
+            turn_id=sender.turn,
+            native_id=native_id,
+            text=sent_text,
+            already_bound=already_bound,
+        ):
+            return sender._refusal(UnboundOrdinaryInputRule())
+        if not self.consume_wait(sender.comms, canonical, wait):
+            return sender._refusal(UnconsumedDependencyRule())
+        sender.comms.transcripts.routes.record_input_display(
+            native_id,
+            self.display(sender.inputs.dispositions, sent_text),
+            sent_text=sent_text,
+            routing=TurnRouting(
+                tuple(origin.reference for origin in self.origins), None
+            ) if self.origins else None,
+        )
+        return GrantedSend()
 
     def valid_keys(self, text: str) -> bool:
         return len(self.keys) <= 1
@@ -184,7 +342,7 @@ class SelectedOriginalInput(RoutedOriginalInput):
     @classmethod
     def answering(cls, prompt: str, permission: TurnGoalPermission) -> SelectedOriginalInput:
         return cls(
-            accepted_id=None,
+            acceptance=NoTurnAcceptance(),
             goal_permission=permission,
             prompt=prompt,
             original_display=None,

@@ -17,6 +17,7 @@ from .maintenance_barrier import MaintenanceStatus
 from .reservation_rules import ReservationRule, RuleCheck, ReservationViolationError
 from .routing import ScheduledTurn
 from .turn_outcome import TurnOutcome
+from .turn_input_source import NoTurnAcceptance
 
 if TYPE_CHECKING:
     from .goals import GoalDeclaration
@@ -138,6 +139,7 @@ class WakeScheduleCheck(SchedulesWake, BackgroundWake, SessionScheduleCheck):
                         session_id,
                         inputs.sessions.require(session_id),
                         "\n\n".join(turn.prompt for turn in pending),
+                        acceptance=NoTurnAcceptance(),
                         origins=tuple(origin for turn in pending for origin in turn.origin.messages()),
                         autonomous_goal=len(pending) == 1 and pending[0].autonomous_goal,
                         dependency_wait_id=pending[0].goal_wait_id,

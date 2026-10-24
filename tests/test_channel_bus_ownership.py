@@ -1,15 +1,16 @@
 """Channel membership and notifications have one canonical bus authority."""
 
-from bus_history import read_history
-from dataclasses import replace
 from contextlib import AsyncExitStack
+from dataclasses import replace
 
 from agent_comms.channel_targets import CommandTarget
 from agent_comms.coordination_cohort import accept_delivery_cohort
 from agent_comms.coordinator import Coordination
-from agent_comms.notification_progress import SentProgress
-from agent_comms.wake_policy import BoundedTriageWake
 from agent_comms.native_arguments import GivenBinary
+from agent_comms.notification_progress import SentProgress
+from agent_comms.turn_input_source import NoTurnAcceptance
+from agent_comms.wake_policy import BoundedTriageWake
+from bus_history import read_history
 from test_coordinated_runtime import _root, tmp_path  # noqa: F401
 
 
@@ -82,7 +83,10 @@ async def test_natural_owned_turn_prepares_observer_pointer_without_native_start
         agent_bin=GivenBinary("pi"),
         auto_wake=False,
     )
-    turn = OwnedTurn(agent.turns, "alpha", "alpha", "Independently authorized task")
+    turn = OwnedTurn(
+        agent.turns, "alpha", "alpha", "Independently authorized task",
+        acceptance=NoTurnAcceptance(),
+    )
     try:
         async with AsyncExitStack() as resources:
             async with AsyncExitStack() as permits:

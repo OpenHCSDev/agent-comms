@@ -5,7 +5,12 @@ import pytest
 from agent_comms.child_process import NoProcess, ProcessIdentity
 from agent_comms.errors import RelationViolationError
 from agent_comms.field_codec import FieldCodec, TurnId
-from agent_comms.thread_identity import RecordedThreadIncarnation, TurnFence, TurnIdentity
+from agent_comms.thread_identity import (
+    NoObservedTurn,
+    RecordedThreadIncarnation,
+    TurnFence,
+    TurnIdentity,
+)
 from agent_comms.turn_lease import ActiveTurn, FinishedTurn, NoTurn, NoTurnRecord, TurnDeclaration
 from agent_comms.turn_phase import ToolRunningPhase
 
@@ -30,8 +35,12 @@ def test_idle_turn_answers_without_an_active_record():
     assert not idle.started_by(10000)
     identity = TurnIdentity(RecordedThreadIncarnation("owner", 1.0), 1)
     turn_id = TurnId.mint()
-    assert idle.observed_turn(NoTurnRecord(), identity, 1) is None
-    assert idle.observed_turn(FinishedTurn(turn_id), identity, 1) == TurnFence(identity, turn_id, 1)
+    missing = NoObservedTurn()
+    fence = TurnFence(identity, turn_id, 1)
+    assert idle.observed_turn(NoTurnRecord(), identity, 1) == missing
+    assert idle.observed_turn(FinishedTurn(turn_id), identity, 1) == fence
+    assert missing == NoObservedTurn() and not missing.can_attest(1)
+    assert missing != fence and fence != missing
     assert idle.without_claim() is idle
     assert not tuple(idle.phase_effects(ToolRunningPhase()))
     idle.validate_owner(NoProcess(), 0)

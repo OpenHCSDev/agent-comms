@@ -264,7 +264,7 @@ class InputDispositions(DurableStore):
         where, parameters = _members("owner", sorted(owners))
         return self._select(f"unresolved = 1 AND {where}", parameters)
 
-    def in_turn(self, turn_id: str) -> InputDocument:
+    def in_turn(self, turn_id: TurnId) -> InputDocument:
         return self._select('"turn_id" = ?', (turn_id,))
 
 

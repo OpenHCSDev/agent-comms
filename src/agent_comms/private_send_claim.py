@@ -16,6 +16,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from agent_comms.native_runtime_input import NativeRuntimeTable
+from .field_codec import InputId
 from .coordination_errors import IdentityConflict, RetryScheduled
 from .coordinator import Coordination
 from .diagnostics import (
@@ -55,7 +56,7 @@ from .private_send_stage import NativeSendStage
 class PrivateSendClaim(PromptBoundary):
     selected: SelectedParticipant
     stage: NativeSendStage
-    input_id: str
+    input_id: InputId
     token_digest: str
     prompt: RenderedInput
     session: SelectedSession

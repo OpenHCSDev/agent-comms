@@ -1,22 +1,22 @@
 """Behaviour-bearing absence belongs to the state that owns the operation."""
 
-from agent_comms.pi_payloads import AnonymousRequest, RequestId
 import asyncio
 
 import pytest
 
-from agent_comms.agent_backend import SendNow, TurnInbox
-from agent_comms.field_codec import InputId
-from agent_comms.backend import EventFinishSignal, FinishSignal, InputStartListener, NoFinishSignal, NoInputStartListener
+from agent_comms import agent_events as events
+from agent_comms.agent_backend import InputStartListener, NoInputStartListener, SendNow, TurnInbox
+from agent_comms.backend import EventFinishSignal, FinishSignal, NoFinishSignal
 from agent_comms.change_report import FileLine, NoSourceReference
-from agent_comms.field_codec import FieldCodec
+from agent_comms.field_codec import FieldCodec, InputId
 from agent_comms.input_drain import DrainedSession
 from agent_comms.native_child import NoInputForwarder
-from agent_comms.native_startup import MeasuredSessionLoad, SessionLoad, UnmeasuredSessionLoad
 from agent_comms.native_session_reopen import SessionRetention
+from agent_comms.native_startup import MeasuredSessionLoad, SessionLoad, UnmeasuredSessionLoad
 from agent_comms.pi_commands import GetState
-from agent_comms.turn_input_source import SelectedOriginalInput
+from agent_comms.pi_payloads import AnonymousRequest, RequestId
 from agent_comms.turn_goal_permission import InactiveGoalPermission, TurnGoalPermission
+from agent_comms.turn_input_source import SelectedOriginalInput
 
 
 def test_drain_lifecycle_keeps_inbox_and_original_in_one_owner():
@@ -77,10 +77,22 @@ async def test_native_absence_does_not_admit_a_wait_or_a_forwarding_job():
     assert listener.original("native", "input") and listener.started_events == ()
     assert listener.following("public", "native", "input")
     seen = []
-    reporting = InputStartListener.from_callback(lambda *args: seen.append(args) or False)
+    class RecordingStarts(InputStartListener):
+        started_events = (events.OriginalInputStarted(),)
+
+        def original(self, native_id: str, text: str) -> bool:
+            seen.append((None, native_id, text))
+            return False
+
+        def following(self, public_id: InputId, native_id: str, text: str) -> bool:
+            seen.append((public_id, native_id, text))
+            return False
+
+    public_id = InputId.mint()
+    reporting = RecordingStarts()
     assert not reporting.original("native", "input")
-    assert not reporting.following("public", "following-native", "next")
-    assert seen == [(None, "native", "input"), ("public", "following-native", "next")]
+    assert not reporting.following(public_id, "following-native", "next")
+    assert seen == [(None, "native", "input"), (public_id, "following-native", "next")]
     assert len(reporting.started_events) == 1
     calls = []
     async def forward():

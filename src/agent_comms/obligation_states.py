@@ -5,10 +5,9 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, ClassVar
 
-from .coordination_contracts import MAX_IDENTIFIER_CHARS, require_bounded
 from .coordination_errors import IdentityConflict, IntegrityViolationError
 from .coordinator_vocabulary import CoordinatorVocabulary
-from .field_codec import NullMember
+from .field_codec import FieldCodec, MessageId, NullMember
 from .lifecycle import LifecycleState
 from .lifecycle_capability import Deferred, Failed, Pending, Successful, Terminal
 from .message_reference import MessageReference
@@ -50,7 +49,7 @@ class ResponseState(CoordinatorVocabulary, LifecycleState, affix="Response"):
         )
 
     @property
-    def published_message_id(self) -> str | Unpublished:
+    def published_message_id(self) -> MessageId | Unpublished:
         return Unpublished()
 
     @property
@@ -150,16 +149,13 @@ class DeferredResponse(Deferred, ResponseState):
 
 @dataclass(frozen=True)
 class PublishedResponse(Successful, ResponseState):
-    message_id: str
+    message_id: MessageId
     seq: int
     allows_intent = True
     requires_intent = True
     published = True
 
     def __post_init__(self):
-        if not isinstance(self.message_id, str) or not self.message_id:
-            raise IntegrityViolationError("published obligations require a acknowledgement")
-        require_bounded(self.message_id, "receipt_message_id", MAX_IDENTIFIER_CHARS)
         if type(self.seq) is not int or self.seq <= 0:
             raise ValueError("receipt_seq must be positive")
 
@@ -184,7 +180,7 @@ class PublishedResponse(Successful, ResponseState):
     def load(cls, message_id, seq):
         if message_id is None or seq is None:
             raise IntegrityViolationError("published obligations require a acknowledgement")
-        return cls(message_id, seq)
+        return cls(FieldCodec.decode(MessageId, message_id), seq)
 
 
 class SilentResponse(Successful, ResponseState):

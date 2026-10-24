@@ -12,10 +12,11 @@ from agent_comms.acp import CommsAgent
 from agent_comms.agent_backend import InputContent
 from agent_comms.channel_input_batch import InputBatch
 from agent_comms.child_process import ProcessIdentity
-from conftest import installed_comms
-from agent_comms.field_codec import TurnId
+from agent_comms.field_codec import InputId, TurnId
 from agent_comms.goal_actions import (
-    BlockedGoalAction, CreateProblemGoalAction, OrderGoalAction,
+    BlockedGoalAction,
+    CreateProblemGoalAction,
+    OrderGoalAction,
 )
 from agent_comms.goal_states import ActiveGoal
 from agent_comms.owned_send import OwnedSend
@@ -24,11 +25,13 @@ from agent_comms.queued_input import InitialInput, QueuedInput
 from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.repository_name import RepositoryName
 from agent_comms.reservation_rules import ReservationViolationError
-from compaction_loopback import LoopbackProvider
-from native_backend_fixture import native_backend_fixture, wait_for
-from test_todos import order
-from source_revision_fixture import SourceRepository
 from agent_comms.threads import Thread
+from agent_comms.turn_input_source import NoTurnAcceptance
+from compaction_loopback import LoopbackProvider
+from conftest import installed_comms
+from native_backend_fixture import native_backend_fixture, wait_for
+from source_revision_fixture import SourceRepository
+from test_todos import order
 
 
 class FollowingReadProvider(LoopbackProvider):
@@ -67,7 +70,7 @@ async def test_turn_after_order_replacement_is_allowed(tmp_path, native_runtime_
             task = asyncio.create_task(InitialInput.run(
                 agent.inputs, session_id, worker, 'Original input before replacement',
                 display_text='Original input before replacement',
-            ))
+             input_id=InputId.mint()))
             try:
                 await wait_for(lambda: saved.provider.posts == 1)
                 sender = backend.TurnSession.active[task].send_boundary
@@ -86,7 +89,7 @@ async def test_turn_after_order_replacement_is_allowed(tmp_path, native_runtime_
                 async with QueuedInput.reserve(
                     agent.inputs, session_id, worker, text='Following input after replacement',
                     prompt='Following input after replacement', echo=True, images=(), controller=None,
-                ) as reservation:
+                 input_id=InputId.mint()) as reservation:
                     item = reservation.item
                     item.place(agent.inputs, session_id, agent.inputs.state(session_id).require_inbox(),
                                InputContent(text=item.prompt))
@@ -132,7 +135,8 @@ async def test_goal_published_during_preparation_is_current_at_reservation(tmp_p
     actor = comms.registry.require('lead').incarnation
     agent = CommsAgent(comms, auto_wake=False)
     old = OwnedTurn(agent.turns, 'worker-session', 'worker', 'first input',
-                    original_owner_input=True, original_goal_id=initial.id)
+                    original_owner_input=True, original_goal_id=initial.id,
+                    acceptance=NoTurnAcceptance())
     async with AsyncExitStack() as resources, AsyncExitStack() as permits:
         assert await old.acquire(resources, permits)
         old.original.goal_permission.require_current(initial)
@@ -147,7 +151,8 @@ async def test_goal_published_during_preparation_is_current_at_reservation(tmp_p
     # Exercise the real lease-to-reservation boundary without replacing any methods.
     # A second commander publication during preparation makes the leased snapshot stale.
     current = OwnedTurn(agent.turns, 'worker-session', 'worker', 'next input',
-                        original_owner_input=True, original_goal_id=replaced.id)
+                        original_owner_input=True, original_goal_id=replaced.id,
+                        acceptance=NoTurnAcceptance())
     assert current.authorize()
     current.turn_id = TurnId.mint()
     async with AsyncExitStack() as resources:
@@ -201,7 +206,7 @@ async def test_order_reactivating_a_blocked_goal_keeps_the_running_turn(tmp_path
     # QueuedInputContext.active_goal_id of a blocked goal, as queued_input.py passes it.
     turn = OwnedTurn(agent.turns, 'worker-session', 'worker', 'retry order message',
                      original_owner_input=True,
-                     original_goal_id=blocked.active().reported_id())
+                     original_goal_id=blocked.active().reported_id(), acceptance=NoTurnAcceptance())
     async with AsyncExitStack() as resources, AsyncExitStack() as permits:
         assert await turn.acquire(resources, permits)
         todo = comms.goals.todos.get('P1')

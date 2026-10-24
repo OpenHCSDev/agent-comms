@@ -1,5 +1,5 @@
 """Installed native 429 exhaustion reaches one completed user-visible failure."""
-from agent_comms.controller import SessionUpdateSink
+
 import asyncio
 import json
 from pathlib import Path
@@ -8,13 +8,15 @@ import pytest
 
 import agent_comms.native_pi as native_pi
 from agent_comms.acp_extension import RequestFailedUpdate, decode_updates
-from agent_comms.native_arguments import GivenArguments, GivenBinary
-from agent_comms.pi_native_backend import PiNativeBackend
 from agent_comms.acp_failure import (
     NativeMessageFailureSource,
-    ProviderQuotaFailure,
     NativeTurnError,
+    ProviderQuotaFailure,
 )
+from agent_comms.controller import SessionUpdateSink
+from agent_comms.native_arguments import GivenArguments, GivenBinary
+from agent_comms.pi_native_backend import PiNativeBackend
+from agent_comms.turn_input_source import NoTurnAcceptance
 from delivery_owner_fixture import canonical_agent
 
 RATE_LIMIT = "Too many requests for this provider"
@@ -94,7 +96,7 @@ async def test_installed_429_exhaustion_publishes_one_retry_owned_failure(
             with pytest.raises(NativeTurnError) as caught:
                 await agent.turns.run_agent_turn(
                     "project", "project", "One isolated request that remains rate limited",
-                    original_owner_input=True,
+                    original_owner_input=True, acceptance=NoTurnAcceptance(),
                 )
         reports = [item for update in updates for item in decode_updates(update.field_meta)
                    if isinstance(item, RequestFailedUpdate)]

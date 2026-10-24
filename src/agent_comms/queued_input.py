@@ -33,7 +33,7 @@ from .input_origin import InputOrigin, UnattributedInputOrigin, WireInputOrigin
 from .thread_identity import ClaimedIdentity, ClaimScoped
 from .threads import Thread
 from .turn_goal_permission import AcceptedGoalPermission, TurnGoalPermission
-from .turn_input_source import AcceptedFollowingInput, DeliveredFollowingInput
+from .turn_input_source import AcceptedFollowingInput, AcceptedTurn, DeliveredFollowingInput
 
 if TYPE_CHECKING:
     from .acp_extension import QueueItem, QueueScope
@@ -102,7 +102,7 @@ class QueuedInput:
     def source(self) -> AcceptedFollowingInput:
         return AcceptedFollowingInput(
             keys=(self.key,),
-            accepted_id=self.input_id,
+            acceptance=AcceptedTurn(self.input_id),
             goal_permission=TurnGoalPermission(AcceptedGoalPermission(self.context.active_goal_id)),
         )
 
@@ -118,7 +118,7 @@ class QueuedInput:
         images: tuple[ImageInput, ...],
         controller: Controller | None,
         ownership: ExitStack,
-        input_id: InputId | None = None,
+        input_id: InputId,
         origin: InputOrigin = UnattributedInputOrigin(),
     ) -> tuple[Self, InputAttempt]:
         """Called under the registry lock; acceptance follows the durable reservation."""
@@ -134,7 +134,7 @@ class QueuedInput:
             text or prompt or "[image prompt]",
             echo,
             context,
-            InputId.mint() if input_id is None else input_id,
+            input_id,
             prompt,
             images,
             controller,
@@ -165,7 +165,7 @@ class QueuedInput:
     async def reserve(
         cls, inputs: InputDrain, session_id: str, name: str, *, text: str, prompt: str,
         echo: bool, images: tuple[ImageInput, ...], controller: Controller | None,
-        input_id: InputId | None = None,
+        input_id: InputId,
         origin: InputOrigin = UnattributedInputOrigin(),
     ) -> AsyncIterator[InputReservation[Self]]:
         """Serialize local queue placement; reserve durable input in a worker."""
@@ -228,7 +228,7 @@ class QueuedInput:
             initial_display_text=self.text if self.echo else None,
             original_owner_input=True,
             original_goal_id=self.context.active_goal_id,
-            accepted_input_id=self.input_id,
+            acceptance=AcceptedTurn(self.input_id),
         )
 
     def is_live(self, inputs: InputDrain, session_id: str) -> bool:
@@ -315,7 +315,7 @@ class DeliveredInput(QueuedInput):
     def source(self) -> DeliveredFollowingInput:
         return DeliveredFollowingInput(
             keys=(self.key,),
-            accepted_id=self.input_id,
+            acceptance=AcceptedTurn(self.input_id),
             goal_permission=TurnGoalPermission(AcceptedGoalPermission(self.context.active_goal_id)),
             origins=(self.message,),
         )
@@ -547,7 +547,7 @@ class InitialInput(QueuedInput):
     async def run(
         cls, inputs: InputDrain, session_id: str, thread_name: str, task: str, *,
         images: tuple[ImageInput, ...] = (), display_text: str | None = None,
-        input_id: InputId | None = None,
+        input_id: InputId,
         origin: InputOrigin = UnattributedInputOrigin(),
     ) -> None:
         """Own original reservation, dispatch and unbound retirement as one lifetime."""
