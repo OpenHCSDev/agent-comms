@@ -20,6 +20,7 @@ from agent_comms.coordination_database import CoordinationStore
 from agent_comms.envelope_claim_transitions import WakeClaim
 from agent_comms.field_codec import ClaimId, InputId, MessageId, TurnId
 from agent_comms.native_tool_call import (
+    CodingCall,
     DuplicateToolCallIdentity,
     OwnerToolConnection,
 )
@@ -100,6 +101,20 @@ def test_consumption_is_once_only_and_terminal_is_separate(slot_store) -> None:
     )
     with pytest.raises(SelectedToolDenied):
         broker.record_selected_terminal(slot_store.session.path, slot_id, "call_1")
+
+
+def test_openai_responses_call_id_is_consumed_as_the_provider_spells_it(slot_store) -> None:
+    provider_id = (
+        "call_082e4aa2372a4cb2872b5eaa6920b3d1|fc_061e57fb77d34295016ad6e0376e78819eb0dc71a4eb1a6725"
+    )
+    call = CodingCall.decode(provider_id, "read", {"path": "README.md"})
+    slot_id = call.slot(InputId.mint(), 0)
+    broker.consume_selected_slot(slot_store, slot_id, call.call_id)
+    row = SelectedToolSlot.require(slot_store.session._connection, slot_id=slot_id)
+    assert row.call_id == provider_id
+    for malformed in ("", "call one", "x" * 257):
+        with pytest.raises(SelectedToolDenied):
+            CodingCall.decode(malformed, "read", {"path": "README.md"})
 
 
 @pytest.mark.skipif(sys.platform != "linux", reason="selected tool storage requires POSIX dirfd")

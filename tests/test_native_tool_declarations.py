@@ -13,6 +13,8 @@ import agent_comms.agent_events as events
 from agent_comms.acp import SdkSessionConnection
 from agent_comms.agent_event_updates import AcpEventConsumer
 from agent_comms.comms import wire
+from agent_comms.field_codec import FieldCodec
+from agent_comms.native_tool_call import ToolCallId
 from agent_comms.native_tools import BashTool, CodingTool, EditTool, ReadTool, WriteTool
 from agent_comms.tool_declaration import (
     EditAction,
@@ -51,12 +53,13 @@ async def test_new_tool_declaration_drives_presentation_without_coding_permissio
     )
     with pytest.raises(ValueError):
         CodingTool.from_call("inspect_fixture", {"query": "new declaration"}, call_id="case")
-    examples = (ReadTool(call_id="case", path="file"), BashTool(call_id="case", command="pwd"),
-        EditTool(call_id="case", path="file", edits=(ReplacementEdit("before", "after"),)),
-        WriteTool(call_id="case", path="file", content="value"))
+    case = FieldCodec.decode(ToolCallId, "case")
+    examples = (ReadTool(call_id=case, path="file"), BashTool(call_id=case, command="pwd"),
+        EditTool(call_id=case, path="file", edits=(ReplacementEdit("before", "after"),)),
+        WriteTool(call_id=case, path="file", content="value"))
     assert {type(tool) for tool in examples} == set(CodingTool.members_with(CodingTool))
     for tool in examples:
-        call = type(tool).from_call(tool.declared_name, tool.arguments, call_id="case")
+        call = type(tool).from_call(tool.declared_name, tool.arguments, call_id=case)
         assert type(call) is type(tool)
         event = events.ToolStart.from_call("case", tool.declared_name, call.arguments)
         assert event.kind is tool.declared_action() and event.args == tool.arguments

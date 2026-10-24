@@ -10,7 +10,7 @@ from typing import TYPE_CHECKING, Annotated, ClassVar, Literal
 
 from .envelope_claim_transitions import ExistingFileClaim, FileClaimPath, WritableFileClaim
 from .field_codec import FieldCodec, NullMember, WireContext, WireOmitDefault
-from .native_tool_call import CodingCall
+from .native_tool_call import CodingCall, ToolCallId
 from .recorded_time import EventTime
 from .storage_rules import WriteStorageEffect, physical_path, shell_storage_effects
 from .tool_declaration import (
@@ -40,7 +40,7 @@ class NativeToolDeclaration(ToolDeclaration):
 
     @classmethod
     @abstractmethod
-    def create_call(cls, call_id: str, arguments: dict[str, object]) -> CodingCall: ...
+    def create_call(cls, call_id: ToolCallId, arguments: dict[str, object]) -> CodingCall: ...
 
     @classmethod
     @abstractmethod
@@ -56,7 +56,7 @@ class NativeToolDeclaration(ToolDeclaration):
         return tuple(argument for extension in extensions for argument in ("-e", str(extension)))
 
     @classmethod
-    def from_call(cls, name: str, arguments: object, *, call_id: str) -> CodingCall:
+    def from_call(cls, name: str, arguments: object, *, call_id: ToolCallId) -> CodingCall:
         decoded = FieldCodec.decode(dict[str, object], arguments)
         return cls.field_value(name).create_call(call_id, decoded)
 
@@ -65,14 +65,14 @@ class NativeToolDeclaration(ToolDeclaration):
 class NativeExecutableTool(NativeToolDeclaration, CodingCall):
     """A decoded tool is the live call; runtime fields are not model arguments."""
 
-    call_id: Annotated[str, WireContext()]
+    call_id: Annotated[ToolCallId, WireContext()]
     claim: ClassVar[None] = None
 
     def allowed_claim(self) -> FileClaimPath | None:
         return self.claim
 
     @classmethod
-    def create_call(cls, call_id: str, arguments: dict[str, object]) -> NativeExecutableTool:
+    def create_call(cls, call_id: ToolCallId, arguments: dict[str, object]) -> NativeExecutableTool:
         return cls.parse_arguments(arguments, call_id=call_id)
 
 
@@ -85,7 +85,7 @@ class NativeRequestTools:
 
     @classmethod
     def create_call(
-        cls, call_id: str, arguments: dict[str, object]
+        cls, call_id: ToolCallId, arguments: dict[str, object]
     ) -> CoordinationCall:
         return CoordinationCall(
             call_id=call_id, declared_name=cls.declared_name, arguments=arguments)

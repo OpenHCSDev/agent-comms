@@ -9,13 +9,14 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
+import re
 from abc import ABC, abstractmethod
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, ClassVar, Never
 
-from .field_codec import InputId, SlotId
+from .field_codec import FieldCodec, InputId, MalformedRecord, NominalSpelling, NominalText, SlotId
 from .lifecycle_capability import Complete, Executing, LifecycleCapability
 from .storage_rules import StorageProjection, StorageRule
 from .tool_denial import SelectedToolDenied
@@ -28,6 +29,16 @@ if TYPE_CHECKING:
     from .storage_rules import StorageEffect
     from .pi_payloads import PiToolResult
     from .turn_goal_permission import TurnGoalPermission
+
+
+class ToolCallId(NominalText):
+    """A provider's own tool call identity, spelled exactly as the provider sends it
+    (OpenAI Responses joins ``call_...|fc_...``). Only equality is defined; slots hash it.
+    """
+
+
+class ToolCallIdText(NominalSpelling[ToolCallId]):
+    spelling = re.compile(r"\S{1,256}")
 
 
 class ToolNotExecuting(SelectedToolDenied):
@@ -187,7 +198,7 @@ class CallProgress:
 class NativeToolCall(ABC):
     """A fixed call payload with one changing execution record."""
 
-    call_id: str
+    call_id: ToolCallId
     progress: CallProgress = field(default_factory=CallProgress, init=False, compare=False, repr=False)
     declared_name: ClassVar[str]
 
@@ -281,14 +292,12 @@ class CodingCall(NativeToolCall):
 
     @classmethod
     def decode(cls, call_id: object, name: object, arguments: object) -> CodingCall:
-        if (
-            type(call_id) is not str
-            or not call_id
-            or len(call_id) > 256
-            or type(name) is not str
-        ):
+        try:
+            call_id = FieldCodec.decode(ToolCallId, call_id)
+        except MalformedRecord as error:
+            raise SelectedToolDenied("Malformed native coding call identity") from error
+        if type(name) is not str:
             raise SelectedToolDenied("Malformed native coding call identity")
-        from .field_codec import MalformedRecord
         from .native_tools import NativeToolDeclaration
 
         try:
