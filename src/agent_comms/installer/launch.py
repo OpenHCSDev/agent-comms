@@ -198,34 +198,40 @@ class InstallRun:
     def logs(self) -> Path:
         return InstallLogs(self.root).minted()
 
+    @property
+    def result(self) -> Path:
+        return self.logs / "result.json"
+
+    @property
+    def errors(self) -> Path:
+        return self.logs / "stderr.log"
+
     def spawn(self) -> subprocess.Popen[bytes]:
         """The install outlives its caller: a new session, its output in files beside the bus.
         Retiring the caller's process group must not cut an install short."""
         tree = TargetTree(self.command.checkout, self.scratch, self.target)
-        result, errors = self.logs / "result.json", self.logs / "stderr.log"
         request_read, request_write = os.pipe()
         with (os.fdopen(request_read, "rb") as stdin,
               os.fdopen(request_write, "wb") as requests,
-              result.open("xb") as stdout, errors.open("xb") as stderr):
+              self.result.open("xb") as stdout, self.errors.open("xb") as stderr):
             process = subprocess.Popen(
                 [sys.executable, "-m", agent_comms.installer.__name__], cwd=tree.path,
                 env={**os.environ, "PYTHONPATH": os.pathsep.join(map(str, tree.source_paths()))},
                 stdin=stdin, stdout=stdout, stderr=stderr, start_new_session=True,
             )
             requests.write(json.dumps(FieldCodec.encode(self)).encode())
-        print(f"install: pid {process.pid} runs {self.target[:12]}; diagnostics {errors}",
+        print(f"install: pid {process.pid} runs {self.target[:12]}; diagnostics {self.errors}",
               file=sys.stderr, flush=True)
         return process
 
     def launch(self, output: TextIO) -> int:
         process = self.spawn()
         status = process.wait()
-        result, errors = self.logs / "result.json", self.logs / "stderr.log"
         if status:
-            print(f"install failed ({status}): {errors.read_text().strip()}",
+            print(f"install failed ({status}): {self.errors.read_text().strip()}",
                   file=sys.stderr)
         else:
-            output.write(result.read_text())
+            output.write(self.result.read_text())
         return status
 
     def run(self) -> Upgrade:
