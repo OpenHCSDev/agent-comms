@@ -33,6 +33,7 @@ from .message_reference import MessageReference
 from .messages import Message
 from .threads import Thread
 from .tool_result import ToolResult
+from .reported_turn import ReportedTurnState
 from .typed_table import Column, DurableStore, Generated, Index, StoreRows, TypedTable, sql_literal
 
 if TYPE_CHECKING:
@@ -338,13 +339,16 @@ class InputDispositions(DurableStore):
         refusal = "Native clear differs from its original input"
         self._transition(key, lambda row: row.clear_native(native_id, text).require_moved(refusal))
 
-    def bind(self, key: str, *, claim_scope: int, turn_id: str, native_id: str, text: str) -> bool:
+    def bind(
+        self, key: str, *, claim_scope: int, turn_id: TurnId, native_id: str, text: str
+    ) -> bool:
         return self.bind_originals(
             (key,), claim_scope=claim_scope, turn_id=turn_id, native_id=native_id, text=text
         )
 
     def bind_turn_input(
-        self, keys: tuple[str, ...], *, claim_scope: int, turn_id: str, native_id: str, text: str,
+        self, keys: tuple[str, ...], *, claim_scope: int, turn_id: TurnId,
+        native_id: str, text: str,
         already_bound: bool,
     ) -> bool:
         """Bind a turn's unresolved inputs to the native input carrying them.
@@ -365,7 +369,7 @@ class InputDispositions(DurableStore):
         )
 
     def bind_originals(
-        self, keys: tuple[str, ...], *, claim_scope: int, turn_id: str, native_id: str, text: str
+        self, keys: tuple[str, ...], *, claim_scope: int, turn_id: TurnId, native_id: str, text: str
     ) -> bool:
         """Bind the complete captured original atomically; no partial batch grant."""
         def change(document: InputDocument) -> DocumentChange[InputDocument, bool]:
@@ -380,7 +384,7 @@ class InputDispositions(DurableStore):
 
         return self._update(*_members("key", keys), change)
 
-    def started(self, key: str, *, turn_id: str, native_id: str, text: str) -> bool:
+    def started(self, key: str, *, turn_id: TurnId, native_id: str, text: str) -> bool:
         return self._transition(
             key, lambda row: row.started(turn_id=turn_id, native_id=native_id, text=text)
         )
@@ -398,7 +402,7 @@ class InputDispositions(DurableStore):
         owners: frozenset[str],
         goal_id: GoalId,
         goal_revision: int,
-        turn_id: str,
+        turn_id: ReportedTurnState,
         observed: tuple[InputAttempt, ...] = (),
     ) -> None:
         decision = GoalInputDecision(goal_revision, turn_id)

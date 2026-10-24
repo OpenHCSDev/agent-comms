@@ -13,7 +13,7 @@ from .bus import BusReader
 from .bus_publication import Delivered
 from .declared_family import DeclaredFamily
 from .errors import UnregisteredThreadError
-from .field_codec import NullMember, GoalId
+from .field_codec import NullMember, GoalId, TurnId
 from .goal_presentation import GoalExecution, GoalExecutionSource, GoalWaitTarget, StandbyExecution
 from .goals import Goal, GoalDeclaration
 from .input_attempt import StoredInput, UnresolvedInput
@@ -109,7 +109,7 @@ class RecordedGoalWait(GoalWait):
     # An idle dependency has no turn generation at the moment of declaration.
     target_turn_generations: tuple[int | None, ...]
     # Runtime declarations outside a turn explicitly carry no reporting turn.
-    report_turn_id: str | None
+    report_turn_id: TurnId | None
     report_turn_generation: int | None
 
     def __post_init__(self) -> None:
@@ -124,8 +124,7 @@ class RecordedGoalWait(GoalWait):
         if (self.report_turn_id is None) != (self.report_turn_generation is None) or (
             self.report_turn_id is not None
             and (
-                not self.report_turn_id
-                or type(self.report_turn_generation) is not int
+                type(self.report_turn_generation) is not int
                 or self.report_turn_generation <= 0
             )
         ):

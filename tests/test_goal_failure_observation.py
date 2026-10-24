@@ -73,7 +73,7 @@ def test_duplicate_callback_and_restart_preserve_failure_bytes(bound):
 
 @pytest.mark.parametrize("mutation", [
     {"identity": TurnIdentity(RecordedThreadIncarnation("owner", 11.0), 7)},
-    {"turn_id": "b" * 32}, {"claimed_generation": 4},
+    {"turn_id": TurnId.mint()}, {"claimed_generation": 4},
     {"identity": TurnIdentity(RecordedThreadIncarnation("owner", 10.0), 8)},
 ])
 def test_mismatched_turn_lease_is_not_bound(bound, mutation):

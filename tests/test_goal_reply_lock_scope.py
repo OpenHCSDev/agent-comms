@@ -30,6 +30,7 @@ from agent_comms.thread_text import GivenThreadText
 from agent_comms.thread_status import StoppedThreadStatus
 from agent_comms.tool_caller import ThreadCaller
 from agent_comms.tools import CommsGoalTool
+from agent_comms.reported_turn import NoReportedTurn
 from goal_owner_fixture import canonical_goal_wire
 from agent_comms.threads import Thread
 
@@ -188,7 +189,7 @@ def review_inputs(comms, prepared):
     InputDispositions(comms.root).review_for_goal(
         prepared.reviewed_inputs, observed=prepared.review.unknown,
         owners=prepared.review.owners, goal_id=goal.id,
-        goal_revision=goal.revision + 1, turn_id="",
+        goal_revision=goal.revision + 1, turn_id=NoReportedTurn(),
     )
 
 

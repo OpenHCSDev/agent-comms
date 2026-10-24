@@ -11,7 +11,10 @@ from agent_comms.thread_identity import (
     TurnFence,
     TurnIdentity,
 )
-from agent_comms.turn_lease import ActiveTurn, FinishedTurn, NoTurn, NoTurnRecord, TurnDeclaration
+from agent_comms.turn_lease import (
+    ActiveTurn, FinishedTurn, NoTurn, NoTurnRecord, TurnDeclaration,
+)
+from agent_comms.reported_turn import NoReportedTurn
 from agent_comms.turn_phase import ToolRunningPhase
 
 
@@ -30,7 +33,7 @@ def test_idle_turn_answers_without_an_active_record():
     idle = NoTurn()
     assert FieldCodec.encode(idle) is None
     idle.require_idle()
-    assert idle.report_turn == ''
+    assert idle.reported_turn == NoReportedTurn()
     assert not idle.matches(TurnId('9b473845f684444f80a26586ae298d2b'))
     assert not idle.started_by(10000)
     identity = TurnIdentity(RecordedThreadIncarnation("owner", 1.0), 1)

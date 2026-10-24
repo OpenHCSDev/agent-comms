@@ -11,6 +11,7 @@ from agent_comms.input_attempt import (
 from agent_comms.input_disposition import InputDispositions
 from stored_inputs import stored_inputs
 from agent_comms.threads import Thread
+from agent_comms.reported_turn import ReportedTurn
 
 
 def seed(comms, name):
@@ -28,7 +29,8 @@ def seed(comms, name):
         text="Text bus:2",
     )
     ledger.review_for_goal(
-        ("bus:1",), owners=owners, goal_id=goal_id, goal_revision=1, turn_id=turn_id
+        ("bus:1",), owners=owners, goal_id=goal_id, goal_revision=1,
+        turn_id=ReportedTurn(turn_id),
     )
     return ledger
 

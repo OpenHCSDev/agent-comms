@@ -10,7 +10,8 @@ from agent_comms.goal_generation import (
     CompletedGeneration, ReadyGeneration,
 )
 from agent_comms.goal_states import ActiveGoal, CompletedGoal, PausedGoal
-from agent_comms.goals import Goal, ReportedTurn
+from agent_comms.goals import Goal
+from agent_comms.reported_turn import ReportedTurn
 from agent_comms.turn_goal_account import OriginGoalSettlement, VerifiedGoalSettlement
 
 

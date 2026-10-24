@@ -24,6 +24,7 @@ from agent_comms.errors import RelationViolationError
 from agent_comms.thread_identity import RecordedThreadIncarnation
 from stored_inputs import insert_inputs, stored_inputs
 from agent_comms.threads import Thread
+from agent_comms.reported_turn import ReportedTurn
 
 
 TURN = TurnId('9b473845f684444f80a26586ae298d2b')
@@ -122,7 +123,8 @@ def test_saved_discriminator_and_optional_notices_roundtrip_without_replay(tmp_p
             notice_dismissed=True,
             goal_reviews={
                 goal_id: GoalInputDecision(
-                    goal_revision=7, turn_id=TurnId('c97ace4c8fef2cee8fa0f3c9f52aab18')
+                    goal_revision=7,
+                    turn_id=ReportedTurn(TurnId('c97ace4c8fef2cee8fa0f3c9f52aab18')),
                 )
             },
         )

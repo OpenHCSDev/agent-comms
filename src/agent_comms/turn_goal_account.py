@@ -17,6 +17,7 @@ from .field_codec import GoalId, TurnId
 from agent_comms.goal_turn_permit import GoalTurnPermit, NoLaunchPermit
 from .goal_states import ActiveGoal, CompletedGoal, PausedGoal
 from .mro_dispatch import MroDispatch, handles
+from .reported_turn import ReportedTurn
 
 if TYPE_CHECKING:
     from .goal_attempts import GoalAttemptStore, LaunchPermit
@@ -65,7 +66,7 @@ class VerifiedGoalSettlement(MroDispatch):
 
     @handles(CompletedGoal)
     def completion(self, state: CompletedGoal) -> None:
-        if self.goal.reports_turn(self.turn):
+        if self.goal.reports_turn(ReportedTurn(self.turn)):
             self.permit.record_verified_completion(self.store, self.completion_witness)
 
 

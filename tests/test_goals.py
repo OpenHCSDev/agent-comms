@@ -5,7 +5,7 @@ import pytest
 from agent_comms.comms import wire
 from conftest import installed_comms
 from agent_comms.errors import RelationViolationError
-from agent_comms.field_codec import FieldCodec, GoalId
+from agent_comms.field_codec import FieldCodec, GoalId, TurnId
 from agent_comms.goal_actions import (
     ActiveGoalAction,
     BlockedGoalAction,
@@ -16,31 +16,35 @@ from agent_comms.goal_actions import (
     PausedGoalAction,
     SetGoalAction,
 )
-from agent_comms.goals import (
-    Goal, NoGoal, NoReportedTurn, ReportedTurn, ReportedTurnState,
-)
+from agent_comms.goals import Goal, NoGoal
 from agent_comms.task_sources import GoalTaskScope, TurnTaskScope
 from agent_comms.threads import ChosenModel, NextTurnConfiguration, Thread
 from agent_comms.tool_caller import ThreadCaller
 from agent_comms.tool_request import ToolRequest
 from agent_comms.thread_model import DeclaredModel
+from agent_comms.reported_turn import NoReportedTurn, ReportedTurn, ReportedTurnState
 
 
 def test_reported_turn_states_preserve_existing_wire_values():
     goal_id = GoalId.mint()
-    schema = {"anyOf": [{"type": "null"}, {"type": "string"}]}
+    turn_id = TurnId.mint()
+    other_turn = TurnId.mint()
+    turn_schema = FieldCodec.value_schema(TurnId)
+    schema = {"anyOf": [{"type": "null"}, turn_schema]}
     assert FieldCodec.value_schema(ReportedTurnState) == schema
     assert FieldCodec.record_schema(Goal)["properties"]["reported_turn"] == schema
     assert FieldCodec.value_schema(NoReportedTurn) == {"anyOf": [{"type": "null"}]}
-    assert FieldCodec.value_schema(ReportedTurn) == {"anyOf": [{"type": "string"}]}
+    assert FieldCodec.value_schema(ReportedTurn) == {"anyOf": [turn_schema]}
     absent = Goal('work', goal_id, published_seq=0)
     assert absent.reported_turn == NoReportedTurn()
-    assert not absent.reports_turn('turn')
+    assert not absent.reports_turn(ReportedTurn(turn_id))
+    assert not absent.reports_turn(NoReportedTurn())
     assert FieldCodec.encode(absent)['reported_turn'] is None
     assert FieldCodec.decode(Goal, FieldCodec.encode(absent)) == absent
-    reported = Goal('work', goal_id, published_seq=0, reported_turn=ReportedTurn('turn'))
-    assert reported.reports_turn('turn') and not reported.reports_turn('other')
-    assert FieldCodec.encode(reported)['reported_turn'] == 'turn'
+    reported = Goal('work', goal_id, published_seq=0, reported_turn=ReportedTurn(turn_id))
+    assert reported.reports_turn(ReportedTurn(turn_id))
+    assert not reported.reports_turn(ReportedTurn(other_turn))
+    assert FieldCodec.encode(reported)['reported_turn'] == turn_id
     assert FieldCodec.decode(Goal, FieldCodec.encode(reported)) == reported
 
 

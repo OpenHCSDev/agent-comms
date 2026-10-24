@@ -319,7 +319,7 @@ class TurnProgress(events.AgentEventConsumer):
             )
             diagnostic = record_terminal_failure(
                 self.comms.root,
-                turn_id=self.turn_lease.turn_id,
+                subject=self.turn_lease.turn_id,
                 thread=self.thread_name,
                 failure=terminal.failure_kind,
                 measurements=terminal.diagnostic,

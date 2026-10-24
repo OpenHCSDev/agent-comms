@@ -33,6 +33,7 @@ from .field_codec import (
     InputId,
     MalformedRecord,
     MessageId,
+    TurnId,
     WireValue,
     WireName,
     WireOmitDefault,
@@ -43,6 +44,7 @@ from .input_origin import HumanInputOrigin, InputOrigin, UnattributedInputOrigin
 from .native_runtime_input import CurrentNativeCursor
 from .owner_protocol import IncompatibleOwner
 from .pi_payloads import McpLiveAcknowledgement
+from .reported_turn import ReportedTurn, ReportedTurnState
 from .routing import MessageRoute
 from .thread_identity import ClaimScoped, ThreadIncarnation
 from .tool_result import DeclaredReply
@@ -63,8 +65,7 @@ class AgentCommsUpdate(DeclaredFamily, affix="Update"):
     def for_session(self, session_id: str) -> AgentCommsUpdate:
         return self
 
-    def matches_turn(self, turn_id: str) -> bool:
-        """Facts without a turn identity apply throughout their session."""
+    def matches_turn(self, turn: ReportedTurnState) -> bool:
         return True
 
     def acp_chunk(self) -> AgentMessageChunk:
@@ -656,11 +657,11 @@ class InputDeliveryChangedUpdate(AgentCommsUpdate):
 
 @dataclass(frozen=True)
 class McpClientAcknowledgementUpdate(AgentCommsUpdate, declared_name="mcp_client_receipt"):
-    turn_id: str
+    turn_id: TurnId
     acknowledgement: Annotated[McpLiveAcknowledgement, WireName("receipt")]
 
-    def matches_turn(self, turn_id: str) -> bool:
-        return self.turn_id == turn_id
+    def matches_turn(self, turn: ReportedTurnState) -> bool:
+        return ReportedTurn(self.turn_id).reports(turn)
 
 
 class CommsRequest(DeclaredFamily, affix="Request"):
