@@ -99,7 +99,7 @@ from agent_comms.registry_store import RegistryStore
 from agent_comms.repo import Repo
 from agent_comms.repository_name import RepositoryName
 from agent_comms.slop import Slop
-from agent_comms.storage_rules import StorageRule
+from agent_comms.storage_rules import StorageRule, UnitStorage
 from agent_comms.store_files import SharedLock
 from agent_comms.thread_identity import (
     CoreWatcherIncarnation,
@@ -3699,6 +3699,9 @@ class DeliverTodo(TodoOperation, declared_name=None):
 
     def prepare(self, goals, current):
         self.require_current(current)
+        UnitStorage.read(
+            goals.registry.storage_rule, goals.registry.require(current.held().owner),
+        ).require_retired(current.id)
         verified = self.delivery.verified(current, goals.registry, self.verified_claims)
         try:
             delivered = asyncio.run(verified)

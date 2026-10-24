@@ -54,7 +54,6 @@ from agent_comms.goal_actions import CreateProblemGoalAction, OrderGoalAction
 from agent_comms.goals import OrderCheck
 from agent_comms.message_reference import MessageReference
 from agent_comms.messages import Message
-from agent_comms.tool_denial import SelectedToolDenied
 from agent_comms.owner_requests import NewestOpenRequest, OwnerRequestId, RequestSelection
 from agent_comms.phase_evidence import MainTree, PlanReading
 from agent_comms.plan_phases import OrderPhase, PlanPhase
@@ -63,7 +62,6 @@ from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.repo import Repo
 from agent_comms.registry_document import RegisteredCommanderProject
 from agent_comms.standing_rules import HuntDue, OwedAnswer
-from agent_comms.storage_rules import UnitStorage
 from agent_comms.thread_identity import ThreadIncarnation
 from agent_comms.held_orders import HeldOrders
 from agent_comms.todos import (
@@ -661,28 +659,6 @@ class Commander(CommanderContext):
         self.on_record(line, 'Strike', VerdictAudience.of(unit, todo), answers)
         print(f'{unit}: {n} strike(s) on {todo.id}' + (f'. Reassign {todo.id} now and freeze its branch.' if n >= 2 else ''))
 
-    def done(self, pid: str, delivery: OrderDelivery) -> None:
-        """Storage is checked here; the delivery owns its evidence and claims."""
-        todo = self.comms.goals.todos.get(pid)
-        todo.state.require_open(todo)
-        order = todo.order.checked()
-        order.require_delivery(order.id)
-        unit = todo.held().owner
-        claims = delivery.done_claims(order)
-        thread = self.comms.registry.require(unit)
-        storage = UnitStorage.read(self.comms.registry.storage_rule, thread)
-        for checkout in storage.rule.problem_checkouts(unit, pid):
-            if checkout in storage.extra_checkouts:
-                sys.exit(f'Refused: {unit} still has the checkout {checkout} for this order; '
-                         'storage rule: it removes it before the order counts as done.')
-        try:
-            storage.require_quota()
-        except SelectedToolDenied as quota:
-            sys.exit(f'Refused: {unit}: {quota}; storage rule: it cleans up before the order counts as done.')
-        self.call(CommsOrderDoneTool(problem=pid,
-            order_id=order.id, delivery=delivery, claims=claims))
-        print(f'{unit}: order {order.id} delivered as {delivery.work}')
-
     def hunt(self, where, why, sent):
         """Record the commander's source read, whether or not it became an order."""
         ref = FileLine.from_wire(where)
@@ -1016,7 +992,10 @@ class DoneVerb(OrderVerb):
         delivery = order.scope.delivery(
             todo, Repo.selected(ctx.repos, order.check.directory).checkout, self.source,
             self.screenshot, self.seen)
-        ctx.done(todo.id, delivery)
+        ctx.call(CommsOrderDoneTool(
+            problem=todo.id, order_id=order.id, delivery=delivery,
+            claims=delivery.done_claims(order)))
+        print(f'{todo.held().owner}: order {order.id} delivered as {delivery.work}')
 
 
 @dataclass(frozen=True)
