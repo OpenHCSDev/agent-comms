@@ -385,3 +385,20 @@ def test_restart_refuses_a_connector_with_an_undecodable_store(connector_service
         service.serves()
     with socket.socket() as refused:
         assert refused.connect_ex(("127.0.0.1", service.port)) != 0
+
+
+def test_services_of_every_member_stop_in_one_call(tmp_path, monkeypatch):
+    stops: list[tuple[str, ...]] = []
+
+    def run(command: tuple[str, ...], *, check: bool) -> subprocess.CompletedProcess[bytes]:
+        stops.append(command)
+        return subprocess.CompletedProcess(command, 0)
+
+    monkeypatch.setattr(subprocess, "run", run)
+    inboxes = (CodexInboxService("a"), CodexInboxService("b"))
+    connector = SystemdConnectorService(launch=LaunchRoot.from_path(tmp_path), port=1)
+    HostService.stop_all((*inboxes, connector))
+    assert stops == [(
+        "systemctl", "--user", "stop",
+        "codex-comms-inbox@a.service", "codex-comms-inbox@b.service", connector.unit_name(),
+    )]
