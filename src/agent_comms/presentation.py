@@ -63,6 +63,7 @@ from .recorded_bus import NoRecordedBus, RecordedBusIdentity
 from .registry_document import DEFAULT_ROSTER, RosterVisibility
 from .revision_views import (
     BusSourceView,
+    CommanderFramesView,
     ExternalTranscriptsView,
     NotificationsView,
     RegistrationsView,
@@ -799,6 +800,12 @@ def external_transcript_paths(views: HistoryViews) -> tuple[Path, ...]:
     return ExternalTranscript.source_paths(views.root)
 
 
+def commander_frame_paths(views: HistoryViews) -> tuple[Path, ...]:
+    from .commander_hud import CommanderFrame  # The HUD reads presentation's stores.
+
+    return tuple(sorted(CommanderFrame.matching_in(views.root)))
+
+
 def expiry_period_changed(before: int, now: int) -> bool:
     return before // WireRevision.expiry_seconds != now // WireRevision.expiry_seconds
 
@@ -878,6 +885,10 @@ class WireRevision(ReadState):
     external_transcripts: Annotated[
         tuple[FileRevision, ...],
         *revision_source(external_transcript_paths, StoresView, ExternalTranscriptsView),
+    ]
+    commander_frames: Annotated[
+        tuple[FileRevision, ...],
+        *revision_source(commander_frame_paths, CommanderFramesView),
     ]
     # Notifications change once per expiry period, not per tick.
     expiry_tick: Annotated[

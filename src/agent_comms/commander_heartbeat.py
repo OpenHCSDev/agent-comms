@@ -5,8 +5,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
-from agent_comms.commander_hud import CommanderHud
-from agent_comms.commander_pings import CommanderUpdate, Ping, RulePing, UnitPing
+from agent_comms.commander_hud import CommanderFrame, CommanderHud
+from agent_comms.commander_pings import CommanderUpdate, RulePing, UnitPing
 from agent_comms.commander_service import CommanderService
 from agent_comms.heartbeat_frame import HeartbeatFrame
 from agent_comms.message_bus import WatchPass
@@ -27,7 +27,7 @@ class CommanderObservation:
     merged: tuple[Todo, ...]
     rules: tuple[StandingRule, ...]
     states: tuple[UnitState, ...]
-    hud: tuple[Ping, ...]
+    hud: CommanderHud
 
     @classmethod
     def read(cls, comms: Comms, thread: Thread,
@@ -50,9 +50,7 @@ class CommanderObservation:
             for closed in todo.order.closed_by_merge(
                 todo, pulls, comms.registry.storage_rule.checkout_base)
         )
-        return cls(
-            thread, merged, rules, states, CommanderHud.of(comms, thread.name, frame).pings()
-        )
+        return cls(thread, merged, rules, states, CommanderHud.of(comms, thread.name, frame, states))
 
 
 class CommanderHeartbeat(CommanderService, WatchPass[tuple[CommanderObservation, ...]]):
@@ -66,6 +64,7 @@ class CommanderHeartbeat(CommanderService, WatchPass[tuple[CommanderObservation,
     def pass_body(self, comms: Comms, observed: tuple[CommanderObservation, ...]) -> None:
         """The committed packet survives connector replacement; local memory owns nothing."""
         self.register(comms.registry)
+        CommanderFrame.replace_all(comms.root, tuple(item.hud for item in observed))
         completed = []
         try:
             for item in observed:
@@ -82,7 +81,7 @@ class CommanderHeartbeat(CommanderService, WatchPass[tuple[CommanderObservation,
                     item.thread.incarnation,
                     tuple(state for state in item.states if state not in rejected),
                     tuple(rule for rule in item.rules if rule not in rejected), previous,
-                    hud=item.hud,
+                    hud=item.hud.pings(),
                     not_applied=tuple(
                         rule.rejected_line(error) for rule, error in rejected.items()),
                 )

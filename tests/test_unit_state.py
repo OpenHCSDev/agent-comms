@@ -11,6 +11,7 @@ import pytest
 from agent_comms.activity import ActivityState
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.commander_heartbeat import CommanderHeartbeat
+from agent_comms.commander_hud import CommanderFrame
 from agent_comms.external_transcript import ExternalTranscript
 from agent_comms.heartbeat_frame import HeartbeatFrame
 from agent_comms.launch_runtime import LaunchRoot
@@ -281,6 +282,7 @@ def test_heartbeat_keeps_every_unit_when_one_checkout_is_unreadable(
         assert isinstance(cards[0], Unreadable)
         assert {card.unit.name for card in cards} >= {"worker", "outsider"}
         heartbeat.pass_body(held_bus, observed)
+        assert CommanderFrame.read_all(held_bus.root) == (observed[0].hud,)
         page = MessagePageRequest(
             DMDisplayScope.capture(
                 heartbeat.sender,
