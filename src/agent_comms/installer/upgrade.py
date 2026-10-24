@@ -610,6 +610,10 @@ class Stack:
         return tuple(outcome.owner_start()
                      for outcome in self.owners(root, StartCliCommand, names).outcomes)
 
+    def stop_services(self) -> tuple[HostService, ...]:
+        with ServicesPhase("stop").running(self.commands.clock):
+            return HostService.stop_running()
+
     def start_services(self, stopped: tuple[HostService, ...]) -> tuple[RestartedService, ...]:
         with ServicesPhase("start").running(self.commands.clock):
             services = tuple(service.start_onto(self.python) for service in stopped)
@@ -1016,9 +1020,9 @@ class ChangedInstall(ExistingBusInstall[RehearsedFiles]):
         with MaintenancePhase("outgoing runtime").running(self.staged.commands.clock):
             RootRuntimeStore.at(self.root).adopt(self.installed.runtime)
         running = self.installed.running_owners(self.root)
+        services = self.staged.stop_services()
         with MaintenancePhase("begin").running(self.staged.commands.clock):
             maintenance = MaintenanceBarrier(RegistryStore.at(self.root).path)
-            services = HostService.stop_running()
             try:
                 held = maintenance.begin(MaintenanceOperator.current())
             except BaseException:
@@ -1068,7 +1072,7 @@ class ChangedInstall(ExistingBusInstall[RehearsedFiles]):
                       "restoring original installation", file=sys.stderr)
                 # A running service writes the root (the connector its passes), so none may
                 # run while the backup is restored; they start again on the original runtime.
-                HostService.stop_running()
+                self.staged.stop_services()
                 state = maintenance.read()
                 recovery = state.phase.hold_for(maintenance, state, MaintenanceOperator.current())
                 holder.close()
@@ -1161,12 +1165,12 @@ class FreshInstall(Install[FreshRehearsal]):
         wire(self.root).registry.prepare_native_root()
         report.writer = RuntimeWriter(self.root, self.staged)
         backup, selected_route = self.backed_up(())
-        stopped = HostService.stop_running()
+        stopped = self.staged.stop_services()
         try:
             route = self.publish(backup, selected_route)
             services = self.staged.start_services(stopped)
         except BaseException:
-            HostService.stop_running()
+            self.staged.stop_services()
             backup.restore_route()
             self.installed.publish(self.root)
             self.installed.start_services(stopped)
