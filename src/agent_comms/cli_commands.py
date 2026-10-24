@@ -308,15 +308,15 @@ class TargetOutcome(LifecycleCapability, ABC):
 
 @dataclass(frozen=True)
 class TargetCompleted(Successful, TargetOutcome, RecordMember):
-    target: str
+    target: CommandTarget
     command: CliCommand
     result: Annotated[CliResult, WireValue]
 
     def show(self, shower: ResultShower, label: str, title: str) -> None:
-        shower.show_done(f"{label}: {self.target}", title)
+        shower.show_done(f"{label}: {self.target.display_name()}", title)
 
     def owner_start(self) -> OwnerStart:
-        return StartedOwner(self.target)
+        return StartedOwner(self.target.display_name())
 
     @classmethod
     def from_wire(cls, data: JsonValue) -> Self:
@@ -333,18 +333,18 @@ class TargetCompleted(Successful, TargetOutcome, RecordMember):
 
 @dataclass(frozen=True)
 class TargetFailed(TargetOutcome):
-    target: str
+    target: CommandTarget
     error_type: str
     error: str
 
     def __str__(self) -> str:
-        return f"{self.target}: {self.error_type}: {self.error}"
+        return f"{self.target.display_name()}: {self.error_type}: {self.error}"
 
     def show(self, shower: ResultShower, label: str, title: str) -> None:
         shower.show_error(str(self), title)
 
     def owner_start(self) -> OwnerStart:
-        return RefusedOwner(self.target, str(self))
+        return RefusedOwner(self.target.display_name(), str(self))
 
 
 @dataclass(frozen=True)
@@ -464,7 +464,7 @@ class TargetBatch(TargetSelection):
                 resolved = name.resolve(snapshot, comms.bus.require_channel)
             except ToolRefusedError as error:
                 outcomes.append((len(planned) + len(outcomes),
-                                 TargetFailed(name.name, type(error).__name__, str(error))))
+                                 TargetFailed(name, type(error).__name__, str(error))))
                 continue
             for context in name.contexts(declaration, channel):
                 try:
@@ -476,7 +476,7 @@ class TargetBatch(TargetSelection):
                         raise CommandSelectionChanged(f'This action is no longer available for {name}{scope}')
                 except ToolRefusedError as error:
                     outcomes.append((len(planned) + len(outcomes),
-                                     TargetFailed(name.name, type(error).__name__, str(error))))
+                                     TargetFailed(name, type(error).__name__, str(error))))
                     continue
                 for command in bindings:
                     planned.setdefault(command, (len(planned) + len(outcomes), name, context))
@@ -495,11 +495,11 @@ class TargetBatch(TargetSelection):
                     raise CommandSelectionChanged(f'The bound command for {name}{scope} changed; refresh the selection')
                 command.schedule(TargetBatchSchedule(position, name, outcomes, together), comms)
             except CLI_FAILURES as error:
-                result = TargetFailed(name.name, type(error).__name__, str(error))
+                result = TargetFailed(name, type(error).__name__, str(error))
                 outcomes.append((position, result))
         for together_declaration, members in together.items():
             results = together_declaration.apply_together(comms, tuple(command for _, _, command in members))
-            outcomes.extend((position, TargetCompleted(name.name, command, result))
+            outcomes.extend((position, TargetCompleted(name, command, result))
                             for (position, name, command), result in zip(members, results, strict=True))
         return TargetBatchResult(tuple(outcome for _, outcome in sorted(outcomes, key=lambda item: item[0])))
 
@@ -863,7 +863,7 @@ class CliCommand[Answer: CliResult = CliResult](
     discovery_package="agent_comms.tools",
 ):
     def schedule(self, batch: TargetBatchSchedule, comms: Comms) -> None:
-        result = TargetCompleted(batch.target.name, self, self.apply(comms))
+        result = TargetCompleted(batch.target, self, self.apply(comms))
         batch.outcomes.append((batch.position, result))
 
     @classmethod
@@ -959,7 +959,7 @@ class CliCommand[Answer: CliResult = CliResult](
                         declaration = target.listed_declaration(member)
                         grouped.setdefault(declaration, {}).update(dict.fromkeys(
                             command.for_editor(comms, name.name, project) for command in available))
-        names = tuple(name for item in selected for name in item.names)
+        names = tuple(name for item in selected for name in item.destination_names)
         return tuple(TargetAction(tuple(commands), names, declaration,
                                   channel if declaration.channel_fields() else NoChannel())
                      for declaration, commands in grouped.items())
@@ -984,7 +984,7 @@ class CliCommand[Answer: CliResult = CliResult](
         bound = self.for_editor(comms, target.name, project)
         channels = next((OneChannel(getattr(bound, item.name))
                          for item in bound.channel_fields()), NoChannel())
-        return TargetAction((bound,), target.names, type(bound), channels)
+        return TargetAction((bound,), target.destination_names, type(bound), channels)
 
     def run(self, ctx: Comms, output: TextIO) -> int:
         """Run this command and write its declared result."""

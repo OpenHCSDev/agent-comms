@@ -51,8 +51,6 @@ from agent_comms.cli_commands import (
     ReconcileStoresCliCommand,
     StartCliCommand,
     StopCliCommand,
-    TargetActionCliCommand,
-    TargetBatchResult,
 )
 from agent_comms.cli_result import CliResult
 from agent_comms.comms import wire
@@ -134,7 +132,7 @@ from agent_comms.installer.probes.commands import (
 from agent_comms.installer.probes.harnesses import InstallResult
 from agent_comms.installer.probes.imports import ClientImportsProbe
 from agent_comms.installer.probes.native import PrepareNativeProbe, PrepareProducerDigestsProbe
-from agent_comms.installer.probes.owners import RunningOwnersProbe
+from agent_comms.installer.probes.owners import OwnersProbe, RunningOwnersProbe
 from agent_comms.installer.probes.publication import PublicationProbe, SelectedRouteProbe
 from agent_comms.installer.probes.services import ServingProbe
 from agent_comms.installer.refusals import InstallRolledBack, UpgradeRefused
@@ -700,19 +698,13 @@ class Stack:
         """Use the restart request's receiving declaration in the selected runtime."""
         return self.probe(RunningOwnersProbe(root))
 
-    def owners(self, root: Path, command: type[CliCommand], names: list[str]) -> TargetBatchResult:
-        """Run the whole owner selection through the operation's existing CLI batch."""
+    def owners(self, root: Path, command: type[CliCommand],
+               names: list[str]) -> tuple[OwnerStart, ...]:
+        """Run and decode the owner selection in the runtime that owns its CLI."""
         if not names:
-            return TargetBatchResult(())
+            return ()
         with OwnersPhase(command=command).running(self.commands.clock):
-            # A batch command answers every selection with its batch (MultipleTargets).
-            return self.answer(root, TargetActionCliCommand.invocation(
-                "--operation", command.declared_name, "--targets", *names), TargetBatchResult)
-
-    def start(self, root: Path, names: list[str]) -> tuple[OwnerStart, ...]:
-        """One start batch; keep each refusal in the installed or rollback report."""
-        return tuple(outcome.owner_start()
-                     for outcome in self.owners(root, StartCliCommand, names).outcomes)
+            return self.probe(OwnersProbe(root, command, tuple(names)))
 
     @contextmanager
     def services_stopped(self, restore_on: Stack) -> Iterator[ServicesStopped]:
