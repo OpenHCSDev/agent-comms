@@ -89,9 +89,6 @@ class OwnerLine(WireValue):
         """The lines that must exist on the delivered tree before the order is done."""
         return ()
 
-    def unnamed_by(self, edits: tuple[str, ...]) -> tuple[str, ...]:
-        return ()
-
     def spelled(self) -> str:
         return self.line.to_wire()
 
@@ -140,11 +137,6 @@ class CreatedLine(OwnerLine):
 
     def owed(self) -> tuple[FileLine, ...]:
         return (self.created,)
-
-    def unnamed_by(self, edits: tuple[str, ...]) -> tuple[str, ...]:
-        if any(self.created.file in edit for edit in edits):
-            return ()
-        return (f"slop by {self.spelled()}: fix: an edit must create {self.created.file}",)
 
     def spelled(self) -> str:
         return f"{self.created.to_wire()} (this order creates it)"

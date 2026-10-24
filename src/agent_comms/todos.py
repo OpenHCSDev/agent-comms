@@ -1987,8 +1987,6 @@ class CheckedProblemOrder(ProblemOrder, declared_name=None):
                 *traced.located(),
             ) if reference not in self.created
         ))
-        problems.extend(refusal for slop in document.slop
-                        for refusal in slop.by.unnamed_by(self.edits))
         deleted = {Path(module).stem for module in self.deletes.modules}
         if deleted and (unread := context.importers(deleted, check)):
             problems.append(f'the order deletes {sorted(deleted)}, which {unread} import; '
