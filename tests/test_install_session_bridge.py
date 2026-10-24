@@ -44,6 +44,8 @@ def session_bridge(tmp_path, home, program=SERVE_FROM_SOURCE, *, state_directory
     transcript.write_text('')
     state = (home / '.local/state/agent-comms/claude-bridge-copy'
              if state_directory is None else state_directory)
+    base_state = state
+    state = base_state / 'bridge-copy'
     binding = Binding(
         str(comms.root), 'bridge-copy', transcript.stem, Binding.bus_head(str(comms.root)))
     with Binding.open(state) as db:
@@ -51,7 +53,7 @@ def session_bridge(tmp_path, home, program=SERVE_FROM_SOURCE, *, state_directory
     claim = WatchClaim(binding.thread, home)
     command = (str(Path(sys.executable).with_name('agent-comms-claude-bridge')),
                'watch', '--state', str(state))
-    claim.enrol(WatchRecord(binding.bus, binding.root, command))
+    claim.enrol(WatchRecord(binding.bus, binding.root, command, base_state))
     owner = ProcessIdentity.capture(os.getpid())
     log = tmp_path / 'bridge.log'
     with log.open('wb') as output:
@@ -146,7 +148,7 @@ def test_installer_pause_closes_the_real_bridge_and_eof_never_replays_or_relaunc
         tmp_path, bridge_home):
     with session_bridge(tmp_path, bridge_home) as (home, claim, observed, child, log):
         directory = home / '.local/state/agent-comms'
-        with Binding.open(directory / 'claude-bridge-copy') as db:
+        with Binding.open(directory / 'claude-bridge-copy' / 'bridge-copy') as db:
             (binding,) = Binding.select(db)
         with Binding.open(directory / 'claude-bridge-historical-copy') as db:
             binding.bind(db)
@@ -163,7 +165,7 @@ def test_installer_pause_closes_the_real_bridge_and_eof_never_replays_or_relaunc
         # Losing the installer connection grants no fallback runtime or retry.
         assert child.wait(timeout=15) == 0, log.read_text()
         assert isinstance(claim.state(), LapsedWatch)
-        with Binding.open(home / '.local/state/agent-comms/claude-bridge-copy') as db:
+        with Binding.open(home / '.local/state/agent-comms/claude-bridge-copy/bridge-copy') as db:
             assert Binding.select(db)[0].thread == claim.thread
 
 
@@ -195,7 +197,8 @@ def test_session_start_and_runtime_replacement_share_the_declared_launcher(tmp_p
     owner = ProcessIdentity.capture(os.getpid())
     operation = Serve(owner=owner, transcript=tmp_path / 'copied-session.jsonl')
     record = WatchRecord('copy', '/copied/bus', ('/old/bin/agent-comms-claude-bridge',
-                                             'watch', '--state', '/copied/state'))
+                                             'watch', '--state', '/copied/state'),
+                         Path('/copied/state'))
     runtime = LaunchRuntime(tmp_path / 'runtime-B/bin/python')
     command = operation.command(record, runtime)
     assert command[:4] == (str(runtime.interpreter.with_name('agent-comms-claude-bridge')),

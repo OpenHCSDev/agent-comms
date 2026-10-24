@@ -4,6 +4,7 @@ import multiprocessing
 import signal
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import contextmanager
+from pathlib import Path
 
 import pytest
 
@@ -11,7 +12,8 @@ from agent_comms.cli_bridges.monitor import InspectSession
 from agent_comms_hooks.watch import LapsedWatch, LiveWatch, NoSessionBridge, WatchClaim, WatchRecord
 
 RECORD = WatchRecord(
-    "commander", "/bus", ("agent-comms-claude-bridge", "watch", "--state", "/bus with spaces")
+    "commander", "/bus", ("agent-comms-claude-bridge", "watch", "--state", "/bus with spaces"),
+    Path("/bus with spaces"),
 )
 
 

@@ -46,7 +46,7 @@ async def test_empty_journal_starts_at_binding_and_ignores_user_reads(comms, tmp
             Binding.family_discriminator: Binding.declared_name,
             'root': str(comms.root), 'bus_thread': 'viewer', 'session': 'session',
         }).bind(db)
-        selected = ClaudeBridge(Options(Watch(), StoredBinding(), state), binding, db)
+        selected = ClaudeBridge(Options(Watch(), StoredBinding(), state, state.parent), binding, db)
         fresh = comms.messaging.send(
             'peer', 'viewer', 'after binding, already read in Toad').message
         comms.messaging.acknowledge('viewer', (fresh.reference,))
@@ -105,7 +105,7 @@ def bridge(comms, tmp_path):
     binding = Binding(str(root), 'viewer', 'session', Binding.bus_head(str(root)))
     with Binding.open(state) as db:
         binding.bind(db)
-        yield ClaudeBridge(Options(Watch(), StoredBinding(), state), binding, db)
+        yield ClaudeBridge(Options(Watch(), StoredBinding(), state, state.parent), binding, db)
 
 
 @pytest.fixture
@@ -157,7 +157,7 @@ async def test_parts_require_complete_exact_body_then_reopen(bridge, emitted_del
     assert DeliveryRow.select(bridge.db)[0].outcome is EmittedOutcome
     bridge.db.close()
     with Binding.open(state) as db:
-        reopened = ClaudeBridge(Options(Watch(), StoredBinding(), state), binding, db)
+        reopened = ClaudeBridge(Options(Watch(), StoredBinding(), state, state.parent), binding, db)
         for number in (0, 4):
             for update in record_factory(lines[number], record_id=f'record-{number}').updates(ClaudeSession()):
                 await update.observed(reopened)
@@ -306,12 +306,14 @@ def _old_delivery_file(state):
 def test_old_delivery_index_set_is_carried_onto_the_declaration_with_every_row(tmp_path):
     """A durable store derives its declared schema on the writer's open (a5b3cd8a7): the old
     index set is replaced by the declared one and no row is lost."""
-    from cutover.binding_start import migrate, revert
+    from cutover.binding_start import SavedJournal, migrate
 
     path = _old_delivery_file(tmp_path)
     with closing(sqlite3.connect(path)) as db:
         before = {table: db.execute(f'SELECT * FROM "{table}"').fetchall()
                   for table in ('binding', 'delivery', 'observed_part')}
+    original = SavedJournal(tmp_path, tmp_path / "original")
+    original.save()
     assert migrate(tmp_path).report() == 1
     assert migrate(tmp_path).report() == 0
     with Binding.open(tmp_path) as db:
@@ -319,8 +321,7 @@ def test_old_delivery_index_set_is_carried_onto_the_declaration_with_every_row(t
         assert {table: db.execute(f'SELECT count(*) FROM "{table}"').fetchone()[0]
                 for table in ('binding', 'delivery', 'observed_part')} == Counter(
             table for table, _ in _OLD_DELIVERY_ROWS)
-    assert revert(tmp_path).report() == 1
-    assert revert(tmp_path).report() == 0
+    original.restore()
     with closing(sqlite3.connect(path)) as db:
         assert {table: db.execute(f'SELECT * FROM "{table}"').fetchall()
                 for table in before} == before

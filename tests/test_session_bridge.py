@@ -56,13 +56,13 @@ async def detached(bridge):
 def test_enrol_is_idempotent_and_refuses_another_command(tmp_path, monkeypatch):
     monkeypatch.setenv('HOME', str(tmp_path))
     claim = WatchClaim('session')
-    record = WatchRecord('viewer', str(tmp_path), ('bridge', 'watch'))
+    record = WatchRecord('viewer', str(tmp_path), ('bridge', 'watch'), tmp_path)
     claim.enrol(record)
     assert claim.state().record == record
     with claim.held(record):
         claim.enrol(record)
         with pytest.raises(ValueError):
-            claim.enrol(WatchRecord('viewer', str(tmp_path), ('other', 'watch')))
+            claim.enrol(WatchRecord('viewer', str(tmp_path), ('other', 'watch'), tmp_path))
         assert not claim.has_reader()
         with claim.reader_held():
             assert claim.has_reader()

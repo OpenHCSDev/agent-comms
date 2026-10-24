@@ -35,13 +35,14 @@ def test_session_start_hook_exit_preserves_the_recorded_owner_for_install_pause(
         'bridge-copy', frozenset(), str(tmp_path), execution=ExternalThreadExecution))
     transcript = tmp_path / f'{session}.jsonl'
     transcript.write_text('')
-    state = WatchClaim.directory(home).parent / 'claude-bridge-owner'
+    base_state = WatchClaim.directory(home).parent / 'claude-bridge-owner'
+    state = base_state / 'bridge-copy'
     binding = Binding(str(comms.root), 'bridge-copy', session, Binding.bus_head(str(comms.root)))
     with Binding.open(state) as db:
         binding.bind(db)
     claim = WatchClaim(session, home)
     claim.enrol(WatchRecord(binding.bus, binding.root, (
-        str(source_programs.script(claude.main)), 'watch', '--state', str(state))))
+        str(source_programs.script(claude.main)), 'watch', '--state', str(state)), base_state))
     current = home / LaunchRuntime.current_pointer().relative_to(Path.home())
     current.parent.mkdir(parents=True)
     current.symlink_to(source_programs.prefix, target_is_directory=True)
