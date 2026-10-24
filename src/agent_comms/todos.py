@@ -2997,6 +2997,11 @@ class StrikeTodo(CitedStrike, StoryEvent):
     reason: str
     at: EventTime = field(default_factory=lambda: EventTime.capture(time.time()))
 
+    def prepare(self, goals: Goals, current: Todo) -> Self:
+        current.state.require_open(current)
+        DirectiveText.require(self.reason)
+        return super().prepare(goals, current)
+
     def changed(self, current: Todo) -> Todo:
         self.actor.require_may_change(current)
         current.require_assignment(self.previous)
