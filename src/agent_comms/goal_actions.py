@@ -19,7 +19,6 @@ from agent_comms.goals import (
     GoalOrder,
     NoGoal,
     ProblemGoalOrder,
-    ReportedTurn,
     UnobservedGoalCheckpoint,
     UnorderedGoalOrder,
 )
@@ -52,6 +51,7 @@ from .recorded_time import EventTime
 from .repository_name import RepositoryName
 from .thread_identity import ThreadIncarnation
 from .threads import Thread
+from .turn_lease import ReportedTurnState
 
 if TYPE_CHECKING:
     from .goal_management import Goals
@@ -107,8 +107,8 @@ class GoalActionContext:
     actor: type = RuntimeInvocable
 
     @property
-    def report_turn(self) -> str:
-        return self.thread.turn_record.read().report_turn
+    def reported_turn(self) -> ReportedTurnState:
+        return self.thread.turn_record.read().reported_turn
 
     @property
     def model_report(self) -> bool:
@@ -163,7 +163,7 @@ class GoalAction[Result: GoalDeclaration](
         self.expect.check(ctx)
         self.require_actor(ctx.actor)
         if ctx.model_report and any(
-            entry.reports_turn(ctx.report_turn)
+            entry.reports_turn(ctx.reported_turn)
             for entry in ctx.goals.registry.goal_history(ctx.thread.name)
         ):
             raise ValueError("This goal was already reported in this turn.")
@@ -209,7 +209,7 @@ class TransitionGoalAction(GoalAction[Goal]):
             state=state,
             revision=goal.revision + 1,
             progress=goal.progress if self.progress is None else self.progress,
-            reported_turn=ReportedTurn(ctx.report_turn) if ctx.model_report else goal.reported_turn,
+            reported_turn=ctx.reported_turn if ctx.model_report else goal.reported_turn,
         )
         self.before_goal_publish(changed, ctx)
         return changed
@@ -296,7 +296,7 @@ class PreparedStandbyGoalAction(StandbyGoalAction, declared_name=None):
         review = self.review
         review.require_current(ctx.goals, ctx.thread)
         thread = ctx.thread
-        report_turn = ctx.report_turn
+        reported_turn = ctx.reported_turn
         wait_targets = review.targets
         aliases = review.owners
         dispositions = InputDispositions(ctx.goals.root)
@@ -356,7 +356,7 @@ class PreparedStandbyGoalAction(StandbyGoalAction, declared_name=None):
             owners=aliases,
             goal_id=goal.id,
             goal_revision=goal.revision,
-            turn_id=report_turn,
+            turn_id=reported_turn,
         )
         # Commit scheduling authority first. A crash before the registry
         # progress update must leave this same goal waiting, not runnable.

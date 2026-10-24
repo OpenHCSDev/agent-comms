@@ -30,6 +30,7 @@ from .input_origin import (
 )
 from .text_digest import TextDigest
 from .thread_identity import GenerationCounter, ThreadIncarnation
+from .turn_lease import ReportedTurnState
 
 if TYPE_CHECKING:
     from .registry_document import RegistrySnapshot
@@ -51,7 +52,7 @@ class ClearedInputState:
 @dataclass(frozen=True, slots=True)
 class GoalInputDecision:
     goal_revision: int
-    turn_id: str
+    turn_id: ReportedTurnState
 
 
 class InputTransition:
@@ -123,12 +124,12 @@ class InputAttempt(LifecycleCapability, DeclaredFamily, affix="Input"):
         raise RelationViolationError("Constraint lacks its original input")
 
     def bind(
-        self, *, claim_scope: int, turn_id: str, native_id: str, text: str
+        self, *, claim_scope: int, turn_id: TurnId, native_id: str, text: str
     ) -> InputTransition:
         self.require_not_cleared()
         return UnchangedInput(self)
 
-    def started(self, *, turn_id: str, native_id: str, text: str) -> InputTransition:
+    def started(self, *, turn_id: TurnId, native_id: str, text: str) -> InputTransition:
         return UnchangedInput(self)
 
     def finish_unbound(self) -> InputTransition:
@@ -143,7 +144,7 @@ class InputAttempt(LifecycleCapability, DeclaredFamily, affix="Input"):
     def require_not_cleared(self) -> None:
         """Non-cleared states retain their existing write checks."""
 
-    def matches_native(self, *, turn_id: str, native_id: str, text: str) -> bool:
+    def matches_native(self, *, turn_id: TurnId, native_id: str, text: str) -> bool:
         return False
 
     def started_for_native(
@@ -343,7 +344,7 @@ class ReservedInput(Unresolved, RecoverableUnboundInput):
         )
 
     def bind(
-        self, *, claim_scope: int, turn_id: str, native_id: str, text: str
+        self, *, claim_scope: int, turn_id: TurnId, native_id: str, text: str
     ) -> InputTransition:
         if self.claim_generation != claim_scope:
             return UnchangedInput(self)
@@ -377,7 +378,7 @@ class SentInput(StoredInput):
         except ValueError as error:
             raise ValueError("Invalid native input attempt") from error
 
-    def matches_native(self, *, turn_id: str, native_id: str, text: str) -> bool:
+    def matches_native(self, *, turn_id: TurnId, native_id: str, text: str) -> bool:
         return (self.turn_id, self.native_id) == (turn_id, native_id) and self.sent_digest.matches(text)
 
 
@@ -389,7 +390,7 @@ class BoundUnknownInput(Unresolved, SentInput):
             return MovedInput(self._transition(ClearedNativeInput))
         return UnchangedInput(self)
 
-    def started(self, *, turn_id: str, native_id: str, text: str) -> InputTransition:
+    def started(self, *, turn_id: TurnId, native_id: str, text: str) -> InputTransition:
         if self.matches_native(turn_id=turn_id, native_id=native_id, text=text):
             return MovedInput(self._transition(StartedInput))
         return UnchangedInput(self)

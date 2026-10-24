@@ -13,7 +13,7 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Annotated
 
 from .turn_failure import TurnFailure
-from .field_codec import Id128Text, GoalId
+from .field_codec import GoalId, TurnId
 from .goal_attempt_identity import GoalAttemptIdentity
 from .thread_identity import (
     ClaimedIdentity,
@@ -61,7 +61,7 @@ class FailedTurnEvidence(GoalLedgerTable, TypedTable, GoalFailureEvidence):
     ]
     turn_generation: Annotated[int, Column(check="turn_generation>0")]
     goal_revision: Annotated[int, Column(check="goal_revision>=0")]
-    turn_id: Annotated[str, Column(unique=True, check="length(turn_id)=32")]
+    turn_id: Annotated[TurnId, Column(unique=True, check="length(turn_id)=32")]
     failure: type[TurnFailure]
 
     def __post_init__(self) -> None:
@@ -73,7 +73,6 @@ class FailedTurnEvidence(GoalLedgerTable, TypedTable, GoalFailureEvidence):
             raise ValueError("Observation turn generation must be positive")
         if not math.isfinite(self.owner_created_at):
             raise ValueError("Observation incarnation must be finite")
-        Id128Text.from_text(self.turn_id)
 
     def execution(self, goal_id: GoalId) -> GoalExecution:
         from .goal_presentation import AttemptFailedExecution
@@ -126,7 +125,7 @@ class FailedTurnObservation:
         owner: Thread,
         goal: Goal,
         lease: TurnLeaseFence,
-        turn_id: str,
+        turn_id: TurnId,
         claim_scope: int,
         current_owner: Thread | None,
         current_claim: int | None,

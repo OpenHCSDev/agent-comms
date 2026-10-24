@@ -23,8 +23,6 @@ from .errors import RejectedEnforcementError, RelationViolationError
 from .field_codec import (
     GoalId,
     FieldCodec,
-    JsonShapeFamily,
-    JsonShapeMember,
     MalformedRecord,
     NullMember,
     PresenceExclude,
@@ -39,6 +37,7 @@ from .registration_inheritance import RegistrationInheritance
 from .repo import GitCommandError, Repo, ScratchCheckout
 from .thread_identity import RecordedThreadIncarnation, ThreadIncarnation
 from .text_digest import TextDigest
+from .turn_lease import NoReportedTurn, ReportedTurnState
 from .ui_model.goal import GoalDisplay
 
 if TYPE_CHECKING:
@@ -660,7 +659,7 @@ class GoalDeclaration(GoalDisplay, SubclassUnion, RegistrationInheritance["GoalD
     def accepts_observation(self, goal_id: GoalId, minimum_revision: int) -> bool:
         return False
 
-    def reports_turn(self, turn_id: str) -> bool:
+    def reports_turn(self, turn: ReportedTurnState) -> bool:
         return False
 
     @property
@@ -736,29 +735,6 @@ class NoGoal(NullMember, GoalDeclaration):
 
     def action_failure(self, error: Exception) -> str:
         return "This goal has been cleared."
-
-
-class ReportedTurnState(DeclaredFamily, JsonShapeFamily, affix="ReportedTurnState"):
-    """The reporting turn is a state; null/text remain the existing wire forms."""
-
-    @abstractmethod
-    def reports(self, turn_id: str) -> bool: ...
-
-
-@dataclass(frozen=True)
-class NoReportedTurn(ReportedTurnState, JsonShapeMember):
-    value: None = None
-
-    def reports(self, turn_id: str) -> bool:
-        return False
-
-
-@dataclass(frozen=True)
-class ReportedTurn(ReportedTurnState, JsonShapeMember):
-    value: str
-
-    def reports(self, turn_id: str) -> bool:
-        return self.value == turn_id
 
 
 @dataclass(frozen=True)
@@ -881,8 +857,8 @@ class Goal(RecordMember, GoalDeclaration):
     def active(self) -> GoalDeclaration:
         return next(iter(self.state.items_with(Active, self)), NoGoal())
 
-    def reports_turn(self, turn_id: str) -> bool:
-        return self.reported_turn.reports(turn_id)
+    def reports_turn(self, turn: ReportedTurnState) -> bool:
+        return self.reported_turn.reports(turn)
 
     @property
     def captured(self) -> GoalCheckpoint:

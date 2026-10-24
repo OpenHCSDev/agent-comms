@@ -120,7 +120,7 @@ class TurnRunner:
         name = self.sessions.bindings.get(session_id)
         return self.comms.registry.require(name).turn_state if name is not None else TurnState()
 
-    def owns_turn(self, session_id: str, turn_id: str) -> bool:
+    def owns_turn(self, session_id: str, turn_id: TurnId) -> bool:
         state = self.turn_state(session_id)
         return state.active.phase.busy and state.active.id == turn_id
 
@@ -271,7 +271,7 @@ class TurnRunner:
     async def extension_ui_permission(
         self,
         session_id: str,
-        turn_id: str,
+        turn_id: TurnId,
         controller: Controller | None,
         request: pi.DialogUiRequest,
     ) -> pi.ExtensionUiChoice:

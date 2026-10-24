@@ -10,6 +10,7 @@ from agent_comms import field_codec
 from .assignment_states import AssignmentState
 from .coordination_tables.publications import PublicationEvidence
 from .diagnostics import record_terminal_failure
+from .field_codec import FieldCodec, InputId
 from .messages import AlertKind, NoticeRole
 from .send_result import SendResult
 from .turn_failure import BackendFailed
@@ -54,7 +55,7 @@ def publish_native_failure(
     """Existing durable alert, never another wake or retry authorization."""
     diagnostic = record_terminal_failure(
         participant.comms.root,
-        turn_id=input_id,
+        subject=FieldCodec.decode(InputId, input_id),
         thread=participant.owner.thread.name,
         failure=BackendFailed,
         sequences=tuple(source.delivery.message.seq for source in participant.batch.sources),

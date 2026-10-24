@@ -11,8 +11,11 @@ from typing import TYPE_CHECKING, Annotated, ClassVar
 
 from .activity import ObservedActivity
 from .child_process import ProcessIdentity, ProcessState
+from .declared_family import DeclaredFamily
 from .errors import RelationViolationError
 from .field_codec import (
+    JsonShapeFamily,
+    JsonShapeMember,
     NullMember,
     RecordMember,
     SingleFieldValue,
@@ -41,6 +44,29 @@ if TYPE_CHECKING:
     from .threads import Thread
 
 
+class ReportedTurnState(DeclaredFamily, JsonShapeFamily, affix="ReportedTurnState"):
+    """The reporting turn is a state; null/text remain the existing wire forms."""
+
+    @abstractmethod
+    def reports(self, turn: ReportedTurnState) -> bool: ...
+
+
+@dataclass(frozen=True)
+class NoReportedTurn(ReportedTurnState, JsonShapeMember):
+    value: None = None
+
+    def reports(self, turn: ReportedTurnState) -> bool:
+        return False
+
+
+@dataclass(frozen=True)
+class ReportedTurn(ReportedTurnState, JsonShapeMember):
+    value: TurnId
+
+    def reports(self, turn: ReportedTurnState) -> bool:
+        return turn == self
+
+
 class TurnDeclaration(LifecycleCapability, SubclassUnion, affix=""):
     """A recorded active turn or the idle state."""
 
@@ -56,7 +82,7 @@ class TurnDeclaration(LifecycleCapability, SubclassUnion, affix=""):
 
     @property
     @abstractmethod
-    def report_turn(self) -> str: ...
+    def reported_turn(self) -> ReportedTurnState: ...
 
     @abstractmethod
     def require_active(self) -> ActiveTurn: ...
@@ -99,7 +125,7 @@ class NoTurn(NullMember, TurnDeclaration):
     phase: ClassVar[TurnPhase] = IdlePhase()
     id = None
     started_at = None
-    report_turn = ""
+    reported_turn: ClassVar[ReportedTurnState] = NoReportedTurn()
 
     def execution(self, source: GoalExecutionSource) -> GoalExecution:
         return source.generation.lifecycle.idle_execution(source)
@@ -231,8 +257,8 @@ class ActiveTurn(Executing, RecordMember, TurnDeclaration):
         return source.generation.lifecycle.idle_execution(source)
 
     @property
-    def report_turn(self) -> str:
-        return self.id
+    def reported_turn(self) -> ReportedTurnState:
+        return ReportedTurn(self.id)
 
     def require_active(self) -> ActiveTurn:
         return self
@@ -333,7 +359,7 @@ class TurnLease(ABC):
 
     @abstractmethod
     @boundary_decoder
-    def reports(self, turn_id: str | None, generation: int | None) -> bool:
+    def reports(self, turn_id: TurnId | None, generation: int | None) -> bool:
         """A stored wait's reporting turn is this lease's turn."""
 
     @abstractmethod
@@ -369,7 +395,7 @@ class NoTurnLease(NullMember, TurnLease):
         return idle
 
     @boundary_decoder
-    def reports(self, turn_id: str | None, generation: int | None) -> bool:
+    def reports(self, turn_id: TurnId | None, generation: int | None) -> bool:
         return False
 
     @boundary_decoder
@@ -404,7 +430,7 @@ class TurnLeaseFence(TurnFence, TurnLease):
         return self.authored(identity, turn) or identity.generation == self.identity.generation - 1
 
     @boundary_decoder
-    def reports(self, turn_id: str | None, generation: int | None) -> bool:
+    def reports(self, turn_id: TurnId | None, generation: int | None) -> bool:
         return (turn_id, generation) == (self.turn_id, self.identity.generation)
 
     @boundary_decoder

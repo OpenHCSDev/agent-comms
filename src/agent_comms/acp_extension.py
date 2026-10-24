@@ -33,6 +33,7 @@ from .field_codec import (
     InputId,
     MalformedRecord,
     MessageId,
+    TurnId,
     WireValue,
     WireName,
     WireOmitDefault,
@@ -62,10 +63,6 @@ class AgentCommsUpdate(DeclaredFamily, affix="Update"):
 
     def for_session(self, session_id: str) -> AgentCommsUpdate:
         return self
-
-    def matches_turn(self, turn_id: str) -> bool:
-        """Facts without a turn identity apply throughout their session."""
-        return True
 
     def acp_chunk(self) -> AgentMessageChunk:
         """Carry this declared observation in its original empty ACP envelope."""
@@ -656,11 +653,8 @@ class InputDeliveryChangedUpdate(AgentCommsUpdate):
 
 @dataclass(frozen=True)
 class McpClientAcknowledgementUpdate(AgentCommsUpdate, declared_name="mcp_client_receipt"):
-    turn_id: str
+    turn_id: TurnId
     acknowledgement: Annotated[McpLiveAcknowledgement, WireName("receipt")]
-
-    def matches_turn(self, turn_id: str) -> bool:
-        return self.turn_id == turn_id
 
 
 class CommsRequest(DeclaredFamily, affix="Request"):

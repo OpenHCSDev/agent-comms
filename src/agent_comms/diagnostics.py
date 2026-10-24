@@ -16,7 +16,7 @@ from uuid import uuid4
 
 
 from .child_process import Platform
-from .field_codec import FieldCodec, Id128Text
+from .field_codec import FieldCodec, InputId, TurnId
 from .locked_store import PatternFile, RuntimeFile
 from .native_failures import NativeRequestFailure
 from .mro_dispatch import MroDispatch, handles
@@ -131,7 +131,7 @@ class RequestObservations(RuntimeFile, PatternFile):
 def record_terminal_failure(
     root: Path,
     *,
-    turn_id: str,
+    subject: TurnId | InputId,
     thread: str,
     failure: type[TurnFailure],
     sequences: tuple[int, ...],
@@ -140,7 +140,6 @@ def record_terminal_failure(
     source_error: BaseException | None = None,
 ) -> Path:
     """Persist before publishing the failure notice; this record grants no retry authority."""
-    Id128Text.decode(turn_id)
     measurements = measurements or {}
     safe = {
         key: value
@@ -155,7 +154,7 @@ def record_terminal_failure(
     }
     document = {
         "version": 1,
-        "turn_id": turn_id,
+        "subject": subject,
         "thread": thread,
         "failure": failure.declared_name,
         "sequences": list(sequences),
@@ -165,7 +164,7 @@ def record_terminal_failure(
     if native_response is not None:
         document["native_response"] = native_response.rejection_details()
     document.update(DiagnosticDocument.source_error_evidence(source_error))
-    return DiagnosticDocument.write(root, turn_id, document)
+    return DiagnosticDocument.write(root, subject, document)
 
 
 def record_drain_failure(
