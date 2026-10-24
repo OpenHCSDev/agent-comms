@@ -330,7 +330,7 @@ class TargetFailed(TargetOutcome):
         return f"{self.target}: {self.error_type}: {self.error}"
 
     def show(self, shower: ResultShower, label: str, title: str) -> None:
-        shower.show_failure(str(self), title)
+        shower.show_error(str(self), title)
 
     def owner_start(self) -> OwnerStart:
         return RefusedOwner(self.target, str(self))
