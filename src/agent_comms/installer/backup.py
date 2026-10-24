@@ -59,8 +59,8 @@ class SavedFile:
         return self.size == copied.size
 
 
-def bus_files(root: Path) -> dict[DeclaredFile | UndeclaredFile, dict[Path, SavedFile]]:
-    """Record owner identities and their content members' physical metadata."""
+def observed_files(root: Path) -> dict[Path, os.stat_result]:
+    """Every regular file an installation carries, with its metadata."""
     excluded = RuntimeFile.paths_in(root)
     observed: dict[Path, os.stat_result] = {}
     for path in root.rglob("*"):
@@ -69,6 +69,18 @@ def bus_files(root: Path) -> dict[DeclaredFile | UndeclaredFile, dict[Path, Save
         info = path.lstat()
         if stat.S_ISREG(info.st_mode):
             observed[path] = info
+    return observed
+
+
+def settle_bus_files(root: Path) -> None:
+    """Give the held live bus the practice copy's physical cut before its snapshot."""
+    for resource, owner in RootFile.owned_files(root, observed_files(root)).items():
+        owner.settle(root / resource.path)
+
+
+def bus_files(root: Path) -> dict[DeclaredFile | UndeclaredFile, dict[Path, SavedFile]]:
+    """Record owner identities and their content members' physical metadata."""
+    observed = observed_files(root)
     return {
         resource: {
             member.relative_to(root): SavedFile(

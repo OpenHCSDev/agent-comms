@@ -124,6 +124,10 @@ class RootFile:
         return frozenset((source,))
 
     @staticmethod
+    def settle(path: Path) -> None:
+        """A plain file keeps no committed bytes beside it, so there is nothing to settle."""
+
+    @staticmethod
     def digest(path: Path) -> str:
         return hashlib.sha256(path.read_bytes()).hexdigest()
 
@@ -611,6 +615,18 @@ class SQLiteFile(RootFile):
         """SQLite's snapshot owns the whole cut without a file lock spanning the copy."""
         cls.copy_file(source, target)
         return frozenset((source,))
+
+    @classmethod
+    def settle(cls, path: Path) -> None:
+        """Move committed WAL frames into the file. A copy is a backup with no WAL, so a
+        settled file has the copy's physical cut, and no later last close rewrites it."""
+        wal = cls.wal_path(path)
+        if not (wal.is_file() and wal.stat().st_size):
+            return
+        with _store_lock(path), closing(cls.writer(path, isolation_level=None)) as db:
+            busy, _, _ = db.execute("PRAGMA wal_checkpoint(TRUNCATE)").fetchone()
+        if busy:
+            raise sqlite3.OperationalError(f"Another connection holds the WAL of {path}")
 
     @classmethod
     def digest(cls, path: Path) -> str:
