@@ -13,12 +13,14 @@ from agent_comms.goal_actions import SetGoalAction
 from agent_comms.goals import OrderCheck, ProblemGoalOrder
 from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.todos import (
+    ClaimOrder,
     ClaimedProblemOrder,
     CorrectCheckTodo,
     DoneTodoState,
     FailedCheckStrike,
     DeliveredProblemOrder,
     PendingProblemOrder,
+    OrderClaim,
     SendBackVerdict,
     StrikeReason,
     StrikeTodo,
@@ -194,6 +196,64 @@ def test_corrected_order_to_the_claimant_replaces_its_claim(held_commander, cite
     assert claimed.order in corrected.prior_orders
     assert corrected.holder == "worker"
     assert corrected.strike_count == claimed.strike_count
+
+
+def test_two_delivery_claims_warn_without_deadlocking_other_orders(
+    held_commander, cited_source, capsys,
+):
+    ctx = held_commander
+    comms = ctx.comms
+    store = comms.goals.todos
+    source = ctx.repos[0]
+    checkout = ctx.root.parent / "other-claim-checkout"
+    source.git(source.checkout, "worktree", "add", "-q", "--detach", str(checkout))
+    other = thread("other", checkout, 3.0)
+    comms.registry.register(other)
+    comms.registry.register(thread("third", ctx.root.parent / "third", 4.0))
+    lead = comms.registry.require(ctx.commander)
+    original = store.get("P1")
+    second = store.create(
+        "P2", original.repo, "Repair the other held workflow", creator=lead,
+        assigner=ctx.incarnation, owner=other, generation="other-order",
+        request=original.request.require(), review_at=RecordedEventTime(time.time() + 1000),
+        order=replace(original.order.checked(), id="other-order"),
+    )
+    head = source.git(source.checkout, "rev-parse", "HEAD").strip()
+    claims = []
+    for todo in (original, second):
+        holder = comms.registry.require(todo.holder)
+        sent = comms.messaging.send(
+            ctx.commander, holder.name, todo.order.instructions(todo),
+        ).message
+        claim = OrderClaim.for_order(
+            todo, holder.incarnation, 1, head, "The source repair is published for review.",
+            sent.reference, store=store,
+        )
+        claim = replace(claim, message=replace(claim.message, timestamp=time.time() - 3600))
+        claims.append(ClaimOrder(
+            todo.revision, holder.incarnation, todo.held().generation, claim,
+        ).record(comms.goals, todo.id))
+
+    reply = ctx.root / "claim-status.txt"
+    reply.write_text("Waiting on the review, owner lead.")
+    capsys.readouterr()
+    main(["say", "third", str(reply)], ctx)
+    warning = capsys.readouterr().out
+    assert "WARNING: DELIVERY AWAITING JUDGEMENT worker P1" in warning
+    assert "WARNING: DELIVERY AWAITING JUDGEMENT other P2" in warning
+    assert store.get("P1") == claims[0]
+    assert store.get("P2") == claims[1]
+    with pytest.raises(SystemExit, match="DELIVERY AWAITING JUDGEMENT worker P1"):
+        main(["say", "worker", str(reply), "--answers",
+              claims[0].order.claim.message.message_id], ctx)
+    assert store.get("P1") == claims[0]
+
+    main(["send", "worker", corrected_order_file(ctx, cited_source), "--clean"], ctx)
+    corrected = store.get("P1")
+    assert isinstance(corrected.order, PendingProblemOrder)
+    assert corrected.order.commander_claims() == ()
+    assert claims[0].order in corrected.prior_orders
+    assert store.get("P2") == claims[1]
 
 
 def test_claimed_order_to_another_unit_is_refused_and_writes_nothing(held_commander, cited_source):
