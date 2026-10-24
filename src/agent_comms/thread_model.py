@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 from agent_comms.field_codec import SubclassUnion, boundary_decoder
-from agent_comms.native_arguments import ModelArgument, NativeArguments, ProviderArgument, SelectedModel
+from agent_comms.native_arguments import NativeArguments, SelectedModel
 from agent_comms.native_failures import NativePiUnavailable
 from agent_comms.thread_text import AbsentText, GivenText, TextChoice
 
@@ -28,8 +28,8 @@ class ThreadModel(SubclassUnion, TextChoice, affix="Model"):
     @boundary_decoder
     def selected_by(arguments: NativeArguments) -> ThreadModel:
         """The model a launch's native arguments select, or none."""
-        selected = arguments.value(ModelArgument)
-        provider = arguments.value(ProviderArgument)
+        selected = arguments.model
+        provider = arguments.provider
         if selected is None or provider is None:
             return ThreadModel.reported(selected)
         return DeclaredModel(SelectedModel(provider, selected.removeprefix(provider + "/")).qualified)

@@ -37,6 +37,21 @@ class NativeArgument(DeclaredFamily, affix="Argument"):
     def apply_thinking(self, current: type[ThinkingChoice]) -> type[ThinkingChoice]:
         return current
 
+    def apply_provider(self, current: str | None) -> str | None:
+        return current
+
+    def apply_model(self, current: str | None) -> str | None:
+        return current
+
+    def kept_on_model_change(self) -> tuple[NativeArgument, ...]:
+        return (self,)
+
+    def kept_on_thinking_change(self) -> tuple[NativeArgument, ...]:
+        return (self,)
+
+    def kept_on_rpc(self) -> tuple[NativeArgument, ...]:
+        return (self,)
+
 
 @dataclass(frozen=True)
 class ExternalArgument(NativeArgument):
@@ -92,11 +107,19 @@ class ValueArgument(ValueOption):
 
 
 class ProviderArgument(NamedOption, ValueArgument):
-    pass
+    def apply_provider(self, current: str | None) -> str | None:
+        return self.value
+
+    def kept_on_model_change(self) -> tuple[NativeArgument, ...]:
+        return ()
 
 
 class ModelArgument(NamedOption, ValueArgument):
-    pass
+    def apply_model(self, current: str | None) -> str | None:
+        return self.value
+
+    def kept_on_model_change(self) -> tuple[NativeArgument, ...]:
+        return ()
 
 
 class ExtensionArgument(NamedOption, ValueArgument):
@@ -170,6 +193,9 @@ class ThinkingArgument(NamedOption, ValueOption):
     def apply_thinking(self, current: type[ThinkingChoice]) -> type[ThinkingChoice]:
         return self.level
 
+    def kept_on_thinking_change(self) -> tuple[NativeArgument, ...]:
+        return ()
+
     @classmethod
     def from_text(cls, value: str) -> ThinkingArgument:
         return cls(ThinkingLevel.member_named(value))
@@ -214,6 +240,9 @@ class ModeArgument(NamedOption, ValueArgument):
     def validate_rpc(self) -> None:
         if self.value != "rpc":
             raise ValueError("Managed Pi requires RPC mode")
+
+    def kept_on_rpc(self) -> tuple[NativeArgument, ...]:
+        return ()
 
 
 class FlagArgument(OptionArgument):
@@ -298,11 +327,6 @@ class NativeArguments:
     def argv(self) -> tuple[str, ...]:
         return tuple(token for entry in self.entries for token in entry.argv)
 
-    def value(self, member: type[ValueArgument]) -> str | None:
-        return next(
-            (entry.value for entry in reversed(self.entries) if isinstance(entry, member)), None
-        )
-
     def loads(self, extension: Path) -> bool:
         """Pi discovers installed extensions unless told not to; ``-e`` always loads its own."""
         return (NoExtensionsArgument() not in self.entries
@@ -310,8 +334,22 @@ class NativeArguments:
 
     @property
     def provider_type(self) -> type[ModelProvider]:
-        provider = self.value(ProviderArgument)
+        provider = self.provider
         return NoSelectedModel if provider is None else ModelProvider.member_named(provider)
+
+    @property
+    def provider(self) -> str | None:
+        selected: str | None = None
+        for entry in self.entries:
+            selected = entry.apply_provider(selected)
+        return selected
+
+    @property
+    def model(self) -> str | None:
+        selected: str | None = None
+        for entry in self.entries:
+            selected = entry.apply_model(selected)
+        return selected
 
     @property
     def thinking(self) -> type[ThinkingChoice]:
@@ -320,18 +358,17 @@ class NativeArguments:
             selected = entry.apply_thinking(selected)
         return selected
 
-    def replace(self, member: type[NativeArgument], *entries: NativeArgument) -> NativeArguments:
-        return NativeArguments(
-            tuple(entry for entry in self.entries if not isinstance(entry, member)) + entries
-        )
-
     def with_model(self, selected: str) -> NativeArguments:
-        return self.replace(ProviderArgument).replace(
-            ModelArgument, *SelectedModel.decode(selected).arguments
+        return NativeArguments(
+            tuple(kept for entry in self.entries for kept in entry.kept_on_model_change())
+            + SelectedModel.decode(selected).arguments
         )
 
     def with_thinking(self, selected: type[ThinkingChoice]) -> NativeArguments:
-        return self.replace(ThinkingArgument, *selected.native_arguments(ThinkingArgument))
+        return NativeArguments(
+            tuple(kept for entry in self.entries for kept in entry.kept_on_thinking_change())
+            + selected.native_arguments(ThinkingArgument)
+        )
 
     def managed_rpc(self, package: Path) -> tuple[str, ...]:
         """Managed sessions load only the packaged extensions, never discovered copies of them."""
@@ -342,7 +379,10 @@ class NativeArguments:
     def rpc(self) -> tuple[str, ...]:
         for entry in self.entries:
             entry.validate_rpc()
-        return self.replace(ModeArgument, ModeArgument("rpc")).argv
+        return NativeArguments(
+            tuple(kept for entry in self.entries for kept in entry.kept_on_rpc())
+            + (ModeArgument("rpc"),)
+        ).argv
 
 
 class LaunchBinary(SubclassUnion, affix="Binary"):
