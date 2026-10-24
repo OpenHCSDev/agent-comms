@@ -253,7 +253,7 @@ class UnavailableDrainReadiness(DiagnosticDrainReadiness):
     def require_available(self):
         raise RelationViolationError(self.diagnostic.summary)
 
-    def unavailable_since(self):
+    def unavailable_since(self) -> tuple[float, ...]:
         return (self.diagnostic.recorded_at,)
 
 
