@@ -10,7 +10,9 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Annotated, ClassVar
 
 from .activity import ObservedActivity
+from .channel_targets import CommandTarget
 from .child_process import ProcessIdentity, ProcessState
+from .coordination_session import NativeBoundary
 from .errors import RelationViolationError
 from .field_codec import (
     NullMember,
@@ -22,8 +24,11 @@ from .field_codec import (
     boundary_decoder,
 )
 from .goal_presentation import RunningExecution
+from .input_disposition import InputDispositions
 from .lifecycle_capability import Executing, LifecycleCapability
 from .locked_store import DurableFile, JsonDocument, PatternFile
+from .message_reference import MessageReference
+from .read_basis import ChannelConversation, DMConversation
 from .reported_turn import NoReportedTurn, ReportedTurn, ReportedTurnState
 from .routing import TurnRouting
 from .store_files import _store_lock
@@ -38,6 +43,7 @@ from .turn_phase import IdlePhase, PreparingPhase, TurnPhase
 
 if TYPE_CHECKING:
     from .goal_presentation import GoalExecution, GoalExecutionSource
+    from .messaging import Messaging
     from .registry_document import RegistrySnapshot
     from .threads import Thread
 
@@ -322,6 +328,12 @@ class TurnLease(ABC):
     def held(self) -> tuple[TurnLeaseFence, ...]: ...
 
     @abstractmethod
+    def answered_inputs(
+        self, messaging: Messaging, owner: Thread, target: str,
+    ) -> tuple[MessageReference, ...]:
+        """What a message from this owner to target answers."""
+
+    @abstractmethod
     def attests(self, claim_scope: int, turn_id: TurnId) -> bool:
         """This lease holds ``turn_id`` under ``claim_scope``."""
 
@@ -360,6 +372,29 @@ class NoTurnLease(NullMember, TurnLease):
     def held(self) -> tuple[TurnLeaseFence, ...]:
         return ()
 
+    def answered_inputs(
+        self, messaging: Messaging, owner: Thread, target: str,
+    ) -> tuple[MessageReference, ...]:
+        with NativeBoundary(messaging.bus) as boundary, messaging.bus.bus.reading() as source:
+            snapshot = boundary.registry
+            route = CommandTarget.named(target)
+            conversation = route.conversation_key(
+                owner.name, snapshot, ChannelConversation, DMConversation,
+            )
+            reads = messaging.bus.reads
+            document = reads.read_conversation(owner.name, conversation, snapshot)
+            cursor = reads.cursor(owner.name, snapshot, document=document)
+            references = source.delivered_unanswered(
+                owner.incarnation.require_recorded(), conversation.scope(snapshot),
+                cursor, snapshot,
+            )
+            destination = route.canonical_name(snapshot.canonical_name)
+            return tuple(
+                original.message.reference
+                for original in source.messages_for_references(references)
+                if original.message.exact_reply_target == destination
+            )
+
     def attests(self, claim_scope: int, turn_id: TurnId) -> bool:
         return False
 
@@ -394,6 +429,15 @@ class TurnLeaseFence(TurnFence, TurnLease):
 
     def held(self) -> tuple[TurnLeaseFence, ...]:
         return (self,)
+
+    def answered_inputs(
+        self, messaging: Messaging, owner: Thread, target: str,
+    ) -> tuple[MessageReference, ...]:
+        inputs = InputDispositions(messaging.root).in_turn(self.turn_id)
+        with NativeBoundary(messaging.bus) as boundary, messaging.bus.bus.reading() as source:
+            return inputs.answered_by(
+                self, source, boundary.registry, target, privacy=boundary.privacy,
+            )
 
     def attests(self, claim_scope: int, turn_id: TurnId) -> bool:
         return self.can_attest(claim_scope) and self.turn_id == turn_id
