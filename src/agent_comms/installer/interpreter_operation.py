@@ -239,6 +239,10 @@ class BackupRetirePhase(InstallPhase):
     """Remove old rollback backups after acceptance."""
 
 
+class RouteHoldersPhase(InstallPhase):
+    """End Toad's hold on the route and refuse any other holder before a unit stops."""
+
+
 class ServicesPhase(InstallPhase):
     """Stop or start host services."""
 

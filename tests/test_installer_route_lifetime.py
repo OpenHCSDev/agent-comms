@@ -4,7 +4,9 @@
 import errno
 import json
 import os
+import signal
 import subprocess
+import sys
 from concurrent.futures import ThreadPoolExecutor
 from threading import Event
 
@@ -28,6 +30,7 @@ from agent_comms.installer.probes.publication import SelectedRouteProbe
 from agent_comms.installer.interpreter_operation import InstalledProgram
 from agent_comms.launch_runtime import LaunchRuntime
 from agent_comms.recorded_bus import RecordedBusIdentity
+from agent_comms.store_files import StoreLockBusyError
 from bus_record_fixture import prepare_native_comms
 
 
@@ -237,3 +240,45 @@ def test_route_publication_waits_for_a_client_call_but_not_an_idle_service(
     idle = Comms(route_bus)
     with route_directory(path):
         assert idle.root == route_bus.root
+
+
+ROUTE_HOLDER = """import ctypes, fcntl, os, sys, time
+ctypes.CDLL(None).prctl(15, sys.argv[2].encode())  # PR_SET_NAME: the comm the kernel reports
+fcntl.flock(os.open(sys.argv[1], os.O_RDONLY | os.O_DIRECTORY), fcntl.LOCK_SH)
+print("held", flush=True)
+time.sleep(60)
+"""
+
+
+def route_holder(directory, program):
+    directory.mkdir(mode=0o700)
+    holder = subprocess.Popen(
+        (sys.executable, "-c", ROUTE_HOLDER, str(directory), program),
+        stdout=subprocess.PIPE, text=True)
+    assert holder.stdout.readline() == "held\n"
+    return holder
+
+
+def test_route_publication_ends_a_toad_holder(tmp_path):
+    holder = route_holder(tmp_path / "state", "toad")
+    with ThreadPoolExecutor(max_workers=1) as reaper:
+        # Toad's own shell reaps it; here the test is its parent.
+        ended = reaper.submit(holder.wait)
+        try:
+            with route_directory(tmp_path / "state" / "active-route.json"):
+                assert ended.result(timeout=5) == -signal.SIGTERM
+        finally:
+            holder.kill()
+
+
+def test_route_publication_refuses_another_holder_by_pid(tmp_path, monkeypatch):
+    monkeypatch.setattr("agent_comms.active_route.ROUTE_PUBLICATION_WAIT_SECONDS", 0.2)
+    holder = route_holder(tmp_path / "state", "agent-comms")
+    try:
+        with pytest.raises(StoreLockBusyError, match=f"PID {holder.pid}: "):
+            with route_directory(tmp_path / "state" / "active-route.json"):
+                pass
+        assert holder.poll() is None
+    finally:
+        holder.kill()
+        holder.wait()
