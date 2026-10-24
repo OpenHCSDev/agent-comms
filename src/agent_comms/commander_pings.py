@@ -87,6 +87,9 @@ class CommanderUpdate(TaskAttachment, declared_name=None):
     not_applied: tuple[str, ...] = field(default=(), kw_only=True)
     role: ClassVar[MessageRole]
 
+    def commander_update(self, commander: ThreadIncarnation) -> CommanderUpdate | None:
+        return self if self.commander == commander else None
+
     @abstractmethod
     def body(self, previous: CommanderUpdate | None) -> str: ...
 
@@ -122,11 +125,7 @@ class CommanderUpdate(TaskAttachment, declared_name=None):
         if not messages:
             return None
         message, = messages
-        # Ordinary messages carry no commander-observation evidence.
-        update = message.task
-        if not isinstance(update, CommanderUpdate):
-            return None
-        return update if update.commander == commander else None
+        return message.task.commander_update(commander)
 
     @classmethod
     def derive(cls, commander: ThreadIncarnation, states: tuple[UnitState, ...],
