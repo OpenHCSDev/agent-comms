@@ -11,7 +11,7 @@ from functools import cached_property
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from agent_comms.field_codec import GoalId
+from agent_comms.field_codec import GoalId, GoalWaitId
 from .agent_activity import AgentActivity
 from .coordination_errors import StaleFence
 from .errors import RelationViolationError, UnregisteredThreadError
@@ -397,7 +397,7 @@ class Goals:
             return GoalSnapshot(goal, source.execution())
         return GoalSnapshot(owner.goal, IdleGoalExecution())
 
-    def consume_goal_wait(self, name: str, wait_id: str) -> bool:
+    def consume_goal_wait(self, name: str, wait_id: GoalWaitId) -> bool:
         """Consume the exact wait after reserving its original attempt."""
         goal = self.registry.require(name).goal.active()
         return goal.clear_wait(self.waits, wait_id=wait_id)

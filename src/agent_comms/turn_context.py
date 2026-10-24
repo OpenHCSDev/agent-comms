@@ -34,6 +34,7 @@ from .native_session_reopen import NativeSessionIdentity
 from .peer_relevance import AlwaysListed, GoalShown, PeerRelevance
 from .thread_identity import ThreadIncarnation, TurnIdentity
 from .tool_result import DeclaredReply
+from .turn_item import PiRequestKey
 
 if TYPE_CHECKING:
     from .context_store import RecordedContextState
@@ -1224,31 +1225,31 @@ class DispatchRequest(SubclassUnion, affix="DispatchRequest"):
     """
 
     @abstractmethod
-    def names(self, request_id: str) -> bool: ...
+    def names(self, request_id: PiRequestKey) -> bool: ...
 
     @abstractmethod
-    def require_id(self) -> str: ...
+    def require_id(self) -> PiRequestKey: ...
 
 
 @dataclass(frozen=True)
 class UnobservedDispatchRequest(NullMember, DispatchRequest):
     """Previews and captures that never observed dispatch."""
 
-    def names(self, request_id: str) -> bool:
+    def names(self, request_id: PiRequestKey) -> bool:
         return False
 
-    def require_id(self) -> str:
+    def require_id(self) -> PiRequestKey:
         raise ValueError("Original request ID was not captured by this historical context")
 
 
 @dataclass(frozen=True)
 class ObservedDispatchRequest(SingleFieldValue, DispatchRequest):
-    request_id: str
+    request_id: PiRequestKey
 
-    def names(self, request_id: str) -> bool:
+    def names(self, request_id: PiRequestKey) -> bool:
         return self.request_id == request_id
 
-    def require_id(self) -> str:
+    def require_id(self) -> PiRequestKey:
         return self.request_id
 
 
@@ -1278,7 +1279,9 @@ class ContextManifest:
         raise ValueError("Source is outside the original recorded context")
 
     @classmethod
-    def for_request(cls, history, turn: RecordedContextTurn, request_id: str) -> ContextManifest:
+    def for_request(
+        cls, history, turn: RecordedContextTurn, request_id: PiRequestKey
+    ) -> ContextManifest:
         """Select the original indexed publication, never today's preview."""
         selected = tuple(record for record in history
                          if record.turn == turn and record.request_id.names(request_id))

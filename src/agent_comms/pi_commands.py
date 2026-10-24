@@ -9,7 +9,6 @@ from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Annotated, ClassVar
-from uuid import uuid4
 
 from pydantic import JsonValue
 
@@ -47,6 +46,7 @@ from .pi_payloads import (
     UnknownData,
 )
 from .turn_context import InputContributionCoordinates, SegmentManifest
+from .turn_item import PiRequestKey
 
 if TYPE_CHECKING:
     from .backend import TurnSession
@@ -78,10 +78,10 @@ class PiCommand(DeclaredFamily):
     # The answering child appends to its own session file (a retained child stays current).
     writes_session: ClassVar[bool] = False
     id: Annotated[PiRequestId, WireAbsentNone()] = field(
-        default_factory=lambda: RequestId(uuid4().hex)
+        default_factory=lambda: RequestId(PiRequestKey.fresh())
     )
 
-    def require_id(self) -> str:
+    def require_id(self) -> PiRequestKey:
         """Operations that correlate an input require the command's actual ID."""
         return self.id.require()
 

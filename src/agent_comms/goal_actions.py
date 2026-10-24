@@ -9,7 +9,7 @@ from dataclasses import dataclass, field, replace
 from typing import TYPE_CHECKING, Annotated, ClassVar, Self
 from uuid import uuid4
 
-from agent_comms.field_codec import GoalId
+from agent_comms.field_codec import GoalId, GoalWaitId
 from agent_comms import field_codec
 from agent_comms.goals import (
     Goal,
@@ -377,7 +377,7 @@ class PreparedStandbyGoalAction(StandbyGoalAction, declared_name=None):
         ctx.goals.waits.record(
             RecordedGoalWait(
                 goal.id,
-                uuid4().hex,
+                GoalWaitId.mint(),
                 goal.revision,
                 review.through_seq,
                 wait_targets,

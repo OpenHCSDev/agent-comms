@@ -39,6 +39,7 @@ from .recorded_time import GeneratedTimestamp
 from .routing import TurnRouting
 from .transcript_events import ImportedMessage, NoticeTranscript, TranscriptEvent
 from .transcript_routes import InputDisplay
+from .turn_item import PiSessionId
 
 
 @dataclass(frozen=True)
@@ -488,6 +489,8 @@ class NativeEvidenceScope(ExitStack):
 
 @dataclass(frozen=True, kw_only=True)
 class SessionEntry(NativeEntry):
+    id: PiSessionId | None = None
+
     @property
     def child_parent(self) -> object:
         return FieldCodec.encode(self.parent_id)
@@ -495,7 +498,7 @@ class SessionEntry(NativeEntry):
     version: int | None = None
     cwd: Annotated[str | PiOmitted, WireOmitDefault()] = PiOmitted()
     parent_session: Annotated[
-        str | PiOmitted, WireName("parentSession"), WireOmitDefault()
+        PiSessionId | PiOmitted, WireName("parentSession"), WireOmitDefault()
     ] = PiOmitted()
 
     @classmethod

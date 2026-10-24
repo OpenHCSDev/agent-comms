@@ -12,7 +12,6 @@ import fcntl
 import json
 import os
 import sys
-import uuid
 from collections.abc import Iterator, Mapping
 from contextlib import contextmanager
 from dataclasses import dataclass, replace
@@ -26,7 +25,7 @@ from .coordination_errors import CoordinationError
 from .coordinator import Coordination
 from .declared_family import DeclaredFamily
 from .errors import RelationViolationError
-from .field_codec import FieldCodec, WireOmitDefault
+from .field_codec import FieldCodec, RestartId, WireOmitDefault
 from .launch_runtime import LaunchRuntime, RestartEnvironment
 from .lifecycle_capability import Active, LifecycleCapability, Pending
 from .locked_store import DurableFile, PatternFile, RuntimeFile
@@ -178,7 +177,7 @@ class QueuedRestart(DurableFile, PatternFile):
     def matching_in(cls, root: Path) -> frozenset[Path]:
         return frozenset(path for path in root.rglob(str(cls.pattern())) if path.is_file())
 
-    id: str
+    id: RestartId
     selection: OwnerRestartSelection
     target: RestartTarget
     state: RestartState
@@ -240,7 +239,7 @@ class RestartQueue:
         directory.mkdir(mode=0o700, exist_ok=True)
         PrivateDirectoryRole.require(
             directory.lstat(), RelationViolationError("Settled restart directory must be private"))
-        return directory / f'{uuid.UUID(record.id).hex}.json'
+        return directory / f'{record.id}.json'
 
     def read(self, path: Path) -> QueuedRestart:
         if path.is_symlink():
@@ -312,7 +311,7 @@ def enqueue(comms: Comms, selection: OwnerRestartSelection, *,
             queue.save(result)
         else:
             result = QueuedRestart(
-                uuid.uuid4().hex, selection, target, PendingRestart()
+                RestartId.mint(), selection, target, PendingRestart()
             )
             queue.save(result)
     # A new watcher can safely race an existing watcher: flock permits one runner.

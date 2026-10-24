@@ -30,6 +30,7 @@ from .turn_context import (
 )
 
 from .typed_table import StoreRows, Column, DurableStore, Generated, Index, SingletonRow, TypedTable
+from .turn_item import PiSessionId
 
 
 @dataclass(frozen=True)
@@ -147,7 +148,7 @@ class ContextStoreInfo(ContextStoreRows, ContextSourceState, SingletonRow):
 
 @dataclass(frozen=True)
 class ContextEntry(ContextStoreRows, TypedTable):
-    session_id: Annotated[str, Column(primary_key=True)]
+    session_id: Annotated[PiSessionId, Column(primary_key=True)]
     session_file: Annotated[str, Column(primary_key=True)]
     entry_id: Annotated[str, Column(primary_key=True)]
     manifest: SegmentManifest

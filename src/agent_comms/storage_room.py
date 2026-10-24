@@ -14,11 +14,11 @@ from contextlib import asynccontextmanager, contextmanager
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Annotated, ClassVar
-from uuid import uuid4
 
 from .activity import ActivityState
 from .child_process import ProcessIdentity
 from .declared_family import DeclaredFamily
+from .field_codec import RoomTicket
 from .repo import Checkout
 from .thread_identity import ThreadIncarnation
 from .typed_table import Column, DurableStore, JsonStorage, StoreRows, TypedTable
@@ -97,7 +97,7 @@ class WorkPeak(RoomLedgerRows, TypedTable):
 
 @dataclass(frozen=True)
 class RoomClaim(RoomLedgerRows, TypedTable):
-    ticket: Annotated[str, Column(primary_key=True)]
+    ticket: Annotated[RoomTicket, Column(primary_key=True)]
     root: str
     unit: Annotated[ThreadIncarnation, Column(storage=JsonStorage)]
     process: Annotated[ProcessIdentity, Column(storage=JsonStorage)]
@@ -118,7 +118,7 @@ class RoomLedger(DurableStore):
             claims = RoomClaim.select(db)
         return tuple(claim.ticket for claim in claims if not claim.process.alive())
 
-    def release(self, ticket, peak=None):
+    def release(self, ticket: RoomTicket, peak=None):
         with self.writing() as db:
             claim = RoomClaim.one(db, ticket=ticket)
             if claim is not None and peak is not None:
@@ -211,7 +211,7 @@ class NoRoomNeeded(RoomReservation):
 @dataclass
 class MeasuredRoomReservation(RoomReservation):
     rule: RoomAllocation
-    ticket: str
+    ticket: RoomTicket
     measurement: WorkMeasurement
 
     def finish(self, *, completed=True):
@@ -245,7 +245,7 @@ class RoomAllocation:
     def room_floor(self):
         return RoomNeed(int(self.memory_gib * 2**30), int(self.floor_gib * 2**30))
 
-    def _admit(self, ticket):
+    def _admit(self, ticket: RoomTicket):
         ledger = self.room_ledger
         # OS reads and /proc traversal never hold the writer transaction.
         free = self.free_room()
@@ -282,7 +282,7 @@ class RoomAllocation:
         process = process or ProcessIdentity.capture(os.getpid())
         ledger = self.room_ledger
         await asyncio.to_thread(ledger.root.mkdir, parents=True, exist_ok=True)
-        ticket = uuid4().hex
+        ticket = RoomTicket.mint()
         claim = RoomClaim(ticket, str(root), thread.incarnation,
                           process, work, WaitingRoomPhase(), time.time())
         admitted = False

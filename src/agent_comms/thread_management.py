@@ -12,7 +12,6 @@ from contextlib import contextmanager
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import TYPE_CHECKING, Self
-from uuid import uuid4
 
 from agent_comms.coordination_errors import CoordinationError
 
@@ -49,6 +48,7 @@ from .thread_owned_state import ThreadOwnedState
 from .thread_text import ForkedParent, GivenThreadText, NoThreadText, ThreadText
 from .tool_result import ToolResult
 from .threads import KeptModel, ModelChoice, NextTurnConfiguration, Thread, current_thread
+from .turn_item import PiSessionId
 
 
 @dataclass(frozen=True, slots=True)
@@ -241,7 +241,7 @@ class ThreadManagement:
         project = Path(directory).expanduser().resolve()
         if not project.is_dir():
             raise ValueError("The imported project does not exist locally; supply --worktree.")
-        session_path = ImportedSessionWriter.path_in(self.root, session_id=uuid4().hex)
+        session_path = ImportedSessionWriter.path_in(self.root, session_id=PiSessionId.fresh())
         thread = model.configured(Thread(
             name,
             tags,

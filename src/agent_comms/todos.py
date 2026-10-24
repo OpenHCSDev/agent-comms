@@ -58,9 +58,10 @@ from agent_comms.coordination_session import NativeBoundary
 from agent_comms.declared_family import DeclaredFamily
 from agent_comms.errors import MissingSourceLine, ToolRefusedError
 from agent_comms.field_codec import (
-    GoalId,
     FieldCodec,
     GitCommitText,
+    GoalId,
+    HuntId,
     MalformedRecord,
     MessageId,
     NullMember,
@@ -2727,7 +2728,7 @@ class TodoStoreRows(StoreRows):
 
 @dataclass(frozen=True)
 class HuntRecord(TodoStoreRows, TypedTable):
-    id: Annotated[str, Column(primary_key=True)]
+    id: Annotated[HuntId, Column(primary_key=True)]
     commander: Annotated[ThreadIncarnation, Column(index=True)]
     hunt: Hunt
 
@@ -4369,7 +4370,7 @@ class TodoStore(OwnerRequestStore):
 
     def record_hunt(self, commander: ThreadIncarnation, hunt: Hunt) -> HuntRecord:
         hunt.require_commander(self, commander)
-        recorded = HuntRecord(uuid4().hex, commander, hunt)
+        recorded = HuntRecord(HuntId.mint(), commander, hunt)
         with self.writing() as db:
             recorded.upsert(db)
         return recorded

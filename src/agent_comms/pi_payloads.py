@@ -20,7 +20,6 @@ from typing import (
     Literal,
     Self,
 )
-from uuid import uuid4
 
 from pydantic import JsonValue
 
@@ -51,6 +50,7 @@ from .goals import GoalDeclaration
 from .lifecycle_capability import Successful
 from .native_file_artifact import NativeFileArtifact
 from .native_session_reopen import NativeSessionIdentity
+from .turn_item import PiRequestKey
 from .pi_counts import NonnegativePiCount, PiCount, TotalPiCount, UnreportedCount
 from .pi_vocabulary import (
     NoThinkingOverride,
@@ -153,10 +153,10 @@ class ReportedFlag(PiReported[bool]):
 
 
 @dataclass(frozen=True)
-class RequestId(PiReported[str]):
+class RequestId(PiReported[PiRequestKey]):
     """The id a command carries and Pi echoes on the response that answers it."""
 
-    value: str
+    value: PiRequestKey
 
     def track_in(
         self, pending: PendingRequests, owner: type[PiCommand], command: PiCommand,
@@ -179,7 +179,7 @@ class AnonymousRequest(PiOmitted):
     def track_in(
         self, pending: PendingRequests, owner: type[PiCommand], command: PiCommand,
     ) -> Future[Response]:
-        return pending.add(owner, uuid4().hex, request=command)
+        return pending.add(owner, PiRequestKey.fresh(), request=command)
 
     def release_from(self, pending: PendingRequests, owner: type[PiCommand]) -> None:
         """The anonymous entry is keyed by a private token nobody else holds."""
@@ -189,7 +189,7 @@ class AnonymousRequest(PiOmitted):
     ) -> PiCommand | None:
         return pending.take_anonymous(owner, response)
 
-    def require(self) -> str:
+    def require(self) -> PiRequestKey:
         raise ValueError("A correlated native input requires its command ID")
 
 

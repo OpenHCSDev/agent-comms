@@ -14,7 +14,7 @@ from . import input_attempt
 from .acp_extension import InputStartedUpdate, NoQueueScope, UnidentifiedInputStarted
 from .agent_backend import BusyInputPolicy, SteerInputPolicy
 from .channel_input_batch import InputBatch, SingleInputBatch
-from .field_codec import InputId, TurnId
+from .field_codec import GoalWaitId, InputId, TurnId
 from .input_attempt import InputAlreadyCleared
 from .input_key import InputKey
 from .messages import Message
@@ -242,7 +242,7 @@ class NoInputDependency(InputDependency):
 
 @dataclass(frozen=True)
 class CapturedInputDependency(InputDependency):
-    wait_id: str
+    wait_id: GoalWaitId
 
     def current(self, wait: GoalWait) -> bool:
         return wait.matches_id(self.wait_id)

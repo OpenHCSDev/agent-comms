@@ -10,6 +10,7 @@ from .child_process import ProcessIdentity
 from .field_codec import InputId
 from .pi_counts import PiCount, UnreportedCount
 from .pi_payloads import PiModel, PiPayload, UnreportedModel
+from .turn_item import PiRequestKey, PiSessionId
 
 
 @dataclass(frozen=True, slots=True)
@@ -19,8 +20,8 @@ class UnreportedText(field_codec.NullMember):
 
 @dataclass(frozen=True)
 class RequestProgress(PiPayload):
-    request_id: Annotated[str, field_codec.WireName("requestId")]
-    session_id: Annotated[str, field_codec.WireName("sessionId")]
+    request_id: Annotated[PiRequestKey, field_codec.WireName("requestId")]
+    session_id: Annotated[PiSessionId, field_codec.WireName("sessionId")]
     input_id: Annotated[InputId, field_codec.WireName("inputId")]
     started_at_ms: Annotated[int, field_codec.WireName("startedAtMs")]
     observed_at_ms: Annotated[int, field_codec.WireName("observedAtMs")]

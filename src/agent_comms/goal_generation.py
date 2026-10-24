@@ -9,6 +9,7 @@ from agent_comms.goal_turn_permit import GoalTurnPermit, NoLaunchPermit
 
 from .declared_family import DeclaredFamily
 from .errors import UnresolvedAttemptError
+from .field_codec import AttemptId
 from .goal_attempt_phase import (
     FailedAttempt,
     GoalAttemptPhase,
@@ -63,7 +64,7 @@ class GenerationState(DeclaredFamily, LifecycleState, affix="Generation"):
     ) -> GoalTurnPermit:
         return NoLaunchPermit()
 
-    def validate_attempt(self, attempt_id: str | None) -> None:
+    def validate_attempt(self, attempt_id: AttemptId | None) -> None:
         if not attempt_id:
             raise ValueError("This generation requires an attempt identity.")
 
@@ -111,7 +112,7 @@ class ReadyGeneration(GenerationState):
     def require_ready(self) -> None:
         pass
 
-    def validate_attempt(self, attempt_id: str | None) -> None:
+    def validate_attempt(self, attempt_id: AttemptId | None) -> None:
         if attempt_id is not None:
             raise ValueError("READY cannot carry an attempt identity.")
 
@@ -197,6 +198,6 @@ class CompletedGeneration(Complete, Terminal, GenerationState):
 
 @dataclass(frozen=True)
 class CancelledGeneration(Terminal, GenerationState):
-    def validate_attempt(self, attempt_id: str | None) -> None:
+    def validate_attempt(self, attempt_id: AttemptId | None) -> None:
         if attempt_id is not None and not attempt_id:
             raise ValueError("A retired attempt identity must be nonempty.")

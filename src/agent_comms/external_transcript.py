@@ -16,10 +16,9 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from sqlite3 import Connection
 from typing import TYPE_CHECKING, Annotated, ClassVar
-from uuid import uuid4
 
 from .declared_family import DeclaredFamily
-from .field_codec import FieldCodec, InputId, ThreadLookup
+from .field_codec import FieldCodec, InputId, PageRequestId, ThreadLookup
 from .locked_store import RegistryFile
 from .native_transcript import RecordsCut
 from .recorded_time import EventTime, GeneratedTimestamp
@@ -27,7 +26,7 @@ from .thread_identity import ThreadIncarnation
 from .tool_declaration import ToolDeclaration
 from .transcript_events import ToolStartTranscript, TranscriptEvent, TurnDigest
 from .transcript_sources import TranscriptDraft, TranscriptRecord, TranscriptSource
-from .turn_item import NativeTurnId
+from .turn_item import NativeItemId, NativeTurnId
 from .typed_table import (
     Column,
     DurableStore,
@@ -85,14 +84,14 @@ class EarlierPage(ExternalPage):
         with transcript.writing() as connection:
             if transcript.oldest(connection) != row:
                 return True  # The read retries against the newly published prefix.
-            row.continue_with(connection, RequestedEarlierPage(self.cursor, uuid4().hex))
+            row.continue_with(connection, RequestedEarlierPage(self.cursor, PageRequestId.mint()))
         return True
 
 
 @dataclass(frozen=True)
 class RequestedEarlierPage(EarlierPage):
     """Demand is a transition of the stored continuation, not a second cursor store."""
-    request_id: str
+    request_id: PageRequestId
 
     def request_page(self, transcript, row) -> bool:
         return True  # A deferred read keeps the request without another write.
@@ -133,7 +132,7 @@ class NoItems:
 class ExternalPageRow(TypedRow):
     thread: Annotated[str, Column(primary_key=True)]
     turn_id: Annotated[NativeTurnId, Column(primary_key=True)]
-    item_id: Annotated[str, Column(primary_key=True)]
+    item_id: Annotated[NativeItemId, Column(primary_key=True)]
     seq: int
     earlier: ExternalPage = field(default_factory=NoEarlierPage, kw_only=True)
 
@@ -266,7 +265,7 @@ class DraftRow(ExternalTranscriptRows, TypedTable, TranscriptDraft, declared_nam
 
     thread: Annotated[str, Column(primary_key=True)]
     turn_id: NativeTurnId
-    item_id: str
+    item_id: NativeItemId
     events: tuple[TranscriptEvent, ...]
 
     def external_row(self):
@@ -470,7 +469,7 @@ class ExternalTranscript(TranscriptSource, DurableStore):
             ).fetchone()[0]
         return GeneratedTimestamp.decode(timestamp)
 
-    def finish(self, *, turn_id: NativeTurnId, item_id: str,
+    def finish(self, *, turn_id: NativeTurnId, item_id: NativeItemId,
                events: tuple[TranscriptEvent, ...]) -> None:
         """Append a finished item once; an item with no presentation adds nothing."""
         with self.writing() as connection:
@@ -526,7 +525,7 @@ class ExternalTranscript(TranscriptSource, DurableStore):
                         emit(frame)
                 previous = current
 
-    def draft(self, *, turn_id: NativeTurnId, item_id: str,
+    def draft(self, *, turn_id: NativeTurnId, item_id: NativeItemId,
               events: tuple[TranscriptEvent, ...]) -> None:
         with self.writing() as connection:
             DraftRow(self.lookup, turn_id, item_id, events).upsert(connection)
@@ -585,7 +584,7 @@ class TurnDraftPublication(DraftPublication, StoreWriter):
             yield self.connection
 
     def begin_message(self, timestamp: float) -> None:
-        self.item_id = uuid4().hex
+        self.item_id = NativeItemId.fresh()
         self.timestamp = timestamp
 
     def publish(self, parts: Iterable[str]) -> None:

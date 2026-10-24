@@ -59,6 +59,7 @@ from .typed_table import (
     WriteOnceColumns,
     sql_literal,
 )
+from .turn_item import PiSessionId
 
 if TYPE_CHECKING:
     from .native_pi import NativeContextProof
@@ -276,7 +277,7 @@ class NativeRuntimeInput(
             nullable=True,
         ),
     ] = field(default_factory=UnrecordedNativeClaim)
-    session_id: str | None = None
+    session_id: PiSessionId | None = None
     session_file: str | None = None
     session_entry_id: Annotated[NativeColumn, NativeContext(str), Column(storage=TextStorage, nullable=True)] = UnrecordedNativeColumn()
     session_entry_start: Annotated[
@@ -453,7 +454,9 @@ class CurrentNativeCursor(
         ),
         NativeContext(type[NativeInputExecution]),
     ]
-    session_id: Annotated[NativeColumn, NativeContext(str), Column(storage=TextStorage, nullable=True)]
+    session_id: Annotated[
+        NativeColumn, NativeContext(PiSessionId), Column(storage=TextStorage, nullable=True)
+    ]
     request_generation: Annotated[NativeColumn, NativeContext(int), Column(storage=IntegerStorage, nullable=True)]
 
     checks = (

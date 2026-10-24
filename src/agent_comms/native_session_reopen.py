@@ -10,6 +10,7 @@ from typing import Annotated, TYPE_CHECKING
 from .field_codec import MalformedRecord, boundary_decoder, WireName
 from abc import ABC, abstractmethod
 from .private_path import FileRevision
+from .turn_item import PiSessionId
 
 if TYPE_CHECKING:
     from .native_child import PiSessionChild
@@ -43,7 +44,7 @@ class NoSessionRetention(SessionRetention):
 class NativeSessionIdentity(SessionRetention):
     """SessionManager's observed saved-session identity."""
 
-    session_id: Annotated[str, WireName("sessionId")]
+    session_id: Annotated[PiSessionId, WireName("sessionId")]
     session_file: Annotated[str, WireName("sessionFile")]
 
     def __post_init__(self):
