@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # One checkout owns the stack paths and every native-package import.
 stack_root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)
+native_root=$stack_root/native
 repo_root=$(cd -- "$stack_root/.." && pwd)
 python="$stack_root/.venv/bin/python"
 

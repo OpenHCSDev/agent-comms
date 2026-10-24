@@ -1,6 +1,8 @@
 """The source inventory and pinned identity of a native package build."""
 
 import hashlib
+import json
+import os
 import platform
 import subprocess
 import sys
@@ -26,31 +28,62 @@ def built_tree_pin(manifest: Path) -> str:
 
 
 @dataclass(frozen=True)
+class PackageFile:
+    source: str
+    target: str
+
+
+@dataclass(frozen=True)
+class McpClientSource:
+    root: str
+    install: tuple[str, ...]
+    files: tuple[str, ...]
+    trees: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class NativeRepositoryInputs:
+    package_files: tuple[PackageFile, ...]
+    mcp_client: McpClientSource
+    compaction_instruction: str
+
+    @classmethod
+    def of(cls, root: Path) -> "NativeRepositoryInputs":
+        data = json.loads((root / "stack/native/repository-inputs.json").read_text())
+        if data["version"] != 1:
+            raise ValueError("Unsupported native repository inputs version")
+        mcp = data["mcp_client"]
+        return cls(
+            tuple(PackageFile(**item) for item in data["package_files"]),
+            McpClientSource(mcp["root"], tuple(mcp["install"]),
+                            tuple(mcp["files"]), tuple(mcp["trees"])),
+            data["compaction_instruction"],
+        )
+
+    def pathspecs(self) -> tuple[str, ...]:
+        return (
+            *(item.source for item in self.package_files),
+            *(f"{self.mcp_client.root}/{name}" for name in
+              (*self.mcp_client.install, *self.mcp_client.files, *self.mcp_client.trees)),
+            self.compaction_instruction,
+        )
+
+
+@dataclass(frozen=True)
 class NativeBuildInputs:
     root: Path
 
     def paths(self) -> tuple[Path, ...]:
-        """Inventory source families, never a second roster of patch filenames."""
-        families = (
-            ("stack", {"", ".py", ".mjs", ".ts", ".patch", ".json", ".sha256"}),
-            ("experiments/pi-context-proof", {".sh", ".patch"}),
-            ("extensions", {".ts", ".mjs", ".js", ".json", ".md"}),
-            ("src/agent_comms", {".mjs"}),
-            ("src/agent_comms/instructions", {".md"}),
-        )
-        paths: set[Path] = set()
-        for directory, suffixes in families:
-            for parent, directories, files in (self.root / directory).walk():
-                directories[:] = [
-                    name
-                    for name in directories
-                    if not name.startswith(".") and name not in {"node_modules", "__pycache__"}
-                ]
-                for name in files:
-                    path = parent / name
-                    if not name.startswith(".") and path.suffix in suffixes:
-                        paths.add(path)
-        return tuple(sorted(paths - {self.root / "stack/pi-native.sha256"}))
+        """The files the recipe in stack/native reads: that directory and the repository inputs it declares."""
+        environment = dict(os.environ)
+        for name in ("GIT_DIR", "GIT_INDEX_FILE", "GIT_WORK_TREE"):
+            environment.pop(name, None)
+        tracked = subprocess.run(
+            ["git", "-C", str(self.root), "ls-files", "-z", "--cached", "--",
+             "stack/native", *NativeRepositoryInputs.of(self.root).pathspecs()],
+            env=environment, check=True, capture_output=True, text=True,
+        ).stdout
+        return tuple(sorted(self.root / path for path in tracked.split("\0") if path))
 
     def digest(self, manifest: Path) -> str:
         digest = hashlib.sha256()
@@ -75,7 +108,7 @@ class NativeBuildInputs:
         if dependency_package:
             dependency_digest = subprocess.check_output(
                 [
-                    str(self.root / "stack/bin/native-source"),
+                    str(self.root / "stack/native/native-source"),
                     sys.executable,
                     "digest",
                     dependency_package,
