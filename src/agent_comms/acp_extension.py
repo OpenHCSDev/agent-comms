@@ -44,6 +44,7 @@ from .input_origin import HumanInputOrigin, InputOrigin, UnattributedInputOrigin
 from .native_runtime_input import CurrentNativeCursor
 from .owner_protocol import IncompatibleOwner
 from .pi_payloads import McpLiveAcknowledgement
+from .reported_turn import ReportedTurn, ReportedTurnState
 from .routing import MessageRoute
 from .thread_identity import ClaimScoped, ThreadIncarnation
 from .tool_result import DeclaredReply
@@ -63,6 +64,9 @@ class AgentCommsUpdate(DeclaredFamily, affix="Update"):
 
     def for_session(self, session_id: str) -> AgentCommsUpdate:
         return self
+
+    def matches_turn(self, turn: ReportedTurnState) -> bool:
+        return True
 
     def acp_chunk(self) -> AgentMessageChunk:
         """Carry this declared observation in its original empty ACP envelope."""
@@ -655,6 +659,9 @@ class InputDeliveryChangedUpdate(AgentCommsUpdate):
 class McpClientAcknowledgementUpdate(AgentCommsUpdate, declared_name="mcp_client_receipt"):
     turn_id: TurnId
     acknowledgement: Annotated[McpLiveAcknowledgement, WireName("receipt")]
+
+    def matches_turn(self, turn: ReportedTurnState) -> bool:
+        return ReportedTurn(self.turn_id).reports(turn)
 
 
 class CommsRequest(DeclaredFamily, affix="Request"):
