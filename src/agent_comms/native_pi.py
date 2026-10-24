@@ -17,8 +17,6 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Annotated, Literal
 
-from pydantic import JsonValue
-
 from agent_comms.participant_identity import ParticipantIdentity
 
 from .errors import RelationViolationError
@@ -231,22 +229,6 @@ class NativeContextJournal(
     type: Literal["context_committed"]
 
     indexes = (Index(("request_generation",)), Index(("session_id",)))
-
-    @classmethod
-    def native_contract(cls) -> dict[str, JsonValue]:
-        """Generate the native writer's SQLite contract from this declaration."""
-        table = cls.declared_name
-        return {
-            "objects": cls.schema_objects(),
-            "columns": [
-                {"name": plan.name, "wire": plan.key} for plan in FieldCodec.field_plans(cls)
-            ],
-            "insert": cls.insertion_statement(),
-            "head": f"SELECT COALESCE(MAX(request_generation),0) AS generation FROM {table}",
-            "session": f"SELECT session_id AS id FROM {table} ORDER BY session_id LIMIT 1",
-            "current": f"SELECT input_id,session_entry_id FROM {table} "
-            f"WHERE request_generation=(SELECT MAX(request_generation) FROM {table})",
-        }
 
     @classmethod
     @contextmanager

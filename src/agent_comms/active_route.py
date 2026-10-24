@@ -267,17 +267,6 @@ def acquire_exclusive_route_lock(directory: int) -> None:
     UNBOUNDED_CONTENTION.acquire(directory, Platform.current(), mode=ExclusiveLock())
 
 
-def publish_active_route(route: ActiveRoute, path: Path | None = None) -> None:
-    """Atomically install the first private default after owner migration.
-
-    Existing routes are never overwritten by a stale migration. Publication
-    uses the same no-replace hardlink pattern as the private store initializer;
-    a reader fails closed during the brief two-link staging window.
-    """
-    with _route_directory(route, path) as (path, directory):
-        _publish_active_route_locked(route, path, directory)
-
-
 def route_new_bus(route: ActiveRoute, path: Path) -> str:
     """Route to this bus unless the file already selects one: install's answer and the
     owner's repair. A replaced file is kept beside the new one under a backup name, so a

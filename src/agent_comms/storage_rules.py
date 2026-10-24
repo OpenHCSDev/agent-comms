@@ -706,10 +706,6 @@ class GitInvocation:
     cwd: Path
     directories: tuple[Path, ...]
 
-    @property
-    def writes_source(self) -> bool:
-        return bool(self.args) and self.args[0] in GitWriteOperation
-
 
 class ForbidsCommands(ShellProgram):
     forbidden = ((),)
