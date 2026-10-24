@@ -675,7 +675,7 @@ class PullRequests:
 
     def claimed_heads(self, todo: Todo) -> Iterator[tuple[OrderClaim, PullRequest]]:
         """Join the current claim to its open PR in this same GitHub read."""
-        for claim in todo.order.commander_claims():
+        for claim in todo.order.owed_claims():
             for request in self.listed(claim.pull_request.repo, UnmergedListedPullRequest, todo):
                 if request.number == claim.pull_request.number:
                     yield claim, request
@@ -1653,6 +1653,10 @@ class ProblemOrder(LifecycleCapability, DeclaredFamily, StorySource, affix="Prob
     def commander_claims(self) -> tuple[OrderClaim, ...]:
         return ()
 
+    def owed_claims(self) -> tuple[OrderClaim, ...]:
+        """Claims that still await the commander's verdict."""
+        return ()
+
     def closing_artifact(self) -> str:
         raise TodoError("Only a delivered order has closing evidence.")
 
@@ -1848,6 +1852,9 @@ class CheckedProblemOrder(ProblemOrder, declared_name=None):
 
     def claimed(self, claim: OrderClaim) -> ClaimedProblemOrder:
         raise TodoError("Only a pending order can be claimed by its holder.")
+
+    def under_review(self, record: OrderHeadReviewRecord) -> ReviewingProblemOrder:
+        raise TodoError("Only a claimed order goes under review.")
 
     def sent_back(self, reason: StrikeReason) -> CheckedProblemOrder:
         return self
@@ -2347,7 +2354,10 @@ class OrderClaim:
 @dataclass(frozen=True, kw_only=True)
 class ClaimedProblemOrder(BranchPointCheck, DeliverableProblemOrder):
     claim: OrderClaim
-    line: ClassVar[str] = "Claimed by the unit, waiting on the commander's verdict"
+
+    @property
+    def line(self) -> str:
+        return "Claimed by the unit, waiting on the commander's verdict"
 
     @property
     def work_commit(self) -> str:
@@ -2379,6 +2389,31 @@ class ClaimedProblemOrder(BranchPointCheck, DeliverableProblemOrder):
                     revision=todo.revision + 1,
                 ),
             )
+        return ()
+
+    def owed_claims(self) -> tuple[OrderClaim, ...]:
+        return (self.claim,)
+
+    def under_review(self, record: OrderHeadReviewRecord) -> ReviewingProblemOrder:
+        if not record.request.head.startswith(self.claim.head):
+            raise TodoError(
+                f"Review head {record.request.head} does not match claimed head {self.claim.head}."
+            )
+        return self.copy_as(ReviewingProblemOrder, review=record)
+
+
+@dataclass(frozen=True, kw_only=True)
+class ReviewingProblemOrder(ClaimedProblemOrder):
+    """A claim a named reviewer is reading at its exact head; nothing is owed until the verdict."""
+
+    review: OrderHeadReviewRecord
+
+    @property
+    def line(self) -> str:
+        return (f"Under review by {self.review.actor.name} on #{self.review.request.pr} "
+                f"at {self.review.request.head[:9]}")
+
+    def owed_claims(self) -> tuple[OrderClaim, ...]:
         return ()
 
 
@@ -3165,6 +3200,17 @@ class RejectedHeadVerdict(HeadVerdict):
     def judge_order(self, current: Todo, record: OrderHeadReviewRecord) -> Todo:
         return StrikeTodo.send_back(current, record.actor, record.order.previous,
                                     self.reason, record.at, record.order.evidence)
+
+
+@dataclass(frozen=True)
+class UnderReviewHeadVerdict(HeadVerdict):
+    state = "pending"
+
+    def description(self, reviewer: str, subject: str) -> str:
+        return f"Under review by {reviewer} on {subject}"
+
+    def judge_order(self, current: Todo, record: OrderHeadReviewRecord) -> Todo:
+        return replace(current, order=current.order.checked().under_review(record))
 
 
 class HeadReviewRelation(DeclaredFamily):
