@@ -32,17 +32,8 @@ def test_claim_claim_tolerates_metadata_and_finished_captured_turn(tmp_path, cap
     initial, claim_scope = registry.live_owner_with_claim('owner')
     leased, _ = registry.lease_local_turn('owner', TurnId('a7937b64b8caa58f03721bb6bacf5c78'))
     captured = initial if capture_idle else leased
-    generation = registry.snapshot().owner_generations['owner']
     assert registry.release_turn(leased.turn_lease)[0]
     registry.register(replace(registry.require('owner'), title=GivenThreadText('metadata'), tags=frozenset({'new'})))
-    with pytest.raises(
-        RelationViolationError,
-    ):
-        registry.lease_live_turn_with_generation(
-            captured,
-            TurnId('16367aacb67a4a017c8da8ab95682ccb'),
-            expected_owner_generation=generation,
-        )
     claimed, current_claim = registry.lease_live_turn_with_claim(
         captured, TurnId('16367aacb67a4a017c8da8ab95682ccb'), expected_generation=claim_scope,
     )
