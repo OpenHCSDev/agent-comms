@@ -30,6 +30,7 @@ from agent_comms.envelope_claim_transitions import (
     UnclaimedResource, WakeClaims,
 )
 from agent_comms.errors import CommittedMessageError
+from agent_comms.field_codec import TurnId
 from agent_comms.locked_store import RegistryFile
 from agent_comms.registration import Registration
 from agent_comms.store_files import store_lock_path
@@ -44,11 +45,12 @@ from agent_comms.threads import Thread
 class ClaimBus:
     bus: Bus
     registry: Registration
+    turns: dict[str, TurnId]
 
     def scope(self, name: str, operation: str) -> NativeClaim:
         return NativeClaim(
             owner_claimed_generation=self.registry.snapshot().claim_generation(name),
-            operation_id=operation, turn_id=f"turn-{name}", input_id=f"input-{name}",
+            operation_id=operation, turn_id=self.turns[name], input_id=f"input-{name}",
         )
 
     def builder(self, name: str, transition) -> RecordBuilder:
@@ -90,14 +92,16 @@ class ClaimBus:
 def claims(tmp_path: Path) -> ClaimBus:
     root = tmp_path / "bus"
     registry = Registration(RegistryFile.path_in(root))
+    turns = {}
     for name in ("alice", "bob"):
+        turns[name] = TurnId.mint()
         registry.declare(Thread(
             name, frozenset(), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid()),
         ), RunningThreadStatus())
     bus = Bus.install(Bus.path_in(root))
     with bus.writing():
         pass
-    return ClaimBus(bus, registry)
+    return ClaimBus(bus, registry, turns)
 
 
 def test_existing_owner_allocates_nothing_and_never_invokes_builder(claims: ClaimBus, tmp_path: Path):
