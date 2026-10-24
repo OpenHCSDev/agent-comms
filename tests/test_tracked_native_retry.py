@@ -33,6 +33,7 @@ def tracked_turn(output, terminal):
     turn.usage, turn.explicit_interrupt = UsageAccount(), False
     turn.watchdog = ProgressWatchdog(DEFAULT_MODEL_WAIT, 1, 1, NativeStartupPolicy())
     turn.watchdog.launching(lambda: 0.0, None)
+    turn.watchdog.reading()
     turn.watchdog.tick()
     return turn
 
@@ -44,7 +45,10 @@ async def test_provider_retry_observations_keep_declared_conditions():
     assert retrying.state is RetryingRecovery
     assert turn.watchdog.retry_recovery_pending
 
-    progress = PiEvent.from_wire({"type": "agent_start"})
+    progress = PiEvent.from_wire({
+        "type": "message_update",
+        "assistantMessageEvent": {"type": "text_delta", "delta": "resumed"},
+    })
     recovered, = [event async for event in turn.watchdog.observe(progress, turn)]
     assert recovered.state is RecoveredRecovery
     assert not turn.watchdog.retry_recovery_pending
