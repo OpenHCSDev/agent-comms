@@ -134,7 +134,8 @@ def test_checkout_add_allocates_a_declared_sibling_repository_before_it_exists(
     assert not destination.exists()
     assert rule.owns_checkout(worker, destination, sibling.github)
     assert not rule.owns_checkout(worker, destination, RepositoryName("OpenHCSDev", "textual"))
-    result = core("--root", str(comms.root), "checkout", "add", "P1", "--repository", "toad")
+    result = core("--root", str(comms.root), "repository-checkout", "add", "P1",
+                  sibling.github.to_wire())
     assert result.returncode == 0, result.stderr
     assert destination.name == "worker--P1--toad"
     assert Repo.of(destination).github == sibling.github

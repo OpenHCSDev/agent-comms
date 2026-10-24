@@ -17,6 +17,7 @@ from typing import TYPE_CHECKING, Annotated, ClassVar, Self, cast
 
 from pydantic import JsonValue
 
+from agent_comms.declared_family import DeclaredFamily
 from agent_comms.errors import RelationViolationError
 from agent_comms.field_codec import (
     FieldCodec,
@@ -130,6 +131,78 @@ class MemoryUse:
     processes: tuple[MemoryHolder, ...]
 
 
+class CheckoutAllocation(DeclaredFamily, affix="CheckoutAllocation"):
+    """A path's declared allocation; each member owns its interpretation and Git needs."""
+
+    @classmethod
+    def for_path(cls, owner: Thread, path: Path) -> Iterator[CheckoutAllocation]:
+        problem, _, suffix = path.name.removeprefix(f'{owner.name}--').partition('--')
+        for member in cls.members_with(cls):
+            yield from member.read(owner, path, problem, suffix)
+
+    @classmethod
+    @abstractmethod
+    def read(cls, owner: Thread, path: Path, problem: str,
+             suffix: str) -> Iterator[CheckoutAllocation]: ...
+
+    @abstractmethod
+    def owns_present(self, rule: StorageRule, owner: Thread, path: Path) -> bool: ...
+
+    def owns_declared(self, rule: StorageRule, owner: Thread, path: Path,
+                      repository: RepositoryName) -> bool:
+        return self.owns_present(rule, owner, path)
+
+
+@dataclass(frozen=True)
+class HomeCheckoutAllocation(CheckoutAllocation):
+    @classmethod
+    def read(cls, owner: Thread, path: Path, problem: str,
+             suffix: str) -> Iterator[CheckoutAllocation]:
+        if path == owner.project_path:
+            yield cls()
+
+    def owns_present(self, rule: StorageRule, owner: Thread, path: Path) -> bool:
+        return path == owner.project_path
+
+
+@dataclass(frozen=True)
+class OrderCheckoutAllocation(CheckoutAllocation):
+    problem: str
+
+    @classmethod
+    def read(cls, owner: Thread, path: Path, problem: str,
+             suffix: str) -> Iterator[CheckoutAllocation]:
+        if path != owner.project_path and ProblemNumber.accepts(problem) and not suffix:
+            yield cls(problem)
+
+    def owns_present(self, rule: StorageRule, owner: Thread, path: Path) -> bool:
+        return path == rule.order_checkout(owner.name, self.problem)
+
+
+@dataclass(frozen=True)
+class RepositoryCheckoutAllocation(CheckoutAllocation):
+    problem: str
+    suffix: str
+
+    @classmethod
+    def read(cls, owner: Thread, path: Path, problem: str,
+             suffix: str) -> Iterator[CheckoutAllocation]:
+        if path != owner.project_path and ProblemNumber.accepts(problem) and suffix:
+            yield cls(problem, suffix)
+
+    def owns_present(self, rule: StorageRule, owner: Thread, path: Path) -> bool:
+        try:
+            repository = Repo.of(path).github
+        except GitCommandError as error:
+            raise StorageDenied(
+                f'Cannot read repository {self.suffix} of checkout {path}: {error}') from error
+        return self.owns_declared(rule, owner, path, repository)
+
+    def owns_declared(self, rule: StorageRule, owner: Thread, path: Path,
+                      repository: RepositoryName) -> bool:
+        return path == rule.repository_checkout(owner.name, self.problem, repository)
+
+
 @dataclass(frozen=True)
 class StorageRule(RoomAllocation, DurableFile):
     filename: ClassVar[str] = "storage.json"
@@ -207,29 +280,13 @@ class StorageRule(RoomAllocation, DurableFile):
     def owns_checkout(self, owner: Thread, path: Path,
                       repository: RepositoryName) -> bool:
         """Ownership follows the declared repository allocation, before its checkout exists."""
-        if path == owner.project_path:
-            return True
-        problem, _, suffix = path.name.removeprefix(f'{owner.name}--').partition('--')
-        if not ProblemNumber.accepts(problem):
-            return False
-        if not suffix:
-            return path == self.order_checkout(owner.name, problem)
-        return path == self.repository_checkout(owner.name, problem, repository)
+        return any(allocation.owns_declared(self, owner, path, repository)
+                   for allocation in CheckoutAllocation.for_path(owner, path))
 
     def owns_present_checkout(self, owner: Thread, path: Path) -> bool:
         """Only a repository-suffixed allocation needs its existing Git origin read."""
-        if path == owner.project_path:
-            return True
-        problem, _, suffix = path.name.removeprefix(f'{owner.name}--').partition('--')
-        if not ProblemNumber.accepts(problem):
-            return False
-        if not suffix:
-            return path == self.order_checkout(owner.name, problem)
-        try:
-            repository = Repo.of(path).github
-        except GitCommandError as error:
-            raise StorageDenied(f'Cannot read repository of checkout {path}: {error}') from error
-        return self.owns_checkout(owner, path, repository)
+        return any(allocation.owns_present(self, owner, path)
+                   for allocation in CheckoutAllocation.for_path(owner, path))
 
     def checkout_paths(self, owner: Thread) -> tuple[Path, ...]:
         """Declared home and order locations; Git metadata supplies their branches."""
@@ -320,20 +377,21 @@ class StorageRule(RoomAllocation, DurableFile):
         self.require_floor()
         self.require_quota(thread, *proposed)
 
-    def require_path(self, thread: Thread, path: Path,
-                     repository: RepositoryName | None = None):
-        """Allocations declare their repository; writes inside an existing checkout read it."""
+    def require_destination(self, thread: Thread, path: Path) -> None:
+        """Every destination obeys artifact and scratch ownership, without reading Git."""
         if '.artifacts' in path.parts:
             self.deny('writes inside .artifacts are forbidden')
         scratch = thread.storage_roots.assigned(self, thread.name).scratch
         if path.is_relative_to(self.scratch_base) and not path.is_relative_to(scratch):
             self.deny(f'foreign scratch destination {path}; registered scratch is {scratch}')
+
+    def require_path(self, thread: Thread, path: Path) -> None:
+        """A write in a present checkout follows that checkout's allocation."""
+        self.require_destination(thread, path)
         base = self.checkout_base.resolve()
         if path.is_relative_to(base) and path != base:
             checkout = base / path.relative_to(base).parts[0]
-            owned = (self.owns_present_checkout(thread, checkout) if repository is None
-                     else self.owns_checkout(thread, checkout, repository))
-            if not owned:
+            if not self.owns_present_checkout(thread, checkout):
                 self.deny(f'{checkout} is not a checkout of {thread.name}')
 
     def order_text(self, thread: Thread, pythons: Sequence[str]) -> str:
@@ -344,7 +402,7 @@ class StorageRule(RoomAllocation, DurableFile):
             f'same problem: {self.order_checkout(thread.name, "P<n>")}--<repository name>), '
             f'at most {self.max_checkouts} besides your home checkout {thread.project_path}, '
             'created with agent-comms checkout add PROBLEM '
-            '(another repository: add --repository NAME), '
+            '(another repository: agent-comms repository-checkout add PROBLEM OWNER/REPO), '
             'removed with git worktree remove in the same order that created them; '
             'your only scratch dir is '
             f'{thread.storage_roots.assigned(self, thread.name).scratch}/, '
@@ -555,7 +613,7 @@ class CheckoutStorageEffect(AllocateStorageEffect):
 
     def check(self, projection: StorageProjection):
         rule, thread = projection.rule, projection.thread
-        rule.require_path(thread, self.path, self.repository)
+        rule.require_destination(thread, self.path)
         if not rule.owns_checkout(thread, self.path, self.repository):
             destination = rule.order_checkout(thread.name, "P<number>")
             rule.deny(f'checkout destination must be {destination}')
