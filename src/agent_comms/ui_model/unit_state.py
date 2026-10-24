@@ -387,6 +387,7 @@ class StalledOnNothing(NeedsCommanderAttention, PendingWorkState, UnitState):
     def matches(cls, source: UnitObservation) -> bool:
         return bool(
             source.goal.execution.runnable()
+            and not source.working
             and source.turns
             and not source.comms.bus.pending_count(source.thread.name)
         )
