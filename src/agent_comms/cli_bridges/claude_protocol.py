@@ -16,6 +16,7 @@ from pydantic import (
 )
 
 from agent_comms.cli_protocol import TaggedWire, TextWire, TimestampedWire, WireHeader
+from agent_comms.field_codec import FieldCodec, MalformedRecord, MessageId
 from agent_comms.recorded_time import EventTime
 from agent_comms.runtime_updates import (
     ActiveItem,
@@ -115,10 +116,12 @@ class ClaudeMonitorFrame(MonitorIncomingFrame):
         decoded = cls.JSON_TEXT.validate_json(line)
         header, _, body = decoded.partition('\n')
         sender, message_id, _ = header.removeprefix(cls.HEADER + ' · ').rsplit(' · ', 2)
-        return MonitorPart.model_validate({
-            'id': message_id, 'sender': sender, 'number': int(number),
-            'total': int(total), 'body': body,
-        })
+        try:
+            identity = FieldCodec.decode(MessageId, message_id)
+        except MalformedRecord:
+            return ForeignMonitorFrame(text=line)
+        return MonitorPart(id=identity, sender=sender, number=int(number),
+                           total=int(total), body=body)
 
     @classmethod
     def decode_event(cls, event: str) -> tuple[MonitorFrame, ...]:

@@ -5,7 +5,7 @@ from __future__ import annotations
 
 
 from bus_record_fixture import prepare_native_comms
-from agent_comms.field_codec import TurnId
+from agent_comms.field_codec import FieldCodec, MessageId, TurnId
 from agent_comms.lifecycle_capability import Executing
 
 from conftest import publish_initial, without_mutation_guards
@@ -283,7 +283,7 @@ def test_older_receipt_message_id_mismatch_omits_entire_context(tmp_path: Path) 
         with without_mutation_guards(db, ClaimBatchAcknowledgements):
             db.execute(
                 "UPDATE claim_batch_receipts SET message_id=? WHERE wire_root_id=? AND wire_seq=?",
-                ("forged-older-id", root_id, prior.message.seq),
+                (FieldCodec.encode(MessageId.mint("forged-older-id")), root_id, prior.message.seq),
             )
         stale = builder(initial, assignment, owner)
         assert 'Optional awareness omitted' in stale.render(32768)
