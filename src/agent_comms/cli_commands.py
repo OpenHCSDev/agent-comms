@@ -150,7 +150,8 @@ from .registry_store import RegistryStore
 from .repo import Checkout, GitCommandError, Repo
 from .repository_name import RepositoryName
 from .storage_rules import (
-    CheckoutStorageEffect, OrderCheckoutAllocation, RepositoryCheckoutAllocation, StorageProjection,
+    CheckoutStorageEffect, OrderCheckoutAllocation, RemoveCheckoutStorageEffect,
+    RepositoryCheckoutAllocation, StorageProjection,
 )
 from .restart_scope import AllOwners, OneOwner, RestartTarget
 from .owner_connection import OwnerConnection, socket_path
@@ -1891,9 +1892,41 @@ class CheckoutResult(CliResult):
     checkout: Annotated[Path, PathText]
 
 
+class CheckoutOperation(DeclaredFamily, affix="CheckoutOperation"):
+    """What a problem checkout command does to the checkout allocated to it. Each member owns
+    its storage check and its Git work, so adding and retiring stay in the Checkout owner."""
+
+    @classmethod
+    @abstractmethod
+    def apply(cls, repository: Repo, destination: Path, projection: StorageProjection) -> None: ...
+
+
+class AddCheckoutOperation(CheckoutOperation):
+    """Create the checkout from origin/main, or repair an existing one's pinned submodules."""
+
+    @classmethod
+    def apply(cls, repository: Repo, destination: Path, projection: StorageProjection) -> None:
+        CheckoutStorageEffect(destination, repository.github).check(projection)
+        if destination.exists():
+            Checkout(destination).prepare()
+        else:
+            Repo.git(repository.checkout, "fetch", "origin", "main")
+            Checkout.add(repository.checkout, destination, "origin/main", "-b",
+                         f"work/{destination.name}")
+
+
+class RemoveCheckoutOperation(CheckoutOperation):
+    """Retire the checkout with its pinned submodules; it refuses one holding uncommitted work."""
+
+    @classmethod
+    def apply(cls, repository: Repo, destination: Path, projection: StorageProjection) -> None:
+        RemoveCheckoutStorageEffect(destination).check(projection)
+        Checkout(destination).retire()
+
+
 @dataclass(frozen=True, kw_only=True)
 class PreparedCheckoutCliCommand(CliCommand):
-    operation: Annotated[Literal["add"], Argument(flags=("operation",))]
+    operation: Annotated[type[CheckoutOperation], Argument(flags=("operation",))]
     problem: Annotated[str, Argument(flags=("problem",))]
 
     @abstractmethod
@@ -1903,23 +1936,16 @@ class PreparedCheckoutCliCommand(CliCommand):
         thread = CallingThreadTarget().thread(ctx.registry)
         todo = ctx.goals.todos.get(self.problem)
         todo.require_assignee(thread.incarnation, todo.held().generation)
-        storage = ctx.registry.storage_rule
         repository, destination = self.allocation(ctx, thread, todo)
-        CheckoutStorageEffect(destination, repository.github).check(
-            StorageProjection(storage, thread))
-        if destination.exists():
-            Checkout(destination).prepare()
-        else:
-            Repo.git(repository.checkout, "fetch", "origin", "main")
-            Checkout.add(repository.checkout, destination, "origin/main", "-b",
-                         f"work/{destination.name}")
+        self.operation.apply(
+            repository, destination, StorageProjection(ctx.registry.storage_rule, thread))
         return CheckoutResult(destination)
 
 
 @dataclass(frozen=True, kw_only=True)
 class CheckoutCliCommand(PreparedCheckoutCliCommand,
                          declared_name=OrderCheckoutAllocation.verb):
-    help = "Create or repair an owned problem checkout with its pinned submodules"
+    help = "Create, repair or remove an owned problem checkout with its pinned submodules"
 
     def allocation(self, ctx: Comms, thread: Thread, todo: Todo) -> tuple[Repo, Path]:
         repository = Repo(checkout=Path(todo.order.checked().check.directory), github=todo.repo)
@@ -1929,7 +1955,7 @@ class CheckoutCliCommand(PreparedCheckoutCliCommand,
 @dataclass(frozen=True, kw_only=True)
 class RepositoryCheckoutCliCommand(PreparedCheckoutCliCommand,
                                    declared_name=RepositoryCheckoutAllocation.verb):
-    help = "Create or repair an owned problem checkout of a registered OWNER/REPO"
+    help = "Create, repair or remove an owned problem checkout of a registered OWNER/REPO"
     repository: Annotated[RepositoryName, Argument(flags=("repository",))]
 
     def allocation(self, ctx: Comms, thread: Thread, todo: Todo) -> tuple[Repo, Path]:

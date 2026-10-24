@@ -121,6 +121,25 @@ def test_checkout_add_repairs_an_existing_checkout_with_a_missing_store(checkout
     assert (module.path / "catalog.md").read_text() == "patterns\n"
 
 
+def test_checkout_remove_retires_the_order_checkout_with_its_submodule(
+    checkout_command_bus, repository,
+):
+    comms = checkout_command_bus
+    added = core("--root", str(comms.root), "checkout", "add", "P1")
+    assert added.returncode == 0, added.stderr
+    path = comms.registry.storage_rule.order_checkout("worker", "P1")
+    (path / "owner.py").write_text("an unpushed edit\n")
+    held = core("--root", str(comms.root), "checkout", "remove", "P1")
+    assert held.returncode != 0
+    assert "holds uncommitted work" in held.stdout + held.stderr
+    assert path.is_dir()
+    git(path, "checkout", "--", "owner.py")
+    removed = core("--root", str(comms.root), "checkout", "remove", "P1")
+    assert removed.returncode == 0, removed.stderr
+    assert not path.exists()
+    assert str(path) not in git(repository, "worktree", "list")
+    assert git(repository, "config", "core.bare").strip() == "false"
+
 def test_checkout_add_allocates_a_declared_sibling_repository_before_it_exists(
     checkout_command_bus, tmp_path,
 ):

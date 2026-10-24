@@ -192,7 +192,7 @@ class Repo(BaseModel, WireValue):
         return cls(checkout=checkout, github=RepositoryName.from_wire("/".join(github)))
 
 
-class CheckoutHoldsWorkError(Exception):
+class CheckoutHoldsWorkError(ValueError):
     """A checkout cannot be retired: it holds changes that removing it would lose."""
 
     def __init__(self, path: Path, changes: str):

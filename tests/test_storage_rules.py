@@ -122,11 +122,11 @@ def test_cannot_remove_current_project_but_can_remove_another_checkout(tmp_path)
     assert thread.project_path == current
     assert UnitStorage.read(comms.registry.storage_rule, thread).home == current
     with pytest.raises(StorageDenied):
-        StorageProjection(comms.registry.storage_rule, comms.registry.require('worker')).check(shell_storage_effects(
-            f'git worktree remove {project_link}', repository))
+        StorageProjection(comms.registry.storage_rule, comms.registry.require('worker')).check((
+            RemoveCheckoutStorageEffect(project_link.resolve()),))
     assert current.is_dir()
-    StorageProjection(comms.registry.storage_rule, comms.registry.require('worker')).check(shell_storage_effects(
-        f'git worktree remove {other}', repository))
+    StorageProjection(comms.registry.storage_rule, comms.registry.require('worker')).check((
+        RemoveCheckoutStorageEffect(other),))
     subprocess.run(('git', '-C', str(repository), 'worktree', 'remove', str(other)), check=True)
     assert not other.exists()
     assert current.is_dir()
@@ -134,6 +134,7 @@ def test_cannot_remove_current_project_but_can_remove_another_checkout(tmp_path)
 
 @pytest.mark.parametrize('command', ['git clone remote target',
                                      'git worktree add target origin/main',
+                                     'git worktree remove --force target',
                                      'python -m venv env', 'uv sync',
                                      'git -C ~/wt/other--P3 reset --hard', 'touch ~/wt/x-check/file'])
 def test_forbidden_shell_operations_use_declared_rule(tmp_path, command):
@@ -157,7 +158,7 @@ def test_programs_do_not_claim_to_be_effect_values():
     ('npm ci', 'AllocateStorageEffect'),
     ('ffmpeg -i input output', 'AllocateStorageEffect'),
     ('git -C repo worktree add --detach extra origin/main', 'ForbiddenStorageEffect'),
-    ('git worktree remove --force extra', 'RemoveCheckoutStorageEffect'),
+    ('git worktree remove --force extra', 'ForbiddenStorageEffect'),
     ('git worktree move extra elsewhere', 'ForbiddenStorageEffect'),
     ('git -C ../other--P3 reset --hard', 'WriteStorageEffect'),
     ('pip install --help\nmkdir target', 'WriteStorageEffect'),
