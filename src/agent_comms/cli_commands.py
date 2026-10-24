@@ -149,7 +149,9 @@ from .registry_document import CommanderProject, RegistrySnapshot
 from .registry_store import RegistryStore
 from .repo import Checkout, GitCommandError, Repo
 from .repository_name import RepositoryName
-from .storage_rules import CheckoutStorageEffect, StorageProjection
+from .storage_rules import (
+    CheckoutStorageEffect, OrderCheckoutAllocation, RepositoryCheckoutAllocation, StorageProjection,
+)
 from .restart_scope import AllOwners, OneOwner, RestartTarget
 from .owner_connection import OwnerConnection, socket_path
 from .schema_report import StoreSchemaReport, StoreSchemaReports
@@ -1915,7 +1917,8 @@ class PreparedCheckoutCliCommand(CliCommand):
 
 
 @dataclass(frozen=True, kw_only=True)
-class CheckoutCliCommand(PreparedCheckoutCliCommand):
+class CheckoutCliCommand(PreparedCheckoutCliCommand,
+                         declared_name=OrderCheckoutAllocation.verb):
     help = "Create or repair an owned problem checkout with its pinned submodules"
 
     def allocation(self, ctx: Comms, thread: Thread, todo: Todo) -> tuple[Repo, Path]:
@@ -1924,13 +1927,18 @@ class CheckoutCliCommand(PreparedCheckoutCliCommand):
 
 
 @dataclass(frozen=True, kw_only=True)
-class RepositoryCheckoutCliCommand(PreparedCheckoutCliCommand):
+class RepositoryCheckoutCliCommand(PreparedCheckoutCliCommand,
+                                   declared_name=RepositoryCheckoutAllocation.verb):
     help = "Create or repair an owned problem checkout of a registered OWNER/REPO"
     repository: Annotated[RepositoryName, Argument(flags=("repository",))]
 
     def allocation(self, ctx: Comms, thread: Thread, todo: Todo) -> tuple[Repo, Path]:
         repositories = ctx.registry.snapshot().commander_project.require().repos
-        repository = Repo.selected(repositories, self.repository.to_wire())
+        selected = [repository for repository in repositories
+                    if repository.github == self.repository]
+        if not selected:
+            raise ValueError(f'{self.repository.to_wire()} is not a registered repository.')
+        repository, = selected
         return repository, ctx.registry.storage_rule.repository_checkout(
             thread.name, todo.id, repository.github)
 

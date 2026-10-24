@@ -33,7 +33,7 @@ class RepositoryName(WireValue):
         return hash(self.key)
 
     def named(self, name: str) -> bool:
-        return name.casefold() in (self.name.casefold(), self.to_wire())
+        return self.name.casefold() == name.casefold()
 
     def to_wire(self) -> str:
         return "/".join(self.key)

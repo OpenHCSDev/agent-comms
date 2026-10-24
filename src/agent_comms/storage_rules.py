@@ -162,17 +162,33 @@ class HomeCheckoutAllocation(CheckoutAllocation):
             yield cls()
 
     def owns_present(self, rule: StorageRule, owner: Thread, path: Path) -> bool:
-        return path == owner.project_path
+        return True
 
 
-@dataclass(frozen=True)
-class OrderCheckoutAllocation(CheckoutAllocation):
-    problem: str
+class ProblemCheckoutAllocation(CheckoutAllocation):
+    """A checkout allocated to one problem; ``verb`` is the command that creates it."""
+
+    verb: ClassVar[str]
 
     @classmethod
     def read(cls, owner: Thread, path: Path, problem: str,
              suffix: str) -> Iterator[CheckoutAllocation]:
-        if path != owner.project_path and ProblemNumber.accepts(problem) and not suffix:
+        if path != owner.project_path and ProblemNumber.accepts(problem):
+            yield from cls.allocated(problem, suffix)
+
+    @classmethod
+    @abstractmethod
+    def allocated(cls, problem: str, suffix: str) -> Iterator[CheckoutAllocation]: ...
+
+
+@dataclass(frozen=True)
+class OrderCheckoutAllocation(ProblemCheckoutAllocation):
+    verb: ClassVar[str] = 'checkout'
+    problem: str
+
+    @classmethod
+    def allocated(cls, problem: str, suffix: str) -> Iterator[CheckoutAllocation]:
+        if not suffix:
             yield cls(problem)
 
     def owns_present(self, rule: StorageRule, owner: Thread, path: Path) -> bool:
@@ -180,14 +196,14 @@ class OrderCheckoutAllocation(CheckoutAllocation):
 
 
 @dataclass(frozen=True)
-class RepositoryCheckoutAllocation(CheckoutAllocation):
+class RepositoryCheckoutAllocation(ProblemCheckoutAllocation):
+    verb: ClassVar[str] = 'repository-checkout'
     problem: str
     suffix: str
 
     @classmethod
-    def read(cls, owner: Thread, path: Path, problem: str,
-             suffix: str) -> Iterator[CheckoutAllocation]:
-        if path != owner.project_path and ProblemNumber.accepts(problem) and suffix:
+    def allocated(cls, problem: str, suffix: str) -> Iterator[CheckoutAllocation]:
+        if suffix:
             yield cls(problem, suffix)
 
     def owns_present(self, rule: StorageRule, owner: Thread, path: Path) -> bool:
@@ -401,8 +417,9 @@ class StorageRule(RoomAllocation, DurableFile):
             f'{self.order_checkout(thread.name, "P<n>")} (another repository changed in the '
             f'same problem: {self.order_checkout(thread.name, "P<n>")}--<repository name>), '
             f'at most {self.max_checkouts} besides your home checkout {thread.project_path}, '
-            'created with agent-comms checkout add PROBLEM '
-            '(another repository: agent-comms repository-checkout add PROBLEM OWNER/REPO), '
+            f'created with agent-comms {OrderCheckoutAllocation.verb} add PROBLEM '
+            f'(another repository: agent-comms {RepositoryCheckoutAllocation.verb} add '
+            'PROBLEM OWNER/REPO), '
             'removed with git worktree remove in the same order that created them; '
             'your only scratch dir is '
             f'{thread.storage_roots.assigned(self, thread.name).scratch}/, '
