@@ -38,7 +38,7 @@ def notifications(comms):
 
 
 def beat(comms, rules=(), *, states=()):
-    frame = CommanderObservation(comms.registry.require("lead"), (), rules, states)
+    frame = CommanderObservation(comms.registry.require("lead"), (), rules, states, hud=())
     # Deliberately construct a fresh watcher on every pass, never reuse a cache.
     CommanderHeartbeat().pass_body(comms, (frame,))
 
@@ -47,7 +47,7 @@ def test_quiet_completion_is_per_commander_even_when_a_later_recipient_fails(not
     comms = notification_bus
     lead = comms.registry.require("lead")
     missing = replace(comms.registry.require("worker"), name="unregistered-recipient")
-    frames = tuple(CommanderObservation(thread, (), (), ()) for thread in (lead, missing))
+    frames = tuple(CommanderObservation(thread, (), (), (), hud=()) for thread in (lead, missing))
     with pytest.raises(UnregisteredThreadError):
         CommanderHeartbeat().pass_body(comms, frames)
     completed = ServicePassStore.at(comms.root).read().commander_completed
