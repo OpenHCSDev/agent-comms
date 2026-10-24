@@ -16,13 +16,15 @@ import tempfile
 from collections.abc import Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass, field
+from functools import cached_property
 from pathlib import Path
 from traceback import extract_tb
-from typing import Annotated, TextIO
+from typing import Annotated, ClassVar, TextIO
 
 import agent_comms.installer
 from agent_comms.cli_bridges.shared import SessionBridgeResumes
 from agent_comms.cli_commands import InstallCliCommand
+from agent_comms.commander import standing
 from agent_comms.installer.probes.harnesses import InstallResult
 from agent_comms.field_codec import FieldCodec, Id128, PathText
 from agent_comms.installer.backup import StoreBackup
@@ -47,6 +49,7 @@ from agent_comms.installer.upgrade import (
 )
 from agent_comms.mro_dispatch import MroDispatch, handles
 from agent_comms.repo import Repo
+from agent_comms.repository_name import RepositoryName
 from agent_comms.storage_rules import StorageRule
 
 
@@ -118,10 +121,35 @@ class InstallReport(MroDispatch):
 
 
 @dataclass(frozen=True)
+class InstallCause:
+    """The repository merge that caused an automatic install, independent of its target."""
+
+    repo: RepositoryName
+    main: str
+
+
+@dataclass(frozen=True)
 class InstallLogs:
     """Each install's diagnostics beside the bus, kept as long as its data backups are."""
 
     root: Path
+    cause_file: ClassVar[str] = "cause.json"
+
+    def member(self, repo: RepositoryName, main: str) -> type[standing.InstallDue]:
+        """Decode the merge's launch record once into its standing-rule member."""
+        cause = InstallCause(repo, main)
+        if any(
+            marker.is_file()
+            and FieldCodec.decode(InstallCause, FieldCodec.parse(marker.read_text())) == cause
+            for path in self.root.parent.glob(f"{glob.escape(self.prefix)}*")
+            if path.is_dir()
+            for marker in (path / self.cause_file,)
+        ):
+            return standing.LaunchedInstallDue
+        return standing.PendingInstallDue
+
+    def record(self, logs: Path, repo: RepositoryName, main: str) -> None:
+        (logs / self.cause_file).write_text(json.dumps(FieldCodec.encode(InstallCause(repo, main))))
 
     @property
     def prefix(self) -> str:
@@ -166,27 +194,45 @@ class InstallRun:
             TargetTree(checkout, scratch, target).add()
         return cls(command, root, scratch, target, commands.clock.phases)
 
-    def launch(self, output: TextIO) -> int:
+    @cached_property
+    def logs(self) -> Path:
+        return InstallLogs(self.root).minted()
+
+    @property
+    def result(self) -> Path:
+        return self.logs / "result.json"
+
+    @property
+    def errors(self) -> Path:
+        return self.logs / "stderr.log"
+
+    def spawn(self) -> subprocess.Popen[bytes]:
         """The install outlives its caller: a new session, its output in files beside the bus.
         Retiring the caller's process group must not cut an install short."""
         tree = TargetTree(self.command.checkout, self.scratch, self.target)
-        logs = InstallLogs(self.root).minted()
-        result, errors = logs / "result.json", logs / "stderr.log"
-        with result.open("xb") as stdout, errors.open("xb") as stderr:
+        request_read, request_write = os.pipe()
+        with (os.fdopen(request_read, "rb") as stdin,
+              os.fdopen(request_write, "wb") as requests,
+              self.result.open("xb") as stdout, self.errors.open("xb") as stderr):
             process = subprocess.Popen(
                 [sys.executable, "-m", agent_comms.installer.__name__], cwd=tree.path,
                 env={**os.environ, "PYTHONPATH": os.pathsep.join(map(str, tree.source_paths()))},
-                stdin=subprocess.PIPE, stdout=stdout, stderr=stderr, start_new_session=True,
+                stdin=stdin, stdout=stdout, stderr=stderr, start_new_session=True,
             )
-        print(f"install: pid {process.pid} runs {self.target[:12]}; diagnostics {errors}",
+            requests.write(json.dumps(FieldCodec.encode(self)).encode())
+        print(f"install: pid {process.pid} runs {self.target[:12]}; diagnostics {self.errors}",
               file=sys.stderr, flush=True)
-        process.communicate(json.dumps(FieldCodec.encode(self)).encode())
-        if process.returncode:
-            print(f"install failed ({process.returncode}): {errors.read_text().strip()}",
+        return process
+
+    def launch(self, output: TextIO) -> int:
+        process = self.spawn()
+        status = process.wait()
+        if status:
+            print(f"install failed ({status}): {self.errors.read_text().strip()}",
                   file=sys.stderr)
         else:
-            output.write(result.read_text())
-        return process.returncode
+            output.write(self.result.read_text())
+        return status
 
     def run(self) -> Upgrade:
         command = self.command
