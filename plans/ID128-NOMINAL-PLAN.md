@@ -37,7 +37,7 @@ Each phase, its predecessors and its evidence on `origin/main` are declared in `
 
 | Phase | Done when, on main | Now | Done |
 |---|---|---|---|
-| 1 `NominalIdTypePhase` | `NominalText`, `NominalSpelling`, `Id128`, `MessageId` and all seven kind classes declared in `field_codec.py`; `def mint\(cls(, text: str)?\) -> str:` absent there | 2 | 0 |
+| 1 `NominalIdTypePhase` | `NominalText`, `NominalSpelling`, `Id128`, `MessageId` and all six kind classes declared in `field_codec.py`; `def mint\(cls(, text: str)?\) -> str:` absent there | 2 | 0 |
 | 2 `PlainStrIdRatchetPhase` | `^class PlainStrIdAnnotation\(` in `tools/debt_ratchet.py` | 0 | 1 |
 | 3 `ClaimIdsPhase` | `\b(nonce\|operation_id\|generation): (str\b\|Id128\b\|Annotated\[(str\|Id128)\b)` | 35 in 10 modules | 0 |
 | | `Id128Text\.decode\(self\.(nonce\|operation_id)\)` | 2 | 0 |
@@ -78,10 +78,10 @@ For each kind: retype its fields and parameters to that kind (`ClaimId`/`Message
 
 - Assignment.generation is the holder's goal id (goal_actions.py:540, :578), so it is GoalId; `ClaimId` names an envelope claim generation (publisher.py:176). `ThreadLookup` names a thread incarnation lookup (registry_provenance.py:79); `RootId` names the bus root. Phase 1 declares the additional kind; the kind phases retype their use sites.
 
-- **3 Claims** (`maintenance_barrier.py`, `selected_write_plan.py`, `envelope_claim_transitions.py`, `todos.py` generations, `publisher.py`). These are Installer's two boundaries, where the constructor check is the only validation (`maintenance_barrier.py:305,316`; `selected_write_plan.py:71,89`).
+- **3 Claims** (`maintenance_barrier.py`, `selected_write_plan.py`, `envelope_claim_transitions.py`, `publisher.py`). These are Installer's two boundaries, where the constructor check is the only validation (`maintenance_barrier.py:305,316`; `selected_write_plan.py:71,89`).
 - **4 Messages.** `commander/order.py:784`, `messages.py:952`, and the 37 `message_id` annotations.
 - **5 Turns.** Includes `diagnostics.py:143`, `goal_failure_observation.py:76` and `owned_turn.py:135`. A `turn_id` that holds a foreign agent's turn id is not an `Id128`: it is declared a boundary in the PR and the check is corrected with `order check`, never forced.
-- **6 Goals.** Includes `goal_actions.py:364,482,686` and `goal_attempts.py:873`, which mint by hand today.
+- **6 Goals.** `SetGoalAction.goal_id` uses `GoalId.mint`; `Assignment.generation` carries that goal id. The wait, retry and attempt mints in `goal_actions.py` and `goal_attempts.py` belong to phase 9, not this phase.
 - **7 Bus roots and lookups.** Includes `acp_extension.py:305`, `input_origin.py:104,122,137`, `bus_source_page.py:30,50`, `envelope_claim_transitions.py:209,214`, `proven_source_coverage.py:215-216`, `native_session_files.py:236` and `private_registry_guard.py:289`.
 - **8 Inputs.** Includes `acp_extension.py:675,681`, `input_attempt.py:375`, `native_entries.py:567`, `native_pi.py:341`, `native_prompt_binding.py:123`, `native_input_record.py:396` and `pi_payloads.py:1595`.
 
