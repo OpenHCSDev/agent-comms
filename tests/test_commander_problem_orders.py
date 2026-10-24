@@ -17,7 +17,7 @@ from agent_comms.todos import (
     OrderDelivery,
     RecordedCommitDelivery,
 )
-from agent_comms.slop import DeclarationDerivation, Slop
+from agent_comms.slop import DeclarationDerivation, ExistingLine, Slop
 
 
 def order(source: SourceRepository, identity, command='printf 1', expected=1):
@@ -41,11 +41,13 @@ def test_delivery_time_has_its_own_named_requirement():
 def test_slop_uses_every_pinned_catalog_entry_and_refuses_unknown_ids():
     location = FileLine(__file__, 1)
     for pattern in Slop.patterns():
-        slop = Slop(pattern, 'the count of open orders', location, DeclarationDerivation, location)
+        slop = Slop(pattern, 'the count of open orders', location, DeclarationDerivation,
+                    ExistingLine(location))
         assert FieldCodec.decode(Slop, FieldCodec.encode(slop)) == slop
         assert pattern in slop.render()
     with pytest.raises(ValueError):
-        Slop('MADEUP-999', 'the count of open orders', location, DeclarationDerivation, location)
+        Slop('MADEUP-999', 'the count of open orders', location, DeclarationDerivation,
+             ExistingLine(location))
 
 
 @pytest.mark.parametrize('printed, refused', [

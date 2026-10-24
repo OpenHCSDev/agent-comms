@@ -94,6 +94,12 @@ class ThreadExecution(DeclaredFamily, affix="ThreadExecution"):
         return ()
 
     @classmethod
+    def order_candidates(cls, thread: Thread) -> tuple[Thread, ...]:
+        """The thread when it can hold an order: a turn executor whose work state is ready."""
+        return tuple(candidate for executor in thread.role.executor(thread)
+                     for candidate in thread.work_state.candidates(executor))
+
+    @classmethod
     def owner_binding(cls, snapshot: RegistrySnapshot, thread: Thread):
         from .thread_presentation import UnavailableThreadOwnerBinding
 
@@ -186,3 +192,8 @@ class CommanderForkExecution(ExternalThreadExecution):
     @classmethod
     def require_commander_fork(cls) -> None:
         pass
+
+    @classmethod
+    def order_candidates(cls, thread: Thread) -> tuple[Thread, ...]:
+        """A fork works inside its commander's turn and never holds an order."""
+        return ()
