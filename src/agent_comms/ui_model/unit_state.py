@@ -67,6 +67,11 @@ class UnitObservation:
         )
 
     @cached_property
+    def between_turns(self) -> bool:
+        """Core lets the goal run and no bridge reports a live turn."""
+        return self.goal.execution.runnable() and not self.working
+
+    @cached_property
     def pending(self) -> tuple[Todo, ...]:
         return tuple(todo for todo in self.todos if todo.pending)
 
@@ -164,8 +169,11 @@ class UnitState(UndatedStandingRule, declared_name=None):
                 thread,
                 tuple(held.get(thread.incarnation, ())),
                 requests,
-                tuple(message for rule in frame.answers
-                      for message in rule.questions_for(thread.incarnation)),
+                tuple(
+                    message
+                    for rule in frame.answers
+                    for message in rule.questions_for(thread.incarnation)
+                ),
                 now,
                 snapshot.status(thread.name),
                 comms.agents.is_working(thread.incarnation, snapshot),
@@ -386,8 +394,7 @@ class StalledOnNothing(NeedsCommanderAttention, PendingWorkState, UnitState):
     @classmethod
     def matches(cls, source: UnitObservation) -> bool:
         return bool(
-            source.goal.execution.runnable()
-            and not source.working
+            source.between_turns
             and source.turns
             and not source.comms.bus.pending_count(source.thread.name)
         )
