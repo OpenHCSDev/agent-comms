@@ -34,7 +34,7 @@ from collections import Counter
 from collections.abc import Callable, Iterator
 from concurrent.futures import as_completed
 from dataclasses import dataclass
-from functools import cache, cached_property, partial
+from functools import cache, cached_property, lru_cache, partial
 from pathlib import Path
 
 from agent_comms.pinned_audit import audit
@@ -202,26 +202,6 @@ class ChangeMeasure(Measure):
         return before, after
 
 
-class RevisionMeasure(Measure):
-    """Each revision measured on its own, so the two run at once; align() pairs them."""
-
-    @classmethod
-    @abstractmethod
-    def at(cls, repo: Path, ref: str, base: str, head: str, changed: set[str],
-           root: str) -> dict[str, int]:
-        """This revision's measurements."""
-
-    @classmethod
-    def parts(cls, repo: Path, base: str, head: str, changed: set[str],
-              root: str) -> tuple[Callable[[], object], ...]:
-        return tuple(partial(cls.at, repo, ref, base, head, changed, root) for ref in (base, head))
-
-    @classmethod
-    def combine(cls, results: list, repo: Path, base: str, head: str, changed: set[str],
-                root: str) -> tuple[dict[str, int], dict[str, int]]:
-        return cls.align(*results)
-
-
 class InventoryMeasure[Reading](Measure):
     """A measure of every file a revision holds, not only the changed ones. A file the change
     did not touch reads the same at both revisions, so it is read once; the reading is split
@@ -285,13 +265,8 @@ class InventoryMeasure[Reading](Measure):
                            for ref, own in ((base, before), (head, after))))
 
 
-class GitMeasure(RevisionMeasure):
-    """Shared Git collection and alignment for declaration-owned snapshots."""
-
-    @classmethod
-    @abstractmethod
-    def snapshot(cls, sources: list[tuple[str, bytes]]) -> dict[str, int]:
-        """Measure the selected source declarations."""
+class GitMeasure(Measure):
+    """Shared Git collection for declaration-owned snapshots."""
 
     @staticmethod
     def blobs(repo: Path, ref: str, selected: set[str]) -> dict[str, str]:
@@ -334,19 +309,40 @@ class GitMeasure(RevisionMeasure):
             raise ValueError("Git returned unrequested objects")
         return [(path, blobs[identities[path]]) for path in sorted(selected)]
 
-    @classmethod
-    def at(cls, repo: Path, ref: str, base: str, head: str, changed: set[str],
-           root: str) -> dict[str, int]:
-        return cls.snapshot(cls.sources(repo, ref, changed & python_paths(repo, ref, root)))
-
 
 class CountedSource(GitMeasure):
-    """A measure that is one number per source file."""
+    """A measure that is one number per source file: a pass over the tree SyntaxPasses parses
+    once for every pass. Passes read the shared tree and never write it."""
 
     @classmethod
     @abstractmethod
     def count(cls, source: bytes, filename: str) -> int:
         """Return this file's count."""
+
+    @classmethod
+    @abstractmethod
+    def tally(cls, counts: list[tuple[str, int]]) -> dict[str, int]:
+        """A revision's measurements from each selected file's count, in path order."""
+
+    @classmethod
+    def snapshot(cls, sources: list[tuple[str, bytes]]) -> dict[str, int]:
+        return cls.tally([(path, cls.count(source, path)) for path, source in sources])
+
+    @staticmethod
+    @lru_cache(maxsize=4)
+    def tree(source: bytes, filename: str) -> ast.Module:
+        """The file's syntax, parsed once while every pass counts it."""
+        return ast.parse(source, filename)
+
+    @classmethod
+    def parts(cls, repo: Path, base: str, head: str, changed: set[str],
+              root: str) -> tuple[Callable[[], object], ...]:
+        return ()  # SyntaxPasses reads and parses each file once for every pass
+
+    @classmethod
+    def combine(cls, results: list, repo: Path, base: str, head: str, changed: set[str],
+                root: str) -> tuple[dict[str, int], dict[str, int]]:
+        return {}, {}
 
 
 class OccurrenceMeasure(CountedSource):
@@ -364,20 +360,20 @@ class OccurrenceMeasure(CountedSource):
 
     @classmethod
     def count(cls, source: bytes, filename: str) -> int:
-        tree = ast.parse(source, filename)
+        tree = cls.tree(source, filename)
         return sum(cls.occurrences(node) for node in cls.sites(tree, filename))
 
     @classmethod
-    def snapshot(cls, sources: list[tuple[str, bytes]]) -> dict[str, int]:
-        return {cls.__name__: sum(cls.count(source, path) for path, source in sources)}
+    def tally(cls, counts: list[tuple[str, int]]) -> dict[str, int]:
+        return {cls.__name__: sum(count for _, count in counts)}
 
 
 class PerFileMeasure(CountedSource):
     """An improvement in one file cannot hide a regression in another."""
 
     @classmethod
-    def snapshot(cls, sources: list[tuple[str, bytes]]) -> dict[str, int]:
-        return {f"{cls.__name__}:{path}": cls.count(source, path) for path, source in sources}
+    def tally(cls, counts: list[tuple[str, int]]) -> dict[str, int]:
+        return {f"{cls.__name__}:{path}": count for path, count in counts}
 
     @classmethod
     def align(cls, base: dict[str, int], head: dict[str, int]) -> tuple[dict[str, int], dict[str, int]]:
@@ -388,6 +384,56 @@ class PerFileMeasure(CountedSource):
 
 class PerFileOccurrenceMeasure(PerFileMeasure, OccurrenceMeasure):
     """A per-node count, kept separately for each file."""
+
+
+class SyntaxPasses(InventoryMeasure[dict[str, int]]):
+    """The front end of every CountedSource pass, as a compiler runs its passes over one tree.
+
+    Each changed file is read and parsed once per revision and every pass counts that tree;
+    the counts are stored under the file's blob, so a file an earlier run saw is not parsed
+    again. The changed files of each revision are split across the pool."""
+
+    @staticmethod
+    def passes() -> tuple[type[CountedSource], ...]:
+        return Measure.members_with(CountedSource)
+
+    @classmethod
+    def inventory(cls, repo: Path, ref: str, root: str) -> frozenset[str]:
+        return python_paths(repo, ref, root)
+
+    @classmethod
+    def reading(cls, path: str, source: bytes) -> dict[str, int]:
+        return {measure.__name__: measure.count(source, path) for measure in cls.passes()}
+
+    @classmethod
+    def measured(cls, repo: Path, ref: str, base: str, head: str,
+                 readings: dict[str, dict[str, int]], root: str) -> dict[str, int]:
+        return {key: value for measure in cls.passes() for key, value in measure.tally(
+            [(path, reading[measure.__name__]) for path, reading in readings.items()]).items()}
+
+    @classmethod
+    def side(cls, side: Side, repo: Path, ref: str,
+             paths: list[str]) -> tuple[Side, dict[str, dict[str, int]]]:
+        return side, cls.read(repo, ref, paths)
+
+    @classmethod
+    def parts(cls, repo: Path, base: str, head: str, changed: set[str],
+              root: str) -> tuple[Callable[[], object], ...]:
+        shards = os.process_cpu_count() or 1
+        return tuple(partial(cls.side, side, repo, ref, paths[shard::shards])
+                     for side, ref in zip(Side, (base, head), strict=True)
+                     for paths in (sorted(changed & cls.inventory(repo, ref, root)),)
+                     for shard in range(min(shards, len(paths))))
+
+    @classmethod
+    def combine(cls, results: list, repo: Path, base: str, head: str, changed: set[str],
+                root: str) -> tuple[dict[str, int], dict[str, int]]:
+        readings: dict[Side, dict[str, dict[str, int]]] = {side: {} for side in Side}
+        for side, read in results:
+            readings[side].update(read)
+        return PerFileMeasure.align(*(cls.measured(repo, ref, base, head,
+                                                   dict(sorted(readings[side].items())), root)
+                                      for side, ref in zip(Side, (base, head), strict=True)))
 
 
 class MetadataKeys(ast.NodeVisitor):
@@ -566,8 +612,9 @@ class Unformatted(CheckedRevision):
 
     @staticmethod
     def batches(selected: list[str]) -> list[list[str]]:
-        # One run per file spreads the files across the ratchet's pool.
-        return [[path] for path in selected]
+        # One run per pool worker: a Black start costs more than checking a file.
+        shards = os.process_cpu_count() or 1
+        return [selected[shard::shards] for shard in range(shards)]
 
     @staticmethod
     def extract(repo: Path, ref: str, scratch: Path, selected: list[str]) -> None:
@@ -581,10 +628,19 @@ class Unformatted(CheckedRevision):
         return Unformatted.black("--check", *selected)
 
     @classmethod
-    def inputs(cls, repo: Path, ref: str, head: str, root: str, selected: list[str]) -> str:
-        """Black reads only the file and the configuration."""
-        return " ".join((*GitMeasure.blobs(repo, ref, set(selected)).values(),
-                         cls.configuration(repo, head)))
+    def findings(cls, repo: Path, ref: str, head: str, root: str, selected: list[str],
+                 side: Side) -> tuple[Side, Counter[str]]:
+        """Black reads only the file and the configuration, so each file's finding is stored
+        under its own blob and one Black run checks the batch's unstored files."""
+        configuration = cls.configuration(repo, head)
+        blobs = GitMeasure.blobs(repo, ref, set(selected))
+        parts = {path: (cls.__name__, configuration, path, blobs[path]) for path in selected}
+        found = {path: typing.cast(int, stored)
+                 for path in selected for stored in ContentCache.stored(*parts[path])}
+        fresh = [path for path in selected if path not in found]
+        checked = cls.checked(repo, ref, head, root, fresh, side) if fresh else Counter()
+        found |= {path: ContentCache.store(checked[path], *parts[path]) for path in fresh}
+        return side, Counter(found)
 
 
 class LintFindings(CheckedRevision):
@@ -610,7 +666,7 @@ class TypeErrors(CheckedRevision):
         # against its content while unchanged analysis carries from one run to the next. Each side
         # keeps its own cache: the two revisions run at once, and a base usually matches the
         # previous run's base.
-        cache = Path.home() / ".cache/agent-comms-debt-ratchet/mypy" / side.value
+        cache = ContentCache.directory.with_name("debt-ratchet-mypy") / side.value
         return ["mypy", "--explicit-package-bases", "--cache-dir", str(cache), "--no-error-summary",
                 *(str(tree / path) for path in selected)]
 
@@ -632,11 +688,11 @@ class ChangedSource:
 
     @cached_property
     def tree(self) -> ast.Module:
-        return ast.parse(self.source, self.path)
+        return CountedSource.tree(self.source, self.path)
 
     @cached_property
     def base_tree(self) -> ast.Module:
-        return ast.parse(self.base_source, self.path)
+        return CountedSource.tree(self.base_source, self.path)
 
     @cached_property
     def tokens(self) -> tuple[tokenize.TokenInfo, ...]:
@@ -981,7 +1037,7 @@ class RawRecordShapes(PerFileMeasure):
     @classmethod
     def count(cls, source: bytes, filename: str) -> int:
         text = source.decode()
-        module = AuditModule(filename, text, ast.parse(text, filename), filename)
+        module = AuditModule(filename, text, cls.tree(source, filename), filename)
         package = AuditPackage(AuditRepository(Path.cwd()), "", filename, (module,), ())
         return sum(1 for facts in package.functions[filename]
                    for _finding in RawShape.from_facts(facts, package))
@@ -1006,7 +1062,7 @@ class FunctionLocalImport(PerFileMeasure):
     @classmethod
     def count(cls, source: bytes, filename: str) -> int:
         collector = cls.Collector()
-        collector.visit(ast.parse(source, filename))
+        collector.visit(cls.tree(source, filename))
         return collector.found
 
 
@@ -1576,7 +1632,8 @@ class TypeDispatchCases(DispatchCases):
     @handles(ast.Call)
     def instance_check(self, node: ast.Call) -> None:
         match node:
-            case ast.Call(func=ast.Name(id="isinstance"), args=[subject, kind], keywords=[]):
+            case ast.Call(func=ast.Name(id="isinstance" | "issubclass"), args=[subject, kind],
+                          keywords=[]):
                 self.add(subject, ast.dump(kind))
 
     @handles(ast.Compare)
@@ -1584,6 +1641,20 @@ class TypeDispatchCases(DispatchCases):
         match node:
             case ast.Compare(left=ast.Call(func=ast.Name(id="type"), args=[subject]), comparators=[kind]):
                 self.add(subject, ast.dump(kind))
+
+    @handles(ast.Compare)
+    def identity(self, node: ast.Compare) -> None:
+        """``origin is Literal`` and ``origin in (list, tuple)``: a type chosen by identity."""
+        match node:
+            case ast.Compare(left=ast.Call(func=ast.Name(id="type"))):
+                pass  # exact_type reads ``type(x) is C`` as a test of x
+            case ast.Compare(left=subject, ops=[ast.Is()],
+                             comparators=[ast.Name() | ast.Attribute() as kind]):
+                self.add(subject, ast.dump(kind))
+            case ast.Compare(left=subject, ops=[ast.In()], comparators=[ast.Tuple(elts=kinds)]) if (
+                    kinds and all(isinstance(kind, (ast.Name, ast.Attribute)) for kind in kinds)):
+                for kind in kinds:
+                    self.add(subject, ast.dump(kind))
 
     @handles(ast.Match)
     def match_cases(self, node: ast.Match) -> None:
@@ -1644,6 +1715,97 @@ class TypeSwitchArms(DispatchArms, TypeSwitch):
     pass
 
 
+class OwnTypeTests(MroDispatch):
+    """The classes one module tests a value against: isinstance, issubclass, ``type(x) is``
+    and class patterns, each reported by the final name it spells."""
+
+    def __init__(self, foreign: frozenset[str]) -> None:
+        self.foreign = foreign
+        self.tested: list[tuple[int, str]] = []
+
+    def add(self, node: ast.AST, kind: ast.expr) -> None:
+        for spelled in kind.elts if isinstance(kind, ast.Tuple) else (kind,):
+            match spelled:
+                case ast.Name(id=name) | ast.Attribute(attr=name) if (
+                        ast.unparse(spelled).partition(".")[0] not in self.foreign):
+                    self.tested.append((node.lineno, name))
+
+    @staticmethod
+    def foreign_bindings(tree: ast.Module, ours: frozenset[str]) -> frozenset[str]:
+        """Names this module binds from another program's modules: ``ast`` in ``ast.Import``."""
+        bound: set[str] = set()
+        for node in ast.walk(tree):
+            match node:
+                case ast.Import(names=names):
+                    bound.update((alias.asname or alias.name).partition(".")[0] for alias in names
+                                 if alias.name.partition(".")[0] not in ours)
+                case ast.ImportFrom(module=module, level=0, names=names) if (
+                        (module or "").partition(".")[0] not in ours):
+                    bound.update(alias.asname or alias.name for alias in names)
+        return frozenset(bound)
+
+    @handles(ast.Call)
+    def instance_check(self, node: ast.Call) -> None:
+        match node:
+            case ast.Call(func=ast.Name(id="isinstance" | "issubclass"), args=[_, kind]):
+                self.add(node, kind)
+
+    @handles(ast.Compare)
+    def exact_type(self, node: ast.Compare) -> None:
+        match node:
+            case ast.Compare(left=ast.Call(func=ast.Name(id="type")), comparators=[kind]):
+                self.add(node, kind)
+
+    @handles(ast.MatchClass)
+    def class_pattern(self, node: ast.MatchClass) -> None:
+        self.add(node, node.cls)
+
+    @classmethod
+    def of(cls, source: bytes, path: str, ours: frozenset[str]) -> list[tuple[int, str]]:
+        tree = ast.parse(source, path)
+        tests = cls(cls.foreign_bindings(tree, ours))
+        for node in ast.walk(tree):
+            tests.dispatch_sync(node)
+        return tests.tested
+
+
+class OwnTypeTest(InventoryMeasure[ModuleDeclarations]):
+    """Type tests against a class this repository declares, per changed file under --root.
+
+    A test of our own class re-derives at the call site what the class's method already
+    answers, so every one counts, a single arm included: the fix is a method on the base and an
+    override in the member. Foreign values are dispatched once by MroDispatch at the decoder,
+    which tests their foreign types, never ours. The declared classes are every production
+    file's, since a tested class and its test can sit in different trees.
+    """
+
+    @classmethod
+    def inventory(cls, repo: Path, ref: str, root: str) -> frozenset[str]:
+        return production_paths(repo, ref)
+
+    reading = DeclaredSpellings.declarations
+
+    @classmethod
+    def measured(cls, repo: Path, ref: str, base: str, head: str,
+                 readings: dict[str, ModuleDeclarations], root: str) -> dict[str, int]:
+        declared = {name for module in readings.values() for name, _ in module.classes}
+        ours = frozenset(cls.top_level(path) for path in readings)
+        selected = {path for path in readings.keys() & touched_paths(repo, base, head)
+                    if path.startswith(root)}
+        return {f"{cls.__name__}:{path}": sum(name in declared for _, name in
+                                              OwnTypeTests.of(source, path, ours))
+                for path, source in GitMeasure.sources(repo, ref, selected)}
+
+    @staticmethod
+    def top_level(path: str) -> str:
+        """The import name a production file is reached under: its package below ``src``, or
+        its own stem for a script directory such as ``tools``."""
+        parts = Path(path).with_suffix("").parts
+        return parts[1] if parts[0] == "src" and len(parts) > 1 else parts[-1]
+
+    align = PerFileMeasure.align
+
+
 class BuiltinHandlerTypeSwitch(BuiltinHandlerDeclarations, PerFileMeasure):
     """Share the audit collector; per-file counts prevent moving primitive debt."""
 
@@ -1651,7 +1813,7 @@ class BuiltinHandlerTypeSwitch(BuiltinHandlerDeclarations, PerFileMeasure):
     def count(cls, source: bytes, filename: str) -> int:
         if not cls.admits(filename):
             return 0
-        return cls.count_module(ast.parse(source, filename))
+        return cls.count_module(cls.tree(source, filename))
 
 
 class GodClassExcess(InventoryMeasure[dict[str, int]]):
@@ -1929,7 +2091,7 @@ class TypingReference(MroDispatch):
 class StringSubscript(OccurrenceMeasure):
     @classmethod
     def count(cls, source: bytes, filename: str) -> int:
-        tree = ast.parse(source, filename)
+        tree = cls.tree(source, filename)
         imports = TypingImports.of(tree)
         count = 0
         for node in ast.walk(tree):
@@ -2105,7 +2267,7 @@ class AnyName(PerFileMeasure):
 
     @classmethod
     def uses(cls, source: bytes, filename: str) -> tuple[AnyUse, ...]:
-        tree = ast.parse(source, filename)
+        tree = cls.tree(source, filename)
         sites = DeclaredTypeSites(TypingImports.at_any_depth(tree))
         sites.read(tree)
         return tuple(sorted(sites.uses, key=lambda use: (use.line, use.site, use.owner)))

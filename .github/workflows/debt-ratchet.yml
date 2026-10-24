@@ -166,6 +166,14 @@ jobs:
           uv sync --locked --all-extras
           echo "$GITHUB_WORKSPACE/.venv/bin" >> "$GITHUB_PATH"
 
+      # Saved by debt-ratchet-cache.yml on main; entries are keyed by content, so any
+      # older main's cache only misses where the code differs.
+      - uses: actions/cache/restore@v4
+        with:
+          path: ~/.cache/agent-comms
+          key: debt-ratchet-${{ matrix.kind }}-${{ github.event.merge_group.base_sha || github.event.pull_request.base.sha }}
+          restore-keys: debt-ratchet-${{ matrix.kind }}-
+
       - name: No new structural debt against the base
         env:
           BASE: ${{ github.event.merge_group.base_sha || github.event.pull_request.base.sha }}

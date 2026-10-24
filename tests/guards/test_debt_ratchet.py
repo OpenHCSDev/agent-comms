@@ -641,6 +641,8 @@ def test_chain_terms_catch_growth_hidden_by_unchanged_chain_count(repo: Reposito
         ("TypeSwitch", "if isinstance(value, Case{case}): return 1"),
         ("TypeSwitch", "if type(value) is Case{case}: return 1"),
         ("TypeSwitch", "match value:\n        case Case{case}(): return 1"),
+        ("TypeSwitch", "if issubclass(value, Case{case}): return 1"),
+        ("TypeSwitch", "if value is Case{case}: return 1"),
     ],
 )
 def test_dispatch_growth_and_reduction_use_the_installed_command(
@@ -664,6 +666,18 @@ def test_dispatch_growth_and_reduction_use_the_installed_command(
     assert status == 0
     assert report["delta"][f"{measure}:{repo.root}/policy.py"] == -1
     assert report["delta"][f"{measure}Arms:{repo.root}/policy.py"] == -4
+
+
+def test_own_class_type_test_counts_one_arm_and_never_a_foreign_class(repo: Repository) -> None:
+    owned = "class Case:\n    pass\n\n\nclass Import:\n    pass\n"
+    base = repo.commit({"owned.py": owned, "check.py": "import ast\n\n\ndef read(node):\n"
+                        "    return isinstance(node, ast.Import)\n"})
+    head = repo.commit({"check.py": "import ast\n\nfrom .owned import Case\n\n\ndef read(node):\n"
+                        "    return isinstance(node, ast.Import) or issubclass(node, Case)\n"})
+    status, report = repo.compare(base, head)
+    assert status == 1
+    assert report["base"][f"OwnTypeTest:{repo.root}/check.py"] == 0
+    assert report["delta"][f"OwnTypeTest:{repo.root}/check.py"] == 1
 
 
 def test_dispatch_scopes_subjects_and_repeated_cases_do_not_combine(repo: Repository) -> None:
@@ -704,6 +718,7 @@ async def second(value):
             "TypeSwitch",
             "def decide(x):\n    return isinstance(x, A) or isinstance(x, B) or isinstance(x, C)\n",
         ),
+        ("OwnTypeTest", "class Case:\n    pass\ndef read(x):\n    return isinstance(x, Case)\n"),
         ("AnyName", "from typing import Any\ndef read(value: Any) -> None: ...\n"),
         ("AnyName", "from typing import Any\nvalue = Any\n"),
         ("UnannotatedParameter", "def read(value): ...\n"),
