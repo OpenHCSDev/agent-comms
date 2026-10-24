@@ -22,6 +22,8 @@ from agent_comms_hooks import ClaudeHookProgram
 
 from .child_process import Platform
 from .declared_family import DeclaredFamily
+from .errors import RelationViolationError
+from .host_services import SystemdUserService
 from .host_services.codex_inbox import CodexInboxService
 
 
@@ -61,6 +63,12 @@ class Harness(DeclaredFamily, affix="Harness"):
         return tuple(
             member(home) for member in cls.members_with(cls) if shutil.which(member.executable)
         )
+
+    @classmethod
+    def retire_session(cls, session: str) -> SystemdUserService:
+        """Stop the bridge delivering to ``session`` before its thread moves to native Pi."""
+        raise RelationViolationError(
+            f"{cls.declared_name} sessions have no declared bridge to retire; re-home refused.")
 
     @staticmethod
     def bin(name: str) -> Path:
@@ -155,6 +163,14 @@ class CodexHarness(Harness):
     def configure(self) -> tuple[Path, ...]:
         CodexInboxService.install(home=self.home)
         return (CodexInboxService.unit_file(self.home),)
+
+    @classmethod
+    def retire_session(cls, session: str) -> CodexInboxService:
+        if not session:
+            raise RelationViolationError("Codex reported no session id; cannot retire its inbox.")
+        inbox = CodexInboxService(session)
+        inbox.retire()
+        return inbox
 
 
 @dataclass(frozen=True)
