@@ -435,7 +435,7 @@ class GoalWorkDecision(GoalLedgerTable, TypedTable):
     goal_id: Annotated[
         GoalId, Column(primary_key=True, references=TableReference(Generation, ("goal_id",)))
     ]
-    decision: Annotated[WorkDecision, Column(primary_key=True, renamed_from=("decision_id",))]
+    decision: Annotated[WorkDecision, Column(primary_key=True)]
     generation: int
 
     def claim(self, conn: sqlite3.Connection) -> None:
