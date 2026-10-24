@@ -58,7 +58,7 @@ def test_saved_goal_prompt_hidden_but_followup_and_images_survive_reopen(tmp_pat
     session.write_text("".join(json.dumps(row) + "\n" for row in rows))
     comms.threads.attach_session((attachment_owner := comms.registry.require("worker")), str(session), process=attachment_owner.process_identity)
     reopened = wire(comms.root)
-    events = reopened.transcripts.thread_transcript_page("worker").events
+    events = reopened.transcripts.capture_page_read("worker").read().events
     assert [event.text for event in events if event.declared_name == "context"] == [
         GOAL_PROMPT,
         "User follow-up:\nPlease inspect this image\nthen continue.",

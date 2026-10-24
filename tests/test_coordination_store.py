@@ -831,24 +831,15 @@ def test_ambiguity_forces_failed_partition(db_path: Path) -> None:
 
 def test_replay_facts_cannot_be_erased(db_path: Path) -> None:
     with ready(db_path) as db:
-        _, fence = started(db)
-        db.observe_replay(
-            fence,
-            expected_pointer_revision=1,
-            expected_replay_revision=None,
-            facts=ReplayFact.TOOL_EXECUTED,
-            replay_safe=False,
-            side_effects_possible=True,
-        )
-        with pytest.raises(IdentityConflict):
-            db.observe_replay(
-                fence,
-                expected_pointer_revision=1,
-                expected_replay_revision=1,
-                facts=ReplayFact.NONE,
-                replay_safe=True,
-                side_effects_possible=False,
-            )
+        started(db)
+        with db.session.writing() as connection:
+            ReplayAssessments.accumulate(connection, "exec", ReplayFact.TOOL_EXECUTED)
+            recorded = ReplayAssessments.for_execution(connection, "exec")
+            with pytest.raises(IdentityConflict):
+                recorded.observe(
+                    connection, "exec", facts=ReplayFact.NONE,
+                    replay_safe=True, side_effects_possible=False,
+                )
         assert db.get("exec").replay.require_assessment().facts == ReplayFact.TOOL_EXECUTED
 
 

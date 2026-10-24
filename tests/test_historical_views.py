@@ -219,15 +219,11 @@ def test_duplicate_and_newer_incarnations_sessions(tmp_path):
     declarations = {h.thread.name: h.thread for h in live.views.historical_threads()}
     assert declarations["alice"].created_at == declarations["bob"].created_at == 10.0
     assert live.registry.require("alice").created_at == 20.0
-    page = live.transcripts.thread_transcript_page(
-        "alice", historical_source=source.key, max_messages=1
-    )
-    assert [e.text for e in page.events] == ["old answer"]
-    assert page.events[0].routing == routing
-    earlier = live.transcripts.thread_transcript_page(
-        "alice", historical_source=source.key, before=page.before, max_messages=1
-    )
-    assert [e.text for e in earlier.events if e.declared_name == "user"] == [
+    page = live.transcripts.capture_page_read("alice", historical_source=source.key).read()
+    (answer,) = (e for e in page.events if e.declared_name == "assistant")
+    assert answer.text == "old answer"
+    assert answer.routing == routing
+    assert [e.text for e in page.events if e.declared_name == "user"] == [
         "original owner question"
     ]
     assert session.read_text() == "".join(json.dumps(r) + "\n" for r in records)
