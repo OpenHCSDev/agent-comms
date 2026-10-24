@@ -89,6 +89,10 @@ class SourceGrowth:
     def total(self) -> int:
         return sum(lines for _path, lines in self.files)
 
+    @property
+    def exceeds(self) -> bool:
+        return self.total > self.limit
+
     def growing(self) -> tuple[str, ...]:
         return tuple(path for path, lines in self.files if lines > 0)
 
@@ -107,7 +111,7 @@ class BranchDifference:
     main: str
     behind: int
     files: frozenset[str]
-    code_growth: int
+    growth: SourceGrowth
 
 
 class ForgeAnswer(WireModel):
@@ -391,7 +395,7 @@ query($owner: String!, $name: String!, $after: String) {
         files = self.changed(base, head)
         return BranchDifference(
             RepositoryName(*self.repository), branch, head, moved_at, main, behind, files,
-            self.source_growth(base, head, files).total,
+            self.source_growth(base, head, files),
         )
 
     def changed(self, base: str, head: str) -> frozenset[str]:

@@ -287,22 +287,21 @@ class BranchGrowth(HeldBranchRule):
     holder: ThreadIncarnation
     repository: RepositoryName
     branch: str
-    growth: int = field(compare=False)
-    limit: ClassVar[int] = SourceGrowth.limit
+    growth: SourceGrowth = field(compare=False)
 
     @classmethod
     def derive(cls, branches: tuple[HeldBranch, ...]) -> tuple[Self, ...]:
         return tuple(
             cls(held.problem, held.holder, held.difference.repository,
-                held.difference.branch, held.difference.code_growth)
-            for held in branches if held.difference.code_growth > cls.limit
+                held.difference.branch, held.difference.growth)
+            for held in branches if held.difference.growth.exceeds
         )
 
     def line(self) -> str:
         return (
             f"SOURCE GROWTH: {self.problem} {self.holder.name} "
-            f"{self.repository.to_wire()}:{self.branch} grows src by {self.growth} code lines "
-            f"(limit {self.limit}) -> the verdict states why the growth is necessary, "
+            f"{self.repository.to_wire()}:{self.branch} grows src by {self.growth.total} code "
+            f"lines (limit {self.growth.limit}) -> the verdict states why the growth is necessary, "
             "or the slop is deleted"
         )
 

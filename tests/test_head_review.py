@@ -159,6 +159,9 @@ def test_acceptance_over_the_growth_limit_needs_a_reason_naming_each_growing_fil
     request = opened(github, source, 8, head)
     with pytest.raises(ToolRefusedError, match=f"src/grown.py \\+{grown}"):
         invoke(comms, request, ReviewedHeadVerdict(ACCEPTED))
+    with pytest.raises(ToolRefusedError, match="names no reason for src/grown.py"):
+        invoke(comms, request, GrownHeadVerdict(ACCEPTED, GrowthReason(
+            "overgrown.py declares forty one values that the reviewed request needs as names")))
     assert not comms.goals.todos.head_reviews(request)
     invoke(comms, request, GrownHeadVerdict(ACCEPTED, GrowthReason(
         "grown.py declares forty one values that the reviewed request needs as separate names")))

@@ -1459,6 +1459,11 @@ class GrowthReason(PlainText):
     refusal = "Say why the source grows in {}+ words; jargon {} hides what happened."
     least_words = 12
 
+    def names(self, path: str) -> bool:
+        """One whole word of the reason is the file's path or its file name."""
+        words = {word.strip(".,;:()`'\"") for word in self.text.split()}
+        return bool({path, Path(path).name} & words)
+
 
 class CheckCorrectionReason(PlainText):
     """Why the recorded check was wrong, in enough words to stand on the record."""
@@ -3351,7 +3356,7 @@ class ReviewedHeadVerdict(DecidedHeadVerdict):
         return f"#{request.pr} (src {growth.total:+d})"
 
     def require_growth(self, growth: SourceGrowth) -> None:
-        if growth.total > growth.limit:
+        if growth.exceeds:
             raise TodoError(f"Source grows {growth.total:+d} code lines (limit {growth.limit}): "
                             f"{growth.listing()}. Delete the slop or accept with --growth.")
 
@@ -3364,7 +3369,7 @@ class GrownHeadVerdict(ReviewedHeadVerdict):
 
     def require_growth(self, growth: SourceGrowth) -> None:
         if unnamed := [path for path in growth.growing()
-                       if Path(path).name not in self.growth.text]:
+                       if not self.growth.names(path)]:
             raise TodoError(f"--growth names no reason for {', '.join(unnamed)} "
                             f"({growth.listing()}).")
 
