@@ -56,7 +56,7 @@ class DeadBinding(BindingMigration):
 
 def state_directories(home: Path) -> tuple[Path, ...]:
     """Recorded commands retain custom state paths; default roots retain inactive bindings."""
-    states = set()
+    states: set[Path] = set()
     parser = argparse.ArgumentParser(add_help=False)
     parser.add_argument("--state", type=Path, action="append", default=[])
     parser.add_argument("--session", action="append", default=[])
