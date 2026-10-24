@@ -9,7 +9,7 @@ from pathlib import Path
 from .bus import Bus
 from .bus_publication import Delivered
 from .bus_source_page import CandidateQuery
-from .field_codec import MalformedRecord, MessageId
+from .field_codec import MalformedRecord, MessageId, ThreadLookup
 from .wake_policy import WakePolicy
 
 
@@ -21,13 +21,13 @@ class ProjectionUnavailableError(RuntimeError):
 class Candidate:
     source_seq: int
     message_id: MessageId
-    recipient_lookup: str
+    recipient_lookup: ThreadLookup
     sender: str
     target: str
     wake_mode: type[WakePolicy]
 
     @classmethod
-    def for_recipient(cls, record: Delivered, lookup: str) -> tuple[Candidate, ...]:
+    def for_recipient(cls, record: Delivered, lookup: ThreadLookup) -> tuple[Candidate, ...]:
         return tuple(
             cls(record.seq, record.message_id, lookup, record.sender, record.target,
                 decision.candidate_wake_mode())
@@ -62,7 +62,7 @@ class WakeCandidateIndex:
         return self.bus.revision()
 
     def page(
-        self, *, recipient_lookup: str, after_seq: int,
+        self, *, recipient_lookup: ThreadLookup, after_seq: int,
         required_through_seq: int, limit: int = 32,
     ) -> CandidatePage:
         request = CandidateQuery.capture(

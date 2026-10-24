@@ -10,7 +10,7 @@ import os
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, ClassVar
 
-from agent_comms.field_codec import GoalId
+from agent_comms.field_codec import GoalId, ThreadLookup
 from .child_process import ProcessIdentity
 from .coordination_errors import StaleFence
 from .coordination_tables.participants import OwnerGenerations
@@ -189,12 +189,12 @@ class ParticipantOwner:
     thread: Thread
     generation: int
 
-    def coordinator_identity(self, lookup: str) -> OwnerGenerations:
+    def coordinator_identity(self, lookup: ThreadLookup) -> OwnerGenerations:
         return OwnerGenerations(
             owner_lookup=lookup, generation=self.generation
         )
 
-    def require(self, store: Coordination, lookup: str) -> None:
+    def require(self, store: Coordination, lookup: ThreadLookup) -> None:
         participant = store.participants.get(lookup)
         if not participant.committed or participant.owner_identity != self.coordinator_identity(lookup):
             raise StaleFence("cohort participant generation changed")

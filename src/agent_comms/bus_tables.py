@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Annotated
 
 from agent_comms import messages
-from agent_comms.field_codec import FieldCodec
+from agent_comms.field_codec import FieldCodec, ThreadLookup
 from agent_comms.message_reference import MessageReference
 from agent_comms.typed_table import (
     Column,
@@ -31,11 +31,11 @@ class BusSchema(ComposedSchemas, messages.BusTables, ProjectionProducerTables, m
 class ParticipantSource(messages.BusProjectionTables, declared_name=None):
     """A recorded participant's positions in actual frozen deliveries."""
 
-    lookup: Annotated[str, Column(primary_key=True)]
+    lookup: Annotated[ThreadLookup, Column(primary_key=True)]
     seq: Annotated[int, Column(primary_key=True)]
 
     @classmethod
-    def query(cls, lookup: str) -> tuple[str, tuple[object, ...]]:
+    def query(cls, lookup: ThreadLookup) -> tuple[str, tuple[object, ...]]:
         return f'SELECT seq FROM "{cls.declared_name}" WHERE lookup=?', (lookup,)
 
 
@@ -48,7 +48,7 @@ class ReceivedSource(ParticipantSource):
 
     @classmethod
     def query(
-        cls, lookup: str, sender_lookups: tuple[str, ...] = (),
+        cls, lookup: ThreadLookup, sender_lookups: tuple[str, ...] = (),
     ) -> tuple[str, tuple[object, ...]]:
         query, parameters = super().query(lookup)
         if sender_lookups:
@@ -87,7 +87,7 @@ class DirectReplySource(AwaitingAnswerSource, declared_name=None):
 
     @classmethod
     def query(
-        cls, lookup: str, sender_lookups: tuple[str, ...] = (),
+        cls, lookup: ThreadLookup, sender_lookups: tuple[str, ...] = (),
     ) -> tuple[str, tuple[object, ...]]:
         query, parameters = AwaitingAnswerSource.query(lookup, sender_lookups)
         return query + " AND starts_direct_turn=?", (*parameters, True)

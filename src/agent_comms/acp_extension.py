@@ -37,6 +37,7 @@ from .field_codec import (
     WireValue,
     WireName,
     WireOmitDefault,
+    RootId,
 )
 from .goal_presentation import GoalSnapshot, GoalExecution
 from .input_attempt import InputAttempt
@@ -302,11 +303,10 @@ class NoCursorScope(CursorScope):
 @dataclass(frozen=True)
 class LiveCursorScope(CursorScope, LiveAttachmentScope):
     session_id: str
-    wire_root_id: str
+    wire_root_id: RootId
     owner: ProcessIdentity
 
     def __post_init__(self):
-        Id128Text.decode(self.wire_root_id)
         self.claimed_identity.incarnation.require_recorded()
         if (
             not self.session_id

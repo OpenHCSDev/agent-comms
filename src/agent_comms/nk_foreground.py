@@ -47,7 +47,7 @@ class ForegroundOwner:
     """The registration belongs to this process and authorizes at most one GO."""
 
     root: Path
-    wire_root_id: str
+    wire_root_id: RootId
     name: str
     native_package: VerifiedNativePackage
     _started: bool = field(default=False, init=False, repr=False)

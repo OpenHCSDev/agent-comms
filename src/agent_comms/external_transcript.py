@@ -19,7 +19,7 @@ from typing import TYPE_CHECKING, Annotated, ClassVar
 from uuid import uuid4
 
 from .declared_family import DeclaredFamily
-from .field_codec import FieldCodec
+from .field_codec import ThreadLookup, FieldCodec
 from .locked_store import RegistryFile
 from .native_transcript import RecordsCut
 from .recorded_time import EventTime, GeneratedTimestamp
@@ -449,7 +449,7 @@ class ExternalTranscript(TranscriptSource, DurableStore):
     synchronous: ClassVar[str] = "NORMAL"
 
     @property
-    def lookup(self) -> str:
+    def lookup(self) -> ThreadLookup:
         return self.incarnation.require_recorded().lookup
 
     def tool_call_between(self, since: float, through: float) -> bool:

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from agent_comms.field_codec import ThreadLookup
+
 import hashlib
 import secrets
 from dataclasses import dataclass
@@ -20,7 +22,7 @@ class AttemptAuthority:
 
     execution_id: str
     ordinal: int
-    owner_lookup: str
+    owner_lookup: ThreadLookup
     owner_generation: int
     token_digest: str
 
@@ -29,7 +31,7 @@ class AttemptAuthority:
 class OwnerFence:
     execution_id: str
     attempt_ordinal: int
-    owner_lookup: str
+    owner_lookup: ThreadLookup
     owner_generation: int
     revision: int
     token: str

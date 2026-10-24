@@ -2,6 +2,8 @@
 
 from abc import ABC, abstractmethod
 
+from .field_codec import ThreadLookup
+
 
 class ParticipantIdentity(ABC):
     """Naming a participant does not grant a live generation or replay permission."""
@@ -10,4 +12,4 @@ class ParticipantIdentity(ABC):
 
     @property
     @abstractmethod
-    def lookup(self) -> str: ...
+    def lookup(self) -> ThreadLookup: ...

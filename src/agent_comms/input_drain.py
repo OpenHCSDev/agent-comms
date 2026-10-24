@@ -38,7 +38,7 @@ from .drain_failures import (
     record_drain_failure,
 )
 from .errors import RelationViolationError, UnregisteredThreadError
-from .field_codec import InputId
+from .field_codec import InputId, RootId, ThreadLookup
 from .image_input import ImageInput
 from .input_attempt import (
     UNOBSERVED_DELIVERY_SCOPE,
@@ -79,11 +79,11 @@ class PrivateObservationState(ABC):
     settled = False
 
     @abstractmethod
-    def has_unobserved_inputs(self, bus: Bus, lookup: str) -> bool: ...
+    def has_unobserved_inputs(self, bus: Bus, lookup: ThreadLookup) -> bool: ...
 
 
 class NoPrivateObservation(PrivateObservationState):
-    def has_unobserved_inputs(self, bus: Bus, lookup: str) -> bool:
+    def has_unobserved_inputs(self, bus: Bus, lookup: ThreadLookup) -> bool:
         return True
 
 
@@ -96,12 +96,12 @@ class PrivateObservation(PrivateObservationState):
     work: tuple
     settled = True
 
-    def has_unobserved_inputs(self, bus: Bus, lookup: str) -> bool:
+    def has_unobserved_inputs(self, bus: Bus, lookup: ThreadLookup) -> bool:
         self.source_prefix.require_current(bus)
         return bool(bus.received(
             lookup, after=self.source_prefix.through_seq, limit=1, descending=False))
 
-    async def drain(self, inputs, session_id: str, root_id: str) -> int:
+    async def drain(self, inputs, session_id: str, root_id: RootId) -> int:
         await DeliveredInput.recover_interrupted(inputs, session_id, root_id)
         return await inputs.effects._drain_private_nk(session_id, root_id)
 
@@ -109,7 +109,7 @@ class PrivateObservation(PrivateObservationState):
 class ExecutionWaitingObservation(PrivateObservation):
     """A previous execution blocks new input until its stored state changes."""
 
-    async def drain(self, inputs, session_id: str, root_id: str) -> int:
+    async def drain(self, inputs, session_id: str, root_id: RootId) -> int:
         return 0
 
 
@@ -249,7 +249,7 @@ class InputObservation(ABC):
             pass
 
     def _private_observation_revision(
-        self, session_id: str, root_id: str, source_prefix: SourcePrefix, entry: RegistryEntry,
+        self, session_id: str, root_id: RootId, source_prefix: SourcePrefix, entry: RegistryEntry,
         store: Coordination,
     ) -> PrivateObservation:
         """Original owner/work observations, never delivery or replay authority.
@@ -296,7 +296,9 @@ class InputObservation(ABC):
             maintenance.phase, maintenance.generation,
         ))
 
-    async def _observe_private_revision(self, session_id: str, root_id: str) -> PrivateObservation:
+    async def _observe_private_revision(
+        self, session_id: str, root_id: RootId
+    ) -> PrivateObservation:
         # Pending acquisition is not an inbox failure or a completed read.
         source_prefix = await Coordination.run_worker(partial(
             SourcePrefix.capture, self.comms.bus.bus, 0))
@@ -304,7 +306,7 @@ class InputObservation(ABC):
         return await self._observe_coordination(session_id, root_id, source_prefix, entry)
 
     async def _observe_coordination(
-        self, session_id: str, root_id: str, source_prefix: SourcePrefix, entry: RegistryEntry,
+        self, session_id: str, root_id: RootId, source_prefix: SourcePrefix, entry: RegistryEntry,
     ) -> PrivateObservation:
         # Release all bus locks before starting registry/SQL consumer work.
         # The original coordinator owns its bounded read acquisition policy;
@@ -662,7 +664,7 @@ class InputDrain(InputObservation):
         async with self.state(session_id).lock:
             return await self.drain_owned_inbox(session_id)
 
-    async def _drain_private_if_changed(self, session_id: str, root_id: str) -> int:
+    async def _drain_private_if_changed(self, session_id: str, root_id: RootId) -> int:
         # The caller still validates the current private marker each time. The
         # ordinary loop still synchronizes configuration and schedules goals.
         state = self.state(session_id)

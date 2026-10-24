@@ -22,7 +22,7 @@ from agent_comms.response_acknowledgement import (
 )
 from agent_comms.typed_table import Column, Generated, sql_literal
 
-from .field_codec import FieldCodec, MessageId
+from .field_codec import FieldCodec, MessageId, ThreadLookup
 from .read_basis import RepliesDisplayScope
 from .wake_policy import RecipientDecision
 
@@ -68,13 +68,13 @@ class Delivered(BusRecord, declared_name=None):
     def deliveries(self) -> tuple[Self, ...]:
         return (self,)
 
-    def direct_for(self, recipient_lookup: str) -> bool:
+    def direct_for(self, recipient_lookup: ThreadLookup) -> bool:
         """Direct reply semantics and the committed addressed incarnation agree."""
         policy = self.message.role.response_policy(self.message)
         return (policy.starts_direct_turn
                 and self.audience.includes_lookup(recipient_lookup))
 
-    def compaction_messages_for(self, recipient_lookup: str) -> tuple[Message, ...]:
+    def compaction_messages_for(self, recipient_lookup: ThreadLookup) -> tuple[Message, ...]:
         addressed = self.audience.includes_lookup(recipient_lookup)
         authored = (self.audience.sender_lookup == recipient_lookup
                     and self.message.retains_authored_task)
