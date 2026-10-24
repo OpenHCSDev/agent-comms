@@ -5,7 +5,12 @@ import sqlite3
 import pytest
 
 from agent_comms.field_codec import GoalId
-from agent_comms.goal_history import GoalHistoryError, GoalHistoryStore
+from agent_comms.goal_history import (
+    CommittedEntry,
+    GoalHistoryError,
+    GoalHistoryStore,
+    PendingEntry,
+)
 from agent_comms.goals import Goal
 from agent_comms.registration import Registration
 from agent_comms.threads import Thread
@@ -35,9 +40,9 @@ def test_pending_rows_remain_pending_and_original_bytes_unchanged(tmp_path):
     before = preserved_files(registry.store.path.parent)
     with registry.store.reading():
         rows = GoalHistoryStore.acquire_read_only(registry.store.path)
-    assert [(row.sequence, row.state.declared_name) for row in rows] == [
-        (1, 'committed'), (sequence, 'pending')
-    ]
+    assert [row.sequence for row in rows] == [1, sequence]
+    assert rows[0].state is CommittedEntry
+    assert rows[1].state is PendingEntry
     assert before == preserved_files(registry.store.path.parent)
 
 

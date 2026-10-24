@@ -152,7 +152,10 @@ def test_writer_derives_missing_nullable_fields_but_refuses_unclaimed_data():
             db.execute(f'ALTER TABLE "{GoalHistoryEntry.declared_name}" DROP COLUMN {column}')
         db.commit()
         GoalHistoryEntry.reconcile_schema(db, WriterOwnedFile())
-        assert GoalHistoryEntry.require(db, sequence=1) == entry
+        restored = GoalHistoryEntry.require(db, sequence=1)
+        assert restored == entry
+        assert restored.kind is BaselineRevision
+        assert restored.state is CommittedEntry
         db.execute(f'ALTER TABLE "{GoalHistoryEntry.declared_name}" ADD COLUMN unclaimed TEXT')
         db.execute(f'UPDATE "{GoalHistoryEntry.declared_name}" SET unclaimed=?', ('preserve this',))
         db.commit()

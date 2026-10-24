@@ -19,7 +19,13 @@ from agent_comms.goal_actions import (
     PausedGoalAction,
     SetGoalAction,
 )
-from agent_comms.goal_history import GoalHistoryError, GoalHistoryStore
+from agent_comms.goal_history import (
+    BaselineRevision,
+    GoalHistoryError,
+    GoalHistoryStore,
+    ObservedGapRevision,
+    TransitionRevision,
+)
 from agent_comms.goals import NoGoal
 from agent_comms.goal_states import ActiveGoal
 from agent_comms.tool_request import ToolRequest
@@ -61,7 +67,8 @@ def test_goal_history_records_transitions_replacement_clear_and_rename(tmp_path,
 
     reopened = wire(comms.root)
     entries = reopened.goals.goal_history("worker")
-    assert [entry.kind.declared_name for entry in entries] == ["transition"] * 6
+    assert len(entries) == 6
+    assert all(entry.kind is TransitionRevision for entry in entries)
     assert [entry.after for entry in entries] == [first, paused, resumed, completed, second, NoGoal()]
     assert entries[0].after.text == "Ask @reviewer about the release"
     assert entries[4].before == completed
@@ -94,14 +101,16 @@ def test_existing_goal_seeds_only_current_observed_baseline(tmp_path):
     reopened = wire(comms.root)
     baseline = reopened.goals.goal_history("worker")
     assert len(baseline) == 1
-    assert baseline[0].kind.declared_name == "baseline"
+    assert baseline[0].kind is BaselineRevision
     assert baseline[0].before == NoGoal() and baseline[0].after == current
     assert wire(comms.root).goals.goal_history("worker") == baseline
     paused = reopened.goals.update_goal(
         "worker", PausedGoalAction(expect=GoalPrecondition(goal_id=current.id))
     )
     entries = wire(comms.root).goals.goal_history("worker")
-    assert [entry.kind.declared_name for entry in entries] == ["baseline", "transition"]
+    assert len(entries) == 2
+    assert entries[0].kind is BaselineRevision
+    assert entries[1].kind is TransitionRevision
     assert entries[-1].before == current and entries[-1].after == paused
 
 
@@ -158,7 +167,8 @@ def test_crash_after_registry_write_reconciles_pending_history(tmp_path, monkeyp
     paused = reopened.registry.require("worker").goal
     assert paused is not None and paused.state.declared_name == "paused"
     entries = reopened.goals.goal_history("worker")
-    assert [entry.kind.declared_name for entry in entries] == ["transition", "transition"]
+    assert len(entries) == 2
+    assert all(entry.kind is TransitionRevision for entry in entries)
     assert entries[-1].before == current and entries[-1].after == paused
 
 
@@ -173,7 +183,9 @@ def test_unjournaled_current_registry_change_is_labeled_observed_gap(tmp_path):
 
     reopened = wire(comms.root)
     entries = reopened.goals.goal_history("worker")
-    assert [entry.kind.declared_name for entry in entries] == ["transition", "observed_gap"]
+    assert len(entries) == 2
+    assert entries[0].kind is TransitionRevision
+    assert entries[1].kind is ObservedGapRevision
     assert entries[-1].before == current
     assert entries[-1].after.text == "Unjournaled change"
     assert len(wire(comms.root).goals.goal_history("worker")) == 2
