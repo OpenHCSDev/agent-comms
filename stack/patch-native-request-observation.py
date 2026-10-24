@@ -18,7 +18,7 @@ def main(package):
     start = source.index("async function streamAssistantResponse(")
     end = source.index("/**", start)
     function = source[start:end]
-    function = function.replace("    // Apply context transform", """    const request = new NativeRequestObservation(config, context);
+    function = function.replace("    // Apply context transform", """    const request = new NativeRequestObservation(config);
     const publish = event => request.emit(event, emit);
     request.observe({ stage: "preparing", detail: "Preparing model request" });
     try {
@@ -56,7 +56,7 @@ def main(package):
             onRequestProgress: this.agent.onRequestProgress,""")
     summary = package / "dist/core/compaction/compaction.js"
     summary.write_text(
-        'import { NativeSummaryObservation } from "../../../node_modules/@earendil-works/pi-ai/dist/utils/agent-comms-request-observation.js";\n'
+        'import { NativeRequestObservation } from "../../../node_modules/@earendil-works/pi-ai/dist/utils/agent-comms-request-observation.js";\n'
         + summary.read_text()
     )
     replace_once(summary, 'import { completeSimple } from "@earendil-works/pi-ai/compat";',
@@ -65,8 +65,8 @@ def main(package):
         ? (await streamFn(model, context, requestOptions)).result()
         : completeSimple(model, context, requestOptions);
     return retryAssistantCall(produce, retry, requestOptions.signal, callbacks);
-}""", """    const request = new NativeSummaryObservation({ ...requestOptions,
-        onRequestProgress: callbacks?.onRequestProgress }, context);
+}""", """    const request = new NativeRequestObservation({ ...requestOptions,
+        onRequestProgress: callbacks?.onRequestProgress });
     request.observe({ stage: "preparing", detail: "Preparing compaction request" });
     try {
         const produce = async () => {

@@ -13,7 +13,7 @@ const load = path => import(pathToFileURL(join(dist, path)));
 const chat = await load('api/openai-completions.js');
 const anthropic = await load('api/anthropic-messages.js');
 const codex = await load('api/openai-codex-responses.js');
-const {NativeRequestObservation, NativeSummaryObservation, observeStream} = await load('utils/agent-comms-request-observation.js');
+const {NativeRequestObservation, observeStream} = await load('utils/agent-comms-request-observation.js');
 const {WebSocketServer} = createRequire(pathToFileURL(join(pkg, 'entry.cjs')))('ws');
 const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
 const requests = [];
@@ -66,7 +66,7 @@ wss.on('connection', socket => socket.on('message', async () => {
 await new Promise(resolve => server.listen(0,'127.0.0.1',resolve));
 const baseUrl = `http://127.0.0.1:${server.address().port}`;
 const model = {id:'fixture',name:'Fixture',provider:'local',api:'openai-completions',baseUrl:baseUrl+'/v1',contextWindow:8192,maxTokens:1024,reasoning:false,input:['text'],cost:{input:0,output:0,cacheRead:0,cacheWrite:0},compat:{maxTokensField:'max_tokens'}};
-const context = {messages:[{role:'user',inputId:'private-control',content:[{type:'text',text:'x'}],timestamp:1}]};
+const context = {messages:[{role:'user',content:[{type:'text',text:'x'}],timestamp:1}]};
 const controls = [];
 async function run(label, adapter, selectedModel, config = {}) {
     mode = label; responses = 0;
@@ -75,7 +75,7 @@ async function run(label, adapter, selectedModel, config = {}) {
         points.push(p);
         if (label==='throwing') throw new Error('Observer failure');
         if (label==='cancel' && p.stage==='first_event') config.signalOwner.abort();
-    }},context);
+    }});
     const start = requests.length;
     const options = observation.options({apiKey:'local-fixture',maxRetries:0,
         ...config, onResponse:async()=>{ if(label==='ordinary') await sleep(120); }});
@@ -90,7 +90,8 @@ async function run(label, adapter, selectedModel, config = {}) {
     assert.equal(points.filter(p=>p.stage==='stream_end').length,1,label);
     assert.equal(points.filter(p=>p.stage==='first_event').length,1,label);
     assert.equal(new Set(points.map(p=>p.requestId)).size,1);
-    assert(points.every(p=>p.inputId==='private-control' && p.sessionId==='private-control'));
+    // The input a request carries is owned by the committed context, never by its timing.
+    assert(points.every(p=>!('inputId' in p) && p.sessionId==='private-control'));
     if(label==='ordinary') {
         const headers = points.find(p=>p.stage==='headers');
         const first = points.find(p=>p.stage==='first_event');
@@ -114,11 +115,6 @@ try {
     assert(ws.points.every(p=>p.transport==='websocket'));
     assert(!ws.points.some(p=>p.stage==='headers'));
     assert.equal(wsSends,1);
-    // A summary request answers no input; an agent-loop request without one is refused.
-    const summary = [], bare = {messages:[{role:'user',content:[],timestamp:1}]};
-    new NativeSummaryObservation({onRequestProgress:p=>summary.push(p)},bare).observe({stage:'preparing'});
-    assert.equal(summary.length,1); assert(!('inputId' in summary[0]));
-    assert.throws(()=>new NativeRequestObservation({},bare),/no user input/);
     // Iterator return must close the upstream resource on early consumption end.
     let released = false; const terminal = [];
     async function* original() {try{yield 1;yield 2;}finally{released=true;}}
