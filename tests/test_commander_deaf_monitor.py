@@ -38,7 +38,8 @@ async def test_unconfirmed_monitor_reports_commander_deaf_once(
     )
     held_bus.registry.register(commander)
     state = tmp_path / "bridge-state"
-    binding = Binding(str(held_bus.root), "lead", "deaf-session")
+    binding = Binding(str(held_bus.root), "lead", "deaf-session",
+                      Binding.bus_head(str(held_bus.root)))
     operation = Serve(owner=owner, transcript=tmp_path / "deaf-session.jsonl")
     heartbeat = CommanderHeartbeat()
 
