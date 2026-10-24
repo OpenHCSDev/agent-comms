@@ -28,6 +28,7 @@ from .field_codec import InputId, GoalId, RootId
 from .goals import GoalDeclaration, NoGoal
 from .image_input import ImageInput
 from .input_attempt import InputAttempt, ReservedInput
+from .input_key import AcpInputKey, InputKey
 from .input_disposition import InputDispositions
 from .input_origin import InputOrigin, UnattributedInputOrigin, WireInputOrigin
 from .thread_identity import ClaimedIdentity, ClaimScoped
@@ -90,8 +91,8 @@ class QueuedInput:
     controller: Controller | None = None
 
     @property
-    def key(self) -> str:
-        return f"acp:{self.input_id}"
+    def key(self) -> InputKey:
+        return AcpInputKey(self.input_id)
 
     def queue_items(self, scope: QueueScope) -> tuple[QueueItem, ...]:
         """Show the item only when its recorded input generation matches the queue."""
@@ -259,7 +260,7 @@ class QueuedInput:
             raise RelationViolationError("Queued input acceptance context changed")
         if not row.queued_for(owner.incarnation, claim_scope, self.text):
             raise RelationViolationError("Queued input reservation changed")
-        if row.key != f"acp:{input_id}":
+        if row.key != AcpInputKey(input_id):
             raise RelationViolationError("Queued input ID changed")
 
     def after_clear(self) -> QueuedInput | None:
@@ -301,12 +302,12 @@ class DeliveredInput(QueuedInput):
     wake. One written without a proved start stays paused and is never resent.
     """
 
-    bus_key: str
+    bus_key: InputKey
     message: Message
     assignment: WakeAssignment
 
     @property
-    def key(self) -> str:
+    def key(self) -> InputKey:
         return self.bus_key
 
     def queue_items(self, scope: QueueScope) -> tuple[QueueItem, ...]:
@@ -419,7 +420,7 @@ class DeliveredInput(QueuedInput):
     @staticmethod
     def _recover_locked(
         comms: Comms, dispositions: InputDispositions,
-        name: str, root_id: RootId, live_keys: frozenset[str],
+        name: str, root_id: RootId, live_keys: frozenset[InputKey],
     ) -> int:
         """Acquire, recover and release entirely inside the joined worker."""
         entry = comms.registry.entry(name).entry

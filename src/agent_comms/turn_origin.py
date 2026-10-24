@@ -4,6 +4,8 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from typing import TYPE_CHECKING
 
+from .input_key import InputKey
+
 if TYPE_CHECKING:
     from .input_disposition import InputDispositions
     from .messages import Message
@@ -31,5 +33,5 @@ class TurnOrigin(ABC):
     def messages(self) -> tuple[Message, ...]: ...
 
     @abstractmethod
-    def bus_keys(self, dispositions: InputDispositions, owner: Thread) -> tuple[str, ...]: ...
+    def bus_keys(self, dispositions: InputDispositions, owner: Thread) -> tuple[InputKey, ...]: ...
 

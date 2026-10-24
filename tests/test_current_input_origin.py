@@ -18,6 +18,7 @@ from agent_comms.field_codec import FieldCodec, InputId, MessageId, TurnId, Goal
 from agent_comms.goal_states import ActiveGoal, CompletedGoal, PausedGoal
 from agent_comms.goals import AbsentGoalCheckpoint, Goal, GoalRevision, NoGoal, PresentGoalCheckpoint
 from agent_comms.input_attempt import ReservedInput
+from agent_comms.input_key import AcpInputKey
 from agent_comms.input_origin import HumanInputOrigin, UnattributedInputOrigin, WireInputOrigin
 from agent_comms.message_reference import MessageReference
 from agent_comms.queued_input import QueuedInput
@@ -93,7 +94,7 @@ async def test_original_human_followup_survives_forwarding_reservation_and_nativ
     await agent.prompt(session_id="beta", prompt=[TextContentBlock(type="text", text=command.user_text)],
                        field_meta=encode_request(command))
     inputs = agent.inputs.dispositions
-    key = "acp:" + command.input_id
+    key = AcpInputKey(command.input_id)
     row = stored_inputs(inputs.root).lookup(key)
     assert row.origin == origin and row.source_text == command.user_text
     assert len(stored_inputs(inputs.root).rows) == 1 and comms.bus.bus.revision() == before
@@ -104,7 +105,7 @@ async def test_original_human_followup_survives_forwarding_reservation_and_nativ
     contribution, = queued.content.contributions
     assert contribution.kind is UserFollowupSegment
     assert row.context_provenance() in contribution.provenance
-    native_id = "b" * 32
+    native_id = InputId("b" * 32)
     sent = "User follow-up:\n" + command.user_text
     assert inputs.bind(
         key,
@@ -172,7 +173,8 @@ async def test_foreign_or_changed_origin_refused_before_any_reservation(live_own
 async def test_historical_unknown_author_stays_neutral_and_human_scope_invalidates(live_owner):
     comms, agent = live_owner
     origin = capture(comms)
-    neutral = ReservedInput("old", None, "beta", origin.claimed_identity.claimed_generation,
+    neutral = ReservedInput(AcpInputKey(InputId.mint()), None, "beta",
+                            origin.claimed_identity.claimed_generation,
                             "beta", "Exact old user-looking text")
     payload = FieldCodec.encode(neutral)
     assert "origin" not in payload
@@ -300,7 +302,8 @@ async def test_direct_human_input_pin_shares_original_source_lineage_without_rep
     with pytest.raises(RelationViolationError):
         comms.messaging.pin_input_constraint('unaddressed', subject, worktree=origin.project)
     with pytest.raises(RelationViolationError):
-        comms.messaging.pin_input_constraint('beta', replace(subject, key='absent'), worktree=origin.project)
+        comms.messaging.pin_input_constraint(
+            'beta', replace(subject, key=AcpInputKey(InputId.mint())), worktree=origin.project)
     with pytest.raises(RelationViolationError):
         comms.messaging.pin_input_constraint('beta', replace(subject, origin=replace(origin, root_id='f'*32)),
                                              worktree=origin.project)

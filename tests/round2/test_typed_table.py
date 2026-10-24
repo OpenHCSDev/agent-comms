@@ -364,3 +364,45 @@ def test_streamed_query_decodes_only_consumed_rows_and_releases_cursor():
         rows = StreamProjection.iterate(db.execute("SELECT 2 AS enabled"))
         with pytest.raises(ValueError):
             next(rows)
+
+
+def test_declared_column_rename_preserves_rows_and_refuses_both_names():
+    from agent_comms.errors import RelationViolationError
+    from agent_comms.typed_table import DurableTables, FrozenColumn, WriterOwnedFile
+
+    @dataclass(frozen=True)
+    class RenamedFieldRow(DurableTables, TypedTable, declared_name="renamed_field_carry"):
+        key: Annotated[str, FrozenColumn(primary_key=True, renamed_from=("prior_key",))]
+        value: str
+
+    rows = [RenamedFieldRow("first", "one"), RenamedFieldRow("second", "λ two")]
+    with sqlite3.connect(":memory:") as db:
+        RenamedFieldRow.create(db)
+        for row in rows:
+            row.insert(db)
+        db.execute('ALTER TABLE renamed_field_carry RENAME COLUMN key TO prior_key')
+        db.commit()
+        before = db.execute('SELECT prior_key, value FROM renamed_field_carry').fetchall()
+
+        RenamedFieldRow.reconcile_schema(db, WriterOwnedFile())
+
+        assert RenamedFieldRow.select(db, order_by=("key",)) == rows
+        assert db.execute('SELECT key, value FROM renamed_field_carry').fetchall() == before
+        assert RenamedFieldRow.count(db) == len(rows)
+        with pytest.raises(sqlite3.IntegrityError):
+            db.execute('UPDATE renamed_field_carry SET key = ?', ("changed",))
+
+    with sqlite3.connect(":memory:") as db:
+        RenamedFieldRow.create(db)
+        for row in rows:
+            row.insert(db)
+        db.execute('ALTER TABLE renamed_field_carry ADD COLUMN prior_key TEXT')
+        db.execute('UPDATE renamed_field_carry SET prior_key = ?', ("keep this too",))
+        db.commit()
+        before = db.execute('SELECT key, value, prior_key FROM renamed_field_carry').fetchall()
+
+        with pytest.raises(RelationViolationError):
+            RenamedFieldRow.reconcile_schema(db, WriterOwnedFile())
+
+        assert db.execute(
+            'SELECT key, value, prior_key FROM renamed_field_carry').fetchall() == before

@@ -14,6 +14,8 @@ from acp.schema import (
 )
 from pydantic import JsonValue
 
+from .input_key import InputKey
+
 from . import agent_events as events
 from .agent_backend import AgentBackend
 from .agent_event_updates import AcpEventConsumer, TurnEventConsumer
@@ -436,7 +438,7 @@ class TurnRunner:
         *,
         origins: tuple[Message, ...] = (),
         images: tuple[ImageInput, ...] = (),
-        original_keys: tuple[str, ...] = (),
+        original_keys: tuple[InputKey, ...] = (),
         initial_display_text: str | None = None,
         autonomous_goal: bool = False,
         original_owner_input: bool = False,
