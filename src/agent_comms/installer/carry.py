@@ -74,8 +74,11 @@ class CarryChain:
     def finish_at(self, root: Path) -> None:
         """An accepted install leaves every step of its chain finished on its bus."""
         names = tuple(step.declared_name for step in self.steps)
-        FinishedCarryStore.at(root).update(lambda finished: DocumentChange.to(
-            FinishedCarries(tuple(dict.fromkeys((*finished.steps, *names))))))
+        FinishedCarryStore.at(root).update(
+            lambda finished: DocumentChange.to(
+                FinishedCarries(tuple(dict.fromkeys((*finished.steps, *names))))
+            )
+        )
 
 
 @dataclass(frozen=True)
