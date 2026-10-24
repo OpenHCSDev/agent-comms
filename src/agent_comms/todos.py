@@ -3100,7 +3100,16 @@ class StrikeTodo(CitedStrike, StoryEvent):
         StrikeReason(self.reason)
         if any(self.repeats(recorded) for recorded in self.prior_strikes(current)):
             return current
-        return replace(current, strikes=(*current.strikes, self), revision=current.revision + 1)
+        return self.taken_away(
+            replace(current, strikes=(*current.strikes, self), revision=current.revision + 1))
+
+    def taken_away(self, struck: Todo) -> Todo:
+        """The strike that reaches StrikeLimit takes the task away in the same write, through
+        the release `order fire` records."""
+        if not struck.struck_out(self.previous.owner):
+            return struck
+        return ReleaseTodo(struck.revision, self.actor, self.previous,
+                           StrikeReason(self.reason), self.at).apply(struck)
 
     @classmethod
     def send_back(cls, current: Todo, actor: ThreadIncarnation, previous: Assignment,
@@ -3146,13 +3155,6 @@ class FailedCheckStrike(StrikeTodo):
 
     def repeats(self, recorded: StrikeTodo) -> bool:
         return recorded.matches_failed_check(self)
-
-    def changed(self, current: Todo) -> Todo:
-        struck = super().changed(current)
-        if struck != current and struck.struck_out(self.previous.owner):
-            return ReleaseTodo(struck.revision, self.actor, self.previous,
-                               StrikeReason(self.reason), self.at).apply(struck)
-        return struck
 
     def after_record(self, goals: Goals, changed: Todo) -> None:
         if changed.revision == self.expected_revision:
