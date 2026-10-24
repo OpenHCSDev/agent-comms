@@ -49,7 +49,6 @@ from .owner_protocol import (
 )
 from .owner_connection import OwnerConnection, OwnerIdentityChangedError, socket_path
 from .runtime_requests import RuntimeRequest, SubscribeRuntimeRequest
-from .child_process import Platform
 from .errors import RelationViolationError
 from .coordination_errors import CoordinationError, IdentityConflict
 from .native_failures import NativeRequestFailure
@@ -258,7 +257,7 @@ class RuntimeServer(SessionUpdateSink):
             _LOG.error("Owner work %s failed", task.get_name(), exc_info=error)
 
     async def start(self) -> None:
-        if self.server is not None or not Platform.current().serves_local_socket:
+        if self.server is not None:
             return
         self.path.parent.mkdir(parents=True, exist_ok=True)
         try:

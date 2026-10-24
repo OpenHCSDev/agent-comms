@@ -349,8 +349,6 @@ class PrivateRegistryGuard(DurableFile, WireWakeFile, RegistryPrivacy):
             raise error
 
     def _trusted_root(self) -> None:
-        Platform.current().require_pinned_paths(RelationViolationError(
-            "Private registry guard requires POSIX directory and fixed-slot durability"))
         if ".." in self.registry_path.parts:
             _reject("has an ambiguous root path")
         root = self.registry_path.parent.absolute()
