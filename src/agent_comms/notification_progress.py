@@ -131,9 +131,6 @@ class AssignmentProgress(DeliveryProgress):
     def selected_notification(self, notification: MessageNotification, *, busy: bool) -> MessageNotification: ...
 
     @abstractmethod
-    def interrupted_notification(self, notification: MessageNotification) -> MessageNotification: ...
-
-    @abstractmethod
     def read_notification(self, notification: MessageNotification) -> MessageNotification: ...
 
     def answered_notification(self, notification: MessageNotification,
@@ -152,9 +149,6 @@ class SentProgress(WaitingDelivery, PendingDelivery, AssignmentProgress):
 
     def selected_notification(self, notification, *, busy):
         return replace(notification, state=SendingProgress(self.sent_at_ms) if busy else self)
-
-    def interrupted_notification(self, notification):
-        return replace(notification, state=InterruptedProgress(self))
 
     def read_notification(self, notification):
         raise ValueError("Read notification has no model-context proof")
@@ -180,9 +174,6 @@ class ShownToModelProgress(ReadDelivery, AssignmentProgress):
     def selected_notification(self, notification, *, busy):
         state = ReadingProgress(self.read_at_ms) if busy else SelectedReadProgress(self.read_at_ms)
         return replace(notification, state=state)
-
-    def interrupted_notification(self, notification):
-        return replace(notification, state=InterruptedReadProgress(self.read_at_ms))
 
     def read_notification(self, notification):
         return replace(notification, state=self)

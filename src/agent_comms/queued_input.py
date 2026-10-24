@@ -569,7 +569,7 @@ class InitialInput(QueuedInput):
                 inputs.state(session_id).queued[item.input_id] = item
                 resources.push_async_callback(item.finish, inputs, session_id)
                 reservation.release()
-            await inputs.emit_input_disposition(session_id, reservation.source)
+            await inputs.emit_input_delivery_changed(session_id)
             await inputs.emit_queue_state(session_id)
             await item.dispatch(inputs.effects.turns, session_id, thread_name)
 

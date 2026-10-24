@@ -74,12 +74,6 @@ class GoalState(DeclaredFamily, LifecycleState, affix="Goal"):
         return ((pause.instruction() if pause else None)
                 or "This goal is no longer active; refresh its state.")
 
-    @classmethod
-    def wire_payload(cls, reason: str | None, source: str | None) -> dict[str, object]:
-        if reason is not None:
-            raise ValueError("A blocked goal requires a bounded explicit reason.")
-        return {"kind": cls.declared_name}
-
     def check_transition(self, nxt: GoalState, *, owner: bool) -> None:
         if not self.may_become(nxt):
             raise ValueError(self.transition_refusal())
@@ -138,13 +132,6 @@ class PausedGoal(OpenGoal, FromOpenGoal):
         from .goal_presentation import PausedExecution
         return PausedExecution(source.goal.id, self.source)
 
-    @classmethod
-    def wire_payload(cls, reason: str | None, source: str | None) -> dict[str, object]:
-        if reason is not None:
-            raise ValueError("A blocked goal requires a bounded explicit reason.")
-        return {"kind": cls.declared_name,
-                "source": {"kind": source if source is not None else OwnerPause.declared_name}}
-
     @property
     def pause_source(self) -> PauseSource:
         return self.source
@@ -195,10 +182,6 @@ class BlockedGoal(BlockedState):
         if (type(reason) is not str or not reason.strip() or reason != reason.strip()
                 or len(reason) > 1024):
             raise ValueError("A blocked goal requires a bounded explicit reason.")
-
-    @classmethod
-    def wire_payload(cls, reason: str | None, source: str | None) -> dict[str, object]:
-        return {"kind": cls.declared_name, "block_reason": reason}
 
     @property
     def reason(self) -> str:

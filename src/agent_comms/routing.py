@@ -51,10 +51,6 @@ class MessageRoute:
     targets: tuple[str, ...]
 
     @property
-    def outgoing_label(self) -> str:
-        return "To " + ", ".join(self.targets)
-
-    @property
     def incoming_scope(self) -> str:
         return (
             ", ".join(
@@ -62,10 +58,6 @@ class MessageRoute:
             )
             or "direct message"
         )
-
-    @property
-    def incoming_label(self) -> str:
-        return f"Incoming from {self.sender}: via {self.incoming_scope}"
 
     @classmethod
     def from_wire(cls, data: Mapping) -> MessageRoute:

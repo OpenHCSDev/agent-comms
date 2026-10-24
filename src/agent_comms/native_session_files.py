@@ -268,16 +268,6 @@ class BusTranscriptFile(PatternFile):
         return super().files_in(root) | frozenset(
             root.glob(str(NativeSessionLocks(cls.pattern()).writer_lock)))
 
-    @classmethod
-    def sessions_in(cls, root: Path) -> tuple[NativeSessionLocks, ...]:
-        """Every saved session under ``root``, found relative to it, so a practice copy's
-        sessions are its own and never the live bus the copied registry still names."""
-        return tuple(
-            NativeSessionLocks(path)
-            for owner, directory in cls.declarations_in(root)
-            for path in sorted(owner.matching_in(directory))
-        )
-
 
 class PrivateSession(DurableFile, BusTranscriptFile):
     """A thread's own session, created fresh for it."""

@@ -291,6 +291,16 @@ class ThreadRows(ExternalJsonShape, WireValue, MutableMapping[str, Thread]):
         self._binding = binding
         self._decoded = {name: binding(thread) for name, thread in self._decoded.items()}
 
+    def __eq__(self, other: object) -> bool:
+        """Rows still stored on both sides compare as their JSON; only rows that differ there,
+        or that either side wrote, are decoded, so a one-row edit never decodes the registry."""
+        if not isinstance(other, ThreadRows):
+            return super().__eq__(other)
+        return self.keys() == other.keys() and all(
+            (name in self._raw and name in other._raw and self._raw[name] == other._raw[name])
+            or self[name] == other[name]
+            for name in self)
+
     def __getitem__(self, name: str) -> Thread:
         if name not in self._decoded:
             self._decoded[name] = self.decode_row(self._raw[name])
