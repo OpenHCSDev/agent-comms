@@ -20,7 +20,7 @@ export interface RequestObservationPoint {
 export interface NativeRequestProgress extends RequestObservationPoint {
     requestId: string;
     sessionId: string;
-    inputId: string;
+    inputId?: string;
     startedAtMs: number;
     observedAtMs: number;
     monotonicNs: string;
@@ -41,5 +41,6 @@ export declare class NativeRequestObservation {
     events<T extends { type: string }>(events: AsyncIterable<T>): AsyncGenerator<T>;
     emit<T>(event: { type: string }, publish: (event: { type: string }) => T | Promise<T>): Promise<T>;
 }
+export declare class NativeSummaryObservation extends NativeRequestObservation {}
 export declare function observeStream<T>(options: { onRequestProgress?: RequestObserver } | undefined,
     events: AsyncIterable<T>, transport: string): AsyncGenerator<T>;

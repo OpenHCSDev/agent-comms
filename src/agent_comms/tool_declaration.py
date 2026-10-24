@@ -9,6 +9,7 @@ from typing import Annotated, ClassVar, Self
 
 from .declared_family import DeclaredFamily, UnknownFamilyMember
 from .field_codec import FieldCodec, MalformedRecord, NullMember, WireName
+from .native_tool_call import ToolCallId
 from .recorded_time import EventTime
 from .native_tool_call import ToolCallId
 from .tool_denial import SelectedToolDenied
@@ -106,7 +107,8 @@ class ToolDeclaration(DeclaredFamily, affix="Tool"):
         """The call decoded once as Core's tool record, or no record when Core does not decode it."""
         try:
             decoded = FieldCodec.decode(dict[str, object], arguments)
-            return cls.for_name(name).parse_arguments(decoded, call_id=call_id)
+            return cls.for_name(name).parse_arguments(
+                decoded, call_id=FieldCodec.decode(ToolCallId, call_id))
         except MalformedRecord, SelectedToolDenied:
             return NoToolRecord()
 

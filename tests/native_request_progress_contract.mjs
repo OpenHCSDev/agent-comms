@@ -13,7 +13,7 @@ const load = path => import(pathToFileURL(join(dist, path)));
 const chat = await load('api/openai-completions.js');
 const anthropic = await load('api/anthropic-messages.js');
 const codex = await load('api/openai-codex-responses.js');
-const {NativeRequestObservation, observeStream} = await load('utils/agent-comms-request-observation.js');
+const {NativeRequestObservation, NativeSummaryObservation, observeStream} = await load('utils/agent-comms-request-observation.js');
 const {WebSocketServer} = createRequire(pathToFileURL(join(pkg, 'entry.cjs')))('ws');
 const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
 const requests = [];
@@ -114,6 +114,11 @@ try {
     assert(ws.points.every(p=>p.transport==='websocket'));
     assert(!ws.points.some(p=>p.stage==='headers'));
     assert.equal(wsSends,1);
+    // A summary request answers no input; an agent-loop request without one is refused.
+    const summary = [], bare = {messages:[{role:'user',content:[],timestamp:1}]};
+    new NativeSummaryObservation({onRequestProgress:p=>summary.push(p)},bare).observe({stage:'preparing'});
+    assert.equal(summary.length,1); assert(!('inputId' in summary[0]));
+    assert.throws(()=>new NativeRequestObservation({},bare),/no user input/);
     // Iterator return must close the upstream resource on early consumption end.
     let released = false; const terminal = [];
     async function* original() {try{yield 1;yield 2;}finally{released=true;}}

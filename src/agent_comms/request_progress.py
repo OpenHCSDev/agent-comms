@@ -7,10 +7,8 @@ from typing import Annotated
 from agent_comms import field_codec
 
 from .child_process import ProcessIdentity
-from .field_codec import InputId
 from .pi_counts import PiCount, UnreportedCount
-from .pi_payloads import PiModel, PiPayload, UnreportedModel
-from .turn_item import PiRequestKey, PiSessionId
+from .pi_payloads import PiField, PiModel, PiOmitted, PiPayload, ReportedInputId, UnreportedModel
 
 
 @dataclass(frozen=True, slots=True)
@@ -20,9 +18,8 @@ class UnreportedText(field_codec.NullMember):
 
 @dataclass(frozen=True)
 class RequestProgress(PiPayload):
-    request_id: Annotated[PiRequestKey, field_codec.WireName("requestId")]
-    session_id: Annotated[PiSessionId, field_codec.WireName("sessionId")]
-    input_id: Annotated[InputId, field_codec.WireName("inputId")]
+    request_id: Annotated[str, field_codec.WireName("requestId")]
+    session_id: Annotated[str, field_codec.WireName("sessionId")]
     started_at_ms: Annotated[int, field_codec.WireName("startedAtMs")]
     observed_at_ms: Annotated[int, field_codec.WireName("observedAtMs")]
     monotonic_ns: Annotated[str, field_codec.WireName("monotonicNs")]
@@ -31,6 +28,10 @@ class RequestProgress(PiPayload):
     callback_count: Annotated[int, field_codec.WireName("callbackCount")]
     callback_max_ms: Annotated[float, field_codec.WireName("callbackMaxMs")]
     stage: str
+    # Summary requests answer no input; the agent loop refuses to observe one without it.
+    input_id: Annotated[PiField[ReportedInputId | PiOmitted], field_codec.WireName("inputId")] = (
+        PiOmitted()
+    )
     detail: str = ""
     transport: str = ""
     attempt: int = 0
