@@ -24,6 +24,7 @@ from agent_comms.maintenance_barrier import (
     MaintenanceNotHeldError,
     MaintenanceOperator,
 )
+from agent_comms.native_tool_call import ToolCallId
 from agent_comms.order_runs import MechanicalOrderRun
 from agent_comms.order_tools import CommsCommanderLoadTool, CommsHudTool, CommsTodoListTool
 from agent_comms.problem_number import ProblemNumber
@@ -242,7 +243,7 @@ def test_fork_and_parent_judge_show_same_unjudged_edits(fork_bus):
             "path": str(source.checkout / "owner.py"),
             "edits": [{"oldText": "", "newText": "class ReviewedOwner: pass"}],
         },
-        call_id="parent-edit",
+        call_id=ToolCallId("parent-edit"),
     )
     ExternalTranscript(comms.root, actor).finish(
         turn_id=parent_work_turn_id,
@@ -250,7 +251,7 @@ def test_fork_and_parent_judge_show_same_unjudged_edits(fork_bus):
         events=(
             ToolStartTranscript(
                 position=0,
-                tool_call_id="parent-edit",
+                tool_call_id=ToolCallId("parent-edit"),
                 tool_name="edit",
                 timestamp=time.time(),
                 tool=declaration,
@@ -464,7 +465,7 @@ def test_fork_superseded_verdict_reads_its_commanders_orders(fork_bus):
         expected_revision=current.revision,
         actor=actor,
         previous=current.held(),
-        tool_call_id="retained-edit",
+        tool_call_id=ToolCallId("retained-edit"),
         replacement="P41",
         reason="The replacing order moved this edit to another unit.",
     )

@@ -19,6 +19,7 @@ from agent_comms.cli_protocol import TaggedWire, TextWire
 from agent_comms.declared_family import UnknownFamilyMember
 from agent_comms.external_transcript import EarlierPage, NoEarlierPage
 from agent_comms.field_codec import FieldCodec, MessageId
+from agent_comms.native_tool_call import ToolCallId
 from agent_comms.native_tools import FilePatchTool
 from agent_comms.recorded_time import EventTime, UnrecordedEventTime
 from agent_comms.runtime_updates import (
@@ -50,7 +51,6 @@ from agent_comms.transcript_events import (
     UserTranscript,
 )
 from agent_comms.turn_item import NativeItemId, NativeTurnId
-from agent_comms.native_tool_call import ToolCallId
 from agent_comms.turn_phase import CompactionPhase, ModelWaitPhase, ToolRunningPhase, TurnPhase
 
 from ..wire_models import DeclaredWireFamily, WireModel
@@ -309,6 +309,13 @@ class Item(TaggedWire, ABC, affix=""):
     def phase(self) -> TurnPhase:
         return ModelWaitPhase(self.doing)
 
+
+class ToolCallItem(WireModel):
+    """An item whose wire id is also its tool call's identity, typed once at decode."""
+
+    call_id: ToolCallId = Field(validation_alias='id', exclude=True)
+
+
 class AccumulatedItem(Item):
     @abstractmethod
     def accumulator(self, started_at: EventTime) -> PresentableDraft: ...
@@ -365,7 +372,7 @@ class UserItem(Item):
         return super().completed(turn_id, events)
 
 
-class ToolItem(Item, ABC):
+class ToolItem(ToolCallItem, Item, ABC):
     def accumulator(self, started_at: EventTime) -> ToolDraft:
         return ToolDraft(started_at, (self.call.started(self.id, started_at.recorded_at('Codex tool start')),))
 
@@ -387,10 +394,9 @@ class ToolItem(Item, ABC):
 
     @property
     def call(self) -> ToolCall:
-        call_id = ToolCallId(self.id)
-        shown = ToolCall(call_id, self.tool_name, self.arguments)
+        shown = ToolCall(self.call_id, self.tool_name, self.arguments)
         return ToolDeclaration.record(
-            self.tool_name, self.arguments, call_id=call_id
+            self.tool_name, self.arguments, call_id=self.call_id
         ).recorded_call(shown)
 
     def events(self, timestamp: float) -> tuple[TranscriptEvent, ...]:
@@ -529,14 +535,14 @@ class McpToolItem(ToolInput, ToolItem):
             self.result is None or self.result.succeeded)
 
 
-class FunctionOutputItem(Item):
+class FunctionOutputItem(ToolCallItem, Item):
     wire_tag = 'functionCallOutput'
     name: str
     output: str
 
     def events(self, timestamp: float) -> tuple[TranscriptEvent, ...]:
         return (ToolEndTranscript(
-            position=self.id, timestamp=timestamp, tool_call_id=ToolCallId(self.id),
+            position=self.id, timestamp=timestamp, tool_call_id=self.call_id,
             tool_name=self.name, text=self.output),)
 
 
@@ -576,7 +582,7 @@ class ExitedReviewItem(ReviewBody, Item):
     wire_tag = 'exitedReviewMode'
 
 
-class SleepItem(Item):
+class SleepItem(ToolCallItem, Item):
     wire_tag = 'sleep'
     durationMs: int
 
@@ -585,7 +591,7 @@ class SleepItem(Item):
 
     @property
     def phase(self) -> TurnPhase:
-        return ToolRunningPhase(tools=((ToolCallId(self.id), f'Waiting {self.durationMs} ms'),))
+        return ToolRunningPhase(tools=((self.call_id, f'Waiting {self.durationMs} ms'),))
 
 
 class ImageViewItem(Item):
@@ -607,7 +613,7 @@ class ImageGenerationItem(Item):
                                  (f' — {self.savedPath}' if self.savedPath else ''), position=self.id, timestamp=timestamp),)
 
 
-class WebSearchItem(Item):
+class WebSearchItem(ToolCallItem, Item):
     wire_tag = 'webSearch'
     query: str
     action: JsonValue = None
@@ -619,7 +625,7 @@ class WebSearchItem(Item):
 
     @property
     def phase(self) -> TurnPhase:
-        return ToolRunningPhase(tools=((ToolCallId(self.id), f'Searching: {self.query}'),))
+        return ToolRunningPhase(tools=((self.call_id, f'Searching: {self.query}'),))
 
 
 class PatchChange(TaggedWire, ABC, affix=""):
@@ -656,19 +662,19 @@ class FileChange(WireModel):
     diff: str
     kind: PatchChange.declared_union()
 
-    def call(self, item_id: NativeItemId) -> DecodedToolCall:
-        return ToolCall(ToolCallId(item_id), 'edit', {'path': self.path}).recorded(
+    def call(self, call_id: ToolCallId) -> DecodedToolCall:
+        return ToolCall(call_id, 'edit', {'path': self.path}).recorded(
             FilePatchTool(path=self.path))
 
     def events(
-        self, item_id: NativeItemId, ok: bool, timestamp: float,
+        self, item_id: NativeItemId, call_id: ToolCallId, ok: bool, timestamp: float,
     ) -> tuple[TranscriptEvent, ...]:
-        call = self.call(item_id)
+        call = self.call(call_id)
         diff = self.kind.patch(self.path, self.diff)
         return diff.patch(call).finished('', ok, item_id, timestamp)
 
 
-class FileChangeItem(Item):
+class FileChangeItem(ToolCallItem, Item):
     wire_tag = 'fileChange'
     doing = 'Editing files'
     changes: list[FileChange]
@@ -677,7 +683,7 @@ class FileChangeItem(Item):
     def accumulator(self, started_at: EventTime) -> ToolDraft:
         timestamp = started_at.recorded_at('Codex file change start')
         return ToolDraft(started_at, tuple(
-            change.call(item_id := NativeItemId(f'{self.id}:{index}')).started(item_id, timestamp)
+            change.call(self.change_call(index)).started(self.change_item(index), timestamp)
             for index, change in enumerate(self.changes)))
 
     def events(self, timestamp: float) -> tuple[TranscriptEvent, ...]:
@@ -685,7 +691,15 @@ class FileChangeItem(Item):
             raise ValueError('File change completion still says inProgress')
         return tuple(event for index, change in enumerate(self.changes)
                      for event in change.events(
-                         NativeItemId(f'{self.id}:{index}'), self.status == 'completed', timestamp))
+                         self.change_item(index), self.change_call(index),
+                         self.status == 'completed', timestamp))
+
+    # Codex reports one item for several changes; each change is its own item and call.
+    def change_item(self, index: int) -> NativeItemId:
+        return NativeItemId(f'{self.id}:{index}')
+
+    def change_call(self, index: int) -> ToolCallId:
+        return ToolCallId(f'{self.call_id}:{index}')
 
 
 class AgentState(WireModel):

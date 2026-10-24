@@ -20,6 +20,7 @@ from typing import TYPE_CHECKING, Annotated, ClassVar
 from .declared_family import DeclaredFamily
 from .field_codec import FieldCodec, InputId, PageRequestId, ThreadLookup
 from .locked_store import RegistryFile
+from .native_tool_call import ToolCallId
 from .native_transcript import RecordsCut
 from .recorded_time import EventTime, GeneratedTimestamp
 from .thread_identity import ThreadIncarnation
@@ -425,7 +426,7 @@ class StoreRead(TranscriptSource):
             f'FROM "{ExternalEventRow.declared_name}" e WHERE {where}) '
             'WHERE latest=1 ORDER BY seq DESC,ordinal DESC', parameters)) as rows:
             for timestamp, call_id, encoded in rows:
-                identity = FieldCodec.decode(str, call_id)
+                identity = FieldCodec.decode(ToolCallId, call_id)
                 tool = FieldCodec.decode_bound(ToolDeclaration, FieldCodec.parse(encoded),
                                                call_id=identity)
                 yield from tool.edit_calls(identity, GeneratedTimestamp.decode(timestamp),

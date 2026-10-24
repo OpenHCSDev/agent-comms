@@ -16,12 +16,12 @@ from .declared_family import DeclaredFamily
 from .field_codec import FieldCodec, InputId, NullMember, PresentMember, WireBind, WireOmitDefault
 from .message_reference import MessageReference
 from .messages import Message
+from .native_tool_call import ToolCallId
 from .recorded_time import EventTime, UnrecordedEventTime
 from .routing import MessageRoute, TurnRouting
 from .tool_results import SENT_MESSAGE_MIME, NoSentMessage, NoToolDiff, ToolDiff, ToolText
 from .transcript_merge import EventMerge, StreamingMerge
 from .turn_item import NativeItemId, NativeTurnId
-from .native_tool_call import ToolCallId
 from .ui_model.message_category import (
     AgentCategory,
     InboundCategory,

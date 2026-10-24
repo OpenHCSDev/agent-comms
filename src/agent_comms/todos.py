@@ -78,6 +78,7 @@ from agent_comms.head_review import PullRequestHead
 from agent_comms.lifecycle_capability import LifecycleCapability, Pending
 from agent_comms.message_reference import MessageReference
 from agent_comms.messages import InfoKind, Message
+from agent_comms.native_tool_call import ToolCallId
 from agent_comms.tool_denial import SelectedToolDenied
 from agent_comms.order_runs import OrderRun
 from agent_comms.order_story import ProblemStory, StoryEvent, StoryLine, StorySource
@@ -3210,7 +3211,7 @@ class OrderVerdict(TodoCommand, StoryEvent, declared_name=None):
     def implied_strikes(self) -> tuple[StrikeTodo, ...]:
         return ()
 
-    def judged_calls(self) -> tuple[str, ...]:
+    def judged_calls(self) -> tuple[ToolCallId, ...]:
         """The holder's tool calls this verdict judges by identity."""
         return ()
 
@@ -3234,9 +3235,9 @@ class OrderVerdict(TodoCommand, StoryEvent, declared_name=None):
 
 @dataclass(frozen=True)
 class ToolCallVerdict(OrderVerdict, TodoOperation, declared_name=None):
-    tool_call_id: str
+    tool_call_id: ToolCallId
 
-    def judged_calls(self) -> tuple[str, ...]:
+    def judged_calls(self) -> tuple[ToolCallId, ...]:
         return (self.tool_call_id,)
 
     def story_text(self) -> str:
@@ -3244,7 +3245,6 @@ class ToolCallVerdict(OrderVerdict, TodoOperation, declared_name=None):
 
     def require_current(self, current: Todo) -> None:
         current.require_commander(self.actor)
-        _text(self.tool_call_id, "Judged tool call ID", 200)
         super().require_current(current)
 
 
@@ -3984,7 +3984,7 @@ class Todo(TodoStoreRows, TypedTable):
         return Repo(checkout=self.order.checked().check.directory, github=self.repo)
 
     @property
-    def judged_calls(self) -> tuple[str, ...]:
+    def judged_calls(self) -> tuple[ToolCallId, ...]:
         return tuple(call for verdict in self.verdicts for call in verdict.judged_calls())
 
     @property

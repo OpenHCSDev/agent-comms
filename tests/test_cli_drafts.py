@@ -1,6 +1,7 @@
 """The shared owner reconstructs prefixes, not the CLI decoders or the database."""
 import pytest
 
+from agent_comms.native_tool_call import ToolCallId
 from agent_comms.turn_item import NativeItemId, NativeTurnId
 from agent_comms.turn_phase import ModelWaitPhase, ToolRunningPhase
 from agent_comms.runtime_updates import (
@@ -147,10 +148,10 @@ def test_paragraph_identity_not_arrival_order_owns_summary_joining(tmp_path):
 def test_tool_start_is_one_draft_row_then_one_completed_row(tmp_path):
     t_turn_id = NativeTurnId('t')
     output = _output(tmp_path)
-    call = ToolCall('call', 'read', {'path': 'a.py'})
+    call = ToolCall(ToolCallId('call'), 'read', {'path': 'a.py'})
     start_event = call.started(NativeItemId('call'), 1.0)
     output.publish_batch([StartedItem(
-        t_turn_id, NativeItemId('call'), ToolRunningPhase(tools=(('call', 'Read a.py'),)),
+        t_turn_id, NativeItemId('call'), ToolRunningPhase(tools=((ToolCallId('call'), 'Read a.py'),)),
         ToolDraft(RecordedEventTime(1.0), (start_event,)))])
     draft = output.transcript.current_draft(output.transcript.root, output.transcript.incarnation)
     assert draft.events == (start_event,)

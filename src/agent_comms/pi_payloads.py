@@ -50,6 +50,7 @@ from .goals import GoalDeclaration
 from .lifecycle_capability import Successful
 from .native_file_artifact import NativeFileArtifact
 from .native_session_reopen import NativeSessionIdentity
+from .native_tool_call import ToolCallId
 from .pi_counts import NonnegativePiCount, PiCount, TotalPiCount, UnreportedCount
 from .pi_vocabulary import (
     NoThinkingOverride,
@@ -65,7 +66,6 @@ from .tool_declaration import ToolDeclaration
 from .tool_results import NoSentMessage, NoToolDiff, ToolDiff
 from .transcript_events import SentTranscript
 from .turn_failure import ProviderTransportFailed
-from .native_tool_call import ToolCallId
 from .turn_item import PiRequestKey, PiSessionId
 
 if TYPE_CHECKING:

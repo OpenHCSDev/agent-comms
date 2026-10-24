@@ -64,12 +64,12 @@ from .send_outcome import NO_SEND_BOUNDARY, SendBoundary
 from .tool_denial import SelectedToolDenied
 from .turn_context import InputContributionCoordinates
 from .turn_inputs import InputForwarding
+from .turn_item import PiRequestKey
 from .turn_output import TurnOutput
 from .turn_phase import SettlingStatsPhase, TurnPhase
 from .turn_stats import StatsRequest
 from .turn_usage import UsageAccount
 from .turn_watchdog import DEFAULT_MODEL_WAIT, ProgressWatchdog, TurnWait, TurnWaitExpired
-from .turn_item import PiRequestKey
 
 if TYPE_CHECKING:
     from .acp_failure import ProviderRetryResult

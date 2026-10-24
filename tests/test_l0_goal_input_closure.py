@@ -7,8 +7,8 @@ from pathlib import Path
 
 import pytest
 
+from agent_comms.attempt_resolution import FailedTurnResolution
 from agent_comms.child_process import ProcessIdentity
-from agent_comms.input_key import BusInputKey
 from agent_comms.comms import wire
 from agent_comms.field_codec import FieldCodec, GoalId, InputId, TurnId
 from agent_comms.goal_actions import (
@@ -25,7 +25,9 @@ from agent_comms.goal_states import BlockedGoal, GoalState, UnrecordedBlockGoal
 from agent_comms.goal_waits import GoalWait, GoalWaits
 from agent_comms.goals import Goal
 from agent_comms.input_disposition import InputDispositions
+from agent_comms.input_key import BusInputKey
 from agent_comms.threads import Thread
+from agent_comms.turn_failure import BackendFailed
 from stored_inputs import stored_inputs
 
 
@@ -92,7 +94,7 @@ def test_retry_requires_existing_private_generation_and_never_adopts(tmp_path, s
     # A known failed generation requires an explicit owner decision to advance.
     store.create_goal(goal.id)
     reservation = store.reserve(goal.id, 1)
-    reservation.fail(store, "Observed failure")
+    reservation.fail(store, FailedTurnResolution(BackendFailed))
     assert not store.snapshot(goal.id).lifecycle.allows_resume(False)
     changed = comms.goals.update_goal("owner", retry, actor=OwnerInvocable)
     changed.require_active()

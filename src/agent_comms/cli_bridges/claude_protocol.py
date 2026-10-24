@@ -17,6 +17,7 @@ from pydantic import (
 
 from agent_comms.cli_protocol import TaggedWire, TextWire, TimestampedWire, WireHeader
 from agent_comms.field_codec import FieldCodec, MalformedRecord, MessageId
+from agent_comms.native_tool_call import ToolCallId
 from agent_comms.recorded_time import EventTime
 from agent_comms.runtime_updates import (
     ActiveItem,
@@ -43,7 +44,6 @@ from agent_comms.transcript_events import (
     TranscriptEvent,
     UserTranscript,
 )
-from agent_comms.native_tool_call import ToolCallId
 from agent_comms.turn_item import NativeItemId, NativeTurnId
 from agent_comms.turn_phase import ModelWaitPhase, ToolRunningPhase, TurnPhase
 

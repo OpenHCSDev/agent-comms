@@ -15,6 +15,7 @@ from agent_comms.external_transcript import ExternalTranscript
 from agent_comms.heartbeat_frame import HeartbeatFrame
 from agent_comms.launch_runtime import LaunchRoot
 from agent_comms.message_page import MessagePageRequest
+from agent_comms.native_tool_call import ToolCallId
 from agent_comms.read_basis import DMDisplayScope
 from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.session_file import RegistrySessionLocation
@@ -190,7 +191,7 @@ def test_started_turn_on_delivered_order_is_moving_not_stalled(held_bus):
         item_id=NativeItemId("call"),
         events=(
             ToolStartTranscript(
-                position=0, tool_call_id="call", tool_name="bash", timestamp=time.time()
+                position=0, tool_call_id=ToolCallId("call"), tool_name="bash", timestamp=time.time()
             ),
         ),
     )

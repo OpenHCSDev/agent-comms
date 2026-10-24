@@ -26,6 +26,7 @@ from .field_codec import InputId, NullMember, TurnId
 from .input_attempt import InputAttempt
 from .mro_dispatch import MroDispatch, handles
 from .native_failures import NativePiUnavailable
+from .native_tool_call import ToolCallId
 from .pi_counts import PiCount, UnreportedCount
 from .pi_payloads import McpLiveAcknowledgement, PiDiagnostic, PiRequestId, PiUsage
 from .pi_vocabulary import (
@@ -35,7 +36,6 @@ from .pi_vocabulary import (
     UnknownCompactionReason,
 )
 from .thread_model import ThreadModel, UndeclaredModel
-from .native_tool_call import ToolCallId
 from .tool_declaration import OtherAction, ToolAction, ToolDeclaration
 from .tool_results import NoSentMessage, NoToolDiff, ToolDiff
 from .turn_failure import BackendFailed, TurnFailure

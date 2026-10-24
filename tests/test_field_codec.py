@@ -797,10 +797,10 @@ def test_saved_tool_start_decodes_its_own_tool_tag_and_nullable_arguments() -> N
     event = transcript_records.event(
         ToolStartTranscript,
         position=0,
-        tool_call_id="call-1",
+        tool_call_id=ToolCallId("call-1"),
         tool_name="comms_send",
         raw_input=arguments,
-        tool=ToolDeclaration.record("comms_send", arguments, call_id="case"),
+        tool=ToolDeclaration.record("comms_send", arguments, call_id=ToolCallId("case")),
     )
     encoded = FieldCodec.encode(event)
     assert isinstance(encoded, dict)

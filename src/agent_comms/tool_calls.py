@@ -22,8 +22,8 @@ from .native_tools import BashTool, EditTool, GlobTool, GrepTool, ReadTool, Writ
 from .tool_declaration import ReplacementEdit, ToolDeclaration
 from .tool_results import ToolDiff
 from .transcript_events import ToolEndTranscript, ToolStartTranscript
-from .wire_models import DeclaredWireFamily, WireModel
 from .turn_item import NativeItemId
+from .wire_models import DeclaredWireFamily, WireModel
 
 
 @dataclass(frozen=True)

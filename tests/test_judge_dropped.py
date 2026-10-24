@@ -5,10 +5,12 @@ import pytest
 
 from agent_comms.commander.judge import Edit, main
 from agent_comms.external_transcript import ExternalTranscript
+from agent_comms.native_tool_call import ToolCallId
 from agent_comms.todos import DroppedVerdict, TodoError
 from agent_comms.tool_declaration import ToolDeclaration
 from agent_comms.transcript_events import ToolStartTranscript
 from agent_comms.turn_item import NativeItemId, NativeTurnId
+
 pytest_plugins = ("test_held_problem_orders",)
 
 LIVE = "LIVE_MARKER_LINE = 'kept on the checkout head'"
@@ -21,7 +23,7 @@ def committed(repo, name: str, line: str) -> None:
     repo.git(repo.checkout, "commit", "-q", "-m", f"add {name}")
 
 
-def recorded_edit(ctx, call_id: str, path: str, line: str) -> None:
+def recorded_edit(ctx, call_id: ToolCallId, path: str, line: str) -> None:
     formatter_turn_id = NativeTurnId('formatter')
     tool = ToolDeclaration.record(
         "edit", {"path": path, "edits": [{"oldText": "", "newText": line}]}, call_id=call_id)
@@ -57,8 +59,8 @@ def discarded_and_kept(held_commander):
     repo.git(repo.checkout, "checkout", "-q", base)
     repo.git(repo.checkout, "branch", "-q", "-D", "formatter")
     committed(repo, "kept_module.py", LIVE)
-    recorded_edit(ctx, "dropped-call", str(gone / "dropped_module.py"), DROPPED)
-    recorded_edit(ctx, "kept-call", str(gone / "kept_module.py"), LIVE)
+    recorded_edit(ctx, ToolCallId("dropped-call"), str(gone / "dropped_module.py"), DROPPED)
+    recorded_edit(ctx, ToolCallId("kept-call"), str(gone / "kept_module.py"), LIVE)
     return ctx
 
 

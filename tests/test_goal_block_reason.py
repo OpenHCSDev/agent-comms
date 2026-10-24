@@ -5,9 +5,9 @@ from dataclasses import replace
 
 import pytest
 
+from agent_comms.attempt_resolution import FailedTurnResolution
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.comms import wire
-from conftest import installed_comms
 from agent_comms.goal_actions import (
     ActiveGoalAction,
     BlockedGoalAction,
@@ -16,12 +16,14 @@ from agent_comms.goal_actions import (
     PausedGoalAction,
     SetGoalAction,
 )
-from agent_comms.goal_states import UnrecordedBlockGoal
 from agent_comms.goal_presentation import PausedExecution, UnrecordedBlockExecution
+from agent_comms.goal_states import UnrecordedBlockGoal
 from agent_comms.goals import Goal
-from agent_comms.tool_request import ToolRequest
-from agent_comms.tool_caller import ThreadCaller
 from agent_comms.threads import Thread
+from agent_comms.tool_caller import ThreadCaller
+from agent_comms.tool_request import ToolRequest
+from agent_comms.turn_failure import BackendFailed
+from conftest import installed_comms
 
 
 def _owner(tmp_path):
@@ -94,7 +96,7 @@ def test_owner_resume_refusal_preserves_pause_and_prior_progress(tmp_path):
     assert progressed is not None
     store = comms.goals.open_goal_store()
     reservation = store.reserve(original.id, 1)
-    reservation.fail(store, "Previous goal attempt failed")
+    reservation.fail(store, FailedTurnResolution(BackendFailed))
 
     with pytest.raises(ValueError):
         comms.goals.update_goal(
