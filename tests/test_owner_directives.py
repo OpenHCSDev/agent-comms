@@ -5,7 +5,8 @@ from agent_comms.channel_targets import CommandTarget
 
 import pytest
 
-from agent_comms.connector import ConnectorSendTool, DirectorCaller
+from agent_comms.connector import ConnectorSendTool
+from agent_comms.connector_caller import DirectorCaller
 from agent_comms.errors import CommittedMessageError
 from agent_comms.owner_requests import RequestDirective
 from agent_comms.tools import invoke_tool

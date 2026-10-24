@@ -1,7 +1,8 @@
 """agent-comms-connector: the claude.ai connector, a Streamable HTTP MCP server beside Core.
 
 The server is a transport over the ToolRequest family: ``tools/list`` reports every member
-and whether it changes the bus; ``tools/call`` runs ``invoke()`` as the bus thread claude-ai.
+and whether it changes the bus; ``tools/call`` runs ``invoke()`` as the caller identified
+by its bearer grant.
 OAuth stands in front of every MCP request. An unknown browser waits for the owner's
 single-use approval link sent on comms. Its page requires a POST confirmation and then
 remembers that browser on this issuer;
@@ -43,7 +44,6 @@ from aiohttp.web_urldispatcher import AbstractResource, ResourceRoute, SystemRou
 from pydantic import JsonValue
 
 
-from .bus_publication import DirectorOrigin
 from .declared_verb import DeclaredVerb
 from .cli_protocol import CoreError
 from .command import Command
@@ -58,10 +58,12 @@ from .field_codec import (
 from agent_comms.channel_targets import NamedTarget
 from agent_comms.owner_requests import NewestOpenRequest, RequestSelection
 from .host_services import HostService
+from .connector_caller import CALLER, ConnectorCaller, ConnectorTool
 from .connector_store import (
     CODE_SECONDS, ApprovalQueueFull, ApprovalRefused, AuthorizationQuery,
     AuthorizationRequest, ClaudeCallback,
-    ConnectorGrants, ConnectorStore, IssuedTokens, RegisteredClient, TrustedBrowser, digest,
+    ConnectorGrants, ConnectorStore, GrantRefusedError, IssuedTokens,
+    RegisteredClient, TrustedBrowser, digest,
 )
 from .locked_store import DocumentChange
 from .messages import QuestionKind
@@ -69,35 +71,14 @@ from .commander.standing import UnownedOrderWatch
 from .commander_heartbeat import CommanderHeartbeat
 from .coordinator import Coordination
 from .service_passes import ServicePassStore
-from .head_review import PullRequestHead
-from .todos import DirectiveText, HeadReviewOrder
 from .tool_result import ToolResult
 from .task_sources import OwnerRequestAttachment
-from .tool_caller import ThreadCaller, ToolCaller
 from .tools import CommsSendTool, SendTool
 from .order_tools import CommsHeadVerdictTool, HeadVerdictTool, MessagePublished
 from .tool_request import ReadTool, ToolRequest, tool_field
 
 LOOPBACK = "127.0.0.1"
 PORT = 18766
-
-
-@dataclass(frozen=True)
-class DirectorCaller(ThreadCaller):
-    """claude-ai speaks for the owner, so its sends carry the director origin, which records each
-    message to a thread as a directive like the owner's own."""
-
-    def require_directive(self, comms: Comms, body: str) -> None:
-        """A directive passes DirectiveText. claude-ai directs the commanders, so the
-        commander rules review does not gate it."""
-        DirectiveText.require(body)
-
-    def origin(self) -> DirectorOrigin:
-        return DirectorOrigin()
-
-    def head_review_actor(self, comms: Comms, request: PullRequestHead,
-                          order: HeadReviewOrder):
-        return order.director_identity(comms.goals, self.identity(comms))
 
 
 class SystemdSite(web.TCPSite):
@@ -112,10 +93,6 @@ class SystemdSite(web.TCPSite):
         with socket.socket(socket.AF_UNIX, socket.SOCK_DGRAM) as notify:
             notify.connect(target)
             notify.sendall(b"READY=1")
-
-
-class ConnectorTool(ToolRequest[DirectorCaller], affix="ConnectorTool"):
-    """Connector-only declarations are absent from the native/CLI tool registry."""
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -136,7 +113,6 @@ class ConnectorHeadVerdictTool(HeadVerdictTool, ConnectorTool,
     """Director and native callers share the same persisted verdict and publication path."""
 
 
-CALLER = DirectorCaller("claude-ai")  # Owner-typed calls act as this registered bus thread.
 PROTOCOL_VERSION = "2025-06-18"
 
 
@@ -381,7 +357,7 @@ class ToolCall:
     @classmethod
     def of(cls, tool: type[ToolRequest]) -> ToolCall:
         """A call of a tool the connector exposes, by the name it exposes it under."""
-        (name,) = (name for name, exposed in Connector.exposed().items() if exposed is tool)
+        (name,) = (name for name, exposed in CALLER.exposed().items() if exposed is tool)
         return cls(name)
 
 
@@ -404,7 +380,7 @@ class McpMessage(DeclaredFamily, affix="Message"):
         return self.declared_name
 
     @abstractmethod
-    async def answer(self, connector: Connector) -> web.Response: ...
+    async def answer(self, connector: Connector, caller: ConnectorCaller) -> web.Response: ...
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -413,7 +389,7 @@ class McpNotification(McpMessage, declared_name=None):
 
     params: dict[str, object] = field(default_factory=dict)
 
-    async def answer(self, connector: Connector) -> web.Response:
+    async def answer(self, connector: Connector, caller: ConnectorCaller) -> web.Response:
         return web.Response(status=202)
 
 
@@ -431,18 +407,20 @@ class CancelledMessage(McpNotification, declared_name="notifications/cancelled")
 class McpRequest(McpMessage):
     id: int | str
 
-    async def answer(self, connector: Connector) -> web.Response:
-        return web.json_response(FieldCodec.encode(McpReply(self.id, await self.result(connector))))
+    async def answer(self, connector: Connector, caller: ConnectorCaller) -> web.Response:
+        return web.json_response(
+            FieldCodec.encode(McpReply(self.id, await self.result(connector, caller)))
+        )
 
     @abstractmethod
-    async def result(self, connector: Connector) -> McpResult: ...
+    async def result(self, connector: Connector, caller: ConnectorCaller) -> McpResult: ...
 
 
 @dataclass(frozen=True, kw_only=True)
 class InitializeMessage(McpRequest, declared_name="initialize"):
     params: dict[str, object]
 
-    async def result(self, connector: Connector) -> InitializeResult:
+    async def result(self, connector: Connector, caller: ConnectorCaller) -> InitializeResult:
         return InitializeResult()
 
 
@@ -450,7 +428,7 @@ class InitializeMessage(McpRequest, declared_name="initialize"):
 class PingMessage(McpRequest, declared_name="ping"):
     params: dict[str, object] = field(default_factory=dict)
 
-    async def result(self, connector: Connector) -> McpResult:
+    async def result(self, connector: Connector, caller: ConnectorCaller) -> McpResult:
         return McpResult()
 
 
@@ -458,9 +436,9 @@ class PingMessage(McpRequest, declared_name="ping"):
 class ToolsListMessage(McpRequest, declared_name="tools/list"):
     params: dict[str, object] = field(default_factory=dict)
 
-    async def result(self, connector: Connector) -> ToolsListResult:
+    async def result(self, connector: Connector, caller: ConnectorCaller) -> ToolsListResult:
         return ToolsListResult(tuple(
-            ToolDescription.of(name, tool) for name, tool in Connector.exposed().items()
+            ToolDescription.of(name, tool) for name, tool in caller.exposed().items()
         ))
 
 
@@ -473,19 +451,19 @@ class ToolsCallMessage(McpMessage, declared_name="tools/call"):
     def log_name(self) -> str:
         return f"{super().log_name} {self.params.name}"
 
-    async def answer(self, connector: Connector) -> web.Response:
+    async def answer(self, connector: Connector, caller: ConnectorCaller) -> web.Response:
         return web.json_response(
-            FieldCodec.encode(ToolsCallReply(self.id, await self.result(connector)))
+            FieldCodec.encode(ToolsCallReply(self.id, await self.result(connector, caller)))
         )
 
-    async def result(self, connector: Connector) -> ToolsCallResult:
-        tool = Connector.exposed().get(self.params.name)
+    async def result(self, connector: Connector, caller: ConnectorCaller) -> ToolsCallResult:
+        tool = caller.exposed().get(self.params.name)
         if tool is None:
             return ToolsCallResult.failed(
                 ToolRefusedError(f"The connector exposes no tool {self.params.name!r}.")
             )
         try:
-            reply = await asyncio.to_thread(connector.invoke, tool, self.params.arguments)
+            reply = await asyncio.to_thread(connector.invoke, tool, self.params.arguments, caller)
             return ToolsCallResult((TextContent(json.dumps(reply)),), False, reply)
         except (ToolRefusedError, RelationViolationError, CoordinationError) as error:
             logging.exception("Connector tool %s failed", self.params.name)
@@ -532,16 +510,6 @@ class Connector:
     def resource_metadata_url(self) -> str:
         return f"{self.issuer}/.well-known/oauth-protected-resource"
 
-    @staticmethod
-    def exposed() -> dict[str, type[ToolRequest] | type[ConnectorTool]]:
-        tools: dict[str, type[ToolRequest] | type[ConnectorTool]] = {
-            tool.declared_name: tool for tool in ToolRequest.members_with(ToolRequest)
-        }
-        tools.update({
-            tool.declared_name: tool for tool in ConnectorTool.members_with(ConnectorTool)
-        })
-        return tools
-
     @contextmanager
     def opened_wire(self) -> Iterator[Comms]:
         """The connector's caller must exist at startup and at each later call."""
@@ -559,10 +527,11 @@ class Connector:
         yield wire(self.root)
 
     def invoke(
-        self, tool: type[ToolRequest] | type[ConnectorTool], arguments: Mapping[str, object]
+        self, tool: type[ToolRequest] | type[ConnectorTool], arguments: Mapping[str, object],
+        caller: ConnectorCaller,
     ) -> dict[str, JsonValue]:
         with self.opened_wire() as comms:
-            return tool.invoke(comms, arguments, caller=CALLER)
+            return tool.invoke(comms, arguments, caller=caller)
 
     def application(self) -> web.Application:
         self.store.read()  # Refuse an unreadable store before binding any port.
@@ -790,7 +759,9 @@ class Connector:
     async def mcp(self, request: web.Request) -> web.Response:
         token = request.headers.get("Authorization", "").removeprefix("Bearer ")
         grants = await asyncio.to_thread(self.store.read)
-        if not grants.holds(token):
+        try:
+            caller = grants.caller_for(token)
+        except GrantRefusedError:
             raise web.HTTPUnauthorized(
                 headers={
                     "WWW-Authenticate": (f'Bearer resource_metadata="{self.resource_metadata_url}"')
@@ -807,7 +778,7 @@ class Connector:
         except MalformedRecord as error:
             return self.refused(data, InvalidRequestError(str(error)))
         started = time.monotonic()
-        response = await message.answer(self)
+        response = await message.answer(self, caller)
         logging.info("MCP %s answered in %.3fs", message.log_name, time.monotonic() - started)
         return response
 
