@@ -261,7 +261,6 @@ class TestRegistration:
         registry.heartbeat("b")
         snapshot = registry.snapshot()
         other = RegistryOwner.capture_local(snapshot, "b").thread
-        other_generation = snapshot.owner_identity("b").generation
         registry.lease_local_turn(other.name, TurnId('d9298a10d1b0735837dc4bd85dac641b'))
         snapshot = registry.snapshot()
         assert RegistryOwner.capture_local(snapshot, "a").thread == owner
@@ -280,7 +279,6 @@ class TestRegistration:
         registry.register(Thread(name='a', tags=frozenset(), worktree='/wt', process_identity=ProcessIdentity.capture(os.getpid())))
         snapshot = registry.snapshot()
         owner = RegistryOwner.capture_local(snapshot, "a").thread
-        claimed_generation = snapshot.owner_identity("a").generation
         leased, owner_generation = registry.lease_local_turn(owner.name, TurnId('d79d3458a58877cd8e48c18ebaf4c27b'))
         snapshot = registry.snapshot()
         assert RegistryOwner.capture_local(snapshot, "a").thread == leased
@@ -408,7 +406,6 @@ class TestRegistration:
         registry.rename("a", "b")
         snapshot = registry.snapshot()
         owner = RegistryOwner.capture_local(snapshot, "a").thread
-        claimed_generation = snapshot.owner_identity("a").generation
         assert owner.name == "b"
         leased, _ = registry.lease_local_turn(owner.name, TurnId('d79d3458a58877cd8e48c18ebaf4c27b'))
         registry.rename("b", "c")
