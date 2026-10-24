@@ -181,3 +181,19 @@ print(json.dumps(steps,sort_keys=True))
     restored = Registration(tmp_path / "current" / "registry.json")
     assert restored.require("child").created_at == 20.0
     assert restored.snapshot().owner_generations["renamed"] > 0
+
+
+def test_thread_rows_compare_unread_rows_as_stored_and_decode_only_what_changed(tmp_path):
+    from agent_comms.registry_document import ThreadRows
+    from agent_comms.thread_execution import ExternalThreadExecution
+
+    # A row that cannot decode proves an unread, unchanged row is never decoded to compare.
+    stored = {'unread': {'name': 'unread', 'not': 'a thread'}}
+    assert ThreadRows.from_wire(stored) == ThreadRows.from_wire(stored)
+    written = ThreadRows.from_wire(stored)
+    written['unread'] = Thread(
+        'unread', frozenset(), str(tmp_path), execution=ExternalThreadExecution)
+    other = ThreadRows.from_wire({})
+    other['unread'] = written['unread']
+    assert written == other
+    assert written != ThreadRows.from_wire({})
