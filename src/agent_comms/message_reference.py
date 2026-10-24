@@ -6,9 +6,15 @@ from .class_fact import ClassFact
 from .projection_source import ProducedRow, ProjectionSource
 from abc import abstractmethod
 from dataclasses import dataclass
+from typing import TYPE_CHECKING
 
 from .field_codec import MessageId, NullMember, RecordMember, SingleFieldValue, SubclassUnion
 from .page_traversal import LiveCursor, NewestCursor, PageCursor, PageTraversal
+
+if TYPE_CHECKING:
+    from .read_basis import ReadCursor
+    from .read_ledger import ReadDocument, ReadLedger
+    from .registry_document import RegistrySnapshot
 
 
 @dataclass(frozen=True, slots=True)
@@ -38,6 +44,14 @@ class InboxStart(SubclassUnion, affix="Start"):
         """Unread messages are taken in delivery order, oldest first after the start."""
         return LiveCursor(self.cursor()).newer()
 
+    def read_basis(self, reads: ReadLedger, actor: str, snapshot: RegistrySnapshot
+                   ) -> tuple[ReadDocument, ReadCursor]:
+        document = reads.read()
+        return document, reads.cursor(actor, snapshot, document=document)
+
+    def advanced(self, reference: MessageReference) -> AfterMessageStart:
+        return AfterMessageStart(reference)
+
 
 @dataclass(frozen=True, slots=True)
 class AfterMessageStart(SingleFieldValue, InboxStart):
@@ -48,6 +62,25 @@ class AfterMessageStart(SingleFieldValue, InboxStart):
 
     def cursor(self) -> int:
         return self.reference.seq
+
+    def advanced(self, reference: MessageReference) -> AfterMessageStart:
+        return AfterMessageStart(reference)
+
+
+@dataclass(frozen=True, slots=True)
+class BridgeStart(RecordMember, AfterMessageStart):
+    """The binding and journal own delivery position; human reads do not."""
+
+    def references(self) -> tuple[MessageReference, ...]:
+        return ()
+
+    def advanced(self, reference: MessageReference) -> BridgeStart:
+        return BridgeStart(reference)
+
+    def read_basis(self, reads: ReadLedger, actor: str, snapshot: RegistrySnapshot
+                   ) -> tuple[ReadDocument, ReadCursor]:
+        document = reads.empty()
+        return document, reads.cursor(actor, snapshot, document=document)
 
 
 @dataclass(frozen=True, slots=True)

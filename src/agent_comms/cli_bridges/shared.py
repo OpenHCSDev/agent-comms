@@ -26,6 +26,7 @@ from typing import Annotated, ClassVar, Generic, Literal, Self, TextIO, TypeVar
 from pydantic import Field, model_validator
 
 from agent_comms import field_codec, messages
+from agent_comms.bus import Bus
 from agent_comms.agent_runtime import DeliversInput, ExternalRuntime, PublishesTranscript
 from agent_comms.change_report import NoChangeReport, ReportEvidence
 from agent_comms.child_process import (
@@ -53,7 +54,7 @@ from agent_comms.declared_family import DeclaredFamily
 from agent_comms.declared_verb import DeclaredOptions
 from agent_comms.field_codec import FieldCodec, PathText
 from agent_comms.launch_runtime import LaunchRuntime
-from agent_comms.message_reference import AfterMessageStart, FirstUnreadStart, InboxStart
+from agent_comms.message_reference import BridgeStart, InboxStart, MessageReference
 from agent_comms.read_basis import ExplicitWatchAcknowledgment
 from agent_comms.runtime_updates import RuntimeUpdate, ThreadOutput
 from agent_comms.send_result import SendResult
@@ -123,26 +124,49 @@ class GivenBinding(BindingRequest):
 
     def bind(self, db: sqlite3.Connection) -> Binding:
         stored = tuple(FieldCodec.encode(row) for row in Binding.select(db))
-        requested = FieldCodec.decode(Binding, {**(stored[0] if stored else {}), **self.given})
+        if stored:
+            payload = stored[0]
+        else:
+            identity = FieldCodec.decode(BindingIdentity, {
+                key: value for key, value in self.given.items()
+                if key != Binding.family_discriminator
+            })
+            payload = {'start': FieldCodec.encode(Binding.bus_head(identity.root))}
+        requested = FieldCodec.decode(Binding, {**payload, **self.given})
         return requested.bind(db)
 
 
 @dataclass(frozen=True)
-class Binding(BridgeStateTable, TypedTable, BindingRequest):
+class BindingIdentity:
     root: str
     bus: Annotated[str, field_codec.WireName("bus_thread")]
     thread: Annotated[str, field_codec.WireName("session")]
+
+
+@dataclass(frozen=True)
+class Binding(BindingIdentity, BridgeStateTable, TypedTable, BindingRequest):
+    start: MessageReference
+
+    @staticmethod
+    def bus_head(root: str) -> MessageReference:
+        bus = Bus(Bus.path_in(Path(root)))
+        if not bus.path.is_file():
+            return MessageReference(0, field_codec.MessageId.mint(''))
+        with bus.reading() as source:
+            latest = source.page(source.revision() + 1, 1)
+            return (latest[0].reference if latest else
+                    MessageReference(0, field_codec.MessageId.mint('')))
 
     @classmethod
     def add_arguments(cls, parser: argparse.ArgumentParser) -> None:
         group = parser.add_argument_group(
             'Core/CLI binding (each given field overrides the stored binding)')
-        for _, key in FieldCodec.record_fields(cls):
+        for _, key in FieldCodec.record_fields(BindingIdentity):
             group.add_argument('--' + key.replace('_', '-'))
 
     @classmethod
     def from_arguments(cls, arguments: argparse.Namespace) -> BindingRequest:
-        values = {key: vars(arguments)[key] for _, key in FieldCodec.record_fields(cls)
+        values = {key: vars(arguments)[key] for _, key in FieldCodec.record_fields(BindingIdentity)
                   if vars(arguments)[key] is not None}
         return GivenBinding({cls.family_discriminator: cls.declared_name, **values}) if values else StoredBinding()
 
@@ -259,12 +283,14 @@ class DeliveryRow(BridgeStateTable, TypedTable):
     indexes = (ExpressionIndex((sequence_sql,)),)
 
     @classmethod
-    def resume_after(cls, db: sqlite3.Connection) -> InboxStart:
+    def resume_after(cls, db: sqlite3.Connection, binding: Binding) -> InboxStart:
         """The existing journal owns attempted progress, including uncertain emissions."""
         latest = cls.read(db.execute(
             f'SELECT {cls._column_list(tuple(cls.column_projection()))} FROM "{cls.declared_name}" '
             f'ORDER BY {cls._sql(cls.sequence_sql)} DESC LIMIT 1'))
-        return AfterMessageStart(latest[0].message.reference) if latest else FirstUnreadStart()
+        reference = max((binding.start, *(row.message.reference for row in latest)),
+                        key=lambda point: point.seq)
+        return BridgeStart(reference)
 
     id: Annotated[str, Column(primary_key=True)]
     payload: str
@@ -943,7 +969,7 @@ class CliBridge(ExternalRuntime, DeliversInput, Generic[BridgeOptions]):
         child = await AttachedChild.start((
             str(LaunchRuntime.running().interpreter.with_name('agent-comms')),
             '--root', self.binding.root, 'watch', '--thread', self.binding.bus,
-            '--after', json.dumps(FieldCodec.encode(DeliveryRow.resume_after(self.db))),
+            '--after', json.dumps(FieldCodec.encode(DeliveryRow.resume_after(self.db, self.binding))),
             '--acknowledgment', FieldCodec.encode(ExplicitWatchAcknowledgment)),
             stdio=StreamingChildStdio(input_enabled=False))
         try:

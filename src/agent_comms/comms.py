@@ -22,7 +22,7 @@ from .launch_runtime import LaunchRuntime
 from .locked_store import RegistryFile
 from .maintenance_barrier import MaintenanceBarrier
 from .message_bus import MessageBus
-from .message_reference import AfterMessageStart, FirstUnreadStart, InboxStart
+from .message_reference import FirstUnreadStart, InboxStart
 from .messages import Message
 from .messaging import Messaging
 from .owner_lifecycle import OwnerLifecycle
@@ -114,7 +114,7 @@ class Comms:
                         yield message
                         with Comms.client(self.route) as comms:
                             acknowledgment.taken(comms.bus.reads, batch.displayed.through(message.seq))
-                        after = AfterMessageStart(message.reference)
+                        after = after.advanced(message.reference)
                     if not batch.remaining:
                         break
 

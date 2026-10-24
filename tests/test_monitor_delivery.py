@@ -1,5 +1,5 @@
 """Session-owned parts, not stdout writes, confirm monitor delivery."""
-from contextlib import closing
+from contextlib import closing, suppress
 import asyncio
 import os
 import socket
@@ -70,7 +70,8 @@ async def test_empty_journal_starts_at_binding_and_ignores_user_reads(comms, tmp
         finally:
             if watching is not None:
                 watching.cancel()
-                await asyncio.gather(watching, return_exceptions=True)
+                with suppress(asyncio.CancelledError):
+                    await watching
             monitor_writer.close()
             await monitor_writer.wait_closed()
             await attachment

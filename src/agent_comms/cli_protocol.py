@@ -138,14 +138,9 @@ class Outcome(DeclaredFamily, affix="Outcome"):
     """Stored spellings stay the same; their owners perform confirmation."""
 
     @classmethod
-    async def acknowledge(cls, bridge: CliBridge, message: Message) -> None:
-        """Pending transport outcomes cannot advance Core's read state."""
-
-    @classmethod
     async def finish(
         cls, bridge: CliBridge, delivery: DeliveryRow, observation: type[Outcome]
     ) -> None:
-        await observation.acknowledge(bridge, delivery.message)
         with bridge.db:
             replace(delivery, outcome=observation).upsert(bridge.db)
 
@@ -155,13 +150,7 @@ class FilteredOutcome(Outcome):
     async def finish(
         cls, bridge: CliBridge, delivery: DeliveryRow, observation: type[Outcome]
     ) -> None:
-        """Core already confirmed this row; a later emission cannot acknowledge it twice."""
-
-    @classmethod
-    async def acknowledge(cls, bridge: CliBridge, message: Message) -> None:
-        await asyncio.to_thread(
-            bridge.comms.messaging.acknowledge, bridge.binding.bus, (message.reference,)
-        )
+        """The journal confirmed this row; a later emission cannot change that fact."""
 
 
 class UnconfirmedOutcome(Outcome):
