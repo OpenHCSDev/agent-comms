@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import sqlite3
 from abc import ABC, abstractmethod
 from contextlib import closing
 from dataclasses import dataclass, fields
@@ -25,7 +26,7 @@ class PreviousBinding(BindingIdentity, TypedTable):
     """The three fields the bridge stored before it declared its start."""
 
     @classmethod
-    def read_binding(cls, db) -> list[PreviousBinding]:
+    def read_binding(cls, db: sqlite3.Connection) -> list[PreviousBinding]:
         columns = Binding._column_list(tuple(item.name for item in fields(BindingIdentity)))
         return cls.read(db.execute(f'SELECT {columns} FROM "{Binding.declared_name}"'))
 
@@ -110,6 +111,12 @@ def revert(state: Path) -> BindingMigration:
     with closing(SQLiteFile.writer(path)) as db, SQLiteFile.write_transaction(db):
         start, = Binding._fields_named(('start',))
         if start.wire_name not in Binding.stored_columns(db):
+            if not DeliveryRow.latest(db):
+                for binding in PreviousBinding.read_binding(db):
+                    try:
+                        Binding.bus_head(binding.root)
+                    except FileNotFoundError:
+                        return DeadBinding(Bus.path_in(Path(binding.root)))
             return MigratedBindings(0)
         previous = PreviousBinding.read_binding(db)
         Binding.drop(db)
@@ -129,7 +136,7 @@ def main() -> None:
     arguments = parser.parse_args()
     changed = sum(arguments.operation(state).report()
                   for state in state_directories(arguments.home))
-    print(f'Binding starts carried: {changed}')
+    print(f'Binding rows changed: {changed}')
 
 
 if __name__ == '__main__':

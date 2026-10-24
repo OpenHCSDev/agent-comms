@@ -296,9 +296,12 @@ def _old_delivery_file(state):
 def test_old_delivery_index_set_is_carried_onto_the_declaration_with_every_row(tmp_path):
     """A durable store derives its declared schema on the writer's open (a5b3cd8a7): the old
     index set is replaced by the declared one and no row is lost."""
-    from cutover.binding_start import migrate
+    from cutover.binding_start import migrate, revert
 
-    _old_delivery_file(tmp_path)
+    path = _old_delivery_file(tmp_path)
+    with closing(sqlite3.connect(path)) as db:
+        before = {table: db.execute(f'SELECT * FROM "{table}"').fetchall()
+                  for table in ('binding', 'delivery', 'observed_part')}
     assert migrate(tmp_path).report() == 1
     assert migrate(tmp_path).report() == 0
     with Binding.open(tmp_path) as db:
@@ -306,3 +309,8 @@ def test_old_delivery_index_set_is_carried_onto_the_declaration_with_every_row(t
         assert {table: db.execute(f'SELECT count(*) FROM "{table}"').fetchone()[0]
                 for table in ('binding', 'delivery', 'observed_part')} == Counter(
             table for table, _ in _OLD_DELIVERY_ROWS)
+    assert revert(tmp_path).report() == 1
+    assert revert(tmp_path).report() == 0
+    with closing(sqlite3.connect(path)) as db:
+        assert {table: db.execute(f'SELECT * FROM "{table}"').fetchall()
+                for table in before} == before

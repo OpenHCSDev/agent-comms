@@ -640,7 +640,11 @@ class BindingStartCutover(AbstractContextManager[None]):
             )
 
     def __enter__(self) -> None:
-        self.run(BridgePhase('binding start'))
+        try:
+            self.run(BridgePhase('binding start'))
+        except BaseException as error:
+            self.__exit__(type(error), error, error.__traceback__)
+            raise
 
     def __exit__(self, exception_type: type[BaseException] | None,
                  exception: BaseException | None, traceback: TracebackType | None) -> Literal[False]:
