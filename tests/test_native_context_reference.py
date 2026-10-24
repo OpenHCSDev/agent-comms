@@ -18,7 +18,7 @@ from agent_comms.cursor_owner import (
     RecordedCursor,
     UnstartedCursor,
 )
-from agent_comms.field_codec import FieldCodec, InputId, MessageId
+from agent_comms.field_codec import FieldCodec, InputId, MessageId, ThreadLookup
 from agent_comms.historical_native_inputs import (
     FullHistoricalNativeInput,
     TriageHistoricalNativeInput,
@@ -72,7 +72,7 @@ def reservation():
     return NativeRuntimeInput(
         input_id=FieldCodec.decode(InputId, "c" * 32), stage=TriageNativeExecution,
         execution_id=UnrecordedNativeColumn(), attempt_ordinal=UnrecordedNativeColumn(),
-        owner_lookup="b" * 32,  owner_generation=1,
+        owner_lookup=FieldCodec.decode(ThreadLookup, "b" * 32), owner_generation=1,
         owner_token_digest="e" * 64,
     )
 

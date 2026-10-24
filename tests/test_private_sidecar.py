@@ -12,7 +12,7 @@ import pytest
 import agent_comms.private_sidecar as sidecar
 from agent_comms.native_input_record import TriageNativeExecution, UnrecordedNativeColumn
 from agent_comms.coordination_errors import IdentityConflict
-from agent_comms.field_codec import InputId
+from agent_comms.field_codec import FieldCodec, InputId, RootId, ThreadLookup
 from agent_comms.native_prompt_binding import PromptBinding
 
 
@@ -41,9 +41,9 @@ def _insert(db, key="1"):
         stage=TriageNativeExecution,
         execution_id=UnrecordedNativeColumn(),
         attempt_ordinal=UnrecordedNativeColumn(),
-        owner_lookup="2" * 32,
+        owner_lookup=FieldCodec.decode(ThreadLookup, "2" * 32),
         owner_generation=1,
-        wire_root_id="3" * 32,
+        wire_root_id=FieldCodec.decode(RootId, "3" * 32),
         expected_prompt_digest="a" * 64,
         bound_at_ms=1,
     ).insert(db)
@@ -203,7 +203,7 @@ from pathlib import Path
 import agent_comms.private_sidecar as s
 from agent_comms.native_input_record import TriageNativeExecution, UnrecordedNativeColumn
 from agent_comms.native_prompt_binding import PromptBinding
-from agent_comms.field_codec import InputId
+from agent_comms.field_codec import FieldCodec, InputId, RootId, ThreadLookup
 p = Path(sys.argv[1])
 print('READY', flush=True)
 assert sys.stdin.readline() == 'GO\n'
@@ -220,8 +220,8 @@ if len(sys.argv) > 2:
     s.os.fsync = crash
     with s.sidecar_connection(p, PromptBinding) as db:
         PromptBinding(input_id=InputId('1'*32),stage=TriageNativeExecution,
-            execution_id=UnrecordedNativeColumn(),attempt_ordinal=UnrecordedNativeColumn(),owner_lookup='2'*32,
-            owner_generation=1,wire_root_id='3'*32,
+            execution_id=UnrecordedNativeColumn(),attempt_ordinal=UnrecordedNativeColumn(),owner_lookup=FieldCodec.decode(ThreadLookup,'2'*32),
+            owner_generation=1,wire_root_id=FieldCodec.decode(RootId,'3'*32),
             expected_prompt_digest='a'*64,
             bound_at_ms=1).insert(db)
 print('OK', flush=True)
