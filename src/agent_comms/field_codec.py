@@ -41,6 +41,7 @@ from pydantic import BaseModel, JsonValue
 from typing_extensions import TypeAliasType, TypeForm
 
 from .declared_family import DeclaredFamily
+from .json_schema import JsonScalar, JsonSchemaOwner
 from .mro_dispatch import MroDispatch, handles
 from .sealed import Sealed
 
@@ -929,7 +930,7 @@ class DecoderPlan(ABC):
 
 
 @dataclass(frozen=True, slots=True)
-class ValueDecoder[T](DecoderPlan):
+class ValueDecoder[T](DecoderPlan, JsonSchemaOwner):
     """One annotation owns its wire conversion, draft projection and choice domain."""
 
     _by_origin: ClassVar[dict[object, type[ValueDecoder[object]]]] = {}
@@ -1154,7 +1155,7 @@ class _NominalTextDecoder[T: str](_RepresentedDecoder[T]):
         return self.encode(value)
 
 
-class FieldRepresentation[T](MroDispatch, ABC):
+class FieldRepresentation[T](MroDispatch, ABC, JsonSchemaOwner):
     """A field capability, declared as ``Annotated[ValueType, Representation]``.
 
     Private transports can declare captures without permitting those objects in
@@ -1218,10 +1219,6 @@ class FieldRepresentation[T](MroDispatch, ABC):
     def decode(cls, value: object) -> T: ...
 
     @classmethod
-    def schema(cls) -> dict[str, JsonValue]:
-        raise TypeError(f"{cls.__name__} has no JSON schema")
-
-    @classmethod
     def argument_options(cls, argument: Argument) -> dict[str, object]:
         """argparse options for this representation's command-line text."""
         return {}
@@ -1283,20 +1280,11 @@ class StructuralRepresentation(FieldRepresentation):
         if isinstance(annotation, type) and issubclass(annotation, Enum):
             values = [value for _, value in compile_decoder(annotation).editor_choices()]
             return {**FieldCodec.value_schema(type(values[0])), "enum": values}
-        primitive = {
-            str: "string",
-            bool: "boolean",
-            int: "integer",
-            float: "number",
-            type(None): "null",
-        }
-        if annotation in primitive:
-            return {"type": primitive[annotation]}
         if isinstance(annotation, type) and issubclass(annotation, DeclaredFamily):
             return FieldCodec._family_schema(annotation)
         if isinstance(annotation, type) and is_dataclass(annotation):
             return FieldCodec.record_schema(annotation)
-        raise TypeError(f"No declared JSON schema for {annotation}")
+        return ValueDecoder.represented_class(annotation).schema()
 
 
 class AcceptsNull[T](FieldRepresentation[T]):
@@ -1668,8 +1656,13 @@ class TextRepresentation[V](FieldRepresentation[V]):
     def from_text(cls, value: str) -> V: ...
 
     @classmethod
+    def text_form(cls) -> type[TextRepresentation]:
+        return cls
+
+    @classmethod
     def schema(cls) -> dict[str, JsonValue]:
-        return {"type": "string", "description": f"{cls.__module__}.{cls.__qualname__} text"}
+        form = cls.text_form()
+        return {"type": "string", "description": f"{form.__module__}.{form.__qualname__} text"}
 
 
 class ValidatedScalar(FieldRepresentation):
@@ -2415,7 +2408,7 @@ class _ScalarDecoder[T, Target = object](ValueDecoder[T]):
         raise TypeError(f"Unsupported JSON value: {type(value).__name__}")
 
 
-class _ExactScalarDecoder[T](_ScalarDecoder[T]):
+class _ExactScalarDecoder[T](_ScalarDecoder[T], JsonScalar):
     """A JSON scalar decoded only from its own type."""
 
     __slots__ = ()
@@ -2443,15 +2436,21 @@ class _PathDecoder(PathText, ValueDecoder[Path]):
 
     origins = (Path,)
 
+    @classmethod
+    def text_form(cls) -> type[TextRepresentation]:
+        return PathText
+
 
 class _NullDecoder(_ExactScalarDecoder[None]):
     __slots__ = ()
     annotations = (type(None),)
+    json_type = "null"
 
 
 class _TextDecoder(_ExactScalarDecoder[str]):
     __slots__ = ()
     annotations = (str,)
+    json_type = "string"
 
     def accepts(self, data: object) -> TypeGuard[str]:
         # RedecodesDeletedPhase removes nominal values from plain str fields.
@@ -2470,6 +2469,7 @@ class _TextDecoder(_ExactScalarDecoder[str]):
 class _FlagDecoder(_ExactScalarDecoder[bool]):
     __slots__ = ()
     annotations = (bool,)
+    json_type = "boolean"
 
     def argument_options(self, argument: Argument) -> dict[str, object]:
         return {"action": "store_true"}
@@ -2485,6 +2485,7 @@ class _NumberDecoder[T: (int, float)](_ExactScalarDecoder[T]):
 class _IntegerDecoder(_NumberDecoder[int]):
     __slots__ = ()
     annotations = (int,)
+    json_type = "integer"
 
 
 class _RealDecoder(_NumberDecoder[float]):
@@ -2492,6 +2493,7 @@ class _RealDecoder(_NumberDecoder[float]):
 
     __slots__ = ()
     annotations = (float,)
+    json_type = "number"
 
     def fits_wire(self, data: object) -> TypeGuard[int | float]:
         return type(data) in (int, float)
