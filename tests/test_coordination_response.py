@@ -15,6 +15,7 @@ from agent_comms.comms import Comms, wire
 from agent_comms.coordination_cohort import accept_delivery_cohort
 from agent_comms.coordination_errors import (
     IdentityConflict,
+    StaleFence,
     StaleRevision,
 )
 from agent_comms.coordination_response import (
@@ -28,7 +29,10 @@ from agent_comms.coordinator import Coordination
 from agent_comms.field_codec import InputId, RootId, ThreadLookup, TurnId
 from agent_comms.lifecycle_capability import Active, Complete
 from agent_comms.message_bus import MessageBus
-from agent_comms.obligation_states import PendingResponse
+from agent_comms.assignment_states import CompletedAssignment
+from agent_comms.coordination_results import AlreadyApplied
+from agent_comms.execution_states import CompletedExecution
+from agent_comms.obligation_states import PendingResponse, PublishedResponse, PublishingResponse
 from agent_comms.owner_fence import prepare_fence_token
 from agent_comms.publisher import ParticipantPublisher
 from agent_comms.registration import Registration
@@ -190,6 +194,55 @@ def test_original_routes_prepare_together_and_release_one_attempt_only_after_all
                 assignment.source for assignment in settled.assignments
                 if assignment.lifecycle.exact_target == route
             )
+    finally:
+        case.close()
+
+
+@pytest.mark.parametrize("direct", [False, True])
+def test_real_bus_sql_tx1_exact_reply_tx2_and_lost_ack_replay(tmp_path: Path, direct: bool) -> None:
+    case = _ready(tmp_path, direct=direct)
+    try:
+        result = prepare_fenced_response(
+            case.store,
+            case.bus,
+            case.fence,
+            "Response on the original route",
+            timestamp=123.5,
+            exact_target=case.reply_target, owner_witness=case.witness,
+        )
+        intent = result.value
+        assert intent.exact_target == case.reply_target
+        assert type(case.store.get("exec").require_wire_response(case.reply_target).lifecycle) is PublishingResponse
+        assert intent.published_message(case.bus.bus) is None
+        assert case.comms.bus.bus.revision() == case.origin_seq
+
+        def replay(store):
+            return prepare_fenced_response(
+                store,
+                case.bus,
+                case.fence,
+                intent.message.body,
+                timestamp=intent.message.timestamp,
+                exact_target=case.reply_target, owner_witness=case.witness,
+            )
+
+        assert isinstance(replay(case.store), AlreadyApplied)
+        published = publish_fenced_response(
+            case.store, case.bus, case.fence, exact_target=case.reply_target, owner_witness=case.witness
+        ).value
+        assert type(published.execution.lifecycle) is CompletedExecution
+        assert type(published.require_wire_response(case.reply_target).lifecycle) is PublishedResponse
+        assert type(published.assignments[0].lifecycle) is CompletedAssignment
+        assert ResponseObligation.response_record(published.publication_evidence, case.reply_target).seq == case.origin_seq + 1
+        response = intent.published_message(case.bus.bus)
+        assert response is not None and response.target == case.reply_target
+        assert published == case.store.get("exec")
+        case.store.close()
+        with Coordination(str(case.comms.root / "coordination.sqlite3")) as reopened:
+            assert reopened.get("exec") == published
+            with pytest.raises(StaleFence):
+                replay(reopened)
+        assert case.comms.bus.bus.revision() == case.origin_seq + 1
     finally:
         case.close()
 
