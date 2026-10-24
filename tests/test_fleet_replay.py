@@ -25,6 +25,7 @@ from agent_comms.goal_actions import CreateProblemGoalAction
 from agent_comms.goals import CountCheckResult, OrderCheck
 from agent_comms.order_runs import MechanicalOrderRun
 from agent_comms.recorded_time import RecordedEventTime
+from agent_comms.repo import Checkout
 from agent_comms.repository_name import RepositoryName
 from agent_comms.standing_rules import (
     BranchBehindMain,
@@ -43,6 +44,7 @@ from agent_comms.todos import (
     OrderClaim,
     OrderMessage,
     PendingProblemOrder,
+    ProgressRead,
     PullRequestLink,
     SharedWorktreeRefusal,
     Todo,
@@ -50,7 +52,7 @@ from agent_comms.todos import (
 )
 from agent_comms.transcript_events import ToolStartTranscript
 from agent_comms.turn_item import NativeTurnId
-from agent_comms.work_branches import UnpushedHead
+from agent_comms.work_branches import BranchDifference, UnpushedHead
 from conftest import declare_test_bus
 from source_revision_fixture import SourceRepository
 from github_fixture import GitHubFixture
@@ -450,6 +452,27 @@ def test_branch_rules_read_the_order_checkout_instead_of_the_behind_home(fleet):
     assert BranchGrowth(
         todo.id, todo.held().owner_identity, built.repository, 'current-order', growth,
     ) in built.observe().rules
+
+
+def test_held_branch_rules_survive_an_order_checkout_retired_mid_frame(fleet):
+    """A unit retires its checkout before reporting; the heartbeat reading it must not crash."""
+    built, expected = fleet
+    storage = built.comms.registry.storage_rule
+    allocated = {storage.order_checkout(name, problem) for name, problem in built.problems.items()}
+
+    class RetiringRead(ProgressRead):
+        def branch_difference(self, path: Path) -> BranchDifference:
+            difference = super().branch_difference(path)
+            if path in allocated:
+                Checkout(path).retire()
+            return difference
+
+    observed = CommanderObservation.read(
+        built.comms, built.thread(Fleet.commander), RetiringRead)
+    held = set(HeldBranchRule.members_with(HeldBranchRule))
+    assert not any(path.exists() for path in allocated)
+    assert Counter(rule for rule in observed.rules if type(rule) in held) == Counter(
+        rule for rule in expected if type(rule) in held)
 
 
 def test_replay_raises_each_incident_once(fleet):
