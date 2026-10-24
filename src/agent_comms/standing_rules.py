@@ -671,18 +671,6 @@ class DirectiveUnacted(OwedAnswer, DatedStandingRule):
 
 
 @dataclass(frozen=True)
-class BridgeDown(ReasonedStandingRule, UndatedStandingRule):
-    text = (
-        "COMMS BRIDGE DOWN: the commander receives nothing -> re-arm the bridge Monitor this wake"
-    )
-
-    @classmethod
-    def reason(cls, comms: Comms, commander: str) -> str | None:
-        receiving = comms.registry.snapshot().status(commander).receiving
-        return None if receiving else f"{commander} is not receiving"
-
-
-@dataclass(frozen=True)
 class ServicePassFailing(IndependentStandingRule, DatedStandingRule):
     """A Core service watch whose newest pass failed; the connector's log reaches nobody."""
 

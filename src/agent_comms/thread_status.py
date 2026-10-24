@@ -340,6 +340,9 @@ class NoBridgeThreadStatus(SelfRenaming, CliInboxPresence, StoppedThreadStatus):
     It has no launched process to stop or restart, so it stays in every view.
     """
 
+    def paused_since(self, last_seen: float) -> tuple[float, ...]:
+        return (last_seen,)
+
     def presentation(
         self, title: str, activity: ObservedActivity,
         idle: Callable[[ThreadPresentation], ThreadPresentation],
