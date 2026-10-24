@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from agent_comms.field_codec import ThreadLookup
+
 from dataclasses import replace
 
 from agent_comms.assignment_states import AssignmentState, DeferredAssignment
@@ -49,7 +51,7 @@ class AssignmentStore:
             return Applied(assignment)
 
     def recoverable_unbound_deliveries(
-        self, recipient_lookup: str, sources: frozenset[MessageReference],
+        self, recipient_lookup: ThreadLookup, sources: frozenset[MessageReference],
     ) -> tuple[WakeAssignment, ...]:
         """Paused following deliveries with neither send binding nor native source."""
         from agent_comms.native_runtime_input import NativeRuntimeInput

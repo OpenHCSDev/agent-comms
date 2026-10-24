@@ -12,7 +12,7 @@ import sqlite3
 import time
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Annotated
+from typing import TYPE_CHECKING
 
 from agent_comms.coordination_errors import IdentityConflict
 from agent_comms.coordinator import Coordination
@@ -26,7 +26,7 @@ from .bus_source_page import CoveragePage
 from .cohort_schema import ClaimBatchAcknowledgements, CohortTable
 from .coordination_cohort import AcceptedCohort, _claim_record
 from .coordination_session import NativeBoundary
-from .field_codec import FieldCodec, Id128Text
+from .field_codec import FieldCodec, RootId, ThreadLookup
 from .historical_native_inputs import HistoricalNativeInput, read_historical_native_inputs
 from .message_bus import MessageBus
 from .native_input_record import NumberNativeColumn, TextNativeColumn, UnrecordedNativeColumn
@@ -166,8 +166,8 @@ class ProvenSourceCoverage:
     these historical observations never permit new input or replay.
     """
 
-    wire_root_id: str
-    recipient_lookup: str
+    wire_root_id: RootId
+    recipient_lookup: ThreadLookup
     covered_seq: int
     inputs: tuple[HistoricalNativeInput, ...]
     no_wake_seqs: tuple[int, ...]
@@ -208,11 +208,12 @@ class SourceCoverage:
     page_budget = 32  # Existing bounded pass: 3,200 addressed initials.
 
     def __init__(
-        self, bus: MessageBus, store: Coordination, *, wire_root_id: str, recipient_lookup: str,
+        self, bus: MessageBus, store: Coordination, *,
+        wire_root_id: RootId, recipient_lookup: ThreadLookup,
     ):
         self.bus, self.store = bus, store
-        self.wire_root_id = FieldCodec.decode(Annotated[str, Id128Text], wire_root_id)
-        self.recipient_lookup = FieldCodec.decode(Annotated[str, Id128Text], recipient_lookup)
+        self.wire_root_id = wire_root_id
+        self.recipient_lookup = recipient_lookup
 
     def read(
         self, *, limit: int = 100, after_seq: int = 0, partial: bool = False,

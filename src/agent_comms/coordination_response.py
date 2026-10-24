@@ -57,7 +57,7 @@ from agent_comms.typed_table import (
     WithoutRowid,
 )
 
-from .field_codec import MessageId
+from .field_codec import MessageId, RootId, ThreadLookup
 from .locked_store import RegistryFile
 
 
@@ -73,7 +73,7 @@ class PublicationAppendDispatches(ResponseTable, WithoutRowid):
         str, Column(primary_key=True, check="length(exact_target) BETWEEN 1 AND 256")
     ]
     wire_root_id: Annotated[
-        str, Column(check="length(wire_root_id)=32 AND wire_root_id NOT GLOB '*[^0-9a-f]*'")
+        RootId, Column(check="length(wire_root_id)=32 AND wire_root_id NOT GLOB '*[^0-9a-f]*'")
     ]
     owner_generation: Annotated[int, Column(check="owner_generation>0")]
     attempt_ordinal: Annotated[int, Column(check="attempt_ordinal>0")]
@@ -84,14 +84,14 @@ class PublicationAppendDispatches(ResponseTable, WithoutRowid):
         return (ForeignKey(columns=("execution_id", "exact_target"), target=PublicationIntents,
                           target_columns=("execution_id", "exact_target")),)
 
-    def matches(self, wire_root_id: str, fence: OwnerFence, exact_target: str) -> bool:
+    def matches(self, wire_root_id: RootId, fence: OwnerFence, exact_target: str) -> bool:
         return self.matches_attempt(
             wire_root_id, fence.execution_id, fence.owner_generation,
             fence.attempt_ordinal, exact_target,
         )
 
     def matches_attempt(
-        self, wire_root_id: str, execution_id: str, owner_generation: int,
+        self, wire_root_id: RootId, execution_id: str, owner_generation: int,
         attempt_ordinal: int, exact_target: str,
     ) -> bool:
         return self == PublicationAppendDispatches(
@@ -202,7 +202,7 @@ class SelectedResponseRoute(TypedRow):
     decisions_digest: str
     resolver_version: str
     policy_version: str
-    recipient_lookup: str
+    recipient_lookup: ThreadLookup
     canonical_thread: str
 
     def require_source(self, initial, assignment: WakeAssignment) -> None:
@@ -228,7 +228,7 @@ class LiveResponseOwner(RegistryOwner):
     check_type = RunningTurnRegistryCheck
 
     @property
-    def recipient_lookup(self) -> str:
+    def recipient_lookup(self) -> ThreadLookup:
         return self.thread.incarnation.lookup
 
     def require_live(self, snapshot: RegistrySnapshot, fence: OwnerFence) -> None:

@@ -33,7 +33,7 @@ from .child_process import Platform
 from .coordination_cohort import sealed_cohort_assignments
 from .declared_family import DeclaredFamily
 from .envelope_claim_transitions import ExistingFileClaim
-from .field_codec import ClaimId, FieldCodec, MalformedRecord, MessageId
+from .field_codec import ClaimId, FieldCodec, MalformedRecord, MessageId, RootId
 from .message_reference import MessageReference
 from .private_path import PrivateDirectoryRole, PrivateFileRole
 from .thread_identity import ClaimedIdentity, ClaimScoped, RecordedThreadIncarnation
@@ -50,7 +50,7 @@ class PlannedWrite:
 
 @dataclass(frozen=True, slots=True)
 class SelectedWriteBinding(ClaimScoped):
-    root_id: str
+    root_id: RootId
     source: MessageReference
     assignment_id: str
 
@@ -61,7 +61,7 @@ class SelectedWriteIntent(DeclaredFamily, affix="WriteIntent"):
 
     family_discriminator = "status"
     schema: Literal[1]
-    root_id: str
+    root_id: RootId
     source_seq: int
     source_message_id: MessageId
     claim_id: str
@@ -108,7 +108,7 @@ class SelectedWritePlans(DurableFile, PatternFile):
     filename = "{source_seq}-{lookup}.json"
     root_directory = "selected-write-plans"
 
-    def __init__(self, comms: Comms, root_id: str):
+    def __init__(self, comms: Comms, root_id: RootId):
         self.comms = comms
         self.root_id = root_id
         self.directory = self.directory_in(comms.root)

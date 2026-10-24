@@ -19,7 +19,7 @@ from agent_comms.coordinator import Coordination
 from .cohort_schema import CohortTable
 from agent_comms.native_runtime_input import NativeRuntimeTable
 from .declared_family import DeclaredFamily
-from .field_codec import InputId, MessageId, WireName
+from .field_codec import InputId, MessageId, WireName, RootId, ThreadLookup
 from .native_input_record import (
     FullNativeExecution,
     NativeInputExecution,
@@ -39,13 +39,13 @@ if TYPE_CHECKING:
 
 @dataclass(frozen=True, kw_only=True)
 class HistoricalNativeInput(NativeInputRecord, DeclaredFamily, affix="HistoricalNativeInput"):
-    wire_root_id: str
+    wire_root_id: RootId
     source_seq: int
     source_message_id: MessageId
     assignment_id: Annotated[str, WireName("claim_id")]
     execution: NativeInputExecution
     input_id: InputId
-    owner_lookup: str
+    owner_lookup: ThreadLookup
     owner_generation: int
     context: NativeContextProof
     native_reference: NativeInputReference
@@ -100,8 +100,8 @@ class _HistoricalSource(TypedRow):
 def read_historical_native_inputs(
     store: Coordination,
     *,
-    wire_root_id: str,
-    recipient_lookup: str,
+    wire_root_id: RootId,
+    recipient_lookup: ThreadLookup,
     source_seq: int,
     source_reads: NativeEvidenceScope,
 ) -> tuple[HistoricalNativeInput, ...]:

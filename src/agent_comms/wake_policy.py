@@ -7,6 +7,8 @@ from dataclasses import dataclass
 from enum import StrEnum
 from typing import ClassVar
 
+from agent_comms.field_codec import FieldCodec, ThreadLookup
+
 from .coordination_errors import IntegrityViolationError
 from .coordinator_vocabulary import CoordinatorVocabulary
 from .declared_family import DeclaredFamily
@@ -36,7 +38,7 @@ class NoWakeReason(StrEnum):
 
 @dataclass(frozen=True, slots=True)
 class RecipientDecision(DeclaredFamily):
-    recipient: str  # Stable recipient_lookup, never the mutable canonical name.
+    recipient: ThreadLookup  # Stable recipient_lookup, never the mutable canonical name.
 
     @abstractmethod
     def wake_policy(self) -> WakePolicy: ...
@@ -86,7 +88,7 @@ class NoWakeDecision(RecipientDecision):
     def from_wire(cls, row: dict[str, str]) -> NoWakeDecision:
         match row:
             case {"recipient_lookup": lookup, "no_wake": reason}:
-                return cls(lookup, NoWakeReason(reason))
+                return cls(FieldCodec.decode(ThreadLookup, lookup), NoWakeReason(reason))
         raise IntegrityViolationError("A no-wake decision row is incomplete.")
 
 
@@ -114,7 +116,10 @@ class WakeDecision(RecipientDecision):
     def from_wire(cls, row: dict[str, str]) -> WakeDecision:
         match row:
             case {"recipient_lookup": lookup, "audience": audience, "wake_mode": mode}:
-                return cls(lookup, MessageAudience(audience), WakePolicy.member_named(mode)())
+                return cls(
+                    FieldCodec.decode(ThreadLookup, lookup), MessageAudience(audience),
+                    WakePolicy.member_named(mode)(),
+                )
         raise IntegrityViolationError("A wake decision row is incomplete.")
 
 
@@ -184,7 +189,7 @@ class WakePolicy(LifecycleCapability, CoordinatorVocabulary, SourceProofRequirem
     def full_expectation(self):
         return "this is yours; answer the original committed message"
 
-    def recipient_decision(self, recipient: str, audience: MessageAudience):
+    def recipient_decision(self, recipient: ThreadLookup, audience: MessageAudience):
         return WakeDecision(recipient, audience, self)
 
 
@@ -204,7 +209,7 @@ class PassiveWake(NoSourceProof, WakePolicy):
 class UnmentionedWake(PassiveWake):
     """A delivered observer, not even a passive claim."""
 
-    def recipient_decision(self, recipient: str, audience: MessageAudience):
+    def recipient_decision(self, recipient: ThreadLookup, audience: MessageAudience):
         return NoWakeDecision(recipient)
 
 

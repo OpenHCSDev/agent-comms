@@ -47,7 +47,7 @@ from .context_segments.optional_awareness import (
 )
 from .coordination_cohort import _claim_record
 from .errors import RelationViolationError
-from .field_codec import FieldCodec
+from .field_codec import FieldCodec, RootId, ThreadLookup
 from .message_reference import MessageReference
 from .native_input_owner import RegistryOwner
 from .private_registry_guard import RegistryPrivacy
@@ -263,7 +263,9 @@ class OptionalAwarenessProjection:
         result.require_resource_budget(self.max_text_bytes)
         return result
 
-    def _verify_live_inclusion(self, path: os.PathLike[str], lookup: str, owner: Thread) -> None:
+    def _verify_live_inclusion(
+        self, path: os.PathLike[str], lookup: ThreadLookup, owner: Thread
+    ) -> None:
         registry = self.registry
         with _store_lock(registry.store.path, contention=StoreLockContention(0)):
             snapshot = registry.store.read_snapshot_unlocked()
@@ -311,7 +313,7 @@ class OptionalAwarenessProjection:
             raise ProjectionUnavailableError("current selected claim lost its sealed acknowledgement")
 
     def _selected_decisions(
-        self, db: sqlite3.Connection, root_id: str, lookup: str, through_seq: int
+        self, db: sqlite3.Connection, root_id: RootId, lookup: ThreadLookup, through_seq: int
     ) -> list[_SelectedDecision]:
         assignments = WakeAssignment.select(
             db,
@@ -379,7 +381,9 @@ class OptionalAwarenessProjection:
             for row in assignments
         ]
 
-    def _open_obligations(self, db: sqlite3.Connection, lookup: str) -> list[_OpenObligation]:
+    def _open_obligations(
+        self, db: sqlite3.Connection, lookup: ThreadLookup
+    ) -> list[_OpenObligation]:
         obligations = ResponseObligation.select(
             db,
             where="execution_id IN (SELECT execution_id FROM executions "

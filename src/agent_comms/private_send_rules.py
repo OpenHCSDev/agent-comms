@@ -5,6 +5,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
+from agent_comms.field_codec import RootId
+
 from .child_process import ProcessIdentity
 from .coordination_tables.assignments import WakeAssignment
 from .coordination_tables.participants import OwnerGenerations
@@ -194,7 +196,7 @@ class NativeReservationCheck(NativeIdentityCheck):
 @dataclass(frozen=True, kw_only=True)
 class NativeBindingCheck(NativeIdentityCheck):
     row: PromptBinding
-    wire_root_id: str
+    wire_root_id: RootId
     prompt_digest: TextDigest
 
 

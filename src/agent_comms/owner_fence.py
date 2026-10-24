@@ -12,6 +12,7 @@ from agent_comms.coordination_contracts import (
     require_nonempty,
     validate_execution_id,
 )
+from agent_comms.field_codec import ThreadLookup
 
 
 @dataclass(frozen=True, slots=True)
@@ -20,7 +21,7 @@ class AttemptAuthority:
 
     execution_id: str
     ordinal: int
-    owner_lookup: str
+    owner_lookup: ThreadLookup
     owner_generation: int
     token_digest: str
 
@@ -29,7 +30,7 @@ class AttemptAuthority:
 class OwnerFence:
     execution_id: str
     attempt_ordinal: int
-    owner_lookup: str
+    owner_lookup: ThreadLookup
     owner_generation: int
     revision: int
     token: str

@@ -33,7 +33,7 @@ from .cohort_schema import AcceptanceFrontier
 from .coordination_tables.participants import Participants
 from .coordinator import Coordination
 from .errors import RelationViolationError
-from .field_codec import Id128Text, MalformedRecord, RootId
+from .field_codec import RootId, ThreadLookup
 from .locked_store import DurableFile, WireWakeFile
 from .native_runtime_input import NativeRuntimeInput, NativeRuntimeTable
 from .private_path import PrivateFileRole
@@ -138,7 +138,7 @@ class RegistryPrivacy(ABC):
 
     @property
     @abstractmethod
-    def namespace(self) -> str:
+    def namespace(self) -> RootId:
         """Require the original native namespace; a public registry has none."""
 
     @abstractmethod
@@ -151,7 +151,7 @@ class RegistryPrivacy(ABC):
     def prepare_native(self, registry_path: Path) -> PrivateRegistryGuard: ...
 
     @abstractmethod
-    def require_root(self, root_id: str, error: Exception) -> None: ...
+    def require_root(self, root_id: RootId, error: Exception) -> None: ...
 
     @abstractmethod
     def notification_context_sql(self, connection: sqlite3.Connection) -> str:
@@ -167,7 +167,7 @@ class RegistryPrivacy(ABC):
         """The complete schema this root's authority requires during reconciliation."""
 
     @abstractmethod
-    def declare_acceptance(self, db: sqlite3.Connection, recipient_lookup: str) -> None:
+    def declare_acceptance(self, db: sqlite3.Connection, recipient_lookup: ThreadLookup) -> None:
         """Prepare the new recipient's acceptance state before registry publication."""
 
     @abstractmethod
@@ -178,7 +178,7 @@ class RegistryPrivacy(ABC):
 
 class PublicRegistry(RegistryPrivacy):
 
-    def declare_acceptance(self, db: sqlite3.Connection, recipient_lookup: str) -> None:
+    def declare_acceptance(self, db: sqlite3.Connection, recipient_lookup: ThreadLookup) -> None:
         """Public roots have no native cohort acceptance state."""
 
     def publication_connection(self, connection: sqlite3.Connection) -> None:
@@ -216,7 +216,7 @@ class PublicRegistry(RegistryPrivacy):
         return ()
 
     @property
-    def namespace(self) -> str:
+    def namespace(self) -> RootId:
         _reject("native namespace requires the original registry guard")
 
     def write(self, registry_path: Path, text: str) -> None:
@@ -243,7 +243,7 @@ class PublicRegistry(RegistryPrivacy):
         guard.commit_initial()
         return guard
 
-    def require_root(self, root_id: str, error: Exception) -> None:
+    def require_root(self, root_id: RootId, error: Exception) -> None:
         raise error
 
 
@@ -252,7 +252,7 @@ class PrivateRegistryGuard(DurableFile, WireWakeFile, RegistryPrivacy):
 
     filename = ".registry-owner-guard"
 
-    def declare_acceptance(self, db: sqlite3.Connection, recipient_lookup: str) -> None:
+    def declare_acceptance(self, db: sqlite3.Connection, recipient_lookup: ThreadLookup) -> None:
         AcceptanceFrontier(
             wire_root_id=self.namespace, recipient_lookup=recipient_lookup, through_seq=0,
         ).insert_if_absent(db)
@@ -284,11 +284,7 @@ class PrivateRegistryGuard(DurableFile, WireWakeFile, RegistryPrivacy):
 
         raise PublicationActivationBlocked("Private notification coordinator is missing")
 
-    def __init__(self, registry_path: Path, wire_root_id: str):
-        try:
-            Id128Text.decode(wire_root_id)
-        except MalformedRecord:
-            _reject("root ID is invalid")
+    def __init__(self, registry_path: Path, wire_root_id: RootId):
         self.registry_path = registry_path
         self.path = self.path_in(registry_path.parent)
         self.root_id = bytes.fromhex(wire_root_id)
@@ -306,14 +302,14 @@ class PrivateRegistryGuard(DurableFile, WireWakeFile, RegistryPrivacy):
             _reject("slot has an invalid length")
         _, _, root_id, _, _, _ = _HEADER.unpack(raw[:_HEADER.size])
         _decode(raw, root_id)
-        guard = cls(registry_path, root_id.hex())
+        guard = cls(registry_path, RootId(root_id.hex()))
         guard.verify()
         return guard
 
     @property
-    def namespace(self) -> str:
+    def namespace(self) -> RootId:
         """The existing native protocol namespace, never the SQLite bus identity."""
-        return self.root_id.hex()
+        return RootId(self.root_id.hex())
 
     def cursor_scope(
         self, snapshot: RegistrySnapshot, thread_name: str, session_id: str,
@@ -348,7 +344,7 @@ class PrivateRegistryGuard(DurableFile, WireWakeFile, RegistryPrivacy):
         self.verify()
         return self
 
-    def require_root(self, root_id: str, error: Exception) -> None:
+    def require_root(self, root_id: RootId, error: Exception) -> None:
         if root_id != self.namespace:
             raise error
 

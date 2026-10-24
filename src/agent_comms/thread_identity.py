@@ -31,6 +31,7 @@ from .field_codec import (
     SingleFieldValue,
     WireName,
     WireValue,
+    ThreadLookup,
 )
 from .projection_source import ProducedRow, ProjectionSource
 from .response_policy import CollectivePolicy, InformationalPolicy, ResponsePolicy
@@ -240,7 +241,7 @@ class ThreadIncarnation(JsonFlagRecord, WireValue, ABC):
     def require_may_change(self, todo: Todo) -> None:
         todo.require_commander(self)
 
-    def selects_lookup(self, lookup: str) -> bool:
+    def selects_lookup(self, lookup: ThreadLookup) -> bool:
         return False
 
     def matches_recorded_name(self, name: str, snapshot: RegistryProvenance) -> bool:
@@ -300,7 +301,7 @@ class RecordedThreadIncarnation(ThreadIncarnation, ParticipantIdentity):
     ) -> T:
         return make(self)
 
-    def selects_lookup(self, lookup: str) -> bool:
+    def selects_lookup(self, lookup: ThreadLookup) -> bool:
         return self.lookup == lookup
 
     def acting_for(self, authority: ThreadIncarnation) -> CommanderForkIdentity:
@@ -320,10 +321,10 @@ class RecordedThreadIncarnation(ThreadIncarnation, ParticipantIdentity):
             raise ValueError("Thread incarnation requires a positive recorded birth")
 
     @cached_property
-    def lookup(self) -> str:
+    def lookup(self) -> ThreadLookup:
         """The creation lookup, computed once for this recorded incarnation."""
         identity = f"agent-comms:thread-creation:v1\0{float(self.created_at)!r}".encode()
-        return hashlib.sha256(identity).hexdigest()[:32]
+        return ThreadLookup(hashlib.sha256(identity).hexdigest()[:32])
 
 
 @dataclass(frozen=True, eq=False)

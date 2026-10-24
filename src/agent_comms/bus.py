@@ -46,7 +46,7 @@ from agent_comms.envelope_claim_transitions import (
     ResourceClaim,
 )
 from agent_comms.errors import CommittedMessageError, RelationViolationError, UnclaimedError
-from agent_comms.field_codec import ClaimId, FieldCodec, MessageId
+from agent_comms.field_codec import ClaimId, FieldCodec, MessageId, ThreadLookup
 from agent_comms.locked_store import BusFile, SQLiteFile, StoreCommittedError
 from agent_comms.message_reference import MessageReference
 from agent_comms.private_path import FileIdentity, PresentPath
@@ -312,7 +312,7 @@ class BusReader(RouteCounts, ABC):
                     yield FieldCodec.decode(int, row[0])
 
     def conversation(
-        self, lookup: str, *, after: int = 0, before: int | None = None, limit: int = 100,
+        self, lookup: ThreadLookup, *, after: int = 0, before: int | None = None, limit: int = 100,
         descending: bool = True, sequences: tuple[int, ...] = (),
     ) -> tuple[Delivered, ...]:
         with self.reading() as source:
@@ -328,7 +328,7 @@ class BusReader(RouteCounts, ABC):
             ))
 
     def sent(
-        self, lookup: str, *, after: int = 0, before: int | None = None,
+        self, lookup: ThreadLookup, *, after: int = 0, before: int | None = None,
         limit: int = 100, descending: bool = True,
     ) -> tuple[Delivered, ...]:
         with self.reading() as source, closing(source._source_sequences(
@@ -338,7 +338,7 @@ class BusReader(RouteCounts, ABC):
             return tuple(source.delivery(seq) for seq in positions)
 
     def received(
-        self, lookup: str, *, after: int = 0, before: int | None = None, limit: int = 100,
+        self, lookup: ThreadLookup, *, after: int = 0, before: int | None = None, limit: int = 100,
         sender_lookups: tuple[str, ...] = (), descending: bool = True,
         sequences: tuple[int, ...] = (),
     ) -> tuple[Delivered, ...]:
@@ -349,7 +349,7 @@ class BusReader(RouteCounts, ABC):
             return tuple(source.delivery(seq) for seq in positions)
 
     def direct_replies(
-        self, lookup: str, *, after: int = 0, limit: int = 100,
+        self, lookup: ThreadLookup, *, after: int = 0, limit: int = 100,
         sender_lookups: tuple[str, ...] = (), descending: bool = True,
         sequences: tuple[int, ...] = (),
     ) -> tuple[Delivered, ...]:
@@ -464,7 +464,7 @@ class Bus(BusReader, ReconciledFile, WalStore, CarriedWriter, BusFile, Watched):
     def __init__(self, path: Path):
         super().__init__(path)
 
-    def received_after(self, lookup: str, after: int) -> bool:
+    def received_after(self, lookup: ThreadLookup, after: int) -> bool:
         """Whether this recipient has a newer candidate; read one indexed metadata row."""
         with self.observing() as db:
             return ReceivedSource.exists(db, where="{seq} > ?", parameters=(after,), lookup=lookup)

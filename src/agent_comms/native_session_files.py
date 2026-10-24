@@ -14,7 +14,6 @@ from pathlib import Path
 from typing import Self
 
 from agent_comms.child_process import Platform, ProcessIdentity
-from agent_comms.field_codec import Id128Text
 from agent_comms.locked_store import DurableFile, PatternFile, SQLiteFile
 from agent_comms.native_session_reopen import NativeSessionIdentity
 from agent_comms.participant_identity import ParticipantIdentity
@@ -233,7 +232,7 @@ class NativeSessionFiles(NativeSessionIdentity, NativeTranscriptFiles):
         # keeps the key stable across transcript moves and confined to one file.
         key = hashlib.sha256(self.session_id.encode()).hexdigest()
         return NativeInputProof.path_in(
-            self.root, lookup=Id128Text.decode(self.owner.lookup), name=key,
+            self.root, lookup=self.owner.lookup, name=key,
         )
 
 

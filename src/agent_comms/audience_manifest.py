@@ -19,7 +19,7 @@ from typing import Final
 from agent_comms.coordination_contracts import MAX_IDENTIFIER_CHARS
 
 from .channel_targets import exact_stored_target
-from .field_codec import FieldCodec, MalformedRecord, MessageId, Sha256Text
+from .field_codec import FieldCodec, MalformedRecord, MessageId, Sha256Text, ThreadLookup
 from .messages import Message
 from .projection_source import ProducedRow, ProjectionSource
 
@@ -68,7 +68,7 @@ class FrozenRecipient(ProjectionSource):
         return (ReceivedSource, AwaitingAnswerSource)
 
 
-    recipient_lookup: str
+    recipient_lookup: ThreadLookup
     canonical_thread: str
 
     def __post_init__(self) -> None:
@@ -156,7 +156,7 @@ class FrozenAudience(ProjectionSource):
         """Names supplied to the separate pure wake resolver; no membership lookup."""
         return frozenset(item.canonical_thread for item in self.recipients)
 
-    def includes_lookup(self, lookup: str) -> bool:
+    def includes_lookup(self, lookup: ThreadLookup) -> bool:
         """Membership in the original frozen audience, independent of current names/tags."""
         return any(item.recipient_lookup == lookup for item in self.recipients)
 

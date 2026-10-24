@@ -11,6 +11,7 @@ from agent_comms.coordination_errors import IdentityConflict
 from agent_comms.coordination_session import NativeBoundary
 from agent_comms.coordinator import Coordination
 from agent_comms.cursor_owner import UnstartedCursor
+from agent_comms.field_codec import ThreadLookup
 from agent_comms.messages import InfoKind, Message
 from agent_comms.proven_source_coverage import SourceCoverage, SourcePrefix
 from agent_comms.publisher import ResponseWrites
@@ -24,7 +25,7 @@ def coverage(tmp_path):
         root_id = boundary.privacy.namespace
     with Coordination(str(CoordinationStore.path_in(tmp_path))) as store:
         yield SourceCoverage(comms.bus, store, wire_root_id=root_id,
-                             recipient_lookup="b" * 32)
+                             recipient_lookup=ThreadLookup("b" * 32))
 
 
 @pytest.mark.parametrize("declaration", BusRecord.members_with(BusRecord))
