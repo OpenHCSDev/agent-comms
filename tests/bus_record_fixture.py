@@ -5,25 +5,32 @@ import os
 from multiprocessing.context import ForkServerContext
 from pathlib import Path
 
-from agent_comms.field_codec import ClaimId, ThreadLookup
 from agent_comms.audience_manifest import FrozenRecipient, freeze_audience
 from agent_comms.bus import PrivateRecord
-from agent_comms.comms import Comms, wire
-from agent_comms.child_process import ProcessIdentity
 from agent_comms.bus_publication import Delivered, KeyedPublication
+from agent_comms.child_process import ProcessIdentity
+from agent_comms.comms import Comms, wire
 from agent_comms.envelope_claim_transitions import UnscopedClaims
+from agent_comms.field_codec import ClaimId, InputId, RootId, ThreadLookup
 from agent_comms.messages import ClaimMessage, ConversationRole, InfoKind, Message
 from agent_comms.response_acknowledgement import (
-    KeyedResponseAcknowledgement, canonical_publication_key, public_envelope_digest,
+    KeyedResponseAcknowledgement,
+    canonical_publication_key,
+    public_envelope_digest,
 )
-from agent_comms.wake import OrdinaryControl, resolve_wake_cohort
 from agent_comms.threads import Thread
-
+from agent_comms.wake import OrdinaryControl, resolve_wake_cohort
 
 publication_processes = ForkServerContext()
 publication_processes.set_forkserver_preload([ClaimMessage.__module__.partition(".")[0]])
 SENDER_LOOKUP = ThreadLookup("a" * 32)
 RECIPIENT_LOOKUP = ThreadLookup("b" * 32)
+ROOT_ID = RootId("d" * 32)
+OWNER_LOOKUP = ThreadLookup("c" * 32)
+INPUT_ID = InputId("e" * 32)
+UNRELATED_LOOKUP = ThreadLookup("f" * 32)
+RENAMED_OWNER_LOOKUP = ThreadLookup("d" * 32)
+RENAMED_RECIPIENT_LOOKUP = ThreadLookup("e" * 32)
 
 
 def prepare_native_comms(comms: Comms) -> Comms:
@@ -72,7 +79,7 @@ def record_from(
         )
     if issubclass(declaration, KeyedPublication):
         capabilities["acknowledgement"] = KeyedResponseAcknowledgement(
-            "d" * 32,
+            ROOT_ID,
             "e" * 32,
             canonical_publication_key("e" * 32, message.target),
             public_envelope_digest(message.to_wire()),
