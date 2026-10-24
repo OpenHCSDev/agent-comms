@@ -11,7 +11,7 @@ import pytest
 
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.errors import RelationViolationError, UnregisteredThreadError
-from agent_comms.field_codec import FieldCodec
+from agent_comms.field_codec import FieldCodec, TurnId
 from agent_comms.locked_store import DocumentChange, LockedStore
 from agent_comms.registration import Registration
 from agent_comms.registry_document import RegistryDocument, ThreadSlice
@@ -29,7 +29,7 @@ def test_edit_owns_turn_and_document_owns_later_changes(tmp_path, *, thread_regi
     thread_registration.register(owner(tmp_path, registry=thread_registration))
     before = thread_registration.snapshot().owner_identity("owner")
     with thread_registration.store.editing() as edit:
-        leased, generation = edit.lease_turn(edit.document.threads["owner"], "turn", None)
+        leased, generation = edit.lease_turn(edit.document.threads["owner"], TurnId.mint(), None)
     assert generation == before.generation
     assert leased.turn_generation == 1
     thread_registration.release_turn(leased.turn_lease)
@@ -134,7 +134,7 @@ from agent_comms.child_process import ProcessIdentity
 from agent_comms.errors import RelationViolationError, UnregisteredThreadError
 from agent_comms.threads import Thread
 from agent_comms.registration import Registration
-from agent_comms.field_codec import FieldCodec
+from agent_comms.field_codec import FieldCodec, TurnId
 import time
 time.time = lambda: 1000.0
 root=Path(sys.argv[1]);root.mkdir()
@@ -152,7 +152,7 @@ def capture():
 r.register(Thread('owner', frozenset({'team'}), str(root), process_identity=ProcessIdentity.capture(os.getpid()), created_at=10.0));capture()
 r.register(Thread('child', frozenset(), str(root), parent=ForkedParent('owner'), created_at=20.0));capture()
 r.register(replace(r.require('owner'), title=GivenThreadText('metadata')));capture()
-r.lease_local_turn('owner','first');capture()
+r.lease_local_turn('owner',TurnId(sys.argv[2]));capture()
 r.release_turn(r.require('owner').turn_lease);capture()
 r.rename('owner','renamed');capture()
 r.unregister('renamed');capture()
@@ -161,8 +161,9 @@ r.begin_delete('renamed');capture()
 r.remove('renamed');capture()
 print(json.dumps(steps,sort_keys=True))
 """
+    first = TurnId.mint()
     result = subprocess.run(
-        [sys.executable, "-c", program, str(tmp_path / "current")],
+        [sys.executable, "-c", program, str(tmp_path / "current"), str(first)],
         env=dict(os.environ, PYTHONPATH=str(Path(__file__).parents[1] / "src")),
         capture_output=True,
         text=True,
@@ -172,7 +173,7 @@ print(json.dumps(steps,sort_keys=True))
     steps = json.loads(result.stdout)
     assert len(steps) == 10
     assert steps[2]["threads"]["owner"]["title"] == "metadata"
-    assert steps[3]["turns"]["owner"]["id"] == "first"
+    assert steps[3]["turns"]["owner"]["id"] == str(first)
     assert steps[4]["turns"]["owner"] is None
     assert steps[5]["threads"]["renamed"]["created_at"] == 10.0
     assert steps[6]["statuses"]["renamed"]["kind"] == "stopped"
