@@ -239,3 +239,22 @@ def test_unreadable_checkout_is_its_units_state_and_the_pass_carries_on(
         assert unreadable.unit == c.registry.require('worker').incarnation
         assert str(checkout) in unreadable.reason
         assert 'not a git repository' in unreadable.line()
+
+
+def test_order_closed_after_the_frame_read_does_not_fail_the_merge_read(
+        checkout_bus: Comms, tmp_path: Path):
+    """2026-10-24 03:57: P498 closed between the frame read and the merge read."""
+    practice = PracticeCopy(checkout_bus.root, tmp_path / 'practice')
+    practice.include(tuple(RootFile.existing_in(practice.root)))
+    c = wire(practice.path)
+    with LaunchRoot.from_path(practice.path).selected():
+        frame = HeartbeatFrame.read(c, 'lead', ProgressRead())
+        worker, = (state for state in UnitState.current(c, 'lead', frame)
+                   if state.unit == c.registry.require('worker').incarnation)
+        assert 'P1' in worker.orders and not isinstance(worker, Unreadable)
+        row = c.goals.todos.get('P1')
+        c.goals.todos.apply('P1', ReleaseTodo(
+            row.revision, CoreWatcherIncarnation.watcher(), row.held(),
+            StrikeReason('The commander closed this order after the heartbeat frame was read.')))
+        c.goals.todos.record_merges(worker.merged_orders(c, frame.pulls))
+        assert c.goals.todos.get('P1').holder is None
