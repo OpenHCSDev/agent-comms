@@ -3,6 +3,7 @@ from agent_comms.cli_bridges.codex_protocol import BusInput, ItemsPage
 from agent_comms.transcript_events import UserTranscript
 from agent_comms.threads import Thread
 from agent_comms.turn_item import NativeItemId, NativeTurnId
+from agent_comms.native_tool_call import ToolCallId
 
 
 def _output(tmp_path):
@@ -70,7 +71,7 @@ def test_codex_stream_reports_activity_and_finishes_items(tmp_path):
         (
             ToolStartTranscript(
                 position=NativeItemId("c1"),
-                tool_call_id="c1",
+                tool_call_id=ToolCallId("c1"),
                 tool_name="bash",
                 raw_input={"command": "ls -la"},
                 tool=BashTool(call_id="c1", command="ls -la"),
@@ -78,7 +79,7 @@ def test_codex_stream_reports_activity_and_finishes_items(tmp_path):
             ),
             ToolEndTranscript(
                 position=NativeItemId("c1"),
-                tool_call_id="c1",
+                tool_call_id=ToolCallId("c1"),
                 tool_name="bash",
                 text="a\n",
                 ok=True,
@@ -192,7 +193,7 @@ def test_function_outputs_keep_wire_fields_and_source_clocks_in_page_and_live_de
             else (
                 ToolEndTranscript(
                     position=NativeItemId("out"),
-                    tool_call_id="out",
+                    tool_call_id=ToolCallId("out"),
                     tool_name=name,
                     text="result",
                     timestamp=1.0,
@@ -212,7 +213,8 @@ def test_function_outputs_keep_wire_fields_and_source_clocks_in_page_and_live_de
         }))
         finished, = complete.accumulate(output)
         assert finished.events == (() if item_type is SendOutputItem else (
-            ToolEndTranscript(position=NativeItemId("out"), tool_call_id="out", tool_name=name,
+            ToolEndTranscript(position=NativeItemId("out"),
+                              tool_call_id=ToolCallId("out"), tool_name=name,
                               text="result", timestamp=2.0),))
         assert entry.publication().accumulate(output) == (
             FinishedItem(turn_turn_id, NativeItemId("out"), expected),

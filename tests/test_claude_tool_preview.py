@@ -2,6 +2,7 @@
 import pytest
 from agent_comms.cli_bridges.claude_protocol import ClaudeSession, KnownTurn, Live, TimedRecord, ToolResult, ToolUse
 from agent_comms.tool_calls import ToolCall
+from agent_comms.native_tool_call import ToolCallId
 from agent_comms.field_codec import FieldCodec
 from agent_comms.native_tools import BashTool
 from agent_comms.tool_results import NoToolDiff
@@ -53,5 +54,5 @@ def test_diff_constructor_preserves_a_newline_only_change():
 def test_known_claude_tool_with_input_that_does_not_fit_is_recorded_as_sent():
     # Claude records calls the model sent with invalid input (a real Glob call with {})
     # and answers them with an error result; the call is shown under the name Claude used.
-    assert ToolUse(id='x', name='Glob', input={}).call() == ToolCall('x', 'Glob', {})
+    assert ToolUse(id='x', name='Glob', input={}).call() == ToolCall(ToolCallId('x'), 'Glob', {})
     assert ToolUse(id='y', name='Bash', input={'command': 'ls'}).call().name == FieldCodec.encode(BashTool)

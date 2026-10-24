@@ -45,6 +45,7 @@ from agent_comms.todos import (
 from agent_comms.tool_caller import CommanderForkCaller
 from agent_comms.tool_declaration import ToolDeclaration
 from agent_comms.transcript_events import ToolStartTranscript
+from agent_comms.native_tool_call import ToolCallId
 from agent_comms.turn_item import NativeItemId, NativeTurnId
 from cli_command import commander
 from source_revision_fixture import SourceRepository
@@ -250,7 +251,7 @@ def test_fork_and_parent_judge_show_same_unjudged_edits(fork_bus):
         events=(
             ToolStartTranscript(
                 position=0,
-                tool_call_id="parent-edit",
+                tool_call_id=ToolCallId("parent-edit"),
                 tool_name="edit",
                 timestamp=time.time(),
                 tool=declaration,

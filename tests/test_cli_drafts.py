@@ -11,6 +11,7 @@ from agent_comms.recorded_time import EventTime, RecordedEventTime, UnrecordedEv
 from agent_comms.transcript_events import AssistantTranscript, ThinkingTranscript
 from agent_comms.transcript_sources import NoDraft
 from agent_comms.tool_calls import ToolCall
+from agent_comms.native_tool_call import ToolCallId
 from test_codex_items import _output
 
 
@@ -147,7 +148,7 @@ def test_paragraph_identity_not_arrival_order_owns_summary_joining(tmp_path):
 def test_tool_start_is_one_draft_row_then_one_completed_row(tmp_path):
     t_turn_id = NativeTurnId('t')
     output = _output(tmp_path)
-    call = ToolCall('call', 'read', {'path': 'a.py'})
+    call = ToolCall(ToolCallId('call'), 'read', {'path': 'a.py'})
     start_event = call.started(NativeItemId('call'), 1.0)
     output.publish_batch([StartedItem(
         t_turn_id, NativeItemId('call'), ToolRunningPhase(tools=(('call', 'Read a.py'),)),

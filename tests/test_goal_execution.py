@@ -12,6 +12,7 @@ from agent_comms.acp import CommsAgent
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.comms import wire
 from agent_comms.field_codec import FieldCodec
+from agent_comms.native_tool_call import ToolCallId
 from agent_comms.goal_actions import (
     PausedGoalAction,
     RetryGoalAction,
@@ -106,7 +107,8 @@ async def test_provider_retry_during_live_turn_writes_no_goal_failure(execution_
         store = comms.goals.open_goal_store()
         before = store.snapshot(goal.id)
         await turn.progress.done(events.Done("provider is retrying", False))
-        await turn.progress.tool_ended(events.ToolEnd("read", "read", True, "source read"))
+        await turn.progress.tool_ended(events.ToolEnd(
+            ToolCallId("read"), "read", True, "source read"))
         assert store.snapshot(goal.id) == before
         assert failure_count(comms) == 0
         assert comms.registry.require("worker").goal == goal
@@ -128,7 +130,8 @@ async def test_owner_stop_beats_backend_failure_and_next_turn_runs_without_retry
     assert failure_count(relaunched) == 0
     async with turn_on(relaunched) as next_turn:
         assert isinstance(relaunched.goals.goal_execution("worker"), RunningExecution)
-        await next_turn.progress.tool_ended(events.ToolEnd("read", "read", True, "source read"))
+        await next_turn.progress.tool_ended(events.ToolEnd(
+            ToolCallId("read"), "read", True, "source read"))
         await next_turn.progress.done(events.Done("Continued without Retry", True))
     assert isinstance(relaunched.goals.goal_execution("worker"), RunnableExecution)
     assert failure_count(relaunched) == 0
@@ -141,7 +144,8 @@ async def test_verified_productive_turn_recovers_blocked_generation(execution_bu
         await failed.progress.done(events.Done("backend failed", False))
     assert isinstance(comms.goals.goal_execution("worker"), AttemptFailedExecution)
     async with turn_on(comms, original_owner_input=True) as productive:
-        await productive.progress.tool_ended(events.ToolEnd("read", "read", True, "source read"))
+        await productive.progress.tool_ended(events.ToolEnd(
+            ToolCallId("read"), "read", True, "source read"))
         await productive.progress.done(events.Done("Verified productive progress", True))
     assert isinstance(comms.goals.goal_execution("worker"), RunnableExecution)
     assert comms.registry.require("worker").goal.state == ActiveGoal()

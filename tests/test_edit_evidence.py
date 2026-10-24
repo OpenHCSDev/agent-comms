@@ -6,12 +6,14 @@ from agent_comms.commander.judge import Edit
 from agent_comms.field_codec import FieldCodec, MalformedRecord
 from agent_comms.recorded_time import EventTime, RecordedEventTime
 from agent_comms.tool_calls import CliToolArguments, ToolCall
+from agent_comms.native_tool_call import ToolCallId
 from agent_comms.turn_digests import UnjudgedEdits
 
 
 def original_call():
     arguments = {'file_path': 'owner.py', 'old_string': 'before', 'new_string': 'after'}
-    return CliToolArguments.decode(ToolCall('source-call', 'Edit', arguments), arguments)
+    return CliToolArguments.decode(
+        ToolCall(ToolCallId('source-call'), 'Edit', arguments), arguments)
 
 
 def assert_edit(edit, clock):

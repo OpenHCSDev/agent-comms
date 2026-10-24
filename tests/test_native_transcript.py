@@ -7,6 +7,7 @@ from dataclasses import fields
 import pytest
 
 from agent_comms.field_codec import FieldCodec, MalformedRecord
+from agent_comms.native_tool_call import ToolCallId
 from agent_comms.native_entries import MessageEntry, NativeEntry, TranscriptProjection, UnknownEntry
 from agent_comms.native_transcript import NativeTranscript
 from agent_comms.pi_payloads import UserMessage
@@ -101,8 +102,12 @@ def test_corrupt_complete_entries_raise_in_every_read_direction(tmp_path, raw, e
         transcript_records.event(AssistantTranscript, "answer", position=0),
         transcript_records.event(ThinkingTranscript, "reason", position=512),
         transcript_records.event(NoticeTranscript, "compacted", position="item-1"),
-        transcript_records.event(ToolStartTranscript, position=1024, tool_call_id="a", tool_name="read", raw_input={"path": "x"}),
-        transcript_records.event(ToolEndTranscript, position=1024, tool_call_id="a", tool_name="read", text="contents", ok=False),
+        transcript_records.event(ToolStartTranscript, position=1024,
+                                 tool_call_id=ToolCallId("a"),
+                                 tool_name="read", raw_input={"path": "x"}),
+        transcript_records.event(ToolEndTranscript, position=1024,
+                                 tool_call_id=ToolCallId("a"),
+                                 tool_name="read", text="contents", ok=False),
     ],
 )
 def test_snapshot_family_roundtrip_has_only_owned_fields(event):

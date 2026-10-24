@@ -13,6 +13,7 @@ from pydantic import (
     Field,
     JsonValue,
     ValidateAs,
+    model_validator,
 )
 
 from agent_comms.cli_protocol import TaggedWire, TextWire
@@ -282,14 +283,21 @@ class RpcNotification(RpcReply):
 RPC_RESPONSE = WireModel.adapter(RpcSuccess | RpcFailure | RpcNotification)
 
 
-class Item(TaggedWire, ABC, affix=""):
+class ItemIdentity(WireModel):
+    id: NativeItemId
+
+
+class ToolIdentity(ItemIdentity):
+    call_id: ToolCallId = Field(alias='id')
+
+
+class Item(TaggedWire, ItemIdentity, ABC, affix=""):
     wire_tag: ClassVar[str]
 
     @classmethod
     def tag(cls) -> str:
         return cls.wire_tag
 
-    id: NativeItemId
     # What the CLI is doing while it produces this item.
     doing: ClassVar[str] = ''
 
@@ -365,7 +373,7 @@ class UserItem(Item):
         return super().completed(turn_id, events)
 
 
-class ToolItem(Item, ABC):
+class ToolItem(ToolIdentity, Item, ABC):
     def accumulator(self, started_at: EventTime) -> ToolDraft:
         return ToolDraft(started_at, (self.call.started(self.id, started_at.recorded_at('Codex tool start')),))
 
@@ -387,10 +395,9 @@ class ToolItem(Item, ABC):
 
     @property
     def call(self) -> ToolCall:
-        call_id = ToolCallId(self.id)
-        shown = ToolCall(call_id, self.tool_name, self.arguments)
+        shown = ToolCall(self.call_id, self.tool_name, self.arguments)
         return ToolDeclaration.record(
-            self.tool_name, self.arguments, call_id=call_id
+            self.tool_name, self.arguments, call_id=self.call_id
         ).recorded_call(shown)
 
     def events(self, timestamp: float) -> tuple[TranscriptEvent, ...]:
@@ -529,14 +536,14 @@ class McpToolItem(ToolInput, ToolItem):
             self.result is None or self.result.succeeded)
 
 
-class FunctionOutputItem(Item):
+class FunctionOutputItem(ToolIdentity, Item):
     wire_tag = 'functionCallOutput'
     name: str
     output: str
 
     def events(self, timestamp: float) -> tuple[TranscriptEvent, ...]:
         return (ToolEndTranscript(
-            position=self.id, timestamp=timestamp, tool_call_id=ToolCallId(self.id),
+            position=self.id, timestamp=timestamp, tool_call_id=self.call_id,
             tool_name=self.name, text=self.output),)
 
 
@@ -576,7 +583,7 @@ class ExitedReviewItem(ReviewBody, Item):
     wire_tag = 'exitedReviewMode'
 
 
-class SleepItem(Item):
+class SleepItem(ToolIdentity, Item):
     wire_tag = 'sleep'
     durationMs: int
 
@@ -585,7 +592,7 @@ class SleepItem(Item):
 
     @property
     def phase(self) -> TurnPhase:
-        return ToolRunningPhase(tools=((ToolCallId(self.id), f'Waiting {self.durationMs} ms'),))
+        return ToolRunningPhase(tools=((self.call_id, f'Waiting {self.durationMs} ms'),))
 
 
 class ImageViewItem(Item):
@@ -607,7 +614,7 @@ class ImageGenerationItem(Item):
                                  (f' — {self.savedPath}' if self.savedPath else ''), position=self.id, timestamp=timestamp),)
 
 
-class WebSearchItem(Item):
+class WebSearchItem(ToolIdentity, Item):
     wire_tag = 'webSearch'
     query: str
     action: JsonValue = None
@@ -619,7 +626,7 @@ class WebSearchItem(Item):
 
     @property
     def phase(self) -> TurnPhase:
-        return ToolRunningPhase(tools=((ToolCallId(self.id), f'Searching: {self.query}'),))
+        return ToolRunningPhase(tools=((self.call_id, f'Searching: {self.query}'),))
 
 
 class PatchChange(TaggedWire, ABC, affix=""):
@@ -651,21 +658,19 @@ class UpdatedFile(PatchChange, declared_name='update'):
         return ToolDiff(f'--- {before}\n+++ {after}\n{content}')
 
 
-class FileChange(WireModel):
+class FileChange(ToolIdentity):
     path: str
     diff: str
     kind: PatchChange.declared_union()
 
-    def call(self, item_id: NativeItemId) -> DecodedToolCall:
-        return ToolCall(ToolCallId(item_id), 'edit', {'path': self.path}).recorded(
+    @property
+    def call(self) -> DecodedToolCall:
+        return ToolCall(self.call_id, 'edit', {'path': self.path}).recorded(
             FilePatchTool(path=self.path))
 
-    def events(
-        self, item_id: NativeItemId, ok: bool, timestamp: float,
-    ) -> tuple[TranscriptEvent, ...]:
-        call = self.call(item_id)
+    def events(self, ok: bool, timestamp: float) -> tuple[TranscriptEvent, ...]:
         diff = self.kind.patch(self.path, self.diff)
-        return diff.patch(call).finished('', ok, item_id, timestamp)
+        return diff.patch(self.call).finished('', ok, self.id, timestamp)
 
 
 class FileChangeItem(Item):
@@ -674,18 +679,24 @@ class FileChangeItem(Item):
     changes: list[FileChange]
     status: Literal['inProgress', 'completed', 'failed', 'declined']
 
+    @model_validator(mode='before')
+    @classmethod
+    def identified_changes(cls, value: dict) -> dict:
+        return {**value, 'changes': [
+            {**change, 'id': f"{value['id']}:{index}"}
+            for index, change in enumerate(value['changes'])
+        ]}
+
     def accumulator(self, started_at: EventTime) -> ToolDraft:
         timestamp = started_at.recorded_at('Codex file change start')
         return ToolDraft(started_at, tuple(
-            change.call(item_id := NativeItemId(f'{self.id}:{index}')).started(item_id, timestamp)
-            for index, change in enumerate(self.changes)))
+            change.call.started(change.id, timestamp) for change in self.changes))
 
     def events(self, timestamp: float) -> tuple[TranscriptEvent, ...]:
         if self.status == 'inProgress':
             raise ValueError('File change completion still says inProgress')
-        return tuple(event for index, change in enumerate(self.changes)
-                     for event in change.events(
-                         NativeItemId(f'{self.id}:{index}'), self.status == 'completed', timestamp))
+        return tuple(event for change in self.changes
+                     for event in change.events(self.status == 'completed', timestamp))
 
 
 class AgentState(WireModel):

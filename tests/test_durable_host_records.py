@@ -12,6 +12,7 @@ from agent_comms.agent_backend import (
 )
 from agent_comms.agent_events import Chunk, Error, Thinking, ToolStart
 from agent_comms.field_codec import FieldCodec, MalformedRecord
+from agent_comms.native_tool_call import ToolCallId
 from agent_comms.native_entries import NativeEntry, StoredEntry, TranscriptProjection
 from agent_comms.pi_commands import GetSessionStats
 from agent_comms.pi_counts import PiCount, UnreportedCount
@@ -58,7 +59,8 @@ def test_compaction_reply_decodes_directly_to_existing_outcome(result, expected)
         {'type': 'thinking_delta', 'contentIndex': 1, 'delta': 'reasoning'}}, (Thinking('reasoning'),)),
     ({'type': 'tool_execution_start', 'toolCallId': 'call', 'toolName': 'read',
       'args': {'path': 'source.py'}},
-     (ToolStart(id='call', name='read', title='Read source.py', kind=ReadAction, args={'path': 'source.py'}),)),
+     (ToolStart(id=ToolCallId('call'), name='read', title='Read source.py',
+                kind=ReadAction, args={'path': 'source.py'}),)),
     ({'type': 'task_failed', 'taskId': 3, 'kind': 'tool', 'message': 'failed'}, (Error('failed'),)),
 ])
 def test_event_fields_and_changes_are_decoded_at_frame_ingress(event, expected):

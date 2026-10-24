@@ -12,6 +12,7 @@ from agent_comms.cli_bridges.claude_protocol import (
 from agent_comms.recorded_time import EventTime
 from agent_comms.runtime_updates import ActiveItem, FinishedItem, StartedItem
 from agent_comms.tool_calls import ToolCall
+from agent_comms.native_tool_call import ToolCallId
 from agent_comms.transcript_events import AssistantTranscript
 
 
@@ -23,7 +24,7 @@ from agent_comms.transcript_events import AssistantTranscript
 def test_unknown_turn_uses_the_reader_phase_for_every_item(question, phase, expectation):
     session = ClaudeSession(phase=phase())
     record = TimedRecord(uuid='record', timestamp='2026-10-18T00:00:00Z', position=17)
-    call = ToolCall('call', 'read', {'path': 'a.py'})
+    call = ToolCall(ToolCallId('call'), 'read', {'path': 'a.py'})
     session.tools['call'] = ClaudeToolDraft(
         EventTime.capture(record.timestamp), (call.started(record.position, record.timestamp),), call)
     actions = {

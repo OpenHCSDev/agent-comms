@@ -50,6 +50,7 @@ from agent_comms.todos import (
     Todo,
     UnmergedListedPullRequest,
 )
+from agent_comms.native_tool_call import ToolCallId
 from agent_comms.transcript_events import ToolStartTranscript
 from agent_comms.turn_item import NativeItemId, NativeTurnId
 from agent_comms.work_branches import BranchDifference, UnpushedHead
@@ -357,7 +358,7 @@ class SpinningUnitSeed(IncidentSeed):
                 events=(
                     ToolStartTranscript(
                         position=0,
-                        tool_call_id=f"call-{call}",
+                        tool_call_id=ToolCallId(f"call-{call}"),
                         tool_name="bash",
                         timestamp=moved + 60 + call,
                     ),

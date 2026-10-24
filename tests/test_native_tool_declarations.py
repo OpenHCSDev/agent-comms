@@ -39,7 +39,8 @@ async def test_new_tool_declaration_drives_presentation_without_coding_permissio
         def reads(self):
             return self.query
 
-    event = events.ToolStart.from_call("case", "inspect_fixture", {"query": "new declaration"})
+    event = events.ToolStart.from_call(
+        ToolCallId("case"), "inspect_fixture", {"query": "new declaration"})
     assert (event.title, event.kind) == ("Inspect new declaration", SearchAction)
     owner, received = acp_tools
     await AcpEventConsumer(owner, "declared-tool", owner.sessions.client).dispatch(event)
@@ -61,10 +62,11 @@ async def test_new_tool_declaration_drives_presentation_without_coding_permissio
     for tool in examples:
         call = type(tool).from_call(tool.declared_name, tool.arguments, call_id=case)
         assert type(call) is type(tool)
-        event = events.ToolStart.from_call("case", tool.declared_name, call.arguments)
+        event = events.ToolStart.from_call(case, tool.declared_name, call.arguments)
         assert event.kind is tool.declared_action() and event.args == tool.arguments
         assert call.call_id == "case" and call.arguments == tool.arguments and tool.reads() in event.title
-    unknown = events.ToolStart.from_call("unknown", "external_extension", {"private": "preserved"})
+    unknown = events.ToolStart.from_call(
+        ToolCallId("unknown"), "external_extension", {"private": "preserved"})
     assert (unknown.title, unknown.kind, unknown.args) == (
         "external_extension",
         OtherAction,
@@ -77,8 +79,11 @@ async def test_pattern_search_metadata_reaches_official_acp(acp_tools, name, lab
     from agent_comms.transcript_events import ToolStartTranscript
 
     arguments = {"pattern": "shared preview"}
-    event = events.ToolStart.from_call("pattern-case", name, arguments)
-    recorded = transcript_records.event(ToolStartTranscript, position=0, tool_call_id="pattern-case", tool_name=name, raw_input=arguments, tool=ToolDeclaration.record(name, arguments, call_id="pattern-case"))
+    call_id = ToolCallId("pattern-case")
+    event = events.ToolStart.from_call(call_id, name, arguments)
+    recorded = transcript_records.event(
+        ToolStartTranscript, position=0, tool_call_id=call_id, tool_name=name,
+        raw_input=arguments, tool=ToolDeclaration.record(name, arguments, call_id=call_id))
     assert (event.title, event.kind) == (f"{label} shared preview", SearchAction)
     assert (recorded.title, recorded.kind) == (event.title, event.kind)
     owner, received = acp_tools
@@ -103,11 +108,14 @@ def test_recorded_metadata_does_not_require_an_executable_request(name, label, k
     from agent_comms.transcript_events import ToolEndTranscript, ToolStartTranscript
 
     foreign = {"file_path": "external.txt"}
-    start = transcript_records.event(ToolStartTranscript, position=0, tool_call_id="saved", tool_name=name, raw_input=foreign)
-    end = transcript_records.event(ToolEndTranscript, position=1, tool_call_id="saved", tool_name=name, text="saved result")
+    call_id = ToolCallId("saved")
+    start = transcript_records.event(
+        ToolStartTranscript, position=0, tool_call_id=call_id, tool_name=name, raw_input=foreign)
+    end = transcript_records.event(
+        ToolEndTranscript, position=1, tool_call_id=call_id, tool_name=name, text="saved result")
     assert (start.title, start.kind, start.raw_input) == (label, kind, foreign)
     assert (end.title, end.kind) == (label, kind)
-    assert events.ToolStart.from_call("saved", name, foreign).title == label
+    assert events.ToolStart.from_call(call_id, name, foreign).title == label
     from agent_comms.field_codec import FieldCodec
     for invalid in (17, None, [["path", "external.txt"]]):
         with pytest.raises((TypeError, ValueError)):
@@ -125,8 +133,9 @@ def test_foreign_protocol_owners_decode_canonical_preview_arguments():
     from agent_comms.tool_calls import ToolCall
     from agent_comms.transcript_events import TranscriptEvent
 
-    start, end = FileChange(path="codex.txt", diff="@@ -1 +1 @@\\n-old\\n+new\\n",
-                            kind=UpdatedFile()).events("codex", True, transcript_records.timestamp.at.timestamp())
+    start, end = FileChange(id="codex", path="codex.txt", diff="@@ -1 +1 @@\\n-old\\n+new\\n",
+                            kind=UpdatedFile()).events(
+                                True, transcript_records.timestamp.at.timestamp())
     assert start.title == "Edit codex.txt" and start.raw_input == {"path": "codex.txt"}
     assert start.tool == FilePatchTool(path="codex.txt")
     assert end.title == "Edit" and end.diff is not None
@@ -139,7 +148,8 @@ def test_foreign_protocol_owners_decode_canonical_preview_arguments():
     recorded, _ = call.finished("saved", True, 0, transcript_records.timestamp.at.timestamp())
     assert recorded.title == call.title and recorded.raw_input == {"path": "open-code.txt"}
     opaque = {"external": ["not", "Pi"]}
-    scalar, _ = ToolCall("opaque", "external_custom", opaque).finished("saved", True, 0, transcript_records.timestamp.at.timestamp())
+    scalar, _ = ToolCall(ToolCallId("opaque"), "external_custom", opaque).finished(
+        "saved", True, 0, transcript_records.timestamp.at.timestamp())
     assert scalar.title == "external_custom" and scalar.raw_input == opaque
 
 

@@ -59,6 +59,7 @@ from .typed_table import (
     WriteOnceColumns,
     sql_literal,
 )
+from .native_tool_call import ToolCallId
 from .turn_item import PiSessionId
 
 if TYPE_CHECKING:
@@ -368,21 +369,21 @@ class SelectedToolSlot(NativeRuntimeTable, WithoutRowid):
     """The consumed slot and its live terminal acknowledgement, in one transaction store."""
 
     slot_id: Annotated[SlotId, FrozenColumn(primary_key=True, renamed_from=("input_id",))]
-    call_id: Annotated[str, FrozenColumn()]
+    call_id: Annotated[ToolCallId, FrozenColumn()]
     state: type[SelectedSlotState] = ConsumedSlot
 
     @classmethod
     def consume(
-        cls, db: sqlite3.Connection, slot_id: SlotId, call_id: str,
+        cls, db: sqlite3.Connection, slot_id: SlotId, call_id: ToolCallId,
     ) -> None:
         if cls(slot_id, call_id).insert_if_absent(db).rowcount != 1:
             raise SelectedToolDenied("Selected tool input already consumed; outcome may be UNKNOWN")
 
-    def require_call(self, call_id: str) -> None:
+    def require_call(self, call_id: ToolCallId) -> None:
         if self.call_id != call_id:
             raise SelectedToolDenied("Selected tool has no matching terminal acknowledgement")
 
-    def acknowledge(self, db: sqlite3.Connection, call_id: str) -> None:
+    def acknowledge(self, db: sqlite3.Connection, call_id: ToolCallId) -> None:
         self.require_call(call_id)
         state = self.state.acknowledge()
         where, parameters = self._condition(
@@ -391,7 +392,7 @@ class SelectedToolSlot(NativeRuntimeTable, WithoutRowid):
         if self.update(db, where=where, parameters=parameters, state=state).rowcount != 1:
             raise SelectedToolDenied("Selected tool terminal changed; outcome UNKNOWN; no retry")
 
-    def verify(self, call_id: str) -> None:
+    def verify(self, call_id: ToolCallId) -> None:
         self.require_call(call_id)
         self.state.require_acknowledged()
 

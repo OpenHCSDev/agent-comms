@@ -8,6 +8,7 @@ import pytest
 from agent_comms import agent_events as events
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.field_codec import TurnId
+from agent_comms.native_tool_call import ToolCallId
 from agent_comms.goal_actions import ClearGoalAction, SetGoalAction
 from agent_comms.goal_attempts import ProviderUsageTotal
 from agent_comms.goal_turn_permit import NoLaunchPermit
@@ -41,7 +42,8 @@ def goal_turn(comms, original_goal):
             )
             if not original_goal:
                 comms.goals.update_goal("worker", SetGoalAction(text="Work created in turn"))
-                account.tool_ended(events.ToolEnd("set", "comms_set_goal", True, "created"))
+                account.tool_ended(events.ToolEnd(
+                    ToolCallId("set"), "comms_set_goal", True, "created"))
             yield account
     finally:
         comms.agents.finish_turn(lease)

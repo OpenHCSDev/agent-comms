@@ -14,6 +14,7 @@ from pathlib import Path
 import pytest
 
 from agent_comms.goal_attempt_identity import GoalAttemptIdentity
+from agent_comms.attempt_resolution import GoalCleared
 from agent_comms.goal_attempt_phase import ReservedAttempt, ResolvedAttempt
 from agent_comms.goal_attempts import AttemptRecord, GoalAttemptStore, NoAttempt, RecordedAttempt, StorageUncertainError
 from agent_comms.goal_generation import CancelledGeneration, ReadyGeneration, ReservedGeneration
@@ -47,9 +48,9 @@ def test_a_recorded_attempt_answers_for_its_own_reservation_only(store):
     with pytest.raises(StaleAttemptError):
         attempt.identified(GoalAttemptIdentity(goal_id, 2, reservation.attempt_id), refusal)
     assert attempt.holds(reservation, ReservedAttempt())
-    assert not attempt.resolved_as(ResolvedAttempt(), "goal cleared")
+    assert not attempt.resolved_as(ResolvedAttempt(), GoalCleared())
     store.retire_goal(goal_id, expected_generation=1, attempt_id=reservation.attempt_id)
-    assert read(store, reservation.attempt_id).resolved_as(ResolvedAttempt(), "goal cleared")
+    assert read(store, reservation.attempt_id).resolved_as(ResolvedAttempt(), GoalCleared())
 
 
 def test_a_missing_attempt_refuses_every_question_and_cannot_be_retired(store):
@@ -64,7 +65,7 @@ def test_a_missing_attempt_refuses_every_question_and_cannot_be_retired(store):
     with pytest.raises(StaleAttemptError):
         attempt.identified(reservation.identity, StaleAttemptError("absent"))
     assert not attempt.holds(reservation, ReservedAttempt())
-    assert not attempt.resolved_as(ResolvedAttempt(), "goal cleared")
+    assert not attempt.resolved_as(ResolvedAttempt(), GoalCleared())
     with closing(store._connect()) as conn, pytest.raises(StaleAttemptError):
         attempt.retire(conn, ReservedGeneration(), goal_id, 1)
 

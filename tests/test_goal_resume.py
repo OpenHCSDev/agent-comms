@@ -6,6 +6,8 @@ import os
 import pytest
 
 from agent_comms.child_process import ProcessIdentity
+from agent_comms.attempt_resolution import FailedTurnResolution
+from agent_comms.turn_failure import BackendFailed
 from agent_comms.comms import wire
 from agent_comms.lifecycle_capability import Active
 from agent_comms.field_codec import FieldCodec, TurnId, GoalId
@@ -182,7 +184,7 @@ def test_terminal_goal_cannot_reactivate_through_pause(comms, monkeypatch, termi
     store = comms.goals.open_goal_store()
     reservation = store.reserve(started_goal_id, 1)
     if terminal == "blocked":
-        reservation.fail(store, "uncertain turn")
+        reservation.fail(store, FailedTurnResolution(BackendFailed))
     else:
         store.claim_launch(reservation).record_verified_completion(store, "finished")
     terminal_goal = comms.goals.update_goal(
@@ -247,25 +249,25 @@ def test_a_blocked_goal_is_retried_by_its_unit_or_commander_and_authorize_retry_
     goal_id = FieldCodec.decode(GoalId, _goal(comms, monkeypatch)["id"])
     store = comms.goals.open_goal_store()
 
-    def failed_turn(diagnostic):
+    def failed_turn():
         generation = store.require_generation(goal_id)
-        store.reserve(goal_id, generation.number).fail(store, diagnostic)
+        store.reserve(goal_id, generation.number).fail(store, FailedTurnResolution(BackendFailed))
         assert isinstance(comms.registry.require("owner").goal.state, Active)
 
-    failed_turn("Backend outcome uncertain.")
+    failed_turn()
     retried = invoke_tool(comms, "comms_goal",
                           {"goal_id": goal_id, "status": "retry", "progress": "cause fixed"})
     goal = comms.registry.require("owner").goal
     goal.require_active()
     assert retried['goal']['state'] == {'kind': 'active'} and goal.progress == 'cause fixed'
 
-    failed_turn("Provider failed again.")
+    failed_turn()
     commander_retry = comms.goals.update_goal(
         "owner", RetryGoalAction(expect=GoalPrecondition(goal_id=goal_id)))
     commander_retry.require_active()
     assert comms.registry.require('owner').goal == commander_retry
 
-    failed_turn("Provider failed a third time.")
+    failed_turn()
     comms.goals.update_goal("owner", RetryGoalAction(expect=GoalPrecondition(goal_id=goal_id)))
     store.reserve(goal_id, store.require_generation(goal_id).number)
     with pytest.raises(ValueError):

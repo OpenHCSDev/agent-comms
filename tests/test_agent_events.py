@@ -11,6 +11,7 @@ import agent_comms.agent_events as events
 from agent_comms.mro_dispatch import MroDispatch, handles
 from agent_comms.pending_requests import PendingRequests
 from agent_comms.turn_item import PiRequestKey
+from agent_comms.native_tool_call import ToolCallId
 
 
 async def test_mro_specific_before_shared_and_consumer_override():
@@ -168,7 +169,7 @@ async def test_handler_can_consume_without_returning_a_publication(synchronous):
 
 
 def test_payload_fields_and_frozen_multiple_inheritance():
-    start = events.ToolStart("id", "read", "Read file", {"path": "file"})
+    start = events.ToolStart(ToolCallId("id"), "read", "Read file", {"path": "file"})
     assert events.ToolEvent in type(start).__mro__
     for value in (start, events.OriginalInputStarted(), events.ModelChanged("id", True)):
         with pytest.raises(FrozenInstanceError):

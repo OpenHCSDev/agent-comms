@@ -173,7 +173,7 @@ def consume_selected_slot(store: Coordination, slot_id: SlotId, call_id: ToolCal
         raise SelectedToolDenied("Selected tool consumption UNKNOWN; do not retry") from error
 
 
-def record_selected_terminal(coordination_path: Path, slot_id: SlotId, call_id: str) -> None:
+def record_selected_terminal(coordination_path: Path, slot_id: SlotId, call_id: ToolCallId) -> None:
     """Only a committed terminal acknowledgement lets the tool return success."""
     try:
         with Coordination(str(coordination_path)) as store, store.session.writing() as db:
@@ -257,7 +257,7 @@ def _require_sent_full_input(
         raise SelectedToolDenied("Selected input was already settled")
 
 
-def verify_selected_terminal(coordination_path: Path, slot_id: SlotId, call_id: str) -> None:
+def verify_selected_terminal(coordination_path: Path, slot_id: SlotId, call_id: ToolCallId) -> None:
     """Corroborate a live owner result; a persisted acknowledgement alone grants nothing."""
     with Coordination(str(coordination_path), session_type=ReadNativeCoordinationSession) as store, store.session.read():
         SelectedToolSlot.require(store.session._connection, slot_id=slot_id).verify(call_id)

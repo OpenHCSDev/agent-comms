@@ -23,6 +23,7 @@ from agent_comms.thread_status import StoppedThreadStatus
 from agent_comms.thread_text import ForkedParent
 from agent_comms.todos import DeliverTodo, OperationDelivery, ProgressRead
 from agent_comms.transcript_events import ToolStartTranscript
+from agent_comms.native_tool_call import ToolCallId
 from agent_comms.turn_item import NativeItemId, NativeTurnId
 from agent_comms.ui_model.unit_state import (
     AwaitingCommander,
@@ -190,7 +191,7 @@ def test_started_turn_on_delivered_order_is_moving_not_stalled(held_bus):
         item_id=NativeItemId("call"),
         events=(
             ToolStartTranscript(
-                position=0, tool_call_id="call", tool_name="bash", timestamp=time.time()
+                position=0, tool_call_id=ToolCallId("call"), tool_name="bash", timestamp=time.time()
             ),
         ),
     )
