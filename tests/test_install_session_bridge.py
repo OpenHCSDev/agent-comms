@@ -14,20 +14,26 @@ from pathlib import Path
 import pytest
 
 from agent_comms.child_process import ProcessIdentity
-from agent_comms.cli_bridges.monitor import InspectSession, PauseSession
 from agent_comms.cli_bridges import claude
+from agent_comms.cli_bridges.monitor import InspectSession, PauseSession
 from agent_comms.cli_bridges.shared import (
-    MONITOR_FRAME, Binding, MonitorBridgeStopped, MonitorBridgeSwapping, MonitorProbe, Serve, SessionBridgeResumes,
+    MONITOR_FRAME,
+    Binding,
+    MonitorBridgeStopped,
+    MonitorBridgeSwapping,
+    MonitorProbe,
+    Serve,
+    SessionBridgeResumes,
 )
-from conftest import installed_comms
 from agent_comms.field_codec import FieldCodec
 from agent_comms.launch_runtime import LaunchRuntime
 from agent_comms.root_runtime import RootRuntime
 from agent_comms.thread_execution import ExternalThreadExecution
+from agent_comms.threads import Thread
 from agent_comms_hooks.session import started
 from agent_comms_hooks.watch import LapsedWatch, LiveWatch, NoSessionBridge, WatchClaim, WatchRecord
+from conftest import installed_comms
 from source_programs import SourcePrograms
-from agent_comms.threads import Thread
 
 SERVE_FROM_SOURCE = (sys.executable, '-c', 'from agent_comms.cli_bridges.claude import main; main()')
 

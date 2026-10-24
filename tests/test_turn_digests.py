@@ -2,14 +2,15 @@
 
 import asyncio
 import hashlib
-from contextlib import aclosing, redirect_stdout, suppress
-from datetime import datetime, timedelta
 import io
 import json
 import os
+from contextlib import aclosing, redirect_stdout, suppress
+from datetime import datetime, timedelta
 
 import pytest
 
+from agent_comms.bus import Bus
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.cli import main
 from agent_comms.cli_bridges.claude import ClaudeBridge
@@ -21,15 +22,14 @@ from agent_comms.errors import ToolRefusedError
 from agent_comms.external_transcript import NoEarlierPage
 from agent_comms.field_codec import FieldCodec
 from agent_comms.runtime_updates import FinishedItem
-from agent_comms.thread_execution import ExternalThreadExecution
 from agent_comms.session_file import RegistrySessionLocation
+from agent_comms.thread_execution import ExternalThreadExecution
+from agent_comms.threads import Thread
 from agent_comms.transcript_events import AssistantTranscript, TurnDigest
 from agent_comms.turn_context import JournalProvenance, SegmentManifest, TranscriptSegment, WireProvenance
 from agent_comms.turn_digests import LastTurns, TurnBound, TurnsOlderThan, TurnsBefore, TurnsSince
-from agent_comms.bus import Bus
 from agent_comms.turn_item import NativeTurnId
 from agent_comms.watched import FileSource
-from agent_comms.threads import Thread
 
 
 def prepared(tmp_path):

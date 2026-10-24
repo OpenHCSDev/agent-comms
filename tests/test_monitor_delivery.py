@@ -59,6 +59,7 @@ async def test_empty_journal_starts_at_binding_and_ignores_user_reads(comms, tmp
             'root': str(comms.root), 'bus_thread': 'viewer', 'session': 'session',
         }).bind(db)
         selected = ClaudeBridge(Options(Watch(), StoredBinding(), state, state.parent), binding, db)
+        selected.binding = await selected.options.operation.prepare(selected)
         fresh = comms.messaging.send(
             'peer', 'viewer', 'after binding, already read in Toad').message
         comms.messaging.acknowledge('viewer', (fresh.reference,))
@@ -318,13 +319,16 @@ def _old_delivery_file(state):
     return path
 
 
-def test_old_delivery_index_set_is_carried_onto_the_declaration_with_every_row(tmp_path):
+def test_old_delivery_index_set_is_carried_onto_the_declaration_with_every_row(tmp_path, comms):
     """A durable store derives its declared schema on the writer's open (a5b3cd8a7): the old
     index set is replaced by the declared one and no row is lost."""
     from cutover.binding_start import SavedJournal, migrate
 
+    comms.registry.declare(Thread('viewer', frozenset(), str(tmp_path), created_at=0.5))
     path = _old_delivery_file(tmp_path)
     with closing(sqlite3.connect(path)) as db:
+        db.execute('UPDATE binding SET root = ?', (str(comms.root),))
+        db.commit()
         before = {table: db.execute(f'SELECT * FROM "{table}"').fetchall()
                   for table in ('binding', 'delivery', 'observed_part')}
     original = SavedJournal(tmp_path, tmp_path / "original")
@@ -340,3 +344,75 @@ def test_old_delivery_index_set_is_carried_onto_the_declaration_with_every_row(t
     with closing(sqlite3.connect(path)) as db:
         assert {table: db.execute(f'SELECT * FROM "{table}"').fetchall()
                 for table in before} == before
+
+
+def test_binding_carry_reports_every_refusal_before_changing_any_journal(comms, tmp_path, capsys):
+    from cutover.binding_start import merge_directories
+
+    home = tmp_path / 'carry-home'
+    comms.registry.declare(Thread('viewer', frozenset(), str(tmp_path), created_at=0.5))
+    comms.registry.declare(Thread('reused', frozenset(), str(tmp_path), created_at=3.0))
+    comms.registry.declare(Thread('deleted', frozenset(), str(tmp_path), created_at=0.25))
+    comms.registry.unregister('deleted')
+    comms.registry.remove('deleted')
+    originals = {}
+    for name in ('viewer', 'missing', 'deleted', 'reused', 'empty'):
+        state = home / ClaudeBridge.state_directory / name
+        state.mkdir(parents=True)
+        path = _old_delivery_file(state)
+        with closing(sqlite3.connect(path)) as db:
+            db.execute('UPDATE binding SET root = ?, bus = ?',
+                       (str(comms.root), 'viewer' if name == 'empty' else name))
+            if name == 'empty':
+                db.execute('DELETE FROM delivery')
+                db.execute('DELETE FROM observed_part')
+            db.commit()
+        originals[path] = path.read_bytes()
+    with pytest.raises(ExceptionGroup, match='4 bindings require explicit rebinding'):
+        merge_directories(home, comms.root)
+    output = capsys.readouterr().out
+    assert '1 proven, 4 refused, 8 deliveries retained' in output
+    for name in ('missing', 'deleted', 'reused', 'empty'):
+        assert f'{home / ClaudeBridge.state_directory / name}: Refused binding' in output
+    assert {path: path.read_bytes() for path in originals} == originals
+
+
+def test_inactive_binding_carry_keeps_start_deliveries_and_current_run_rollback(
+        comms, tmp_path, capsys):
+    from cutover.binding_start import DirectoryBackup, merge_directories, revert
+
+    from agent_comms.field_codec import FieldCodec
+    from agent_comms.message_reference import BridgeStart
+
+    comms.registry.declare(Thread('viewer', frozenset(), str(tmp_path), created_at=0.5))
+    home = tmp_path / 'carry-home'
+    state = home / ClaudeBridge.state_directory / 'inactive'
+    state.mkdir(parents=True)
+    path = _old_delivery_file(state)
+    start = BridgeStart(_OLD_FIRST.reference)
+    with closing(sqlite3.connect(path)) as db:
+        db.execute('UPDATE binding SET root = ?', (str(comms.root),))
+        db.execute('ALTER TABLE binding ADD COLUMN start TEXT')
+        db.execute('UPDATE binding SET start = ?', (FieldCodec.compact(FieldCodec.encode(start)),))
+        db.commit()
+        deliveries = db.execute('SELECT * FROM delivery').fetchall()
+        parts = db.execute('SELECT * FROM observed_part').fetchall()
+    original = path.read_bytes()
+    stale = state.parent / '.binding-start-backup'
+    stale.mkdir()
+    sentinel = stale / 'manifest.json'
+    sentinel.write_text('not this run; never read or restored')
+
+    assert merge_directories(home, comms.root) == 1
+    assert '1 rows carried, 0 refused, 2 delivery records retained' in capsys.readouterr().out
+    with Binding.open(state) as db:
+        binding, = Binding.select(db)
+        assert binding.owner == comms.registry.require('viewer').incarnation
+        assert binding.start == start
+        assert db.execute('SELECT * FROM delivery').fetchall() == deliveries
+        assert db.execute('SELECT * FROM observed_part').fetchall() == parts
+    assert merge_directories(home, comms.root) == 0
+    assert revert(home, comms.root) == 1
+    assert path.read_bytes() == original
+    assert sentinel.read_text() == 'not this run; never read or restored'
+    assert not DirectoryBackup.path_in(home).exists()

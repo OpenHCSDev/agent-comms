@@ -15,13 +15,13 @@ from agent_comms.child_process import IdentityMismatchError, ProcessIdentity
 from agent_comms.cli_bridges import claude
 from agent_comms.cli_bridges.monitor import InspectSession, VerifySession
 from agent_comms.cli_bridges.shared import Binding, Serve
-from conftest import installed_comms
 from agent_comms.launch_runtime import LaunchRuntime
 from agent_comms.root_runtime import RootRuntime
 from agent_comms.thread_execution import ExternalThreadExecution
+from agent_comms.threads import Thread
 from agent_comms_hooks.session import started
 from agent_comms_hooks.watch import LiveWatch, WatchClaim, WatchRecord
-from agent_comms.threads import Thread
+from conftest import installed_comms
 
 
 def test_session_start_hook_exit_preserves_the_recorded_owner_for_install_pause(

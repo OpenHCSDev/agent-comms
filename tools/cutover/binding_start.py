@@ -33,6 +33,7 @@ from agent_comms.cli_protocol import FilteredOutcome, Outcome
 from agent_comms.field_codec import FieldCodec, PathText, WireName
 from agent_comms.locked_store import SQLiteFile
 from agent_comms.message_reference import BridgePosition, BridgeStart
+from agent_comms.messages import Message
 from agent_comms.registry_document import RegistrySnapshot
 from agent_comms.registry_store import RegistryStore
 from agent_comms.thread_identity import ThreadIncarnation
@@ -63,11 +64,13 @@ class PreviousBinding(TypedRow):
             return binding
         with RegistryStore(RegistryStore.path_in(Path(self.root))).reading_snapshot() as registry:
             current = registry.threads.get(registry.canonical_name(self.bus))
+        timestamp = FieldCodec.record_key(Message, 'timestamp')
         first, = db.execute(
-            f'SELECT MIN(json_extract(payload, \'$.timestamp\')) FROM "{DeliveryRow.declared_name}"'
+            f'SELECT MIN(json_extract(payload, \'$.{timestamp}\')) '
+            f'FROM "{DeliveryRow.declared_name}"'
         ).fetchone()
         if current is None or first is None or current.incarnation.wire_birth > first:
-            raise ValueError(
+            raise PermissionError(
                 f"Refused binding {self.root}/{self.bus}/{self.thread}: "
                 f"no current birth proven before first delivery {first}; "
                 "journal retained for explicit rebinding"
@@ -118,9 +121,6 @@ class PreviousWatch:
     def base(self, derived: Path) -> Path:
         return derived
 
-    def recorded_bases(self) -> tuple[Path, ...]:
-        return ()
-
     def arguments(self) -> tuple[argparse.Namespace, list[str]]:
         parser = argparse.ArgumentParser(add_help=False)
         parser.add_argument("--state", type=Path, action="append", default=[])
@@ -144,9 +144,6 @@ class RecordedWatch(WatchRecord, PreviousWatch):
 
     def base(self, derived: Path) -> Path:
         return self.base_state
-
-    def recorded_bases(self) -> tuple[Path, ...]:
-        return (self.base_state,)
 
 
 def default_bases(home: Path) -> tuple[Path, ...]:
@@ -321,7 +318,12 @@ class DirectoryBackup:
     destinations: tuple[Annotated[Path, PathText], ...]
     root: Annotated[Path, PathText]
 
+    @staticmethod
+    def path_in(home: Path) -> Path:
+        return home / '.binding-incarnation-backup' / 'manifest.json'
+
     def save(self, path: Path) -> None:
+        path.parent.mkdir(parents=True, exist_ok=True)
         for journal in self.journals:
             journal.save()
         for watch in self.watches:
@@ -372,31 +374,19 @@ class ReaderDirectories:
     def destination(self) -> Path:
         return self.selected_watch().record.base_state / self.identity.bus
 
-    def merge(self) -> None:
+    def merge(self, work: Path) -> None:
         bindings: dict[Path, Binding] = {}
         for state in self.states:
             migrate(state).report()
             with Binding.open(state) as db:
                 (binding,) = Binding.select(db)
                 bindings[state] = binding
-        position = max(
+        position = min(
             (binding.start for binding in bindings.values()), key=lambda start: start.cursor()
         )
-        registry = RegistrySnapshot.capture(
-            RegistryStore(RegistryStore.path_in(Path(self.identity.root))).read()
-        )
-        commander = registry.commander_project.commanders(registry)
-        reader = registry.require(self.identity.bus)
-        if any(reader.incarnation == thread.incarnation for thread in commander):
-            head = Binding.bus_head(self.identity.root)
-            print(
-                f"{self.identity.bus}: start {position.cursor()} -> {head.cursor()}; "
-                f"skipped {head.cursor() - position.cursor()} bus positions"
-            )
-            position = head
         selected = self.selected_watch()
         destination = self.destination
-        merged = destination.parent / ".binding-start-backup" / (self.identity.bus + ".sqlite3")
+        merged = work / (self.identity.bus + ".sqlite3")
         with Binding.open(merged.parent / (self.identity.bus + ".merging")) as target:
             with SQLiteFile.write_transaction(target):
                 deliveries: dict[str, JournalDelivery] = {}
@@ -463,21 +453,44 @@ def merge_directories(home: Path, root: Path) -> int:
     watches = recorded_watches(home)
     groups: dict[tuple[str, ThreadIncarnation], list[Path]] = {}
     identities = {}
-    unbound = []
+    refused: list[PermissionError] = []
+    deliveries = 0
+    uncarried: list[Path] = []
     for state in state_directories(home, watches):
         with closing(
             sqlite3.connect((state / BridgeStateTable.filename).as_uri() + "?mode=ro", uri=True)
         ) as db:
-            bindings = [row.registered(db) for row in PreviousBinding.read_binding(db)]
+            deliveries += DeliveryRow.count(db)
+            bindings = []
+            prior_refusals = len(refused)
+            for row in PreviousBinding.read_binding(db):
+                try:
+                    bindings.append(row.registered(db))
+                except PermissionError as refusal:
+                    refusal.add_note(str(state))
+                    refused.append(refusal)
+            if len(refused) != prior_refusals:
+                continue
+            owner, = Binding._fields_named(('owner',))
+            if (bindings and bindings[0].root == str(root)
+                    and owner.wire_name not in Binding.stored_columns(db)):
+                uncarried.append(state)
             if not bindings and DeliveryRow.count(db):
                 raise ValueError(f"Journal rows without a binding: {state}")
         if not bindings:
-            unbound.append(state)
             continue
         identity, = bindings
         key = (identity.root, identity.owner)
         identities[key] = identity
         groups.setdefault(key, []).append(state)
+    for rejected in refused:
+        print(f"{rejected.__notes__[0]}: {rejected}", flush=True)
+    print(f"Binding preflight: {sum(map(len, groups.values()))} proven, "
+          f"{len(refused)} refused, {deliveries} deliveries retained", flush=True)
+    if refused:
+        raise ExceptionGroup(
+            f"{len(refused)} bindings require explicit rebinding; no journal was changed", refused
+        )
     readers = tuple(
         ReaderDirectories(
             identities[key],
@@ -496,87 +509,53 @@ def merge_directories(home: Path, root: Path) -> int:
         )
         for key, states in groups.items()
     )
-    by_base: dict[Path, list[ReaderDirectories]] = {}
-    for reader in readers:
-        if reader.identity.root != str(root):
-            for state in reader.states:
-                print(f"left in place: {reader.identity.bus} at {state} (other root)")
-            continue
-        if not any(watch.held() for watch in reader.watches):
-            for state in reader.states:
-                print(f"left in place: {reader.identity.bus} at {state} (no live reader)")
-            continue
-        by_base.setdefault(reader.destination.parent, []).append(reader)
-    for watch in watches:
-        if watch.record.root == str(root):
-            by_base.setdefault(watch.record.base_state, [])
-    changed = 0
-    for base, members in by_base.items():
-        directory = base / ".binding-start-backup"
-        manifest = directory / "manifest.json"
-        if manifest.is_file():
-            print(f"Already merged: {base}")
-            continue
-        empty = (
-            tuple(state for state in unbound if state == base or state.parent == base)
-            if members
-            else ()
-        )
-        sources = tuple(
-            dict.fromkeys((*(state for member in members for state in member.states), *empty))
-        )
-        records = tuple(
-            watch
-            for watch in watches
-            if watch.record.root == str(root) and watch.record.base_state == base
-        )
-        commands = tuple(dict.fromkeys(watch.path for watch in records))
-        backup = DirectoryBackup(
-            tuple(
-                SavedJournal(state, directory / "journals" / str(index))
-                for index, state in enumerate(sources)
-            ),
-            tuple(SavedWatch(path, directory / "watches" / path.name) for path in commands),
-            tuple(member.destination for member in members),
-            root,
-        )
-        backup.save(manifest)
-        for watch in records:
-            watch.write(watch.record)
-        for state in empty:
-            for path in state.glob(BridgeStateTable.filename + "*"):
-                path.unlink()
-            print(f"Deleted empty unbound journal: {state}")
-        for member in members:
-            member.merge()
-            changed += len(member.states)
-    return changed
+    members = tuple(
+        reader for reader in readers
+        if reader.identity.root == str(root) and any(watch.held() for watch in reader.watches)
+    )
+    records = tuple(watch for watch in watches if watch.record.root == str(root))
+    sources = tuple(dict.fromkeys((
+        *uncarried, *(state for member in members for state in member.states),
+    )))
+    manifest = DirectoryBackup.path_in(home)
+    if manifest.is_file():
+        backup = FieldCodec.decode(DirectoryBackup, json.loads(manifest.read_text()))
+        if backup.root != root or uncarried:
+            raise ValueError(f"Retained carry backup requires explicit disposition: {manifest}")
+        print(f"Already carried: {manifest}")
+        return 0
+    if not sources and not records:
+        return 0
+    directory = manifest.parent
+    commands = tuple(dict.fromkeys(watch.path for watch in records))
+    backup = DirectoryBackup(
+        tuple(SavedJournal(state, directory / 'journals' / str(index))
+              for index, state in enumerate(sources)),
+        tuple(SavedWatch(path, directory / 'watches' / path.name) for path in commands),
+        tuple(member.destination for member in members),
+        root,
+    )
+    backup.save(manifest)
+    carried = sum(migrate(state).report() for state in uncarried)
+    for watch in records:
+        watch.write(watch.record)
+    for member in members:
+        member.merge(directory / 'merged')
+    print(f"Binding carry: {carried} rows carried, 0 refused, "
+          f"{deliveries} delivery records retained", flush=True)
+    return carried
 
 
 def revert(home: Path, root: Path) -> int:
-    # A failed forward run may already have removed an old journal. Discover its
-    # backup from the saved command without opening the journal being restored.
-    bases = set(default_bases(home))
-    for path in WatchClaim.directory(home).glob("*.lock"):
-        text = path.read_text()
-        if not text:
-            continue
-        previous = PreviousWatch.read(text)
-        arguments, _ = previous.arguments()
-        for state in arguments.state:
-            bases.update((state, state.parent))
-        bases.update(previous.recorded_bases())
-    changed = 0
-    for base in sorted(bases):
-        directory = base / ".binding-start-backup"
-        manifest = directory / "manifest.json"
-        if manifest.is_file():
-            backup = FieldCodec.decode(DirectoryBackup, json.loads(manifest.read_text()))
-            if backup.root != root:
-                print(f"left backup: {directory} (other root {backup.root})")
-                continue
-            changed += backup.restore()
-            shutil.rmtree(directory)
+    """Restore only this cutover's snapshot, never a previous install's stale backup."""
+    manifest = DirectoryBackup.path_in(home)
+    if not manifest.is_file():
+        return 0
+    backup = FieldCodec.decode(DirectoryBackup, json.loads(manifest.read_text()))
+    if backup.root != root:
+        raise ValueError(f"Backup belongs to another root: {manifest}: {backup.root}")
+    changed = backup.restore()
+    shutil.rmtree(manifest.parent)
     return changed
 
 

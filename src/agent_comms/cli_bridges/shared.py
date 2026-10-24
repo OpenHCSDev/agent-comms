@@ -194,7 +194,7 @@ class GivenBinding(BindingRequest):
                     FieldCodec.record_key(BindingAddress, 'bus'): arguments.binding_thread.thread})
 
     def bind(self, db: sqlite3.Connection) -> BindingAddress:
-        stored = tuple(FieldCodec.encode(row.address()) for row in Binding.select(db))
+        stored = tuple(FieldCodec.encode_record(row.address()) for row in Binding.select(db))
         if stored:
             payload = stored[0]
         else:
@@ -275,10 +275,6 @@ class SessionBinding(ABC):
     def registered(self, comms: Comms) -> Binding:
         return Binding(root=self.root, owner=self.recipient(comms),
                        thread=self.thread, start=self.start)
-
-    async def prepared(self, bridge: CliBridge, operation: Operation) -> Binding:
-        await operation.register(bridge)
-        return self.registered(bridge.comms).bind(bridge.db)
 
 
 @dataclass(frozen=True, kw_only=True, slots=True)
@@ -503,6 +499,10 @@ class Operation(DeclaredOptions, ABC, Generic[OperationBridge]):
 
     async def register(self, bridge: CliBridge) -> None:
         """Most operations require an already registered reader."""
+
+    async def prepare(self, bridge: CliBridge) -> SessionBinding:
+        await self.register(bridge)
+        return bridge.binding.registered(bridge.comms).bind(bridge.db)
 
     def transcript_source(self) -> Path:
         raise ValueError('This command does not own a live transcript subscription')
@@ -1055,6 +1055,10 @@ class Enrol(Operation):
     def serves(cls, bridge: type[CliBridge]) -> bool:
         return issubclass(bridge, LineMonitorBridge)
 
+    async def prepare(self, bridge: CliBridge) -> SessionBinding:
+        """Enrol an address; SessionStart registers its reader before persisting a binding."""
+        return bridge.binding
+
     async def execute(self, bridge: LineMonitorBridge) -> None:
         WatchClaim(bridge.binding.thread).enrol(bridge.watch_record())
         self.begin(bridge)
@@ -1455,7 +1459,7 @@ def run_bridge(bridge_type: type[CliBridge[BridgeOptions]], options: BridgeOptio
     try:
         with Binding.open(options.state) as db, asyncio.Runner() as runner:
             bridge = bridge_type(options, options.binding.bind(db), db)
-            bridge.binding = runner.run(bridge.binding.prepared(bridge, options.operation))
+            bridge.binding = runner.run(options.operation.prepare(bridge))
             with suppress(asyncio.CancelledError):
                 runner.run(bridge.run())
         options.operation.retired(bridge)

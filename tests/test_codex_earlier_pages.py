@@ -8,14 +8,14 @@ from aiohttp import web
 
 from agent_comms.cli_bridges.codex import CodexBridge, CodexOptions
 from agent_comms.cli_bridges.shared import Binding, Watch
-from agent_comms.runtime_updates import ThreadOutput
-from agent_comms.cli_protocol import EarlierItems, WATCH_LINE
+from agent_comms.cli_protocol import WATCH_LINE, EarlierItems
 from agent_comms.comms import wire
-from conftest import installed_comms
 from agent_comms.coordination_errors import CoordinationReadUnavailable
 from agent_comms.external_transcript import ExternalItemRow
+from agent_comms.runtime_updates import ThreadOutput
 from agent_comms.thread_execution import ExternalThreadExecution
 from agent_comms.threads import Thread
+from conftest import installed_comms
 
 
 def entry(name, timestamp):

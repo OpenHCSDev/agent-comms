@@ -23,6 +23,7 @@ from agent_comms.field_codec import RecordProblems
 from agent_comms.locked_store import SQLiteFile
 from agent_comms.messages import InfoKind, Message
 from agent_comms.thread_identity import RecordedThreadIncarnation
+from agent_comms.threads import Thread
 
 
 @pytest.mark.parametrize('error,expected', [
@@ -198,15 +199,22 @@ async def test_watched_record_crosses_the_watch_line_as_its_envelope(root):
     assert line.message.to_wire() == sent.to_wire() == record.to_wire()
 
 
-def test_given_binding_fields_override_the_stored_binding(tmp_path, bus):
+def test_given_binding_fields_override_the_stored_binding(tmp_path, comms):
     """A partial binding takes each missing field from the stored one; a field absent from
     both is refused by name, and a changed field still claims another conversation."""
+    for name in ('viewer', 'other-viewer'):
+        comms.registry.declare(Thread(name, frozenset(), str(tmp_path)))
     type_key = {Binding.family_discriminator: Binding.declared_name}
     with Binding.open(tmp_path) as db:
         with pytest.raises(RecordProblems, match='bus_thread'):
-            GivenBinding({**type_key, 'root': str(tmp_path)}).bind(db)
-        stored = Binding(root=str(tmp_path), owner=RecordedThreadIncarnation('viewer', 1.0),
-                         thread='external-session', start=Binding.bus_head(str(tmp_path))).bind(db)
-        assert GivenBinding({**type_key, 'root': str(tmp_path)}).bind(db) == stored
+            GivenBinding({**type_key, 'root': str(comms.root)}).bind(db)
+        stored = Binding(
+            root=str(comms.root), owner=comms.registry.require('viewer').incarnation,
+            thread='external-session', start=Binding.bus_head(str(comms.root)),
+        ).bind(db)
+        address = GivenBinding({**type_key, 'root': str(comms.root)}).bind(db)
+        assert address == stored.address()
+        assert address.registered(comms).bind(db) == stored
+        other = GivenBinding({**type_key, 'bus_thread': 'other-viewer'}).bind(db)
         with pytest.raises(ValueError, match='another Core/CLI conversation'):
-            GivenBinding({**type_key, 'bus_thread': 'other-viewer'}).bind(db)
+            other.registered(comms).bind(db)
