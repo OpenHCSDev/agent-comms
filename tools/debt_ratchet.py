@@ -446,14 +446,15 @@ class PlainStrIdAnnotation(PerFileOccurrenceMeasure):
                     continue
             while True:
                 match annotation:
-                    case ast.Name(id="str"):
+                    case ast.Name(id=str.__name__):
                         yield node
                         break
                     case ast.BinOp(left=inner, op=ast.BitOr(), right=ast.Constant(value=None)) \
                             | ast.BinOp(left=ast.Constant(value=None), op=ast.BitOr(), right=inner):
                         annotation = inner
                     case ast.Subscript(
-                        value=ast.Name(id="Annotated") | ast.Attribute(attr="Annotated"),
+                        value=ast.Name(id=TypePositions.annotated)
+                              | ast.Attribute(attr=TypePositions.annotated),
                         slice=ast.Tuple(elts=[inner, *_]),
                     ):
                         annotation = inner
