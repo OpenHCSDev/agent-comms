@@ -387,6 +387,7 @@ class HistoricalMessage(CarriesEnvelope, Message):
             },
         }
 
+
 @dataclass(frozen=True, slots=True)
 class HistoricalThread:
     source: HistorySource
