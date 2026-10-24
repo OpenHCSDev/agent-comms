@@ -28,7 +28,7 @@ from .goals import GoalDeclaration, NoGoal
 from .locked_store import DurableFile
 from .private_registry_guard import PrivateRegistryGuard
 from .store_files import AtomicFile
-from .turn_lease import ReportedTurnState
+from .reported_turn import ReportedTurnState
 from .typed_table import (
     Column,
     DurableTables,

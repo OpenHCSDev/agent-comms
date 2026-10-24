@@ -17,7 +17,7 @@ from .field_codec import GoalId, TurnId
 from agent_comms.goal_turn_permit import GoalTurnPermit, NoLaunchPermit
 from .goal_states import ActiveGoal, CompletedGoal, PausedGoal
 from .mro_dispatch import MroDispatch, handles
-from .turn_lease import ReportedTurn
+from .reported_turn import ReportedTurn
 
 if TYPE_CHECKING:
     from .goal_attempts import GoalAttemptStore, LaunchPermit

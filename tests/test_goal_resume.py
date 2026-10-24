@@ -22,6 +22,7 @@ from agent_comms.goal_actions import (
 from agent_comms.goal_attempts import GoalAttemptStore
 from agent_comms.goal_generation import BlockedGeneration, CancelledGeneration, CompletedGeneration
 from agent_comms.goals import Goal, NoGoal
+from agent_comms.reported_turn import ReportedTurn
 from agent_comms.tools import invoke_tool
 from agent_comms.tool_caller import ThreadCaller
 from functools import partial
@@ -108,7 +109,7 @@ def test_replacing_or_clearing_goal_cannot_reset_turn_report_guard(comms, monkey
     after_clear = invoke_tool(comms, "comms_set_goal", {"text": "after clear"})["goal"]
     reopened = wire(comms.root)
     assert any(
-        entry.reports_turn(turn)
+        entry.reports_turn(ReportedTurn(turn))
         for entry in reopened.registry.goal_history("owner")
     )
     with pytest.raises(ValueError):

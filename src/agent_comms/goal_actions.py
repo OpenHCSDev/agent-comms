@@ -51,7 +51,7 @@ from .recorded_time import EventTime
 from .repository_name import RepositoryName
 from .thread_identity import ThreadIncarnation
 from .threads import Thread
-from .turn_lease import ReportedTurnState
+from .reported_turn import ReportedTurnState
 
 if TYPE_CHECKING:
     from .goal_management import Goals

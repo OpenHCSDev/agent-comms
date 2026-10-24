@@ -4,13 +4,14 @@ import json
 import os
 
 from agent_comms.diagnostics import record_terminal_failure
+from agent_comms.field_codec import TurnId
 from agent_comms.turn_failure import NativePreflightTimeout
 
 
 def test_terminal_diagnostic_excludes_untrusted_payloads(tmp_path):
     path = record_terminal_failure(
         tmp_path,
-        turn_id="a" * 32,
+        subject=TurnId.mint(),
         thread="worker",
         sequences=(6943,),
         failure=NativePreflightTimeout,

@@ -11,11 +11,8 @@ from typing import TYPE_CHECKING, Annotated, ClassVar
 
 from .activity import ObservedActivity
 from .child_process import ProcessIdentity, ProcessState
-from .declared_family import DeclaredFamily
 from .errors import RelationViolationError
 from .field_codec import (
-    JsonShapeFamily,
-    JsonShapeMember,
     NullMember,
     RecordMember,
     SingleFieldValue,
@@ -27,6 +24,7 @@ from .field_codec import (
 from .goal_presentation import RunningExecution
 from .lifecycle_capability import Executing, LifecycleCapability
 from .locked_store import DurableFile, JsonDocument, PatternFile
+from .reported_turn import NoReportedTurn, ReportedTurn, ReportedTurnState
 from .routing import TurnRouting
 from .store_files import _store_lock
 from .thread_identity import (
@@ -42,29 +40,6 @@ if TYPE_CHECKING:
     from .goal_presentation import GoalExecution, GoalExecutionSource
     from .registry_document import RegistrySnapshot
     from .threads import Thread
-
-
-class ReportedTurnState(DeclaredFamily, JsonShapeFamily, affix="ReportedTurnState"):
-    """The reporting turn is a state; null/text remain the existing wire forms."""
-
-    @abstractmethod
-    def reports(self, turn: ReportedTurnState) -> bool: ...
-
-
-@dataclass(frozen=True)
-class NoReportedTurn(ReportedTurnState, JsonShapeMember):
-    value: None = None
-
-    def reports(self, turn: ReportedTurnState) -> bool:
-        return False
-
-
-@dataclass(frozen=True)
-class ReportedTurn(ReportedTurnState, JsonShapeMember):
-    value: TurnId
-
-    def reports(self, turn: ReportedTurnState) -> bool:
-        return turn == self
 
 
 class TurnDeclaration(LifecycleCapability, SubclassUnion, affix=""):

@@ -37,7 +37,7 @@ from .registration_inheritance import RegistrationInheritance
 from .repo import GitCommandError, Repo, ScratchCheckout
 from .thread_identity import RecordedThreadIncarnation, ThreadIncarnation
 from .text_digest import TextDigest
-from .turn_lease import NoReportedTurn, ReportedTurnState
+from .reported_turn import NoReportedTurn, ReportedTurnState
 from .ui_model.goal import GoalDisplay
 
 if TYPE_CHECKING:

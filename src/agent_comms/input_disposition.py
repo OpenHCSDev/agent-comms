@@ -33,7 +33,7 @@ from .message_reference import MessageReference
 from .messages import Message
 from .threads import Thread
 from .tool_result import ToolResult
-from .turn_lease import ReportedTurnState
+from .reported_turn import ReportedTurnState
 from .typed_table import Column, DurableStore, Generated, Index, StoreRows, TypedTable, sql_literal
 
 if TYPE_CHECKING:

@@ -30,7 +30,7 @@ from .input_origin import (
 )
 from .text_digest import TextDigest
 from .thread_identity import GenerationCounter, ThreadIncarnation
-from .turn_lease import ReportedTurnState
+from .reported_turn import ReportedTurnState
 
 if TYPE_CHECKING:
     from .registry_document import RegistrySnapshot
