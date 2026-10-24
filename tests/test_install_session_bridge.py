@@ -21,7 +21,7 @@ from agent_comms.cli_bridges.monitor import (
 from agent_comms.cli_bridges import claude
 from agent_comms.cli_bridges.shared import (
     MONITOR_FRAME, Binding, MonitorBridgeStopped, MonitorBridgeSwapping, MonitorProbe, Serve, SessionBridge, SessionBridgeResumes,
-    UnacknowledgedPause,
+    ReleasedSessionBridge, UnacknowledgedPause, UnobservedBridge,
 )
 from conftest import installed_comms
 from agent_comms.field_codec import FieldCodec
@@ -310,6 +310,22 @@ def test_a_bridge_that_never_answers_pause_refuses_the_install_by_name(tmp_path,
     assert str(refused.value) == (
         f'Session bridge silent-session at {claim.socket_path} did not acknowledge pause within 30 s')
     assert bridges.failures == (refused.value,)
+
+
+def test_a_successor_that_exits_before_serving_is_unobserved_without_a_deadline(
+        tmp_path, bridge_home):
+    """The released claim lock, not a clock, says the successor is gone."""
+    claim = WatchClaim('exited-session', bridge_home)
+    with claim.held(WatchRecord('bridge-copy', str(tmp_path), ('serve',), tmp_path)):
+        pass
+    assert isinstance(claim.state(), LapsedWatch)
+    me = ProcessIdentity.capture(os.getpid())
+    observed = SessionInformation(owner=me, process=me, runtime=LaunchRuntime.running(),
+                                  transcript=tmp_path / 'exited-session.jsonl')
+    runtime = LaunchRuntime.running()
+    outcome = ReleasedSessionBridge(SessionBridge(claim, observed), runtime).confirm()
+    assert outcome == UnobservedBridge(
+        'exited-session', f'process exited before serving {runtime.prefix}')
 
 
 def test_a_bridge_whose_installer_left_before_ready_stays_stopped(tmp_path, capsys):
