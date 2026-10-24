@@ -159,7 +159,8 @@ def main(package: Path, dependency_package: Path | None = None) -> None:
     repo = stack.parents[1]
     inputs = NativeRepositoryInputs.of(repo)
     extension = repo / inputs.mcp_client.root
-    destination = package / "agent-comms-extensions/pi-mcp-client"
+    extension_path = Path("agent-comms-extensions") / Path(inputs.mcp_client.root).name
+    destination = package / extension_path
     if destination.exists():
         raise SystemExit("Import-boundary destination already exists; never repair in place")
     patch_loader(package / "dist/core/extensions/loader.js")
@@ -178,7 +179,7 @@ def main(package: Path, dependency_package: Path | None = None) -> None:
             env=environment,
             check=True,
         )
-        staging = dependency_package / "agent-comms-extensions/pi-mcp-client"
+        staging = dependency_package / extension_path
         for name in (*inputs.mcp_client.install, *inputs.mcp_client.files):
             if (extension / name).read_bytes() != (staging / name).read_bytes():
                 raise SystemExit(f"Committed MCP source differs: {name}")
