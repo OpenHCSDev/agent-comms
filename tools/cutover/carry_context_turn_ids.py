@@ -51,9 +51,11 @@ class ContextTurnIds(Carry):
     @staticmethod
     def rewrite(path: Path, record: type, payload: dict[str, object]) -> dict[str, object]:
         try:
-            return FieldCodec.encode(
-                FieldCodec.decode(StoredContextTurn | CurrentContextTurn, payload).carried()
-            )
+            return {
+                **FieldCodec.encode(
+                    FieldCodec.decode(StoredContextTurn | CurrentContextTurn, payload).carried()
+                )
+            }
         except MalformedRecord as error:
             error.add_note(f"{path}: {payload!r}")
             raise
