@@ -34,7 +34,7 @@ from .goal_states import ActiveGoal, GoalState
 from agent_comms.goal_turn_permit import GoalTurnPermit, NoLaunchPermit
 from .turn_goal_permission import ContinuationGoalPermission, GoalPermission, InactiveGoalPermission
 from .registration_inheritance import RegistrationInheritance
-from .repo import GitCommandError, Repo, ScratchCheckout
+from .repo import DetachedStart, GitCommandError, Repo, ScratchCheckout
 from .thread_identity import RecordedThreadIncarnation, ThreadIncarnation
 from .text_digest import TextDigest
 from .reported_turn import NoReportedTurn, ReportedTurnState
@@ -400,7 +400,7 @@ class OrderCheck(CheckCommand):
         checkout_base.mkdir(parents=True, exist_ok=True)
         with tempfile.TemporaryDirectory(prefix="order-check-", dir=checkout_base) as scratch:
             tree = str(Path(scratch) / "tree")
-            checkout = ScratchCheckout.add(repository, tree, revision, "--detach")
+            checkout = ScratchCheckout.add(repository, tree, DetachedStart(revision))
             try:
                 run = subprocess.run(("bash", "-c", self.command), cwd=tree, capture_output=True,
                                      timeout=self.timeout)

@@ -160,7 +160,7 @@ from agent_comms.native_package import (
 )
 from agent_comms.recorded_bus import RecordedBusIdentity
 from agent_comms.registry_store import RegistryStore
-from agent_comms.repo import Checkout, Repo, ScratchCheckout
+from agent_comms.repo import Checkout, DetachedStart, Repo, ScratchCheckout
 from agent_comms.root_runtime import RootRuntime, RootRuntimeStore
 from agent_comms.runtime_processes import RuntimeProcesses
 from agent_comms.storage_rules import StorageRule
@@ -745,7 +745,7 @@ class TargetTree(AbstractContextManager):
         return self.path / "src", self.steps_package
 
     def add(self) -> None:
-        ScratchCheckout.add(self.repo, self.path, self.revision, "--detach", "-q")
+        ScratchCheckout.add(self.repo, self.path, DetachedStart(self.revision))
 
     def close(self) -> None:
         """Retire the tree; a failed add left nothing to retire."""

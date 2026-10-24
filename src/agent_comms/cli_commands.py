@@ -147,7 +147,7 @@ from .read_basis import (
 from .recorded_bus import RecordedBusIdentity
 from .registry_document import CommanderProject, RegistrySnapshot
 from .registry_store import RegistryStore
-from .repo import Checkout, GitCommandError, Repo
+from .repo import Checkout, CheckoutStart, GitCommandError, Repo
 from .repository_name import RepositoryName
 from .storage_rules import (
     CheckoutStorageEffect, OrderCheckoutAllocation, RemoveCheckoutStorageEffect,
@@ -1939,8 +1939,10 @@ class AddCheckoutOperation(CheckoutOperation):
             Checkout(destination).prepare()
         else:
             Repo.git(repository.checkout, "fetch", "origin", "main")
-            Checkout.add(repository.checkout, destination, "origin/main", "-b",
-                         f"work/{destination.name}")
+            Checkout.add(
+                repository.checkout, destination,
+                CheckoutStart.of(repository.checkout, f"work/{destination.name}", "origin/main"),
+            )
 
 
 class RemoveCheckoutOperation(CheckoutOperation):
