@@ -3,12 +3,29 @@ tree with submodules needs no hand-forced removal."""
 
 import shutil
 import subprocess
+import time
 from pathlib import Path
 
 import pytest
 
-from agent_comms.repo import Checkout, CheckoutHoldsWorkError, ScratchCheckout
+from agent_comms.bus import Bus
+from agent_comms.change_report import FileLine
+from agent_comms.comms import wire
+from agent_comms.field_codec import FieldCodec
+from agent_comms.goals import OrderCheck
+from agent_comms.order_runs import MechanicalOrderRun
+from agent_comms.recorded_time import RecordedEventTime
+from agent_comms.registry_document import RegisteredCommanderProject
+from agent_comms.repo import Checkout, CheckoutHoldsWorkError, Repo, ScratchCheckout
+from agent_comms.repository_name import RepositoryName
+from agent_comms.storage_rules import StorageRule
+from agent_comms.thread_execution import ExternalThreadExecution
+from agent_comms.threads import Thread
+from agent_comms.todos import PendingProblemOrder
+from cli_command import core
 from fixture_git import IDENTITY
+from order_scope_fixture import FIX_SCOPE
+from source_revision_fixture import SourceRepository
 
 
 def git(path: Path, *args: str) -> str:
@@ -40,6 +57,88 @@ def repository(tmp_path, monkeypatch):
     git(main, "add", ".")
     git(main, "commit", "-q", "-m", "pin")
     return main
+
+
+@pytest.fixture
+def checkout_command_bus(repository, tmp_path, monkeypatch, installed_runtime):
+    """A held order and its real pinned-submodule repository, with a local origin."""
+    (repository / "owner.py").write_text(SourceRepository.main_source)
+    git(repository, "commit", "-qam", "Declare the order's source owner")
+    git(repository, "branch", "-M", "main")
+    identity = RepositoryName("OpenHCSDev", "agent-comms")
+    remote = SourceRepository.remote_for(tmp_path, identity)
+    git(repository, "remote", "add", "origin", str(remote))
+    git(repository, "push", "-q", "origin", "main")
+    root = tmp_path / "wire"
+    root.mkdir(mode=0o700)
+    rule = StorageRule(checkout_base=tmp_path / "checkouts",
+                       scratch_base=tmp_path / "scratch", floor_gib=0)
+    StorageRule.path_in(root).write_text(FieldCodec.compact(FieldCodec.encode(rule)))
+    Bus.install(Bus.path_in(root))
+    comms = wire(root)
+    lead = comms.registry.declare(Thread(
+        "lead", frozenset(), str(tmp_path / "lead"), execution=ExternalThreadExecution))
+    worker = comms.registry.declare(Thread(
+        "worker", frozenset(), str(repository), execution=ExternalThreadExecution))
+    comms.registry.set_commander_project(RegisteredCommanderProject(
+        lead.incarnation, (Repo(checkout=repository, github=identity),)))
+    request = comms.goals.todos.add_request(lead.incarnation, "Prepare the pinned checkout").id
+    now = time.time()
+    order = PendingProblemOrder(
+        id="prepare-checkout", owner=FileLine("owner.py", 1), scope=FIX_SCOPE,
+        run=MechanicalOrderRun(), check=OrderCheck(str(repository), "true"),
+        edits=("Create the order checkout through its pinned-submodule owner.",),
+        banned=("No checkout creation bypassing its pinned submodules.",),
+        report="Report the prepared checkout.", at=RecordedEventTime(now),
+        first_call_deadline=RecordedEventTime(now + 120))
+    comms.goals.todos.create(
+        "P1", identity, "Prepare the pinned checkout", creator=lead, owner=worker,
+        assigner=lead.incarnation, generation="prepare-checkout", request=request,
+        review_at=RecordedEventTime(now + 3600), order=order)
+    monkeypatch.setenv("AGENT_COMMS_THREAD", worker.name)
+    return comms
+
+
+def test_checkout_add_prepares_the_order_repository_submodule(checkout_command_bus):
+    comms = checkout_command_bus
+    result = core("--root", str(comms.root), "checkout", "add", "P1")
+    assert result.returncode == 0, result.stderr
+    path = comms.registry.storage_rule.order_checkout("worker", "P1")
+    assert (path / "pinned" / "catalog.md").read_text() == "patterns\n"
+
+
+def test_checkout_add_repairs_an_existing_checkout_with_a_missing_store(checkout_command_bus):
+    comms = checkout_command_bus
+    first = core("--root", str(comms.root), "checkout", "add", "P1")
+    assert first.returncode == 0, first.stderr
+    checkout = Checkout(comms.registry.storage_rule.order_checkout("worker", "P1"))
+    pointer_without_store(checkout)
+    repaired = core("--root", str(comms.root), "checkout", "add", "P1")
+    assert repaired.returncode == 0, repaired.stderr
+    (module,) = checkout.submodules()
+    assert module.usable()
+    assert (module.path / "catalog.md").read_text() == "patterns\n"
+
+
+def test_checkout_add_allocates_a_declared_sibling_repository_before_it_exists(
+    checkout_command_bus, tmp_path,
+):
+    comms = checkout_command_bus
+    sibling = SourceRepository.create(tmp_path / "paired", RepositoryName("OpenHCSDev", "toad"))
+    project = comms.registry.snapshot().commander_project.require()
+    comms.registry.set_commander_project(RegisteredCommanderProject(
+        project.commander, (*project.repos, sibling)))
+    rule = comms.registry.storage_rule
+    worker = comms.registry.require("worker")
+    destination = rule.repository_checkout(worker.name, "P1", sibling.github)
+    assert not destination.exists()
+    assert rule.owns_checkout(worker, destination, sibling.github)
+    assert not rule.owns_checkout(worker, destination, RepositoryName("OpenHCSDev", "textual"))
+    result = core("--root", str(comms.root), "checkout", "add", "P1", "--repository", "toad")
+    assert result.returncode == 0, result.stderr
+    assert destination.name == "worker--P1--toad"
+    assert Repo.of(destination).github == sibling.github
+    assert destination in rule.checkouts_of(worker)
 
 
 def config_only_store(checkout: Checkout) -> None:

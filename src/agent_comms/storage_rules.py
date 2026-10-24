@@ -222,7 +222,8 @@ class StorageRule(RoomAllocation, DurableFile):
         ordered = self.order_checkout(owner.name, 'P*')
         return tuple(path for path in (owner.project_path,
                                        *sorted(ordered.parent.glob(ordered.name)))
-                     if path.is_dir() and self.owns_checkout(owner, path))
+                     if path.is_dir() and (self.owns_checkout(owner, path)
+                         or self.owns_checkout(owner, path, Repo.of(path).github)))
 
     def checkouts_of(self, thread: Thread) -> tuple[Path, ...]:
         """Read each repository now; directories and names do not register ownership."""
