@@ -8,7 +8,6 @@ import time
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import replace
 from functools import partial
-from uuid import uuid4
 
 import pytest
 
@@ -31,7 +30,7 @@ from agent_comms.commander_pings import CommanderUpdate
 from agent_comms.comms import wire
 from agent_comms.coordinator import Coordination
 from agent_comms.errors import CommittedMessageError, HumanSendRefusedError, RelationViolationError
-from agent_comms.field_codec import FieldCodec, MessageId, TurnId
+from agent_comms.field_codec import FieldCodec, InputId, MessageId, TurnId
 from agent_comms.goal_actions import (
     CreateProblemGoalAction,
     ReissuedOrderGoalAction,
@@ -116,7 +115,7 @@ def held_bus(comms, tmp_path, source_repository, configured_repository):
         "unresolved-input",
         claim_scope=1,
         turn_id=TurnId('310c74d7ac243239a928d4021c709acb'),
-        native_id=uuid4().hex,
+        native_id=InputId.mint(),
         text="Do not replay this input",
     )
     configured_repository(comms)
@@ -841,6 +840,32 @@ def test_a_compliant_answer_resumes_a_held_unit_whose_attempt_was_interrupted(he
     held_bus.goals.update_goal("worker", ChokeholdPausedGoalAction())
     with pytest.raises(ValueError, match="unresolved"):
         held_bus.goals.update_goal("worker", ActiveGoalAction(), actor=OwnerInvocable)
+    held_bus.goals.update_goal(
+        "worker", CompliedGoalAction(witness="compliant-answer"), actor=OwnerInvocable)
+    assert isinstance(held_bus.registry.require("worker").goal.require().state, ActiveGoal)
+
+
+def test_a_compliant_answer_resumes_a_held_unit_whose_problems_closed_during_the_hold(held_bus):
+    """The heartbeat died on every pass from 13:08 on 2026-10-24: a unit whose problems were
+    withdrawn while the chokehold held it refused the release, so no unit after it resumed."""
+    from agent_comms.goal_actions import (
+        ChokeholdPausedGoalAction,
+        CompliedGoalAction,
+        OwnerInvocable,
+    )
+    from agent_comms.todos import ReleaseTodo, StrikeReason, WithdrawTodo
+
+    held_bus.goals.update_goal("worker", ChokeholdPausedGoalAction())
+    lead = held_bus.registry.require("lead").incarnation
+    worker = held_bus.registry.require("worker")
+    todos = held_bus.goals.todos
+    for todo in todos.for_goal(worker.incarnation, worker.goal.require().id):
+        released = todos.apply(todo.id, ReleaseTodo(todo.revision, lead, todo.held(), StrikeReason(
+            "The commander moved this assigned repair elsewhere while the unit was held.")))
+        todos.apply(todo.id, WithdrawTodo(
+            released.revision, lead, released.holder_state.previous_assignment(),
+            "The requested repair already merged into main through another problem."))
+    assert todos.for_goal(worker.incarnation, worker.goal.require().id) == ()
     held_bus.goals.update_goal(
         "worker", CompliedGoalAction(witness="compliant-answer"), actor=OwnerInvocable)
     assert isinstance(held_bus.registry.require("worker").goal.require().state, ActiveGoal)

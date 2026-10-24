@@ -199,8 +199,12 @@ class TransitionGoalAction(GoalAction[Goal]):
     @abstractmethod
     def next_state(self, goal: Goal, ctx: GoalActionContext) -> GoalState: ...
 
-    def change(self, goal: Goal, ctx: GoalActionContext) -> Goal:
+    def require_order(self, goal: Goal, ctx: GoalActionContext) -> None:
+        """A transition works under the goal's order, so the order must still hold."""
         goal.order.require_order(goal, ctx.goals, ctx.thread.incarnation)
+
+    def change(self, goal: Goal, ctx: GoalActionContext) -> Goal:
+        self.require_order(goal, ctx)
         state = self.next_state(goal, ctx)
         self.require_transition(goal, state, ctx)
         self.before_transition(goal, ctx)
@@ -251,6 +255,10 @@ class CompliedGoalAction(TransitionGoalAction, OwnerInvocable):
     Only Core's release takes it; no model or control surface can name a witness."""
 
     witness: str
+
+    def require_order(self, goal: Goal, ctx: GoalActionContext) -> None:
+        """Lifting the heartbeat's hold restores the goal it paused. Its problems may close
+        during the hold, and that must not keep this unit, or the units after it, held."""
 
     def next_state(self, goal: Goal, ctx: GoalActionContext) -> GoalState:
         return ActiveGoal()
