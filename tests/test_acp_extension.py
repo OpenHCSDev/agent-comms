@@ -44,7 +44,7 @@ from agent_comms.pi_payloads import McpLiveAcknowledgement
 from agent_comms.thread_identity import ClaimedIdentity
 from agent_comms.thread_identity import RecordedThreadIncarnation
 from agent_comms.transcripts import NativeTranscriptCursor, TranscriptPage
-from agent_comms.turn_lease import ActiveTurn, TurnState
+from agent_comms.turn_lease import ActiveTurn, FinishedTurn, TurnState
 from agent_comms.turn_context import ContextManifest, NextContextTurn
 from agent_comms.threads import Thread
 
@@ -108,7 +108,7 @@ def test_declared_family_roundtrip_and_strict_boundary(tmp_path):
                 )
             )
         ),
-        TurnChangedUpdate(TurnState(finished_turn_id=TurnId('9b473845f684444f80a26586ae298d2b'))),
+        TurnChangedUpdate(TurnState(finished=FinishedTurn(TurnId('9b473845f684444f80a26586ae298d2b')))),
         TextRouteUpdate(None),
         TranscriptChangedUpdate(NativeTranscriptCursor("session.jsonl", 42)),
         InputFailedUpdate("prompt", BackendDeliveryFailure("provider refused")),

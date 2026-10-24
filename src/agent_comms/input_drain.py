@@ -38,6 +38,7 @@ from .drain_failures import (
     record_drain_failure,
 )
 from .errors import RelationViolationError, UnregisteredThreadError
+from .field_codec import InputId
 from .image_input import ImageInput
 from .input_attempt import (
     UNOBSERVED_DELIVERY_SCOPE,
@@ -419,9 +420,9 @@ class DrainedSession:
     wake_task: asyncio.Task[WakeOutcome] | None = None
     observation_watcher: ChangeSignal | None = None
     turn: DrainTurn = field(default_factory=NoDrainTurn)
-    queued: dict[str, QueuedInput] = field(default_factory=dict)
-    restored: dict[str, QueuedInput] = field(default_factory=dict)
-    following: dict[str, AcceptedFollowingInput] = field(default_factory=dict)
+    queued: dict[InputId, QueuedInput] = field(default_factory=dict)
+    restored: dict[InputId, QueuedInput] = field(default_factory=dict)
+    following: dict[InputId, AcceptedFollowingInput] = field(default_factory=dict)
     queue_revision: int = 0
     pending_turns: list[ScheduledTurn] = field(default_factory=list)
     # Only a completed, quiescent observation can suppress another scan.

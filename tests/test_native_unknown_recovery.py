@@ -28,7 +28,7 @@ from agent_comms.thread_model import DeclaredModel
 from agent_comms.session_file import RegistrySessionLocation
 from functools import partial
 from native_backend_fixture import native_backend_fixture
-from agent_comms.child_process import ProcessIdentity
+from agent_comms.child_process import ProcessIdentity, SpawnedProcess
 from agent_comms.comms import wire
 from agent_comms.coordination_errors import RecoveryBlocked
 from agent_comms.coordination_tables.attempts import ReplayFact
@@ -162,9 +162,9 @@ def test_undispatched_owner_loss_refuses_a_live_native_child(released_starting, 
         status=comms.registry.status(owner.name),
     )
     selected = session if argument == "--session" else directory
-    child = subprocess.Popen([
+    child = SpawnedProcess.launch((
         sys.executable, "-c", "import time; time.sleep(30)", argument, str(selected),
-    ])
+    )).process
     try:
         with pytest.raises(RecoveryBlocked):
             RecoveryMonitorCapability.recover_owners(wire(released_starting).owners, (comms.registry.require("beta"),))

@@ -46,7 +46,7 @@ A plan phase whose earlier phases are all done is not done itself, and no open o
 
 Checked by:
 
-- standing rule `plan_idle` (`agent_comms.standing_rules.PlanIdle`)
+- standing rule `plan_idle` (`agent_comms.commander.standing.PlanIdle`)
 
 Learned from: P83 (34ba68c81)
 
@@ -56,7 +56,7 @@ A plan phase whose earlier phases are all done is held by a unit, and main still
 
 Checked by:
 
-- standing rule `plan_stalled` (`agent_comms.standing_rules.PlanStalled`)
+- standing rule `plan_stalled` (`agent_comms.commander.standing.PlanStalled`)
 
 Learned from: Failure 23: October 21: every virtual bus step had a holder and none merged for 22 hours, because the steps only land together and nobody owned integrating them; Tristan caught it (claude-ai #comms 2dde16189509).
 
@@ -96,7 +96,7 @@ A strike recorded in error is deleted, or voided while not live, instead of a vo
 
 Checked by:
 
-- check in `agent_comms.todos.VoidStrikeTodo.apply`
+- check in `agent_comms.todos.TodoCommand.apply`
 
 Learned from: P47 (15d435152)
 

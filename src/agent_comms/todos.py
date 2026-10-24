@@ -58,6 +58,7 @@ from agent_comms.field_codec import (
     FieldCodec,
     GitCommitText,
     MalformedRecord,
+    MessageId,
     NullMember,
     SingleFieldValue,
     SubclassUnion,
@@ -3452,7 +3453,7 @@ class CorrectCheckTodo(TodoOperation):
 @dataclass(frozen=True)
 class WordingCorrection(TodoOperation):
     """Core's answer to a published unit message whose words hide what happened; no strike."""
-    message_id: str
+    message_id: MessageId
     words: tuple[str, ...]
 
     def authored_by(self, actor: ThreadIncarnation) -> Self:
@@ -3467,11 +3468,10 @@ class WordingCorrection(TodoOperation):
 class OrderMessage(TodoOperation):
     """The bus message the commander sent this order in; a verdict citing it lands here."""
     actor: ThreadIncarnation
-    message_id: str
+    message_id: MessageId
 
     def changed(self, current: Todo) -> Todo:
         current.require_commander(self.actor)
-        _text(self.message_id, "Order message ID", 200)
         return replace(current, messages=(*current.messages, self), revision=current.revision + 1)
 
 

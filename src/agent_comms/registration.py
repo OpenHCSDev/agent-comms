@@ -11,6 +11,7 @@ from typing import TYPE_CHECKING, Concatenate
 from .catalog_store import ChannelCatalog
 from .child_process import NoProcess, ProcessIdentity
 from .errors import RelationViolationError
+from .field_codec import TurnId
 from .goal_history import GoalHistoryEntry, GoalHistoryStore
 from .native_input_owner import RegistryOwner
 from .private_registry_guard import PrivateRegistryGuard
@@ -20,7 +21,6 @@ from .registry_store import RegistryEdit, RegistryEntryRevision, RegistryStore
 from .routing import TurnRouting
 from .storage_rules import StorageRule
 from .thread_execution import CommanderForkExecution
-from .field_codec import TurnId
 from .thread_identity import GenerationCounter, RegisteredTurn
 from .thread_status import (
     ConnectedThreadStatus,
@@ -32,9 +32,9 @@ from .thread_text import ForkedParent
 from .threads import Thread
 
 if TYPE_CHECKING:
+    from .agent_backend import RuntimeLocation
     from .goal_management import Goals
     from .selected_participant import SelectedParticipant
-    from .agent_backend import RuntimeLocation
 
 _DEFAULT_PRESENCE = ProcessThreadStatus()
 

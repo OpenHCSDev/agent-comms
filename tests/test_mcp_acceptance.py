@@ -448,13 +448,20 @@ async def test_real_pi_mcp_acp_link(case, tmp_path, monkeypatch, native_runtime_
                                 # cannot attest that the live view received it.
                                 receipt_seen.set()
                             if isinstance(fact, TurnChangedUpdate):
+                                thread = owner._comms.registry.require(
+                                    owner.sessions.bindings[session_id]
+                                )
+                                observed = fact.state.active.observed_turn(
+                                    fact.state.finished, thread.turn_identity,
+                                    thread.claimed_generation,
+                                )
                                 if fact.state.active.phase.busy:
                                     if attachment_turn is None:
-                                        attachment_turn = fact.state
+                                        attachment_turn = observed
                                     else:
-                                        assert fact.state.matches(attachment_turn.active.id)
+                                        assert observed == attachment_turn
                                 elif attachment_turn is not None:
-                                    assert fact.state.matches(attachment_turn.active.id)
+                                    assert observed == attachment_turn
                                     attachment_settled.set()
                         return True
 
@@ -567,17 +574,24 @@ async def test_real_pi_mcp_acp_link(case, tmp_path, monkeypatch, native_runtime_
                     assert row["sessionId"] == session_id
                     for fact in decode_updates(row["update"].get("_meta")):
                         if isinstance(fact, TurnChangedUpdate):
+                            thread = owner._comms.registry.require(
+                                owner.sessions.bindings[session_id]
+                            )
+                            observed = fact.state.active.observed_turn(
+                                fact.state.finished, thread.turn_identity,
+                                thread.claimed_generation,
+                            )
                             if fact.state.active.phase.busy:
                                 if active is None:
-                                    active = fact.state
+                                    active = observed
                                 else:
-                                    assert fact.state.matches(active.active.id)
+                                    assert observed == active
                             elif active is not None:
-                                assert fact.state.matches(active.active.id)
+                                assert observed == active
                                 settlements.append(fact.state)
                                 active = None
                         if isinstance(fact, McpClientAcknowledgementUpdate):
-                            assert active is not None and active.matches(fact.turn_id)
+                            assert active is not None and active.turn_id == fact.turn_id
                             receipts.append(fact.acknowledgement)
                 assert active is None and len(settlements) == len(receipts) == 1, updates
                 assert [FieldCodec.encode(server) for server in receipts[0].servers] == [

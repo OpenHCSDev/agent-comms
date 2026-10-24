@@ -9,7 +9,7 @@ user-message hash and the required execution evidence has been recorded.
 
 from __future__ import annotations
 
-from collections.abc import Iterator
+from collections.abc import Iterable, Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
@@ -20,7 +20,7 @@ from agent_comms.coordination_tables.assignments import WakeAssignment
 from agent_comms.coordinator import Coordination
 
 from .cohort_schema import CohortTable
-from .field_codec import FieldCodec, Id128Text, MalformedRecord
+from .field_codec import FieldCodec, Id128Text, InputId, MalformedRecord
 from .locked_store import DurableFile, SQLiteFile
 from .native_entries import NativeEvidenceRead
 from .native_input_owner import ParticipantOwner
@@ -57,7 +57,7 @@ class PromptBinding(
     filename = "native_prompt_bindings.sqlite3"
 
     input_id: Annotated[
-        str,
+        InputId,
         Column(primary_key=True, check="length(input_id)=32 AND input_id NOT GLOB '*[^0-9a-f]*'"),
     ]
     stage: type[NativeInputExecution]
@@ -192,12 +192,10 @@ def _binding_wire_root(store: Coordination, assignment: WakeAssignment) -> str:
 
 @contextmanager
 def expected_prompt_bindings(
-    store: Coordination, input_ids
-) -> Iterator[dict[str, PromptBinding]]:
+    store: Coordination, input_ids: Iterable[InputId]
+) -> Iterator[dict[InputId, PromptBinding]]:
     """Keep one immutable binding snapshot open while validating input."""
     input_ids = tuple(input_ids)
-    if any(type(input_id) is not str for input_id in input_ids):
-        raise ValueError("prompt binding lookup requires string input IDs")
     path = binding_store_path(store)
     if not input_ids or (not path.exists() and not path.is_symlink()):
         yield {}

@@ -215,7 +215,7 @@ class WakeClaim(RecordMember, RecordedScope):
     execution_id: Annotated[str, BoundedText]
     participant_generation: int
     attempt_ordinal: int
-    version: Annotated[Literal[1], WireRequired()] = 1
+    version: Annotated[Literal[2], WireRequired()] = 2
 
     def belongs_to(self, attempt: AttemptRecord) -> bool:
         # The attempts table's primary key fixes its immutable participant identity.

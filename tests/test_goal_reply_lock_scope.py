@@ -413,7 +413,7 @@ def test_new_dependency_turn_during_silence_read_keeps_wait(reviewing):
     wait = reviewing.goals.goal_wait("owner")
     fence = reviewing.agents.finish_turn(reviewing.registry.require("child").require_turn_lease())
     reviewing.bus.bus = AfterReadBus(
-        reviewing.bus.bus.path, partial(reviewing.agents.begin_turn, "child", "new-child-turn"),
+        reviewing.bus.bus.path, partial(reviewing.agents.begin_turn, "child", TurnId.mint()),
     )
     assert reviewing.goals.release_waits_after_terminal_turn(fence) == ()
     assert reviewing.bus.bus.changed

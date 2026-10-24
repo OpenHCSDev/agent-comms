@@ -19,7 +19,7 @@ from agent_comms.coordinator import Coordination
 from .cohort_schema import CohortTable
 from agent_comms.native_runtime_input import NativeRuntimeTable
 from .declared_family import DeclaredFamily
-from .field_codec import WireName
+from .field_codec import InputId, WireName
 from .native_input_record import (
     FullNativeExecution,
     NativeInputExecution,
@@ -44,7 +44,7 @@ class HistoricalNativeInput(NativeInputRecord, DeclaredFamily, affix="Historical
     source_message_id: str
     assignment_id: Annotated[str, WireName("claim_id")]
     execution: NativeInputExecution
-    input_id: str
+    input_id: InputId
     owner_lookup: str
     owner_generation: int
     context: NativeContextProof

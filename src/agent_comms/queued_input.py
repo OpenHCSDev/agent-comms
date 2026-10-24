@@ -118,7 +118,7 @@ class QueuedInput:
         images: tuple[ImageInput, ...],
         controller: Controller | None,
         ownership: ExitStack,
-        input_id: str | None = None,
+        input_id: InputId | None = None,
         origin: InputOrigin = UnattributedInputOrigin(),
     ) -> tuple[Self, InputAttempt]:
         """Called under the registry lock; acceptance follows the durable reservation."""
@@ -165,7 +165,7 @@ class QueuedInput:
     async def reserve(
         cls, inputs: InputDrain, session_id: str, name: str, *, text: str, prompt: str,
         echo: bool, images: tuple[ImageInput, ...], controller: Controller | None,
-        input_id: str | None = None,
+        input_id: InputId | None = None,
         origin: InputOrigin = UnattributedInputOrigin(),
     ) -> AsyncIterator[InputReservation[Self]]:
         """Serialize local queue placement; reserve durable input in a worker."""
@@ -547,7 +547,7 @@ class InitialInput(QueuedInput):
     async def run(
         cls, inputs: InputDrain, session_id: str, thread_name: str, task: str, *,
         images: tuple[ImageInput, ...] = (), display_text: str | None = None,
-        input_id: str | None = None,
+        input_id: InputId | None = None,
         origin: InputOrigin = UnattributedInputOrigin(),
     ) -> None:
         """Own original reservation, dispatch and unbound retirement as one lifetime."""

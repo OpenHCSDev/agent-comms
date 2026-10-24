@@ -12,7 +12,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, ClassVar
 
 from agent_comms.declared_family import DeclaredFamily
-from agent_comms.field_codec import Id128
+from agent_comms.field_codec import Id128, MessageId, NominalSpelling, NominalText
 from agent_comms.phase_evidence import (
     AllEvidence,
     BusStorageAbsent,
@@ -806,12 +806,10 @@ class NominalIdTypePhase(Id128NominalPhase):
 
     evidence = AllEvidence(
         (
-            ClassDeclared("NominalText", ("src/agent_comms/field_codec.py",)),
-            ClassDeclared("NominalSpelling", ("src/agent_comms/field_codec.py",)),
-            ClassDeclared("Id128", ("src/agent_comms/field_codec.py",)),
-            ClassDeclared("MessageId", ("src/agent_comms/field_codec.py",)),
             *(ClassDeclared(kind.__name__, ("src/agent_comms/field_codec.py",))
-              for kind in Id128.__subclasses__()),
+              for kind in (
+                  NominalText, NominalSpelling, Id128, MessageId, *Id128.__subclasses__(),
+              )),
             PatternAbsent(
                 r"def mint\(cls(, text: str)?\) -> str:", ("src/agent_comms/field_codec.py",)
             ),

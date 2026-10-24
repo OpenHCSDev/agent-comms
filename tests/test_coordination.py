@@ -10,6 +10,7 @@ from dataclasses import FrozenInstanceError, replace
 
 import pytest
 
+from agent_comms.child_process import SpawnedProcess
 from agent_comms.maintenance_barrier import MaintenanceNotHeldError
 from conftest import maintenance_held
 
@@ -493,12 +494,12 @@ print("ready")
 """
     path = tmp_path / "concurrent.sqlite3"
     children = [
-        subprocess.Popen(
-            [sys.executable, "-c", script, str(path)],
+        SpawnedProcess.launch(
+            (sys.executable, "-c", script, str(path)),
             stdin=subprocess.PIPE,
-            stdout=subprocess.PIPE,
+            output=subprocess.PIPE,
             stderr=subprocess.PIPE,
-        )
+        ).process
         for _ in range(2)
     ]
     try:
