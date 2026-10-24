@@ -215,14 +215,6 @@ class UnitState(UndatedStandingRule, declared_name=None):
     def attention(self) -> bool:
         return False
 
-    def merged_orders(self, comms: Comms, pulls: ProgressRead) -> tuple[Todo, ...]:
-        # The frame read these todos once; a second read by id can see an order closed since.
-        return tuple(
-            closed
-            for todo in self.source.todos
-            for closed in todo.order.closed_by_merge(todo, comms.registry, pulls)
-        )
-
     @property
     def default_action(self) -> str:
         return self.action
@@ -268,10 +260,6 @@ class Unreadable(NeedsCommanderAttention, UnitState):
         return iter(())
 
     def readable_units(self) -> tuple[ThreadIncarnation, ...]:
-        return ()
-
-    def merged_orders(self, comms: Comms, pulls: ProgressRead) -> tuple[Todo, ...]:
-        # The card reports the failure; a merge read must not retry that source.
         return ()
 
     def detail(self) -> str:

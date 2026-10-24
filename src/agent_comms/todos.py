@@ -1078,11 +1078,26 @@ class ProgressRead(PullRequests, CheckoutReads):
 
 
 @dataclass(frozen=True)
-class ProgressSource:
-    """Problem progress across owned worktrees, shared Git history and retained PR identities."""
+class PullRequestSource:
+    """The forge facts of one order: its linked pull requests, read without any holder."""
+
     todo: Todo
-    checkout: ProgressCheckout
     pulls: ProgressRead
+
+    @property
+    def since(self) -> float:
+        return self.todo.order.checked().at.recorded_at("An order")
+
+    def requests(self, kind: type[ListedPullRequest]) -> list[PullRequest]:
+        """Explicit PR references survive checkout removal or branch reuse."""
+        return list(self.pulls.listed(self.todo.repo, kind, self.todo))
+
+
+@dataclass(frozen=True)
+class ProgressSource(PullRequestSource):
+    """Problem progress across owned worktrees, shared Git history and retained PR identities."""
+
+    checkout: ProgressCheckout
     references: tuple[str, ...] = ()
     worktrees: tuple[PresentCheckout, ...] = ()
 
@@ -1100,16 +1115,10 @@ class ProgressSource:
             references = checkout.references(storage, owner)
         except (OSError, GitCommandError, WorkBranchError, subprocess.TimeoutExpired) as failure:
             checkout, references = UnreadCheckout(path, str(failure)), ()
-        return cls(todo, checkout, pulls, references,
-                   tuple(pulls.checkout(path) for path in owned if (path / ".git").exists()))
-
-    @property
-    def since(self) -> float:
-        return self.todo.order.checked().at.recorded_at("An order")
-
-    def requests(self, kind: type[ListedPullRequest]) -> list[PullRequest]:
-        """Explicit PR references survive checkout removal or branch reuse."""
-        return list(self.pulls.listed(self.todo.repo, kind, self.todo))
+        return cls(
+            todo=todo, pulls=pulls, checkout=checkout, references=references,
+            worktrees=tuple(pulls.checkout(path) for path in owned if (path / ".git").exists()),
+        )
 
     def commits(self, *excluded: str) -> Iterator[ProgressPoint]:
         points = (
@@ -1249,7 +1258,7 @@ class MergedProgress(FoundProgress):
     sha: str
 
     @classmethod
-    def found(cls, source: ProgressSource) -> Iterator[Self]:
+    def found(cls, source: PullRequestSource) -> Iterator[Self]:
         return (cls(sha) for pr in source.requests(MergedListedPullRequest)
                 for sha in pr.merged_commits(source.since))
 
@@ -1598,8 +1607,7 @@ class ProblemOrder(LifecycleCapability, DeclaredFamily, StorySource, affix="Prob
     def declarations(self) -> tuple[CheckedProblemOrder, ...]:
         return ()
 
-    def closed_by_merge(self, todo: Todo, registry: Registration,
-                        pulls: ProgressRead) -> tuple[Todo, ...]:
+    def closed_by_merge(self, todo: Todo, pulls: ProgressRead) -> tuple[Todo, ...]:
         return ()
 
     def reissued(self, at: float) -> PendingProblemOrder:
@@ -1997,14 +2005,15 @@ class CheckedProblemOrder(ProblemOrder, declared_name=None):
     def merged(self, sha: str) -> MergedProblemOrder:
         return self.copy_as(MergedProblemOrder, sha=sha)
 
-    def closed_by_merge(self, todo: Todo, registry: Registration,
-                        pulls: ProgressRead) -> tuple[Todo, ...]:
+    def closed_by_merge(self, todo: Todo, pulls: ProgressRead) -> tuple[Todo, ...]:
         repo = Repo(checkout=Path(self.check.directory), github=todo.repo)
-        source = ProgressSource.of(todo, registry, pulls)
+        source = PullRequestSource(todo, pulls)
         return tuple(self.run.after_merge(todo, merged)
                      for merged in self.observed_merges(repo, source))
 
-    def observed_merges(self, repo: Repo, source: ProgressSource) -> tuple[MergedProblemOrder, ...]:
+    def observed_merges(
+        self, repo: Repo, source: PullRequestSource
+    ) -> tuple[MergedProblemOrder, ...]:
         return tuple(self.merged(merged.sha) for merged in MergedProgress.found(source)
                      if repo.contains(merged.sha))
 
@@ -2107,7 +2116,9 @@ class MergedProblemOrder(AwaitingInstallationProblemOrder):
         return (todo if todo.order == self
                 else replace(todo, order=self, revision=todo.revision + 1))
 
-    def observed_merges(self, repo: Repo, source: ProgressSource) -> tuple[MergedProblemOrder, ...]:
+    def observed_merges(
+        self, repo: Repo, source: PullRequestSource
+    ) -> tuple[MergedProblemOrder, ...]:
         return (self,)
 
     def require_close(self) -> None:
@@ -2354,6 +2365,22 @@ class ClaimedProblemOrder(BranchPointCheck, DeliverableProblemOrder):
     def commander_claims(self) -> tuple[OrderClaim, ...]:
         return (self.claim,)
 
+    def closed_by_merge(self, todo: Todo, pulls: ProgressRead) -> tuple[Todo, ...]:
+        merged = super().closed_by_merge(todo, pulls)
+        if merged:
+            return merged
+        if any(
+            request.number == self.claim.pull_request.number
+            for request in pulls.listed(todo.repo, ClosedListedPullRequest, todo)
+        ):
+            return (
+                replace(
+                    todo, order=self.fresh_order(time.time(), self.edits),
+                    revision=todo.revision + 1,
+                ),
+            )
+        return ()
+
 
 @dataclass(frozen=True, kw_only=True)
 class DeliveredProblemOrder(AwaitingInstallationProblemOrder):
@@ -2381,7 +2408,9 @@ class DeliveredProblemOrder(AwaitingInstallationProblemOrder):
     def delivered(self, delivery):
         return replace(self, delivery=self.delivery.reproved(delivery))
 
-    def observed_merges(self, repo: Repo, source: ProgressSource) -> tuple[MergedProblemOrder, ...]:
+    def observed_merges(
+        self, repo: Repo, source: PullRequestSource
+    ) -> tuple[MergedProblemOrder, ...]:
         commits = self.delivery.merged_commits(repo)
         return (tuple(self.merged(commit) for commit in commits)
                 or super().observed_merges(repo, source))
@@ -2415,7 +2444,9 @@ class ReportedProblemOrder(DeliveredProblemOrder):
     def require_close(self) -> None:
         pass
 
-    def observed_merges(self, repo: Repo, source: ProgressSource) -> tuple[MergedProblemOrder, ...]:
+    def observed_merges(
+        self, repo: Repo, source: PullRequestSource
+    ) -> tuple[MergedProblemOrder, ...]:
         return ()
 
     def waiting_on_install(self, todo: Todo, read: dict[str, OrderProgress]) -> tuple[Todo, ...]:
