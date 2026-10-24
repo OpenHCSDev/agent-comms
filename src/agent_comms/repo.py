@@ -222,8 +222,11 @@ class PinnedSubmodule:
         module = self.path.relative_to(self.checkout).as_posix()
         pinned = Repo.git(self.checkout, 'rev-parse', f'{commit}:{module}').strip()
         relative = (self.checkout / file).relative_to(self.path).as_posix()
+        store = self.store
+        Repo.git(self.checkout, '--git-dir', str(store), 'rev-parse', '--verify',
+                 f'{pinned}^{{commit}}')
         try:
-            text = Repo.git(self.checkout, '--git-dir', str(self.store),
+            text = Repo.git(self.checkout, '--git-dir', str(store),
                             'show', f'{pinned}:{relative}')
             return tuple(text.splitlines())
         except GitCommandError as error:
