@@ -6,7 +6,6 @@ from datetime import UTC, datetime
 
 import pytest
 
-from pathlib import Path
 
 from agent_comms.commander import judge, order
 from agent_comms.goal_actions import CreateProblemGoalAction
@@ -69,7 +68,7 @@ def test_judge_ok_and_back_dispatch_orderless_prs_without_positional_edit_ids(he
     judge.main(["ok", *common], context)
     assert isinstance(comms.goals.todos.head_reviews(request)[0].verdict, ReviewedHeadVerdict)
     todo = comms.goals.todos.get("P2")
-    location = f"{Path(todo.order.check.directory) / todo.order.owner.file}:{todo.order.owner.line}"
+    location = f"{todo.order.check.directory / todo.order.owner.file}:{todo.order.owner.line}"
     judge.main(["back", *common,
                 "--roast", "This is stupid because the same decision is written twice instead of belonging to its existing class.",
                 "--fix", "Put the shared behavior on the existing parent and delete both copies.",

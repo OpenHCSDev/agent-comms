@@ -154,7 +154,7 @@ class Fleet:
                     owner=scope.shape.parents[0],
                     scope=scope,
                     run=MechanicalOrderRun(),
-                    check=OrderCheck(str(worktree), "printf 0", CountCheckResult(1)),
+                    check=OrderCheck(worktree, "printf 0", CountCheckResult(1)),
                     edits=("Repair the existing owner",),
                     banned=("No second store",),
                     report="Report the result",

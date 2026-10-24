@@ -398,7 +398,7 @@ class CommitDelivery(RecordedCommitDelivery, declared_name="delivered_commit"):
             for merge in await request.delivery_merges(self, check):
                 return merge
         linked = await asyncio.to_thread(
-            WorkBranches(Path(check.directory)).read, registry.snapshot())
+            WorkBranches(check.directory).read, registry.snapshot())
         sources = tuple(sorted(branch.name for branch in linked
                                if branch.name in branches and branch.linked))
         if not sources:
@@ -1008,7 +1008,7 @@ class PresentCheckout(ProgressCheckout):
 
     def stored(self, sha: str) -> tuple[CheckedCommit, ...]:
         if sha not in self.check_notes:
-            self.check_notes[sha] = CheckedCommit.stored(str(self.path), sha)
+            self.check_notes[sha] = CheckedCommit.stored(self.path, sha)
         return self.check_notes[sha]
 
     def references(self, storage: StorageRule, owner: Thread) -> tuple[str, ...]:
@@ -1140,7 +1140,7 @@ class ProgressSource(PullRequestSource):
         owner = registry.require(todo.held().owner)
         storage = registry.storage_rule
         owned = storage.checkout_paths(owner)
-        candidates = (Path(todo.order.checked().check.directory), *owned)
+        candidates = (todo.order.checked().check.directory, *owned)
         path = next((path for path in candidates if (path / ".git").exists()),
                     next(iter(owned), candidates[0]))
         checkout: ProgressCheckout = (
@@ -1893,7 +1893,7 @@ class CheckedProblemOrder(ProblemOrder, declared_name=None):
 
     def installation(self) -> CommitInstallation:
         return self.installation_build.installation(
-            self.installation_commits, Path(self.check.directory)
+            self.installation_commits, self.check.directory
         )
 
     def require_installation(self) -> None:
@@ -1920,7 +1920,7 @@ class CheckedProblemOrder(ProblemOrder, declared_name=None):
         return (*map(PullRequestHeadRevision, self.linked_requests), MainRevision())[0]
 
     def require_references(self) -> None:
-        root, revision = Path(self.check.directory), self.cited_revision
+        root, revision = self.check.directory, self.cited_revision
         self.owner.require_exists(root, revision)
         self.finding.require_references(root, revision)
         self.scope.require_references(root, revision)
@@ -1930,14 +1930,14 @@ class CheckedProblemOrder(ProblemOrder, declared_name=None):
         try:
             with MalformedRecord.refusing('order.check'):
                 self.require_writable()
-                if Path(self.check.directory).is_dir():
+                if self.check.directory.is_dir():
                     self.require_check_acceptance(self.check, worktrees)
         except MalformedRecord as error:
             return (f'order.check: {error}; fix: supply a focused measurable command',)
         return ()
 
     def require_check_acceptance(self, check: OrderCheck, worktrees: Path) -> None:
-        repo = Path(check.directory)
+        repo = check.directory
         Repo.git(repo, 'fetch', '-q', 'origin', 'main')
         check.require_acceptance(self.check_base(repo), worktrees)
 
@@ -1965,12 +1965,12 @@ class CheckedProblemOrder(ProblemOrder, declared_name=None):
         for reference in references:
             try:
                 with MalformedRecord.refusing(reference.to_wire()):
-                    reference.require_exists(Path(check.directory), self.cited_revision)
+                    reference.require_exists(check.directory, self.cited_revision)
             except MalformedRecord as error:
                 problems.append(f'{error}; fix: cite an existing source line')
         body = '\n'.join((document.prose, *self.edits, self.report))
-        if any((Path(check.directory) / reference.file).resolve().is_relative_to(
-                   Path(check.directory) / 'tools/') for reference in references) and not all(
+        if any((check.directory / reference.file).resolve().is_relative_to(
+                   check.directory / 'tools/') for reference in references) and not all(
                 said in body for said in ('--root tools', '--root src')):
             problems.append('the order changes tools/: say "ratchet with --root tools and with '
                             '--root src, each as its own command"')
@@ -2064,7 +2064,7 @@ class CheckedProblemOrder(ProblemOrder, declared_name=None):
     def closed_by_merge(
         self, todo: Todo, pulls: ProgressRead, checkout_base: Path
     ) -> tuple[Todo, ...]:
-        repo = Repo(checkout=Path(self.check.directory), github=todo.repo)
+        repo = todo.repository
         source = PullRequestSource(todo, pulls)
         return tuple(self.run.after_merge(todo, merged)
                      for merged in self.observed_merges(repo, source))
@@ -2225,7 +2225,7 @@ class DeliverableProblemOrder(FreshMainCheck, OpenProblemOrder, declared_name=No
         merged = super().closed_by_merge(todo, pulls, checkout_base)
         if merged:
             return merged
-        repo = Path(self.check.directory)
+        repo = self.check.directory
         main = Repo.git(
             repo, "rev-parse", f"{FreshMainCheck.check_base(self, repo)}^{{commit}}"
         ).strip()
@@ -3034,7 +3034,7 @@ class CitedEvidence:
         if not self.evidence:
             raise TodoError("A strike needs a checkable file:line, not a board row or goal text.")
         order = current.order.checked()
-        root, revision = Path(order.check.directory), order.cited_revision
+        root, revision = order.check.directory, order.cited_revision
         for cited in self.evidence:
             cited.require_exists(root, revision)
 
@@ -3533,7 +3533,7 @@ class DroppedVerdict(ToolCallVerdict):
         if not lines:
             raise TodoError(
                 "An edit that adds no line cannot be shown dropped; judge it ok or back.")
-        self.refuse_held(Path(current.order.checked().check.directory), lines)
+        self.refuse_held(current.order.checked().check.directory, lines)
         return self
 
     def refuse_held(self, checkout: Path, lines: tuple[str, ...]) -> None:
@@ -3942,6 +3942,10 @@ class Todo(TodoStoreRows, TypedTable):
         return tuple(cls.read(db.execute(
             f"SELECT * FROM {cls.declared_name} WHERE {cls._sql(where)} ORDER BY rowid",
             parameters)))
+
+    @property
+    def repository(self) -> Repo:
+        return Repo(checkout=self.order.checked().check.directory, github=self.repo)
 
     @property
     def judged_calls(self) -> tuple[str, ...]:

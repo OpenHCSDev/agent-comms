@@ -1983,7 +1983,7 @@ class CheckoutCliCommand(PreparedCheckoutCliCommand,
         return rule.order_checkout(thread.name, self.problem)
 
     def source(self, ctx: Comms, todo: Todo) -> Repo:
-        return Repo(checkout=Path(todo.order.checked().check.directory), github=todo.repo)
+        return todo.repository
 
 
 @dataclass(frozen=True, kw_only=True)

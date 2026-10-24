@@ -28,7 +28,7 @@ from collections.abc import Mapping, Sequence
 from copy import deepcopy
 from dataclasses import dataclass, replace
 from pathlib import Path
-from typing import Annotated, Self
+from typing import Annotated, ClassVar, Self
 
 from pydantic import BaseModel, ConfigDict, Field, InstanceOf, PrivateAttr
 
@@ -51,7 +51,7 @@ from agent_comms.field_codec import (
     boundary_decoder,
 )
 from agent_comms.goal_actions import CreateProblemGoalAction, OrderGoalAction
-from agent_comms.goals import OrderCheck
+from agent_comms.goals import CheckCommand, CheckResult, CountCheckResult, OrderCheck
 from agent_comms.message_reference import MessageReference
 from agent_comms.messages import Message
 from agent_comms.owner_requests import NewestOpenRequest, OwnerRequestId, RequestSelection
@@ -237,6 +237,29 @@ class OpDeliverySource(CommandDeliverySource):
 
 
 @dataclass(frozen=True)
+class CheckRequest(CheckCommand):
+    """A text check selects a configured repository before becoming a stored path."""
+
+    repository: str
+    command: str
+    result: CheckResult
+    LINE: ClassVar[re.Pattern] = re.compile(r"(\S*)\s*::\s*(.+?)\s*->\s*(\d+)", re.DOTALL)
+
+    @classmethod
+    def parse(cls, line: str) -> CheckRequest | None:
+        """Read `<repo> :: <shell command> -> <integer>`; else None."""
+        found = cls.LINE.fullmatch(line.strip())
+        if not found:
+            return None
+        request = cls(found[1], found[2], CountCheckResult(int(found[3])))
+        request.require_writable()
+        return request
+
+    def resolve(self, repos: tuple[Repo, ...]) -> OrderCheck:
+        return OrderCheck(Repo.selected(repos, self.repository).checkout, self.command, self.result)
+
+
+@dataclass(frozen=True)
 class OrderFile:
     """CLI context and prose around the same order the native tools accept."""
 
@@ -275,10 +298,8 @@ class OrderFile:
             problems.append('slop: fix: supply pattern, fact, at, derive and by citation fields')
         return problems
 
-    def resolved(self, context: CommanderContext, finding: ProblemFinding) -> OrderFile:
-        check = replace(self.order.check,
-                        directory=str(Repo.selected(context.repos, self.order.check.directory).checkout))
-        return replace(self, order=replace(self.order, finding=finding, check=check))
+    def resolved(self, finding: ProblemFinding) -> OrderFile:
+        return replace(self, order=replace(self.order, finding=finding))
 STAGES = (
     "tool call",
     "review",
@@ -372,10 +393,9 @@ class CommanderContext(BaseModel):
         return self.comms.goals.todos.for_commander(self.incarnation)
 
     def read_check(self, line: str) -> OrderCheck:
-        if not (check := OrderCheck.parse(line)):
+        if not (request := CheckRequest.parse(line)):
             sys.exit('Refused: Check reads "<repo> :: <shell command> -> <integer>"')
-        directory = Repo.selected(self.repos, check.directory).checkout
-        return replace(check, directory=str(directory))
+        return request.resolve(self.repos)
 
     def held_orders(self) -> tuple[Todo, ...]:
         return tuple(todo for todo in self.todos() if todo.holder)
@@ -396,7 +416,7 @@ class CommanderContext(BaseModel):
         check reads them."""
         pattern = rf'^\s*(from|import) agent_comms\b.*\b({"|".join(sorted(modules))})\b'
         return [str(repo.checkout) for repo in self.repos
-                if repo.checkout != Path(check.directory).resolve()
+                if repo.checkout != check.directory.resolve()
                 and str(repo.checkout) not in check.command
                 and subprocess.run(['grep', '-rqE', '--include=*.py', pattern,
                                     str(repo.checkout / repo.source)]).returncode == 0]
@@ -448,7 +468,7 @@ class NewProblem(OrderedProblems):
                group: Sequence[str], traced: FileLine | NoSourceReference, request: OwnerRequestId,
                review_at: RecordedEventTime) -> None:
         context.call(CommsTodoCreateTool(owner=unit, order=CreateProblemGoalAction(
-            problem=self.problem, repo=Repo.of(Path(order.check.directory)).github,
+            problem=self.problem, repo=Repo.of(order.check.directory).github,
             text=self.text, order=order, request=request, review_at=review_at,
             commander=context.commander, assigner=context.actor_identity)))
 
@@ -582,7 +602,7 @@ class Commander(CommanderContext):
              disk: bool = False, finding: ProblemFinding = UnlocatedProblemFinding(),
              answers: tuple[MessageReference, ...] = (), *, request: RequestSelection) -> None:
         """Record the decoded order, or report every failed prerequisite before any write."""
-        document = document.resolved(self, finding)
+        document = document.resolved(finding)
         document.order.send(self, document, unit, clean, reassign, target, traced, answers, request)
 
     def say(self, units: str, body_file: str,
@@ -974,7 +994,7 @@ class DoneVerb(OrderVerb):
         todo = ctx.comms.goals.todos.resolve_order(ctx.incarnation, self.unit, self.problem)
         order = todo.order.checked()
         delivery = order.scope.delivery(
-            todo, Repo.selected(ctx.repos, order.check.directory).checkout, self.source,
+            todo, order.check.directory, self.source,
             self.screenshot, self.seen)
         ctx.call(CommsOrderDoneTool(
             problem=todo.id, order_id=order.id, delivery=delivery,
@@ -1137,7 +1157,7 @@ class ProblemVerb(RequestedOrderVerb):
     def respond(self, ctx: Commander, references: tuple[MessageReference, ...]) -> None:
         document = OrderFile.read(Path(self.order).read_text())
         location = FileLine.from_wire(self.where)
-        checkout = Repo.selected(ctx.repos, document.order.check.directory).checkout
+        checkout = document.order.check.directory
         if checkout.is_dir():
             ctx.comms.goals.todos.require_recurrence_declaration(
                 document.order, location, checkout, document.slop, time.time())

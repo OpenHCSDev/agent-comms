@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from agent_comms.lifecycle_capability import Active
 
-import re
 import shlex
 import signal
 import subprocess
@@ -25,6 +24,7 @@ from .field_codec import (
     FieldCodec,
     MalformedRecord,
     NullMember,
+    PathText,
     PresenceExclude,
     RecordMember,
     SubclassUnion,
@@ -299,15 +299,14 @@ class CountCheckResult(CheckResult):
         return result.outcome.printed_count(result.stdout).distance(self.expected)
 
 
-@dataclass(frozen=True)
-class OrderCheck:
-    directory: str
+class CheckCommand:
+    """Command validation shared by authored requests and stored checks."""
+
     command: str
-    result: CheckResult = field(default_factory=SilentCheckResult)
 
     def __post_init__(self):
-        if not self.directory.strip() or not self.command.strip():
-            raise ValueError("An order check requires a directory and command.")
+        if not self.command.strip():
+            raise ValueError("An order check requires a command.")
 
     def require_writable(self) -> None:
         """New checks cannot select revisions; saved checks remain readable for correction."""
@@ -316,25 +315,9 @@ class OrderCheck:
             raise ValueError("A check never checks out a revision: Core runs it at the "
                              "delivered commit and at each branch commit. Drop the checkout.")
 
-    def require_directory(self):
-        if not Path(self.directory).is_dir():
-            raise ValueError("The order check directory does not exist.")
-
-    LINE: ClassVar[re.Pattern] = re.compile(r"(\S+)\s*::\s*(.+?)\s*->\s*(\d+)", re.DOTALL)
     # The revision is the run's parameter; a check line that chooses one is refused.
     REVISION_COMMANDS: ClassVar[frozenset[str]] = frozenset({"checkout", "switch"})
     SEPARATORS: ClassVar[frozenset[str]] = frozenset({"&&", "||", ";", "|", "&", "\n"})
-    timeout: ClassVar[int] = 300
-
-    @classmethod
-    def parse(cls, line: str) -> OrderCheck | None:
-        """The one reading of a check line, `<repo> :: <shell command> -> <integer>`; else None."""
-        found = cls.LINE.fullmatch(line.strip())
-        if not found:
-            return None
-        check = cls(found[1], found[2], CountCheckResult(int(found[3])))
-        check.require_writable()
-        return check
 
     @classmethod
     def simple_commands(cls, command: str) -> list[list[str]]:
@@ -363,6 +346,18 @@ class OrderCheck:
                 return word
         return ""
 
+
+@dataclass(frozen=True)
+class OrderCheck(CheckCommand):
+    directory: Annotated[Path, PathText]
+    command: str
+    result: CheckResult = field(default_factory=SilentCheckResult)
+    timeout: ClassVar[int] = 300
+
+    def require_directory(self):
+        if not self.directory.is_dir():
+            raise ValueError("The order check directory does not exist.")
+
     def require_acceptance(self, base: str, checkout_base: Path) -> None:
         """The order state supplies the source preceding its delivered work."""
         self.require_writable()
@@ -378,7 +373,7 @@ class OrderCheck:
         return await BoundedRun.run(("bash", "-c", self.command), cwd=self.directory,
                                     timeout=self.timeout)
 
-    def recorded(self, sha: str, repository: str) -> tuple[ChildResult, ...]:
+    def recorded(self, sha: str, repository: Path) -> tuple[ChildResult, ...]:
         """Read the check run result without starting the check."""
         return self.recorded_among(CheckedCommit.stored(repository, sha))
 
@@ -386,7 +381,7 @@ class OrderCheck:
         """This check's result among a commit's stored check results."""
         return tuple(checked.result for checked in stored if checked.command == self.command)[:1]
 
-    def at(self, revision: str, repository: str, checkout_base: Path) -> ChildResult:
+    def at(self, revision: str, repository: Path, checkout_base: Path) -> ChildResult:
         """Read the result on ``revision``, or explicitly run the check in a detached checkout."""
         sha = Repo.git(repository, "rev-parse", f"{revision}^{{commit}}").strip()
         for recorded in self.recorded(sha, repository):
@@ -400,7 +395,7 @@ class OrderCheck:
         checked.store(repository, sha)
         return checked.result
 
-    def run_at(self, revision: str, repository: str, checkout_base: Path) -> ChildResult:
+    def run_at(self, revision: str, repository: Path, checkout_base: Path) -> ChildResult:
         """Run in a fresh detached tree, never in the configured checkout."""
         checkout_base.mkdir(parents=True, exist_ok=True)
         with tempfile.TemporaryDirectory(prefix="order-check-", dir=checkout_base) as scratch:
@@ -432,7 +427,7 @@ class CheckedCommit:
         return ChildResult(self.outcome, self.stdout.encode())
 
     @classmethod
-    def stored(cls, repository: str, sha: str) -> tuple[CheckedCommit, ...]:
+    def stored(cls, repository: Path, sha: str) -> tuple[CheckedCommit, ...]:
         """Every check result the commit's note records; a commit no check ran on has none."""
         try:
             Repo.git(repository, *cls.NOTES, "list", sha)
@@ -443,7 +438,7 @@ class CheckedCommit:
         return tuple(FieldCodec.decode(cls, FieldCodec.parse(line)) for line in
                      Repo.git(repository, *cls.NOTES, "show", sha).splitlines() if line)
 
-    def store(self, repository: str, sha: str) -> None:
+    def store(self, repository: Path, sha: str) -> None:
         Repo.git(repository, *self.NOTES, "append", "-m",
                  FieldCodec.compact(FieldCodec.encode(self)), sha)
 

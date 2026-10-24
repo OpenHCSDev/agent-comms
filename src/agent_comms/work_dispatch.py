@@ -10,7 +10,6 @@ from __future__ import annotations
 import math
 import time
 from dataclasses import dataclass, replace
-from pathlib import Path
 from typing import TYPE_CHECKING, Self
 
 from agent_comms.goal_actions import (
@@ -71,7 +70,7 @@ class WorkDispatch:
         self.action.require_reviewed(comms.goals)
         self.action.require_ready(GoalActionContext(comms.goals, candidate))
         comms.registry.require_declaration_available(candidate, StoppedThreadStatus())
-        repository = Repo.of(Path(self.action.order.check.directory))
+        repository = Repo.of(self.action.order.check.directory)
         CheckoutStorageEffect(checkout, repository.github).check(
             StorageProjection(storage, candidate)
         )

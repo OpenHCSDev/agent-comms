@@ -124,7 +124,7 @@ def checkout_bus(tmp_path: Path, configured_repository, installed_runtime) -> Co
     now = time.time()
     order = PendingProblemOrder(
         id='shared-work', owner=FileLine('work.py', 1), scope=FIX_SCOPE, run=MechanicalOrderRun(),
-        check=OrderCheck(str(home), 'false'),
+        check=OrderCheck(home, 'false'),
         edits=('Keep the changes with their author until they have been pushed.',),
         banned=('No second store of checkout holders.',), report='Report the actual checkout.',
         at=RecordedEventTime(now), first_call_deadline=RecordedEventTime(now + 120))

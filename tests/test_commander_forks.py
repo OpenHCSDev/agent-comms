@@ -88,7 +88,7 @@ def fork_bus(tmp_path, configured_repository):
         owner=source.scope().shape.parents[0],
         scope=source.scope(),
         run=MechanicalOrderRun(),
-        check=OrderCheck(str(source.checkout), "printf 0", CountCheckResult(1)),
+        check=OrderCheck(source.checkout, "printf 0", CountCheckResult(1)),
         edits=("Repair the existing declaration and remove the duplicate decision.",),
         banned=("No second assignment store.",),
         report="Report the working command.",

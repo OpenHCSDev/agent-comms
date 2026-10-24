@@ -23,7 +23,7 @@ def prepare() -> None:
     comms = wire(ROOT)
     todo = comms.goals.todos.get("P6")
     check = OrderCheck(
-        str(CHECKOUT), f"printf x >> {shlex.quote(str(MARKER))}; printf 0", CountCheckResult(0)
+        CHECKOUT, f"printf x >> {shlex.quote(str(MARKER))}; printf 0", CountCheckResult(0)
     )
     cli(
         "record-lead",
@@ -64,12 +64,12 @@ def verify() -> None:
         assert not board(todo).readings
         assert not MARKER.exists()
         sha = Repo.git(checkout, "rev-parse", "HEAD").strip()
-        assert not check.recorded(sha, str(checkout))
-        check.at(sha, str(checkout), comms.registry.storage_rule.checkout_base)
+        assert not check.recorded(sha, checkout)
+        check.at(sha, checkout, comms.registry.storage_rule.checkout_base)
         assert MARKER.read_bytes() == MARKER_CONTENT
         assert len(board(todo).readings) == 1
         assert MARKER.read_bytes() == MARKER_CONTENT
-        for result in CheckedCommit.stored(str(checkout), sha):
+        for result in CheckedCommit.stored(checkout, sha):
             if result.command == check.command:
                 print(FieldCodec.encode(result), flush=True)
         print(

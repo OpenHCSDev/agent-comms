@@ -114,7 +114,7 @@ def test_storage_family_reads_once_and_renders_each_broken_fact(
             id="storage-case-order", scope=FIX_SCOPE,
             owner=FileLine(__file__, 1),
             run=MechanicalOrderRun(),
-            check=OrderCheck(str(tmp_path), "true"),
+            check=OrderCheck(tmp_path, "true"),
             edits=("Fix the filesystem paths",),
             banned=("No extra store",),
             report="Report the delivered commit",
