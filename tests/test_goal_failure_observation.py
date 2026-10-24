@@ -19,7 +19,7 @@ from agent_comms.goals import Goal
 from agent_comms.thread_identity import RecordedThreadIncarnation, TurnIdentity
 from agent_comms.turn_lease import FinishedTurn, StoredTurnRecord, TurnLeaseFence
 from agent_comms.threads import Thread
-from agent_comms.attempt_resolution import FailureDiagnostic
+from agent_comms.attempt_resolution import FailedTurnResolution
 
 
 @pytest.fixture
@@ -58,13 +58,13 @@ def rows(store, table):
 def test_duplicate_callback_and_restart_preserve_failure_bytes(bound):
     store, owner, _, observation = bound
     observation.reservation.fail(
-        store, FailureDiagnostic("private diagnostic"), observation=observation
+        store, FailedTurnResolution(BackendFailed), observation=observation
     )
     before = store.path.read_bytes()
     for current in (store, GoalAttemptStore(store.root)):
         with pytest.raises(StaleAttemptError):
             observation.reservation.fail(
-                current, FailureDiagnostic("duplicate"), observation=observation
+                current, FailedTurnResolution(BackendFailed), observation=observation
             )
         with pytest.raises(UnresolvedAttemptError):
             current.resume(owner.goal.id, 1)
@@ -92,7 +92,7 @@ def test_mismatched_turn_lease_is_not_bound(bound, mutation):
         current_owner=owner, current_claim=3, failure=BackendFailed,
     )
     assert rejected is None
-    observation.reservation.fail(store, FailureDiagnostic("failed anyway"), observation=rejected)
+    observation.reservation.fail(store, FailedTurnResolution(BackendFailed), observation=rejected)
     assert store.snapshot(owner.goal.id).lifecycle == BlockedGeneration()
     assert store.require_generation(owner.goal.id).failure_evidence(store) == NoFailedTurnEvidence()
 
@@ -106,7 +106,7 @@ def test_mismatched_permit_cannot_attach_observation_or_weaken_failure(bound, bi
         if binding == "token"
         else replace(observation, evidence=replace(observation.evidence, goal_id=another_goal_id))
     )
-    observation.reservation.fail(store, FailureDiagnostic("failed"), observation=forged)
+    observation.reservation.fail(store, FailedTurnResolution(BackendFailed), observation=forged)
     assert rows(store, "failed_turn_evidence") == []
     assert store.snapshot(owner.goal.id).lifecycle == BlockedGeneration()
     assert store.require_generation(owner.goal.id).failure_evidence(store) == NoFailedTurnEvidence()
@@ -119,7 +119,7 @@ def test_unclaimed_attempt_failure_has_no_backend_incident(bound):
     reservation = store.reserve(unclaimed_goal_id, 1)
     reservation.fail(
         store,
-        FailureDiagnostic("prelaunch failure"),
+        FailedTurnResolution(BackendFailed),
         observation=replace(observation, reservation=reservation),
     )
     assert store.snapshot(unclaimed_goal_id).lifecycle == BlockedGeneration()
@@ -132,7 +132,9 @@ def test_stale_attempt_cannot_record_an_incident(bound):
         attempt_id=observation.reservation.attempt_id)
     before = store.path.read_bytes()
     with pytest.raises(StaleAttemptError):
-        observation.reservation.fail(store, FailureDiagnostic("late"), observation=observation)
+        observation.reservation.fail(
+            store, FailedTurnResolution(BackendFailed), observation=observation
+        )
     assert store.path.read_bytes() == before
     assert rows(store, "failed_turn_evidence") == []
 
@@ -144,7 +146,9 @@ def test_observation_insert_error_does_not_rollback_failure_fence(bound):
             "CREATE TRIGGER reject_observation BEFORE INSERT ON failed_turn_evidence "
             "BEGIN SELECT RAISE(ABORT,'injected observation failure'); END"
         )
-    observation.reservation.fail(store, FailureDiagnostic("failed"), observation=observation)
+    observation.reservation.fail(
+        store, FailedTurnResolution(BackendFailed), observation=observation
+    )
     assert store.snapshot(owner.goal.id).lifecycle == BlockedGeneration()
     with sqlite3.connect(store.path) as conn:
         assert AttemptRecord.one(conn, attempt_id=observation.reservation.attempt_id).phase.declared_name == "failed"
