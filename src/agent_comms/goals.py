@@ -10,7 +10,7 @@ import subprocess
 import tempfile
 from abc import abstractmethod
 from collections.abc import Iterator, Sequence
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import TYPE_CHECKING, Annotated, ClassVar, Literal
 
@@ -353,6 +353,11 @@ class OrderCheck(CheckCommand):
     command: str
     result: CheckResult = field(default_factory=SilentCheckResult)
     timeout: ClassVar[int] = 300
+
+    def registered(self, repos: tuple[Repo, ...]) -> OrderCheck:
+        """The written directory names a registered repository, by name or checkout path; every
+        reader runs in that repository's absolute checkout, whatever directory it was sent from."""
+        return replace(self, directory=Repo.selected(repos, str(self.directory)).checkout)
 
     def require_directory(self):
         if not self.directory.is_dir():
