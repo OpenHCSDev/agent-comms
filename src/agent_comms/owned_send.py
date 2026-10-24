@@ -9,6 +9,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from .field_codec import InputId
 from .channel_coding_tools import CodingToolOwner
 from .coordination_session import NativeBoundary
 from .coordinator import Coordination
@@ -57,7 +58,7 @@ class OwnedSend(CodingToolOwner):
     original: OriginalTurnInput
     goal_permit: GoalTurnPermit
 
-    def source(self, public_id: str | None) -> TurnInputSource:
+    def source(self, public_id: InputId | None) -> TurnInputSource:
         if public_id is None:
             return self.original
         try:
@@ -99,7 +100,8 @@ class OwnedSend(CodingToolOwner):
         return AuthorityChangedSend()
 
     def _prepare(
-        self, public_id: str | None, native_id: str, sent_text: str, *, already_bound: bool = False
+        self, public_id: InputId | None, native_id: str, sent_text: str,
+        *, already_bound: bool = False
     ) -> SendOutcome:
         # Backend input handling holds shared locks through this check and write.
         snapshot = self.comms.registry.snapshot()
@@ -159,7 +161,8 @@ class OwnedSend(CodingToolOwner):
 
     @contextmanager
     def __call__(
-        self, public_id: str | None, native_id: str, sent_text: str, *, already_bound: bool = False
+        self, public_id: InputId | None, native_id: str, sent_text: str,
+        *, already_bound: bool = False
     ) -> Iterator[SendOutcome]:
         try:
             decision = self._prepare(public_id, native_id, sent_text, already_bound=already_bound)
@@ -207,7 +210,7 @@ class OwnedSend(CodingToolOwner):
 
         await Coordination.run_worker(release)
 
-    def native_start(self, public_id: str | None, native_id: str, sent_text: str) -> bool:
+    def native_start(self, public_id: InputId | None, native_id: str, sent_text: str) -> bool:
         source = self.source(public_id)
         return source.valid_keys(sent_text) and all(
             self.inputs.dispositions.started(

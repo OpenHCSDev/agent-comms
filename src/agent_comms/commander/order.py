@@ -40,6 +40,7 @@ from agent_comms.comms import Comms, wire
 from agent_comms.declared_family import DeclaredFamily
 from agent_comms.errors import RelationViolationError
 from agent_comms.field_codec import (
+    MessageId,
     Argument,
     FieldCodec,
     MalformedRecord,
@@ -360,7 +361,7 @@ class CommanderContext(BaseModel):
         return self.actor.as_thread(self.commander).identity(self.comms)
 
     def post(self, audience: VerdictAudience, body: str,
-             answers: tuple[MessageReference, ...] = ()) -> str:
+             answers: tuple[MessageReference, ...] = ()) -> MessageId:
         target = audience.target
         published = self.comms.messaging.send(self.actor_name, target.name,
             target.addressed(audience.threads, body), answers=answers)

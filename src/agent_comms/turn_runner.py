@@ -21,7 +21,7 @@ from .channel_targets import NamedTarget
 from .channels import AllChannel
 from .controller import Controller
 from .coordinator import Coordination
-from .field_codec import TurnId
+from .field_codec import InputId, TurnId
 from .errors import RelationViolationError
 from .following_inputs import OwnerFollowingInputs
 from .goal_actions import (
@@ -184,7 +184,7 @@ class TurnRunner:
         *,
         images: tuple[ImageInput, ...],
         display_text: str | None = None,
-        input_id: str | None = None,
+        input_id: InputId | None = None,
         origin: InputOrigin = UnattributedInputOrigin(),
     ) -> PromptResponse:
         session_id = request.session_id
@@ -440,7 +440,7 @@ class TurnRunner:
         autonomous_goal: bool = False,
         original_owner_input: bool = False,
         original_goal_id: str | None = None,
-        accepted_input_id: str | None = None,
+        accepted_input_id: InputId | None = None,
         dependency_wait_id: str | None = None,
     ) -> None:
         from .owned_turn import OwnedTurn

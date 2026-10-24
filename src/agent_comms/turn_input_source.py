@@ -7,6 +7,7 @@ from contextlib import ExitStack
 from dataclasses import dataclass, replace
 from typing import TYPE_CHECKING, ClassVar
 
+from .field_codec import InputId
 from .agent_backend import BusyInputPolicy, SteerInputPolicy
 from .channel_input_batch import InputBatch, SingleInputBatch
 from .messages import Message
@@ -24,7 +25,7 @@ if TYPE_CHECKING:
 
 @dataclass(frozen=True, kw_only=True)
 class TurnInputSource(StartedInput, ABC):
-    accepted_id: str | None
+    accepted_id: InputId | None
     goal_permission: TurnGoalPermission
     bypasses_goal_permit: ClassVar[bool] = False
     origins: ClassVar[tuple[Message, ...]] = ()

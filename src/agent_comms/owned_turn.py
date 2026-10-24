@@ -18,7 +18,7 @@ from . import agent_events as events
 from .agent_backend import InputContent, TurnDelivery
 from .channel_input_batch import InputBatch
 from .coordinator import Coordination
-from .field_codec import TurnId
+from .field_codec import InputId, TurnId
 from .goals import Goal
 from .image_input import ImageInput
 from .input_attempt import ReservedInput
@@ -90,7 +90,7 @@ class OwnedTurn:
         autonomous_goal: bool = False,
         original_owner_input: bool = False,
         original_goal_id: str | None = None,
-        accepted_input_id: str | None = None,
+        accepted_input_id: InputId | None = None,
         dependency_wait_id: str | None = None,
     ) -> None:
         self.runner = runner

@@ -101,7 +101,7 @@ def _ensure_binding_schema(store: Coordination) -> None:
 def bind_expected_prompt(
     store: Coordination,
     *,
-    input_id: str,
+    input_id: InputId,
     stage: NativeSendStage,
     owner: Thread,
     generation: int,

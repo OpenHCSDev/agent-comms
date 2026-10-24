@@ -10,9 +10,8 @@ from pathlib import Path
 from typing import Annotated, Self
 
 from ..active_route import ActiveRoute
-from ..comms import client_wire
+from ..bus import Bus
 from ..connector import (
-    CALLER,
     LOOPBACK,
     PORT,
     ConnectorOptions,
@@ -26,6 +25,7 @@ from ..connector_store import ConnectorStore
 from ..errors import RelationViolationError, ToolRefusedError
 from ..field_codec import Argument, FieldCodec, MalformedRecord, PathText
 from ..launch_root import LaunchRoot
+from ..recorded_bus import RecordedBusIdentity
 from ..tools import CommsChannelsTool
 from . import ServiceNotServingError, SystemdUserService
 
@@ -48,7 +48,7 @@ class ConnectorService:
 
     @property
     def result(self) -> RoundTripResult:
-        return RoundTripResult(f"{CommsChannelsTool.declared_name} read alike on port {self.port}")
+        return RoundTripResult(f"{CommsChannelsTool.declared_name} answered on port {self.port}")
 
     def serves(self) -> None:
         read = ToolCall.of(CommsChannelsTool)
@@ -70,11 +70,6 @@ class ConnectorService:
                     "Connector round trip returned an error: "
                     f"{' '.join(item.text for item in reply.content)}"
                 )
-            with client_wire(self.launch.path) as comms:
-                if reply.structured_content != CommsChannelsTool.invoke(comms, {}, caller=CALLER):
-                    raise ServiceNotServingError(
-                        f"Connector on port {self.port} reads another bus than {self.launch.path}"
-                    )
         except (
             MalformedRecord,
             json.JSONDecodeError,
@@ -92,6 +87,16 @@ class SystemdConnectorService(ConnectorService, SystemdUserService):
 
     program = ConnectorVerb.program
     unit = f"{program}.service"
+
+    def serves(self) -> None:
+        super().serves()
+        served = Bus.path_in(self.launch.path)
+        published = Bus.path_in(ActiveRoute.published_launch().path)
+        if not RecordedBusIdentity.capture(served).matches(RecordedBusIdentity.capture(published)):
+            raise ServiceNotServingError(
+                f"Connector on port {self.port} serves {served}; "
+                f"published route selects {published}"
+            )
 
     @classmethod
     def running(cls) -> tuple[Self, ...]:
@@ -129,9 +134,9 @@ class InstallServiceVerb(ConnectorOptions, declared_name="install-service"):
 
 @dataclass(frozen=True, kw_only=True)
 class RoundTripVerb(ConnectorVerb):
-    """The same serving proof required after an install restarts the connector."""
+    """The install's serving proof for the connector, run for one root."""
 
-    help = "Read the bus through the running connector service and compare"
+    help = "Prove the running connector service answers for ROOT's bus"
     root: Annotated[
         Path, PathText, Argument(flags=("root",), options={"help": "The comms root it proves"})
     ]
@@ -140,9 +145,19 @@ class RoundTripVerb(ConnectorVerb):
     ] = PORT
 
     def apply(self, ctx: ConnectorStore) -> int | str:
-        service = ConnectorService(
-            launch=LaunchRoot.from_path(self.root), store=ctx, port=self.port
-        )
+        match SystemdConnectorService.running():
+            case ():
+                return f"No connector service is running for {self.root}"
+            case (service,):
+                served = Bus.path_in(service.launch.path)
+                requested = Bus.path_in(self.root)
+                if service.port != self.port or not RecordedBusIdentity.capture(served).matches(
+                    RecordedBusIdentity.capture(requested)
+                ):
+                    return (
+                        f"Connector on port {service.port} serves {served}; "
+                        f"requested {requested} on port {self.port}"
+                    )
         try:
             service.serves()
         except ServiceNotServingError as error:

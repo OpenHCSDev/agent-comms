@@ -4374,7 +4374,9 @@ class TodoStore(OwnerRequestStore):
             command.write(db, current, self)
             return self._current(db, todo_id)
 
-    def correct(self, unit: ThreadIncarnation, message_id: str, text: str) -> tuple[Todo, ...]:
+    def correct(
+        self, unit: ThreadIncarnation, message_id: MessageId, text: str,
+    ) -> tuple[Todo, ...]:
         """Correct every open order the unit holds when its published text uses jargon."""
         if not self.path.exists() or not (words := tuple(PlainText.found(text))):
             return ()
