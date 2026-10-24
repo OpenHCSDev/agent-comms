@@ -5,6 +5,7 @@
 import json
 import os
 import select
+import socket
 import subprocess
 import sys
 import time
@@ -14,10 +15,13 @@ from pathlib import Path
 import pytest
 
 from agent_comms.child_process import ProcessIdentity
-from agent_comms.cli_bridges.monitor import InspectSession, PauseSession
+from agent_comms.cli_bridges.monitor import (
+    ClaimedReplacement, InspectSession, PauseSession, SessionInformation,
+)
 from agent_comms.cli_bridges import claude
 from agent_comms.cli_bridges.shared import (
-    MONITOR_FRAME, Binding, MonitorBridgeStopped, MonitorBridgeSwapping, MonitorProbe, Serve, SessionBridgeResumes,
+    MONITOR_FRAME, Binding, MonitorBridgeStopped, MonitorBridgeSwapping, MonitorProbe, Serve, SessionBridge, SessionBridgeResumes,
+    UnacknowledgedPause,
 )
 from conftest import installed_comms
 from agent_comms.field_codec import FieldCodec
@@ -287,3 +291,32 @@ def test_install_swap_keeps_the_claim_and_resumes_the_same_process_on_the_new_ru
             # The next frame must be the probe, so a second swapping frame fails here.
             assert probe(monitor).session == claim.thread
             assert child.poll() is None, log.read_text()
+
+
+def test_a_bridge_that_never_answers_pause_refuses_the_install_by_name(tmp_path, bridge_home):
+    claim = WatchClaim('silent-session', bridge_home)
+    claim.socket_path.parent.mkdir(parents=True, exist_ok=True)
+    me = ProcessIdentity.capture(os.getpid())
+    observed = SessionInformation(owner=me, process=me, runtime=LaunchRuntime.running(),
+                                  transcript=tmp_path / 'silent-session.jsonl')
+    bridges = SessionBridgeResumes()
+    with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as silent, ExitStack() as resources:
+        silent.bind(str(claim.socket_path))
+        silent.listen()
+        with pytest.raises(UnacknowledgedPause) as refused:
+            bridges.pause(SessionBridge(claim, observed), resources)
+    bridges.release()
+    bridges.confirm()
+    assert str(refused.value) == (
+        f'Session bridge silent-session at {claim.socket_path} did not acknowledge pause within 30 s')
+    assert bridges.failures == (refused.value,)
+
+
+def test_a_bridge_whose_installer_left_before_ready_stays_stopped(tmp_path, capsys):
+    installer, peer = socket.socketpair()
+    installer.close()
+    operation = Serve(owner=ProcessIdentity.capture(os.getpid()),
+                      transcript=tmp_path / 'copied-session.jsonl')
+    record = WatchRecord('bridge-copy', str(tmp_path), ('watch',), tmp_path)
+    ClaimedReplacement(peer, claim=-1).finish(operation, record)
+    assert 'Session bridge installer gone before ready; left stopped' in capsys.readouterr().err

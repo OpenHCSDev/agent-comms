@@ -58,26 +58,33 @@ class ClaimedReplacement(BridgeReplacement):
 
     claim: int
 
+    @staticmethod
+    def left_stopped(why: str) -> None:
+        print(f"Session bridge {why}; left stopped", file=sys.stderr)
+
     def finish(self, operation: Serve, record: WatchRecord) -> None:
         self.peer.setblocking(True)
-        with self.peer, self.peer.makefile("rwb", buffering=0) as stream:
-            stream.write((FieldCodec.compact(FieldCodec.encode(SessionReady())) + "\n").encode())
-            while operation.owner.alive():
-                if select.select((self.peer,), (), (), 1)[0]:
-                    break
-            else:
-                print(f"Session bridge owner {operation.owner.pid} exited; left stopped",
-                      file=sys.stderr)
-                return
-            # EOF means the installer died. Never select a fallback runtime.
-            self.peer.settimeout(30)
-            raw = stream.readline(4096)
-            if not raw:
-                return
-            runtime = FieldCodec.decode(LaunchRuntime, FieldCodec.parse(raw.decode()))
+        try:
+            with self.peer, self.peer.makefile("rwb", buffering=0) as stream:
+                ready = FieldCodec.compact(FieldCodec.encode(SessionReady()))
+                stream.write((ready + "\n").encode())
+                while operation.owner.alive():
+                    if select.select((self.peer,), (), (), 1)[0]:
+                        break
+                else:
+                    self.left_stopped(f"owner {operation.owner.pid} exited")
+                    return
+                self.peer.settimeout(30)
+                raw = stream.readline(4096)
+                if not raw:
+                    raise ConnectionResetError("Installer closed before selecting a runtime")
+                runtime = FieldCodec.decode(LaunchRuntime, FieldCodec.parse(raw.decode()))
+        except ConnectionError:
+            # A broken pipe or EOF means the installer died. Never select a fallback runtime.
+            self.left_stopped("installer gone before ready")
+            return
         if not operation.owner.alive():
-            print(f"Session bridge owner {operation.owner.pid} exited; left stopped",
-                  file=sys.stderr)
+            self.left_stopped(f"owner {operation.owner.pid} exited")
             return
         operation.owner.require_alive()
         runtime.require_available()
