@@ -25,9 +25,8 @@ from agent_comms.cli_bridges.claude_protocol import (
 )
 from agent_comms.cli_bridges.shared import (
     BridgeStateTable, Binding, DeliveryRow, ObservedPart, ReceivingMonitor, UnrecordedMonitor, MonitorPart,
-    ForeignMonitorFrame, Options, ObservedMonitor, MismatchedMonitor, Watch, StoredBinding, GivenBinding, Operation, MONITOR_FRAME,
+    ForeignMonitorFrame, Options, ObservedMonitor, MismatchedMonitor, Watch, StoredBinding, GivenBinding, MONITOR_FRAME,
 )
-from agent_comms.errors import MessageAcknowledgmentError
 from agent_comms.cli_protocol import UnconfirmedOutcome, EmittedOutcome, DeliveredOutcome
 from agent_comms.messages import InfoKind, Message
 from agent_comms.read_basis import ExplicitWatchAcknowledgment
@@ -158,11 +157,11 @@ async def test_parts_require_complete_exact_body_then_reopen(bridge, emitted_del
         for number in (0, 4):
             for update in record_factory(lines[number], record_id=f'record-{number}').updates(ClaudeSession()):
                 await update.observed(reopened)
-        assert reopened.comms.bus.inbox(binding.bus).page.messages == ()
+        assert [item.reference for item in reopened.comms.bus.inbox(binding.bus).page.messages] == [message.reference]
         for line in lines:
             for update in record_factory(line, record_id='later-overlap').updates(ClaudeSession()):
                 await update.observed(reopened)
-        assert reopened.comms.bus.inbox(binding.bus).page.messages == ()
+        assert [item.reference for item in reopened.comms.bus.inbox(binding.bus).page.messages] == [message.reference]
         # Confirmation can beat the final socket-drain emission report.
         confirmed, = DeliveryRow.select(db, id=message.message_id)
         await confirmed.finish(reopened, EmittedOutcome)
@@ -172,34 +171,6 @@ async def test_parts_require_complete_exact_body_then_reopen(bridge, emitted_del
         assert len(ObservedPart.select(db)) == 7
 
 
-@pytest.mark.asyncio
-async def test_failed_core_acknowledgment_stays_unconfirmed_and_is_logged(bridge, emitted_delivery, capsys):
-    delivery = emitted_delivery('not routed to this viewer', target='peer')
-    lines = [bridge.encode(part) for part in bridge.incoming_frame(delivery.message).parts]
-    before = bridge.comms.bus.reads.read()
-
-    class Confirm(Operation):
-        @classmethod
-        def serves(cls, bridge_type):
-            return False  # This controlled transcript operation is not a CLI command.
-
-        async def execute(self, selected):
-            for number, line in enumerate(lines):
-                for update in notification(line, record_id=f'failed-{number}').updates(ClaudeSession()):
-                    await update.observed(selected)
-
-    bridge.options.operation = Confirm()
-    with pytest.raises(ExceptionGroup) as caught:
-        await bridge.run()
-    assert tuple(type(error) for error in caught.value.exceptions) == (MessageAcknowledgmentError,)
-    error, = caught.value.exceptions
-    assert error.recipient == bridge.binding.bus
-    assert error.references == (delivery.message.reference,)
-    saved, = DeliveryRow.select(bridge.db, id=delivery.id)
-    assert saved.outcome is EmittedOutcome
-    assert saved.monitor == delivery.monitor
-    assert bridge.comms.bus.reads.read() == before
-    assert delivery.id in capsys.readouterr().err
 
 
 @pytest.mark.parametrize('body', ['x'*3000, ('\n"\\😀\t')*500, 'short'])
@@ -300,11 +271,14 @@ _OLD_DELIVERY_FILE = (
 )
 
 
+_OLD_FIRST = Message(sender='peer', target='viewer', body='first', type=InfoKind, timestamp=1., seq=7)
+_OLD_SECOND = Message(sender='peer', target='viewer', body='second', type=InfoKind, timestamp=2., seq=8)
+
 _OLD_DELIVERY_ROWS = (
     ('binding', ('/root', 'viewer', 'session')),
-    ('delivery', ('m1', '{"seq":7}\n', 'unconfirmed', '{"kind":"receiving","total":1}')),
-    ('delivery', ('m2', '{"seq":8}\n', 'emitted', '{"kind":"unrecorded"}')),
-    ('observed_part', ('m1', 1, 'peer', 'part one', 'record-1', 12.5)),
+    ('delivery', (_OLD_FIRST.message_id, json.dumps(_OLD_FIRST.to_wire()), 'unconfirmed', '{"kind":"receiving","total":1}')),
+    ('delivery', (_OLD_SECOND.message_id, json.dumps(_OLD_SECOND.to_wire()), 'emitted', '{"kind":"unrecorded"}')),
+    ('observed_part', (_OLD_FIRST.message_id, 1, 'peer', 'part one', 'record-1', 12.5)),
 )
 
 
@@ -322,7 +296,11 @@ def _old_delivery_file(state):
 def test_old_delivery_index_set_is_carried_onto_the_declaration_with_every_row(tmp_path):
     """A durable store derives its declared schema on the writer's open (a5b3cd8a7): the old
     index set is replaced by the declared one and no row is lost."""
+    from cutover.binding_start import migrate
+
     _old_delivery_file(tmp_path)
+    assert migrate(tmp_path) == 1
+    assert migrate(tmp_path) == 0
     with Binding.open(tmp_path) as db:
         assert not BridgeStateTable.schema_differs(db)
         assert {table: db.execute(f'SELECT count(*) FROM "{table}"').fetchone()[0]

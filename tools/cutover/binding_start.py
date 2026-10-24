@@ -1,0 +1,78 @@
+"""Give pre-P479 host bridge bindings their own stream position once at install.
+
+Run only after host bridges pause, before they resume; never in a bus rehearsal.
+Delete this tool and its host call after the installation that runs it.
+"""
+from __future__ import annotations
+
+import argparse
+import json
+from contextlib import closing
+from dataclasses import dataclass, fields
+from pathlib import Path
+
+from agent_comms.cli_bridges.shared import Binding, BindingIdentity, BridgeStateTable, DeliveryRow
+from agent_comms.message_reference import BridgeStart
+from agent_comms.locked_store import SQLiteFile
+from agent_comms.typed_table import TypedRow
+from agent_comms_hooks.watch import WatchClaim, WatchRecord
+
+
+@dataclass(frozen=True)
+class PreviousBinding(BindingIdentity, TypedRow):
+    """The three fields the bridge stored before it declared its start."""
+
+
+def state_directories(home: Path) -> tuple[Path, ...]:
+    """Recorded commands retain custom state paths; default roots retain inactive bindings."""
+    states = set()
+    parser = argparse.ArgumentParser(add_help=False)
+    parser.add_argument('--state', type=Path)
+    parser.add_argument('--session')
+    for path in WatchClaim.directory(home).glob('*.lock'):
+        text = path.read_text()
+        if not text:
+            continue
+        record = WatchRecord.decode(**json.loads(text))
+        arguments, _ = parser.parse_known_args(record.command[1:])
+        if arguments.state is not None:
+            states.add(arguments.state / arguments.session if arguments.session else arguments.state)
+    for name in ('claude-comms-inbox', 'codex-comms-inbox', 'opencode-comms-inbox'):
+        base = home / '.local/state' / name
+        states.update(path.parent for path in base.rglob(BridgeStateTable.filename))
+    return tuple(sorted(states))
+
+
+def migrate(state: Path) -> int:
+    """Carry the binding table atomically, preserving every journal and observation row."""
+    path = state / BridgeStateTable.filename
+    with closing(SQLiteFile.writer(path)) as db, SQLiteFile.write_transaction(db):
+        start, = Binding._fields_named(('start',))
+        if start.wire_name in Binding.stored_columns(db):
+            return 0
+        columns = Binding._column_list(tuple(item.name for item in fields(BindingIdentity)))
+        previous = PreviousBinding.read(db.execute(
+            f'SELECT {columns} FROM "{Binding.declared_name}"'))
+        latest = DeliveryRow.latest(db)
+        bindings = tuple(Binding(row.root, row.bus, row.thread,
+            BridgeStart(latest[0].message.reference) if latest else Binding.bus_head(row.root))
+            for row in previous)
+        Binding.drop(db)
+        Binding.create(db)
+        for binding in bindings:
+            binding.insert(db)
+    return len(bindings)
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('--home', type=Path, required=True)
+    parser.add_argument('--state', type=Path, action='append', default=[])
+    arguments = parser.parse_args()
+    states = set(state_directories(arguments.home)) | set(arguments.state)
+    changed = sum(migrate(state) for state in sorted(states))
+    print(f'Binding starts carried: {changed}')
+
+
+if __name__ == '__main__':
+    main()

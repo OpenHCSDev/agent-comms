@@ -282,11 +282,16 @@ class DeliveryRow(BridgeStateTable, TypedTable):
     indexes = (ExpressionIndex((sequence_sql,)),)
 
     @classmethod
-    def resume_after(cls, db: sqlite3.Connection, binding: Binding) -> InboxStart:
-        """The existing journal owns attempted progress, including uncertain emissions."""
-        latest = cls.read(db.execute(
+    def latest(cls, db: sqlite3.Connection) -> tuple[Self, ...]:
+        """The sequence index selects the newest attempt, including uncertain emissions."""
+        return tuple(cls.read(db.execute(
             f'SELECT {cls._column_list(tuple(cls.column_projection()))} FROM "{cls.declared_name}" '
-            f'ORDER BY {cls._sql(cls.sequence_sql)} DESC LIMIT 1'))
+            f'ORDER BY {cls._sql(cls.sequence_sql)} DESC LIMIT 1')))
+
+    @classmethod
+    def resume_after(cls, db: sqlite3.Connection, binding: Binding) -> InboxStart:
+        """The binding and journal own progress, including uncertain emissions."""
+        latest = cls.latest(db)
         return max((binding.start, *(BridgeStart(row.message.reference) for row in latest)),
                    key=lambda point: point.cursor())
 

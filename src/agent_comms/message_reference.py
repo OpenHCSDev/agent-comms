@@ -63,6 +63,17 @@ class AfterMessageStart(SingleFieldValue, InboxStart):
     def cursor(self) -> int:
         return self.reference.seq
 
+
+class StreamBeginning(NullMember, InboxStart, declared_name=None):
+    """Before the first message, there is no reference and the sequence is zero."""
+
+    def references(self) -> tuple[MessageReference, ...]:
+        return ()
+
+    def cursor(self) -> int:
+        return 0
+
+
 class BridgePosition(InboxStart, declared_name=None):
     """The binding and journal own delivery position; human reads do not."""
 
@@ -81,23 +92,12 @@ class BridgeStart(RecordMember, AfterMessageStart, BridgePosition):
 
 
 @dataclass(frozen=True, slots=True)
-class BridgeBeginning(RecordMember, NullMember, BridgePosition):
+class BridgeBeginning(RecordMember, StreamBeginning, BridgePosition):
     """An empty bus starts the bridge stream before its first message."""
 
-    def references(self) -> tuple[MessageReference, ...]:
-        return ()
-
-    def cursor(self) -> int:
-        return 0
-
-
 @dataclass(frozen=True, slots=True)
-class FirstUnreadStart(NullMember, InboxStart):
-    def references(self) -> tuple[MessageReference, ...]:
-        return ()
-
-    def cursor(self) -> int:
-        return 0
+class FirstUnreadStart(StreamBeginning):
+    """The first unread message is selected by the user's read ledger."""
 
 
 @dataclass(frozen=True, slots=True)
