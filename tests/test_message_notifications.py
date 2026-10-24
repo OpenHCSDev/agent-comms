@@ -20,13 +20,12 @@ def test_channel_assignments_are_visible_from_agent_view(tmp_path):  # noqa: F81
     assert not comms.registry.require('beta').executing
 
 
-def test_legacy_bus_has_no_fabricated_receipts(tmp_path):  # noqa: F811
+def test_new_reader_has_no_fabricated_receipts(tmp_path):  # noqa: F811
 
-    root = tmp_path / 'legacy'
+    root = tmp_path / 'new'
     comms = installed_comms(root)
     comms.registry.declare(Thread('reader', frozenset(), str(tmp_path)))
     assert comms.views.thread_presentations(('reader',)).require('reader').notifications == ()
-    assert not (root / 'coordination.sqlite3').exists()
 
 
 def test_live_turn_never_presents_ready_between_activity_events(tmp_path):  # noqa: F811

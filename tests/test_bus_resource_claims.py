@@ -236,8 +236,10 @@ def test_admitted_snapshot_keeps_its_claim_while_another_writer_releases(claims:
     assert claims.bus.resource_owner(resource) == UnclaimedResource()
 
 
-def append_until_projected(root: Path, scope: NativeClaim, resource: str, ready) -> None:
-    claims = ClaimBus(Bus(Bus.path_in(root)), Registration(RegistryFile.path_in(root)))
+def append_until_projected(
+    root: Path, turns: dict[str, TurnId], scope: NativeClaim, resource: str, ready,
+) -> None:
+    claims = ClaimBus(Bus(Bus.path_in(root)), Registration(RegistryFile.path_in(root)), turns)
 
     def projected():
         ready.send("original, held resource and operation inserted")
@@ -261,7 +263,7 @@ def test_sigkill_after_projection_leaves_no_original_or_derived_claim(claims: Cl
     scope = claims.scope("alice", "a" * 32)
     reader, writer = publication_processes.Pipe(duplex=False)
     child = publication_processes.Process(target=append_until_projected,
-                            args=(claims.bus.path.parent, scope, resource, writer))
+                            args=(claims.bus.path.parent, claims.turns, scope, resource, writer))
     child.start()
     writer.close()
     try:
