@@ -115,7 +115,7 @@ def test_recorded_assignment_schema_refusal_is_read_only(archived_notification):
 
 def test_recorded_engagement_is_not_an_active_turn(archived_notification):
     old, _live, _source, messages, root_id = archived_notification
-    recipient, = old.bus.bus.delivery(messages[0].seq).audience.recipients
+    recipient, = old.bus.bus.delivery(messages[0].seq).recipients
     assignment = EngagedAssignment.build(FullWake(), "authored-execution", "sender")
     from agent_comms.notification_assignment import (
         AssignmentActivity,
@@ -154,7 +154,7 @@ def test_recorded_engagement_is_not_an_active_turn(archived_notification):
 
 def test_sent_recipient_progresses_through_durable_read_and_answer(archived_notification):
     old, _live, _source, messages, root_id = archived_notification
-    recipient, = old.bus.bus.delivery(messages[0].seq).audience.recipients
+    recipient, = old.bus.bus.delivery(messages[0].seq).recipients
     from agent_comms.message_reference import MessageReference
     from agent_comms.notification_assignment import (
         AnsweredResponse,

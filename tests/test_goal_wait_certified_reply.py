@@ -77,7 +77,7 @@ def test_original_reply_is_not_reassigned_to_same_name_replacement(tmp_path):
     with comms.bus.bus.reading() as source:
         original = source.lookup(reply.seq)
         assert wait.matches(original, owner.incarnation.require_recorded())
-        assert original.audience.sender_lookup == peer.incarnation.lookup
+        assert original.sender_lookup == peer.incarnation.lookup
 
     comms.agents.finish_turn(lease)
     comms.registry.unregister("peer")

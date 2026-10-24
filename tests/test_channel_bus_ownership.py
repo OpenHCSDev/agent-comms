@@ -27,7 +27,7 @@ def test_membership_changes_keep_canonical_notification_and_history(tmp_path):  
     )
     message = comms.messaging.send_user_message(CommandTarget.named('#team'), "current membership", worktree=str(root))
     initial = comms.bus.bus.delivery(message.seq)
-    assert [row.canonical_thread for row in initial.audience.recipients] == ["beta"]
+    assert [row.canonical_thread for row in initial.recipients] == ["beta"]
     assert all(isinstance(decision.wake_mode, BoundedTriageWake) for decision in initial.decisions)
     with Coordination(str(root / "coordination.sqlite3")) as store:
         accepted = accept_delivery_cohort(comms.bus, root_id, message.seq, store).value

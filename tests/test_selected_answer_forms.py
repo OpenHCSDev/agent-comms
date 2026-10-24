@@ -49,7 +49,7 @@ def alice_batch(*sent: tuple[str, str]):
         messages = [publish_initial(comms, "sender", target, text) for target, text in sent]
         with Coordination(str(root / "coordination.sqlite3")) as store:
             deliveries = [comms.bus.bus.delivery(m.seq) for m in messages]
-            for recipient in deliveries[0].audience.recipients:
+            for recipient in deliveries[0].recipients:
                 store.participants.register(
                     recipient.recipient_lookup, committed=True,
                 )

@@ -89,7 +89,7 @@ def test_frozen_delivery_full_n_observer_and_public_history(tmp_path: Path) -> N
         message.seq
     ]
     verified = comms.bus.bus.delivery(message.seq)
-    assert [r.recipient_lookup for r in verified.audience.recipients] == sorted(
+    assert [r.recipient_lookup for r in verified.recipients] == sorted(
         (lookups["Alice"], lookups["Bob"])
     )
     assert len(verified.decisions) == 2
@@ -294,7 +294,7 @@ def test_keyed_response_replay_after_initial_row_and_receipt_backed_page(tmp_pat
         assert intent.published_message(case.bus.bus) == first
         assert [m.seq for m in read_history(case.comms)] == [case.origin_seq, first.seq]
         delivery = case.bus.bus.delivery(first.seq)
-        assert delivery.audience.canonical_members == {"sender"}
+        assert delivery.canonical_members == {"sender"}
         assert delivery.decisions[0].wake_mode.triage
     finally:
         case.close()

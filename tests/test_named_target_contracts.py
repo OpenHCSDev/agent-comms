@@ -67,7 +67,7 @@ def test_retained_dm_target_follows_rename_through_send_page_and_revision(tmp_pa
     sent = comms.messaging.send_user_message(target, "after rename", worktree=worktree)
     assert sent.target == "renamed"
     delivery = comms.bus.bus.delivery(sent.seq)
-    assert [(row.canonical_thread, row.recipient_lookup) for row in delivery.audience.recipients] == [
+    assert [(row.canonical_thread, row.recipient_lookup) for row in delivery.recipients] == [
         ("renamed", target.incarnation.require_recorded().lookup)]
     page = comms.views.dm_display_page(target, worktree=worktree)
     assert page.messages == (original, sent)

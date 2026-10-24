@@ -976,7 +976,7 @@ async def run(arguments):
             from agent_comms.coordination_cohort import accept_delivery_cohort
             initial = service.bus.bus.delivery(cutover.originals[0].seq)
             with Coordination(str(service.root/'coordination.sqlite3')) as store:
-                for audience in initial.audience.recipients:
+                for audience in initial.recipients:
                     store.participants.register(audience.recipient_lookup, committed=True)
                 accept_delivery_cohort(service.bus, root_id, cutover.originals[0].seq, store)
         else:

@@ -99,7 +99,7 @@ def wire_source(db: StandaloneCoordination, assignment_id: str, original: Messag
                                sender_name=original.sender)
     decisions = (WakeDecision("owner", MessageAudience.DIRECT, mode),)
     delivery = PrivateRecord.from_message(
-        original, audience=audience, decisions=decisions, control="ordinary")
+        audience, decisions=decisions, control="ordinary")
     return SelectedSource(assignment_id, db.assignments, delivery)
 
 

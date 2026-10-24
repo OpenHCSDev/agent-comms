@@ -95,7 +95,7 @@ def selected_turn(private_comms, private_directory):
     record_context(comms, "Alice", 2)
     initial = comms.bus.bus.delivery(message.seq)
     with Coordination(str(root / "coordination.sqlite3")) as store:
-        for recipient in initial.audience.recipients:
+        for recipient in initial.recipients:
             store.participants.register(
                 recipient.recipient_lookup, committed=True,
             )

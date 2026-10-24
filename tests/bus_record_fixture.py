@@ -63,10 +63,10 @@ def record_from(
             sender_lookup=sender_lookup,
             sender_name=message.sender,
         )
+        message = audience
         capabilities.update(
-            audience=audience,
             decisions=resolve_wake_cohort(
-                message, frozen_audience=audience, control=OrdinaryControl
+                message, control=OrdinaryControl
             ),
             control=OrdinaryControl.declared_name,
         )

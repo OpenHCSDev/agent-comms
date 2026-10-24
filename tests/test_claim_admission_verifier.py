@@ -62,7 +62,7 @@ def test_selected_wake_verifier_refuses_no_wake_and_stale_authority(
         message = publish_initial(comms, "sender", "#team", "@Alice investigate")
         initial = comms.bus.bus.delivery(message.seq)
         with Coordination(str(root / "coordination.sqlite3")) as store:
-            for recipient in initial.audience.recipients:
+            for recipient in initial.recipients:
                 store.participants.register(
                     recipient.recipient_lookup,
                     committed=True,
