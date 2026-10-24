@@ -49,11 +49,16 @@ from agent_comms.cli_protocol import (
     raise_child_exit,
 )
 from agent_comms.comms import Comms, wire
-from agent_comms.config_options import CatalogChoice, CatalogConfigOption, CatalogSelection, ConfigOptions
+from agent_comms.config_options import (
+    CatalogChoice,
+    CatalogConfigOption,
+    CatalogSelection,
+    ConfigOptions,
+)
 from agent_comms.coordination_errors import CoordinationError
 from agent_comms.declared_family import DeclaredFamily
 from agent_comms.declared_verb import DeclaredOptions
-from agent_comms.field_codec import FieldCodec, MessageId, PathText
+from agent_comms.field_codec import FieldCodec, MessageId, PathText, SubclassUnion
 from agent_comms.launch_runtime import LaunchRuntime
 from agent_comms.message_reference import (
     BridgeBeginning,
@@ -65,7 +70,10 @@ from agent_comms.message_reference import (
 from agent_comms.read_basis import ExplicitWatchAcknowledgment
 from agent_comms.runtime_updates import ReplyingThreadOutput, RuntimeUpdate, ThreadOutput
 from agent_comms.send_result import SendResult
+from agent_comms.thread_execution import ExternalThreadExecution
 from agent_comms.thread_status import ThreadStatus
+from agent_comms.thread_text import AbsentText, GivenText, TextChoice
+from agent_comms.threads import Thread
 from agent_comms.typed_table import (
     Column,
     DurableTables,
@@ -641,8 +649,44 @@ class Inbox(Operation[OperationBridge]):
         await bridge.registered_watch(self)
 
 
+class BindingCommander(SubclassUnion, TextChoice, affix="BindingCommander"):
+    """Who commands a newly bound session, or an independent user's session."""
+
+    @abstractmethod
+    async def register(self, bridge: TranscriptBridge) -> None: ...
+
+
+@dataclass(frozen=True, slots=True)
+class CommandedBy(GivenText, BindingCommander):
+    text: str
+
+    async def register(self, bridge: TranscriptBridge) -> None:
+        worktree = str(await bridge.session_worktree())
+        await bridge.comms.bus.when_open(partial(
+            bridge.comms.registry.register_commanded_unit,
+            bridge.binding.bus, self.text, worktree, bridge.session_process(),
+        ))
+
+
+@dataclass(frozen=True, slots=True)
+class Uncommanded(AbsentText, BindingCommander):
+    """A user's own session has no commanded audience or fork parent."""
+
+    async def register(self, bridge: TranscriptBridge) -> None:
+        thread = Thread(
+            bridge.binding.bus, frozenset(), str(await bridge.session_worktree()),
+            process_identity=bridge.session_process(), execution=ExternalThreadExecution,
+        )
+        await bridge.comms.bus.when_open(partial(bridge.comms.registry.declare, thread))
+
+
+@dataclass(frozen=True)
 class Watch(Inbox):
     help = "Deliver this binding's bus messages and publish its harness transcript to the bus"
+
+    commander: Annotated[
+        BindingCommander, field_codec.Argument(flags=("--commander",))
+    ] = Uncommanded()
 
     @classmethod
     def serves(cls, bridge: type[CliBridge]) -> bool:
@@ -653,13 +697,8 @@ class Watch(Inbox):
 
     async def start(self, bridge: TranscriptBridge, tasks: asyncio.TaskGroup,
                     endpoint: ExitStack) -> None:
-        from agent_comms.cli_commands import RegisterCliCommand
-
         if not bridge.comms.registry.snapshot().taken(bridge.binding.bus):
-            command = RegisterCliCommand(
-                name=bridge.binding.bus, worktree=str(await bridge.session_worktree()),
-                process=bridge.session_process())
-            await bridge.comms.bus.when_open(partial(command.apply, bridge.comms))
+            await self.commander.register(bridge)
         await super().start(bridge, tasks, endpoint)
         tasks.create_task(bridge.publish_transcript())
 
