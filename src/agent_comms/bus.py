@@ -50,7 +50,9 @@ from agent_comms.field_codec import ClaimId, FieldCodec, MessageId
 from agent_comms.locked_store import BusFile, SQLiteFile, StoreCommittedError
 from agent_comms.message_reference import MessageReference
 from agent_comms.private_path import FileIdentity, PresentPath
-from agent_comms.read_basis import ChannelDisplayScope, ReadCursor, RepliesDisplayScope
+from agent_comms.read_basis import (
+    ChannelDisplayScope, MessageDisplayScope, ReadCursor, RepliesDisplayScope,
+)
 from agent_comms.store_files import UNBOUNDED_CONTENTION, StoreLockContention
 from agent_comms.typed_table import CarriedWriter, ReconciledFile, SQLiteDatabase, WalStore
 from agent_comms.watched import Watched
@@ -58,6 +60,7 @@ from agent_comms.watched import Watched
 if TYPE_CHECKING:
     from agent_comms.registry_document import RegistrySnapshot
     from agent_comms.registry_provenance import RegistryProvenance
+    from agent_comms.thread_identity import RecordedThreadIncarnation
 
 
 class PublicRecord(BusRecord):
@@ -418,6 +421,27 @@ class BusReader(RouteCounts, ABC):
                      json.dumps(tuple(viewer_names))),
                 ).fetchone()[0])
         return counts
+
+    def delivered_unanswered(
+        self, recipient: RecordedThreadIncarnation, scope: MessageDisplayScope,
+        seen: ReadCursor, snapshot: RegistryProvenance,
+    ) -> tuple[MessageReference, ...]:
+        """Unanswered originals in this recipient's recorded delivered cursor."""
+        bindings = ReadCursor.sql_bindings(snapshot, {"viewer": seen.counted(scope, snapshot)})
+        predicate, parameters = scope.index_predicate
+        received, recipients = ReceivedSource.query(recipient.lookup)
+        with self.observing() as db:
+            rows = db.execute(
+                f'WITH {ReadCursor.sql("?")}, requests AS ('
+                f'SELECT \'viewer\' AS actor,* FROM "{Addressed.table.declared_name}" '
+                f'JOIN "{Message.table.declared_name}" USING(seq) '
+                f'WHERE seq > 0 AND ({predicate}) AND seq IN ({received})), '
+                f'{ReadCursor.joined_sql} '
+                f'SELECT DISTINCT seq FROM cursors WHERE {ReadCursor.read_sql}',
+                (*bindings.values(), *parameters, *recipients),
+            )
+            sequences = tuple(FieldCodec.decode(int, row[0]) for row in rows)
+            return self.unanswered_references(sequences, snapshot.names_for(recipient.name))
 
     def selected_sequences(
         self, predicate: str, parameters: tuple[object, ...], through: int,

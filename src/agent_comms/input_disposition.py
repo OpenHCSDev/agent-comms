@@ -31,7 +31,6 @@ from .lifecycle_capability import Unresolved
 from .locked_store import DocumentChange
 from .message_reference import MessageReference
 from .messages import Message
-from .threads import Thread
 from .tool_result import ToolResult
 from .reported_turn import ReportedTurnState
 from .typed_table import Column, DurableStore, Generated, Index, StoreRows, TypedTable, sql_literal
@@ -41,6 +40,7 @@ if TYPE_CHECKING:
     from .channel_input_batch import SingleInputBatch
     from .private_registry_guard import RegistryPrivacy
     from .registry_document import RegistrySnapshot
+    from .threads import Thread
     from .turn_lease import TurnLeaseFence
 
 
