@@ -32,6 +32,7 @@ from agent_comms.field_codec import (
     ThreadLookup,
     TimestampText,
     TurnId,
+    ValueDecoder,
     WireValue,
     FlagDirective,
     WireAbsentNone,
@@ -42,6 +43,20 @@ from agent_comms.field_codec import (
     WireTransient,
 )
 from agent_comms.messages import ConversationRole, InfoKind, MembershipConversationRole, MembershipNoticeRole, Message, MessageRole, NoticeRole, JoinedMembership, LeftMembership
+
+
+def test_registered_value_decoders_own_their_json_schema() -> None:
+    for annotation in (*ValueDecoder._by_annotation, Path):
+        decoder = ValueDecoder.represented_class(annotation)
+        assert FieldCodec.value_schema(annotation) == decoder.schema()
+
+    assert FieldCodec.value_schema(Path) == FieldCodec.value_schema(Annotated[Path, PathText])
+
+    class NoSchema:
+        pass
+
+    with pytest.raises(TypeError):
+        FieldCodec.value_schema(NoSchema)
 
 
 def test_transient_plan_excludes_fields_before_decoder_or_value_access() -> None:
