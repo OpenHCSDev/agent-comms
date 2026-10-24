@@ -136,11 +136,16 @@ class NoReader(ReaderState):
             await SessionReady().publish(peer)
             await peer.write(attachment.probe.model_dump_json())
             await peer.reader.read()
+            # Only a reader leaving a bridge that keeps serving is declared. A stopping bridge
+            # skips this registry write: its install pause is acknowledged only once teardown
+            # ends, and a successor declares its own reader state when it starts serving.
+            async with bridge.reader_changed:
+                bridge.reader = NoReader()
+                await bridge.declare_reader(PausedBridgeThreadStatus())
             return PeerGone()
         finally:
             async with bridge.reader_changed:
                 bridge.reader = NoReader()
-                await bridge.declare_reader(PausedBridgeThreadStatus())
                 bridge.reader_changed.notify_all()
             async with attachment.window_changed:
                 attachment.window_changed.notify_all()
@@ -387,10 +392,15 @@ class MonitorService:
         path = WatchClaim(self.bridge.binding.thread).socket_path
         path.unlink(missing_ok=True)
         try:
-            server = await asyncio.start_unix_server(
-                lambda reader, writer: clients.create_task(self.accept(reader, writer)),
-                str(path), start_serving=False,
-            )
+            def connected(reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:
+                try:
+                    clients.create_task(self.accept(reader, writer))
+                except RuntimeError:
+                    # The group is shutting down. An unowned transport would keep
+                    # Server.wait_closed waiting forever, so the connection is closed.
+                    writer.close()
+
+            server = await asyncio.start_unix_server(connected, str(path), start_serving=False)
             # Clients retire before Server.wait_closed waits for their transports.
             async with server, asyncio.TaskGroup() as clients:
                 await server.start_serving()

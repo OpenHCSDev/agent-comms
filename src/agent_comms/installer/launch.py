@@ -93,13 +93,15 @@ class InstallReport(MroDispatch):
 
     @handles(BaseException)
     def crashed(self, error: BaseException) -> tuple[str, ...]:
-        package = Path(agent_comms.__file__).resolve().parent
+        # The target tree is already removed here, so paths are compared as imported, never
+        # resolved: a removed working directory makes even a non-strict resolve raise.
+        package = Path(agent_comms.__file__).parent
         frame = next(
             frame for frame in reversed(extract_tb(error.__traceback__))
-            if Path(frame.filename).resolve().is_relative_to(package)
+            if Path(frame.filename).is_relative_to(package)
         )
         module = ".".join(
-            Path(frame.filename).resolve().relative_to(package.parent).with_suffix("").parts
+            Path(frame.filename).relative_to(package.parent).with_suffix("").parts
         )
         location = self.source.module_file(module)
         return (f"Install failed: {type(error).__name__}: {error}",
