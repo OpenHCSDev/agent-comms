@@ -10,9 +10,8 @@ from pathlib import Path
 from typing import Annotated, Self
 
 from ..active_route import ActiveRoute
-from ..comms import client_wire
+from ..bus import Bus
 from ..connector import (
-    CALLER,
     LOOPBACK,
     PORT,
     ConnectorOptions,
@@ -26,6 +25,7 @@ from ..connector_store import ConnectorStore
 from ..errors import RelationViolationError, ToolRefusedError
 from ..field_codec import Argument, FieldCodec, MalformedRecord, PathText
 from ..launch_root import LaunchRoot
+from ..recorded_bus import RecordedBusIdentity
 from ..tools import CommsChannelsTool
 from . import ServiceNotServingError, SystemdUserService
 
@@ -70,11 +70,6 @@ class ConnectorService:
                     "Connector round trip returned an error: "
                     f"{' '.join(item.text for item in reply.content)}"
                 )
-            with client_wire(self.launch.path) as comms:
-                if reply.structured_content != CommsChannelsTool.invoke(comms, {}, caller=CALLER):
-                    raise ServiceNotServingError(
-                        f"Connector on port {self.port} reads another bus than {self.launch.path}"
-                    )
         except (
             MalformedRecord,
             json.JSONDecodeError,
@@ -92,6 +87,16 @@ class SystemdConnectorService(ConnectorService, SystemdUserService):
 
     program = ConnectorVerb.program
     unit = f"{program}.service"
+
+    def serves(self) -> None:
+        super().serves()
+        served = Bus.path_in(self.launch.path)
+        published = Bus.path_in(ActiveRoute.published_launch().path)
+        if not RecordedBusIdentity.capture(served).matches(RecordedBusIdentity.capture(published)):
+            raise ServiceNotServingError(
+                f"Connector on port {self.port} serves {served}; "
+                f"published route selects {published}"
+            )
 
     @classmethod
     def running(cls) -> tuple[Self, ...]:

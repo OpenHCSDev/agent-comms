@@ -7,11 +7,22 @@ import os
 import socket
 import subprocess
 import sys
+import urllib.request
+from contextlib import contextmanager
 from pathlib import Path
 
 import pytest
 from aiohttp import ClientSession, web
 
+from agent_comms.active_route import (
+    ActiveRoute,
+    RouteFile,
+    active_route_path,
+    route_directory,
+    route_new_bus,
+)
+from agent_comms.bus import Bus
+from agent_comms.comms import client_wire
 from agent_comms.connector import ConnectorVerb
 from agent_comms.connector_store import ConnectorStore
 from agent_comms.harness_install import CodexHarness
@@ -26,6 +37,7 @@ from agent_comms.installer.backup import StoreBackup
 from agent_comms.launch_root import LaunchRoot
 from agent_comms.launch_runtime import LaunchRuntime
 from agent_comms.locked_store import DocumentChange
+from agent_comms.recorded_bus import RecordedBusIdentity
 from agent_comms.threads import Thread
 from connector_readiness import ConnectorReadiness
 
@@ -129,6 +141,9 @@ def connector_service(comms, tmp_path, monkeypatch):
     home = tmp_path / "home"
     home.mkdir()
     monkeypatch.setenv("HOME", str(home))
+    route_new_bus(
+        ActiveRoute(copied, RecordedBusIdentity.capture(Bus.path_in(copied))), active_route_path()
+    )
     store = ConnectorStore.owned()
     store.update(DocumentChange.to)
     with socket.socket() as reserved:
@@ -197,6 +212,42 @@ def test_restart_proves_a_healthy_connector_on_its_installed_runtime(connector_s
     )
     assert service.result.round_trip in capsys.readouterr().err
     assert not service.store.read().access  # Its one short-lived proof grant was revoked.
+
+
+def test_connector_refuses_a_different_published_bus(connector_service, tmp_path):
+    service = connector_service
+    other = tmp_path / "other-published-bus"
+    StoreBackup.copy_tree(service.launch.path, other)
+    route = ActiveRoute(other, RecordedBusIdentity.capture(Bus.path_in(other)))
+    path = active_route_path()
+    with route_directory(path) as directory:
+        RouteFile.read(path).replace(route, path, directory)
+
+    with pytest.raises(ServiceNotServingError, match="published route selects") as refused:
+        service.serves()
+    assert str(Bus.path_in(service.launch.path)) in str(refused.value)
+    assert str(Bus.path_in(other)) in str(refused.value)
+
+
+def test_connector_accepts_bus_writes_during_its_proof(connector_service, monkeypatch):
+    service = connector_service
+    open_response = urllib.request.urlopen
+
+    @contextmanager
+    def read_then_write(*args, **kwargs):
+        with open_response(*args, **kwargs) as response:
+            yield response
+        with client_wire(service.launch.path) as comms:
+            comms.channels.create_tag("proof-race")
+            comms.registry.declare(Thread(
+                name="proof-writer", tags=frozenset({"proof-race"}),
+                worktree=str(service.launch.path),
+            ))
+
+    monkeypatch.setattr(urllib.request, "urlopen", read_then_write)
+    service.serves()
+    with client_wire(service.launch.path) as comms:
+        assert comms.registry.require("proof-writer").tags == frozenset({"proof-race"})
 
 
 def test_connector_unit_owns_exec_start_and_readiness(tmp_path, monkeypatch):
