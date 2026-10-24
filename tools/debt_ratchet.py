@@ -141,9 +141,18 @@ class Side(enum.Enum):
 
 class Measure(DeclaredFamily, affix="Measure"):
     @classmethod
+    def owns(cls, key: str) -> bool:
+        """Whether a report key is one of this measure's."""
+        return key.partition(":")[0] == cls.__name__
+
+    @classmethod
     def blocks(cls, delta: dict[str, int]) -> bool:
-        return any(value > 0 for key, value in delta.items()
-                   if key.partition(":")[0] == cls.__name__)
+        return any(value > 0 for key, value in delta.items() if cls.owns(key))
+
+    @classmethod
+    def run_by(cls) -> type[Measure]:
+        """The measure a comparison runs to take this one's measurements."""
+        return cls
 
     @staticmethod
     def environment(root: str, tree: Path) -> dict[str, str]:
@@ -335,14 +344,20 @@ class CountedSource(GitMeasure):
         return ast.parse(source, filename)
 
     @classmethod
+    def run_by(cls) -> type[Measure]:
+        return SyntaxPasses
+
+    @classmethod
     def parts(cls, repo: Path, base: str, head: str, changed: set[str],
               root: str) -> tuple[Callable[[], object], ...]:
-        return ()  # SyntaxPasses reads and parses each file once for every pass
+        return SyntaxPasses.parts(repo, base, head, changed, root)
 
     @classmethod
     def combine(cls, results: list, repo: Path, base: str, head: str, changed: set[str],
                 root: str) -> tuple[dict[str, int], dict[str, int]]:
-        return {}, {}
+        before, after = SyntaxPasses.combine(results, repo, base, head, changed, root)
+        return ({key: value for key, value in before.items() if cls.owns(key)},
+                {key: value for key, value in after.items() if cls.owns(key)})
 
 
 class OccurrenceMeasure(CountedSource):
@@ -2442,7 +2457,8 @@ def compare(repo: Path, base: str, head: str, root: str, workers: int) -> Compar
     if not touched & (production_paths(repo, base) | production_paths(repo, head)):
         return Comparison(root, base, head, (), before, after, introduced, introduced_lines)
 
-    measures = Measure.members_with(Measure)
+    # A pass of a shared runner is measured once, by that runner.
+    measures = tuple(dict.fromkeys(measure.run_by() for measure in Measure.members_with(Measure)))
     # Forked workers start from this already-imported module instead of importing it again.
     with ForkedProcessPool(workers) as pool:
         parts = {measure: [pool.submit(part)
