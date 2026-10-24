@@ -80,20 +80,26 @@ def test_pre_turn_intent_is_distinct_from_owner_bound_mode() -> None:
 
 
 def test_consumption_is_once_only_and_terminal_is_separate(slot_store) -> None:
-    input_id = secrets.token_hex(16)
-    broker.consume_selected_slot(slot_store, input_id, "call_1")
-    row = SelectedToolSlot.require(slot_store.session._connection, input_id=input_id)
+    request = broker.SelectedToolRequest(
+        "call_1", broker.SelectedWriteArguments("notes.txt", "write"),
+    )
+    slot_id = request.slot(InputId.mint(), 0)
+    broker.consume_selected_slot(slot_store, slot_id, "call_1")
+    row = SelectedToolSlot.require(slot_store.session._connection, slot_id=slot_id)
     assert row.call_id == "call_1"
     assert row.state is ConsumedSlot
     with pytest.raises(SelectedToolDenied):
-        broker.verify_selected_terminal(slot_store.session.path, input_id, "call_1")
+        broker.verify_selected_terminal(slot_store.session.path, slot_id, "call_1")
     with pytest.raises(SelectedToolDenied):
-        broker.consume_selected_slot(slot_store, input_id, "call_2")
-    broker.record_selected_terminal(slot_store.session.path, input_id, "call_1")
-    broker.verify_selected_terminal(slot_store.session.path, input_id, "call_1")
-    assert SelectedToolSlot.require(slot_store.session._connection, input_id=input_id).state is AcknowledgedSlot
+        broker.consume_selected_slot(slot_store, slot_id, "call_2")
+    broker.record_selected_terminal(slot_store.session.path, slot_id, "call_1")
+    broker.verify_selected_terminal(slot_store.session.path, slot_id, "call_1")
+    assert (
+        SelectedToolSlot.require(slot_store.session._connection, slot_id=slot_id).state
+        is AcknowledgedSlot
+    )
     with pytest.raises(SelectedToolDenied):
-        broker.record_selected_terminal(slot_store.session.path, input_id, "call_1")
+        broker.record_selected_terminal(slot_store.session.path, slot_id, "call_1")
 
 
 @pytest.mark.skipif(sys.platform != "linux", reason="selected tool storage requires POSIX dirfd")
@@ -120,7 +126,7 @@ def test_owner_mode_denies_unreserved_input_before_consuming_ledger(private_comm
         )
         with pytest.raises(SelectedToolDenied):
             mode.action(
-                broker.SelectedToolRequest(
+                0, broker.SelectedToolRequest(
                     "call_1", broker.SelectedWriteArguments("notes.txt", "write")
                 )
             )
@@ -137,7 +143,8 @@ def test_fake_socket_requires_pid_token_matching_emitted_call(
 
     async def run() -> None:
         wrong = broker.SelectedToolSocket(
-            tool_listener(tmp_path, token), observed.append, pid=os.getpid() + 100000
+            tool_listener(tmp_path, token),
+            lambda round_number, call: observed.append(call), pid=os.getpid() + 100000
         )
         await wrong.start()
         try:
@@ -145,7 +152,8 @@ def test_fake_socket_requires_pid_token_matching_emitted_call(
         finally:
             await wrong.close()
         server = broker.SelectedToolSocket(
-            tool_listener(tmp_path, token), observed.append, pid=os.getpid()
+            tool_listener(tmp_path, token),
+            lambda round_number, call: observed.append(call), pid=os.getpid()
         )
         await server.start()
         try:
@@ -214,13 +222,14 @@ async def test_listener_isolated_from_previous_turn_and_keeps_consumed_slot(
         previous.socket.close()
     previous_inode = previous.path.stat().st_ino
     token = secrets.token_hex(32)
-    input_id = secrets.token_hex(16)
+    input_id = InputId.mint()
     observed: list[broker.SelectedToolRequest] = []
 
-    def accept(request: broker.SelectedToolRequest) -> None:
+    def accept(round_number: int, request: broker.SelectedToolRequest) -> None:
+        slot_id = request.slot(input_id, round_number)
         with Coordination(slot_store.session.path) as store:
-            broker.consume_selected_slot(store, input_id, request.call_id)
-            broker.record_selected_terminal(store.session.path, input_id, request.call_id)
+            broker.consume_selected_slot(store, slot_id, request.call_id)
+            broker.record_selected_terminal(store.session.path, slot_id, request.call_id)
         observed.append(request)
 
     server = broker.SelectedToolSocket(tool_listener(tmp_path, token), accept, pid=os.getpid())
@@ -262,7 +271,9 @@ async def test_listener_isolated_from_previous_turn_and_keeps_consumed_slot(
                 broker.SelectedWriteArguments("notes.txt", "é"),
             )
         ]
-        assert SelectedToolSlot.require(slot_store.session._connection, input_id=input_id).state is AcknowledgedSlot
+        assert (SelectedToolSlot.require(
+            slot_store.session._connection, slot_id=observed[0].slot(input_id, 0),
+        ).state is AcknowledgedSlot)
     finally:
         await server.close()
     assert not server.listener.path.exists()

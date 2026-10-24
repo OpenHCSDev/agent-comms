@@ -1,5 +1,7 @@
 """Real native Pi and owner socket: cancelled goals need an explicit fresh grant."""
 from agent_comms.controller import SessionUpdateSink
+from agent_comms.field_codec import InputId
+from agent_comms.input_key import AcpInputKey
 
 import asyncio
 import json
@@ -18,6 +20,9 @@ from agent_comms.runtime import RuntimeProxy, socket_path
 from compaction_loopback import LoopbackProvider
 from native_backend_fixture import native_backend_fixture
 from stored_inputs import stored_inputs
+
+
+UNCERTAIN_SENTINEL_KEY = AcpInputKey(InputId.mint())
 
 
 class PausedChunksProvider(LoopbackProvider):
@@ -58,10 +63,11 @@ async def test_native_cancelled_goal_resume_requires_retry_before_fresh_input(tm
             proxy = RuntimeProxy(owner, session, socket_path(comms.root, os.getpid()))
             await proxy.subscribe()
             owner.inputs.dispositions.record(
-                "acp:uncertain-sentinel", seq=None, owner=session, claim_scope=1,
+                UNCERTAIN_SENTINEL_KEY, seq=None, owner=session, claim_scope=1,
                 target=session, text="UNCERTAIN_INPUT_MUST_NOT_REPLAY",
             )
-            sentinel_before = stored_inputs(owner.inputs.dispositions.root).rows.get("acp:uncertain-sentinel")
+            sentinel_before = stored_inputs(owner.inputs.dispositions.root).rows.get(
+                UNCERTAIN_SENTINEL_KEY)
             # Human prompts are independent inputs, not goal attempts. Exercise
             # the actual goal scheduler through Set Goal and explicit Retry.
             objective = "Continue the owner objective"
@@ -117,7 +123,8 @@ async def test_native_cancelled_goal_resume_requires_retry_before_fresh_input(tm
                 final = GoalAttemptStore(store.root).snapshot(goal_id)
                 assert final.number == fresh_claim.number + 1 and final.lifecycle == ReadyGeneration()
                 assert len(requests) == 2
-                assert stored_inputs(owner.inputs.dispositions.root).rows.get("acp:uncertain-sentinel") == sentinel_before
+                assert (stored_inputs(owner.inputs.dispositions.root).rows.get(
+                    UNCERTAIN_SENTINEL_KEY) == sentinel_before)
                 assert "UNCERTAIN_INPUT_MUST_NOT_REPLAY" not in json.dumps(requests)
                 accepted = [row for row in stored_inputs(owner.inputs.dispositions.root).rows.values()
                             if isinstance(row, StartedInput)]

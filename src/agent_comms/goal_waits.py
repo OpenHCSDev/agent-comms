@@ -16,6 +16,7 @@ from .errors import UnregisteredThreadError
 from .field_codec import NullMember, GoalId, TurnId
 from .goal_presentation import GoalExecution, GoalExecutionSource, GoalWaitTarget, StandbyExecution
 from .goals import Goal, GoalDeclaration
+from .input_key import InputKey, InputKeyText
 from .input_attempt import StoredInput, UnresolvedInput
 from .locked_store import WireWakeFile
 from .store_files import SharedLock
@@ -228,7 +229,7 @@ class ExcludedInput(UnresolvedInput):
     def excluded(cls, row: StoredInput, reason: type[InputExclusion]) -> ExcludedInput:
         return ExcludedInput(
             sequence=row.sequence, target=row.target, text=row.source_text,
-            input_id=row.public_id, status=row.public_status,
+            input_id=row.key, status=row.public_status,
             reviewed_for_goals=tuple(sorted(row.goal_reviews)), reason=reason)
 
 
@@ -243,7 +244,7 @@ class StandbyReview:
 
     goal_id: GoalId
     wait_for: tuple[str, ...]
-    reviewed_inputs: tuple[str, ...]
+    reviewed_inputs: tuple[Annotated[InputKey, InputKeyText], ...]
     messages: tuple[UnresolvedInput, ...]
     already_reviewed_inputs: tuple[UnresolvedInput, ...]
     excluded_inputs: tuple[ExcludedInput, ...]
@@ -348,7 +349,7 @@ class GoalInputReview(GoalWaitReview):
     through_seq: int
     targets: tuple[GoalWaitTarget, ...]
     unknown: tuple[StoredInput, ...]
-    eligible_keys: frozenset[str]
+    eligible_keys: frozenset[InputKey]
 
     def _current_goal(self, owner: Thread) -> bool:
         """Publishing an input review still requires the exact prepared goal."""

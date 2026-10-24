@@ -16,7 +16,7 @@ from agent_comms.goals import OrderCheck
 from agent_comms.order_runs import MechanicalOrderRun
 from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.registry_document import RegisteredCommanderProject
-from agent_comms.repo import Checkout, CheckoutHoldsWorkError, Repo, ScratchCheckout
+from agent_comms.repo import Checkout, CheckoutHoldsWorkError, DetachedStart, Repo, ScratchCheckout
 from agent_comms.repository_name import RepositoryName
 from agent_comms.storage_rules import StorageRule
 from agent_comms.thread_execution import ExternalThreadExecution
@@ -146,6 +146,28 @@ def test_checkout_remove_retires_the_order_checkout_with_its_submodule(
     assert str(path) not in git(repository, "worktree", "list")
     assert git(repository, "config", "core.bare").strip() == "false"
 
+def test_checkout_add_reopens_retired_order_branch_with_its_commits(checkout_command_bus):
+    comms = checkout_command_bus
+    path = comms.registry.storage_rule.order_checkout("worker", "P1")
+    added = core("--root", str(comms.root), "checkout", "add", "P1")
+    assert added.returncode == 0, added.stderr
+    (path / "unit-change.py").write_text("kept work\n")
+    git(path, "add", "unit-change.py")
+    git(path, "commit", "-q", "-m", "Keep the unit's work")
+    commit = git(path, "rev-parse", "HEAD").strip()
+    branch = git(path, "branch", "--show-current").strip()
+
+    removed = core("--root", str(comms.root), "checkout", "remove", "P1")
+    assert removed.returncode == 0, removed.stderr
+    assert not path.exists()
+    restored = core("--root", str(comms.root), "checkout", "add", "P1")
+    assert restored.returncode == 0, restored.stderr
+    assert git(path, "rev-parse", "HEAD").strip() == commit
+    assert git(path, "branch", "--show-current").strip() == branch
+    assert (path / "unit-change.py").read_text() == "kept work\n"
+    assert (path / "pinned" / "catalog.md").read_text() == "patterns\n"
+
+
 def test_checkout_add_allocates_a_declared_sibling_repository_before_it_exists(
     checkout_command_bus, tmp_path,
 ):
@@ -208,7 +230,7 @@ def linked_directory(checkout: Checkout) -> None:
 def test_prepare_rebuilds_a_store_an_interrupted_clone_left_broken(
     repository, tmp_path, break_store
 ):
-    checkout = Checkout.add(repository, tmp_path / "unit--P1", "HEAD", "--detach")
+    checkout = Checkout.add(repository, tmp_path / "unit--P1", DetachedStart("HEAD"))
     break_store(checkout)
     with pytest.raises(subprocess.CalledProcessError):
         git(checkout.path, "submodule", "update", "--init", "--recursive", "--checkout")
@@ -219,7 +241,7 @@ def test_prepare_rebuilds_a_store_an_interrupted_clone_left_broken(
 
 def test_prepare_rebuilds_a_store_with_no_origin_when_the_pin_moves(repository, tmp_path):
     """fork-boundaries at install 34: a store with no remote cannot fetch the moved pin."""
-    checkout = Checkout.add(repository, tmp_path / "unit--P1", "HEAD", "--detach")
+    checkout = Checkout.add(repository, tmp_path / "unit--P1", DetachedStart("HEAD"))
     (module,) = checkout.submodules()
     git(module.path, "remote", "remove", "origin")
     package = tmp_path / "package"
@@ -236,7 +258,7 @@ def test_prepare_rebuilds_a_store_with_no_origin_when_the_pin_moves(repository, 
 
 
 def test_an_intact_checkout_prepares_without_reaching_its_source(repository, tmp_path):
-    checkout = Checkout.add(repository, tmp_path / "unit--P1", "HEAD", "--detach")
+    checkout = Checkout.add(repository, tmp_path / "unit--P1", DetachedStart("HEAD"))
     (module,) = checkout.submodules()
     git(checkout.path, "config", f"submodule.{module.name}.url", str(tmp_path / "gone"))
     git(module.path, "remote", "set-url", "origin", str(tmp_path / "gone"))
@@ -247,15 +269,15 @@ def test_an_intact_checkout_prepares_without_reaching_its_source(repository, tmp
 def test_retiring_a_checkout_with_submodules_keeps_held_work_and_drops_scratch(
     repository, tmp_path
 ):
-    held = Checkout.add(repository, tmp_path / "unit--P1", "HEAD", "--detach")
+    held = Checkout.add(repository, tmp_path / "unit--P1", DetachedStart("HEAD"))
     (held.path / "owner.py").write_text("edited\n")
     with pytest.raises(CheckoutHoldsWorkError):
         held.retire()
     assert held.path.is_dir()
-    scratch = ScratchCheckout.add(repository, tmp_path / "check", "HEAD", "--detach")
+    scratch = ScratchCheckout.add(repository, tmp_path / "check", DetachedStart("HEAD"))
     (scratch.path / "owner.py").write_text("left by the check\n")
     scratch.retire()
-    clean = Checkout.add(repository, tmp_path / "unit--P2", "HEAD", "--detach")
+    clean = Checkout.add(repository, tmp_path / "unit--P2", DetachedStart("HEAD"))
     clean.retire()
     assert not scratch.path.exists() and not clean.path.exists()
     listed = git(repository, "worktree", "list", "--porcelain")

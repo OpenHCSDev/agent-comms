@@ -7,6 +7,8 @@ import sqlite3
 
 import pytest
 
+from agent_comms.field_codec import InputId
+from agent_comms.input_key import AcpInputKey
 from agent_comms.field_codec import GoalId
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.comms import wire
@@ -22,6 +24,9 @@ from agent_comms.input_disposition import InputDispositions
 from agent_comms.threads import Thread
 
 
+UNKNOWN_ORIGINAL_KEY = AcpInputKey(InputId.mint())
+
+
 def test_carried_blocked_goal_requires_explicit_retry_preserving_unknown(tmp_path):
     comms = wire(tmp_path / 'wire')
     store = comms.goals.open_goal_store()
@@ -31,7 +36,7 @@ def test_carried_blocked_goal_requires_explicit_retry_preserving_unknown(tmp_pat
                 state=BlockedGoal('Inspect uncertain original work before explicit Retry'))
     thread = comms.registry.declare(Thread('legacy', frozenset({'test'}), str(tmp_path), goal=goal, process_identity=ProcessIdentity.capture(os.getpid())))
     inputs = InputDispositions(comms.root)
-    inputs.record('acp:unknown-original', seq=None, owner=thread.name,
+    inputs.record(UNKNOWN_ORIGINAL_KEY, seq=None, owner=thread.name,
                   claim_scope=comms.registry.snapshot().claim_generation(thread.name),
                   target=thread.name, text='This uncertain original must not replay')
     original_inputs = inputs.path.read_bytes()

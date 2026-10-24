@@ -27,6 +27,7 @@ from .input_origin import (
     UnattributedInputOrigin,
     UndeliveredInput,
 )
+from .input_key import InputKey, InputKeyText, PublicInputKeyText
 from .lifecycle_capability import LifecycleCapability, Unresolved
 from .reported_turn import ReportedTurnState
 from .text_digest import TextDigest
@@ -59,7 +60,7 @@ class InputTransition:
     """What one transition did to an input: moved it to a named state, or left it where it was."""
 
     @abstractmethod
-    def successors(self, key: str) -> dict[str, StoredInput]:
+    def successors(self, key: InputKey) -> dict[InputKey, StoredInput]:
         """The rows this transition writes under key."""
 
     @abstractmethod
@@ -70,7 +71,7 @@ class InputTransition:
 class MovedInput(InputTransition):
     state: StoredInput
 
-    def successors(self, key: str) -> dict[str, StoredInput]:
+    def successors(self, key: InputKey) -> dict[InputKey, StoredInput]:
         return {key: self.state}
 
     def require_moved(self, refusal: str) -> MovedInput:
@@ -81,7 +82,7 @@ class MovedInput(InputTransition):
 class UnchangedInput(InputTransition):
     state: InputAttempt
 
-    def successors(self, key: str) -> dict[str, StoredInput]:
+    def successors(self, key: InputKey) -> dict[InputKey, StoredInput]:
         return {}
 
     def require_moved(self, refusal: str) -> MovedInput:
@@ -187,7 +188,7 @@ class UnobservedInputDeliveryScope(NullMember, InputDeliveryScope, declared_name
 
 @dataclass(frozen=True)
 class OwnerQueueInputDeliveryScope(InputDeliveryScope, declared_name="owner_queue"):
-    keys: frozenset[str]
+    keys: frozenset[Annotated[InputKey, InputKeyText]]
     pending_label: ClassVar[str] = "awaiting start"
     notices_label: ClassVar[str] = "earlier notices"
 
@@ -205,7 +206,7 @@ class UnresolvedInput:
     sequence: int | None
     target: str
     text: str
-    input_id: Annotated[str, WireName("inputId")]
+    input_id: Annotated[InputKey, PublicInputKeyText, WireName("inputId")]
     status: str
     reviewed_for_goals: Annotated[
         tuple[str, ...], WireName("reviewedForGoals"), WireOmitDefault()
@@ -213,13 +214,14 @@ class UnresolvedInput:
 
     def record_text(self) -> str:
         sequence = self.sequence if self.sequence is not None else "direct input"
-        return f"Sequence: {sequence} · Target: {self.target}\nInput: {self.input_id}\n{self.text}"
+        return (f"Sequence: {sequence} · Target: {self.target}\n"
+                f"Input: {self.input_id.public_text()}\n{self.text}")
 
     @classmethod
     def of(cls, row: StoredInput) -> UnresolvedInput:
         return UnresolvedInput(
             sequence=row.sequence, target=row.target, text=row.source_text,
-            input_id=row.public_id, status=row.public_status,
+            input_id=row.key, status=row.public_status,
             reviewed_for_goals=tuple(sorted(row.goal_reviews)))
 
 
@@ -238,7 +240,7 @@ class HistoricalInput(UnresolvedInput):
     def notice(cls, row: StoredInput, notice_dismissed: bool) -> HistoricalInput:
         return HistoricalInput(
             sequence=row.sequence, target=row.target, text=row.source_text,
-            input_id=row.public_id, status=row.public_status,
+            input_id=row.key, status=row.public_status,
             reviewed_for_goals=tuple(sorted(row.goal_reviews)), notice_dismissed=notice_dismissed)
 
 
@@ -257,7 +259,7 @@ class StoredInput(InputAttempt):
         self.origin.require_human()
         return self
 
-    key: str
+    key: Annotated[InputKey, InputKeyText]
     sequence: int | None
     owner: str
     claim_generation: int
@@ -275,20 +277,13 @@ class StoredInput(InputAttempt):
 
     def __post_init__(self) -> None:
         try:
-            for value in (self.key, self.owner, self.target, self.source_text):
+            for value in (self.owner, self.target, self.source_text):
                 if not FieldCodec.decode(str, value):
                     raise ValueError("Input identity text cannot be empty")
             GenerationCounter.require_positive(self.claim_generation)
         except ValueError as error:
             raise ValueError("Invalid ACP input identity") from error
-        if self.sequence is not None and (
-            FieldCodec.decode(int, self.sequence) <= 0
-            or (
-                self.key != f"bus:{self.sequence}"
-                and not self.key.startswith(f"bus:{self.sequence}:owner:")
-            )
-        ):
-            raise ValueError("Bus input key and sequence disagree")
+        self.key.require_sequence(self.sequence)
 
     @property
     def digest(self) -> TextDigest:
@@ -321,9 +316,6 @@ class StoredInput(InputAttempt):
         self.require(Unresolved, ValueError("Reviewed inputs changed; inspect them again."))
         return replace(self, goal_reviews={**self.goal_reviews, goal_id: decision})
 
-    @property
-    def public_id(self) -> str:
-        return self.key.removeprefix("acp:")
 
 
 class RecoverableUnboundInput(StoredInput):
