@@ -232,6 +232,32 @@ class UnitAskUnanswered(OwedAnswer, UndatedStandingRule):
 
 
 @dataclass(frozen=True)
+class HolderGone(IndependentStandingRule, UndatedStandingRule):
+    """An order still held by a unit that was deleted or registered again since the order:
+    no registered thread can deliver it, so its order state names what clears it."""
+
+    todo: Todo
+
+    @classmethod
+    def violations(cls, comms: Comms, commander: str) -> tuple[Self, ...]:
+        return cls.in_scan(StandingScan.read(comms, commander))
+
+    @classmethod
+    def scan_observed(cls, comms: Comms, commander: str,
+                      observed: Sequence[UnitState], frame: HeartbeatFrame) -> tuple[Self, ...]:
+        return cls.in_scan(frame)
+
+    @classmethod
+    def in_scan(cls, scan: StandingScan) -> tuple[Self, ...]:
+        return tuple(cls(todo) for todo in scan.held.orphaned)
+
+    def line(self) -> str:
+        held = self.todo.held()
+        return (f"HOLDER GONE: {self.todo.id} is held by {held.owner} born {held.owner_created}, "
+                f"no longer registered -> {self.todo.order.orphan_clearing(self.todo)}")
+
+
+@dataclass(frozen=True)
 class UnownedWheelSpin(IndependentStandingRule, UndatedStandingRule):
     """A unit holds no next order while the board has unowned rows; Core hands the row to it
     without a commander turn, restarting the row's review window at the handoff."""

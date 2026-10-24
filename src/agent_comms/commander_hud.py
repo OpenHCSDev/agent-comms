@@ -101,7 +101,7 @@ class CommanderHud(ToolResult):
         timers = store.timers_up_in(held, now, progress)
         edits = {
             read.todo.id: read.read()
-            for read in OrderEditCountRead.for_orders(comms.root, snapshot, held)
+            for read in OrderEditCountRead.for_orders(comms.root, frame.held.live)
         }
         units = []
         for unit, orders in frame.holders.items():

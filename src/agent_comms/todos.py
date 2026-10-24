@@ -129,6 +129,7 @@ if TYPE_CHECKING:
     from agent_comms.comms import Comms
     from agent_comms.goal_management import Goals
     from agent_comms.registration import Registration
+    from agent_comms.registry_document import RegistrySnapshot
 
 
 @dataclass(frozen=True)
@@ -1633,6 +1634,11 @@ class ProblemOrder(LifecycleCapability, DeclaredFamily, StorySource, affix="Prob
     def closing_artifact(self) -> str:
         raise ValueError("Only a delivered order has closing evidence.")
 
+    def orphan_clearing(self, todo: Todo) -> str:
+        """What clears this order once its holder is no longer registered."""
+        return (f"no live unit can deliver it; send it to a live unit with `order send UNIT "
+                f"ORDER.json` naming {todo.id}, or retire it with `order withdraw {todo.id}`")
+
     def linked(self, order: PendingProblemOrder) -> PendingProblemOrder:
         raise ValueError("This problem already has an order; drop it before linking another.")
 
@@ -2060,6 +2066,10 @@ class AwaitingInstallationProblemOrder(OpenProblemOrder, declared_name=None):
     def waiting_on_install(self, todo: Todo, read: dict[str, OrderProgress]) -> tuple[Todo, ...]:
         return (todo,)
 
+    def orphan_clearing(self, todo: Todo) -> str:
+        return (f"its work is done and waits on install; once installed, close it with "
+                f"`order close {todo.id} --works WHAT-RAN --artifact FILE`")
+
 
 @dataclass(frozen=True, kw_only=True)
 class MergedProblemOrder(AwaitingInstallationProblemOrder):
@@ -2093,6 +2103,10 @@ class MergedProblemOrder(AwaitingInstallationProblemOrder):
     def installed(self, works: str, artifact: str) -> ProblemOrder:
         self.run.require_closing(works)
         return self.copy_as(InstalledMergedProblemOrder, works=works, artifact=artifact)
+
+    def closing_artifact(self) -> str:
+        raise ValueError("A merged order records no delivered run; pass --artifact FILE "
+                         "showing the run on the installed build.")
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -2623,6 +2637,11 @@ class Assignment(TodoHolder):
     @property
     def owner_identity(self) -> ThreadIncarnation:
         return RecordedThreadIncarnation(self.owner, self.owner_created)
+
+    def holder_in(self, snapshot: RegistrySnapshot) -> tuple[Thread, ...]:
+        """The registered thread born as this hold's recorded holder; empty once that thread
+        was deleted or registered again under a new birth."""
+        return snapshot.threads_for(self.owner_identity.require_recorded())
 
     @property
     def parent_identity(self) -> ThreadIncarnation:
@@ -4046,6 +4065,42 @@ class OwnerRequestStore(DurableStore):
             return tuple(Todo.select(db, request=request))
 
 
+@dataclass(frozen=True)
+class LiveHold:
+    """A held order and the registered thread its recorded holder still is."""
+
+    todo: Todo
+    holder: Thread
+
+
+@dataclass(frozen=True)
+class HeldOrders:
+    """A commander's held orders split once against one registry cut: live holds, whose
+    recorded holder is still registered, and orphaned holds, whose holder was deleted or
+    registered again since the order. Every reader takes its side of this split."""
+
+    live: tuple[LiveHold, ...]
+    orphaned: tuple[Todo, ...]
+
+    @classmethod
+    def split(cls, todos: Sequence[Todo], snapshot: RegistrySnapshot) -> Self:
+        holds = tuple((todo, todo.held().holder_in(snapshot)) for todo in todos)
+        return cls(tuple(LiveHold(todo, thread) for todo, threads in holds for thread in threads),
+                   tuple(todo for todo, threads in holds if not threads))
+
+    @property
+    def todos(self) -> tuple[Todo, ...]:
+        return tuple(hold.todo for hold in self.live)
+
+    @property
+    def holders(self) -> dict[ThreadIncarnation, list[Todo]]:
+        """Live holds by their holder's current registration."""
+        held: dict[ThreadIncarnation, list[Todo]] = {}
+        for hold in self.live:
+            held.setdefault(hold.holder.incarnation, []).append(hold.todo)
+        return held
+
+
 @dataclass(frozen=True, slots=True)
 class TodoStore(OwnerRequestStore):
     """One SQLite row owns both todo state and its exclusive assignment.
@@ -4286,6 +4341,9 @@ class TodoStore(OwnerRequestStore):
     def held_for_commander(self, commander: ThreadIncarnation) -> tuple[Todo, ...]:
         return self._select("creator=? AND creator_created=? AND assignment IS NOT NULL",
             (commander.name, commander.wire_birth), reader=self._open)
+
+    def holds_for_commander(self, commander: ThreadIncarnation, snapshot: RegistrySnapshot) -> HeldOrders:
+        return HeldOrders.split(self.held_for_commander(commander), snapshot)
 
     def held_by(self, commander: ThreadIncarnation, unit: ThreadIncarnation) -> tuple[Todo, ...]:
         return self._select('creator=? AND creator_created=?',

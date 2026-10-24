@@ -32,7 +32,7 @@ class HeartbeatFrame(StandingScan):
             snapshot.commander_project.require().repos, PlanPhase.__module__
         )
         return cls(
-            scan.todos,
+            scan.held,
             pulls.register(scan.todos),
             PlanReading(
                 comms.goals.todos.history_for_commander(snapshot.require(commander).incarnation),

@@ -35,7 +35,9 @@ if TYPE_CHECKING:
     from agent_comms.messages import Message
     from agent_comms.registry_document import RegistrySnapshot
     from agent_comms.storage_rules import MemoryUse, StorageRule
-    from agent_comms.todos import OrderClaim, OwnerRequest, ProgressRead, PullRequest, Todo
+    from agent_comms.todos import (
+        HeldOrders, OrderClaim, OwnerRequest, ProgressRead, PullRequest, Todo,
+    )
     from agent_comms.goal_management import Goals
     from agent_comms.ui_model.unit_state import UnitObservation, UnitState
 
@@ -78,20 +80,22 @@ class BlocksRelease:
 class StandingScan:
     """The held orders captured once for this scan; filtering never reopens the store."""
 
-    todos: tuple[Todo, ...]
+    held: HeldOrders
 
     @classmethod
     def read(cls, comms: Comms, commander: str) -> Self:
-        return cls(comms.goals.todos.held_for_commander(
-            comms.registry.require(commander).incarnation,
-        ))
+        snapshot = comms.registry.snapshot()
+        return cls(comms.goals.todos.holds_for_commander(
+            snapshot.require(commander).incarnation, snapshot))
+
+    @property
+    def todos(self) -> tuple[Todo, ...]:
+        """The orders a registered unit holds."""
+        return self.held.todos
 
     @property
     def holders(self) -> dict[ThreadIncarnation, list[Todo]]:
-        held: dict[ThreadIncarnation, list[Todo]] = {}
-        for todo in self.todos:
-            held.setdefault(todo.held().owner_identity, []).append(todo)
-        return held
+        return self.held.holders
 
 
 class StandingRule(DeclaredFamily, affix="StandingRule", discovery_package="agent_comms.commander"):

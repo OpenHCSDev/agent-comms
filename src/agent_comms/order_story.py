@@ -11,8 +11,7 @@ from .recorded_time import EventTime
 from .tool_result import ToolResult
 
 if TYPE_CHECKING:
-    from .registry_document import RegistrySnapshot
-    from .todos import Todo
+    from .todos import HeldOrders, Todo
 
 
 @dataclass(frozen=True)
@@ -68,22 +67,16 @@ class OrderStory(ToolResult):
 
 @dataclass(frozen=True)
 class FleetStory(ToolResult):
-    """What each held order is doing now: one line per order a receiving unit holds, then one
-    line naming the orders whose holder no longer reads. A held order's past verdicts are its
-    order story."""
+    """What each held order is doing now: one line per order a registered unit holds, then one
+    line naming the orders whose holder is no longer registered. A held order's past verdicts
+    are its order story."""
 
     lines: tuple[str, ...]
 
     @classmethod
-    def collect(cls, todos: Iterable[Todo], presence: RegistrySnapshot) -> Self:
-        live: list[str] = []
-        dead: list[str] = []
-        for todo in todos:
-            owner = todo.held().owner
-            if presence.receiving(owner):
-                live.append(f"{todo.id} {owner}: {todo.order.line}")
-            else:
-                dead.append(todo.id)
-        if dead:
-            live.append(f"{len(dead)} orders held by dead units: {', '.join(dead)}")
-        return cls(tuple(live))
+    def collect(cls, held: HeldOrders) -> Self:
+        lines = [f"{hold.todo.id} {hold.holder.name}: {hold.todo.order.line}" for hold in held.live]
+        if held.orphaned:
+            lines.append(f"{len(held.orphaned)} orders held by units no longer registered: "
+                         + ", ".join(f"{todo.id} {todo.held().owner}" for todo in held.orphaned))
+        return cls(tuple(lines))
