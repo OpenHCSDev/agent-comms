@@ -7,6 +7,7 @@ import builtins
 from abc import ABC, abstractmethod
 from collections.abc import AsyncIterator
 from dataclasses import replace
+from functools import partial
 from graphlib import TopologicalSorter
 from itertools import groupby
 from typing import TYPE_CHECKING, Annotated, ClassVar, NoReturn, Self, Union
@@ -26,12 +27,12 @@ from typing_extensions import TypeForm
 from .coordination_errors import CoordinationError, CoordinationReadUnavailable
 from .declared_family import DeclaredFamily, UnknownFamilyMember
 from .external_transcript import RequestedEarlierPage
-from .field_codec import TimestampText
+from .field_codec import FieldCodec, TimestampText
 from .maintenance_barrier import MaintenanceHeldError
 from .messages import Message
 from .recorded_time import UnrecordedTimeError
 from .repo import GitCommandError
-from .turn_item import TurnItem
+from .turn_item import NativeTurnId, TurnItem
 from .wire_models import DeclaredWireFamily, WireModel
 
 if TYPE_CHECKING:
@@ -236,6 +237,11 @@ class ArrivedMessage(WatchLine, declared_name="message"):
 class EarlierItems(WatchLine, TurnItem, declared_name="earlier-items"):
     """The pager's outstanding continuation, handled only by its socket-owning bridge."""
 
+    turn_id: Annotated[
+        NativeTurnId,
+        PlainValidator(partial(FieldCodec.decode, NativeTurnId)),
+        PlainSerializer(str),
+    ]
     request: RequestedEarlierPage
 
     @classmethod

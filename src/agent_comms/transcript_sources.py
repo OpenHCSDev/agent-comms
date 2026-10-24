@@ -21,17 +21,17 @@ if TYPE_CHECKING:
     from .native_entries import TranscriptProjection
     from .native_transcript import NativeRecord, NativeTranscript
     from .threads import Thread, ThreadProvenance
-    from .turn_context import SegmentManifest
     from .transcript_events import TextTranscript, TranscriptEvent
     from .transcript_routes import TranscriptRoutes, _SessionRoutes
     from .transcripts import NativeTranscriptCursor, TranscriptCursor
+    from .turn_context import SegmentManifest
     from .turn_digests import TurnBound
 
 from .bus import Bus
 from .bus_publication import Delivered
 from .coordination_errors import StaleRevision, TranscriptChanged
 from .declared_family import DeclaredFamily
-from .field_codec import MalformedRecord
+from .field_codec import FieldCodec, MalformedRecord
 from .native_runtime_input import NativeRuntimeInput, PublishedReplyRevision
 from .recorded_time import EventTime, UnrecordedEventTime
 from .routing import TurnRouting
@@ -42,6 +42,7 @@ from .transcript_events import (
     SentTranscript,
     TurnDigest,
 )
+from .turn_item import NativeTurnId
 from .typed_table import StoreWriter
 
 
@@ -415,7 +416,8 @@ class TranscriptSource:
         for record in records:
             pending.append(record)
             for digest in record.project(lambda original: (
-                TurnDigest(original.entry.require_entry_id(), tuple(
+                TurnDigest(
+                    FieldCodec.decode(NativeTurnId, original.entry.require_entry_id()), tuple(
                     event for source in reversed(pending) for event in source.events)),
             ) if original.entry.input_boundary else ()):
                 yield digest

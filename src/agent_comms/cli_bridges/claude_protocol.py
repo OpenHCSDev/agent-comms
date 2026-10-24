@@ -43,6 +43,7 @@ from agent_comms.transcript_events import (
     TranscriptEvent,
     UserTranscript,
 )
+from agent_comms.turn_item import NativeTurnId
 from agent_comms.turn_phase import ModelWaitPhase, ToolRunningPhase, TurnPhase
 
 from ..wire_models import WireModel
@@ -223,7 +224,7 @@ class UnknownTurn(ClaudeTurn):
 
 @dataclass(frozen=True)
 class KnownTurn(ClaudeTurn):
-    id: str
+    id: NativeTurnId
 
     def started(self, tool: ClaudeToolDraft,
                 phase: ClaudeReaderPhase) -> tuple[RuntimeUpdate, ...]:
@@ -603,7 +604,7 @@ class UserRecord(ClaudeRecord, TimedRecord, declared_name='user'):
     origin: PromptOrigin.declared_union() = Field(default_factory=ToolSupplied)
 
     def updates(self, session: ClaudeSession) -> tuple[RuntimeUpdate, ...]:
-        session.turn = KnownTurn(self.promptId)
+        session.turn = KnownTurn(FieldCodec.decode(NativeTurnId, self.promptId))
         return tuple(update for block in self.message.content for update in block.updates(self, session))
 
     @property
@@ -618,7 +619,7 @@ class CompactSummary(UserRecord, declared_name='compact-summary'):
     """Claude's summary of the conversation before its latest compaction."""
 
     def updates(self, session: ClaudeSession) -> tuple[RuntimeUpdate, ...]:
-        session.turn = KnownTurn(self.promptId)
+        session.turn = KnownTurn(FieldCodec.decode(NativeTurnId, self.promptId))
         return (TurnStarted(), Summarized(self.text))
 
     def request(self) -> str:

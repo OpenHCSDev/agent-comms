@@ -8,6 +8,7 @@ from agent_comms.external_transcript import ExternalTranscript
 from agent_comms.todos import DroppedVerdict, TodoError
 from agent_comms.tool_declaration import ToolDeclaration
 from agent_comms.transcript_events import ToolStartTranscript
+from agent_comms.turn_item import NativeTurnId
 pytest_plugins = ("test_held_problem_orders",)
 
 LIVE = "LIVE_MARKER_LINE = 'kept on the checkout head'"
@@ -21,10 +22,11 @@ def committed(repo, name: str, line: str) -> None:
 
 
 def recorded_edit(ctx, call_id: str, path: str, line: str) -> None:
+    formatter_turn_id = NativeTurnId('formatter')
     tool = ToolDeclaration.record(
         "edit", {"path": path, "edits": [{"oldText": "", "newText": line}]}, call_id=call_id)
     worker = ctx.comms.registry.require("worker").incarnation
-    ExternalTranscript(ctx.root, worker).finish(turn_id="formatter", item_id=call_id, events=(
+    ExternalTranscript(ctx.root, worker).finish(turn_id=formatter_turn_id, item_id=call_id, events=(
         ToolStartTranscript(position=0, tool_call_id=call_id, tool_name="edit",
                             timestamp=time.time(), tool=tool),))
 

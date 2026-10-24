@@ -25,7 +25,7 @@ from .transcript_events import (
 from .thread_text import NoThreadText, ThreadText
 from .thread_identity import OfferedTools
 from .turn_phase import IdlePhase, ModelWaitPhase, TurnPhase
-from .turn_item import TurnItem
+from .turn_item import NativeTurnId, TurnItem
 
 if TYPE_CHECKING:
     from .cli_bridges.shared import TranscriptBridge
@@ -50,7 +50,7 @@ class DraftAccumulator:
     def activity(self, update: ActiveItem) -> tuple[RuntimeUpdate, ...]:
         return (update,)
 
-    def snapshot(self, turn_id: str, item_id: str) -> tuple[DraftItem, ...]:
+    def snapshot(self, turn_id: NativeTurnId, item_id: str) -> tuple[DraftItem, ...]:
         return ()
 
     def append(self, update: AppendDraftItem) -> tuple[RuntimeUpdate, ...]:
@@ -82,7 +82,7 @@ class PresentableDraft(DraftAccumulator, ABC):
     @abstractmethod
     def events(self) -> tuple[TranscriptEvent, ...]: ...
 
-    def snapshot(self, turn_id: str, item_id: str) -> tuple[DraftItem, ...]:
+    def snapshot(self, turn_id: NativeTurnId, item_id: str) -> tuple[DraftItem, ...]:
         return (DraftItem(turn_id, item_id, self),)
 
 
@@ -94,7 +94,7 @@ class ToolDraft(PresentableDraft):
     def events(self) -> tuple[TranscriptEvent, ...]:
         return self.prefix
 
-    def snapshot(self, turn_id: str, item_id: str) -> tuple[DraftItem, ...]:
+    def snapshot(self, turn_id: NativeTurnId, item_id: str) -> tuple[DraftItem, ...]:
         return super().snapshot(turn_id, item_id) if self.prefix else ()
 
 
@@ -184,7 +184,7 @@ class ThreadOutput(activity.ThreadOutput):
         self.drafts[update.key], finished = self.draft(update.key).finish(update)
         return finished
 
-    def end_turn(self, turn_id: str) -> None:
+    def end_turn(self, turn_id: NativeTurnId) -> None:
         for key in tuple(self.drafts):
             if key.turn_id == turn_id:
                 del self.drafts[key]
@@ -231,7 +231,7 @@ class RuntimeUpdate(ABC):
         """Whether this update still needs publication before later updates."""
         return True
 
-    def page_record(self, turn_id: str, item_id: str) -> FinishedItem:
+    def page_record(self, turn_id: NativeTurnId, item_id: str) -> FinishedItem:
         """Even an invisible item owns a source position and its page continuation."""
         return FinishedItem(turn_id, item_id, ())
 
@@ -307,7 +307,7 @@ class FinishedItem(TurnItem, RuntimeUpdate):
         later.add(self.key)
         return True
 
-    def page_record(self, turn_id: str, item_id: str) -> FinishedItem:
+    def page_record(self, turn_id: NativeTurnId, item_id: str) -> FinishedItem:
         return self
 
     def add_to(self, history: ImportBuffer) -> None:
@@ -471,7 +471,7 @@ class AppendDraftItem(TurnItem, DraftUpdate):
 
 @dataclass(frozen=True)
 class FinishedTurn(DraftUpdate, TurnEnded):
-    turn_id: str
+    turn_id: NativeTurnId
 
     def accumulate(self, output: ThreadOutput) -> tuple[RuntimeUpdate, ...]:
         output.end_turn(self.turn_id)

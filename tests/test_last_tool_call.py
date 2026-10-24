@@ -5,17 +5,20 @@ from agent_comms.external_transcript import ExternalTranscript, ExternalEventRow
 from agent_comms.recorded_time import RecordedEventTime, UnrecordedEventTime
 from agent_comms.thread_identity import RecordedThreadIncarnation
 from agent_comms.transcript_events import ToolStartTranscript, AssistantTranscript
+from agent_comms.turn_item import NativeTurnId
 
 
 def test_newest_tool_call_is_one_indexed_read_and_time_comparisons_cross_midnight(tmp_path):
+    turn_turn_id = NativeTurnId('turn')
     transcript = ExternalTranscript(tmp_path, RecordedThreadIncarnation("worker", 1.0))
     assert transcript.last_tool_call() == UnrecordedEventTime()
     assert not transcript.path.exists()
-    transcript.finish(turn_id="turn", item_id="first", events=(
+    transcript.finish(turn_id=turn_turn_id, item_id="first", events=(
         ToolStartTranscript(position=0, tool_call_id="first", tool_name="bash", timestamp=86390.0),))
-    transcript.finish(turn_id="turn", item_id="text", events=(AssistantTranscript("newer text", position=0, timestamp=86420.0),))
+    transcript.finish(turn_id=turn_turn_id, item_id="text",
+        events=(AssistantTranscript("newer text", position=0, timestamp=86420.0),))
     assert transcript.last_tool_call() == RecordedEventTime(86390.0)
-    transcript.finish(turn_id="turn", item_id="second", events=(
+    transcript.finish(turn_id=turn_turn_id, item_id="second", events=(
         ToolStartTranscript(position=0, tool_call_id="second", tool_name="bash", timestamp=86410.0),))
     latest = transcript.last_tool_call()
     assert latest.since(86399.0)

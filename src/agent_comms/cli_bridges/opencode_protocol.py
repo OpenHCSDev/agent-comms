@@ -10,6 +10,7 @@ from pydantic import Field, JsonValue
 
 from agent_comms.cli_protocol import TaggedWire
 from agent_comms.declared_family import UnknownFamilyMember
+from agent_comms.field_codec import FieldCodec
 from agent_comms.runtime_updates import (
     AllTurnsEnded,
     AppendDraftItem,
@@ -17,6 +18,7 @@ from agent_comms.runtime_updates import (
     TurnEnded,
     TurnStarted,
 )
+from agent_comms.turn_item import NativeTurnId
 
 from ..wire_models import DeclaredWireFamily, WireModel
 from .opencode_parts import MessageInfo, Part, SavedMessage, UserMessage
@@ -71,6 +73,10 @@ class PartDelta(WireModel):
     partID: str
     field: Literal['text']
     delta: str
+
+    @property
+    def turn(self) -> NativeTurnId:
+        return FieldCodec.decode(NativeTurnId, self.messageID)
 
 
 class NativeError(WireModel):
@@ -180,7 +186,7 @@ class PartChanged(OpenCodeEvent, declared_name='message.part.delta'):
         delta = self.properties
         if delta.sessionID != stream.connection.session:
             return ()
-        return (AppendDraftItem(delta.messageID, delta.partID, delta.delta),)
+        return (AppendDraftItem(delta.turn, delta.partID, delta.delta),)
 
 
 class MessageUpdated(OpenCodeEvent, declared_name='message.updated'):

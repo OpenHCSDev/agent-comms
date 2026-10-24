@@ -16,6 +16,7 @@ from agent_comms.transcript_events import AssistantTranscript, NoticeTranscript,
 from agent_comms.native_entries import NativeEntry
 from agent_comms.thread_status import RunningThreadStatus, StoppedThreadStatus
 from agent_comms.threads import Thread
+from agent_comms.turn_item import NativeTurnId
 
 
 @pytest.fixture
@@ -35,6 +36,7 @@ def source(scratch_root, durable_home):
 
 @pytest.mark.parametrize("timestamp", (None, 1_760_000_000.125))
 def test_external_projection_preserves_event_clocks_or_refuses_unknown(source, scratch_root, timestamp):
+    saved_turn_id = NativeTurnId('saved')
     owner = source.registry.require("B")
     external = ExternalTranscript(source.root, owner.incarnation)
     events = (
@@ -48,12 +50,12 @@ def test_external_projection_preserves_event_clocks_or_refuses_unknown(source, s
     if timestamp is None:
         # Current records require a clock at their storage boundary, before copying.
         with pytest.raises(TypeError):
-            external.finish(turn_id="saved", item_id="item", events=events)
+            external.finish(turn_id=saved_turn_id, item_id="item", events=events)
         with external.reading() as original:
             assert not original.has_records(original.cut().offset)
         assert not root.exists()
         return
-    external.finish(turn_id="saved", item_id="item", events=events)
+    external.finish(turn_id=saved_turn_id, item_id="item", events=events)
     with CheckRoot(source, (owner.name,), root).open() as copied:
         session = Path(copied.registry.require(owner.name).runtime.path)
         rows = [NativeEntry.read(line) for line in session.read_bytes().splitlines()]

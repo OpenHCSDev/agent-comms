@@ -18,7 +18,7 @@ from pydantic import (
 from agent_comms.cli_protocol import TaggedWire, TextWire
 from agent_comms.declared_family import UnknownFamilyMember
 from agent_comms.external_transcript import EarlierPage, NoEarlierPage
-from agent_comms.field_codec import MessageId
+from agent_comms.field_codec import FieldCodec, MessageId
 from agent_comms.native_tools import FilePatchTool
 from agent_comms.recorded_time import EventTime, UnrecordedEventTime
 from agent_comms.runtime_updates import (
@@ -49,6 +49,7 @@ from agent_comms.transcript_events import (
     TranscriptEvent,
     UserTranscript,
 )
+from agent_comms.turn_item import NativeTurnId
 from agent_comms.turn_phase import CompactionPhase, ModelWaitPhase, ToolRunningPhase, TurnPhase
 
 from ..wire_models import DeclaredWireFamily, WireModel
@@ -295,7 +296,9 @@ class Item(TaggedWire, ABC, affix=""):
     def events(self, timestamp: float) -> tuple[TranscriptEvent, ...]:
         """The finished item's presentation at its source record's time."""
 
-    def completed(self, turn_id: str, events: tuple[TranscriptEvent, ...]) -> RuntimeUpdate:
+    def completed(
+        self, turn_id: NativeTurnId, events: tuple[TranscriptEvent, ...]
+    ) -> RuntimeUpdate:
         return CompletedItem(turn_id, self.id, events)
 
     def accumulator(self, started_at: EventTime) -> DraftAccumulator:
@@ -352,7 +355,9 @@ class UserItem(Item):
     def events(self, timestamp: float) -> tuple[TranscriptEvent, ...]:
         return (UserTranscript('\n'.join(part.display for part in self.content), position=self.id, timestamp=timestamp),)
 
-    def completed(self, turn_id: str, events: tuple[TranscriptEvent, ...]) -> RuntimeUpdate:
+    def completed(
+        self, turn_id: NativeTurnId, events: tuple[TranscriptEvent, ...]
+    ) -> RuntimeUpdate:
         # Bus inputs already appear in Core's inbox; the live view does not echo them as new input.
         if BusInput.identifies(self.clientId):
             return HiddenItem(events)
@@ -731,6 +736,10 @@ class ItemEntry(WireModel):
     )
 
     @property
+    def turn(self) -> NativeTurnId:
+        return FieldCodec.decode(NativeTurnId, self.turnId)
+
+    @property
     def completed(self) -> bool:
         return self.completedAtMs is not None
 
@@ -738,7 +747,8 @@ class ItemEntry(WireModel):
         if self.completedAtMs is None:
             raise ValueError(f'Item {self.item.id} has not finished')
         event_time = self.started_at.continued_from(self.completedAtMs / 1000)
-        return self.item.completed(self.turnId, self.item.events(event_time.recorded_at('A Codex item')))
+        return self.item.completed(
+            self.turn, self.item.events(event_time.recorded_at('A Codex item')))
 
 
 class ItemsPage(WireModel):
@@ -752,7 +762,7 @@ class ItemsPage(WireModel):
                 earlier = EarlierPage(cursor)
             case None:
                 earlier = NoEarlierPage()
-        return PublishedPage(tuple(PageItem(entry.turnId, entry.item.id, entry.publication())
+        return PublishedPage(tuple(PageItem(entry.turn, entry.item.id, entry.publication())
                                    for entry in reversed(self.data) if entry.completed), earlier)
 
 
@@ -766,6 +776,10 @@ class TranscriptNotification(DeclaredWireFamily, WireModel, ABC, affix=""):
 class TurnHeader(WireModel):
     id: str
 
+    @property
+    def turn_id(self) -> NativeTurnId:
+        return FieldCodec.decode(NativeTurnId, self.id)
+
 
 class TurnBegan(TranscriptNotification, declared_name='turn/started'):
     turn: TurnHeader
@@ -778,11 +792,15 @@ class TurnFinished(TranscriptNotification, declared_name='turn/completed'):
     turn: TurnHeader
 
     def apply(self, stream: ItemStream) -> RuntimeUpdate:
-        return FinishedTurn(self.turn.id)
+        return FinishedTurn(self.turn.turn_id)
 
 
 class ItemNotification(TranscriptNotification, ABC):
     turnId: str
+
+    @property
+    def turn(self) -> NativeTurnId:
+        return FieldCodec.decode(NativeTurnId, self.turnId)
 
 
 class Started(ItemNotification, declared_name='item/started'):
@@ -790,7 +808,7 @@ class Started(ItemNotification, declared_name='item/started'):
     startedAtMs: int
 
     def apply(self, stream: ItemStream) -> RuntimeUpdate:
-        return StartedItem(self.turnId, self.item.id, self.item.phase,
+        return StartedItem(self.turn, self.item.id, self.item.phase,
                            self.item.accumulator(EventTime.capture(self.startedAtMs / 1000)))
 
 
@@ -811,7 +829,7 @@ class TextDelta(ItemNotification, ABC, declared_name=None):
         return 0
 
     def apply(self, stream: ItemStream) -> AppendDraftItem:
-        return AppendDraftItem(self.turnId, self.itemId, self.delta, self.section())
+        return AppendDraftItem(self.turn, self.itemId, self.delta, self.section())
 
 
 class AssistantDelta(TextDelta, declared_name='item/agentMessage/delta'):

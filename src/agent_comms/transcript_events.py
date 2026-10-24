@@ -20,6 +20,7 @@ from .recorded_time import EventTime, UnrecordedEventTime
 from .routing import MessageRoute, TurnRouting
 from .tool_results import SENT_MESSAGE_MIME, NoSentMessage, NoToolDiff, ToolDiff, ToolText
 from .transcript_merge import EventMerge, StreamingMerge
+from .turn_item import NativeTurnId
 from .ui_model.message_category import (
     AgentCategory,
     InboundCategory,
@@ -514,7 +515,7 @@ class OrderCall:
 class TurnDigest:
     """One turn's events in their recorded order, read from the unit's own records."""
 
-    turn_id: str
+    turn_id: NativeTurnId
     events: tuple[TranscriptEvent, ...]
 
     def with_selected(self, selected: tuple[TranscriptEvent, ...]) -> TurnDigest:
