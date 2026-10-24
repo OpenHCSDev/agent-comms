@@ -7,7 +7,7 @@ import time
 from abc import abstractmethod
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
-from typing import ClassVar, Self
+from typing import TYPE_CHECKING, ClassVar, Self
 
 from agent_comms.build_identity import RecordedBuildIdentity
 from agent_comms.bus import BusReader
@@ -40,10 +40,13 @@ from agent_comms.standing_rules import (
 from agent_comms.storage_rules import OrderCheckoutWork
 from agent_comms.thread_identity import ThreadIncarnation
 from agent_comms.threads import Thread
-from agent_comms.todos import OwnerRequest, Todo
+from agent_comms.todos import OrderClaim, OwnerRequest, Todo
 from agent_comms.turn_digests import OrderEditCountRead, TurnDigestRead, TurnsSince
 from agent_comms.ui_model.unit_state import AwaitingCommander, UnitState
 from agent_comms.work_dispatch import ReusedWorkDispatch, WorkDispatch
+
+if TYPE_CHECKING:
+    from agent_comms.commander.order import CommanderVerb
 
 
 @dataclass(frozen=True)
@@ -230,6 +233,40 @@ class UnitAskUnanswered(OwedAnswer, UndatedStandingRule):
         age = max(0, int((time.time() - self.message.timestamp) // 60))
         return (f"UNANSWERED {self.unit}: message {self.cited}, "
                 f"{age} min old -> commander must answer")
+
+
+@dataclass(frozen=True)
+class DeliveryAwaitingJudgement(OwedAnswer, UndatedStandingRule):
+    """A holder's delivery needs a verdict or a replacement order, never a chat reply."""
+
+    unit: str
+    problem: str
+
+    @classmethod
+    def read_open(cls, source: BusReader, snapshot: RegistrySnapshot,
+                  held: Mapping[ThreadIncarnation, Sequence[Todo]], commander: str,
+                  requests: Sequence[OwnerRequest]) -> tuple[Self, ...]:
+        originals = OrderClaim.originals(
+            source,
+            {(owner, todo.id): todo.order.commander_claims()
+             for owner, todos in held.items() for todo in todos},
+        )
+        return tuple(cls(message, owner.name, problem)
+                     for (owner, problem), messages in originals.items() for message in messages)
+
+    def clearing_action(self) -> str:
+        return (f"order done {self.unit} {self.problem} (with --seen FILE for an application run)"
+                " or send the unit its replacement order.")
+
+    def answered_by(self, named: tuple[Message, ...]) -> bool:
+        return False
+
+    def blocks(self, reached: frozenset[str], action: CommanderVerb) -> bool:
+        return self.unit in reached and not action.resolves_claim(self.unit, self.problem)
+
+    def line(self) -> str:
+        return (f"DELIVERY AWAITING JUDGEMENT {self.unit} {self.problem}: "
+                f"message {self.cited} -> {self.clearing_action()}")
 
 
 @dataclass(frozen=True)

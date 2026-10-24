@@ -59,8 +59,6 @@ class UnansweredUnitAsks(SenderMessages):
         cls, source: BusReader, snapshot: RegistrySnapshot, commander: str,
         held: Mapping[ThreadIncarnation, Sequence[Todo]], before: float,
     ) -> dict[ThreadIncarnation, tuple[Message, ...]]:
-        from agent_comms.todos import OrderClaim
-
         if not held:
             return {}
         peers = frozenset(name for owner in held for name in snapshot.names_for(owner.name))
@@ -71,17 +69,9 @@ class UnansweredUnitAsks(SenderMessages):
         questions = cls(
             RepliesDisplayScope(snapshot.names_for(commander), peers), since, before,
         ).read_opened(source)
-        claims = OrderClaim.originals(
-            source,
-            {owner: tuple(claim for todo in todos for claim in todo.order.commander_claims())
-             for owner, todos in held.items()},
-        )
         return {
-            owner: (
-                *(message for message in questions
-                  if snapshot.canonical_name(message.sender) == owner.name),
-                *claims.get(owner, ()),
-            )
+            owner: tuple(message for message in questions
+                         if snapshot.canonical_name(message.sender) == owner.name)
             for owner in held
         }
 

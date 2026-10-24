@@ -767,6 +767,10 @@ class CommanderVerb(DeclaredVerb, affix="Verb"):
     def gate(self, ctx: Commander) -> None:
         ctx.comms.registry.require(self.who(ctx)).require_commander()
 
+    def resolves_claim(self, unit: str, problem: str) -> bool:
+        """Ordinary messages and actions do not judge a delivery claim."""
+        return False
+
     @abstractmethod
     def run(self, ctx: Commander) -> None: ...
 
@@ -809,10 +813,16 @@ class DirectiveVerb(CommanderVerb):
             sys.exit('REFUSED, nothing recorded: --answers names a message this action never'
                      ' reaches:\n' + '\n'.join(misaddressed))
         owed = tuple(rule for rule in opened if rule.due(now) and not rule.answered_by(named))
-        if owed:
+        blocked = []
+        for rule in owed:
+            if rule.blocks(reached, self):
+                blocked.append(rule)
+            else:
+                print(f'WARNING: {rule.line()}')
+        if blocked:
             lines = '\n'.join(
                 f'{rule.line()}: {rule.message.body[:80]}\n{rule.clearing_action()}'
-                for rule in owed
+                for rule in blocked
             )
             sys.exit('REFUSED, nothing recorded: messages owed an answer:\n' + lines)
         self.respond(ctx, tuple(dict.fromkeys(message.reference for message in named)))
@@ -878,6 +888,10 @@ class SendVerb(RequestedOrderVerb):
     @property
     def addressed(self) -> tuple[str, ...]:
         return (self.unit,)
+
+    def resolves_claim(self, unit: str, problem: str) -> bool:
+        return (self.unit == unit
+                and problem in OrderFile.read(Path(self.body_file).read_text()).problems)
 
     def respond(self, ctx: Commander, references: tuple[MessageReference, ...]) -> None:
         ctx.send(self.unit, OrderFile.read(Path(self.body_file).read_text()), clean=self.clean,
@@ -990,6 +1004,9 @@ class DoneVerb(OrderVerb):
     ] = ""
 
     seen: Annotated[str, Argument(flags=("--seen",))] = ""
+
+    def resolves_claim(self, unit: str, problem: str) -> bool:
+        return self.unit == unit and self.problem == problem
 
     def run(self, ctx: Commander) -> None:
         todo = ctx.comms.goals.todos.resolve_order(ctx.incarnation, self.unit, self.problem)

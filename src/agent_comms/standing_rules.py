@@ -30,6 +30,7 @@ from agent_comms.service_passes import ServicePassStore
 
 if TYPE_CHECKING:
     from agent_comms.bus import BusReader
+    from agent_comms.commander.order import CommanderVerb
     from agent_comms.comms import Comms
     from agent_comms.heartbeat_frame import HeartbeatFrame
     from agent_comms.owner_requests import OwnerRequestId, RequestDirective
@@ -336,9 +337,8 @@ class DatedStandingRule(StandingRule, declared_name=None):
 
 @dataclass(frozen=True)
 class OwedAnswer(IndependentStandingRule, declared_name=None):
-    """A message to the commander owed an answer past its window. Every member gates the
-    commander's answering verbs until an action names it with --answers, so an answer cannot
-    be held: one that must wait is sent now as "waiting on X, owner Y"."""
+    """A question or delivery awaiting the commander; each member owns what clears it
+    and which actions it prevents while it waits."""
 
     message: Message
 
@@ -400,6 +400,10 @@ class OwedAnswer(IndependentStandingRule, declared_name=None):
     def answered_by(self, named: tuple[Message, ...]) -> bool:
         """Whether an action naming these open messages answers this one."""
         return any(message.message_id == self.message.message_id for message in named)
+
+    def blocks(self, reached: frozenset[str], action: CommanderVerb) -> bool:
+        """An unanswered question must be answered before unrelated work."""
+        return True
 
     def misaddressed(self, named: tuple[Message, ...], reached: frozenset[str]) -> str:
         """Why naming this debt in an action that reaches only these threads would record an
