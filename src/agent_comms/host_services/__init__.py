@@ -12,7 +12,6 @@ import subprocess
 import time
 from abc import abstractmethod
 from dataclasses import dataclass
-from itertools import groupby
 from pathlib import Path
 from typing import Annotated, ClassVar, Self
 
@@ -52,9 +51,18 @@ class HostService(DeclaredFamily, affix="Service", discovery_package=__name__):
     @classmethod
     @abstractmethod
     def stop_all(cls, instances: tuple[Self, ...]) -> None:
-        """Stop these running instances of this member together; their launchers stay installed."""
-        for member, selected in groupby(instances, type):
-            member.stop_all(tuple(selected))
+        """Stop these running instances together; their launchers stay installed.
+
+        Instances whose classes inherit one ``stop_all`` stop in one call, so the wait is the
+        slowest service's, not the sum of one stop per member."""
+        owners = tuple(dict.fromkeys(type(instance).stop_owner() for instance in instances))
+        for owner in owners:
+            owner.stop_all(tuple(i for i in instances if type(i).stop_owner() is owner))
+
+    @classmethod
+    def stop_owner(cls) -> type[HostService]:
+        """The class whose ``stop_all`` stops this member: the nearest that declares it."""
+        return next(base for base in cls.__mro__ if "stop_all" in vars(base))
 
     @abstractmethod
     def start(self) -> None:
