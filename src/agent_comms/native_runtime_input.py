@@ -366,7 +366,7 @@ class AcknowledgedSlot(SelectedSlotState):
 class SelectedToolSlot(NativeRuntimeTable, WithoutRowid):
     """The consumed slot and its live terminal acknowledgement, in one transaction store."""
 
-    input_id: Annotated[SlotId, FrozenColumn(primary_key=True)]
+    slot_id: Annotated[SlotId, FrozenColumn(primary_key=True)]
     call_id: Annotated[str, FrozenColumn()]
     state: type[SelectedSlotState] = ConsumedSlot
 
@@ -385,7 +385,7 @@ class SelectedToolSlot(NativeRuntimeTable, WithoutRowid):
         self.require_call(call_id)
         state = self.state.acknowledge()
         where, parameters = self._condition(
-            "1", (), {"input_id": self.input_id, "state": self.state},
+            "1", (), {"slot_id": self.slot_id, "state": self.state},
         )
         if self.update(db, where=where, parameters=parameters, state=state).rowcount != 1:
             raise SelectedToolDenied("Selected tool terminal changed; outcome UNKNOWN; no retry")

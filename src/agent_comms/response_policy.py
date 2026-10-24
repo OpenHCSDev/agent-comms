@@ -10,6 +10,7 @@ from functools import cache
 from typing import TYPE_CHECKING
 
 from .declared_family import DeclaredFamily
+from .input_key import BusInputKey, InputKey, OwnedBusInputKey
 from .projection_source import ProducedRow, ProjectionSource
 
 if TYPE_CHECKING:
@@ -56,8 +57,8 @@ class ResponsePolicy(DeclaredFamily, ProjectionSource, affix="Policy"):
     def context_peer(self, owner: str, sender: str, target: str) -> str | None:
         return None
 
-    def disposition_key(self, message: Message, owner: Thread) -> str:
-        return f"bus:{message.seq}:owner:{float(owner.created_at).hex()}"
+    def disposition_key(self, message: Message, owner: Thread) -> InputKey:
+        return OwnedBusInputKey(message.seq, float(owner.created_at))
 
 
 class NoChannelRecipients(ProjectionSource):
@@ -84,8 +85,8 @@ class DirectPolicy(NoChannelRecipients, ResponsePolicy):
     def context_peer(self, owner: str, sender: str, target: str) -> str | None:
         return target if sender == owner else sender if target == owner else None
 
-    def disposition_key(self, message: Message, owner: Thread) -> str:
-        return f"bus:{message.seq}"
+    def disposition_key(self, message: Message, owner: Thread) -> InputKey:
+        return BusInputKey(message.seq)
 
 
 class CollectivePolicy(ResponsePolicy):

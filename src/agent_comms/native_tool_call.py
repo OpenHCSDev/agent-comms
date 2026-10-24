@@ -191,6 +191,10 @@ class NativeToolCall(ABC):
     progress: CallProgress = field(default_factory=CallProgress, init=False, compare=False, repr=False)
     declared_name: ClassVar[str]
 
+    def slot(self, input_id: InputId, round_number: int) -> SlotId:
+        identity = f"{input_id}\0{round_number}\0{self.call_id}"
+        return SlotId(hashlib.sha256(identity.encode()).hexdigest()[:32])
+
     def correlate(self, candidate: NativeToolCall) -> None:
         if self != candidate:
             candidate.reject_correlated(self)
@@ -268,7 +272,7 @@ class CodingCall(NativeToolCall):
         from .selected_tool_broker import record_selected_terminal
 
         slot = self.slot(input_id, round_number)
-        record_selected_terminal(coordination_path, slot, slot)
+        record_selected_terminal(coordination_path, slot, self.call_id)
 
     def claim_failed(self) -> None:
         # A denied ordinary tool may report an error and let Pi explain it. The
@@ -292,9 +296,7 @@ class CodingCall(NativeToolCall):
         except MalformedRecord as error:
             return RefusedCodingCall(call_id, name, arguments, str(error))
 
-    def slot(self, input_id: InputId, round_number: int) -> SlotId:
-        identity = f"{input_id}\0{round_number}\0{self.call_id}"
-        return SlotId(hashlib.sha256(identity.encode()).hexdigest()[:32])
+
 
 
 @dataclass

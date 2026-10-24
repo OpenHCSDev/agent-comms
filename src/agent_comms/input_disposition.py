@@ -26,6 +26,7 @@ from .input_attempt import (
     StoredInput,
     UnresolvedInput,
 )
+from .input_key import InputKey, InputKeyText, TurnInputKey
 from .input_origin import InputOrigin, UnattributedInputOrigin
 from .lifecycle_capability import Unresolved
 from .locked_store import DocumentChange
@@ -66,13 +67,13 @@ class DeliveryOverview(ToolResult):
 class InputDocument:
     """The stored rows one query selected; never the whole store."""
 
-    rows: dict[str, StoredInput] = field(default_factory=dict)
+    rows: dict[InputKey, StoredInput] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
         if any(not row.exists or key != row.key for key, row in self.rows.items()):
             raise ValueError("Input document key differs from its attempt")
 
-    def lookup(self, key: str | None) -> InputAttempt:
+    def lookup(self, key: InputKey | None) -> InputAttempt:
         return self.rows.get(key, MissingInput())
 
     def record(self, *originals: ReservedInput) -> InputDocument:
@@ -83,7 +84,7 @@ class InputDocument:
                 additions.setdefault(row.key, row)
         return replace(self, rows={**self.rows, **additions}) if additions else self
 
-    def originals(self, keys: tuple[str, ...]) -> tuple[StoredInput, ...]:
+    def originals(self, keys: tuple[InputKey, ...]) -> tuple[StoredInput, ...]:
         """Capture ordered originals from their sole durable declaration owner."""
         if len(set(keys)) != len(keys):
             raise ValueError("Original input membership contains duplicate keys")
@@ -92,14 +93,14 @@ class InputDocument:
         except KeyError as error:
             raise ValueError("Original input acknowledgement is unavailable") from error
 
-    def transition(self, keys: tuple[str, ...], change) -> InputDocument:
+    def transition(self, keys: tuple[InputKey, ...], change) -> InputDocument:
         """Each original state decides its successor; unchanged rows stay intact."""
         successors = {
             name: row for key in keys for name, row in change(self.lookup(key)).successors(key).items()
         }
         return replace(self, rows={**self.rows, **successors}) if successors else self
 
-    def settle_unbound(self, keys: tuple[str, ...]) -> InputDocument:
+    def settle_unbound(self, keys: tuple[InputKey, ...]) -> InputDocument:
         return self.transition(keys, lambda row: row.finish_unbound())
 
     def started_for_native(
@@ -115,7 +116,7 @@ class InputDocument:
         return tuple(row for row in self.rows.values()
                      if row.started_for_native(lease, native_id, sent_text, snapshot=snapshot))
 
-    def shared_state(self, keys: tuple[str, ...]) -> type[InputAttempt] | None:
+    def shared_state(self, keys: tuple[InputKey, ...]) -> type[InputAttempt] | None:
         """Project only a complete, homogeneous durable observation."""
         states = {type(self.lookup(key)) for key in keys}
         if len(states) == 1 and all(self.lookup(key).exists for key in keys):
@@ -198,7 +199,7 @@ class InputDispositionsRows(StoreRows):
 class InputDispositionRow(InputDispositionsRows, TypedTable):
     """One stored input; its lookup columns are generated from the stored row."""
 
-    key: Annotated[str, Column(primary_key=True)]
+    key: Annotated[InputKey, InputKeyText, Column(primary_key=True)]
     attempt: StoredInput
     owner: ClassVar[Generated] = Generated(str, Column(generated="json_extract(attempt,'$.owner')"))
     turn_id: ClassVar[Generated] = Generated(
@@ -255,10 +256,10 @@ class InputDispositions(DurableStore):
                     InputDispositionRow(key, row).upsert(connection)
             return changed.result
 
-    def read(self, keys: tuple[str, ...]) -> InputDocument:
-        return self._select(*_members("key", keys))
+    def read(self, keys: tuple[InputKey, ...]) -> InputDocument:
+        return self._select(*_members("key", (InputKeyText.encode(key) for key in keys)))
 
-    def lookup(self, key: str) -> InputAttempt:
+    def lookup(self, key: InputKey) -> InputAttempt:
         return self.read((key,)).lookup(key)
 
     def unresolved(self, owners: frozenset[str]) -> InputDocument:
@@ -270,11 +271,12 @@ class InputDispositions(DurableStore):
 
 
     @staticmethod
-    def bus_key(message: Message, owner: Thread) -> str:
+    def bus_key(message: Message, owner: Thread) -> InputKey:
         return message.role.response_policy(message).disposition_key(message, owner)
 
     def record(
-        self, key: str, *, seq: int | None, owner: str, claim_scope: int, target: str, text: str,
+        self, key: InputKey, *, seq: int | None, owner: str, claim_scope: int,
+        target: str, text: str,
         origin: InputOrigin = UnattributedInputOrigin(), ownership: ExitStack | None = None,
     ) -> bool:
         """Register supplied reservation rollback before publishing acceptance."""
@@ -296,7 +298,9 @@ class InputDispositions(DurableStore):
                 )
             return DocumentChange.to(changed)
 
-        return self._update(*_members("key", (row.key for row in originals)), reserve)
+        return self._update(
+            *_members("key", (InputKeyText.encode(row.key) for row in originals)), reserve,
+        )
 
     def reserve_turn(
         self, owner: str, turn: TurnId, claim_scope: int, text: str,
@@ -305,7 +309,7 @@ class InputDispositions(DurableStore):
         """Enlist rollback before publication; caller retains the original wire scope."""
         from .channel_input_batch import SingleInputBatch
 
-        row = ReservedInput(f"turn:{turn}", None, owner, claim_scope, owner, text)
+        row = ReservedInput(TurnInputKey(turn), None, owner, claim_scope, owner, text)
 
         document = self.reserve_originals(row, ownership=ownership)
         return SingleInputBatch(document.originals((row.key,)))
@@ -319,35 +323,35 @@ class InputDispositions(DurableStore):
             raise RelationViolationError("Input reservation already exists")
         return document
 
-    def _transition(self, key: str, change) -> bool:
+    def _transition(self, key: InputKey, change) -> bool:
         def update(document: InputDocument) -> DocumentChange[InputDocument, bool]:
             successor = document.transition((key,), change)
             return DocumentChange(successor, successor is not document)
 
-        return self._update(*_members("key", (key,)), update)
+        return self._update(*_members("key", (InputKeyText.encode(key),)), update)
 
-    def clear_unbound(self, keys: tuple[str, ...]) -> InputDocument:
+    def clear_unbound(self, keys: tuple[InputKey, ...]) -> InputDocument:
         return self._update(
-            *_members("key", keys),
+            *_members("key", (InputKeyText.encode(key) for key in keys)),
             lambda document: DocumentChange.to(
                 document.transition(keys, lambda row: row.clear_unbound())
             ),
         )
 
-    def clear_native(self, key: str, native_id: InputId, text: str) -> None:
+    def clear_native(self, key: InputKey, native_id: InputId, text: str) -> None:
         """Clear only the matching native input; publish nothing if it differs."""
         refusal = "Native clear differs from its original input"
         self._transition(key, lambda row: row.clear_native(native_id, text).require_moved(refusal))
 
     def bind(
-        self, key: str, *, claim_scope: int, turn_id: TurnId, native_id: InputId, text: str
+        self, key: InputKey, *, claim_scope: int, turn_id: TurnId, native_id: InputId, text: str
     ) -> bool:
         return self.bind_originals(
             (key,), claim_scope=claim_scope, turn_id=turn_id, native_id=native_id, text=text
         )
 
     def bind_turn_input(
-        self, keys: tuple[str, ...], *, claim_scope: int, turn_id: TurnId,
+        self, keys: tuple[InputKey, ...], *, claim_scope: int, turn_id: TurnId,
         native_id: InputId, text: str,
         already_bound: bool,
     ) -> bool:
@@ -369,7 +373,7 @@ class InputDispositions(DurableStore):
         )
 
     def bind_originals(
-        self, keys: tuple[str, ...], *, claim_scope: int, turn_id: TurnId,
+        self, keys: tuple[InputKey, ...], *, claim_scope: int, turn_id: TurnId,
         native_id: InputId, text: str,
     ) -> bool:
         """Bind the complete captured original atomically; no partial batch grant."""
@@ -383,22 +387,23 @@ class InputDispositions(DurableStore):
                 return DocumentChange(document, False)
             return DocumentChange(replace(document, rows={**document.rows, **successors}), True)
 
-        return self._update(*_members("key", keys), change)
+        return self._update(*_members("key", (InputKeyText.encode(key) for key in keys)), change)
 
-    def started(self, key: str, *, turn_id: TurnId, native_id: InputId, text: str) -> bool:
+    def started(self, key: InputKey, *, turn_id: TurnId, native_id: InputId, text: str) -> bool:
         return self._transition(
             key, lambda row: row.started(turn_id=turn_id, native_id=native_id, text=text)
         )
 
-    def settle_unbound(self, keys: tuple[str, ...]) -> InputDocument:
+    def settle_unbound(self, keys: tuple[InputKey, ...]) -> InputDocument:
         """Publish one complete retirement and return that exact document cut."""
         return self._update(
-            *_members("key", keys), lambda document: DocumentChange.to(document.settle_unbound(keys))
+            *_members("key", (InputKeyText.encode(key) for key in keys)),
+            lambda document: DocumentChange.to(document.settle_unbound(keys)),
         )
 
     def review_for_goal(
         self,
-        keys: tuple[str, ...],
+        keys: tuple[InputKey, ...],
         *,
         owners: frozenset[str],
         goal_id: GoalId,
@@ -426,7 +431,7 @@ class InputDispositions(DurableStore):
                 rows={**rows, **{key: rows[key].review(goal_id, decision) for key in keys}},
             ))
 
-        self._update(*_members("key", keys), review)
+        self._update(*_members("key", (InputKeyText.encode(key) for key in keys)), review)
 
     def dismiss_historical(
         self,

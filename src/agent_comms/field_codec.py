@@ -1878,10 +1878,6 @@ class InputId(Id128):
 class SlotId(Id128):
     """The consumed tool slot, distinct from the input that produced it."""
 
-    @classmethod
-    def of_input(cls, input_id: InputId) -> SlotId:
-        return cls(input_id)
-
 
 class Id128Text(NominalSpelling[Id128]):
     """A 128-bit identity: an input, turn, bus root, recipient lookup or claim generation."""

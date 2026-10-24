@@ -191,7 +191,7 @@ class TurnProgress(events.AgentEventConsumer):
             partial(self.inputs.dispositions.in_turn, self.turn_lease.turn_id))
         keys = tuple(sent.rows)
         document = await Coordination.run_worker(partial(
-            self.inputs.dispositions.read, (*keys, *self.original.keys, *self.original.notice_keys),
+            self.inputs.dispositions.read, (*keys, *self.original.keys),
         ))
         unknown_attempts = not document.all_started(keys)
         if event.ok is True and unknown_attempts:

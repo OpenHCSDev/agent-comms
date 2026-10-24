@@ -13,6 +13,7 @@ from .active_route import ActiveRoute
 from .comms import Comms, wire
 from .coordination_database import CoordinationStore
 from .coordinator import Coordination
+from .input_key import InputKey, InputKeyText
 from .launch_root import LaunchRoot
 from .launch_runtime import LaunchRuntime, ThreadLaunch
 from .native_arguments import GivenBinary, NativeArguments
@@ -48,13 +49,14 @@ async def run_owner(comms: Comms) -> None:
             ownership.push_async_callback(lambda: agent.shutdown())
             await agent.sessions.start_owner(thread.worktree, name)
             if key := ThreadLaunch.take_startup_input():
-                initial = asyncio.create_task(run_startup_input(agent, name, key))
+                initial = asyncio.create_task(
+                    run_startup_input(agent, name, InputKeyText.decode(key)))
                 ownership.push_async_callback(asyncio.gather, initial, return_exceptions=True)
                 ownership.callback(lambda: initial.cancel())
             await stopped
 
 
-async def run_startup_input(agent: CommsAgent, name: str, key: str) -> None:
+async def run_startup_input(agent: CommsAgent, name: str, key: InputKey) -> None:
     """Consume this launch's explicitly authorized input, never scan for retries."""
     async with agent.turns.turn_locks.setdefault(name, asyncio.Lock()):
         def capture():

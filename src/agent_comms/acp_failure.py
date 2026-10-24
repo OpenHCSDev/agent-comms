@@ -302,14 +302,13 @@ class FailedNativeTurnOutcome(NativeTurnOutcome):
         failure = replace(
             ACPFailure.from_detail(-32603, terminal.text or "Backend failed",
                                   diagnostics=error.diagnostics if error is not None else ()),
-            input_state=document.shared_state(original.notice_keys),
+            input_state=original.failure_state(document),
             retry_result=ProviderRetryResult.from_optional(terminal.retry_result),
         )
         return cls(
             request=RequestFailure(failure, False),
             source=error.source if error is not None else UnrecordedFailureSource(),
-            failed_input_text=(original.notice_text
-                               if not document.all_started(original.notice_keys) else None),
+            failed_input_text=original.failed_input_text(document),
         )
 
     async def publish(self, client: SessionUpdateSink, session_id: str) -> NativeTurnOutcome:

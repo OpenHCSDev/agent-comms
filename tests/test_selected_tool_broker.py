@@ -18,7 +18,7 @@ from agent_comms.channel_coding_tools import CodingToolSocket
 from agent_comms.coordinator import Coordination
 from agent_comms.coordination_database import CoordinationStore
 from agent_comms.envelope_claim_transitions import WakeClaim
-from agent_comms.field_codec import ClaimId, InputId, MessageId, SlotId, TurnId
+from agent_comms.field_codec import ClaimId, InputId, MessageId, TurnId
 from agent_comms.native_tool_call import (
     DuplicateToolCallIdentity,
     OwnerToolConnection,
@@ -80,9 +80,12 @@ def test_pre_turn_intent_is_distinct_from_owner_bound_mode() -> None:
 
 
 def test_consumption_is_once_only_and_terminal_is_separate(slot_store) -> None:
-    slot_id = SlotId.mint()
+    request = broker.SelectedToolRequest(
+        "call_1", broker.SelectedWriteArguments("notes.txt", "write"),
+    )
+    slot_id = request.slot(InputId.mint(), 0)
     broker.consume_selected_slot(slot_store, slot_id, "call_1")
-    row = SelectedToolSlot.require(slot_store.session._connection, input_id=slot_id)
+    row = SelectedToolSlot.require(slot_store.session._connection, slot_id=slot_id)
     assert row.call_id == "call_1"
     assert row.state is ConsumedSlot
     with pytest.raises(SelectedToolDenied):
@@ -92,7 +95,7 @@ def test_consumption_is_once_only_and_terminal_is_separate(slot_store) -> None:
     broker.record_selected_terminal(slot_store.session.path, slot_id, "call_1")
     broker.verify_selected_terminal(slot_store.session.path, slot_id, "call_1")
     assert (
-        SelectedToolSlot.require(slot_store.session._connection, input_id=slot_id).state
+        SelectedToolSlot.require(slot_store.session._connection, slot_id=slot_id).state
         is AcknowledgedSlot
     )
     with pytest.raises(SelectedToolDenied):
@@ -123,7 +126,7 @@ def test_owner_mode_denies_unreserved_input_before_consuming_ledger(private_comm
         )
         with pytest.raises(SelectedToolDenied):
             mode.action(
-                broker.SelectedToolRequest(
+                0, broker.SelectedToolRequest(
                     "call_1", broker.SelectedWriteArguments("notes.txt", "write")
                 )
             )
@@ -140,7 +143,8 @@ def test_fake_socket_requires_pid_token_matching_emitted_call(
 
     async def run() -> None:
         wrong = broker.SelectedToolSocket(
-            tool_listener(tmp_path, token), observed.append, pid=os.getpid() + 100000
+            tool_listener(tmp_path, token),
+            lambda round_number, call: observed.append(call), pid=os.getpid() + 100000
         )
         await wrong.start()
         try:
@@ -148,7 +152,8 @@ def test_fake_socket_requires_pid_token_matching_emitted_call(
         finally:
             await wrong.close()
         server = broker.SelectedToolSocket(
-            tool_listener(tmp_path, token), observed.append, pid=os.getpid()
+            tool_listener(tmp_path, token),
+            lambda round_number, call: observed.append(call), pid=os.getpid()
         )
         await server.start()
         try:
@@ -218,10 +223,10 @@ async def test_listener_isolated_from_previous_turn_and_keeps_consumed_slot(
     previous_inode = previous.path.stat().st_ino
     token = secrets.token_hex(32)
     input_id = InputId.mint()
-    slot_id = SlotId.of_input(input_id)
     observed: list[broker.SelectedToolRequest] = []
 
-    def accept(request: broker.SelectedToolRequest) -> None:
+    def accept(round_number: int, request: broker.SelectedToolRequest) -> None:
+        slot_id = request.slot(input_id, round_number)
         with Coordination(slot_store.session.path) as store:
             broker.consume_selected_slot(store, slot_id, request.call_id)
             broker.record_selected_terminal(store.session.path, slot_id, request.call_id)
@@ -266,7 +271,9 @@ async def test_listener_isolated_from_previous_turn_and_keeps_consumed_slot(
                 broker.SelectedWriteArguments("notes.txt", "é"),
             )
         ]
-        assert SelectedToolSlot.require(slot_store.session._connection, input_id=input_id).state is AcknowledgedSlot
+        assert (SelectedToolSlot.require(
+            slot_store.session._connection, slot_id=observed[0].slot(input_id, 0),
+        ).state is AcknowledgedSlot)
     finally:
         await server.close()
     assert not server.listener.path.exists()

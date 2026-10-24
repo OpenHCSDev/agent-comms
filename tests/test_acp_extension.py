@@ -14,7 +14,8 @@ from agent_comms.acp_extension import (
     GoalChangedUpdate,
     InputDeliveryChangedUpdate,
     InputFailedUpdate,
-    InputStartedUpdate,
+    IdentifiedInputStarted,
+    UnidentifiedInputStarted,
     LiveCursorScope,
     LiveQueueScope,
     McpClientAcknowledgementUpdate,
@@ -79,7 +80,8 @@ def test_declared_family_roundtrip_and_strict_boundary(tmp_path):
         QueueChangedUpdate(
             queue_scope, 1, AvailableQueueProjection((QueueItem(InputId.mint(), "text"),)),
         ),
-        InputStartedUpdate("input", "text", queue_scope, 2, InputId("b" * 32)),
+        IdentifiedInputStarted("text", queue_scope, 2, InputId("b" * 32), InputId("a" * 32)),
+        UnidentifiedInputStarted("text", queue_scope, 2, InputId("b" * 32)),
         CoordinationChangedUpdate(
             owner.incarnation,
             "/home/ts/wt/pilot",
@@ -95,7 +97,7 @@ def test_declared_family_roundtrip_and_strict_boundary(tmp_path):
         CompactionCommittedUpdate("summary", "first-kept"),
         TranscriptSnapshotUpdate(read.read(), read.identity),
         TranscriptDraftUpdate(read.identity, None),
-        InputDeliveryChangedUpdate("input"),
+        InputDeliveryChangedUpdate(),
         McpClientAcknowledgementUpdate(
             TurnId.mint(), McpLiveAcknowledgement(
                 1, "pi-mcp-client", "a" * 32, "running", "turn", ()
