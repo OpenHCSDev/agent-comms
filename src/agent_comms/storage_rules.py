@@ -10,7 +10,6 @@ import time
 from abc import ABC, abstractmethod
 from collections.abc import Iterable, Iterator, Sequence
 from dataclasses import dataclass, field, replace
-from enum import StrEnum
 from functools import cached_property
 from pathlib import Path
 from typing import TYPE_CHECKING, Annotated, ClassVar, Self, cast
@@ -695,16 +694,10 @@ class ShellInvocation(ShellCommand):
             yield cls(words, cwd)
 
 
-class GitWriteOperation(StrEnum):
-    COMMIT = 'commit'
-    PUSH = 'push'
-
-
 @dataclass(frozen=True)
 class GitInvocation:
     args: list[str]
     cwd: Path
-    directories: tuple[Path, ...]
 
 
 class ForbidsCommands(ShellProgram):
@@ -757,7 +750,7 @@ class WritesTargets(ShellProgram):
 
 
 class WritesWorkingTree(ShellProgram):
-    verbs = (('switch',), ('checkout',), (GitWriteOperation.COMMIT,),
+    verbs = (('switch',), ('checkout',), ('commit',),
              ('merge',), ('reset',), ('stash',))
 
     def decode(self, args: list[str], cwd: Path) -> tuple[StorageEffect, ...]:
@@ -792,14 +785,12 @@ class GitProgram(ForbidsCommands, WritesWorkingTree):
         except getopt.GetoptError as error:
             raise SelectedToolDenied(
                 f'StorageRule: incomplete or unknown git option: {error}') from error
-        directories = [cwd]
         for option, value in options:
             if option in cls.directory_options:
                 path = physical_path(value, cwd)
-                directories.append(path)
                 if option == cls.chdir_option:
                     cwd = path
-        return GitInvocation(remaining, cwd, tuple(directories))
+        return GitInvocation(remaining, cwd)
 
     def effects(self, args, cwd):
         invocation = self.invocation(args, cwd)
