@@ -11,7 +11,7 @@ import re
 import types
 from abc import ABC, abstractmethod
 from collections.abc import Callable, Iterable, Iterator, Mapping
-from contextlib import AbstractContextManager, contextmanager
+from contextlib import contextmanager
 from dataclasses import MISSING, Field, dataclass, field, fields, is_dataclass
 from datetime import datetime
 from enum import Enum
@@ -64,15 +64,6 @@ class MalformedRecord(ValueError):  # noqa: N818 - names the refused data
 
     def located(self, name: str, fix: str) -> dict[str, str]:
         return {name: f"{self}; fix: {fix}"}
-
-    @staticmethod
-    @contextmanager
-    def gathering(problems: dict[str, str], name: str, fix: str) -> Iterator[None]:
-        """Record a refused field under its key so sibling refusals are reported together."""
-        try:
-            yield
-        except MalformedRecord as refused:
-            problems.update(refused.located(name, fix))
 
     @classmethod
     @contextmanager
@@ -457,9 +448,8 @@ class FieldPlan:
     def key(self) -> str:
         return WireName.read(self.annotation, self.name)
 
-    def locating(self, problems: dict[str, str]) -> AbstractContextManager[None]:
-        """A refused value joins its record's problems under this field's key."""
-        return MalformedRecord.gathering(problems, self.key, f"supply {self.annotation}")
+    def locate(self, problems: dict[str, str], refused: MalformedRecord) -> None:
+        problems.update(refused.located(self.key, f"supply {self.annotation}"))
 
     @cached_property
     def required(self) -> bool:
@@ -1038,13 +1028,11 @@ class ValueDecoder[T](DecoderPlan):
     def decode_bound(self, data: object, context: Mapping[str, object]) -> T:
         return self.decode(data)
 
-    field_names: ClassVar[tuple[str, ...]] = ()
-
     @property
     def uses_representation(self) -> bool:
         return False
 
-    def decode_selected(self, data, selections, *, fields: tuple[str, ...]):
+    def decode_selected(self, data, selections):
         return self.decode_bound(data, {})
 
     def decode_keys(self, data, keys, selections):
@@ -2119,7 +2107,7 @@ class FieldCodec(MroDispatch, Sealed):
             if not issubclass(narrowed, annotation):
                 raise TypeError(f"{target.__name__}.{name} cannot widen its declared type")
         return cast(T, decoder.decode_selected(
-            data, {}, fields=decoder.field_names, field_types=field_types))
+            data, {}, field_types=field_types))
 
     @classmethod
     def argument_fields(cls, target: type) -> tuple[FieldPlan, ...]:
@@ -2149,7 +2137,8 @@ class FieldCodec(MroDispatch, Sealed):
     @classmethod
     def decode_selected(cls, target: type[T], data: object, selections, *, fields: tuple[str, ...]) -> T:
         """Decode selected mapping keys by their declaring record and field, not wire shape."""
-        return cast(T, _RecordDecoder(target).decode_selected(data, selections, fields=fields))
+        entries = tuple(entry for entry in cls._record_plan(target).bindings if entry.name in fields)
+        return cast(T, _RecordDecoder(target).decode_entries(data, entries, selections, {}, {}))
 
     @classmethod
     def decode(cls, target: TypeForm[T], data: object) -> T:
@@ -2966,8 +2955,7 @@ class _DictDecoder[K, V](ValueDecoder[dict[K, V]]):
 
     def decode_keys(self, data, keys, selections):
         encoded = tuple(FieldCodec.encode(key) for key in keys)
-        return {self.key.decode_bound(key, {}): self.value.decode_selected(
-                    value, selections, fields=self.value.field_names)
+        return {self.key.decode_bound(key, {}): self.value.decode_selected(value, selections)
                 for key, value in self.entries(data) if key in encoded}
 
 
@@ -3170,28 +3158,29 @@ class _RecordDecoder[T](_ContextDecoder[T]):
             raise self.shape_refusal(data)
         return data
 
-    @property
-    def field_names(self) -> tuple[str, ...]:
-        return tuple(entry.name for entry in self.plan.bindings)
-
     def decode_bound(self, data: object, context: Mapping[str, object]) -> T:
-        return self.decode_selected(data, {}, fields=self.field_names, context=context)
+        return self.decode_entries(data, self.plan.bindings, {}, context, {})
 
     def decode_selected(
         self, data: object, selections: Mapping[tuple[type, str], object], *,
-        fields: tuple[str, ...], context: Mapping[str, object] = {},
+        context: Mapping[str, object] = {},
         field_types: Mapping[str, type[object]] = types.MappingProxyType({}),
+    ) -> T:
+        return self.decode_entries(data, self.plan.bindings, selections, context, field_types)
+
+    def decode_entries(
+        self, data: object, entries: tuple[FieldPlan, ...],
+        selections: Mapping[tuple[type, str], object], context: Mapping[str, object],
+        field_types: Mapping[str, type[object]],
     ) -> T:
         if not isinstance(data, dict):
             raise MalformedRecord("Expected a record object; fix: supply a JSON object.")
         problems = self.problems(data)
         target = self.target
         values = {}
-        for entry in self.plan.bindings:
-            if entry.name not in fields:
-                continue
+        for entry in entries:
             key = (target, entry.name)
-            with entry.locating(problems):
+            try:
                 if entry.name in field_types:
                     narrowed = compile_decoder(field_types[entry.name])
                     values.update(entry.decoded_using(
@@ -3200,6 +3189,8 @@ class _RecordDecoder[T](_ContextDecoder[T]):
                 else:
                     values.update(entry.decoded_selected(data, selections[key], selections)
                                   if key in selections else entry.decoded_bound(data, context))
+            except MalformedRecord as refused:
+                entry.locate(problems, refused)
         if problems:
             raise RecordProblems(problems)
         return FieldCodec.construct(target, values)
