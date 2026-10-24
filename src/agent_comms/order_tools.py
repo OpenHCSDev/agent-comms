@@ -41,6 +41,7 @@ from .goals import Goal, OrderCheck
 from .heartbeat_frame import HeartbeatFrame
 from .head_review import PullRequestHead
 from .held_orders import HeldOrders
+from .input_disposition import DeliveryOverview
 from .order_story import FleetStory, OrderStory
 from .order_work import OrderWork
 from .plan_phases import OrderPhase
@@ -474,6 +475,16 @@ class CommsTurnsTool(ThreadReadTool):
 
     def apply(self, comms: Comms, caller: ToolCaller) -> ThreadTurns:
         return comms.transcripts.turns(caller.subject(self.thread), self.window)
+
+
+@dataclass(frozen=True, kw_only=True)
+class CommsInputDeliveryTool(ThreadReadTool):
+    label = "Input delivery"
+    description = ("Read a unit's inputs that failed or are UNKNOWN, and its earlier delivery "
+                   "notices, each with its bus sequence and input id; none is ever replayed.")
+
+    def apply(self, comms: Comms, caller: ToolCaller) -> DeliveryOverview:
+        return comms.goals.input_delivery(caller.subject(self.thread), include_history=True)
 
 
 @dataclass(frozen=True, kw_only=True)
