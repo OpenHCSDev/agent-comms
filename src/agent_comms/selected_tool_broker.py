@@ -9,7 +9,6 @@ claim append or file mutation, and UNKNOWN is never retried automatically.
 from __future__ import annotations
 
 import logging
-import re
 import sqlite3
 import stat
 from collections.abc import Callable
@@ -31,6 +30,7 @@ from .native_tool_call import (
     CoordinationBusy,
     NativeToolCall,
     NativeToolMode,
+    ToolCallId,
 )
 from .native_tool_transport import (
     NativeToolRound,
@@ -46,7 +46,6 @@ from .turn_context import InstructionFile
 # Stay well below the existing native RPC record cap (1 MiB, including JSON).
 _MAX_CONTENT = 128 * 1024
 _MAX_REQUEST = _MAX_CONTENT + 8192
-_CALL_ID = re.compile(r"[A-Za-z0-9_-]{1,128}\Z")
 _TOOL_SOURCE = Path(__file__).with_name("selected_claimed_write.mjs")
 
 _LOG = logging.getLogger(__name__)
@@ -125,10 +124,6 @@ class SelectedWriteArguments:
 class SelectedToolRequest(NativeToolCall):
     arguments: SelectedWriteArguments
 
-    def __post_init__(self) -> None:
-        if not _CALL_ID.fullmatch(self.call_id):
-            raise SelectedToolDenied("Selected tool call identity is invalid")
-
     declared_name: ClassVar[str] = "selected_claimed_write"
 
     def commit_terminal(
@@ -169,10 +164,8 @@ def selected_extension(package: Path) -> Path:
     return source
 
 
-def consume_selected_slot(store: Coordination, slot_id: SlotId, call_id: str) -> None:
+def consume_selected_slot(store: Coordination, slot_id: SlotId, call_id: ToolCallId) -> None:
     """Commit consumption BEFORE any action; a failed commit is UNKNOWN, never retried."""
-    if type(call_id) is not str or not _CALL_ID.fullmatch(call_id):
-        raise SelectedToolDenied("Selected tool call identity is invalid")
     try:
         with store.session.writing() as db:
             SelectedToolSlot.consume(db, slot_id, call_id)

@@ -17,6 +17,7 @@ from pydantic import AliasChoices, Field, JsonValue, ValidationError
 
 from .declared_family import UniqueExternalSelector
 from .field_codec import FieldCodec, MalformedRecord
+from .native_tool_call import ToolCallId
 from .native_tools import BashTool, EditTool, GlobTool, GrepTool, ReadTool, WriteTool
 from .tool_declaration import ReplacementEdit, ToolDeclaration
 from .tool_results import ToolDiff
@@ -106,14 +107,14 @@ class CliToolArguments(UniqueExternalSelector, DeclaredWireFamily, WireModel, af
             raise ValueError(f"Ambiguous CLI tool name {sent.name!r}: {owners}")
         shape, = shapes
         try:
-            return shape.model_validate(arguments).call(sent.id)
+            return shape.model_validate(arguments).call(FieldCodec.decode(ToolCallId, sent.id))
         except ValidationError, MalformedRecord:  # kept as sent; its runtime answers the refusal
             return sent
 
     @abstractmethod
-    def record(self, *, call_id: str) -> ToolDeclaration: ...
+    def record(self, *, call_id: ToolCallId) -> ToolDeclaration: ...
 
-    def call(self, call_id: str) -> DecodedToolCall:
+    def call(self, call_id: ToolCallId) -> DecodedToolCall:
         tool = self.record(call_id=call_id)
         name = FieldCodec.encode(type(tool), type[ToolDeclaration])
         shown = ToolCall(call_id, name, self.model_dump(exclude_unset=True))
@@ -124,7 +125,7 @@ class CliCommandArguments(CliToolArguments):
     cli_names = ("Bash", "bash")
     command: str
 
-    def record(self, *, call_id: str) -> BashTool:
+    def record(self, *, call_id: ToolCallId) -> BashTool:
         return BashTool(call_id=call_id, command=self.command)
 
 
@@ -135,7 +136,7 @@ class CliPatternArguments(CliToolArguments):
     search: ClassVar[type[GrepTool | GlobTool]] = GrepTool
     pattern: str
 
-    def record(self, *, call_id: str) -> GrepTool | GlobTool:
+    def record(self, *, call_id: ToolCallId) -> GrepTool | GlobTool:
         scope = self.model_dump(include={"pattern", "path"})
         return self.search.parse_arguments(scope, call_id=call_id)
 
@@ -152,7 +153,7 @@ class CliPathArguments(CliToolArguments):
 class CliReadArguments(CliPathArguments):
     cli_names = ("Read", "read")
 
-    def record(self, *, call_id: str) -> ReadTool:
+    def record(self, *, call_id: ToolCallId) -> ReadTool:
         return ReadTool(call_id=call_id, path=self.path)
 
 
@@ -167,14 +168,14 @@ class CliReplacingArguments(CliPathArguments):
     @abstractmethod
     def replacements(self) -> Sequence[CliReplacement]: ...
 
-    def record(self, *, call_id: str) -> EditTool:
+    def record(self, *, call_id: ToolCallId) -> EditTool:
         edits = tuple(
             ReplacementEdit(old_text=edit.old_string, new_text=edit.new_string)
             for edit in self.replacements()
         )
         return EditTool(call_id=call_id, path=self.path, edits=edits)
 
-    def call(self, call_id: str) -> PatchedToolCall:
+    def call(self, call_id: ToolCallId) -> PatchedToolCall:
         patches = (
             ToolDiff.from_versions(self.path, edit.old_string, edit.new_string)
             for edit in self.replacements()
@@ -209,10 +210,10 @@ class CliWriteArguments(CliPathArguments):
     cli_names = ("Write", "write")
     content: str
 
-    def record(self, *, call_id: str) -> WriteTool:
+    def record(self, *, call_id: ToolCallId) -> WriteTool:
         return WriteTool(call_id=call_id, path=self.path, content=self.content)
 
-    def call(self, call_id: str) -> DecodedToolCall:
+    def call(self, call_id: ToolCallId) -> DecodedToolCall:
         call = super().call(call_id)
         before = self.path + " (previous content not supplied)"
         diff = ToolDiff.between(before, self.path, "", self.content)
