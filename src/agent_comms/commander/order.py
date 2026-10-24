@@ -59,6 +59,7 @@ from agent_comms.messages import Message
 from agent_comms.owner_requests import NewestOpenRequest, OwnerRequestId, RequestSelection
 from agent_comms.phase_evidence import MainTree, PlanReading
 from agent_comms.plan_phases import OrderPhase, PlanPhase
+from agent_comms.presentation import MessageNotification
 from agent_comms.problem_number import ProblemNumber
 from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.repo import Repo
@@ -405,9 +406,9 @@ class CommanderContext(BaseModel):
             target.addressed(audience.threads, body), answers=answers).message
 
     def delivery(self, reference: MessageReference) -> str:
-        """The recipients' delivery as the notification owner reports it; a publish alone is only queued."""
-        from agent_comms.presentation import MessageNotification
+        """The recipients' delivery as the notification owner reports it.
 
+        A publish alone is only queued."""
         outcomes = MessageNotification.references(
             self.comms.root, self.comms.registry, self.comms.bus.bus, (reference,))
         return MessageNotification.summary(outcomes.get((reference.seq, reference.message_id), ()))
@@ -645,7 +646,8 @@ class Commander(CommanderContext):
         body = open(body_file).read()
         refuse(body, *DirectiveText.checks())
         try:
-            message = self.published(VerdictAudience(tuple(units.split(','))), body.rstrip(), answers)
+            audience = VerdictAudience(tuple(units.split(',')))
+            message = self.published(audience, body.rstrip(), answers)
             print(message.message_id, self.delivery(message.reference))
         except MaintenanceHeldError as held:
             # A say records nothing but its post, so the whole command is the resend.
