@@ -15,7 +15,7 @@ from collections.abc import AsyncIterator, Iterator, Mapping, MutableMapping
 from contextlib import AbstractAsyncContextManager, asynccontextmanager, contextmanager
 from dataclasses import dataclass, field, replace
 from pathlib import Path
-from typing import TYPE_CHECKING, Annotated, Literal, Self
+from typing import Annotated, Literal, Self
 
 from .child_process import ProcessIdentity
 from .private_path import PrivateFileRole
@@ -40,9 +40,6 @@ from .store_files import (
     _async_store_lock,
     _store_lock,
 )
-
-if TYPE_CHECKING:
-    from .turn_terminal import TurnInterruption
 
 
 class MaintenanceHeldError(RelationViolationError, ToolRefusedError):
@@ -73,11 +70,8 @@ class HeldSends:
         raise MaintenanceHeldError("Maintenance holds ingress: the bus is under maintenance")
 
     @staticmethod
-    def interruption() -> TurnInterruption:
-        """A hold is the planned stop declared before any owner is signalled."""
-        from .turn_terminal import OperatorStopped
-
-        return OperatorStopped()
+    def selected[T](held: T, granted: T) -> T:
+        return held
 
 
 class GrantedSends:
@@ -98,10 +92,8 @@ class GrantedSends:
         pass
 
     @staticmethod
-    def interruption() -> TurnInterruption:
-        from .turn_terminal import EndedWithoutResult
-
-        return EndedWithoutResult()
+    def selected[T](held: T, granted: T) -> T:
+        return granted
 
 
 class MaintenanceTarget(SubclassUnion):
@@ -307,9 +299,9 @@ class MaintenanceStatus:
     def require_open(self) -> None:
         self.phase.new_sends.require_open()
 
-    @property
-    def interruption(self) -> TurnInterruption:
-        return self.phase.new_sends.interruption()
+    def selected[T](self, *, held: T, granted: T) -> T:
+        """The caller's answer for this phase's ingress; the barrier names no caller's facts."""
+        return self.phase.new_sends.selected(held, granted)
 
     def require_open_to(self, holder: MaintenanceHolder) -> None:
         """Open, or held by ``holder``: the operation holding maintenance still runs its own reads."""
