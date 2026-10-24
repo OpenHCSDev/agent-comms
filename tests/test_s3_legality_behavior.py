@@ -145,7 +145,8 @@ def test_response_receipt_and_publication_constraints(owner, pending):
     record = {ResponseState.family_discriminator: owner.declared_name}
     if owner.published:
         state = FieldCodec.decode(ResponseState, {
-            **record, 'message_id': acknowledgement.message_id, 'seq': acknowledgement.seq,
+            **record, 'message_id': FieldCodec.encode(acknowledgement.message_id),
+            'seq': acknowledgement.seq,
         })
         for message_id, seq in (
             (None, 1),
