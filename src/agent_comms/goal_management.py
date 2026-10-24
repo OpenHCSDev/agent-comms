@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from agent_comms.field_codec import GoalId
 from .errors import StaleAttemptError
 import logging
 from collections.abc import Iterator, Sequence
@@ -12,6 +11,7 @@ from functools import cached_property
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from agent_comms.field_codec import GoalId
 from .agent_activity import AgentActivity
 from .coordination_errors import StaleFence
 from .errors import RelationViolationError, UnregisteredThreadError

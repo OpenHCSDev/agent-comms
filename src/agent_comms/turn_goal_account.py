@@ -13,7 +13,7 @@ from typing import TYPE_CHECKING
 
 from agent_comms.coordination_errors import RequestRefused
 
-from .field_codec import TurnId
+from .field_codec import GoalId, TurnId
 from agent_comms.goal_turn_permit import GoalTurnPermit, NoLaunchPermit
 from .goal_states import ActiveGoal, CompletedGoal, PausedGoal
 from .mro_dispatch import MroDispatch, handles
@@ -86,9 +86,9 @@ class TurnGoalAccount:
     turn: TurnId
     lease: TurnLeaseFence
     permit: GoalTurnPermit
-    pending_origins: dict[str, str]
+    pending_origins: dict[str, GoalId]
     claims: ExitStack
-    originated: dict[str, GoalTurnPermit] = field(default_factory=dict, init=False)
+    originated: dict[GoalId, GoalTurnPermit] = field(default_factory=dict, init=False)
     unattributed_usage: list[tuple[str, PiUsage]] = field(default_factory=list, init=False)
     has_productive_tool: bool = field(default=False, init=False)
 

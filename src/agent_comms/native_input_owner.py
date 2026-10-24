@@ -6,11 +6,11 @@ recheck the canonical registry/SQLite snapshot under their operation's locks.
 
 from __future__ import annotations
 
-from agent_comms.field_codec import GoalId
 import os
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, ClassVar
 
+from agent_comms.field_codec import GoalId
 from .child_process import ProcessIdentity
 from .coordination_errors import StaleFence
 from .coordination_tables.participants import OwnerGenerations

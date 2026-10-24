@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from agent_comms.field_codec import GoalId
 import time
 from abc import abstractmethod
 from collections.abc import Awaitable, Callable
@@ -10,6 +9,7 @@ from dataclasses import dataclass, field, replace
 from typing import TYPE_CHECKING, Annotated, ClassVar, Self
 from uuid import uuid4
 
+from agent_comms.field_codec import GoalId
 from agent_comms import field_codec
 from agent_comms.goals import (
     Goal,

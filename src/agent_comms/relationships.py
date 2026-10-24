@@ -7,7 +7,6 @@ claim historical proof that a model consumed an old channel message.
 
 from __future__ import annotations
 
-from agent_comms.field_codec import GoalId
 import time
 from abc import ABC, abstractmethod
 from collections.abc import Sequence
@@ -16,6 +15,7 @@ from functools import cmp_to_key
 from pathlib import Path
 from typing import TYPE_CHECKING, Annotated, ClassVar, Literal
 
+from agent_comms.field_codec import GoalId
 from agent_comms import field_codec
 
 from . import presentation

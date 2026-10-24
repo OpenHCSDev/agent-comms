@@ -6,10 +6,10 @@ old token: a deleted peer's replacement cannot inherit its predecessor's goal.
 
 from __future__ import annotations
 
-from agent_comms.field_codec import GoalId
 import hashlib
 import re
 
+from agent_comms.field_codec import GoalId
 from .goals import (
     GoalMentionBinding,
     GoalMentionSource,

@@ -6,7 +6,6 @@ and checks the declared start rules before recovering any unused READY grant.
 
 from __future__ import annotations
 
-from agent_comms.field_codec import GoalId
 from .errors import GoalAttemptError
 import asyncio
 import os
@@ -14,6 +13,7 @@ from dataclasses import dataclass, field
 from functools import partial
 from typing import TYPE_CHECKING
 
+from agent_comms.field_codec import GoalId
 from .agent_event_updates import AcpEventConsumer
 from .child_process import ProcessIdentity
 from .coordinator import Coordination
