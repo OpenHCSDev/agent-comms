@@ -308,7 +308,7 @@ def test_claimed_order_takes_a_check_correction_through_the_real_verb(held_comma
     corrected = ctx.comms.goals.todos.get("P1")
     assert isinstance(corrected.order, ClaimedProblemOrder)
     assert corrected.order.check.command == "printf 1"
-    assert corrected.order.check_corrections[-1].previous == claimed.order.check
+    assert corrected.order.corrections[-1].previous == claimed.order.check
     assert (corrected.order.id, corrected.order.claim) == (claimed.order.id, claimed.order.claim)
     assert (corrected.holder, corrected.review_at, corrected.strike_count) == (
         claimed.holder, claimed.review_at, claimed.strike_count)
@@ -329,7 +329,7 @@ def test_held_application_order_takes_a_run_correction_through_the_real_verb(hel
     corrected = store.get("P1")
     assert corrected.order.run == ApplicationOrderRun(
         "The order story shows the unit's newest tool call after it ends.")
-    assert corrected.order.run_corrections[-1].previous == stale
+    assert corrected.order.corrections[-1].previous == stale
     assert (corrected.holder, corrected.review_at, corrected.strike_count) == (
         held.holder, held.review_at, held.strike_count)
 

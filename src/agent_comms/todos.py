@@ -2029,11 +2029,8 @@ class CheckedProblemOrder(ProblemOrder, declared_name=None):
     report: str
     at: EventTime
     first_call_deadline: EventTime
-    check_corrections: Annotated[
-        tuple[CorrectCheckTodo, ...], WireOmitDefault()
-    ] = ()
+    corrections: Annotated[tuple[CorrectOrderTodo, ...], WireOmitDefault()] = ()
     run: OrderRun
-    run_corrections: Annotated[tuple[CorrectRunTodo, ...], WireOmitDefault()] = ()
     deletes: Annotated[OrderDeletion, WireOmitDefault()] = field(
         default_factory=NoOrderDeletion
     )
@@ -3684,6 +3681,7 @@ class CorrectOrderTodo(TodoOperation, declared_name=None):
     The order keeps its id, holder, review timer and strikes; a correction is not a resend."""
     actor: ThreadIncarnation
     reason: str
+    previous: object
     at: EventTime = field(default_factory=lambda: EventTime.capture(time.time()), kw_only=True)
 
     def prepare(self, goals: Goals, current: Todo) -> Self:
@@ -3696,9 +3694,18 @@ class CorrectOrderTodo(TodoOperation, declared_name=None):
         _text(self.reason, "Correction reason", 2000)
         return replace(current, order=current.order.corrected(self), revision=current.revision + 1)
 
-    @abstractmethod
     def corrected(self, order: OpenProblemOrder) -> OpenProblemOrder:
-        """The order with this correction's part replaced and the correction recorded."""
+        if self.previous != self.part(order):
+            raise TodoError("The corrected part changed since it was read; read it again.")
+        return replace(self.replaced(order), corrections=(*order.corrections, self))
+
+    @abstractmethod
+    def part(self, order: OpenProblemOrder) -> object:
+        """The order's current value of the part this correction replaces."""
+
+    @abstractmethod
+    def replaced(self, order: OpenProblemOrder) -> OpenProblemOrder:
+        """The order with this correction's part replaced."""
 
 
 @dataclass(frozen=True)
@@ -3714,12 +3721,12 @@ class CorrectCheckTodo(CorrectOrderTodo):
         )
         return super().prepare(goals, current)
 
-    def corrected(self, order: OpenProblemOrder) -> OpenProblemOrder:
-        if self.previous != order.check:
-            raise TodoError("The order's check changed since it was read; read it again.")
+    def part(self, order: OpenProblemOrder) -> OrderCheck:
+        return order.check
+
+    def replaced(self, order: OpenProblemOrder) -> OpenProblemOrder:
         self.check.require_writable()
-        return replace(order, check=self.check,
-                       check_corrections=(*order.check_corrections, self))
+        return replace(order, check=self.check)
 
 
 @dataclass(frozen=True)
@@ -3728,10 +3735,11 @@ class CorrectRunTodo(CorrectOrderTodo):
     previous: OrderRun
     run: OrderRun
 
-    def corrected(self, order: OpenProblemOrder) -> OpenProblemOrder:
-        if self.previous != order.run:
-            raise TodoError("The order's run changed since it was read; read it again.")
-        return replace(order, run=self.run, run_corrections=(*order.run_corrections, self))
+    def part(self, order: OpenProblemOrder) -> OrderRun:
+        return order.run
+
+    def replaced(self, order: OpenProblemOrder) -> OpenProblemOrder:
+        return replace(order, run=self.run)
 
 
 @dataclass(frozen=True)
