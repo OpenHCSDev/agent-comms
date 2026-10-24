@@ -361,7 +361,7 @@ class TurnEnded(StatusUpdate):
         self.publish(output)
 
     def retire(self, output: ThreadOutput) -> None:
-        output.end_all_turns()
+        """An idle status snapshot retires nothing: saved completions refuse their replay."""
 
     def publish(self, output: ThreadOutput) -> None:
         self.retire(output)
@@ -575,3 +575,6 @@ class FinishedTurn(TurnEnded):
 @dataclass(frozen=True)
 class AllTurnsEnded(TurnEnded):
     """The source ended every open turn; publication owns their retirement."""
+
+    def retire(self, output: ThreadOutput) -> None:
+        output.end_all_turns()

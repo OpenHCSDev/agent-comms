@@ -10,7 +10,7 @@ from agent_comms.channel_targets import ThreadTarget
 from agent_comms.child_process import NoProcess, ProcessIdentity
 from agent_comms.comms import wire
 from agent_comms.errors import RelationViolationError
-from agent_comms.field_codec import FieldCodec, TurnId
+from agent_comms.field_codec import FieldCodec, RootId, TurnId
 from agent_comms.read_basis import Conversation
 from agent_comms.read_ledger import ReadDocument
 from agent_comms.registration import Registration
@@ -218,7 +218,7 @@ def test_claim_scope_cannot_decode_a_registry_process_owner(tmp_path):
             session_id="official-session", claimed_identity=claim_scope, owner=owner.require_process(),
         ),
         LiveCursorScope(
-            session_id="official-session", wire_root_id="a" * 32,
+            session_id="official-session", wire_root_id=RootId("a" * 32),
             claimed_identity=claim_scope, owner=owner.require_process(),
         ),
     ):

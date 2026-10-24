@@ -25,7 +25,7 @@ from agent_comms.acp_extension import (
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.comms import Comms, wire
 from agent_comms.errors import RelationViolationError
-from agent_comms.field_codec import TurnId
+from agent_comms.field_codec import RootId, TurnId
 from agent_comms.queued_input import QueuedInput, QueuedInputContext
 from agent_comms.runtime import present_session
 from agent_comms.thread_identity import ClaimedIdentity, RecordedThreadIncarnation
@@ -173,7 +173,7 @@ def test_attachment_routing_rename_preserves_exact_executor_fences():
             session_id="official-acp-id", claimed_identity=original, owner=ProcessIdentity(123, 1),
         ),
         LiveCursorScope(
-            session_id="official-acp-id", wire_root_id="a" * 32,
+            session_id="official-acp-id", wire_root_id=RootId("a" * 32),
             claimed_identity=original, owner=ProcessIdentity(123, 1),
         ),
     )
@@ -184,7 +184,7 @@ def test_attachment_routing_rename_preserves_exact_executor_fences():
         assert scope.relation(replace(scope, claimed_identity=replace(original, incarnation=replace(original.incarnation, created_at=1001.0)))).ambiguous
         assert scope.relation(replace(scope, claimed_identity=replace(original, claimed_generation=8))).newer
         assert scope.relation(replace(scope, claimed_identity=replace(original, claimed_generation=6))).older
-    assert scopes[1].relation(replace(scopes[1], wire_root_id="b" * 32)).foreign
+    assert scopes[1].relation(replace(scopes[1], wire_root_id=RootId("b" * 32))).foreign
     assert original == renamed  # Birth owns identity; a name is only its route.
     assert original.incarnation.name != renamed.incarnation.name
 

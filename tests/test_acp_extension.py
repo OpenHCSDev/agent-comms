@@ -36,7 +36,7 @@ from agent_comms.acp_failure import ACPFailure, BackendDeliveryFailure
 from agent_comms.agent_events import CompactionStart
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.context_reading import UnmeasuredContext
-from agent_comms.field_codec import ClaimId, InputId, MessageId, TurnId
+from agent_comms.field_codec import ClaimId, InputId, MessageId, RootId, TurnId
 from agent_comms.goal_presentation import IdleGoalExecution
 from agent_comms.goals import NoGoal
 from agent_comms.pi_payloads import McpLiveAcknowledgement
@@ -68,7 +68,7 @@ def test_declared_family_roundtrip_and_strict_boundary(tmp_path):
             CursorEnvelope(
                 LiveCursorScope(
                     session_id="pilot",
-                    wire_root_id="a" * 32,
+                    wire_root_id=RootId("a" * 32),
                     claimed_identity=owner,
                     owner=ProcessIdentity(123, 1),
                 ),
@@ -98,7 +98,7 @@ def test_declared_family_roundtrip_and_strict_boundary(tmp_path):
         InputDeliveryChangedUpdate("input"),
         McpClientAcknowledgementUpdate(
             TurnId.mint(), McpLiveAcknowledgement(
-                1, "pi-mcp-client", "a" * 32, "running", "turn", ()
+                1, "pi-mcp-client", InputId("a" * 32), "running", "turn", ()
             )
         ),
         TurnChangedUpdate(
