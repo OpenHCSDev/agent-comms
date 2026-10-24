@@ -577,15 +577,3 @@ def publish_fenced_response(
     )
 
 
-def resolve_existing_response(
-    store: Coordination,
-    bus: MessageBus[ResponseWrites],
-    fence: OwnerFence,
-    *,
-    exact_target: str,
-    owner_witness: LiveResponseOwner,
-) -> Applied[RecoverySnapshot] | AlreadyApplied[RecoverySnapshot]:
-    """Read-only bus resolution of Tx1; absence never appends or retries."""
-    return _settle_fenced_response(
-        store, bus, fence, allow_append=False, exact_target=exact_target, owner_witness=owner_witness
-    )

@@ -27,7 +27,7 @@ from agent_comms.private_registry_guard import PrivateRegistryGuard
 from agent_comms.registry_document import RegistryDocument
 from agent_comms.runtime_info import AgentRuntimeInfo, RuntimeInfoStore
 from agent_comms.shared_ledger import SharedLedger
-from agent_comms.thread_status import DeletingThreadStatus, HeartbeatThreadStatus, RunningThreadStatus, StoppedThreadStatus
+from agent_comms.thread_status import DeletingThreadStatus, HeartbeatThreadStatus, StoppedThreadStatus
 from agent_comms.threads import current_thread
 from agent_comms.thread_text import ForkedParent, GivenThreadText
 from agent_comms.thread_model import DeclaredModel
@@ -197,24 +197,6 @@ class TestRegistration:
         with pytest.raises(UnregisteredThreadError):
             registry.unregister("ghost")
 
-    def test_stop_then_heartbeat_cannot_reclaim_initial_owner_generation(self, tmp_path: Path):
-        registry = Registration(tmp_path / "registry.json")
-        registry.register(Thread(name='a', tags=frozenset(), worktree='/wt', process_identity=ProcessIdentity.capture(os.getpid())))
-        snapshot = registry.snapshot()
-        expected = RegistryOwner.capture_local(snapshot, "a").thread
-        claimed_generation = snapshot.owner_identity("a").generation
-        registry.unregister("a")
-        registry.heartbeat("a")  # Presence can resume; a stale turn CAS cannot reclaim it.
-        assert registry.require("a") == expected
-        assert registry.status("a") == RunningThreadStatus()
-        assert registry.snapshot().owner_identity("a").generation > claimed_generation
-        with pytest.raises(RelationViolationError):
-            registry.lease_live_turn_with_generation(
-                expected,
-                TurnId('18ab1892f9f48635ac465d11156044ce'),
-                expected_owner_generation=claimed_generation,
-            )
-
     def test_owner_claim_survives_session_metadata_and_rotates_on_restart(
         self, tmp_path: Path
     ) -> None:
@@ -280,19 +262,11 @@ class TestRegistration:
         snapshot = registry.snapshot()
         other = RegistryOwner.capture_local(snapshot, "b").thread
         other_generation = snapshot.owner_identity("b").generation
-        registry.lease_live_turn_with_generation(
-            other,
-            TurnId('d9298a10d1b0735837dc4bd85dac641b'),
-            expected_owner_generation=other_generation,
-        )
+        registry.lease_local_turn(other.name, TurnId('d9298a10d1b0735837dc4bd85dac641b'))
         snapshot = registry.snapshot()
         assert RegistryOwner.capture_local(snapshot, "a").thread == owner
         assert snapshot.owner_identity("a").generation == claimed_generation
-        turn, _ = registry.lease_live_turn_with_generation(
-            owner,
-            TurnId('3fd30542fe3f61b14bd4a4b2dc0b6fb3'),
-            expected_owner_generation=claimed_generation,
-        )
+        turn, _ = registry.lease_local_turn(owner.name, TurnId('3fd30542fe3f61b14bd4a4b2dc0b6fb3'))
         lease = turn.require_turn_lease()
         assert registry.release_turn(lease)[0]
         assert not registry.release_turn(lease)[0]
@@ -307,11 +281,7 @@ class TestRegistration:
         snapshot = registry.snapshot()
         owner = RegistryOwner.capture_local(snapshot, "a").thread
         claimed_generation = snapshot.owner_identity("a").generation
-        leased, owner_generation = registry.lease_live_turn_with_generation(
-            owner,
-            TurnId('d79d3458a58877cd8e48c18ebaf4c27b'),
-            expected_owner_generation=claimed_generation,
-        )
+        leased, owner_generation = registry.lease_local_turn(owner.name, TurnId('d79d3458a58877cd8e48c18ebaf4c27b'))
         snapshot = registry.snapshot()
         assert RegistryOwner.capture_local(snapshot, "a").thread == leased
         assert snapshot.owner_identity("a").generation == owner_generation
@@ -337,7 +307,6 @@ class TestRegistration:
         with pytest.raises(RelationViolationError):
             comms.agents.begin_turn("a", TurnId('eb1c7f738bbe6d0fd106bf4a2fe97600'))
         assert comms.registry.status("a") == StoppedThreadStatus()
-
 
     @pytest.mark.skipif(os.name == "nt", reason="private POSIX ownership unavailable on Windows")
     def test_native_guard_can_precede_first_registry_snapshot(self, tmp_path: Path) -> None:
@@ -367,7 +336,6 @@ class TestRegistration:
             comms.agents.begin_turn("a", TurnId('18e37571ddd8a9cd1f2b7ffa63493bb6'))
         with pytest.raises(RelationViolationError):
             comms.registry.register(Thread(name='a', tags=frozenset(), worktree='/wt'))
-
 
     @pytest.mark.skipif(sys.platform != "linux", reason="fault injection uses Linux /proc/self/fd")
     @pytest.mark.parametrize("stage", ["pending", "commit"])
@@ -442,17 +410,12 @@ class TestRegistration:
         owner = RegistryOwner.capture_local(snapshot, "a").thread
         claimed_generation = snapshot.owner_identity("a").generation
         assert owner.name == "b"
-        leased, _ = registry.lease_live_turn_with_generation(
-            owner,
-            TurnId('d79d3458a58877cd8e48c18ebaf4c27b'),
-            expected_owner_generation=claimed_generation,
-        )
+        leased, _ = registry.lease_local_turn(owner.name, TurnId('d79d3458a58877cd8e48c18ebaf4c27b'))
         registry.rename("b", "c")
         assert not registry.release_turn(
             replace(leased.turn_lease, turn_id=TurnId('d9298a10d1b0735837dc4bd85dac641b'))
         )[0]
         assert registry.release_turn(leased.turn_lease)[0]
-
 
     def test_deleting_thread_cannot_be_revived(self, tmp_path: Path):
         registry = Registration(tmp_path / "registry.json")

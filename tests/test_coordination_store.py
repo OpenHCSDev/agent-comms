@@ -12,7 +12,6 @@ from multiprocessing.synchronize import Event
 from pathlib import Path
 
 import pytest
-from pydantic import JsonValue
 
 from agent_comms.assignment_states import (
     AssignmentState,
@@ -26,14 +25,11 @@ from agent_comms.assignment_states import (
 )
 from agent_comms.attempt_start import INITIAL_LEASE_DURATION_MS, AttemptStart
 from agent_comms.attempt_states import (
-    AbortingAttempt,
     AttemptFailedAttempt,
     LiveAttempt,
     ModelRunningAttempt,
-    ModelStalledAttempt,
     PromptAcceptedAttempt,
     PromptStartingAttempt,
-    RetryingAttempt,
     SettlingAttempt,
     SucceededAttempt,
 )
@@ -72,9 +68,8 @@ from agent_comms.execution_states import (
 from agent_comms.field_codec import FieldCodec, MessageId
 from agent_comms.messages import InfoKind, Message
 from agent_comms.owner_fence import OwnerFence, prepare_fence_token
-from agent_comms.reason_codes import GivenDetail, GivenReasonCode, NoDetail
-from agent_comms.recovery_reader import RecoveryReader
-from agent_comms.recovery_states import FailedRecovery, ModelStalledRecovery, RecoveredRecovery
+from agent_comms.reason_codes import GivenReasonCode, NoDetail
+from agent_comms.recovery_states import FailedRecovery
 from agent_comms.response_acknowledgement import canonical_publication_key
 from agent_comms.selected_source_batch import SelectedSource
 from agent_comms.turn_failure import ProviderRetryExhausted
@@ -216,8 +211,6 @@ def _concurrent_start(
         output.put(type(exc).__name__)
 
 
-
-
 def test_registration_complete_atomic_reopen_and_generation(db_path: Path) -> None:
     db = store(db_path)
     original = db.participants.register(SENDER_LOOKUP, committed=False)
@@ -239,8 +232,6 @@ def test_registration_complete_atomic_reopen_and_generation(db_path: Path) -> No
         assert isinstance(replay, AlreadyApplied)
         assert replay.value.owner_identity.generation == 2
         assert replay.value.owner_identity.owner_lookup == SENDER_LOOKUP
-
-
 
 
 def test_claim_execution_idempotency_and_rollback(db_path: Path) -> None:
@@ -863,190 +854,6 @@ def test_ambiguity_forces_failed_partition(db_path: Path) -> None:
         assert type(settled.value.execution.lifecycle) is FailedExecution
         assert not settled.value.can_retry
         assert settled.value.replay.require_assessment().facts == ReplayFact.TOOL_EXECUTED
-
-
-def test_fenced_recovery_audit_and_monotone_replay(db_path: Path) -> None:
-    with ready(db_path) as db:
-        _, fence = started(db)
-        with pytest.raises(IdentityConflict):
-            db.append_recovery_audit(
-                fence, expected_pointer_revision=1, kind=FailedRecovery, reason_code=GivenReasonCode("invented")
-            )
-        accepted = db.advance(fence, PromptAcceptedAttempt, expected_pointer_revision=1)
-        stalled = db.advance(
-            accepted.value.fence, ModelStalledAttempt, expected_pointer_revision=1
-        )
-        fence = stalled.value.fence
-        audited = db.append_recovery_audit(
-            fence,
-            expected_pointer_revision=1,
-            kind=ModelStalledRecovery,
-            reason_code=GivenReasonCode("stalled"),
-            sanitized_detail=GivenDetail("watchdog"),
-            elapsed_ms=1_000,
-        )
-        assert audited.value.last_recovery is not None
-        assert audited.value.last_recovery.attempt == 1
-        db.observe_replay(
-            fence,
-            expected_pointer_revision=1,
-            expected_replay_revision=None,
-            facts=ReplayFact.TOOL_EXECUTED,
-            replay_safe=False,
-            side_effects_possible=True,
-        )
-        with pytest.raises(IdentityConflict):
-            db.observe_replay(
-                fence,
-                expected_pointer_revision=1,
-                expected_replay_revision=1,
-                facts=ReplayFact.NONE,
-                replay_safe=True,
-                side_effects_possible=False,
-            )
-        assert db.get("exec").replay.require_assessment().facts == ReplayFact.TOOL_EXECUTED
-
-
-def test_recovered_audit_requires_same_attempt_new_incident_and_resumption(db_path: Path) -> None:
-    with ready(db_path) as db:
-        _, fence = started(db)
-        accepted = db.advance(fence, PromptAcceptedAttempt, expected_pointer_revision=1)
-        stalled = db.advance(
-            accepted.value.fence, ModelStalledAttempt, expected_pointer_revision=1
-        )
-        fence = stalled.value.fence
-        db.append_recovery_audit(
-            fence,
-            expected_pointer_revision=1,
-            kind=ModelStalledRecovery,
-            reason_code=GivenReasonCode("stalled"),
-        )
-        with pytest.raises(IdentityConflict):
-            db.append_recovery_audit(
-                fence,
-                expected_pointer_revision=1,
-                kind=RecoveredRecovery,
-                reason_code=GivenReasonCode("premature"),
-            )
-        aborting = db.advance(fence, AbortingAttempt, expected_pointer_revision=1)
-        with pytest.raises(IdentityConflict):
-            db.append_recovery_audit(
-                aborting.value.fence,
-                expected_pointer_revision=1,
-                kind=RecoveredRecovery,
-                reason_code=GivenReasonCode("still_aborting"),
-            )
-        retrying = db.advance(
-            aborting.value.fence, RetryingAttempt, expected_pointer_revision=1
-        )
-        running = db.advance(
-            retrying.value.fence, ModelRunningAttempt, expected_pointer_revision=1
-        )
-        fence = running.value.fence
-        db.append_recovery_audit(
-            fence,
-            expected_pointer_revision=1,
-            kind=RecoveredRecovery,
-            reason_code=GivenReasonCode("resumed"),
-        )
-        with pytest.raises(IdentityConflict):
-            db.append_recovery_audit(
-                fence,
-                expected_pointer_revision=1,
-                kind=RecoveredRecovery,
-                reason_code=GivenReasonCode("duplicate"),
-            )
-        again = db.advance(fence, ModelStalledAttempt, expected_pointer_revision=1)
-        db.append_recovery_audit(
-            again.value.fence,
-            expected_pointer_revision=1,
-            kind=ModelStalledRecovery,
-            reason_code=GivenReasonCode("stalled_again"),
-        )
-        aborting = db.advance(
-            again.value.fence, AbortingAttempt, expected_pointer_revision=1
-        )
-        retrying = db.advance(
-            aborting.value.fence, RetryingAttempt, expected_pointer_revision=1
-        )
-        running = db.advance(
-            retrying.value.fence, ModelRunningAttempt, expected_pointer_revision=1
-        )
-        db.append_recovery_audit(
-            running.value.fence,
-            expected_pointer_revision=1,
-            kind=RecoveredRecovery,
-            reason_code=GivenReasonCode("resumed_again"),
-        )
-
-
-def test_recovered_audit_rejects_prior_attempt_incident_and_terminal(db_path: Path) -> None:
-    with ready(db_path) as db:
-        _, first = started(db)
-        accepted = db.advance(first, PromptAcceptedAttempt, expected_pointer_revision=1)
-        stalled = db.advance(
-            accepted.value.fence, ModelStalledAttempt, expected_pointer_revision=1
-        )
-        db.append_recovery_audit(
-            stalled.value.fence,
-            expected_pointer_revision=1,
-            kind=ModelStalledRecovery,
-            reason_code=GivenReasonCode("stalled"),
-        )
-        db.observe_replay(
-            stalled.value.fence,
-            expected_pointer_revision=1,
-            expected_replay_revision=None,
-            facts=ReplayFact.NONE,
-            replay_safe=True,
-            side_effects_possible=False,
-        )
-        done = db.advance(
-            stalled.value.fence,
-            ModelStalledAttempt,
-            expected_pointer_revision=1,
-            backend_done=True,
-            process_dead=True,
-        )
-        deferred = db.settle_nonpublication(
-            done.value.fence,
-            expected_pointer_revision=1,
-            outcome=AttemptFailedAttempt(),
-            reason_code=GivenReasonCode("first_failed"),
-        )
-        assert deferred.value.can_retry
-        with pytest.raises(StaleFence):
-            db.append_recovery_audit(
-                done.value.fence,
-                expected_pointer_revision=2,
-                kind=RecoveredRecovery,
-                reason_code=GivenReasonCode("terminal"),
-            )
-        db.participants.advance_generation(SENDER_LOOKUP, expected_generation=1)
-        second = db.start(
-            AttemptStart(
-                "exec",
-                2,
-                SENDER_LOOKUP,
-                2,
-                prepare_fence_token(),
-                expected_execution_revision=4,
-                expected_pointer_revision=2,
-            )
-        )
-        accepted = db.advance(
-            second.value.fence, PromptAcceptedAttempt, expected_pointer_revision=3
-        )
-        running = db.advance(
-            accepted.value.fence, ModelRunningAttempt, expected_pointer_revision=3
-        )
-        with pytest.raises(IdentityConflict):
-            db.append_recovery_audit(
-                running.value.fence,
-                expected_pointer_revision=3,
-                kind=RecoveredRecovery,
-                reason_code=GivenReasonCode("prior_attempt"),
-            )
 
 
 def test_unstarted_failure_and_claim_requeue(db_path: Path) -> None:

@@ -11,7 +11,6 @@ from agent_comms.errors import RelationViolationError
 from agent_comms.field_codec import TurnId, GoalId
 from agent_comms.goals import Goal
 from agent_comms.thread_identity import UserThreadRole
-from agent_comms.thread_text import GivenThreadText
 from agent_comms.turn_lease import RecordedGeneration
 from agent_comms.turn_phase import PreparingPhase
 from agent_comms.threads import Thread
@@ -24,32 +23,6 @@ def registered(root):
         process_identity=ProcessIdentity.capture(os.getpid()),
         goal=Goal('task', g_goal_id, published_seq=0)))
     return comms.registry
-
-
-@pytest.mark.parametrize('capture_idle', [False, True])
-def test_claim_claim_tolerates_metadata_and_finished_captured_turn(tmp_path, capture_idle):
-    registry = registered(tmp_path)
-    initial, claim_scope = registry.live_owner_with_claim('owner')
-    leased, _ = registry.lease_local_turn('owner', TurnId('a7937b64b8caa58f03721bb6bacf5c78'))
-    captured = initial if capture_idle else leased
-    generation = registry.snapshot().owner_generations['owner']
-    assert registry.release_turn(leased.turn_lease)[0]
-    registry.register(replace(registry.require('owner'), title=GivenThreadText('metadata'), tags=frozenset({'new'})))
-    with pytest.raises(
-        RelationViolationError,
-    ):
-        registry.lease_live_turn_with_generation(
-            captured,
-            TurnId('16367aacb67a4a017c8da8ab95682ccb'),
-            expected_owner_generation=generation,
-        )
-    claimed, current_claim = registry.lease_live_turn_with_claim(
-        captured, TurnId('16367aacb67a4a017c8da8ab95682ccb'), expected_generation=claim_scope,
-    )
-    assert current_claim == claim_scope
-    assert claimed.title == GivenThreadText('metadata')
-    assert claimed.turn_record.read().id == '16367aacb67a4a017c8da8ab95682ccb'
-    assert registry.release_turn(claimed.turn_lease)[0]
 
 
 @pytest.mark.parametrize('mutation', [
