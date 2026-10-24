@@ -687,10 +687,11 @@ class Commander(CommanderContext):
                answers: tuple[MessageReference, ...] = ()) -> None:
         """Publish a strike Core already recorded on the task's Todo to #comms."""
         n = struck(todo, unit)
+        taken = f", {todo.id} taken away" if todo.holder != unit else ""
         line = (f'{time.strftime("%Y-%m-%d")} {strike.at.clock()} {unit} (strike {n} on {todo.id}'
-                f'{f", {todo.id} taken away" if n >= 2 else ""}): {strike.reason}')
+                f'{taken}): {strike.reason}')
         self.on_record(line, 'Strike', VerdictAudience.of(unit, todo), answers)
-        print(f'{unit}: {n} strike(s) on {todo.id}' + (f'. Reassign {todo.id} now and freeze its branch.' if n >= 2 else ''))
+        print(f'{unit}: {n} strike(s) on {todo.id}{taken}')
 
     def hunt(self, where, why, sent, repository=""):
         """Record the commander's source read, whether or not it became an order.

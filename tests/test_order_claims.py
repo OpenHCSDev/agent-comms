@@ -167,6 +167,21 @@ def test_failed_check_strike_releases_at_the_updated_revision(held_commander):
     assert store.get(first.id) == released
 
 
+def test_second_commander_strike_takes_the_task_away(held_commander):
+    ctx = held_commander
+    store = ctx.comms.goals.todos
+    todo = store.get("P1")
+    for reason in ("The first review found the original duplicated decision still present.",
+                   "The second review found the same duplicated decision restated in a new file."):
+        todo = store.apply(todo.id, StrikeTodo(
+            todo.revision, ctx.incarnation, todo.held(), reason,
+            evidence=(todo.order.checked().owner,),
+        ))
+    assert todo.holder is None
+    assert len(todo.strikes) == 2
+    assert todo.released[-1].previous == todo.strikes[-1].previous
+
+
 def claimed_by_worker(ctx) -> Todo:
     ctx.comms.goals.update_goal("worker", SetGoalAction(
         text=ProblemGoalOrder.text, order=ProblemGoalOrder(),
