@@ -11,7 +11,6 @@ import re
 import types
 from abc import ABC, abstractmethod
 from collections.abc import Callable, Iterable, Iterator, Mapping
-from contextlib import contextmanager
 from dataclasses import MISSING, Field, dataclass, field, fields, is_dataclass
 from datetime import datetime
 from enum import Enum
@@ -67,18 +66,27 @@ class MalformedRecord(ValueError):  # noqa: N818 - names the refused data
         return {name: f"{self}; fix: {fix}"}
 
     @classmethod
-    @contextmanager
-    def refusing(cls, subject: str) -> Iterator[None]:
-        """Each check that refuses decoded data with ValueError refuses a malformed record.
+    def refusing(cls, subject: str) -> Refusing:
+        return Refusing(subject)
 
-        A domain error raised by the record's own checks stays the cause.
-        """
-        try:
-            yield
-        except cls:
-            raise
-        except ValueError as error:
-            raise cls(f"{subject}: {error}") from error
+
+@dataclass(frozen=True, slots=True)
+class Refusing:
+    """One non-generator boundary preserves malformed records and locates domain errors."""
+
+    subject: str
+
+    def __enter__(self) -> None:
+        return None
+
+    def __exit__(
+        self, kind: type[BaseException] | None, error: BaseException | None,
+        trace: types.TracebackType | None,
+    ) -> Literal[False]:
+        if (kind is not None and issubclass(kind, ValueError)
+                and not issubclass(kind, MalformedRecord)):
+            raise MalformedRecord(f"{self.subject}: {error}") from error
+        return False
 
 
 class RecordProblems(MalformedRecord):
