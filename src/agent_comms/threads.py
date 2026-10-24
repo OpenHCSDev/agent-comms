@@ -335,6 +335,11 @@ class Thread(ThreadProvenance):
                 "cannot command: no Codex commander."
             )
 
+    def commanded_child(self, child: Thread) -> Thread:
+        """A commanded declaration inherits its initial audience from its commander."""
+        self.require_commander()
+        return replace(child, tags=self.tags)
+
     def inherited_history(self, registry, visited):
         if self.name in visited:
             return

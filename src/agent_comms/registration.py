@@ -11,7 +11,7 @@ from typing import TYPE_CHECKING, Concatenate
 from .catalog_store import ChannelCatalog
 from .child_process import NoProcess, ProcessIdentity
 from .errors import RelationViolationError
-from .field_codec import TurnId, GoalId
+from .field_codec import GoalId, TurnId
 from .goal_history import GoalHistoryEntry, GoalHistoryStore
 from .native_input_owner import RegistryOwner
 from .private_registry_guard import PrivateRegistryGuard
@@ -20,7 +20,7 @@ from .registry_document import RegistryDocument, RegistrySnapshot
 from .registry_store import RegistryEdit, RegistryEntryRevision, RegistryStore
 from .routing import TurnRouting
 from .storage_rules import StorageRule
-from .thread_execution import CommanderForkExecution
+from .thread_execution import CommanderForkExecution, ExternalThreadExecution
 from .thread_identity import GenerationCounter
 from .thread_status import (
     ConnectedThreadStatus,
@@ -96,7 +96,6 @@ class Registration:
         """Declare or resume one child and its own goal under the registry's lock."""
         with self.store.editing() as edit:
             parent = edit.document.require(parent_name)
-            parent.require_commander()
             if edit.document.canonical_name(name) != name:
                 raise RelationViolationError(f"Commander fork {name!r} is an alias.")
             if edit.document.taken(name):
@@ -105,14 +104,27 @@ class Registration:
                 if not existing.parent.named(parent.name):
                     raise RelationViolationError(f"Thread {name!r} is not a fork of {parent.name!r}.")
                 return self._declare_in(edit, existing, _DEFAULT_PRESENCE)
-            child = Thread(name, parent.tags, parent.worktree,
+            child = parent.commanded_child(Thread(name, frozenset(), parent.worktree,
                 parent=ForkedParent(parent.name), model=parent.model,
                 thinking_level=parent.thinking_level, service_tier=parent.service_tier,
-                execution=CommanderForkExecution)
+                execution=CommanderForkExecution))
             with self._preparing_declaration(edit, child, _DEFAULT_PRESENCE) as change:
                 goal = goals.fork_goal(parent, change.thread)
                 return self._commit_registration(edit, replace(
                     change, thread=replace(change.thread, goal=goal))).thread
+
+    def register_commanded_unit(
+        self, name: str, commander: str, worktree: str, process: ProcessIdentity,
+    ) -> Thread:
+        """Declare a new commanded endpoint without rewriting an existing declaration."""
+        with self.store.editing() as edit:
+            if edit.document.taken(name):
+                return self._declare_in(edit, edit.document.require(name), _DEFAULT_PRESENCE)
+            child = edit.document.require(commander).commanded_child(Thread(
+                name, frozenset(), worktree,
+                process_identity=process, execution=ExternalThreadExecution,
+            ))
+            return self._declare_in(edit, child, _DEFAULT_PRESENCE)
 
     def reserve_owner(self, original: Thread, process: ProcessIdentity) -> RegistryOwner:
         """Reserve one process against the exact stopped launch it prepared.
