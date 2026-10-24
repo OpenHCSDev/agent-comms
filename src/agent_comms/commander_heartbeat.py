@@ -37,9 +37,14 @@ class CommanderObservation:
             pulls.open(repo)
         states = UnitState.current(comms, thread.name, frame)
         rules = StandingRule.broken(comms, thread.name, observed=states, frame=frame)
+        # An unreadable holder's checkout already has its card; its checks cannot run there.
+        unreadable = ({state.unit for state in states}
+                      - {unit for state in states for unit in state.readable_units()})
         merged = tuple(
             closed
             for todo in comms.goals.todos.for_commander(thread.incarnation)
+            if not any(held.owner_identity in unreadable
+                       for held in todo.holder_state.current_assignments())
             for closed in todo.order.closed_by_merge(
                 todo, pulls, comms.registry.storage_rule.checkout_base)
         )
