@@ -55,6 +55,7 @@ from agent_comms.coordination_session import NativeBoundary
 from agent_comms.declared_family import DeclaredFamily
 from agent_comms.errors import ToolRefusedError
 from agent_comms.field_codec import (
+    GoalId,
     FieldCodec,
     GitCommitText,
     MalformedRecord,
@@ -2592,7 +2593,7 @@ class TodoHolder(ABC):
     @abstractmethod
     def previous_assignment(self) -> Assignment: ...
 
-    def owned_by(self, actor: ThreadIncarnation, generation: str) -> bool:
+    def owned_by(self, actor: ThreadIncarnation, generation: GoalId) -> bool:
         return False
 
     def proposed_assignment(self, proposed: Assignment) -> Assignment:
@@ -2622,13 +2623,15 @@ class Assignment(TodoHolder):
     owner_created: float
     parent: str
     parent_created: float
-    generation: str
+    generation: GoalId
     previous_owners: Annotated[
         tuple[ThreadIncarnation, ...], WireOmitDefault()
     ] = ()
 
     @classmethod
-    def of(cls, owner: ThreadIncarnation, parent: ThreadIncarnation, generation: str) -> Assignment:
+    def of(
+        cls, owner: ThreadIncarnation, parent: ThreadIncarnation, generation: GoalId
+    ) -> Assignment:
         return cls(owner.name, owner.wire_birth, parent.name, parent.wire_birth, generation)
 
     @classmethod
@@ -2643,7 +2646,6 @@ class Assignment(TodoHolder):
             self.owner_identity.require_recorded()
         except ValueError as error:
             raise TodoError("Assignment requires a recorded owner incarnation") from error
-        _text(self.generation, "Assignment generation", 128)
 
     @property
     def owner_identity(self) -> ThreadIncarnation:
@@ -2668,7 +2670,7 @@ class Assignment(TodoHolder):
     def current_assignments(self) -> tuple[Assignment, ...]:
         return (self,)
 
-    def owned_by(self, actor: ThreadIncarnation, generation: str) -> bool:
+    def owned_by(self, actor: ThreadIncarnation, generation: GoalId) -> bool:
         return (self.owner_identity, self.generation) == (actor, generation)
 
     def require_trace(self, owner: str, traced: SourceReference) -> None:
@@ -2829,7 +2831,8 @@ class AssignTodo(TodoOperation):
 
     @classmethod
     def by(cls, actor: ThreadIncarnation, expected_revision: int, owner: ThreadIncarnation,
-           generation: str, review_at: EventTime, order: PendingProblemOrder | MergedProblemOrder,
+           generation: GoalId, review_at: EventTime,
+           order: PendingProblemOrder | MergedProblemOrder,
            request: OwnerRequestId, traced: FileLine | NoSourceReference) -> AssignTodo:
         """The one place the typed actor and the assignment's recorded assigner are made."""
         return cls(expected_revision, actor, Assignment.of(owner, actor, generation),
@@ -3509,7 +3512,7 @@ class OrderMessage(TodoOperation):
 class RecordPullRequest(TodoCommand):
     actor: ThreadIncarnation
     link: PullRequestLink
-    generation: str
+    generation: GoalId
 
     def changed(self, current: Todo) -> Todo:
         current.require_actor(self.actor, self.generation)
@@ -3539,7 +3542,7 @@ class ClaimOrder(TodoCommand):
     """Only the holder records a claim; its answer is published from the retained value."""
 
     actor: ThreadIncarnation
-    generation: str
+    generation: GoalId
     claim: OrderClaim
 
     def record(self, goals: Goals, problem: str) -> Todo:
@@ -3654,7 +3657,7 @@ class WithdrawTodo(CloseOrderTodo):
 class ChangeTodoState(TodoOperation):
     state: type[TodoState]
     actor: ThreadIncarnation
-    generation: str | None
+    generation: GoalId | None
 
     def prepare(self, goals, current):
         self.state.prepare_change(goals, current)
@@ -3900,7 +3903,7 @@ class Todo(TodoStoreRows, TypedTable):
             raise TodoConflict(self)
 
     @boundary_decoder
-    def require_assignee(self, actor: ThreadIncarnation, generation: str | None) -> None:
+    def require_assignee(self, actor: ThreadIncarnation, generation: GoalId | None) -> None:
         if generation is None or not self.holder_state.owned_by(actor, generation):
             raise TodoConflict(self)
 
@@ -3914,7 +3917,7 @@ class Todo(TodoStoreRows, TypedTable):
         proposed = holder.successor(proposed, self)
         return replace(self, assignment=proposed, revision=self.revision + 1)
 
-    def require_released_order(self, owner: ThreadIncarnation, goal_id: str) -> None:
+    def require_released_order(self, owner: ThreadIncarnation, goal_id: GoalId) -> None:
         if self.holder_state.owned_by(owner, goal_id):
             raise TodoConflict(self)
 
@@ -3944,7 +3947,7 @@ class Todo(TodoStoreRows, TypedTable):
         if self.creator_identity != actor.commanding_identity:
             raise TodoConflict(self)
 
-    def require_actor(self, actor: ThreadIncarnation, generation: str | None) -> None:
+    def require_actor(self, actor: ThreadIncarnation, generation: GoalId | None) -> None:
         if self.creator_identity != actor.commanding_identity:
             self.require_assignee(actor, generation)
 
@@ -4272,7 +4275,7 @@ class TodoStore(OwnerRequestStore):
     def list(self, repo: RepositoryName) -> tuple[Todo, ...]:
         return self._select("repo=?", (repo.to_wire(),))
 
-    def for_goal(self, owner: ThreadIncarnation, goal_id: str) -> tuple[Todo, ...]:
+    def for_goal(self, owner: ThreadIncarnation, goal_id: GoalId) -> tuple[Todo, ...]:
         return self._select(Assignment.sql_field('generation') + '=?', (goal_id,),
                             reader=partial(self.held_in, unit=owner))
 
@@ -4354,7 +4357,7 @@ class TodoStore(OwnerRequestStore):
         creator: Thread,
         owner: Thread,
         assigner: ThreadIncarnation,
-        generation: str,
+        generation: GoalId,
         review_at: EventTime,
         order: PendingProblemOrder,
         request: OwnerRequestId,
@@ -4443,7 +4446,7 @@ class TodoStore(OwnerRequestStore):
         expected_revision: int,
         owner: Thread,
         assigner: ThreadIncarnation,
-        generation: str,
+        generation: GoalId,
         request: OwnerRequestId,
         review_at: EventTime,
         order: PendingProblemOrder,

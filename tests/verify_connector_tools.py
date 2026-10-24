@@ -29,7 +29,7 @@ from agent_comms.child_process import ProcessIdentity
 from agent_comms.comms import Comms, wire
 from agent_comms.connector import Connector
 from agent_comms.connector_store import ConnectorStore
-from agent_comms.field_codec import FieldCodec, TurnId
+from agent_comms.field_codec import FieldCodec, TurnId, GoalId
 from agent_comms.goal_actions import CreateProblemGoalAction, PausedGoalAction, SetGoalAction
 from agent_comms.goals import CountCheckResult, OrderCheck
 from agent_comms.owner_requests import NewestOpenRequest
@@ -46,6 +46,7 @@ from agent_comms.threads import Thread
 
 
 def seed(root: Path, project: Path) -> None:
+    probe_goal_id = GoalId.mint()
     root.mkdir(mode=0o700)
     comms = wire(root)
     for name in ("claude-ai", "worker", "archivable"):
@@ -57,7 +58,7 @@ def seed(root: Path, project: Path) -> None:
         ParticipantsView('probe-view', ViewPredicate(AnyOfMatch, frozenset({'probe'})))
     )
     comms.goals.update_goal(
-        "claude-ai", SetGoalAction(text="Measure the connector calls.", goal_id="probe-goal")
+        "claude-ai", SetGoalAction(text="Measure the connector calls.", goal_id=probe_goal_id)
     )
     comms.goals.todos.add_request(comms.registry.require('claude-ai').incarnation,
                                  'Measure the connector calls.')
@@ -70,6 +71,7 @@ def seed(root: Path, project: Path) -> None:
 
 
 def arguments(comms: Comms, name: str, project: Path, checkout: Path) -> dict:
+    goal_id = comms.registry.require("claude-ai").goal.require().id
     actor = FieldCodec.encode(comms.registry.require("claude-ai").incarnation)
     pending = PendingProblemOrder(
         id="probe-order", scope=FIX_SCOPE,
@@ -161,15 +163,15 @@ def arguments(comms: Comms, name: str, project: Path, checkout: Path) -> dict:
         "comms_set_project": {"path": str(project)},
         "comms_set_goal": {"text": "Measure this scratch connector."},
         "comms_goal": {
-            "goal_id": "probe-goal",
+            "goal_id": str(goal_id),
             "status": "active",
             "progress": "Reading scratch history.",
         },
         "comms_resume_goal": {
-            "goal_id": "probe-goal",
+            "goal_id": str(goal_id),
             "progress": "Continue the authorized scratch work.",
         },
-        "comms_edit_goal": {"goal_id": "probe-goal", "text": "Measure only the scratch connector."},
+        "comms_edit_goal": {"goal_id": str(goal_id), "text": "Measure only the scratch connector."},
         "comms_goal_history": {},
         "comms_todo": {
             "id": "P1",

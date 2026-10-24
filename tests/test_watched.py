@@ -10,6 +10,7 @@ from pathlib import Path
 
 import pytest
 
+from agent_comms.field_codec import GoalId
 from agent_comms.bus import Bus, PublicRecord
 from agent_comms.comms import wire
 from agent_comms.goal_attempts import Generation, GoalAttemptStore, StorageUncertainError
@@ -38,9 +39,10 @@ def watched_bus(tmp_path):
 
 @pytest.fixture
 def recorded_wait(watched_bus):
+    watched_goal_id = GoalId.mint()
     _, comms = watched_bus
     return RecordedGoalWait(
-        goal_id="watched-goal", wait_id="watched-wait", revision=0, after_seq=0,
+        goal_id=watched_goal_id, wait_id="watched-wait", revision=0, after_seq=0,
         targets=(GoalWaitTarget(comms.registry.require("peer").incarnation.require_recorded()),),
         owner=comms.registry.require("owner").incarnation.require_recorded(),
         target_turn_generations=(None,), report_turn_id=None, report_turn_generation=None,
@@ -119,15 +121,17 @@ def private_ledger(watched_bus):
 
 
 async def test_private_goal_commits_wake_but_reads_do_not(watched_bus, private_ledger):
+    first_goal_id = GoalId.mint()
+    second_goal_id = GoalId.mint()
     bus, _ = watched_bus
     async with aclosing(bus.watch()) as observations:
         await anext(observations)
-        for goal in ("first", "second"):
+        for goal in (first_goal_id, second_goal_id):
             await asyncio.to_thread(private_ledger.create_goal, goal)
             await asyncio.wait_for(anext(observations), 1)
         waiting = asyncio.create_task(anext(observations))
         try:
-            assert private_ledger.snapshot("first").goal_id == "first"
+            assert private_ledger.snapshot(first_goal_id).goal_id == first_goal_id
             await asyncio.sleep(0.05)
             assert not waiting.done()
         finally:
@@ -136,25 +140,27 @@ async def test_private_goal_commits_wake_but_reads_do_not(watched_bus, private_l
 
 
 def test_private_failed_readback_does_not_publish(private_ledger):
-    private_ledger.create_goal("retained")
+    retained_goal_id = GoalId.mint()
+    private_ledger.create_goal(retained_goal_id)
     with Bus.register_sources(*(FileSource(path) for path in
                                private_ledger.source_paths(private_ledger.root))) as changes:
         with pytest.raises(StorageUncertainError):
             private_ledger._change(
-                lambda db: Generation.delete(db, goal_id="retained"), lambda _: False,
+                lambda db: Generation.delete(db, goal_id=retained_goal_id), lambda _: False,
             )
-        assert private_ledger.snapshot("retained") is None
+        assert private_ledger.snapshot(retained_goal_id) is None
         assert changes.changed_paths() == frozenset()
 
 
 def test_private_notification_failure_returns_no_ready_grant(private_ledger):
+    uncertain_goal_id = GoalId.mint()
     marker, = private_ledger.source_paths(private_ledger.root)
     marker.mkdir()
     with pytest.raises(StorageUncertainError):
-        private_ledger.create_goal("uncertain")
-    assert private_ledger.snapshot("uncertain").goal_id == "uncertain"
+        private_ledger.create_goal(uncertain_goal_id)
+    assert private_ledger.snapshot(uncertain_goal_id).goal_id == uncertain_goal_id
     with pytest.raises(UnresolvedAttemptError):
-        private_ledger.ready_grant("uncertain", 1)
+        private_ledger.ready_grant(uncertain_goal_id, 1)
 
 
 def move_away(path: Path) -> None:

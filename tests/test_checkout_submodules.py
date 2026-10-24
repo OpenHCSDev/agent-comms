@@ -11,7 +11,7 @@ import pytest
 from agent_comms.bus import Bus
 from agent_comms.change_report import FileLine
 from agent_comms.comms import wire
-from agent_comms.field_codec import FieldCodec
+from agent_comms.field_codec import FieldCodec, GoalId
 from agent_comms.goals import OrderCheck
 from agent_comms.order_runs import MechanicalOrderRun
 from agent_comms.recorded_time import RecordedEventTime
@@ -62,6 +62,7 @@ def repository(tmp_path, monkeypatch):
 @pytest.fixture
 def checkout_command_bus(repository, tmp_path, monkeypatch, installed_runtime):
     """A held order and its real pinned-submodule repository, with a local origin."""
+    prepare_checkout_goal_id = GoalId.mint()
     (repository / "owner.py").write_text(SourceRepository.main_source)
     git(repository, "commit", "-qam", "Declare the order's source owner")
     git(repository, "branch", "-M", "main")
@@ -93,7 +94,7 @@ def checkout_command_bus(repository, tmp_path, monkeypatch, installed_runtime):
         first_call_deadline=RecordedEventTime(now + 120))
     comms.goals.todos.create(
         "P1", identity, "Prepare the pinned checkout", creator=lead, owner=worker,
-        assigner=lead.incarnation, generation="prepare-checkout", request=request,
+        assigner=lead.incarnation, generation=prepare_checkout_goal_id, request=request,
         review_at=RecordedEventTime(now + 3600), order=order)
     monkeypatch.setenv("AGENT_COMMS_THREAD", worker.name)
     return comms

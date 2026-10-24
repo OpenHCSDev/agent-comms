@@ -5,6 +5,7 @@ from dataclasses import replace
 
 import pytest
 
+from agent_comms.field_codec import GoalId
 from agent_comms.agent_events import GoalUnchanged
 from agent_comms.comms import wire
 from agent_comms.goal_actions import (
@@ -97,16 +98,17 @@ def test_goal_changed_compares_goal_snapshots(owner):
 
 
 def test_original_proxy_decodes_typed_goal_control_at_json_boundary():
+    original_goal_id = GoalId.mint()
     from agent_comms.runtime_requests import RuntimeRequest, UpdateGoalRuntimeRequest
 
     payload = UpdateGoalRuntimeRequest.proxy_payload("worker", None, {
-        "status": PausedGoalAction, "goal_id": "original-goal", "expected_revision": 7,
+        "status": PausedGoalAction, "goal_id": original_goal_id, "expected_revision": 7,
     })
     assert payload == {"action": "update_goal", "thread": "worker", "status": "paused",
-                       "goal_id": "original-goal", "expected_revision": 7}
+                       "goal_id": original_goal_id, "expected_revision": 7}
     request = RuntimeRequest.from_wire(json.loads(json.dumps(payload)))
     assert request == UpdateGoalRuntimeRequest(thread="worker", status=PausedGoalAction,
-        goal_id="original-goal", expected_revision=7)
+        goal_id=original_goal_id, expected_revision=7)
     with pytest.raises(ValueError):
         RuntimeRequest.from_wire({**payload, "status": "unrecorded"})
 

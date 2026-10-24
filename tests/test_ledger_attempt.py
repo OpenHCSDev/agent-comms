@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from agent_comms.field_codec import GoalId
 from agent_comms.errors import StaleAttemptError
 import os
 import tempfile
@@ -34,8 +35,9 @@ def read(store: GoalAttemptStore, attempt_id: str):
 
 
 def test_a_recorded_attempt_answers_for_its_own_reservation_only(store):
-    store.create_goal("goal")
-    reservation = store.reserve("goal", 1)
+    goal_id = GoalId.mint()
+    store.create_goal(goal_id)
+    reservation = store.reserve(goal_id, 1)
     attempt = read(store, reservation.attempt_id)
     assert type(attempt) is RecordedAttempt
     refusal = StaleAttemptError("not this reservation")
@@ -43,16 +45,17 @@ def test_a_recorded_attempt_answers_for_its_own_reservation_only(store):
     with pytest.raises(StaleAttemptError):
         attempt.reserved_by(replace(reservation, token="other"), refusal)
     with pytest.raises(StaleAttemptError):
-        attempt.identified(GoalAttemptIdentity("goal", 2, reservation.attempt_id), refusal)
+        attempt.identified(GoalAttemptIdentity(goal_id, 2, reservation.attempt_id), refusal)
     assert attempt.holds(reservation, ReservedAttempt())
     assert not attempt.resolved_as(ResolvedAttempt(), "goal cleared")
-    store.retire_goal("goal", expected_generation=1, attempt_id=reservation.attempt_id)
+    store.retire_goal(goal_id, expected_generation=1, attempt_id=reservation.attempt_id)
     assert read(store, reservation.attempt_id).resolved_as(ResolvedAttempt(), "goal cleared")
 
 
 def test_a_missing_attempt_refuses_every_question_and_cannot_be_retired(store):
-    store.create_goal("goal")
-    reservation = store.reserve("goal", 1)
+    goal_id = GoalId.mint()
+    store.create_goal(goal_id)
+    reservation = store.reserve(goal_id, 1)
     attempt = read(store, "0" * 32)
     with pytest.raises(StorageUncertainError, match="0" * 32):
         attempt.stopped_permit()
@@ -63,14 +66,15 @@ def test_a_missing_attempt_refuses_every_question_and_cannot_be_retired(store):
     assert not attempt.holds(reservation, ReservedAttempt())
     assert not attempt.resolved_as(ResolvedAttempt(), "goal cleared")
     with closing(store._connect()) as conn, pytest.raises(StaleAttemptError):
-        attempt.retire(conn, ReservedGeneration(), "goal", 1)
+        attempt.retire(conn, ReservedGeneration(), goal_id, 1)
 
 
 def test_no_attempt_retires_a_ready_goal_and_refuses_a_reserved_one(store):
-    store.create_goal("goal")
+    goal_id = GoalId.mint()
+    store.create_goal(goal_id)
     with closing(store._connect()) as conn, pytest.raises(StaleAttemptError):
-        NoAttempt().retire(conn, ReservedGeneration(), "goal", 1)
+        NoAttempt().retire(conn, ReservedGeneration(), goal_id, 1)
     with closing(store._connect()) as conn:
-        NoAttempt().retire(conn, ReadyGeneration(), "goal", 1)
-    retired = store.retire_goal("goal", expected_generation=1, attempt_id=None)
+        NoAttempt().retire(conn, ReadyGeneration(), goal_id, 1)
+    retired = store.retire_goal(goal_id, expected_generation=1, attempt_id=None)
     assert retired.lifecycle == CancelledGeneration()

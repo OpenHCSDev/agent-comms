@@ -1,4 +1,4 @@
-from agent_comms.field_codec import FieldCodec
+from agent_comms.field_codec import FieldCodec, GoalId
 
 """External contracts and adding commands without editing any consumer catalog."""
 
@@ -91,15 +91,18 @@ def test_cli_decodes_tag_sets_enums_json_and_shell_words_once(monkeypatch, tmp_p
         {"action": "compact", "instructions": "focus"},
         {"action": "input_dispositions", "include_history": True},
         {"action": "dismiss_historical_inputs"},
-        {"action": "goal_history", "goal_id": "g"},
+        {"action": "goal_history", "goal_id": None},
         {"action": "goal_snapshot"},
-        {"action": "edit_goal", "goal_id": "g", "expected_revision": 3, "text": "new goal"},
-        {"action": "update_goal", "goal_id": "g", "expected_revision": 3, "status": "paused"},
-        {"action": "retry_goal", "goal_id": "g", "expected_revision": 3},
+        {"action": "edit_goal", "goal_id": None, "expected_revision": 3, "text": "new goal"},
+        {"action": "update_goal", "goal_id": None, "expected_revision": 3, "status": "paused"},
+        {"action": "retry_goal", "goal_id": None, "expected_revision": 3},
         {"action": "set_goal", "text": "new goal"},
     ],
 )
 def test_runtime_wire_format_round_trip(parameters):
+    goal_id = GoalId.mint()
+    if "goal_id" in parameters and parameters["goal_id"] is None:
+        parameters = {**parameters, "goal_id": str(goal_id)}
     payload = {"thread": "alias", **parameters}
     request = RuntimeRequest.from_wire(payload)
     encoded = request.to_wire()
@@ -119,13 +122,16 @@ def test_runtime_wire_format_round_trip(parameters):
     [
         {"action": "input_dispositions", "include_history": "yes"},
         {"action": "goal_history", "goal_id": 2},
-        {"action": "edit_goal", "goal_id": "g", "expected_revision": True, "text": "x"},
+        {"action": "edit_goal", "goal_id": None, "expected_revision": True, "text": "x"},
         {"action": "retry_goal"},
         {"action": "set_goal", "text": "  "},
-        {"action": "edit_goal", "goal_id": "g", "expected_revision": 1, "text": False},
+        {"action": "edit_goal", "goal_id": None, "expected_revision": 1, "text": False},
     ],
 )
 def test_invalid_runtime_parameters_use_canonical_decode_and_domain_errors(parameters):
+    goal_id = GoalId.mint()
+    if "goal_id" in parameters and parameters["goal_id"] is None:
+        parameters = {**parameters, "goal_id": str(goal_id)}
     payload = {"thread": "owner", **parameters}
     values = dict(payload)
     action = values.pop("action")

@@ -8,7 +8,7 @@ import pytest
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.comms import wire
 from agent_comms.errors import RelationViolationError
-from agent_comms.field_codec import TurnId
+from agent_comms.field_codec import TurnId, GoalId
 from agent_comms.goals import Goal
 from agent_comms.thread_identity import UserThreadRole
 from agent_comms.thread_text import GivenThreadText
@@ -18,8 +18,11 @@ from agent_comms.threads import Thread
 
 
 def registered(root):
+    g_goal_id = GoalId.mint()
     comms = wire(root)
-    comms.registry.register(Thread('owner', frozenset({'team'}), str(root), process_identity=ProcessIdentity.capture(os.getpid()), goal=Goal('task', 'g', published_seq=0)))
+    comms.registry.register(Thread('owner', frozenset({'team'}), str(root),
+        process_identity=ProcessIdentity.capture(os.getpid()),
+        goal=Goal('task', g_goal_id, published_seq=0)))
     return comms.registry
 
 
@@ -51,9 +54,12 @@ def test_claim_claim_tolerates_metadata_and_finished_captured_turn(tmp_path, cap
 
 @pytest.mark.parametrize('mutation', [
     {'created_at': 200.0}, {'worktree': '/different'},
-    {'goal': Goal('replacement', 'other', published_seq=0)},
+    {'goal': None},
 ])
 def test_raw_registry_writer_cannot_cross_captured_claim_identity(tmp_path, mutation):
+    if 'goal' in mutation:
+        replacement_goal_id = GoalId.mint()
+        mutation = {'goal': Goal('replacement', replacement_goal_id, published_seq=0)}
     registry = registered(tmp_path)
     captured, claim_scope = registry.live_owner_with_claim('owner')
     # Direct canonical writer, not a fake snapshot or mocked claim_scope.

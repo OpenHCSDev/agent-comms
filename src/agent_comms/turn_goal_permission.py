@@ -6,6 +6,7 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
+from agent_comms.field_codec import GoalId
 from .ordinary_turn_rules import OrdinaryGoalRule
 from .reservation_rules import ReservationViolationError
 from .tool_denial import SelectedToolDenied
@@ -60,7 +61,7 @@ class InactiveGoalPermission(GoalPermission):
 
 @dataclass(frozen=True)
 class AcceptedGoalPermission(GoalPermission):
-    goal_id: str | None
+    goal_id: GoalId | None
 
     def allows(self, current: GoalDeclaration) -> bool:
         active = current.active()

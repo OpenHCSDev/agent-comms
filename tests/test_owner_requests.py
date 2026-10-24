@@ -5,6 +5,7 @@ from pathlib import Path
 
 import pytest
 
+from agent_comms.field_codec import GoalId
 from agent_comms.change_report import FileLine, MainRevision
 from agent_comms.commander.order import Commander
 from agent_comms.commander.request import main as request_main
@@ -32,6 +33,8 @@ from agent_comms.threads import Thread
 
 
 def test_independent_requests_orders_and_directives(comms: Comms, durable_home, capsys) -> None:
+    claim_review_goal_id = GoalId.mint()
+    request_family_goal_id = GoalId.mint()
     repository = Repo(checkout=Path.cwd(), github=RepositoryName("OpenHCSDev", "agent-comms"))
     for name in ("claude-ai", "commander", "worker"):
         thread = Thread(name, frozenset(), str(repository.checkout))
@@ -71,7 +74,7 @@ def test_independent_requests_orders_and_directives(comms: Comms, durable_home, 
         creator=commander,
         assigner=commander.incarnation,
         owner=worker,
-        generation="request-family",
+        generation=request_family_goal_id,
         review_at=RecordedEventTime(order.at.recorded_at("Order") + 60),
         order=order,
         request=first.id,
@@ -187,7 +190,7 @@ def test_independent_requests_orders_and_directives(comms: Comms, durable_home, 
         creator=commander,
         assigner=commander.incarnation,
         owner=worker,
-        generation="claim-review",
+        generation=claim_review_goal_id,
         request=awaiting.id,
         review_at=RecordedEventTime(awaiting_order.at.recorded_at("Order") + 60),
         order=awaiting_order,

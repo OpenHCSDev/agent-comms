@@ -1,5 +1,6 @@
 from dataclasses import replace
 
+from agent_comms.field_codec import GoalId
 from agent_comms.goal_presentation import GoalWaitTarget
 from agent_comms.goal_waits import GoalWaits, RecordedGoalWait
 from agent_comms.thread_identity import RecordedThreadIncarnation
@@ -7,10 +8,11 @@ from test_goal_standby_liveness import _finish, _waiting
 
 
 def test_finished_turn_reads_only_its_waits_after_rename(tmp_path, monkeypatch):
+    unrelated_goal_ids = tuple(GoalId.mint() for _ in range(200))
     comms, goal = _waiting(tmp_path)
     original = comms.goals.waits.read()[goal.id]
     comms.goals.waits.record_many(
-        replace(original, goal_id=f"unrelated-{index}", targets=(GoalWaitTarget(
+        replace(original, goal_id=unrelated_goal_ids[index], targets=(GoalWaitTarget(
             RecordedThreadIncarnation(f"other-{index}", 10.0 + index)),))
         for index in range(200)
     )

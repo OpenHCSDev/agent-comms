@@ -11,6 +11,7 @@ from .declared_family import DeclaredFamily
 from .lifecycle_capability import LifecycleCapability, Unresolved
 from .errors import RelationViolationError
 from .field_codec import (
+    GoalId,
     FieldCodec,
     Id128Text,
     TurnId,
@@ -312,10 +313,10 @@ class StoredInput(InputAttempt):
         """Return this input's bus sequence only if it is within the requested limit."""
         return (self.sequence,) if self.sequence is not None and self.sequence <= through else ()
 
-    def reviewed_for_goal(self, goal_id: str) -> bool:
+    def reviewed_for_goal(self, goal_id: GoalId) -> bool:
         return goal_id in self.goal_reviews
 
-    def review(self, goal_id: str, decision: GoalInputDecision) -> StoredInput:
+    def review(self, goal_id: GoalId, decision: GoalInputDecision) -> StoredInput:
         self.require(Unresolved, ValueError("Reviewed inputs changed; inspect them again."))
         return replace(self, goal_reviews={**self.goal_reviews, goal_id: decision})
 

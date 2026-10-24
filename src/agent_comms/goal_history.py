@@ -19,7 +19,7 @@ from dataclasses import dataclass, field, fields
 from pathlib import Path
 from typing import Annotated, Literal
 
-from agent_comms.field_codec import WireOmitDefault
+from agent_comms.field_codec import WireOmitDefault, GoalId
 from agent_comms.owner_requests import NoRequestRevision, RequestAtRevision, RequestRevision
 
 from .child_process import Platform
@@ -296,7 +296,7 @@ class GoalHistoryStore(DurableFile, ReconciledFile):
         self._set_state(sequence, "committed")
 
     def history(
-        self, owner_created_at: float, current: GoalDeclaration, goal_id: str | None = None
+        self, owner_created_at: float, current: GoalDeclaration, goal_id: GoalId | None = None
     ) -> tuple[GoalHistoryEntry, ...]:
         self.observe(owner_created_at, current)
         return tuple(

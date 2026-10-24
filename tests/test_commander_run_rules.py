@@ -5,7 +5,7 @@ import pytest
 
 from agent_comms.change_report import FileLine
 from agent_comms.errors import ToolRefusedError
-from agent_comms.field_codec import FieldCodec
+from agent_comms.field_codec import FieldCodec, GoalId
 from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.repository_name import RepositoryName
 from agent_comms.todos import Todo, TodoStore
@@ -14,6 +14,7 @@ from test_todos import order, thread
 
 
 def test_declared_run_round_trips_and_short_runs_are_refused(tmp_path, source_repository):
+    one_goal_id = GoalId.mint()
     planned = 'The real application shows every thread after reopening the saved session'
     checked = replace(order(source_repository), run=ApplicationOrderRun(planned))
     store = TodoStore(tmp_path)
@@ -21,7 +22,7 @@ def test_declared_run_round_trips_and_short_runs_are_refused(tmp_path, source_re
     request = store.add_request(lead.incarnation, 'Repair the thread list').id
     todo = store.create('P1', RepositoryName.from_wire('OpenHCSDev/agent-comms'),
         'Repair the thread list',
-        creator=lead, assigner=lead.incarnation, owner=lead, generation='one',
+        creator=lead, assigner=lead.incarnation, owner=lead, generation=one_goal_id,
         request=request, review_at=RecordedEventTime(1000), order=checked)
     assert FieldCodec.decode(Todo, FieldCodec.encode(todo)) == todo
     assert planned in todo.order.instructions(todo)
@@ -35,19 +36,24 @@ def test_declared_run_round_trips_and_short_runs_are_refused(tmp_path, source_re
 
 
 def test_clean_transfers_keep_history_and_third_owner_requires_a_trace(tmp_path, source_repository):
+    one_goal_id = GoalId.mint()
+    three_goal_id = GoalId.mint()
+    two_goal_id = GoalId.mint()
     store = TodoStore(tmp_path)
     lead = thread('lead', tmp_path, 1)
     request = store.add_request(lead.incarnation, 'Repair the thread list').id
     first = store.create('P1', RepositoryName.from_wire('OpenHCSDev/agent-comms'),
         'Repair the thread list',
-        creator=lead, assigner=lead.incarnation, owner=lead, generation='one',
+        creator=lead, assigner=lead.incarnation, owner=lead, generation=one_goal_id,
         request=request, review_at=RecordedEventTime(1000), order=order(source_repository))
     second = store.assign('P1', expected_revision=first.revision,
-        owner=thread('second', tmp_path, 2), assigner=lead.incarnation, generation='two', request=request,
+        owner=thread('second', tmp_path, 2), assigner=lead.incarnation, generation=two_goal_id,
+            request=request,
         review_at=RecordedEventTime(1000), order=order(source_repository))
     assert not second.strikes
     kwargs = dict(expected_revision=second.revision, owner=thread('third', tmp_path, 3),
-        assigner=lead.incarnation, generation='three', request=request, review_at=RecordedEventTime(1000), order=order(source_repository))
+        assigner=lead.incarnation, generation=three_goal_id, request=request,
+            review_at=RecordedEventTime(1000), order=order(source_repository))
     with pytest.raises(ValueError):
         store.assign('P1', **kwargs)
     # Source existence belongs to the commander boundary, not a Core record.

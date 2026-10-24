@@ -11,7 +11,7 @@ from test_todos import order, thread
 
 from agent_comms.commander.order import OrderFile, main
 from agent_comms.commander.request import RequestAddVerb
-from agent_comms.field_codec import FieldCodec
+from agent_comms.field_codec import FieldCodec, GoalId
 from agent_comms.installer.practice import PracticeCopy
 from agent_comms.locked_store import RootFile
 from agent_comms.goals import CountCheckResult, OrderCheck
@@ -39,6 +39,7 @@ def cited_source(pr_commander, proof_build_checkouts):
 
 @pytest.fixture
 def held_commander(pr_commander, cited_source):
+    initial_order_goal_id = GoalId.mint()
     source = pr_commander
     worker = thread("worker", source.root, 2.0)
     source.comms.registry.register(worker)
@@ -46,7 +47,7 @@ def held_commander(pr_commander, cited_source):
     lead = source.comms.registry.require(source.commander)
     todo = source.comms.goals.todos.create(
         "P1", source.repos[0].github, "Repair the held workflow", creator=lead, assigner=lead.incarnation,
-        owner=worker, generation="initial-order",
+        owner=worker, generation=initial_order_goal_id,
         request=NewestOpenRequest().for_order(source.comms.goals.todos, lead.incarnation),
         review_at=RecordedEventTime(time.time() + 1000), order=order(cited_source),
     )
@@ -133,6 +134,7 @@ def test_clean_resend_derives_the_existing_order_and_leaves_no_strike(held_comma
 
 
 def test_second_unplanned_order_is_refused_without_recording(held_commander, cited_source):
+    second_workflow_goal_id = GoalId.mint()
     ctx = held_commander
     original = ctx.comms.goals.todos.get("P1")
     marker = ctx.root / "unfinished"
@@ -148,7 +150,7 @@ def test_second_unplanned_order_is_refused_without_recording(held_commander, cit
     lead = ctx.comms.registry.require(ctx.commander)
     ctx.comms.goals.todos.create(
         "P2", ctx.repos[0].github, "Repair the second workflow", creator=lead, assigner=lead.incarnation, owner=lead,
-        generation="second-workflow", request=original.request.require(),
+        generation=second_workflow_goal_id, request=original.request.require(),
         review_at=RecordedEventTime(time.time() + 1000), order=document.order,
     )
     path = ctx.root / "second-order.json"

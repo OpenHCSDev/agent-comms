@@ -8,7 +8,7 @@ from functools import cached_property
 from typing import TYPE_CHECKING, ClassVar, Self
 
 from .declared_family import DeclaredFamily
-from .field_codec import NullMember, WireValue
+from .field_codec import NullMember, WireValue, GoalId
 from .goal_failure_observation import FailedTurnEvidence
 from .goal_states import PauseSource
 from .goals import Goal, GoalCheckpoint, GoalDeclaration
@@ -110,7 +110,7 @@ class IdleGoalExecution(GoalExecution):
 
 @dataclass(frozen=True)
 class BoundGoalExecution(GoalExecution, declared_name=None):
-    goal_id: str
+    goal_id: GoalId
     glyph: ClassVar[str] = "✓"
     @property
     @abstractmethod

@@ -8,7 +8,7 @@ from dataclasses import replace
 
 import pytest
 
-from agent_comms.field_codec import FieldCodec, TurnId
+from agent_comms.field_codec import FieldCodec, TurnId, GoalId
 from agent_comms.input_attempt import (
     GoalInputDecision,
     BoundUnknownInput,
@@ -104,6 +104,7 @@ def _insert_raw(store: InputDispositions, key: str, attempt: dict) -> None:
 
 
 def test_saved_discriminator_and_optional_notices_roundtrip_without_replay(tmp_path):
+    goal_id = GoalId.mint()
     store = InputDispositions(tmp_path)
     from agent_comms.text_digest import TextDigest
 
@@ -120,7 +121,7 @@ def test_saved_discriminator_and_optional_notices_roundtrip_without_replay(tmp_p
             sent_digest=TextDigest.of("Exact sent text"),
             notice_dismissed=True,
             goal_reviews={
-                "goal": GoalInputDecision(
+                goal_id: GoalInputDecision(
                     goal_revision=7, turn_id=TurnId('c97ace4c8fef2cee8fa0f3c9f52aab18')
                 )
             },
@@ -129,7 +130,7 @@ def test_saved_discriminator_and_optional_notices_roundtrip_without_replay(tmp_p
     _insert_raw(store, "acp:old", saved)
     row = store.lookup("acp:old")
     assert isinstance(row, BoundUnknownInput) and not row.accepts_reservation
-    assert row.reviewed_for_goal("goal")
+    assert row.reviewed_for_goal(goal_id)
     assert FieldCodec.encode(row) == saved
     assert store.in_turn(TURN).rows == {"acp:old": row}
     assert store.unresolved(frozenset({"worker"})).rows == {"acp:old": row}

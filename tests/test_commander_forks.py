@@ -15,7 +15,7 @@ from agent_comms.change_report import FileLine
 from agent_comms.commander.order import CommanderContext, OrderFile
 from agent_comms.comms import wire
 from agent_comms.external_transcript import ExternalTranscript
-from agent_comms.field_codec import FieldCodec
+from agent_comms.field_codec import FieldCodec, GoalId
 from agent_comms.goal_actions import SetGoalAction
 from agent_comms.goals import CountCheckResult, OrderCheck
 from agent_comms.installer.backup import StoreBackup
@@ -52,6 +52,8 @@ from source_revision_fixture import SourceRepository
 
 @pytest.fixture
 def fork_bus(tmp_path, configured_repository):
+    request_goal_id = GoalId.mint()
+    retained_goal_id = GoalId.mint()
     source = SourceRepository.create(tmp_path / "source")
     (source.checkout / "declaration.py").write_text("class AssignmentOwner:\n    pass\n")
     source.git(source.checkout, "add", "declaration.py")
@@ -74,7 +76,7 @@ def fork_bus(tmp_path, configured_repository):
             )
         )
     comms.goals.update_goal(
-        "lead", SetGoalAction(text="Repair the commander workflow", goal_id="request")
+        "lead", SetGoalAction(text="Repair the commander workflow", goal_id=request_goal_id)
     )
     request = comms.goals.todos.add_request(
         comms.registry.require("lead").incarnation, "Repair the commander workflow"
@@ -101,7 +103,7 @@ def fork_bus(tmp_path, configured_repository):
         creator=lead,
         owner=comms.registry.require("retained"),
         assigner=lead.incarnation,
-        generation="retained",
+        generation=retained_goal_id,
         review_at=RecordedEventTime(now + 600),
         order=replace(order, id="retained-order"),
         request=request.id,
@@ -378,6 +380,8 @@ def test_retained_schema_is_carried_under_maintenance_before_runtime_writes(fork
 
 
 def test_created_ids_live_only_on_todos_and_allocation_uses_numeric_index(fork_bus):
+    created_goal_id = GoalId.mint()
+    direct_goal_id = GoalId.mint()
     comms, source, order = fork_bus
     store = comms.goals.todos
     lead = comms.registry.require("lead")
@@ -391,7 +395,7 @@ def test_created_ids_live_only_on_todos_and_allocation_uses_numeric_index(fork_b
         creator=lead,
         assigner=lead.incarnation,
         owner=comms.registry.require("other"),
-        generation="created",
+        generation=created_goal_id,
         request=retained.request.require(),
         review_at=retained.review_at,
         order=order,
@@ -406,7 +410,7 @@ def test_created_ids_live_only_on_todos_and_allocation_uses_numeric_index(fork_b
         creator=lead,
         assigner=lead.incarnation,
         owner=comms.registry.require("worker"),
-        generation="direct",
+        generation=direct_goal_id,
         request=retained.request.require(),
         review_at=retained.review_at,
         order=replace(order, id="direct-order"),
@@ -437,6 +441,7 @@ def test_malformed_problem_ids_are_refused_without_writes(fork_bus):
 
 
 def test_fork_superseded_verdict_reads_its_commanders_orders(fork_bus):
+    worker_goal_id = GoalId.mint()
     comms, source, order = fork_bus
     store = comms.goals.todos
     lead = comms.registry.require("lead")
@@ -447,7 +452,7 @@ def test_fork_superseded_verdict_reads_its_commanders_orders(fork_bus):
         creator=lead,
         owner=comms.registry.require("worker"),
         assigner=lead.incarnation,
-        generation="worker",
+        generation=worker_goal_id,
         review_at=RecordedEventTime(time.time() + 600),
         order=replace(order, id="replacing-order"),
         request=store.get("P40").request.require(),
