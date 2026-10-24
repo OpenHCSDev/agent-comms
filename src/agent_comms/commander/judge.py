@@ -51,6 +51,7 @@ from agent_comms.todos import (
     SupersededVerdict,
     Todo,
     ToolCallVerdict,
+    UnderReviewHeadVerdict,
 )
 from agent_comms.slop import Derivation, Slop
 from agent_comms.order_tools import CommsHeadVerdictTool, CommsUnjudgedTool, CommsVerdictTool
@@ -336,6 +337,21 @@ class OkVerb(HeadVerdictVerb):
             if added := order.forwarders_added(edit.added(), after):
                 sys.exit(f'Refused: edit {edit.id} adds forwarders {added[:5]}; it goes back with judge back, never ok')
             AcceptedVerdict.require_branches(edit.branches_added(), self.no_owner)
+
+@dataclass(frozen=True, kw_only=True)
+class ReviewingVerb(HeadVerdictVerb):
+    help = "a fork is reading this exact PR head; its delivery is not owed until ok or back"
+
+    def head_operation(self) -> HeadVerdict:
+        return UnderReviewHeadVerdict()
+
+    def operation(self, ctx: order.Commander, todo: Todo, edit: Edit) -> ToolCallVerdict:
+        sys.exit('Refused: judge reviewing takes --pr and --head, never edit ids.')
+
+    def check_edits(self, edits: list[Edit]) -> None:
+        if edits:
+            sys.exit('Refused: judge reviewing takes --pr and --head, never edit ids.')
+
 
 @dataclass(frozen=True, kw_only=True)
 class SupersededVerb(VerdictVerb):

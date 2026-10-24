@@ -252,7 +252,7 @@ class DeliveryAwaitingJudgement(UnitOwedAnswer, UndatedStandingRule):
                   requests: Sequence[OwnerRequest]) -> tuple[Self, ...]:
         originals = OrderClaim.originals(
             source,
-            {(owner, todo.id): todo.order.commander_claims()
+            {(owner, todo.id): todo.order.owed_claims()
              for owner, todos in held.items() for todo in todos},
         )
         return tuple(cls(message, owner.name, problem)
@@ -260,7 +260,9 @@ class DeliveryAwaitingJudgement(UnitOwedAnswer, UndatedStandingRule):
 
     def clearing_action(self) -> str:
         return (f"order done {self.unit} {self.problem} (with --seen FILE for an application run)"
-                " or send the unit its replacement order.")
+                " or send the unit its replacement order"
+                " or `judge reviewing --pr N --head SHA --serves WORDS --fork NAME`"
+                " while a fork reads it.")
 
     def answered_by(self, named: tuple[Message, ...]) -> bool:
         return False
