@@ -68,7 +68,12 @@ unset AGENT_COMMS_THREAD AGENT_COMMS_MANAGED PI_AGENT_ID PI_PARENT_ID PI_TASK PI
 project="$PWD"
 session=()
 if [[ -n "$thread" ]]; then
-    project="$("$python" -c 'import sys; from agent_comms.comms import wire; print(wire().registry.require(sys.argv[1]).worktree)' "$thread")"
+    # The CLI selects the root like every entry point; the launcher only reads its answer.
+    if ! described="$("$runtime/agent-comms" thread --name "$thread" --no-pending)"; then
+        printf '%s\n' "$described" >&2
+        exit 1
+    fi
+    project="$("$python" -I -c 'import json, sys; print(json.loads(sys.argv[1])["worktree"])' "$described")"
     session=(--session "$thread")
 fi
 if [[ ! -d "$project" ]]; then
