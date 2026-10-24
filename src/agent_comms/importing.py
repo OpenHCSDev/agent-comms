@@ -203,5 +203,13 @@ class ThreadImported(CliResult):
     notices: tuple[str, ...]
     historical_instructions: tuple[CodexRolloutProvenance, ...] = ()
 
+    @classmethod
+    def of(cls, thread: str, session_file: Path, snapshot: ImportSnapshot) -> ThreadImported:
+        return cls(
+            thread, str(session_file), snapshot.harness, snapshot.source_id,
+            len(snapshot.messages), snapshot.messages_seen - len(snapshot.messages),
+            snapshot.truncated_messages, snapshot.notices, snapshot.historical_instructions,
+        )
+
     def to_wire(self) -> dict[str, object]:
         return FieldCodec.encode(self)
