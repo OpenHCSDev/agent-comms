@@ -328,9 +328,9 @@ def test_attach_only_reads_original_roots_and_rejects_changed_snapshot(tmp_path)
         bounds=PageBounds(HistoryCursor(source=source.key, sequence=100).older()),
     )
     archived = Bus(Bus.path_in(Path(source.root)))
-    template = page.messages[0]
-    archived.append(lambda seq, db: PublicRecord.from_message(
-        replace(template, seq=seq, body="external archive mutation")))
+    original = page.messages[0]
+    archived.append(lambda seq, db: PublicRecord.from_message(Message(
+        original.sender, original.target, "external archive mutation", original.type, seq=seq)))
     with pytest.raises(ValueError):
         live.views.mark_page_read(page, worktree=str(live.root))
     with pytest.raises(ValueError):

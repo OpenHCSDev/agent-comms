@@ -24,7 +24,7 @@ from .coordination_session import ReadNativeCoordinationSession
 from .coordination_tables.participants import OwnerGenerations
 from .coordinator import Coordination
 from .envelope_claim_transitions import ExistingFileClaim, WakeClaim
-from .field_codec import FieldCodec, MalformedRecord
+from .field_codec import FieldCodec, InputId, MalformedRecord
 from .native_input_record import FullNativeExecution, NativeInputIdentity
 from .native_runtime_input import NativeRuntimeInput, NativeRuntimeTable, SelectedToolSlot
 from .native_tool_call import (
@@ -194,7 +194,7 @@ def selected_tool_mode_for_owner(
     store: Coordination,
     claim_scope: WakeClaim,
     owner_name: str,
-    input_id: str,
+    input_id: InputId,
 ) -> SelectedToolMode:
     """Capture only owner-derived typed fields for this one FULL selected input.
 
@@ -222,7 +222,7 @@ def selected_tool_mode_for_owner(
 
 
 def verify_sent_full_input(
-    store: Coordination, claim_scope: WakeClaim, owner_name: str, input_id: str
+    store: Coordination, claim_scope: WakeClaim, owner_name: str, input_id: InputId
 ) -> None:
     """Only the exact FULL input authorized by the owner may call native tools.
 
@@ -239,7 +239,7 @@ def verify_sent_full_input(
 
 
 def _require_sent_full_input(
-    scoped: Coordination, claim_scope: WakeClaim, owner_name: str, input_id: str
+    scoped: Coordination, claim_scope: WakeClaim, owner_name: str, input_id: InputId
 ) -> None:
     NativeRuntimeTable.require_installed(scoped.session._connection)
     row = NativeRuntimeInput.one(scoped.session._connection, input_id=input_id)

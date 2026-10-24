@@ -7,11 +7,11 @@ from agent_comms.envelope_claim_transitions import (
     ClaimProjection, ClaimRelease, ClaimTransition, NativeClaim, ReleasedClaims,
     UnrecordedScope, UnscopedClaims, WakeClaims,
 )
-from agent_comms.field_codec import FieldCodec, MalformedRecord, TurnId
+from agent_comms.field_codec import ClaimId, FieldCodec, MalformedRecord, MessageId, TurnId
 from agent_comms.thread_status import RunningThreadStatus
 from agent_comms.threads import Thread
 
-G1, G2 = "a" * 32, "b" * 32
+G1, G2 = ClaimId("a" * 32), ClaimId("b" * 32)
 
 
 def test_unscoped_history_row_decodes_projects_never_live_and_releases(tmp_path):
@@ -21,9 +21,12 @@ def test_unscoped_history_row_decodes_projects_never_live_and_releases(tmp_path)
     comms.registry.declare(Thread("peer", frozenset(), str(tmp_path)))
     owner = comms.registry.require("owner")
     resource = str(tmp_path / "held.py")
+    message_id = MessageId.mint("msg-1")
+    next_message_id = MessageId.mint("msg-2")
     # The row exactly as the writer before native claim scopes stored it.
     stored = {"owner": "owner", "incarnation": str(owner.created_at), "seq": 1,
-              "message_id": "msg-1", "claims": [resource], "releases": [], "generation": G1}
+              "message_id": FieldCodec.encode(message_id), "claims": [resource],
+              "releases": [], "generation": G1}
 
     transition = FieldCodec.decode(ClaimTransition, stored)
     assert type(transition) is UnscopedClaims
@@ -40,12 +43,12 @@ def test_unscoped_history_row_decodes_projects_never_live_and_releases(tmp_path)
         owner="peer",
         incarnation=str(peer.created_at),
         seq=2,
-        message_id="msg-2",
+        message_id=next_message_id,
         claims=(resource,),
         generation=G2,
         resource_scope=NativeClaim(
             owner_claimed_generation=1,
-            operation_id="c" * 32,
+            operation_id=ClaimId("c" * 32),
             turn_id=TurnId('ff33c94032d9f01447a779689c1dff6a'),
             input_id="input-2",
         ),
@@ -54,7 +57,7 @@ def test_unscoped_history_row_decodes_projects_never_live_and_releases(tmp_path)
 
     # The owner's recorded release of its unscoped generation still replays.
     released = ReleasedClaims(owner="owner", incarnation=str(owner.created_at), seq=2,
-                              message_id="msg-2", releases=(ClaimRelease(resource, G1),))
+                              message_id=next_message_id, releases=(ClaimRelease(resource, G1),))
     assert dict(released.project(held)) == {}
 
     # A row published today records its scope; history rows carry none.

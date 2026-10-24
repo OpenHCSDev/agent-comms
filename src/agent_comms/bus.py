@@ -46,7 +46,7 @@ from agent_comms.envelope_claim_transitions import (
     ResourceClaim,
 )
 from agent_comms.errors import CommittedMessageError, RelationViolationError, UnclaimedError
-from agent_comms.field_codec import FieldCodec, MessageId
+from agent_comms.field_codec import ClaimId, FieldCodec, MessageId
 from agent_comms.locked_store import BusFile, SQLiteFile, StoreCommittedError
 from agent_comms.message_reference import MessageReference
 from agent_comms.private_path import FileIdentity, PresentPath
@@ -154,7 +154,7 @@ class BusReader(RouteCounts, ABC):
         with self.observing() as db:
             return HeldResources.owner_for(db, resource)
 
-    def claim_operation_used(self, operation_id: str) -> bool:
+    def claim_operation_used(self, operation_id: ClaimId) -> bool:
         with self.observing() as db:
             return ClaimOperations.used(db, operation_id)
 

@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING, ClassVar
 
 from .coordination_errors import IdentityConflict, IntegrityViolationError
 from .coordinator_vocabulary import CoordinatorVocabulary
-from .field_codec import FieldCodec, MessageId, NullMember
+from .field_codec import MessageId, NullMember
 from .lifecycle import LifecycleState
 from .lifecycle_capability import Deferred, Failed, Pending, Successful, Terminal
 from .message_reference import MessageReference
@@ -58,12 +58,6 @@ class ResponseState(CoordinatorVocabulary, LifecycleState, affix="Response"):
 
     def published_reference(self) -> MessageReference:
         raise IntegrityViolationError("only published obligations have an acknowledgement")
-
-    @classmethod
-    def load(cls, message_id: str | None, seq: int | None) -> ResponseState:
-        if message_id is not None or seq is not None:
-            raise IntegrityViolationError("only published obligations may have a acknowledgement")
-        return cls()
 
     def require_preparation(self) -> None:
         raise IdentityConflict("response obligation cannot prepare a new intent")
@@ -175,12 +169,6 @@ class PublishedResponse(Successful, ResponseState):
             raise IntegrityViolationError("publication acknowledgement exists iff published")
         if (acknowledgement.message_id, acknowledgement.seq) != (self.message_id, self.seq):
             raise IntegrityViolationError("obligation acknowledgement does not match publication")
-
-    @classmethod
-    def load(cls, message_id, seq):
-        if message_id is None or seq is None:
-            raise IntegrityViolationError("published obligations require a acknowledgement")
-        return cls(FieldCodec.decode(MessageId, message_id), seq)
 
 
 class SilentResponse(Successful, ResponseState):

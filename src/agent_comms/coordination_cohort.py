@@ -37,7 +37,7 @@ from agent_comms.coordination_tables.participants import OwnerGenerations, Parti
 from agent_comms.coordinator import Coordination
 from agent_comms.message_bus import MessageBus
 
-from .field_codec import MalformedRecord, WireName
+from .field_codec import MalformedRecord, MessageId, WireName
 
 _LOG = logging.getLogger(__name__)
 
@@ -46,7 +46,7 @@ _LOG = logging.getLogger(__name__)
 class AcceptedCohort:
     wire_root_id: str
     wire_seq: int
-    message_id: str
+    message_id: MessageId
     member_count: int
     assignment_count: Annotated[int, WireName("claim_count")]
     accepted_at_ms: int

@@ -19,9 +19,10 @@ from .comms import Comms
 from .coordination_database import CoordinationStore
 from .envelope_claim_transitions import (
     ClaimOwner,
+    FileClaimPath,
     WakeClaim,
 )
-from .field_codec import FieldCodec, MalformedRecord
+from .field_codec import ClaimId, FieldCodec, InputId, MalformedRecord
 from .lifecycle_capability import Executing
 from .native_arguments import NativeArguments
 from .native_tool_call import CodingCall, NativeToolMode, ToolNotExecuting
@@ -42,6 +43,8 @@ from .tool_denial import SelectedToolDenied
 from .turn_goal_permission import TurnGoalPermission
 
 if TYPE_CHECKING:
+    from .backend import TurnSession
+    from .coordination_tables.assignments import WakeAssignment
     from .pi_payloads import PiToolResult
 
 
@@ -77,7 +80,8 @@ class CodingToolOwner(ABC):
             resource = call.allowed_claim()
             if resource is not None:
                 canonical = resource.normalized(Path(owner.worktree))
-                self.claims[canonical] = self.claim_resource(store, turn, resource, slot)
+                self.claims[canonical] = self.claim_resource(
+                    store, turn, resource, FieldCodec.decode(ClaimId, slot))
 
         reservation = await self.reserve_room(call)
         async with reservation.checking(), self.check_lock:
@@ -92,9 +96,10 @@ class CodingToolOwner(ABC):
     def verify(self, store, turn, snapshot): ...
 
     @abstractmethod
-    def claim_resource(self, store, turn, resource, slot): ...
+    def claim_resource(self, store: Coordination, turn: TurnSession,
+                       resource: FileClaimPath, slot: ClaimId) -> ClaimOwner: ...
 
-    def for_original(self, assignment, operation_id):
+    def for_original(self, assignment: WakeAssignment, operation_id: ClaimId) -> CodingToolOwner:
         raise SelectedToolDenied("An ordinary input has no selected original")
 
 
@@ -103,10 +108,10 @@ class SelectedCodingToolOwner(CodingToolOwner):
     store: Coordination
     resource_scope: WakeClaim
     session_dir: Path
-    input_id: str
+    input_id: InputId
     goal_permission: TurnGoalPermission = field()
 
-    def for_original(self, assignment, operation_id) -> CodingToolOwner:
+    def for_original(self, assignment: WakeAssignment, operation_id: ClaimId) -> CodingToolOwner:
         """Project the same native grant onto an actually included original."""
         from .native_runtime_input import NativeRuntimeInput
 
@@ -131,7 +136,8 @@ class SelectedCodingToolOwner(CodingToolOwner):
         verify_sent_full_input(store, self.resource_scope, self.owner_name, self.input_id)
         verify_selected_wake(self.comms, store, self.resource_scope, self.owner_name)
 
-    def claim_resource(self, store, turn, resource, slot):
+    def claim_resource(self, store: Coordination, turn: TurnSession,
+                       resource: FileClaimPath, slot: ClaimId) -> ClaimOwner:
         scope = replace(self.resource_scope, operation_id=slot)
         return publish_selected_resource_claim(self.comms, store, scope, self.owner_name, resource)
 
