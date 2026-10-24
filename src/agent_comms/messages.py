@@ -38,6 +38,7 @@ from .envelope_claim_transitions import (
 )
 from .errors import RelationViolationError
 from .field_codec import (
+    ClaimId,
     FieldCodec,
     InlineRecord,
     MessageId,
@@ -112,7 +113,7 @@ class BusRow(BusTables):
 class ClaimOperations(BusProjectionTables):
     """An acquisition's consumed operation refers to its original claim row."""
 
-    operation_id: Annotated[str, Column(primary_key=True)]
+    operation_id: Annotated[ClaimId, Column(primary_key=True)]
     seq: int
 
     @classmethod
@@ -120,7 +121,7 @@ class ClaimOperations(BusProjectionTables):
         return (ForeignKey(columns=("seq",), target=Claimed.table, target_columns=("seq",)),)
 
     @classmethod
-    def used(cls, db: sqlite3.Connection, operation_id: str) -> bool:
+    def used(cls, db: sqlite3.Connection, operation_id: ClaimId) -> bool:
         return cls.exists(db, where="{operation_id} = ?", parameters=(operation_id,))
 
 
@@ -211,7 +212,7 @@ class ClaimHolders(ProjectionPass):
     @abstractmethod
     def before(self, db: sqlite3.Connection, transition: ClaimTransition) -> ClaimProjection: ...
 
-    def operation_used(self, db: sqlite3.Connection, operation: str) -> bool:
+    def operation_used(self, db: sqlite3.Connection, operation: ClaimId) -> bool:
         return ClaimOperations.used(db, operation)
 
     def apply(
@@ -249,7 +250,7 @@ class ReplayedHolders(ClaimHolders):
         default_factory=lambda: frozenset(BusProjectionTables.schema_rows()))
     last_seq: int = 0
     owners: dict[str, ClaimOwner] = field(default_factory=dict)
-    operations: set[str] = field(default_factory=set)
+    operations: set[ClaimId] = field(default_factory=set)
     rows: dict[str, list[tuple]] = field(default_factory=dict)
     """Derived rows by insert statement; nothing in the rebuild reads them back before
     ``flush``, which inserts each statement's rows with one ``executemany``."""
@@ -267,7 +268,7 @@ class ReplayedHolders(ClaimHolders):
         self.operations.update(transition.operation_ids)
         self.advance(transition.resources + transition.expired, projected)
 
-    def operation_used(self, db: sqlite3.Connection, operation: str) -> bool:
+    def operation_used(self, db: sqlite3.Connection, operation: ClaimId) -> bool:
         return operation in self.operations
 
     def flush(self, db: sqlite3.Connection) -> None:

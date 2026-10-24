@@ -7,7 +7,7 @@ import sqlite3
 
 import pytest
 
-from agent_comms.field_codec import InputId, TurnId
+from agent_comms.field_codec import ClaimId, InputId, TurnId
 from agent_comms.installer.backup import bus_files
 from bus_record_fixture import prepare_native_comms
 from agent_comms.native_pi import NativeContextJournal
@@ -57,7 +57,7 @@ def test_every_bus_file_is_a_declared_root_file(tmp_path: Path, source_repositor
             ExistingFileClaim(resource).normalized(tmp_path),
             NativeClaim(
                 owner_claimed_generation=boundary.registry.claim_generation(owner.name),
-                operation_id="a" * 32,
+                operation_id=ClaimId("a" * 32),
                 turn_id=TurnId('76716892c3b5bb4cc8b0f07da1976c7e'),
                 input_id="declared-file-input",
             ),

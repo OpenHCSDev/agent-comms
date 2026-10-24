@@ -1,7 +1,7 @@
 """Declared extension decoding is strict and shares its owner with consumers."""
 
 from agent_comms.child_process import ProcessIdentity
-from agent_comms.field_codec import MessageId, TurnId
+from agent_comms.field_codec import ClaimId, MessageId, TurnId
 from agent_comms.acp_failure import ACPFailure
 
 import pytest
@@ -66,7 +66,7 @@ def test_declared_family_roundtrip_and_strict_boundary(tmp_path):
         ),
         RequestFailedUpdate(ACPFailure.from_detail(-32603, "The usage limit has been reached")),
         PromptCancelledUpdate(None),
-        SelectedWriteAcceptedUpdate("operation", 1, "claim"),
+        SelectedWriteAcceptedUpdate(ClaimId("c" * 32), 1, "claim"),
         CursorAdvancedUpdate(
             CursorEnvelope(
                 LiveCursorScope(

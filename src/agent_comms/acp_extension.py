@@ -25,6 +25,7 @@ from .context_reading import ContextReading
 from .declared_family import DeclaredFamily
 from .external_transcript import DraftRow
 from .field_codec import (
+    ClaimId,
     AcceptsNull,
     ExternalJsonShape,
     FieldCodec,
@@ -736,7 +737,7 @@ class SelectedWriteRequest(CommsRequest):
 
 @dataclass(frozen=True)
 class SelectedWriteAcceptedUpdate(AgentCommsUpdate):
-    operation_id: str
+    operation_id: ClaimId
     source_seq: int
     claim_id: str
 

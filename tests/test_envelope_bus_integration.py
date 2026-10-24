@@ -10,7 +10,6 @@ from __future__ import annotations
 from bus_history import read_history
 import json
 import os
-import secrets
 import signal
 import subprocess
 import sys
@@ -29,7 +28,7 @@ from agent_comms.coordination_session import NativeBoundary
 from agent_comms.envelope_claim_transitions import ClaimConflict, ExistingFileClaim, NativeClaim
 from agent_comms.errors import RelationViolationError
 from agent_comms.exporting import EverythingScope, FullLimit, JsonlFormat
-from agent_comms.field_codec import TurnId
+from agent_comms.field_codec import ClaimId, TurnId
 from agent_comms.messages import Message
 from agent_comms.message_reference import MessageReference
 from agent_comms.thread_status import RunningThreadStatus
@@ -57,7 +56,7 @@ def acquire_message(comms: Comms, name: str, path: Path, turn_id: TurnId) -> Mes
         owner = boundary.registry.require(name)
         scope = NativeClaim(
             owner_claimed_generation=boundary.registry.claim_generation(name),
-            operation_id=secrets.token_hex(16), turn_id=turn_id, input_id=f"input-{name}",
+            operation_id=ClaimId.mint(), turn_id=turn_id, input_id=f"input-{name}",
         )
         claim = comms.bus.publisher._publish_acquisition_unlocked(
             boundary.registry, owner,
