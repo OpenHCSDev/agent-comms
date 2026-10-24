@@ -68,12 +68,15 @@ def paged_answers(comms, name):
 
 
 def test_external_turns_preserve_interleaving_and_the_whole_selected_turn(tmp_path):
+    old_turn_id = NativeTurnId('old')
+    one_turn_id = NativeTurnId('one')
+    two_turn_id = NativeTurnId('two')
     comms = prepared(tmp_path)
     comms.registry.declare(Thread('cli', frozenset(), str(tmp_path), execution=ExternalThreadExecution))
     source = comms.transcripts.external('cli')
     for at, (turn, item, text) in enumerate([
-            ('old', 'a', 'older'), ('one', 'b', 'first'),
-            ('two', 'c', 'other'), ('one', 'd', 'continued')], start=1):
+            (old_turn_id, 'a', 'older'), (one_turn_id, 'b', 'first'),
+            (two_turn_id, 'c', 'other'), (one_turn_id, 'd', 'continued')], start=1):
         source.finish(turn_id=turn, item_id=item,
                       events=(AssistantTranscript(text, position=item, timestamp=float(at)),))
     answer = endpoint(comms, 'cli', LastTurns(2))
