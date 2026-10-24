@@ -60,6 +60,7 @@ if TYPE_CHECKING:
     from .native_entries import NativeEntry, NativeEvidenceRead, SessionEntry
     from .selected_session import SelectedSession
     from .turn_failure import TurnFailure
+    from .turn_item import PiSessionId
 
 CAPABILITY = "pi-native-input-v1-live-only"
 
@@ -177,7 +178,10 @@ class NativeContextRecord(NativeInputCommit):
     ]
 
     @classmethod
-    def from_events(cls, input_id, session_id, input_event, context_event):
+    def from_events(
+        cls, input_id: InputId, session_id: PiSessionId,
+        input_event: pi.InputCommitted, context_event: pi.ContextCommitted,
+    ) -> NativeContextRecord:
         """Strictly join the two emitted records through the context declaration.
 
         This is an emitted acknowledgement, not proof of durable inclusion. A journal
@@ -902,7 +906,7 @@ def read_tracked_input_commitment(
 def _verify_context(
     files: NativeSessionFiles,
     input_id: InputId,
-    session_id: str,
+    session_id: PiSessionId,
     input_event: pi.InputCommitted,
     context_event: pi.ContextCommitted,
     *, evidence: NativeEvidenceRead | None = None,
