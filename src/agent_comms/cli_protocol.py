@@ -6,7 +6,7 @@ import argparse
 import asyncio
 import builtins
 from abc import ABC, abstractmethod
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Mapping
 from dataclasses import replace
 from functools import partial
 from graphlib import TopologicalSorter
@@ -96,8 +96,10 @@ class TaggedWire(DeclaredWireFamily, WireModel, ABC, affix="", declared_name=Non
         return self.tag()
 
     @classmethod
-    def tag_of(cls, value: object) -> str:
-        return cls.header.model_validate(value, from_attributes=True).type
+    def tag_of(cls, value: Mapping[str, object] | TaggedWire) -> str:
+        if isinstance(value, Mapping):
+            return cls.header.model_validate(value).type
+        return value.type
 
     @classmethod
     def declared_union(cls) -> TypeForm[Self]:
@@ -122,7 +124,7 @@ class OpenWire(TaggedWire, ABC, declared_name=None):
     member tagged 'foreign', which carries no conversation."""
 
     @classmethod
-    def tag_of(cls, value: object) -> str:
+    def tag_of(cls, value: Mapping[str, object] | TaggedWire) -> str:
         tag = super().tag_of(value)
         try:
             cls.member_named(tag)
