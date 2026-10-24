@@ -8,8 +8,10 @@ import os
 import platform
 import subprocess
 import sys
+from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
+from typing import cast
 
 INPUTS_PREFIX = "# agent-comms-native-inputs-v1 "
 PREPARATION_SCHEME = "sealed-native-store-v1"
@@ -34,6 +36,10 @@ class PackageFile:
     source: str
     target: str
 
+    @classmethod
+    def of(cls, record: Mapping[str, str]) -> PackageFile:
+        return cls(**record)
+
 
 @dataclass(frozen=True)
 class McpClientSource:
@@ -41,6 +47,16 @@ class McpClientSource:
     install: tuple[str, ...]
     files: tuple[str, ...]
     trees: tuple[str, ...]
+
+    @classmethod
+    def of(cls, record: Mapping[str, object]) -> McpClientSource:
+        # JSON enters the declared constructor here; post-init normalizes its arrays.
+        return cls(**record)  # type: ignore[arg-type]
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "install", tuple(self.install))
+        object.__setattr__(self, "files", tuple(self.files))
+        object.__setattr__(self, "trees", tuple(self.trees))
 
 
 @dataclass(frozen=True)
@@ -51,20 +67,26 @@ class NativeRepositoryInputs:
 
     @classmethod
     def of(cls, root: Path) -> NativeRepositoryInputs:
-        data = json.loads((root / "stack/native/repository-inputs.json").read_text())
-        mcp = data["mcp_client"]
-        return cls(
-            tuple(PackageFile(**item) for item in data["package_files"]),
-            McpClientSource(mcp["root"], tuple(mcp["install"]),
-                            tuple(mcp["files"]), tuple(mcp["trees"])),
-            data["compaction_instruction"],
+        return cls(**json.loads((root / "stack/native/repository-inputs.json").read_text()))
+
+    def __post_init__(self) -> None:
+        records = cast(tuple[Mapping[str, str], ...], self.package_files)
+        object.__setattr__(self, "package_files", tuple(PackageFile.of(item) for item in records))
+        object.__setattr__(
+            self, "mcp_client", McpClientSource.of(cast(Mapping[str, object], self.mcp_client))
         )
 
     def pathspecs(self) -> tuple[str, ...]:
         return (
             *(item.source for item in self.package_files),
-            *(f"{self.mcp_client.root}/{name}" for name in
-              (*self.mcp_client.install, *self.mcp_client.files, *self.mcp_client.trees)),
+            *(
+                f"{self.mcp_client.root}/{name}"
+                for name in (
+                    *self.mcp_client.install,
+                    *self.mcp_client.files,
+                    *self.mcp_client.trees,
+                )
+            ),
             self.compaction_instruction,
         )
 
@@ -81,9 +103,21 @@ class NativeBuildInputs:
         for name in ("GIT_DIR", "GIT_INDEX_FILE", "GIT_WORK_TREE"):
             environment.pop(name, None)
         tracked = subprocess.run(
-            ["git", "-C", str(self.root), "ls-files", "-z", "--cached", "--",
-             "stack/native", *NativeRepositoryInputs.of(self.root).pathspecs()],
-            env=environment, check=True, capture_output=True, text=True,
+            [
+                "git",
+                "-C",
+                str(self.root),
+                "ls-files",
+                "-z",
+                "--cached",
+                "--",
+                "stack/native",
+                *NativeRepositoryInputs.of(self.root).pathspecs(),
+            ],
+            env=environment,
+            check=True,
+            capture_output=True,
+            text=True,
         ).stdout
         return tuple(sorted(self.root / path for path in tracked.split("\0") if path))
 
