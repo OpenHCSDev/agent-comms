@@ -3,7 +3,6 @@ from __future__ import annotations
 
 import argparse
 import json
-import os
 import sqlite3
 from collections.abc import Iterator
 from contextlib import aclosing
@@ -97,14 +96,22 @@ class ClaudeBridge(RunningClaude, LineMonitorBridge, declared_name=None):
     RECENT_BYTES = 4 * 1024 * 1024
 
     @classmethod
-    def add_arguments(cls, parser: argparse.ArgumentParser) -> None:
+    def binding_arguments(cls, arguments: argparse.Namespace) -> None:
         """A bare Monitor command uses the binding enrolled for this Claude session."""
-        for record in WatchClaim(os.environ.get('CLAUDE_CODE_SESSION_ID', '')).state().bindings():
-            arguments, _ = parser.parse_known_args(record.command[2:])
-            parser.set_defaults(
-                root=record.root, bus_thread=record.bus,
-                session=os.environ['CLAUDE_CODE_SESSION_ID'], state=arguments.state.parent,
+        if arguments.bus_thread is not None:
+            return
+        session = arguments.session or SessionHook.environment_session()
+        bindings = WatchClaim(session).state().bindings()
+        if len(bindings) != 1:
+            raise ValueError(
+                f'Expected one enrolled binding for session {session}; '
+                f'found {[record.bus for record in bindings]}'
             )
+        record, = bindings
+        arguments.root = record.root
+        arguments.bus_thread = record.bus
+        arguments.state = record.state
+        arguments.session = session
 
     def __init__(self, options: Options, binding: Binding, db: sqlite3.Connection) -> None:
         LineMonitorBridge.__init__(self, options, binding, db)

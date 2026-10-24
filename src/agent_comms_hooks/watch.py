@@ -41,11 +41,16 @@ class WatchRecord:
     bus: str
     root: str
     command: tuple[str, ...]
+    state: Path
 
     @classmethod
-    def decode(cls, bus: str, root: str, command: Sequence[str]) -> WatchRecord:
+    def decode(cls, bus: str, root: str, command: Sequence[str], state: str) -> WatchRecord:
         """Normalize the saved JSON array before constructing the immutable record."""
-        return cls(bus, root, tuple(command))
+        return cls(bus, root, tuple(command), Path(state))
+
+    def to_json(self) -> str:
+        """The saved command carries its declared base directory as path text."""
+        return json.dumps({**asdict(self), "state": str(self.state)})
 
 
 @dataclass(frozen=True)
@@ -57,7 +62,7 @@ class HeldClaim:
 
     def record(self, record: WatchRecord) -> HeldClaim:
         self.lock.truncate(0)
-        self.lock.write(json.dumps(asdict(record)))
+        self.lock.write(record.to_json())
         self.lock.flush()
         return self
 
