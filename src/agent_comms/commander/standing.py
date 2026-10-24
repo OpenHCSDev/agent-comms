@@ -537,23 +537,38 @@ class HeartbeatNotStarted(HeartbeatSilent):
 
 
 @dataclass(frozen=True)
-class CommanderDeaf(IndependentStandingRule, DatedStandingRule):
-    """The session bridge has no confirmed Monitor; its own registration dates the pause."""
+class InboxUnavailable(IndependentStandingRule, DatedStandingRule, declared_name=None):
+    """A thread nothing can reach: every message sent to it waits unread.
+
+    Each member owns how its inbox reports the pause; the window and the date are shared.
+    """
 
     seconds: ClassVar[int] = 300
     since: float = field(compare=False)
 
     @classmethod
-    def violations(cls, comms: Comms, commander: str) -> tuple[CommanderDeaf, ...]:
-        snapshot = comms.registry.snapshot()
+    @abstractmethod
+    def paused(cls, comms: Comms, commander: str) -> tuple[Self, ...]:
+        """Each pause this member observes, dated when its window closes."""
+
+    @classmethod
+    def violations(cls, comms: Comms, commander: str) -> tuple[Self, ...]:
         now = time.time()
-        pauses = snapshot.status(commander).paused_since(snapshot.seen_at(commander))
-        return tuple(cls(paused + cls.seconds)
-                     for paused in pauses
-                     if paused + cls.seconds < now)
+        return tuple(rule for rule in cls.paused(comms, commander) if rule.since < now)
 
     def began(self) -> float:
         return self.since
+
+
+@dataclass(frozen=True)
+class CommanderDeaf(InboxUnavailable):
+    """The session bridge has no confirmed Monitor; its own registration dates the pause."""
+
+    @classmethod
+    def paused(cls, comms: Comms, commander: str) -> tuple[Self, ...]:
+        snapshot = comms.registry.snapshot()
+        pauses = snapshot.status(commander).paused_since(snapshot.seen_at(commander))
+        return tuple(cls(paused + cls.seconds) for paused in pauses)
 
     def line(self) -> str:
         return (f"COMMANDER DEAF: its bridge has no confirmed Monitor since "
@@ -565,6 +580,27 @@ class CommanderDeaf(IndependentStandingRule, DatedStandingRule):
         """The commander's own inbox is the dead path, so #comms hears it instead."""
         comms.messaging.send(
             CommanderService.sender, CommsTag.channel(), f"{commander}: {self.line()}")
+
+
+@dataclass(frozen=True)
+class UnitDeaf(InboxUnavailable):
+    """A unit's own drain recorded that it cannot read its inbox; that record dates the pause."""
+
+    unit: str
+
+    @classmethod
+    def paused(cls, comms: Comms, commander: str) -> tuple[Self, ...]:
+        snapshot = comms.registry.snapshot()
+        units = [thread for name, thread in comms.registry.active_threads().items() if name != commander]
+        return tuple(cls(paused + cls.seconds, name)
+                     for name, observed in comms.agents.all_activity(units, snapshot=snapshot).items()
+                     for paused in observed.readiness.unavailable_since())
+
+    def line(self) -> str:
+        return (f"UNIT DEAF: {self.unit} has read none of its inbox since "
+                f"{RecordedEventTime(self.since - self.seconds).clock()}, so every order to it"
+                " waits unread -> read its drain diagnostic and fix that owner")
+
 
 @dataclass(frozen=True)
 class Unjudged(ReasonedStandingRule, UndatedStandingRule):

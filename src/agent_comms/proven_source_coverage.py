@@ -9,7 +9,6 @@ historical watermark grants no current-owner, provider, write or reply permit.
 from __future__ import annotations
 
 import sqlite3
-import time
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
@@ -39,8 +38,6 @@ if TYPE_CHECKING:
     from .cursor_owner import CursorOwner, CursorState
     from .native_entries import NativeEvidenceScope
     from .private_registry_guard import RegistryPrivacy
-
-_MAX_SCAN_SECONDS = 0.25
 
 
 @dataclass(frozen=True)
@@ -223,8 +220,8 @@ class SourceCoverage:
 
         Count messages with no wake or no recipients without submitting input.
         At the end of a page, use the last checked message for this recipient,
-        not the last message anywhere on the bus. Filesystem flushes and locks
-        can still take longer than the requested time limit.
+        not the last message anywhere on the bus. The page is bounded by its row
+        limit; elapsed time never decides whether it is readable.
         """
         request = CoveragePage.capture(lookup=self.recipient_lookup, limit=limit,
                                        after_seq=after_seq, partial=partial)
@@ -239,7 +236,6 @@ class SourceCoverage:
             if self.store.session._connection.in_transaction:
                 raise IdentityConflict("source coverage requires a committed coordinator snapshot")
             prefix.require_start(request.after_seq)
-            deadline = time.monotonic() + _MAX_SCAN_SECONDS
             records = self.bus.bus.received(
                 self.recipient_lookup, after=request.after_seq, before=prefix.through_seq + 1,
                 descending=False, limit=request.limit + 1,
@@ -248,8 +244,6 @@ class SourceCoverage:
             request.require_exhausted(more)
             initials = tuple(delivery for record in records[:request.limit]
                              for delivery in record.deliveries())
-            if time.monotonic() > deadline:
-                raise IdentityConflict("source coverage exceeded its scan deadline")
             prefix.require_current(self.bus.bus)
             horizon = initials[-1].seq if more else prefix.through_seq
             covered, inputs, no_wake, blocked = request.after_seq if request.partial else 0, [], [], None

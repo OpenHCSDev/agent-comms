@@ -230,3 +230,26 @@ async def test_cancelled_drain_keeps_original_failure(tmp_path):
         await agent.shutdown()
 
 
+
+
+@pytest.mark.parametrize("kind, deaf", [
+    (UnavailableDrainDiagnostic, True), (StoppedDrainDiagnostic, True),
+    (NativeInputDrainDiagnostic, False),
+])
+def test_unit_deaf_is_dated_by_the_drain_that_cannot_read_its_inbox(tmp_path, monkeypatch, kind, deaf):
+    from agent_comms.commander.standing import InboxUnavailable, UnitDeaf
+    from test_acp_private_nk_delivery import _private_comms
+
+    comms, _ = _private_comms(tmp_path)
+    owner = comms.registry.snapshot().owner_identity("beta")
+    assert UnitDeaf.violations(comms, "lead") == ()
+    comms.agents.set_drain_diagnostic("beta", owner, kind(owner, "OSError", "inbox read failed", recorded_at=100.0))
+    monkeypatch.setattr(time, "time", lambda: 100.0 + InboxUnavailable.seconds - 1)
+    assert UnitDeaf.violations(comms, "lead") == ()
+    monkeypatch.setattr(time, "time", lambda: 100.0 + InboxUnavailable.seconds + 1)
+    found = UnitDeaf.violations(comms, "lead")
+    assert found == ((UnitDeaf(100.0 + InboxUnavailable.seconds, "beta"),) if deaf else ())
+    assert UnitDeaf.violations(comms, "beta") == ()
+    if deaf:
+        assert found[0].line().startswith("UNIT DEAF: beta")
+        assert found[0].broke_after(100.0)
