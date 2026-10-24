@@ -1140,7 +1140,8 @@ class ChangedInstall(ExistingBusInstall[RehearsedFiles]):
                     def rehold() -> MaintenanceState:
                         """Hold the root again in whatever phase it is now in."""
                         state = maintenance.read()
-                        hold = state.phase.hold_for(maintenance, state, MaintenanceOperator.current())
+                        hold = state.phase.hold_for(
+                            maintenance, state, MaintenanceOperator.current())
                         holder.close()
                         holder.enter_context(hold.holding())
                         return hold

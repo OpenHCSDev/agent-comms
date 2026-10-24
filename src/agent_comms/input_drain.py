@@ -304,11 +304,6 @@ class InputObservation(ABC):
         source_prefix = await Coordination.run_worker(partial(
             SourcePrefix.capture, self.comms.bus.bus, 0))
         entry = (await self._own_entry(session_id)).entry
-        return await self._observe_coordination(session_id, root_id, source_prefix, entry)
-
-    async def _observe_coordination(
-        self, session_id: str, root_id: RootId, source_prefix: SourcePrefix, entry: RegistryEntry,
-    ) -> PrivateObservation:
         # Release all bus locks before starting registry/SQL consumer work.
         # The original coordinator owns its bounded read acquisition policy;
         # the observation must not replace it with a zero-wait failure.
@@ -473,9 +468,6 @@ class DrainedSession:
 
     def turn_open(self) -> bool:
         return self.turn.is_open
-
-    def turn_started(self) -> bool:
-        return self.turn.has_source
 
     def observing(self) -> bool:
         return self.drain_task is not None and not self.drain_task.done()
