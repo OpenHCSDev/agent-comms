@@ -97,10 +97,15 @@ def test_plain_str_id_annotations_block_growth_per_file(source, expected):
 SOURCE = Path(__file__).resolve().parents[2]
 
 
+def search_path(*first: Path) -> str:
+    """first, then the inherited PYTHONPATH when the caller's environment has one."""
+    inherited = os.environ.get("PYTHONPATH")
+    return os.pathsep.join([*map(str, first), *([inherited] if inherited else [])])
+
+
 def ratchet_environment() -> dict[str, str]:
     """The command's environment: this checkout's src before the inherited path."""
-    return {**os.environ, "PYTHONPATH": os.pathsep.join(
-        (str(SOURCE / "src"), os.environ["PYTHONPATH"]))}
+    return {**os.environ, "PYTHONPATH": search_path(SOURCE / "src")}
 
 
 class RatchetServer:
@@ -289,7 +294,7 @@ def test_format_probe_keeps_parent_dependencies_and_reads_archived_source(tmp_pa
     dependency = tmp_path / "dependencies"
     dependency.mkdir()
     (dependency / "parent_only_dependency.py").write_text("VERSION = 7\n")
-    inherited = os.pathsep.join((str(dependency), os.environ["PYTHONPATH"]))
+    inherited = search_path(dependency)
     monkeypatch.setenv("PYTHONPATH", inherited)
     revision = repo.commit(
         {
