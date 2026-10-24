@@ -32,7 +32,7 @@ from collections.abc import Callable, Iterator
 from contextlib import AbstractContextManager, ExitStack, contextmanager
 from dataclasses import dataclass, field, fields, replace
 from pathlib import Path
-from typing import TYPE_CHECKING, Annotated, ClassVar, Self
+from typing import TYPE_CHECKING, Annotated, ClassVar, Self, TypeVar
 
 from pydantic import TypeAdapter
 
@@ -622,6 +622,9 @@ class Stack:
             return self.cli(root, ReadBackCliCommand)
 
 
+T = TypeVar('T')
+
+
 @dataclass(frozen=True)
 class BindingStartCutover:
     """Undo the host-only binding conversion before the bus/runtime restore path."""
@@ -638,7 +641,7 @@ class BindingStartCutover:
                 cwd=self.home, env=self.staged.environment(),
             )
 
-    def around[Result](self, start: Callable[[], Result]) -> Result:
+    def around(self, start: Callable[[], T]) -> T:
         try:
             self.run(BridgePhase('binding start'))
             return start()
