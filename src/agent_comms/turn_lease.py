@@ -31,7 +31,7 @@ from .message_reference import MessageReference
 from .read_basis import ChannelConversation, DMConversation
 from .reported_turn import NoReportedTurn, ReportedTurn, ReportedTurnState
 from .routing import TurnRouting
-from .store_files import _store_lock
+from .store_files import SharedLock, _store_lock
 from .thread_identity import (
     NoObservedTurn,
     ObservedTurn,
@@ -609,6 +609,19 @@ class StoredTurnRecord(Executing, DurableFile, PatternFile, JsonDocument[ActiveT
     def empty(self) -> ActiveTurn:
         raise RelationViolationError(f"Active turn record is missing: {self.path}")
 
+    def read(self) -> TurnDeclaration:  # type: ignore[override]  # A successor may be finished.
+        """This turn while its thread still names it, else the thread's current turn.
+
+        RegistryEdit.commit unlinks a superseded file under the registry lock, so the
+        registry read under that same lock settles which generation is current
+        (RegistrySnapshot.current_turn); a caller's older snapshot never names a deleted file.
+        """
+        from .registry_store import RegistryStore
+
+        with _store_lock(self.registry_path, mode=SharedLock()):
+            current = RegistryStore(self.registry_path).read_snapshot_unlocked().current_turn(self)
+            return self._read_unlocked() if current == self else current.read()
+
     @classmethod
     def for_identity(cls, registry_path: Path, identity: TurnIdentity) -> StoredTurnRecord:
         return cls(identity, registry_path.resolve())
@@ -624,12 +637,12 @@ class StoredTurnRecord(Executing, DurableFile, PatternFile, JsonDocument[ActiveT
 
     def lease(self, incarnation: ThreadIncarnation, process: ProcessState,
               generation: int) -> TurnLease:
-        active = self.read()
+        active = self._read_unlocked()
         active.validate_owner(process, generation)
         return active.lease(incarnation, self)
 
     def without_claim(self) -> None:
-        self._publish_unlocked(self.read().without_claim())
+        self._publish_unlocked(self._read_unlocked().without_claim())
 
     def _turn_effects(
         self, lease: TurnLeaseFence, observe: Callable[[TurnState], Iterable[TurnState]],

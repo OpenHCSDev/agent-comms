@@ -123,7 +123,6 @@ class AudiencedMessage(CarriesEnvelope, Message, Audience):
             raise MalformedRecord(
                 "audience data cannot be canonically encoded: non-finite timestamp"
             )
-        _ = self.digest
 
     @cached_property
     def wire_envelope_digest(self) -> str:
@@ -181,7 +180,7 @@ def freeze_audience(
         raise MalformedRecord(
             "sender_name must be the externally captured canonical message sender"
         )
-    return AudiencedMessage.from_message(
+    audience = AudiencedMessage.from_message(
         prepared_message,
         sender_lookup=sender_lookup,
         source_revision=source_revision,
@@ -189,3 +188,6 @@ def freeze_audience(
             externally_captured_recipients, key=lambda item: item.recipient_lookup
         )),
     )
+    # Publication enforces the canonical byte bounds; history reads do not rehash.
+    _ = audience.digest
+    return audience
