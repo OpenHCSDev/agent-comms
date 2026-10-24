@@ -136,7 +136,7 @@ if TYPE_CHECKING:
 @dataclass(frozen=True)
 class DeliveryEvidence(DeclaredFamily, affix="DeliveryEvidence"):
     def artifact(self) -> str:
-        raise ValueError("No application evidence was supplied at delivery; pass --artifact FILE.")
+        raise TodoError("No application evidence was supplied at delivery; pass --artifact FILE.")
 
     def require_run(self, run: OrderRun) -> None:
         run.require_artifact("")
@@ -153,7 +153,7 @@ class FileDeliveryEvidence(DeliveryEvidence):
 
     def artifact(self) -> str:
         if not Path(self.path).is_file():
-            raise ValueError("Delivery evidence must name an existing file.")
+            raise TodoError("Delivery evidence must name an existing file.")
         return self.path
 
     def require_run(self, run: OrderRun) -> None:
@@ -181,7 +181,7 @@ class BranchPointCheck:
         for commit in Repo.git(repo, "rev-list", "--first-parent", f"{self.work_commit}^1").split():
             if commit in line:
                 return commit
-        raise ValueError(f"{self.work_commit} was not built on {WorkBranches.main}.")
+        raise TodoError(f"{self.work_commit} was not built on {WorkBranches.main}.")
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -195,10 +195,10 @@ class OrderDelivery(DeclaredFamily, StoryEvent, affix="Delivery"):
     def reproved(self, delivery: OrderDelivery) -> OrderDelivery:
         if delivery.unobserved() == self.unobserved():
             return delivery
-        raise ValueError("The order already records a different delivery.")
+        raise TodoError("The order already records a different delivery.")
 
     def check_base(self, repo: Path) -> str:
-        raise ValueError("This delivery has no source commit to establish a check base.")
+        raise TodoError("This delivery has no source commit to establish a check base.")
 
     def done_claims(self, order: CheckedProblemOrder) -> tuple[ProgressClaim, ...]:
         return ()
@@ -225,11 +225,11 @@ class OrderDelivery(DeclaredFamily, StoryEvent, affix="Delivery"):
     ) -> OrderDelivery: ...
 
     def closing_artifact(self) -> str:
-        raise ValueError("A triage report is not installed application evidence.")
+        raise TodoError("A triage report is not installed application evidence.")
 
     @property
     def installation_build(self) -> BuildIdentity:
-        raise ValueError("A triage report cannot be installed.")
+        raise TodoError("A triage report cannot be installed.")
 
     @property
     def work(self) -> str:
@@ -335,7 +335,7 @@ class RecordedCommitDelivery(BranchPointCheck, CheckedDelivery, declared_name="c
         super().check_failed(goals, todo, error)
 
     async def require_source(self, check: OrderCheck) -> None:
-        raise ValueError("A commit delivery names the unit's delivered commit and the checked one.")
+        raise TodoError("A commit delivery names the unit's delivered commit and the checked one.")
 
     async def checked(self, check: OrderCheck, checkout_base: Path) -> ChildResult:
         return await asyncio.to_thread(check.at, self.commit, check.directory, checkout_base)
@@ -361,7 +361,7 @@ class CommitDelivery(RecordedCommitDelivery, declared_name="delivered_commit"):
         base = await asyncio.to_thread(Repo.git, check.directory, "merge-base", self.delivered,
                                        self.commit)
         if base.strip() != delivered:
-            raise ValueError(
+            raise TodoError(
                 f"Delivered commit {self.delivered} is not in the checked commit {self.commit}.")
 
     def required_claims(self, claims: tuple[ProgressClaim, ...]) -> tuple[ProgressClaim, ...]:
@@ -400,7 +400,7 @@ class CommitDelivery(RecordedCommitDelivery, declared_name="delivered_commit"):
         sources = tuple(sorted(branch.name for branch in linked
                                if branch.name in branches and branch.linked))
         if not sources:
-            raise ValueError(
+            raise TodoError(
                 f"Delivered commit {self.delivered} is not merged and has no branch linked "
                 "to an open PR or issue.")
         return UnmergedDeliveryMerge(sources)
@@ -482,7 +482,7 @@ class ReportDelivery(OrderDelivery):
 
     def __post_init__(self) -> None:
         if not self.report.strip():
-            raise ValueError("report must contain the triage findings")
+            raise TodoError("report must contain the triage findings")
 
     @property
     def work(self) -> str:
@@ -503,7 +503,7 @@ class PullRequestLink:
 
     def __post_init__(self) -> None:
         if FieldCodec.decode(int, self.number) <= 0:
-            raise ValueError("A pull request number must be positive.")
+            raise TodoError("A pull request number must be positive.")
 
     @property
     def url(self) -> str:
@@ -526,7 +526,7 @@ class PullRequestLink:
     def existing(cls, repo: RepositoryName, number: int) -> Self:
         link = cls(repo, number)
         if cls._reported_number(repo, str(number)) != number:
-            raise ValueError(f"GitHub did not report pull request {number} in {repo.to_wire()}.")
+            raise TodoError(f"GitHub did not report pull request {number} in {repo.to_wire()}.")
         return link
 
 
@@ -554,7 +554,7 @@ class PullRequest(DeclaredFamily, affix="PullRequest"):
         return iter(())
 
     def delivery(self, repo: Path, evidence: DeliveryEvidence) -> CommitDelivery:
-        raise ValueError(f"Pull request {self.number} is not merged; done checks the merged tree.")
+        raise TodoError(f"Pull request {self.number} is not merged; done checks the merged tree.")
 
     async def delivery_merges(self, delivery: CommitDelivery,
                               check: OrderCheck) -> tuple[DeliveryMerge, ...]:
@@ -580,7 +580,7 @@ class MergedPullRequest(PullRequest):
         for first in Repo.git(repo, "rev-list", "--first-parent", "--reverse",
                               f"{self.merge}^1..{self.head}").split():
             return CommitDelivery(commit=self.merge, delivered_commit=first, evidence=evidence)
-        raise ValueError(f"Pull request {self.number} adds no commit to {self.base}.")
+        raise TodoError(f"Pull request {self.number} adds no commit to {self.base}.")
 
     async def delivery_merges(self, delivery: CommitDelivery,
                               check: OrderCheck) -> tuple[DeliveryMerge, ...]:
@@ -670,7 +670,7 @@ class PullRequests:
         """The newest merged request linked to the order is what `order done` checks."""
         for request in self.listed(todo.repo, MergedListedPullRequest, todo):
             return request.delivery(repo, evidence)
-        raise ValueError(
+        raise TodoError(
             f"{todo.id} has no merged pull request; link it with `order pr` and merge it.")
 
     def claimed_heads(self, todo: Todo) -> Iterator[tuple[OrderClaim, PullRequest]]:
@@ -1585,10 +1585,10 @@ class ProblemOrder(LifecycleCapability, DeclaredFamily, StorySource, affix="Prob
         return "No order"
 
     def check_base(self, repo: Path) -> str:
-        raise ValueError("This problem has no active checked order.")
+        raise TodoError("This problem has no active checked order.")
 
     def corrected(self, correction: CorrectCheckTodo) -> ProblemOrder:
-        raise ValueError("Only an active checked order takes a check correction.")
+        raise TodoError("Only an active checked order takes a check correction.")
 
     finding: Annotated[ProblemFinding, WireOmitDefault()] = field(
         default_factory=UnlocatedProblemFinding
@@ -1604,17 +1604,17 @@ class ProblemOrder(LifecycleCapability, DeclaredFamily, StorySource, affix="Prob
 
     def reissued(self, at: float) -> PendingProblemOrder:
         """This order sent again at ``at`` to a new owner, its first-call window kept."""
-        raise ValueError("Only an undelivered order can change owner.")
+        raise TodoError("Only an undelivered order can change owner.")
 
     def checked(self) -> CheckedProblemOrder:
-        raise ValueError("This problem has no checked order.")
+        raise TodoError("This problem has no checked order.")
 
     @property
     def phase(self) -> type[OrderPhase]:
         return UnplannedPhase
 
     def for_phase(self, phase: type[OrderPhase]) -> ProblemOrder:
-        raise ValueError("Only a checked order can declare a plan phase.")
+        raise TodoError("Only a checked order can declare a plan phase.")
 
     @property
     def accepted(self) -> bool:
@@ -1628,13 +1628,13 @@ class ProblemOrder(LifecycleCapability, DeclaredFamily, StorySource, affix="Prob
         self.require_transfer(todo)
 
     def require_close(self):
-        raise ValueError("Closing requires recorded installed application evidence.")
+        raise TodoError("Closing requires recorded installed application evidence.")
 
     def require_installation(self) -> None:
-        raise ValueError("Check the delivered order before recording installation.")
+        raise TodoError("Check the delivered order before recording installation.")
 
     def require_withdrawal(self) -> None:
-        raise ValueError("Only an undelivered order can be withdrawn.")
+        raise TodoError("Only an undelivered order can be withdrawn.")
 
     def withdrawals(self, todo: Todo) -> tuple[str, ...]:
         return ()
@@ -1646,7 +1646,7 @@ class ProblemOrder(LifecycleCapability, DeclaredFamily, StorySource, affix="Prob
         return ()
 
     def closing_artifact(self) -> str:
-        raise ValueError("Only a delivered order has closing evidence.")
+        raise TodoError("Only a delivered order has closing evidence.")
 
     def orphan_clearing(self, todo: Todo) -> str:
         """What clears this order once its holder is no longer registered."""
@@ -1654,11 +1654,11 @@ class ProblemOrder(LifecycleCapability, DeclaredFamily, StorySource, affix="Prob
                 f"ORDER.json` naming {todo.id}, or retire it with `order withdraw {todo.id}`")
 
     def linked(self, order: PendingProblemOrder) -> PendingProblemOrder:
-        raise ValueError("This problem already has an order; drop it before linking another.")
+        raise TodoError("This problem already has an order; drop it before linking another.")
 
     def folded(self, into: str, why: str) -> ProblemOrder:
         if self.items_with(Pending, self):
-            raise ValueError("The problem has open orders; link or drop them first.")
+            raise TodoError("The problem has open orders; link or drop them first.")
         return FoldedProblemOrder(original=self, into=into, why=why)
 
 @dataclass(frozen=True, kw_only=True)
@@ -1706,7 +1706,7 @@ class FixShape:
 
     def __post_init__(self) -> None:
         if not self.parents:
-            raise ValueError("scope.shape.parents must name at least one parent class declaration")
+            raise TodoError("scope.shape.parents must name at least one parent class declaration")
 
     def require_references(self, root: Path, revision: SourceRevision) -> None:
         for location in (*self.parents, *self.members):
@@ -1720,7 +1720,7 @@ class DeliverySource(DeclaredFamily, affix="DeliverySource"):
     def delivery(self, todo: Todo, repo: Path, evidence: DeliveryEvidence) -> CheckedDelivery: ...
 
     def require_report(self) -> None:
-        raise ValueError("Triage returns --seen REPORT, not a commit or operation.")
+        raise TodoError("Triage returns --seen REPORT, not a commit or operation.")
 
 
 @dataclass(frozen=True)
@@ -1763,7 +1763,9 @@ class TriageScope(OrderScope[ReportDelivery]):
                  screenshot: str, seen: str) -> ReportDelivery:
         source.require_report()
         if screenshot:
-            raise ValueError("Triage returns --seen REPORT, not a screenshot.")
+            raise TodoError("Triage returns --seen REPORT, not a screenshot.")
+        if not seen:
+            raise TodoError("A triage order needs --seen REPORT.")
         return ReportDelivery(report=Path(seen).read_text())
 
     def instructions(self, problem: str) -> tuple[str, ...]:
@@ -1775,7 +1777,8 @@ class TriageScope(OrderScope[ReportDelivery]):
         comms: Comms, checkout: Path,
     ) -> dict[ProgressClaim, tuple[str, ...]]:
         if claims:
-            raise ValueError("scope triage returns a report, not merged, installed or working claims")
+            raise TodoError(
+                "scope triage returns a report, not merged, installed or working claims")
         return {}
 
     def completed(self, todo: Todo, delivery: ReportDelivery) -> Todo:
@@ -1964,7 +1967,7 @@ class CheckedProblemOrder(ProblemOrder, declared_name=None):
             except MalformedRecord as error:
                 problems.append(str(error))
         if problems:
-            raise ValueError("\n".join(problems))
+            raise TodoError("\n".join(problems))
 
     NAMED_FILE: ClassVar[re.Pattern] = re.compile(r"([\w./-]+\.\w+):\d+")
 
@@ -2016,14 +2019,14 @@ class CheckedProblemOrder(ProblemOrder, declared_name=None):
             cwd=checkout,
             capture_output=True, text=True, timeout=60)
         if created.returncode:
-            raise ValueError(created.stderr.strip() or "Order pull request creation failed.")
+            raise TodoError(created.stderr.strip() or "Order pull request creation failed.")
         url = created.stdout.strip()
         try:
             store.apply(todo.id, RecordPullRequest(todo.revision, actor,
                                                   PullRequestLink.created(todo.repo, url),
                                                   todo.held().generation))
         except (ValueError, TodoError, subprocess.SubprocessError) as error:
-            raise ValueError(f"Created {url}, but recording its link failed: {error}. "
+            raise TodoError(f"Created {url}, but recording its link failed: {error}. "
                              "Use order pr --existing; do not create another PR.") from error
         return url
 
@@ -2044,14 +2047,14 @@ class CheckedProblemOrder(ProblemOrder, declared_name=None):
         return self.copy_as(DeliveredProblemOrder, delivery=delivery)
 
     def installed(self, works: str, artifact: str) -> ProblemOrder:
-        raise ValueError("Check the delivered order before recording installation.")
+        raise TodoError("Check the delivered order before recording installation.")
 
     def require_delivery(self, order_id: str) -> None:
-        raise ValueError("Only an open order can be delivered.")
+        raise TodoError("Only an open order can be delivered.")
 
     def require_checked(self, problem: str) -> None:
         """An installed claim stands on this order's recorded check result."""
-        raise ValueError(f"An installed claim needs the recorded check result of {problem}; "
+        raise TodoError(f"An installed claim needs the recorded check result of {problem}; "
                          "its order has none.")
 
     def withdrawn(self, previous: Assignment, why: str, superseded_by: Successor) -> ProblemOrder:
@@ -2066,13 +2069,13 @@ class OpenProblemOrder(CheckedProblemOrder, declared_name=None):
 
     def corrected(self, correction: CorrectCheckTodo) -> Self:
         if correction.previous != self.check:
-            raise ValueError("The order's check changed since it was read; read it again.")
+            raise TodoError("The order's check changed since it was read; read it again.")
         return replace(self, check=correction.check,
                        check_corrections=(*self.check_corrections, correction))
 
     def require_delivery(self, order_id: str) -> None:
         if self.id != order_id:
-            raise ValueError("The order changed; refresh its state before delivering it.")
+            raise TodoError("The order changed; refresh its state before delivering it.")
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -2119,7 +2122,7 @@ class MergedProblemOrder(AwaitingInstallationProblemOrder):
         return self.copy_as(InstalledMergedProblemOrder, works=works, artifact=artifact)
 
     def closing_artifact(self) -> str:
-        raise ValueError("A merged order records no delivered run; pass --artifact FILE "
+        raise TodoError("A merged order records no delivered run; pass --artifact FILE "
                          "showing the run on the installed build.")
 
 
@@ -2433,11 +2436,11 @@ class InstalledEvidence(CheckedProblemOrder, declared_name=None):
     def __post_init__(self) -> None:
         super().__post_init__()
         if not self.works.strip() or not self.artifact.strip():
-            raise ValueError("Describe what worked and name its artifact file.")
+            raise TodoError("Describe what worked and name its artifact file.")
 
     def installed(self, works: str, artifact: str) -> Self:
         if (works, artifact) != (self.works, self.artifact):
-            raise ValueError("The order already records different installed evidence.")
+            raise TodoError("The order already records different installed evidence.")
         return self
 
     def require_close(self) -> None:
@@ -2517,7 +2520,7 @@ class Hunt(DeclaredFamily, affix="Hunt"):
 
     def __post_init__(self):
         if len(self.why.split()) < 10:
-            raise ValueError("Describe the inspected code and verdict in ten or more words.")
+            raise TodoError("Describe the inspected code and verdict in ten or more words.")
         self.at.require_recorded("A hunt")
 
     def require_commander(self, store: TodoStore, commander: ThreadIncarnation) -> None:
@@ -2537,7 +2540,7 @@ class OrderedHunt(Hunt):
         super().require_commander(store, commander)
         if not any(todo.id == self.sent
                    for todo in store.held_for_commander(commander)):
-            raise ValueError("The hunt must name this commander's current order.")
+            raise TodoError("The hunt must name this commander's current order.")
 
 
 class TodoStoreRows(StoreRows):
@@ -2555,7 +2558,7 @@ class TodoError(ToolRefusedError):
     """A todo request is invalid or its persisted state cannot be trusted."""
 
 
-class SharedWorktreeRefusal(ValueError):
+class SharedWorktreeRefusal(TodoError):
     """Two different order holders cannot write into the same physical worktree."""
 
     def __init__(self, problem: str, holding_problem: str, holder: ThreadIncarnation,
@@ -2874,7 +2877,7 @@ class CitedEvidence:
 
     def require_evidence(self, current: Todo) -> None:
         if not self.evidence:
-            raise ValueError("A strike needs a checkable file:line, not a board row or goal text.")
+            raise TodoError("A strike needs a checkable file:line, not a board row or goal text.")
         order = current.order.checked()
         root, revision = Path(order.check.directory), order.cited_revision
         for cited in self.evidence:
@@ -3056,7 +3059,7 @@ class OrderQuote:
     def require_quote(self, text: str) -> None:
         quoted = " ".join(self.quote.split())
         if len(quoted.split()) < 4 or quoted not in " ".join(text.split()):
-            raise ValueError("Quote 4+ words of the order this verdict carries out.")
+            raise TodoError("Quote 4+ words of the order this verdict carries out.")
 
 
 @dataclass(frozen=True)
@@ -3080,7 +3083,8 @@ class AcceptedVerdict(QuotedVerdict, ToolCallVerdict):
             return
         if not (no_owner and len(no_owner.split()) >= 12 and re.search(r'\bbecause\b', no_owner)
                 and re.search(r'/\S+:\d+', no_owner)):
-            raise ValueError('Added branches need --no-owner: 12+ words with because and an absolute file:line.')
+            raise TodoError(
+                'Added branches need --no-owner: 12+ words with because and an absolute file:line.')
 
 
 @dataclass(frozen=True)
@@ -3309,7 +3313,7 @@ class PeerAcceptedVerdict(AcceptedVerdict):
         if (message.sender == self.actor.name or
                 (message.target != current.holder and
                  current.holder not in {mention.thread for mention in message.mentions})):
-            raise ValueError("--peer must name another sender's message to this unit.")
+            raise TodoError("--peer must name another sender's message to this unit.")
         self.require_quote(message.body)
         return self
 
@@ -3331,11 +3335,12 @@ class SupersededVerdict(ToolCallVerdict):
         replacing = [todo for todo in goals.todos.held_for_commander(
                          self.actor.commanding_identity) if todo.id == self.replacement]
         if not replacing:
-            raise ValueError('The replacing problem is not held for this commander.')
+            raise TodoError('The replacing problem is not held for this commander.')
         if any(todo.holder == current.holder for todo in replacing):
-            raise ValueError('The replacing order went to the same unit; judge its edits ok or back.')
+            raise TodoError(
+                'The replacing order went to the same unit; judge its edits ok or back.')
         if len(self.reason.split()) < 6:
-            raise ValueError('Say why this edit was replaced in 6+ words.')
+            raise TodoError('Say why this edit was replaced in 6+ words.')
         return self
 
     def judged(self, current: Todo) -> Todo:
@@ -3634,7 +3639,7 @@ class InstallTodo(CloseOrderTodo):
 
     def closed(self, current: Todo) -> ProblemOrder:
         if not Path(self.artifact).is_file():
-            raise ValueError("Retain the installed application artifact before closing.")
+            raise TodoError("Retain the installed application artifact before closing.")
         return current.order.installed(self.works, self.artifact)
 
 
@@ -3924,16 +3929,16 @@ class Todo(TodoStoreRows, TypedTable):
     @property
     def latest_message(self) -> OrderMessage:
         if not self.messages:
-            raise ValueError(f"{self.holder} holds {self.id}, but no order message was recorded.")
+            raise TodoError(f"{self.holder} holds {self.id}, but no order message was recorded.")
         return self.messages[-1]
 
     def require_fold(self, target: Todo, why: str) -> None:
         self.state.require_open(self)
         target.state.require_open(target)
         if self.id == target.id:
-            raise ValueError("Fold needs two different open problems.")
+            raise TodoError("Fold needs two different open problems.")
         if len(why.split()) < 8:
-            raise ValueError("Say why they are the same problem in 8+ words.")
+            raise TodoError("Say why they are the same problem in 8+ words.")
         self.order.folded(target.id, why)
 
     @property
@@ -4157,14 +4162,14 @@ class TodoStore(OwnerRequestStore):
         found = self._select('id=? AND creator=? AND creator_created=?',
                              (problem, authority.name, authority.wire_birth), reader=self._open)
         if len(found) != 1 or found[0].holder != unit:
-            raise ValueError(f'{unit} holds no order on {problem}')
+            raise TodoError(f'{unit} holds no order on {problem}')
         return found[0]
 
     def drop(self, commander: ThreadIncarnation, unit: str, problem: str, by: str) -> Todo:
         old = self.resolve_order(commander, unit, problem)
         newer = self.resolve_order(commander, unit, by)
         if not old.pending or not newer.pending or newer.order.at.at <= old.order.at.at:
-            raise ValueError('Only a live newer order to the same unit replaces an old one.')
+            raise TodoError('Only a live newer order to the same unit replaces an old one.')
         with self.writing() as db:
             current = self._current(db, old.id)
             current.require_result(old)
@@ -4208,7 +4213,7 @@ class TodoStore(OwnerRequestStore):
             target.require_commander(commander)
             target.state.require_open(target)
             if target.holder not in (None, unit):
-                raise ValueError(f'{problem} is already held by {target.holder}')
+                raise TodoError(f'{problem} is already held by {target.holder}')
             linked = target.order.linked(source.order)
             replace(target, order=linked,
                     prior_orders=target.orders_before(linked, source.prior_orders),
