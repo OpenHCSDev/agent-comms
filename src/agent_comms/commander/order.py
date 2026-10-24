@@ -375,8 +375,6 @@ class CommanderContext(BaseModel):
         if not (check := OrderCheck.parse(line)):
             sys.exit('Refused: Check reads "<repo> :: <shell command> -> <integer>"')
         directory = Repo.selected(self.repos, check.directory).checkout
-        if not directory.is_dir():
-            sys.exit(f'Refused: Check repo {check.directory} is not a directory')
         return replace(check, directory=str(directory))
 
     def held_orders(self) -> tuple[Todo, ...]:
@@ -586,17 +584,6 @@ class Commander(CommanderContext):
         """Record the decoded order, or report every failed prerequisite before any write."""
         document = document.resolved(self, finding)
         document.order.send(self, document, unit, clean, reassign, target, traced, answers, request)
-
-    def correct_check(self, pid: str, line: str, why: str) -> None:
-        """Correct the current check against the source preceding this order's delivery."""
-        todo = self.comms.goals.todos.get(pid)
-        order = todo.order.checked()
-        check = self.read_check(line)
-        if len(why.split()) < 8:
-            sys.exit('Refused: --why says what was wrong with the recorded check (8+ words)')
-        order.require_check_acceptance(check, self.comms.registry.storage_rule.checkout_base)
-        self.call(CommsOrderCheckTool(problem=pid, check=check, why=why))
-        print(f'{pid}: order {order.id} now checks `{check.command}`')
 
     def say(self, units: str, body_file: str,
             answers: tuple[MessageReference, ...] = ()) -> None:
@@ -1083,7 +1070,9 @@ class CheckVerb(OrderVerb):
     ]
 
     def run(self, ctx: Commander) -> None:
-        ctx.correct_check(self.pid, self.check, self.why)
+        check = ctx.read_check(self.check)
+        ctx.call(CommsOrderCheckTool(problem=self.pid, check=check, why=self.why))
+        print(f'{self.pid}: order now checks `{check.command}`')
 
 
 @dataclass(frozen=True, kw_only=True)
