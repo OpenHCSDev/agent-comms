@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import inspect
+import sqlite3
 from abc import abstractmethod
 from dataclasses import dataclass, field, replace
 from pathlib import Path
@@ -21,6 +22,7 @@ from agent_comms.installer.interpreter_operation import (
 )
 from agent_comms.locked_store import RootFile
 from agent_comms.store_files import is_store_lock
+from agent_comms.typed_table import TriggerKind, TypedTable, _Field
 
 
 @dataclass(frozen=True)
@@ -78,6 +80,25 @@ class Carry(DeclaredFamily, affix="", discovery_package="cutover"):
     def after_acceptance(self) -> Carried:
         """Retire obsolete inputs after the installation's rollback window closes."""
         return Carried(0)
+
+    @staticmethod
+    def rewrite_stored(
+        db: sqlite3.Connection,
+        row: type[TypedTable],
+        column: _Field,
+        updates: list[tuple[object, int]],
+    ) -> None:
+        """Inside the caller's write transaction, carry stored values of a guarded row:
+        its declared mutation guards are lifted and recreated from the same declaration."""
+        guards = row.triggers()
+        for name in guards:
+            TriggerKind.drop(db, name)
+        db.executemany(
+            row._sql(f'UPDATE "{row.declared_name}" SET {{{column.name}}}=? WHERE {{seq}}=?'),
+            updates,
+        )
+        for sql in guards.values():
+            db.execute(sql)
 
     @staticmethod
     def require_confined(root: Path, path: Path) -> None:
