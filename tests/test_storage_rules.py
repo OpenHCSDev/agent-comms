@@ -88,8 +88,8 @@ def test_removed_worktree_frees_quota_and_another_home_cannot_claim_its_parent(t
     assert storage.home == home
     assert storage.extra_checkouts == (old,)
     assert storage.adding(home) == storage
-    assert rule.owns_checkout(thread, home)
-    assert not rule.owns_checkout(other, old)
+    assert rule.owns_present_checkout(thread, home)
+    assert not rule.owns_present_checkout(other, old)
     with pytest.raises(StorageDenied):
         StorageProjection(comms.registry.storage_rule, comms.registry.require(other.name)).check((
             CheckoutStorageEffect(new, RepositoryName('OpenHCSDev', 'agent-comms')),))

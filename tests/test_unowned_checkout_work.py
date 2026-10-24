@@ -71,7 +71,7 @@ def test_one_problem_owns_a_checkout_in_each_repository_it_changes(checkout_bus,
 
     assert checkout.name == 'worker--P1'
     assert lockstep.name == 'worker--P1--toad'
-    assert rule.owns_checkout(worker, checkout)
+    assert rule.owns_present_checkout(worker, checkout)
     assert rule.owns_checkout(worker, lockstep, RepositoryName('OpenHCSDev', 'toad'))
     assert not rule.owns_checkout(worker, misnamed, RepositoryName('OpenHCSDev', 'toad'))
     assert rule.problem_checkouts('worker', 'P1') == (checkout, misnamed, lockstep)

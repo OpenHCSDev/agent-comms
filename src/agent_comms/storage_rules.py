@@ -205,7 +205,7 @@ class StorageRule(RoomAllocation, DurableFile):
         return tuple(found)
 
     def owns_checkout(self, owner: Thread, path: Path,
-                      repository: RepositoryName | None = None) -> bool:
+                      repository: RepositoryName) -> bool:
         """Ownership follows the declared repository allocation, before its checkout exists."""
         if path == owner.project_path:
             return True
@@ -214,16 +214,29 @@ class StorageRule(RoomAllocation, DurableFile):
             return False
         if not suffix:
             return path == self.order_checkout(owner.name, problem)
-        return (repository is not None
-                and path == self.repository_checkout(owner.name, problem, repository))
+        return path == self.repository_checkout(owner.name, problem, repository)
+
+    def owns_present_checkout(self, owner: Thread, path: Path) -> bool:
+        """Only a repository-suffixed allocation needs its existing Git origin read."""
+        if path == owner.project_path:
+            return True
+        problem, _, suffix = path.name.removeprefix(f'{owner.name}--').partition('--')
+        if not ProblemNumber.accepts(problem):
+            return False
+        if not suffix:
+            return path == self.order_checkout(owner.name, problem)
+        try:
+            repository = Repo.of(path).github
+        except GitCommandError as error:
+            raise StorageDenied(f'Cannot read repository of checkout {path}: {error}') from error
+        return self.owns_checkout(owner, path, repository)
 
     def checkout_paths(self, owner: Thread) -> tuple[Path, ...]:
         """Declared home and order locations; Git metadata supplies their branches."""
         ordered = self.order_checkout(owner.name, 'P*')
         return tuple(path for path in (owner.project_path,
                                        *sorted(ordered.parent.glob(ordered.name)))
-                     if path.is_dir() and (self.owns_checkout(owner, path)
-                         or self.owns_checkout(owner, path, Repo.of(path).github)))
+                     if path.is_dir() and self.owns_present_checkout(owner, path))
 
     def checkouts_of(self, thread: Thread) -> tuple[Path, ...]:
         """Read each repository now; directories and names do not register ownership."""
@@ -237,8 +250,7 @@ class StorageRule(RoomAllocation, DurableFile):
             entries = WorkBranches(repository).read_checkout().worktrees()
             listed.update(entries)
             checkouts.update(path for path in entries
-                             if path.is_dir() and (self.owns_checkout(thread, path)
-                                 or self.owns_checkout(thread, path, Repo.of(repository).github)))
+                             if path.is_dir() and self.owns_present_checkout(thread, path))
         return (home, *sorted(checkouts - {home}))
 
     def deny(self, reason):
@@ -319,12 +331,9 @@ class StorageRule(RoomAllocation, DurableFile):
         base = self.checkout_base.resolve()
         if path.is_relative_to(base) and path != base:
             checkout = base / path.relative_to(base).parts[0]
-            if repository is None and not self.owns_checkout(thread, checkout):
-                try:
-                    repository = Repo.of(checkout).github
-                except GitCommandError as error:
-                    raise StorageDenied(f'{checkout} is not a checkout of {thread.name}') from error
-            if not self.owns_checkout(thread, checkout, repository):
+            owned = (self.owns_present_checkout(thread, checkout) if repository is None
+                     else self.owns_checkout(thread, checkout, repository))
+            if not owned:
                 self.deny(f'{checkout} is not a checkout of {thread.name}')
 
     def order_text(self, thread: Thread, pythons: Sequence[str]) -> str:
