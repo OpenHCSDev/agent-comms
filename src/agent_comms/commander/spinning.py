@@ -23,9 +23,12 @@ class SpinningUnit(HeldBranchRule):
 
     @classmethod
     def derive(cls, branches: tuple[HeldBranch, ...]) -> tuple[Self, ...]:
+        """Only a presence that may be active can spin; a stopped unit's old calls are history."""
         found = []
         for held in branches:
             source = held.source
+            if not source.presence.may_be_active:
+                continue
             since = max(held.difference.moved_at, held.todo.order.checked().at.recorded_at("A held order"))
             elapsed = (source.now - since) / 60
             if elapsed < cls.minutes:

@@ -199,9 +199,6 @@ def arguments(comms: Comms, name: str, project: Path, checkout: Path) -> dict:
         },
         "comms_todo_list": {},
         "comms_standing_rules": {},
-        "comms_rule_review": {
-            "entry": {"kind": "drawn", "drawn": ["Read the original source."], "cited": 1}
-        },
         "comms_order": {
             "owner": "worker",
             "order": {
@@ -229,6 +226,7 @@ def arguments(comms: Comms, name: str, project: Path, checkout: Path) -> dict:
             "artifact": str(screenshot),
         },
         "comms_turns": {"thread": "worker"},
+        "comms_input_delivery": {"thread": "worker"},
         "comms_order_work": {"problem": "P1"},
         "comms_threads": {},
         "comms_work_branches": {"checkout": str(checkout)},
