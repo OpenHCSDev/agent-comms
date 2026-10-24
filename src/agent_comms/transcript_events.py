@@ -34,6 +34,7 @@ from .ui_model.message_category import (
 
 if TYPE_CHECKING:
     from .importing import ImportBuffer, ImportLimits
+    from .transcript_sources import TranscriptSource
 
 
 TRUNCATED = "\n[Import excerpt truncated]"
@@ -119,6 +120,15 @@ class TranscriptEvent(EventMerge, DeclaredFamily, affix="Transcript"):
         return None
 
     def for_assigned_source(self, source, published: bool) -> tuple[TranscriptEvent, ...]:
+        return (self,)
+
+    def assistant_parts(self) -> tuple[str, ...]:
+        return ()
+
+    def with_publications(self, publications: tuple[MessageReference, ...]) -> TranscriptEvent:
+        return self
+
+    def for_external_source(self, source: TranscriptSource) -> tuple[TranscriptEvent, ...]:
         return (self,)
 
     def as_context(self) -> TranscriptEvent:
@@ -327,6 +337,17 @@ class AssistantTranscript(AgentTextTranscript):
 
     def for_assigned_source(self, source, published: bool) -> tuple[TranscriptEvent, ...]:
         return () if published else (self,)
+
+    def assistant_parts(self) -> tuple[str, ...]:
+        return (self.text,)
+
+    def with_publications(self, publications: tuple[MessageReference, ...]) -> AssistantTranscript:
+        return replace(self, routing=TurnRouting(publications=publications))
+
+    def for_external_source(self, source: TranscriptSource) -> tuple[TranscriptEvent, ...]:
+        references = self.routing.publications if self.routing is not None else ()
+        published = bool(references) and source.sent_messages(references).keys() >= set(references)
+        return self.for_assigned_source(source, published)
 
     @property
     def category(self) -> type[MessageCategory]:

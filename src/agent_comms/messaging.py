@@ -10,14 +10,12 @@ from .active_route import guard_original_root_write
 from .bus_publication import AgentOrigin, HumanOrigin, InitialOrigin
 from .change_report import NoChangeReport, ReportEvidence
 from .channel_targets import CommandTarget, IncarnationThreadTarget, NamedTarget
-from .coordination_session import NativeBoundary
 from .errors import (
     CommittedMessageError,
     MessageAcknowledgmentError,
     RelationViolationError,
     UnregisteredThreadError,
 )
-from .input_disposition import InputDispositions
 from .message_bus import MessageBus
 from .message_reference import MessageReference
 from .messages import ConversationRole, InfoKind, Message, MessageKind, MessageRole, NoticeRole
@@ -107,13 +105,7 @@ class Messaging:
 
     def _answered_by(self, owner: Thread, target: str) -> tuple[MessageReference, ...]:
         """What this owner's message to target answers among its running turn's inputs."""
-        for lease in owner.turn_lease.held():
-            inputs = InputDispositions(self.root).in_turn(lease.turn_id)
-            with NativeBoundary(self.bus) as boundary, self.bus.bus.reading() as source:
-                return inputs.answered_by(
-                    lease, source, boundary.registry, target, privacy=boundary.privacy,
-                )
-        return ()
+        return owner.turn_lease.answered_inputs(self, owner, target)
 
     def _register_user(self, worktree: str) -> Thread:
         name = self.registry.snapshot().claim_name("user")
