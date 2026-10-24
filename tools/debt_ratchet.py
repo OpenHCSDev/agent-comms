@@ -430,6 +430,42 @@ class StringFieldMetadata(PerFileOccurrenceMeasure):
         )
 
 
+class PlainStrIdAnnotation(PerFileOccurrenceMeasure):
+    """ID-shaped fields and parameters retain their nominal kind instead of plain str."""
+
+    @staticmethod
+    def sites(tree: ast.AST, filename: str) -> Iterator[ast.AST]:
+        for node in ast.walk(tree):
+            match node:
+                case ast.AnnAssign(
+                    target=ast.Name(id=name) | ast.Attribute(attr=name), annotation=annotation
+                ) | ast.arg(arg=name, annotation=annotation):
+                    if not name.endswith(("_id", "nonce", "lookup", "generation")):
+                        continue
+                case _:
+                    continue
+            while True:
+                match annotation:
+                    case ast.Name(id=str.__name__):
+                        yield node
+                        break
+                    case ast.BinOp(left=inner, op=ast.BitOr(), right=ast.Constant(value=None)) \
+                            | ast.BinOp(left=ast.Constant(value=None), op=ast.BitOr(), right=inner):
+                        annotation = inner
+                    case ast.Subscript(
+                        value=ast.Name(id=TypePositions.annotated)
+                              | ast.Attribute(attr=TypePositions.annotated),
+                        slice=ast.Tuple(elts=[inner, *_]),
+                    ):
+                        annotation = inner
+                    case _:
+                        break
+
+    @staticmethod
+    def occurrences(node: ast.AST) -> int:
+        return 1
+
+
 class CheckedRevision(Measure):
     """A checker's findings per changed file. Both revisions are checked under the head's
     configuration, so the difference is the code's alone. A path missing at one revision counts
