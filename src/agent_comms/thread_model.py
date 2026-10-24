@@ -28,11 +28,8 @@ class ThreadModel(SubclassUnion, TextChoice, affix="Model"):
     @boundary_decoder
     def selected_by(arguments: NativeArguments) -> ThreadModel:
         """The model a launch's native arguments select, or none."""
-        selected = arguments.model
-        provider = arguments.provider
-        if selected is None or provider is None:
-            return ThreadModel.reported(selected)
-        return DeclaredModel(SelectedModel(provider, selected.removeprefix(provider + "/")).qualified)
+        return arguments.model.chosen(
+            lambda model: DeclaredModel(arguments.provider.qualified(model)), UndeclaredModel())
 
     @staticmethod
     @boundary_decoder
