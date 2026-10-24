@@ -27,7 +27,6 @@ from agent_comms.active_route import active_route_path
 from agent_comms.bus import Bus
 from agent_comms.comms import Comms, wire
 from agent_comms.connector import (
-    CALLER,
     ApprovalLink,
     AuthorizationCodeGrant,
     Connector,
@@ -35,6 +34,7 @@ from agent_comms.connector import (
     ServeVerb,
     RevokeVerb,
 )
+from agent_comms.connector_caller import CALLER
 from agent_comms.connector_store import (
     CALLBACK, CODE_SECONDS, AuthorizationQuery, ConnectorGrants, ConnectorStore,
     IssuedCode, TrustedBrowser, digest,
@@ -422,7 +422,7 @@ async def test_connector_lists_every_tool(client, store, comms):
     token = await approved_token(client, comms)
     headers = {"Authorization": f"Bearer {token}"}
     listed = (await (await client.post("/mcp", json=LIST, headers=headers)).json())["result"]["tools"]
-    family = Connector.exposed()
+    family = CALLER.exposed()
     assert [tool["name"] for tool in listed] == list(family)
     assert [tool["annotations"]["readOnlyHint"] for tool in listed] == [
         issubclass(tool, ReadTool) for tool in family.values()]
@@ -591,7 +591,7 @@ async def test_approval_previews_do_not_grant_browser_trust(client, store, comms
     assert (await client.post(link.path, allow_redirects=False)).status == 400
     code = parse_qs(urlsplit(approved.headers["Location"]).query)["code"][0]
     token = await login.redeem(client, code)
-    assert store.read().holds(token)
+    assert store.read().caller_for(token) == CALLER
 
 
 async def test_pending_authorizations_are_bounded(client, store, comms):
@@ -645,7 +645,7 @@ async def test_owner_browser_approval_lifecycle(client, store, comms):
     assert digest(browser) in grants.trusted_browsers and not grants.requests
     assert browser not in store.path.read_text()
     assert first_link.path.rsplit("/", 1)[-1] not in store.path.read_text()
-    assert grants.holds(token)
+    assert grants.caller_for(token) == CALLER
 
     registered = await (await client.post(
         "/register", json={"redirect_uris": [CALLBACK], "client_name": "claude.ai"}

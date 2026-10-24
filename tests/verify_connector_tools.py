@@ -27,7 +27,7 @@ from agent_comms.change_report import FileLine
 from agent_comms.channels import AnyOfMatch, ViewPredicate, ParticipantsView
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.comms import Comms, wire
-from agent_comms.connector import Connector
+from agent_comms.connector_caller import CALLER
 from agent_comms.connector_store import ConnectorStore
 from agent_comms.field_codec import FieldCodec, TurnId, GoalId
 from agent_comms.goal_actions import CreateProblemGoalAction, PausedGoalAction, SetGoalAction
@@ -262,14 +262,14 @@ def arguments(comms: Comms, name: str, project: Path, checkout: Path) -> dict:
         "comms_cancel_restart": {"name": "worker"},
         "comms_archive": {"name": "archivable"},
     }
-    assert set(cases) == set(Connector.exposed()), (
+    assert set(cases) == set(CALLER.exposed()), (
         "The timing cases must cover the live declaration family."
     )
     selected = cases[name]
     if name == "comms_order":
         selected["order"].pop("repo")
         selected["order"].pop("text")
-    Connector.exposed()[name].parse_arguments(selected, call_id="timing-probe")
+    CALLER.exposed()[name].parse_arguments(selected, call_id="timing-probe")
     return selected
 
 
@@ -281,7 +281,7 @@ def run(output: Path, checkout: Path, selected: list[str]) -> None:
     seed(original, project)
     config = json.loads((Path.home() / ".config/agent-comms/commander.json").read_text())
     rows = []
-    names = selected or list(Connector.exposed())
+    names = selected or list(CALLER.exposed())
     for name in names:
         case = output / name
         case.mkdir()
@@ -424,6 +424,6 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("output", type=Path)
     parser.add_argument("--checkout", type=Path, default=Path(__file__).resolve().parents[1])
-    parser.add_argument("--tools", nargs="*", choices=tuple(Connector.exposed()), default=[])
+    parser.add_argument("--tools", nargs="*", choices=tuple(CALLER.exposed()), default=[])
     args = parser.parse_args()
     run(args.output.resolve(), args.checkout.resolve(), args.tools)

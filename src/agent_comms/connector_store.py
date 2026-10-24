@@ -11,6 +11,8 @@ from pathlib import Path
 from typing import ClassVar, Literal, Self, get_args
 from urllib.parse import urlencode
 
+from .connector_caller import CALLER, ConnectorCaller
+from .errors import ToolRefusedError
 from .field_codec import FieldCodec
 from .locked_store import DocumentChange
 from .maintenance_barrier import CarriedDocument
@@ -35,6 +37,10 @@ class ApprovalRefused(ValueError):
 
 class ApprovalQueueFull(ValueError):
     """Unknown browsers have filled the bounded waiting queue."""
+
+
+class GrantRefusedError(ToolRefusedError):
+    """The bearer token identifies no live connector caller."""
 
 
 @dataclass(frozen=True)
@@ -99,6 +105,17 @@ class IssuedCode(ExpiringGrant):
 class IssuedAccess(ExpiringGrant):
     client_id: str
 
+    def caller(self) -> ConnectorCaller:
+        return CALLER
+
+
+@dataclass(frozen=True)
+class ThreadGrant:
+    thread: str
+
+    def caller(self) -> ConnectorCaller:
+        return ConnectorCaller(self.thread)
+
 
 @dataclass(frozen=True)
 class IssuedTokens:
@@ -118,6 +135,7 @@ class ConnectorGrants:
     requests: dict[str, AuthorizationRequest] = field(default_factory=dict)
     codes: dict[str, IssuedCode] = field(default_factory=dict)
     access: dict[str, IssuedAccess] = field(default_factory=dict)
+    threads: dict[str, ThreadGrant] = field(default_factory=dict)
     refresh: dict[str, str] = field(default_factory=dict)
     trusted_browsers: dict[str, TrustedBrowser] = field(default_factory=dict)
     waiting_limit: ClassVar[int] = 8
@@ -176,9 +194,16 @@ class ConnectorGrants:
         )
         return DocumentChange(grants, IssuedTokens(access, refresh))
 
-    def holds(self, token: str) -> bool:
+    def caller_for(self, token: str) -> ConnectorCaller:
         key = digest(token)
-        return key in self.access and self.access[key].live(time.time())
+        if key in self.access and self.access[key].live(time.time()):
+            return self.access[key].caller()
+        if key in self.threads:
+            return self.threads[key].caller()
+        raise GrantRefusedError("Unknown or expired connector grant.")
+
+    def thread_held(self, thread: str) -> bool:
+        return any(grant.thread == thread for grant in self.threads.values())
 
 
 @dataclass(frozen=True, slots=True)
@@ -195,6 +220,15 @@ class ConnectorStore(CarriedDocument[ConnectorGrants], DependentStateTier):
 
     def empty(self) -> ConnectorGrants:
         return ConnectorGrants()
+
+    def thread_granted(self, thread: str) -> str:
+        token = secrets.token_urlsafe(32)
+        return self.update(lambda grants: DocumentChange(
+            replace(grants, threads={
+                key: grant for key, grant in grants.threads.items() if grant.thread != thread
+            } | {digest(token): ThreadGrant(thread)}),
+            token,
+        ))
 
     @contextmanager
     def granted(self, client_id: str) -> Iterator[str]:

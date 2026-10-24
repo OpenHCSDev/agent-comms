@@ -9,13 +9,14 @@ from __future__ import annotations
 import json
 import os
 import shutil
+import subprocess
 import sys
 import uuid
 from abc import abstractmethod
 from dataclasses import dataclass
 from importlib.resources import files
 from pathlib import Path
-from typing import ClassVar
+from typing import ClassVar, Self
 
 from agent_comms_hooks import ClaudeHookProgram
 
@@ -56,7 +57,7 @@ class Harness(DeclaredFamily, affix="Harness"):
     bus_threads: ClassVar[tuple[str, ...]] = ()
 
     @classmethod
-    def present(cls, home: Path) -> tuple[Harness, ...]:
+    def present(cls, home: Path) -> tuple[Self, ...]:
         return tuple(
             member(home) for member in cls.members_with(cls) if shutil.which(member.executable)
         )
@@ -90,14 +91,42 @@ class Harness(DeclaredFamily, affix="Harness"):
         }
 
 
+class ConnectorClientHarness(Harness):
+    """A harness whose MCP client can reach the connector as its bus threads."""
+
+    @abstractmethod
+    def connector_registered(self) -> bool: ...
+
+    @abstractmethod
+    def register_connector(self, url: str, token: str) -> None: ...
+
+
 @dataclass(frozen=True)
-class ClaudeCodeHarness(Harness):
+class ClaudeCodeHarness(ConnectorClientHarness):
     """Claude Code reads the bus through a Monitor on `agent-comms-claude-bridge watch`;
     no config holds it."""
 
     executable: ClassVar[str] = "claude"
     skills_dir: ClassVar[str] = ".claude/skills"
     bus_threads: ClassVar[tuple[str, ...]] = ("claude-code",)
+
+    def connector_registered(self) -> bool:
+        return subprocess.run(
+            (self.executable, "mcp", "get", "comms"), capture_output=True,
+        ).returncode == 0
+
+    def register_connector(self, url: str, token: str) -> None:
+        if self.connector_registered():
+            subprocess.run(
+                (self.executable, "mcp", "remove", "--scope", "user", "comms"), check=True,
+            )
+        subprocess.run(
+            (self.executable, "mcp", "add-json", "--scope", "user", "comms", json.dumps({
+                "type": "http", "url": url,
+                "headers": {"Authorization": f"Bearer {token}"},
+            })),
+            check=True,
+        )
 
     def configure(self) -> tuple[Path, ...]:
         settings = self.home / ".claude/settings.json"
@@ -113,7 +142,7 @@ class ClaudeCodeHarness(Harness):
                     events.setdefault(event, []).append(program.entry())
 
         merge_json(settings, reconcile_hooks)
-        return (settings,)
+        return (settings, self.home / ".claude.json")
 
 
 @dataclass(frozen=True)

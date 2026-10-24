@@ -12,8 +12,10 @@ from pathlib import Path
 from typing import Annotated
 
 import agent_comms
+from agent_comms.connector import LOOPBACK, PORT
+from agent_comms.connector_store import ConnectorStore
 from agent_comms.field_codec import PathText
-from agent_comms.harness_install import Harness, replace_link
+from agent_comms.harness_install import ConnectorClientHarness, Harness, replace_link
 from agent_comms.installer.runtime_resolution import (
     ConsoleScriptPackage,
     RuntimePackage,
@@ -63,3 +65,9 @@ class RuntimePublication:
         replace_link(current, selected)
         for harness in Harness.present(Path.home()):
             harness.configure()
+        store = ConnectorStore.owned()
+        for client in ConnectorClientHarness.present(Path.home()):
+            for name in client.bus_threads:
+                if not store.read().thread_held(name) or not client.connector_registered():
+                    token = store.thread_granted(name)
+                    client.register_connector(f"http://{LOOPBACK}:{PORT}/mcp", token)
