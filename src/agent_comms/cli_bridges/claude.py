@@ -1,7 +1,9 @@
 """Claude Code sessions: their stored transcripts, and the live bridge that follows one."""
 from __future__ import annotations
 
+import argparse
 import json
+import os
 import sqlite3
 from collections.abc import Iterator
 from contextlib import aclosing
@@ -15,6 +17,7 @@ from agent_comms.runtime_updates import RuntimeUpdate, SessionFacts
 from agent_comms.thread_text import NoThreadText, ThreadText
 from agent_comms.watched import FileSource
 from agent_comms_hooks.session import SessionHook
+from agent_comms_hooks.watch import WatchClaim
 
 from ..wire_models import WireModel
 from .claude_protocol import CLAUDE_RECORD, ClaudeMonitorFrame, ClaudeRecord, ClaudeSession
@@ -92,6 +95,16 @@ class ClaudeBridge(RunningClaude, LineMonitorBridge, declared_name=None):
     incoming_frame = ClaudeMonitorFrame
     window_bytes = ClaudeMonitorFrame.BATCH_CHARS * 2
     RECENT_BYTES = 4 * 1024 * 1024
+
+    @classmethod
+    def add_arguments(cls, parser: argparse.ArgumentParser) -> None:
+        """A bare Monitor command uses the binding enrolled for this Claude session."""
+        for record in WatchClaim(os.environ.get('CLAUDE_CODE_SESSION_ID', '')).state().bindings():
+            arguments, _ = parser.parse_known_args(record.command[2:])
+            parser.set_defaults(
+                root=record.root, bus_thread=record.bus,
+                session=os.environ['CLAUDE_CODE_SESSION_ID'], state=arguments.state.parent,
+            )
 
     def __init__(self, options: Options, binding: Binding, db: sqlite3.Connection) -> None:
         LineMonitorBridge.__init__(self, options, binding, db)
