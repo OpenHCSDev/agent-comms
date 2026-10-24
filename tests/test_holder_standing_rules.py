@@ -744,6 +744,23 @@ def test_successful_pass_health_does_not_depend_on_messages(held_bus, monkeypatc
     assert held_bus.bus.bus.revision() == before
 
 
+def test_pass_missing_a_restarting_commander_keeps_its_completion(held_bus, installed_runtime):
+    """An install leaves the commander's process dead for one pass, which retires nothing."""
+    commander = held_bus.registry.require("lead")
+    alive = replace(commander, process_identity=ProcessIdentity.capture(os.getpid()))
+    heartbeat = CommanderHeartbeat()
+    held_bus.registry.register(alive)
+    heartbeat.pass_body(held_bus, heartbeat.observe(held_bus))
+    passes = ServicePassStore.at(held_bus.root)
+    completed = passes.read().commander_completed[commander.incarnation]
+    held_bus.registry.register(commander)
+    assert heartbeat.observe(held_bus) == ()
+    heartbeat.pass_body(held_bus, ())
+    held_bus.registry.register(alive)
+    assert passes.read().commander_completed[commander.incarnation] == completed
+    assert HeartbeatSilent.violations(held_bus, "lead") == ()
+
+
 def test_first_pass_is_owed_from_oldest_request_and_survives_renames(held_bus, monkeypatch):
     commander = held_bus.registry.require("lead")
     held_bus.registry.register(replace(commander, process_identity=ProcessIdentity.capture(os.getpid())))

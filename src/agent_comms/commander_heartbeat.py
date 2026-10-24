@@ -77,5 +77,6 @@ class CommanderHeartbeat(CommanderService, WatchPass[tuple[CommanderObservation,
         finally:
             # A later commander's failure does not erase passes already completed.
             ServicePassStore.at(comms.root).heartbeat_passed(
-                completed, (item.thread.incarnation for item in observed),
+                completed,
+                (thread.incarnation for thread in comms.registry.all_threads().values()),
             )
