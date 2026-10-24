@@ -66,11 +66,15 @@ async def stopped_goal_journey(
             resumed = store.snapshot(stopped.goal.require().id)
             assert resumed is not None and resumed.number == ready.number
             fixture.provider.response_gate.set()
-            stopped_turn = stopped.observed_turn(stopped.claimed_generation)
+            def observed_turn():
+                snapshot = comms.registry.snapshot()
+                thread = snapshot.require("stop-copy")
+                return thread, thread.observed_turn(snapshot.claim_generation("stop-copy"))
+
+            _, stopped_turn = observed_turn()
 
             def continued_turn_finished():
-                thread = comms.registry.require("stop-copy")
-                observed = thread.observed_turn(thread.claimed_generation)
+                thread, observed = observed_turn()
                 return (
                     not thread.executing
                     and observed != NoObservedTurn()
@@ -78,8 +82,7 @@ async def stopped_goal_journey(
                 )
 
             await wait_for(continued_turn_finished)
-            continued = comms.registry.require("stop-copy")
-            continued_turn = continued.observed_turn(continued.claimed_generation)
+            continued, continued_turn = observed_turn()
             assert continued_turn != NoObservedTurn()
             with closing(store._connect()) as db:
                 finished = AttemptRecord.one(db, attempt_id=resumed.attempt_id)
