@@ -16,13 +16,18 @@ from agent_comms.cli_bridges.shared import Binding, BindingIdentity, BridgeState
 from agent_comms.bus import Bus
 from agent_comms.message_reference import BridgeStart
 from agent_comms.locked_store import SQLiteFile
-from agent_comms.typed_table import TypedRow
+from agent_comms.typed_table import TypedTable
 from agent_comms_hooks.watch import WatchClaim, WatchRecord
 
 
 @dataclass(frozen=True)
-class PreviousBinding(BindingIdentity, TypedRow):
+class PreviousBinding(BindingIdentity, TypedTable):
     """The three fields the bridge stored before it declared its start."""
+
+    @classmethod
+    def read_binding(cls, db) -> list[PreviousBinding]:
+        columns = Binding._column_list(tuple(item.name for item in fields(BindingIdentity)))
+        return cls.read(db.execute(f'SELECT {columns} FROM "{Binding.declared_name}"'))
 
 
 class BindingMigration(ABC):
@@ -78,9 +83,7 @@ def migrate(state: Path) -> BindingMigration:
         start, = Binding._fields_named(('start',))
         if start.wire_name in Binding.stored_columns(db):
             return MigratedBindings(0)
-        columns = Binding._column_list(tuple(item.name for item in fields(BindingIdentity)))
-        previous = PreviousBinding.read(db.execute(
-            f'SELECT {columns} FROM "{Binding.declared_name}"'))
+        previous = PreviousBinding.read_binding(db)
         latest = DeliveryRow.latest(db)
         bindings = []
         for row in previous:
@@ -99,11 +102,33 @@ def migrate(state: Path) -> BindingMigration:
     return MigratedBindings(len(bindings))
 
 
+def revert(state: Path) -> BindingMigration:
+    """Restore the pre-P479 binding declaration, leaving all journal rows intact."""
+    path = state / BridgeStateTable.filename
+    if not path.is_file():
+        raise FileNotFoundError(path)
+    with closing(SQLiteFile.writer(path)) as db, SQLiteFile.write_transaction(db):
+        start, = Binding._fields_named(('start',))
+        if start.wire_name not in Binding.stored_columns(db):
+            return MigratedBindings(0)
+        previous = PreviousBinding.read_binding(db)
+        Binding.drop(db)
+        PreviousBinding.create(db)
+        for binding in previous:
+            binding.insert(db)
+        db.execute(f'ALTER TABLE "{PreviousBinding.declared_name}" '
+                   f'RENAME TO "{Binding.declared_name}"')
+    return MigratedBindings(len(previous))
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--home', type=Path, required=True)
+    parser.add_argument('--revert', dest='operation', action='store_const',
+                        const=revert, default=migrate)
     arguments = parser.parse_args()
-    changed = sum(migrate(state).report() for state in state_directories(arguments.home))
+    changed = sum(arguments.operation(state).report()
+                  for state in state_directories(arguments.home))
     print(f'Binding starts carried: {changed}')
 
 

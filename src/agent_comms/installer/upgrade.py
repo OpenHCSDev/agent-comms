@@ -32,7 +32,8 @@ from collections.abc import Callable, Iterator
 from contextlib import AbstractContextManager, ExitStack, contextmanager
 from dataclasses import dataclass, field, fields, replace
 from pathlib import Path
-from typing import TYPE_CHECKING, Annotated, ClassVar, Self
+from types import TracebackType
+from typing import TYPE_CHECKING, Annotated, ClassVar, Literal, Self
 
 from pydantic import TypeAdapter
 
@@ -623,6 +624,32 @@ class Stack:
 
 
 @dataclass(frozen=True)
+class BindingStartCutover(AbstractContextManager[None]):
+    """Undo the host-only binding conversion before the bus/runtime restore path."""
+
+    staged: Stack
+    checkout: Path
+    home: Path
+
+    def run(self, phase: BridgePhase, *arguments: str) -> None:
+        with phase.running(self.staged.commands.clock):
+            self.staged.commands.run(
+                self.staged.python, self.checkout / STEPS / 'binding_start.py',
+                '--home', self.home, *arguments,
+                cwd=self.home, env=self.staged.environment(),
+            )
+
+    def __enter__(self) -> None:
+        self.run(BridgePhase('binding start'))
+
+    def __exit__(self, exception_type: type[BaseException] | None,
+                 exception: BaseException | None, traceback: TracebackType | None) -> Literal[False]:
+        if exception_type is not None:
+            self.run(BridgePhase('binding start revert'), '--revert')
+        return False
+
+
+@dataclass(frozen=True)
 class TargetTree(AbstractContextManager):
     """The temporary worktree of the target revision the install runs from."""
 
@@ -1031,13 +1058,8 @@ class ChangedInstall(ExistingBusInstall[RehearsedFiles]):
                 with MaintenancePhase("clear").running(self.staged.commands.clock):
                     holder.close()
                     maintenance.clear(held)
-                with BridgePhase("binding start").running(self.staged.commands.clock):
-                    self.staged.commands.run(
-                        self.staged.python, self.checkout / STEPS / 'binding_start.py',
-                        '--home', self.installed.home,
-                        cwd=self.installed.home, env=self.staged.environment(),
-                    )
-                restarted_services = self.staged.start_services(services)
+                with BindingStartCutover(self.staged, self.checkout, self.installed.home):
+                    restarted_services = self.staged.start_services(services)
             except BaseException as error:
                 print(f"install: install failed ({type(error).__name__}: {error}); "
                       "restoring original installation", file=sys.stderr)
