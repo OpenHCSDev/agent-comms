@@ -40,7 +40,6 @@ from .native_arguments import ConfiguredBinary
 from .native_settings import NativeThreadDefaults
 from .owner_lifecycle import LaunchInput, OwnerLifecycle, TaskLaunchInput
 from .pi_vocabulary import NoThinkingOverride, ThinkingChoice, ThinkingLevelField
-from .registry_document import RegistrySnapshot
 from .registry_provenance import RegistryNames
 from .session_file import RegistrySessionLocation
 from .store_files import AtomicFile
@@ -49,7 +48,7 @@ from .thread_model import DeclaredModel, ThreadModel, UndeclaredModel
 from .thread_owned_state import ThreadOwnedState
 from .thread_text import ForkedParent, GivenThreadText, NoThreadText, ThreadText
 from .tool_result import ToolResult
-from .threads import KeptModel, ModelChoice, NextTurnConfiguration, Thread, current_thread
+from .threads import KeptModel, ModelChoice, NextTurnConfiguration, Thread
 
 
 @dataclass(frozen=True, slots=True)
@@ -202,8 +201,6 @@ class ThreadDeleted(CliResult):
     deleted: str
     session_bytes_freed: int
     detached_children: tuple[str, ...]
-
-
 
 
 @dataclass(frozen=True, slots=True)
@@ -538,7 +535,6 @@ class ThreadManagement:
             for original in originals
         )
 
-
     def create(self, spec: NewThreadSpec) -> Thread:
         """Prepare the session, then register and launch the thread with its task as first input."""
         resolved_bin = ConfiguredBinary().configured()
@@ -551,7 +547,3 @@ class ThreadManagement:
             child, resolved_bin, initial_input=spec.task, launch_runtime=runtime,
         )
 
-    def adopt_current(self) -> Thread:
-        """Declare and register the current process's thread from env."""
-        thread = current_thread(self.registry)
-        return self.registry.declare(thread)
