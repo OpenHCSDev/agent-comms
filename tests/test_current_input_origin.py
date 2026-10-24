@@ -14,7 +14,7 @@ from acp.schema import TextContentBlock
 
 from agent_comms.acp_extension import QueuePromptRequest, decode_request, encode_request
 from agent_comms.errors import RelationViolationError
-from agent_comms.field_codec import FieldCodec, TurnId
+from agent_comms.field_codec import FieldCodec, MessageId, TurnId
 from agent_comms.goal_states import ActiveGoal, CompletedGoal, PausedGoal
 from agent_comms.goals import AbsentGoalCheckpoint, Goal, GoalRevision, NoGoal, PresentGoalCheckpoint
 from agent_comms.input_attempt import ReservedInput
@@ -133,7 +133,8 @@ async def test_foreign_or_changed_origin_refused_before_any_reservation(live_own
     invalid = (replace(origin, root_id="f" * 32),
                replace(origin, author=replace(origin.author, created_at=origin.author.created_at + 1)),
                replace(origin, project="/another/project"),
-               WireInputOrigin(origin.root_id, MessageReference(1, "forged-reference")))
+               WireInputOrigin(origin.root_id, MessageReference(
+                   1, MessageId.mint("forged-reference"))))
     for witness in invalid:
         with comms.registry.store.locked(), pytest.raises(RelationViolationError):
             with ExitStack() as ownership:
@@ -166,7 +167,8 @@ async def test_historical_unknown_author_stays_neutral_and_human_scope_invalidat
     assert fact.for_owner(owner, comms.registry.snapshot()) == CurrentHumanInputTaskFact(authored)
     changed = replace(owner, worktree="/another/project")
     assert fact.for_owner(changed, comms.registry.snapshot()) == HumanInputTaskFact(authored)
-    routed = replace(restored, origin=WireInputOrigin(origin.root_id, MessageReference(1, "original-id")))
+    routed = replace(restored, origin=WireInputOrigin(
+        origin.root_id, MessageReference(1, MessageId.mint("original-id"))))
     assert routed.origin.retained_fact(routed) == InputTaskFact(routed)
     assert FieldCodec.decode(ReservedInput, FieldCodec.encode(routed)) == routed
 
@@ -272,8 +274,9 @@ async def test_direct_human_input_pin_shares_original_source_lineage_without_rep
         comms.messaging.pin_input_constraint('beta', replace(subject, origin=replace(origin, root_id='f'*32)),
                                              worktree=origin.project)
     with pytest.raises(RelationViolationError):
-        comms.messaging.pin_input_constraint('beta', WireProvenance(MessageReference(1, 'not-input')),
-                                             worktree=origin.project)
+        comms.messaging.pin_input_constraint(
+            'beta', WireProvenance(MessageReference(1, MessageId.mint('not-input'))),
+            worktree=origin.project)
     assert comms.bus.bus.revision() == before
     assert inputs.path.read_bytes() == original_inputs
 

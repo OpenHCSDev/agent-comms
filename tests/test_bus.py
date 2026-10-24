@@ -554,7 +554,8 @@ def test_unanswered_reference_selection_requires_the_recorded_original_and_exact
     with pytest.raises(RelationViolationError):
         bus.append(lambda seq, db: PublicRecord.from_message(
             Message("lead", "#comms", "Wrong original reference", InfoKind, seq=seq,
-                    answers=(MessageReference(original.seq + offset, "wrong-hash"),))))
+                    answers=(MessageReference(
+                        original.seq + offset, MessageId.mint("wrong-hash")),))))
     assert bus.revision() == original.seq
     bus.append(lambda seq, db: PublicRecord.from_message(
         Message("another-unit", "#comms", "Someone else's answer", InfoKind, seq=seq,

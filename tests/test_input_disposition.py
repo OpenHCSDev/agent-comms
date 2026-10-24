@@ -7,7 +7,7 @@ from pathlib import Path
 import pytest
 
 from agent_comms.errors import RelationViolationError
-from agent_comms.field_codec import TurnId
+from agent_comms.field_codec import MessageId, TurnId
 from agent_comms.input_attempt import (
     BoundUnknownInput,
     ClearedNativeInput,
@@ -178,7 +178,7 @@ def test_admitted_snapshot_retains_cut_without_blocking_writer(tmp_path):
 
 
 ROOT, NATIVE, SENT = "c" * 32, "a" * 32, "sent text"
-REFERENCE = MessageReference(7, "original-id")
+REFERENCE = MessageReference(7, MessageId.mint("original-id"))
 RESERVED = ReservedInput("bus:7", 7, "owner", 1, "owner", "ask",
                          origin=WireInputOrigin(ROOT, REFERENCE))
 BOUND = RESERVED._transition(
