@@ -4,8 +4,10 @@ from __future__ import annotations
 
 import re
 from abc import abstractmethod
+from collections.abc import Callable
 from dataclasses import dataclass
-from typing import TYPE_CHECKING
+from functools import partial
+from typing import TYPE_CHECKING, ClassVar
 
 from .declared_family import DeclaredFamily
 from .field_codec import FieldCodec, InputId, MalformedRecord, TextRepresentation, TurnId
@@ -15,12 +17,22 @@ if TYPE_CHECKING:
 
 
 class InputKey(DeclaredFamily):
+    """Each member declares its prefix once; its text is the prefix, then its body."""
+
+    prefix: ClassVar[str]
+    body: ClassVar[str]
+    readers: ClassVar[tuple[Callable[[str], object], ...]]
+
     @abstractmethod
-    def __str__(self) -> str: ...
+    def text(self) -> str: ...
+
+    def __str__(self) -> str:
+        return self.prefix + self.text()
 
     @classmethod
-    @abstractmethod
-    def parse(cls, text: str) -> InputKey | None: ...
+    def parse(cls, text: str) -> InputKey | None:
+        return (match := re.fullmatch(re.escape(cls.prefix) + cls.body, text)) and cls(
+            *(read(group) for read, group in zip(cls.readers, match.groups(), strict=True)))
 
     def require_sequence(self, sequence: int | None) -> None:
         if sequence is not None:
@@ -40,15 +52,12 @@ class InputKey(DeclaredFamily):
 @dataclass(frozen=True)
 class AcpInputKey(InputKey):
     input_id: InputId
+    prefix = "acp:"
+    body = "(" + InputId.spelled_by.spelling.pattern + ")"
+    readers = (partial(FieldCodec.decode, InputId),)
 
-    def __str__(self) -> str:
-        return "acp:" + self.input_id
-
-    @classmethod
-    def parse(cls, text: str) -> AcpInputKey | None:
-        if match := re.fullmatch("acp:(" + InputId.spelled_by.spelling.pattern + ")", text):
-            return cls(FieldCodec.decode(InputId, match[1]))
-        return None
+    def text(self) -> str:
+        return self.input_id
 
     @classmethod
     def parse_public(cls, text: str) -> AcpInputKey | None:
@@ -66,15 +75,12 @@ class AcpInputKey(InputKey):
 @dataclass(frozen=True)
 class BusInputKey(InputKey):
     sequence: int
+    prefix = "bus:"
+    body = r"([1-9][0-9]*)"
+    readers = (int,)
 
-    def __str__(self) -> str:
-        return "bus:" + str(self.sequence)
-
-    @classmethod
-    def parse(cls, text: str) -> BusInputKey | None:
-        if match := re.fullmatch(r"bus:([1-9][0-9]*)", text):
-            return cls(int(match[1]))
-        return None
+    def text(self) -> str:
+        return str(self.sequence)
 
     def require_sequence(self, sequence: int | None) -> None:
         if sequence != self.sequence or self.sequence <= 0:
@@ -84,28 +90,21 @@ class BusInputKey(InputKey):
 @dataclass(frozen=True)
 class OwnedBusInputKey(BusInputKey):
     owner_created: float
+    body = BusInputKey.body + r":owner:(.+)"
+    readers = (*BusInputKey.readers, float.fromhex)
 
-    def __str__(self) -> str:
-        return super().__str__() + ":owner:" + self.owner_created.hex()
-
-    @classmethod
-    def parse(cls, text: str) -> OwnedBusInputKey | None:
-        if match := re.fullmatch(r"bus:([1-9][0-9]*):owner:(.+)", text):
-            return cls(int(match[1]), float.fromhex(match[2]))
-        return None
+    def text(self) -> str:
+        return super().text() + ":owner:" + self.owner_created.hex()
 
 @dataclass(frozen=True)
 class TurnInputKey(InputKey):
     turn_id: TurnId
+    prefix = "turn:"
+    body = "(" + TurnId.spelled_by.spelling.pattern + ")"
+    readers = (partial(FieldCodec.decode, TurnId),)
 
-    def __str__(self) -> str:
-        return "turn:" + self.turn_id
-
-    @classmethod
-    def parse(cls, text: str) -> TurnInputKey | None:
-        if match := re.fullmatch(f"turn:({TurnId.spelled_by.spelling.pattern})", text):
-            return cls(FieldCodec.decode(TurnId, match[1]))
-        return None
+    def text(self) -> str:
+        return self.turn_id
 
 class InputKeyText(TextRepresentation[InputKey]):
     @classmethod
