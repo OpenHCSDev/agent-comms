@@ -7,11 +7,13 @@ from __future__ import annotations
 
 import argparse
 import json
+from abc import ABC, abstractmethod
 from contextlib import closing
 from dataclasses import dataclass, fields
 from pathlib import Path
 
 from agent_comms.cli_bridges.shared import Binding, BindingIdentity, BridgeStateTable, DeliveryRow
+from agent_comms.bus import Bus
 from agent_comms.message_reference import BridgeStart
 from agent_comms.locked_store import SQLiteFile
 from agent_comms.typed_table import TypedRow
@@ -21,6 +23,28 @@ from agent_comms_hooks.watch import WatchClaim, WatchRecord
 @dataclass(frozen=True)
 class PreviousBinding(BindingIdentity, TypedRow):
     """The three fields the bridge stored before it declared its start."""
+
+
+class BindingMigration(ABC):
+    @abstractmethod
+    def report(self) -> int: ...
+
+
+@dataclass(frozen=True)
+class MigratedBindings(BindingMigration):
+    changed: int
+
+    def report(self) -> int:
+        return self.changed
+
+
+@dataclass(frozen=True)
+class DeadBinding(BindingMigration):
+    path: Path
+
+    def report(self) -> int:
+        print(f'dead binding, bus missing: {self.path}')
+        return 0
 
 
 def state_directories(home: Path) -> tuple[Path, ...]:
@@ -45,7 +69,7 @@ def state_directories(home: Path) -> tuple[Path, ...]:
     return tuple(sorted(states))
 
 
-def migrate(state: Path) -> int:
+def migrate(state: Path) -> BindingMigration:
     """Carry the binding table atomically, preserving every journal and observation row."""
     path = state / BridgeStateTable.filename
     if not path.is_file():
@@ -53,26 +77,33 @@ def migrate(state: Path) -> int:
     with closing(SQLiteFile.writer(path)) as db, SQLiteFile.write_transaction(db):
         start, = Binding._fields_named(('start',))
         if start.wire_name in Binding.stored_columns(db):
-            return 0
+            return MigratedBindings(0)
         columns = Binding._column_list(tuple(item.name for item in fields(BindingIdentity)))
         previous = PreviousBinding.read(db.execute(
             f'SELECT {columns} FROM "{Binding.declared_name}"'))
         latest = DeliveryRow.latest(db)
-        bindings = tuple(Binding(row.root, row.bus, row.thread,
-            BridgeStart(latest[0].message.reference) if latest else Binding.bus_head(row.root))
-            for row in previous)
+        bindings = []
+        for row in previous:
+            if latest:
+                position = BridgeStart(latest[0].message.reference)
+            else:
+                try:
+                    position = Binding.bus_head(row.root)
+                except FileNotFoundError:
+                    return DeadBinding(Bus.path_in(Path(row.root)))
+            bindings.append(Binding(row.root, row.bus, row.thread, position))
         Binding.drop(db)
         Binding.create(db)
         for binding in bindings:
             binding.insert(db)
-    return len(bindings)
+    return MigratedBindings(len(bindings))
 
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--home', type=Path, required=True)
     arguments = parser.parse_args()
-    changed = sum(migrate(state) for state in state_directories(arguments.home))
+    changed = sum(migrate(state).report() for state in state_directories(arguments.home))
     print(f'Binding starts carried: {changed}')
 
 

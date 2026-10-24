@@ -854,14 +854,7 @@ class Install[Rehearsed: Rehearsal](ABC):
                 with BridgePhase("discover and pause").running(self.staged.commands.clock):
                     for bridge in Serve.running(self.installed.home):
                         bridges.pause(bridge, resources)
-                live = self.live(rehearsal, report)
-                with BridgePhase("binding start").running(self.staged.commands.clock):
-                    self.staged.commands.run(
-                        self.staged.python, self.checkout / STEPS / 'binding_start.py',
-                        '--home', self.installed.home,
-                        cwd=self.installed.home, env=self.staged.environment(),
-                    )
-                return report.record_live(live)
+                return report.record_live(self.live(rehearsal, report))
             finally:
                 # A later pause may fail; release captured peers before closing their sockets.
                 with BridgePhase("release").running(self.staged.commands.clock):
@@ -1038,6 +1031,12 @@ class ChangedInstall(ExistingBusInstall[RehearsedFiles]):
                 with MaintenancePhase("clear").running(self.staged.commands.clock):
                     holder.close()
                     maintenance.clear(held)
+                with BridgePhase("binding start").running(self.staged.commands.clock):
+                    self.staged.commands.run(
+                        self.staged.python, self.checkout / STEPS / 'binding_start.py',
+                        '--home', self.installed.home,
+                        cwd=self.installed.home, env=self.staged.environment(),
+                    )
                 restarted_services = self.staged.start_services(services)
             except BaseException as error:
                 print(f"install: install failed ({type(error).__name__}: {error}); "

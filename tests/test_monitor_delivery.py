@@ -299,8 +299,8 @@ def test_old_delivery_index_set_is_carried_onto_the_declaration_with_every_row(t
     from cutover.binding_start import migrate
 
     _old_delivery_file(tmp_path)
-    assert migrate(tmp_path) == 1
-    assert migrate(tmp_path) == 0
+    assert migrate(tmp_path).report() == 1
+    assert migrate(tmp_path).report() == 0
     with Binding.open(tmp_path) as db:
         assert not BridgeStateTable.schema_differs(db)
         assert {table: db.execute(f'SELECT count(*) FROM "{table}"').fetchone()[0]
