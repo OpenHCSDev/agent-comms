@@ -2,12 +2,12 @@
 
 from __future__ import annotations
 
-from agent_comms.field_codec import FieldCodec, ThreadLookup
-
 from abc import abstractmethod
 from dataclasses import dataclass
 from enum import StrEnum
 from typing import ClassVar
+
+from agent_comms.field_codec import FieldCodec, ThreadLookup
 
 from .coordination_errors import IntegrityViolationError
 from .coordinator_vocabulary import CoordinatorVocabulary

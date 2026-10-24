@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from agent_comms.field_codec import ThreadLookup
-
 import json
 import re
 from abc import ABC, abstractmethod
@@ -13,6 +11,8 @@ from functools import cached_property, partial
 from pathlib import Path
 from types import MappingProxyType
 from typing import TYPE_CHECKING, Generic, TypeVar
+
+from agent_comms.field_codec import ThreadLookup
 
 from .agent_activity import UnavailableRecipientActivity
 from .errors import RelationViolationError, UnregisteredThreadError

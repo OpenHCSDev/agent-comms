@@ -17,7 +17,7 @@ from agent_comms.coordination_contracts import (
 )
 from agent_comms.coordination_schema import CoordinatorRow
 from agent_comms.envelope_claim_transitions import AssignmentBinding
-from agent_comms.field_codec import MessageId, SnapshotExclude, WireName, projected, ThreadLookup
+from agent_comms.field_codec import MessageId, SnapshotExclude, ThreadLookup, WireName, projected
 from agent_comms.message_reference import MessageReference
 from agent_comms.typed_table import (
     Column,

@@ -30,13 +30,13 @@ from .field_codec import (
     JsonShapeFamily,
     JsonShapeMember,
     PresenceExclude,
+    ThreadLookup,
     WatchPaths,
     WatchViews,
     WireExclude,
     WireInline,
     WireOmitDefault,
     projected,
-    ThreadLookup,
 )
 from .goal_attempts import GoalAttemptStore
 from .goal_presentation import GoalExecution

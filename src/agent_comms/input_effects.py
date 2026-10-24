@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
-from agent_comms.field_codec import RootId
-
 from abc import ABC, abstractmethod
 from typing import TYPE_CHECKING
+
+from agent_comms.field_codec import RootId
 
 if TYPE_CHECKING:
     from .cursor_publication import CursorPublication

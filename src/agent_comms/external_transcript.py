@@ -19,7 +19,7 @@ from typing import TYPE_CHECKING, Annotated, ClassVar
 from uuid import uuid4
 
 from .declared_family import DeclaredFamily
-from .field_codec import ThreadLookup, FieldCodec
+from .field_codec import FieldCodec, ThreadLookup
 from .locked_store import RegistryFile
 from .native_transcript import RecordsCut
 from .recorded_time import EventTime, GeneratedTimestamp

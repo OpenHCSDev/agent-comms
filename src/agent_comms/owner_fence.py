@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from agent_comms.field_codec import ThreadLookup
-
 import hashlib
 import secrets
 from dataclasses import dataclass
@@ -14,6 +12,7 @@ from agent_comms.coordination_contracts import (
     require_nonempty,
     validate_execution_id,
 )
+from agent_comms.field_codec import ThreadLookup
 
 
 @dataclass(frozen=True, slots=True)

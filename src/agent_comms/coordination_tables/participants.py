@@ -2,13 +2,12 @@
 
 from __future__ import annotations
 
-from agent_comms.field_codec import ThreadLookup
-
 from dataclasses import dataclass
 from typing import Annotated
 
 from agent_comms.coordination_errors import IdentityConflict
 from agent_comms.coordination_schema import CoordinatorRow
+from agent_comms.field_codec import ThreadLookup
 from agent_comms.participant_identity import ParticipantIdentity
 from agent_comms.typed_table import (
     Column,

@@ -15,7 +15,7 @@ from agent_comms.private_runtime_schema import PrivateCoordinatorTable
 
 from .audience_manifest import MAX_AUDIENCE_BYTES
 from .coordination_contracts import POLICY_VERSION, RESOLVER_VERSION
-from .field_codec import MalformedRecord, MessageId, WireName, RootId, ThreadLookup
+from .field_codec import MalformedRecord, MessageId, RootId, ThreadLookup, WireName
 from .response_acknowledgement import _canonical
 from .typed_table import (
     Column,

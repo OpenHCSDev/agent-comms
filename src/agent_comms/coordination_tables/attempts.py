@@ -17,7 +17,7 @@ from agent_comms.coordination_contracts import (
 from agent_comms.coordination_errors import RecoveryBlocked, StaleFence
 from agent_comms.coordination_schema import CoordinatorRow
 from agent_comms.coordination_tables.participants import OwnerGenerations, OwnerRecord
-from agent_comms.field_codec import SnapshotExclude, projected, ThreadLookup
+from agent_comms.field_codec import SnapshotExclude, ThreadLookup, projected
 from agent_comms.owner_fence import AttemptAuthority
 from agent_comms.reason_codes import ReasonCode
 from agent_comms.typed_table import (

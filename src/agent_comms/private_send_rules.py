@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
-from agent_comms.field_codec import RootId
-
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
+
+from agent_comms.field_codec import RootId
 
 from .child_process import ProcessIdentity
 from .coordination_tables.assignments import WakeAssignment

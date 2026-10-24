@@ -25,9 +25,11 @@ from agent_comms.field_codec import (
     PathText,
     RecordMember,
     RecordedTimestamp,
+    RootId,
     SnapshotExclude,
     SubclassUnion,
     TextRepresentation,
+    ThreadLookup,
     TimestampText,
     TurnId,
     WireValue,
@@ -940,20 +942,17 @@ def test_declaration_bug_passes_through_a_data_boundary_as_type_error() -> None:
 
 def test_identity_and_digest_text_is_one_rule_at_every_reader(tmp_path: Path) -> None:
     from agent_comms.bus_source_page import AddressedPage
-    from agent_comms.errors import RelationViolationError
     from agent_comms.private_registry_guard import PrivateRegistryGuard
     from agent_comms.text_digest import TextDigest
 
-    minted = Id128.mint()
-    # A declared field decodes through FieldCodec; the guard calls the representation itself.
+    minted = ThreadLookup.mint()
+    root_id = RootId.mint()
+    # The field decodes at its boundary; the guard receives the namespace's declared kind.
     assert AddressedPage.capture(lookup=minted).lookup == minted
-    assert PrivateRegistryGuard(tmp_path / "registry.json", minted).root_id.hex() == minted
+    assert PrivateRegistryGuard(tmp_path / "registry.json", root_id).root_id.hex() == root_id
     for invalid in (minted.upper(), minted[:31], int(minted, 16)):
         with pytest.raises(MalformedRecord):
             AddressedPage.capture(lookup=invalid)
-    for invalid_text in (minted.upper(), minted[:31]):
-        with pytest.raises(RelationViolationError):
-            PrivateRegistryGuard(tmp_path / "registry.json", invalid_text)
     with pytest.raises(MalformedRecord):
         TextDigest("a" * 63)
 
