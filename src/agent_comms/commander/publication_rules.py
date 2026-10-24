@@ -24,10 +24,9 @@ class UnpushedBranch(HeldBranchRule):
     @classmethod
     def derive(cls, branches: tuple[HeldBranch, ...]) -> tuple[Self, ...]:
         return tuple(cls(held.problem, held.todo.order.checked().id, held.holder,
-                         held.source.thread.project_path, unpublished)
+                         held.checkout.path, unpublished)
                      for held in branches
-                     for unpublished in held.source.pulls.checkout(
-                         held.source.thread.project_path).branches.unpushed(held.difference))
+                     for unpublished in held.checkout.branches.unpushed(held.difference))
 
     def line(self) -> str:
         return (f"UNPUSHED: {self.order} ({self.problem}), holder {self.holder.name}, "
@@ -49,7 +48,7 @@ class EmptyPullRequest(HeldBranchRule):
     def derive(cls, branches: tuple[HeldBranch, ...]) -> tuple[Self, ...]:
         found = []
         for held in branches:
-            reader = held.source.pulls.checkout(held.source.thread.project_path).branches
+            reader = held.checkout.branches
             todo = held.todo
             for pull in held.source.pulls.listed(todo.repo, UnmergedListedPullRequest, todo):
                 compared = reader.pull_request_diff(pull.base, pull.head)

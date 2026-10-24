@@ -1,7 +1,7 @@
 """Replay a small fleet written through Core's own writers: each covered incident is raised once.
 
-Git is real (a temporary repository with an origin remote and one worktree per unit); only the
-forge answers come from the external gh fixture, through the unmodified reader.
+Git is real (a temporary repository, origin remote, unit homes and allocated order checkouts);
+only forge answers come from the external gh fixture, through the unmodified reader.
 """
 
 import os
@@ -121,12 +121,17 @@ class Fleet:
         self.git(worktree, "push", "-q", "-u", "origin", "HEAD")
 
     def unit(self, name: str, worktree: Path, *, at: float | None = None) -> Todo:
-        """Register a unit on its worktree and give it one order through the goal writer."""
+        """Register a home, publish its order and populate the allocated order checkout."""
         declare_test_bus(
             self.comms,
             threads=(Thread(name=name, tags=frozenset({"comms"}), worktree=str(worktree)),),
         )
-        return self.order(name, worktree, at=time.time() if at is None else at)
+        todo = self.order(name, worktree, at=time.time() if at is None else at)
+        checkout = self.comms.registry.storage_rule.order_checkout(name, todo.id)
+        branch = self.git(worktree, 'rev-parse', '--abbrev-ref', 'HEAD')
+        self.git(worktree, 'switch', '--detach', at=at)
+        self.git(worktree, 'worktree', 'add', '-q', str(checkout), branch, at=at)
+        return todo
 
     def order(self, name: str, worktree: Path, *, at: float) -> Todo:
         problem = self.problems.setdefault(name, f"P{len(self.problems) + 1}")
@@ -277,7 +282,7 @@ class UnpushedBranchSeed(IncidentSeed):
             todo.id,
             todo.order.checked().id,
             unit.incarnation,
-            unit.project_path,
+            fleet.comms.registry.storage_rule.order_checkout(unit.name, todo.id),
             UnpushedHead(head, 1, ""),
         )
 
@@ -422,6 +427,27 @@ def fleet(comms, tmp_path, configured_repository, installed_runtime, github_cli)
 
 def test_every_held_branch_rule_has_a_seed():
     assert set(HeldBranchRule.members_with(HeldBranchRule)) <= set(IncidentSeed.seeds)
+
+
+def test_branch_rules_read_the_order_checkout_instead_of_the_behind_home(fleet):
+    built, _ = fleet
+    home = built.worktree('old-home', base=built.old_main)
+    todo = built.unit('order-worker', home)
+    checkout = built.comms.registry.storage_rule.order_checkout('order-worker', todo.id)
+    behind_line = f'BRANCH BEHIND MAIN: {todo.id} '
+    built.git(built.source.checkout, 'worktree', 'remove', str(checkout))
+    assert not any(rule.line().startswith(behind_line) for rule in built.observe().rules)
+
+    built.git(built.source.checkout, 'worktree', 'add', '-q', '-b', 'current-order',
+              str(checkout), built.main)
+    assert not any(rule.line().startswith(behind_line) for rule in built.observe().rules)
+    growth = BranchGrowth.limit + 1
+    built.commit(checkout, 'src/agent_comms/order_growth.py',
+                 ''.join(f'order_value_{index} = {index}\n' for index in range(growth)))
+    assert built.git(home, 'rev-parse', 'HEAD') == built.old_main
+    assert BranchGrowth(
+        todo.id, todo.held().owner_identity, built.repository, 'current-order', growth,
+    ) in built.observe().rules
 
 
 def test_replay_raises_each_incident_once(fleet):
