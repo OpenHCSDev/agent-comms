@@ -291,6 +291,9 @@ class ReadingPhase(ABC):
 class RuntimeUpdate(ABC):
     """One change a runtime reports about its thread."""
 
+    def trail_events(self) -> tuple[object, ...]:
+        return ()
+
     def during(self, phase: ReadingPhase) -> tuple[RuntimeUpdate, ...]:
         return (self,)
 
@@ -388,6 +391,9 @@ class FinishedItem(TurnItem, RuntimeUpdate):
     @property
     def assistant_text(self) -> str:
         return "".join(part for event in self.events for part in event.assistant_parts())
+
+    def trail_events(self) -> tuple[object, ...]:
+        return self.events
 
     def publish(self, output: ThreadOutput) -> None:
         output.publish_item(self)
