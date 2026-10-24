@@ -24,6 +24,13 @@ from source_revision_fixture import SourceRepository
 from agent_comms.threads import Thread
 
 
+def board_read(tool, comms, caller, thread="lead"):
+    """A board tool's reply names whose board it read; the rest is that board's record."""
+    reply = tool.invoke(comms, {"thread": thread}, caller=caller)
+    assert reply.pop("board") == thread
+    return reply
+
+
 def test_order_story_copied_bus_strike_and_send_back_once(comms, tmp_path):
     source = SourceRepository.create(tmp_path / 'source')
     for name in ("lead", "worker"):
@@ -84,8 +91,7 @@ def test_order_story_copied_bus_strike_and_send_back_once(comms, tmp_path):
     assert "strike recorded" in story.line
     assert len(saved.strikes) == len(saved.verdicts) == 2
     assert CommsOrderStoryTool.invoke(copied, {"order_id": "resent-order"}, caller=caller) == result
-    fleet = FieldCodec.decode(FleetStory, CommsFleetStoryTool.invoke(
-        copied, {"thread": "lead"}, caller=NoThreadCaller()))
+    fleet = FieldCodec.decode(FleetStory, board_read(CommsFleetStoryTool, copied, NoThreadCaller()))
     assert fleet.lines == (f"P1 worker: {saved.order.line}",)
     assert copied.goals.todos.get("P1") == saved == comms.goals.todos.get("P1")
     assert copied.goals.todos.path.stat().st_mtime_ns == stored_at
@@ -99,8 +105,7 @@ def test_order_story_copied_bus_strike_and_send_back_once(comms, tmp_path):
     assert tuple(problem.problem for problem in linked.problems) == ("P1", "P2")
     assert linked.problems[0] == story.problems[0]
     assert linked.line.count(reason) == linked.line.count(standalone) == 1
-    linked_fleet = FieldCodec.decode(FleetStory, CommsFleetStoryTool.invoke(
-        copied, {"thread": "lead"}, caller=caller))
+    linked_fleet = FieldCodec.decode(FleetStory, board_read(CommsFleetStoryTool, copied, caller))
     assert linked_fleet.lines == (
         *fleet.lines, f"P2 worker: {copied.goals.todos.get('P2').order.line}")
     current = copied.goals.todos.get(saved.id)
@@ -114,7 +119,7 @@ def test_order_story_copied_bus_strike_and_send_back_once(comms, tmp_path):
         "This copied order is withdrawn after checking its original recorded public events.",
     ))
     assert withdrawn.state is DoneTodoState
-    assert FieldCodec.decode(FleetStory, CommsFleetStoryTool.invoke(
-        copied, {"thread": "lead"}, caller=caller)).lines == linked_fleet.lines[1:]
+    assert FieldCodec.decode(
+        FleetStory, board_read(CommsFleetStoryTool, copied, caller)).lines == linked_fleet.lines[1:]
     with pytest.raises(TodoError):
         CommsOrderStoryTool.invoke(copied, {"order_id": "absent-order"}, caller=caller)

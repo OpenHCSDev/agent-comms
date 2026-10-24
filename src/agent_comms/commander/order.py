@@ -685,10 +685,14 @@ class Commander(CommanderContext):
         self.on_record(line, 'Strike', VerdictAudience.of(unit, todo), answers)
         print(f'{unit}: {n} strike(s) on {todo.id}' + (f'. Reassign {todo.id} now and freeze its branch.' if n >= 2 else ''))
 
-    def hunt(self, where, why, sent):
-        """Record the commander's source read, whether or not it became an order."""
+    def hunt(self, where, why, sent, repository=""):
+        """Record the commander's source read, whether or not it became an order.
+        FILE:LINE is read in the registered repository's checkout, never the shell's cwd."""
         ref = FileLine.from_wire(where)
-        directory = Path.cwd()
+        try:
+            directory = Repo.selected(self.repos, repository).checkout
+        except ValueError as error:
+            sys.exit(f'Refused: {error}')
         ref.require_exists(directory, MainRevision())
         if len(why.split()) < 10:
             sys.exit('Refused: say what the code does per event or per history row, and the fix or why it is clean (10+ words)')
@@ -1275,9 +1279,14 @@ class HuntVerb(Reasoned, OrderVerb):
             },
         ),
     ] = ""
+    repository: Annotated[
+        str,
+        Argument(flags=("--repo",), options={
+            "help": "registered repository FILE:LINE is in; required when several are registered"}),
+    ] = ""
 
     def run(self, ctx: Commander) -> None:
-        ctx.hunt(self.where, self.why, self.sent)
+        ctx.hunt(self.where, self.why, self.sent, self.repository)
 
 
 class NextHuntVerb(OrderVerb, declared_name="next-hunt"):
