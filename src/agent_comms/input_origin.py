@@ -4,13 +4,13 @@ from __future__ import annotations
 
 from abc import abstractmethod
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Annotated
+from typing import TYPE_CHECKING
 
 
 from .bus_publication import HumanOrigin
 from .declared_family import DeclaredFamily
 from .errors import RelationViolationError
-from .field_codec import Id128Text
+from .field_codec import RootId
 from .goals import GoalCheckpoint
 from .message_reference import MessageReference
 from .thread_identity import ClaimScoped, ClaimedIdentity
@@ -61,7 +61,7 @@ class InputOrigin(DeclaredFamily, affix="InputOrigin"):
     def matches_owner(self, recorded_name, incarnation):
         return recorded_name == incarnation.name
 
-    def delivery_reference(self, root_id: str) -> InputDelivery:
+    def delivery_reference(self, root_id: RootId) -> InputDelivery:
         return UndeliveredInput()
 
     @property
@@ -100,10 +100,10 @@ class UnattributedInputOrigin(InputOrigin):
 
 @dataclass(frozen=True)
 class WireInputOrigin(InputOrigin):
-    root_id: Annotated[str, Id128Text]
+    root_id: RootId
     reference: MessageReference
 
-    def delivery_reference(self, root_id: str) -> InputDelivery:
+    def delivery_reference(self, root_id: RootId) -> InputDelivery:
         return DeliveredInput(self.reference) if self.root_id == root_id else UndeliveredInput()
 
     def require_ingress(self, comms, snapshot, claim_scope, controller):
@@ -118,7 +118,7 @@ class HumanInputOrigin(InputOrigin, ClaimScoped):
     declaration supplies authorship, not executable or tool authority.
     """
 
-    root_id: Annotated[str, Id128Text]
+    root_id: RootId
     author: HumanOrigin
     project: str
     goal: GoalCheckpoint
@@ -133,7 +133,6 @@ class HumanInputOrigin(InputOrigin, ClaimScoped):
             if snapshot.claimed_identity(owner.name) != claim_scope:
                 raise RelationViolationError("User input attachment changed before capture")
             root_id = comms.registry.store.private_guard_unlocked().namespace
-            root_id = Id128Text.decode(root_id)
             user = comms.messaging.user_identity(owner.worktree)
             return cls(
                 root_id=root_id, author=HumanOrigin.of(user),

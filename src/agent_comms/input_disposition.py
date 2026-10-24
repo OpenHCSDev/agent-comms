@@ -13,7 +13,7 @@ from agent_comms import field_codec
 
 from .channel_targets import CommandTarget
 from .errors import RelationViolationError
-from .field_codec import TurnId, GoalId
+from .field_codec import TurnId, GoalId, RootId
 from .input_attempt import (
     UNOBSERVED_DELIVERY_SCOPE,
     GoalInputDecision,
@@ -152,7 +152,7 @@ class InputDocument:
             if original.message.exact_reply_target == route
         )
 
-    def unbound_wire_inputs(self, root_id: str) -> dict[MessageReference, StoredInput]:
+    def unbound_wire_inputs(self, root_id: RootId) -> dict[MessageReference, StoredInput]:
         """Original bus deliveries with positive evidence that Pi never received them."""
         return {
             reference: row

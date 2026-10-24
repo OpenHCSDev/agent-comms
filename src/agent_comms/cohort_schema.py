@@ -15,7 +15,7 @@ from agent_comms.private_runtime_schema import PrivateCoordinatorTable
 
 from .audience_manifest import MAX_AUDIENCE_BYTES
 from .coordination_contracts import POLICY_VERSION, RESOLVER_VERSION
-from .field_codec import MalformedRecord, MessageId, WireName
+from .field_codec import MalformedRecord, MessageId, WireName, RootId, ThreadLookup
 from .response_acknowledgement import _canonical
 from .typed_table import (
     Column,
@@ -110,7 +110,7 @@ class ClaimBatchAcknowledgements(
     decision_domain: ClassVar[bytes] = b"agent-comms:cohort-decisions:v1\0"
 
     wire_root_id: Annotated[
-        str,
+        RootId,
         FrozenColumn(
             primary_key=True,
             check=(
@@ -187,11 +187,11 @@ class ClaimBatchMembers(GuardedInserts, ImmutableRows, CohortTable, WithoutRowid
         AND c.resolver_version = r.resolver_version AND c.policy_version = r.policy_version
         AND c.accepted_at_ms = r.accepted_at_ms))"""
 
-    wire_root_id: Annotated[str, Column(primary_key=True)]
+    wire_root_id: Annotated[RootId, Column(primary_key=True)]
     wire_seq: Annotated[int, Column(primary_key=True)]
     ordinal: Annotated[int, Column(primary_key=True, check="ordinal >= 0")]
     claim_id: str
-    recipient_lookup: str
+    recipient_lookup: ThreadLookup
     unique = (
         ("wire_root_id", "wire_seq", "claim_id"),
         ("claim_id",),
@@ -231,10 +231,10 @@ class CohortDeliveries(
         AND m.wire_seq = NEW.wire_seq AND m.claim_id = NEW.claim_id
         AND m.recipient_lookup = NEW.recipient_lookup AND c.recipient = NEW.canonical_thread))"""
 
-    wire_root_id: Annotated[str, Column(primary_key=True)]
+    wire_root_id: Annotated[RootId, Column(primary_key=True)]
     wire_seq: Annotated[int, Column(primary_key=True)]
     ordinal: Annotated[int, Column(primary_key=True, check="ordinal >= 0")]
-    recipient_lookup: str
+    recipient_lookup: ThreadLookup
     canonical_thread: Annotated[
         str, Column(check="length(canonical_thread) BETWEEN 1 AND 256")
     ]
@@ -259,8 +259,8 @@ class CohortDeliveries(
         cls,
         db: sqlite3.Connection,
         *,
-        wire_root_id: str,
-        recipient_lookup: str,
+        wire_root_id: RootId,
+        recipient_lookup: ThreadLookup,
         after_seq: int,
         limit: int,
     ) -> frozenset[int]:
@@ -292,8 +292,8 @@ class AcceptanceFrontier(CohortTable, WithoutRowid):
 
     page: ClassVar[int] = 101
 
-    wire_root_id: Annotated[str, Column(primary_key=True)]
-    recipient_lookup: Annotated[str, Column(primary_key=True)]
+    wire_root_id: Annotated[RootId, Column(primary_key=True)]
+    recipient_lookup: Annotated[ThreadLookup, Column(primary_key=True)]
     through_seq: Annotated[int, Column(check="through_seq >= 0")]
 
     @classmethod
@@ -301,8 +301,8 @@ class AcceptanceFrontier(CohortTable, WithoutRowid):
         cls,
         db: sqlite3.Connection,
         *,
-        wire_root_id: str,
-        recipient_lookup: str,
+        wire_root_id: RootId,
+        recipient_lookup: ThreadLookup,
     ) -> int:
         return cls.require(
             db, wire_root_id=wire_root_id, recipient_lookup=recipient_lookup,
@@ -344,9 +344,9 @@ class AwarenessClaimGenerations(
         AND g.generation=NEW.owner_generation))"""
 
     claim_id: Annotated[str, Column(primary_key=True)]
-    wire_root_id: str
+    wire_root_id: RootId
     wire_seq: Annotated[int, Column(check="wire_seq > 0")]
-    owner_lookup: Annotated[str, WireName("recipient_lookup"), Column(record_key=True)]
+    owner_lookup: Annotated[ThreadLookup, WireName("recipient_lookup"), Column(record_key=True)]
     owner_generation: Annotated[int, Column(check="owner_generation > 0")]
 
     def current(self, expected: OwnerGenerations) -> bool:

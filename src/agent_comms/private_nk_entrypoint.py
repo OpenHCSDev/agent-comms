@@ -7,6 +7,8 @@ owners for each process. This module installs no marker, participant, schema or 
 
 from __future__ import annotations
 
+from agent_comms.field_codec import RootId
+
 import shutil
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
@@ -108,7 +110,7 @@ class SharedRootLaunch(RootLaunch):
 @dataclass(frozen=True, slots=True)
 class PrivateNkLaunch(RootLaunch):
     validated_root: Path
-    wire_root_id: str
+    wire_root_id: RootId
     native_package: VerifiedNativePackage
 
     @property
@@ -126,7 +128,7 @@ class PrivateNkLaunch(RootLaunch):
         return self.validate()
 
     @classmethod
-    def installed(cls, root: Path, wire_root_id: str) -> PrivateNkLaunch:
+    def installed(cls, root: Path, wire_root_id: RootId) -> PrivateNkLaunch:
         """A private root's launch with this installation's pinned native package."""
         try:
             package = VerifiedNativePackage.acquire(pinned_native_package())

@@ -34,7 +34,13 @@ from agent_comms.coordination_tables.executions import (
 from agent_comms.coordination_tables.publications import PublicationEvidence, PublicationIntents
 from agent_comms.coordination_tables.recovery import RecoveryAudit
 from agent_comms.coordination_tables.responses import ResponseObligation
-from agent_comms.field_codec import boundary_decoder, projected, SnapshotName, WireName
+from agent_comms.field_codec import (
+    boundary_decoder,
+    projected,
+    SnapshotName,
+    WireName,
+    ThreadLookup,
+)
 from agent_comms.reason_codes import ReasonCode
 
 if TYPE_CHECKING:
@@ -76,7 +82,9 @@ class RecoverySnapshot:
             raise IdentityConflict("response route is absent from original obligations")
         return obligation
 
-    def require_final_response(self, recipient_lookup: str, exact_target: str) -> ResponseObligation:
+    def require_final_response(
+        self, recipient_lookup: ThreadLookup, exact_target: str
+    ) -> ResponseObligation:
         if self.execution.owner_lookup != recipient_lookup:
             raise StaleFence("response turn belongs to a different SQL recipient")
         self.execution.lifecycle.require_final_response()

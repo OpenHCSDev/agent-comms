@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from agent_comms.field_codec import ThreadLookup
+
 from dataclasses import dataclass
 from typing import Annotated
 
@@ -24,7 +26,7 @@ from agent_comms.typed_table import (
 class OwnerRecord:
     """Stored owner components produce one coordinator identity, never live permission."""
 
-    owner_lookup: str
+    owner_lookup: ThreadLookup
     owner_generation: int
 
     @property
@@ -45,7 +47,7 @@ class Participants(MonotoneColumns, GuardedColumns, NoDelete, CoordinatorRow):
     )
 
     participant_lookup: Annotated[
-        str,
+        ThreadLookup,
         Column(
             primary_key=True,
             check="\n        length(participant_lookup) BETWEEN 1 AND 256\n    ",
@@ -60,7 +62,7 @@ class OwnerGenerations(
 
     counter_column = 'generation'
 
-    owner_lookup: Annotated[str, FrozenColumn(primary_key=True)]
+    owner_lookup: Annotated[ThreadLookup, FrozenColumn(primary_key=True)]
     generation: Annotated[int, Column(check="generation > 0")]
 
     def require_recorded_owner(self, thread):
@@ -75,5 +77,5 @@ class OwnerGenerations(
         return (ForeignKey(columns=("owner_lookup",), target=Participants, target_columns=("participant_lookup",)),)
 
     @property
-    def lookup(self) -> str:
+    def lookup(self) -> ThreadLookup:
         return self.owner_lookup

@@ -36,6 +36,7 @@ from .field_codec import (
     WireInline,
     WireOmitDefault,
     projected,
+    ThreadLookup,
 )
 from .goal_attempts import GoalAttemptStore
 from .goal_presentation import GoalExecution
@@ -130,7 +131,7 @@ class AllOutcomes(OutcomeViewer):
 class OwnerOutcomes(OutcomeViewer):
     """A sender sees all outcomes; a recipient sees only its original outcome."""
 
-    lookup: str
+    lookup: ThreadLookup
 
     @classmethod
     def of(cls, owner: ThreadProvenance) -> OwnerOutcomes:
@@ -273,7 +274,7 @@ class MessageNotification:
     @classmethod
     def project_delivery_window(
         cls, root: Path, snapshot: RegistryProvenance,
-        sources: Sequence[Delivered], observations: Mapping[str, RecipientActivity],
+        sources: Sequence[Delivered], observations: Mapping[ThreadLookup, RecipientActivity],
         *, assignment_read: NotificationAssignmentRead, viewer: OutcomeViewer,
     ) -> dict[tuple[int, str], tuple[MessageNotification, ...]]:
         """Original assignment and read authorities own both display projections."""

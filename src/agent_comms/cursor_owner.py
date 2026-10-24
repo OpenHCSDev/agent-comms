@@ -7,7 +7,7 @@ from dataclasses import dataclass, replace
 from functools import partial
 from typing import TYPE_CHECKING
 
-from agent_comms.field_codec import InputId
+from agent_comms.field_codec import InputId, RootId, ThreadLookup
 from agent_comms.native_runtime_input import NativeRuntimeTable
 
 from .acp_extension import CursorObservation, EmptyCursorObservation, VerifiedCursorObservation
@@ -37,7 +37,7 @@ class CursorOwner(RegistryOwner):
     """Record this started input; deciding whether tools may run belongs to its turn."""
 
     check_type = RunningTurnRegistryCheck
-    wire_root_id: str
+    wire_root_id: RootId
     generation: int
 
     def __post_init__(self):
@@ -45,7 +45,7 @@ class CursorOwner(RegistryOwner):
         GenerationCounter.require_positive(self.claimed_generation)
 
     @classmethod
-    async def read_async(cls, bus: MessageBus, *, wire_root_id: str, owner_name: str,
+    async def read_async(cls, bus: MessageBus, *, wire_root_id: RootId, owner_name: str,
                          source_reads: NativeEvidenceScope) -> CursorState:
         return await Coordination.run_read_async(
             CoordinationStore.path_in(bus.bus.path.parent),
@@ -53,7 +53,10 @@ class CursorOwner(RegistryOwner):
         )
 
     @classmethod
-    def _read_owned(cls, bus: MessageBus, root_id: str, owner_name: str, source_reads: NativeEvidenceScope, store: Coordination) -> CursorState:
+    def _read_owned(
+        cls, bus: MessageBus, root_id: RootId, owner_name: str,
+        source_reads: NativeEvidenceScope, store: Coordination,
+    ) -> CursorState:
         with store.session.boundary(bus) as boundary:
             reason = "Current native cursor has no matching live owner"
             bus._registry.store.private_guard_unlocked().require_root(root_id, StaleFence(reason))
@@ -93,7 +96,7 @@ class CursorOwner(RegistryOwner):
         return True
 
     @classmethod
-    async def refresh_async(cls, bus: MessageBus, *, wire_root_id: str, owner_name: str,
+    async def refresh_async(cls, bus: MessageBus, *, wire_root_id: RootId, owner_name: str,
                             source_reads: NativeEvidenceScope) -> CursorState:
         return await Coordination.run_async(
             CoordinationStore.path_in(bus.bus.path.parent),
@@ -101,7 +104,10 @@ class CursorOwner(RegistryOwner):
         )
 
     @classmethod
-    def _refresh_owned(cls, bus: MessageBus, root_id: str, owner_name: str, source_reads: NativeEvidenceScope, store: Coordination) -> CursorState:
+    def _refresh_owned(
+        cls, bus: MessageBus, root_id: RootId, owner_name: str,
+        source_reads: NativeEvidenceScope, store: Coordination,
+    ) -> CursorState:
         thread, generation = bus._registry.live_owner_with_claim(owner_name)
         person = store.participants.get(thread.incarnation.require_recorded().lookup)
         owner = cls(thread=thread, claimed_generation=generation, wire_root_id=root_id,
@@ -135,7 +141,7 @@ class CursorOwner(RegistryOwner):
         return ParticipantOwner(self.thread, self.generation).coordinator_identity(self.lookup)
 
     @property
-    def lookup(self) -> str:
+    def lookup(self) -> ThreadLookup:
         return self.thread.incarnation.require_recorded().lookup
 
     def require_live(self, bus: MessageBus, registry: RegistrySnapshot, reason: str) -> None:
