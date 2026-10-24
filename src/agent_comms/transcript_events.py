@@ -261,9 +261,7 @@ class IncomingTranscript(TextTranscript):
     timestamp: ClassVar[float]
 
     def __post_init__(self) -> None:
-        # A stored record carries delivery columns the public wire refuses.
-        if type(self.message).envelope_type() is not type(self.message):
-            raise TypeError(f"{type(self.message).__name__} is a record; pass its envelope")
+        self.message.require_envelope()
 
     @property
     def position(self) -> int:
