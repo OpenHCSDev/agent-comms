@@ -419,6 +419,10 @@ class OwedAnswer(IndependentStandingRule, declared_name=None):
         """An unanswered question must be answered before unrelated work."""
         return True
 
+    def asked_by(self, reached: frozenset[str]) -> bool:
+        """Whether one of these threads asked it, so a reply reaching them answers it unnamed."""
+        return False
+
     def misaddressed(self, named: tuple[Message, ...], reached: frozenset[str]) -> str:
         """Why naming this debt in an action that reaches only these threads would record an
         answer its asker never receives; empty when it would not."""

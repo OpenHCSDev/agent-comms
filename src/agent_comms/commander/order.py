@@ -20,6 +20,7 @@ import argparse
 import ast
 import dataclasses
 import re
+import shlex
 import subprocess
 import sys
 import time
@@ -52,6 +53,7 @@ from agent_comms.field_codec import (
 )
 from agent_comms.goal_actions import CreateProblemGoalAction, OrderGoalAction
 from agent_comms.goals import CheckCommand, CheckResult, CountCheckResult, OrderCheck
+from agent_comms.maintenance_barrier import MaintenanceHeldError
 from agent_comms.message_reference import MessageReference
 from agent_comms.messages import Message
 from agent_comms.owner_requests import NewestOpenRequest, OwnerRequestId, RequestSelection
@@ -631,7 +633,12 @@ class Commander(CommanderContext):
             answers: tuple[MessageReference, ...] = ()) -> None:
         body = open(body_file).read()
         refuse(body, *DirectiveText.checks())
-        print(self.post(VerdictAudience(tuple(units.split(','))), body.rstrip(), answers))
+        try:
+            print(self.post(VerdictAudience(tuple(units.split(','))), body.rstrip(), answers))
+        except MaintenanceHeldError as held:
+            # A say records nothing but its post, so the whole command is the resend.
+            sys.exit(f'Refused, nothing sent: {held}\nAfter the install reports finished, '
+                     'resend:\n  ' + shlex.join(('agent-comms-commander', *sys.argv[1:])))
 
     def close(self, pid, works, artifact=''):
         """Core owns closing: the installed evidence, the artifact and the no-open-order rule live on the Todo."""
@@ -804,10 +811,11 @@ class DirectiveVerb(CommanderVerb):
         """
         now = time.time()
         opened = OwedAnswer.opened(ctx.comms, self.who(ctx))
-        named = tuple(rule.message for rule in opened
-                      if rule.message.message_id in self.answers)
         snapshot = ctx.comms.registry.snapshot()
         reached = frozenset(snapshot.canonical_name(name) for name in self.addressed)
+        named = (tuple(rule.message for rule in opened
+                       if rule.message.message_id in self.answers)
+                 if self.answers else self.unnamed_answers(opened, reached))
         misaddressed = tuple(reason for rule in opened
                              if (reason := rule.misaddressed(named, reached)))
         if misaddressed:
@@ -827,6 +835,11 @@ class DirectiveVerb(CommanderVerb):
             )
             sys.exit('REFUSED, nothing recorded: messages owed an answer:\n' + lines)
         self.respond(ctx, tuple(dict.fromkeys(message.reference for message in named)))
+
+    def unnamed_answers(self, opened: tuple[OwedAnswer, ...],
+                        reached: frozenset[str]) -> tuple[Message, ...]:
+        """What this action answers when --answers names nothing: only what it names."""
+        return ()
 
     @property
     @abstractmethod
@@ -1143,6 +1156,14 @@ class SayVerb(OrderVerb, DirectiveVerb):
     @property
     def addressed(self) -> tuple[str, ...]:
         return VerdictAudience(tuple(self.units.split(','))).threads
+
+    def unnamed_answers(self, opened: tuple[OwedAnswer, ...],
+                        reached: frozenset[str]) -> tuple[Message, ...]:
+        """A reply answers every open ask from the threads it reaches."""
+        asked = tuple(rule.message for rule in opened if rule.asked_by(reached))
+        if asked:
+            print('answers: ' + ' '.join(message.message_id for message in asked))
+        return asked
 
     def respond(self, ctx: Commander, references: tuple[MessageReference, ...]) -> None:
         ctx.say(self.units, self.body_file, references)
