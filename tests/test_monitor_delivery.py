@@ -1,6 +1,8 @@
 """Session-owned parts, not stdout writes, confirm monitor delivery."""
 from contextlib import closing
 import asyncio
+import os
+import socket
 from html import escape
 import json
 import sqlite3
@@ -15,13 +17,15 @@ from agent_comms.installer.practice import PracticeCopy
 from agent_comms.locked_store import RootFile
 
 from agent_comms.cli_bridges.claude import ClaudeBridge, ClaudeJsonLines
+from agent_comms.child_process import ProcessIdentity
+from agent_comms.cli_bridges.monitor import MonitorPeer, MonitorService
 from agent_comms.cli_bridges.claude_protocol import (
     ClaudeSession, ClaudeMonitorFrame, ForeignTaskNotification,
     ForeignAttachment,
 )
 from agent_comms.cli_bridges.shared import (
     BridgeStateTable, Binding, DeliveryRow, ObservedPart, ReceivingMonitor, UnrecordedMonitor, MonitorPart,
-    ForeignMonitorFrame, Options, ObservedMonitor, MismatchedMonitor, Watch, StoredBinding, GivenBinding, Operation,
+    ForeignMonitorFrame, Options, ObservedMonitor, MismatchedMonitor, Watch, StoredBinding, GivenBinding, Operation, MONITOR_FRAME,
 )
 from agent_comms.errors import MessageAcknowledgmentError
 from agent_comms.cli_protocol import UnconfirmedOutcome, EmittedOutcome, DeliveredOutcome
@@ -31,7 +35,7 @@ from agent_comms.threads import Thread
 
 
 @pytest.mark.asyncio
-async def test_empty_journal_starts_at_binding_and_ignores_user_reads(comms, tmp_path, monkeypatch):
+async def test_empty_journal_starts_at_binding_and_ignores_user_reads(comms, tmp_path):
     declare_test_bus(comms, threads=tuple(
         Thread(name, frozenset(), str(tmp_path)) for name in ('viewer', 'peer')
     ))
@@ -45,22 +49,32 @@ async def test_empty_journal_starts_at_binding_and_ignores_user_reads(comms, tmp
         selected = ClaudeBridge(Options(Watch(), StoredBinding(), state), binding, db)
         fresh = comms.messaging.send('peer', 'viewer', 'after binding, already read in Toad').message
         comms.messaging.acknowledge('viewer', (fresh.reference,))
-        arrived = asyncio.Event()
-        received = []
-
-        async def accept(message):
-            received.append(message.reference)
-            arrived.set()
-
-        monkeypatch.setattr(selected, 'accept', accept)
-        watching = asyncio.create_task(selected.watch_child())
+        bridge_socket, monitor_socket = socket.socketpair()
+        bridge_peer = MonitorPeer(*await asyncio.open_connection(sock=bridge_socket))
+        monitor_reader, monitor_writer = await asyncio.open_connection(sock=monitor_socket)
+        service = MonitorService(selected, ProcessIdentity.capture(os.getpid()), lambda: None)
+        attachment = asyncio.create_task(selected.reader.attach(service, bridge_peer))
+        watching = None
         try:
-            await asyncio.wait_for(arrived.wait(), timeout=15)
-            assert received == [fresh.reference]
-            assert DeliveryRow.select(db) == ()
+            async with asyncio.timeout(15):
+                await monitor_reader.readline()  # SessionReady, followed by the real probe.
+                probe = MONITOR_FRAME.validate_json(await monitor_reader.readline())
+                await probe.confirm(selected, ObservedMonitor('probe', 1.))
+                watching = asyncio.create_task(selected.watch_child())
+                line = json.loads(await monitor_reader.readline())
+                for update in notification(line).updates(ClaudeSession()):
+                    await update.observed(selected)
+                row, = DeliveryRow.select(db)
+                assert row.message.reference == fresh.reference
+                assert row.outcome is DeliveredOutcome
         finally:
-            watching.cancel()
-            await asyncio.gather(watching, return_exceptions=True)
+            if watching is not None:
+                watching.cancel()
+                await asyncio.gather(watching, return_exceptions=True)
+            monitor_writer.close()
+            await monitor_writer.wait_closed()
+            await attachment
+            await bridge_peer.close()
 
 
 @pytest.fixture
