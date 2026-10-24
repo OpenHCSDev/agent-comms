@@ -416,11 +416,6 @@ class Registration:
         with self.store.reading() as document:
             return dict(document.threads)
 
-    def live_threads(self) -> tuple[Thread, ...]:
-        with self.store.reading() as document:
-            return tuple(thread for thread in document.threads.values()
-                         if thread.process_identity.alive())
-
     def schema_paths(self) -> frozenset[Path]:
         """Every SQLite file a registered thread's runtime keeps beside its saved session."""
         return frozenset(
