@@ -472,10 +472,156 @@ class FieldDirectivesPhase(MultipleInheritancePhase):
     )
 
 
+class NominalIdTypePhase(Id128NominalPhase):
+    """1: an id is a nominal value type; FieldCodec decodes and mints it, the wire unchanged."""
+
+    evidence = AllEvidence(
+        (
+            *(ClassDeclared(kind.__name__, ("src/agent_comms/field_codec.py",))
+              for kind in (
+                  NominalText, NominalSpelling, Id128, MessageId, *Id128.__subclasses__(),
+              )),
+            PatternAbsent(
+                r"def mint\(cls(, text: str)?\) -> str:", ("src/agent_comms/field_codec.py",)
+            ),
+        )
+    )
+
+
+class PlainStrIdRatchetPhase(Id128NominalPhase):
+    """2: no file gains a plain ``str`` annotation on an id-named field or parameter."""
+
+    after = (NominalIdTypePhase,)
+    evidence = PatternPresent(r"^class PlainStrIdAnnotation\(", ("tools/debt_ratchet.py",))
+
+
+class ClaimIdsPhase(Id128NominalPhase):
+    """3: claim nonces, operation ids and generations are ``ClaimId``; their checks go."""
+
+    after = (NominalIdTypePhase,)
+    evidence = AllEvidence(
+        (
+            PatternAbsent(
+                r"\b(nonce|operation_id|generation): "
+                r"(str\b|Id128\b|Annotated\[(str|Id128)\b)",
+                Id128NominalPhase.paths,
+            ),
+            PatternAbsent(
+                r"Id128Text\.decode\(self\.(nonce|operation_id)\)",
+                Id128NominalPhase.paths,
+            ),
+        )
+    )
+
+
+class MessageIdsPhase(Id128NominalPhase):
+    """4: bus message ids are ``MessageId``."""
+
+    after = (NominalIdTypePhase,)
+    evidence = AllEvidence(
+        (
+            PatternAbsent(
+                r"\b(message_id|source_message_id): "
+                r"(str\b|Id128\b|Annotated\[(str|Id128)\b)",
+                Id128NominalPhase.paths,
+            ),
+            PatternAbsent(
+                r"Annotated\[str, *MessageIdText\]",
+                Id128NominalPhase.paths,
+            ),
+        )
+    )
+
+
+class TurnIdsPhase(Id128NominalPhase):
+    """5: Core turn ids are ``TurnId``; their re-decodes go."""
+
+    after = (NominalIdTypePhase,)
+    evidence = AllEvidence(
+        (
+            PatternAbsent(
+                r"\b(turn_id|finished_turn_id|report_turn_id|current_turn_id)"
+                r": (str\b|Id128\b|Annotated\[(str|Id128)\b)",
+                Id128NominalPhase.paths,
+            ),
+            PatternAbsent(
+                r"Id128Text\.(decode|from_text)\((self\.)?turn_id\)",
+                Id128NominalPhase.paths,
+            ),
+        )
+    )
+
+
+class GoalIdsPhase(Id128NominalPhase):
+    """6: goal ids are ``GoalId``, minted by it, never by a hand-written ``uuid4().hex``."""
+
+    after = (NominalIdTypePhase,)
+    evidence = PatternAbsent(
+        r"\b(goal_id|original_goal_id): (str\b|Id128\b|Annotated\[(str|Id128)\b)",
+        Id128NominalPhase.paths,
+    )
+
+
+class RootIdsPhase(Id128NominalPhase):
+    """7: bus roots and recipient lookups are ``RootId``; their re-decodes go."""
+
+    after = (NominalIdTypePhase,)
+    evidence = AllEvidence(
+        (
+            PatternAbsent(
+                r"\b(wire_root_id|root_id|lookup|recipient_lookup): "
+                r"(str\b|Id128\b|Annotated\[(str|Id128)\b)",
+                Id128NominalPhase.paths,
+            ),
+            PatternAbsent(
+                r"Id128Text\.decode\((self\.)?(owner\.)?(wire_root_id|root_id|lookup)\)",
+                Id128NominalPhase.paths,
+            ),
+            PatternAbsent(
+                r"FieldCodec\.decode\(Annotated\[str, *Id128Text\]",
+                Id128NominalPhase.paths,
+            ),
+        )
+    )
+
+
+class InputIdsPhase(Id128NominalPhase):
+    """8: input ids are ``InputId``; their re-decodes and constructor checks go."""
+
+    after = (NominalIdTypePhase,)
+    evidence = AllEvidence(
+        (
+            PatternAbsent(
+                r"\b(input_id|native_id): "
+                r"(str\b|Id128\b|Annotated\[(str|Id128)\b)",
+                Id128NominalPhase.paths,
+            ),
+            PatternAbsent(
+                r"Id128Text\.(decode|from_text)\((self\.)?(input_id|native_id)\)",
+                Id128NominalPhase.paths,
+            ),
+        )
+    )
+
+
+class RedecodesDeletedPhase(Id128NominalPhase):
+    """9: no id is decoded twice or minted by hand, and a plain ``str`` field refuses an id."""
+
+    after = (PlainStrIdRatchetPhase, InputIdsPhase)
+    evidence = AllEvidence(
+        (
+            PatternAbsent(r"Id128Text\.(decode|from_text)\("),
+            PatternAbsent(r"Annotated\[str, *(Id128Text|MessageIdText)\]"),
+            PatternAbsent(r"uuid4\(\)\.hex([^\[]|$)", ("src", ":!src/agent_comms/field_codec.py")),
+            PatternAbsent(r"isinstance\(\w+, NominalText\)", ("src/agent_comms/field_codec.py",)),
+        )
+    )
+
+
 class OwnTypeChecksPhase(MultipleInheritancePhase):
     """Batch 3."""
 
-    after = (FieldDirectivesPhase,)
+    after = (FieldDirectivesPhase, RedecodesDeletedPhase)
     evidence = OwnClassChecksAbsent()
 
 
@@ -799,149 +945,3 @@ class FleetReplayPhase(FleetAwarenessPhase):
         LostToolsPhase,
     )
     evidence = FunctionDeclared("test_replay_raises_each_incident_once", ("tests",))
-
-
-class NominalIdTypePhase(Id128NominalPhase):
-    """1: an id is a nominal value type; FieldCodec decodes and mints it, the wire unchanged."""
-
-    evidence = AllEvidence(
-        (
-            *(ClassDeclared(kind.__name__, ("src/agent_comms/field_codec.py",))
-              for kind in (
-                  NominalText, NominalSpelling, Id128, MessageId, *Id128.__subclasses__(),
-              )),
-            PatternAbsent(
-                r"def mint\(cls(, text: str)?\) -> str:", ("src/agent_comms/field_codec.py",)
-            ),
-        )
-    )
-
-
-class PlainStrIdRatchetPhase(Id128NominalPhase):
-    """2: no file gains a plain ``str`` annotation on an id-named field or parameter."""
-
-    after = (NominalIdTypePhase,)
-    evidence = PatternPresent(r"^class PlainStrIdAnnotation\(", ("tools/debt_ratchet.py",))
-
-
-class ClaimIdsPhase(Id128NominalPhase):
-    """3: claim nonces, operation ids and generations are ``ClaimId``; their checks go."""
-
-    after = (NominalIdTypePhase,)
-    evidence = AllEvidence(
-        (
-            PatternAbsent(
-                r"\b(nonce|operation_id|generation): "
-                r"(str\b|Id128\b|Annotated\[(str|Id128)\b)",
-                Id128NominalPhase.paths,
-            ),
-            PatternAbsent(
-                r"Id128Text\.decode\(self\.(nonce|operation_id)\)",
-                Id128NominalPhase.paths,
-            ),
-        )
-    )
-
-
-class MessageIdsPhase(Id128NominalPhase):
-    """4: bus message ids are ``MessageId``."""
-
-    after = (NominalIdTypePhase,)
-    evidence = AllEvidence(
-        (
-            PatternAbsent(
-                r"\b(message_id|source_message_id): "
-                r"(str\b|Id128\b|Annotated\[(str|Id128)\b)",
-                Id128NominalPhase.paths,
-            ),
-            PatternAbsent(
-                r"Annotated\[str, *MessageIdText\]",
-                Id128NominalPhase.paths,
-            ),
-        )
-    )
-
-
-class TurnIdsPhase(Id128NominalPhase):
-    """5: Core turn ids are ``TurnId``; their re-decodes go."""
-
-    after = (NominalIdTypePhase,)
-    evidence = AllEvidence(
-        (
-            PatternAbsent(
-                r"\b(turn_id|finished_turn_id|report_turn_id|current_turn_id)"
-                r": (str\b|Id128\b|Annotated\[(str|Id128)\b)",
-                Id128NominalPhase.paths,
-            ),
-            PatternAbsent(
-                r"Id128Text\.(decode|from_text)\((self\.)?turn_id\)",
-                Id128NominalPhase.paths,
-            ),
-        )
-    )
-
-
-class GoalIdsPhase(Id128NominalPhase):
-    """6: goal ids are ``GoalId``, minted by it, never by a hand-written ``uuid4().hex``."""
-
-    after = (NominalIdTypePhase,)
-    evidence = PatternAbsent(
-        r"\b(goal_id|original_goal_id): (str\b|Id128\b|Annotated\[(str|Id128)\b)",
-        Id128NominalPhase.paths,
-    )
-
-
-class RootIdsPhase(Id128NominalPhase):
-    """7: bus roots and recipient lookups are ``RootId``; their re-decodes go."""
-
-    after = (NominalIdTypePhase,)
-    evidence = AllEvidence(
-        (
-            PatternAbsent(
-                r"\b(wire_root_id|root_id|lookup|recipient_lookup): "
-                r"(str\b|Id128\b|Annotated\[(str|Id128)\b)",
-                Id128NominalPhase.paths,
-            ),
-            PatternAbsent(
-                r"Id128Text\.decode\((self\.)?(owner\.)?(wire_root_id|root_id|lookup)\)",
-                Id128NominalPhase.paths,
-            ),
-            PatternAbsent(
-                r"FieldCodec\.decode\(Annotated\[str, *Id128Text\]",
-                Id128NominalPhase.paths,
-            ),
-        )
-    )
-
-
-class InputIdsPhase(Id128NominalPhase):
-    """8: input ids are ``InputId``; their re-decodes and constructor checks go."""
-
-    after = (NominalIdTypePhase,)
-    evidence = AllEvidence(
-        (
-            PatternAbsent(
-                r"\b(input_id|native_id): "
-                r"(str\b|Id128\b|Annotated\[(str|Id128)\b)",
-                Id128NominalPhase.paths,
-            ),
-            PatternAbsent(
-                r"Id128Text\.(decode|from_text)\((self\.)?(input_id|native_id)\)",
-                Id128NominalPhase.paths,
-            ),
-        )
-    )
-
-
-class RedecodesDeletedPhase(Id128NominalPhase):
-    """9: no id is decoded twice or minted by hand, and a plain ``str`` field refuses an id."""
-
-    after = (PlainStrIdRatchetPhase, InputIdsPhase)
-    evidence = AllEvidence(
-        (
-            PatternAbsent(r"Id128Text\.(decode|from_text)\("),
-            PatternAbsent(r"Annotated\[str, *(Id128Text|MessageIdText)\]"),
-            PatternAbsent(r"uuid4\(\)\.hex([^\[]|$)", ("src", ":!src/agent_comms/field_codec.py")),
-            PatternAbsent(r"isinstance\(\w+, NominalText\)", ("src/agent_comms/field_codec.py",)),
-        )
-    )
