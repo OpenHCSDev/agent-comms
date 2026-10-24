@@ -36,7 +36,7 @@ class BusRouteCounts(BusProjectionTables):
     @classmethod
     def from_message(cls, message: Message):
         return cls(message.seq, message.target, message.sender,
-                   message.sender_lookup, message.timestamp)
+                   str(message.sender_lookup), message.timestamp)
 
 
 @dataclass(frozen=True)

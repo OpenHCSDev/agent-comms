@@ -70,7 +70,7 @@ from agent_comms.execution_states import (
     FailedExecution,
     PendingExecution,
 )
-from agent_comms.field_codec import FieldCodec, MessageId
+from agent_comms.field_codec import FieldCodec, MessageId, ThreadLookup
 from agent_comms.messages import Message, InfoKind
 from agent_comms.owner_fence import prepare_fence_token
 from agent_comms.recovery_states import FailedRecovery, ModelStalledRecovery, RecoveredRecovery
@@ -95,7 +95,7 @@ def wire_source(db: StandaloneCoordination, assignment_id: str, original: Messag
     from agent_comms.wake_policy import WakeDecision
 
     audience = freeze_audience(original, (FrozenRecipient("owner", "Owner"),),
-                               "0" * 64, sender_lookup="sender",
+                               "0" * 64, sender_lookup=ThreadLookup("f" * 32),
                                sender_name=original.sender)
     decisions = (WakeDecision("owner", MessageAudience.DIRECT, mode),)
     delivery = PrivateRecord.from_message(

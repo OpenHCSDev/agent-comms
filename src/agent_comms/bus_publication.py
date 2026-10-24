@@ -46,7 +46,7 @@ class Delivered(BusRecord, declared_name=None):
     control: str
 
     @property
-    def sender_lookup(self) -> str:
+    def sender_lookup(self) -> ThreadLookup:
         return self.audience.sender_lookup
 
     def projections(self):

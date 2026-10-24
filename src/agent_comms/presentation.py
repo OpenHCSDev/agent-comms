@@ -109,7 +109,7 @@ class OutcomeViewer(ABC):
     """Who reads a delivery window decides which of its outcomes are shown."""
 
     @abstractmethod
-    def includes(self, sender_lookup: str, recipient: FrozenRecipient) -> bool:
+    def includes(self, sender_lookup: ThreadLookup, recipient: FrozenRecipient) -> bool:
         pass
 
     @abstractmethod
@@ -120,7 +120,7 @@ class OutcomeViewer(ABC):
 class AllOutcomes(OutcomeViewer):
     """An unscoped reader sees every recipient's outcome and every human read."""
 
-    def includes(self, sender_lookup: str, recipient: FrozenRecipient) -> bool:
+    def includes(self, sender_lookup: ThreadLookup, recipient: FrozenRecipient) -> bool:
         return True
 
     def sees_direct_read(self, source: Delivered) -> bool:
@@ -137,7 +137,7 @@ class OwnerOutcomes(OutcomeViewer):
     def of(cls, owner: ThreadProvenance) -> OwnerOutcomes:
         return cls(owner.incarnation.require_recorded().lookup)
 
-    def includes(self, sender_lookup: str, recipient: FrozenRecipient) -> bool:
+    def includes(self, sender_lookup: ThreadLookup, recipient: FrozenRecipient) -> bool:
         return self.lookup in (sender_lookup, recipient.recipient_lookup)
 
     def sees_direct_read(self, source: Delivered) -> bool:
@@ -150,7 +150,7 @@ class MessageNotification:
 
     window_limit: ClassVar[int] = 120
     recipient_identity: FrozenRecipient
-    sender_lookup: str
+    sender_lookup: ThreadLookup
     state: DeliveryProgress
     message: Message | None = None
     displayed_to: tuple[ThreadIncarnation, ...] = ()
