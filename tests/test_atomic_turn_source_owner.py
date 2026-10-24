@@ -1,10 +1,7 @@
 """Original begin/attachment ownership with real registry and callback resources."""
 
-from agent_comms.turn_input_source import NoTurnAcceptance
-
-
-from contextlib import AsyncExitStack
 import os
+from contextlib import AsyncExitStack
 
 import pytest
 
@@ -12,18 +9,18 @@ from agent_comms.acp import CommsAgent
 from agent_comms.agent_events import AgentInfo
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.comms import wire
-from conftest import installed_comms
 from agent_comms.coordination_errors import StaleFence
 from agent_comms.field_codec import TurnId
-from agent_comms.session_file import RegistrySessionLocation
 from agent_comms.goal_actions import SetGoalAction
 from agent_comms.native_input_owner import RegistryOwner
 from agent_comms.owned_turn import OwnedTurn
-from agent_comms.turn_phase import PreparingPhase
-from agent_comms.threads import ChosenModel, NextTurnConfiguration
+from agent_comms.session_file import RegistrySessionLocation
 from agent_comms.thread_model import DeclaredModel
+from agent_comms.threads import ChosenModel, NextTurnConfiguration, Thread
+from agent_comms.turn_input_source import NoTurnAcceptance
 from agent_comms.turn_lease import NoTurnLease
-from agent_comms.threads import Thread
+from agent_comms.turn_phase import PreparingPhase
+from conftest import installed_comms
 
 
 @pytest.mark.asyncio

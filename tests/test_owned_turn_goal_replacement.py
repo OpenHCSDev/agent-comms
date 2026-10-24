@@ -1,7 +1,5 @@
 """A replaced order keeps the running turn's authority, so following input joins that turn; a new original captures the current goal."""
 
-from agent_comms.turn_input_source import NoTurnAcceptance
-
 import asyncio
 import os
 from contextlib import AsyncExitStack
@@ -14,10 +12,11 @@ from agent_comms.acp import CommsAgent
 from agent_comms.agent_backend import InputContent
 from agent_comms.channel_input_batch import InputBatch
 from agent_comms.child_process import ProcessIdentity
-from conftest import installed_comms
 from agent_comms.field_codec import InputId, TurnId
 from agent_comms.goal_actions import (
-    BlockedGoalAction, CreateProblemGoalAction, OrderGoalAction,
+    BlockedGoalAction,
+    CreateProblemGoalAction,
+    OrderGoalAction,
 )
 from agent_comms.goal_states import ActiveGoal
 from agent_comms.owned_send import OwnedSend
@@ -26,11 +25,13 @@ from agent_comms.queued_input import InitialInput, QueuedInput
 from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.repository_name import RepositoryName
 from agent_comms.reservation_rules import ReservationViolationError
-from compaction_loopback import LoopbackProvider
-from native_backend_fixture import native_backend_fixture, wait_for
-from test_todos import order
-from source_revision_fixture import SourceRepository
 from agent_comms.threads import Thread
+from agent_comms.turn_input_source import NoTurnAcceptance
+from compaction_loopback import LoopbackProvider
+from conftest import installed_comms
+from native_backend_fixture import native_backend_fixture, wait_for
+from source_revision_fixture import SourceRepository
+from test_todos import order
 
 
 class FollowingReadProvider(LoopbackProvider):

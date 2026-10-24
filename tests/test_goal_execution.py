@@ -1,7 +1,5 @@
 """Real turn acquisition and terminal handling share the execution owner."""
 
-from agent_comms.turn_input_source import NoTurnAcceptance
-
 import os
 import sqlite3
 from contextlib import AsyncExitStack, asynccontextmanager, closing
@@ -29,8 +27,9 @@ from agent_comms.goal_presentation import (
 )
 from agent_comms.goal_states import ActiveGoal
 from agent_comms.owned_turn import OwnedTurn
-from agent_comms.turn_terminal import OwnerStop
 from agent_comms.threads import Thread
+from agent_comms.turn_input_source import NoTurnAcceptance
+from agent_comms.turn_terminal import OwnerStop
 
 
 @pytest.fixture

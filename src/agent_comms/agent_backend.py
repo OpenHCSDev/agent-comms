@@ -312,8 +312,8 @@ class TurnDelivery:
 
     ``inbox`` carries :class:`InputRequest` and :class:`SendNow` records that
     arrive while the turn runs. Core checks input permission at these boundaries: the
-    backend enters ``send_boundary`` around writing each input and
-    ``interrupt_boundary`` around a send-now; ``input_started`` reports that the
+    backend asks ``send_boundary`` before writing each input or interrupt;
+    ``input_start`` reports that the
     runtime began an input; ``request_progress`` and ``ui_request`` observe
     provider progress and answer runtime dialogs.
     """
@@ -323,7 +323,6 @@ class TurnDelivery:
     inbox: TurnInbox
     finish_event: asyncio.Event
     send_boundary: SendBoundary
-    interrupt_boundary: SendBoundary
     input_start: InputStartListener
     request_progress: Callable[..., None]
     ui_request: Callable[[DialogUiRequest], Awaitable[ExtensionUiChoice]]

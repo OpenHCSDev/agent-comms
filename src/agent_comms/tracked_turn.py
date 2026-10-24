@@ -474,7 +474,6 @@ class TrackedTurnSession(TurnSession):
         """Later inputs go to the running child under the owner's write checks."""
         self.inputs.queue = inbox
         self.send_boundary = sender
-        self.interrupt_boundary = partial(sender, already_bound=True)
         self.input_start = sender
         self.ensure_input_forwarding()
 
@@ -484,13 +483,12 @@ class TrackedTurnSession(TurnSession):
         """The original input starts when Pi commits it; any other user message is a later input."""
         if message.matches_input(self.command.message, self.command.input_id):
             return ()
-        matched, input_id = self.inputs.mark_started(self, event)
-        if not matched:
-            raise NativePiUnavailable("Native Pi started a user message this turn did not send")
-        source = await self.following.started(input_id)
-        self.terminal = source.continue_response(self.terminal, self.output.text_parts)
-        self.output.discard_text()
-        return ()
+        for input_id in self.inputs.mark_started(self, event):
+            source = await self.following.started(input_id)
+            self.terminal = source.continue_response(self.terminal, self.output.text_parts)
+            self.output.discard_text()
+            return ()
+        raise NativePiUnavailable("Native Pi started a user message this turn did not send")
 
     @handles(pi.ContextCommitted)
     async def committed_context(self, event: pi.ContextCommitted) -> None:

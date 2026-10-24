@@ -358,9 +358,6 @@ class OwnedTurn:
             inbox=self.following.inbox,
             finish_event=self.finish_event,
             send_boundary=sender,
-            interrupt_boundary=lambda public_id, native_id, text: sender(
-                public_id, native_id, text, already_bound=True
-            ),
             input_start=sender,
             request_progress=self.progress.record_request_progress,
             ui_request=lambda request: self.runner.extension_ui_permission(

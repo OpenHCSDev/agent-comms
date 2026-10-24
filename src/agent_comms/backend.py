@@ -61,7 +61,7 @@ from .native_tool_transport import ToolTransport, UnboundToolTransport
 from .pi_rpc import PiRpcChannel
 from .prompt_state import UnwrittenPrompt
 from .request_progress import NO_REQUEST_OBSERVER, RequestObserver, RequestProgress
-from .send_outcome import SendBoundary
+from .send_outcome import NO_SEND_BOUNDARY, SendBoundary
 from .tool_denial import SelectedToolDenied
 from .turn_context import InputContributionCoordinates
 from .turn_inputs import InputForwarding
@@ -116,8 +116,7 @@ async def stream_agent_events(
     images: Sequence[ImageInput] = (),
     model_wait: TurnWait = DEFAULT_MODEL_WAIT,
     rpc_abort_grace: float = RPC_ABORT_GRACE_SECONDS,
-    send_boundary: SendBoundary | None = None,
-    interrupt_boundary: SendBoundary | None = None,
+    send_boundary: SendBoundary = NO_SEND_BOUNDARY,
     *,
     input_start: InputStartListener,
     persistent_session: PersistentPiSession,
@@ -172,7 +171,6 @@ async def stream_agent_events(
                     rpc_abort_grace=rpc_abort_grace,
                     send_boundary=send_boundary,
                     input_start=input_start,
-                    interrupt_boundary=interrupt_boundary,
                     native_session=persistent_session,
                     ui_request=ui_request,
                     request_observer=request_observer,
@@ -228,8 +226,7 @@ class NativeSession(MroDispatch, ABC):
         finish_signal: FinishSignal = NO_FINISH_SIGNAL,
         model_wait: TurnWait = DEFAULT_MODEL_WAIT,
         rpc_abort_grace: float = RPC_ABORT_GRACE_SECONDS,
-        send_boundary: SendBoundary | None = None,
-        interrupt_boundary: SendBoundary | None = None,
+        send_boundary: SendBoundary = NO_SEND_BOUNDARY,
         input_start: InputStartListener = NO_INPUT_START_LISTENER,
         ui_request: Callable[[pi.DialogUiRequest], Awaitable[pi.ExtensionUiChoice]] | None = None,
         request_observer: RequestObserver = NO_REQUEST_OBSERVER,
@@ -245,7 +242,6 @@ class NativeSession(MroDispatch, ABC):
         )
         self.rpc_abort_grace = rpc_abort_grace
         self.send_boundary = send_boundary
-        self.interrupt_boundary = interrupt_boundary
         self.input_start = input_start
         self.native_session = native_session
         self.extension_ui = ExtensionUiSession(ui_request)
@@ -345,9 +341,10 @@ class NativeSession(MroDispatch, ABC):
 
     def observe_input_during_abort(self, event):
         if self.accepts_output:
-            matched, identity = self.inputs.mark_started(self, event)
-            if matched:
-                self.started_during_abort.append(events.FollowingInputStarted(id=identity))
+            self.started_during_abort.extend(
+                events.FollowingInputStarted(id=identity)
+                for identity in self.inputs.mark_started(self, event)
+            )
 
     def permits_live_status(self) -> bool:
         """Only tracked, live input may publish an informational package acknowledgement."""
@@ -645,9 +642,9 @@ class TurnSession(NativeSession):
             self.ensure_input_forwarding()
             return self.input_start.started_events
         if self.started_input:
-            matched, input_id = self.inputs.mark_started(self, event)
-            if matched:
-                return (events.FollowingInputStarted(id=input_id),)
+            started = self.inputs.mark_started(self, event)
+            if started:
+                return tuple(events.FollowingInputStarted(id=input_id) for input_id in started)
             self.inputs.uncertain = True
             self.output.final_assistant_stop = False
             self.output.record_failure(

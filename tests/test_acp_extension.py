@@ -1,8 +1,9 @@
+"""Declared extension decoding is strict and shares its owner with consumers."""
+
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.field_codec import TurnId
 from agent_comms.acp_failure import ACPFailure
 
-"""Declared extension decoding is strict and shares its owner with consumers."""
 import pytest
 from agent_comms.goal_presentation import IdleGoalExecution
 from agent_comms.goals import NoGoal

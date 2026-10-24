@@ -1,42 +1,41 @@
 """Acquired original native fixture shared by pytest and installed drivers."""
 
-from agent_comms.turn_input_source import AcceptedTurn
-
-
-from agent_comms.native_package import VerifiedNativePackage
-from agent_comms.native_arguments import NativeArguments
-
 import asyncio
 import json
 import os
-from pathlib import Path
 from contextlib import AsyncExitStack, asynccontextmanager
 from functools import partial
+from pathlib import Path
 from unittest.mock import patch
 
 import agent_comms.agent_events as events
 import agent_comms.backend as backend
 from agent_comms.agent_backend import (
-    InputContent, InputRequest, NoInputStartListener, TurnInbox, SteerInputPolicy,
+    InputContent,
+    InputRequest,
+    NoInputStartListener,
+    SteerInputPolicy,
+    TurnInbox,
 )
-from agent_comms.field_codec import InputId
-from agent_comms.comms import wire
-from agent_comms.fresh_private_session import create_fresh_private_session
 from agent_comms.child_process import BoundedRun, join_retirement
+from agent_comms.comms import wire
 from agent_comms.coordinator import Coordination
-from agent_comms.field_codec import FieldCodec
-from agent_comms.pi_native_backend import PersistentPiSession
+from agent_comms.field_codec import FieldCodec, InputId
+from agent_comms.fresh_private_session import create_fresh_private_session
+from agent_comms.native_arguments import GivenArguments, GivenBinary, NativeArguments
 from agent_comms.native_child import PiSessionChild
-from agent_comms.selected_actions import NoSelectedTools
+from agent_comms.native_package import VerifiedNativePackage
 from agent_comms.owned_turn import OwnedTurn
-from agent_comms.thread_identity import RecordedThreadIncarnation
+from agent_comms.pi_native_backend import PersistentPiSession
 from agent_comms.queued_input import InitialInput
+from agent_comms.selected_actions import NoSelectedTools
 from agent_comms.storage_rules import StorageRule
-from agent_comms.native_arguments import GivenArguments, GivenBinary
-from delivery_owner_fixture import canonical_agent
-from compaction_loopback import LoopbackProvider
-from native_proof_cases import read_proof_rows
+from agent_comms.thread_identity import RecordedThreadIncarnation
 from agent_comms.threads import Thread
+from agent_comms.turn_input_source import AcceptedTurn
+from compaction_loopback import LoopbackProvider
+from delivery_owner_fixture import canonical_agent
+from native_proof_cases import read_proof_rows
 
 
 async def wait_for(predicate):

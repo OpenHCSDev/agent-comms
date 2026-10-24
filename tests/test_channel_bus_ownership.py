@@ -1,17 +1,16 @@
 """Channel membership and notifications have one canonical bus authority."""
 
-from agent_comms.turn_input_source import NoTurnAcceptance
-
-from bus_history import read_history
-from dataclasses import replace
 from contextlib import AsyncExitStack
+from dataclasses import replace
 
 from agent_comms.channel_targets import CommandTarget
 from agent_comms.coordination_cohort import accept_delivery_cohort
 from agent_comms.coordinator import Coordination
-from agent_comms.notification_progress import SentProgress
-from agent_comms.wake_policy import BoundedTriageWake
 from agent_comms.native_arguments import GivenBinary
+from agent_comms.notification_progress import SentProgress
+from agent_comms.turn_input_source import NoTurnAcceptance
+from agent_comms.wake_policy import BoundedTriageWake
+from bus_history import read_history
 from test_coordinated_runtime import _root, tmp_path  # noqa: F401
 
 

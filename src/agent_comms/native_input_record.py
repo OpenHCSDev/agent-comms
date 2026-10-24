@@ -219,7 +219,9 @@ class NativeInputExecution(DeclaredFamily, affix="NativeExecution"):
         return tuple(original.assignment_id for original in originals)
 
     @abstractmethod
-    def record_sources(self, db: Connection, input_id: InputId, assignments: tuple[WakeAssignment, ...]) -> None:
+    def record_sources(
+        self, db: Connection, input_id: InputId, assignments: tuple[WakeAssignment, ...],
+    ) -> None:
         """Record only membership which is not already owned by execution claims."""
 
     @abstractmethod
@@ -257,7 +259,9 @@ class TriageNativeExecution(NativeInputExecution):
         return (f"SELECT s.input_id, member.value AS assignment_id, CAST(member.key AS INTEGER) AS ordinal "
                 f"FROM {TriageNativeSources.declared_name} s, json_each(s.assignment_ids) member")
 
-    def record_sources(self, db: Connection, input_id: InputId, assignments: tuple[WakeAssignment, ...]) -> None:
+    def record_sources(
+        self, db: Connection, input_id: InputId, assignments: tuple[WakeAssignment, ...],
+    ) -> None:
         from .triage_native_sources import TriageNativeSources
 
         TriageNativeSources(input_id, tuple(row.assignment_id for row in assignments)).insert(db)
@@ -293,7 +297,9 @@ class FullNativeExecution(NativeInputExecution):
                 f"JOIN {ExecutionAssignmentLink.declared_name} c ON c.execution_id=n.execution_id "
                 f"WHERE n.stage='{cls.declared_name}'")
 
-    def record_sources(self, db: Connection, input_id: InputId, assignments: tuple[WakeAssignment, ...]) -> None:
+    def record_sources(
+        self, db: Connection, input_id: InputId, assignments: tuple[WakeAssignment, ...],
+    ) -> None:
         if self.source_assignment_ids(db, input_id) != tuple(row.assignment_id for row in assignments):
             raise IdentityConflict("Full native input differs from its original execution membership")
 

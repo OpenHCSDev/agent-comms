@@ -3,7 +3,8 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from contextlib import ExitStack
+from collections.abc import Iterator
+from contextlib import ExitStack, contextmanager
 from dataclasses import dataclass, replace
 from typing import TYPE_CHECKING, ClassVar
 
@@ -14,8 +15,17 @@ from .acp_extension import InputStartedUpdate, NoQueueScope
 from .agent_backend import BusyInputPolicy, SteerInputPolicy
 from .channel_input_batch import InputBatch, SingleInputBatch
 from .field_codec import InputId
+from .input_attempt import InputAlreadyCleared
 from .messages import Message
-from .ordinary_turn_rules import AcceptedInputCheck, MissingAcceptedInputCheck
+from .ordinary_turn_rules import (
+    AcceptedInputCheck,
+    MissingAcceptedInputCheck,
+    UnboundOrdinaryInputRule,
+    UnconsumedDependencyRule,
+)
+from .reservation_rules import ReservationViolationError
+from .routing import TurnRouting
+from .send_outcome import DeferredSend, GrantedSend, RefusedSend, SendOutcome
 from .started_input import StartedInput
 
 if TYPE_CHECKING:
@@ -26,6 +36,7 @@ if TYPE_CHECKING:
     from .goals import GoalDeclaration
     from .input_disposition import InputDispositions
     from .input_drain import DrainedSession, InputDrain
+    from .owned_send import OwnedSend
     from .runtime import RuntimeServer
     from .thread_identity import RecordedThreadIncarnation, RegisteredTurn
     from .threads import Thread
@@ -100,12 +111,9 @@ class AcceptedTurn(TurnAcceptance):
         row: input_attempt.StartedInput, scope: QueueScope,
     ) -> InputStartedUpdate:
         text = source.notice_text
-        try:
-            item = inputs.state(session_id).queued[self.input_id]
-        except KeyError:
-            pass
-        else:
-            text = await item.started(inputs)
+        queued = inputs.state(session_id).queued
+        if self.input_id in queued:
+            text = await queued[self.input_id].started(inputs)
         update = await super().started_update(source, inputs, session_id, row, scope)
         return replace(
             update, input_id=row.public_id if source.notice_keys else self.input_id, text=text,
@@ -124,6 +132,64 @@ class TurnInputSource(StartedInput, ABC):
 
     if TYPE_CHECKING:
         keys: tuple[str, ...]
+
+    @contextmanager
+    def prepare_send(
+        self, sender: OwnedSend, native_id: str, sent_text: str,
+        *, already_bound: bool = False,
+    ) -> Iterator[SendOutcome]:
+        try:
+            decision = self._prepare(sender, native_id, sent_text, already_bound=already_bound)
+        except InputAlreadyCleared:
+            decision = RefusedSend()
+        yield decision
+
+    def _prepare(
+        self, sender: OwnedSend, native_id: str, sent_text: str,
+        *, already_bound: bool = False,
+    ) -> SendOutcome:
+        # Backend input handling holds shared locks through this check and write.
+        snapshot = sender.comms.registry.snapshot()
+        canonical = snapshot.canonical_name(sender.thread.name)
+        try:
+            current = sender.require_owner(snapshot, canonical)
+            sender._check_owner(current, snapshot, canonical, self, sent_text)
+            # The queue grants a send, not a running tool's lifetime. Once Pi
+            # starts this exact input, StartedInput removes its queue entry.
+            self.acceptance.require_current(
+                sender.inputs, sender.session_id, self, current, sender.claim_generation,
+            )
+        except ReservationViolationError as error:
+            return sender._refusal(error.rule)
+        if self.defers_for_goal(sender.goal_permission, current.goal):
+            return DeferredSend()
+        wait = sender.comms.goals.goal_wait(canonical)
+        try:
+            sender._require_context(self, current, wait)
+        except ReservationViolationError as error:
+            return sender._refusal(error.rule)
+        # Binding failures may be uncertain. Exceptions here still propagate;
+        # never reinterpret a failed durable operation as a retryable policy refusal.
+        if not sender.inputs.dispositions.bind_turn_input(
+            self.keys,
+            claim_scope=sender.claim_generation,
+            turn_id=sender.turn.value,
+            native_id=native_id,
+            text=sent_text,
+            already_bound=already_bound,
+        ):
+            return sender._refusal(UnboundOrdinaryInputRule())
+        if not self.consume_wait(sender.comms, canonical, wait):
+            return sender._refusal(UnconsumedDependencyRule())
+        sender.comms.transcripts.routes.record_input_display(
+            native_id,
+            self.display(sender.inputs.dispositions, sent_text),
+            sent_text=sent_text,
+            routing=TurnRouting(
+                tuple(origin.reference for origin in self.origins), None
+            ) if self.origins else None,
+        )
+        return GrantedSend()
 
     def valid_keys(self, text: str) -> bool:
         return len(self.keys) <= 1

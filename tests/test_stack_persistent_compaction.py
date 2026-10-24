@@ -1,7 +1,4 @@
 """A manual /compact runs Pi's own engine in the retained child, which keeps serving."""
-from agent_comms.field_codec import InputId
-from agent_comms.controller import SessionUpdateSink
-
 import asyncio
 import json
 import os
@@ -25,6 +22,8 @@ from agent_comms.acp_extension import (
 )
 from agent_comms.agent_events import CompactionEnd
 from agent_comms.comms import wire
+from agent_comms.controller import SessionUpdateSink
+from agent_comms.field_codec import InputId
 from agent_comms.launch_runtime import RestartEnvironment
 from agent_comms.native_arguments import GivenArguments, GivenBinary
 from agent_comms.pi_vocabulary import ManualCompactionReason
