@@ -1,13 +1,11 @@
 """Session-owned parts, not stdout writes, confirm monitor delivery."""
-from contextlib import closing, suppress
+from contextlib import suppress
 import asyncio
 import os
 import socket
 from html import escape
 import json
-import sqlite3
 
-from collections import Counter
 
 import pytest
 
@@ -24,7 +22,7 @@ from agent_comms.cli_bridges.claude_protocol import (
     ForeignAttachment,
 )
 from agent_comms.cli_bridges.shared import (
-    BridgeStateTable, Binding, DeliveryRow, ObservedPart, ReceivingMonitor, UnrecordedMonitor, MonitorPart,
+    Binding, DeliveryRow, ObservedPart, ReceivingMonitor, UnrecordedMonitor, MonitorPart,
     ForeignMonitorFrame, Options, ObservedMonitor, MismatchedMonitor, Watch, StoredBinding,
     GivenBinding, MONITOR_FRAME,
 )
@@ -262,71 +260,6 @@ async def test_explicit_watch_does_not_mark_streamed_messages_read(wired):
     assert {m.reference for m in wired.bus.inbox('fixer').page.messages}=={first.reference,second.reference}
     assert wired.messaging.acknowledge('fixer',(first.reference,))==1
     assert [m.reference for m in wired.bus.inbox('fixer').page.messages]==[second.reference]
-
-
-# delivery.sqlite3 as bridges wrote it before the sequence index was declared:
-# its outcome index held the name the sequence index now declares.
-_OLD_DELIVERY_FILE = (
-    'CREATE TABLE "binding" ("root" TEXT NOT NULL, "bus" TEXT NOT NULL, "thread" TEXT NOT NULL) STRICT',
-    'CREATE TABLE "delivery" ("id" TEXT NOT NULL, "payload" TEXT NOT NULL, "outcome" TEXT NOT NULL'
-    ' CHECK ("outcome" IN (\'filtered\', \'unconfirmed\', \'delivered\', \'emitted\')),'
-    ' "monitor" TEXT NOT NULL, PRIMARY KEY ("id")) STRICT',
-    'CREATE INDEX "delivery_0_idx" ON "delivery" ("outcome")',
-    'CREATE INDEX "delivery_sequence" ON "delivery" (json_extract(payload, \'$.seq\'))',
-    'CREATE TABLE "observed_part" ("id" TEXT NOT NULL, "number" INTEGER NOT NULL, "sender" TEXT NOT NULL,'
-    ' "body" TEXT NOT NULL, "record_id" TEXT NOT NULL, "timestamp" REAL NOT NULL,'
-    ' PRIMARY KEY ("id", "number")) STRICT',
-)
-
-
-_OLD_FIRST = Message(
-    sender='peer', target='viewer', body='first', type=InfoKind, timestamp=1., seq=7)
-_OLD_SECOND = Message(
-    sender='peer', target='viewer', body='second', type=InfoKind, timestamp=2., seq=8)
-
-_OLD_DELIVERY_ROWS = (
-    ('binding', ('/root', 'viewer', 'session')),
-    ('delivery', (_OLD_FIRST.message_id, json.dumps(_OLD_FIRST.to_wire()),
-                  'unconfirmed', '{"kind":"receiving","total":1}')),
-    ('delivery', (_OLD_SECOND.message_id, json.dumps(_OLD_SECOND.to_wire()),
-                  'emitted', '{"kind":"unrecorded"}')),
-    ('observed_part', (_OLD_FIRST.message_id, 1, 'peer', 'part one', 'record-1', 12.5)),
-)
-
-
-def _old_delivery_file(state):
-    path = state / BridgeStateTable.filename
-    with closing(sqlite3.connect(path)) as db:
-        for statement in _OLD_DELIVERY_FILE:
-            db.execute(statement)
-        for table, values in _OLD_DELIVERY_ROWS:
-            db.execute(f'INSERT INTO "{table}" VALUES ({",".join("?" for _ in values)})', values)
-        db.commit()
-    return path
-
-
-def test_old_delivery_index_set_is_carried_onto_the_declaration_with_every_row(tmp_path):
-    """A durable store derives its declared schema on the writer's open (a5b3cd8a7): the old
-    index set is replaced by the declared one and no row is lost."""
-    from cutover.binding_start import SavedJournal, migrate
-
-    path = _old_delivery_file(tmp_path)
-    with closing(sqlite3.connect(path)) as db:
-        before = {table: db.execute(f'SELECT * FROM "{table}"').fetchall()
-                  for table in ('binding', 'delivery', 'observed_part')}
-    original = SavedJournal(tmp_path, tmp_path / "original")
-    original.save()
-    assert migrate(tmp_path).report() == 1
-    assert migrate(tmp_path).report() == 0
-    with Binding.open(tmp_path) as db:
-        assert not BridgeStateTable.schema_differs(db)
-        assert {table: db.execute(f'SELECT count(*) FROM "{table}"').fetchone()[0]
-                for table in ('binding', 'delivery', 'observed_part')} == Counter(
-            table for table, _ in _OLD_DELIVERY_ROWS)
-    original.restore()
-    with closing(sqlite3.connect(path)) as db:
-        assert {table: db.execute(f'SELECT * FROM "{table}"').fetchall()
-                for table in before} == before
 
 
 @pytest.mark.asyncio

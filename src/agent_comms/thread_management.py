@@ -229,10 +229,10 @@ class ThreadManagement:
         worktree: ImportDirectory = SourceDirectory(),
         model: ModelChoice = KeptModel(),
         tags: frozenset[str] = frozenset(),
-        limits: ImportLimits | None = None,
+        limits: ImportLimits = ImportLimits(),
     ) -> ThreadImported:
         """Import a stopped, resumable snapshot of any harness session, without adopting its executor."""
-        snapshot = ImportSnapshot.read(history, limits or ImportLimits())
+        snapshot = ImportSnapshot.read(history, limits)
         directory = worktree.project(snapshot)
         if not directory:
             raise ValueError("The source has no project directory; supply --worktree.")
@@ -263,7 +263,7 @@ class ThreadManagement:
         return ThreadImported.of(name, session_path, snapshot)
 
     def rehome_thread(
-        self, history: History, *, name: str, limits: ImportLimits | None = None,
+        self, history: History, *, name: str, limits: ImportLimits = ImportLimits(),
     ) -> ThreadImported:
         """Move an external unit onto native Pi on its existing declaration.
 
@@ -271,12 +271,10 @@ class ThreadManagement:
         only the execution and the session change. The harness's own bridge is retired
         first, so one inbox never has two deliverers.
         """
-        snapshot = ImportSnapshot.read(history, limits or ImportLimits())
+        snapshot = ImportSnapshot.read(history, limits)
         session_path = ImportedSessionWriter.path_in(self.root, session_id=PiSessionId.fresh())
         with self.registry.store.locked():
-            current = self.registry.snapshot().threads.get(name)
-            if current is None:
-                raise ValueError(f"No thread named {name!r} to re-home.")
+            current = self.registry.snapshot().require(name)
             current.execution.require_external()
             self._write_imported_session(session_path, snapshot, Path(current.worktree))
             rehomed = replace(

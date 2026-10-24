@@ -332,7 +332,6 @@ class Column(FieldDirective):
     generated: str | None = None
     storage: type[SqlStorage] | None = None
     nullable: bool = False  # SQLite NULL may decode to a mandatory nominal value.
-    renamed_from: tuple[str, ...] = ()
 
     @classmethod
     def declared(cls, annotation: object) -> Column:
@@ -887,12 +886,11 @@ class TableSchema(ABC):
         cls, db: sqlite3.Connection, sharing: tuple[type[TypedTable], ...] = (),
     ) -> None:
         """Inside the caller's write transaction, the stored schema onto the declaration
-        wherever the declaration says how: declared earlier table or column names, missing
+        wherever the declaration says how: declared earlier table names, missing
         nullable fields, an index, trigger or view rebuilt from its SQL, or a missing object.
         Other table differences are refused with the rows untouched."""
         for row in cls.schema_rows():
             row.take_previous_name(db)
-            row.derive_renamed_fields(db)
             row.derive_nullable_fields(db)
             row.derive_relaxed_fields(db)
         SQLiteCatalogObject.carry(db, cls.declared_schema(),
@@ -1793,26 +1791,6 @@ class TypedTable(
                 raise RelationViolationError(
                     f"{cls.declared_name}: tables {holders} could each hold its rows;"
                     " refusing to choose")
-
-    @classmethod
-    def derive_renamed_fields(cls, db: sqlite3.Connection) -> None:
-        """Values stored under a column's declared earlier name move to its declared name;
-        columns under both are refused, since nothing says which to keep."""
-        stored = set(cls.stored_columns(db))
-        for column in cls._columns:
-            match [name for name in column.column.renamed_from if name in stored]:
-                case []:
-                    pass
-                case [previous] if column.wire_name not in stored:
-                    cls.rename_stored_column(db, previous, column.name)
-                    stored.remove(previous)
-                    stored.add(column.wire_name)
-                case found:
-                    holders = sorted({*found, column.wire_name} & stored)
-                    raise RelationViolationError(
-                        f"{cls.declared_name}: columns {holders} could each hold "
-                        f"{column.wire_name};"
-                        " refusing to choose")
 
     @classmethod
     def stored_columns(cls, db: sqlite3.Connection) -> tuple[str, ...]:

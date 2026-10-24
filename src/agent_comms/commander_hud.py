@@ -4,18 +4,22 @@ from __future__ import annotations
 
 import time
 from dataclasses import dataclass
+from pathlib import Path
 from typing import TYPE_CHECKING
 
 from agent_comms.commander.vibe_check import OverloadDegradation
+from agent_comms.commander_frame_file import CommanderFrameFile
 from agent_comms.commander_pings import LoadPing, PhaseRowPing, Ping, UnitRowPing
 from agent_comms.field_codec import projected
 from agent_comms.heartbeat_frame import HeartbeatFrame
+from agent_comms.locked_store import JsonDocument
 from agent_comms.plan_phases import PlanPhase
 from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.thread_identity import ThreadIncarnation
 from agent_comms.todos import OrderProgress, ProgressRead, PullRequest, UnmergedListedPullRequest
 from agent_comms.tool_result import ToolResult
 from agent_comms.turn_digests import OrderEditCountRead
+from agent_comms.ui_model.unit_state import UnitClock, UnitState
 
 if TYPE_CHECKING:
     from agent_comms.comms import Comms
@@ -37,9 +41,15 @@ class CommanderOrder:
 
 @dataclass(frozen=True)
 class CommanderUnit:
-    """One holder's orders, live strikes and GitHub's open ready/draft requests."""
+    """One unit's state card: its orders, live strikes and GitHub's open ready/draft requests.
+
+    ``state`` and ``clock`` come from the UnitState the heartbeat derived for the unit, so a
+    view tells moving from circling without deriving either itself.
+    """
 
     unit: ThreadIncarnation
+    state: type[UnitState]
+    clock: UnitClock
     orders: tuple[CommanderOrder, ...]
     strikes: int
     ready_prs: tuple[PullRequest, ...]
@@ -50,7 +60,7 @@ class CommanderUnit:
             f"{order.problem}: {order.state}; {order.progress.line}" for order in self.orders
         )
         return (
-            f"{self.unit.name}: orders={orders} "
+            f"{self.state.__name__} {self.unit.name}: orders={orders} "
             f"review timers={sum(len(order.review_timers_up) for order in self.orders)} "
             f"strikes={self.strikes} edits={sum(order.unjudged_edits for order in self.orders)} "
             f"ready={','.join(str(pr.number) for pr in self.ready_prs)} "
@@ -97,10 +107,13 @@ class CommanderHud(ToolResult):
 
     @classmethod
     def read(cls, comms: Comms, commander: str) -> CommanderHud:
-        return cls.of(comms, commander, HeartbeatFrame.read(comms, commander, ProgressRead()))
+        frame = HeartbeatFrame.read(comms, commander, ProgressRead())
+        return cls.of(comms, commander, frame, UnitState.current(comms, commander, frame))
 
     @classmethod
-    def of(cls, comms: Comms, commander: str, frame: HeartbeatFrame) -> CommanderHud:
+    def of(cls, comms: Comms, commander: str, frame: HeartbeatFrame,
+           states: tuple[UnitState, ...]) -> CommanderHud:
+        """Cards follow ``states``, already in the UnitState family's declared order."""
         snapshot, now = comms.registry.snapshot(), time.time()
         owner = snapshot.require(commander).incarnation
         store = comms.goals.todos
@@ -114,14 +127,15 @@ class CommanderHud(ToolResult):
             for read in OrderEditCountRead.for_orders(comms.root, frame.live)
         }
         units = []
-        for unit, orders in frame.holders.items():
+        for state in states:
+            unit, orders = state.unit, state.source.todos
             requests = {
                 (todo.repo, request.number): request
                 for todo in orders
                 for request in pulls.listed(todo.repo, UnmergedListedPullRequest, todo)
             }
             units.append(CommanderUnit(
-                unit,
+                unit, type(state), state.clock(),
                 tuple(CommanderOrder(
                     todo.id, todo.text, todo.order.checked().id, todo.order.line, progress[todo.id],
                     tuple(at for due, at in timers if due.id == todo.id),
@@ -151,3 +165,37 @@ class CommanderHud(ToolResult):
         return tuple(ping.text for ping in self.pings())
 
 
+
+
+@dataclass(frozen=True)
+class CommanderFrame(CommanderFrameFile, JsonDocument[CommanderHud]):
+    """The newest CommanderHud of each beating commander, for views that only show it.
+
+    One writer, the heartbeat, replaces every commander's file each beat from the same
+    CommanderHud its pings derive from, and keeps no history. It never reads a frame back,
+    so a shape left by an older build cannot stop a beat; the next beat overwrites it.
+    """
+
+    path: Path
+
+    record_type = CommanderHud
+
+    def empty(self) -> CommanderHud:
+        raise FileNotFoundError(self.path)
+
+    @classmethod
+    def replace_all(cls, root: Path, huds: tuple[CommanderHud, ...]) -> None:
+        """Write one frame per commander; a commander no longer beating loses its frame."""
+        written = set()
+        for hud in huds:
+            frame = cls(cls.path_in(root, lookup=str(hud.commander.require_recorded().lookup)))
+            frame.path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+            frame._publish_unlocked(hud)
+            written.add(frame.path)
+        for stale in cls.matching_in(root) - written:
+            stale.unlink(missing_ok=True)
+
+    @classmethod
+    def read_all(cls, root: Path) -> tuple[CommanderHud, ...]:
+        return tuple(sorted((cls(path).read() for path in cls.matching_in(root)),
+                            key=lambda hud: hud.commander.name))

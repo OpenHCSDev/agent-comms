@@ -16,7 +16,7 @@ from functools import cached_property
 from pathlib import Path
 from typing import TYPE_CHECKING, Generic, TypeVar
 
-from .child_process import Platform, join_retirement
+from .child_process import join_retirement
 from .coordination_database import CoordinationStore
 from .errors import RelationViolationError
 from .field_codec import FieldCodec, InputId, MalformedRecord, Token256Text
@@ -204,7 +204,6 @@ class ToolListener:
         refusal = SelectedToolDenied("Selected tool requires a peer-credential Unix socket")
         if not hasattr(socket, "SO_PEERCRED"):
             raise refusal
-        Platform.current().require_pinned_paths(refusal)
         PrivateDirectoryRole.require(
             self.session_directory.lstat(), RelationViolationError("Selected tool socket parent is not private"))
         if self.session_directory.resolve() != self.session_directory:

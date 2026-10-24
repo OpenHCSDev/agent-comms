@@ -368,7 +368,7 @@ class AcknowledgedSlot(SelectedSlotState):
 class SelectedToolSlot(NativeRuntimeTable, WithoutRowid):
     """The consumed slot and its live terminal acknowledgement, in one transaction store."""
 
-    slot_id: Annotated[SlotId, FrozenColumn(primary_key=True, renamed_from=("input_id",))]
+    slot_id: Annotated[SlotId, FrozenColumn(primary_key=True)]
     call_id: Annotated[ToolCallId, FrozenColumn()]
     state: type[SelectedSlotState] = ConsumedSlot
 

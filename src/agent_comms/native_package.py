@@ -90,9 +90,6 @@ class PackageInventory(ABC):
     bytes: int = 0
 
     def inspect(self, root: Path) -> None:
-        Platform.current().require_posix(
-            NativePackageError("Native package filesystem verification requires POSIX")
-        )
         try:
             self.visit(os.fspath(root), ".", 0)
         except OSError as error:

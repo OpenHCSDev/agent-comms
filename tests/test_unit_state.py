@@ -11,6 +11,7 @@ import pytest
 from agent_comms.activity import ActivityState
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.commander_heartbeat import CommanderHeartbeat
+from agent_comms.commander_hud import CommanderFrame
 from agent_comms.external_transcript import ExternalTranscript
 from agent_comms.heartbeat_frame import HeartbeatFrame
 from agent_comms.launch_runtime import LaunchRoot
@@ -236,6 +237,14 @@ def test_stopped_child_without_lead_orders_remains_in_the_frame(held_bus):
         assert state.presence == StoppedThreadStatus()
 
 
+def test_commander_fork_gets_no_unit_card(held_bus):
+    fork = held_bus.registry.register_commander_child("judge-fork", "lead", held_bus.goals)
+    with LaunchRoot.from_path(held_bus.root).selected():
+        states = UnitState.current(
+            held_bus, "lead", HeartbeatFrame.read(held_bus, "lead", ProgressRead()))
+    assert fork.incarnation not in {state.unit for state in states}
+
+
 def test_malformed_native_source_is_unreadable_not_idle(held_bus):
     recorded_turn(held_bus, 1)
     path = held_bus.root / "state-source.jsonl"
@@ -274,6 +283,7 @@ def test_heartbeat_keeps_every_unit_when_one_checkout_is_unreadable(
         assert isinstance(cards[0], Unreadable)
         assert {card.unit.name for card in cards} >= {"worker", "outsider"}
         heartbeat.pass_body(held_bus, observed)
+        assert CommanderFrame.read_all(held_bus.root) == (observed[0].hud,)
         page = MessagePageRequest(
             DMDisplayScope.capture(
                 heartbeat.sender,

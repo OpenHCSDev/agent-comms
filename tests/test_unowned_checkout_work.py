@@ -43,7 +43,9 @@ from agent_comms.storage_rules import StorageRule
 from agent_comms.thread_execution import ExternalThreadExecution
 from agent_comms.thread_identity import CoreWatcherIncarnation
 from agent_comms.heartbeat_frame import HeartbeatFrame
-from agent_comms.todos import PendingProblemOrder, ProgressRead, ReleaseTodo, StrikeReason
+from agent_comms.todos import (
+    PendingProblemOrder, ProgressRead, ReleaseTodo, StrikeReason, TodoError,
+)
 from agent_comms.transcript_events import AssistantTranscript
 from agent_comms.turn_item import NativeItemId, NativeTurnId
 from agent_comms.ui_model.unit_state import UnitState, Unreadable
@@ -291,3 +293,21 @@ def test_a_renamed_unit_keeps_its_order_checkouts(tmp_path):
     assert rule.owns_present_checkout(renamed, checkout)
     assert not rule.owns_present_checkout(
         replace(born, name='codex-mi', storage_roots=rule.initial_roots('codex-mi')), checkout)
+
+
+def test_fire_refuses_while_the_holders_checkout_retains_work(checkout_bus: Comms):
+    """2026-10-24: fire released P602 from a unit holding nine uncommitted edits, and the
+    heartbeat's WORK HELD answered the same fact the other way one minute later."""
+    c = checkout_bus
+    lead = c.registry.require('lead').incarnation
+    rule = c.registry.storage_rule
+    checkout = rule.order_checkout(rule.initial_roots('worker'), 'P1')
+    reason = StrikeReason('The unit broke the tests its order touched and claimed they passed.')
+    (checkout / 'work.py').write_text('# not yet published\n')
+    with pytest.raises(TodoError, match=f'worker retains work in {checkout}'):
+        c.goals.fire('worker', reason, lead)
+    assert {c.goals.todos.get(problem).holder for problem in ('P1', 'P3')} == {'worker'}
+    git(checkout, 'commit', '-q', '-am', 'Published before release')
+    git(checkout, 'push', '-q', 'origin', 'worker-work')
+    released = c.goals.fire('worker', reason, lead)
+    assert {todo.id for todo in released} == {'P1', 'P3'}

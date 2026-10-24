@@ -52,6 +52,10 @@ class NotificationsView(RevisionView):
     """Whole-window changes; activity is attributed to its message participants."""
 
 
+class CommanderFramesView(RevisionView):
+    """The heartbeat's newest frame per commander; nothing else feeds the commander page."""
+
+
 class BusSourceView(RevisionView):
     def differs(self, before: tuple[FileObservation, ...], current: tuple[FileObservation, ...]) -> bool:
         return any(
