@@ -144,7 +144,9 @@ class ModelWait(TurnWait):
             yield watchdog.state(
                 ModelStalledRecovery, reason_code, elapsed_ms, phase=stalled_phase
             )
-        yield watchdog.state(AbortingRecovery, reason_code, elapsed_ms, phase=phases.ShutdownPhase())
+        yield watchdog.state(
+            AbortingRecovery, reason_code, elapsed_ms, phase=phases.ShutdownPhase()
+        )
         await session.abort_stalled_rpc()
         for started in session.started_during_abort:
             yield started
