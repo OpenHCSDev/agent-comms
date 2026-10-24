@@ -2,31 +2,56 @@
 
 from dataclasses import replace
 from pathlib import Path
-
-import pytest
 from typing import Type
 
+import pytest
+
 from agent_comms.audience_manifest import AudiencedMessage, FrozenRecipient, freeze_audience
-from conftest import installed_comms
-from agent_comms.wake_policy import MessageAudience
 from agent_comms.field_codec import ThreadLookup
 from agent_comms.mentions import ThreadMention
-from agent_comms.messages import AckKind, HandoffKind, InfoKind, MembershipTransition, MembershipConversationRole, Message, MessageKind, NoticeRole, JoinedMembership
+from agent_comms.messages import (
+    AckKind,
+    HandoffKind,
+    InfoKind,
+    JoinedMembership,
+    MembershipConversationRole,
+    MembershipTransition,
+    Message,
+    MessageKind,
+    NoticeRole,
+)
 from agent_comms.obligation_states import SilentResponse
 from agent_comms.response_policy import CollectivePolicy, InformationalPolicy, MentionedOnlyPolicy
 from agent_comms.thread_identity import AgentThreadRole, ThreadRole, UserThreadRole
-from agent_comms.wake import MessageControl, resolve_wake, resolve_wake_cohort, OrdinaryControl, SystemControl
-from agent_comms.wake_policy import BoundedTriageWake, FullWake, PassiveWake, NoWakeDecision, NoWakeReason, RecipientDecision, WakeDecision
 from agent_comms.threads import Thread
+from agent_comms.wake import (
+    MessageControl,
+    OrdinaryControl,
+    SystemControl,
+    resolve_wake,
+    resolve_wake_cohort,
+)
+from agent_comms.wake_policy import (
+    BoundedTriageWake,
+    FullWake,
+    MessageAudience,
+    NoWakeDecision,
+    NoWakeReason,
+    PassiveWake,
+    RecipientDecision,
+    WakeDecision,
+)
+from bus_record_fixture import (
+    OWNER_LOOKUP,
+    RECIPIENT_LOOKUP,
+    RENAMED_OWNER_LOOKUP,
+    RENAMED_RECIPIENT_LOOKUP,
+    SENDER_LOOKUP,
+    UNRELATED_LOOKUP,
+)
+from conftest import installed_comms
 
-ALPHA_LOOKUP = ThreadLookup("a" * 32)
-BETA_LOOKUP = ThreadLookup("b" * 32)
-OUTSIDER_LOOKUP = ThreadLookup("c" * 32)
-RENAMED_ALPHA_LOOKUP = ThreadLookup("d" * 32)
-RENAMED_BETA_LOOKUP = ThreadLookup("e" * 32)
-SENDER_LOOKUP = ThreadLookup("f" * 32)
-
-MEMBERS = (FrozenRecipient(ALPHA_LOOKUP, "alpha"), FrozenRecipient(BETA_LOOKUP, "beta"))
+MEMBERS = (FrozenRecipient(SENDER_LOOKUP, "alpha"), FrozenRecipient(RECIPIENT_LOOKUP, "beta"))
 
 
 def stored(
@@ -50,13 +75,13 @@ def stored(
 
 def audience(message: Message, members: tuple[FrozenRecipient, ...] = MEMBERS) -> AudiencedMessage:
     return freeze_audience(
-        message, members, "source-revision-42", sender_lookup=SENDER_LOOKUP, sender_name="sender"
+        message, members, "source-revision-42", sender_lookup=UNRELATED_LOOKUP, sender_name="sender"
     )
 
 
 def decide(
     message: Message,
-    lookup: ThreadLookup = ALPHA_LOOKUP,
+    lookup: ThreadLookup = SENDER_LOOKUP,
     members: tuple[FrozenRecipient, ...] = MEMBERS,
     control: type[MessageControl] = OrdinaryControl,
 ) -> RecipientDecision | None:
@@ -83,7 +108,7 @@ def test_ordinary_unmentioned_channel_reaches_all_members_without_full_turns(
         WakeDecision(member.recipient_lookup, MessageAudience.COLLECTIVE, BoundedTriageWake())
         for member in MEMBERS
     ]
-    assert decide(message, OUTSIDER_LOOKUP) is None
+    assert decide(message, OWNER_LOOKUP) is None
     assert message.target == "#team"
     # Shadow does not change the existing sender-role-dependent live behavior.
     assert message.role.response_policy(message) is policy.instance()
@@ -96,21 +121,21 @@ def test_direct_is_full_only_for_frozen_lookup_and_route_ignores_sender_role(
 ) -> None:
     message = stored("alpha", sender_role=sender_role)
     members = MEMBERS[:1]
-    assert decide(message, ALPHA_LOOKUP, members) == WakeDecision(
-        ALPHA_LOOKUP, MessageAudience.DIRECT, FullWake()
+    assert decide(message, SENDER_LOOKUP, members) == WakeDecision(
+        SENDER_LOOKUP, MessageAudience.DIRECT, FullWake()
     )
-    assert decide(message, BETA_LOOKUP, members) is None
+    assert decide(message, RECIPIENT_LOOKUP, members) is None
     assert message.exact_reply_target == "sender"
     assert message.reply_target == reply_target
 
 
 def test_valid_mention_selects_canonical_name_and_leaves_other_member_unaddressed() -> None:
     message = stored("#team", "@beta investigate", mentions=(ThreadMention("beta", 0, 5),))
-    assert decide(message, BETA_LOOKUP) == WakeDecision(
-        BETA_LOOKUP, MessageAudience.MENTIONED, FullWake()
+    assert decide(message, RECIPIENT_LOOKUP) == WakeDecision(
+        RECIPIENT_LOOKUP, MessageAudience.MENTIONED, FullWake()
     )
-    assert decide(message, ALPHA_LOOKUP) == NoWakeDecision(ALPHA_LOOKUP)
-    assert decide(message, OUTSIDER_LOOKUP) is None  # Not in the frozen audience.
+    assert decide(message, SENDER_LOOKUP) == NoWakeDecision(SENDER_LOOKUP)
+    assert decide(message, OWNER_LOOKUP) is None  # Not in the frozen audience.
     assert MEMBERS[0] in audience(message).recipients  # The bus must retain both identities.
     assert message.exact_reply_target == "#team"
     assert message.role.response_policy(message) is MentionedOnlyPolicy.instance()
@@ -121,14 +146,14 @@ def test_valid_mention_selects_canonical_name_and_leaves_other_member_unaddresse
 
 def test_renamed_mentioned_member_preserves_stable_lookup_not_old_alias() -> None:
     members = (
-        FrozenRecipient(RENAMED_ALPHA_LOOKUP, "alpha"),
-        FrozenRecipient(RENAMED_BETA_LOOKUP, "renamed"),
+        FrozenRecipient(RENAMED_OWNER_LOOKUP, "alpha"),
+        FrozenRecipient(RENAMED_RECIPIENT_LOOKUP, "renamed"),
     )
     message = stored("#team", "@beta investigate", mentions=(ThreadMention("renamed", 0, 5),))
-    assert decide(message, RENAMED_BETA_LOOKUP, members) == WakeDecision(
-        RENAMED_BETA_LOOKUP, MessageAudience.MENTIONED, FullWake()
+    assert decide(message, RENAMED_RECIPIENT_LOOKUP, members) == WakeDecision(
+        RENAMED_RECIPIENT_LOOKUP, MessageAudience.MENTIONED, FullWake()
     )
-    assert decide(message, RENAMED_ALPHA_LOOKUP, members) == NoWakeDecision(RENAMED_ALPHA_LOOKUP)
+    assert decide(message, RENAMED_OWNER_LOOKUP, members) == NoWakeDecision(RENAMED_OWNER_LOOKUP)
     assert members[0] in audience(message, members).recipients
     # The textual old alias and mutable current tags are not consulted.
     assert "beta" not in audience(message, members).canonical_members
@@ -157,10 +182,10 @@ def test_mixed_in_and_out_of_scope_mentions_only_name_valid_frozen_member() -> N
         "@outsider and @beta act",
         mentions=(ThreadMention("outsider", 0, 9), ThreadMention("beta", 14, 19)),
     )
-    assert decide(message, BETA_LOOKUP) == WakeDecision(
-        BETA_LOOKUP, MessageAudience.MENTIONED, FullWake()
+    assert decide(message, RECIPIENT_LOOKUP) == WakeDecision(
+        RECIPIENT_LOOKUP, MessageAudience.MENTIONED, FullWake()
     )
-    assert decide(message, ALPHA_LOOKUP) == NoWakeDecision(ALPHA_LOOKUP)
+    assert decide(message, SENDER_LOOKUP) == NoWakeDecision(SENDER_LOOKUP)
     assert MEMBERS[0] in audience(message).recipients
 
 
@@ -171,7 +196,7 @@ def test_notice_and_membership_are_passive_regardless_of_control_or_sender(
 ) -> None:
     message = replace(stored(sender_role=AgentThreadRole), role=role)
     assert decide(message, control=control) == WakeDecision(
-        ALPHA_LOOKUP, MessageAudience.COLLECTIVE, PassiveWake()
+        SENDER_LOOKUP, MessageAudience.COLLECTIVE, PassiveWake()
     )
 
 
@@ -186,14 +211,14 @@ def test_explicit_control_on_mentioned_row_is_passive_not_unmentioned_observer()
 def test_system_control_must_be_explicit_not_guessed_from_body_or_ack_type() -> None:
     ordinary = stored("#team", "system command", type=AckKind)
     assert decide(ordinary) == WakeDecision(
-        ALPHA_LOOKUP, MessageAudience.COLLECTIVE, BoundedTriageWake()
+        SENDER_LOOKUP, MessageAudience.COLLECTIVE, BoundedTriageWake()
     )
     assert decide(ordinary, control=SystemControl) == WakeDecision(
-        ALPHA_LOOKUP, MessageAudience.COLLECTIVE, PassiveWake()
+        SENDER_LOOKUP, MessageAudience.COLLECTIVE, PassiveWake()
     )
     direct = stored("alpha", sender_role=UserThreadRole)
     assert decide(direct, members=MEMBERS[:1], control=SystemControl) == (
-        WakeDecision(ALPHA_LOOKUP, MessageAudience.DIRECT, PassiveWake())
+        WakeDecision(SENDER_LOOKUP, MessageAudience.DIRECT, PassiveWake())
     )
     from agent_comms.field_codec import FieldCodec, MalformedRecord
 
@@ -204,15 +229,15 @@ def test_system_control_must_be_explicit_not_guessed_from_body_or_ack_type() -> 
 
 def test_no_wake_is_not_a_passive_claim() -> None:
     mentioned = stored("#team", "@beta investigate", mentions=(ThreadMention("beta", 0, 5),))
-    observer = decide(mentioned, ALPHA_LOOKUP)
-    assert observer == NoWakeDecision(ALPHA_LOOKUP, NoWakeReason.UNMENTIONED_OBSERVER)
+    observer = decide(mentioned, SENDER_LOOKUP)
+    assert observer == NoWakeDecision(SENDER_LOOKUP, NoWakeReason.UNMENTIONED_OBSERVER)
     assert observer.claim_decisions() == ()
     assert observer.wake_policy() == PassiveWake()
     assert not hasattr(observer, "wake_mode")
     assert not hasattr(observer, "audience")
     assert MEMBERS[0] in audience(mentioned).recipients
-    assert decide(mentioned, OUTSIDER_LOOKUP) is None
-    passive = WakeDecision(ALPHA_LOOKUP, MessageAudience.DIRECT, PassiveWake())
+    assert decide(mentioned, OWNER_LOOKUP) is None
+    passive = WakeDecision(SENDER_LOOKUP, MessageAudience.DIRECT, PassiveWake())
     assert passive.claim_decisions() == (passive,)
     assert passive.wake_policy() == observer.wake_policy()
     assert passive.to_wire() != observer.to_wire()
@@ -224,7 +249,7 @@ def test_excluded_recipient_and_bad_identity_fail_closed() -> None:
     assert (
         resolve_wake(
             manifest,
-            recipient=FrozenRecipient(ALPHA_LOOKUP, "someone_else"),
+            recipient=FrozenRecipient(SENDER_LOOKUP, "someone_else"),
             control=OrdinaryControl,
         )
         is None
@@ -232,7 +257,7 @@ def test_excluded_recipient_and_bad_identity_fail_closed() -> None:
     with pytest.raises(ValueError):
         decide(stored("alpha"), members=MEMBERS)
     with pytest.raises(ValueError):
-        decide(stored("alpha"), BETA_LOOKUP, members=(MEMBERS[1],))
+        decide(stored("alpha"), RECIPIENT_LOOKUP, members=(MEMBERS[1],))
     with pytest.raises(ValueError):
         resolve_wake(
             replace(manifest, seq=0),
@@ -246,7 +271,7 @@ def test_full_cohort_preserves_direct_control_and_fail_closed_envelope() -> None
     assert resolve_wake_cohort(
         audience(direct, MEMBERS[:1]),
         control=OrdinaryControl,
-    ) == (WakeDecision(ALPHA_LOOKUP, MessageAudience.DIRECT, FullWake()),)
+    ) == (WakeDecision(SENDER_LOOKUP, MessageAudience.DIRECT, FullWake()),)
     collective = stored()
     assert resolve_wake_cohort(
         audience(collective),
@@ -278,7 +303,7 @@ def test_exact_stored_channel_routes_no_wildcard_or_silence_inference(
         "sender",
     ]
     assert decide(broadcast) == WakeDecision(
-        ALPHA_LOOKUP, MessageAudience.COLLECTIVE, BoundedTriageWake()
+        SENDER_LOOKUP, MessageAudience.COLLECTIVE, BoundedTriageWake()
     )
     assert SilentResponse.declared_name == "silent"  # Existing explicit disposition type.
     assert channel.exact_reply_target == "#team"
@@ -300,7 +325,7 @@ def test_pure_shadow_does_not_mutate_envelope_state_or_live_cursor(tmp_path: Pat
         manifest,
         recipient=MEMBERS[0],
         control=OrdinaryControl,
-    ) == WakeDecision(ALPHA_LOOKUP, MessageAudience.COLLECTIVE, BoundedTriageWake())
+    ) == WakeDecision(SENDER_LOOKUP, MessageAudience.COLLECTIVE, BoundedTriageWake())
     assert message.exact_reply_target == "#team"
     assert message.to_wire() == before
     assert comms.bus.bus.revision() == high_water

@@ -1,6 +1,5 @@
 """S5 identity boundaries: process, turn, provenance and saved-data preservation."""
 
-
 import json
 import os
 from dataclasses import replace
@@ -8,23 +7,22 @@ from dataclasses import replace
 import pytest
 
 from agent_comms.channel_targets import ThreadTarget
-from agent_comms.session_file import RegistrySessionLocation
 from agent_comms.child_process import NoProcess, ProcessIdentity
 from agent_comms.comms import wire
-from conftest import installed_comms
 from agent_comms.errors import RelationViolationError
 from agent_comms.field_codec import FieldCodec, TurnId
 from agent_comms.read_basis import Conversation
-from agent_comms.turn_lease import NoTurnLease
 from agent_comms.read_ledger import ReadDocument
 from agent_comms.registration import Registration
+from agent_comms.session_file import RegistrySessionLocation
+from agent_comms.thread_execution import ExternalThreadExecution
 from agent_comms.thread_identity import (
     ClaimedIdentity,
     GenerationCounter,
     RecordedThreadIncarnation,
     TurnIdentity,
 )
-from agent_comms.thread_execution import ExternalThreadExecution
+from agent_comms.thread_model import DeclaredModel
 from agent_comms.thread_status import (
     ArchivedThreadStatus,
     ConnectedThreadStatus,
@@ -32,10 +30,11 @@ from agent_comms.thread_status import (
     RunningThreadStatus,
     StoppedThreadStatus,
 )
-from agent_comms.turn_lease import FinishedTurnFence, NoFinishedTurn
 from agent_comms.thread_text import GivenThreadText, NoThreadText
-from agent_comms.thread_model import DeclaredModel
 from agent_comms.threads import Thread
+from agent_comms.turn_lease import FinishedTurnFence, NoFinishedTurn, NoTurnLease
+from bus_record_fixture import OWNER_LOOKUP
+from conftest import installed_comms
 
 
 def registry_with_owner(tmp_path):
@@ -239,14 +238,17 @@ def test_coordination_assignment_generation_is_independent_of_registry_process(t
     registry = registry_with_owner(tmp_path)
     initial = registry.snapshot().owner_identity("owner")
     with Coordination(str(tmp_path / "coordination.sqlite3")) as store:
-        participant = store.participants.register("lookup", committed=True).value
+        participant = store.participants.register(OWNER_LOOKUP, committed=True).value
         advanced = store.participants.advance_generation(
-            "lookup", expected_generation=participant.owner_identity.generation
+            OWNER_LOOKUP, expected_generation=participant.owner_identity.generation
         ).value
         assert advanced.owner_identity.generation == participant.owner_identity.generation + 1
         assert registry.snapshot().owner_identity("owner") == initial
         registry.register(registry.require("owner"), new_owner=True)
-        assert store.participants.get("lookup").owner_identity.generation == advanced.owner_identity.generation
+        assert (
+            store.participants.get(OWNER_LOOKUP).owner_identity.generation
+            == advanced.owner_identity.generation
+        )
 
 
 def test_saved_read_ledger_survives_reopen_and_new_ack(tmp_path):

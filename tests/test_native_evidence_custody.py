@@ -9,14 +9,15 @@ from concurrent.futures import ThreadPoolExecutor
 
 import pytest
 
-from agent_comms.native_entries import NativeEntry, NativeEvidenceScope
-from agent_comms.native_input_record import NativeInputLocation
-from agent_comms.native_transcript import NativeTranscript
-from agent_comms.native_pi import NativeContextJournal, NativeContextProof, PrivateEvidenceRead
-from agent_comms.native_failures import NativePiUnavailable
-from agent_comms.coordinator import Coordination
 from agent_comms.coordination_database import CoordinationStore
+from agent_comms.coordinator import Coordination
+from agent_comms.native_entries import NativeEntry, NativeEvidenceScope
+from agent_comms.native_failures import NativePiUnavailable
+from agent_comms.native_input_record import NativeInputLocation
+from agent_comms.native_pi import NativeContextJournal, NativeContextProof, PrivateEvidenceRead
+from agent_comms.native_transcript import NativeTranscript
 from agent_comms.store_files import StoreLockContention, _store_lock
+from bus_record_fixture import OWNER_LOOKUP
 from test_native_pi import INPUT_ID, _evidence
 
 
@@ -169,7 +170,7 @@ async def test_joined_worker_retains_original_evidence_and_owns_sqlite_until_can
     before = session.read_bytes(), files.input_proof.read_bytes()
     path = CoordinationStore.path_in(private_comms.root)
     with Coordination(str(path), clock_ms=lambda: 1234) as original:
-        original.participants.register('original', committed=True)
+        original.participants.register(OWNER_LOOKUP, committed=True)
         original_connection = original.session._connection
         entered, release = threading.Event(), threading.Event()
         worker_connections = []
@@ -179,7 +180,10 @@ async def test_joined_worker_retains_original_evidence_and_owns_sqlite_until_can
                 assert store.session.now() == original.session.now()
                 worker_connections.append(store.session._connection)
                 with store.session.read():
-                    assert store.participants.get('original').owner_identity.owner_lookup == 'original'
+                    assert (
+                        store.participants.get(OWNER_LOOKUP).owner_identity.owner_lookup
+                        == OWNER_LOOKUP
+                    )
                     NativeContextProof.read_evidence(files, INPUT_ID, evidence=evidence,
                                                      session_entry_start=input_record.start)
                     entered.set()
@@ -204,7 +208,10 @@ async def test_joined_worker_retains_original_evidence_and_owns_sqlite_until_can
                 with pytest.raises(sqlite3.ProgrammingError):
                     _ = worker_connections[0].in_transaction
                 with original.session.read():
-                    assert original.participants.get('original').owner_identity.owner_lookup == 'original'
+                    assert (
+                        original.participants.get(OWNER_LOOKUP).owner_identity.owner_lookup
+                        == OWNER_LOOKUP
+                    )
             finally:
                 release.set()
                 if not pending.done():

@@ -13,26 +13,26 @@ import sys
 from contextlib import closing
 from pathlib import Path
 
+from agent_comms.activity import ActivityStore
+from agent_comms.bus import Bus
 from agent_comms.cli_commands import (
     CliCommand,
     PlannedReconcileCliCommand,
     ReadBackCliCommand,
     ReconcileStoresCliCommand,
 )
-from agent_comms.activity import ActivityStore
 from agent_comms.coordination_database import CoordinationStore
 from agent_comms.coordination_session import CoordinationSession
 from agent_comms.coordinator import Coordination
+from agent_comms.installer.backup import bus_files
+from agent_comms.locked_store import SQLiteFile
+from agent_comms.maintenance_barrier import MaintenanceHolder, NoMaintenanceHolder
 from agent_comms.native_runtime_input import NativeRuntimeInput
 from agent_comms.private_runtime_schema import PrivateCoordinatorSchema
 from agent_comms.triage_native_sources import TriageNativeSources
-from agent_comms.bus import Bus
-from agent_comms.maintenance_barrier import MaintenanceHolder, NoMaintenanceHolder
-from agent_comms.installer.backup import bus_files
-from agent_comms.locked_store import SQLiteFile
 from agent_comms.typed_table import ReconciledFile
+from bus_record_fixture import OWNER_LOOKUP
 from conftest import maintenance_held
-
 
 NO_MAINTENANCE_HOLDER = NoMaintenanceHolder()
 
@@ -163,8 +163,8 @@ def test_private_carry_plans_and_restores_missing_native_tables(private_comms):
     root = private_comms.root
     database = CoordinationStore.path_in(root)
     with Coordination(database) as store:
-        store.participants.register("retained", committed=True)
-        retained = store.participants.get("retained")
+        store.participants.register(OWNER_LOOKUP, committed=True)
+        retained = store.participants.get(OWNER_LOOKUP)
         store.session._connection.execute(f"DROP TABLE {TriageNativeSources.declared_name}")
 
     with maintenance_held(root) as holder:
@@ -180,7 +180,7 @@ def test_private_carry_plans_and_restores_missing_native_tables(private_comms):
             root, holder, PlannedReconcileCliCommand).stdout)["rewritten"] == []
 
     with Coordination(database) as store:
-        assert store.participants.get("retained") == retained
+        assert store.participants.get(OWNER_LOOKUP) == retained
         PrivateCoordinatorSchema.require_installed(store.session._connection)
 
 

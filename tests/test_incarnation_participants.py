@@ -11,6 +11,7 @@ from agent_comms.participant_store import ParticipantStore
 from agent_comms.thread_identity import AgentThreadRole, UserThreadRole
 from agent_comms.thread_text import GivenThreadText
 from agent_comms.threads import Thread
+from bus_record_fixture import UNRELATED_LOOKUP
 
 
 def test_incarnation_has_one_participant_before_registration_returns(tmp_path):
@@ -55,5 +56,5 @@ def test_existing_public_participant_survives_native_root_preparation(tmp_path):
 
 def test_missing_participant_reader_names_lookup(tmp_path):
     with CoordinationSession(str(CoordinationStore.path_in(tmp_path))) as session:
-        with pytest.raises(ParticipantNotRegistered, match="absent-lookup"):
-            ParticipantStore(session).get("absent-lookup")
+        with pytest.raises(ParticipantNotRegistered, match=UNRELATED_LOOKUP):
+            ParticipantStore(session).get(UNRELATED_LOOKUP)
