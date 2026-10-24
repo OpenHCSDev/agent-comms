@@ -29,6 +29,7 @@ from agent_comms.triage_native_sources import TriageNativeSources
 from agent_comms.bus import Bus
 from agent_comms.maintenance_barrier import HOLDER_NONCE
 from agent_comms.installer.backup import bus_files
+from agent_comms.locked_store import SQLiteFile
 from agent_comms.typed_table import ReconciledFile
 from conftest import maintenance_held
 
@@ -113,6 +114,43 @@ def test_read_back_under_the_hold_writes_nothing_on_a_drifted_bus(private_comms)
         before = bus_files(root)
         completed = reconcile(root, nonce, ReadBackCliCommand)
         assert completed.returncode == 0, completed.stdout + completed.stderr
+        assert bus_files(root) == before
+
+
+def test_a_settled_bus_reconciles_without_moving_committed_wal_frames(private_comms):
+    """An owner that ends without the last close leaves its commits in the WAL. The practice
+    copy is a SQLite backup holding none, so the live bus is settled before its snapshot;
+    otherwise reconcile's own last close moves the frames into the file, and the carry
+    refuses a change no step names."""
+    root = private_comms.root
+    # The child rewrites one row in place: frames in the WAL, the same rows in the store.
+    framed = subprocess.run(
+        [sys.executable, "-c",
+         "import os, sqlite3, sys\n"
+         "for path in sys.argv[1:]:\n"
+         "    db = sqlite3.connect(path, isolation_level=None)\n"
+         "    if db.execute('PRAGMA journal_mode').fetchone() != ('wal',):\n"
+         "        continue\n"
+         "    db.execute('PRAGMA wal_autocheckpoint=0')\n"
+         "    tables = db.execute(\"SELECT name FROM sqlite_master WHERE type='table'\")\n"
+         "    for (table,) in tables.fetchall():\n"
+         "        try:\n"
+         "            if db.execute(f'UPDATE \"{table}\" SET rowid=rowid').rowcount:\n"
+         "                print(path, flush=True)\n"
+         "                os._exit(0)\n"
+         "        except sqlite3.OperationalError:\n"
+         "            pass\n"
+         "os._exit(1)\n",
+         *map(str, ReconciledFile.existing_in(root))],
+        capture_output=True, text=True, check=True, timeout=60)
+    database = Path(framed.stdout.strip())
+    assert SQLiteFile.wal_path(database).stat().st_size
+    with maintenance_held(root) as nonce:
+        SQLiteFile.settle(database)
+        before = bus_files(root)
+        completed = reconcile(root, nonce)
+        assert completed.returncode == 0, completed.stdout + completed.stderr
+        assert json.loads(completed.stdout)["rewritten"] == []
         assert bus_files(root) == before
 
 

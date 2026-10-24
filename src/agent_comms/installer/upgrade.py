@@ -61,7 +61,9 @@ from agent_comms.declared_family import DeclaredFamily
 from agent_comms.field_codec import FieldCodec, MalformedRecord, PathText
 from agent_comms.host_services import HostService, RestartedService
 from agent_comms.install_choices import InstallerChoice, RunMode
-from agent_comms.installer.backup import BackupReport, RestoreSpace, SavedFile, StoreBackup, bus_files
+from agent_comms.installer.backup import (
+    BackupReport, RestoreSpace, SavedFile, StoreBackup, bus_files, settle_bus_files,
+)
 from agent_comms.installer.refusals import InstallRolledBack, UpgradeRefused
 from agent_comms.installer.owner_starts import OwnerStart
 from agent_comms.installer.carry import STEPS, CarryChain
@@ -912,9 +914,12 @@ class PreparedMigration(Extendable):
 
     @classmethod
     def capture(cls, hold: MaintenanceState, outgoing: Stack) -> PreparedMigration:
-        """The maintenance barrier keeps every carried writer out until the caller's backup ends."""
+        """The maintenance barrier keeps every carried writer out until the caller's backup ends.
+        Settling first moves committed WAL frames into their files, as the practice copy's
+        backup did, so no later last close rewrites a file no step names."""
         root = Path(hold.root)
         with FileScanPhase("before migration").running(outgoing.commands.clock):
+            settle_bus_files(root)
             before = bus_files(root)
         return cls(hold, before, outgoing.verify(root))
 
@@ -1049,8 +1054,8 @@ class ChangedInstall(ExistingBusInstall[RehearsedFiles]):
                 self.installed.publish(self.root)
                 holder.close()
                 maintenance.clear(restored_hold)
-                self.installed.start_services(services)
                 started = self.installed.start(self.root, running)
+                self.installed.start_services(services)
                 print(f"install: restored after failure ({type(error).__name__}: {error}); "
                       f"original runtime selected; owners: {started}; "
                       f"backup: {migration.backup.description}",
