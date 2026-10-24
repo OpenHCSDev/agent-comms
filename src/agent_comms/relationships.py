@@ -719,7 +719,7 @@ class ThreadRelationships:
         ):
             for goal in owner.goal.active():
                 ThreadRelationships._project_goal_contacts(goal, owner, registry, contacts, diagnostics)
-        return (tuple(row for row in contacts if row.counterpart(thread) is not None),
+        return (tuple(row for row in contacts if row.incident(thread)),
                 tuple(row for row in diagnostics if row.owner == thread.name))
 
     @staticmethod
