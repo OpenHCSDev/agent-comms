@@ -21,12 +21,20 @@ class RuleAudience(DeclaredFamily, affix="Audience"):
     @abstractmethod
     def unit_rules(cls, rule: RuleFile) -> tuple[str, ...]: ...
 
+    @classmethod
+    @abstractmethod
+    def order_reference(cls, rule: RuleFile) -> tuple[str, ...]: ...
+
 
 class CommanderAudience(RuleAudience):
     """The commander's own process (roasts, strikes, timers, coordination): units never carry it."""
 
     @classmethod
     def unit_rules(cls, rule: RuleFile) -> tuple[str, ...]:
+        return ()
+
+    @classmethod
+    def order_reference(cls, rule: RuleFile) -> tuple[str, ...]:
         return ()
 
 
@@ -36,6 +44,10 @@ class FleetAudience(RuleAudience):
     @classmethod
     def unit_rules(cls, rule: RuleFile) -> tuple[str, ...]:
         return (rule.render(),)
+
+    @classmethod
+    def order_reference(cls, rule: RuleFile) -> tuple[str, ...]:
+        return (rule.name,)
 
 
 @dataclass(frozen=True)

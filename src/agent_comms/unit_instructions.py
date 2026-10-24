@@ -25,6 +25,7 @@ class UnitInstructions:
         sections = (
             OWNER_INSTRUCTIONS.read_text(encoding="utf-8"),
             CommanderPackage.indictment().read_text(encoding="utf-8"),
+            CommanderPackage.voice().read_text(encoding="utf-8"),
             "# Rules every unit follows\n\n"
             + "\n\n".join(text for rule in RuleFile.packaged() for text in rule.unit_rules()),
             (Slop.catalog() / "README.md").read_text(encoding="utf-8"),
