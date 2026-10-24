@@ -6,7 +6,7 @@ from agent_comms.field_codec import FieldCodec, TurnId
 from agent_comms.image_input import ImageInput
 from agent_comms.native_tool_call import OwnerToolConnection
 from agent_comms.pi_commands import Prompt
-from agent_comms.thread_identity import RegisteredTurn, TurnIdentity
+from agent_comms.thread_identity import TurnIdentity
 from agent_comms.turn_context import (
     ContextManifest,
     OwnerProvenance,
@@ -26,7 +26,7 @@ def manifest(owner, generation=1):
     return ContextManifest(
         owner.incarnation,
         RecordedContextTurn(
-            RegisteredTurn(TurnId('ab87f599dc0a50a56b7c65de71c39426')),
+            TurnId('ab87f599dc0a50a56b7c65de71c39426'),
             TurnIdentity(owner.incarnation, generation),
         ),
         (segment,),

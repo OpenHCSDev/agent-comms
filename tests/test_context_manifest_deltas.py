@@ -11,7 +11,7 @@ import json
 
 from agent_comms.field_codec import FieldCodec, TurnId
 from agent_comms.native_session_reopen import NativeSessionIdentity
-from agent_comms.thread_identity import RegisteredTurn, TurnIdentity
+from agent_comms.thread_identity import TurnIdentity
 from agent_comms.turn_context import ObservedDispatchRequest
 from agent_comms.turn_context import (
     ContextManifest, JournalProvenance, NativeProvenance, RecordedContextPredecessor,
@@ -36,7 +36,7 @@ def context(owner, path, count, turn):
     return ContextManifest(
         owner.incarnation,
         RecordedContextTurn(
-            RegisteredTurn(TurnId(f"{turn:032x}")), TurnIdentity(owner.incarnation, turn)
+            TurnId(f"{turn:032x}"), TurnIdentity(owner.incarnation, turn)
         ),
         (
             segment(SystemLayerSegment, 's' * 27000),
@@ -60,7 +60,7 @@ def test_context_deltas_restore_original_text_and_incremental_membership(tmp_pat
         replace(
             second,
             turn=replace(
-                second.turn, identity=RegisteredTurn(TurnId('431ad49b3e0129a11ea5a0320c188024'))
+                second.turn, identity=TurnId('431ad49b3e0129a11ea5a0320c188024')
             ),
             request_id=ObservedDispatchRequest('request-3'),
         ),

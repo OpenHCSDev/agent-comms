@@ -20,18 +20,19 @@ from .cli_result import CliResult
 from .declared_family import DeclaredFamily
 from .field_codec import (
     FieldCodec,
+    IdentityExclude,
     NullMember,
     Sha256Text,
     SingleFieldValue,
     SubclassUnion,
-    IdentityExclude,
+    TurnId,
     WireOmitDefault,
 )
 from .goals import Goal, NoGoal
 from .message_reference import MessageReference
 from .native_session_reopen import NativeSessionIdentity
 from .peer_relevance import AlwaysListed, GoalShown, PeerRelevance
-from .thread_identity import ThreadIncarnation, RegisteredTurn, TurnIdentity
+from .thread_identity import ThreadIncarnation, TurnIdentity
 from .tool_result import DeclaredReply
 
 if TYPE_CHECKING:
@@ -1194,7 +1195,7 @@ class ContextTurn(DeclaredFamily, affix="ContextTurn"):
 
 @dataclass(frozen=True)
 class RecordedContextTurn(ContextTurn):
-    identity: RegisteredTurn
+    identity: TurnId
     occurrence: TurnIdentity
 
     def __post_init__(self):
@@ -1202,7 +1203,7 @@ class RecordedContextTurn(ContextTurn):
             raise ValueError("Context requires the original authorized turn generation")
 
     def source_revision(self, owner: Thread) -> str:
-        return self.identity.value
+        return self.identity
 
     def require_recorded(self) -> RecordedContextTurn:
         return self

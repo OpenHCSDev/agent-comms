@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING, ClassVar
 
 from .agent_backend import BusyInputPolicy, SteerInputPolicy
 from .channel_input_batch import InputBatch, SingleInputBatch
+from .field_codec import TurnId
 from .messages import Message
 from .started_input import StartedInput
 from agent_comms.turn_goal_permission import GoalPermission, TurnGoalPermission
@@ -18,7 +19,7 @@ if TYPE_CHECKING:
     from .goal_waits import GoalWait
     from .goals import GoalDeclaration
     from .input_disposition import InputDispositions
-    from .thread_identity import RecordedThreadIncarnation, RegisteredTurn
+    from .thread_identity import RecordedThreadIncarnation
     from .threads import Thread
 
 
@@ -119,7 +120,7 @@ class OriginalTurnInput(TurnInputSource):
         return super().valid_keys(text) or (self.batch.allows_multiple and text == self.prompt)
 
     def reserve(
-        self, dispositions: InputDispositions, owner: Thread, turn: RegisteredTurn,
+        self, dispositions: InputDispositions, owner: Thread, turn: TurnId,
         claim_scope: int,
         *, ownership: ExitStack,
     ) -> OriginalTurnInput:

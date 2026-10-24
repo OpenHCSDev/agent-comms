@@ -26,7 +26,7 @@ from .lifecycle_capability import Executing, LifecycleCapability
 from .locked_store import DurableFile, JsonDocument, PatternFile
 from .routing import TurnRouting
 from .store_files import _store_lock
-from .thread_identity import RegisteredTurn, ThreadIncarnation, TurnFence, TurnIdentity
+from .thread_identity import ThreadIncarnation, TurnFence, TurnIdentity
 from .turn_phase import IdlePhase, PreparingPhase, TurnPhase
 
 if TYPE_CHECKING:
@@ -68,7 +68,7 @@ class TurnDeclaration(LifecycleCapability, SubclassUnion, affix=""):
     def require_current(self, claim_scope: int, generation: int) -> None: ...
 
     @abstractmethod
-    def require_turn(self, turn_id: RegisteredTurn) -> None: ...
+    def require_turn(self, turn_id: TurnId) -> None: ...
 
     @abstractmethod
     def without_claim(self) -> TurnDeclaration: ...
@@ -85,7 +85,7 @@ class TurnDeclaration(LifecycleCapability, SubclassUnion, affix=""):
     def phase_effects(self, phase: TurnPhase) -> Iterator[TurnDeclaration]: ...
 
     @abstractmethod
-    def matches(self, turn_id: RegisteredTurn) -> bool: ...
+    def matches(self, turn_id: TurnId) -> bool: ...
 
 
 @dataclass(frozen=True)
@@ -113,7 +113,7 @@ class NoTurn(NullMember, TurnDeclaration):
     def require_current(self, claim_scope: int, generation: int) -> None:
         pass
 
-    def require_turn(self, turn_id: RegisteredTurn) -> None:
+    def require_turn(self, turn_id: TurnId) -> None:
         raise RelationViolationError("live owner does not hold the requested turn")
 
     def without_claim(self) -> NoTurn:
@@ -130,7 +130,7 @@ class NoTurn(NullMember, TurnDeclaration):
     def phase_effects(self, phase: TurnPhase) -> Iterator[TurnDeclaration]:
         return iter(())
 
-    def matches(self, turn_id: RegisteredTurn) -> bool:
+    def matches(self, turn_id: TurnId) -> bool:
         return False
 
 
@@ -247,12 +247,12 @@ class ActiveTurn(Executing, RecordMember, TurnDeclaration):
         if not self.current(claim_scope, generation):
             raise RelationViolationError("live owner turn claim_scope is no longer current")
 
-    def require_turn(self, turn_id: RegisteredTurn) -> None:
+    def require_turn(self, turn_id: TurnId) -> None:
         if not self.matches(turn_id):
             raise RelationViolationError("live owner does not hold the requested turn")
 
-    def matches(self, turn_id: RegisteredTurn) -> bool:
-        return RegisteredTurn(self.id) == turn_id
+    def matches(self, turn_id: TurnId) -> bool:
+        return self.id == turn_id
 
     def without_claim(self) -> ActiveTurn:
         return replace(self, claimed_generation=UnrecordedGeneration())
@@ -315,14 +315,14 @@ class TurnLease(ABC):
     def held(self) -> tuple[TurnLeaseFence, ...]: ...
 
     @abstractmethod
-    def attests(self, claim_scope: int, turn_id: RegisteredTurn) -> bool:
+    def attests(self, claim_scope: int, turn_id: TurnId) -> bool:
         """This lease holds ``turn_id`` under ``claim_scope``."""
 
     @abstractmethod
-    def authored(self, identity: TurnIdentity, turn: RegisteredTurn) -> bool: ...
+    def authored(self, identity: TurnIdentity, turn: TurnId) -> bool: ...
 
     @abstractmethod
-    def observes_task_turn(self, identity: TurnIdentity, turn: RegisteredTurn, idle: bool) -> bool:
+    def observes_task_turn(self, identity: TurnIdentity, turn: TurnId, idle: bool) -> bool:
         """During a turn, its exact ID or the preceding generation; idle, the caller's answer."""
 
     @abstractmethod
@@ -353,13 +353,13 @@ class NoTurnLease(NullMember, TurnLease):
     def held(self) -> tuple[TurnLeaseFence, ...]:
         return ()
 
-    def attests(self, claim_scope: int, turn_id: RegisteredTurn) -> bool:
+    def attests(self, claim_scope: int, turn_id: TurnId) -> bool:
         return False
 
-    def authored(self, identity: TurnIdentity, turn: RegisteredTurn) -> bool:
+    def authored(self, identity: TurnIdentity, turn: TurnId) -> bool:
         return False
 
-    def observes_task_turn(self, identity: TurnIdentity, turn: RegisteredTurn, idle: bool) -> bool:
+    def observes_task_turn(self, identity: TurnIdentity, turn: TurnId, idle: bool) -> bool:
         return idle
 
     @boundary_decoder
@@ -388,13 +388,13 @@ class TurnLeaseFence(TurnFence, TurnLease):
     def held(self) -> tuple[TurnLeaseFence, ...]:
         return (self,)
 
-    def attests(self, claim_scope: int, turn_id: RegisteredTurn) -> bool:
-        return self.can_attest(claim_scope) and RegisteredTurn(self.turn_id) == turn_id
+    def attests(self, claim_scope: int, turn_id: TurnId) -> bool:
+        return self.can_attest(claim_scope) and self.turn_id == turn_id
 
-    def authored(self, identity: TurnIdentity, turn: RegisteredTurn) -> bool:
-        return (self.identity, self.turn_id) == (identity, turn.value)
+    def authored(self, identity: TurnIdentity, turn: TurnId) -> bool:
+        return (self.identity, self.turn_id) == (identity, turn)
 
-    def observes_task_turn(self, identity: TurnIdentity, turn: RegisteredTurn, idle: bool) -> bool:
+    def observes_task_turn(self, identity: TurnIdentity, turn: TurnId, idle: bool) -> bool:
         return self.authored(identity, turn) or identity.generation == self.identity.generation - 1
 
     @boundary_decoder

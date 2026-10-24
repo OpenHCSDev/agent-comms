@@ -13,6 +13,7 @@ from .channel_coding_tools import CodingToolOwner
 from .coordination_session import NativeBoundary
 from .coordinator import Coordination
 from .envelope_claim_transitions import NativeClaim
+from .field_codec import TurnId
 from .input_attempt import InputAlreadyCleared
 from agent_comms.ordinary_turn_rules import (
     AcceptedInputCheck,
@@ -27,8 +28,13 @@ from agent_comms.ordinary_turn_rules import (
 )
 from .reservation_rules import ReservationRule, ReservationViolationError
 from .routing import TurnRouting
-from agent_comms.send_outcome import AuthorityChangedSend, DeferredSend, GrantedSend, RefusedSend, SendOutcome
-from .thread_identity import RegisteredTurn
+from agent_comms.send_outcome import (
+    AuthorityChangedSend,
+    DeferredSend,
+    GrantedSend,
+    RefusedSend,
+    SendOutcome,
+)
 from .turn_input_source import (
     OriginalTurnInput,
     TurnInputSource,
@@ -52,7 +58,7 @@ class OwnedSend(CodingToolOwner):
     goal_store: GoalAttemptStore
     session_id: str
     thread: Thread
-    turn: RegisteredTurn
+    turn: TurnId
     claim_generation: int
     original: OriginalTurnInput
     goal_permit: GoalTurnPermit
@@ -139,7 +145,7 @@ class OwnedSend(CodingToolOwner):
         if not self.inputs.dispositions.bind_turn_input(
             source.keys,
             claim_scope=self.claim_generation,
-            turn_id=self.turn.value,
+            turn_id=self.turn,
             native_id=native_id,
             text=sent_text,
             already_bound=already_bound,
@@ -192,7 +198,7 @@ class OwnedSend(CodingToolOwner):
             owner = snapshot.require(self.owner_name)
             canonical = resource.normalized(Path(owner.worktree))
             scope = NativeClaim(owner_claimed_generation=self.claim_generation,
-                                operation_id=slot, turn_id=self.turn.value,
+                                operation_id=slot, turn_id=self.turn,
                                 input_id=turn.command.input_id)
             return boundary.bus.publisher._publish_acquisition_unlocked(
                 snapshot, owner, canonical, scope, activity=boundary.activity)
@@ -211,7 +217,7 @@ class OwnedSend(CodingToolOwner):
         source = self.source(public_id)
         return source.valid_keys(sent_text) and all(
             self.inputs.dispositions.started(
-                key, turn_id=self.turn.value, native_id=native_id, text=sent_text
+                key, turn_id=self.turn, native_id=native_id, text=sent_text
             )
             for key in source.keys
         )

@@ -21,8 +21,15 @@ from .context_segments.wake_values import NoWakeGoalContext, WakeGoalContext, Wa
 from .declared_family import DeclaredFamily
 from .errors import RejectedEnforcementError, RelationViolationError
 from .field_codec import (
-    FieldCodec, JsonShapeFamily, JsonShapeMember, MalformedRecord, NullMember,
-    PresenceExclude, RecordMember, SubclassUnion,
+    FieldCodec,
+    JsonShapeFamily,
+    JsonShapeMember,
+    MalformedRecord,
+    NullMember,
+    PresenceExclude,
+    RecordMember,
+    SubclassUnion,
+    TurnId,
 )
 from .goal_states import ActiveGoal, GoalState
 from agent_comms.goal_turn_permit import GoalTurnPermit, NoLaunchPermit
@@ -45,7 +52,6 @@ if TYPE_CHECKING:
     from .goal_management import Goals
     from .goal_attempts import GoalAttemptStore, LaunchPermit
     from .turn_goal_account import VerifiedGoalSettlement
-    from .thread_identity import RegisteredTurn
     from .todos import Todo
 
 
@@ -588,7 +594,7 @@ class GoalDeclaration(GoalDisplay, SubclassUnion, RegistrationInheritance["GoalD
 
     @abstractmethod
     def settle(self, settlement: type[VerifiedGoalSettlement], store: GoalAttemptStore,
-               permit: LaunchPermit, turn: RegisteredTurn) -> None: ...
+               permit: LaunchPermit, turn: TurnId) -> None: ...
 
     @abstractmethod
     def instructions_for(self, goals: Goals, owner: ThreadIncarnation) -> tuple[str, ...]: ...
@@ -678,7 +684,7 @@ class NoGoal(NullMember, GoalDeclaration):
         return previous
 
     def settle(self, settlement: type[VerifiedGoalSettlement], store: GoalAttemptStore,
-               permit: LaunchPermit, turn: RegisteredTurn) -> None:
+               permit: LaunchPermit, turn: TurnId) -> None:
         pass
 
     def instructions_for(self, goals: Goals, owner: ThreadIncarnation) -> tuple[str, ...]:
@@ -785,7 +791,7 @@ class Goal(RecordMember, GoalDeclaration):
         return self
 
     def settle(self, settlement: type[VerifiedGoalSettlement], store: GoalAttemptStore,
-               permit: LaunchPermit, turn: RegisteredTurn) -> None:
+               permit: LaunchPermit, turn: TurnId) -> None:
         settlement(store, permit, self, turn).dispatch_sync(self.state)
 
     def instructions_for(self, goals: Goals, owner: ThreadIncarnation) -> tuple[str, ...]:

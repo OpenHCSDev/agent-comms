@@ -64,7 +64,7 @@ class FailedGoalTurn(TurnTerminal):
             owner=account.owner,
             goal=captured,
             lease=account.lease,
-            turn_id=account.turn.value,
+            turn_id=account.turn,
             claim_scope=account.lease.claimed_generation,
             current_owner=snapshot.threads.get(account.thread_name),
             current_claim=snapshot.claim_generation(account.thread_name),

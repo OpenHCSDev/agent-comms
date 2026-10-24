@@ -9,14 +9,13 @@ from typing import TYPE_CHECKING, Annotated
 from .channel_targets import CommandTarget
 from .declared_family import DeclaredFamily
 from .errors import RelationViolationError
-from .field_codec import FieldCodec, WireOmitDefault
+from .field_codec import FieldCodec, TurnId, WireOmitDefault
 from .goals import GoalDeclaration, GoalRevision
 from .message_reference import MessageReference
 from .owner_requests import OwnerRequestId, RequestDirective
 from .projection_source import ProjectionSource
 from .thread_identity import (
     RecordedThreadIncarnation,
-    RegisteredTurn,
     ThreadIncarnation,
     TurnIdentity,
     UserThreadRole,
@@ -406,14 +405,14 @@ class ScopedTaskDeclaration(TaskAttachment):
 @dataclass(frozen=True, kw_only=True)
 class ModelTaskDeclaration(ScopedTaskDeclaration):
     source_turn: TurnIdentity
-    source_turn_id: RegisteredTurn
+    source_turn_id: TurnId
     permits_agent_revision = True
 
     @classmethod
     def from_claim(cls, owner: Thread, scope: TaskScopeSelection, change: TaskChange, **content) -> Self:
         lease = owner.require_turn_lease()
         return cls(scope=scope.select(owner), source_turn=lease.identity,
-                   source_turn_id=RegisteredTurn(lease.turn_id), change=change, **content)
+                   source_turn_id=lease.turn_id, change=change, **content)
 
     def __post_init__(self):
         self.author.require_recorded()
@@ -443,7 +442,7 @@ class ModelTaskDeclaration(ScopedTaskDeclaration):
     def require_emission(self, owner: Thread) -> None:
         self.require_sender(owner.name)
         lease = owner.require_turn_lease()
-        if (lease.identity, lease.turn_id) != (self.source_turn, self.source_turn_id.value):
+        if (lease.identity, lease.turn_id) != (self.source_turn, self.source_turn_id):
             raise RelationViolationError("Task declaration's original turn is no longer authorized")
         self.scope.require_current(owner)
 

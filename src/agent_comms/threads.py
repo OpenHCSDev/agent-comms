@@ -24,6 +24,7 @@ from .field_codec import (
     RegistrationPolicy,
     SingleFieldValue,
     SubclassUnion,
+    TurnId,
     WireOmitDefault,
     WireRequired,
 )
@@ -63,7 +64,6 @@ from .thread_execution import NativeThreadExecution, ThreadExecution
 from .thread_identity import (
     AgentThreadRole,
     OfferedTools,
-    RegisteredTurn,
     ThreadIncarnation,
     ThreadIncarnationRecord,
     ThreadRole,
@@ -488,7 +488,7 @@ class Thread(ThreadProvenance):
     def require_current_turn(self, claim_scope: int) -> None:
         self.turn_record.read().require_current(claim_scope, self.turn_generation)
 
-    def require_turn(self, turn_id: RegisteredTurn, claim_scope: int) -> None:
+    def require_turn(self, turn_id: TurnId, claim_scope: int) -> None:
         if not self.turn_lease.attests(claim_scope, turn_id):
             raise RelationViolationError("live owner does not hold the requested turn")
 
@@ -576,10 +576,10 @@ class Thread(ThreadProvenance):
     def require_turn_lease(self) -> TurnLeaseFence:
         return self.turn_lease.require(RelationViolationError("An authorized original turn is required"))
 
-    def has_authored_turn(self, identity: TurnIdentity, turn: RegisteredTurn) -> bool:
+    def has_authored_turn(self, identity: TurnIdentity, turn: TurnId) -> bool:
         return self.turn_lease.authored(identity, turn)
 
-    def has_observed_task_turn(self, identity: TurnIdentity, turn: RegisteredTurn) -> bool:
+    def has_observed_task_turn(self, identity: TurnIdentity, turn: TurnId) -> bool:
         """Check whether a task record can refer to this thread's current or preceding turn.
 
         Reject a different thread registration. During a turn, accept its exact
@@ -592,7 +592,7 @@ class Thread(ThreadProvenance):
         return self.turn_lease.observes_task_turn(
             identity, turn,
             idle=identity.generation == self.turn_generation
-            and self.turn_record == FinishedTurn(turn.value))
+            and self.turn_record == FinishedTurn(turn))
 
     @property
     def turn_identity(self) -> TurnIdentity:
