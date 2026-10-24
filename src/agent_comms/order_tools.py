@@ -200,13 +200,8 @@ class BoardReadTool(ThreadReadTool, declared_name=None):
     """A read of one commander's board. An omitted thread reads the caller's own, and an
     empty board looks like a broken reader, so the reply names whose board it read."""
 
-    @classmethod
-    def invoke(
-        cls, comms: Comms, arguments: Mapping[str, object], *, caller: ToolCaller
-    ) -> dict[str, JsonValue]:
-        read = super().invoke(comms, arguments, caller=caller)
-        return {"board": caller.subject(FieldCodec.decode(str, arguments.get("thread", ""))),
-                **read}
+    def reply(self, read: dict[str, JsonValue], caller: ToolCaller) -> dict[str, JsonValue]:
+        return {"board": caller.subject(self.thread), **read}
 
 
 @dataclass(frozen=True, kw_only=True)
