@@ -6,18 +6,13 @@ import hashlib
 import multiprocessing
 import sqlite3
 import threading
-from agent_comms.reason_codes import GivenDetail, GivenReasonCode, NoDetail
-from agent_comms.attempt_states import AttemptFailedAttempt, SucceededAttempt
 from collections.abc import Callable
-from multiprocessing.synchronize import Event
 from multiprocessing.queues import Queue
-from pydantic import JsonValue
-from agent_comms.owner_fence import OwnerFence
-from agent_comms.selected_source_batch import SelectedSource
-from agent_comms.attempt_states import LiveAttempt
+from multiprocessing.synchronize import Event
 from pathlib import Path
 
 import pytest
+from pydantic import JsonValue
 
 from agent_comms.assignment_states import (
     AssignmentState,
@@ -29,17 +24,19 @@ from agent_comms.assignment_states import (
     PassiveAssignment,
     TriagePendingAssignment,
 )
-from agent_comms.attempt_start import AttemptStart
+from agent_comms.attempt_start import INITIAL_LEASE_DURATION_MS, AttemptStart
 from agent_comms.attempt_states import (
     AbortingAttempt,
+    AttemptFailedAttempt,
+    LiveAttempt,
     ModelRunningAttempt,
     ModelStalledAttempt,
     PromptAcceptedAttempt,
     PromptStartingAttempt,
     RetryingAttempt,
     SettlingAttempt,
+    SucceededAttempt,
 )
-from agent_comms.attempt_start import INITIAL_LEASE_DURATION_MS
 from agent_comms.coordination_errors import (
     IdentityConflict,
     IntegrityViolationError,
@@ -53,16 +50,18 @@ from agent_comms.coordination_snapshot import RecoverySnapshot
 from agent_comms.coordination_tables.assignments import WakeAssignment
 from agent_comms.coordination_tables.attempts import ReplayFact
 from agent_comms.coordination_tables.executions import (
+    AcpOrigin,
+    ExecutionProvenance,
+    GoalOrigin,
     NoReplayAssessment,
     ReplayAssessment,
     ReplayAssessments,
+    WireOrigin,
 )
-from agent_comms.coordination_tables.executions import ExecutionProvenance, WireOrigin, AcpOrigin, GoalOrigin
 from agent_comms.coordination_tables.publications import (
     PublicationIntents,
 )
 from agent_comms.coordinator import StandaloneCoordination
-from agent_comms.response_acknowledgement import canonical_publication_key
 from agent_comms.execution_states import (
     ActiveExecution,
     CompletedExecution,
@@ -70,13 +69,23 @@ from agent_comms.execution_states import (
     FailedExecution,
     PendingExecution,
 )
-from agent_comms.field_codec import FieldCodec, MessageId, ThreadLookup
-from agent_comms.messages import Message, InfoKind
-from agent_comms.owner_fence import prepare_fence_token
-from agent_comms.recovery_states import FailedRecovery, ModelStalledRecovery, RecoveredRecovery
+from agent_comms.field_codec import FieldCodec, MessageId
+from agent_comms.messages import InfoKind, Message
+from agent_comms.owner_fence import OwnerFence, prepare_fence_token
+from agent_comms.reason_codes import GivenDetail, GivenReasonCode, NoDetail
 from agent_comms.recovery_reader import RecoveryReader
+from agent_comms.recovery_states import FailedRecovery, ModelStalledRecovery, RecoveredRecovery
+from agent_comms.response_acknowledgement import canonical_publication_key
+from agent_comms.selected_source_batch import SelectedSource
 from agent_comms.turn_failure import ProviderRetryExhausted
-from agent_comms.wake_policy import BoundedTriageWake, FullWake, MessageAudience, PassiveWake, WakePolicy
+from agent_comms.wake_policy import (
+    BoundedTriageWake,
+    FullWake,
+    MessageAudience,
+    PassiveWake,
+    WakePolicy,
+)
+from bus_record_fixture import OWNER_LOOKUP, RECIPIENT_LOOKUP, SENDER_LOOKUP, UNRELATED_LOOKUP
 
 
 @pytest.fixture
@@ -94,10 +103,10 @@ def wire_source(db: StandaloneCoordination, assignment_id: str, original: Messag
     from agent_comms.selected_source_batch import SelectedSource
     from agent_comms.wake_policy import WakeDecision
 
-    audience = freeze_audience(original, (FrozenRecipient("owner", "Owner"),),
-                               "0" * 64, sender_lookup=ThreadLookup("f" * 32),
+    audience = freeze_audience(original, (FrozenRecipient(SENDER_LOOKUP, "Owner"),),
+                               "0" * 64, sender_lookup=OWNER_LOOKUP,
                                sender_name=original.sender)
-    decisions = (WakeDecision("owner", MessageAudience.DIRECT, mode),)
+    decisions = (WakeDecision(SENDER_LOOKUP, MessageAudience.DIRECT, mode),)
     delivery = PrivateRecord.from_message(
         audience, decisions=decisions, control="ordinary")
     return SelectedSource(assignment_id, db.assignments, delivery)
@@ -108,14 +117,14 @@ def ready(
 ) -> StandaloneCoordination:
     db = store(path)
     sources: tuple[SelectedSource, ...] = ()
-    assert isinstance(db.participants.register("owner", committed=True), Applied)
+    assert isinstance(db.participants.register(SENDER_LOOKUP, committed=True), Applied)
     if origin is WireOrigin:
         original = Message("owner", "Owner", "Original request", InfoKind, timestamp=1.0, seq=1)
         db.assignments.accept(
             WakeAssignment(
                 assignment_id="claim",
                 recipient="Owner",
-                recipient_lookup="owner",
+                recipient_lookup=SENDER_LOOKUP,
                 wire_seq=1,
                 message_id=original.message_id,
                 audience=MessageAudience.DIRECT,
@@ -128,7 +137,7 @@ def ready(
     db.create(
         "exec",
         origin,
-        "owner",
+        SENDER_LOOKUP,
         max_attempts,
         sources=sources,
     )
@@ -142,7 +151,7 @@ def started(db: StandaloneCoordination) -> tuple[str, OwnerFence]:
         AttemptStart(
             "exec",
             1,
-            "owner",
+            SENDER_LOOKUP,
             1,
             token,
             expected_execution_revision=2,
@@ -179,7 +188,7 @@ def _concurrent_registration(
     try:
         with StandaloneCoordination(path, clock_ms=lambda: 1_000) as db:
             gate.wait(timeout=5)
-            result = db.participants.register("owner", committed=True)
+            result = db.participants.register(SENDER_LOOKUP, committed=True)
             output.put(type(result).__name__)
     except Exception as exc:
         output.put(type(exc).__name__)
@@ -195,7 +204,7 @@ def _concurrent_start(
                 AttemptStart(
                     "exec",
                     1,
-                    "owner",
+                    SENDER_LOOKUP,
                     1,
                     token,
                     expected_execution_revision=2,
@@ -211,25 +220,25 @@ def _concurrent_start(
 
 def test_registration_complete_atomic_reopen_and_generation(db_path: Path) -> None:
     db = store(db_path)
-    original = db.participants.register("owner", committed=False)
+    original = db.participants.register(SENDER_LOOKUP, committed=False)
     assert isinstance(original, Applied)
     assert original.value.pointer.pointer_revision == 0
-    assert isinstance(db.participants.register("owner"), AlreadyApplied)
-    assert isinstance(db.participants.commit("owner"), Applied)
-    assert isinstance(db.participants.commit("owner"), AlreadyApplied)
+    assert isinstance(db.participants.register(SENDER_LOOKUP), AlreadyApplied)
+    assert isinstance(db.participants.commit(SENDER_LOOKUP), Applied)
+    assert isinstance(db.participants.commit(SENDER_LOOKUP), AlreadyApplied)
     assert isinstance(
-        db.participants.advance_generation("owner", expected_generation=1), Applied
+        db.participants.advance_generation(SENDER_LOOKUP, expected_generation=1), Applied
     )
     with pytest.raises(StaleRevision):
-        db.participants.advance_generation("owner", expected_generation=1)
+        db.participants.advance_generation(SENDER_LOOKUP, expected_generation=1)
     db.close()
     with store(db_path) as reopened:
-        assert reopened.participants.get("owner").owner_identity.generation == 2
-        assert reopened.participants.get("owner").committed
-        replay = reopened.participants.register("owner", committed=False)
+        assert reopened.participants.get(SENDER_LOOKUP).owner_identity.generation == 2
+        assert reopened.participants.get(SENDER_LOOKUP).committed
+        replay = reopened.participants.register(SENDER_LOOKUP, committed=False)
         assert isinstance(replay, AlreadyApplied)
         assert replay.value.owner_identity.generation == 2
-        assert replay.value.owner_identity.owner_lookup == "owner"
+        assert replay.value.owner_identity.owner_lookup == SENDER_LOOKUP
 
 
 
@@ -245,7 +254,7 @@ def test_claim_execution_idempotency_and_rollback(db_path: Path) -> None:
     replay = db.create(
         "exec",
         WireOrigin,
-        "owner",
+        SENDER_LOOKUP,
         2,
         sources=(wire_source(db, "claim", original, FullWake()),),
     )
@@ -256,7 +265,7 @@ def test_claim_execution_idempotency_and_rollback(db_path: Path) -> None:
         db.create(
             "exec",
             WireOrigin,
-            "owner",
+            SENDER_LOOKUP,
             2,
             sources=(wire_source(db, "claim", different, FullWake()),),
         )
@@ -267,7 +276,7 @@ def test_claim_execution_idempotency_and_rollback(db_path: Path) -> None:
 
 def test_claim_acceptance_requires_initial_mode_decision(db_path: Path) -> None:
     with store(db_path) as db:
-        db.participants.register("owner", committed=True)
+        db.participants.register(SENDER_LOOKUP, committed=True)
 
         def assignment(
             index: int,
@@ -278,7 +287,7 @@ def test_claim_acceptance_requires_initial_mode_decision(db_path: Path) -> None:
             return WakeAssignment(
                 assignment_id=f"claim-{index}",
                 recipient="Owner",
-                recipient_lookup="owner",
+                recipient_lookup=SENDER_LOOKUP,
                 wire_seq=index,
                 message_id=MessageId.mint(f"message-{index}"),
                 audience=MessageAudience.DIRECT,
@@ -330,7 +339,7 @@ def test_claim_acceptance_requires_initial_mode_decision(db_path: Path) -> None:
 
 def test_claim_preengagement_and_mixed_engagement_rollback(db_path: Path) -> None:
     with store(db_path) as db:
-        db.participants.register("owner", committed=True)
+        db.participants.register(SENDER_LOOKUP, committed=True)
         sources = []
         for index, disposition in (
             (1, TriagePendingAssignment),
@@ -343,7 +352,7 @@ def test_claim_preengagement_and_mixed_engagement_rollback(db_path: Path) -> Non
                 WakeAssignment(
                     assignment_id=str(index),
                     recipient="Owner",
-                    recipient_lookup="owner",
+                    recipient_lookup=SENDER_LOOKUP,
                     wire_seq=index,
                     message_id=original.message_id,
                     audience=MessageAudience.DIRECT,
@@ -363,7 +372,7 @@ def test_claim_preengagement_and_mixed_engagement_rollback(db_path: Path) -> Non
             db.create(
                 "exec",
                 WireOrigin,
-                "owner",
+                SENDER_LOOKUP,
                 2,
                 sources=tuple(sources),
             )
@@ -381,7 +390,7 @@ def test_token_prepared_before_transaction_and_loss_replay_ignores_mutable(db_pa
             AttemptStart(
                 "exec",
                 1,
-                "owner",
+                SENDER_LOOKUP,
                 1,
                 token,
                 expected_execution_revision=2,
@@ -403,7 +412,7 @@ def test_token_prepared_before_transaction_and_loss_replay_ignores_mutable(db_pa
             AttemptStart(
                 "exec",
                 1,
-                "owner",
+                SENDER_LOOKUP,
                 1,
                 token,
                 expected_execution_revision=2,
@@ -424,7 +433,7 @@ def test_token_prepared_before_transaction_and_loss_replay_ignores_mutable(db_pa
             AttemptStart(
                 "exec",
                 1,
-                "owner",
+                SENDER_LOOKUP,
                 1,
                 token,
                 expected_execution_revision=2,
@@ -438,7 +447,7 @@ def test_token_prepared_before_transaction_and_loss_replay_ignores_mutable(db_pa
                 AttemptStart(
                     "exec",
                     2,
-                    "owner",
+                    SENDER_LOOKUP,
                     1,
                     token,
                     expected_execution_revision=2,
@@ -452,7 +461,7 @@ def test_token_prepared_before_transaction_and_loss_replay_ignores_mutable(db_pa
             AttemptStart(
                 "exec",
                 1,
-                "owner",
+                SENDER_LOOKUP,
                 1,
                 token,
                 expected_execution_revision=2,
@@ -465,15 +474,15 @@ def test_token_prepared_before_transaction_and_loss_replay_ignores_mutable(db_pa
 def test_token_digest_is_global_and_only_digest_persists(db_path: Path) -> None:
     with ready(db_path) as db:
         token, _ = started(db)
-        db.participants.register("other", committed=True)
-        db.create("other-exec", GoalOrigin, "other", 1)
+        db.participants.register(RECIPIENT_LOOKUP, committed=True)
+        db.create("other-exec", GoalOrigin, RECIPIENT_LOOKUP, 1)
         db.mark_pending("other-exec", expected_revision=1)
         with pytest.raises(IdentityConflict):
             db.start(
                 AttemptStart(
                     "other-exec",
                     1,
-                    "other",
+                    RECIPIENT_LOOKUP,
                     1,
                     token,
                     expected_execution_revision=2,
@@ -491,8 +500,8 @@ def test_settled_snapshot_encodes_recovery_kind_separately_from_table(db_path: P
     from agent_comms.coordination_tables.recovery import RecoveryAudit
 
     with store(db_path) as db:
-        db.participants.register("owner", committed=True)
-        db.create("exec", AcpOrigin, "owner", 1)
+        db.participants.register(SENDER_LOOKUP, committed=True)
+        db.create("exec", AcpOrigin, SENDER_LOOKUP, 1)
         db.mark_pending("exec", expected_revision=1)
         _, fence = started(db)
         fence = final_evidence(db, fence)
@@ -559,19 +568,19 @@ def test_retry_partition_and_generation_fence(db_path: Path) -> None:
                 AttemptStart(
                     "exec",
                     2,
-                    "owner",
+                    SENDER_LOOKUP,
                     1,
                     prepare_fence_token(),
                     expected_execution_revision=4,
                     expected_pointer_revision=2,
                 )
             )
-        db.participants.advance_generation("owner", expected_generation=1)
+        db.participants.advance_generation(SENDER_LOOKUP, expected_generation=1)
         second = db.start(
             AttemptStart(
                 "exec",
                 2,
-                "owner",
+                SENDER_LOOKUP,
                 2,
                 prepare_fence_token(),
                 expected_execution_revision=4,
@@ -587,7 +596,7 @@ def test_retry_partition_and_generation_fence(db_path: Path) -> None:
                 AttemptStart(
                     "exec",
                     1,
-                    "owner",
+                    SENDER_LOOKUP,
                     1,
                     token,
                     expected_execution_revision=2,
@@ -691,12 +700,12 @@ def test_provider_proof_carries_until_later_attempt_records_output(
         )
         proof = deferred.value.replay.require_assessment()
         assert deferred.value.can_retry and proof.allows_retry
-        db.participants.advance_generation("owner", expected_generation=1)
+        db.participants.advance_generation(SENDER_LOOKUP, expected_generation=1)
         second = db.start(
             AttemptStart(
                 "exec",
                 2,
-                "owner",
+                SENDER_LOOKUP,
                 2,
                 prepare_fence_token(),
                 expected_execution_revision=4,
@@ -795,7 +804,7 @@ def test_retry_start_rollback_restores_prior_replay_authorization(db_path: Path)
             failure=ProviderRetryExhausted("controlled provider failure"),
         )
         assert deferred.value.can_retry
-        db.participants.advance_generation("owner", expected_generation=1)
+        db.participants.advance_generation(SENDER_LOOKUP, expected_generation=1)
         before = db.get("exec")
         prepared = prepare_fence_token()
         db.session._connection.execute(
@@ -810,7 +819,7 @@ def test_retry_start_rollback_restores_prior_replay_authorization(db_path: Path)
                 AttemptStart(
                     "exec",
                     2,
-                    "owner",
+                    SENDER_LOOKUP,
                     2,
                     prepared,
                     expected_execution_revision=4,
@@ -825,7 +834,7 @@ def test_retry_start_rollback_restores_prior_replay_authorization(db_path: Path)
             AttemptStart(
                 "exec",
                 2,
-                "owner",
+                SENDER_LOOKUP,
                 2,
                 prepared,
                 expected_execution_revision=4,
@@ -1013,12 +1022,12 @@ def test_recovered_audit_rejects_prior_attempt_incident_and_terminal(db_path: Pa
                 kind=RecoveredRecovery,
                 reason_code=GivenReasonCode("terminal"),
             )
-        db.participants.advance_generation("owner", expected_generation=1)
+        db.participants.advance_generation(SENDER_LOOKUP, expected_generation=1)
         second = db.start(
             AttemptStart(
                 "exec",
                 2,
-                "owner",
+                SENDER_LOOKUP,
                 2,
                 prepare_fence_token(),
                 expected_execution_revision=4,
@@ -1055,7 +1064,7 @@ def test_unstarted_failure_and_claim_requeue(db_path: Path) -> None:
                 AttemptStart(
                     "exec",
                     1,
-                    "owner",
+                    SENDER_LOOKUP,
                     1,
                     prepare_fence_token(),
                     expected_execution_revision=3,
@@ -1066,12 +1075,12 @@ def test_unstarted_failure_and_claim_requeue(db_path: Path) -> None:
         assert type(reopened.get("exec").execution.lifecycle) is FailedExecution
 
     with store(db_path.with_name("claim-only.sqlite3")) as db:
-        db.participants.register("owner", committed=True)
+        db.participants.register(SENDER_LOOKUP, committed=True)
         db.assignments.accept(
             WakeAssignment(
                 assignment_id="claim",
                 recipient="Owner",
-                recipient_lookup="owner",
+                recipient_lookup=SENDER_LOOKUP,
                 wire_seq=1,
                 message_id=MessageId.mint("message"),
                 audience=MessageAudience.DIRECT,
@@ -1121,7 +1130,7 @@ def test_frozen_v2_pre_attempt_deferred_execution_cannot_resume(db_path: Path) -
                 AttemptStart(
                     "exec",
                     1,
-                    "owner",
+                    SENDER_LOOKUP,
                     1,
                     prepare_fence_token(),
                     expected_execution_revision=3,
@@ -1144,13 +1153,13 @@ def test_crash_reopen_pending_starts_once_after_owner_returns(db_path: Path) -> 
     db.close()  # Owner disappeared before the attempt began; PENDING remains durable.
     with store(db_path) as returned:
         assert type(returned.get("exec").execution.lifecycle) is PendingExecution
-        returned.participants.advance_generation("owner", expected_generation=1)
+        returned.participants.advance_generation(SENDER_LOOKUP, expected_generation=1)
         token = prepare_fence_token()
         applied = returned.start(
             AttemptStart(
                 "exec",
                 1,
-                "owner",
+                SENDER_LOOKUP,
                 2,
                 token,
                 expected_execution_revision=2,
@@ -1165,7 +1174,7 @@ def test_crash_reopen_pending_starts_once_after_owner_returns(db_path: Path) -> 
             AttemptStart(
                 "exec",
                 1,
-                "owner",
+                SENDER_LOOKUP,
                 2,
                 token,
                 expected_execution_revision=2,
@@ -1179,7 +1188,7 @@ def test_crash_reopen_pending_starts_once_after_owner_returns(db_path: Path) -> 
                 AttemptStart(
                     "exec",
                     1,
-                    "owner",
+                    SENDER_LOOKUP,
                     2,
                     prepare_fence_token(),
                     expected_execution_revision=2,
@@ -1313,7 +1322,7 @@ def test_concurrent_registration_one_writer_one_replay(db_path: Path) -> None:
         assert process.exitcode == 0
     assert sorted(results) == ["AlreadyApplied", "Applied"]
     with store(db_path) as db:
-        assert db.participants.get("owner").owner_identity.generation == 1
+        assert db.participants.get(SENDER_LOOKUP).owner_identity.generation == 1
         assert (
             db.session._connection.execute("SELECT count(*) FROM participants").fetchone()[0] == 1
         )
@@ -1416,17 +1425,17 @@ def test_public_snapshot_is_one_committed_revision_during_settlement(db_path: Pa
 
 def test_public_participant_is_one_committed_revision_during_commit(db_path: Path) -> None:
     with store(db_path) as db:
-        db.participants.register("owner", committed=False)
+        db.participants.register(SENDER_LOOKUP, committed=False)
 
     observed = _read_while_other_store_waits(
         db_path,
         "participants",
-        lambda reader: reader.participants.get("owner"),
-        lambda writer: writer.participants.commit("owner"),
+        lambda reader: reader.participants.get(SENDER_LOOKUP),
+        lambda writer: writer.participants.commit(SENDER_LOOKUP),
     )
     assert not observed.committed
     with store(db_path) as db:
-        assert db.participants.get("owner").committed
+        assert db.participants.get(SENDER_LOOKUP).committed
 
 
 def test_public_read_exception_releases_transaction_and_mutators_reuse_it(db_path: Path) -> None:
@@ -1435,23 +1444,23 @@ def test_public_read_exception_releases_transaction_and_mutators_reuse_it(db_pat
             db.get("missing")
         assert not db.session._connection.in_transaction
         with pytest.raises(IdentityConflict):
-            db.participants.get("missing")
+            db.participants.get(UNRELATED_LOOKUP)
         assert not db.session._connection.in_transaction
         with db.session.writing():
             assert db.session._connection.in_transaction
             assert type(db.get("exec").execution.lifecycle) is PendingExecution
-            assert db.participants.get("owner").committed
+            assert db.participants.get(SENDER_LOOKUP).committed
             assert db.session._connection.in_transaction
         assert not db.session._connection.in_transaction
-        db.participants.register("other")
-        assert db.participants.get("other").lookup == "other"
+        db.participants.register(RECIPIENT_LOOKUP)
+        assert db.participants.get(RECIPIENT_LOOKUP).lookup == RECIPIENT_LOOKUP
 
 
 def test_observation_closes_failed_reads_and_preserves_schema_disposition(db_path: Path) -> None:
     from agent_comms.coordination_database import CoordinationStore
 
     with store(db_path) as writer:
-        writer.participants.register("owner", committed=True)
+        writer.participants.register(SENDER_LOOKUP, committed=True)
     for statement in (
         "UPDATE participants SET committed=0",
         "SELECT * FROM nonexistent_original_table",
@@ -1467,6 +1476,6 @@ def test_observation_closes_failed_reads_and_preserves_schema_disposition(db_pat
     with pytest.raises(sqlite3.ProgrammingError):
         reader.execute("SELECT 1")
     with store(db_path) as writer:
-        assert writer.participants.get("owner").committed
+        assert writer.participants.get(SENDER_LOOKUP).committed
 
 

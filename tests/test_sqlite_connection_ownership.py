@@ -8,10 +8,11 @@ from pathlib import Path
 import pytest
 
 from agent_comms.coordination_database import CoordinationStore
-from agent_comms.locked_store import StoreBusy
 from agent_comms.coordination_errors import CoordinationReadUnavailable
 from agent_comms.coordination_session import CoordinationSession, system_clock
 from agent_comms.coordinator import Coordination
+from agent_comms.locked_store import StoreBusy
+from bus_record_fixture import OWNER_LOOKUP, RECIPIENT_LOOKUP, SENDER_LOOKUP
 
 PACKAGE = Path(__file__).parents[1] / "src" / "agent_comms"
 CONNECTION_OWNER = PACKAGE / "locked_store.py"
@@ -62,7 +63,7 @@ async def test_scoped_reader_releases_for_owner_commit(tmp_path):
 
     def commit(store):
         store.participants.register(
-            "reader-release-owner"
+            OWNER_LOOKUP
         )
 
     read_task = asyncio.create_task(Coordination.run_read_async(path, read))
@@ -116,7 +117,7 @@ async def test_resident_cancellation_joins_operation_before_retirement(tmp_path)
     def operation(store):
         begun.set()
         assert release.wait(2)
-        store.participants.register("joined")
+        store.participants.register(OWNER_LOOKUP)
         finished.set()
     async with Coordination.worker(path):
         pending = asyncio.create_task(Coordination.run_async(path, operation))
@@ -128,7 +129,9 @@ async def test_resident_cancellation_joins_operation_before_retirement(tmp_path)
         with pytest.raises(asyncio.CancelledError):
             await pending
         assert finished.is_set()
-        assert await Coordination.run_read_async(path, lambda store: store.participants.get("joined").owner_identity.owner_lookup) == "joined"
+        assert await Coordination.run_read_async(
+            path, lambda store: store.participants.get(OWNER_LOOKUP).owner_identity.owner_lookup
+        ) == OWNER_LOOKUP
 
 
 @pytest.mark.asyncio
@@ -156,13 +159,13 @@ async def test_nested_resident_scopes_restore_outer_and_standalone_routes(tmp_pa
         return await Coordination.run_read_async(path, lambda store: store.participants.get(name).owner_identity.owner_lookup)
 
     async with Coordination.worker(outer):
-        await register(outer, "outer")
+        await register(outer, SENDER_LOOKUP)
         async with Coordination.worker(inner):
-            await register(inner, "inner")
-            assert await owner(inner, "inner") == "inner"
+            await register(inner, RECIPIENT_LOOKUP)
+            assert await owner(inner, RECIPIENT_LOOKUP) == RECIPIENT_LOOKUP
             with pytest.raises(ValueError):
-                await owner(outer, "outer")
-        assert await owner(outer, "outer") == "outer"
+                await owner(outer, SENDER_LOOKUP)
+        assert await owner(outer, SENDER_LOOKUP) == SENDER_LOOKUP
     # Outside both scopes, either root uses a fresh per-operation store again.
-    assert await owner(inner, "inner") == "inner"
-    assert await owner(outer, "outer") == "outer"
+    assert await owner(inner, RECIPIENT_LOOKUP) == RECIPIENT_LOOKUP
+    assert await owner(outer, SENDER_LOOKUP) == SENDER_LOOKUP

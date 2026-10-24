@@ -1,24 +1,30 @@
 """Stored lifecycle names, graph/data ownership, and current codec paths."""
 
-from agent_comms.lifecycle_capability import Failed
 from dataclasses import fields, replace
 
 import pytest
 
-from agent_comms.reason_codes import NoReasonCode
 from agent_comms.assignment_states import AssignmentState, EngagedAssignment, FullPendingAssignment
 from agent_comms.attempt_states import SucceededAttempt
 from agent_comms.coordination_errors import IntegrityViolationError
 from agent_comms.coordination_tables.assignments import WakeAssignment
-from agent_comms.coordination_tables.executions import ExecutionProvenance, ExecutionRecord, WireOrigin, AcpOrigin
+from agent_comms.coordination_tables.executions import (
+    AcpOrigin,
+    ExecutionProvenance,
+    ExecutionRecord,
+    WireOrigin,
+)
 from agent_comms.execution_states import (
     ActiveExecution,
     ExecutionState,
     PendingExecution,
 )
 from agent_comms.field_codec import FieldCodec, MessageId
+from agent_comms.lifecycle_capability import Failed
 from agent_comms.obligation_states import PublishedResponse, ResponseState, SilentResponse
+from agent_comms.reason_codes import NoReasonCode
 from agent_comms.wake_policy import FullWake, MessageAudience
+from bus_record_fixture import OWNER_LOOKUP
 
 
 def test_state_data_cannot_be_attached_to_wrong_variant():
@@ -45,7 +51,7 @@ def test_record_replacement_uses_only_nominal_state():
         execution_id="e",
         origin=AcpOrigin,
         lifecycle=PendingExecution(),
-        owner_lookup="o",
+        owner_lookup=OWNER_LOOKUP,
         revision=1,
         max_attempts=3,
         reason_code=NoReasonCode(),
@@ -85,11 +91,12 @@ def test_execution_extension_is_stored_and_transitioned(tmp_path):
 
     try:
         with Coordination(tmp_path / "coordination.sqlite3") as store:
-            store.participants.register("owner", committed=True)
+            store.participants.register(OWNER_LOOKUP, committed=True)
             store.session._connection.execute(
                 "INSERT INTO executions (execution_id,origin,lifecycle,owner_loo"
                 "kup,revision,max_attempts,reason_code,created_at_ms,updated_at_ms) VALUES ('"
-                "e','acp',json_object('kind','paused'),'owner',1,2,NULL,1,1)"
+                "e','acp',json_object('kind','paused'),?,1,2,NULL,1,1)",
+                (OWNER_LOOKUP,),
             )
             record = store.get("e").execution
             assert isinstance(record.lifecycle, PausedExecution)
@@ -116,16 +123,16 @@ def test_new_response_state_roundtrips_real_store(tmp_path):
 
     try:
         with Coordination(tmp_path / "coordination.sqlite3") as store:
-            store.participants.register("p", committed=True)
+            store.participants.register(OWNER_LOOKUP, committed=True)
             with store.session.writing() as db:
                 ExecutionRecord(
                     execution_id="e", origin=WireOrigin,
-                    lifecycle=QueuedExecution(), owner_lookup="p",
+                    lifecycle=QueuedExecution(), owner_lookup=OWNER_LOOKUP,
                     revision=1, max_attempts=2, reason_code=NoReasonCode(),
                     created_at_ms=0, updated_at_ms=0,
                 ).insert(db)
                 WakeAssignment(
-                    assignment_id="c", recipient="owner", recipient_lookup="p",
+                    assignment_id="c", recipient="owner", recipient_lookup=OWNER_LOOKUP,
                     wire_seq=1, message_id=MessageId.mint("m"), audience=MessageAudience.DIRECT,
                     lifecycle=EngagedAssignment.build(FullWake(), "e", "requester"),
                     accepted_at_ms=0, updated_at_ms=0,
@@ -157,11 +164,11 @@ def test_assignment_extension_derives_sql_projection_and_transitions(tmp_path):
 
     try:
         with Coordination(tmp_path / "coordination.sqlite3") as store:
-            store.participants.register("owner", committed=True)
+            store.participants.register(OWNER_LOOKUP, committed=True)
             assignment = WakeAssignment(
                 assignment_id="assignment",
                 recipient="owner",
-                recipient_lookup="owner",
+                recipient_lookup=OWNER_LOOKUP,
                 wire_seq=1,
                 message_id=MessageId.mint("message"),
                 audience=MessageAudience.DIRECT,
