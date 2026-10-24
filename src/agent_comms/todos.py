@@ -1777,7 +1777,8 @@ class TriageScope(OrderScope[ReportDelivery]):
         comms: Comms, checkout: Path,
     ) -> dict[ProgressClaim, tuple[str, ...]]:
         if claims:
-            raise TodoError("scope triage returns a report, not merged, installed or working claims")
+            raise TodoError(
+                "scope triage returns a report, not merged, installed or working claims")
         return {}
 
     def completed(self, todo: Todo, delivery: ReportDelivery) -> Todo:
@@ -3082,7 +3083,8 @@ class AcceptedVerdict(QuotedVerdict, ToolCallVerdict):
             return
         if not (no_owner and len(no_owner.split()) >= 12 and re.search(r'\bbecause\b', no_owner)
                 and re.search(r'/\S+:\d+', no_owner)):
-            raise TodoError('Added branches need --no-owner: 12+ words with because and an absolute file:line.')
+            raise TodoError(
+                'Added branches need --no-owner: 12+ words with because and an absolute file:line.')
 
 
 @dataclass(frozen=True)
@@ -3335,7 +3337,8 @@ class SupersededVerdict(ToolCallVerdict):
         if not replacing:
             raise TodoError('The replacing problem is not held for this commander.')
         if any(todo.holder == current.holder for todo in replacing):
-            raise TodoError('The replacing order went to the same unit; judge its edits ok or back.')
+            raise TodoError(
+                'The replacing order went to the same unit; judge its edits ok or back.')
         if len(self.reason.split()) < 6:
             raise TodoError('Say why this edit was replaced in 6+ words.')
         return self
