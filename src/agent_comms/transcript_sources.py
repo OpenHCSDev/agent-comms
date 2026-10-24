@@ -526,7 +526,7 @@ class AssignedTranscriptSource(TranscriptSource):
     def sent_messages(self, references: Iterable[MessageReference]) -> dict[MessageReference, Delivered]:
         return {reference: original.message
                 for reference, original in self.assignments(references).items()
-                if original.audience.sender_lookup == self.recipient.lookup}
+                if original.sender_lookup == self.recipient.lookup}
 
     def resolve_sent(
         self, messages: tuple[SentTranscript, ...],
@@ -613,7 +613,7 @@ class AssignedTranscriptSource(TranscriptSource):
                      for retained in event.for_assigned_source(self, published))
 
     def events(self, original: Delivered) -> tuple[TextTranscript, ...]:
-        if original.audience.sender_lookup == self.recipient.lookup:
+        if original.sender_lookup == self.recipient.lookup:
             return (
                 SentTranscript.from_message(original),
             )

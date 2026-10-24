@@ -130,7 +130,7 @@ async def acceptance(app, pilot, agent, comms, entered, release, hold_next, requ
     assert not any(row.wire_seq == pending_source.seq for row in rows)
     original, = comms.bus.bus.deliveries_for_references((pending_source.reference,))
     assert original.message == pending_source
-    assert any(recipient.canonical_thread == 'beta' for recipient in original.audience.recipients)
+    assert any(recipient.canonical_thread == 'beta' for recipient in original.recipients)
     result = {'elapsed_seconds':perf_counter()-started, 'localhost_provider_posts':len(requests),
         'ui_driver':'Textual App.run_test/Pilot', 'external_terminal_entrypoint_verified':False,
         'ordinary_first_reply_visible':True, 'actual_native_provider_failure':True,

@@ -31,7 +31,7 @@ async def test_channel_with_unstarted_and_stopped_subscribers_delivers_whole_coh
             }
         message = comms.messaging.send("sender", "#team", "Hello @receiver").message
         initial = comms.bus.bus.delivery(message.seq)
-        assert {r.canonical_thread for r in initial.audience.recipients} == {
+        assert {r.canonical_thread for r in initial.recipients} == {
             "receiver", "stopped-reviewer", "unstarted-reviewer"
         }
         await _accept_visible_deliveries(
@@ -49,7 +49,7 @@ async def test_channel_with_unstarted_and_stopped_subscribers_delivers_whole_coh
         assert len(assignments) == 1 and assignments[0].recipient == receiver.name
         assert assignments[0].wire_seq == message.seq
         before = tuple(store.participants.get(r.recipient_lookup)
-                       for r in initial.audience.recipients)
+                       for r in initial.recipients)
         again = comms.messaging.send("sender", "#team", "Second @receiver").message
         await _accept_visible_deliveries(
             comms.bus, root_id, store.session.path, lookup, owner_name=receiver.name
@@ -63,7 +63,7 @@ async def test_channel_with_unstarted_and_stopped_subscribers_delivers_whole_coh
             == again.seq
         )
         assert tuple(store.participants.get(r.recipient_lookup)
-                     for r in initial.audience.recipients) == before
+                     for r in initial.recipients) == before
         assert len(sealed_cohort_assignments(store, lookup)) == 2
         assert comms.registry.snapshot().statuses[stopped.name].stopped
         assert all(not thread.process_alive for thread in comms.registry.snapshot().threads.values())

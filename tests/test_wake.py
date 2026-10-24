@@ -6,7 +6,7 @@ from pathlib import Path
 import pytest
 from typing import Type
 
-from agent_comms.audience_manifest import FrozenAudience, FrozenRecipient, freeze_audience
+from agent_comms.audience_manifest import AudiencedMessage, FrozenRecipient, freeze_audience
 from conftest import installed_comms
 from agent_comms.wake_policy import MessageAudience
 from agent_comms.field_codec import ThreadLookup
@@ -48,7 +48,7 @@ def stored(
     )
 
 
-def audience(message: Message, members: tuple[FrozenRecipient, ...] = MEMBERS) -> FrozenAudience:
+def audience(message: Message, members: tuple[FrozenRecipient, ...] = MEMBERS) -> AudiencedMessage:
     return freeze_audience(
         message, members, "source-revision-42", sender_lookup=SENDER_LOOKUP, sender_name="sender"
     )
@@ -65,7 +65,7 @@ def decide(
         FrozenRecipient(lookup, "outsider"),
     )
     return resolve_wake(
-        message, recipient=recipient, frozen_audience=audience(message, members), control=control
+        audience(message, members), recipient=recipient, control=control
     )
 
 
@@ -223,79 +223,20 @@ def test_excluded_recipient_and_bad_identity_fail_closed() -> None:
     manifest = audience(message)
     assert (
         resolve_wake(
-            message,
+            manifest,
             recipient=FrozenRecipient(ALPHA_LOOKUP, "someone_else"),
-            frozen_audience=manifest,
             control=OrdinaryControl,
         )
         is None
     )  # Lookup alone cannot steal another frozen name's decision.
-    with pytest.raises(TypeError):
-        resolve_wake(
-            message,
-            recipient="alpha",  # type: ignore[arg-type]
-            frozen_audience=manifest,
-            control=OrdinaryControl,
-        )
-    with pytest.raises(TypeError):
-        resolve_wake(
-            message,
-            recipient=MEMBERS[0],
-            frozen_audience=object(),  # type: ignore[arg-type]
-            control=OrdinaryControl,
-        )
     with pytest.raises(ValueError):
         decide(stored("alpha"), members=MEMBERS)
     with pytest.raises(ValueError):
         decide(stored("alpha"), BETA_LOOKUP, members=(MEMBERS[1],))
     with pytest.raises(ValueError):
         resolve_wake(
-            replace(message, seq=0),
+            replace(manifest, seq=0),
             recipient=MEMBERS[0],
-            frozen_audience=manifest,
-            control=OrdinaryControl,
-        )
-
-
-@pytest.mark.parametrize("field", ["seq", "body", "target", "sender"])
-def test_prepared_message_must_match_frozen_manifest_identity(field: str) -> None:
-    message = stored()
-    manifest = audience(message)
-    if field == "seq":
-        mismatched = replace(message, seq=43)
-    elif field == "body":
-        mismatched = replace(message, body="different body")
-    elif field == "target":
-        mismatched = replace(message, target="#other")
-    else:
-        mismatched = replace(message, sender="other")
-    with pytest.raises(ValueError):
-        resolve_wake(
-            mismatched,
-            recipient=MEMBERS[0],
-            frozen_audience=manifest,
-            control=OrdinaryControl,
-        )
-
-
-@pytest.mark.parametrize("changes", [
-    {"mentions": ()},
-    pytest.param({"role": NoticeRole()}, id="notice"),
-    pytest.param({"role": MembershipConversationRole(JoinedMembership)}, id="membership"),
-    {"type": HandoffKind},
-    {"sender_role": UserThreadRole},
-])
-def test_same_message_id_does_not_override_frozen_full_envelope(changes) -> None:
-    message = stored("#team", "@beta investigate", mentions=(ThreadMention("beta", 0, 5),))
-    manifest = audience(message)
-    changed = replace(message, **changes)
-    assert changed.message_id == message.message_id
-    assert changed.to_wire() != message.to_wire()
-    with pytest.raises(ValueError):
-        resolve_wake(
-            changed,
-            recipient=MEMBERS[0],
-            frozen_audience=manifest,
             control=OrdinaryControl,
         )
 
@@ -303,14 +244,12 @@ def test_same_message_id_does_not_override_frozen_full_envelope(changes) -> None
 def test_full_cohort_preserves_direct_control_and_fail_closed_envelope() -> None:
     direct = stored("alpha", sender_role=UserThreadRole)
     assert resolve_wake_cohort(
-        direct,
-        frozen_audience=audience(direct, MEMBERS[:1]),
+        audience(direct, MEMBERS[:1]),
         control=OrdinaryControl,
     ) == (WakeDecision(ALPHA_LOOKUP, MessageAudience.DIRECT, FullWake()),)
     collective = stored()
     assert resolve_wake_cohort(
-        collective,
-        frozen_audience=audience(collective),
+        audience(collective),
         control=SystemControl,
     ) == tuple(
         WakeDecision(member.recipient_lookup, MessageAudience.COLLECTIVE, PassiveWake())
@@ -318,14 +257,7 @@ def test_full_cohort_preserves_direct_control_and_fail_closed_envelope() -> None
     )
     with pytest.raises(ValueError):
         resolve_wake_cohort(
-            direct,
-            frozen_audience=audience(direct, (MEMBERS[1],)),
-            control=OrdinaryControl,
-        )
-    with pytest.raises(ValueError):
-        resolve_wake_cohort(
-            replace(collective, role=NoticeRole()),
-            frozen_audience=audience(collective),
+            audience(direct, (MEMBERS[1],)),
             control=OrdinaryControl,
         )
 
@@ -365,9 +297,8 @@ def test_pure_shadow_does_not_mutate_envelope_state_or_live_cursor(tmp_path: Pat
     live_starts = message.role.response_policy(message).starts_turn_for(message, "alpha")
     live_reply = message.reply_target
     assert resolve_wake(
-        message,
+        manifest,
         recipient=MEMBERS[0],
-        frozen_audience=manifest,
         control=OrdinaryControl,
     ) == WakeDecision(ALPHA_LOOKUP, MessageAudience.COLLECTIVE, BoundedTriageWake())
     assert message.exact_reply_target == "#team"

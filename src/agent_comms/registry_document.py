@@ -1120,7 +1120,7 @@ class RegistrySnapshot(RegistryPresence[Mapping[str, ThreadStatus]], RegistryPro
             if thread.name != self.canonical_name(recipient.canonical_thread):
                 raise RelationViolationError("Frozen recipient name does not match its lookup.")
             return RegisteredRecipient(thread)
-        if recipient not in original.audience.recipients:
+        if recipient not in original.recipients:
             raise UnregisteredThreadError("Recipient lookup is not in the original message.")
         return RetiredRecipient(lookup)
 

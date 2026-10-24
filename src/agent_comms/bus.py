@@ -12,7 +12,7 @@ from dataclasses import dataclass, replace
 from heapq import nlargest
 from itertools import islice, product
 from pathlib import Path
-from typing import TYPE_CHECKING, Self
+from typing import TYPE_CHECKING, ClassVar, Self
 
 from agent_comms.bus_activity_index import BusActivityIndex
 from agent_comms.bus_display_index import BusDisplayIndex
@@ -37,6 +37,7 @@ from agent_comms.messages import (
     ClaimMessage,
     Message,
     MessageKind,
+    PublicSender,
 )
 from agent_comms.envelope_claim_transitions import (
     ClaimOwner,
@@ -64,7 +65,7 @@ if TYPE_CHECKING:
 
 
 class PublicRecord(BusRecord):
-    pass
+    sender_lookup: ClassVar[PublicSender] = PublicSender()
 
 
 class ClaimRecord(PublicRecord, ClaimMessage):

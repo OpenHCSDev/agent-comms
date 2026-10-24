@@ -87,7 +87,7 @@ class WakeAssignment(
         selected = sum(
             recipient == self.recipient_identity and decision == expected
             for recipient, decision in zip(
-                initial.audience.recipients, initial.decisions, strict=True
+                initial.recipients, initial.decisions, strict=True
             )
         )
         if selected != 1:

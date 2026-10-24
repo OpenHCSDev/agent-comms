@@ -63,7 +63,7 @@ def _accepted(
 ) -> tuple[Delivered, WakeAssignment]:
     message = publish_initial(comms, "sender", target, body)
     initial = comms.bus.bus.delivery(message.seq)
-    for recipient in initial.audience.recipients:
+    for recipient in initial.recipients:
         store.participants.register(
             recipient.recipient_lookup,
             committed=True,

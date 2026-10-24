@@ -73,7 +73,7 @@ class AcceptedCohort:
             db, where="wire_seq=?", parameters=(initial.message.seq,)
         ):
             raise IdentityConflict("wire sequence already belongs to another cohort root")
-        for recipient in initial.audience.recipients:
+        for recipient in initial.recipients:
             if Participants.one(db, participant_lookup=recipient.recipient_lookup) is None:
                 raise IdentityConflict("frozen recipient has no durable participant identity")
         accepted_at = store.session.now()
@@ -91,7 +91,7 @@ class AcceptedCohort:
         selected = {
             assignment.recipient_lookup: assignment.assignment_id for assignment in expected
         }
-        for ordinal, recipient in enumerate(initial.audience.recipients):
+        for ordinal, recipient in enumerate(initial.recipients):
             assignment_id = selected.get(recipient.recipient_lookup)
             CohortDeliveries(
                 wire_root_id=privacy.namespace,
@@ -121,7 +121,7 @@ def _expected_assignments(
     initial: Delivered, accepted_at_ms: int, privacy: RegistryPrivacy
 ) -> tuple[WakeAssignment, ...]:
     result: list[WakeAssignment] = []
-    for recipient, member in zip(initial.audience.recipients, initial.decisions, strict=True):
+    for recipient, member in zip(initial.recipients, initial.decisions, strict=True):
         if recipient.recipient_lookup != member.recipient:
             raise IntegrityViolationError("bus decision does not match frozen N")
         for decision in member.claim_decisions():
@@ -150,7 +150,6 @@ def _claim_record(
     db: sqlite3.Connection, initial: Delivered, privacy: RegistryPrivacy,
 ) -> AcceptedCohort:
     message = initial.message
-    audience = initial.audience
     namespace = privacy.namespace
     row = ClaimBatchAcknowledgements.one(db, wire_root_id=namespace, wire_seq=message.seq)
     if row is None or not row.sealed:
@@ -186,7 +185,7 @@ def _claim_record(
             kind="selected" if recipient.recipient_lookup in selected else "unmentioned_observer",
             claim_id=selected.get(recipient.recipient_lookup),
         )
-        for ordinal, recipient in enumerate(audience.recipients)
+        for ordinal, recipient in enumerate(initial.recipients)
     ]:
         raise IdentityConflict("sealed N delivery rows conflict with committed bus")
     current: list[WakeAssignment] = []
@@ -198,11 +197,11 @@ def _claim_record(
         current.append(actual)
     if any(
         WakeAssignment.one(db, recipient_lookup=recipient.recipient_lookup, wire_seq=message.seq)
-        for recipient, decision in zip(audience.recipients, initial.decisions, strict=True)
+        for recipient, decision in zip(initial.recipients, initial.decisions, strict=True)
         if not decision.claim_decisions()
     ):
         raise IdentityConflict("no-wake observer has a conflicting unbound claim")
-    return AcceptedCohort(namespace, message.seq, message.message_id, len(audience.recipients),
+    return AcceptedCohort(namespace, message.seq, message.message_id, len(initial.recipients),
                           len(expected), row.accepted_at_ms, tuple(current))
 
 

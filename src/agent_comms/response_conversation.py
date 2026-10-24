@@ -76,12 +76,12 @@ class ResponseConversation:
         for source in self.sources:
             if source.message.exact_reply_target != self.obligation.exact_target:
                 raise IdentityConflict("Response conversation differs from original route")
-            audience = source.audience
-            participants = list(audience.recipients)
+            participants = list(source.recipients)
             participants.extend(source.message.sender_role.executor(
-                FrozenRecipient(audience.sender_lookup, audience.sender_name)
+                FrozenRecipient(source.sender_lookup, source.sender)
             ))
-            if not any(member.recipient_lookup == self.responder.recipient_lookup for member in audience.recipients):
+            if not any(member.recipient_lookup == self.responder.recipient_lookup
+                       for member in source.recipients):
                 raise IdentityConflict("Responder was not in original frozen audience")
             for member in participants:
                 # Names belong to these original envelopes. A participant can
@@ -90,7 +90,7 @@ class ResponseConversation:
         members.pop(self.responder.recipient_lookup, None)
         recipients = CommandTarget.named(self.obligation.exact_target).response_recipients(tuple(members.values()))
         revision = hashlib.sha256(
-            "\n".join(source.audience.digest for source in self.sources).encode()
+            "\n".join(source.digest for source in self.sources).encode()
         ).hexdigest()
         return freeze_audience(
             message,
@@ -108,10 +108,10 @@ class ResponseConversation:
         stored = replace(message, seq=seq)
         audience = self.audience(stored)
         decisions = ResponseDeliveryPolicy.resolve(
-            stored, audience, OrdinaryControl,
+            audience, OrdinaryControl,
         )
         return KeyedPrivateRecord.from_message(
-            stored, audience=audience, decisions=decisions,
+            audience, decisions=decisions,
             control=OrdinaryControl.declared_name,
             acknowledgement=KeyedResponseAcknowledgement(
                 self.privacy.namespace, intent.execution_id, intent.publication_key,

@@ -129,7 +129,7 @@ class TestCliSuccess:
             assert code == 0
             message_id = FieldCodec.decode(MessageId, sent["id"])
             delivery, = comms.bus.bus.lookup_message(message_id).deliveries()
-            assert len(delivery.audience.recipients) == 2
+            assert len(delivery.recipients) == 2
             assert [decision.wake_policy() for decision in delivery.decisions] == [expected] * 2
         parser = argparse.ArgumentParser()
         Send.add_arguments(parser)

@@ -54,7 +54,7 @@ def test_order_story_copied_bus_strike_and_send_back_once(comms, tmp_path):
     assert comms.bus.bus.revision() == before_send_back + 1
     published = comms.bus.bus.lookup(before_send_back + 1)
     assert published.target == "#comms" and published.body.count(reason) == 1
-    assert published.audience.includes_lookup(comms.registry.require("worker").incarnation.lookup)
+    assert published.includes_lookup(comms.registry.require("worker").incarnation.lookup)
     with pytest.raises(TodoConflict):
         caller.invoke(CommsVerdictTool(problem="P1", operation=sent_back), comms)
     assert comms.bus.bus.revision() == before_send_back + 1

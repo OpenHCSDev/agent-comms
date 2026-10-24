@@ -133,7 +133,7 @@ def test_private_human_channel_and_dm_seal_original_full_audience(tmp_path: Path
     assert [row.body for row in comms.views.history_page(CommandTarget.named("#team")).messages] == ["hello @alice"]
     initial = comms.bus.bus.delivery(channel.seq)
     assert initial.message == channel
-    assert {member.recipient_lookup for member in initial.audience.recipients} == set(
+    assert {member.recipient_lookup for member in initial.recipients} == set(
         lookups.values()
     )
     acknowledgement = accept_delivery_cohort(comms.bus, root_id, channel.seq, store)
@@ -146,7 +146,7 @@ def test_private_human_channel_and_dm_seal_original_full_audience(tmp_path: Path
     dm_initial = comms.bus.bus.delivery(dm.seq)
     assert [
         (member.canonical_thread, member.recipient_lookup)
-        for member in dm_initial.audience.recipients
+        for member in dm_initial.recipients
     ] == [("bob", lookups["bob"])]
     accepted = accept_delivery_cohort(comms.bus, root_id, dm.seq, store)
     assert isinstance(accepted, Applied)

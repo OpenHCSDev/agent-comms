@@ -258,7 +258,7 @@ class SourceCoverage:
                 matches = [
                     (recipient, decision)
                     for recipient, decision in zip(
-                        initial.audience.recipients, initial.decisions, strict=True
+                        initial.recipients, initial.decisions, strict=True
                     )
                     if recipient.recipient_lookup == self.recipient_lookup
                 ]

@@ -141,7 +141,7 @@ class OwnerOutcomes(OutcomeViewer):
         return self.lookup in (sender_lookup, recipient.recipient_lookup)
 
     def sees_direct_read(self, source: Delivered) -> bool:
-        return source.audience.sender_lookup == self.lookup
+        return source.sender_lookup == self.lookup
 
 
 @dataclass(frozen=True, slots=True)
@@ -247,8 +247,8 @@ class MessageNotification:
             return {}
         snapshot = registry.snapshot()
         observations = AgentActivity(root, registry).observe_recipients(
-            ((source, recipient) for source in sources for recipient in source.audience.recipients
-             if viewer.includes(source.audience.sender_lookup, recipient)),
+            ((source, recipient) for source in sources for recipient in source.recipients
+             if viewer.includes(source.sender_lookup, recipient)),
             snapshot=snapshot,
         )
         return cls.project_delivery_window(
@@ -264,7 +264,7 @@ class MessageNotification:
 
         observations = {
             recipient.recipient_lookup: RecordedRecipientActivity()
-            for source in sources for recipient in source.audience.recipients
+            for source in sources for recipient in source.recipients
         }
         return cls.project_delivery_window(
             root, namespace, sources, observations,
@@ -292,11 +292,12 @@ class MessageNotification:
         for source, outcomes in NotificationAssignment.for_deliveries(sources, rows):
             key = (source.message.seq, source.message.message_id)
             for outcome in outcomes:
-                if not viewer.includes(source.audience.sender_lookup, outcome.recipient):
+                if not viewer.includes(source.sender_lookup, outcome.recipient):
                     continue
                 observation = observations[outcome.recipient.recipient_lookup]
                 notification = observation.after_inbox_read(
-                    outcome.project(observation, source.audience.sender_lookup), source, reads, document, snapshot
+                    outcome.project(observation, source.sender_lookup),
+                    source, reads, document, snapshot
                 )
                 displayed_to = observation.displayed_recipient(
                     notification, source, reads, document, snapshot
@@ -321,7 +322,7 @@ class MessageNotification:
     ) -> MessageNotification | None:
         """Project a human DM read even though humans have no wake assignment."""
         message = source.message
-        if source.audience.recipients or not viewer.sees_direct_read(source):
+        if source.recipients or not viewer.sees_direct_read(source):
             return None
         peer = CommandTarget.named(message.target).direct_peer(snapshot)
         for target in () if peer is None else peer.role.human(peer):
@@ -333,7 +334,7 @@ class MessageNotification:
                 return None
             return cls(
                 recipient,
-                source.audience.sender_lookup,
+                source.sender_lookup,
                 HumanReadProgress(),
                 displayed_to=displayed_to,
                 changed=True,

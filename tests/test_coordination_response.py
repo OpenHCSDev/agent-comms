@@ -74,8 +74,8 @@ def _ready(tmp_path: Path, *, direct: bool = False, extra_targets: tuple[str, ..
         "sender", target, "Need owner to consider and reply."
     )
     original_record = comms.bus.bus.delivery(original.seq)
-    assert len(original_record.audience.recipients) == 1
-    recipient = original_record.audience.recipients[0]
+    assert len(original_record.recipients) == 1
+    recipient = original_record.recipients[0]
     bus = responder(comms.root, comms.registry)
     store = Coordination(str(comms.root / "coordination.sqlite3"), clock_ms=lambda: 1_000)
     store.participants.register(

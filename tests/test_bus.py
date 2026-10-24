@@ -171,8 +171,8 @@ def test_nominal_message_id_column_stores_plain_text() -> None:
     (
         (
             "bus_publication.py",
-            "yield SentSource(self.audience.sender_lookup, self.seq)",
-            "yield SentSource(self.audience.sender_lookup, self.seq + 1)",
+            "yield SentSource(self.sender_lookup, self.seq)",
+            "yield SentSource(self.sender_lookup, self.seq + 1)",
         ),
         ("bus_activity_index.py", '=max("{name}",excluded.', '=min("{name}",excluded.'),
         (

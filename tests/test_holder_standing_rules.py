@@ -219,7 +219,7 @@ def test_order_claim_publishes_only_to_its_retained_commander_birth(
         recipient = "renamed" if change == "rename" else "lead"
         assert delivery.message.target == recipient
         assert delivery.message.sender == ("renamed-worker" if change == "rename_holder" else "worker")
-        assert [(row.canonical_thread, row.recipient_lookup) for row in delivery.audience.recipients] == [
+        assert [(row.canonical_thread, row.recipient_lookup) for row in delivery.recipients] == [
             (recipient, lead.require_recorded().lookup)]
         assert comms.goals.todos.get(todo.id) == changed
         with comms.bus.bus.reading() as source:

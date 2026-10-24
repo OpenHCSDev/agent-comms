@@ -65,13 +65,13 @@ def _root(
     message = publish_initial(comms, "sender", target, body)
     initial = comms.bus.bus.delivery(message.seq)
     with Coordination(str(root / "coordination.sqlite3")) as store:
-        for recipient in initial.audience.recipients:
+        for recipient in initial.recipients:
             store.participants.register(
                 recipient.recipient_lookup,
                 committed=True,
             )
         accepted = accept_delivery_cohort(comms.bus, root_id, message.seq, store)
-        assert accepted.value.member_count == len(initial.audience.recipients)
+        assert accepted.value.member_count == len(initial.recipients)
     return root, root_id, comms, initial, people
 
 
@@ -139,7 +139,7 @@ def test_wake_frame_includes_bounded_changed_sent_outcomes(tmp_path: Path) -> No
         lookup = people[1].incarnation.lookup
         assignment = sealed_cohort_assignments(store, lookup)[0]
     notification = MessageNotification(
-        initial.audience.recipients[0], initial.audience.sender_lookup, HumanReadProgress(),
+        initial.recipients[0], initial.sender_lookup, HumanReadProgress(),
         message=initial.message, changed=True,
     )
     sent_outcome = notification.sent_outcome()

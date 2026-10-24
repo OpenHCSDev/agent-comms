@@ -9,9 +9,10 @@ from typing import Annotated, TYPE_CHECKING
 
 
 from .channel_targets import CommandTarget
-from .field_codec import FieldCodec, NullMember, WireOmitDefault, GoalId
+from .field_codec import ThreadLookup, FieldCodec, NullMember, WireOmitDefault, GoalId
 from .message_reference import MessageReference
-from .read_basis import DMDisplayScope, MessageDisplayScope, ReadCursor
+from .messages import PublicSender
+from .read_basis import DMDisplayScope, MessageDisplayScope
 
 if TYPE_CHECKING:
     from .catalog_document import CatalogDocument
@@ -102,7 +103,7 @@ class TurnRouting:
         if self.reply is None or len(originals) > len(self.reply.targets):
             raise RelationViolationError("Publication exceeds this turn's reply intent")
         for original in originals:
-            if original.audience.sender_lookup != owner_lookup:
+            if original.sender_lookup != owner_lookup:
                 raise RelationViolationError("Publication belongs to another original sender")
             if original.message.target not in self.reply.targets:
                 raise RelationViolationError("Publication is outside this turn's reply targets")
@@ -165,14 +166,6 @@ class ScheduledTurn:
 
 
 @dataclass(frozen=True, slots=True)
-class DeliveryMessage:
-    """The current Message decoder plus its existing publication identity."""
-
-    message: Message
-    sender_lookup: str = ""
-
-
-@dataclass(frozen=True, slots=True)
 class DeliveryScope(MessageDisplayScope):
     actor: str
     aliases: Mapping[str, str]
@@ -213,21 +206,22 @@ class DeliveryScope(MessageDisplayScope):
     @staticmethod
     def sender_lookups(
         source: ThreadIncarnation, on_unrecorded: Callable[[], None]
-    ) -> Iterator[str]:
+    ) -> Iterator[ThreadLookup | PublicSender]:
         """Share format discovery; each consumer owns its missing-birth action.
 
         The unstamped format matches before a birth is required. An index must
         probe for an assigned stamp; starting input requires a verified stamp.
         """
-        def missing() -> tuple[str, ...]:
+        def missing() -> tuple[ThreadLookup, ...]:
             on_unrecorded()
             return ()
 
-        yield ""
+        yield PublicSender()
         yield from source.recorded_or(lambda recorded: (recorded.lookup,), missing)
 
     def minimum_timestamp(
-        self, sender: str, target: str, sender_lookup: str, snapshot: RegistryProvenance
+        self, sender: str, target: str, sender_lookup: ThreadLookup | PublicSender,
+        snapshot: RegistryProvenance
     ) -> float | None:
         """Require current identities while preserving aliases of one incarnation."""
 
@@ -240,17 +234,6 @@ class DeliveryScope(MessageDisplayScope):
         if sender_lookup not in self.sender_lookups(incarnation, incarnation.require_recorded):
             return None
         return max(source.incarnation.wire_birth, snapshot.threads[self.actor].incarnation.wire_birth)
-
-    def unread(
-        self, delivery: DeliveryMessage, snapshot: RegistryProvenance, seen: ReadCursor
-    ) -> bool:
-        message = delivery.message
-        if self.has_read(seen, message, snapshot):
-            return False
-        since = self.minimum_timestamp(
-            message.sender, message.target, delivery.sender_lookup, snapshot
-        )
-        return since is not None and message.timestamp >= since
 
     def conversation(self, sender: str, target: str) -> str:
         return CommandTarget.named(target).conversation(sender, self.actor, self.canonical)

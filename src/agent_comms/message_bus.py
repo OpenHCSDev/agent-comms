@@ -252,7 +252,7 @@ class MessageBus[Writes: Publisher]:
             ) for delivery in record.deliveries()
         )
         rows = tuple(sorted(
-            rows, key=lambda row: (row.audience.sender_lookup not in first, row.seq)))
+            rows, key=lambda row: (row.sender_lookup not in first, row.seq)))
         return (AwarenessSegment.capture(self.bus.path, rows),) if rows else ()
 
     def incoming_page(self, name: str, *, after: int) -> MessagePage:

@@ -17,7 +17,7 @@ from .response_policy import DirectPolicy, MentionedOnlyPolicy
 from .wake_policy import BoundedTriageWake, FullWake, MessageAudience, UnmentionedWake
 
 if TYPE_CHECKING:
-    from .audience_manifest import FrozenAudience, FrozenRecipient
+    from .audience_manifest import AudiencedMessage, FrozenRecipient
     from .catalog_document import CatalogDocument
     from .channels import Channel
     from .cli_commands import CliCommand
@@ -269,14 +269,14 @@ class NamedTarget(CommandTarget):
     def wake_audience(self, mentions: frozenset[str]) -> MessageAudience:
         return MessageAudience.MENTIONED if mentions else self.default_audience
 
-    def effective_mentions(self, message: Message, audience: FrozenAudience):
+    def effective_mentions(self, message: AudiencedMessage):
         return frozenset()
 
     def addressed(self, threads: tuple[str, ...], body: str) -> str:
         """One recipient is its own audience."""
         return body
 
-    def require_frozen_recipients(self, message: Message, audience: FrozenAudience):
+    def require_frozen_recipients(self, message: AudiencedMessage):
         """Non-direct targets impose no exact-recipient requirement."""
 
 
@@ -286,8 +286,8 @@ class ThreadTarget(NamedTarget):
     kind = "thread"
     incoming_scope = "direct message"
 
-    def require_frozen_recipients(self, message: Message, audience: FrozenAudience):
-        message.role.require_recipients(self, audience)
+    def require_frozen_recipients(self, message: AudiencedMessage):
+        message.role.require_recipients(self, message)
 
     @property
     def direct_names(self) -> tuple[str, ...]:
@@ -501,8 +501,10 @@ class ChannelTarget(NamedTarget):
     def reply_target(self, sender: str) -> str:
         return self.name
 
-    def effective_mentions(self, message: Message, audience: FrozenAudience):
-        return frozenset(mention.thread for mention in message.mentions).intersection(audience.canonical_members)
+    def effective_mentions(self, message: AudiencedMessage):
+        return frozenset(mention.thread for mention in message.mentions).intersection(
+            message.canonical_members
+        )
 
     def addressed(self, threads: tuple[str, ...], body: str) -> str:
         """Keep collective posts unchanged; prefix mentions for a named audience."""

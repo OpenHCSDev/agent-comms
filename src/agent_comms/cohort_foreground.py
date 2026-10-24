@@ -59,7 +59,7 @@ async def _accept_visible_deliveries(
             for initial in originals:
                 if initial.seq in sealed:
                     continue
-                recipients = [r for r in initial.audience.recipients if r.recipient_lookup == lookup]
+                recipients = [r for r in initial.recipients if r.recipient_lookup == lookup]
                 if not recipients:
                     raise RelationViolationError("checked initial lookup differs from bus row.")
                 if any(r.canonical_thread == owner_name for r in recipients):

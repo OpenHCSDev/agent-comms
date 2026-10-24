@@ -14,13 +14,14 @@ import math
 import re
 from collections.abc import Sequence
 from dataclasses import dataclass
+from functools import cached_property
 from typing import Final
 
 from agent_comms.coordination_contracts import MAX_IDENTIFIER_CHARS
 
 from .channel_targets import exact_stored_target
-from .field_codec import FieldCodec, MalformedRecord, MessageId, Sha256Text, ThreadLookup
-from .messages import Message
+from .field_codec import FieldCodec, MalformedRecord, ThreadLookup
+from .messages import BusCapability, Message
 from .projection_source import ProducedRow, ProjectionSource
 
 AUDIENCE_VERSION: Final = 1
@@ -76,80 +77,13 @@ class FrozenRecipient(ProjectionSource):
         _bounded_text(self.canonical_thread, "canonical_thread", thread_name=True)
 
 
-@dataclass(frozen=True, slots=True)
-class FrozenAudience(ProjectionSource):
-    """Immutable precommit snapshot of the full delivered audience, not a acknowledgement.
+@dataclass(frozen=True, kw_only=True)
+class Audience(BusCapability):
+    """The participant facts frozen at publication."""
 
-    Neither the digest nor direct construction attests a bus append. At recovery,
-    the bus owner must match this value to the original wire envelope/sideband.
-    """
-
-    @ClassFact
-    def writes(cls) -> tuple[type[ProducedRow], ...]:
-        from .bus_tables import SentSource, ReceivedSource, AwaitingAnswerSource
-        from .bus_route_counts import BusRouteCounts
-        return (SentSource, ReceivedSource, AwaitingAnswerSource, BusRouteCounts)
-
-
-    wire_seq: int
-    message_id: MessageId
-    exact_target: str
     sender_lookup: ThreadLookup
-    sender_name: str
     source_revision: str
     recipients: tuple[FrozenRecipient, ...]
-    wire_envelope_digest: str
-    digest: str
-    version: int = AUDIENCE_VERSION
-
-    def __post_init__(self) -> None:
-        if type(self.version) is not int or self.version != AUDIENCE_VERSION:
-            raise MalformedRecord("unsupported audience version")
-        if type(self.wire_seq) is not int or not 0 < self.wire_seq <= MAX_WIRE_SEQ:
-            raise MalformedRecord("wire_seq must be a positive SQLite-range integer")
-        for name in ("exact_target", "source_revision"):
-            _bounded_text(getattr(self, name), name)
-        _bounded_text(self.sender_name, "sender_name", thread_name=True)
-        if not exact_stored_target(self.exact_target):
-            raise MalformedRecord("aggregate views are not exact stored targets")
-        if type(self.recipients) is not tuple or len(self.recipients) > MAX_RECIPIENTS:
-            raise MalformedRecord("recipients must be a bounded immutable tuple")
-        if any(type(item) is not FrozenRecipient for item in self.recipients):
-            raise TypeError("recipients must contain FrozenRecipient values")
-        sorted_recipients = tuple(sorted(self.recipients, key=lambda item: item.recipient_lookup))
-        if sorted_recipients != self.recipients:
-            raise MalformedRecord("recipients must be ordered by stable lookup")
-        lookups = [item.recipient_lookup for item in self.recipients]
-        names = [item.canonical_thread for item in self.recipients]
-        if len(set(lookups)) != len(lookups) or len(set(names)) != len(names):
-            raise MalformedRecord("frozen recipient lookups and canonical names must be unique")
-        if self.sender_lookup in lookups or self.sender_name in names:
-            raise MalformedRecord("the sender cannot be an eligible recipient")
-        Sha256Text.decode(self.wire_envelope_digest)
-        Sha256Text.decode(self.digest)
-        if self.digest != _digest(
-            _AUDIENCE_DOMAIN, _canonical_json(self._digest_record(), limit=MAX_AUDIENCE_BYTES)
-        ):
-            raise MalformedRecord("audience digest does not match the frozen value")
-
-    def _digest_record(self) -> dict[str, object]:
-        return {
-            "version": self.version,
-            "wire_seq": self.wire_seq,
-            "message_id": self.message_id,
-            "exact_target": self.exact_target,
-            "sender_lookup": self.sender_lookup,
-            "sender_name": self.sender_name,
-            "source_revision": self.source_revision,
-            "recipients": [
-                {
-                    "recipient_lookup": item.recipient_lookup,
-                    "canonical_thread": item.canonical_thread,
-                }
-                for item in self.recipients
-            ],
-            "wire_envelope_digest": self.wire_envelope_digest,
-        }
 
     @property
     def canonical_members(self) -> frozenset[str]:
@@ -161,6 +95,68 @@ class FrozenAudience(ProjectionSource):
         return any(item.recipient_lookup == lookup for item in self.recipients)
 
 
+@dataclass(frozen=True, kw_only=True)
+class AudiencedMessage(Message, Audience):
+    """A prepared message and its frozen participants, with one content identity."""
+
+    def __post_init__(self) -> None:
+        super().__post_init__()
+        if type(self.seq) is not int or not 0 < self.seq <= MAX_WIRE_SEQ:
+            raise MalformedRecord("wire_seq must be a positive SQLite-range integer")
+        for name in ("target", "source_revision"):
+            _bounded_text(getattr(self, name), name)
+        _bounded_text(self.sender, "sender_name", thread_name=True)
+        if not exact_stored_target(self.target):
+            raise MalformedRecord("aggregate views are not exact stored targets")
+        if type(self.recipients) is not tuple or len(self.recipients) > MAX_RECIPIENTS:
+            raise MalformedRecord("recipients must be a bounded immutable tuple")
+        sorted_recipients = tuple(sorted(self.recipients, key=lambda item: item.recipient_lookup))
+        if sorted_recipients != self.recipients:
+            raise MalformedRecord("recipients must be ordered by stable lookup")
+        lookups = [item.recipient_lookup for item in self.recipients]
+        names = [item.canonical_thread for item in self.recipients]
+        if len(set(lookups)) != len(lookups) or len(set(names)) != len(names):
+            raise MalformedRecord("frozen recipient lookups and canonical names must be unique")
+        if self.sender_lookup in lookups or self.sender in names:
+            raise MalformedRecord("the sender cannot be an eligible recipient")
+        if not math.isfinite(self.timestamp):
+            raise MalformedRecord(
+                "audience data cannot be canonically encoded: non-finite timestamp"
+            )
+        _ = self.digest
+
+    @cached_property
+    def wire_envelope_digest(self) -> str:
+        return _digest(
+            _ENVELOPE_DOMAIN, _canonical_json(self.to_wire(), limit=MAX_WIRE_ENVELOPE_BYTES)
+        )
+
+    @cached_property
+    def digest(self) -> str:
+        return _digest(
+            _AUDIENCE_DOMAIN, _canonical_json(self._digest_record(), limit=MAX_AUDIENCE_BYTES)
+        )
+
+    def _digest_record(self) -> dict[str, object]:
+        return {
+            "version": AUDIENCE_VERSION,
+            "wire_seq": self.seq,
+            "message_id": self.message_id,
+            "exact_target": self.target,
+            "sender_lookup": self.sender_lookup,
+            "sender_name": self.sender,
+            "source_revision": self.source_revision,
+            "recipients": [
+                {
+                    "recipient_lookup": item.recipient_lookup,
+                    "canonical_thread": item.canonical_thread,
+                }
+                for item in self.recipients
+            ],
+            "wire_envelope_digest": self.wire_envelope_digest,
+        }
+
+
 def freeze_audience(
     prepared_message: Message,
     externally_captured_recipients: Sequence[FrozenRecipient],
@@ -168,7 +164,7 @@ def freeze_audience(
     *,
     sender_lookup: ThreadLookup,
     sender_name: str,
-) -> FrozenAudience:
+) -> AudiencedMessage:
     """Build a precommit value from an externally captured complete recipient set.
 
     Mentions do not filter this set. Neither current tags nor view declarations are
@@ -180,50 +176,16 @@ def freeze_audience(
         raise TypeError("externally_captured_recipients must be a bounded sequence")
     if len(externally_captured_recipients) > MAX_RECIPIENTS:
         raise MalformedRecord("too many frozen recipients")
-    if any(type(item) is not FrozenRecipient for item in externally_captured_recipients):
-        raise TypeError("externally_captured_recipients must contain FrozenRecipient values")
     _bounded_text(sender_name, "sender_name", thread_name=True)
     if prepared_message.sender != sender_name:
         raise MalformedRecord(
             "sender_name must be the externally captured canonical message sender"
         )
-    _bounded_text(source_revision, "source_revision")
-    if not exact_stored_target(prepared_message.target):
-        raise MalformedRecord("only exact stored routable targets may be frozen")
-    if type(prepared_message.seq) is not int or not 0 < prepared_message.seq <= MAX_WIRE_SEQ:
-        raise MalformedRecord("the prepared message must have an assigned wire sequence")
-    if not math.isfinite(prepared_message.timestamp):
-        raise MalformedRecord("audience data cannot be canonically encoded: non-finite timestamp")
-    wire = _canonical_json(prepared_message.to_wire(), limit=MAX_WIRE_ENVELOPE_BYTES)
-    recipients = tuple(
-        sorted(externally_captured_recipients, key=lambda item: item.recipient_lookup)
-    )
-    envelope_digest = _digest(_ENVELOPE_DOMAIN, wire)
-    record = {
-        "version": AUDIENCE_VERSION,
-        "wire_seq": prepared_message.seq,
-        "message_id": prepared_message.message_id,
-        "exact_target": prepared_message.target,
-        "sender_lookup": sender_lookup,
-        "sender_name": sender_name,
-        "source_revision": source_revision,
-        "recipients": [
-            {
-                "recipient_lookup": item.recipient_lookup,
-                "canonical_thread": item.canonical_thread,
-            }
-            for item in recipients
-        ],
-        "wire_envelope_digest": envelope_digest,
-    }
-    return FrozenAudience(
-        wire_seq=prepared_message.seq,
-        message_id=prepared_message.message_id,
-        exact_target=prepared_message.target,
+    return AudiencedMessage.from_message(
+        prepared_message,
         sender_lookup=sender_lookup,
-        sender_name=sender_name,
         source_revision=source_revision,
-        recipients=recipients,
-        wire_envelope_digest=envelope_digest,
-        digest=_digest(_AUDIENCE_DOMAIN, _canonical_json(record, limit=MAX_AUDIENCE_BYTES)),
+        recipients=tuple(sorted(
+            externally_captured_recipients, key=lambda item: item.recipient_lookup
+        )),
     )
