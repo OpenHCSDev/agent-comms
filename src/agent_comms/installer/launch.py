@@ -185,6 +185,9 @@ class InstallUnit(SystemdUnit):
              f"--working-directory={tree}", f"--property=StandardInput=file:{self.request}",
              f"--property=StandardOutput=file:{self.result}",
              f"--property=StandardError=file:{self.errors}",
+             # The owners an install restarts are started from inside this unit; ending it
+             # must not take its cgroup's restarted fleet down with it.
+             "--property=KillMode=process",
              *(f"--setenv={name}" for name in self.inherited),
              f"--setenv=PYTHONPATH={pythonpath}", *command),
             check=True,
