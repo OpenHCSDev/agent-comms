@@ -1630,12 +1630,11 @@ class JsonShapeFamily(AcceptsNull, ExternalJsonShape, SingleValueEncoding):
             shape = list
         if not isinstance(shape, type):
             raise TypeError(f"Unsupported JSON shape declaration: {cls.__name__}")
-        shape = next(
-            (base for base in shape.__mro__
-             if base in (dict, list, str, int, float, bool, type(None))),
-            None,
-        )
-        if shape is None:
+        for base in shape.__mro__:
+            if base in (dict, list, str, int, float, bool, type(None)):
+                shape = base
+                break
+        else:
             raise TypeError(f"Unsupported JSON shape declaration: {cls.__name__}")
         return shape, annotation
 
