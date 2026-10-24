@@ -27,6 +27,7 @@ from agent_comms.transcript_events import AssistantTranscript, TurnDigest
 from agent_comms.turn_context import JournalProvenance, SegmentManifest, TranscriptSegment, WireProvenance
 from agent_comms.turn_digests import LastTurns, TurnBound, TurnsOlderThan, TurnsBefore, TurnsSince
 from agent_comms.bus import Bus
+from agent_comms.turn_item import NativeTurnId
 from agent_comms.watched import FileSource
 from agent_comms.threads import Thread
 
@@ -180,6 +181,7 @@ def recorded_claude_transcript(tmp_path):
 
 @pytest.mark.parametrize('empty_index', (152, 52))
 def test_recorded_claude_transcript_pages_through_tool_without_loss(tmp_path, monkeypatch, recorded_claude_transcript, empty_index):
+    undated_edge_turn_id = NativeTurnId('undated-edge')
     path, final = recorded_claude_transcript
     monkeypatch.setenv('HOME', str(tmp_path / 'home'))
     comms = prepared(tmp_path / 'wire')
@@ -218,7 +220,7 @@ def test_recorded_claude_transcript_pages_through_tool_without_loss(tmp_path, mo
     recorded = comms.transcripts.external('claude').turns(LastTurns(300))
     comms.registry.declare(Thread('paged', frozenset(), str(tmp_path), execution=ExternalThreadExecution))
     items = [FinishedItem(turn.turn_id, turn.turn_id, turn.events) for turn in reversed(recorded)]
-    items.insert(empty_index, FinishedItem('undated-edge', 'undated-edge', ()))
+    items.insert(empty_index, FinishedItem(undated_edge_turn_id, 'undated-edge', ()))
     comms.transcripts.external('paged').publish_page(items, NoEarlierPage())
     pages = list(paged_answers(comms, 'paged'))
     seen = [turn['turn_id'] for page in pages for turn in page['turns']]
@@ -241,24 +243,26 @@ def test_recorded_claude_transcript_pages_through_tool_without_loss(tmp_path, mo
 
 
 def test_missing_native_session_is_empty_and_nonpositive_count_is_rejected(tmp_path):
+    missing_turn_id = NativeTurnId('missing')
     comms = prepared(tmp_path)
     comms.registry.declare(Thread('new', frozenset(), str(tmp_path)))
     for window in (LastTurns(), TurnsBefore(at=1.0, count=100), TurnsSince(1.0)):
         answer = comms.transcripts.turns('new', window)
         assert not answer.turns
         assert answer.older is window
-    for window in (LastTurns(), TurnsBefore(at=1.0), TurnsOlderThan(turn_id='missing')):
+    for window in (LastTurns(), TurnsBefore(at=1.0), TurnsOlderThan(turn_id=missing_turn_id)):
         with pytest.raises(ValueError):
             FieldCodec.decode(TurnBound, {**FieldCodec.encode(window), 'count': 0})
     with pytest.raises(ToolRefusedError):
-        comms.transcripts.turns('new', TurnsOlderThan(turn_id='missing'))
+        comms.transcripts.turns('new', TurnsOlderThan(turn_id=missing_turn_id))
 
 
 @pytest.mark.parametrize('events', ((), (AssistantTranscript('same time', position=1, timestamp=1.0),)))
 def test_undated_and_equal_time_transcripts_page_without_timestamp_assumptions(tmp_path, events):
     comms = prepared(tmp_path)
     comms.registry.declare(Thread('undated', frozenset(), str(tmp_path), execution=ExternalThreadExecution))
-    items = tuple(FinishedItem(f'undated-{index}', f'item-{index}', events) for index in range(251))
+    items = tuple(FinishedItem(NativeTurnId(f'undated-{index}'), f'item-{index}',
+        events) for index in range(251))
     comms.transcripts.external('undated').publish_page(items, NoEarlierPage())
     pages = list(paged_answers(comms, 'undated'))
     seen = [turn['turn_id'] for page in pages for turn in page['turns']]
@@ -267,7 +271,9 @@ def test_undated_and_equal_time_transcripts_page_without_timestamp_assumptions(t
 
 
 def test_turn_windows_distinguish_first_and_last_event_time():
-    turn = TurnDigest('crossing', (
+    crossing_turn_id = NativeTurnId('crossing')
+    empty_turn_id = NativeTurnId('empty')
+    turn = TurnDigest(crossing_turn_id, (
         AssistantTranscript('start', position=1, timestamp=1.0),
         AssistantTranscript('finish', position=2, timestamp=3.0),
     ))
@@ -275,5 +281,5 @@ def test_turn_windows_distinguish_first_and_last_event_time():
     assert not turn.before(2.0)
     assert TurnsBefore(at=2.0, count=1).take((turn,)) == (turn,)
     assert TurnsSince(2.0).take((turn,)) == (turn,)
-    assert not TurnDigest('empty', ()).starts_before(2.0)
+    assert not TurnDigest(empty_turn_id, ()).starts_before(2.0)
     assert not TurnsBefore(at=1.0, count=1).take((turn,))

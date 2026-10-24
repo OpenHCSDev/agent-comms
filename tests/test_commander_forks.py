@@ -45,6 +45,7 @@ from agent_comms.todos import (
 from agent_comms.tool_caller import CommanderForkCaller
 from agent_comms.tool_declaration import ToolDeclaration
 from agent_comms.transcript_events import ToolStartTranscript
+from agent_comms.turn_item import NativeTurnId
 from cli_command import commander
 from source_revision_fixture import SourceRepository
 
@@ -230,6 +231,7 @@ def test_registered_fork_sends_parent_problem_with_fork_actor(fork_bus, tmp_path
 
 
 def test_fork_and_parent_judge_show_same_unjudged_edits(fork_bus):
+    parent_work_turn_id = NativeTurnId('parent-work')
     comms, source, order = fork_bus
     actor = comms.registry.require("retained").incarnation
     declaration = ToolDeclaration.record(
@@ -241,7 +243,7 @@ def test_fork_and_parent_judge_show_same_unjudged_edits(fork_bus):
         call_id="parent-edit",
     )
     ExternalTranscript(comms.root, actor).finish(
-        turn_id="parent-work",
+        turn_id=parent_work_turn_id,
         item_id="parent-edit",
         events=(
             ToolStartTranscript(

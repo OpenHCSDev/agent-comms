@@ -49,6 +49,7 @@ from agent_comms.todos import (
     UnmergedListedPullRequest,
 )
 from agent_comms.transcript_events import ToolStartTranscript
+from agent_comms.turn_item import NativeTurnId
 from agent_comms.work_branches import UnpushedHead
 from conftest import declare_test_bus
 from source_revision_fixture import SourceRepository
@@ -338,6 +339,7 @@ class SpinningUnitSeed(IncidentSeed):
 
     @classmethod
     def seed(cls, fleet: Fleet) -> StandingRule:
+        spinning_turn_id = NativeTurnId('spinning')
         moved = time.time() - (SpinningUnit.minutes + 10) * 60
         worktree = fleet.worktree("spinning", base=fleet.main, at=moved)
         head = fleet.commit(worktree, "spinning.py", "spinning = 1\n", at=moved)
@@ -346,7 +348,7 @@ class SpinningUnitSeed(IncidentSeed):
         transcript = ExternalTranscript(fleet.comms.root, todo.held().owner_identity)
         for call in range(SpinningUnit.calls):
             transcript.finish(
-                turn_id="spinning",
+                turn_id=spinning_turn_id,
                 item_id=f"call-{call}",
                 events=(
                     ToolStartTranscript(

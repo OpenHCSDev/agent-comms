@@ -24,6 +24,7 @@ from agent_comms.thread_status import StoppedThreadStatus
 from agent_comms.thread_text import ForkedParent
 from agent_comms.todos import DeliverTodo, OperationDelivery, ProgressRead
 from agent_comms.transcript_events import ToolStartTranscript
+from agent_comms.turn_item import NativeTurnId
 from agent_comms.ui_model.unit_state import (
     AwaitingCommander,
     Blocked,
@@ -182,10 +183,11 @@ def test_unit_state_family_uses_real_records(held_bus, tmp_path, member):
 
 
 def test_started_turn_on_delivered_order_is_moving_not_stalled(held_bus):
+    turn_turn_id = NativeTurnId('turn')
     worker = replace(held_bus.registry.require("worker"), execution=ExternalThreadExecution)
     held_bus.registry.register(worker)
     ExternalTranscript(held_bus.root, worker.incarnation).finish(
-        turn_id="turn",
+        turn_id=turn_turn_id,
         item_id="call",
         events=(
             ToolStartTranscript(

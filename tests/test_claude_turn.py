@@ -3,6 +3,7 @@ from contextlib import nullcontext
 
 import pytest
 
+from agent_comms.turn_item import NativeTurnId
 from agent_comms.turn_phase import ModelWaitPhase, ToolRunningPhase
 from agent_comms.cli_bridges.claude_protocol import (
     CatchUp, ClaudeSession, ClaudeToolDraft, KnownTurn, Live, RedactedThinking,
@@ -36,19 +37,20 @@ def test_unknown_turn_uses_the_reader_phase_for_every_item(question, phase, expe
 
 
 def test_prompt_identifies_finished_and_active_items_with_the_same_turn():
+    turn_id_turn_id = NativeTurnId('turn-id')
     session = ClaudeSession(phase=Live())
     prompt = UserRecord(uuid='prompt', timestamp='2026-10-18T00:00:00Z', position=17,
                         promptId='turn-id', message={'content': []})
     prompt.updates(session)
-    assert session.turn == KnownTurn('turn-id')
+    assert session.turn == KnownTurn(turn_id_turn_id)
     (started,) = ToolUse(id='call', name='Read', input={'file_path': 'a.py'}).updates(prompt, session)
     assert isinstance(started, StartedItem)
     assert started.phase == ToolRunningPhase(tools=(('call', started.accumulator.call.title),))
     call = started.accumulator.call
     result = TimedRecord(uuid='result', timestamp='2026-10-18T00:00:01Z', position=18)
     completed, active = session.tool_result('call', 'done', True, result)
-    assert completed == FinishedItem('turn-id', 'call', (
+    assert completed == FinishedItem(turn_id_turn_id, 'call', (
         call.started(prompt.position, prompt.timestamp),
         call.ended('done', True, result.position, result.timestamp),
     ))
-    assert active == ActiveItem('turn-id', 'call', ModelWaitPhase())
+    assert active == ActiveItem(turn_id_turn_id, 'call', ModelWaitPhase())
