@@ -54,6 +54,7 @@ from agent_comms.todos import (
     DeliverTodo,
     DoneTodoState,
     MergedListedPullRequest,
+    NotOrderCommander,
     OperationDelivery,
     PendingProblemOrder,
     ProgressRead,
@@ -141,7 +142,7 @@ def test_create_is_idempotent_and_request_link_is_historical(tmp_path: Path, sou
     assert TodoStore(tmp_path).list(RepositoryName.from_wire("openhcsdev/agent-comms")) == (original,)
     newer = thread("lead", tmp_path, 2.0)
     assert store.get(original.id).request == request
-    with pytest.raises(TodoConflict):
+    with pytest.raises(NotOrderCommander):
         store.apply("P1", ChangeTodoState(1, DoneTodoState, newer.incarnation, None))
     assert store.get("P1") == original
 

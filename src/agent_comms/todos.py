@@ -2686,6 +2686,18 @@ class TodoConflict(TodoError):  # noqa: N818 - domain-specific conflict outcome
         super().__init__(f"Todo {current.id} changed (revision {current.revision}, owner {owner}).")
 
 
+class NotOrderCommander(TodoError):  # noqa: N818 - domain-specific refusal outcome
+    """The caller is not the commander who created this order."""
+
+    def __init__(self, current: Todo, actor: ThreadIncarnation) -> None:
+        self.current = current
+        self.actor = actor
+        super().__init__(
+            f"{current.id} belongs to commander {current.creator_identity.name}; "
+            f"{actor.name} is not its commander."
+        )
+
+
 class TodoHolder(ABC):
     """Current, released and absent holders own their assignment behaviour."""
 
@@ -4076,7 +4088,7 @@ class Todo(TodoStoreRows, TypedTable):
 
     def require_commander(self, actor: ThreadIncarnation) -> None:
         if self.creator_identity != actor.commanding_identity:
-            raise TodoConflict(self)
+            raise NotOrderCommander(self, actor)
 
     def require_actor(self, actor: ThreadIncarnation, generation: GoalId | None) -> None:
         if self.creator_identity != actor.commanding_identity:
