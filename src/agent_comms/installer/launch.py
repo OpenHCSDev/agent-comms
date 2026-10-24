@@ -170,12 +170,19 @@ class InstallUnit(SystemdUnit):
     def errors(self) -> Path:
         return self.logs / "stderr.log"
 
+    @property
+    def request(self) -> Path:
+        """The ``InstallRun`` the unit reads on its standard input, as every runtime's launcher
+        has sent it: the launcher is the installed runtime, older than the tree it starts."""
+        return self.logs / "request.json"
+
     def start(self, tree: Path, command: tuple[str, ...], pythonpath: str,
               *options: str) -> None:
         """Start the unit; ``--wait`` follows it to its end and raises on its failure."""
         subprocess.run(
             ("systemd-run", "--user", "--quiet", "--collect", *options, f"--unit={self.unit}",
-             f"--working-directory={tree}", f"--property=StandardOutput=file:{self.result}",
+             f"--working-directory={tree}", f"--property=StandardInput=file:{self.request}",
+             f"--property=StandardOutput=file:{self.result}",
              f"--property=StandardError=file:{self.errors}",
              *(f"--setenv={name}" for name in self.inherited),
              f"--setenv=PYTHONPATH={pythonpath}", *command),
@@ -273,12 +280,11 @@ class InstallRun:
         """The install runs in its own unit and reads its request from a file beside the bus,
         so stopping the caller's unit, the connector's included, cannot cut it short."""
         tree = TargetTree(self.command.checkout, self.scratch, self.target)
-        request = self.unit.logs / "request.json"
-        request.write_text(json.dumps(FieldCodec.encode(self)))
+        self.unit.request.write_text(json.dumps(FieldCodec.encode(self)))
         print(f"install: {self.unit.unit} runs {self.target[:12]}; "
               f"diagnostics {self.unit.errors}", file=sys.stderr, flush=True)
         self.unit.start(
-            tree.path, (sys.executable, "-m", agent_comms.installer.__name__, str(request)),
+            tree.path, (sys.executable, "-m", agent_comms.installer.__name__),
             os.pathsep.join(map(str, tree.source_paths())), *options,
         )
 
