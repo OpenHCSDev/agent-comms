@@ -611,7 +611,7 @@ class HuntDue(ReasonedStandingRule, DatedStandingRule):
         for hunt in comms.goals.todos.hunts_for_commander(actor):
             hunted[hunt.where.file] = max(hunted.get(hunt.where.file, 0),
                                           hunt.at.recorded_at("A hunt"))
-        repos = {Repo(checkout=Path(todo.order.checked().check.directory), github=todo.repo)
+        repos = {todo.repository
                  for todo in todos}
         candidates: list[str] = []
         for repo in repos:

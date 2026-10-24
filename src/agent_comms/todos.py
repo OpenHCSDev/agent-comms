@@ -2064,7 +2064,7 @@ class CheckedProblemOrder(ProblemOrder, declared_name=None):
     def closed_by_merge(
         self, todo: Todo, pulls: ProgressRead, checkout_base: Path
     ) -> tuple[Todo, ...]:
-        repo = Repo(checkout=Path(self.check.directory), github=todo.repo)
+        repo = todo.repository
         source = PullRequestSource(todo, pulls)
         return tuple(self.run.after_merge(todo, merged)
                      for merged in self.observed_merges(repo, source))
@@ -3942,6 +3942,10 @@ class Todo(TodoStoreRows, TypedTable):
         return tuple(cls.read(db.execute(
             f"SELECT * FROM {cls.declared_name} WHERE {cls._sql(where)} ORDER BY rowid",
             parameters)))
+
+    @property
+    def repository(self) -> Repo:
+        return Repo(checkout=self.order.checked().check.directory, github=self.repo)
 
     @property
     def judged_calls(self) -> tuple[str, ...]:
