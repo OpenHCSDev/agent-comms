@@ -1,11 +1,10 @@
 from __future__ import annotations
 
-import shlex
 from contextlib import redirect_stdout
 from dataclasses import dataclass
 from io import StringIO
 
-from agent_comms.installer.interpreter_operation import ProbePhase, RuntimeProbe
+from agent_comms.installer.interpreter_operation import CliProbePhase, RuntimeProbe
 
 
 @dataclass(frozen=True)
@@ -20,8 +19,8 @@ class CliCommandProbe(RuntimeProbe[CliOutput]):
 
     arguments: tuple[str, ...]
 
-    def install_phase(self) -> ProbePhase:
-        return ProbePhase(shlex.join(self.arguments), probe=type(self))
+    def install_phase(self) -> CliProbePhase:
+        return CliProbePhase(probe=type(self), arguments=self.arguments)
 
     def run(self) -> CliOutput:
         from agent_comms import cli

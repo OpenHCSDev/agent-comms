@@ -9,6 +9,7 @@ from __future__ import annotations
 import base64
 import inspect
 import os
+import shlex
 import sys
 import time
 from abc import ABC, abstractmethod
@@ -34,15 +35,8 @@ from agent_comms.maintenance_barrier import HOLDER_NONCE
 class InstallPhase(DeclaredFamily, affix="Phase"):
     """A declared operation measures its own run through the install's shared clock."""
 
-    detail: str = ""
-
     def label(self) -> str:
-        subject = self.subject
-        return f"{type(self).__name__}: {subject}" if subject else type(self).__name__
-
-    @property
-    def subject(self) -> str:
-        return self.detail
+        return type(self).__name__
 
     def started_at(self, now: float) -> float:
         return now
@@ -63,6 +57,17 @@ class InstallPhase(DeclaredFamily, affix="Phase"):
                 clock.active[:] = [active for active in clock.active if active is not measured]
 
 
+class SubjectPhase(InstallPhase):
+    """A phase derives its subject from the typed operation it measures."""
+
+    @property
+    @abstractmethod
+    def subject(self) -> str: ...
+
+    def label(self) -> str:
+        return f"{type(self).__name__}: {self.subject}"
+
+
 class InstallRunPhase(InstallPhase):
     """The whole installer, including teardown and its final publication."""
 
@@ -79,27 +84,65 @@ class PreparePhase(InstallPhase):
     """Read the selected target, outgoing runtime and pending operation declarations."""
 
 
+class TargetCheckoutPreparePhase(PreparePhase):
+    """Prepare the target revision's checkout."""
+
+
+class LiveCheckoutPreparePhase(PreparePhase):
+    """Advance and prepare the live checkout."""
+
+
+class RestoredCheckoutPreparePhase(PreparePhase):
+    """Restore the outgoing checkout after an install failure."""
+
+
 class BuildPhase(InstallPhase):
     """Resolve and build the target stack and its native package."""
 
 
-class CommandPhase(InstallPhase):
+@dataclass(frozen=True)
+class CommandPhase(SubjectPhase):
     """An external command, identified by its actual invocation."""
 
+    command: tuple[str, ...]
 
-class GitPhase(InstallPhase):
+    @property
+    def subject(self) -> str:
+        return shlex.join(self.command)
+
+
+@dataclass(frozen=True)
+class GitPhase(SubjectPhase):
     """A Git operation through the shared repository owner."""
+
+    checkout: Path
+    arguments: tuple[str, ...]
+
+    @property
+    def subject(self) -> str:
+        return shlex.join(("git", "-C", str(self.checkout), *self.arguments))
 
 
 @dataclass(frozen=True, kw_only=True)
-class ProbePhase(InstallPhase):
+class ProbePhase(SubjectPhase):
     """A declared operation answered by an interpreter worker."""
 
     probe: type[RuntimeProbe]
 
     @property
     def subject(self) -> str:
-        return f"{self.probe.declared_name} {self.detail}".rstrip()
+        return self.probe.declared_name
+
+
+@dataclass(frozen=True, kw_only=True)
+class CliProbePhase(ProbePhase):
+    """A CLI probe retains the command arguments it measures."""
+
+    arguments: tuple[str, ...]
+
+    @property
+    def subject(self) -> str:
+        return f"{super().subject} {shlex.join(self.arguments)}"
 
 
 class PracticePhase(InstallPhase):
@@ -114,6 +157,10 @@ class VerifyPhase(InstallPhase):
     """Read back the carried bus and compare the files the steps changed."""
 
 
+class ReadBackVerifyPhase(VerifyPhase):
+    """Read back the carried bus through its selected runtime."""
+
+
 class LivePhase(InstallPhase):
     """Stop owners, carry the held bus, publish and restart its captured owners."""
 
@@ -122,16 +169,72 @@ class BridgePhase(InstallPhase):
     """Discover, pause or resume the session bridges around the live swap."""
 
 
+class BindingStartBridgePhase(BridgePhase):
+    """Convert host bindings before starting services on the selected runtime."""
+
+
+class BindingStartRevertBridgePhase(BridgePhase):
+    """Undo the host binding conversion after a failed service start."""
+
+
+class ConfirmBridgePhase(BridgePhase):
+    """Confirm bridges observe the selected runtime."""
+
+
+class DiscoverAndPauseBridgePhase(BridgePhase):
+    """Discover and pause bridges before carrying the live bus."""
+
+
+class ReleaseBridgePhase(BridgePhase):
+    """Release bridges after the live swap."""
+
+
 class MaintenancePhase(InstallPhase):
     """Set up, transfer or clear the install's maintenance hold."""
+
+
+class OutgoingRuntimeMaintenancePhase(MaintenancePhase):
+    """Record the outgoing runtime before acquiring maintenance."""
+
+
+class BeginMaintenancePhase(MaintenancePhase):
+    """Acquire the install's maintenance hold after services are stopped."""
+
+
+class RetargetMaintenancePhase(MaintenancePhase):
+    """Transfer the maintenance hold to the staged runtime."""
+
+
+class AbortMaintenancePhase(MaintenancePhase):
+    """Clear maintenance after an install aborts before backup."""
+
+
+class ClearMaintenancePhase(MaintenancePhase):
+    """Clear maintenance after publishing the selected runtime."""
 
 
 class FileScanPhase(InstallPhase):
     """Inventory the bus files before or after a migration."""
 
 
+class BeforeMigrationFileScanPhase(FileScanPhase):
+    """Inventory bus files before the carry pass."""
+
+
+class AfterMigrationFileScanPhase(FileScanPhase):
+    """Inventory bus files after the carry pass."""
+
+
 class BackupPhase(InstallPhase):
     """Reserve restore space or save the selected stores and route."""
+
+
+class StoresAndRouteBackupPhase(BackupPhase):
+    """Save the selected stores and the live route."""
+
+
+class RestoreSpaceBackupPhase(BackupPhase):
+    """Reserve enough space to restore the selected stores."""
 
 
 class BackupRetirePhase(InstallPhase):
@@ -139,7 +242,15 @@ class BackupRetirePhase(InstallPhase):
 
 
 class ServicesPhase(InstallPhase):
-    """Start stopped host services and prove they serve the selected runtime."""
+    """Stop or start host services."""
+
+
+class StopServicesPhase(ServicesPhase):
+    """Stop host services before carrying or restoring the bus."""
+
+
+class StartServicesPhase(ServicesPhase):
+    """Start host services and prove they serve the selected runtime."""
 
 
 class ProcessScanPhase(InstallPhase):
@@ -150,8 +261,39 @@ class PublicationPhase(InstallPhase):
     """Publish the route, runtime or install result through its existing owner."""
 
 
+class RuntimePublicationPhase(PublicationPhase):
+    """Publish the selected runtime's launch paths."""
+
+
+class StartingReportPublicationPhase(PublicationPhase):
+    """Publish the install's starting report."""
+
+
+class RouteAndRuntimePublicationPhase(PublicationPhase):
+    """Publish the selected route and runtime together."""
+
+
+class FailureReportPublicationPhase(PublicationPhase):
+    """Publish the install's failure report."""
+
+
+class FinishedReportPublicationPhase(PublicationPhase):
+    """Publish the install's finished report."""
+
+
 class WorkerClosePhase(InstallPhase):
     """Close and reap the install's persistent interpreter workers."""
+
+
+@dataclass(frozen=True)
+class RuntimeWorkerClosePhase(SubjectPhase, WorkerClosePhase):
+    """Close and reap interpreter workers for one selected runtime."""
+
+    python: Path
+
+    @property
+    def subject(self) -> str:
+        return str(self.python)
 
 
 class TreeClosePhase(InstallPhase):

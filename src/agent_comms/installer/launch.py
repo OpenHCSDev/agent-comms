@@ -29,11 +29,12 @@ from agent_comms.field_codec import FieldCodec, Id128, PathText
 from agent_comms.installer.backup import StoreBackup
 from agent_comms.installer.commands import InstallCommands
 from agent_comms.installer.interpreter_operation import (
+    FailureReportPublicationPhase,
+    FinishedReportPublicationPhase,
     InstallClock,
     LauncherPhase,
     PhaseTiming,
-    PreparePhase,
-    PublicationPhase,
+    TargetCheckoutPreparePhase,
     TreeClosePhase,
 )
 from agent_comms.installer.probes.harnesses import HarnessesProbe, InstallResult
@@ -118,14 +119,14 @@ class InstallReport(MroDispatch):
         except BaseException as error:
             self.outcome = FailedInstall(self.outcome, next(self.handlers_for(error))(error))
             try:
-                with PublicationPhase("failure report").running(clock):
+                with FailureReportPublicationPhase().running(clock):
                     self.writer.post((*self.outcome.lines(), *self.bridges.lines()))
             except BaseException as publication_error:
                 error.add_note(f"Install failure report also failed: {publication_error}")
                 print(f"install: failure report also failed: {publication_error}", file=sys.stderr)
             raise
         else:
-            with PublicationPhase("finished report").running(clock):
+            with FinishedReportPublicationPhase().running(clock):
                 self.writer.post(lines)
 
 
@@ -199,7 +200,7 @@ class InstallRun:
         parent = command.installer.scratch(StorageRule.load(root))
         parent.mkdir(mode=0o700, parents=True, exist_ok=True)
         scratch = Path(tempfile.mkdtemp(dir=parent, prefix="install-"))
-        with PreparePhase("target checkout").running(commands.clock):
+        with TargetCheckoutPreparePhase().running(commands.clock):
             TargetTree(checkout, scratch, target).add()
         return cls(command, root, scratch, target, commands.clock.phases)
 

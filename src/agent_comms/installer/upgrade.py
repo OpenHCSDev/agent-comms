@@ -76,29 +76,45 @@ from agent_comms.installer.carry import STEPS, CarryChain
 from agent_comms.installer.commands import InstallCommands
 from agent_comms.installer.declared_uv import DeclaredUv
 from agent_comms.installer.interpreter_operation import (
-    BackupPhase,
+    AbortMaintenancePhase,
+    AfterMigrationFileScanPhase,
     BackupRetirePhase,
+    BeforeMigrationFileScanPhase,
+    BeginMaintenancePhase,
+    BindingStartBridgePhase,
+    BindingStartRevertBridgePhase,
     BridgePhase,
     BuildPhase,
+    ClearMaintenancePhase,
+    ConfirmBridgePhase,
     CopyPhase,
-    FileScanPhase,
+    DiscoverAndPauseBridgePhase,
     GitPhase,
     InstallClock,
-    InstallPhase,
     InstallRunPhase,
+    LiveCheckoutPreparePhase,
     LivePhase,
-    MaintenancePhase,
+    OutgoingRuntimeMaintenancePhase,
     PhaseTiming,
     PracticePhase,
     PreparePhase,
     ProbeProgram,
     ProcessScanPhase,
-    PublicationPhase,
+    ReadBackVerifyPhase,
+    ReleaseBridgePhase,
+    RestoredCheckoutPreparePhase,
+    RestoreSpaceBackupPhase,
     RetainedProgram,
+    RetargetMaintenancePhase,
+    RouteAndRuntimePublicationPhase,
     RuntimeProbe,
-    ServicesPhase,
+    RuntimePublicationPhase,
+    StartingReportPublicationPhase,
+    StartServicesPhase,
+    StopServicesPhase,
+    StoresAndRouteBackupPhase,
+    SubjectPhase,
     TargetProgram,
-    VerifyPhase,
 )
 from agent_comms.installer.owner_starts import OwnerStart
 from agent_comms.installer.practice import (
@@ -157,7 +173,7 @@ CORE_ERROR = TypeAdapter(CoreError.declared_union())
 
 
 @dataclass(frozen=True, kw_only=True)
-class OwnersPhase(InstallPhase):
+class OwnersPhase(SubjectPhase):
     """One concurrent batch of owner requests, measured by its elapsed wall time."""
 
     command: type[CliCommand]
@@ -580,7 +596,7 @@ class Stack:
     def publish(self, root: Path) -> None:
         """The selected interpreter owns console metadata and harness declarations, and
         ``root`` belongs to this stack's runtime from now on."""
-        with PublicationPhase("runtime").running(self.commands.clock):
+        with RuntimePublicationPhase().running(self.commands.clock):
             self.probe(PublicationProbe())
             RootRuntime.publish(root, self.runtime)
 
@@ -644,15 +660,19 @@ class Stack:
         return tuple(outcome.owner_start()
                      for outcome in self.owners(root, StartCliCommand, names).outcomes)
 
+    def stop_services(self) -> tuple[HostService, ...]:
+        with StopServicesPhase().running(self.commands.clock):
+            return HostService.stop_running()
+
     def start_services(self, stopped: tuple[HostService, ...]) -> tuple[RestartedService, ...]:
-        with ServicesPhase("start").running(self.commands.clock):
+        with StartServicesPhase().running(self.commands.clock):
             services = tuple(service.start_onto(self.python) for service in stopped)
             self.probe(ServingProbe())
             return services
 
     def verify(self, root: Path) -> BusReadBack:
         """What the carried bus answers through the CLI of the runtime that serves it next."""
-        with VerifyPhase("read back").running(self.commands.clock):
+        with ReadBackVerifyPhase().running(self.commands.clock):
             return self.cli(root, ReadBackCliCommand)
 
 
@@ -678,10 +698,10 @@ class BindingStartCutover:
 
     def around(self, start: Callable[[], T]) -> T:
         try:
-            self.run(BridgePhase('binding start'))
+            self.run(BindingStartBridgePhase())
             return start()
         except BaseException:
-            self.run(BridgePhase('binding start revert'), '--revert')
+            self.run(BindingStartRevertBridgePhase(), '--revert')
             raise
 
 
@@ -792,7 +812,9 @@ def upgrade(checkout: Path, root: Path, target: str, installer: InstallerChoice,
             StoreBackup.complete_interrupted(root, spill_dir)
             installed = Stack(tree.path, commands)
             current = commands.git(checkout, "rev-parse", "HEAD").strip()
-            with commands.timing(GitPhase(f"git merge-base --is-ancestor {current} {target}")):
+            with commands.timing(GitPhase(
+                checkout, ("merge-base", "--is-ancestor", current, target),
+            )):
                 follows = Repo.descends(checkout, current, target)
             if not follows:
                 raise UpgradeRefused(f"{target[:12]} does not follow the checkout's {current[:12]}")
@@ -808,7 +830,7 @@ def upgrade(checkout: Path, root: Path, target: str, installer: InstallerChoice,
             if not installed.python.exists():
                 raise UpgradeRefused(f"No installed stack at {installed.python}")
         staged = Stack.build(ScratchCheckout(tree.path), commands)
-        with PublicationPhase("starting report").running(commands.clock):
+        with StartingReportPublicationPhase().running(commands.clock):
             report.starting(mode.destination(member.initial_writer(root, installed)), target)
         with PracticePhase().running(commands.clock):
             install, rehearsal = member.rehearsed(checkout, root, current, target, chain,
@@ -843,7 +865,7 @@ class Install[Rehearsed: Rehearsal](ABC):
             RuntimeWriter(root, installed), UnpostedWriter())
 
     def backed_up(self, files: tuple[Path, ...]) -> tuple[StoreBackup, RouteFileSelection]:
-        with BackupPhase("stores and route").running(self.staged.commands.clock):
+        with StoresAndRouteBackupPhase().running(self.staged.commands.clock):
             backup = StoreBackup.take(self.root, active_route_path(), files, self.spill_dir)
             with route_directory(backup.route):
                 backup.require_route_revision()
@@ -852,7 +874,7 @@ class Install[Rehearsed: Rehearsal](ABC):
 
     def publish(self, backup: StoreBackup, selected: RouteFileSelection) -> str:
         """The converted bus's route is ready before new runtime entrypoints open it."""
-        with PublicationPhase("route and runtime").running(self.staged.commands.clock):
+        with RouteAndRuntimePublicationPhase().running(self.staged.commands.clock):
             incoming = ActiveRoute(self.root.absolute(), RecordedBusIdentity.capture(Bus.path_in(self.root)))
             route = backup.rebind_route(incoming, selected)
             self.staged.publish(self.root)
@@ -894,7 +916,7 @@ class Install[Rehearsed: Rehearsal](ABC):
                     processes = RuntimeProcesses.observe(self.staged.runtime)
             finally:
                 # Includes rollback, a failed pause, and failures after the live run.
-                with BridgePhase("confirm").running(self.staged.commands.clock):
+                with ConfirmBridgePhase().running(self.staged.commands.clock):
                     bridges.confirm()
             finished = InstalledUpgrade(
                 rehearsed.source, rehearsed.target, rehearsed.root, rehearsed.pending,
@@ -914,13 +936,13 @@ class Install[Rehearsed: Rehearsal](ABC):
         """
         with ExitStack() as resources:
             try:
-                with BridgePhase("discover and pause").running(self.staged.commands.clock):
+                with DiscoverAndPauseBridgePhase().running(self.staged.commands.clock):
                     for bridge in Serve.running(self.installed.home):
                         bridges.pause(bridge, resources)
                 return report.record_live(self.live(rehearsal, report))
             finally:
                 # A later pause may fail; release captured peers before closing their sockets.
-                with BridgePhase("release").running(self.staged.commands.clock):
+                with ReleaseBridgePhase().running(self.staged.commands.clock):
                     bridges.release()
 
     @abstractmethod
@@ -984,7 +1006,7 @@ class PreparedMigration(Extendable):
         Settling first moves committed WAL frames into their files, as the practice copy's
         backup did, so no later last close rewrites a file no step names."""
         root = Path(hold.root)
-        with FileScanPhase("before migration").running(outgoing.commands.clock):
+        with BeforeMigrationFileScanPhase().running(outgoing.commands.clock):
             settle_bus_files(root)
             before = bus_files(root)
         return cls(hold, before, outgoing.verify(root))
@@ -997,7 +1019,7 @@ class PreparedMigration(Extendable):
         steps.append(StepRun(ReconcileStoresCliCommand.declared_name, Carried(
             len(reconciled.rewritten), rewritten=reconciled.rewritten)))
         declared = tuple(steps)
-        with FileScanPhase("after migration").running(staged.commands.clock):
+        with AfterMigrationFileScanPhase().running(staged.commands.clock):
             files = carried(self.root, self.before, declared, RehearsalFiles.declared(declared))
         passed = CarriedPass(declared, files, staged.verify(self.root))
         passed.require_read(self.read)
@@ -1041,18 +1063,18 @@ class ChangedInstall(ExistingBusInstall[RehearsedFiles]):
     def live(self, rehearsal: RehearsedFiles, report: InstallReport) -> CarriedRun:
         expected = frozenset(rehearsal.files.names) | frozenset(rehearsal.inputs)
         selected = tuple(self.root / name for name in sorted(expected))
-        with BackupPhase("restore space").running(self.staged.commands.clock):
+        with RestoreSpaceBackupPhase().running(self.staged.commands.clock):
             restore = RestoreSpace.measure(max(
                 rehearsal.files.restore_bytes,
                 sum(path.stat().st_size for path in selected if path.exists()),
             ), self.root.parent)
             restore.require()
-        with MaintenancePhase("outgoing runtime").running(self.staged.commands.clock):
+        with OutgoingRuntimeMaintenancePhase().running(self.staged.commands.clock):
             RootRuntimeStore.at(self.root).adopt(self.installed.runtime)
         running = self.installed.running_owners(self.root)
-        with MaintenancePhase("begin").running(self.staged.commands.clock):
+        services = self.staged.stop_services()
+        with BeginMaintenancePhase().running(self.staged.commands.clock):
             maintenance = MaintenanceBarrier(RegistryStore.at(self.root).path)
-            services = HostService.stop_running()
             try:
                 held = maintenance.begin(MaintenanceOperator.current())
             except BaseException:
@@ -1063,7 +1085,7 @@ class ChangedInstall(ExistingBusInstall[RehearsedFiles]):
         try:
             try:
                 self.installed.owners(self.root, StopCliCommand, running).require_success(UpgradeRefused)
-                with MaintenancePhase("retarget").running(self.staged.commands.clock):
+                with RetargetMaintenancePhase().running(self.staged.commands.clock):
                     held = maintenance.retarget(held, self.staged.runtime)
                     holder.close()
                     holder.enter_context(held.holding())
@@ -1076,7 +1098,7 @@ class ChangedInstall(ExistingBusInstall[RehearsedFiles]):
                 backup, selected_route = self.backed_up(selected)
                 migration = original.extended(BackedUpMigration, backup=backup)
             except BaseException as error:
-                with MaintenancePhase("abort").running(self.staged.commands.clock):
+                with AbortMaintenancePhase().running(self.staged.commands.clock):
                     holder.close()
                     maintenance.clear(held)
                 started = self.installed.start(self.root, running)
@@ -1085,13 +1107,13 @@ class ChangedInstall(ExistingBusInstall[RehearsedFiles]):
                       f"maintenance cleared; owners: {started}", file=sys.stderr)
                 raise
             try:
-                with PreparePhase("live checkout").running(self.staged.commands.clock):
+                with LiveCheckoutPreparePhase().running(self.staged.commands.clock):
                     self.staged.commands.git(self.checkout, "merge", "--ff-only", "-q", self.target)
                     Checkout(self.checkout).prepare()
                 passed = migration.carry(self.pending, self.staged)
                 passed.files.require_rehearsal(rehearsal.files)
                 self.publish(migration.backup, selected_route)
-                with MaintenancePhase("clear").running(self.staged.commands.clock):
+                with ClearMaintenancePhase().running(self.staged.commands.clock):
                     holder.close()
                     maintenance.clear(held)
                 restarted_services = BindingStartCutover(
@@ -1102,7 +1124,7 @@ class ChangedInstall(ExistingBusInstall[RehearsedFiles]):
                       "restoring original installation", file=sys.stderr)
                 # A running service writes the root (the connector its passes), so none may
                 # run while the backup is restored; they start again on the original runtime.
-                HostService.stop_running()
+                self.staged.stop_services()
                 state = maintenance.read()
                 recovery = state.phase.hold_for(maintenance, state, MaintenanceOperator.current())
                 holder.close()
@@ -1115,7 +1137,7 @@ class ChangedInstall(ExistingBusInstall[RehearsedFiles]):
                 holder.enter_context(restored_hold.holding())
                 head = self.installed.commands.git(self.checkout, "rev-parse", "HEAD").strip()
                 if head != self.current:
-                    with PreparePhase("restored checkout").running(self.staged.commands.clock):
+                    with RestoredCheckoutPreparePhase().running(self.staged.commands.clock):
                         self.installed.commands.git(self.checkout, "reset", "-q", "--keep", self.current)
                         Checkout(self.checkout).prepare()
                 self.installed.publish(self.root)
@@ -1187,7 +1209,7 @@ class FreshInstall(Install[FreshRehearsal]):
         return FreshRehearsal()
 
     def live(self, rehearsal: FreshRehearsal, report: InstallReport) -> CreatedRun:
-        with PreparePhase("live checkout").running(self.staged.commands.clock):
+        with LiveCheckoutPreparePhase().running(self.staged.commands.clock):
             self.staged.commands.git(self.checkout, "merge", "--ff-only", "-q",
                                      self.target)
             Checkout(self.checkout).prepare()
@@ -1195,12 +1217,12 @@ class FreshInstall(Install[FreshRehearsal]):
         wire(self.root).registry.prepare_native_root()
         report.writer = RuntimeWriter(self.root, self.staged)
         backup, selected_route = self.backed_up(())
-        stopped = HostService.stop_running()
+        stopped = self.staged.stop_services()
         try:
             route = self.publish(backup, selected_route)
             services = self.staged.start_services(stopped)
         except BaseException:
-            HostService.stop_running()
+            self.staged.stop_services()
             backup.restore_route()
             self.installed.publish(self.root)
             self.installed.start_services(stopped)

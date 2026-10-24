@@ -89,8 +89,8 @@ def test_typed_results_publish_as_installer_and_survive_history_read(private_com
     installed = InstalledUpgrade(
         found.source, found.target, found.root, found.pending, FreshRehearsal(),
         live, InstallResult(NoCommanderProject(), {}),
-        phases=[PhaseTiming(CommandPhase("uv sync"), 61.2, 61.2),
-                PhaseTiming(CommandPhase("git merge"), 0.1, 0.1)],
+        phases=[PhaseTiming(CommandPhase(("uv", "sync")), 61.2, 61.2),
+                PhaseTiming(CommandPhase(("git", "merge")), 0.1, 0.1)],
     )
     # The wire codec still carries the same result family and fields after factoring.
     decoded = FieldCodec.decode(Upgrade, FieldCodec.encode(installed))
