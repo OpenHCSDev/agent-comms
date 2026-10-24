@@ -7,6 +7,7 @@ from dataclasses import replace
 
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.field_codec import TurnId
+from agent_comms.input_key import BusInputKey
 from agent_comms.goal_actions import GoalPrecondition, SetGoalAction, StandbyGoalAction
 from agent_comms.goal_presentation import GoalWaitTarget
 from goal_owner_fixture import canonical_goal_wire
@@ -37,11 +38,11 @@ def test_first_wait_ignores_unreserved_reply_before_goal_publication(tmp_path):
     # A recorded UNKNOWN remains reviewable even before the goal boundary.
     inputs = InputDispositions(comms.root)
     inputs.record(
-        f"bus:{old.seq}", seq=old.seq, owner="owner", target="owner", text=old.body,
+        BusInputKey(old.seq), seq=old.seq, owner="owner", target="owner", text=old.body,
         claim_scope=comms.registry.snapshot().claim_generation("owner"),
     )
     assert list(comms.goals.goal_input_review("owner", goal.id, ["peer"]).reviewed_inputs) == [
-        f"bus:{old.seq}"
+        BusInputKey(old.seq)
     ]
 
 
@@ -53,7 +54,7 @@ def test_first_wait_reviews_reply_after_goal_publication(tmp_path):
     reply = comms.messaging.send("peer", "owner", "After this goal").message
     assert reply.seq > goal.published_seq
     assert list(comms.goals.goal_input_review("owner", goal.id, ["peer"]).reviewed_inputs) == [
-        f"bus:{reply.seq}"
+        BusInputKey(reply.seq)
     ]
 
 
@@ -122,7 +123,7 @@ def test_original_recipient_and_direct_reply_semantics_cannot_be_replaced(tmp_pa
     comms.registry.rename("peer", "renamed-peer")
     assert wait.has_reply(comms.bus.bus, owner.incarnation.require_recorded())
     assert comms.goals.goal_input_review("renamed-owner", goal.id, ["renamed-peer"]).reviewed_inputs == (
-        f"bus:{reply.seq}",)
+        BusInputKey(reply.seq),)
     comms.registry.unregister("renamed-owner")
     comms.registry.remove("renamed-owner")
     replacement = register(comms, "owner")

@@ -91,7 +91,7 @@ class QueuedInput:
     controller: Controller | None = None
 
     @property
-    def key(self) -> AcpInputKey:
+    def key(self) -> InputKey:
         return AcpInputKey(self.input_id)
 
     def queue_items(self, scope: QueueScope) -> tuple[QueueItem, ...]:
@@ -307,7 +307,7 @@ class DeliveredInput(QueuedInput):
     assignment: WakeAssignment
 
     @property
-    def key(self) -> AcpInputKey:
+    def key(self) -> InputKey:
         return self.bus_key
 
     def queue_items(self, scope: QueueScope) -> tuple[QueueItem, ...]:
