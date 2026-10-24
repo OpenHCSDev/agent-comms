@@ -1875,6 +1875,10 @@ class InputId(Id128):
     pass
 
 
+class SlotId(Id128):
+    """The consumed tool slot, distinct from the input that produced it."""
+
+
 class Id128Text(NominalSpelling[Id128]):
     """A 128-bit identity: an input, turn, bus root, recipient lookup or claim generation."""
 

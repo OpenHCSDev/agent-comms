@@ -11,11 +11,12 @@ from typing import TYPE_CHECKING, ClassVar
 from agent_comms.turn_goal_permission import GoalPermission, TurnGoalPermission
 
 from . import input_attempt
-from .acp_extension import InputStartedUpdate, NoQueueScope
+from .acp_extension import InputStartedUpdate, NoQueueScope, UnidentifiedInputStarted
 from .agent_backend import BusyInputPolicy, SteerInputPolicy
 from .channel_input_batch import InputBatch, SingleInputBatch
 from .field_codec import InputId, TurnId
 from .input_attempt import InputAlreadyCleared
+from .input_key import InputKey
 from .messages import Message
 from .ordinary_turn_rules import (
     AcceptedInputCheck,
@@ -61,10 +62,16 @@ class TurnAcceptance(ABC):
         current = await inputs.queue_binding(session_id)
         if not scope.current_for(current):
             current = NoQueueScope()
-        return InputStartedUpdate(
-            row.public_id if source.notice_keys else None, source.notice_text,
-            current, current.start_revision(inputs, session_id), row.native_id,
+        update = UnidentifiedInputStarted(
+            source.notice_text, current, current.start_revision(inputs, session_id), row.native_id,
         )
+        accepted = await self.accepted_start(update, inputs, session_id)
+        return source.started_update_of(row, accepted)
+
+    async def accepted_start(
+        self, update: InputStartedUpdate, inputs: InputDrain, session_id: str,
+    ) -> InputStartedUpdate:
+        return update
 
     @abstractmethod
     def release(self, inputs: InputDrain, session_id: str) -> None: ...
@@ -106,18 +113,13 @@ class AcceptedTurn(TurnAcceptance):
             input_id=self.input_id, keys=source.keys, inputs=inputs, session_id=session_id,
         ).require_valid()
 
-    async def started_update(
-        self, source: TurnInputSource, inputs: InputDrain, session_id: str,
-        row: input_attempt.StartedInput, scope: QueueScope,
+    async def accepted_start(
+        self, update: InputStartedUpdate, inputs: InputDrain, session_id: str,
     ) -> InputStartedUpdate:
-        text = source.notice_text
         queued = inputs.state(session_id).queued
         if self.input_id in queued:
-            text = await queued[self.input_id].started(inputs)
-        update = await super().started_update(source, inputs, session_id, row, scope)
-        return replace(
-            update, input_id=row.public_id if source.notice_keys else self.input_id, text=text,
-        )
+            update = replace(update, text=await queued[self.input_id].started(inputs))
+        return update.identified(self.input_id)
 
     def release(self, inputs: InputDrain, session_id: str) -> None:
         inputs.state(session_id).queued.pop(self.input_id, None)
@@ -131,7 +133,7 @@ class TurnInputSource(StartedInput, ABC):
     origins: ClassVar[tuple[Message, ...]] = ()
 
     if TYPE_CHECKING:
-        keys: tuple[str, ...]
+        keys: tuple[InputKey, ...]
 
     @contextmanager
     def prepare_send(
@@ -271,7 +273,7 @@ class OriginalTurnInput(TurnInputSource):
     batch: InputBatch
 
     @property
-    def keys(self) -> tuple[str, ...]:
+    def keys(self) -> tuple[InputKey, ...]:
         return self.batch.keys
 
     def valid_keys(self, text: str) -> bool:
@@ -314,9 +316,16 @@ class DirectInput(TurnInputSource):
 
 
 class OwnerOriginalInput(OriginalTurnInput, DirectInput):
-    @property
-    def notice_keys(self) -> tuple[str, ...]:
-        return self.keys
+    def started_update_of(
+        self, row: input_attempt.StartedInput, update: InputStartedUpdate,
+    ) -> InputStartedUpdate:
+        return row.key.identify(update)
+
+    def failure_state(self, document):
+        return document.shared_state(self.keys)
+
+    def failed_input_text(self, document) -> str | None:
+        return self.notice_text if not document.all_started(self.keys) else None
 
     @property
     def notice_text(self) -> str:
@@ -368,7 +377,7 @@ class ScheduledOriginalInput(DependencyOriginalInput):
 
 @dataclass(frozen=True, kw_only=True)
 class FollowingTurnInput(TurnInputSource):
-    keys: tuple[str, ...]
+    keys: tuple[InputKey, ...]
     when_busy: ClassVar[type[BusyInputPolicy]] = SteerInputPolicy
 
     def continue_response(self, response, parts):

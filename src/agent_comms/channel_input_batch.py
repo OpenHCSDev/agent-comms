@@ -6,6 +6,8 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
+from .input_key import InputKey
+
 from .channel_targets import CommandTarget
 from .input_attempt import StoredInput
 
@@ -20,7 +22,7 @@ class InputBatch(ABC):
     originals: tuple[StoredInput, ...]
 
     @property
-    def keys(self) -> tuple[str, ...]:
+    def keys(self) -> tuple[InputKey, ...]:
         return tuple(row.key for row in self.originals)
 
     @property
@@ -40,7 +42,7 @@ class InputBatch(ABC):
     @staticmethod
     def capture(
         origins: tuple[Message, ...],
-        keys: tuple[str, ...],
+        keys: tuple[InputKey, ...],
         prompt: str,
         owner: Thread,
         document: InputDocument,

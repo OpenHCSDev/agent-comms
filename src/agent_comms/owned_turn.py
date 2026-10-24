@@ -14,6 +14,8 @@ from agent_comms.coordination_errors import RequestRefused
 from agent_comms.following_inputs import OwnerFollowingInputs
 from agent_comms.goal_turn_permit import GoalTurnPermit, NoLaunchPermit
 
+from .input_key import InputKey
+
 from . import agent_events as events
 from .agent_backend import InputContent, TurnDelivery
 from .channel_input_batch import InputBatch
@@ -85,7 +87,7 @@ class OwnedTurn:
         *,
         origins: tuple[Message, ...] = (),
         images: tuple[ImageInput, ...] = (),
-        original_keys: tuple[str, ...] = (),
+        original_keys: tuple[InputKey, ...] = (),
         initial_display_text: str | None = None,
         autonomous_goal: bool = False,
         original_owner_input: bool = False,

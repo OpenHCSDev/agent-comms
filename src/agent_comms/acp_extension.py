@@ -432,8 +432,8 @@ class QueueScope(AttachmentScope):
     def accepts_request(self, projection: QueueProjection) -> bool:
         return True
 
-    def unidentified_start(self, input_id: InputId | None) -> bool:
-        return input_id is None
+    def unidentified(self) -> bool:
+        return True
 
 
 @dataclass(frozen=True)
@@ -471,7 +471,7 @@ class LiveQueueScope(QueueScope, LiveAttachmentScope):
     def accepts_request(self, projection: QueueProjection) -> bool:
         return projection.status == 'available'
 
-    def unidentified_start(self, input_id: InputId | None) -> bool:
+    def unidentified(self) -> bool:
         return False
 
 
@@ -571,15 +571,49 @@ class QueueChangedUpdate(AgentCommsUpdate):
 
 
 @dataclass(frozen=True)
-class InputStartedUpdate(AgentCommsUpdate):
-    input_id: str | None
+class InputStartedUpdate(AgentCommsUpdate, declared_name=None):
     text: str | None
     scope: QueueScope
     revision: int | None
-    native_id: InputId | None
+    native_id: InputId
+
+    def queue_started(
+        self, receive: Callable[[IdentifiedInputStarted], tuple[IdentifiedInputStarted, ...]],
+    ) -> tuple[IdentifiedInputStarted, ...]:
+        return ()
+
+    def identified(self, input_id: InputId) -> IdentifiedInputStarted:
+        return IdentifiedInputStarted(
+            self.text, self.scope, self.revision, self.native_id, input_id,
+        )
+
+    def started_request(self, input_id: InputId) -> bool:
+        return False
+
+    def posts_unidentified(self) -> bool:
+        return False
 
     def for_session(self, session_id: str) -> InputStartedUpdate:
         return replace(self, scope=self.scope.for_session(session_id))
+
+
+@dataclass(frozen=True)
+class IdentifiedInputStarted(InputStartedUpdate):
+    input_id: InputId
+
+    def queue_started(
+        self, receive: Callable[[IdentifiedInputStarted], tuple[IdentifiedInputStarted, ...]],
+    ) -> tuple[IdentifiedInputStarted, ...]:
+        return receive(self)
+
+    def started_request(self, input_id: InputId) -> bool:
+        return self.input_id == input_id
+
+
+@dataclass(frozen=True)
+class UnidentifiedInputStarted(InputStartedUpdate):
+    def posts_unidentified(self) -> bool:
+        return self.scope.unidentified()
 
 
 @dataclass(frozen=True)
@@ -652,7 +686,7 @@ class TranscriptSnapshotUpdate(AgentCommsUpdate):
 
 @dataclass(frozen=True)
 class InputDeliveryChangedUpdate(AgentCommsUpdate):
-    input_id: str | None = None
+    pass
 
 
 @dataclass(frozen=True)
