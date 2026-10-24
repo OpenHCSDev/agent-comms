@@ -1690,13 +1690,6 @@ class TypedTable(
         return statements
 
     @classmethod
-    def structure_objects(cls, *, if_not_exists: bool = False) -> dict[str, str]:
-        """Tables, indexes and views, with mutation guards excluded by their declarations."""
-        guards = cls.triggers()
-        return {name: sql for name, sql in cls.schema_objects(if_not_exists=if_not_exists).items()
-                if name not in guards}
-
-    @classmethod
     def ddl(cls, *, if_not_exists: bool = False) -> tuple[str, ...]:
         return tuple(cls.schema_objects(if_not_exists=if_not_exists).values())
 
