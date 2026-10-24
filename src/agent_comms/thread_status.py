@@ -6,7 +6,7 @@ import time
 from abc import abstractmethod
 from collections.abc import Callable
 from dataclasses import dataclass, replace
-from typing import TYPE_CHECKING, ClassVar
+from typing import TYPE_CHECKING, ClassVar, Self
 
 from .child_process import ProcessIdentity, ProcessState
 from .declared_family import DeclaredFamily
@@ -300,9 +300,6 @@ class CliInboxPresence(AlwaysListed):
         return (ConnectedThreadStatus() if thread.process_identity.alive()
                 else NoBridgeThreadStatus())
 
-    def declaration(self) -> ThreadStatus:
-        return NoBridgeThreadStatus()
-
     def restored(self) -> ThreadStatus:
         """Restoration preserves the inbox declaration, never a liveness answer."""
         return NoBridgeThreadStatus()
@@ -316,7 +313,7 @@ class CliInboxPresence(AlwaysListed):
 class DeclaredReaderPresence(CliInboxPresence):
     """The session bridge's reader state survives registration and storage."""
 
-    def declaration(self) -> ThreadStatus:
+    def declaration(self) -> Self:
         return self
 
     def external_registered(self, thread: Thread, now: float) -> ThreadStatus:
