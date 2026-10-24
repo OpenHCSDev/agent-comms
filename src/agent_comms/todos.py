@@ -51,6 +51,8 @@ from agent_comms.child_process import (
     OrderCheckFailedError,
 )
 from agent_comms.command import Command
+from agent_comms.commander.package import CommanderPackage
+from agent_comms.commander.rule_file import RuleFile
 from agent_comms.coordination_session import NativeBoundary
 from agent_comms.declared_family import DeclaredFamily
 from agent_comms.errors import ToolRefusedError
@@ -2060,11 +2062,17 @@ class CheckedProblemOrder(ProblemOrder, declared_name=None):
         return url
 
     def work_instructions(self) -> tuple[str, ...]:
+        fleet_rules = ", ".join(
+            name for rule in RuleFile.packaged()
+            for name in rule.audience.order_reference(rule)
+        )
         return (f"Owner: {self.owner.to_wire()}",
                 f"Check: {self.check.directory} :: {self.check.command}",
                 *self.deletes.instructions(), *self.run.instructions(),
                 *(f"{n}. {edit}" for n, edit in enumerate(self.edits, 1)),
-                "Banned: " + "; ".join(self.banned), "Report: " + self.report)
+                "Banned: " + "; ".join(self.banned), "Report: " + self.report,
+                f"Standing rules for this order: reply in the voice of {CommanderPackage.voice()}; "
+                f"follow the fleet rules {fleet_rules} in {CommanderPackage.rules()}.")
 
     def instructions(self, todo):
         return "\n".join((f"Problem: {todo.id}: {todo.text}", *self.finding.instructions(),
