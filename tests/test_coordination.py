@@ -66,7 +66,7 @@ from agent_comms.execution_states import (
     PendingExecution,
 )
 from agent_comms.attempt_states import AttemptState, LiveAttempt
-from agent_comms.field_codec import FieldCodec
+from agent_comms.field_codec import FieldCodec, MessageId
 from agent_comms.typed_table import JsonStorage
 from agent_comms.messages import InfoKind, Message
 from agent_comms.obligation_states import (
@@ -431,7 +431,7 @@ def test_wire_claim_obligation_and_publication_contract():
         expected_message_id=message.message_id,
     )
     with pytest.raises(IntegrityViolationError):
-        replace(intent, expected_message_id="fabricated")
+        replace(intent, expected_message_id=MessageId.mint("fabricated"))
 
 
 
