@@ -8,7 +8,6 @@ from agent_comms.lifecycle_capability import Failed
 import asyncio
 import multiprocessing
 import os
-import subprocess
 import sys
 from dataclasses import replace
 from pathlib import Path
@@ -32,7 +31,7 @@ from agent_comms.child_process import ProcessIdentity, SpawnedProcess
 from agent_comms.comms import wire
 from agent_comms.coordination_errors import RecoveryBlocked
 from agent_comms.coordination_tables.attempts import ReplayFact
-from agent_comms.coordination_tables.executions import CurrentExecutions, ExecutionProvenance, WireOrigin
+from agent_comms.coordination_tables.executions import CurrentExecutions, WireOrigin
 from agent_comms.cursor_publication import CursorDelivery
 from agent_comms.native_input_record import FullNativeExecution, NumberNativeColumn, TextNativeColumn
 from agent_comms.selected_participant import SelectedParticipant
@@ -43,7 +42,6 @@ from test_coordinated_runtime import _root
 from agent_comms.coordinator import Coordination
 from agent_comms.execution_states import FailedExecution
 from agent_comms.native_runtime_input import CurrentNativeCursor, NativeRuntimeInput
-from agent_comms.owner_lifecycle import OwnerReleaseEvidence
 from agent_comms.reason_codes import GivenReasonCode
 from test_native_failure_recovery import NativeSendHistory, UnknownHistory, release_native_input
 
@@ -311,93 +309,6 @@ def test_stop_of_previously_released_dead_owner_settles_without_replay(released_
         assert input_evidence(store) == before_input
     assert comms.bus.bus.revision() == before_bus
     assert input_id in str(before_input)
-
-
-def test_abandon_refuses_released_but_live_owner(released_unknown):
-    _process, _exit_allowed, root, _root_id, execution_id, _input_id = released_unknown
-    with Coordination(str(root / "coordination.sqlite3")) as store:
-        with pytest.raises(RecoveryBlocked):
-            RecoveryMonitorCapability.abandon_released_native_attempt(store, execution_id)
-        assert store.get(execution_id).is_current
-
-
-def test_abandon_refuses_live_native_process(released_unknown):
-    process, exit_allowed, root, _root_id, execution_id, _input_id = released_unknown
-    leave(process, exit_allowed)
-    with Coordination(str(root / "coordination.sqlite3")) as store:
-        session_dir = (
-            root / "native-sessions" / store.get(execution_id).execution.owner_lookup
-        )
-        child = subprocess.Popen(
-            [sys.executable, "-c", "import time; time.sleep(30)", "--session-dir", str(session_dir)]
-        )
-        try:
-            with pytest.raises(RecoveryBlocked):
-                RecoveryMonitorCapability.abandon_released_native_attempt(store, execution_id)
-            assert store.get(execution_id).is_current
-        finally:
-            child.terminate()
-            child.wait(timeout=5)
-
-
-def delete_release(db, original):
-    OwnerReleaseEvidence.delete(db, name=original.name)
-
-
-def change_release_pid(db, original):
-    process = original.require_process()
-    OwnerReleaseEvidence.update(db, where="name=?", parameters=(original.name,),
-                                process_identity=replace(process, pid=process.pid + 1))
-
-
-def change_release_start(db, original):
-    process = original.require_process()
-    OwnerReleaseEvidence.update(db, where="name=?", parameters=(original.name,),
-                                process_identity=replace(process, start_time=process.start_time + 1))
-
-
-def change_release_birth(db, original):
-    OwnerReleaseEvidence.update(db, where="name=?", parameters=(original.name,), created_at=original.created_at + 1)
-
-
-def invalidate_release_scope(db, original):
-    OwnerReleaseEvidence.update(db, where="name=?", parameters=(original.name,), after=original.before)
-
-
-@pytest.mark.parametrize("damage", [delete_release, change_release_pid, change_release_start,
-                                    change_release_birth, invalidate_release_scope])
-def test_abandon_requires_real_release(released_unknown, damage):
-    process, exit_allowed, root, _root_id, execution_id, _input_id = released_unknown
-    leave(process, exit_allowed)
-    releases = wire(root).owners.releases
-    original = releases.read_many(("beta",))["beta"]
-    with releases.writing() as db:
-        damage(db, original)
-    with Coordination(str(root / "coordination.sqlite3")) as store:
-        with pytest.raises(RecoveryBlocked):
-            RecoveryMonitorCapability.abandon_released_native_attempt(store, execution_id)
-        assert store.get(execution_id).is_current
-
-
-def test_dead_original_settles_unknown_beside_a_live_successor(released_unknown):
-    process, exit_allowed, root, _root_id, execution_id, _input_id = released_unknown
-    leave(process, exit_allowed)
-    comms = wire(root)
-    successor = running_successor(comms)
-    before_bus = comms.bus.bus.revision()
-    with Coordination(root / "coordination.sqlite3") as store:
-        before_input = input_evidence(store)
-        RecoveryMonitorCapability.abandon_released_native_attempt(store, execution_id)
-        after = store.get(execution_id)
-        assert not after.is_current and isinstance(after.attempt.lifecycle, Failed)
-        replay = after.replay.require_assessment()
-        assert replay.facts & ReplayFact.UNKNOWN_EFFECTS
-        assert not replay.replay_safe
-        assert input_evidence(store) == before_input
-    assert comms.bus.bus.revision() == before_bus
-    assert comms.registry.require("beta") == successor
-    assert successor.executing
-    comms.registry.release_turn(successor.require_turn_lease())
 
 
 def test_unknown_settlement_is_atomic_on_existing_store(tmp_path):

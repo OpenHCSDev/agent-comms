@@ -628,11 +628,6 @@ class ThreadRole(DeclaredFamily, ProjectionSource, affix="ThreadRole"):
 
     @classmethod
     @abstractmethod
-    def page_human_sender(cls) -> bool:
-        """The bus page row's stored human-sender column."""
-
-    @classmethod
-    @abstractmethod
     def channel_policy(cls) -> ResponsePolicy: ...
 
     @classmethod
@@ -686,10 +681,6 @@ class AgentThreadRole(ThreadRole):
         document: ReadDocument | None,
     ) -> object:
         return ()
-
-    @classmethod
-    def page_human_sender(cls) -> bool:
-        return False
 
     @classmethod
     def channel_policy(cls) -> ResponsePolicy:
@@ -753,10 +744,6 @@ class UserThreadRole(ThreadRole):
         document: ReadDocument | None,
     ) -> object:
         return reads.displayed_incarnation(message, thread.incarnation, snapshot, document=document)
-
-    @classmethod
-    def page_human_sender(cls) -> bool:
-        return True
 
     @classmethod
     def channel_policy(cls) -> ResponsePolicy:
