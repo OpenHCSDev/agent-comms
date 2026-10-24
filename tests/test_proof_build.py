@@ -267,7 +267,7 @@ def test_installed_proof_closes_and_older_build_is_refused_on_copied_bus(
             order = PendingProblemOrder(
                 scope=FIX_SCOPE,
                 owner=FIX_SCOPE.shape.parents[0],
-                check=OrderCheck(str(checkout), "printf 0", CountCheckResult(0)),
+                check=OrderCheck(checkout, "printf 0", CountCheckResult(0)),
                 edits=("Record the copied application proof on its installed build.",),
                 banned=("Do not change the source bus.",),
                 report="Report the actual close result.",

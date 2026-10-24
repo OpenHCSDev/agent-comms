@@ -84,7 +84,7 @@ def thread(name: str, root: Path, created: float) -> Thread:
 def order(source: SourceRepository):
     scope = source.scope()
     return PendingProblemOrder(id="checked-order", owner=scope.shape.parents[0], scope=scope, run=MechanicalOrderRun(),
-        check=OrderCheck(str(source.checkout), "true"), edits=("Fix the problem",),
+        check=OrderCheck(source.checkout, "true"), edits=("Fix the problem",),
         banned=("No extra store",), report="Report the delivered commit",
         at=RecordedEventTime(10.0), first_call_deadline=RecordedEventTime(130.0))
 
@@ -92,7 +92,7 @@ def order(source: SourceRepository):
 def test_order_factory_preserves_the_callers_directory_without_creating_source(source_repository):
     before = tuple(source_repository.checkout.iterdir())
     planned = order(source_repository)
-    assert planned.check.directory == str(source_repository.checkout)
+    assert planned.check.directory == source_repository.checkout
     assert tuple(source_repository.checkout.iterdir()) == before
 
 
@@ -420,7 +420,8 @@ def test_watcher_git_and_github_reads_leave_wire_free(pr_commander, monkeypatch)
         c.goals.todos.apply(released.id, ReleaseTodo(
             released.revision, CoreWatcherIncarnation.watcher(), released.held(),
             StrikeReason("The worker stopped before this order was completed and published.")))
-        checkout = c.registry.storage_rule.order_checkout(lead.name, released.id)
+        rule = c.registry.storage_rule
+        checkout = rule.order_checkout(rule.initial_roots(lead.name), released.id)
         source.git(source.checkout, "worktree", "add", "-q", "-b", "released-work", str(checkout), merged)
         copied_path = ctx.root.parent / f"{ctx.root.name}-watchers"
         practice = PracticeCopy(ctx.root, copied_path)

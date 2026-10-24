@@ -12,6 +12,8 @@ from acp.schema import TextContentBlock
 from agent_comms.acp import CommsAgent
 from agent_comms.acp_extension import (
     InputDeliveryChangedUpdate,
+    IdentifiedInputStarted,
+    UnidentifiedInputStarted,
     LiveCursorScope,
     LiveQueueScope,
     QueueChangedUpdate,
@@ -25,7 +27,9 @@ from agent_comms.acp_extension import (
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.comms import Comms, wire
 from agent_comms.errors import RelationViolationError
-from agent_comms.field_codec import TurnId
+from agent_comms.field_codec import InputId, RootId, TurnId
+from agent_comms.input_key import AcpInputKey
+from agent_comms.input_attempt import ReservedInput
 from agent_comms.queued_input import QueuedInput, QueuedInputContext
 from agent_comms.runtime import present_session
 from agent_comms.thread_identity import ClaimedIdentity, RecordedThreadIncarnation
@@ -59,7 +63,8 @@ async def test_real_acp_surrogate_queue_ingress_stays_unknown_and_attachable(tmp
         isinstance(f, InputDeliveryChangedUpdate) for f in decode_updates(response.field_meta)
     )
     assert exact in agent.inputs.state("beta").queued
-    assert stored_inputs(agent.inputs.dispositions.root).rows["acp:" + exact].declared_name == "reserved"
+    assert (type(stored_inputs(agent.inputs.dispositions.root).rows[AcpInputKey(exact)])
+            is ReservedInput)
     state = next(
         f
         for f in decode_updates((await agent.sessions.metadata("beta", session_id="beta")))
@@ -82,7 +87,7 @@ async def test_request_identity_tracks_equal_queue_and_immediate_inputs_without_
             "beta", [TextContentBlock(type="text", text="same")], field_meta=encode_request(request)
         )
         acknowledgement = next(f for f in decode_updates(response.field_meta) if isinstance(f, InputDeliveryChangedUpdate))
-        assert acknowledgement.input_id == request.input_id
+        assert acknowledgement == InputDeliveryChangedUpdate()
     assert requests[0].input_id != requests[1].input_id
     state = await agent.inputs.queue_state("beta")
     assert [item.input_id for item in state.projection.items] == [request.input_id for request in requests]
@@ -96,7 +101,7 @@ async def test_request_identity_tracks_equal_queue_and_immediate_inputs_without_
         )
     assert inbox.qsize() == before
     assert len(stored_inputs(agent.inputs.dispositions.root).rows) == 2
-    sources = frozenset(f"acp:{request.input_id}" for request in requests)
+    sources = frozenset(AcpInputKey(request.input_id) for request in requests)
     assert agent.inputs.input_keys("beta") == sources
     receipts = stored_inputs(agent.inputs.dispositions.root)
     cleared = receipts.transition(tuple(sources), lambda row: row.clear_unbound())
@@ -106,7 +111,7 @@ async def test_request_identity_tracks_equal_queue_and_immediate_inputs_without_
     assert agent.inputs.input_keys("beta") == sources
     assert stored_inputs(agent.inputs.dispositions.root) == cleared
     await agent.inputs.input_refused("beta", requests[0].input_id)
-    assert agent.inputs.input_keys("beta") == frozenset((f"acp:{requests[1].input_id}",))
+    assert agent.inputs.input_keys("beta") == frozenset((AcpInputKey(requests[1].input_id),))
     assert stored_inputs(agent.inputs.dispositions.root) == cleared
 
 
@@ -173,7 +178,7 @@ def test_attachment_routing_rename_preserves_exact_executor_fences():
             session_id="official-acp-id", claimed_identity=original, owner=ProcessIdentity(123, 1),
         ),
         LiveCursorScope(
-            session_id="official-acp-id", wire_root_id="a" * 32,
+            session_id="official-acp-id", wire_root_id=RootId("a" * 32),
             claimed_identity=original, owner=ProcessIdentity(123, 1),
         ),
     )
@@ -184,7 +189,7 @@ def test_attachment_routing_rename_preserves_exact_executor_fences():
         assert scope.relation(replace(scope, claimed_identity=replace(original, incarnation=replace(original.incarnation, created_at=1001.0)))).ambiguous
         assert scope.relation(replace(scope, claimed_identity=replace(original, claimed_generation=8))).newer
         assert scope.relation(replace(scope, claimed_identity=replace(original, claimed_generation=6))).older
-    assert scopes[1].relation(replace(scopes[1], wire_root_id="b" * 32)).foreign
+    assert scopes[1].relation(replace(scopes[1], wire_root_id=RootId("b" * 32))).foreign
     assert original == renamed  # Birth owns identity; a name is only its route.
     assert original.incarnation.name != renamed.incarnation.name
 
@@ -200,3 +205,60 @@ async def test_ending_a_drained_session_leaves_no_state_for_it(tmp_path):
     await agent.shutdown()
     assert "beta" not in agent.inputs.drained
     assert drain.done()
+
+
+async def test_original_queued_and_routed_starts_own_their_input_identity(tmp_path):
+    from agent_comms.channel_input_batch import SingleInputBatch
+    from agent_comms.input_attempt import StartedInput
+    from agent_comms.input_key import BusInputKey
+    from agent_comms.text_digest import TextDigest
+    from agent_comms.turn_goal_permission import InactiveGoalPermission, TurnGoalPermission
+    from agent_comms.turn_input_source import (
+        AcceptedTurn,
+        NoInputDependency,
+        NoTurnAcceptance,
+        OwnerOriginalInput,
+        RoutedOriginalInput,
+    )
+
+    _, agent, incarnation, generation = _owner(tmp_path)
+    input_id, native_id = InputId.mint(), InputId.mint()
+    row = StartedInput(
+        AcpInputKey(input_id), None, "beta", generation, "beta", "original",
+        turn_id=TurnId.mint(), native_id=native_id, sent_digest=TextDigest.of("original"),
+    )
+    scope = (await agent.inputs.queue_state("beta")).scope
+    original = OwnerOriginalInput(
+        acceptance=NoTurnAcceptance(),
+        goal_permission=TurnGoalPermission(InactiveGoalPermission()),
+        prompt="original", original_display=None, origins=(), dependency=NoInputDependency(),
+        batch=SingleInputBatch((row,)),
+    )
+    started = await original.acceptance.started_update(original, agent.inputs, "beta", row, scope)
+    assert type(started) is IdentifiedInputStarted
+    assert started.input_id == input_id and started.native_id == native_id
+
+    queued_id = InputId.mint()
+    agent.inputs.state("beta").queued[queued_id] = QueuedInput(
+        "queued text", True, QueuedInputContext(ClaimedIdentity(incarnation, generation)),
+        queued_id, "queued text",
+    )
+    accepted = await AcceptedTurn(queued_id).accepted_start(
+        UnidentifiedInputStarted(None, scope, 1, native_id), agent.inputs, "beta",
+    )
+    assert type(accepted) is IdentifiedInputStarted
+    assert accepted.input_id == queued_id and accepted.text == "queued text"
+
+    routed_row = StartedInput(
+        BusInputKey(7), 7, "beta", generation, "beta", "routed",
+        turn_id=TurnId.mint(), native_id=native_id, sent_digest=TextDigest.of("routed"),
+    )
+    routed = RoutedOriginalInput(
+        acceptance=NoTurnAcceptance(), goal_permission=original.goal_permission,
+        prompt="routed", original_display=None, origins=(), dependency=NoInputDependency(),
+        batch=SingleInputBatch((routed_row,)),
+    )
+    started = await routed.acceptance.started_update(
+        routed, agent.inputs, "beta", routed_row, scope)
+    assert type(started) is UnidentifiedInputStarted
+    assert not started.started_request(input_id)

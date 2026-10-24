@@ -14,10 +14,12 @@ from agent_comms.acp_extension import (
     GoalChangedUpdate,
     InputDeliveryChangedUpdate,
     InputFailedUpdate,
-    InputStartedUpdate,
+    IdentifiedInputStarted,
+    UnidentifiedInputStarted,
     LiveCursorScope,
     LiveQueueScope,
     McpClientAcknowledgementUpdate,
+    NoQueueScope,
     PromptCancelledUpdate,
     QueueChangedUpdate,
     QueueItem,
@@ -36,7 +38,7 @@ from agent_comms.acp_failure import ACPFailure, BackendDeliveryFailure
 from agent_comms.agent_events import CompactionStart
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.context_reading import UnmeasuredContext
-from agent_comms.field_codec import ClaimId, InputId, MessageId, TurnId
+from agent_comms.field_codec import ClaimId, InputId, MessageId, RootId, TurnId
 from agent_comms.goal_presentation import IdleGoalExecution
 from agent_comms.goals import NoGoal
 from agent_comms.pi_payloads import McpLiveAcknowledgement
@@ -68,7 +70,7 @@ def test_declared_family_roundtrip_and_strict_boundary(tmp_path):
             CursorEnvelope(
                 LiveCursorScope(
                     session_id="pilot",
-                    wire_root_id="a" * 32,
+                    wire_root_id=RootId("a" * 32),
                     claimed_identity=owner,
                     owner=ProcessIdentity(123, 1),
                 ),
@@ -79,7 +81,8 @@ def test_declared_family_roundtrip_and_strict_boundary(tmp_path):
         QueueChangedUpdate(
             queue_scope, 1, AvailableQueueProjection((QueueItem(InputId.mint(), "text"),)),
         ),
-        InputStartedUpdate("input", "text", queue_scope, 2, InputId("b" * 32)),
+        IdentifiedInputStarted("text", queue_scope, 2, InputId("b" * 32), InputId("a" * 32)),
+        UnidentifiedInputStarted("text", queue_scope, 2, InputId("b" * 32)),
         CoordinationChangedUpdate(
             owner.incarnation,
             "/home/ts/wt/pilot",
@@ -95,10 +98,10 @@ def test_declared_family_roundtrip_and_strict_boundary(tmp_path):
         CompactionCommittedUpdate("summary", "first-kept"),
         TranscriptSnapshotUpdate(read.read(), read.identity),
         TranscriptDraftUpdate(read.identity, None),
-        InputDeliveryChangedUpdate("input"),
+        InputDeliveryChangedUpdate(),
         McpClientAcknowledgementUpdate(
             TurnId.mint(), McpLiveAcknowledgement(
-                1, "pi-mcp-client", "a" * 32, "running", "turn", ()
+                1, "pi-mcp-client", InputId("a" * 32), "running", "turn", ()
             )
         ),
         TurnChangedUpdate(
@@ -162,3 +165,19 @@ def test_request_family_strict_boundary():
     ):
         with pytest.raises(ValueError):
             decode_request(value)
+
+
+def test_only_an_unidentified_start_without_a_live_queue_posts_itself():
+    owner = ClaimedIdentity(RecordedThreadIncarnation("pilot", 1.0), 1)
+    live = LiveQueueScope(session_id="pilot", claimed_identity=owner, owner=ProcessIdentity(123, 1))
+    native, input_id = InputId.mint(), InputId.mint()
+    posted = []
+    for update in (
+        UnidentifiedInputStarted("routed", NoQueueScope(), None, native),
+        UnidentifiedInputStarted("routed", live, 1, native),
+        IdentifiedInputStarted("queued", NoQueueScope(), None, native, input_id),
+        IdentifiedInputStarted("queued", live, 1, native, input_id),
+    ):
+        update.when_unidentified(lambda update=update: posted.append(update))
+    assert [(type(update), type(update.scope)) for update in posted] == [
+        (UnidentifiedInputStarted, NoQueueScope)]

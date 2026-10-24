@@ -28,7 +28,7 @@ from agent_comms.order_runs import MechanicalOrderRun
 from agent_comms.order_tools import CommsCommanderLoadTool, CommsHudTool, CommsTodoListTool
 from agent_comms.problem_number import ProblemNumber
 from agent_comms.recorded_time import RecordedEventTime
-from agent_comms.slop import DeclarationDerivation, Slop
+from agent_comms.slop import DeclarationDerivation, ExistingLine, Slop
 from agent_comms.thread_execution import ExternalThreadExecution
 from agent_comms.thread_identity import RecordedThreadIncarnation
 from agent_comms.thread_model import DeclaredModel
@@ -88,7 +88,7 @@ def fork_bus(tmp_path, configured_repository):
         owner=source.scope().shape.parents[0],
         scope=source.scope(),
         run=MechanicalOrderRun(),
-        check=OrderCheck(str(source.checkout), "printf 0", CountCheckResult(1)),
+        check=OrderCheck(source.checkout, "printf 0", CountCheckResult(1)),
         edits=("Repair the existing declaration and remove the duplicate decision.",),
         banned=("No second assignment store.",),
         report="Report the working command.",
@@ -154,7 +154,7 @@ def document(path, order, problems=()):
                             "which fork is assigning this unit",
                             FileLine("owner.py", 2),
                             DeclarationDerivation,
-                            FileLine("declaration.py", 1),
+                            ExistingLine(FileLine("declaration.py", 1)),
                         ),
                     ),
                 )

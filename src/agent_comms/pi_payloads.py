@@ -223,11 +223,13 @@ class PiPayload(ExternalField):
                 decoded[f.name] = FieldCodec.decode_resolved(hints[f.name], decoded[f.name])
                 continue
             plan = FieldCodec.field_plan(cls, f.name)
-            with plan.locating(problems):
+            try:
                 captured = plan.decoded_external(value)
                 if f.name not in captured and (plan.constructor_required or plan.required):
                     raise MalformedRecord(f"Missing required field {key}")
                 decoded.update(captured)
+            except MalformedRecord as refused:
+                plan.locate(problems, refused)
         if problems:
             raise RecordProblems(problems)
         return decoded

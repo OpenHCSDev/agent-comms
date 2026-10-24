@@ -7,6 +7,7 @@ from dataclasses import replace
 
 import pytest
 
+from agent_comms.input_key import AcpInputKey, BusInputKey
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.field_codec import FieldCodec, InputId, TurnId
 from agent_comms.goal_actions import SetGoalAction
@@ -23,12 +24,15 @@ from agent_comms.tools import invoke_tool
 from stored_inputs import insert_inputs, stored_inputs
 
 
+OWNER_INPUT_KEY = AcpInputKey(InputId.mint())
+
+
 def seed_unknown(comms, count, text):
     dispositions = InputDispositions(comms.root)
     rows = {
         f"bus:{index}": FieldCodec.encode(
             BoundUnknownInput(
-                key=f"bus:{index}",
+                key=BusInputKey(index),
                 sequence=index,
                 owner="b",
                 claim_generation=index,
@@ -129,7 +133,7 @@ def test_large_standby_review_returns_complete_messages_without_files(
     dispositions = InputDispositions(comms.root)
     for message in messages:
         dispositions.record(
-            f"bus:{message.seq}",
+            BusInputKey(message.seq),
             seq=message.seq,
             owner="b",
             claim_scope=1,
@@ -137,7 +141,7 @@ def test_large_standby_review_returns_complete_messages_without_files(
             text=message.body,
         )
     dispositions.record(
-        "acp:owner-input",
+        OWNER_INPUT_KEY,
         seq=None,
         owner="b",
         claim_scope=1,
@@ -145,7 +149,7 @@ def test_large_standby_review_returns_complete_messages_without_files(
         text="Uncertain owner follow-up",
     )
     dispositions.review_for_goal(
-        (f"bus:{messages[1].seq}",),
+        (BusInputKey(messages[1].seq),),
         owners=frozenset({"b"}),
         goal_id=goal.id,
         goal_revision=goal.revision,
@@ -182,11 +186,11 @@ def test_large_standby_review_returns_complete_messages_without_files(
     invoke_tool(comms, "comms_goal", {**report, "reviewed_inputs": full_review["reviewed_inputs"]}, caller=ThreadCaller("b"))
     assert isinstance(comms.goals.goal_wait("b"), RecordedGoalWait)
     assert all(
-        stored_inputs(dispositions.root).rows[f"bus:{message.seq}"].declared_name == "reserved"
+        stored_inputs(dispositions.root).rows[BusInputKey(message.seq)].declared_name == "reserved"
         for message in messages
     )
-    assert stored_inputs(dispositions.root).rows["acp:owner-input"].declared_name == "reserved"
-    assert not stored_inputs(dispositions.root).rows.get("acp:owner-input").goal_reviews
+    assert stored_inputs(dispositions.root).rows[OWNER_INPUT_KEY].declared_name == "reserved"
+    assert not stored_inputs(dispositions.root).rows.get(OWNER_INPUT_KEY).goal_reviews
 
 
 def test_dependency_review_and_ack_survive_large_excluded_history(
@@ -205,7 +209,7 @@ def test_dependency_review_and_ack_survive_large_excluded_history(
     dispositions = InputDispositions(comms.root)
     for index in range(930):
         dispositions.record(
-            f"acp:owner-{index}",
+            AcpInputKey(InputId(f"{index:032x}")),
             seq=None,
             owner="b",
             claim_scope=1,
@@ -218,7 +222,7 @@ def test_dependency_review_and_ack_survive_large_excluded_history(
     ]
     for message in messages:
         dispositions.record(
-            f"bus:{message.seq}",
+            BusInputKey(message.seq),
             seq=message.seq,
             owner="b",
             claim_scope=1,
@@ -226,7 +230,7 @@ def test_dependency_review_and_ack_survive_large_excluded_history(
             text=message.body,
         )
     dispositions.review_for_goal(
-        (f"bus:{messages[0].seq}",),
+        (BusInputKey(messages[0].seq),),
         owners=frozenset({"b"}),
         goal_id=goal.id,
         goal_revision=goal.revision,
@@ -255,12 +259,16 @@ def test_dependency_review_and_ack_survive_large_excluded_history(
         "reviewed_inputs": review["reviewed_inputs"],
     }
     with pytest.raises(ValueError):
-        invoke_tool(comms, "comms_goal", {**report, "reviewed_inputs": ["acp:owner-0"]}, caller=ThreadCaller("b"))
+        invoke_tool(
+            comms, "comms_goal",
+            {**report, "reviewed_inputs": [str(AcpInputKey(InputId("0" * 32)))]},
+            caller=ThreadCaller("b"),
+        )
     assert stored_inputs(dispositions.root) == before
     # A reply arriving after this snapshot still blocks standby atomically.
     late = comms.messaging.send("a", "b", "New evidence after inbox inspection").message
     dispositions.record(
-        f"bus:{late.seq}", seq=late.seq, owner="b", claim_scope=1, target="b", text=late.body
+        BusInputKey(late.seq), seq=late.seq, owner="b", claim_scope=1, target="b", text=late.body
     )
     after_arrival = stored_inputs(dispositions.root)
     with pytest.raises(ValueError):
@@ -272,8 +280,10 @@ def test_dependency_review_and_ack_survive_large_excluded_history(
     assert fresh["reviewed_inputs"] == [f"bus:{messages[1].seq}", f"bus:{late.seq}"]
     invoke_tool(comms, "comms_goal", {**report, "reviewed_inputs": fresh["reviewed_inputs"]}, caller=ThreadCaller("b"))
     assert isinstance(comms.goals.goal_wait("b"), RecordedGoalWait)
-    assert stored_inputs(dispositions.root).rows[f"bus:{messages[1].seq}"].declared_name == "reserved"
-    assert not stored_inputs(dispositions.root).rows.get("acp:owner-0").goal_reviews
+    assert (stored_inputs(dispositions.root).rows[
+        BusInputKey(messages[1].seq)].declared_name == "reserved")
+    assert not stored_inputs(dispositions.root).rows.get(
+        AcpInputKey(InputId("0" * 32))).goal_reviews
 
 
 def test_inbox_page_bound_and_no_ack_keep_the_next_page_unread(inbox_comms):

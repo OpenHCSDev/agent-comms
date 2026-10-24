@@ -22,6 +22,7 @@ from agent_comms.goals import (
     UnobservedGoalCheckpoint,
     UnorderedGoalOrder,
 )
+from .input_key import InputKey, InputKeyText
 from agent_comms.input_disposition import InputDispositions
 from agent_comms.todos import (
     PendingProblemOrder, RecordOrderHeadVerdict, SendBackVerdict, Todo, TodoCommand, TodoOperation,
@@ -274,7 +275,7 @@ class CompliedGoalAction(TransitionGoalAction, OwnerInvocable):
 @dataclass(frozen=True, kw_only=True)
 class StandbyGoalAction(TransitionGoalAction, ModelInvocable, RuntimeInvocable):
     wait_for: tuple[str, ...] = ()
-    reviewed_inputs: tuple[str, ...] = ()
+    reviewed_inputs: tuple[Annotated[InputKey, InputKeyText], ...] = ()
     preserve_wait = True
 
     def next_state(self, goal: Goal, ctx: GoalActionContext) -> GoalState:

@@ -114,7 +114,7 @@ def test_storage_family_reads_once_and_renders_each_broken_fact(
             id="storage-case-order", scope=FIX_SCOPE,
             owner=FileLine(__file__, 1),
             run=MechanicalOrderRun(),
-            check=OrderCheck(str(tmp_path), "true"),
+            check=OrderCheck(tmp_path, "true"),
             edits=("Fix the filesystem paths",),
             banned=("No extra store",),
             report="Report the delivered commit",
@@ -166,6 +166,7 @@ def test_storage_family_reads_once_and_renders_each_broken_fact(
         assert declared_ref in PresentCheckout(repository).references(comms.registry.storage_rule, worker)
     text = comms.registry.storage_rule.order_text(worker, ("python",))
     assert str(home) in text
-    assert str(comms.registry.storage_rule.order_checkout(worker.name, "P<n>")) in text
+    rule = comms.registry.storage_rule
+    assert str(rule.order_checkout(rule.initial_roots(worker.name), "P<n>")) in text
     assert str(worker.storage_roots.scratch) in text
     print("\n".join(rule.line() for rule in found))

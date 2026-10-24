@@ -10,7 +10,6 @@ from __future__ import annotations
 import math
 import time
 from dataclasses import dataclass, replace
-from pathlib import Path
 from typing import TYPE_CHECKING, Self
 
 from agent_comms.goal_actions import (
@@ -24,7 +23,7 @@ from agent_comms.owner_requests import NewestOpenRequest
 from .native_settings import NativeThreadDefaults
 from .phase_tasks import PhaseTask
 from .recorded_time import RecordedEventTime
-from .repo import Checkout, Repo
+from .repo import Checkout, CheckoutStart, Repo
 from .repository_name import RepositoryName
 from .storage_rules import CheckoutStorageEffect, StorageProjection
 from .thread_status import StoppedThreadStatus
@@ -60,7 +59,7 @@ class WorkDispatch:
         # A concurrent rotation contends on one checkout. Never adopt a partial attempt.
         name = self.name
         storage = comms.registry.storage_rule
-        checkout = storage.order_checkout(name, self.action.problem)
+        checkout = storage.order_checkout(storage.initial_roots(name), self.action.problem)
         candidate = Thread(
             name,
             frozenset(),
@@ -71,13 +70,14 @@ class WorkDispatch:
         self.action.require_reviewed(comms.goals)
         self.action.require_ready(GoalActionContext(comms.goals, candidate))
         comms.registry.require_declaration_available(candidate, StoppedThreadStatus())
-        repository = Repo.of(Path(self.action.order.check.directory))
+        repository = Repo.of(self.action.order.check.directory)
         CheckoutStorageEffect(checkout, repository.github).check(
             StorageProjection(storage, candidate)
         )
         Repo.git(self.action.order.check.directory, "fetch", "origin", "main")
         Checkout.add(
-            self.action.order.check.directory, checkout, "origin/main", "-b", f"auto/{name}"
+            self.action.order.check.directory, checkout,
+            CheckoutStart.of(self.action.order.check.directory, f"auto/{name}", "origin/main"),
         )
         location = candidate.runtime.new_location(comms.root, checkout)
         child = comms.registry.declare(

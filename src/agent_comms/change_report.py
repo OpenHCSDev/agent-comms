@@ -81,6 +81,21 @@ class MainRevision(SourceRevision):
 
 
 @dataclass(frozen=True)
+class CommitRevision(SourceRevision):
+    """The commit a delivery's checks ran on."""
+
+    commit: str
+
+    @property
+    def reference(self) -> str:
+        return self.commit
+
+    @property
+    def fetch_refspec(self) -> str:
+        return self.commit
+
+
+@dataclass(frozen=True)
 class PullRequestHeadRevision(SourceRevision):
     link: PullRequestLink
 

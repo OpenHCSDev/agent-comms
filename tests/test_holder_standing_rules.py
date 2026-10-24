@@ -41,6 +41,7 @@ from agent_comms.goals import CountCheckResult, OrderCheck
 from agent_comms.heartbeat_frame import HeartbeatFrame
 from agent_comms.held_orders import HeldOrders
 from agent_comms.input_disposition import InputDispositions
+from agent_comms.input_key import AcpInputKey
 from agent_comms.installer.backup import StoreBackup
 from agent_comms.launch_root import LaunchRoot
 from agent_comms.message_page import MessagePageRequest
@@ -78,6 +79,9 @@ from native_backend_fixture import native_backend_fixture, wait_for
 from test_goal_execution import turn_on
 
 
+UNRESOLVED_INPUT_KEY = AcpInputKey(InputId.mint())
+
+
 @pytest.fixture
 def held_bus(comms, tmp_path, source_repository, configured_repository):
     """One setup owner: real declarations, checked orders, UNKNOWN row, then a copy."""
@@ -102,17 +106,17 @@ def held_bus(comms, tmp_path, source_repository, configured_repository):
             review_at=RecordedEventTime(now + 3600),
             order=PendingProblemOrder(
                 id=f"order-{problem}", owner=scope.shape.parents[0], scope=scope, run=MechanicalOrderRun(),
-                check=OrderCheck(str(source.checkout), "printf 0", CountCheckResult(1)),
+                check=OrderCheck(source.checkout, "printf 0", CountCheckResult(1)),
                 edits=("Repair the existing owner",), banned=("No second store",),
                 report="Report the result", at=RecordedEventTime(now - 3600),
                 first_call_deadline=RecordedEventTime(now + 3600),
             ),
         ))
     inputs = InputDispositions(comms.root)
-    inputs.record("unresolved-input", seq=None, owner="worker", claim_scope=1,
+    inputs.record(UNRESOLVED_INPUT_KEY, seq=None, owner="worker", claim_scope=1,
                   target="worker", text="Do not replay this input")
     assert inputs.bind(
-        "unresolved-input",
+        UNRESOLVED_INPUT_KEY,
         claim_scope=1,
         turn_id=TurnId('310c74d7ac243239a928d4021c709acb'),
         native_id=InputId.mint(),
@@ -324,14 +328,14 @@ def test_failed_holder_is_reported_without_reissuing_orders_or_replaying_unknown
     generation = store.require_generation(goal.id)
     orders = held_bus.goals.todos.held_orders()
     inputs = InputDispositions(held_bus.root)
-    unresolved = inputs.lookup("unresolved-input")
+    unresolved = inputs.lookup(UNRESOLVED_INPUT_KEY)
     violation, = state_cards(held_bus, Blocked)
     assert violation.orders == ("P1", "P2")
     violation.enforce(held_bus, "lead")
     assert held_bus.registry.require("worker").goal == goal
     assert held_bus.goals.todos.held_orders() == orders
     assert store.require_generation(goal.id) == generation
-    assert inputs.lookup("unresolved-input") == unresolved
+    assert inputs.lookup(UNRESOLVED_INPUT_KEY) == unresolved
     assert state_cards(held_bus, Blocked) == (violation,)
 
 
@@ -359,7 +363,7 @@ async def test_sigterm_group_preserves_active_goal_and_never_reissues_orders(
         held_bus.registry.register(replace(worker, model=DeclaredModel("response-local/fixture")))
         goal = held_bus.registry.require("worker").goal.require()
         orders = held_bus.goals.todos.held_orders()
-        unresolved = InputDispositions(held_bus.root).lookup("unresolved-input")
+        unresolved = InputDispositions(held_bus.root).lookup(UNRESOLVED_INPUT_KEY)
         with LaunchRoot.from_path(held_bus.root).selected():
             await Coordination.run_worker(partial(
                 held_bus.owners.start, "worker", agent_bin=GivenBinary("pi")))
@@ -372,7 +376,7 @@ async def test_sigterm_group_preserves_active_goal_and_never_reissues_orders(
                 for violation in state_cards(held_bus, Blocked):
                     violation.enforce(held_bus, "lead")
                 assert held_bus.goals.todos.held_orders() == orders
-                assert InputDispositions(held_bus.root).lookup("unresolved-input") == unresolved
+                assert InputDispositions(held_bus.root).lookup(UNRESOLVED_INPUT_KEY) == unresolved
             finally:
                 if held_bus.registry.require("worker").process_alive:
                     await Coordination.run_worker(partial(held_bus.owners.stop, "worker"))
@@ -635,7 +639,7 @@ def test_send_and_check_accept_a_deletion_check_on_fresh_main(
     configured_repository(held_bus, source)
     worktrees = held_bus.registry.storage_rule.checkout_base
     original = held_bus.goals.todos.get('P1')
-    check = OrderCheck(str(source.checkout), 'grep -c obsolete owner.py', CountCheckResult(0))
+    check = OrderCheck(source.checkout, 'grep -c obsolete owner.py', CountCheckResult(0))
     order = replace(original.order.checked(), id='delete-obsolete', check=check,
                     banned=('optional guards', 'maybe.py'), report='Report optional examples')
     document = OrderFile(order, 'Four obsolete declarations remain after their reader was deleted.',
@@ -672,9 +676,9 @@ def test_send_and_check_accept_a_deletion_check_on_fresh_main(
     assert current.order.check.result == CountCheckResult(0)
     # Done's result rule remains the inverse: the delivered commit must meet the target.
     current.order.check.result.require(current.order.check.at(
-        source.branch_commit, str(source.checkout), worktrees))
+        source.branch_commit, source.checkout, worktrees))
     with pytest.raises(ValueError):
-        current.order.check.result.require(current.order.check.at(main, str(source.checkout), worktrees))
+        current.order.check.result.require(current.order.check.at(main, source.checkout, worktrees))
     assert source.git(source.checkout, 'rev-parse', 'HEAD') == head
     assert local.read_bytes() == before
     assert not tuple(worktrees.iterdir())

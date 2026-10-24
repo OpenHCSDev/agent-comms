@@ -5,6 +5,8 @@ from dataclasses import replace
 import pytest
 
 from agent_comms.errors import RouteChangedError, UnregisteredThreadError
+from agent_comms.input_key import AcpInputKey
+from agent_comms.field_codec import InputId
 from agent_comms.field_codec import FieldCodec
 from agent_comms.input_attempt import UnobservedInputDeliveryScope, UnresolvedInput
 from agent_comms.input_disposition import DeliveryOverview
@@ -114,7 +116,8 @@ def test_input_delivery_keeps_its_explanation_and_original_work(working):
     ordinary = status.activity_presentation("worker", "thinking", "Actual work")
     delivery = ReadDeliveryView(DeliveryOverview(
         inputs=(UnresolvedInput(
-            sequence=None, target="worker", text="Unconfirmed input", input_id="unconfirmed", status="unknown",
+            sequence=None, target="worker", text="Unconfirmed input",
+            input_id=AcpInputKey(InputId.mint()), status="unknown",
         ),), historical_count=0, dismissed_historical_count=0, historical_inputs=(),
         current_scope=UnobservedInputDeliveryScope,
     ))

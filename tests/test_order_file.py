@@ -55,7 +55,7 @@ def test_problem_and_send_share_field_refusals_and_record_only_valid_documents(p
     RequestAddVerb(text='Repair the copied order workflow without changing original retained state').run(ctx)
     now = time.time()
     planned = replace(order(ctx.repos[0]),
-        check=OrderCheck(str(ctx.repos[0].checkout), 'false'),
+        check=OrderCheck(ctx.repos[0].checkout, 'false'),
         at=RecordedEventTime(now), first_call_deadline=RecordedEventTime(now + 120))
     document = OrderFile(planned,
         'The copied workflow still contains an unfinished decision that prevents completion',

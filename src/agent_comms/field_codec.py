@@ -11,7 +11,7 @@ import re
 import types
 from abc import ABC, abstractmethod
 from collections.abc import Callable, Iterable, Iterator, Mapping
-from contextlib import AbstractContextManager, contextmanager
+from contextlib import contextmanager
 from dataclasses import MISSING, Field, dataclass, field, fields, is_dataclass
 from datetime import datetime
 from enum import Enum
@@ -41,6 +41,7 @@ from pydantic import BaseModel, JsonValue
 from typing_extensions import TypeAliasType, TypeForm
 
 from .declared_family import DeclaredFamily
+from .json_schema import JsonScalar, JsonSchemaOwner
 from .mro_dispatch import MroDispatch, handles
 from .sealed import Sealed
 
@@ -64,15 +65,6 @@ class MalformedRecord(ValueError):  # noqa: N818 - names the refused data
 
     def located(self, name: str, fix: str) -> dict[str, str]:
         return {name: f"{self}; fix: {fix}"}
-
-    @staticmethod
-    @contextmanager
-    def gathering(problems: dict[str, str], name: str, fix: str) -> Iterator[None]:
-        """Record a refused field under its key so sibling refusals are reported together."""
-        try:
-            yield
-        except MalformedRecord as refused:
-            problems.update(refused.located(name, fix))
 
     @classmethod
     @contextmanager
@@ -457,9 +449,8 @@ class FieldPlan:
     def key(self) -> str:
         return WireName.read(self.annotation, self.name)
 
-    def locating(self, problems: dict[str, str]) -> AbstractContextManager[None]:
-        """A refused value joins its record's problems under this field's key."""
-        return MalformedRecord.gathering(problems, self.key, f"supply {self.annotation}")
+    def locate(self, problems: dict[str, str], refused: MalformedRecord) -> None:
+        problems.update(refused.located(self.key, f"supply {self.annotation}"))
 
     @cached_property
     def required(self) -> bool:
@@ -929,7 +920,7 @@ class DecoderPlan(ABC):
 
 
 @dataclass(frozen=True, slots=True)
-class ValueDecoder[T](DecoderPlan):
+class ValueDecoder[T](DecoderPlan, JsonSchemaOwner):
     """One annotation owns its wire conversion, draft projection and choice domain."""
 
     _by_origin: ClassVar[dict[object, type[ValueDecoder[object]]]] = {}
@@ -1038,13 +1029,11 @@ class ValueDecoder[T](DecoderPlan):
     def decode_bound(self, data: object, context: Mapping[str, object]) -> T:
         return self.decode(data)
 
-    field_names: ClassVar[tuple[str, ...]] = ()
-
     @property
     def uses_representation(self) -> bool:
         return False
 
-    def decode_selected(self, data, selections, *, fields: tuple[str, ...]):
+    def decode_selected(self, data, selections):
         return self.decode_bound(data, {})
 
     def decode_keys(self, data, keys, selections):
@@ -1154,7 +1143,7 @@ class _NominalTextDecoder[T: str](_RepresentedDecoder[T]):
         return self.encode(value)
 
 
-class FieldRepresentation[T](MroDispatch, ABC):
+class FieldRepresentation[T](MroDispatch, ABC, JsonSchemaOwner):
     """A field capability, declared as ``Annotated[ValueType, Representation]``.
 
     Private transports can declare captures without permitting those objects in
@@ -1218,10 +1207,6 @@ class FieldRepresentation[T](MroDispatch, ABC):
     def decode(cls, value: object) -> T: ...
 
     @classmethod
-    def schema(cls) -> dict[str, JsonValue]:
-        raise TypeError(f"{cls.__name__} has no JSON schema")
-
-    @classmethod
     def argument_options(cls, argument: Argument) -> dict[str, object]:
         """argparse options for this representation's command-line text."""
         return {}
@@ -1283,20 +1268,11 @@ class StructuralRepresentation(FieldRepresentation):
         if isinstance(annotation, type) and issubclass(annotation, Enum):
             values = [value for _, value in compile_decoder(annotation).editor_choices()]
             return {**FieldCodec.value_schema(type(values[0])), "enum": values}
-        primitive = {
-            str: "string",
-            bool: "boolean",
-            int: "integer",
-            float: "number",
-            type(None): "null",
-        }
-        if annotation in primitive:
-            return {"type": primitive[annotation]}
         if isinstance(annotation, type) and issubclass(annotation, DeclaredFamily):
             return FieldCodec._family_schema(annotation)
         if isinstance(annotation, type) and is_dataclass(annotation):
             return FieldCodec.record_schema(annotation)
-        raise TypeError(f"No declared JSON schema for {annotation}")
+        return ValueDecoder.represented_class(annotation).schema()
 
 
 class AcceptsNull[T](FieldRepresentation[T]):
@@ -1668,8 +1644,13 @@ class TextRepresentation[V](FieldRepresentation[V]):
     def from_text(cls, value: str) -> V: ...
 
     @classmethod
+    def text_form(cls) -> type[TextRepresentation]:
+        return cls
+
+    @classmethod
     def schema(cls) -> dict[str, JsonValue]:
-        return {"type": "string", "description": f"{cls.__module__}.{cls.__qualname__} text"}
+        form = cls.text_form()
+        return {"type": "string", "description": f"{form.__module__}.{form.__qualname__} text"}
 
 
 class ValidatedScalar(FieldRepresentation):
@@ -1873,6 +1854,10 @@ class ThreadLookup(Id128):
 
 class InputId(Id128):
     pass
+
+
+class SlotId(Id128):
+    """The consumed tool slot, distinct from the input that produced it."""
 
 
 class Id128Text(NominalSpelling[Id128]):
@@ -2115,7 +2100,7 @@ class FieldCodec(MroDispatch, Sealed):
             if not issubclass(narrowed, annotation):
                 raise TypeError(f"{target.__name__}.{name} cannot widen its declared type")
         return cast(T, decoder.decode_selected(
-            data, {}, fields=decoder.field_names, field_types=field_types))
+            data, {}, field_types=field_types))
 
     @classmethod
     def argument_fields(cls, target: type) -> tuple[FieldPlan, ...]:
@@ -2145,7 +2130,10 @@ class FieldCodec(MroDispatch, Sealed):
     @classmethod
     def decode_selected(cls, target: type[T], data: object, selections, *, fields: tuple[str, ...]) -> T:
         """Decode selected mapping keys by their declaring record and field, not wire shape."""
-        return cast(T, _RecordDecoder(target).decode_selected(data, selections, fields=fields))
+        entries = tuple(
+            entry for entry in cls._record_plan(target).bindings if entry.name in fields
+        )
+        return cast(T, _RecordDecoder(target).decode_entries(data, entries, selections, {}, {}))
 
     @classmethod
     def decode(cls, target: TypeForm[T], data: object) -> T:
@@ -2411,7 +2399,7 @@ class _ScalarDecoder[T, Target = object](ValueDecoder[T]):
         raise TypeError(f"Unsupported JSON value: {type(value).__name__}")
 
 
-class _ExactScalarDecoder[T](_ScalarDecoder[T]):
+class _ExactScalarDecoder[T](_ScalarDecoder[T], JsonScalar):
     """A JSON scalar decoded only from its own type."""
 
     __slots__ = ()
@@ -2439,15 +2427,21 @@ class _PathDecoder(PathText, ValueDecoder[Path]):
 
     origins = (Path,)
 
+    @classmethod
+    def text_form(cls) -> type[TextRepresentation]:
+        return PathText
+
 
 class _NullDecoder(_ExactScalarDecoder[None]):
     __slots__ = ()
     annotations = (type(None),)
+    json_type = "null"
 
 
 class _TextDecoder(_ExactScalarDecoder[str]):
     __slots__ = ()
     annotations = (str,)
+    json_type = "string"
 
     def accepts(self, data: object) -> TypeGuard[str]:
         # RedecodesDeletedPhase removes nominal values from plain str fields.
@@ -2466,6 +2460,7 @@ class _TextDecoder(_ExactScalarDecoder[str]):
 class _FlagDecoder(_ExactScalarDecoder[bool]):
     __slots__ = ()
     annotations = (bool,)
+    json_type = "boolean"
 
     def argument_options(self, argument: Argument) -> dict[str, object]:
         return {"action": "store_true"}
@@ -2481,6 +2476,7 @@ class _NumberDecoder[T: (int, float)](_ExactScalarDecoder[T]):
 class _IntegerDecoder(_NumberDecoder[int]):
     __slots__ = ()
     annotations = (int,)
+    json_type = "integer"
 
 
 class _RealDecoder(_NumberDecoder[float]):
@@ -2488,6 +2484,7 @@ class _RealDecoder(_NumberDecoder[float]):
 
     __slots__ = ()
     annotations = (float,)
+    json_type = "number"
 
     def fits_wire(self, data: object) -> TypeGuard[int | float]:
         return type(data) in (int, float)
@@ -2962,8 +2959,7 @@ class _DictDecoder[K, V](ValueDecoder[dict[K, V]]):
 
     def decode_keys(self, data, keys, selections):
         encoded = tuple(FieldCodec.encode(key) for key in keys)
-        return {self.key.decode_bound(key, {}): self.value.decode_selected(
-                    value, selections, fields=self.value.field_names)
+        return {self.key.decode_bound(key, {}): self.value.decode_selected(value, selections)
                 for key, value in self.entries(data) if key in encoded}
 
 
@@ -3166,28 +3162,29 @@ class _RecordDecoder[T](_ContextDecoder[T]):
             raise self.shape_refusal(data)
         return data
 
-    @property
-    def field_names(self) -> tuple[str, ...]:
-        return tuple(entry.name for entry in self.plan.bindings)
-
     def decode_bound(self, data: object, context: Mapping[str, object]) -> T:
-        return self.decode_selected(data, {}, fields=self.field_names, context=context)
+        return self.decode_entries(data, self.plan.bindings, {}, context, {})
 
     def decode_selected(
         self, data: object, selections: Mapping[tuple[type, str], object], *,
-        fields: tuple[str, ...], context: Mapping[str, object] = {},
+        context: Mapping[str, object] = {},
         field_types: Mapping[str, type[object]] = types.MappingProxyType({}),
+    ) -> T:
+        return self.decode_entries(data, self.plan.bindings, selections, context, field_types)
+
+    def decode_entries(
+        self, data: object, entries: tuple[FieldPlan, ...],
+        selections: Mapping[tuple[type, str], object], context: Mapping[str, object],
+        field_types: Mapping[str, type[object]],
     ) -> T:
         if not isinstance(data, dict):
             raise MalformedRecord("Expected a record object; fix: supply a JSON object.")
         problems = self.problems(data)
         target = self.target
         values = {}
-        for entry in self.plan.bindings:
-            if entry.name not in fields:
-                continue
+        for entry in entries:
             key = (target, entry.name)
-            with entry.locating(problems):
+            try:
                 if entry.name in field_types:
                     narrowed = compile_decoder(field_types[entry.name])
                     values.update(entry.decoded_using(
@@ -3196,6 +3193,8 @@ class _RecordDecoder[T](_ContextDecoder[T]):
                 else:
                     values.update(entry.decoded_selected(data, selections[key], selections)
                                   if key in selections else entry.decoded_bound(data, context))
+            except MalformedRecord as refused:
+                entry.locate(problems, refused)
         if problems:
             raise RecordProblems(problems)
         return FieldCodec.construct(target, values)

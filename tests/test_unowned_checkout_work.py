@@ -8,6 +8,7 @@ import os
 import subprocess
 import time
 from contextlib import nullcontext
+from dataclasses import replace
 from pathlib import Path
 
 import pytest
@@ -61,13 +62,14 @@ def git(directory: Path, *arguments: str) -> str:
 def test_one_problem_owns_a_checkout_in_each_repository_it_changes(checkout_bus, tmp_path):
     rule = checkout_bus.registry.storage_rule
     worker = checkout_bus.registry.require('worker')
-    checkout = rule.order_checkout('worker', 'P1')
+    checkout = rule.order_checkout(rule.initial_roots('worker'), 'P1')
     other = tmp_path / 'toad'
     other.mkdir()
     git(other, 'init', '-q', '--initial-branch=main')
     git(other, 'commit', '-q', '--allow-empty', '-m', 'Second repository')
     git(other, 'remote', 'add', 'origin', 'https://github.com/OpenHCSDev/toad.git')
-    lockstep = rule.repository_checkout('worker', 'P1', RepositoryName('OpenHCSDev', 'toad'))
+    lockstep = rule.repository_checkout(
+        rule.initial_roots('worker'), 'P1', RepositoryName('OpenHCSDev', 'toad'))
     git(other, 'worktree', 'add', '-q', '-b', 'worker-toad', str(lockstep))
     misnamed = checkout.with_name('worker--P1--textual')
     git(other, 'worktree', 'add', '-q', '-b', 'worker-misnamed', str(misnamed))
@@ -77,7 +79,8 @@ def test_one_problem_owns_a_checkout_in_each_repository_it_changes(checkout_bus,
     assert rule.owns_present_checkout(worker, checkout)
     assert rule.owns_checkout(worker, lockstep, RepositoryName('OpenHCSDev', 'toad'))
     assert not rule.owns_checkout(worker, misnamed, RepositoryName('OpenHCSDev', 'toad'))
-    assert rule.problem_checkouts('worker', 'P1') == (checkout, misnamed, lockstep)
+    assert rule.problem_checkouts(
+        rule.initial_roots('worker'), 'P1') == (checkout, misnamed, lockstep)
     assert lockstep in rule.checkouts_of(worker)
     assert misnamed not in rule.checkouts_of(worker)
 
@@ -100,7 +103,7 @@ def checkout_bus(tmp_path: Path, configured_repository, installed_runtime) -> Co
     git(home, 'push', '-q', '-u', 'origin', 'main')
     rule = StorageRule(checkout_base=tmp_path / 'checkouts',
                        scratch_base=tmp_path / 'scratch', volume=tmp_path, floor_gib=0)
-    checkout = rule.order_checkout('worker', 'P1')
+    checkout = rule.order_checkout(rule.initial_roots('worker'), 'P1')
     checkout.parent.mkdir()
     git(home, 'worktree', 'add', '-q', '-b', 'worker-work', str(checkout))
     git(checkout, 'push', '-q', '-u', 'origin', 'worker-work')
@@ -124,7 +127,7 @@ def checkout_bus(tmp_path: Path, configured_repository, installed_runtime) -> Co
     now = time.time()
     order = PendingProblemOrder(
         id='shared-work', owner=FileLine('work.py', 1), scope=FIX_SCOPE, run=MechanicalOrderRun(),
-        check=OrderCheck(str(home), 'false'),
+        check=OrderCheck(home, 'false'),
         edits=('Keep the changes with their author until they have been pushed.',),
         banned=('No second store of checkout holders.',), report='Report the actual checkout.',
         at=RecordedEventTime(now), first_call_deadline=RecordedEventTime(now + 120))
@@ -167,7 +170,8 @@ def assert_retained(c: Comms) -> None:
     held = rules[0]
     assert isinstance(held, CheckoutHeldWheelSpin)
     assert held.work.owner.name == 'worker'
-    assert held.work.checkout == c.registry.storage_rule.order_checkout('worker', 'P1')
+    rule = c.registry.storage_rule
+    assert held.work.checkout == rule.order_checkout(rule.initial_roots('worker'), 'P1')
     assert 'worker' in held.line() and str(held.work.checkout) in held.line()
     # The real automatic caller must not bypass the heartbeat's protection.
     UnownedOrderWatch().watch_pass(lambda: nullcontext(c))
@@ -179,7 +183,8 @@ def test_dirty_then_unpushed_then_pushed_linked_checkout(checkout_bus: Comms, tm
     original = checkout_bus
     untouched = original.goals.todos.get('P2')
     idle_goal = original.registry.require('idle').goal
-    checkout = original.registry.storage_rule.order_checkout('worker', 'P1')
+    rule = original.registry.storage_rule
+    checkout = rule.order_checkout(rule.initial_roots('worker'), 'P1')
     practice = PracticeCopy(original.root, tmp_path / 'practice')
     practice.include(tuple(RootFile.existing_in(practice.root)))
     (root, _measurement) = practice.path, practice.measurement
@@ -235,7 +240,8 @@ def test_unreadable_checkout_is_its_units_state_and_the_pass_carries_on(
     practice.include(tuple(RootFile.existing_in(practice.root)))
     (root, _measurement) = practice.path, practice.measurement
     c = wire(root)
-    checkout = c.registry.storage_rule.order_checkout('worker', 'P1')
+    rule = c.registry.storage_rule
+    checkout = rule.order_checkout(rule.initial_roots('worker'), 'P1')
     (checkout / '.git').write_text('gitdir: /nonexistent/removed\n')
     before = c.goals.todos.get('P2')
     with LaunchRoot.from_path(root).selected():
@@ -269,3 +275,19 @@ def test_order_closed_after_the_frame_read_does_not_fail_the_merge_read(
         c.goals.todos.record_merges(
             CommanderObservation.read(c, c.registry.require('lead'), ProgressRead).merged)
         assert c.goals.todos.get('P1').holder is None
+
+
+def test_a_renamed_unit_keeps_its_order_checkouts(tmp_path):
+    rule = StorageRule(checkout_base=tmp_path / 'checkouts',
+                       scratch_base=tmp_path / 'scratch', volume=tmp_path, floor_gib=0)
+    born = Thread('unit-mi', frozenset(), str(tmp_path / 'home'),
+                  storage_roots=rule.initial_roots('unit-mi'))
+    renamed = replace(born, name='codex-mi')
+    checkout = rule.order_checkout(rule.roots_of(renamed), 'P1')
+    lockstep = rule.repository_checkout(
+        rule.roots_of(renamed), 'P1', RepositoryName('OpenHCSDev', 'toad'))
+    assert checkout == tmp_path / 'checkouts' / 'unit-mi--P1'
+    assert lockstep.name == 'unit-mi--P1--toad'
+    assert rule.owns_present_checkout(renamed, checkout)
+    assert not rule.owns_present_checkout(
+        replace(born, name='codex-mi', storage_roots=rule.initial_roots('codex-mi')), checkout)

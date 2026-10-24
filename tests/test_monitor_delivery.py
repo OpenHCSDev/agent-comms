@@ -39,7 +39,7 @@ async def test_empty_journal_starts_at_binding_and_ignores_user_reads(comms, tmp
     declare_test_bus(comms, threads=tuple(
         Thread(name, frozenset(), str(tmp_path)) for name in ('viewer', 'peer')
     ))
-    comms.messaging.send('peer', 'viewer', 'before this session was bound')
+    before = comms.messaging.send('peer', 'viewer', 'before this session was bound').message
     state = tmp_path / 'bridge-state'
     with Binding.open(state) as db:
         binding = GivenBinding({
@@ -83,7 +83,8 @@ async def test_empty_journal_starts_at_binding_and_ignores_user_reads(comms, tmp
                 assert all(row.outcome is not DeliveredOutcome for row in DeliveryRow.select(db))
                 assert all(isinstance(row.monitor, ObservedMonitor)
                            for row in DeliveryRow.select(db))
-                assert comms.bus.inbox('viewer').page.messages == ()
+                assert [item.reference for item in comms.bus.inbox('viewer').page.messages] == [
+                    before.reference]
         finally:
             if watching is not None:
                 watching.cancel()

@@ -5,6 +5,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
+from .input_key import InputKey
+
 from .field_codec import InputId, TurnId
 from .reservation_rules import ReservationRule, RuleCheck
 
@@ -124,7 +126,7 @@ class AcceptedInputCheck(RuleCheck):
     current: Thread
     claim_generation: int
     input_id: InputId
-    keys: tuple[str, ...]
+    keys: tuple[InputKey, ...]
     inputs: InputDrain
     session_id: str
 

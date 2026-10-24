@@ -9,7 +9,6 @@ claim append or file mutation, and UNKNOWN is never retried automatically.
 from __future__ import annotations
 
 import logging
-import re
 import sqlite3
 import stat
 from collections.abc import Callable
@@ -24,13 +23,14 @@ from .coordination_session import ReadNativeCoordinationSession
 from .coordination_tables.participants import OwnerGenerations
 from .coordinator import Coordination
 from .envelope_claim_transitions import ExistingFileClaim, WakeClaim
-from .field_codec import FieldCodec, InputId, MalformedRecord
+from .field_codec import FieldCodec, InputId, MalformedRecord, SlotId
 from .native_input_record import FullNativeExecution, NativeInputIdentity
 from .native_runtime_input import NativeRuntimeInput, NativeRuntimeTable, SelectedToolSlot
 from .native_tool_call import (
     CoordinationBusy,
     NativeToolCall,
     NativeToolMode,
+    ToolCallId,
 )
 from .native_tool_transport import (
     NativeToolRound,
@@ -46,7 +46,6 @@ from .turn_context import InstructionFile
 # Stay well below the existing native RPC record cap (1 MiB, including JSON).
 _MAX_CONTENT = 128 * 1024
 _MAX_REQUEST = _MAX_CONTENT + 8192
-_CALL_ID = re.compile(r"[A-Za-z0-9_-]{1,128}\Z")
 _TOOL_SOURCE = Path(__file__).with_name("selected_claimed_write.mjs")
 
 _LOG = logging.getLogger(__name__)
@@ -78,7 +77,7 @@ class SelectedToolIntent(SelectedAction):
 class SelectedToolMode(NativeToolMode):
     """Trusted owner callback, never parsed from a model call or injected text."""
 
-    action: Callable[[SelectedToolRequest], None]
+    action: Callable[[int, SelectedToolRequest], None]
 
     def __post_init__(self) -> None:
         if not callable(self.action):
@@ -125,10 +124,6 @@ class SelectedWriteArguments:
 class SelectedToolRequest(NativeToolCall):
     arguments: SelectedWriteArguments
 
-    def __post_init__(self) -> None:
-        if not _CALL_ID.fullmatch(self.call_id):
-            raise SelectedToolDenied("Selected tool call identity is invalid")
-
     declared_name: ClassVar[str] = "selected_claimed_write"
 
     def commit_terminal(
@@ -136,7 +131,7 @@ class SelectedToolRequest(NativeToolCall):
     ) -> None:
         if is_error:
             raise SelectedToolDenied("Native Pi selected tool did not finish successfully")
-        verify_selected_terminal(coordination_path, input_id, self.call_id)
+        verify_selected_terminal(coordination_path, self.slot(input_id, round_number), self.call_id)
 
     def claim_failed(self) -> None:
         raise SelectedToolDenied("Native Pi selected tool claim_scope failed; outcome UNKNOWN")
@@ -169,10 +164,8 @@ def selected_extension(package: Path) -> Path:
     return source
 
 
-def consume_selected_slot(store: Coordination, slot_id: str, call_id: str) -> None:
+def consume_selected_slot(store: Coordination, slot_id: SlotId, call_id: ToolCallId) -> None:
     """Commit consumption BEFORE any action; a failed commit is UNKNOWN, never retried."""
-    if type(call_id) is not str or not _CALL_ID.fullmatch(call_id):
-        raise SelectedToolDenied("Selected tool call identity is invalid")
     try:
         with store.session.writing() as db:
             SelectedToolSlot.consume(db, slot_id, call_id)
@@ -180,11 +173,11 @@ def consume_selected_slot(store: Coordination, slot_id: str, call_id: str) -> No
         raise SelectedToolDenied("Selected tool consumption UNKNOWN; do not retry") from error
 
 
-def record_selected_terminal(coordination_path: Path, slot_id: str, call_id: str) -> None:
+def record_selected_terminal(coordination_path: Path, slot_id: SlotId, call_id: str) -> None:
     """Only a committed terminal acknowledgement lets the tool return success."""
     try:
         with Coordination(str(coordination_path)) as store, store.session.writing() as db:
-            SelectedToolSlot.require(db, input_id=slot_id).acknowledge(db, call_id)
+            SelectedToolSlot.require(db, slot_id=slot_id).acknowledge(db, call_id)
     except sqlite3.Error as error:
         raise SelectedToolDenied("Selected tool terminal acknowledgement UNKNOWN; no retry") from error
 
@@ -208,14 +201,14 @@ def selected_tool_mode_for_owner(
 
     path = store.session.path
 
-    def owner_action(request: SelectedToolRequest) -> None:
+    def owner_action(round_number: int, request: SelectedToolRequest) -> None:
         # The prompt-send boundary commits this epoch to the exact reserved
         # FULL input before Pi can receive it. A socket token, PID, model text,
         # or context journal alone does not establish this source binding.
         with Coordination(path) as worker_store:
             verify_sent_full_input(worker_store, claim_scope, owner_name, input_id)
             perform_selected_write(
-                comms, worker_store, claim_scope, owner_name, input_id, request
+                comms, worker_store, claim_scope, owner_name, input_id, round_number, request
             )
 
     return SelectedToolMode(owner_action)
@@ -264,10 +257,10 @@ def _require_sent_full_input(
         raise SelectedToolDenied("Selected input was already settled")
 
 
-def verify_selected_terminal(coordination_path: Path, slot_id: str, call_id: str) -> None:
+def verify_selected_terminal(coordination_path: Path, slot_id: SlotId, call_id: str) -> None:
     """Corroborate a live owner result; a persisted acknowledgement alone grants nothing."""
     with Coordination(str(coordination_path), session_type=ReadNativeCoordinationSession) as store, store.session.read():
-        SelectedToolSlot.require(store.session._connection, input_id=slot_id).verify(call_id)
+        SelectedToolSlot.require(store.session._connection, slot_id=slot_id).verify(call_id)
 
 
 def perform_selected_write(
@@ -276,10 +269,12 @@ def perform_selected_write(
     claim_scope: WakeClaim,
     owner_name: str,
     input_id: InputId,
+    round_number: int,
     request: SelectedToolRequest,
 ) -> None:
     """Only the owner calls the existing selected claim and writer boundaries."""
-    consume_selected_slot(store, input_id, request.call_id)
+    slot = request.slot(input_id, round_number)
+    consume_selected_slot(store, slot, request.call_id)
     # Any exception from here leaves the slot consumed. The caller reports
     # UNKNOWN and never automatically reissues the claim or mutation.
     claimed = publish_selected_resource_claim(
@@ -288,7 +283,7 @@ def perform_selected_write(
     write_selected_claimed_file(
         comms, store, claim_scope, owner_name, claimed, request.arguments.contents.encode("utf-8")
     )
-    record_selected_terminal(store.session.path, input_id, request.call_id)
+    record_selected_terminal(store.session.path, slot, request.call_id)
 
 
 class SelectedToolSocket(ToolTransport[SelectedToolRequest]):
@@ -296,7 +291,8 @@ class SelectedToolSocket(ToolTransport[SelectedToolRequest]):
     """One selected replacement, preserving the existing one-slot authority."""
 
     def __init__(
-        self, listener: ToolListener, action: Callable[[SelectedToolRequest], None], *, pid: int
+        self, listener: ToolListener, action: Callable[[int, SelectedToolRequest], None],
+        *, pid: int
     ) -> None:
         super().__init__(listener, pid=pid)
         self.action = action
@@ -328,4 +324,4 @@ class SelectedToolSocket(ToolTransport[SelectedToolRequest]):
         return envelope.authenticate(self.listener.token)
 
     async def allow(self, round_number: int, call: SelectedToolRequest) -> None:
-        await Coordination.run_worker(partial(self.action, call))
+        await Coordination.run_worker(partial(self.action, round_number, call))

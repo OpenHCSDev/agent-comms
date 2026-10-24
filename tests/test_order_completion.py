@@ -43,7 +43,7 @@ class TestOrderCompletion:
         graph = next(graph for graph in proof_build_checkouts if graph.repository.github == repo.github)
         original = ctx.comms.goals.todos.get('P1').order
         merged = replace(original, check=OrderCheck(
-            str(repo.checkout), 'printf 1', CountCheckResult(0)))
+            repo.checkout, 'printf 1', CountCheckResult(0)))
         self.record(ctx, replace(merged, pull_requests=(PullRequestLink(repo.github, 1),))
                     .merged(graph.installed))
         command = "git log -1 --format=%s | grep -c 'proof 0'"

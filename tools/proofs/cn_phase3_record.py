@@ -107,7 +107,7 @@ def create_order(problem: str = "P1") -> None:
                         FileLine.class_declaration(PendingProblemOrder, repo, MainRevision()),
                     ), members=())),
                     owner=FileLine(str(CHECKOUT / "src/agent_comms/todos.py"), 69),
-                    check=OrderCheck(str(CHECKOUT), "printf 1", CountCheckResult(1)),
+                    check=OrderCheck(CHECKOUT, "printf 1", CountCheckResult(1)),
                     edits=(
                         "Decode pull request target branches through the existing record owner",
                     ),

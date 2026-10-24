@@ -124,6 +124,7 @@ from .history_result import HistoryPageResult
 from .history_views import CallingThreadTarget, NamedThreadTarget, PollTarget
 from .importing import ImportedSessionMetadata, ImportLimits, ThreadImported
 from .input_origin import InputProvenance
+from .input_key import InputKey, InputKeyText
 from .install_choices import InstallerChoice, LiveMode, RehearsalMode, RunMode, UnnamedInstaller
 from .maintenance_barrier import MaintenanceHeldError
 from .message_page import PageBounds
@@ -147,7 +148,7 @@ from .read_basis import (
 from .recorded_bus import RecordedBusIdentity
 from .registry_document import CommanderProject, RegistrySnapshot
 from .registry_store import RegistryStore
-from .repo import Checkout, GitCommandError, Repo
+from .repo import Checkout, CheckoutStart, GitCommandError, Repo
 from .repository_name import RepositoryName
 from .storage_rules import (
     CheckoutStorageEffect, OrderCheckoutAllocation, RemoveCheckoutStorageEffect,
@@ -1271,7 +1272,7 @@ class PinConstraintCliCommand(WorktreeArgument, CliCommand, declared_name="pin-c
 class PinInputConstraintCliCommand(PinConstraintCliCommand, declared_name="pin-input-constraint"):
     help = "Pin an original human input for its recipient"
     source: Annotated[
-        str,
+        InputKey, InputKeyText,
         Argument(flags=("--source",), options={"help": "Original durable input key"}),
     ]
 
@@ -1939,8 +1940,10 @@ class AddCheckoutOperation(CheckoutOperation):
             Checkout(destination).prepare()
         else:
             Repo.git(repository.checkout, "fetch", "origin", "main")
-            Checkout.add(repository.checkout, destination, "origin/main", "-b",
-                         f"work/{destination.name}")
+            Checkout.add(
+                repository.checkout, destination,
+                CheckoutStart.of(repository.checkout, f"work/{destination.name}", "origin/main"),
+            )
 
 
 class RemoveCheckoutOperation(CheckoutOperation):
@@ -1980,10 +1983,10 @@ class CheckoutCliCommand(PreparedCheckoutCliCommand,
     help = "Create, repair or remove an owned problem checkout with its pinned submodules"
 
     def destination(self, rule: StorageRule, thread: Thread) -> Path:
-        return rule.order_checkout(thread.name, self.problem)
+        return rule.order_checkout(rule.roots_of(thread), self.problem)
 
     def source(self, ctx: Comms, todo: Todo) -> Repo:
-        return Repo(checkout=Path(todo.order.checked().check.directory), github=todo.repo)
+        return todo.repository
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -1993,7 +1996,7 @@ class RepositoryCheckoutCliCommand(PreparedCheckoutCliCommand,
     repository: Annotated[RepositoryName, Argument(flags=("repository",))]
 
     def destination(self, rule: StorageRule, thread: Thread) -> Path:
-        return rule.repository_checkout(thread.name, self.problem, self.repository)
+        return rule.repository_checkout(rule.roots_of(thread), self.problem, self.repository)
 
     def source(self, ctx: Comms, todo: Todo) -> Repo:
         repositories = ctx.registry.snapshot().commander_project.require().repos

@@ -9,6 +9,7 @@ from functools import partial
 import pytest
 
 from agent_comms.bus import Bus
+from agent_comms.input_key import BusInputKey
 from agent_comms.bus_publication import Delivered
 from agent_comms.bus_tables import ReceivedSource
 from agent_comms.child_process import ProcessIdentity
@@ -156,7 +157,7 @@ def test_reply_appended_between_review_and_publication_is_still_eligible(reviewi
     assert wait.after_seq == cut < reply.seq
     assert wait.has_reply(reviewing.bus.bus, reviewing.registry.require("owner").incarnation)
     review = reviewing.goals.goal_input_review("owner", wait.goal_id, ("child",))
-    assert review.reviewed_inputs == (f"bus:{reply.seq}",)
+    assert review.reviewed_inputs == (BusInputKey(reply.seq),)
 
 
 def change_goal(comms, prepared):
@@ -210,7 +211,7 @@ def replace_registration(comms, prepared, *, name):
 ))
 def test_stale_review_never_writes_inputs_or_replaces_newer_wait(reviewing, change):
     reply = reviewing.messaging.send("child", "owner", "Review this reply").message
-    prepared = standby(reviewing, (f"bus:{reply.seq}",)).prepare(
+    prepared = standby(reviewing, (BusInputKey(reply.seq),)).prepare(
         reviewing.goals, "owner", RuntimeInvocable,
     )
     change(reviewing, prepared)

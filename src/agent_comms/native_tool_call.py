@@ -9,13 +9,14 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
+import re
 from abc import ABC, abstractmethod
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, ClassVar, Never
 
-from .field_codec import InputId
+from .field_codec import FieldCodec, InputId, MalformedRecord, NominalSpelling, NominalText, SlotId
 from .lifecycle_capability import Complete, Executing, LifecycleCapability
 from .storage_rules import StorageProjection, StorageRule
 from .tool_denial import SelectedToolDenied
@@ -28,6 +29,16 @@ if TYPE_CHECKING:
     from .storage_rules import StorageEffect
     from .pi_payloads import PiToolResult
     from .turn_goal_permission import TurnGoalPermission
+
+
+class ToolCallId(NominalText):
+    """A provider's own tool call identity, spelled exactly as the provider sends it
+    (OpenAI Responses joins ``call_...|fc_...``). Only equality is defined; slots hash it.
+    """
+
+
+class ToolCallIdText(NominalSpelling[ToolCallId]):
+    spelling = re.compile(r"\S{1,256}")
 
 
 class ToolNotExecuting(SelectedToolDenied):
@@ -187,9 +198,13 @@ class CallProgress:
 class NativeToolCall(ABC):
     """A fixed call payload with one changing execution record."""
 
-    call_id: str
+    call_id: ToolCallId
     progress: CallProgress = field(default_factory=CallProgress, init=False, compare=False, repr=False)
     declared_name: ClassVar[str]
+
+    def slot(self, input_id: InputId, round_number: int) -> SlotId:
+        identity = f"{input_id}\0{round_number}\0{self.call_id}"
+        return SlotId(hashlib.sha256(identity.encode()).hexdigest()[:32])
 
     def correlate(self, candidate: NativeToolCall) -> None:
         if self != candidate:
@@ -268,7 +283,7 @@ class CodingCall(NativeToolCall):
         from .selected_tool_broker import record_selected_terminal
 
         slot = self.slot(input_id, round_number)
-        record_selected_terminal(coordination_path, slot, slot)
+        record_selected_terminal(coordination_path, slot, self.call_id)
 
     def claim_failed(self) -> None:
         # A denied ordinary tool may report an error and let Pi explain it. The
@@ -277,14 +292,12 @@ class CodingCall(NativeToolCall):
 
     @classmethod
     def decode(cls, call_id: object, name: object, arguments: object) -> CodingCall:
-        if (
-            type(call_id) is not str
-            or not call_id
-            or len(call_id) > 256
-            or type(name) is not str
-        ):
+        try:
+            call_id = FieldCodec.decode(ToolCallId, call_id)
+        except MalformedRecord as error:
+            raise SelectedToolDenied("Malformed native coding call identity") from error
+        if type(name) is not str:
             raise SelectedToolDenied("Malformed native coding call identity")
-        from .field_codec import MalformedRecord
         from .native_tools import NativeToolDeclaration
 
         try:
@@ -292,9 +305,7 @@ class CodingCall(NativeToolCall):
         except MalformedRecord as error:
             return RefusedCodingCall(call_id, name, arguments, str(error))
 
-    def slot(self, input_id: InputId, round_number: int) -> str:
-        identity = f"{input_id}\0{round_number}\0{self.call_id}"
-        return hashlib.sha256(identity.encode()).hexdigest()[:32]
+
 
 
 @dataclass
