@@ -15,7 +15,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, ClassVar, Never
 
-from .field_codec import InputId
+from .field_codec import InputId, SlotId
 from .lifecycle_capability import Complete, Executing, LifecycleCapability
 from .storage_rules import StorageProjection, StorageRule
 from .tool_denial import SelectedToolDenied
@@ -292,9 +292,9 @@ class CodingCall(NativeToolCall):
         except MalformedRecord as error:
             return RefusedCodingCall(call_id, name, arguments, str(error))
 
-    def slot(self, input_id: InputId, round_number: int) -> str:
+    def slot(self, input_id: InputId, round_number: int) -> SlotId:
         identity = f"{input_id}\0{round_number}\0{self.call_id}"
-        return hashlib.sha256(identity.encode()).hexdigest()[:32]
+        return SlotId(hashlib.sha256(identity.encode()).hexdigest()[:32])
 
 
 @dataclass
