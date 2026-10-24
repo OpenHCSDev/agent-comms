@@ -147,7 +147,8 @@ from .read_basis import (
 from .recorded_bus import RecordedBusIdentity
 from .registry_document import CommanderProject, RegistrySnapshot
 from .registry_store import RegistryStore
-from .repo import GitCommandError, Repo
+from .repo import Checkout, GitCommandError, Repo
+from .storage_rules import CheckoutStorageEffect, StorageProjection
 from .restart_scope import AllOwners, OneOwner, RestartTarget
 from .owner_connection import OwnerConnection, socket_path
 from .schema_report import StoreSchemaReport, StoreSchemaReports
@@ -1880,6 +1881,41 @@ class PlannedReconcileCliCommand(StoreReconcileCliCommand, declared_name="planne
         schema = owner.schema_at(path)
         with closing(owner.read_snapshot(path)) as db:
             return schema.reconcile_writes(db)
+
+@dataclass(frozen=True)
+class CheckoutResult(CliResult):
+    checkout: Annotated[Path, PathText]
+
+
+@dataclass(frozen=True, kw_only=True)
+class CheckoutCliCommand(CliCommand):
+    help = "Create or repair an owned problem checkout with its pinned submodules"
+    operation: Annotated[Literal["add"], Argument(flags=("operation",))]
+    problem: Annotated[str, Argument(flags=("problem",))]
+    repository: Annotated[str | None, Argument(flags=("--repository",))] = None
+
+    def apply(self, ctx: Comms) -> CliResult:
+        thread = CallingThreadTarget().thread(ctx.registry)
+        todo = ctx.goals.todos.get(self.problem)
+        todo.require_assignee(thread.incarnation, todo.held().generation)
+        storage = ctx.registry.storage_rule
+        if self.repository is None:
+            repository = Repo(checkout=Path(todo.order.checked().check.directory), github=todo.repo)
+            destination = storage.order_checkout(thread.name, todo.id)
+        else:
+            repositories = ctx.registry.snapshot().commander_project.require().repos
+            repository = Repo.selected(repositories, self.repository)
+            destination = storage.repository_checkout(thread.name, todo.id, repository.github)
+        CheckoutStorageEffect(destination, repository.github).check(
+            StorageProjection(storage, thread))
+        if destination.exists():
+            Checkout(destination).prepare()
+        else:
+            Repo.git(repository.checkout, "fetch", "origin", "main")
+            Checkout.add(repository.checkout, destination, "origin/main", "-b",
+                         f"work/{destination.name}")
+        return CheckoutResult(destination)
+
 
 @dataclass(frozen=True, kw_only=True)
 class CheckpointCliCommand(NameArgument, CliCommand, declared_name="checkpoint"):
