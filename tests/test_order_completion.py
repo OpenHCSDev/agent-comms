@@ -17,6 +17,7 @@ from agent_comms.todos import (
     MergedProblemOrder,
     OperationDelivery,
     PullRequestLink,
+    ReportDelivery,
     ReportedProblemOrder,
     TriageScope,
 )
@@ -133,6 +134,8 @@ class TestOrderCompletion:
         different_work = replace(current.delivery, delivered_commit=graph.newer)
         with pytest.raises(ValueError, match=r'^The order already records a different delivery\.$'):
             current.delivered(different_work)
+        with pytest.raises(ValueError, match=r'^The order already records a different delivery\.$'):
+            current.delivered(ReportDelivery(report="A report is different delivered work."))
 
     def test_triage_rejects_an_operation_without_recording(self, held_commander):
         ctx = held_commander

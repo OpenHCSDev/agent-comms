@@ -187,9 +187,13 @@ class BranchPointCheck:
 class OrderDelivery(DeclaredFamily, StoryEvent, affix="Delivery"):
     at: EventTime = field(default_factory=UnrecordedEventTime)
 
+    def unobserved(self) -> OrderDelivery:
+        """The delivered work without the observations of the proof that recorded it."""
+        return replace(self, at=UnrecordedEventTime())
+
     def reproved(self, delivery: OrderDelivery) -> OrderDelivery:
-        if delivery == self:
-            return self
+        if delivery.unobserved() == self.unobserved():
+            return delivery
         raise ValueError("The order already records a different delivery.")
 
     def check_base(self, repo: Path) -> str:
@@ -249,12 +253,9 @@ class CheckedDelivery(OrderDelivery, declared_name=None):
         default_factory=UnrecordedBuildIdentity
     )
 
-    def reproved(self, delivery: OrderDelivery) -> OrderDelivery:
-        """Keep the delivered work while replacing the observations of its new proof."""
-        if replace(delivery, at=self.at, evidence=self.evidence,
-                   proof_build=self.proof_build) == self:
-            return delivery
-        return super().reproved(delivery)
+    def unobserved(self) -> OrderDelivery:
+        return replace(self, at=UnrecordedEventTime(), evidence=NoDeliveryEvidence(),
+                       proof_build=UnrecordedBuildIdentity())
 
     def closing_artifact(self) -> str:
         return self.evidence.artifact()
