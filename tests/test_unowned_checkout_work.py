@@ -4,6 +4,7 @@
 from agent_comms.bus import Bus
 
 import json
+import os
 import subprocess
 import time
 from contextlib import nullcontext
@@ -14,6 +15,7 @@ import pytest
 from cli_command import core
 from order_scope_fixture import FIX_SCOPE
 from agent_comms.change_report import FileLine
+from agent_comms.child_process import ProcessIdentity
 from agent_comms.threads import ParkedThreadWorkState, ReadyThreadWorkState
 from agent_comms.commander.standing import (
     CheckoutHeldWheelSpin,
@@ -110,9 +112,12 @@ def checkout_bus(tmp_path: Path, configured_repository, installed_runtime) -> Co
     # Two order holders never share one worktree, so the unit taking the work has its own.
     spare = tmp_path / 'idle-project'
     git(home, 'worktree', 'add', '-q', '-b', 'idle-home', str(spare))
-    for name, worktree in (('lead', home), ('worker', home), ('idle', spare)):
+    for name in ('lead', 'worker'):
         c.registry.declare(Thread(
-            name, frozenset(), str(worktree), execution=ExternalThreadExecution))
+            name, frozenset(), str(home), execution=ExternalThreadExecution))
+    c.registry.declare(Thread(
+        'idle', frozenset(), str(spare), execution=ExternalThreadExecution,
+        process_identity=ProcessIdentity.capture(os.getpid())))
     request = c.goals.todos.add_request(
         c.registry.require('lead').incarnation, 'Keep changes with their author').id
     lead, worker = c.registry.require('lead'), c.registry.require('worker')

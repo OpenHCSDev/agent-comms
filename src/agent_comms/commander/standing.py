@@ -312,11 +312,11 @@ class UnownedWheelSpin(IndependentStandingRule, UndatedStandingRule):
 
     @classmethod
     def idle(cls, comms: Comms, commander: str, scan: HeldOrders) -> list[Thread]:
-        """Units with a recent turn in their own transcript and no order, parked threads aside."""
+        """Units with a live process, a recent turn and no order, parked threads aside."""
         held = {todo.holder for todo in scan.todos}
         excluded = held | {commander, ""}
         bound = TurnsSince(time.time() - cls.recent)
-        return sorted((candidate for thread in comms.registry.all_threads().values()
+        return sorted((candidate for thread in comms.registry.live_threads()
                        if thread.name not in excluded
                        for candidate in thread.work_state.candidates(thread)
                        if TurnDigestRead(comms.root, candidate, bound).read().turns),
