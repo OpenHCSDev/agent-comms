@@ -2137,7 +2137,9 @@ class FieldCodec(MroDispatch, Sealed):
     @classmethod
     def decode_selected(cls, target: type[T], data: object, selections, *, fields: tuple[str, ...]) -> T:
         """Decode selected mapping keys by their declaring record and field, not wire shape."""
-        entries = tuple(entry for entry in cls._record_plan(target).bindings if entry.name in fields)
+        entries = tuple(
+            entry for entry in cls._record_plan(target).bindings if entry.name in fields
+        )
         return cast(T, _RecordDecoder(target).decode_entries(data, entries, selections, {}, {}))
 
     @classmethod
