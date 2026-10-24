@@ -963,18 +963,28 @@ class ValueDecoder[T](DecoderPlan):
         return cls(target)
 
     @classmethod
-    def annotation_class(cls, annotation: object) -> type[ValueDecoder[object]]:
-        try:
-            return cls._by_annotation[annotation]
-        except KeyError:
-            pass
+    def _registered(cls, annotation: object) -> tuple[type[ValueDecoder[object]], ...]:
+        matches: list[type[ValueDecoder[object]]] = []
+        if annotation in cls._by_annotation:
+            matches.append(cls._by_annotation[annotation])
         declarations = annotation.__mro__ if isinstance(annotation, type) else (annotation,)
         for declaration in declarations:
-            try:
-                return cls._by_origin[get_origin(declaration) or declaration]
-            except KeyError:
-                continue
-        raise KeyError(annotation)
+            origin = get_origin(declaration) or declaration
+            if origin in cls._by_origin:
+                matches.append(cls._by_origin[origin])
+        return tuple(matches)
+
+    @classmethod
+    def annotation_class(cls, annotation: object) -> type[ValueDecoder[object]]:
+        matches = cls._registered(annotation)
+        if not matches:
+            raise KeyError(annotation)
+        return matches[0]
+
+    @classmethod
+    def represented_class(cls, annotation: object) -> type[ValueDecoder[object]]:
+        """A represented value with no registered decoder is a scalar of its representation."""
+        return next(iter(cls._registered(annotation)), _ScalarDecoder)
 
     @classmethod
     def with_representation(
@@ -1174,7 +1184,7 @@ class FieldRepresentation[T](MroDispatch, ABC):
         return cls
 
     @classmethod
-    def project(cls, value: object, view: str, annotation: object) -> JsonValue:
+    def project_view(cls, value: object, view: str, annotation: object) -> JsonValue:
         return RepresentedProjection.of(value, view, annotation)
 
     @classmethod
@@ -1183,10 +1193,7 @@ class FieldRepresentation[T](MroDispatch, ABC):
 
     @classmethod
     def decoder_for(cls, annotation: object, target: object) -> ValueDecoder[object]:
-        try:
-            owner = ValueDecoder.annotation_class(target)
-        except KeyError:
-            owner = _ScalarDecoder
+        owner = ValueDecoder.represented_class(target)
         return owner.with_representation(annotation, target, get_args(target), cls)
 
     @classmethod
@@ -1243,7 +1250,7 @@ class StructuralRepresentation(FieldRepresentation):
         return FieldCodec.representation(type(value))[1]
 
     @classmethod
-    def project(cls, value: object, view: str, annotation: object) -> JsonValue:
+    def project_view(cls, value: object, view: str, annotation: object) -> JsonValue:
         return FieldCodec._project_structure(value, view, annotation)
 
     @classmethod
@@ -2239,7 +2246,7 @@ class FieldCodec(MroDispatch, Sealed):
         Projection is deliberately one way. Excluded secrets cannot be rebuilt
         from a read-only view, and a view never serves as a persistence record.
         """
-        return cls._value_representation(value, annotation).project(value, view, annotation)
+        return cls._value_representation(value, annotation).project_view(value, view, annotation)
 
     @classmethod
     def _project_structure(cls, value: object, view: str, annotation: object) -> JsonValue:

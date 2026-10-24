@@ -27,9 +27,11 @@ class WakeClaimTurnIds(ArchivedInputs, Carry):
     @staticmethod
     def rewrite(path: Path, record: type, payload: dict[str, object]) -> dict[str, object]:
         try:
-            return FieldCodec.encode(
-                FieldCodec.decode(WakeClaim, {**payload, "version": WakeClaim.version})
-            )
+            return {
+                **FieldCodec.encode(
+                    FieldCodec.decode(WakeClaim, {**payload, "version": WakeClaim.version})
+                )
+            }
         except MalformedRecord as error:
             error.add_note(f"{path}: {payload!r}")
             raise
