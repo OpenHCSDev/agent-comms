@@ -512,15 +512,17 @@ class SessionEntry(NativeEntry):
     def input_evidence(cls, raw: dict) -> tuple[NativeEntry, ...]:
         return (cls.from_evidence(raw),)
 
-    def require_header(self) -> None:
-        if not self.id:
+    def require_header(self) -> PiSessionId:
+        if self.id is None:
             raise MalformedRecord("Native Pi session header is invalid")
+        return self.id
 
-    def require_reopen(self) -> None:
+    def require_reopen(self) -> PiSessionId:
         """Saved native execution supports v3; display may decode older headers."""
-        self.require_header()
+        session_id = self.require_header()
         if self.version != 3:
             raise MalformedRecord("Strict native v3 session header required")
+        return session_id
 
 
 @dataclass(frozen=True, kw_only=True)

@@ -272,7 +272,7 @@ class MaintenanceClaimHolder(RecordMember, MaintenanceHolder):
         return nonce == self.nonce
 
     def exported(self, environment: MutableMapping[str, str]) -> None:
-        environment[HOLDER_NONCE] = self.nonce
+        environment[HOLDER_NONCE] = FieldCodec.encode(self.nonce)
 
 
 class MaintenanceStatus:

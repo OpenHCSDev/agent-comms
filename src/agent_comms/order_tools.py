@@ -101,7 +101,7 @@ class ProblemClosed(ToolResult):
 class MessagePublished(ToolResult):
     """The Pi adapter decodes this reply as PublishedMessageToolDetails by its agentCommsKind."""
 
-    id: str
+    id: MessageId
     message: SentTranscript
     correction: CorrectionResult
     agent_comms_kind: Annotated[

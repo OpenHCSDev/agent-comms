@@ -422,8 +422,8 @@ def test_codex_uses_response_items_not_mirrored_events_and_keeps_recent_budget(t
     records += [
         {"type": "compacted", "payload": {"message": "Earlier context summary"}},
         {"type": "response_item", "payload": {"type": "reasoning", "encrypted_content": "opaque"}},
-        {"type": "response_item", "payload": {"type": "function_call", "name": "exec", "arguments": "{}"}},
-        {"type": "response_item", "payload": {"type": "function_call_output", "output": "x" * 400}},
+        {"type": "response_item", "payload": {"type": "function_call", "name": "exec", "call_id": "call-1", "arguments": "{}"}},
+        {"type": "response_item", "payload": {"type": "function_call_output", "call_id": "call-1", "output": "x" * 400}},
     ]
     source = codex_lines(tmp_path / "rollout.jsonl", records, tail='{"partial"')
     snapshot = read(CodexHarness, source, ImportLimits(4, 300, 100))

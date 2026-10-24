@@ -851,7 +851,7 @@ def test_a_compliant_answer_resumes_a_held_unit_whose_attempt_was_interrupted(he
     with pytest.raises(ValueError, match="unresolved"):
         held_bus.goals.update_goal("worker", ActiveGoalAction(), actor=OwnerInvocable)
     held_bus.goals.update_goal(
-        "worker", CompliedGoalAction(witness="compliant-answer"), actor=OwnerInvocable)
+        "worker", CompliedGoalAction(witness=MessageId("c0ffee000001")), actor=OwnerInvocable)
     assert isinstance(held_bus.registry.require("worker").goal.require().state, ActiveGoal)
 
 
@@ -877,7 +877,7 @@ def test_a_compliant_answer_resumes_a_held_unit_whose_problems_closed_during_the
             "The requested repair already merged into main through another problem."))
     assert todos.for_goal(worker.incarnation, worker.goal.require().id) == ()
     held_bus.goals.update_goal(
-        "worker", CompliedGoalAction(witness="compliant-answer"), actor=OwnerInvocable)
+        "worker", CompliedGoalAction(witness=MessageId("c0ffee000001")), actor=OwnerInvocable)
     assert isinstance(held_bus.registry.require("worker").goal.require().state, ActiveGoal)
 
 

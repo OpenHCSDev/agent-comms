@@ -1,39 +1,45 @@
 """A holder claims through the real tool boundary on a copied bus."""
-from contextlib import chdir
-from dataclasses import replace
 import json
 import shlex
 import time
+from contextlib import chdir
+from dataclasses import replace
 
 import pytest
 
 from agent_comms.commander.order import OrderFile, main
-from agent_comms.field_codec import FieldCodec, GoalId
-from agent_comms.goal_actions import SetGoalAction
 from agent_comms.commander.package import CommanderPackage
 from agent_comms.errors import ToolRefusedError
+from agent_comms.field_codec import FieldCodec, GoalId
+from agent_comms.goal_actions import SetGoalAction
 from agent_comms.goals import OrderCheck, ProblemGoalOrder
+from agent_comms.native_tool_call import ToolCallId
+from agent_comms.order_tools import (
+    CommsHudTool,
+    CommsOrderDeliverTool,
+    CommsVerdictTool,
+    TodoChanged,
+)
 from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.todos import (
-    ClaimOrder,
     ClaimedProblemOrder,
+    ClaimOrder,
     CorrectCheckTodo,
-    DoneTodoState,
-    FailedCheckStrike,
     DeliveredProblemOrder,
     DeliveryReport,
-    PendingProblemOrder,
+    DoneTodoState,
+    FailedCheckStrike,
     OrderClaim,
+    PendingProblemOrder,
     SendBackVerdict,
     StrikeReason,
     StrikeTodo,
+    Todo,
     TodoConflict,
     TodoError,
-    Todo,
 )
 from agent_comms.tool_caller import ThreadCaller
 from agent_comms.tools import CommsHistoryTool
-from agent_comms.order_tools import CommsHudTool, CommsOrderDeliverTool, CommsVerdictTool, TodoChanged
 from test_held_problem_orders import merge_two_commit_fix
 from test_todos import order, thread
 
@@ -92,7 +98,7 @@ def test_claim_verdict_family_on_retained_copy(held_commander):
     )
     ThreadCaller(ctx.commander).invoke(CommsVerdictTool(
         problem="P1", operation=SendBackVerdict(
-            claimed.revision, ctx.incarnation, claimed.held(), "fixture-call", why,
+            claimed.revision, ctx.incarnation, claimed.held(), ToolCallId("fixture-call"), why,
             evidence=(claimed.order.owner,),
         ),
     ), comms)

@@ -101,11 +101,10 @@ class NativeSessionIdentity(SessionRetention):
         """Derive selected identity from its recipient's already verified source."""
         file = evidence.source.path
         try:
-            header = evidence.header()
-            header.require_reopen()
+            session_id = evidence.header().require_reopen()
         except (MalformedRecord, NativePiUnavailable) as error:
             raise NativeReopenError("Saved native session identity cannot be read") from error
-        return cls(header.require_entry_id(), str(file))
+        return cls(session_id, str(file))
 
     @classmethod
     def locate(cls, session_file: str) -> NativeSessionIdentity:

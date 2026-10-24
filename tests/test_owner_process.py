@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-
 import asyncio
 import os
 import shlex
@@ -18,26 +17,28 @@ from pathlib import Path
 import pytest
 
 from agent_comms import native_package
-from agent_comms.launch_runtime import LaunchRuntime
-from agent_comms.owner_lifecycle import NoRelease
+from agent_comms.attempt_resolution import FailedTurnResolution
 from agent_comms.child_process import ObservedProcess, SpawnedProcess
 from agent_comms.comms import wire
 from agent_comms.config_options import ThinkingLevelConfigOption
 from agent_comms.coordinator import Coordination
-from agent_comms.field_codec import GoalId, TurnId, compile_decoder
-from agent_comms.pi_vocabulary import ThinkingLevelField
 from agent_comms.errors import RelationViolationError
-from agent_comms.runtime import RuntimeProxy, socket_path
+from agent_comms.field_codec import GoalId, TurnId, compile_decoder
 from agent_comms.launch_root import LaunchRoot
+from agent_comms.launch_runtime import LaunchRuntime
 from agent_comms.native_arguments import GivenArguments, GivenBinary
+from agent_comms.owner_lifecycle import NoRelease
+from agent_comms.pi_vocabulary import ThinkingLevelField
 from agent_comms.restart_scope import OwnersNamed
+from agent_comms.runtime import RuntimeProxy, socket_path
+from agent_comms.session_file import NoSessionFile
 from agent_comms.thread_model import DeclaredModel
 from agent_comms.thread_text import GivenThreadText
-from agent_comms.session_file import NoSessionFile
+from agent_comms.threads import Thread
+from agent_comms.turn_failure import BackendFailed
 from delivery_owner_fixture import canonical_agent
 from fixture_git import IDENTITY
 from native_backend_fixture import native_backend_fixture
-from agent_comms.threads import Thread
 
 
 @pytest.fixture
@@ -182,8 +183,8 @@ async def test_real_batch_retains_each_launch_and_busy_refuses_every_stop(tmp_pa
     """One provider-free installed worker batch, with original distinct settings."""
     from agent_comms.goal_states import BlockedGoal
     from agent_comms.goals import Goal
-    from agent_comms.owner_launch import RetainedOwnerLaunch
     from agent_comms.owner_cutover import PreserveOwnerRuntime
+    from agent_comms.owner_launch import RetainedOwnerLaunch
 
     model = 'response-local/fixture'
     monkeypatch.setenv("AGENT_COMMS_AGENT_MODELS", model)
@@ -244,7 +245,7 @@ async def test_real_batch_retains_each_launch_and_busy_refuses_every_stop(tmp_pa
             # The ledger owns the failed original: created by its writer, then failed, never registry-only.
             goals = comms.goals.open_goal_store()
             goals.create_goal(goal.id)
-            goals.reserve(goal.id, 1).fail(goals, "No replay")
+            goals.reserve(goal.id, 1).fail(goals, FailedTurnResolution(BackendFailed))
             comms.registry.declare(Thread(name, frozenset({name}), str(tmp_path), model=DeclaredModel(model), thinking_level=thinking, goal=goal, task=GivenThreadText('retained task ' + name)))
             with monkeypatch.context() as patch:
                 patch.setenv("BATCH_OWNER_CREDENTIAL", credential)

@@ -57,7 +57,7 @@ class AcpInputKey(InputKey):
         return None
 
     def public_text(self) -> str:
-        return self.input_id
+        return FieldCodec.encode(self.input_id)
 
     def identify(self, update: InputStartedUpdate) -> InputStartedUpdate:
         return update.identified(self.input_id)

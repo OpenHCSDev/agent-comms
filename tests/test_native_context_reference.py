@@ -18,7 +18,7 @@ from agent_comms.cursor_owner import (
     RecordedCursor,
     UnstartedCursor,
 )
-from agent_comms.field_codec import FieldCodec, InputId, MessageId
+from agent_comms.field_codec import FieldCodec, InputId, MessageId, RootId, ThreadLookup
 from agent_comms.historical_native_inputs import (
     FullHistoricalNativeInput,
     TriageHistoricalNativeInput,
@@ -44,11 +44,12 @@ from agent_comms.selected_triage import (
     IgnoreSelectedTriage,
 )
 from agent_comms.threads import Thread
+from agent_comms.turn_item import PiSessionId
 
 
 def cursor():
     return CurrentNativeCursor(
-        wire_root_id="a" * 32, recipient_lookup="b" * 32,
+        wire_root_id=RootId("a" * 32), recipient_lookup=ThreadLookup("b" * 32),
         owner_generation=1, owner_claimed_generation=2, covered_seq=1, injected_seq=1,
         input_id=TextNativeColumn("c" * 32), stage=TextNativeColumn("full"),
         session_id=TextNativeColumn("original-session"), request_generation=NumberNativeColumn(1),
@@ -72,7 +73,7 @@ def reservation():
     return NativeRuntimeInput(
         input_id=FieldCodec.decode(InputId, "c" * 32), stage=TriageNativeExecution,
         execution_id=UnrecordedNativeColumn(), attempt_ordinal=UnrecordedNativeColumn(),
-        owner_lookup="b" * 32,  owner_generation=1,
+        owner_lookup=ThreadLookup("b" * 32),  owner_generation=1,
         owner_token_digest="e" * 64,
     )
 
@@ -81,7 +82,7 @@ def reservation():
 def recorded():
     return replace(
         reservation(), sent_owner_claimed_generation=RecordedNativeClaim(2),
-        session_id="original-session", session_file="/original/session.jsonl",
+        session_id=PiSessionId("original-session"), session_file="/original/session.jsonl",
         session_entry_id=TextNativeColumn("original-entry"),
         session_entry_start=RecordedNativePosition(128),
         request_generation=NumberNativeColumn(1),

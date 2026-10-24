@@ -141,6 +141,17 @@ class OwnerProvenance(Provenance):
 
 
 @dataclass(frozen=True)
+class TurnProvenance(Provenance):
+    """The owner's recorded turn itself, never a digest standing in for it."""
+
+    owner: ThreadIncarnation
+    turn: TurnId
+
+    def public_description(self) -> str:
+        return f"Owner {self.owner.name} · born {self.owner.created_at} · turn {self.turn}"
+
+
+@dataclass(frozen=True)
 class WireProvenance(Provenance):
     source: MessageReference
 
@@ -1176,7 +1187,7 @@ class RenderedInput:
 @dataclass(frozen=True)
 class ContextTurn(DeclaredFamily, affix="ContextTurn"):
     @abstractmethod
-    def source_revision(self, owner: Thread) -> str: ...
+    def provenance(self, owner: Thread) -> Provenance: ...
 
     def require_recorded(self) -> RecordedContextTurn:
         raise ValueError("A next-context preview cannot be published as a recorded turn")
@@ -1203,8 +1214,8 @@ class RecordedContextTurn(ContextTurn):
         if self.occurrence.generation < 1:
             raise ValueError("Context requires the original authorized turn generation")
 
-    def source_revision(self, owner: Thread) -> str:
-        return self.identity
+    def provenance(self, owner: Thread) -> Provenance:
+        return TurnProvenance(owner.incarnation, self.identity)
 
     def require_recorded(self) -> RecordedContextTurn:
         return self
@@ -1214,8 +1225,11 @@ class RecordedContextTurn(ContextTurn):
 
 
 class NextContextTurn(ContextTurn):
-    def source_revision(self, owner: Thread) -> str:
-        return hashlib.sha256(json.dumps(owner.to_wire(), sort_keys=True).encode()).hexdigest()
+    def provenance(self, owner: Thread) -> Provenance:
+        return OwnerProvenance(
+            owner.incarnation,
+            hashlib.sha256(json.dumps(owner.to_wire(), sort_keys=True).encode()).hexdigest(),
+        )
 
 
 class DispatchRequest(SubclassUnion, affix="DispatchRequest"):
@@ -1445,9 +1459,7 @@ class TurnContext(DeclaredReply):
         origins: tuple[MessageReference, ...] = (),
         inputs: tuple[StoredInput, ...] = (),
     ) -> TurnContext:
-        source = tuple(WireProvenance(ref) for ref in origins) or (
-            OwnerProvenance(owner.incarnation, turn.source_revision(owner)),
-        )
+        source = tuple(WireProvenance(ref) for ref in origins) or (turn.provenance(owner),)
         source += tuple(row.context_provenance() for row in inputs)
         return cls(
             owner.incarnation,

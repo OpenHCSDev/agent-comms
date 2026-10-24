@@ -121,9 +121,10 @@ class InjectedInput(CoverageInput):
     def input_fields(self) -> dict:
         original = self.original
         return dict(
-            injected_seq=original.source_seq, input_id=TextNativeColumn(original.input_id),
+            injected_seq=original.source_seq,
+            input_id=TextNativeColumn(FieldCodec.encode(original.input_id)),
             stage=TextNativeColumn(FieldCodec.encode(type(original.execution))),
-            session_id=TextNativeColumn(original.context.session_id),
+            session_id=TextNativeColumn(FieldCodec.encode(original.context.session_id)),
             request_generation=NumberNativeColumn(original.context.request_generation),
         )
     def injected_for(self, state: CursorState) -> int:

@@ -213,10 +213,10 @@ class OwnedTurn:
         )
         from .turn_context import (
             AutomaticTitleSegment,
-            OwnerProvenance,
             RecordedContextTurn,
             ReplyRouteSegment,
             TurnContext,
+            TurnProvenance,
         )
 
         self.relations = self.runner.comms.relationships.context_relations(self.thread.name)
@@ -233,11 +233,11 @@ class OwnedTurn:
         self.context = self.goal_permit.add_context(self.context, self.thread, self.runner.comms.goals)
         if self.thread.auto_title_pending:
             self.context = self.context.prepend(AutomaticTitleSegment.capture(
-                (OwnerProvenance(self.thread.incarnation, self.turn_id),)))
+                (TurnProvenance(self.thread.incarnation, self.turn_id),)))
         response_targets = batch.native_reply_targets or self.reply_targets
         if response_targets:
             self.context = self.context.prepend(ReplyRouteSegment.capture(
-                (OwnerProvenance(self.thread.incarnation, self.turn_id),), targets=response_targets))
+                (TurnProvenance(self.thread.incarnation, self.turn_id),), targets=response_targets))
 
     def reserve_input(self, batch: InputBatch):
         """Acquire the original durable input before opening loop capabilities."""
