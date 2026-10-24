@@ -48,7 +48,7 @@ class ConnectorService:
 
     @property
     def result(self) -> RoundTripResult:
-        return RoundTripResult(f"{CommsChannelsTool.declared_name} read alike on port {self.port}")
+        return RoundTripResult(f"{CommsChannelsTool.declared_name} answered on port {self.port}")
 
     def serves(self) -> None:
         read = ToolCall.of(CommsChannelsTool)
@@ -134,9 +134,9 @@ class InstallServiceVerb(ConnectorOptions, declared_name="install-service"):
 
 @dataclass(frozen=True, kw_only=True)
 class RoundTripVerb(ConnectorVerb):
-    """The same serving proof required after an install restarts the connector."""
+    """The install's serving proof for the connector, run for one root."""
 
-    help = "Read the bus through the running connector service and compare"
+    help = "Prove the running connector service answers for ROOT's bus"
     root: Annotated[
         Path, PathText, Argument(flags=("root",), options={"help": "The comms root it proves"})
     ]
@@ -145,9 +145,19 @@ class RoundTripVerb(ConnectorVerb):
     ] = PORT
 
     def apply(self, ctx: ConnectorStore) -> int | str:
-        service = ConnectorService(
-            launch=LaunchRoot.from_path(self.root), store=ctx, port=self.port
-        )
+        match SystemdConnectorService.running():
+            case ():
+                return f"No connector service is running for {self.root}"
+            case (service,):
+                served = Bus.path_in(service.launch.path)
+                requested = Bus.path_in(self.root)
+                if service.port != self.port or not RecordedBusIdentity.capture(served).matches(
+                    RecordedBusIdentity.capture(requested)
+                ):
+                    return (
+                        f"Connector on port {service.port} serves {served}; "
+                        f"requested {requested} on port {self.port}"
+                    )
         try:
             service.serves()
         except ServiceNotServingError as error:

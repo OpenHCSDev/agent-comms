@@ -32,7 +32,11 @@ from agent_comms.host_services import (
     SystemdSite,
 )
 from agent_comms.host_services.codex_inbox import CodexInboxService
-from agent_comms.host_services.connector import InstallServiceVerb, SystemdConnectorService
+from agent_comms.host_services.connector import (
+    InstallServiceVerb,
+    RoundTripVerb,
+    SystemdConnectorService,
+)
 from agent_comms.installer.backup import StoreBackup
 from agent_comms.launch_root import LaunchRoot
 from agent_comms.launch_runtime import LaunchRuntime
@@ -229,6 +233,20 @@ def test_connector_refuses_a_different_published_bus(connector_service, tmp_path
         service.serves()
     assert str(Bus.path_in(service.launch.path)) in str(refused.value)
     assert str(Bus.path_in(other)) in str(refused.value)
+
+
+def test_round_trip_refuses_a_different_requested_bus(connector_service, tmp_path, monkeypatch):
+    service = connector_service
+    other = tmp_path / "other-requested-bus"
+    StoreBackup.copy_tree(service.launch.path, other)
+    monkeypatch.setattr(
+        SystemdConnectorService, "running", classmethod(lambda cls: (service,))
+    )
+
+    refused = RoundTripVerb(root=other, port=service.port).apply(service.store)
+    assert isinstance(refused, str)
+    assert str(Bus.path_in(service.launch.path)) in refused
+    assert str(Bus.path_in(other)) in refused
 
 
 def test_connector_accepts_bus_writes_during_its_proof(connector_service, monkeypatch):
