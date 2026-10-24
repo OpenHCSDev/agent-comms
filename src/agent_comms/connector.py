@@ -75,7 +75,7 @@ from .tool_result import ToolResult
 from .task_sources import OwnerRequestAttachment
 from .tools import CommsSendTool, SendTool
 from .order_tools import CommsHeadVerdictTool, HeadVerdictTool, MessagePublished
-from .tool_request import ReadTool, ToolRequest, tool_field
+from .tool_request import ReadTool, ToolCall, ToolRequest, tool_field
 
 LOOPBACK = "127.0.0.1"
 PORT = 18766
@@ -346,20 +346,6 @@ class ToolDescription:
 @dataclass(frozen=True)
 class ToolsListResult(McpResult):
     tools: tuple[ToolDescription, ...]
-
-
-@dataclass(frozen=True)
-class ToolCall:
-    name: str
-    arguments: dict[str, object] = field(default_factory=dict)
-    meta: Annotated[dict[str, object], WireName("_meta")] = field(
-        default_factory=dict
-    )
-
-    @classmethod
-    def of(cls, tool: type[ToolRequest]) -> ToolCall:
-        """A call of a tool the connector exposes, by the name it exposes it under."""
-        return cls(tool.declared_name)
 
 
 @dataclass(frozen=True, kw_only=True)
