@@ -34,6 +34,7 @@ from .cli_commands import (
     HistoryCliCommand,
     PinChannelCliCommand,
     PinThreadCliCommand,
+    QueueRestartCliCommand,
     StartCliCommand,
     StopCliCommand,
     ThreadArchivedResult,
@@ -65,12 +66,11 @@ from .goal_waits import NoStandbyReview, StandbyReview
 from .goals import GoalDeclaration
 from .history_result import HistoryPageResult
 from .input_attempt import UnresolvedInput
-from .launch_runtime import LaunchRuntime
 from .message_page import PageBounds
 from .message_reference import MessageReference
 from .messages import InfoKind, Message, MessageKind, NoticeRole, SendableMessageKind
 from .native_tools import NativeRequestTools
-from .owner_lifecycle import OwnerRestartSelection, OwnerStartResult
+from .owner_lifecycle import OwnerStartResult
 from .page_traversal import NewestCursor, PageCursor
 from .pi_payloads import PublishedGoalToolDetails
 from .pi_vocabulary import ServiceTier, ThinkingLevelField
@@ -90,7 +90,7 @@ from .restart_queue import (
     cancel as cancel_restart,
 )
 from .restart_queue import (
-    enqueue as enqueue_restart,
+    RestartQueued,
 )
 from .restart_queue import (
     status as restart_status,
@@ -257,11 +257,6 @@ class InboxPageRead(ToolResult):
     standby_review: Annotated[StandbyReview | NoStandbyReview, WireOmitDefault()] = (
         NoStandbyReview()
     )
-
-
-@dataclass(frozen=True)
-class RestartQueued(ToolResult):
-    restart: QueuedRestart
 
 
 @dataclass(frozen=True)
@@ -1125,9 +1120,7 @@ class CommsQueueRestartTool(LiveOwnerTool, NativeOwnerCommand, OwnerLifecycleCon
     name: Annotated[str, *tool_field("Live agent thread", binding=SubjectBinding)]
 
     def apply(self, comms: Comms, caller: ToolCaller) -> RestartQueued:
-        return RestartQueued(
-            enqueue_restart(comms, OwnerRestartSelection.capture(comms.registry.snapshot(), self.name),
-                            launch_runtime=LaunchRuntime.running()))
+        return QueueRestartCliCommand(name=self.name).apply(comms)
 
 
 @dataclass(frozen=True, kw_only=True)

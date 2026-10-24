@@ -10,7 +10,14 @@ import pytest
 from agent_comms.cli_commands import InstallCliCommand
 from agent_comms.commander import standing
 from agent_comms.field_codec import FieldCodec, Id128
-from agent_comms.installer.launch import InstallLogs, InstallRun, InstallUnit
+from agent_comms.installer.backup import StoreBackup
+from agent_comms.installer.launch import (
+    InstallLogs,
+    InstallRun,
+    InstallRunning,
+    InstallUnit,
+)
+from agent_comms.repo import Repo
 from agent_comms.repository_name import RepositoryName
 
 FAKE = """#!{python}
@@ -105,3 +112,59 @@ def test_a_missing_systemd_run_refuses_at_once(tmp_path, monkeypatch):
     monkeypatch.setenv("PATH", str(tmp_path))
     with pytest.raises(FileNotFoundError, match="systemd-run"):
         InstallUnit(Id128.mint(), tmp_path).start(tmp_path, ("true",), "")
+
+
+def test_a_second_launch_on_one_root_refuses_until_the_first_lets_go(tmp_path, systemd):
+    """2026-10-24 18:54: three installs of one commit ran on one bus at once."""
+    logs = InstallLogs(tmp_path / "bus")
+    with (logs.launching(), pytest.raises(InstallRunning, match="another install holds"),
+          logs.launching()):
+        pass
+    with logs.launching():
+        pass
+
+
+def running_only(monkeypatch, unit: InstallUnit) -> None:
+    monkeypatch.setattr(InstallUnit, "shown", staticmethod(
+        lambda name, field: "active" if name == unit.unit else "inactive"))
+
+
+def test_every_merge_due_counts_the_running_install_of_its_target(tmp_path, systemd,
+                                                                    monkeypatch):
+    """The Core and Toad merges install one Core target, so the second merge's turn finds
+    the first one's unit running and records itself on it instead of launching again."""
+    root = tmp_path / "bus"
+    root.mkdir()
+    logs = InstallLogs(root)
+    core = Repo(checkout=tmp_path / "checkout",
+                github=RepositoryName.from_wire("OpenHCSDev/agent-comms"))
+    toad = RepositoryName.from_wire("OpenHCSDev/toad")
+    run = InstallRun(InstallCliCommand(checkout=core.checkout, to="HEAD"), root,
+                     tmp_path / "scratch", "a" * 40)
+    with logs.launching():
+        run.spawn()
+    logs.record(run.unit.logs, core.github, "a" * 40)
+    running_only(monkeypatch, run.unit)
+
+    standing.PendingInstallDue(toad, "c" * 40, "0" * 40, 1, 31, logs, core, "a" * 40).enforce(
+        None, "commander")  # type: ignore[arg-type]
+    standing.PendingInstallDue(toad, "d" * 40, "0" * 40, 1, 31, logs, core, "e" * 40).enforce(
+        None, "commander")  # type: ignore[arg-type]
+
+    assert logs.launched(toad, "c" * 40) == (run.unit,)
+    assert logs.member(toad, "c" * 40) is standing.LaunchedInstallDue
+    assert logs.launched(core.github, "a" * 40) == (run.unit,)
+    assert logs.member(toad, "d" * 40) is standing.PendingInstallDue
+    assert logs.units() == (run.unit,)
+
+
+def test_retiring_old_logs_spares_a_running_units_directory(tmp_path, systemd, monkeypatch):
+    """A fresh mint retired the running install's directory and killed it at 18:55."""
+    logs = InstallLogs(tmp_path / "bus")
+    live = logs.minted()
+    running_only(monkeypatch, live)
+    later = [logs.minted() for _ in range(StoreBackup.kept + 2)]
+
+    assert live.logs.is_dir()
+    assert sorted(unit.logs for unit in logs.units()) == sorted(
+        [live.logs, *(unit.logs for unit in later[-StoreBackup.kept:])])
