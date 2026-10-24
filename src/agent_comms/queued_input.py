@@ -24,7 +24,7 @@ from .coordination_errors import IdentityConflict, RequestRefused, StaleRevision
 from .coordination_session import ReadNativeCoordinationSession
 from .coordinator import Coordination
 from .errors import RelationViolationError
-from .field_codec import InputId
+from .field_codec import InputId, GoalId
 from .goals import GoalDeclaration, NoGoal
 from .image_input import ImageInput
 from .input_attempt import InputAttempt, ReservedInput
@@ -75,7 +75,7 @@ class QueuedInputContext(ClaimScoped):
         return self.named(claim_scope.incarnation.name).claimed_identity == claim_scope
 
     @property
-    def active_goal_id(self) -> str | None:
+    def active_goal_id(self) -> GoalId | None:
         return self.goal.active().reported_id()
 
 

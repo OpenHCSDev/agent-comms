@@ -28,7 +28,7 @@ from agent_comms.commander_heartbeat import (
 )
 from agent_comms.commander_pings import CommanderUpdate, RulePing
 from agent_comms.comms import Comms, wire
-from agent_comms.field_codec import FieldCodec
+from agent_comms.field_codec import FieldCodec, GoalId
 from agent_comms.goals import OrderCheck
 from agent_comms.installer.practice import PracticeCopy
 from agent_comms.locked_store import RootFile
@@ -81,6 +81,9 @@ def test_one_problem_owns_a_checkout_in_each_repository_it_changes(checkout_bus,
 
 @pytest.fixture
 def checkout_bus(tmp_path: Path, configured_repository, installed_runtime) -> Comms:
+    other_work_goal_id = GoalId.mint()
+    reissued_work_goal_id = GoalId.mint()
+    shared_work_goal_id = GoalId.mint()
     home = tmp_path / 'declared-project'
     home.mkdir()
     git(home, 'init', '-q', '--initial-branch=main')
@@ -122,20 +125,20 @@ def checkout_bus(tmp_path: Path, configured_repository, installed_runtime) -> Co
         c.goals.todos.create(
             problem, RepositoryName.from_wire('OpenHCSDev/agent-comms'),
             'Keep changes with their author', creator=lead, assigner=lead.incarnation, owner=worker,
-            generation='shared-work', review_at=RecordedEventTime(now + 3600),
+            generation=shared_work_goal_id, review_at=RecordedEventTime(now + 3600),
             order=order, request=request)
     # Both current IDs change, as they do when Core hands work out again.
     for problem in ('P1', 'P2'):
         row = c.goals.todos.get(problem)
         c.goals.todos.assign(
             problem, expected_revision=row.revision, owner=worker,
-            assigner=lead.incarnation, generation='reissued-work',
+            assigner=lead.incarnation, generation=reissued_work_goal_id,
             review_at=RecordedEventTime(now + 3600), order=order.reissued(now + 1),
             request=request)
     c.goals.todos.create(
         'P3', RepositoryName.from_wire('OpenHCSDev/agent-comms'),
         'Keep unrelated work separate', creator=lead, assigner=lead.incarnation, owner=worker,
-        generation='other-work', review_at=RecordedEventTime(now + 3600),
+        generation=other_work_goal_id, review_at=RecordedEventTime(now + 3600),
         order=order.reissued(now + 2), request=request)
     row = c.goals.todos.get('P2')
     assert {related.id for related in c.goals.todos.related_problems(row)} == {'P1', 'P2'}

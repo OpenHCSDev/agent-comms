@@ -15,6 +15,7 @@ from functools import cmp_to_key
 from pathlib import Path
 from typing import TYPE_CHECKING, Annotated, ClassVar, Literal
 
+from agent_comms.field_codec import GoalId
 from agent_comms import field_codec
 
 from . import presentation
@@ -200,7 +201,7 @@ class GoalDerivedContact(MutualThreadRelation):
     owner_created_at: float
     peer: str
     peer_created_at: float
-    goal_id: str
+    goal_id: GoalId
     text_revision: int
     relevance: ClassVar[type[PeerRelevance]] = GoalContactRelevance
     source: ClassVar[str] = "goal_mention"
@@ -231,7 +232,7 @@ class GoalDerivedContact(MutualThreadRelation):
 @dataclass(frozen=True, slots=True)
 class GoalMentionDiagnostic:
     owner: str
-    goal_id: str
+    goal_id: GoalId
     text_revision: int
     token: str
     reason: type[GoalMentionBinding] | Literal["stale_incarnation"]

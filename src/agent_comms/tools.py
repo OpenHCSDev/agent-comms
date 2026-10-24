@@ -43,7 +43,19 @@ from .cli_result import CliResult, ToolCatalogResult
 from .coordination_tables.refusals import SendRefusal
 from .display_order import ChannelSort, ThreadSort
 from .errors import RelationViolationError, ToolRefusedError
-from .field_codec import Argument, FieldCodec, Normalize, NullMember, SingleFieldValue, SubclassUnion, WireForm, WireName, WireOmitDefault, projected
+from .field_codec import (
+    Argument,
+    FieldCodec,
+    Normalize,
+    NullMember,
+    SingleFieldValue,
+    SubclassUnion,
+    WireForm,
+    WireName,
+    WireOmitDefault,
+    projected,
+    GoalId,
+)
 from .goal_actions import ActiveGoalAction, EditGoalAction, GoalAction, GoalPrecondition, ModelInvocable, SetGoalAction, TransitionGoalAction
 from .goal_history import RecordedGoalRevision
 from .goal_presentation import GoalExecution, GoalSnapshot
@@ -537,7 +549,7 @@ class CommsGoalTool(ThreadToolRequest):
         "copy only standby_review.reviewed_inputs into reviewed_inputs; this records "
         "your decision to wait for a later reply without replaying uncertain inputs."
     )
-    goal_id: Annotated[str, *tool_field("Goal identity provided in the turn context")]
+    goal_id: Annotated[GoalId, *tool_field("Goal identity provided in the turn context")]
     status: Annotated[
         type[TransitionGoalAction], *tool_field("Goal state", choices=GoalAction.model_choices)
     ]
@@ -583,7 +595,7 @@ class CommsResumeGoalTool(ThreadToolRequest):
         "Resume your own paused goal with the same ID only after an explicit user "
         "request. This does not replace the goal or resume blocked/completed goals."
     )
-    goal_id: Annotated[str, *tool_field("Identity of the paused goal to resume")]
+    goal_id: Annotated[GoalId, *tool_field("Identity of the paused goal to resume")]
     progress: Annotated[str, *tool_field("Progress summary for the resumed goal")]
 
     def apply(self, comms: Comms, caller: ThreadCaller) -> GoalUpdated:
@@ -615,7 +627,7 @@ class CommsEditGoalTool(ThreadToolRequest):
         "Edit your existing goal text while keeping its identity, status, and progress."
         " Use comms_set_goal only to replace the objective with a fresh goal ID."
     )
-    goal_id: Annotated[str, *tool_field("Identity of the existing goal to edit")]
+    goal_id: Annotated[GoalId, *tool_field("Identity of the existing goal to edit")]
     text: Annotated[str, *tool_field("Revised objective text, including any @mentions")]
 
     def apply(self, comms: Comms, caller: ThreadCaller) -> GoalUpdated:
@@ -636,12 +648,11 @@ class CommsGoalHistoryTool(ThreadReadTool):
     label = "Goal history"
     description = "Read recorded goal revisions and recorded provenance and observation gaps."
     goal_id: Annotated[
-        str, *tool_field("Optional goal ID; omit for this thread's full history")
-    ] = ""
+        GoalId | None, *tool_field("Optional goal ID; omit for this thread's full history")
+    ] = None
 
     def apply(self, comms: Comms, caller: ToolCaller) -> GoalHistory:
-        requested = self.goal_id.strip()
-        entries = comms.goals.goal_history(caller.subject(self.thread), goal_id=requested or None)
+        entries = comms.goals.goal_history(caller.subject(self.thread), goal_id=self.goal_id)
         return GoalHistory(tuple(entry.recorded() for entry in entries))
 
 
@@ -942,7 +953,7 @@ class CommsSubtaskTool(CommsAuthoredTaskTool):
 
 @dataclass(frozen=True)
 class StandbyRequest:
-    goal_id: Annotated[str, *tool_field("Current goal for scoped standby review")]
+    goal_id: Annotated[GoalId, *tool_field("Current goal for scoped standby review")]
     wait_for: Annotated[
         tuple[str, ...], *tool_field("Declared dependencies for standby review")
     ]

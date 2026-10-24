@@ -16,7 +16,7 @@ from agent_comms.child_process import ProcessIdentity
 from agent_comms.comms import wire
 from agent_comms.context_reading import ContextUsage, UnmeasuredContext
 from agent_comms.errors import RelationViolationError, UnregisteredThreadError
-from agent_comms.field_codec import FieldCodec, TurnId
+from agent_comms.field_codec import FieldCodec, TurnId, GoalId
 from agent_comms.goals import Goal
 from agent_comms.launch_runtime import CallingThreadUnavailable
 from agent_comms.messages import HandoffKind, InfoKind, Message
@@ -81,20 +81,23 @@ class TestAgentRuntimeInfo:
 class TestGoalRevision:
     @pytest.mark.parametrize("revision", [True, 1.0, "1", -1, 1 << 63])
     def test_rejects_noncanonical_or_exhausted_revision(self, revision):
+        goal_id = GoalId.mint()
         with pytest.raises(ValueError):
-            Goal(text="work", id="goal-id", published_seq=0, revision=revision)
+            Goal(text="work", id=goal_id, published_seq=0, revision=revision)
 
     def test_old_registry_goal_without_revision_reopens_at_zero(self, tmp_path: Path):
+        old_goal_id = GoalId.mint()
         path = tmp_path / "registry.json"
         registry = Registration(path)
         registry.register(
-            Thread(name='owner', tags=frozenset(), worktree='/wt', goal=Goal('work', 'old-id', published_seq=0))
+            Thread(name='owner', tags=frozenset(), worktree='/wt', goal=Goal('work',
+                old_goal_id, published_seq=0))
         )
         raw = json.loads(path.read_text())
         del raw["threads"]["owner"]["goal"]["revision"]
         path.write_text(json.dumps(raw))
         restored = Registration(path).require("owner").goal
-        assert restored == Goal("work", "old-id", published_seq=0, revision=0)
+        assert restored == Goal("work", old_goal_id, published_seq=0, revision=0)
 
 
 class TestThreadDeclaration:
@@ -237,9 +240,14 @@ class TestRegistration:
         assert not hasattr(snapshot, "claimed_generations")
 
     def test_rename_reclaims_own_alias_without_losing_owner_or_turn(self, tmp_path: Path) -> None:
+        goal_1_goal_id = GoalId.mint()
         registry = Registration(tmp_path / "registry.json")
         registry.register(
-            Thread(name='agent-comms-ux', tags=frozenset(), worktree='/wt', process_identity=ProcessIdentity.capture(os.getpid()), goal=Goal('Finish the goal', 'goal-1', published_seq=0))
+            Thread(
+                name='agent-comms-ux', tags=frozenset(), worktree='/wt',
+                process_identity=ProcessIdentity.capture(os.getpid()),
+                goal=Goal('Finish the goal', goal_1_goal_id, published_seq=0),
+            )
         )
         registry.register(
             Thread(name='child', tags=frozenset(), worktree='/wt', parent=ForkedParent('agent-comms-ux'))

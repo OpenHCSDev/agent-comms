@@ -7,7 +7,7 @@ import sqlite3
 
 import pytest
 
-from agent_comms.field_codec import ClaimId, InputId, TurnId
+from agent_comms.field_codec import ClaimId, GoalId, InputId, TurnId
 from agent_comms.installer.backup import bus_files
 from bus_record_fixture import prepare_native_comms
 from agent_comms.native_pi import NativeContextJournal
@@ -44,6 +44,7 @@ def test_published_change_signal_is_not_a_bus_resource(tmp_path: Path) -> None:
 
 
 def test_every_bus_file_is_a_declared_root_file(tmp_path: Path, source_repository, comms: Comms) -> None:
+    declared_files_goal_id = GoalId.mint()
     for name in ("owner", "peer"):
         comms.registry.declare(Thread(name, frozenset(), str(tmp_path)))
     sent = comms.messaging.send("peer", "owner", "Declare the bus files").message
@@ -67,7 +68,7 @@ def test_every_bus_file_is_a_declared_root_file(tmp_path: Path, source_repositor
     todo = TodoStore(comms.root).create(
         "P1", RepositoryName.from_wire("OpenHCSDev/agent-comms"),
         "Keep declared bus files", creator=owner, assigner=owner.incarnation, owner=owner,
-        generation="declared-files",
+        generation=declared_files_goal_id,
         request=comms.goals.todos.add_request(owner.incarnation, "Keep declared bus files").id,
         review_at=RecordedEventTime(1000.0), order=order(source_repository),
     )

@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING, ClassVar
 
 from agent_comms.ordinary_turn_rules import OrdinaryGoalGrantCheck
 
-from .field_codec import TurnId
+from .field_codec import TurnId, GoalId
 
 if TYPE_CHECKING:
     from agent_comms.goal_attempts import GoalAttemptStore, LaunchPermit
@@ -54,10 +54,10 @@ class GoalTurnPermit(ABC):
     def has_verified_progress(self, store: GoalAttemptStore) -> bool: ...
 
     @abstractmethod
-    def fail_origin(self, store: GoalAttemptStore, goal_id: str) -> None: ...
+    def fail_origin(self, store: GoalAttemptStore, goal_id: GoalId) -> None: ...
 
     @abstractmethod
-    def charge_for(self, goal_id: str, goals: Goals, response: str,
+    def charge_for(self, goal_id: GoalId, goals: Goals, response: str,
                    usage: PiUsage) -> bool: ...
 
     @abstractmethod
@@ -70,14 +70,14 @@ class NoLaunchPermit(GoalTurnPermit):
     def has_verified_progress(self, store: GoalAttemptStore) -> bool:
         return False
 
-    def charge_for(self, goal_id: str, goals: Goals, response: str,
+    def charge_for(self, goal_id: GoalId, goals: Goals, response: str,
                    usage: PiUsage) -> bool:
         return False
 
     def add_context(self, context: TurnContext, owner: Thread, goals: Goals) -> TurnContext:
         return context
 
-    def fail_origin(self, store: GoalAttemptStore, goal_id: str) -> None:
+    def fail_origin(self, store: GoalAttemptStore, goal_id: GoalId) -> None:
         generation = store.snapshot(goal_id)
         if generation and generation.lifecycle.allows_resume(True):
             store.retire_goal(goal_id, expected_generation=generation.number,

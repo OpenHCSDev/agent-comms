@@ -42,17 +42,18 @@ def test_saved_tool_record_acquires_its_family_without_package_bootstrap():
 import sys
 sys.path.insert(0, {str(source)!r})
 from dataclasses import dataclass
-from agent_comms.field_codec import FieldCodec
+from agent_comms.field_codec import FieldCodec, GoalId
+goal_id = GoalId.mint()
 from agent_comms.tool_declaration import ToolDeclaration
 assert 'agent_comms.tools' not in sys.modules
 @dataclass(frozen=True)
 class SavedTool:
     tool: ToolDeclaration | None
 record = FieldCodec.decode(SavedTool, {{'tool': {{
-    'tool': 'comms_edit_goal', 'goal_id': 'saved-goal', 'text': 'retained text'
+    'tool': 'comms_edit_goal', 'goal_id': str(goal_id), 'text': 'retained text'
 }}}})
 assert record.tool.declared_name == 'comms_edit_goal'
-assert record.tool.goal_id == 'saved-goal'
+assert record.tool.goal_id == goal_id
 assert record.tool.text == 'retained text'
 """
     subprocess.run([sys.executable, "-I", "-c", program], check=True, capture_output=True, text=True)

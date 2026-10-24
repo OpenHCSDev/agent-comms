@@ -4,7 +4,7 @@ Audited head: `dfc7d8976` (main, 2026-10-23). Every count below is `git grep -cE
 
 ## The thesis
 
-An id is a nominal value type, decoded once by FieldCodec where it enters: a store row, a file, the wire, a CLI argument. Each kind has its own subclass (`ClaimId`, `AssignmentGeneration`, `TurnId`, `GoalId`, `RootId`, `ThreadLookup`, `InputId`), and every field and parameter carries its kind instead of `str` or bare `Id128`. A turn id cannot encode as an input id. Then a repeated decode has nothing left to check, so it cannot be written, and the constructor checks that exist only because the field is `str` delete themselves.
+An id is a nominal value type, decoded once by FieldCodec where it enters: a store row, a file, the wire, a CLI argument. Each kind has its own subclass (`ClaimId`, `TurnId`, `GoalId`, `RootId`, `ThreadLookup`, `InputId`), and every field and parameter carries its kind instead of `str` or bare `Id128`. A turn id cannot encode as an input id. Then a repeated decode has nothing left to check, so it cannot be written, and the constructor checks that exist only because the field is `str` delete themselves.
 
 ## Why this is slop today
 
@@ -29,7 +29,7 @@ These facts decide the plan's order:
 - **Kinds go in order, one PR each.** An id kind is one set of field names that carry one kind of value. Its fields, parameters, mints and re-decodes change together, so the value never crosses into an unconverted field of its own kind. All six kind phases depend only on phase 1 and can run in parallel. They share modules (`acp_extension.py` holds both input and root ids), so shared files need one editor at a time.
 - **Mechanical rewrites go through one codemod per kind.** The annotation edits are all one shape. Re-decode deletions are by hand, each citing the boundary line where the value entered.
 - **Delete, never wrap.** No helper, no alias, no `cast`, no `try`. A site whose caller passes raw text is a boundary: it decodes once with the kind's type and stays.
-- **Kinds have nominal identity.** Tristan decided that a kind is a required fact: `ClaimId`, `AssignmentGeneration`, `TurnId`, `GoalId`, `RootId`, `ThreadLookup` and `InputId` inherit the shared `Id128` mint and spelling. Each kind is a bare class, with no own mint or spelling declaration. `MessageId` remains a separate 12-hex nominal type. A field decodes to its declared kind and refuses a different kind on encode.
+- **Kinds have nominal identity.** Tristan decided that a kind is a required fact: `ClaimId`, `TurnId`, `GoalId`, `RootId`, `ThreadLookup` and `InputId` inherit the shared `Id128` mint and spelling. Each kind is a bare class, with no own mint or spelling declaration. `MessageId` remains a separate 12-hex nominal type. A field decodes to its declared kind and refuses a different kind on encode.
 
 ## Phases
 
@@ -37,7 +37,7 @@ Each phase, its predecessors and its evidence on `origin/main` are declared in `
 
 | Phase | Done when, on main | Now | Done |
 |---|---|---|---|
-| 1 `NominalIdTypePhase` | `NominalText`, `NominalSpelling`, `Id128`, `MessageId` and all seven kind classes declared in `field_codec.py`; `def mint\(cls(, text: str)?\) -> str:` absent there | 2 | 0 |
+| 1 `NominalIdTypePhase` | `NominalText`, `NominalSpelling`, `Id128`, `MessageId` and all six kind classes declared in `field_codec.py`; `def mint\(cls(, text: str)?\) -> str:` absent there | 2 | 0 |
 | 2 `PlainStrIdRatchetPhase` | `^class PlainStrIdAnnotation\(` in `tools/debt_ratchet.py` | 0 | 1 |
 | 3 `ClaimIdsPhase` | `\b(nonce\|operation_id\|generation): (str\b\|Id128\b\|Annotated\[(str\|Id128)\b)` | 35 in 10 modules | 0 |
 | | `Id128Text\.decode\(self\.(nonce\|operation_id)\)` | 2 | 0 |
@@ -62,7 +62,7 @@ The kind patterns count fields and parameters together, so each kind phase cover
 
 - Declare `class NominalText(str)` with `__slots__ = ()`: text whose type is its identity.
 - Declare `class NominalSpelling[V: NominalText](SpelledText)`. Its `__init_subclass__` reads `V` from the subscripted base with `types.get_original_bases` (as `cli_bridges/monitor.py:258` does) and records the pair once, value type to spelling. `from_text` returns `V(super().from_text(value))`. `encode` returns the validated text as exact `str` (fact 2).
-- Declare `class Id128(NominalText)` with `mint() -> Id128`, holding the `uuid4().hex` now at `field_codec.py:1435-1437`. It returns `cls(uuid4().hex)`, so inherited mints preserve the kind. Declare the seven bare subclasses `ClaimId`, `AssignmentGeneration`, `TurnId`, `GoalId`, `RootId`, `ThreadLookup` and `InputId`. Declare `class MessageId(NominalText)` with `mint(text) -> MessageId`, holding the hash now at `:1448-1450`.
+- Declare `class Id128(NominalText)` with `mint() -> Id128`, holding the `uuid4().hex` now at `field_codec.py:1435-1437`. It returns `cls(uuid4().hex)`, so inherited mints preserve the kind. Declare the six bare subclasses `ClaimId`, `TurnId`, `GoalId`, `RootId`, `ThreadLookup` and `InputId`. Declare `class MessageId(NominalText)` with `mint(text) -> MessageId`, holding the hash now at `:1448-1450`.
 - `Id128Text` (`:1430`) and `MessageIdText` (`:1440`) become `NominalSpelling[Id128]` and `NominalSpelling[MessageId]`. Their `mint`s are deleted; callers use the named kind's inherited mint (`InputId.mint()`, `ClaimId.mint()`, `RootId.mint()`, `TurnId.mint()`) or `MessageId.mint(text)`. A temporary name with no semantic kind uses `Id128.mint()`. That is 15 `Id128Text.mint(` sites in 11 modules and 1 at `messages.py:952`, edited in this phase.
 - `FieldCodec._representation` (`:1534`) walks a bare `NominalText` subclass's MRO to its nearest recorded spelling, beside the `WireValue` branch at `:1556`. Every `Id128` kind therefore uses `Id128Text` with no registration per kind. A field declared `input_id: InputId` decodes to `InputId`, not the spelling's generic `Id128`. The encoder checks the declared kind and raises `TypeError` for an `InputId` in a `TurnId` field.
 - `_TextDecoder` (`:2203`) accepts a `NominalText` and encodes it as exact `str`. This is the migration allowance, and phase 9 deletes it.
@@ -74,14 +74,14 @@ The kind patterns count fields and parameters together, so each kind phase cover
 
 ### 3-8. One id kind per phase, smallest first
 
-For each kind: retype its fields and parameters to that kind (`ClaimId`/`AssignmentGeneration`, `MessageId`, `TurnId`, `GoalId`, `RootId`/`ThreadLookup`, `InputId`, respectively) and its `Optional`s to the same kind unioned with `None`. Delete its re-decodes and constructor checks, citing the boundary line each value already passed. Route its hand-written `uuid4().hex` mints through that kind's inherited mint. Count both plain `str` and bare `Id128` annotations: neither states the kind, and both must reach zero in that phase. A parameter fed by raw text (a CLI argument, a file name, a foreign record) is a boundary: it decodes once there and nowhere downstream.
+For each kind: retype its fields and parameters to that kind (`ClaimId`, `MessageId`, `TurnId`, `GoalId`, `RootId`/`ThreadLookup`, `InputId`, respectively) and its `Optional`s to the same kind unioned with `None`. Delete its re-decodes and constructor checks, citing the boundary line each value already passed. Route its hand-written `uuid4().hex` mints through that kind's inherited mint. Count both plain `str` and bare `Id128` annotations: neither states the kind, and both must reach zero in that phase. A parameter fed by raw text (a CLI argument, a file name, a foreign record) is a boundary: it decodes once there and nowhere downstream.
 
-- `AssignmentGeneration` names a Todo assignment generation (goal_actions.py:364; todos.py:2571), while `ClaimId` names an envelope claim generation (publisher.py:176). `ThreadLookup` names a thread incarnation lookup (registry_provenance.py:79); `RootId` names the bus root. Phase 1 declares the two additional kinds; the kind phases retype their use sites.
+- Assignment.generation is the holder's goal id (goal_actions.py:540, :578), so it is GoalId; `ClaimId` names an envelope claim generation (publisher.py:176). `ThreadLookup` names a thread incarnation lookup (registry_provenance.py:79); `RootId` names the bus root. Phase 1 declares the additional kind; the kind phases retype their use sites.
 
-- **3 Claims** (`maintenance_barrier.py`, `selected_write_plan.py`, `envelope_claim_transitions.py`, `todos.py` generations, `publisher.py`). These are Installer's two boundaries, where the constructor check is the only validation (`maintenance_barrier.py:305,316`; `selected_write_plan.py:71,89`).
+- **3 Claims** (`maintenance_barrier.py`, `selected_write_plan.py`, `envelope_claim_transitions.py`, `publisher.py`). These are Installer's two boundaries, where the constructor check is the only validation (`maintenance_barrier.py:305,316`; `selected_write_plan.py:71,89`).
 - **4 Messages.** `commander/order.py:784`, `messages.py:952`, and the 37 `message_id` annotations.
 - **5 Turns.** Includes `diagnostics.py:143`, `goal_failure_observation.py:76` and `owned_turn.py:135`. A `turn_id` that holds a foreign agent's turn id is not an `Id128`: it is declared a boundary in the PR and the check is corrected with `order check`, never forced.
-- **6 Goals.** Includes `goal_actions.py:364,482,686` and `goal_attempts.py:873`, which mint by hand today.
+- **6 Goals.** `SetGoalAction.goal_id` uses `GoalId.mint`; `Assignment.generation` carries that goal id. The wait, retry and attempt mints in `goal_actions.py` and `goal_attempts.py` belong to phase 9, not this phase.
 - **7 Bus roots and lookups.** Includes `acp_extension.py:305`, `input_origin.py:104,122,137`, `bus_source_page.py:30,50`, `envelope_claim_transitions.py:209,214`, `proven_source_coverage.py:215-216`, `native_session_files.py:236` and `private_registry_guard.py:289`.
 - **8 Inputs.** Includes `acp_extension.py:675,681`, `input_attempt.py:375`, `native_entries.py:567`, `native_pi.py:341`, `native_prompt_binding.py:123`, `native_input_record.py:396` and `pi_payloads.py:1595`.
 

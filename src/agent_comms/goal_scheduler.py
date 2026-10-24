@@ -13,6 +13,7 @@ from dataclasses import dataclass, field
 from functools import partial
 from typing import TYPE_CHECKING
 
+from agent_comms.field_codec import GoalId
 from .agent_event_updates import AcpEventConsumer
 from .child_process import ProcessIdentity
 from .coordinator import Coordination
@@ -58,7 +59,7 @@ class GoalScheduler:
     def __init__(self, comms: Comms, effects: TurnEffects):
         self.comms = comms
         self.effects = effects
-        self.pending_goal_origins: dict[str, str] = {}
+        self.pending_goal_origins: dict[str, GoalId] = {}
         self.publications: dict[str, GoalSessionPublication] = {}
 
     def publication(self, session_id: str) -> GoalSessionPublication:
@@ -145,7 +146,7 @@ class GoalScheduler:
         return goal
 
     async def edit_goal(
-        self, session_id: str, goal_id: str, expected_revision: int, text: str
+        self, session_id: str, goal_id: GoalId, expected_revision: int, text: str
     ) -> Goal:
         """Edit the current objective without replacing its identity or execution state."""
         name = self.sessions.require(session_id)
@@ -169,7 +170,7 @@ class GoalScheduler:
         return edited
 
     async def update_goal(
-        self, session_id: str, action: type[GoalAction], goal_id: str, expected_revision: int
+        self, session_id: str, action: type[GoalAction], goal_id: GoalId, expected_revision: int
     ) -> GoalDeclaration:
         """Apply an explicit UI pause, resume, or clear through the current owner."""
         if not issubclass(action, OwnerControlInvocable):
@@ -197,7 +198,7 @@ class GoalScheduler:
             await self.schedule_goal(session_id)
         return updated
 
-    async def retry_goal(self, session_id: str, goal_id: str, expected_revision: int) -> Goal:
+    async def retry_goal(self, session_id: str, goal_id: GoalId, expected_revision: int) -> Goal:
         """Record an explicit UI retry in the executing owner's private ledger."""
         name = self.sessions.require(session_id)
         thread = await Coordination.run_worker(partial(self.comms.registry.require, name))

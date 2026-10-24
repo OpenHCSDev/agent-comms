@@ -14,7 +14,7 @@ import pytest
 
 from agent_comms.change_report import FileLine
 from agent_comms.comms import wire
-from agent_comms.field_codec import FieldCodec
+from agent_comms.field_codec import FieldCodec, GoalId
 from agent_comms.goals import OrderCheck
 from agent_comms.heartbeat_frame import HeartbeatFrame
 from agent_comms.order_runs import MechanicalOrderRun
@@ -53,6 +53,7 @@ def test_storage_family_reads_once_and_renders_each_broken_fact(
     extra_count: int,
     expected: set[type[StorageViolation]],
 ) -> None:
+    storage_case_goal_id = GoalId.mint()
     repository = tmp_path / "repository"
     repository.mkdir()
     base = tmp_path / "checkouts"
@@ -106,7 +107,7 @@ def test_storage_family_reads_once_and_renders_each_broken_fact(
         "Fix the filesystem paths",
         creator=lead, assigner=lead.incarnation,
         owner=worker,
-        generation="storage-case",
+        generation=storage_case_goal_id,
         review_at=RecordedEventTime(1000),
         request=comms.goals.todos.add_request(lead.incarnation, "Fix the filesystem paths").id,
         order=PendingProblemOrder(

@@ -9,7 +9,7 @@ from pathlib import Path
 import pytest
 
 from agent_comms.errors import RelationViolationError
-from agent_comms.field_codec import FieldCodec
+from agent_comms.field_codec import FieldCodec, GoalId
 from agent_comms.goal_states import BlockedGoal, GoalState
 from agent_comms.goals import Goal
 from agent_comms.registration import Registration
@@ -25,7 +25,8 @@ def test_goal_family_survives_registry_and_history_reopen(tmp_path):
             BlockedGoal(block_reason="Waiting for the fixture dependency")
             if state_type is BlockedGoal else state_type()
         )
-        goal = Goal("Keep the objective", name, published_seq=0, state=state)
+        goal_id = GoalId.mint()
+        goal = Goal("Keep the objective", goal_id, published_seq=0, state=state)
         owner = Thread(name, frozenset(), str(tmp_path), goal=goal)
         registry.register(owner)
         assert FieldCodec.decode(Goal, goal.to_wire()) == goal

@@ -13,7 +13,7 @@ from agent_comms import field_codec
 
 from .channel_targets import CommandTarget
 from .errors import RelationViolationError
-from .field_codec import TurnId
+from .field_codec import TurnId, GoalId
 from .input_attempt import (
     UNOBSERVED_DELIVERY_SCOPE,
     GoalInputDecision,
@@ -396,7 +396,7 @@ class InputDispositions(DurableStore):
         keys: tuple[str, ...],
         *,
         owners: frozenset[str],
-        goal_id: str,
+        goal_id: GoalId,
         goal_revision: int,
         turn_id: str,
         observed: tuple[InputAttempt, ...] = (),

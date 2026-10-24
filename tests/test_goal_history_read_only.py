@@ -4,6 +4,7 @@ import sqlite3
 
 import pytest
 
+from agent_comms.field_codec import GoalId
 from agent_comms.goal_history import GoalHistoryError, GoalHistoryStore
 from agent_comms.goals import Goal
 from agent_comms.registration import Registration
@@ -11,11 +12,13 @@ from agent_comms.threads import Thread
 
 
 def authored_history(root):
+    first_goal_id = GoalId.mint()
     root.mkdir(mode=0o700)
     registry = Registration(root / 'registry.json')
     thread = Thread('author', frozenset(), str(root))
     registry.register(thread)
-    registry.register(replace(thread, goal=Goal('Authored acquisition', 'first', published_seq=0)))
+    registry.register(replace(thread, goal=Goal('Authored acquisition', first_goal_id,
+        published_seq=0)))
     return registry
 
 

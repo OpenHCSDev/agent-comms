@@ -1865,10 +1865,6 @@ class ClaimId(Id128):
     pass
 
 
-class AssignmentGeneration(Id128):
-    pass
-
-
 class TurnId(Id128):
     pass
 

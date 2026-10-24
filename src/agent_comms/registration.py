@@ -11,7 +11,7 @@ from typing import TYPE_CHECKING, Concatenate
 from .catalog_store import ChannelCatalog
 from .child_process import NoProcess, ProcessIdentity
 from .errors import RelationViolationError
-from .field_codec import TurnId
+from .field_codec import TurnId, GoalId
 from .goal_history import GoalHistoryEntry, GoalHistoryStore
 from .native_input_owner import RegistryOwner
 from .private_registry_guard import PrivateRegistryGuard
@@ -380,7 +380,7 @@ class Registration:
     user_thread = reading(RegistryDocument.user_thread)
 
     def goal_history(
-        self, name: str, *, goal_id: str | None = None
+        self, name: str, *, goal_id: GoalId | None = None
     ) -> tuple[GoalHistoryEntry, ...]:
         """Read this owner's recorded transitions, reconciling crash cuts first."""
 

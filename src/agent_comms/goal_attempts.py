@@ -32,7 +32,7 @@ from agent_comms.goal_turn_permit import GoalTurnPermit
 
 from .child_process import Platform
 from .declared_family import DeclaredFamily
-from .field_codec import FieldCodec, MalformedRecord
+from .field_codec import FieldCodec, MalformedRecord, GoalId
 from .goal_attempt_identity import FailureNotObserved, GoalAttemptIdentity
 from .goal_attempt_phase import (
     ClaimedAttempt,
@@ -83,7 +83,7 @@ class ReservationConflictError(errors.GoalAttemptError):
 class MissingGoalGenerationError(errors.GoalAttemptError, ValueError):
     """Historical goal has no launch record; Retry must not invent authority."""
 
-    def __init__(self, goal_id: str):
+    def __init__(self, goal_id: GoalId):
         super().__init__(
             f"Goal {goal_id} has no launch authority. Clear this goal and set it again. "
             "Retry cannot create a grant."
@@ -95,7 +95,7 @@ class MissingGoalGenerationError(errors.GoalAttemptError, ValueError):
 
 @dataclass(frozen=True)
 class Generation(GoalLedgerTable, TypedTable):
-    goal_id: Annotated[str, Column(primary_key=True)]
+    goal_id: Annotated[GoalId, Column(primary_key=True)]
     number: Annotated[int, Column(check="number>0")]
     lifecycle: GenerationState
     attempt_id: str | None
@@ -134,7 +134,7 @@ class Generation(GoalLedgerTable, TypedTable):
             raise ValueError("Generation must be positive.")
 
     @classmethod
-    def read_in(cls, conn: sqlite3.Connection, goal_id: str) -> Generation | None:
+    def read_in(cls, conn: sqlite3.Connection, goal_id: GoalId) -> Generation | None:
         try:
             return cls.one(conn, goal_id=goal_id)
         except MalformedRecord as error:
@@ -171,7 +171,7 @@ class Generation(GoalLedgerTable, TypedTable):
 
 @dataclass(frozen=True, slots=True)
 class Reservation:
-    goal_id: str
+    goal_id: GoalId
     generation: int
     attempt_id: str
     token: str
@@ -338,7 +338,7 @@ class LedgerAttempt(DeclaredFamily, affix="Attempt"):
 
     @abstractmethod
     def retire(
-        self, conn: sqlite3.Connection, lifecycle: GenerationState, goal_id: str, generation: int
+        self, conn: sqlite3.Connection, lifecycle: GenerationState, goal_id: GoalId, generation: int
     ) -> None:
         """Resolve this attempt as the goal is cleared, if the generation permits it."""
 
@@ -367,7 +367,7 @@ class RecordedAttempt(LedgerAttempt):
         return self.record.phase == phase and self.record.resolution == resolution
 
     def retire(
-        self, conn: sqlite3.Connection, lifecycle: GenerationState, goal_id: str, generation: int
+        self, conn: sqlite3.Connection, lifecycle: GenerationState, goal_id: GoalId, generation: int
     ) -> None:
         attempt = self.record.reservation
         self.identified(
@@ -401,7 +401,7 @@ class MissingAttempt(LedgerAttempt):
         return False
 
     def retire(
-        self, conn: sqlite3.Connection, lifecycle: GenerationState, goal_id: str, generation: int
+        self, conn: sqlite3.Connection, lifecycle: GenerationState, goal_id: GoalId, generation: int
     ) -> None:
         raise errors.StaleAttemptError("Unresolved goal has no matching attempt to retire.")
 
@@ -411,7 +411,7 @@ class NoAttempt(MissingAttempt):
     """The generation names no attempt, so there is none to read or resolve."""
 
     def retire(
-        self, conn: sqlite3.Connection, lifecycle: GenerationState, goal_id: str, generation: int
+        self, conn: sqlite3.Connection, lifecycle: GenerationState, goal_id: GoalId, generation: int
     ) -> None:
         if not lifecycle.permits_retirement_without_attempt():
             raise errors.StaleAttemptError("Goal or attempt is no longer eligible for retirement.")
@@ -420,7 +420,9 @@ class NoAttempt(MissingAttempt):
 @dataclass(frozen=True)
 class GoalWorkDecision(GoalLedgerTable, TypedTable):
     """Explicit new-work authority, named by this declaration."""
-    goal_id: Annotated[str, Column(primary_key=True, references=TableReference(Generation, ("goal_id",)))]
+    goal_id: Annotated[
+        GoalId, Column(primary_key=True, references=TableReference(Generation, ("goal_id",)))
+    ]
     decision_id: Annotated[str, Column(primary_key=True)]
     generation: int
 
@@ -467,7 +469,7 @@ class LaunchPermit(GoalTurnPermit):
             "Original launch attempt changed or is unavailable.",
         )).phase.verified_progress
 
-    def charge_for(self, goal_id: str, goals: Goals, response: str,
+    def charge_for(self, goal_id: GoalId, goals: Goals, response: str,
                    usage: PiUsage) -> bool:
         if goal_id != self.reservation.goal_id:
             return False
@@ -477,7 +479,7 @@ class LaunchPermit(GoalTurnPermit):
     def add_context(self, context: TurnContext, owner: Thread, goals: Goals) -> TurnContext:
         return context.with_goal(owner, goals)
 
-    def fail_origin(self, store: GoalAttemptStore, goal_id: str) -> None:
+    def fail_origin(self, store: GoalAttemptStore, goal_id: GoalId) -> None:
         with suppress(errors.StaleAttemptError):
             self.reservation.fail(store, "Goal origin turn did not finish successfully.")
 
@@ -612,7 +614,7 @@ class ProviderUsageTotal:
     cost_total: Decimal = Decimal(0)
 
     @classmethod
-    def for_goal(cls, store: GoalAttemptStore, goal_id: str) -> ProviderUsageTotal:
+    def for_goal(cls, store: GoalAttemptStore, goal_id: GoalId) -> ProviderUsageTotal:
         """Sum only usage reported in provider responses attributed to this goal."""
         with closing(store._connect()) as conn:
             rows = GoalProviderUsage.select(
@@ -757,14 +759,14 @@ class GoalAttemptStore(DurableFile, PublishedSQLiteFile, WireWakeFile):
                 ) from error
         return result
 
-    def snapshot(self, goal_id: str) -> Generation | None:
+    def snapshot(self, goal_id: GoalId) -> Generation | None:
         with closing(self._connect()) as conn:
             try:
                 return Generation.read_in(conn, goal_id)
             except sqlite3.Error as error:
                 raise StorageUncertainError("Cannot read goal attempt state.") from error
 
-    def require_generation(self, goal_id: str) -> Generation:
+    def require_generation(self, goal_id: GoalId) -> Generation:
         generation = self.snapshot(goal_id)
         if generation is None:
             raise MissingGoalGenerationError(goal_id)
@@ -774,11 +776,11 @@ class GoalAttemptStore(DurableFile, PublishedSQLiteFile, WireWakeFile):
         with closing(self._connect()) as conn:
             return AttemptRecord.read_in(conn, attempt_id)
 
-    def stopped_permit(self, goal_id: str) -> GoalTurnPermit:
+    def stopped_permit(self, goal_id: GoalId) -> GoalTurnPermit:
         generation = self.require_generation(goal_id)
         return generation.lifecycle.stopped_permit(self, generation)
 
-    def authorize_current_retry(self, goal_id: str, decision: str) -> None:
+    def authorize_current_retry(self, goal_id: GoalId, decision: str) -> None:
         """The current generation owns how an explicit retry or fresh order proceeds."""
         generation = self.require_generation(goal_id)
         generation.lifecycle.authorize_retry(self, generation, decision)
@@ -787,7 +789,8 @@ class GoalAttemptStore(DurableFile, PublishedSQLiteFile, WireWakeFile):
         return self.snapshot(generation.goal_id) == generation
 
     def _ready_change(
-        self, goal_id: str, generation: int, write: Callable[[sqlite3.Connection, str], Generation]
+        self, goal_id: GoalId, generation: int,
+        write: Callable[[sqlite3.Connection, str], Generation]
     ) -> Generation:
         # Generate before the transaction, but *publish* the capability only
         # after the complete commit/fsync/readback sequence has returned.
@@ -803,7 +806,7 @@ class GoalAttemptStore(DurableFile, PublishedSQLiteFile, WireWakeFile):
         self._ready_grants[(goal_id, generation)] = grant
         return result
 
-    def ready_grant(self, goal_id: str, generation: int) -> str:
+    def ready_grant(self, goal_id: GoalId, generation: int) -> str:
         """Delegate only this instance's acknowledged READY authority to a supervisor."""
         refusal = errors.UnresolvedAttemptError("No acknowledged ready grant is available; decide explicitly.")
         try:
@@ -814,7 +817,7 @@ class GoalAttemptStore(DurableFile, PublishedSQLiteFile, WireWakeFile):
             raise refusal
         return grant
 
-    def recover_unreserved_ready(self, goal_id: str, expected_generation: int) -> Generation:
+    def recover_unreserved_ready(self, goal_id: GoalId, expected_generation: int) -> Generation:
         """Rotate an unused grant after the caller rechecks executing-owner authority.
 
         READY with no attempt proves this generation has never been reserved:
@@ -833,7 +836,7 @@ class GoalAttemptStore(DurableFile, PublishedSQLiteFile, WireWakeFile):
 
         return self._ready_change(goal_id, expected_generation, write)
 
-    def create_goal(self, goal_id: str) -> Generation:
+    def create_goal(self, goal_id: GoalId) -> Generation:
         """Register one externally created immutable goal ID, initially generation 1."""
         if not goal_id.strip():
             raise ValueError("Goal ID is required.")
@@ -848,7 +851,7 @@ class GoalAttemptStore(DurableFile, PublishedSQLiteFile, WireWakeFile):
         return self._ready_change(goal_id, 1, write)
 
     def reserve(
-        self, goal_id: str, expected_generation: int, *, ready_grant: str | None = None
+        self, goal_id: GoalId, expected_generation: int, *, ready_grant: str | None = None
     ) -> Reservation:
         """Reserve once, using acknowledged authority delegated by the goal writer.
 
@@ -933,7 +936,7 @@ class GoalAttemptStore(DurableFile, PublishedSQLiteFile, WireWakeFile):
 
     def authorize_abandon_attempt(
         self,
-        goal_id: str,
+        goal_id: GoalId,
         *,
         expected_generation: int,
         attempt_id: str,
@@ -980,7 +983,7 @@ class GoalAttemptStore(DurableFile, PublishedSQLiteFile, WireWakeFile):
             ),
         )
 
-    def resume(self, goal_id: str, expected_generation: int) -> Generation:
+    def resume(self, goal_id: GoalId, expected_generation: int) -> Generation:
         """Ordinary same-ID resume never resolves a reserved or blocked attempt."""
         current = self.snapshot(goal_id)
         if current is None or current.number != expected_generation:
@@ -991,7 +994,7 @@ class GoalAttemptStore(DurableFile, PublishedSQLiteFile, WireWakeFile):
         return current
 
     def authorize_ready_recovery(
-        self, goal_id: str, *, expected_generation: int, user_decision_id: str
+        self, goal_id: GoalId, *, expected_generation: int, user_decision_id: str
     ) -> Generation:
         """An explicit retry or fresh order rotates lost READY authority.
 
@@ -1025,7 +1028,7 @@ class GoalAttemptStore(DurableFile, PublishedSQLiteFile, WireWakeFile):
 
     def authorize_retry(
         self,
-        goal_id: str,
+        goal_id: GoalId,
         *,
         expected_generation: int,
         attempt_id: str,
@@ -1067,7 +1070,7 @@ class GoalAttemptStore(DurableFile, PublishedSQLiteFile, WireWakeFile):
         return self._ready_change(goal_id, expected_generation + 1, write)
 
     def retire_goal(
-        self, goal_id: str, *, expected_generation: int, attempt_id: str | None
+        self, goal_id: GoalId, *, expected_generation: int, attempt_id: str | None
     ) -> Generation:
         """Revoke READY or an unresolved attempt before clearing the registry goal."""
 

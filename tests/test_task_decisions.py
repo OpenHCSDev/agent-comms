@@ -15,7 +15,7 @@ import pytest
 
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.errors import RelationViolationError
-from agent_comms.field_codec import FieldCodec, TurnId
+from agent_comms.field_codec import FieldCodec, TurnId, GoalId
 from agent_comms.goals import Goal
 from agent_comms.messages import Message, InfoKind
 from agent_comms.task_sources import Decision
@@ -114,9 +114,12 @@ def test_user_pin_original_source_without_model_lease_and_complete_lineage(comms
 
 
 def test_user_pin_goal_scope_replacement_and_original_subject_fences(comms):
+    goal_one_goal_id = GoalId.mint()
+    goal_two_goal_id = GoalId.mint()
     from agent_comms.task_sources import CorrectionTaskChange, GoalTaskScope
 
-    owner = comms.registry.declare(Thread('recipient', frozenset(), str(comms.root), goal=Goal('Original goal', 'goal-one', published_seq=0)))
+    owner = comms.registry.declare(Thread('recipient', frozenset(), str(comms.root),
+        goal=Goal('Original goal', goal_one_goal_id, published_seq=0)))
     subject = comms.messaging.send_user_message(CommandTarget.named(owner.name), "Use the original coordinates.",
                                                 worktree=owner.worktree)
     pin = comms.messaging.pin_user_constraint(owner.name, subject.reference, worktree=owner.worktree)
@@ -130,7 +133,8 @@ def test_user_pin_goal_scope_replacement_and_original_subject_fences(comms):
     with pytest.raises(RelationViolationError):
         comms.messaging.send_user_message(CommandTarget.named('#team'), "wrong audience", worktree=owner.worktree, task=pin.task)
     assert read_history(comms) == before
-    comms.registry.register(replace(owner, goal=Goal("Replacement goal", "goal-two", published_seq=0)))
+    comms.registry.register(replace(owner, goal=Goal("Replacement goal", goal_two_goal_id,
+        published_seq=0)))
     new_subject = comms.messaging.send_user_message(CommandTarget.named(owner.name), "Use the replacement coordinates.",
                                                     worktree=owner.worktree)
     with pytest.raises(RelationViolationError):
@@ -146,12 +150,15 @@ def test_user_pin_goal_scope_replacement_and_original_subject_fences(comms):
 
 
 def test_constraint_original_wording_scope_correction_and_human_authority(comms, monkeypatch):
+    new_goal_id = GoalId.mint()
+    original_goal_id = GoalId.mint()
     from agent_comms.retained_task_facts import CurrentConstraintTaskFact, RetainedTaskFacts
     from agent_comms.task_sources import Constraint, CorrectionTaskChange, UserTaskSupersession
 
     owner = admit(comms, "alpha")
     admit(comms, "beta")
-    comms.registry.register(replace(owner, goal=Goal("Bounded source task", "original-goal", published_seq=0)))
+    comms.registry.register(replace(owner, goal=Goal("Bounded source task", original_goal_id,
+        published_seq=0)))
     owner = comms.registry.require(owner.name)
     monkeypatch.setenv("AGENT_COMMS_THREAD", owner.name)
     exact = "Never replay UNKNOWN.\nPreserve λ and original /artifacts/source."
@@ -191,7 +198,8 @@ def test_constraint_original_wording_scope_correction_and_human_authority(comms,
     comms.registry.rename(owner.name, "renamed-alpha")
     renamed = comms.registry.require("renamed-alpha")
     assert retained.current_authored_sources(renamed, comms.registry.snapshot()) == (Message.from_message(human),)
-    comms.registry.register(replace(renamed, goal=Goal("Replacement scope", "new-goal", published_seq=0)))
+    comms.registry.register(replace(renamed, goal=Goal("Replacement scope", new_goal_id,
+        published_seq=0)))
     assert retained.current_authored_sources(comms.registry.require(renamed.name),
                                             comms.registry.snapshot()) == ()
     assert read_history(comms)[0] == original
@@ -250,10 +258,12 @@ def test_original_choice_correction_and_authority_survive_reopen(comms, monkeypa
 
 
 def test_equal_text_choices_keep_original_identity_through_rename_and_goal_replacement(comms, monkeypatch):
+    goal_id = GoalId.mint()
+    replacement_goal_id = GoalId.mint()
     from agent_comms.retained_task_facts import CurrentDecisionTaskFact, RetainedTaskFacts
 
     owner = admit(comms, "alpha")
-    owner = replace(owner, goal=Goal("Keep checked root", "goal", published_seq=0, revision=1))
+    owner = replace(owner, goal=Goal("Keep checked root", goal_id, published_seq=0, revision=1))
     comms.registry.register(owner)
     monkeypatch.setenv("AGENT_COMMS_THREAD", "alpha")
     request = {"chosen": "/artifacts/exact", "rejected": ["/scratch/guess"], "to": "#team"}
@@ -280,7 +290,8 @@ def test_equal_text_choices_keep_original_identity_through_rename_and_goal_repla
                  if isinstance(fact, CurrentDecisionTaskFact)) == (rows[1].reference, rows[2].reference)
     assert FieldCodec.decode(RetainedTaskFacts, FieldCodec.encode(retained)) == retained
     before = read_history(comms)
-    replacement = replace(renamed, goal=Goal("New task", "replacement", published_seq=0, revision=1))
+    replacement = replace(renamed, goal=Goal("New task", replacement_goal_id, published_seq=0,
+        revision=1))
     comms.registry.register(replacement)
     stale = retained.for_owner(replacement, comms.registry.snapshot())
     assert not any(isinstance(fact, CurrentDecisionTaskFact) for fact in stale.facts)
@@ -291,8 +302,9 @@ def test_equal_text_choices_keep_original_identity_through_rename_and_goal_repla
 
 
 def test_stale_goal_scope_cannot_publish_even_through_original_publisher(comms):
+    goal_id = GoalId.mint()
     owner = admit(comms, "alpha")
-    owner = replace(owner, goal=Goal("Keep exact scope", "goal", published_seq=0, revision=1))
+    owner = replace(owner, goal=Goal("Keep exact scope", goal_id, published_seq=0, revision=1))
     comms.registry.register(owner)
     declaration = Decision(
         chosen="A", rejected=("B",), scope=owner.task_scope,
@@ -335,11 +347,12 @@ def test_turn_scope_correction_cannot_revive_a_finished_turn_choice(comms, monke
 
 
 def test_exact_user_supersession_cannot_be_impersonated_or_overridden_by_peer_choice(comms, monkeypatch):
+    goal_id = GoalId.mint()
     from agent_comms.retained_task_facts import CurrentUserTaskCorrectionFact, RetainedTaskFacts
     from agent_comms.task_sources import CorrectionTaskChange, UserTaskSupersession
 
     owner = admit(comms, "alpha")
-    owner = replace(owner, goal=Goal("Keep project scope", "goal", published_seq=0, revision=1))
+    owner = replace(owner, goal=Goal("Keep project scope", goal_id, published_seq=0, revision=1))
     comms.registry.register(owner)
     monkeypatch.setenv("AGENT_COMMS_THREAD", "alpha")
     request = {"chosen": "/artifacts/old", "rejected": ["/scratch/guess"], "to": "#team"}

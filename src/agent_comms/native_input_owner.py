@@ -10,6 +10,7 @@ import os
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, ClassVar
 
+from agent_comms.field_codec import GoalId
 from .child_process import ProcessIdentity
 from .coordination_errors import StaleFence
 from .coordination_tables.participants import OwnerGenerations
@@ -176,7 +177,7 @@ class GoalLaunchOwner(RegistryOwner):
 
     check_type = RegistryIdentityCheck
 
-    def require_ready(self, snapshot: RegistrySnapshot, goal_id: str) -> Goal:
+    def require_ready(self, snapshot: RegistrySnapshot, goal_id: GoalId) -> Goal:
         self.require_snapshot(snapshot, "Goal launch owner changed")
         current = snapshot.require_active(self.thread.name)
         snapshot.status(current.name).require_running()

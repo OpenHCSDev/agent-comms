@@ -14,7 +14,7 @@ from acp.schema import TextContentBlock
 
 from agent_comms.acp_extension import QueuePromptRequest, decode_request, encode_request
 from agent_comms.errors import RelationViolationError
-from agent_comms.field_codec import FieldCodec, InputId, MessageId, TurnId
+from agent_comms.field_codec import FieldCodec, InputId, MessageId, TurnId, GoalId
 from agent_comms.goal_states import ActiveGoal, CompletedGoal, PausedGoal
 from agent_comms.goals import AbsentGoalCheckpoint, Goal, GoalRevision, NoGoal, PresentGoalCheckpoint
 from agent_comms.input_attempt import ReservedInput
@@ -195,24 +195,25 @@ async def test_historical_unknown_author_stays_neutral_and_human_scope_invalidat
 
 @pytest.mark.parametrize("state", [ActiveGoal(), PausedGoal(), CompletedGoal()])
 async def test_original_goal_checkpoint_survives_codec_and_refuses_changed_scope(live_owner, state):
+    original_goal_id = GoalId.mint()
     comms, agent = live_owner
     absent = capture(comms)
     assert absent.goal == AbsentGoalCheckpoint()
     assert FieldCodec.encode(absent)["goal"] == {"kind": "absent"}
 
     owner = comms.registry.require("beta")
-    goal = Goal("Recorded scope", "original-goal", published_seq=0, revision=4, state=state)
+    goal = Goal("Recorded scope", original_goal_id, published_seq=0, revision=4, state=state)
     comms.registry.register(replace(owner, goal=goal))
     present = capture(comms)
     assert present.goal == PresentGoalCheckpoint(goal.revision_key)
     assert comms.registry.require("beta").goal.require_checkpoint(goal.revision_key) == goal
     assert FieldCodec.encode(GoalRevision(goal.id, goal.revision)) == {
-        "id": "original-goal", "revision": 4,
+        "id": original_goal_id, "revision": 4,
     }
     assert FieldCodec.encode(goal)["state"]["kind"] == state.declared_name
     encoded = FieldCodec.encode(present)
     assert encoded["goal"] == {
-        "kind": "present", "revision": {"id": "original-goal", "revision": 4},
+        "kind": "present", "revision": {"id": original_goal_id, "revision": 4},
     }
     restored = FieldCodec.decode(HumanInputOrigin, encoded)
     assert restored == present

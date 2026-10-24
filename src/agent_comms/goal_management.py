@@ -11,6 +11,7 @@ from functools import cached_property
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from agent_comms.field_codec import GoalId
 from .agent_activity import AgentActivity
 from .coordination_errors import StaleFence
 from .errors import RelationViolationError, UnregisteredThreadError
@@ -172,13 +173,15 @@ class Goals:
             aliases, scope=scope
         )
 
-    def goal_input_review(self, name: str, goal_id: str, wait_for: Sequence[str]) -> StandbyReview:
+    def goal_input_review(
+        self, name: str, goal_id: GoalId, wait_for: Sequence[str]
+    ) -> StandbyReview:
         """Project exact review eligibility for one current goal and dependency set."""
         review = self._goal_input_review(self.registry.require(name), goal_id, wait_for)
         return review.standby_review()
 
     def _goal_input_review(
-        self, thread: Thread, goal_id: str, wait_for: Sequence[str]
+        self, thread: Thread, goal_id: GoalId, wait_for: Sequence[str]
     ) -> GoalInputReview:
         captured = GoalWaitReview.capture(self, thread.incarnation.require_recorded())
         thread = captured.owner
@@ -250,7 +253,7 @@ class Goals:
         )
 
     def goal_history(
-        self, name: str, *, goal_id: str | None = None
+        self, name: str, *, goal_id: GoalId | None = None
     ) -> tuple[GoalHistoryEntry, ...]:
         """Read durable revisions for one thread incarnation and optional goal ID."""
         return self.registry.goal_history(name, goal_id=goal_id)

@@ -9,6 +9,7 @@ from __future__ import annotations
 import hashlib
 import re
 
+from agent_comms.field_codec import GoalId
 from .goals import (
     GoalMentionBinding,
     GoalMentionSource,
@@ -33,7 +34,7 @@ _MAX_TOKEN_CHARS = 512
 
 
 def bind_goal_mentions(
-    text: str, goal_id: str, revision: int, owner: Thread, registry: RegistrySnapshot
+    text: str, goal_id: GoalId, revision: int, owner: Thread, registry: RegistrySnapshot
 ) -> GoalMentionSource:
     """Freeze exact registered executable incarnations in the same Goal row."""
     bindings: list[GoalMentionBinding] = []

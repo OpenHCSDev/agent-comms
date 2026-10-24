@@ -19,7 +19,7 @@ from agent_comms.check_root import CheckRoot
 from agent_comms.commander.order import Commander
 from agent_comms.commander.standing import InstallDue
 from agent_comms.comms import wire
-from agent_comms.field_codec import FieldCodec
+from agent_comms.field_codec import FieldCodec, GoalId
 from agent_comms.goal_actions import CreateProblemGoalAction
 from agent_comms.goals import CountCheckResult, OrderCheck
 from agent_comms.installer.probes.packages import ArchiveRecord, CommitRecord, GitRecord, PackageRecord
@@ -121,6 +121,7 @@ def proof_build_checkouts(
 def test_merge_in_head_cannot_close_until_the_recorded_build_contains_it(
     run, after_install, proof_build_checkouts, comms, tmp_path,
 ):
+    fixture_goal_id = GoalId.mint()
     from agent_comms.launch_runtime import LaunchRuntime
     from test_todos import order, thread
 
@@ -136,7 +137,7 @@ def test_merge_in_head_cannot_close_until_the_recorded_build_contains_it(
     merged = replace(order(graph.repository), run=run).merged(graph.newer)
     todo = comms.goals.todos.create(
         "P1", graph.repository.github, "Prove installation instead of inferring it from merge",
-        creator=lead, assigner=lead.incarnation, owner=lead, generation="fixture-goal",
+        creator=lead, assigner=lead.incarnation, owner=lead, generation=fixture_goal_id,
         request=comms.goals.todos.add_request(lead.incarnation, "Prove the installed build").id,
         review_at=RecordedEventTime(1000), order=merged,
     )
