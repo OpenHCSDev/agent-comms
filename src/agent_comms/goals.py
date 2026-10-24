@@ -372,7 +372,7 @@ class OrderCheck(CheckCommand):
         return await BoundedRun.run(("bash", "-c", self.command), cwd=self.directory,
                                     timeout=self.timeout)
 
-    def recorded(self, sha: str, repository: str) -> tuple[ChildResult, ...]:
+    def recorded(self, sha: str, repository: Path) -> tuple[ChildResult, ...]:
         """Read the check run result without starting the check."""
         return self.recorded_among(CheckedCommit.stored(repository, sha))
 
@@ -380,7 +380,7 @@ class OrderCheck(CheckCommand):
         """This check's result among a commit's stored check results."""
         return tuple(checked.result for checked in stored if checked.command == self.command)[:1]
 
-    def at(self, revision: str, repository: str, checkout_base: Path) -> ChildResult:
+    def at(self, revision: str, repository: Path, checkout_base: Path) -> ChildResult:
         """Read the result on ``revision``, or explicitly run the check in a detached checkout."""
         sha = Repo.git(repository, "rev-parse", f"{revision}^{{commit}}").strip()
         for recorded in self.recorded(sha, repository):
@@ -394,7 +394,7 @@ class OrderCheck(CheckCommand):
         checked.store(repository, sha)
         return checked.result
 
-    def run_at(self, revision: str, repository: str, checkout_base: Path) -> ChildResult:
+    def run_at(self, revision: str, repository: Path, checkout_base: Path) -> ChildResult:
         """Run in a fresh detached tree, never in the configured checkout."""
         checkout_base.mkdir(parents=True, exist_ok=True)
         with tempfile.TemporaryDirectory(prefix="order-check-", dir=checkout_base) as scratch:
@@ -426,7 +426,7 @@ class CheckedCommit:
         return ChildResult(self.outcome, self.stdout.encode())
 
     @classmethod
-    def stored(cls, repository: str, sha: str) -> tuple[CheckedCommit, ...]:
+    def stored(cls, repository: Path, sha: str) -> tuple[CheckedCommit, ...]:
         """Every check result the commit's note records; a commit no check ran on has none."""
         try:
             Repo.git(repository, *cls.NOTES, "list", sha)
@@ -437,7 +437,7 @@ class CheckedCommit:
         return tuple(FieldCodec.decode(cls, FieldCodec.parse(line)) for line in
                      Repo.git(repository, *cls.NOTES, "show", sha).splitlines() if line)
 
-    def store(self, repository: str, sha: str) -> None:
+    def store(self, repository: Path, sha: str) -> None:
         Repo.git(repository, *self.NOTES, "append", "-m",
                  FieldCodec.compact(FieldCodec.encode(self)), sha)
 

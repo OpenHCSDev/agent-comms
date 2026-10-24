@@ -674,7 +674,7 @@ def test_send_and_check_accept_a_deletion_check_on_fresh_main(
     current.order.check.result.require(current.order.check.at(
         source.branch_commit, str(source.checkout), worktrees))
     with pytest.raises(ValueError):
-        current.order.check.result.require(current.order.check.at(main, str(source.checkout), worktrees))
+        current.order.check.result.require(current.order.check.at(main, source.checkout, worktrees))
     assert source.git(source.checkout, 'rev-parse', 'HEAD') == head
     assert local.read_bytes() == before
     assert not tuple(worktrees.iterdir())

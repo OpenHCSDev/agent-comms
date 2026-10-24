@@ -1008,7 +1008,7 @@ class PresentCheckout(ProgressCheckout):
 
     def stored(self, sha: str) -> tuple[CheckedCommit, ...]:
         if sha not in self.check_notes:
-            self.check_notes[sha] = CheckedCommit.stored(str(self.path), sha)
+            self.check_notes[sha] = CheckedCommit.stored(self.path, sha)
         return self.check_notes[sha]
 
     def references(self, storage: StorageRule, owner: Thread) -> tuple[str, ...]:
