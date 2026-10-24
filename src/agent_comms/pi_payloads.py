@@ -65,6 +65,7 @@ from .tool_declaration import ToolDeclaration
 from .tool_results import NoSentMessage, NoToolDiff, ToolDiff
 from .transcript_events import SentTranscript
 from .turn_failure import ProviderTransportFailed
+from .native_tool_call import ToolCallId
 from .turn_item import PiRequestKey, PiSessionId
 
 if TYPE_CHECKING:
@@ -532,7 +533,7 @@ class ToolCallContent(PiContent, declared_name="toolCall"):
                                 tool=ToolDeclaration.record(self.name, self.arguments, call_id=self.id))
         ]
 
-    id: str
+    id: ToolCallId
     name: str
     arguments: object
     tool_round_allowed = True
@@ -959,7 +960,7 @@ class UserMessage(PiMessage):
 
 @dataclass(frozen=True)
 class ToolResultMessage(PiMessage, declared_name="toolResult"):
-    tool_call_id: Annotated[PiField[str], WireName("toolCallId")] = ""
+    tool_call_id: Annotated[PiField[ToolCallId], WireName("toolCallId")] = field(kw_only=True)
     tool_name: Annotated[PiField[str], WireName("toolName")] = "tool"
     is_error: Annotated[PiField[bool], WireName("isError")] = False
     details: NativeToolDetails = field(default_factory=lambda: NoToolDetails())

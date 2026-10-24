@@ -12,6 +12,7 @@ from . import turn_phase as phases
 from .acp_failure import UnrecordedFailureSource
 from .declared_family import DeclaredFamily
 from .field_codec import FieldCodec, FieldPlan, TurnId, WireName, WireNullDefault, WireOmitDefault
+from .native_tool_call import ToolCallId
 from .native_input_record import NativeInputCommit, NativeInputLocation
 from .native_pi import NativePiOperationFailed
 from .native_turn_context import NativeContextManifestData
@@ -806,8 +807,8 @@ class PiToolCallEvent:
         return self.tool_name.text_or("tool")
 
     @property
-    def tool_id(self) -> str:
-        return self.tool_call_id.text_or(self.tool_label)
+    def tool_id(self) -> ToolCallId:
+        return FieldCodec.decode(ToolCallId, self.tool_call_id.text_or(self.tool_label))
 
 
 @dataclass(frozen=True, kw_only=True)

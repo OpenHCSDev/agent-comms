@@ -22,6 +22,7 @@ from pydantic import (
 )
 
 from agent_comms.cli_protocol import OpenWire, TimestampedWire, WireHeader
+from agent_comms.native_tool_call import ToolCallId
 from agent_comms.runtime_updates import (
     FinishedItem,
     HistoryNotice,
@@ -46,7 +47,7 @@ from .history import CodexHistory, JsonLinesFile, OfflineHistory
 @dataclass
 class RolloutState:
     """Tool names by call id: a result names only its call."""
-    tools: dict[str, str] = field(default_factory=dict)
+    tools: dict[ToolCallId, str] = field(default_factory=dict)
 
 
 class ContentPart(WireModel):
@@ -80,7 +81,7 @@ class ForeignItem(RolloutItem, declared_name='foreign'):
 
 
 class MessageItem(RolloutItem, ABC, declared_name=None):
-    id: str = ''
+    id: NativeItemId = NativeItemId('')
     content: list[ContentPart]
 
     @field_validator('content', mode='before')
@@ -96,13 +97,7 @@ class MessageItem(RolloutItem, ABC, declared_name=None):
 class UserMessageItem(MessageItem, declared_name='message/user'):
 
     def updates(self, state: RolloutState, position: int, timestamp: float) -> tuple[RuntimeUpdate, ...]:
-        return (
-            FinishedItem(
-                "",
-                NativeItemId(self.id),
-                (UserTranscript(self.text, position=position, timestamp=timestamp),),
-            ),
-        )
+        return (FinishedItem('', self.id, (UserTranscript(self.text, position=position, timestamp=timestamp),)),)
 
     def request(self) -> str:
         return self.text
@@ -111,13 +106,7 @@ class UserMessageItem(MessageItem, declared_name='message/user'):
 class AssistantMessageItem(MessageItem, declared_name='message/assistant'):
 
     def updates(self, state: RolloutState, position: int, timestamp: float) -> tuple[RuntimeUpdate, ...]:
-        return (
-            FinishedItem(
-                "",
-                NativeItemId(self.id),
-                (AssistantTranscript(self.text, position=position, timestamp=timestamp),),
-            ),
-        )
+        return (FinishedItem('', self.id, (AssistantTranscript(self.text, position=position, timestamp=timestamp),)),)
 
 
 class InstructionMessage(MessageItem, ABC, declared_name=None):
@@ -138,7 +127,7 @@ class DeveloperMessageItem(InstructionMessage, declared_name='message/developer'
 
 class FunctionCallItem(RolloutItem, declared_name='function_call'):
     name: str
-    call_id: str = ''
+    call_id: ToolCallId
     arguments: str = ''
 
     @property
@@ -166,7 +155,7 @@ def output_text(value: JsonValue) -> str:
 
 
 class FunctionCallOutputItem(RolloutItem, declared_name='function_call_output'):
-    call_id: str = ''
+    call_id: ToolCallId
     output: Annotated[str, BeforeValidator(output_text)] = ''
 
     def updates(self, state: RolloutState, position: int, timestamp: float) -> tuple[RuntimeUpdate, ...]:

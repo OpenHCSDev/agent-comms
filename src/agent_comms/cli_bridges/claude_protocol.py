@@ -43,6 +43,7 @@ from agent_comms.transcript_events import (
     TranscriptEvent,
     UserTranscript,
 )
+from agent_comms.native_tool_call import ToolCallId
 from agent_comms.turn_item import NativeItemId, NativeTurnId
 from agent_comms.turn_phase import ModelWaitPhase, ToolRunningPhase, TurnPhase
 
@@ -380,7 +381,7 @@ class NarrationBlock(RedactedThinking, declared_name='thinking'):
 
 
 class ToolUse(AssistantBlock, declared_name='tool_use'):
-    id: str
+    id: ToolCallId
     name: str
     input: dict[str, JsonValue]
 
@@ -584,7 +585,7 @@ class TaskMessage(ContentBlocks):
 
 
 class ToolResult(UserBlock, ContentBlocks, declared_name='tool_result'):
-    tool_use_id: str
+    tool_use_id: ToolCallId
     content: list[ResultPart.declared_union()]
     is_error: bool = False
 

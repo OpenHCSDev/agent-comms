@@ -9,6 +9,10 @@ from pydantic import JsonValue
 
 import pytest
 
+from agent_comms.native_tool_call import ToolCallId
+from agent_comms.transcript_events import ToolStartTranscript
+from agent_comms.turn_item import NativeItemId
+
 from agent_comms.declared_family import DeclaredFamily, UnknownFamilyMember
 from agent_comms.field_codec import (
     DeclaredWireType,
@@ -60,6 +64,17 @@ def test_construct_preserves_the_boundary_error_family(error, expected_type, exp
         FieldCodec.construct(Record, {})
     assert str(failure.value) == expected_text
     assert failure.value is error or failure.value.__cause__ is error
+
+
+def test_transcript_preserves_distinct_item_and_tool_call_identities() -> None:
+    event = ToolStartTranscript(
+        position=NativeItemId("item-1"), timestamp=1.0,
+        tool_call_id=ToolCallId("call-1"), tool_name="read",
+    )
+    decoded = FieldCodec.decode(ToolStartTranscript, FieldCodec.encode(event))
+    assert decoded == event
+    assert type(decoded.position) is NativeItemId
+    assert type(decoded.tool_call_id) is ToolCallId
 
 
 def test_registered_value_decoders_own_their_json_schema() -> None:

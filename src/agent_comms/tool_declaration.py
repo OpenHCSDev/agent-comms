@@ -10,6 +10,7 @@ from typing import Annotated, ClassVar, Self
 from .declared_family import DeclaredFamily, UnknownFamilyMember
 from .field_codec import FieldCodec, MalformedRecord, NullMember, WireName
 from .recorded_time import EventTime
+from .native_tool_call import ToolCallId
 from .tool_denial import SelectedToolDenied
 from .tool_results import NoToolDiff
 
@@ -26,7 +27,7 @@ class ReplacementEdit:
 
 @dataclass(frozen=True)
 class EditCall:
-    id: str
+    id: ToolCallId
     at: EventTime
     thread: str
     path: str
@@ -92,7 +93,7 @@ class ToolDeclaration(DeclaredFamily, affix="Tool"):
             return UndeclaredTool(name)
 
     @classmethod
-    def parse_arguments(cls, arguments: Mapping[str, object], *, call_id: str) -> Self:
+    def parse_arguments(cls, arguments: Mapping[str, object], *, call_id: ToolCallId) -> Self:
         if cls.family_discriminator in arguments:
             raise SelectedToolDenied("Native arguments cannot contain a family selector")
         selected = {cls.family_discriminator: cls.declared_name}
@@ -100,7 +101,7 @@ class ToolDeclaration(DeclaredFamily, affix="Tool"):
 
     @classmethod
     def record(
-        cls, name: str, arguments: object, *, call_id: str
+        cls, name: str, arguments: object, *, call_id: ToolCallId
     ) -> ToolDeclaration | NoToolRecord:
         """The call decoded once as Core's tool record, or no record when Core does not decode it."""
         try:
@@ -114,7 +115,7 @@ class ToolDeclaration(DeclaredFamily, affix="Tool"):
         return shown.recorded(self)
 
     def edit_calls(
-        self, call_id: str, at: EventTime, thread: str, problem: str
+        self, call_id: ToolCallId, at: EventTime, thread: str, problem: str
     ) -> tuple[EditCall, ...]:
         return ()
 
@@ -150,7 +151,7 @@ class NoToolRecord(NullMember):
         return ""
 
     def edit_calls(
-        self, call_id: str, at: EventTime, thread: str, problem: str
+        self, call_id: ToolCallId, at: EventTime, thread: str, problem: str
     ) -> tuple[EditCall, ...]:
         return ()
 

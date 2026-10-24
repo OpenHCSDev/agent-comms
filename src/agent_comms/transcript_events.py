@@ -21,6 +21,7 @@ from .routing import MessageRoute, TurnRouting
 from .tool_results import SENT_MESSAGE_MIME, NoSentMessage, NoToolDiff, ToolDiff, ToolText
 from .transcript_merge import EventMerge, StreamingMerge
 from .turn_item import NativeItemId, NativeTurnId
+from .native_tool_call import ToolCallId
 from .ui_model.message_category import (
     AgentCategory,
     InboundCategory,
@@ -150,7 +151,7 @@ class TranscriptEvent(EventMerge, DeclaredFamily, affix="Transcript"):
     def import_to(self, accept: Callable[[ImportedMessage], None]) -> None:
         """Non-conversation events produce no portable message."""
 
-    def record_call(self, calls: dict[str, OrderCall], since: float) -> None:
+    def record_call(self, calls: dict[ToolCallId, OrderCall], since: float) -> None:
         """Only tool events change a unit's calls."""
 
     def edit_calls(self, thread: str, problem: str, since: float) -> tuple[tool_declaration.EditCall, ...]:
@@ -431,7 +432,7 @@ class ContextTranscript(SilentTranscript, NativeTextTranscript):
 @dataclass(frozen=True, kw_only=True)
 class ToolTranscript(SilentTranscript, RecordedTranscript):
     category = ToolCategory
-    tool_call_id: str
+    tool_call_id: ToolCallId
     tool_name: str
 
     @property
@@ -462,7 +463,7 @@ class ToolStartTranscript(ToolTranscript):
     def title(self) -> str:
         return tool_declaration.ToolDeclaration.caption(self.tool_name, self.tool)
 
-    def record_call(self, calls: dict[str, OrderCall], since: float) -> None:
+    def record_call(self, calls: dict[ToolCallId, OrderCall], since: float) -> None:
         """A call recorded before ``since`` is not work since then."""
         if not self.before(since):
             digest = self.tool.call_digest(self.tool_name, self.raw_input)
@@ -489,7 +490,7 @@ class ToolEndTranscript(ToolTranscript):
     def text_size(self) -> int:
         return len(self.text)
 
-    def record_call(self, calls: dict[str, OrderCall], since: float) -> None:
+    def record_call(self, calls: dict[ToolCallId, OrderCall], since: float) -> None:
         if self.tool_call_id in calls:
             calls[self.tool_call_id] = replace(
                 calls[self.tool_call_id], state=SucceededCallState if self.ok else FailedCallState)
@@ -524,7 +525,7 @@ class FailedCallState(CallState):
 
 @dataclass(frozen=True)
 class OrderCall:
-    tool_call_id: str
+    tool_call_id: ToolCallId
     tool_name: str
     digest: str
     state: type[CallState]

@@ -30,7 +30,7 @@ from .turn_item import NativeItemId
 class ToolCall:
     """A call as the runtime sent it, with the same preview and history as a native tool."""
 
-    id: str
+    id: ToolCallId
     name: str
     arguments: dict[str, JsonValue]
 

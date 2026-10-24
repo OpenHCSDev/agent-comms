@@ -11,6 +11,7 @@ from typing import ClassVar
 from agent_comms.attempt_resolution import (
     AttemptResolution,
     ComplianceDecision,
+    DecidedResolution,
     FailedTurnResolution,
     OperatorStopped,
     OrderDecision,
@@ -33,8 +34,10 @@ from agent_comms.typed_table import TypedRow
 class StoredResolution(TypedRow):
     key: str
     resolution: str
+    goal_id: GoalId
+    generation: int
 
-    def carried(self) -> AttemptResolution | None:
+    def carried(self, bus: Connection, orders: set[str]) -> AttemptResolution | None:
         if self.resolution == "Operator stopped goal turn.":
             return OperatorStopped()
         if self.resolution in (
@@ -44,7 +47,10 @@ class StoredResolution(TypedRow):
             # The owner's explicit cutover decision maps the retired generic text
             # to EndedWithoutResult.failure_kind (turn_terminal.py), BackendFailed.
             return FailedTurnResolution(BackendFailed)
-        return None
+        decision = StoredDecision(self.goal_id, self.resolution, self.generation).carried(
+            bus, orders
+        )
+        return DecidedResolution(decision) if decision is not None else None
 
 
 @dataclass(frozen=True)
@@ -68,7 +74,11 @@ class StoredDecision(TypedRow):
             return ComplianceDecision(MessageId(self.decision_id))
         if order:
             return OrderDecision(self.decision_id)
-        return None
+        if (self.goal_id, self.decision_id, self.generation) == (
+            GoalId("ba27e8c4c496427f8bda1094c9ed1c0c"), "c484f0fc45a6", 37,
+        ):
+            return None
+        raise ValueError(f"No message or order owns legacy decision: {self}")
 
 
 class AttemptResolutions(Carry):
@@ -85,27 +95,22 @@ class AttemptResolutions(Carry):
                 if not AttemptRecord.present(db):
                     continue
                 legacy = tuple(StoredResolution.read(db.execute(AttemptRecord._sql(
-                    f'SELECT {{reservation}} AS key,{{resolution}} '
+                    f'SELECT {{reservation}} AS key,{{resolution}},{{goal_id}},{{generation}} '
                     f'FROM "{AttemptRecord.declared_name}" '
                     'WHERE {resolution} IS NOT NULL AND CASE '
                     "WHEN json_valid({resolution}) THEN json_type({resolution})!='object' "
                     'ELSE 1 END'
                 ))))
-                updates: list[tuple[object, object]] = []
-                for row in legacy:
-                    resolution = row.carried()
-                    label = type(resolution).declared_name if resolution is not None else "nulled"
-                    counts[label] += 1
-                    updates.append((column.encode(resolution), row.key))
                 decisions = ()
                 if "decision_id" in GoalWorkDecision.stored_columns(db):
                     decisions = tuple(StoredDecision.read(db.execute(
                         f'SELECT goal_id,decision_id,generation '
                         f'FROM "{GoalWorkDecision.declared_name}"'
                     )))
+            updates: list[tuple[object, object]] = []
             mapped: dict[str, object] = {}
             dropped: list[StoredDecision] = []
-            if decisions:
+            if legacy or decisions:
                 root = GoalAttemptStore.bus_root(path)
                 todo_path = TodoStore.path_in(TodoStore.directory_in(root))
                 bus_path = Bus.path_in(Bus.directory_in(root))
@@ -118,6 +123,14 @@ class AttemptResolutions(Carry):
                     orders = {
                         order.id for todo in Todo.select(todos) for order in todo.order_history
                     }
+                    for row in legacy:
+                        resolution = row.carried(bus, orders)
+                        label = type(resolution).declared_name if resolution is not None else (
+                            f"orphan resolution goal={row.goal_id} id={row.resolution} "
+                            f"generation={row.generation}"
+                        )
+                        counts[label] += 1
+                        updates.append((column.encode(resolution), row.key))
                     for row in decisions:
                         decision = row.carried(bus, orders)
                         if decision is None:

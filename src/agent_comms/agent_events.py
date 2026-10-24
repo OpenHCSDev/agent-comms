@@ -35,6 +35,7 @@ from .pi_vocabulary import (
     UnknownCompactionReason,
 )
 from .thread_model import ThreadModel, UndeclaredModel
+from .native_tool_call import ToolCallId
 from .tool_declaration import OtherAction, ToolAction, ToolDeclaration
 from .tool_results import NoSentMessage, NoToolDiff, ToolDiff
 from .turn_failure import BackendFailed, TurnFailure
@@ -192,7 +193,7 @@ class ThinkingChanged(SettingChangeResult):
 
 @dataclass(frozen=True)
 class ToolEvent(AgentEvent):
-    id: str
+    id: ToolCallId
     name: str
 
 
@@ -203,7 +204,7 @@ class ToolStart(ToolEvent):
     kind: type[ToolAction] = OtherAction
 
     @classmethod
-    def from_call(cls, call_id: str, name: str, arguments: object) -> ToolStart:
+    def from_call(cls, call_id: ToolCallId, name: str, arguments: object) -> ToolStart:
         declaration = ToolDeclaration.for_name(name)
         title = ToolDeclaration.caption(name, ToolDeclaration.record(name, arguments, call_id=call_id))
         return cls(call_id, name, title, arguments, declaration.declared_action())
