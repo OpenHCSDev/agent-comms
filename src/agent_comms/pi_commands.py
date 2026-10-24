@@ -321,7 +321,7 @@ class InterruptSteering(PiCommand):
             yield events.Error(text=response.error.text_or("Send now was refused"))
 
     input_ids: Annotated[
-        list[str] | PiOmitted, WireOmitDefault(), WireName("inputIds")
+        list[InputId] | PiOmitted, WireOmitDefault(), WireName("inputIds")
     ] = PiOmitted()
 
 
@@ -395,7 +395,7 @@ class ClearQueue(PiCommand):
     """Remove exactly the selected queued native inputs."""
 
     response_payload = QueueClearedData
-    input_ids: Annotated[tuple[str, ...], WireName("inputIds")]
+    input_ids: Annotated[tuple[InputId, ...], WireName("inputIds")]
 
 
 @dataclass(frozen=True, kw_only=True)

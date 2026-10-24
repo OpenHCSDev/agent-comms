@@ -204,7 +204,7 @@ class UnresolvedInput:
     sequence: int | None
     target: str
     text: str
-    input_id: Annotated[InputId, WireName("inputId")]
+    input_id: Annotated[str, WireName("inputId")]
     status: str
     reviewed_for_goals: Annotated[
         tuple[str, ...], WireName("reviewedForGoals"), WireOmitDefault()

@@ -10,7 +10,7 @@ from agent_comms.child_process import NoProcess, ProcessIdentity
 from agent_comms.comms import wire
 from agent_comms.coordination_session import NativeBoundary
 from agent_comms.envelope_claim_transitions import NativeClaim, WakeClaims
-from agent_comms.field_codec import ClaimId, TurnId
+from agent_comms.field_codec import ClaimId, InputId, TurnId
 from agent_comms.messages import ClaimNoticeKind
 from agent_comms.thread_status import RunningThreadStatus, StoppedThreadStatus
 from agent_comms.threads import Thread
@@ -31,7 +31,7 @@ def test_stopped_incarnation_claims_expire_on_next_transition(comms, tmp_path):
             owner = boundary.registry.require(name)
             scope = NativeClaim(
                 owner_claimed_generation=boundary.registry.claim_generation(name),
-                operation_id=operation, turn_id=turns[name], input_id=f"input-{name}",
+                operation_id=operation, turn_id=turns[name], input_id=InputId.mint(),
             )
             return comms.bus.publisher._publish_claim_transition_unlocked(
                 boundary.registry, ClaimNoticeKind.claimed(owner),

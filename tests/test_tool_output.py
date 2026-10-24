@@ -8,19 +8,19 @@ from dataclasses import replace
 import pytest
 
 from agent_comms.child_process import ProcessIdentity
+from agent_comms.field_codec import FieldCodec, InputId, TurnId
 from agent_comms.goal_actions import SetGoalAction
+from agent_comms.goal_waits import RecordedGoalWait
 from agent_comms.input_attempt import BoundUnknownInput
 from agent_comms.input_disposition import InputDispositions
 from agent_comms.message_page import PageBounds
 from agent_comms.read_basis import ExplicitWatchAcknowledgment
-from agent_comms.tools import invoke_tool
-from agent_comms.tool_caller import ThreadCaller, NoThreadCaller
-from agent_comms.field_codec import FieldCodec, TurnId
-from agent_comms.text_digest import TextDigest
-from stored_inputs import insert_inputs, stored_inputs
-from agent_comms.goal_waits import RecordedGoalWait
-from agent_comms.threads import Thread
 from agent_comms.reported_turn import ReportedTurn
+from agent_comms.text_digest import TextDigest
+from agent_comms.threads import Thread
+from agent_comms.tool_caller import NoThreadCaller, ThreadCaller
+from agent_comms.tools import invoke_tool
+from stored_inputs import insert_inputs, stored_inputs
 
 
 def seed_unknown(comms, count, text):
@@ -35,7 +35,7 @@ def seed_unknown(comms, count, text):
                 target="b",
                 source_text=f"{index}: {text}",
                 turn_id=TurnId('9f73871819f6ae95a1bbcac63e1880f4'),
-                native_id="f" * 32,
+                native_id=InputId("f" * 32),
                 sent_digest=TextDigest.of("private-native-prompt"),
             )
         )

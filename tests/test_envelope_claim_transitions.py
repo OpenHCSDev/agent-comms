@@ -8,11 +8,19 @@ import pytest
 
 from agent_comms.bus import ClaimRecord
 from agent_comms.envelope_claim_transitions import (
-    ClaimConflict, ClaimProjection, ClaimRelease, ClaimTransition,
-    ClaimTransitionError, ExistingFileClaim, NativeClaim, ReleasedClaims,
-    UnscopedClaims, WakeClaim, WakeClaims,
+    ClaimConflict,
+    ClaimProjection,
+    ClaimRelease,
+    ClaimTransition,
+    ClaimTransitionError,
+    ExistingFileClaim,
+    NativeClaim,
+    ReleasedClaims,
+    UnscopedClaims,
+    WakeClaim,
+    WakeClaims,
 )
-from agent_comms.field_codec import ClaimId, FieldCodec, MalformedRecord, MessageId, TurnId
+from agent_comms.field_codec import ClaimId, FieldCodec, InputId, MalformedRecord, MessageId, TurnId
 from agent_comms.messages import ClaimMessage, ClaimNoticeKind, Message
 
 G1 = ClaimId("a" * 32)
@@ -42,7 +50,7 @@ def test_same_name_can_take_a_previous_birth_only_with_current_registry_evidence
                                    process_identity=ProcessIdentity.capture(os.getpid())), RunningThreadStatus())
     registry = comms.registry.snapshot()
     scope = NativeClaim(owner_claimed_generation=1, operation_id=ClaimId("c" * 32),
-                        turn_id=TurnId('5d1970910e79a04eb98c8e9533701156'), input_id="input-owner")
+                        turn_id=TurnId('5d1970910e79a04eb98c8e9533701156'), input_id=InputId.mint())
     held_message_id = MessageId.mint("msg-1")
     successor_message_id = MessageId.mint("msg-2")
     held = WakeClaims("owner", "1.0", 1, held_message_id, claims=(resource,),

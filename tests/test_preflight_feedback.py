@@ -1,11 +1,18 @@
 """Failure diagnostics and durable delivery projection remain independent authorities."""
 import pytest
-from agent_comms.field_codec import TurnId
-from agent_comms.input_attempt import ReservedInput, NotSentInput, MissingInput
+
+from agent_comms.field_codec import InputId, TurnId
+from agent_comms.input_attempt import MissingInput, NotSentInput, ReservedInput
 from agent_comms.input_disposition import InputDocument
-from agent_comms.turn_failure import InputIdUnavailable, NativePreflightExit, NativePreflightTimeout, PromptSendFailed
+from agent_comms.turn_failure import (
+    InputIdUnavailable,
+    NativePreflightExit,
+    NativePreflightTimeout,
+    PromptSendFailed,
+)
 from agent_comms.turn_output import TurnOutput
 from stored_inputs import stored_inputs
+
 
 @pytest.mark.parametrize('kind', [NativePreflightExit, NativePreflightTimeout])
 def test_preflight_diagnostics_keep_original_phase(kind):
@@ -47,7 +54,7 @@ def test_post_dispatch_failure_preserves_bound_uncertainty(tmp_path):
         'acp:partial-write',
         claim_scope=1,
         turn_id=TurnId('9b473845f684444f80a26586ae298d2b'),
-        native_id='a' * 32,
+        native_id=InputId('a' * 32),
         text='original input',
     )
     before = stored_inputs(store.root).lookup('acp:partial-write')

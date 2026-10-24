@@ -572,7 +572,7 @@ class QueueChangedUpdate(AgentCommsUpdate):
 
 @dataclass(frozen=True)
 class InputStartedUpdate(AgentCommsUpdate):
-    input_id: InputId | None
+    input_id: str | None
     text: str | None
     scope: QueueScope
     revision: int | None
@@ -652,7 +652,7 @@ class TranscriptSnapshotUpdate(AgentCommsUpdate):
 
 @dataclass(frozen=True)
 class InputDeliveryChangedUpdate(AgentCommsUpdate):
-    input_id: InputId | None = None
+    input_id: str | None = None
 
 
 @dataclass(frozen=True)

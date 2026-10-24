@@ -1164,9 +1164,9 @@ class PiResponseData(ExternalNull, PiPayload, DeclaredFamily, affix="Data"):
 class QueueClearedData(PiResponseData):
     """Native IDs actually removed, never the texts of possible candidates."""
 
-    input_ids: Annotated[tuple[str, ...], WireName("inputIds")]
+    input_ids: Annotated[tuple[InputId, ...], WireName("inputIds")]
 
-    def require_requested(self, requested: tuple[str, ...]) -> tuple[str, ...]:
+    def require_requested(self, requested: tuple[InputId, ...]) -> tuple[InputId, ...]:
         if len(set(self.input_ids)) != len(self.input_ids) or not set(self.input_ids) <= set(requested):
             raise ValueError("Native clear returned duplicate or unrequested input IDs")
         return self.input_ids

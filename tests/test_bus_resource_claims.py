@@ -11,34 +11,38 @@ import pytest
 
 from agent_comms.bus import Bus, ClaimRecord, KeyedPrivateRecord, PublicRecord, RecordBuilder
 from agent_comms.bus_publication import HumanOrigin
+from agent_comms.child_process import NoProcess, ProcessIdentity
+from agent_comms.coordination_errors import IdentityConflict
+from agent_comms.envelope_claim_transitions import (
+    ClaimConflict,
+    ClaimOwner,
+    ClaimRelease,
+    NativeClaim,
+    ReleasedClaims,
+    UnclaimedResource,
+    WakeClaims,
+)
+from agent_comms.errors import CommittedMessageError
+from agent_comms.field_codec import ClaimId, InputId, TurnId
+from agent_comms.locked_store import RegistryFile, StoreCommittedError
 from agent_comms.messages import (
     BusProjectionTables,
     BusRow,
     BusTables,
-    ClaimOperations,
-    HeldResources,
-    ReplayedHolders,
     Claimed,
     ClaimNoticeKind,
+    ClaimOperations,
+    HeldResources,
     InfoKind,
     Message,
+    ReplayedHolders,
 )
-from agent_comms.child_process import NoProcess, ProcessIdentity
-from agent_comms.coordination_errors import IdentityConflict
-from agent_comms.envelope_claim_transitions import (
-    ClaimConflict, ClaimOwner, ClaimRelease, NativeClaim, ReleasedClaims,
-    UnclaimedResource, WakeClaims,
-)
-from agent_comms.errors import CommittedMessageError
-from agent_comms.field_codec import ClaimId, TurnId
-from agent_comms.locked_store import RegistryFile
 from agent_comms.registration import Registration
 from agent_comms.store_files import store_lock_path
 from agent_comms.thread_status import RunningThreadStatus, StoppedThreadStatus
-from agent_comms.locked_store import StoreCommittedError
+from agent_comms.threads import Thread
 from agent_comms.typed_table import TypedTable
 from bus_record_fixture import publication_processes, record_from
-from agent_comms.threads import Thread
 
 
 @dataclass(frozen=True)
@@ -50,7 +54,7 @@ class ClaimBus:
     def scope(self, name: str, operation: ClaimId) -> NativeClaim:
         return NativeClaim(
             owner_claimed_generation=self.registry.snapshot().claim_generation(name),
-            operation_id=operation, turn_id=self.turns[name], input_id=f"input-{name}",
+            operation_id=operation, turn_id=self.turns[name], input_id=InputId.mint(),
         )
 
     def builder(self, name: str, transition) -> RecordBuilder:

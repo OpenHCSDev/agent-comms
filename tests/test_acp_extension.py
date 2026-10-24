@@ -1,33 +1,27 @@
 """Declared extension decoding is strict and shares its owner with consumers."""
 
-from agent_comms.child_process import ProcessIdentity
-from agent_comms.field_codec import ClaimId, MessageId, TurnId
-from agent_comms.acp_failure import ACPFailure
-
 import pytest
-from agent_comms.goal_presentation import IdleGoalExecution
-from agent_comms.goals import NoGoal
 
 from agent_comms.acp_extension import (
     AgentCommsUpdate,
     AvailableQueueProjection,
     CompactionChangedUpdate,
     CompactionCommittedUpdate,
-    CoordinationChangedUpdate,
     ContextAnnotatedUpdate,
+    CoordinationChangedUpdate,
     CursorAdvancedUpdate,
     CursorEnvelope,
-    LiveCursorScope,
     GoalChangedUpdate,
     InputDeliveryChangedUpdate,
     InputFailedUpdate,
     InputStartedUpdate,
+    LiveCursorScope,
+    LiveQueueScope,
     McpClientAcknowledgementUpdate,
+    PromptCancelledUpdate,
     QueueChangedUpdate,
     QueueItem,
-    LiveQueueScope,
     RequestFailedUpdate,
-    PromptCancelledUpdate,
     SelectedWriteAcceptedUpdate,
     TextRouteUpdate,
     TranscriptChangedUpdate,
@@ -38,16 +32,19 @@ from agent_comms.acp_extension import (
     decode_updates,
     encode_updates,
 )
-from agent_comms.acp_failure import BackendDeliveryFailure
-from agent_comms.context_reading import UnmeasuredContext
+from agent_comms.acp_failure import ACPFailure, BackendDeliveryFailure
 from agent_comms.agent_events import CompactionStart
+from agent_comms.child_process import ProcessIdentity
+from agent_comms.context_reading import UnmeasuredContext
+from agent_comms.field_codec import ClaimId, InputId, MessageId, TurnId
+from agent_comms.goal_presentation import IdleGoalExecution
+from agent_comms.goals import NoGoal
 from agent_comms.pi_payloads import McpLiveAcknowledgement
-from agent_comms.thread_identity import ClaimedIdentity
-from agent_comms.thread_identity import RecordedThreadIncarnation
-from agent_comms.transcripts import NativeTranscriptCursor, TranscriptPage
-from agent_comms.turn_lease import ActiveTurn, FinishedTurn, TurnState
-from agent_comms.turn_context import ContextManifest, NextContextTurn
+from agent_comms.thread_identity import ClaimedIdentity, RecordedThreadIncarnation
 from agent_comms.threads import Thread
+from agent_comms.transcripts import NativeTranscriptCursor, TranscriptPage
+from agent_comms.turn_context import ContextManifest, NextContextTurn
+from agent_comms.turn_lease import ActiveTurn, FinishedTurn, TurnState
 
 
 def test_declared_family_roundtrip_and_strict_boundary(tmp_path):
@@ -79,8 +76,10 @@ def test_declared_family_roundtrip_and_strict_boundary(tmp_path):
                 UnavailableCursorObservation(),
             )
         ),
-        QueueChangedUpdate(queue_scope, 1, AvailableQueueProjection((QueueItem("input", "text"),))),
-        InputStartedUpdate("input", "text", queue_scope, 2, "b" * 32),
+        QueueChangedUpdate(
+            queue_scope, 1, AvailableQueueProjection((QueueItem(InputId.mint(), "text"),)),
+        ),
+        InputStartedUpdate("input", "text", queue_scope, 2, InputId("b" * 32)),
         CoordinationChangedUpdate(
             owner.incarnation,
             "/home/ts/wt/pilot",

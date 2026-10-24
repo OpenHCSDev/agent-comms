@@ -361,15 +361,15 @@ class AcknowledgedSlot(SelectedSlotState):
 class SelectedToolSlot(NativeRuntimeTable, WithoutRowid):
     """The consumed slot and its live terminal acknowledgement, in one transaction store."""
 
-    input_id: Annotated[InputId, FrozenColumn(primary_key=True)]
+    input_id: Annotated[str, FrozenColumn(primary_key=True)]
     call_id: Annotated[str, FrozenColumn()]
     state: type[SelectedSlotState] = ConsumedSlot
 
     @classmethod
     def consume(
-        cls, db: sqlite3.Connection, input_id: InputId, call_id: str,
+        cls, db: sqlite3.Connection, slot_id: str, call_id: str,
     ) -> None:
-        if cls(input_id, call_id).insert_if_absent(db).rowcount != 1:
+        if cls(slot_id, call_id).insert_if_absent(db).rowcount != 1:
             raise SelectedToolDenied("Selected tool input already consumed; outcome may be UNKNOWN")
 
     def require_call(self, call_id: str) -> None:

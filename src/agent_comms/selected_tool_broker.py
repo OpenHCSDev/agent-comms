@@ -169,22 +169,22 @@ def selected_extension(package: Path) -> Path:
     return source
 
 
-def consume_selected_slot(store: Coordination, input_id: InputId, call_id: str) -> None:
+def consume_selected_slot(store: Coordination, slot_id: str, call_id: str) -> None:
     """Commit consumption BEFORE any action; a failed commit is UNKNOWN, never retried."""
     if type(call_id) is not str or not _CALL_ID.fullmatch(call_id):
         raise SelectedToolDenied("Selected tool call identity is invalid")
     try:
         with store.session.writing() as db:
-            SelectedToolSlot.consume(db, input_id, call_id)
+            SelectedToolSlot.consume(db, slot_id, call_id)
     except sqlite3.Error as error:
         raise SelectedToolDenied("Selected tool consumption UNKNOWN; do not retry") from error
 
 
-def record_selected_terminal(coordination_path: Path, input_id: InputId, call_id: str) -> None:
+def record_selected_terminal(coordination_path: Path, slot_id: str, call_id: str) -> None:
     """Only a committed terminal acknowledgement lets the tool return success."""
     try:
         with Coordination(str(coordination_path)) as store, store.session.writing() as db:
-            SelectedToolSlot.require(db, input_id=input_id).acknowledge(db, call_id)
+            SelectedToolSlot.require(db, input_id=slot_id).acknowledge(db, call_id)
     except sqlite3.Error as error:
         raise SelectedToolDenied("Selected tool terminal acknowledgement UNKNOWN; no retry") from error
 
@@ -264,10 +264,10 @@ def _require_sent_full_input(
         raise SelectedToolDenied("Selected input was already settled")
 
 
-def verify_selected_terminal(coordination_path: Path, input_id: InputId, call_id: str) -> None:
+def verify_selected_terminal(coordination_path: Path, slot_id: str, call_id: str) -> None:
     """Corroborate a live owner result; a persisted acknowledgement alone grants nothing."""
     with Coordination(str(coordination_path), session_type=ReadNativeCoordinationSession) as store, store.session.read():
-        SelectedToolSlot.require(store.session._connection, input_id=input_id).verify(call_id)
+        SelectedToolSlot.require(store.session._connection, input_id=slot_id).verify(call_id)
 
 
 def perform_selected_write(

@@ -2,7 +2,7 @@
 import hashlib
 import json
 
-from agent_comms.field_codec import FieldCodec, TurnId
+from agent_comms.field_codec import FieldCodec, InputId, TurnId
 from agent_comms.image_input import ImageInput
 from agent_comms.native_tool_call import OwnerToolConnection
 from agent_comms.pi_commands import Prompt
@@ -97,7 +97,7 @@ def test_rendered_contributors_remain_original_bytes_through_prompt_boundary(tmp
         assert hashlib.sha256(raw[source.offset:source.offset+source.length]).hexdigest() == source.sha256
     assert sum(source.length for source in rendered.contributions) == len(raw)
     assert next(source for source in rendered.contributions if source.kind is UserInputSegment).images == (0,)
-    command = Prompt(input_id='a'*32, message=rendered.text, images=images,
+    command = Prompt(input_id=InputId('a'*32), message=rendered.text, images=images,
                      context_contributions=rendered.contributions,
                      owner_tools=OwnerToolConnection('/unused', 'a' * 64))
     decoded = Prompt.from_wire(command.to_rpc())

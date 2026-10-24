@@ -287,7 +287,8 @@ class NativeContextJournal(
         cls, db: sqlite3.Connection, input_id: InputId, generation: int | None = None
     ) -> NativeContextJournal | None:
         """The primary key answers one input without scanning lifetime history."""
-        where, parameters = "input_id=?", (input_id,)
+        where = "input_id=?"
+        parameters: tuple[InputId | int, ...] = (input_id,)
         if generation is not None:
             where += " AND request_generation=?"
             parameters += (generation,)

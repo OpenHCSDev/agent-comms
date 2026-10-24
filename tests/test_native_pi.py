@@ -1,22 +1,27 @@
 """Strict native proof-reader tests; actual RPC/provider exercise is separate."""
 from __future__ import annotations
 
-from abc import abstractmethod
 import json
 import os
-from pathlib import Path
 import sqlite3
 import sys
+from abc import abstractmethod
+from pathlib import Path
 
 import pytest
 
 from agent_comms.coordination_errors import IdentityConflict
 from agent_comms.declared_family import DeclaredFamily
-from agent_comms.field_codec import FieldCodec
+from agent_comms.field_codec import FieldCodec, InputId
 from agent_comms.native_arguments import SelectedModel
-from agent_comms.native_pi import NativeContextJournal, NativeContextProof, NativePiRpcLaunch, NativePiTerminalFailure
-from agent_comms.native_failures import NativePiUnavailable
 from agent_comms.native_entries import NativeEntry
+from agent_comms.native_failures import NativePiUnavailable
+from agent_comms.native_pi import (
+    NativeContextJournal,
+    NativeContextProof,
+    NativePiRpcLaunch,
+    NativePiTerminalFailure,
+)
 from agent_comms.native_session_files import NativeSessionFiles
 from agent_comms.native_session_reopen import NativeSessionIdentity
 from agent_comms.native_startup import NATIVE_STARTUP_POLICY
@@ -27,7 +32,7 @@ from agent_comms.thread_identity import RecordedThreadIncarnation
 from agent_comms.tracked_turn import TrackedTurnSession
 from native_proof_cases import read_proof_rows, write_proof_rows
 
-INPUT_ID = 'a' * 32
+INPUT_ID = InputId('a' * 32)
 DIGEST = 'b' * 64
 PROOF_OWNER = RecordedThreadIncarnation('proof-case', 1.0)
 pytestmark = pytest.mark.skipif(sys.platform == 'win32', reason='native UID checks require POSIX')

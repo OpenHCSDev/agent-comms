@@ -30,7 +30,7 @@ if TYPE_CHECKING:
 @dataclass
 class InputForwarding(MroDispatch):
     queue: TurnInbox = field(default_factory=TurnInbox)
-    pending: dict[str, InputRequest] = field(default_factory=dict)
+    pending: dict[InputId, InputRequest] = field(default_factory=dict)
     accepted: set[InputId] = field(default_factory=set)
     changed: asyncio.Event = field(default_factory=asyncio.Event)
     current: TurnInboxItem | None = None
@@ -125,7 +125,7 @@ class InputForwarding(MroDispatch):
             session.native.send(command)
         await session.native.drain()
 
-    async def queued(self, input_ids: tuple[InputId, ...]) -> tuple[str, ...]:
+    async def queued(self, input_ids: tuple[InputId, ...]) -> tuple[InputId, ...]:
         """A native prompt acknowledgement proves it reached the child's queue."""
         selected = frozenset(input_ids)
         while True:

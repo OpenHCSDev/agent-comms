@@ -2,27 +2,26 @@
 
 from __future__ import annotations
 
-from agent_comms.pi_payloads import AnonymousRequest, ReportedText, RequestId
-from agent_comms.launch_runtime import LaunchRuntime, RestartEnvironment
-from agent_comms.selected_session import SelectedSession
-
 import asyncio
 import itertools
 import json
 from pathlib import Path
 
 import pytest
-from agent_comms.field_codec import MalformedRecord
 
 import agent_comms.pi_commands as commands
 import agent_comms.pi_events as pi
 import agent_comms.turn_failure as failures
-from agent_comms.native_session_prepare import NativeSessionPreparation
-from agent_comms.native_tool_call import OwnerToolConnection
-from agent_comms.native_startup import NativeStartup
+from agent_comms.field_codec import FieldCodec, InputId, MalformedRecord
+from agent_comms.launch_runtime import LaunchRuntime, RestartEnvironment
 from agent_comms.native_pi import NativePiRpcLaunch
+from agent_comms.native_session_prepare import NativeSessionPreparation
+from agent_comms.native_startup import NativeStartup
+from agent_comms.native_tool_call import OwnerToolConnection
 from agent_comms.pi_native_backend import PersistentPiSession
+from agent_comms.pi_payloads import AnonymousRequest, ReportedText, RequestId
 from agent_comms.pi_rpc import PiRpcChannel
+from agent_comms.selected_session import SelectedSession
 from agent_comms.turn_phase import (
     CompactionPhase,
     Excursion,
@@ -123,10 +122,14 @@ def test_failure_precedence_and_text_have_one_owner(left, right):
 
 
 def test_external_formats_are_derived_and_pin_wire_spellings():
-    assert commands.Prompt(id=RequestId("p"), input_id="n", message="hello", owner_tools=OwnerToolConnection("/unused", "a" * 64)).to_rpc() == {
+    input_id = InputId.mint()
+    assert commands.Prompt(
+        id=RequestId("p"), input_id=input_id, message="hello",
+        owner_tools=OwnerToolConnection("/unused", "a" * 64),
+    ).to_rpc() == {
         "type": "prompt",
         "id": "p",
-        "inputId": "n",
+        "inputId": FieldCodec.encode(input_id),
         "message": "hello",
         "ownerTools": {"path": "/unused", "token": "a" * 64},
     }

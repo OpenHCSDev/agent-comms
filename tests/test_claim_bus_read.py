@@ -8,40 +8,39 @@ the owner's event loop with the wire, bus and registry locks held.
 
 from __future__ import annotations
 
-from agent_comms.context_store import UNREAD_CONTEXT
-
-from conftest import publish_initial
 import hashlib
-from pathlib import Path
 import os
 import sys
 from dataclasses import replace
+from pathlib import Path
 
 import pytest
 
-from agent_comms.field_codec import ClaimId, TurnId
-from agent_comms.reason_codes import NoReasonCode
 from agent_comms.attempt_start import AttemptStart
 from agent_comms.bus import BusReader
+from agent_comms.channel_targets import CommandTarget
 from agent_comms.child_process import ProcessIdentity
+from agent_comms.comms import Comms
+from agent_comms.context_store import UNREAD_CONTEXT
+from agent_comms.coordination_cohort import accept_delivery_cohort, sealed_cohort_assignments
+from agent_comms.coordination_errors import IdentityConflict
+from agent_comms.coordination_session import NativeBoundary
+from agent_comms.coordination_tables.executions import WireOrigin
+from agent_comms.coordinator import Coordination
+from agent_comms.envelope_claim_transitions import ExistingFileClaim, NativeClaim, WakeClaim
+from agent_comms.field_codec import ClaimId, InputId, TurnId
+from agent_comms.message_page import ConversationMessagePageRequest, MessagePageRequest
+from agent_comms.messages import ClaimMessage, ClaimNoticeKind
+from agent_comms.owner_fence import prepare_fence_token
+from agent_comms.read_basis import AllChannelDisplayScope, DMDisplayScope
+from agent_comms.reason_codes import NoReasonCode
 from agent_comms.selected_claim import (
     publish_selected_resource_claim,
     write_selected_claimed_file,
 )
-from agent_comms.comms import Comms
-from agent_comms.coordination_cohort import accept_delivery_cohort, sealed_cohort_assignments
-from agent_comms.coordination_errors import IdentityConflict
-from agent_comms.coordination_tables.executions import WireOrigin
-from agent_comms.coordinator import Coordination
-from agent_comms.envelope_claim_transitions import ExistingFileClaim, NativeClaim, WakeClaim
-from agent_comms.coordination_session import NativeBoundary
-from agent_comms.message_page import ConversationMessagePageRequest, MessagePageRequest
-from agent_comms.channel_targets import CommandTarget
-from agent_comms.messages import ClaimMessage, ClaimNoticeKind
-from agent_comms.owner_fence import prepare_fence_token
-from agent_comms.read_basis import AllChannelDisplayScope, DMDisplayScope
 from agent_comms.selected_source_batch import SelectedSource
 from agent_comms.thread_identity import TurnIdentity
+from agent_comms.threads import Thread
 from agent_comms.turn_context import (
     ContextManifest,
     OwnerProvenance,
@@ -49,7 +48,7 @@ from agent_comms.turn_context import (
     SegmentManifest,
     TranscriptSegment,
 )
-from agent_comms.threads import Thread
+from conftest import publish_initial
 
 pytestmark = pytest.mark.skipif(
     sys.platform != "linux", reason="private cohort claim_scope requires real /var/tmp"
@@ -166,7 +165,7 @@ def acquire_tool_claim(
         owner = boundary.registry.require(name)
         scope = NativeClaim(
             owner_claimed_generation=boundary.registry.claim_generation(name),
-            operation_id=operation_id, turn_id=turn_id, input_id=f"input-{name}",
+            operation_id=operation_id, turn_id=turn_id, input_id=InputId.mint(),
         )
         return comms.bus.publisher._publish_acquisition_unlocked(
             boundary.registry, owner,

@@ -2,16 +2,17 @@
 
 from dataclasses import replace
 
-
 from agent_comms.comms import wire
-from agent_comms.field_codec import TurnId, GoalId
+from agent_comms.field_codec import GoalId, InputId, TurnId
 from agent_comms.input_attempt import (
-    OwnerQueueInputDeliveryScope, UnobservedInputDeliveryScope, UnresolvedInput,
+    OwnerQueueInputDeliveryScope,
+    UnobservedInputDeliveryScope,
+    UnresolvedInput,
 )
 from agent_comms.input_disposition import InputDispositions
-from stored_inputs import stored_inputs
-from agent_comms.threads import Thread
 from agent_comms.reported_turn import ReportedTurn
+from agent_comms.threads import Thread
+from stored_inputs import stored_inputs
 
 
 def seed(comms, name):
@@ -25,7 +26,7 @@ def seed(comms, name):
         "bus:2",
         claim_scope=1,
         turn_id=TurnId('e3b98a4da31a127d4bde6e43033f66ba'),
-        native_id="a" * 32,
+        native_id=InputId("a" * 32),
         text="Text bus:2",
     )
     ledger.review_for_goal(
@@ -80,7 +81,7 @@ def test_history_clear_is_notice_only_and_survives_rename_and_reopen(tmp_path):
         "bus:7",
         claim_scope=1,
         turn_id=TurnId('c44474038d459e40e4714afefa7bf8da'),
-        native_id="b" * 32,
+        native_id=InputId("b" * 32),
         text="Text bus:7",
     )
     assert "bus:7" not in [
