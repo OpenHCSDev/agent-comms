@@ -10,6 +10,7 @@ from functools import partial
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from acp.exceptions import RequestError
 from acp.schema import (ConfigOptionUpdate, SessionConfigOptionSelect,
                         SessionConfigSelectOption, SetSessionConfigOptionResponse)
 
@@ -18,7 +19,6 @@ from .bus import Bus
 from .child_process import join_retirement
 from .config_options import (CatalogConfigOption, CatalogSelection, ConfigOption,
                              ConfigOptions, InvalidConfigChoice)
-from .coordination_errors import RequestRefused
 from .coordinator import Coordination
 from .field_codec import FieldCodec
 from .launch_runtime import RestartEnvironment
@@ -108,7 +108,7 @@ class SessionConfigOptions(ConfigOptions):
             member = CatalogConfigOption.member_named(config_id)
             value = FieldCodec.decode(str, value)
         except ValueError:
-            raise RequestRefused.invalid_params(
+            raise RequestError.invalid_params(
                 {"reason": f"Unknown session configuration option: {config_id!r}"}
             ) from None
         if session_id in self.sessions.proxies:
@@ -121,7 +121,7 @@ class SessionConfigOptions(ConfigOptions):
         try:
             await self.catalog_for(member).change(self, thread, value)
         except (NativePiUnavailable, InvalidConfigChoice) as error:
-            raise RequestRefused.invalid_params({"reason": str(error)}) from error
+            raise RequestError.invalid_params({"reason": str(error)}) from error
         await self.effects.turns.close_idle_backend(session_id, thread)
         await self.use_stored_settings(session_id, name)
         return SetSessionConfigOptionResponse(
