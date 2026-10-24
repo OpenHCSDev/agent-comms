@@ -316,6 +316,8 @@ def test_a_bridge_that_never_answers_pause_refuses_the_install_by_name(
         # The late bridge finds its runtime waiting once it acknowledges.
         accepted, _ = silent.accept()
         with accepted, accepted.makefile('rb') as stream:
+            pause = FieldCodec.decode(PauseSession, FieldCodec.parse(stream.readline().decode()))
+            assert pause.process == me
             assert FieldCodec.decode(LaunchRuntime, FieldCodec.parse(stream.readline().decode()))
     bridges.confirm()
     unanswered = (f'Session bridge silent-session at {claim.socket_path} '
