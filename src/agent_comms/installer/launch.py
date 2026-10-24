@@ -24,6 +24,7 @@ from typing import Annotated, ClassVar, TextIO
 import agent_comms.installer
 from agent_comms.cli_bridges.shared import SessionBridgeResumes
 from agent_comms.cli_commands import InstallCliCommand
+from agent_comms.commander import standing
 from agent_comms.installer.probes.harnesses import InstallResult
 from agent_comms.field_codec import FieldCodec, Id128, PathText
 from agent_comms.installer.backup import StoreBackup
@@ -48,6 +49,7 @@ from agent_comms.installer.upgrade import (
 )
 from agent_comms.mro_dispatch import MroDispatch, handles
 from agent_comms.repo import Repo
+from agent_comms.repository_name import RepositoryName
 from agent_comms.storage_rules import StorageRule
 
 
@@ -119,23 +121,35 @@ class InstallReport(MroDispatch):
 
 
 @dataclass(frozen=True)
+class InstallCause:
+    """The repository merge that caused an automatic install, independent of its target."""
+
+    repo: RepositoryName
+    main: str
+
+
+@dataclass(frozen=True)
 class InstallLogs:
     """Each install's diagnostics beside the bus, kept as long as its data backups are."""
 
     root: Path
-    target_file: ClassVar[str] = "target"
+    cause_file: ClassVar[str] = "cause.json"
 
-    def launched(self, target: str) -> bool:
-        """The existing diagnostics record each target whose installer was spawned."""
-        return any(
-            marker.is_file() and marker.read_text(encoding="ascii").strip() == target
+    def member(self, repo: RepositoryName, main: str) -> type[standing.InstallDue]:
+        """Decode the merge's launch record once into its standing-rule member."""
+        cause = InstallCause(repo, main)
+        if any(
+            marker.is_file()
+            and FieldCodec.decode(InstallCause, FieldCodec.parse(marker.read_text())) == cause
             for path in self.root.parent.glob(f"{glob.escape(self.prefix)}*")
             if path.is_dir()
-            for marker in (path / self.target_file,)
-        )
+            for marker in (path / self.cause_file,)
+        ):
+            return standing.LaunchedInstallDue
+        return standing.PendingInstallDue
 
-    def record(self, logs: Path, target: str) -> None:
-        (logs / self.target_file).write_text(target, encoding="ascii")
+    def record(self, logs: Path, repo: RepositoryName, main: str) -> None:
+        (logs / self.cause_file).write_text(json.dumps(FieldCodec.encode(InstallCause(repo, main))))
 
     @property
     def prefix(self) -> str:
@@ -198,7 +212,6 @@ class InstallRun:
                 env={**os.environ, "PYTHONPATH": os.pathsep.join(map(str, tree.source_paths()))},
                 stdin=stdin, stdout=stdout, stderr=stderr, start_new_session=True,
             )
-            InstallLogs(self.root).record(self.logs, self.target)
             requests.write(json.dumps(FieldCodec.encode(self)).encode())
         print(f"install: pid {process.pid} runs {self.target[:12]}; diagnostics {errors}",
               file=sys.stderr, flush=True)
