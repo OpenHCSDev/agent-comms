@@ -6,6 +6,7 @@ from contextlib import closing
 from pathlib import Path
 
 import pytest
+from bus_record_fixture import ROOT_ID, UNRELATED_LOOKUP
 from cutover.carry_wake_claim_turn_ids import WakeClaimTurnIds
 
 from agent_comms.bus import Bus
@@ -24,9 +25,9 @@ def old_claim_bus(root: Path, *, turn_id: str = "a" * 32) -> Path:
         generation=ClaimId("b" * 32),
         resource_scope=WakeClaim(
             owner_claimed_generation=1, operation_id=ClaimId("c" * 32), turn_id=TurnId("a" * 32),
-            wire_root_id="d" * 32, source_seq=1, source_message_id=MessageId.mint("source-1"),
+            wire_root_id=ROOT_ID, source_seq=1, source_message_id=MessageId.mint("source-1"),
             wake_assignment_id="cohort-v1:" + "e" * 64, wake_revision=1,
-            recipient_lookup="f" * 32, execution_id="execution-1",
+            recipient_lookup=UNRELATED_LOOKUP, execution_id="execution-1",
             participant_generation=1, attempt_ordinal=1,
         ),
     )

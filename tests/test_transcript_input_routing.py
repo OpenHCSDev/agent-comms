@@ -1,5 +1,6 @@
 """Native input IDs retain incoming attribution across steering and failed turns."""
 
+from bus_record_fixture import FIRST_INPUT_ID, SECOND_INPUT_ID, THIRD_INPUT_ID
 from conftest import transcript_records
 import json
 
@@ -38,12 +39,13 @@ def test_bound_input_overrides_turn_wide_annotation_without_attributing_quotes(t
     quote = "[agent-comms from peer to worker]\nA genuine user's quoted example"
     # Bind before the session file exists, as on first-turn/fork startup.
     comms.transcripts.routes.record_input_display(
-        "b" * 32, second.body, sent_text=raw_second, routing=TurnRouting((second.reference,), None)
+        SECOND_INPUT_ID, second.body, sent_text=raw_second,
+        routing=TurnRouting((second.reference,), None),
     )
-    comms.transcripts.routes.record_input_display("c" * 32, quote, sent_text=quote)
+    comms.transcripts.routes.record_input_display(THIRD_INPUT_ID, quote, sent_text=quote)
     path = tmp_path / "new-session.jsonl"
-    append_input(path, "b" * 32, raw_second)
-    append_input(path, "c" * 32, quote)
+    append_input(path, SECOND_INPUT_ID, raw_second)
+    append_input(path, THIRD_INPUT_ID, quote)
     comms.threads.attach_session((attachment_owner := comms.registry.require("worker")), str(path), process=attachment_owner.process_identity)
     # Older settlement code labels all records with the initial origin.
     comms.transcripts.routes.record(
@@ -76,14 +78,16 @@ def test_bound_route_rejects_changed_text_and_conflicting_rebind(tmp_path):
     incoming = comms.messaging.send("peer", "worker", "Verified input").message
     route = TurnRouting((incoming.reference,), None)
     text = ScheduledTurn.incoming(incoming).prompt
-    comms.transcripts.routes.record_input_display("a" * 32, text, sent_text=text, routing=route)
-    comms.transcripts.routes.record_input_display("a" * 32, text, sent_text=text, routing=route)
+    comms.transcripts.routes.record_input_display(
+        FIRST_INPUT_ID, text, sent_text=text, routing=route)
+    comms.transcripts.routes.record_input_display(
+        FIRST_INPUT_ID, text, sent_text=text, routing=route)
     with pytest.raises(ValueError):
         comms.transcripts.routes.record_input_display(
-            "a" * 32, text, sent_text="different", routing=route
+            FIRST_INPUT_ID, text, sent_text="different", routing=route
         )
     path = tmp_path / "changed.jsonl"
-    append_input(path, "a" * 32, "unrelated input")
+    append_input(path, FIRST_INPUT_ID, "unrelated input")
     comms.threads.attach_session((attachment_owner := comms.registry.require("worker")), str(path), process=attachment_owner.process_identity)
     comms.transcripts.routes.record(str(path), ("aaaaaaaa",), route)
     event = comms.transcripts.thread_transcript_page("worker").events[0]

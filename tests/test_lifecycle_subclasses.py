@@ -122,10 +122,11 @@ def test_sql_retry_predecessor_is_not_every_unsuccessful_outcome(tmp_path, prede
                 lifecycle=DeferredExecution(1), revision=snapshot.execution.revision + 1,
             )
             CurrentExecutions.update(
-                db, where="owner_lookup=?", parameters=("owner",),
+                db, where="owner_lookup=?", parameters=(snapshot.execution.owner_lookup,),
                 execution_id=NoPointedExecution(), attempt_ordinal=NoPointedAttempt(), pointer_revision=snapshot.pointer_revision + 1,
             )
-        store.participants.advance_generation("owner", expected_generation=1)
+        store.participants.advance_generation(
+            snapshot.execution.owner_lookup, expected_generation=1)
         next_attempt = replace(
             attempt, attempt_ordinal=2, owner_generation=2,
             owner_token_digest=prepare_fence_token(), lifecycle=PromptStartingAttempt(1000),
