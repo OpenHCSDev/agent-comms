@@ -33,10 +33,9 @@ class StartedInput:
         ))
         key = next(iter(self.keys), None)
         row = document.lookup(key).require_started(scope.claimed_generation)
-        for key in self.keys:
-            stored = document.rows.get(key)
-            if stored is not None and not stored.items_with(Unresolved, stored):
-                await inputs.emit_input_disposition(session_id, stored)
+        if any(stored is not None and not stored.items_with(Unresolved, stored)
+               for stored in map(document.rows.get, self.keys)):
+            await inputs.emit_input_delivery_changed(session_id)
         await inputs.runtime.publish_update(
             session_id=session_id, update=(await self.acceptance.started_update(
                 self, inputs, session_id, row, scope,

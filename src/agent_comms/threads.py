@@ -491,9 +491,6 @@ class Thread(ThreadProvenance):
         if self.executing:
             raise RelationViolationError("live owner already has an active turn")
 
-    def require_current_turn(self, claim_scope: int) -> None:
-        self.turn_record.read().require_current(claim_scope, self.turn_generation)
-
     def require_turn(self, turn_id: TurnId, claim_scope: int) -> None:
         if not self.turn_lease.attests(claim_scope, turn_id):
             raise RelationViolationError("live owner does not hold the requested turn")

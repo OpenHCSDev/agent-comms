@@ -198,10 +198,6 @@ class WakeAssignment(
             raise ValueError("claim timestamps are inconsistent")
         object.__setattr__(self, "audience", MessageAudience(self.audience))
 
-    @property
-    def durable_key(self) -> tuple[str, int]:
-        return (self.recipient_lookup, self.wire_seq)
-
     exact_target: ClassVar[Generated] = Generated(
         str,
         Column(

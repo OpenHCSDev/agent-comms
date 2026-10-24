@@ -35,6 +35,7 @@ from .field_codec import (
 )
 from .projection_source import ProducedRow, ProjectionSource
 from .response_policy import CollectivePolicy, InformationalPolicy, ResponsePolicy
+from .wake_policy import MessageAudience
 
 if TYPE_CHECKING:
     from .child_process import ProcessIdentity
@@ -628,12 +629,12 @@ class ThreadRole(DeclaredFamily, ProjectionSource, affix="ThreadRole"):
 
     @classmethod
     @abstractmethod
-    def page_human_sender(cls) -> bool:
-        """The bus page row's stored human-sender column."""
+    def channel_policy(cls) -> ResponsePolicy: ...
 
     @classmethod
-    @abstractmethod
-    def channel_policy(cls) -> ResponsePolicy: ...
+    def addressed(cls, audience: MessageAudience) -> MessageAudience:
+        """Who a delivery addresses: an agent's reaches only the audience its target names."""
+        return audience
 
     @classmethod
     @abstractmethod
@@ -686,10 +687,6 @@ class AgentThreadRole(ThreadRole):
         document: ReadDocument | None,
     ) -> object:
         return ()
-
-    @classmethod
-    def page_human_sender(cls) -> bool:
-        return False
 
     @classmethod
     def channel_policy(cls) -> ResponsePolicy:
@@ -755,12 +752,13 @@ class UserThreadRole(ThreadRole):
         return reads.displayed_incarnation(message, thread.incarnation, snapshot, document=document)
 
     @classmethod
-    def page_human_sender(cls) -> bool:
-        return True
-
-    @classmethod
     def channel_policy(cls) -> ResponsePolicy:
         return CollectivePolicy.instance()
+
+    @classmethod
+    def addressed(cls, audience: MessageAudience) -> MessageAudience:
+        """The owner addresses every member a channel reaches, so it joins their running turns."""
+        return MessageAudience.MENTIONED
 
     @classmethod
     def reply_target(cls, message: Message) -> str | None:

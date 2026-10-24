@@ -59,6 +59,7 @@ from agent_comms.messages import Message
 from agent_comms.owner_requests import NewestOpenRequest, OwnerRequestId, RequestSelection
 from agent_comms.phase_evidence import MainTree, PlanReading
 from agent_comms.plan_phases import OrderPhase, PlanPhase
+from agent_comms.presentation import MessageNotification
 from agent_comms.problem_number import ProblemNumber
 from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.repo import Repo
@@ -396,10 +397,21 @@ class CommanderContext(BaseModel):
 
     def post(self, audience: VerdictAudience, body: str,
              answers: tuple[MessageReference, ...] = ()) -> MessageId:
+        return self.published(audience, body, answers).message_id
+
+    def published(self, audience: VerdictAudience, body: str,
+                  answers: tuple[MessageReference, ...] = ()) -> Message:
         target = audience.target
-        published = self.comms.messaging.send(self.actor_name, target.name,
-            target.addressed(audience.threads, body), answers=answers)
-        return published.message.message_id
+        return self.comms.messaging.send(self.actor_name, target.name,
+            target.addressed(audience.threads, body), answers=answers).message
+
+    def delivery(self, reference: MessageReference) -> str:
+        """The recipients' delivery as the notification owner reports it.
+
+        A publish alone is only queued."""
+        outcomes = MessageNotification.references(
+            self.comms.root, self.comms.registry, self.comms.bus.bus, (reference,))
+        return MessageNotification.summary(outcomes.get((reference.seq, reference.message_id), ()))
 
     def call(self, tool):
         return self.actor.as_thread(self.commander).invoke(tool, self.comms)
@@ -634,7 +646,9 @@ class Commander(CommanderContext):
         body = open(body_file).read()
         refuse(body, *DirectiveText.checks())
         try:
-            print(self.post(VerdictAudience(tuple(units.split(','))), body.rstrip(), answers))
+            audience = VerdictAudience(tuple(units.split(',')))
+            message = self.published(audience, body.rstrip(), answers)
+            print(message.message_id, self.delivery(message.reference))
         except MaintenanceHeldError as held:
             # A say records nothing but its post, so the whole command is the resend.
             sys.exit(f'Refused, nothing sent: {held}\nAfter the install reports finished, '

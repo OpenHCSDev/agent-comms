@@ -69,12 +69,6 @@ class Delivered(BusRecord, AudiencedMessage, declared_name=None):
         return (policy.starts_direct_turn
                 and self.includes_lookup(recipient_lookup))
 
-    def compaction_messages_for(self, recipient_lookup: ThreadLookup) -> tuple[Message, ...]:
-        addressed = self.includes_lookup(recipient_lookup)
-        authored = (self.sender_lookup == recipient_lookup
-                    and self.message.retains_authored_task)
-        return self.messages() if addressed or authored else ()
-
 
 class KeyedPublication(BusRecord, declared_name=None):
     """One publication key binds Message content, not the acknowledgement encoding."""
