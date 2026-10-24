@@ -45,6 +45,23 @@ from agent_comms.field_codec import (
 from agent_comms.messages import ConversationRole, InfoKind, MembershipConversationRole, MembershipNoticeRole, Message, MessageRole, NoticeRole, JoinedMembership, LeftMembership
 
 
+@pytest.mark.parametrize("error,expected_type,expected_text", [
+    (ValueError("rejected"), MalformedRecord, "Invalid Record: rejected"),
+    (MalformedRecord("already located"), MalformedRecord, "already located"),
+    (TypeError("broken declaration"), TypeError, "broken declaration"),
+])
+def test_construct_preserves_the_boundary_error_family(error, expected_type, expected_text) -> None:
+    @dataclass
+    class Record:
+        def __post_init__(self) -> None:
+            raise error
+
+    with pytest.raises(expected_type) as failure:
+        FieldCodec.construct(Record, {})
+    assert str(failure.value) == expected_text
+    assert failure.value is error or failure.value.__cause__ is error
+
+
 def test_registered_value_decoders_own_their_json_schema() -> None:
     for annotation in (*ValueDecoder._by_annotation, Path):
         decoder = ValueDecoder.represented_class(annotation)

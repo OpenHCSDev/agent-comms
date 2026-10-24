@@ -268,3 +268,19 @@ def test_upgrade_refuses_at_start_without_its_own_uv(stack):
     with pytest.raises(UpgradeRefused):
         stack.require_uv()
 
+
+
+def test_an_install_refuses_a_bus_that_never_held_a_retired_step(tmp_path):
+    repository = Repository(tmp_path)
+    before = repository.commit({"carry_first": step_source()})
+    held = repository.commit({"carry_retired": step_source()})
+    target = repository.commit({"carry_retired": None})
+    deleting = target[:12]
+
+    CarryChain.require_crossed(tmp_path, held, target)
+    with pytest.raises(UpgradeRefused) as refused:
+        CarryChain.require_crossed(tmp_path, before, target)
+    assert str(refused.value) == (
+        "install: refused: "
+        f"This bus was last installed at {before[:12]} and never ran 1 retired carry step(s): "
+        f"tools/cutover/carry_retired.py (deleted by {deleting}; install {deleting}^ first)")

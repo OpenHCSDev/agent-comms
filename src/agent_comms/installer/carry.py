@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import ClassVar
 
 from agent_comms.installer.probes.carry import Carry
+from agent_comms.installer.refusals import UpgradeRefused
 from agent_comms.locked_store import DocumentChange, DurableFile, LockedStore
 from agent_comms.repo import Repo
 from agent_comms.store_files import DependentStateTier
@@ -65,6 +66,29 @@ class CarryChain:
             emitted.append(step)
             sorter.done(step)
         return cls(tuple(emitted))
+
+    @staticmethod
+    def require_crossed(checkout: Path, current: str, target: str) -> None:
+        """Refuse a bus whose last install, ``current``, never held a step that a commit
+        on the way to ``target`` deleted: that step's work exists on no revision this
+        install can run. Every step present at ``current`` ran when ``current`` was
+        installed, so Git alone knows which steps the bus crossed."""
+        held = set(Repo.git(checkout, "ls-tree", "-r", "--name-only", current, "--",
+                            str(STEPS)).split())
+        deleted = Repo.git(
+            checkout, "log", "-m", "--first-parent", "--no-renames", "--diff-filter=D",
+            "--name-only", "--format=%x00%H", f"{current}..{target}", "--",
+            f"{STEPS}/*.py",
+        ).split("\x00")[1:]
+        skipped = tuple(
+            f"{path} (deleted by {commit[:12]}; install {commit[:12]}^ first)"
+            for commit, *paths in (entry.split() for entry in deleted)
+            for path in paths if path not in held
+        )
+        if skipped:
+            raise UpgradeRefused(
+                f"This bus was last installed at {current[:12]} and never ran "
+                f"{len(skipped)} retired carry step(s): {'; '.join(skipped)}")
 
     def unfinished_at(self, root: Path) -> CarryChain:
         """The steps this bus has not finished; a finished step is never dry-run again."""

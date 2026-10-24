@@ -158,6 +158,14 @@ class SystemdUserService(HostService, declared_name=None):
     def enable(self) -> None:
         subprocess.run(("systemctl", "--user", "enable", self.unit_name()), check=True)
 
+    def retire(self) -> None:
+        """Stop this instance and keep login and installs from starting it again."""
+        subprocess.run(("systemctl", "--user", "disable", "--now", self.unit_name()), check=True)
+
+    def restore(self) -> None:
+        """Undo ``retire`` when the change it made room for did not commit."""
+        subprocess.run(("systemctl", "--user", "enable", "--now", self.unit_name()), check=True)
+
     @classmethod
     def _pid_for(cls, name: str) -> int:
         """Only the unit loaded from this home's owned definition belongs to it.
