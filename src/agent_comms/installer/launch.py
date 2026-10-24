@@ -32,6 +32,7 @@ from agent_comms.installer.interpreter_operation import (
     FailureReportPublicationPhase,
     FinishedReportPublicationPhase,
     InstallClock,
+    LaunchedPhaseTiming,
     LauncherPhase,
     PhaseTiming,
     TargetCheckoutPreparePhase,
@@ -188,7 +189,7 @@ class InstallRun:
     root: Annotated[Path, PathText]
     scratch: Annotated[Path, PathText]
     target: str
-    phases: list[PhaseTiming] = field(default_factory=list)
+    phases: list[LaunchedPhaseTiming] = field(default_factory=list)
 
     @classmethod
     def start(cls, command: InstallCliCommand, root: Path) -> InstallRun:
@@ -202,7 +203,8 @@ class InstallRun:
         scratch = Path(tempfile.mkdtemp(dir=parent, prefix="install-"))
         with TargetCheckoutPreparePhase().running(commands.clock):
             TargetTree(checkout, scratch, target).add()
-        return cls(command, root, scratch, target, commands.clock.phases)
+        return cls(command, root, scratch, target,
+                   [timing.launched() for timing in commands.clock.phases])
 
     @cached_property
     def logs(self) -> Path:
@@ -248,7 +250,8 @@ class InstallRun:
         command = self.command
         return upgrade(command.checkout, self.root, self.target, command.installer,
                        command.mode, command.retire, command.spill_dir, self.scratch,
-                       self.harnesses, InstallReport(inherited_phases=self.phases))
+                       self.harnesses, InstallReport(
+                           inherited_phases=[launched.timing() for launched in self.phases]))
 
     def harnesses(self, stack: Stack) -> InstallResult:
         # The target runtime is published by now, and only its installed package
