@@ -619,10 +619,17 @@ class UnitDeaf(InboxUnavailable):
 @dataclass(frozen=True)
 class Unjudged(ReasonedStandingRule, UndatedStandingRule):
     limit: ClassVar[int] = 30
-    text = ("UNJUDGED {why} edits -> accept each reviewed PR head with judge ok --pr N --head SHA"
+    text = ("UNJUDGED {why} -> accept each reviewed PR head with judge ok --pr N --head SHA"
             " (one verdict judges every edit before it), or fork judges for the rest")
 
     @classmethod
     def reason(cls, comms: Comms, commander: str) -> str | None:
-        total = OrderEditCountRead.count(comms, commander)
-        return str(total) if total > cls.limit else None
+        """The total, then each order's edits made since its last head verdict."""
+        counts = tuple((read, read.read())
+                       for read in OrderEditCountRead.for_commander(comms, commander))
+        total = sum(count for _, count in counts)
+        if total <= cls.limit:
+            return None
+        named = ", ".join(f"{read.thread.name} {read.todo.id} {count}"
+                          for read, count in counts if count)
+        return f"{total} edits since each order's last head verdict: {named}"
