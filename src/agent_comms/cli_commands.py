@@ -69,7 +69,7 @@ from .cli_bridges.history import (
 )
 from .cli_bridges.shared import ChoiceTargetField, SendRequest, TargetField
 from .cli_protocol import CLI_FAILURES, ArrivedMessage, EarlierItems
-from .cli_result import CliResult
+from .cli_result import CliResult, ResultShower
 from .command import Command
 from .commander.config import (
     CommanderChoice,
@@ -283,6 +283,9 @@ class TargetOutcome(LifecycleCapability, ABC):
     """One attempted selection member; failure never claims absence of effects."""
 
     @abstractmethod
+    def show(self, shower: ResultShower, label: str, title: str) -> None: ...
+
+    @abstractmethod
     def owner_start(self) -> OwnerStart: ...
 
     def reconnect_targets(self) -> tuple[str, ...]:
@@ -297,6 +300,9 @@ class TargetCompleted(Successful, TargetOutcome, RecordMember):
     target: str
     command: CliCommand
     result: Annotated[CliResult, WireValue]
+
+    def show(self, shower: ResultShower, label: str, title: str) -> None:
+        shower.show_done(f"{label}: {self.target}", title)
 
     def owner_start(self) -> OwnerStart:
         return StartedOwner(self.target)
@@ -323,6 +329,9 @@ class TargetFailed(TargetOutcome):
     def __str__(self) -> str:
         return f"{self.target}: {self.error_type}: {self.error}"
 
+    def show(self, shower: ResultShower, label: str, title: str) -> None:
+        shower.show_failure(str(self), title)
+
     def owner_start(self) -> OwnerStart:
         return RefusedOwner(self.target, str(self))
 
@@ -330,6 +339,10 @@ class TargetFailed(TargetOutcome):
 @dataclass(frozen=True)
 class TargetBatchResult(CliResult):
     outcomes: tuple[TargetCompleted | TargetFailed, ...]
+
+    def show(self, shower: ResultShower, label: str, title: str) -> None:
+        for outcome in self.outcomes:
+            outcome.show(shower, label, title)
 
     @property
     def completed_count(self) -> int:
