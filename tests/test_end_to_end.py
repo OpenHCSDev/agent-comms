@@ -3,6 +3,7 @@
 
 import json
 import os
+import sys
 
 import pytest
 
@@ -22,8 +23,10 @@ async def native(tmp_path, native_runtime_package):
 
 
 async def cli(programs, root, *arguments):
+    # The test's own interpreter runs the console target, so the CLI and the in-process
+    # wire are one runtime: a root refuses a second one (root_runtime.py:56).
     result = await BoundedRun.run(
-        (str(programs.script(main)), '--root', str(root), *arguments),
+        (sys.executable, str(programs.script(main)), '--root', str(root), *arguments),
         timeout=20, env=dict(os.environ),
     )
     assert result.outcome.successful, (result.stdout + result.stderr).decode()
