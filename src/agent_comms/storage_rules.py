@@ -420,7 +420,8 @@ class StorageRule(RoomAllocation, DurableFile):
             f'created with agent-comms {OrderCheckoutAllocation.verb} add PROBLEM '
             f'(another repository: agent-comms {RepositoryCheckoutAllocation.verb} add '
             'PROBLEM OWNER/REPO), '
-            'removed with git worktree remove in the same order that created them; '
+            f'removed with agent-comms {OrderCheckoutAllocation.verb} remove PROBLEM in the '
+            'same order that created them; '
             'your only scratch dir is '
             f'{thread.storage_roots.assigned(self, thread.name).scratch}/, '
             f'capped at {self.scratch_cap_gib:g} GB together with '
@@ -737,12 +738,6 @@ class WritesTargets(ShellProgram):
         return tuple(WriteStorageEffect(physical_path(p, cwd)) for p in paths[self.targets]) if len(paths) >= self.minimum else ()
 
 
-class RemovesCheckout(ShellProgram):
-    def decode(self, args, cwd):
-        paths = [p for p in args[2:] if not p.startswith('-')] if args[:2] == ['worktree', 'remove'] else []
-        return (RemoveCheckoutStorageEffect(physical_path(paths[0], cwd)),) if paths else ()
-
-
 class WritesWorkingTree(ShellProgram):
     verbs = (('switch',), ('checkout',), (GitWriteOperation.COMMIT,),
              ('merge',), ('reset',), ('stash',))
@@ -751,11 +746,11 @@ class WritesWorkingTree(ShellProgram):
         return (WriteStorageEffect(cwd),) if self.matches(args, self.verbs) else ()
 
 
-class GitProgram(ForbidsCommands, RemovesCheckout, WritesWorkingTree):
+class GitProgram(ForbidsCommands, WritesWorkingTree):
     names = frozenset({'git'})
-    forbidden = (('clone',), ('worktree', 'add'), ('worktree', 'move'))
-    reason = ('git clone, git worktree add and git worktree move are forbidden; '
-              'run agent-comms checkout add PROBLEM, which prepares the pinned submodules')
+    forbidden = (('clone',), ('worktree', 'add'), ('worktree', 'move'), ('worktree', 'remove'))
+    reason = ('git clone and git worktree add, move and remove are forbidden; run agent-comms '
+              'checkout add PROBLEM or checkout remove PROBLEM, which own the pinned submodules')
 
     chdir_option = '-C'
     directory_options = frozenset({chdir_option, '--git-dir', '--work-tree'})
