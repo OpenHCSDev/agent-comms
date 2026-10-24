@@ -46,7 +46,7 @@ from .native_input_record import FullNativeExecution, TriageNativeExecution
 from .private_send_stage import TriageNativeSend
 from .lifecycle_capability import Deferred
 from agent_comms.typed_table import RowNotFoundError
-from .field_codec import MalformedRecord
+from .field_codec import MalformedRecord, ThreadLookup
 from .input_disposition import InputDispositions
 from .locked_store import RegistryFile
 from .registration import Registration
@@ -84,7 +84,7 @@ class VerifiedOwnerLoss(ABC):
 
     @staticmethod
     def _released(
-        releases: Callable[[str], OwnerRelease], boundary: NativeBoundary, lookup: str,
+        releases: Callable[[str], OwnerRelease], boundary: NativeBoundary, lookup: ThreadLookup,
     ) -> OwnerRelease:
         try:
             return releases(boundary.registry.by_lookup[lookup].name)

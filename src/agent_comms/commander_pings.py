@@ -16,6 +16,7 @@ from agent_comms.message_reference import MessageReference
 from agent_comms.messages import (
     ConversationRole, InfoKind, Message, MessageRole, NoticeRole,
 )
+from agent_comms.plan_phases import PlanPhase
 from agent_comms.standing_rules import StandingRule
 from agent_comms.task_sources import TaskAttachment
 from agent_comms.text_digest import TextDigest
@@ -81,6 +82,38 @@ class UnitPing(Ping):
 
 
 @dataclass(frozen=True)
+class HudPing(Ping, declared_name=None):
+    """A HUD row changes when its rendered line changes, even with the same identity."""
+
+    text: str = field(compare=True, kw_only=True)
+
+
+@dataclass(frozen=True)
+class UnitRowPing(HudPing):
+    unit: ThreadIncarnation
+
+    @property
+    def key(self) -> tuple[type[Self], ThreadIncarnation]:
+        return type(self), self.unit
+
+
+@dataclass(frozen=True)
+class PhaseRowPing(HudPing):
+    phase: type[PlanPhase]
+
+    @property
+    def key(self) -> tuple[type[Self], type[PlanPhase]]:
+        return type(self), self.phase
+
+
+@dataclass(frozen=True)
+class LoadPing(HudPing):
+    @property
+    def key(self) -> tuple[type[LoadPing]]:
+        return (LoadPing,)
+
+
+@dataclass(frozen=True)
 class CommanderUpdate(TaskAttachment, declared_name=None):
     commander: ThreadIncarnation
     handled: tuple[Ping, ...]
@@ -131,9 +164,10 @@ class CommanderUpdate(TaskAttachment, declared_name=None):
     def derive(cls, commander: ThreadIncarnation, states: tuple[UnitState, ...],
                rules: tuple[StandingRule, ...],
                previous: CommanderUpdate | None, *,
+               hud: tuple[Ping, ...],
                not_applied: tuple[str, ...] = ()) -> CommanderUpdate | None:
         known = {ping.key: ping for ping in previous.handled} if previous else {}
-        quiet = tuple(UnitPing.capture(state) for state in states if not state.attention())
+        quiet = (*hud, *(UnitPing.capture(state) for state in states if not state.attention()))
         urgent = (*(UnitPing.capture(state) for state in states if state.attention()),
                   *(RulePing.capture(rule) for rule in rules))
         decisions = tuple(ping for ping in urgent if known.get(ping.key) != ping)[:5]

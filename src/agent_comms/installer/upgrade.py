@@ -37,7 +37,11 @@ from typing import TYPE_CHECKING, Annotated, ClassVar, Self, TypeVar
 from pydantic import TypeAdapter
 
 from agent_comms.active_route import (
-    ActiveRoute, RouteFile, RouteFileSelection, active_route_path, route_directory,
+    ActiveRoute,
+    RouteFile,
+    RouteFileSelection,
+    active_route_path,
+    route_directory,
 )
 from agent_comms.bus import Bus
 from agent_comms.cli_bridges.shared import BridgeResume, Serve, SessionBridgeResumes
@@ -52,7 +56,6 @@ from agent_comms.cli_commands import (
     TargetActionCliCommand,
     TargetBatchResult,
 )
-from agent_comms.installer.probes.harnesses import InstallResult
 from agent_comms.cli_protocol import CoreError
 from agent_comms.cli_result import CliResult
 from agent_comms.comms import wire
@@ -62,35 +65,65 @@ from agent_comms.field_codec import FieldCodec, MalformedRecord, PathText
 from agent_comms.host_services import HostService, RestartedService
 from agent_comms.install_choices import InstallerChoice, RunMode
 from agent_comms.installer.backup import (
-    BackupReport, RestoreSpace, SavedFile, StoreBackup, bus_files, settle_bus_files,
+    BackupReport,
+    RestoreSpace,
+    SavedFile,
+    StoreBackup,
+    bus_files,
+    settle_bus_files,
 )
-from agent_comms.installer.refusals import InstallRolledBack, UpgradeRefused
-from agent_comms.installer.owner_starts import OwnerStart
 from agent_comms.installer.carry import STEPS, CarryChain
-from agent_comms.installer.probes.carry import Carried, Carry, CarryOperation, FirstPendingOperation, MigrateOperation, RetireInputsOperation
-from agent_comms.installer.probes.carry import CarryProbe
 from agent_comms.installer.commands import InstallCommands
-from agent_comms.installer.interpreter_operation import (
-    BackupPhase, BackupRetirePhase, BridgePhase, FileScanPhase, MaintenancePhase,
-    ProcessScanPhase, ServicesPhase,
-    BuildPhase, CopyPhase, GitPhase, InstallClock, InstallPhase, InstallRunPhase,
-    LivePhase, PhaseTiming, PracticePhase, PreparePhase, PublicationPhase, VerifyPhase,
-)
 from agent_comms.installer.declared_uv import DeclaredUv
-from agent_comms.installer.probes.commands import CliCommandProbe
-from agent_comms.installer.probes.imports import ClientImportsProbe
-from agent_comms.installer.probes.native import PrepareNativeProbe, PrepareProducerDigestsProbe
-from agent_comms.installer.interpreter_operation import ProbeProgram, RetainedProgram, RuntimeProbe, TargetProgram
-from agent_comms.installer.probes.publication import PublicationProbe
-from agent_comms.installer.probes.owners import RunningOwnersProbe
-from agent_comms.installer.probes.services import ServingProbe
+from agent_comms.installer.interpreter_operation import (
+    BackupPhase,
+    BackupRetirePhase,
+    BridgePhase,
+    BuildPhase,
+    CopyPhase,
+    FileScanPhase,
+    GitPhase,
+    InstallClock,
+    InstallPhase,
+    InstallRunPhase,
+    LivePhase,
+    MaintenancePhase,
+    PhaseTiming,
+    PracticePhase,
+    PreparePhase,
+    ProbeProgram,
+    ProcessScanPhase,
+    PublicationPhase,
+    RetainedProgram,
+    RuntimeProbe,
+    ServicesPhase,
+    TargetProgram,
+    VerifyPhase,
+)
+from agent_comms.installer.owner_starts import OwnerStart
 from agent_comms.installer.practice import (
     PracticeCopy,
     PracticeMeasurement,
     RehearsalHome,
     RuntimeHome,
 )
-from agent_comms.installer.probes.publication import SelectedRouteProbe
+from agent_comms.installer.probes.carry import (
+    Carried,
+    Carry,
+    CarryOperation,
+    CarryProbe,
+    FirstPendingOperation,
+    MigrateOperation,
+    RetireInputsOperation,
+)
+from agent_comms.installer.probes.commands import CliCommandProbe
+from agent_comms.installer.probes.harnesses import InstallResult
+from agent_comms.installer.probes.imports import ClientImportsProbe
+from agent_comms.installer.probes.native import PrepareNativeProbe, PrepareProducerDigestsProbe
+from agent_comms.installer.probes.owners import RunningOwnersProbe
+from agent_comms.installer.probes.publication import PublicationProbe, SelectedRouteProbe
+from agent_comms.installer.probes.services import ServingProbe
+from agent_comms.installer.refusals import InstallRolledBack, UpgradeRefused
 from agent_comms.installer.reporting import (
     RootWriter,
     RuntimeWriter,
@@ -106,7 +139,8 @@ from agent_comms.maintenance_barrier import (
 )
 from agent_comms.native_build_inputs import NativeBuildInputs
 from agent_comms.native_package import (
-    NativePackageStore, pinned_package_for,
+    NativePackageStore,
+    pinned_package_for,
 )
 from agent_comms.recorded_bus import RecordedBusIdentity
 from agent_comms.registry_store import RegistryStore

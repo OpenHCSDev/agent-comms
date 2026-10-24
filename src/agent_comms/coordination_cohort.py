@@ -37,14 +37,14 @@ from agent_comms.coordination_tables.participants import OwnerGenerations, Parti
 from agent_comms.coordinator import Coordination
 from agent_comms.message_bus import MessageBus
 
-from .field_codec import MalformedRecord, MessageId, WireName
+from .field_codec import MalformedRecord, MessageId, WireName, RootId, ThreadLookup
 
 _LOG = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True, slots=True)
 class AcceptedCohort:
-    wire_root_id: str
+    wire_root_id: RootId
     wire_seq: int
     message_id: MessageId
     member_count: int
@@ -112,7 +112,7 @@ class AcceptedCohort:
         return Applied(_claim_record(db, initial, privacy))
 
 
-def _assignment_id(root: str, seq: int, lookup: str) -> str:
+def _assignment_id(root: str, seq: int, lookup: ThreadLookup) -> str:
     identity = f"agent-comms:cohort-claim:v1\0{root}:{seq}:{lookup}".encode()
     return "cohort-v1:" + hashlib.sha256(identity).hexdigest()
 
@@ -209,7 +209,7 @@ def _claim_record(
 def _record_optional_owner_generations(
     db: sqlite3.Connection,
     assignments: tuple[WakeAssignment, ...],
-    wire_root_id: str,
+    wire_root_id: RootId,
     wire_seq: int,
 ) -> None:
     """Same acceptance transaction; a failed optional savepoint cannot veto N/K.
@@ -241,7 +241,7 @@ def _record_optional_owner_generations(
 
 def accept_delivery_cohort(
     bus: MessageBus,
-    wire_root_id: str,
+    wire_root_id: RootId,
     wire_seq: int,
     store: Coordination,
 ) -> Applied[AcceptedCohort] | AlreadyApplied[AcceptedCohort]:
@@ -259,7 +259,7 @@ def accept_delivery_cohort(
 
 def next_sealed_assignment(
     store: Coordination,
-    recipient_lookup: str,
+    recipient_lookup: ThreadLookup,
     *,
     after_seq: int = 0,
 ) -> WakeAssignment | None:
@@ -279,7 +279,7 @@ def next_sealed_assignment(
 
 
 def pending_sealed_assignments(
-    store: Coordination, recipient_lookup: str, *, after_seq: int = 0,
+    store: Coordination, recipient_lookup: ThreadLookup, *, after_seq: int = 0,
 ) -> tuple[WakeAssignment, ...]:
     """Read acknowledged pending work once, excluding messages arriving afterward.
 
@@ -302,7 +302,7 @@ def pending_sealed_assignments(
 
 
 def sealed_cohort_assignments(
-    store: Coordination, recipient_lookup: str, *, after_seq: int = 0, limit: int = 100,
+    store: Coordination, recipient_lookup: ThreadLookup, *, after_seq: int = 0, limit: int = 100,
     state_capability: type = AssignmentState,
 ) -> tuple[WakeAssignment, ...]:
     """Bounded acknowledgement-backed projection. Never pages unbound singleton claims."""

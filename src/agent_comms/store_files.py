@@ -3,11 +3,11 @@
 from __future__ import annotations
 
 import asyncio
+import errno
 import json
 import math
 import os
 import stat
-import sys
 import tempfile
 import threading
 import time
@@ -27,7 +27,7 @@ from fnmatch import fnmatchcase
 from pathlib import Path
 from typing import BinaryIO, ClassVar
 
-from .child_process import Platform
+from .child_process import LockHolder, Platform
 from .declared_family import DeclaredFamily
 from .errors import RelationViolationError
 from .private_path import FileIdentity, PrivateFileRole
@@ -73,6 +73,19 @@ class ExclusiveLock(LockMode):
         held.require_writer()
 
 
+class StoreLockBusyError(BlockingIOError):
+    """A store lock exhausted its wait budget, with the observed holders."""
+
+    holders: tuple[LockHolder, ...]
+
+    def __init__(self, holders: tuple[LockHolder, ...]) -> None:
+        super().__init__(errno.EAGAIN, "store lock busy")
+        self.holders = holders
+
+    def __str__(self) -> str:
+        return "store lock busy, held by " + "; ".join(holder.describe() for holder in self.holders)
+
+
 @dataclass(slots=True)
 class StoreLockContention:
     """One operation's contention budget, spent only while acquiring physical locks."""
@@ -81,20 +94,14 @@ class StoreLockContention:
 
     def waits(self, descriptor: int, platform: Platform, *, mode: LockMode) -> Iterator[float]:
         """One physical acquisition algorithm; drivers own sync/async waiting."""
-        reported = False
         while True:
             begun = time.monotonic()
             try:
                 platform.try_store_lock(descriptor, mode=mode)
-            except BlockingIOError:
-                if not reported:
-                    print("Waiting on a store lock held by " + "; ".join(
-                        holder.describe() for holder in platform.lock_holders(descriptor)),
-                        file=sys.stderr, flush=True)
-                    reported = True
+            except BlockingIOError as error:
                 self.remaining -= time.monotonic() - begun
                 if self.remaining <= 0:
-                    raise
+                    raise StoreLockBusyError(platform.lock_holders(descriptor)) from error
                 begun = time.monotonic()
                 try:
                     yield min(self.remaining, platform.store_lock_interval)

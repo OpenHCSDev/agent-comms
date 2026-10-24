@@ -12,6 +12,8 @@ from pathlib import Path
 from types import MappingProxyType
 from typing import TYPE_CHECKING, Generic, TypeVar
 
+from agent_comms.field_codec import ThreadLookup
+
 from .agent_activity import UnavailableRecipientActivity
 from .errors import RelationViolationError, UnregisteredThreadError
 from .routing import DeliveryScope
@@ -76,7 +78,7 @@ class ArchivedRecipient(KnownRecipient):
 
 @dataclass(frozen=True, slots=True)
 class RetiredRecipient(RecipientSelection):
-    lookup: str
+    lookup: ThreadLookup
 
     def activity(self, observations, snapshot):
         return UnavailableRecipientActivity()

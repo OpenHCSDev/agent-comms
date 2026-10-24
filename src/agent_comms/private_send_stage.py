@@ -20,7 +20,7 @@ from .coordination_errors import IdentityConflict, RetryScheduled, StaleFence
 from .coordination_tables.assignments import WakeAssignment
 from .coordinator import Coordination
 from .durable_turn import DurableTurn
-from .field_codec import InputId
+from .field_codec import ThreadLookup, InputId, RootId
 from .private_send_rules import (
     NativeBindingCheck,
     NativeClaimCheck,
@@ -50,7 +50,7 @@ class NativeSendStage(ABC):
     assignments: tuple[WakeAssignment, ...]
 
     @property
-    def recipient_lookup(self) -> str:
+    def recipient_lookup(self) -> ThreadLookup:
         """Require every assignment to name the same permitted recipient."""
         lookups = {row.recipient_lookup for row in self.assignments}
         if len(lookups) != 1:
@@ -143,7 +143,7 @@ class NativeSendStage(ABC):
         token_digest: str,
         context: NativeContextProof,
         *,
-        wire_root_id: str,
+        wire_root_id: RootId,
         prompt: str,
         source_reads: NativeEvidenceScope,
     ) -> None:
@@ -207,7 +207,7 @@ class NativeSendStage(ABC):
     @contextmanager
     def bound_prompt(
         self, store: Coordination, input_id: InputId, owner: ParticipantOwner,
-        wire_root_id: str, prompt: str,
+        wire_root_id: RootId, prompt: str,
     ) -> Iterator[PromptBinding]:
         with expected_prompt_bindings(store, (input_id,)) as bindings:
             binding = bindings.get(input_id)
@@ -216,7 +216,7 @@ class NativeSendStage(ABC):
 
     def require_bound_prompt(
         self, binding: PromptBinding | None, owner: ParticipantOwner,
-        wire_root_id: str, prompt: str,
+        wire_root_id: RootId, prompt: str,
     ) -> None:
         if binding is None:
             raise IdentityConflict("native send has no durable prompt binding")

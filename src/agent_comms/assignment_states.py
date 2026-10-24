@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING, ClassVar
 
 from .coordination_errors import IdentityConflict, IntegrityViolationError
 from .coordinator_vocabulary import CoordinatorVocabulary
-from .field_codec import FieldCodec
+from .field_codec import FieldCodec, ThreadLookup
 from .lifecycle import LifecycleState
 from .lifecycle_capability import Active, Complete, Deferred, Failed, Pending, Terminal
 from .notification_progress import (
@@ -143,7 +143,9 @@ class AssignmentState(CoordinatorVocabulary, LifecycleState, affix="Assignment")
     notification_state: ClassVar[type[ContextualProgress]] = ContextualProgress
     records_conversation_response: ClassVar[bool] = False
 
-    def recorded_response(self, original: Delivered, replies: Sequence[Delivered], recipient_lookup: str) -> Delivered | None:
+    def recorded_response(
+        self, original: Delivered, replies: Sequence[Delivered], recipient_lookup: ThreadLookup
+    ) -> Delivered | None:
         return None
 
     def notification(
@@ -503,7 +505,9 @@ class DeliveredAssignment(
     decision: PendingDecision
     records_conversation_response = True
 
-    def recorded_response(self, original: Delivered, replies: Sequence[Delivered], recipient_lookup: str) -> Delivered | None:
+    def recorded_response(
+        self, original: Delivered, replies: Sequence[Delivered], recipient_lookup: ThreadLookup
+    ) -> Delivered | None:
         return next(
             (
                 reply.message

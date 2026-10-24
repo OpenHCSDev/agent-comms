@@ -8,6 +8,7 @@ from pathlib import Path
 from agent_comms.coordination_errors import IdentityConflict
 from agent_comms.coordination_session import NativeBoundary
 from agent_comms.coordinator import Coordination
+from agent_comms.field_codec import RootId, ThreadLookup
 
 from .cohort_schema import AcceptanceFrontier, CohortDeliveries, CohortTable
 from .coordination_cohort import AcceptedCohort
@@ -17,9 +18,9 @@ from .message_bus import MessageBus
 
 async def _accept_visible_deliveries(
     bus: MessageBus,
-    root_id: str,
+    root_id: RootId,
     store_path: Path,
-    lookup: str,
+    lookup: ThreadLookup,
     *,
     owner_name: str,
     acquire_package: Callable[[], None] | None = None,

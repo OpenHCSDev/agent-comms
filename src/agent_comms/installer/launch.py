@@ -25,20 +25,29 @@ import agent_comms.installer
 from agent_comms.cli_bridges.shared import SessionBridgeResumes
 from agent_comms.cli_commands import InstallCliCommand
 from agent_comms.commander import standing
-from agent_comms.installer.probes.harnesses import InstallResult
 from agent_comms.field_codec import FieldCodec, Id128, PathText
 from agent_comms.installer.backup import StoreBackup
-from agent_comms.installer.refusals import UpgradeRefused
 from agent_comms.installer.commands import InstallCommands
 from agent_comms.installer.interpreter_operation import (
-    InstallClock, LauncherPhase, PhaseTiming, PreparePhase, PublicationPhase, TreeClosePhase,
+    InstallClock,
+    LauncherPhase,
+    PhaseTiming,
+    PreparePhase,
+    PublicationPhase,
+    TreeClosePhase,
 )
+from agent_comms.installer.probes.harnesses import HarnessesProbe, InstallResult
+from agent_comms.installer.refusals import UpgradeRefused
 from agent_comms.installer.reporting import (
-    FailedInstall, FinishedInstall, InstallOutcome, ObservedInstall, RootWriter,
-    UnfinishedInstall, UnpostedWriter,
+    FailedInstall,
+    FinishedInstall,
+    InstallOutcome,
+    ObservedInstall,
+    RootWriter,
+    UnfinishedInstall,
+    UnpostedWriter,
 )
 from agent_comms.installer.runtime_resolution import CorePackage
-from agent_comms.installer.probes.harnesses import HarnessesProbe
 from agent_comms.installer.upgrade import (
     LiveRun,
     RehearsedUpgrade,

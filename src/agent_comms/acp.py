@@ -71,7 +71,7 @@ from .coordination_cohort import next_sealed_assignment
 from .coordination_database import CoordinationStore
 from .cursor_owner import CursorOwner
 from .cursor_publication import CursorPublication
-from .field_codec import ClaimId, FieldCodec, MalformedRecord
+from .field_codec import ClaimId, FieldCodec, MalformedRecord, RootId
 from .image_inputs import prompt_images
 from .input_drain import InputDrain
 from .input_effects import InputEffects
@@ -442,7 +442,7 @@ class CommsAgent(SessionEffects, InputEffects, TurnEffects):
 
     # ─── Helpers ─────────────────────────────────────────────────────────────
 
-    async def _drain_private_nk(self, session_id: str, wire_root_id: str) -> int:
+    async def _drain_private_nk(self, session_id: str, wire_root_id: RootId) -> int:
         """Run a selected private wake for this ACP session.
 
         This explicitly configured path reuses the reviewed one-shot native

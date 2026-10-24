@@ -20,7 +20,7 @@ from agent_comms.coordination_tables.assignments import WakeAssignment
 from agent_comms.coordinator import Coordination
 
 from .cohort_schema import CohortTable
-from .field_codec import FieldCodec, InputId, MalformedRecord
+from .field_codec import FieldCodec, InputId, MalformedRecord, RootId, ThreadLookup
 from .locked_store import DurableFile, SQLiteFile
 from .native_entries import NativeEvidenceRead
 from .native_input_owner import ParticipantOwner
@@ -63,9 +63,9 @@ class PromptBinding(
     stage: type[NativeInputExecution]
     execution_id: Annotated[NativeColumn, Column(storage=TextStorage, nullable=True)]
     attempt_ordinal: Annotated[NativeColumn, Column(storage=IntegerStorage, nullable=True)]
-    owner_lookup: str
+    owner_lookup: ThreadLookup
     owner_generation: Annotated[int, Column(check="owner_generation>0")]
-    wire_root_id: str
+    wire_root_id: RootId
     expected_prompt_digest: str
     bound_at_ms: Annotated[int, Column(check="bound_at_ms>0")]
 
@@ -90,7 +90,7 @@ class PromptBinding(
 
 @dataclass(frozen=True)
 class _BindingRoot(TypedRow):
-    wire_root_id: str
+    wire_root_id: RootId
 
 
 def _ensure_binding_schema(store: Coordination) -> None:
@@ -172,7 +172,7 @@ def bind_expected_prompt(
     return digest
 
 
-def _binding_wire_root(store: Coordination, assignment: WakeAssignment) -> str:
+def _binding_wire_root(store: Coordination, assignment: WakeAssignment) -> RootId:
     """Resolve the trusted wire root for a sealed claim from the cohort acknowledgement."""
     with store.session.read():
         rows = _BindingRoot.read(

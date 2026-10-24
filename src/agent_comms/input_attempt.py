@@ -14,6 +14,7 @@ from .field_codec import (
     InputId,
     NullMember,
     PublicExclude,
+    RootId,
     TurnId,
     WireName,
     WireOmitDefault,
@@ -156,12 +157,12 @@ class InputAttempt(LifecycleCapability, DeclaredFamily, affix="Input"):
     ) -> bool:
         return False
 
-    def unbound_delivery(self, root_id: str) -> InputDelivery:
+    def unbound_delivery(self, root_id: RootId) -> InputDelivery:
         """Explicit withdrawal never grants an automatic delivery retry."""
         return UndeliveredInput()
 
     def delivered_in(
-        self, lease: TurnLeaseFence, root_id: str, snapshot: RegistrySnapshot
+        self, lease: TurnLeaseFence, root_id: RootId, snapshot: RegistrySnapshot
     ) -> InputDelivery:
         """The bus message this input delivered into the lease's turn."""
         return UndeliveredInput()
@@ -326,7 +327,7 @@ class StoredInput(InputAttempt):
 
 
 class RecoverableUnboundInput(StoredInput):
-    def unbound_delivery(self, root_id: str) -> InputDelivery:
+    def unbound_delivery(self, root_id: RootId) -> InputDelivery:
         return self.origin.delivery_reference(root_id)
 
 

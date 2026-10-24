@@ -17,15 +17,16 @@ from .field_codec import (
     ClaimId,
     EnvelopeSequence,
     FieldCodec,
-    Id128Text,
     InputId,
     MessageId,
     NullMember,
     ProjectionSequence,
     RecordMember,
     ResourcePathText,
+    RootId,
     Sha256Text,
     SubclassUnion,
+    ThreadLookup,
     TurnId,
     WireName,
     WireOmitDefault,
@@ -125,7 +126,7 @@ class AssignmentBinding(ProjectionSource):
 
     assignment_id: Annotated[str, BoundedText]
     revision: int
-    recipient_lookup: Annotated[str, BoundedText]
+    recipient_lookup: ThreadLookup
     source: MessageReference
     execution_id: Annotated[str, BoundedText]
 
@@ -208,12 +209,12 @@ class NativeClaim(RecordMember, RecordedScope):
 class WakeClaim(RecordMember, RecordedScope):
     """A selected N/K execution bound into the durable resource-claim row."""
 
-    wire_root_id: Annotated[str, Id128Text]
+    wire_root_id: RootId
     source_seq: int
     source_message_id: MessageId
     wake_assignment_id: Annotated[str, BoundedText, WireName("wake_claim_id")]
     wake_revision: int
-    recipient_lookup: Annotated[str, Id128Text]
+    recipient_lookup: ThreadLookup
     execution_id: Annotated[str, BoundedText]
     participant_generation: int
     attempt_ordinal: int

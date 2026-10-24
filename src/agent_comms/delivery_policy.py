@@ -8,7 +8,7 @@ from typing import Literal
 
 from agent_comms.audience_manifest import FrozenAudience
 from agent_comms.declared_family import DeclaredFamily
-from agent_comms.field_codec import FieldCodec
+from agent_comms.field_codec import FieldCodec, RootId
 from agent_comms.response_acknowledgement import (
     KeyedResponseAcknowledgement, NoResponseAcknowledgement, ResponseAcknowledgement,
 )
@@ -18,7 +18,7 @@ from agent_comms.wake_policy import MessageAudience, WakeDecision
 
 @dataclass(frozen=True)
 class DeliveryManifest:
-    wire_root_id: str
+    wire_root_id: RootId
     manifest_codec: str
     resolver_version: str
     policy_version: str

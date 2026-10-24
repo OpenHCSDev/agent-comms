@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 from agent_comms.commander.vibe_check import OverloadDegradation
+from agent_comms.commander_pings import LoadPing, PhaseRowPing, Ping, UnitRowPing
 from agent_comms.field_codec import projected
 from agent_comms.heartbeat_frame import HeartbeatFrame
 from agent_comms.plan_phases import PlanPhase
@@ -56,6 +57,9 @@ class CommanderUnit:
             f"draft={','.join(str(pr.number) for pr in self.draft_prs)}"
         )
 
+    def ping(self) -> UnitRowPing:
+        return UnitRowPing(self.unit, text=self.line())
+
 
 @dataclass(frozen=True)
 class CommanderPhase:
@@ -72,6 +76,9 @@ class CommanderPhase:
             f"done={self.done} ready={self.ready} "
             f"holders={','.join(unit.name for unit in self.holders)}"
         )
+
+    def ping(self) -> PhaseRowPing:
+        return PhaseRowPing(self.phase, text=self.line())
 
 
 @dataclass(frozen=True)
@@ -90,10 +97,13 @@ class CommanderHud(ToolResult):
 
     @classmethod
     def read(cls, comms: Comms, commander: str) -> CommanderHud:
+        return cls.of(comms, commander, HeartbeatFrame.read(comms, commander, ProgressRead()))
+
+    @classmethod
+    def of(cls, comms: Comms, commander: str, frame: HeartbeatFrame) -> CommanderHud:
         snapshot, now = comms.registry.snapshot(), time.time()
         owner = snapshot.require(commander).incarnation
         store = comms.goals.todos
-        frame = HeartbeatFrame.read(comms, commander, ProgressRead())
         pulls, reading = frame.pulls, frame.plan
         history = reading.todos
         held = frame.todos
@@ -128,13 +138,16 @@ class CommanderHud(ToolResult):
         return cls(owner, tuple(units), phases,
                    OverloadDegradation.from_orders(held, len(timers), sum(edits.values())))
 
+    def pings(self) -> tuple[Ping, ...]:
+        return (
+            LoadPing(text=str(self.load)),
+            *(row.ping() for row in self.phases),
+            *(row.ping() for row in self.units),
+        )
+
     @projected(view="wire")
     def frame(self) -> tuple[str, ...]:
         """One line per declared phase or holder, with their original order and PR identities."""
-        return (
-            str(self.load),
-            *(row.line() for row in self.phases),
-            *(row.line() for row in self.units),
-        )
+        return tuple(ping.text for ping in self.pings())
 
 

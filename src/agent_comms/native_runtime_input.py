@@ -17,7 +17,7 @@ from agent_comms.private_runtime_schema import PrivateCoordinatorTable
 
 from .coordination_errors import IdentityConflict, PublicationActivationBlocked, StaleFence
 from .declared_family import DeclaredFamily
-from .field_codec import FieldCodec, InputId, MalformedRecord, NativeContext
+from .field_codec import FieldCodec, InputId, MalformedRecord, NativeContext, RootId, ThreadLookup
 from .native_claim_epoch import NativeClaimEpoch, UnrecordedNativeClaim
 from .tool_denial import SelectedToolDenied
 from .native_input_record import (
@@ -259,7 +259,10 @@ class NativeRuntimeInput(
         ),
     ]
     attempt_ordinal: Annotated[NativeColumn, FrozenColumn(storage=IntegerStorage, nullable=True)]
-    owner_lookup: Annotated[str, FrozenColumn(references=TableReference(Participants, ("participant_lookup",)))]
+    owner_lookup: Annotated[
+        ThreadLookup,
+        FrozenColumn(references=TableReference(Participants, ("participant_lookup",))),
+    ]
     owner_generation: Annotated[int, FrozenColumn(check="owner_generation>0")]
     owner_token_digest: Annotated[str, FrozenColumn(check="length(owner_token_digest)=64")]
     sent_owner_claimed_generation: Annotated[
@@ -408,14 +411,17 @@ class CurrentNativeCursor(
         return self.session_id
 
     wire_root_id: Annotated[
-        str,
+        RootId,
         FrozenColumn(
             primary_key=True,
             check="length(wire_root_id)=32 AND wire_root_id NOT GLOB '*[^0-9a-f]*'",
         ),
     ]
     recipient_lookup: Annotated[
-        str, FrozenColumn(primary_key=True, references=TableReference(Participants, ("participant_lookup",)))
+        ThreadLookup,
+        FrozenColumn(
+            primary_key=True, references=TableReference(Participants, ("participant_lookup",))
+        ),
     ]
     owner_generation: Annotated[int, FrozenColumn(primary_key=True, check="owner_generation>0")]
     owner_claimed_generation: Annotated[

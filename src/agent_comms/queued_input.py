@@ -24,7 +24,7 @@ from .coordination_errors import IdentityConflict, RequestRefused, StaleRevision
 from .coordination_session import ReadNativeCoordinationSession
 from .coordinator import Coordination
 from .errors import RelationViolationError
-from .field_codec import InputId, GoalId
+from .field_codec import InputId, GoalId, RootId
 from .goals import GoalDeclaration, NoGoal
 from .image_input import ImageInput
 from .input_attempt import InputAttempt, ReservedInput
@@ -322,7 +322,7 @@ class DeliveredInput(QueuedInput):
 
     @classmethod
     def reserve_pending(
-        cls, inputs: InputDrain, name: str, root_id: str,
+        cls, inputs: InputDrain, name: str, root_id: RootId,
         pending: tuple[tuple[Delivered, WakeAssignment], ...],
         sources: tuple[TurnInputSource, ...],
         reserved: list[tuple[Self, InputContent]],
@@ -397,7 +397,7 @@ class DeliveredInput(QueuedInput):
 
     @classmethod
     async def recover_interrupted(
-        cls, inputs: InputDrain, session_id: str, root_id: str,
+        cls, inputs: InputDrain, session_id: str, root_id: RootId,
     ) -> int:
         """Requeue only deliveries positively proved absent from native input.
 
@@ -419,7 +419,7 @@ class DeliveredInput(QueuedInput):
     @staticmethod
     def _recover_locked(
         comms: Comms, dispositions: InputDispositions,
-        name: str, root_id: str, live_keys: frozenset[str],
+        name: str, root_id: RootId, live_keys: frozenset[str],
     ) -> int:
         """Acquire, recover and release entirely inside the joined worker."""
         entry = comms.registry.entry(name).entry
@@ -459,7 +459,8 @@ class DeliveredInput(QueuedInput):
 
     @classmethod
     async def deliver_pending(
-        cls, inputs: InputDrain, session_id: str, owner: Thread, bus: MessageBus, root_id: str, after_seq: int,
+        cls, inputs: InputDrain, session_id: str, owner: Thread, bus: MessageBus,
+        root_id: RootId, after_seq: int,
     ) -> None:
         """Hand this owner's pending bus messages to its running turn.
 

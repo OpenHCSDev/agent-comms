@@ -23,7 +23,7 @@ from agent_comms.coordination_tables.participants import (
     OwnerGenerations,
     Participants,
 )
-from agent_comms.field_codec import MalformedRecord
+from agent_comms.field_codec import MalformedRecord, ThreadLookup
 
 
 @dataclass(frozen=True, slots=True)
@@ -35,7 +35,7 @@ class ParticipantSnapshot:
     never be substituted for the registry's owner or input generation.
     """
 
-    lookup: str
+    lookup: ThreadLookup
     committed: bool
     owner_identity: OwnerGenerations
     pointer: CurrentExecutions
@@ -45,7 +45,7 @@ class ParticipantStore:
     def __init__(self, session: CoordinationSession) -> None:
         self.session = session
 
-    def get(self, lookup: str) -> ParticipantSnapshot:
+    def get(self, lookup: ThreadLookup) -> ParticipantSnapshot:
         with self.session.read():
             person = Participants.one(self.session._connection, participant_lookup=lookup)
             generation = OwnerGenerations.one(self.session._connection, owner_lookup=lookup)
@@ -61,7 +61,7 @@ class ParticipantStore:
 
     def register(
         self,
-        lookup: str,
+        lookup: ThreadLookup,
         *,
         committed: bool = False,
     ) -> Applied[ParticipantSnapshot] | AlreadyApplied[ParticipantSnapshot]:
@@ -87,7 +87,7 @@ class ParticipantStore:
             return Applied(self.get(lookup))
 
     def commit(
-        self, lookup: str
+        self, lookup: ThreadLookup
     ) -> Applied[ParticipantSnapshot] | AlreadyApplied[ParticipantSnapshot]:
         with self.session.writing() as db:
             person = self.get(lookup)
@@ -103,7 +103,7 @@ class ParticipantStore:
 
     def advance_generation(
         self,
-        lookup: str,
+        lookup: ThreadLookup,
         *,
         expected_generation: int,
     ) -> Applied[ParticipantSnapshot]:

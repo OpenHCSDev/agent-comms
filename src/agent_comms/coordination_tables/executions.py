@@ -29,6 +29,7 @@ from agent_comms.field_codec import (
     SnapshotExclude,
     SubclassUnion,
     projected,
+    ThreadLookup,
 )
 from agent_comms.reason_codes import ReasonCode
 from agent_comms.thread_text import AbsentText, GivenText, TextChoice
@@ -224,7 +225,7 @@ class CurrentExecutions(
                 "selected owner has an unresolved execution; new claims remain pending"
             )
 
-    owner_lookup: Annotated[str, FrozenColumn(primary_key=True)]
+    owner_lookup: Annotated[ThreadLookup, FrozenColumn(primary_key=True)]
     execution_id: Annotated[PointerExecution, Column(storage=TextStorage, nullable=True)]
     attempt_ordinal: Annotated[PointerAttempt, Column(storage=IntegerStorage, nullable=True)]
     pointer_revision: Annotated[int, Column(check="pointer_revision >= 0")]
@@ -341,7 +342,7 @@ class ExecutionRecord(
     ]
     origin: Annotated[type[ExecutionProvenance], FrozenColumn()]
     lifecycle: Annotated[ExecutionState, SnapshotExclude()]
-    owner_lookup: Annotated[str, FrozenColumn()]
+    owner_lookup: Annotated[ThreadLookup, FrozenColumn()]
     revision: Annotated[int, Column(check="revision > 0")]
     max_attempts: Annotated[int, FrozenColumn(check="max_attempts > 0")]
     reason_code: Annotated[
