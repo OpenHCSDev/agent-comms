@@ -45,7 +45,10 @@ from agent_comms.message_bus import WatchPass
 from agent_comms.service_passes import ServicePassStore
 from agent_comms.standing_rules import ServicePassFailing
 from agent_comms.field_codec import FieldCodec
+from agent_comms.host_services import ServiceNotServingError
+from agent_comms.host_services.connector import ConnectorService
 from agent_comms.installer.backup import StoreBackup
+from agent_comms.launch_root import LaunchRoot
 from agent_comms.maintenance_barrier import (
     InstallingPhase, MaintenanceBarrier, MaintenanceOperator, PausedPhase, ReadyPhase,
 )
@@ -87,7 +90,6 @@ def test_real_connector_refusals_and_replaced_source(tmp_path, source_programs):
 
 @pytest.mark.parametrize("registered", [True, False])
 def test_connector_round_trip_reads_this_bus_as_its_caller(comms, tmp_path, registered):
-    import json
     import os
     import site
     import socket
@@ -104,32 +106,32 @@ def test_connector_round_trip_reads_this_bus_as_its_caller(comms, tmp_path, regi
                                        *site.getsitepackages()))})
     command = "from agent_comms.connector import main; raise SystemExit(main())"
     before = comms.bus.bus.revision()
-    service = subprocess.Popen(
+    server = subprocess.Popen(
         [sys.executable, "-c", command, "serve", "--root", comms.root, "--port", str(port)],
         env=environment, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
     try:
-        readiness.wait(service, port)
+        readiness.wait(server, port)
         if not registered:
             comms.registry.unregister("claude-ai")
             comms.registry.archive("claude-ai")
             comms.registry.begin_delete("claude-ai")
             comms.registry.remove("claude-ai")
-        result = subprocess.run(
-            [sys.executable, "-c", command, "round_trip", comms.root,
-             "--port", str(port)], env=environment,
-            capture_output=True, text=True, timeout=60)
+        proof = ConnectorService(
+            launch=LaunchRoot.from_path(comms.root),
+            store=ConnectorStore(ConnectorStore.path_in(
+                tmp_path / "home" / ".local/state/agent-comms/connector")),
+            port=port,
+        )
         if registered:
-            assert result.returncode == 0, result.stderr
-            assert json.loads(result.stdout) == {
-                "round_trip": f"comms_channels read alike on port {port}"}
+            proof.serves()
         else:
-            assert result.returncode != 0
-            assert CALLER.name in result.stderr
-            assert not result.stdout
-            assert service.poll() is None
+            with pytest.raises(ServiceNotServingError) as refused:
+                proof.serves()
+            assert CALLER.name in str(refused.value)
+            assert server.poll() is None
     finally:
-        service.terminate()
-        service.wait(timeout=30)
+        server.terminate()
+        server.wait(timeout=30)
     assert comms.bus.bus.revision() == before
 
 
