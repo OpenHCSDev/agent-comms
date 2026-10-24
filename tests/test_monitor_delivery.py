@@ -1,5 +1,6 @@
 """Session-owned parts, not stdout writes, confirm monitor delivery."""
 from contextlib import closing
+import asyncio
 from html import escape
 import json
 import sqlite3
@@ -20,13 +21,46 @@ from agent_comms.cli_bridges.claude_protocol import (
 )
 from agent_comms.cli_bridges.shared import (
     BridgeStateTable, Binding, DeliveryRow, ObservedPart, ReceivingMonitor, UnrecordedMonitor, MonitorPart,
-    ForeignMonitorFrame, Options, ObservedMonitor, MismatchedMonitor, Watch, StoredBinding, Operation,
+    ForeignMonitorFrame, Options, ObservedMonitor, MismatchedMonitor, Watch, StoredBinding, GivenBinding, Operation,
 )
 from agent_comms.errors import MessageAcknowledgmentError
 from agent_comms.cli_protocol import UnconfirmedOutcome, EmittedOutcome, DeliveredOutcome
 from agent_comms.messages import InfoKind, Message
 from agent_comms.read_basis import ExplicitWatchAcknowledgment
 from agent_comms.threads import Thread
+
+
+@pytest.mark.asyncio
+async def test_empty_journal_starts_at_binding_and_ignores_user_reads(comms, tmp_path, monkeypatch):
+    declare_test_bus(comms, threads=tuple(
+        Thread(name, frozenset(), str(tmp_path)) for name in ('viewer', 'peer')
+    ))
+    comms.messaging.send('peer', 'viewer', 'before this session was bound')
+    state = tmp_path / 'bridge-state'
+    with Binding.open(state) as db:
+        binding = GivenBinding({
+            Binding.family_discriminator: Binding.declared_name,
+            'root': str(comms.root), 'bus_thread': 'viewer', 'session': 'session',
+        }).bind(db)
+        selected = ClaudeBridge(Options(Watch(), StoredBinding(), state), binding, db)
+        fresh = comms.messaging.send('peer', 'viewer', 'after binding, already read in Toad').message
+        comms.messaging.acknowledge('viewer', (fresh.reference,))
+        arrived = asyncio.Event()
+        received = []
+
+        async def accept(message):
+            received.append(message.reference)
+            arrived.set()
+
+        monkeypatch.setattr(selected, 'accept', accept)
+        watching = asyncio.create_task(selected.watch_child())
+        try:
+            await asyncio.wait_for(arrived.wait(), timeout=15)
+            assert received == [fresh.reference]
+            assert DeliveryRow.select(db) == ()
+        finally:
+            watching.cancel()
+            await asyncio.gather(watching, return_exceptions=True)
 
 
 @pytest.fixture
