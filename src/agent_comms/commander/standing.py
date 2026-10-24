@@ -197,13 +197,18 @@ class PlanStalled(PlanRule):
 
 
 @dataclass(frozen=True)
-class UnitAskUnanswered(OwedAnswer, UndatedStandingRule):
-    """Message debt shares its source read with unit observations."""
+class UnitOwedAnswer(OwedAnswer, declared_name=None):
+    """A message one unit is owed; it belongs on that unit's observation."""
 
     unit: str
 
     def questions_for(self, unit: ThreadIncarnation) -> tuple[Message, ...]:
         return (self.message,) if unit.name == self.unit else ()
+
+
+@dataclass(frozen=True)
+class UnitAskUnanswered(UnitOwedAnswer, UndatedStandingRule):
+    """Message debt shares its source read with unit observations."""
 
     @classmethod
     def read_open(cls, source: BusReader, snapshot: RegistrySnapshot,
@@ -236,10 +241,9 @@ class UnitAskUnanswered(OwedAnswer, UndatedStandingRule):
 
 
 @dataclass(frozen=True)
-class DeliveryAwaitingJudgement(OwedAnswer, UndatedStandingRule):
+class DeliveryAwaitingJudgement(UnitOwedAnswer, UndatedStandingRule):
     """A holder's delivery needs a verdict or a replacement order, never a chat reply."""
 
-    unit: str
     problem: str
 
     @classmethod
