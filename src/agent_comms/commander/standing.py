@@ -73,6 +73,7 @@ class InstallDue(IndependentStandingRule, UndatedStandingRule):
     core: Repo = field(compare=False)
     target: str = field(compare=False)
     settle: ClassVar[float] = 30 * 60
+    headline: ClassVar[str] = "INSTALL DUE"
 
     @property
     @abstractmethod
@@ -111,7 +112,7 @@ class InstallDue(IndependentStandingRule, UndatedStandingRule):
         """An already-launched merge needs no second attempt."""
 
     def line(self) -> str:
-        return (f"INSTALL DUE ({self.repo.to_wire()}: main {self.main}, installed "
+        return (f"{self.headline} ({self.repo.to_wire()}: main {self.main}, installed "
                 f"{self.installed}, {self.commits} commits, oldest {self.oldest_minutes} min) "
                 f"-> {self.action}")
 
@@ -126,13 +127,24 @@ class PendingInstallDue(InstallDue):
                                     project=self.core.checkout)
         run = installer_launch.InstallRun.start(command, comms.root)
         run.spawn()
-        self.logs.record(run.logs, self.repo, self.main)
+        self.logs.record(run.unit.logs, self.repo, self.main)
 
 
 class LaunchedInstallDue(InstallDue):
     @property
     def action(self) -> str:
         return "an install for this merge was already launched"
+
+
+class DiedInstallDue(InstallDue):
+    """Its unit ended without a result; nothing relaunches it until main moves."""
+
+    headline = "INSTALL DIED"
+
+    @property
+    def action(self) -> str:
+        run = self.logs.launched(self.repo, self.main)[0]
+        return f"target {self.target[:12]}; {run.errors}: {run.last_error()}"
 
 
 @dataclass(frozen=True)

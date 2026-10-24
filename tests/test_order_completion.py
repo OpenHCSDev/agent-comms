@@ -52,7 +52,7 @@ class TestOrderCompletion:
         corrected = ctx.comms.goals.todos.get('P1')
         assert isinstance(corrected.order, MergedProblemOrder)
         assert corrected.order.check_base(repo.checkout) == f'{graph.installed}^1'
-        assert corrected.order.check_corrections[-1].previous == merged.check
+        assert corrected.order.corrections[-1].previous == merged.check
         main(['done', 'worker', 'P1'], ctx)
         delivered = ctx.comms.goals.todos.get('P1')
         assert isinstance(delivered.order, DeliveredProblemOrder)

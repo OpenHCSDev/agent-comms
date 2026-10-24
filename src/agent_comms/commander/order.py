@@ -98,7 +98,7 @@ from agent_comms.todos import (
 )
 from agent_comms.slop import Slop
 from agent_comms.tool_caller import CommanderForkCaller, NoThreadCaller
-from agent_comms.order_tools import CommsChangeProblemTool, CommsFireTool, CommsOrderCheckTool, CommsOrderDoneTool, CommsOrderServeTool, CommsOrderTool, CommsProblemCloseTool, CommsTodoCreateTool, CommsTodoListTool, TodoList
+from agent_comms.order_tools import CommsChangeProblemTool, CommsFireTool, CommsOrderCheckTool, CommsOrderDoneTool, CommsOrderRunTool, CommsOrderServeTool, CommsOrderTool, CommsProblemCloseTool, CommsTodoCreateTool, CommsTodoListTool, TodoList
 
 
 def refuse(text, *families):
@@ -1144,6 +1144,22 @@ class CheckVerb(OrderVerb):
         check = ctx.read_check(self.check)
         ctx.call(CommsOrderCheckTool(problem=self.pid, check=check, why=self.why))
         print(f'{self.pid}: order now checks `{check.command}`')
+
+
+@dataclass(frozen=True, kw_only=True)
+class RunVerb(OrderVerb):
+    help = "replace an open application order's wrong run text; keeps its review timer and strikes"
+    pid: Annotated[str, Argument(flags=("pid",))]
+    text: Annotated[
+        str, Argument(flags=("--run",), options={"help": "what the installed app must show"})
+    ]
+    why: Annotated[
+        str, Argument(flags=("--why",), options={"help": "what was wrong with the recorded run"})
+    ]
+
+    def run(self, ctx: Commander) -> None:
+        ctx.call(CommsOrderRunTool(problem=self.pid, run=self.text, why=self.why))
+        print(f'{self.pid}: order now works when {self.text}')
 
 
 @dataclass(frozen=True, kw_only=True)

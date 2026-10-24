@@ -104,6 +104,7 @@ def arguments(comms: Comms, name: str, project: Path, checkout: Path) -> dict:
         "comms_todo_create",
         "comms_order_done",
         "comms_order_check",
+        "comms_order_run",
         "comms_order_serve",
         "comms_problem_close",
         "comms_order_work",
@@ -221,6 +222,11 @@ def arguments(comms: Comms, name: str, project: Path, checkout: Path) -> dict:
             "problem": "P1",
             "check": FieldCodec.encode(pending.check),
             "why": "The earlier check counted the wrong output.",
+        },
+        "comms_order_run": {
+            "problem": "P1",
+            "run": "The scratch application shows the original recorded answer.",
+            "why": "The earlier run named a view the scratch app deleted.",
         },
         "comms_order_serve": {"problem": "P1", "serves": "skill"},
         "comms_problem_close": {
