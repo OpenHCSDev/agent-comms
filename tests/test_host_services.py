@@ -28,6 +28,7 @@ from agent_comms.connector_store import ConnectorStore
 from agent_comms.harness_install import CodexHarness
 from agent_comms.host_services import (
     HostService,
+    RestartedService,
     ServiceNotServingError,
 )
 from agent_comms.host_services.codex_inbox import CodexInboxService
@@ -37,6 +38,9 @@ from agent_comms.host_services.connector import (
     SystemdConnectorService,
 )
 from agent_comms.installer.backup import StoreBackup
+from agent_comms.installer.commands import InstallCommands
+from agent_comms.installer.owner_starts import OwnerStart
+from agent_comms.installer.upgrade import Stack
 from agent_comms.launch_root import LaunchRoot
 from agent_comms.launch_runtime import LaunchRuntime
 from agent_comms.locked_store import DocumentChange
@@ -219,6 +223,77 @@ def test_restart_proves_a_healthy_connector_on_its_installed_runtime(connector_s
     )
     assert service.result.round_trip in capsys.readouterr().err
     assert not service.store.read().access  # Its one short-lived proof grant was revoked.
+
+
+def test_owner_start_failure_restores_stopped_services_once(
+    connector_service: SystemdConnectorService, tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    service = connector_service
+    unit = service.unit_file(Path.home())
+    unit.parent.mkdir(parents=True, exist_ok=True)
+    unit.touch()
+    starts: list[str] = []
+    restores: list[Stack] = []
+    failure = OSError("owner start failed")
+    original_run = subprocess.run
+    original_output = subprocess.check_output
+
+    def control(
+        command: tuple[str, ...], *, check: bool,
+    ) -> subprocess.CompletedProcess[bytes]:
+        if command[:3] == ("systemctl", "--user", "stop"):
+            assert command[3:] == (service.unit_name(),)
+            type(service).stop_all((service,))
+        elif command == ("systemctl", "--user", "start", service.unit_name()):
+            starts.append(service.unit_name())
+            service.start()
+        else:
+            return original_run(command, check=check)
+        return subprocess.CompletedProcess(command, 0)
+
+    def output(command: tuple[str, ...], *, text: bool) -> str:
+        assert text
+        if command == (
+            "systemctl", "--user", "show", "-p", "FragmentPath", "--value", service.unit_name(),
+        ):
+            return f"{unit}\n"
+        if command == (
+            "systemctl", "--user", "show", "-p", "MainPID", "--value", service.unit_name(),
+        ):
+            return f"{service.pid()}\n"
+        return original_output(command, text=True)
+
+    monkeypatch.setattr(subprocess, "run", control)
+    monkeypatch.setattr(subprocess, "check_output", output)
+
+    class OwnerStartFailure(Stack):
+        def start(self, root: Path, names: list[str]) -> tuple[OwnerStart, ...]:
+            raise failure
+
+    class RestoreStack(Stack):
+        def start_services(
+            self, stopped: tuple[HostService, ...],
+        ) -> tuple[RestartedService, ...]:
+            restores.append(self)
+            return super().start_services(stopped)
+
+    with InstallCommands() as commands:
+        runtime = LaunchRuntime.running()
+        installed = RestoreStack(tmp_path, commands, Path.home(), runtime)
+        staged = OwnerStartFailure(tmp_path, commands, Path.home(), runtime)
+        with (
+            pytest.raises(OSError) as raised,
+            staged.services_stopped(installed) as stopped,
+        ):
+            descriptions = tuple(item.described() for item in stopped.services)
+            assert descriptions == (service.described(),)
+            assert service.pid() == 0
+            staged.start(service.launch.path, ["worker"])
+        assert raised.value is failure
+        assert restores == [installed]
+        assert starts == [service.unit_name()]
+        assert service.pid() != 0
+        service.serves()
 
 
 def test_connector_refuses_a_different_published_bus(connector_service, tmp_path):
