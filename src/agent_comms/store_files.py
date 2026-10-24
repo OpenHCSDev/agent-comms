@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import errno
+import fcntl
 import json
 import math
 import os
@@ -31,7 +32,6 @@ from .declared_family import DeclaredFamily
 from .errors import RelationViolationError
 from .private_path import FileIdentity, PrivateFileRole
 
-import fcntl
 
 class LockMode(ABC):
     """Whether a store lock lets other holders in, and what its holder may do."""

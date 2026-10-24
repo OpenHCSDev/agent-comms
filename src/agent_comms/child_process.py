@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import asyncio
 import ctypes
+import fcntl
 import io
 import json
 import math
@@ -37,8 +38,6 @@ from functools import partial
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from typing import TYPE_CHECKING, Any, BinaryIO, ClassVar, NoReturn, TextIO
-
-import fcntl
 
 from .declared_family import DeclaredFamily
 from .errors import RelationViolationError
