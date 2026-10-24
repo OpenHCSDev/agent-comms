@@ -151,7 +151,7 @@ from .repo import Checkout, GitCommandError, Repo
 from .repository_name import RepositoryName
 from .storage_rules import (
     CheckoutStorageEffect, OrderCheckoutAllocation, RemoveCheckoutStorageEffect,
-    RepositoryCheckoutAllocation, StorageProjection,
+    RepositoryCheckoutAllocation, StorageProjection, StorageRule,
 )
 from .restart_scope import AllOwners, OneOwner, RestartTarget
 from .owner_connection import OwnerConnection, socket_path
@@ -1893,20 +1893,28 @@ class CheckoutResult(CliResult):
 
 
 class CheckoutOperation(DeclaredFamily, affix="CheckoutOperation"):
-    """What a problem checkout command does to the checkout allocated to it. Each member owns
-    its storage check and its Git work, so adding and retiring stay in the Checkout owner."""
+    """What a problem checkout command does to the caller's checkout of that problem. Each
+    member owns what it requires of the problem, its storage check and its Git work, so adding
+    and retiring stay in the Checkout owner."""
 
     @classmethod
     @abstractmethod
-    def apply(cls, repository: Repo, destination: Path, projection: StorageProjection) -> None: ...
+    def apply(cls, command: PreparedCheckoutCliCommand, ctx: Comms, thread: Thread,
+              destination: Path) -> None: ...
 
 
 class AddCheckoutOperation(CheckoutOperation):
-    """Create the checkout from origin/main, or repair an existing one's pinned submodules."""
+    """Create the checkout from origin/main, or repair an existing one's pinned submodules;
+    only the holder of the problem's open order allocates one."""
 
     @classmethod
-    def apply(cls, repository: Repo, destination: Path, projection: StorageProjection) -> None:
-        CheckoutStorageEffect(destination, repository.github).check(projection)
+    def apply(cls, command: PreparedCheckoutCliCommand, ctx: Comms, thread: Thread,
+              destination: Path) -> None:
+        todo = ctx.goals.todos.get(command.problem)
+        todo.require_assignee(thread.incarnation, todo.held().generation)
+        repository = command.source(ctx, todo)
+        CheckoutStorageEffect(destination, repository.github).check(
+            StorageProjection(ctx.registry.storage_rule, thread))
         if destination.exists():
             Checkout(destination).prepare()
         else:
@@ -1916,11 +1924,15 @@ class AddCheckoutOperation(CheckoutOperation):
 
 
 class RemoveCheckoutOperation(CheckoutOperation):
-    """Retire the checkout with its pinned submodules; it refuses one holding uncommitted work."""
+    """Retire the caller's own checkout whatever its order's state: the path is the caller's
+    allocation, the storage rule refuses its home checkout and any other unit's, and the
+    Checkout owner refuses uncommitted work."""
 
     @classmethod
-    def apply(cls, repository: Repo, destination: Path, projection: StorageProjection) -> None:
-        RemoveCheckoutStorageEffect(destination).check(projection)
+    def apply(cls, command: PreparedCheckoutCliCommand, ctx: Comms, thread: Thread,
+              destination: Path) -> None:
+        RemoveCheckoutStorageEffect(destination).check(
+            StorageProjection(ctx.registry.storage_rule, thread))
         Checkout(destination).retire()
 
 
@@ -1930,15 +1942,15 @@ class PreparedCheckoutCliCommand(CliCommand):
     problem: Annotated[str, Argument(flags=("problem",))]
 
     @abstractmethod
-    def allocation(self, ctx: Comms, thread: Thread, todo: Todo) -> tuple[Repo, Path]: ...
+    def destination(self, rule: StorageRule, thread: Thread) -> Path: ...
+
+    @abstractmethod
+    def source(self, ctx: Comms, todo: Todo) -> Repo: ...
 
     def apply(self, ctx: Comms) -> CliResult:
         thread = CallingThreadTarget().thread(ctx.registry)
-        todo = ctx.goals.todos.get(self.problem)
-        todo.require_assignee(thread.incarnation, todo.held().generation)
-        repository, destination = self.allocation(ctx, thread, todo)
-        self.operation.apply(
-            repository, destination, StorageProjection(ctx.registry.storage_rule, thread))
+        destination = self.destination(ctx.registry.storage_rule, thread)
+        self.operation.apply(self, ctx, thread, destination)
         return CheckoutResult(destination)
 
 
@@ -1947,9 +1959,11 @@ class CheckoutCliCommand(PreparedCheckoutCliCommand,
                          declared_name=OrderCheckoutAllocation.verb):
     help = "Create, repair or remove an owned problem checkout with its pinned submodules"
 
-    def allocation(self, ctx: Comms, thread: Thread, todo: Todo) -> tuple[Repo, Path]:
-        repository = Repo(checkout=Path(todo.order.checked().check.directory), github=todo.repo)
-        return repository, ctx.registry.storage_rule.order_checkout(thread.name, todo.id)
+    def destination(self, rule: StorageRule, thread: Thread) -> Path:
+        return rule.order_checkout(thread.name, self.problem)
+
+    def source(self, ctx: Comms, todo: Todo) -> Repo:
+        return Repo(checkout=Path(todo.order.checked().check.directory), github=todo.repo)
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -1958,15 +1972,17 @@ class RepositoryCheckoutCliCommand(PreparedCheckoutCliCommand,
     help = "Create, repair or remove an owned problem checkout of a registered OWNER/REPO"
     repository: Annotated[RepositoryName, Argument(flags=("repository",))]
 
-    def allocation(self, ctx: Comms, thread: Thread, todo: Todo) -> tuple[Repo, Path]:
+    def destination(self, rule: StorageRule, thread: Thread) -> Path:
+        return rule.repository_checkout(thread.name, self.problem, self.repository)
+
+    def source(self, ctx: Comms, todo: Todo) -> Repo:
         repositories = ctx.registry.snapshot().commander_project.require().repos
         selected = [repository for repository in repositories
                     if repository.github == self.repository]
         if not selected:
             raise ValueError(f'{self.repository.to_wire()} is not a registered repository.')
         repository, = selected
-        return repository, ctx.registry.storage_rule.repository_checkout(
-            thread.name, todo.id, repository.github)
+        return repository
 
 
 @dataclass(frozen=True, kw_only=True)

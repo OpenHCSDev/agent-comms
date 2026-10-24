@@ -21,7 +21,7 @@ from agent_comms.repository_name import RepositoryName
 from agent_comms.storage_rules import StorageRule
 from agent_comms.thread_execution import ExternalThreadExecution
 from agent_comms.threads import Thread
-from agent_comms.todos import PendingProblemOrder
+from agent_comms.todos import PendingProblemOrder, WithdrawTodo
 from cli_command import core
 from fixture_git import IDENTITY
 from order_scope_fixture import FIX_SCOPE
@@ -128,6 +128,12 @@ def test_checkout_remove_retires_the_order_checkout_with_its_submodule(
     added = core("--root", str(comms.root), "checkout", "add", "P1")
     assert added.returncode == 0, added.stderr
     path = comms.registry.storage_rule.order_checkout("worker", "P1")
+    # The commander may close the problem before its unit retires the checkout.
+    current = comms.goals.todos.get("P1")
+    closed = comms.goals.todos.apply("P1", WithdrawTodo(
+        current.revision, comms.registry.require("lead").incarnation, current.held(),
+        "The order is closed before its unit retires the checkout it worked in."))
+    assert closed.assignment is None
     (path / "owner.py").write_text("an unpushed edit\n")
     held = core("--root", str(comms.root), "checkout", "remove", "P1")
     assert held.returncode != 0
