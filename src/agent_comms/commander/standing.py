@@ -471,7 +471,8 @@ class CommanderDeaf(IndependentStandingRule, DatedStandingRule):
     def line(self) -> str:
         return (f"COMMANDER DEAF: its bridge has confirmed no heartbeat update since "
                 f"{RecordedEventTime(self.since - self.seconds).clock()}, so every Core line"
-                " to it waits unread -> re-arm its watch: agent-comms-claude-bridge watch (bare, no pipe)")
+                " to it waits unread -> re-arm its watch:"
+                " agent-comms-claude-bridge watch (bare, no pipe)")
 
     def enforce(self, comms: Comms, commander: str) -> None:
         """The commander's own inbox is the dead path, so #comms hears it instead."""
