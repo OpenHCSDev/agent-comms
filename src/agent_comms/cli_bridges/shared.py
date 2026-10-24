@@ -144,6 +144,10 @@ class BindingIdentity:
     bus: Annotated[str, field_codec.WireName("bus_thread")]
     thread: Annotated[str, field_codec.WireName("session")]
 
+    def same_reader(self, other: BindingIdentity) -> bool:
+        """A transport session may change without changing the bus reader."""
+        return (self.root, self.bus) == (other.root, other.bus)
+
 
 @dataclass(frozen=True)
 class Binding(BindingIdentity, BridgeStateTable, TypedTable, BindingRequest):
@@ -181,13 +185,16 @@ class Binding(BindingIdentity, BridgeStateTable, TypedTable, BindingRequest):
             yield db
 
     def bind(self, db: sqlite3.Connection) -> Binding:
-        """The first binding claims the directory; a later one must be the same."""
+        """Rebind the reader's transport without replacing its delivery progress."""
         with SQLiteFile.write_transaction(db):
             if not Binding.select(db):
                 self.insert(db)
-            if StoredBinding().bind(db) != self:
+            stored = StoredBinding().bind(db)
+            if not stored.same_reader(self):
                 raise ValueError('This state directory belongs to another Core/CLI conversation')
-            return self
+            if stored.thread != self.thread:
+                Binding.update(db, thread=self.thread)
+            return replace(stored, thread=self.thread)
 
 
 @dataclass
@@ -328,6 +335,8 @@ class Operation(DeclaredOptions, ABC, Generic[OperationBridge]):
     """The one line `--help` shows; every offered command declares it."""
 
     def binding(self, arguments: argparse.Namespace) -> BindingRequest:
+        if arguments.bus_thread is not None:
+            arguments.state = arguments.state / arguments.bus_thread
         return Binding.from_arguments(arguments)
 
     @abstractmethod
@@ -525,11 +534,6 @@ class Inbox(Operation[OperationBridge]):
 
 class Watch(Inbox):
     help = "Deliver this binding's bus messages and publish its harness transcript to the bus"
-
-    def binding(self, arguments: argparse.Namespace) -> BindingRequest:
-        if arguments.session is not None:
-            arguments.state = arguments.state / arguments.session
-        return super().binding(arguments)
 
     @classmethod
     def serves(cls, bridge: type[CliBridge]) -> bool:
