@@ -38,6 +38,9 @@ class InstallPhase(DeclaredFamily, affix="Phase"):
     def label(self) -> str:
         return type(self).__name__
 
+    def launched(self) -> LaunchedPhase:
+        return LaunchedPhase(type(self))
+
     def started_at(self, now: float) -> float:
         return now
 
@@ -66,6 +69,9 @@ class SubjectPhase(InstallPhase):
 
     def label(self) -> str:
         return f"{type(self).__name__}: {self.subject}"
+
+    def launched(self) -> LaunchedPhase:
+        return LaunchedPhase(type(self), self.subject)
 
 
 class InstallRunPhase(InstallPhase):
@@ -310,6 +316,42 @@ class PhaseTiming:
 
     def line(self) -> str:
         return f"{self.seconds:.3f}s {self.phase.label()} ({self.elapsed_seconds:.3f}s elapsed)"
+
+    def launched(self) -> LaunchedPhaseTiming:
+        return LaunchedPhaseTiming(self.phase.launched(), self.seconds, self.elapsed_seconds)
+
+
+@dataclass(frozen=True)
+class LaunchedPhase:
+    """One launcher phase as every deployed launcher encodes it. The installed launcher
+    is always older than the tree it starts, so this shape never changes.
+    """
+
+    kind: type[InstallPhase]
+    detail: str = ""
+
+    def label(self) -> str:
+        return ": ".join(filter(None, (self.kind.__name__, self.detail)))
+
+
+@dataclass
+class LaunchedPhaseTiming:
+    phase: LaunchedPhase
+    seconds: float
+    elapsed_seconds: float
+
+    def timing(self) -> PhaseTiming:
+        return PhaseTiming(InheritedPhase(self.phase), self.seconds, self.elapsed_seconds)
+
+
+@dataclass(frozen=True)
+class InheritedPhase(InstallPhase):
+    """A phase the launcher timed in the outgoing runtime, labelled as that runtime declared it."""
+
+    outgoing: LaunchedPhase
+
+    def label(self) -> str:
+        return self.outgoing.label()
 
 
 @dataclass
