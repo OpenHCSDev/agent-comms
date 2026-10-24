@@ -185,10 +185,12 @@ def connector_service(comms, tmp_path, monkeypatch, pinned_native):
         def _pid_for(cls, name: str) -> int:
             return next((process.pid for process in children if process.poll() is None), 0)
 
-        def stop(self) -> None:
-            previous = next(process for process in children if process.pid == self.pid())
-            previous.terminate()
-            previous.wait(timeout=5)
+        @classmethod
+        def stop_all(cls, instances: tuple[SystemdConnectorService, ...]) -> None:
+            for instance in instances:
+                previous = next(process for process in children if process.pid == instance.pid())
+                previous.terminate()
+                previous.wait(timeout=5)
 
         def start(self) -> None:
             start()
@@ -208,7 +210,7 @@ def connector_service(comms, tmp_path, monkeypatch, pinned_native):
 
 def test_restart_proves_a_healthy_connector_on_its_installed_runtime(connector_service, capsys):
     service = connector_service
-    service.stop()
+    type(service).stop_all((service,))
     result = service.start_onto(Path(sys.executable))
     service.serves()  # ServingProbe's proof, run here by the root's own runtime.
     assert result.runtime == Path(sys.executable)
@@ -302,7 +304,7 @@ def test_connector_unit_owns_exec_start_and_readiness(tmp_path, monkeypatch):
 
 def test_restart_refuses_a_connector_with_an_undecodable_store(connector_service):
     service = connector_service
-    service.stop()
+    type(service).stop_all((service,))
     service.store.path.write_text('{"not_a_grant": true}')
     with pytest.raises(ServiceNotServingError, match="RecordProblems"):
         service.start_onto(Path(sys.executable))
