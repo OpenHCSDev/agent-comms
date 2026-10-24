@@ -8,7 +8,6 @@ service has no instance of it and contributes nothing: there is no list of servi
 from __future__ import annotations
 
 import json
-import shlex
 import subprocess
 import time
 from abc import abstractmethod
@@ -48,11 +47,6 @@ class HostService(DeclaredFamily, affix="Service", discovery_package=__name__):
     @abstractmethod
     def running(cls) -> tuple[Self, ...]:
         """This service's instances on this host; none when the host does not run it."""
-
-    @classmethod
-    def installed(cls) -> tuple[Self, ...]:
-        """The instances an install leaves serving: by default, the ones running now."""
-        return cls.running()
 
     @classmethod
     @abstractmethod
@@ -95,12 +89,20 @@ class HostService(DeclaredFamily, affix="Service", discovery_package=__name__):
 
     @classmethod
     def stop_running(cls) -> tuple[HostService, ...]:
-        """Stop every running service, so nothing writes the root while it is restored,
-        and answer every installed one, so a service already dead is started again too."""
-        installed = tuple(instance for member in cls.members_with(cls)
-                          for instance in member.installed())
-        cls.stop_all(cls.instances())
-        return installed
+        """Stop every running service, so nothing writes the root while it is restored."""
+        stopped = cls.instances()
+        cls.stop_all(stopped)
+        return stopped
+
+    @classmethod
+    def start_enabled(cls) -> None:
+        """Start every service this host enables, each by its own name, so one the install
+        found already dead serves again; a member nothing enables starts nothing."""
+        for member in cls.members_with(cls):
+            member.start_enabled_unit()
+
+    @classmethod
+    def start_enabled_unit(cls) -> None: ...
 
     def start_onto(self, installed: Path) -> RestartedService:
         self.start()
@@ -122,12 +124,11 @@ class HostService(DeclaredFamily, affix="Service", discovery_package=__name__):
 
 
 class SystemdUnit:
-    """A unit of the user's systemd manager: systemd, never the caller, owns its processes,
+    """A unit of the user's systemd manager: systemd, never its caller, owns its processes,
     so stopping the caller's own unit cannot reach them."""
 
     @staticmethod
     def shown(unit: str, name: str) -> str:
-        """One property of the unit as its manager reports it."""
         return subprocess.check_output(
             ("systemctl", "--user", "show", "-p", name, "--value", unit), text=True,
         ).strip()
@@ -163,19 +164,6 @@ class SystemdUserService(SystemdUnit, HostService, declared_name=None):
         )
 
     @classmethod
-    def enabled_commands(cls) -> tuple[tuple[str, ...], ...]:
-        """The command this home's enabled unit declares, read back from ``command_line``;
-        enabling links the unit into ``default.target``, which ``render_unit`` wants."""
-        unit = cls.unit_file(Path.home())
-        return tuple(
-            tuple(word.replace("%%", "%").replace("$$", "$")
-                  for word in shlex.split(line.removeprefix("ExecStart=")))
-            for wanted in (unit.parent / "default.target.wants" / cls.unit,) if wanted.exists()
-            for line in unit.read_text(encoding="utf-8").splitlines()
-            if line.startswith("ExecStart=")
-        )
-
-    @classmethod
     def render_unit(cls, command: str) -> str:
         options = "\n".join(cls.service_options)
         return (
@@ -208,18 +196,25 @@ class SystemdUserService(SystemdUnit, HostService, declared_name=None):
         subprocess.run(("systemctl", "--user", "enable", "--now", self.unit_name()), check=True)
 
     @classmethod
-    def _pid_for(cls, name: str) -> int:
+    def _owned(cls, name: str) -> bool:
         """Only the unit loaded from this home's owned definition belongs to it.
 
         The user manager belongs to the UID, not HOME; a private install must not
         discover or restart the real home's service through that shared manager.
         """
         unit = cls.unit_file(Path.home())
-        if not unit.is_file():
-            return 0
-        if Path(cls.shown(name, "FragmentPath")).resolve() != unit.resolve():
-            return 0
-        return int(cls.shown(name, "MainPID"))
+        return unit.is_file() and Path(cls.shown(name, "FragmentPath")).resolve() == unit.resolve()
+
+    @classmethod
+    def _pid_for(cls, name: str) -> int:
+        return int(cls.shown(name, "MainPID")) if cls._owned(name) else 0
+
+    @classmethod
+    def start_enabled_unit(cls) -> None:
+        """``render_unit`` installs into ``default.target``, so enabling links it there."""
+        enabled = cls.unit_file(Path.home()).parent / "default.target.wants" / cls.unit
+        if enabled.exists() and cls._owned(cls.unit):
+            subprocess.run(("systemctl", "--user", "start", cls.unit), check=True)
 
     def pid(self) -> int:
         return self._pid_for(self.unit_name())

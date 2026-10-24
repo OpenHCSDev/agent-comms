@@ -147,11 +147,18 @@ class InstallUnit(SystemdUnit):
     Systemd owns its lifetime exactly as it owns the connector's, so an install the heartbeat
     starts from inside the connector's unit survives stopping that unit."""
 
+    identity: Id128
     logs: Path
+    inherited: ClassVar[tuple[str, ...]] = (
+        "HOME", "PATH", "XDG_RUNTIME_DIR", "XDG_CONFIG_HOME", "XDG_DATA_HOME", "XDG_STATE_HOME",
+        "XDG_CACHE_HOME", "AGENT_COMMS_DEBUG_LOG",
+    )
+    """The caller's variables the install reads; systemd-run copies each value itself, so
+    none is spelled on a command line."""
 
     @property
     def unit(self) -> str:
-        return f"agent-comms-install-{self.logs.name.rpartition('-')[2]}.service"
+        return f"agent-comms-install-{self.identity}.service"
 
     @property
     def result(self) -> Path:
@@ -161,14 +168,15 @@ class InstallUnit(SystemdUnit):
     def errors(self) -> Path:
         return self.logs / "stderr.log"
 
-    def start(self, tree: Path, command: tuple[str, ...], env: dict[str, str],
+    def start(self, tree: Path, command: tuple[str, ...], pythonpath: str,
               *options: str) -> None:
         """Start the unit; ``--wait`` follows it to its end and raises on its failure."""
         subprocess.run(
             ("systemd-run", "--user", "--quiet", "--collect", *options, f"--unit={self.unit}",
              f"--working-directory={tree}", f"--property=StandardOutput=file:{self.result}",
              f"--property=StandardError=file:{self.errors}",
-             *(f"--setenv={name}={value}" for name, value in env.items()), *command),
+             *(f"--setenv={name}" for name in self.inherited),
+             f"--setenv=PYTHONPATH={pythonpath}", *command),
             check=True,
         )
 
@@ -194,7 +202,7 @@ class InstallLogs:
         """The runs launched for this merge, decoded once from their launch records."""
         cause = InstallCause(repo, main)
         return tuple(
-            InstallUnit(path)
+            InstallUnit(Id128(path.name.removeprefix(self.prefix)), path)
             for path in self.root.parent.glob(f"{glob.escape(self.prefix)}*")
             if path.is_dir()
             for marker in (path / self.cause_file,)
@@ -214,12 +222,13 @@ class InstallLogs:
     def prefix(self) -> str:
         return f".{self.root.name}.installer-"
 
-    def minted(self) -> Path:
-        """A new install's own directory; older ones past the backups' count are retired."""
-        logs = self.root.parent / f"{self.prefix}{Id128.mint()}"
-        logs.mkdir(mode=0o700)
+    def minted(self) -> InstallUnit:
+        """A new install's own unit and directory; older ones past the backups' count are
+        retired."""
+        unit = InstallUnit(identity := Id128.mint(), self.root.parent / f"{self.prefix}{identity}")
+        unit.logs.mkdir(mode=0o700)
         self.retire()
-        return logs
+        return unit
 
     def retire(self) -> tuple[Path, ...]:
         """The names carry no time, so age is each directory's own modification time."""
@@ -255,25 +264,20 @@ class InstallRun:
                    [timing.launched() for timing in commands.clock.phases])
 
     @cached_property
-    def logs(self) -> Path:
-        return InstallLogs(self.root).minted()
-
-    @cached_property
     def unit(self) -> InstallUnit:
-        return InstallUnit(self.logs)
+        return InstallLogs(self.root).minted()
 
     def spawn(self, *options: str) -> None:
         """The install runs in its own unit and reads its request from a file beside the bus,
         so stopping the caller's unit, the connector's included, cannot cut it short."""
         tree = TargetTree(self.command.checkout, self.scratch, self.target)
-        request = self.logs / "request.json"
+        request = self.unit.logs / "request.json"
         request.write_text(json.dumps(FieldCodec.encode(self)))
         print(f"install: {self.unit.unit} runs {self.target[:12]}; "
               f"diagnostics {self.unit.errors}", file=sys.stderr, flush=True)
         self.unit.start(
             tree.path, (sys.executable, "-m", agent_comms.installer.__name__, str(request)),
-            {**os.environ, "PYTHONPATH": os.pathsep.join(map(str, tree.source_paths()))},
-            *options,
+            os.pathsep.join(map(str, tree.source_paths())), *options,
         )
 
     def launch(self, output: TextIO) -> int:

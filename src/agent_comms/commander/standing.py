@@ -127,7 +127,7 @@ class PendingInstallDue(InstallDue):
                                     project=self.core.checkout)
         run = installer_launch.InstallRun.start(command, comms.root)
         run.spawn()
-        self.logs.record(run.logs, self.repo, self.main)
+        self.logs.record(run.unit.logs, self.repo, self.main)
 
 
 class LaunchedInstallDue(InstallDue):
