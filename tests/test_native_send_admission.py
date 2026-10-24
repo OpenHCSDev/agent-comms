@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-import asyncio
 import array
+import asyncio
 import json
 import os
 import sqlite3
@@ -15,6 +15,8 @@ from contextlib import contextmanager
 from pathlib import Path
 
 import pytest
+
+from bus_record_fixture import OWNER_LOOKUP
 
 if sys.platform == "linux":
     import fcntl
@@ -226,7 +228,7 @@ def test_transaction_excludes_late_reader_before_irreversible_write(tmp_path):
     """A transaction which admits the pipe write owns its complete commit lifetime."""
     path = tmp_path / "coordinator.sqlite3"
     with Coordination(path, contention=StoreBusy()) as store:
-        store.participants.register("owner", committed=True)
+        store.participants.register(OWNER_LOOKUP, committed=True)
         reader = sqlite3.connect(path, isolation_level=None, timeout=0)
         read_fd, write_fd = os.pipe2(os.O_NONBLOCK)
         entered = []

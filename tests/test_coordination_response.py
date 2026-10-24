@@ -2,12 +2,6 @@
 
 from __future__ import annotations
 
-
-from bus_record_fixture import prepare_native_comms
-from agent_comms.field_codec import TurnId
-from agent_comms.lifecycle_capability import Active, Complete
-
-from conftest import publish_initial, responder
 import os
 from dataclasses import dataclass, replace
 from pathlib import Path
@@ -25,20 +19,28 @@ from agent_comms.coordination_errors import (
     PublicationUncertain,
     StaleRevision,
 )
-from agent_comms.coordination_response import LiveResponseOwner, prepare_fenced_response, publish_fenced_response, resolve_existing_response
+from agent_comms.coordination_response import (
+    LiveResponseOwner,
+    prepare_fenced_response,
+    publish_fenced_response,
+    resolve_existing_response,
+)
 from agent_comms.coordination_results import AlreadyApplied
-from agent_comms.coordination_tables.executions import WireOrigin
-from agent_comms.coordinator import Coordination
+from agent_comms.coordination_tables.executions import NoPointedExecution, WireOrigin
 from agent_comms.coordination_tables.responses import ResponseObligation
+from agent_comms.coordinator import Coordination
 from agent_comms.execution_states import CompletedExecution
+from agent_comms.field_codec import InputId, RootId, ThreadLookup, TurnId
+from agent_comms.lifecycle_capability import Active, Complete
 from agent_comms.message_bus import MessageBus
-from agent_comms.publisher import ParticipantPublisher
 from agent_comms.obligation_states import PendingResponse, PublishedResponse, PublishingResponse
 from agent_comms.owner_fence import prepare_fence_token
+from agent_comms.publisher import ParticipantPublisher
 from agent_comms.registration import Registration
 from agent_comms.selected_source_batch import SelectedSource
-from agent_comms.coordination_tables.executions import NoPointedExecution
 from agent_comms.threads import Thread
+from bus_record_fixture import prepare_native_comms
+from conftest import publish_initial, responder
 
 # Private bus publication requires POSIX owner/mode ancestry; Windows stat
 # emulation cannot attest this boundary or exercise its durability contract.
@@ -50,10 +52,10 @@ class Fixture:
     comms: Comms
     bus: MessageBus[ParticipantPublisher]
     store: Coordination
-    root_id: str
+    root_id: RootId
     origin_seq: int
     reply_target: str
-    owner_lookup: str
+    owner_lookup: ThreadLookup
     assignment_id: str
     fence: object
     witness: LiveResponseOwner
@@ -353,7 +355,7 @@ def test_response_answers_the_messages_its_turn_took_in(tmp_path: Path) -> None:
             key, seq=follow_up.seq, owner="owner", claim_scope=lease.claimed_generation,
             target="owner", text=text, origin=WireInputOrigin(case.root_id, follow_up.reference),
         )
-        native_id = uuid4().hex
+        native_id = InputId(uuid4().hex)
         assert inputs.bind(
             key, claim_scope=lease.claimed_generation, turn_id=lease.turn_id,
             native_id=native_id, text=text,

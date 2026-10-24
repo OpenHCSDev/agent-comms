@@ -4,9 +4,6 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from agent_comms.coordination_contracts import (
-    MAX_IDENTIFIER_CHARS,
-)
 from agent_comms.coordination_errors import (
     IdentityConflict,
     ParticipantNotRegistered,
@@ -23,7 +20,7 @@ from agent_comms.coordination_tables.participants import (
     OwnerGenerations,
     Participants,
 )
-from agent_comms.field_codec import MalformedRecord, ThreadLookup
+from agent_comms.field_codec import ThreadLookup
 
 
 @dataclass(frozen=True, slots=True)
@@ -65,10 +62,6 @@ class ParticipantStore:
         *,
         committed: bool = False,
     ) -> Applied[ParticipantSnapshot] | AlreadyApplied[ParticipantSnapshot]:
-        if type(committed) is not bool:
-            raise ValueError("committed must be a boolean")
-        if not isinstance(lookup, str) or not 1 <= len(lookup) <= MAX_IDENTIFIER_CHARS:
-            raise MalformedRecord("participant identity must be bounded and nonempty")
         with self.session.writing() as db:
             existing = Participants.one(self.session._connection, participant_lookup=lookup)
             if existing is not None:
