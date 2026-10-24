@@ -16,6 +16,7 @@ from agent_comms.commander_heartbeat import CommanderHeartbeat
 from agent_comms.comms import Comms
 from agent_comms.goal_actions import ReissuedOrderGoalAction
 from agent_comms.heartbeat_frame import HeartbeatFrame
+from agent_comms.held_orders import HeldOrders
 from agent_comms.message_bus import WatchPass
 from agent_comms.message_page import MessageReadRequest
 from agent_comms.messages import Message
@@ -38,7 +39,6 @@ from agent_comms.standing_rules import (
 from agent_comms.storage_rules import OrderCheckoutWork
 from agent_comms.thread_identity import ThreadIncarnation
 from agent_comms.threads import Thread
-from agent_comms.held_orders import HeldOrders
 from agent_comms.todos import OwnerRequest, Todo
 from agent_comms.turn_digests import OrderEditCountRead, TurnDigestRead, TurnsSince
 from agent_comms.ui_model.unit_state import AwaitingCommander, UnitState
