@@ -186,7 +186,7 @@ class TextStorage(SqlStorage):
         if annotation is str:
             return True
         _, representation = FieldCodec.representation(annotation)
-        return representation is not None and issubclass(representation, TextRepresentation)
+        return issubclass(representation, TextRepresentation)
 
 
 class IntegerStorage(SqlStorage):
@@ -2108,17 +2108,18 @@ class ProducedTable(ProducedRow, TypedTable, ProjectionSource, declared_name=Non
                 if issubclass(parent, ProjectionSource)
                 and ("writes" not in vars(parent) or parent in writers)
             )
-        annotations = [column.annotation for column in cls._columns] if is_dataclass(cls) else []
+        annotations: list[object] = (
+            [column.annotation for column in cls._columns] if is_dataclass(cls) else []
+        )
         while annotations:
             value, representation = FieldCodec.representation(annotations.pop())
             annotations.extend(get_args(value))
-            for owner in (value, representation):
-                if not isinstance(owner, type):
-                    continue
+            if isinstance(value, type):
                 owners.update(
-                    parent for parent in owner.__mro__
+                    parent for parent in value.__mro__
                     if issubclass(parent, (FieldRepresentation, NominalText))
                 )
+            owners.update(representation.producer_owners())
         return tuple(sorted(owners, key=lambda owner: (owner.__module__, owner.__qualname__)))
 
 

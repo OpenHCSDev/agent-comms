@@ -659,7 +659,7 @@ class DeclaredFieldPlan(FieldPlan):
 
     @classmethod
     def claims(cls, declared: Field, annotation: object) -> bool:
-        representation = FieldCodec.representation(annotation)[1] or FieldRepresentation
+        _, representation = FieldCodec.representation(annotation)
         return super().claims(declared, annotation) or representation.field_plan is cls
 
 
@@ -963,18 +963,28 @@ class ValueDecoder[T](DecoderPlan):
         return cls(target)
 
     @classmethod
-    def annotation_class(cls, annotation: object) -> type[ValueDecoder[object]]:
-        try:
-            return cls._by_annotation[annotation]
-        except KeyError:
-            pass
+    def _registered(cls, annotation: object) -> tuple[type[ValueDecoder[object]], ...]:
+        matches: list[type[ValueDecoder[object]]] = []
+        if annotation in cls._by_annotation:
+            matches.append(cls._by_annotation[annotation])
         declarations = annotation.__mro__ if isinstance(annotation, type) else (annotation,)
         for declaration in declarations:
-            try:
-                return cls._by_origin[get_origin(declaration) or declaration]
-            except KeyError:
-                continue
-        raise KeyError(annotation)
+            origin = get_origin(declaration) or declaration
+            if origin in cls._by_origin:
+                matches.append(cls._by_origin[origin])
+        return tuple(matches)
+
+    @classmethod
+    def annotation_class(cls, annotation: object) -> type[ValueDecoder[object]]:
+        matches = cls._registered(annotation)
+        if not matches:
+            raise KeyError(annotation)
+        return matches[0]
+
+    @classmethod
+    def represented_class(cls, annotation: object) -> type[ValueDecoder[object]]:
+        """A represented value with no registered decoder is a scalar of its representation."""
+        return next(iter(cls._registered(annotation)), _ScalarDecoder)
 
     @classmethod
     def with_representation(
@@ -1170,6 +1180,30 @@ class FieldRepresentation[T](MroDispatch, ABC):
     decoder: ClassVar[type[_RepresentedDecoder]] = _RepresentedDecoder
 
     @classmethod
+    def for_value(cls, value: object) -> type[FieldRepresentation]:
+        return cls
+
+    @classmethod
+    def project_view(cls, value: object, view: str, annotation: object) -> JsonValue:
+        return RepresentedProjection.of(value, view, annotation)
+
+    @classmethod
+    def producer_owners(cls) -> tuple[type[FieldRepresentation], ...]:
+        return tuple(parent for parent in cls.__mro__ if issubclass(parent, FieldRepresentation))
+
+    @classmethod
+    def decoder_for(cls, annotation: object, target: object) -> ValueDecoder[object]:
+        owner = ValueDecoder.represented_class(target)
+        return owner.with_representation(annotation, target, get_args(target), cls)
+
+    @classmethod
+    def schema_for(cls, annotation: object) -> dict[str, JsonValue]:
+        schema = cls.schema()
+        if type(None) in get_args(annotation):
+            return FieldCodec.alternatives_schema("anyOf", [schema, {"type": "null"}])
+        return schema
+
+    @classmethod
     def wire_structure(cls, structural: DecoderPlan) -> DecoderPlan:
         """A custom scalar form stays opaque; declared structural forms supply their plan."""
         return structural
@@ -1206,6 +1240,78 @@ class FieldRepresentation[T](MroDispatch, ABC):
     def argument_options(cls, argument: Argument) -> dict[str, object]:
         """argparse options for this representation's command-line text."""
         return {}
+
+
+class StructuralRepresentation(FieldRepresentation):
+    """The value has no representation codec, so FieldCodec handles its structure."""
+
+    @classmethod
+    def for_value(cls, value: object) -> type[FieldRepresentation]:
+        return FieldCodec.representation(type(value))[1]
+
+    @classmethod
+    def project_view(cls, value: object, view: str, annotation: object) -> JsonValue:
+        return FieldCodec._project_structure(value, view, annotation)
+
+    @classmethod
+    def producer_owners(cls) -> tuple[type[FieldRepresentation], ...]:
+        return ()
+
+    @classmethod
+    def decoder_for(cls, annotation: object, target: object) -> ValueDecoder[object]:
+        return _structural_decoder(target)
+
+    @classmethod
+    def schema_for(cls, annotation: object) -> dict[str, JsonValue]:
+        origin, args = get_origin(annotation), get_args(annotation)
+        if origin in (Union, types.UnionType):
+            members = list(args)
+            if len(members) == 1:
+                return FieldCodec.value_schema(members[0])
+            return FieldCodec.alternatives_schema(
+                "anyOf", [FieldCodec.value_schema(item) for item in members],
+            )
+        if origin is Literal:
+            return {
+                **FieldCodec.value_schema(type(args[0])),
+                "enum": [value for _, value in compile_decoder(annotation).editor_choices()],
+            }
+        if origin in (list, tuple, frozenset):
+            return {"type": "array", "items": FieldCodec.value_schema(args[0])}
+        if origin is dict:
+            if args[0] is str:
+                return {"type": "object", "additionalProperties": FieldCodec.value_schema(args[1])}
+            return {
+                "type": "array",
+                "items": {
+                    "type": "array",
+                    "prefixItems": [FieldCodec.value_schema(arg) for arg in args],
+                    "minItems": 2,
+                    "maxItems": 2,
+                },
+            }
+        if origin is type and args and issubclass(args[0], DeclaredFamily):
+            return {
+                "type": "string",
+                "enum": [value for _, value in compile_decoder(annotation).editor_choices()],
+            }
+        if isinstance(annotation, type) and issubclass(annotation, Enum):
+            values = [value for _, value in compile_decoder(annotation).editor_choices()]
+            return {**FieldCodec.value_schema(type(values[0])), "enum": values}
+        primitive = {
+            str: "string",
+            bool: "boolean",
+            int: "integer",
+            float: "number",
+            type(None): "null",
+        }
+        if annotation in primitive:
+            return {"type": primitive[annotation]}
+        if isinstance(annotation, type) and issubclass(annotation, DeclaredFamily):
+            return FieldCodec._family_schema(annotation)
+        if isinstance(annotation, type) and is_dataclass(annotation):
+            return FieldCodec.record_schema(annotation)
+        raise TypeError(f"No declared JSON schema for {annotation}")
 
 
 class AcceptsNull[T](FieldRepresentation[T]):
@@ -1884,10 +1990,12 @@ class FieldCodec(MroDispatch, Sealed):
         return target.decode_external
 
     @classmethod
-    def representation(cls, annotation: object) -> tuple[object, type[FieldRepresentation] | None]:
-        """The declared value type and the codec owning its wire representation."""
+    def representation(
+        cls, annotation: object,
+    ) -> tuple[object, type[FieldRepresentation]]:
+        """The value type and its declared representation, structural when unencoded."""
         if annotation is None:
-            return None, None
+            return None, StructuralRepresentation
         if annotation is object:
             return object, _JsonValueRepresentation
         if get_origin(annotation) is Annotated:
@@ -1902,23 +2010,22 @@ class FieldCodec(MroDispatch, Sealed):
             raise TypeError("A field must have one representation")
         if isinstance(target, TypeAliasType):
             if target is JsonValue:
-                return object, representations[0] if representations else _JsonValueRepresentation
+                if representations:
+                    return object, representations[0]
+                return object, _JsonValueRepresentation
         if representations:
             return target, representations[0]
         if target is object:
             return object, _JsonValueRepresentation
         if isinstance(target, type) and issubclass(target, (NominalText, WireValue)):
             return target, target.representation()
-        return target, None
+        return target, StructuralRepresentation
 
     @classmethod
-    def _value_representation(cls, value: object, annotation: object):
-        if annotation is None:
-            return cls.representation(type(value))[1]
-        _, representation = cls.representation(annotation)
-        if representation is None:
-            _, representation = cls.representation(type(value))
-        return representation
+    def _value_representation(
+        cls, value: object, annotation: object,
+    ) -> type[FieldRepresentation]:
+        return cls.representation(annotation)[1].for_value(value)
 
     @classmethod
     def record_fields(cls, record: type) -> tuple[tuple[Field[object], str], ...]:
@@ -2065,11 +2172,6 @@ class FieldCodec(MroDispatch, Sealed):
         return _FamilyRecordDecoder(family).member(data)
 
     @classmethod
-    def record_data(cls, record: type, data: object) -> dict:
-        """Validate the envelope independently of reading its declared payloads."""
-        return _RecordDecoder(record).checked(data)
-
-    @classmethod
     def field_plan(cls, record: type, name: str) -> FieldPlan:
         return next(item for item in cls._record_plan(record).bindings if item.name == name)
 
@@ -2145,44 +2247,7 @@ class FieldCodec(MroDispatch, Sealed):
     def value_schema(cls, annotation: object) -> dict[str, JsonValue]:
         """Derive external scalar/array choices from the same decode declarations."""
         annotation, representation = cls.representation(annotation)
-        if representation is not None:
-            schema = representation.schema()
-            if type(None) in get_args(annotation):
-                return cls.alternatives_schema("anyOf", [schema, {"type": "null"}])
-            return schema
-        origin, args = get_origin(annotation), get_args(annotation)
-        if origin in (Union, types.UnionType):
-            members = list(args)
-            if len(members) == 1:
-                return cls.value_schema(members[0])
-            return cls.alternatives_schema("anyOf", [cls.value_schema(item) for item in members])
-        if origin is Literal:
-            return {**cls.value_schema(type(args[0])), "enum": [value for _, value in compile_decoder(annotation).editor_choices()]}
-        if origin in (list, tuple, frozenset):
-            return {"type": "array", "items": cls.value_schema(args[0])}
-        if origin is dict:
-            if args[0] is str:
-                return {"type": "object", "additionalProperties": cls.value_schema(args[1])}
-            return {"type": "array", "items": {"type": "array", "prefixItems": [cls.value_schema(arg) for arg in args], "minItems": 2, "maxItems": 2}}
-        if origin is type and args and issubclass(cast(type, args[0]), DeclaredFamily):
-            return {"type": "string", "enum": [value for _, value in compile_decoder(annotation).editor_choices()]}
-        if isinstance(annotation, type) and issubclass(annotation, Enum):
-            values = [value for _, value in compile_decoder(annotation).editor_choices()]
-            return {**cls.value_schema(type(values[0])), "enum": values}
-        primitive = {
-            str: "string",
-            bool: "boolean",
-            int: "integer",
-            float: "number",
-            type(None): "null",
-        }
-        if annotation in primitive:
-            return {"type": primitive[annotation]}
-        if isinstance(annotation, type) and issubclass(annotation, DeclaredFamily):
-            return cls._family_schema(annotation)
-        if isinstance(annotation, type) and is_dataclass(annotation):
-            return cls.record_schema(annotation)
-        raise TypeError(f"No declared JSON schema for {annotation}")
+        return representation.schema_for(annotation)
 
     @classmethod
     def project(cls, value: object, view: str, annotation: object = None) -> JsonValue:
@@ -2193,8 +2258,10 @@ class FieldCodec(MroDispatch, Sealed):
         Projection is deliberately one way. Excluded secrets cannot be rebuilt
         from a read-only view, and a view never serves as a persistence record.
         """
-        if cls._value_representation(value, annotation) is not None:
-            return RepresentedProjection.of(value, view, annotation)
+        return cls._value_representation(value, annotation).project_view(value, view, annotation)
+
+    @classmethod
+    def _project_structure(cls, value: object, view: str, annotation: object) -> JsonValue:
         if is_dataclass(value) and not isinstance(value, type):
             return cls._project_record(value, view)
         if isinstance(value, (tuple, list)):
@@ -3173,13 +3240,7 @@ def compile_decoder(annotation: object) -> ValueDecoder[object]: ...
 def compile_decoder(annotation: object) -> ValueDecoder[object]:
     """Compile each immutable declaration once; value paths never parse it again."""
     declared, representation = FieldCodec.representation(annotation)
-    if representation is None:
-        return _structural_decoder(declared)
-    try:
-        owner = ValueDecoder.annotation_class(declared)
-    except KeyError:
-        owner = _ScalarDecoder
-    return owner.with_representation(annotation, declared, get_args(declared), representation)
+    return representation.decoder_for(annotation, declared)
 
 
 def _structural_decoder(annotation: object) -> ValueDecoder[object]:
