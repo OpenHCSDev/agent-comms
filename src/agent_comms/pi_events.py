@@ -291,7 +291,7 @@ class NativeRetryEnd(AutoRetryEnd):
 
 
 @dataclass(frozen=True, kw_only=True)
-class RetryAttemptEvent(NativePiEvent):
+class RetryAttemptEvent(NativePiEvent, declared_name=None):
     """Original Pi retry data and shared observation behavior.
 
     This intermediate declaration factors the same fields and algorithm from
