@@ -134,12 +134,17 @@ def test_rebuild_converts_a_field_and_preserves_the_declared_rows_and_constraint
 
 
 def test_writer_derives_missing_nullable_fields_but_refuses_unclaimed_data():
-    from agent_comms.goal_history import GoalHistoryEntry, GoalHistoryError
+    from agent_comms.goal_history import (
+        BaselineRevision,
+        CommittedEntry,
+        GoalHistoryEntry,
+        GoalHistoryError,
+    )
     from agent_comms.goals import NoGoal
     from agent_comms.typed_table import WriterOwnedFile
 
-    entry = GoalHistoryEntry(1, 'baseline', 1.0, NoGoal(), NoGoal(),
-                             owner_created_at=1.0, state='committed')
+    entry = GoalHistoryEntry(1, BaselineRevision, 1.0, NoGoal(), NoGoal(),
+                             owner_created_at=1.0, state=CommittedEntry)
     with sqlite3.connect(':memory:') as db:
         GoalHistoryEntry.create(db)
         entry.insert(db)

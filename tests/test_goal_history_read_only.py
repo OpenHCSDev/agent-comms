@@ -35,7 +35,9 @@ def test_pending_rows_remain_pending_and_original_bytes_unchanged(tmp_path):
     before = preserved_files(registry.store.path.parent)
     with registry.store.reading():
         rows = GoalHistoryStore.acquire_read_only(registry.store.path)
-    assert [(row.sequence, row.state) for row in rows] == [(1, 'committed'), (sequence, 'pending')]
+    assert [(row.sequence, row.state.declared_name) for row in rows] == [
+        (1, 'committed'), (sequence, 'pending')
+    ]
     assert before == preserved_files(registry.store.path.parent)
 
 
