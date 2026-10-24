@@ -5,7 +5,7 @@ from __future__ import annotations
 import os
 import re
 import shlex
-from abc import abstractmethod
+from abc import ABC, abstractmethod
 from collections.abc import Callable, Iterator, Mapping, Sequence
 from dataclasses import dataclass
 from functools import reduce
@@ -20,8 +20,6 @@ from .launch_runtime import LaunchRuntime
 if TYPE_CHECKING:
     from .owner_lifecycle import OwnerLifecycle
     from .thread_model import ThreadModel
-
-    type ProviderChoice = ProviderArgument | type[NoSelectedModel]
 from .pi_vocabulary import (
     NoThinkingOverride,
     ThinkingChoice,
@@ -110,7 +108,26 @@ class ValueArgument(ValueOption):
         return self.flag(), self.value
 
 
-class ProviderArgument(NamedOption, ValueArgument):
+class ProviderChoice(ABC):
+    """The provider the arguments select, or none; it qualifies a model name."""
+
+    @abstractmethod
+    def qualified(self, model: str) -> str: ...
+
+    @abstractmethod
+    def provider_type(self) -> type[ModelProvider]: ...
+
+
+@dataclass(frozen=True)
+class NoProviderChoice(ProviderChoice):
+    def qualified(self, model: str) -> str:
+        return model
+
+    def provider_type(self) -> type[ModelProvider]:
+        return NoSelectedModel
+
+
+class ProviderArgument(NamedOption, ValueArgument, ProviderChoice):
     def apply_provider(self, current: ProviderChoice) -> ProviderChoice:
         return self
 
@@ -147,14 +164,6 @@ class ModelProvider(DeclaredFamily, affix="Provider"):
 class NoSelectedModel(ModelProvider, declared_name=None):
     """External commanders without a native model remain valid commanders."""
     may_command = True
-
-    @classmethod
-    def qualified(cls, model: str) -> str:
-        return model
-
-    @classmethod
-    def provider_type(cls) -> type[ModelProvider]:
-        return cls
 
 
 class AnthropicProvider(ModelProvider, declared_name="anthropic"):
@@ -362,7 +371,7 @@ class NativeArguments:
 
     @property
     def provider(self) -> ProviderChoice:
-        return self.last(lambda entry: entry.apply_provider)(NoSelectedModel)
+        return self.last(lambda entry: entry.apply_provider)(NoProviderChoice())
 
     @property
     def thinking(self) -> type[ThinkingChoice]:
