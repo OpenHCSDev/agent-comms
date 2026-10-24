@@ -126,6 +126,7 @@ from .importing import ImportedSessionMetadata, ImportLimits, ThreadImported
 from .input_origin import InputProvenance
 from .input_key import InputKey, InputKeyText
 from .install_choices import InstallerChoice, LiveMode, RehearsalMode, RunMode, UnnamedInstaller
+from .launch_runtime import LaunchRuntime
 from .maintenance_barrier import MaintenanceHeldError
 from .message_page import PageBounds
 from .message_reference import FirstUnreadStart, InboxStart, MessageReference, NewestUnreadStart
@@ -135,7 +136,7 @@ from .messages import (
 from .native_arguments import ConfiguredBinary, InheritedArguments, LaunchArguments, LaunchBinary
 from .native_settings import NativeThreadDefaults
 from .native_turn_context import NativeContextData
-from .owner_lifecycle import OwnerRestartResult, OwnerStartResult
+from .owner_lifecycle import OwnerRestartResult, OwnerRestartSelection, OwnerStartResult
 from .page_traversal import NewestCursor, PageCursor
 from .pi_vocabulary import ServiceTier, ThinkingLevelField
 from .presentation import CountedRead, InboxRead, ThreadRecord, ThreadView, UncountedRead
@@ -154,7 +155,8 @@ from .storage_rules import (
     CheckoutStorageEffect, OrderCheckoutAllocation, RemoveCheckoutStorageEffect,
     RepositoryCheckoutAllocation, StorageProjection, StorageRule,
 )
-from .restart_scope import AllOwners, OneOwner, RestartTarget
+from .restart_queue import RestartQueued, enqueue
+from .restart_scope import AllOwners, RestartTarget
 from .owner_connection import OwnerConnection, socket_path
 from .schema_report import StoreSchemaReport, StoreSchemaReports
 from .send_result import SendResult
@@ -2188,15 +2190,24 @@ class RestartCliCommand(CliCommand):
         # Explicit CLI launch overrides are independent operator arguments.
         return ()
 
-    @classmethod
-    def thread_bindings(cls, comms: Comms, thread: Thread, status: ThreadStatus, channel: str | None = None, *, catalog: CatalogDocument | None = None) -> tuple[Self, ...]:
-        if thread.executing:
-            return ()
-        return (cls(name=OneOwner(thread.name)),) if thread.restart_candidates(status) else ()
-
     def apply(self, ctx: Comms) -> CliResult:
         results = ctx.owners.restart_owners(self.name, agent_bin=self.agent_bin, agent_args=self.agent_args)
         return OwnersRestartedResult(results)
+
+
+@dataclass(frozen=True, kw_only=True)
+class QueueRestartCliCommand(ThreadLifecycleCliCommand, CliCommand[RestartQueued]):
+    """A selected owner restarts at its next idle point: at once when idle, never mid-turn."""
+
+    help = "Restart process"
+
+    @classmethod
+    def available_for_thread(cls, thread: Thread, status: ThreadStatus) -> bool:
+        return bool(thread.restart_candidates(status))
+
+    def apply(self, ctx: Comms) -> RestartQueued:
+        selection = OwnerRestartSelection.capture(ctx.registry.snapshot(), self.name)
+        return RestartQueued(enqueue(ctx, selection, launch_runtime=LaunchRuntime.running()))
 
 
 @dataclass(frozen=True, kw_only=True)
