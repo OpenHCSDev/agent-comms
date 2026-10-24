@@ -344,13 +344,6 @@ class CapturedContext(RecordedContextState):
 class ContextManifestCursor(ABC):
     descending: ClassVar[bool] = True
 
-    @classmethod
-    def for_page(cls, value: object) -> ContextManifestCursor:
-        """Accept a typed position or decode an unpositioned API request."""
-        if isinstance(value, cls):
-            return value
-        return FieldCodec.decode(LatestContextManifest, value)
-
     @abstractmethod
     def has_position(self) -> bool: ...
 
@@ -554,7 +547,7 @@ class ContextStore(DurableStore):
         if not 1 <= limit <= self.max_page_rows:
             raise ValueError("Context page row limit exceeds its source budget")
         incarnation = registry.snapshot().require(name).incarnation
-        selection = ContextManifestCursor.for_page(cursor)
+        selection = cursor
         with self.snapshot() as db:
             return ContextStoreInfo.source_in(db).page(
                 self, db, incarnation, selection, previous, limit

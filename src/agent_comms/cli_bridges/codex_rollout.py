@@ -10,9 +10,16 @@ import json
 from abc import ABC
 from collections.abc import Iterator
 from dataclasses import dataclass, field
-from typing import BinaryIO, ClassVar
+from typing import Annotated, BinaryIO
 
-from pydantic import Field, JsonValue, TypeAdapter, field_validator, model_validator
+from pydantic import (
+    BeforeValidator,
+    Field,
+    JsonValue,
+    TypeAdapter,
+    field_validator,
+    model_validator,
+)
 
 from agent_comms.cli_protocol import OpenWire, TimestampedWire, WireHeader
 from agent_comms.runtime_updates import (
@@ -141,14 +148,18 @@ class CustomToolCallItem(FunctionCallItem, declared_name='custom_tool_call'):
         return {'input': self.arguments}
 
 
+def output_text(value: JsonValue) -> str:
+    return value if isinstance(value, str) else json.dumps(value, ensure_ascii=False)
+
+
 class FunctionCallOutputItem(RolloutItem, declared_name='function_call_output'):
     call_id: str = ''
-    output: JsonValue = ''
+    output: Annotated[str, BeforeValidator(output_text)] = ''
 
     def updates(self, state: RolloutState, position: int, timestamp: float) -> tuple[RuntimeUpdate, ...]:
-        text = self.output if isinstance(self.output, str) else json.dumps(self.output, ensure_ascii=False)
         return (FinishedItem('', self.call_id + ':result', (ToolEndTranscript(
-            position=position, timestamp=timestamp, tool_call_id=self.call_id, tool_name=state.tools.get(self.call_id, ''), text=text),)),)
+            position=position, timestamp=timestamp, tool_call_id=self.call_id,
+            tool_name=state.tools.get(self.call_id, ''), text=self.output),)),)
 
 
 class CustomToolCallOutputItem(FunctionCallOutputItem, declared_name='custom_tool_call_output'):
