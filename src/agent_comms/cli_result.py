@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from typing import TextIO
 
@@ -10,10 +11,23 @@ from .pi_vocabulary import ServiceTier
 from .tool_result import DeclaredReply
 
 
+class ResultShower(ABC):
+    """A front end that displays successful and failed command outcomes."""
+
+    @abstractmethod
+    def show_done(self, text: str, title: str) -> None: ...
+
+    @abstractmethod
+    def show_failure(self, text: str, title: str) -> None: ...
+
+
 class CliResult(DeclaredReply):
     """Every result a command returns; a result kind overrides what it decides."""
 
     __slots__ = ()
+
+    def show(self, shower: ResultShower, label: str, title: str) -> None:
+        shower.show_done(label, title)
 
     def reconnect_targets(self) -> tuple[str, ...]:
         return ()
