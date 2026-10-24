@@ -27,6 +27,7 @@ from .acp_extension import (
 )
 from .context_reading import ContextUsage, UnmeasuredContext
 from .coordinator import Coordination
+from .field_codec import TurnId
 from .mro_dispatch import MroDispatch, handles
 from .tool_declaration import (
     EditAction,
@@ -218,7 +219,7 @@ class AcpEventConsumer(MroDispatch):
 
 @dataclass(eq=False, repr=False)
 class TurnEventConsumer(AcpEventConsumer):
-    turn_id: str
+    turn_id: TurnId
 
     @handles(events.McpLiveStatus)
     async def on_mcp_live_status(self, event: events.McpLiveStatus) -> None:

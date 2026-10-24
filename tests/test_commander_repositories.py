@@ -23,6 +23,10 @@ def test_configured_name_and_checkout_select_the_same_repository(configured_repo
     for repo in repositories:
         assert Repo.selected(repositories, repo.github.name).checkout == repo.checkout
         assert Repo.selected(repositories, str(repo.checkout)).checkout == repo.checkout
+        assert Repo.selected(repositories, repo.github.to_wire()).checkout == repo.checkout
+        assert Repo.selected(repositories, f"Example/{repo.github.name.upper()}").checkout == repo.checkout
+    with pytest.raises(ValueError):
+        Repo.selected(repositories, "other/agent-comms")
 
 
 def test_existing_unconfigured_worktree_is_refused_with_configured_choices(

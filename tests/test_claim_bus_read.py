@@ -155,12 +155,14 @@ def claim_originals(comms: Comms) -> tuple[ClaimMessage, ...]:
     return tuple(record for record in records if isinstance(record, ClaimMessage))
 
 
-def acquire_tool_claim(comms: Comms, name: str, resource: Path, operation_id: str = "e" * 32):
+def acquire_tool_claim(
+    comms: Comms, name: str, resource: Path, turn_id: TurnId, operation_id: str = "e" * 32,
+):
     with NativeBoundary(comms.bus) as boundary:
         owner = boundary.registry.require(name)
         scope = NativeClaim(
             owner_claimed_generation=boundary.registry.claim_generation(name),
-            operation_id=operation_id, turn_id=f"turn-{name}", input_id=f"input-{name}",
+            operation_id=operation_id, turn_id=turn_id, input_id=f"input-{name}",
         )
         return comms.bus.publisher._publish_acquisition_unlocked(
             boundary.registry, owner,
