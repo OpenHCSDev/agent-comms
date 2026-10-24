@@ -107,7 +107,7 @@ class FrozenAudience(ProjectionSource):
             raise MalformedRecord("unsupported audience version")
         if type(self.wire_seq) is not int or not 0 < self.wire_seq <= MAX_WIRE_SEQ:
             raise MalformedRecord("wire_seq must be a positive SQLite-range integer")
-        for name in ("message_id", "exact_target", "sender_lookup", "source_revision"):
+        for name in ("exact_target", "sender_lookup", "source_revision"):
             _bounded_text(getattr(self, name), name)
         _bounded_text(self.sender_name, "sender_name", thread_name=True)
         if not exact_stored_target(self.exact_target):

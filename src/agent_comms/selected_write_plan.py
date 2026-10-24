@@ -176,7 +176,7 @@ class SelectedWritePlans(DurableFile, PatternFile):
             FieldCodec.decode(str, contents)
         except MalformedRecord as error:
             raise IdentityConflict("Selected write request is not typed") from error
-        if not source_message_id or not resource:
+        if not resource:
             raise IdentityConflict("Selected write request requires its source and resource")
         raw = contents.encode("utf-8")
         if not raw or len(raw) > _MAX_BYTES:

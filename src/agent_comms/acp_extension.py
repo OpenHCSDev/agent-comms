@@ -730,7 +730,7 @@ class SelectedWriteRequest(CommsRequest):
     contents: str
 
     def __post_init__(self):
-        if self.source_seq <= 0 or not self.source_message_id or not self.resource:
+        if self.source_seq <= 0 or not self.resource:
             raise ValueError("Selected write requires actual source and resource identity")
 
 
