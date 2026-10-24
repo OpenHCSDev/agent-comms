@@ -141,6 +141,11 @@ class Side(enum.Enum):
 
 class Measure(DeclaredFamily, affix="Measure"):
     @classmethod
+    def key(cls, subject: str) -> str:
+        """This measure's report key for one measured subject (a path, or a class in one)."""
+        return f"{cls.__name__}:{subject}"
+
+    @classmethod
     def owns(cls, key: str) -> bool:
         """Whether a report key is one of this measure's."""
         return key.partition(":")[0] == cls.__name__
@@ -388,7 +393,7 @@ class PerFileMeasure(CountedSource):
 
     @classmethod
     def tally(cls, counts: list[tuple[str, int]]) -> dict[str, int]:
-        return {f"{cls.__name__}:{path}": count for path, count in counts}
+        return {cls.key(path): count for path, count in counts}
 
     @classmethod
     def align(cls, base: dict[str, int], head: dict[str, int]) -> tuple[dict[str, int], dict[str, int]]:
@@ -610,7 +615,7 @@ class CheckedRevision(Measure):
         found: dict[Side, Counter[str]] = {side: Counter() for side in Side}
         for side, counted in results:
             found[side] += counted
-        before, after = ({f"{cls.__name__}:{path}": found[side][path] for path in sorted(changed)}
+        before, after = ({cls.key(path): found[side][path] for path in sorted(changed)}
                          for side in Side)
         return before, after
 
@@ -797,7 +802,7 @@ class CleanChangedLines(OccurrenceMeasure):
                 gone.subtract(measure.identities(source.tree, source.path))
                 departed.update(+gone)
             for source in sources:
-                found[f"{measure.__name__}:{source.path}"] = measure.changed_sites(source, departed)
+                found[measure.key(source.path)] = measure.changed_sites(source, departed)
         return found
 
     @staticmethod
@@ -1426,7 +1431,7 @@ class StringIdentity(InventoryMeasure[ModuleDeclarations]):
                  readings: dict[str, ModuleDeclarations], root: str) -> dict[str, int]:
         spellings = DeclaredSpellings.read(readings)
         selected = readings.keys() & touched_paths(repo, base, head)
-        return {f"{cls.__name__}:{path}": len(spellings.sites(source, path))
+        return {cls.key(path): len(spellings.sites(source, path))
                 for path, source in GitMeasure.sources(repo, ref, selected)}
 
     align = PerFileMeasure.align
@@ -1816,8 +1821,8 @@ class OwnTypeTest(InventoryMeasure[ModuleDeclarations]):
                          for path, dotted in DeclaredSpellings.import_names(readings).items())
         selected = {path for path in readings.keys() & touched_paths(repo, base, head)
                     if path.startswith(root)}
-        return {f"{cls.__name__}:{path}": sum(name in declared for _, name in
-                                              OwnTypeTests.of(source, path, ours))
+        return {cls.key(path): sum(name in declared
+                                   for _, name in OwnTypeTests.of(source, path, ours))
                 for path, source in GitMeasure.sources(repo, ref, selected)}
 
     align = PerFileMeasure.align
@@ -1882,7 +1887,8 @@ class GodClassExcess(InventoryMeasure[dict[str, int]]):
                 case ast.ClassDef(name=name, lineno=start, end_lineno=end, decorator_list=decorators):
                     scope = (*scope, name)
                     start = min([start, *(decorator.lineno for decorator in decorators)])
-                    values[f"{cls.__name__}:{path}::{'.'.join(scope)}"] = max(0, end - start + 1 - cls.threshold)
+                    excess = max(0, end - start + 1 - cls.threshold)
+                    values[cls.key(f"{path}::{'.'.join(scope)}")] = excess
                 case ast.FunctionDef(name=name) | ast.AsyncFunctionDef(name=name):
                     scope = (*scope, name)
             for child in ast.iter_child_nodes(node):
@@ -2440,7 +2446,8 @@ class Comparison:
                 or any(self.introduced.values()))
 
 
-def compare(repo: Path, base: str, head: str, root: str, workers: int) -> Comparison:
+def compare(repo: Path, base: str, head: str, root: str, workers: int,
+            measured: tuple[type[Measure], ...] = Measure.members_with(Measure)) -> Comparison:
     source_root = Path(root)
     if source_root.is_absolute() or ".." in source_root.parts or not source_root.parts:
         raise ValueError("--root must be a repository-relative source directory")
@@ -2458,7 +2465,7 @@ def compare(repo: Path, base: str, head: str, root: str, workers: int) -> Compar
         return Comparison(root, base, head, (), before, after, introduced, introduced_lines)
 
     # A pass of a shared runner is measured once, by that runner.
-    measures = tuple(dict.fromkeys(measure.run_by() for measure in Measure.members_with(Measure)))
+    measures = tuple(dict.fromkeys(measure.run_by() for measure in measured))
     # Forked workers start from this already-imported module instead of importing it again.
     with ForkedProcessPool(workers) as pool:
         parts = {measure: [pool.submit(part)
