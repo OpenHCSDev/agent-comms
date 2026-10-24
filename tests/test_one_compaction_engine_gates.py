@@ -14,10 +14,12 @@ from pathlib import Path
 
 import pytest
 
+from agent_comms.native_build_inputs import NativeBuildInputs
+
 REPO = Path(__file__).resolve().parents[1]
 SOURCE = REPO / "src" / "agent_comms"
 STACK = REPO / "stack"
-NATIVE_INPUT_PATCH = REPO / "experiments" / "pi-context-proof" / "native-input.patch"
+NATIVE_INPUT_PATCH = STACK / "native/native-input.patch"
 
 pytestmark = pytest.mark.refactor_guard
 
@@ -52,11 +54,7 @@ def _modules() -> dict[str, ast.Module]:
 
 
 def _stack_texts() -> dict[str, str]:
-    files = [
-        path for path in STACK.iterdir()
-        if path.is_file() and path.suffix in {".mjs", ".py", ".patch", ".ts", ".json"}
-    ]
-    files += [*(STACK / "bin").iterdir(), NATIVE_INPUT_PATCH]
+    files = [*NativeBuildInputs(REPO).paths(), *(STACK / "bin").iterdir()]
     files += list((SOURCE / "_pi_helpers").glob("*.mjs"))
     return {str(path.relative_to(REPO)): path.read_text() for path in files}
 
@@ -84,7 +82,7 @@ def test_deleted_engine_modules_have_no_definition_or_importer():
 
 
 def test_deleted_native_engine_files_are_gone():
-    assert [name for name in DELETED_NATIVE_FILES if (STACK / name).exists()] == []
+    assert [name for name in DELETED_NATIVE_FILES if (STACK / "native" / name).exists()] == []
     helpers = {path.name for path in (SOURCE / "_pi_helpers").iterdir()}
     assert helpers.isdisjoint({"prepare_compaction.mjs", "context_tokens.mjs"})
 
