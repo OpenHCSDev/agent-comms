@@ -370,9 +370,9 @@ class SelectedToolSlot(NativeRuntimeTable, WithoutRowid):
 
     @classmethod
     def consume(
-        cls, db: sqlite3.Connection, input_id: str, call_id: str,
+        cls, db: sqlite3.Connection, slot_id: str, call_id: str,
     ) -> None:
-        if cls(input_id, call_id).insert_if_absent(db).rowcount != 1:
+        if cls(slot_id, call_id).insert_if_absent(db).rowcount != 1:
             raise SelectedToolDenied("Selected tool input already consumed; outcome may be UNKNOWN")
 
     def require_call(self, call_id: str) -> None:

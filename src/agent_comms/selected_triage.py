@@ -14,6 +14,7 @@ from .coordinator import Coordination
 from .declared_family import DeclaredFamily
 from .field_codec import (
     FieldCodec,
+    InputId,
     JsonShapeFamily,
     JsonShapeMember,
     MalformedRecord,
@@ -75,7 +76,10 @@ class SelectedTriage(DeclaredFamily, affix="SelectedTriage"):
     def settle(self, store: Coordination, db: Connection, current: WakeAssignment) -> None: ...
 
     @abstractmethod
-    async def continue_turn(self, participant: SelectedParticipant, session: SelectedSession, input_id: str, execution: SelectedExecution, settled: tuple[WakeAssignment, ...]) -> CoordinatedTurn: ...
+    async def continue_turn(
+        self, participant: SelectedParticipant, session: SelectedSession, input_id: InputId,
+        execution: SelectedExecution, settled: tuple[WakeAssignment, ...],
+    ) -> CoordinatedTurn: ...
 
 
 @dataclass(frozen=True)
@@ -105,7 +109,10 @@ class IgnoreSelectedTriage(SelectedTriage, declared_name="IGNORE"):
             updated_at_ms=store.session.now(now),
         )
 
-    async def continue_turn(self, participant: SelectedParticipant, session: SelectedSession, input_id: str, execution: SelectedExecution, settled: tuple[WakeAssignment, ...]) -> CoordinatedTurn:
+    async def continue_turn(
+        self, participant: SelectedParticipant, session: SelectedSession, input_id: InputId,
+        execution: SelectedExecution, settled: tuple[WakeAssignment, ...],
+    ) -> CoordinatedTurn:
         from .selected_result import CoordinatedTurn
 
         await Coordination.run_worker(participant.consume_reply_wait)
@@ -122,7 +129,10 @@ class FullSelectedTriage(SelectedTriage, declared_name="FULL"):
         # Deferred until the execution owner atomically engages this exact claim.
         pass
 
-    async def continue_turn(self, participant: SelectedParticipant, session: SelectedSession, input_id: str, execution: SelectedExecution, settled: tuple[WakeAssignment, ...]) -> CoordinatedTurn:
+    async def continue_turn(
+        self, participant: SelectedParticipant, session: SelectedSession, input_id: InputId,
+        execution: SelectedExecution, settled: tuple[WakeAssignment, ...],
+    ) -> CoordinatedTurn:
         from .coordination_tables.executions import WireOrigin
 
         await participant.require_current()
@@ -149,7 +159,10 @@ class SelectedTriageOutcome(DeclaredFamily, affix="TriageOutcome"):
     def settle(self, participant: SelectedParticipant, stage: TriageNativeSend, claim_scope: PrivateSendClaim, context: NativeContextProof) -> tuple[WakeAssignment, ...]: ...
 
     @abstractmethod
-    async def continue_turn(self, participant: SelectedParticipant, session: SelectedSession, input_id: str, execution: SelectedExecution, settled: tuple[WakeAssignment, ...]) -> CoordinatedTurn | None: ...
+    async def continue_turn(
+        self, participant: SelectedParticipant, session: SelectedSession, input_id: InputId,
+        execution: SelectedExecution, settled: tuple[WakeAssignment, ...],
+    ) -> CoordinatedTurn | None: ...
 
 
 @dataclass(frozen=True)
@@ -160,7 +173,10 @@ class DecidedTriageOutcome(SelectedTriageOutcome):
         return stage.commit(participant.store, participant.identity, claim_scope.input_id,
                             claim_scope.token_digest, context, self.decision)
 
-    async def continue_turn(self, participant: SelectedParticipant, session: SelectedSession, input_id: str, execution: SelectedExecution, settled: tuple[WakeAssignment, ...]) -> CoordinatedTurn | None:
+    async def continue_turn(
+        self, participant: SelectedParticipant, session: SelectedSession, input_id: InputId,
+        execution: SelectedExecution, settled: tuple[WakeAssignment, ...],
+    ) -> CoordinatedTurn | None:
         return await self.decision.continue_turn(participant, session, input_id, execution, settled)
 
 
@@ -172,7 +188,10 @@ class RejectedTriageOutcome(SelectedTriageOutcome):
         return stage.fail_decision(participant.store, participant.identity,
                                    claim_scope.input_id, claim_scope.token_digest, context)
 
-    async def continue_turn(self, participant: SelectedParticipant, session: SelectedSession, input_id: str, execution: SelectedExecution, settled: tuple[WakeAssignment, ...]) -> CoordinatedTurn | None:
+    async def continue_turn(
+        self, participant: SelectedParticipant, session: SelectedSession, input_id: InputId,
+        execution: SelectedExecution, settled: tuple[WakeAssignment, ...],
+    ) -> CoordinatedTurn | None:
         from .selected_result import CoordinatedTurn, publish_native_failure
 
         sent = await Coordination.run_worker(partial(

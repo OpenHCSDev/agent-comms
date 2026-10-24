@@ -18,8 +18,8 @@ from typing import TYPE_CHECKING, Generic, TypeVar
 
 from .child_process import Platform, join_retirement
 from .coordination_database import CoordinationStore
-from .field_codec import FieldCodec, MalformedRecord, Token256Text
 from .errors import RelationViolationError
+from .field_codec import FieldCodec, InputId, MalformedRecord, Token256Text
 from .lifecycle_capability import Complete
 from .native_tool_call import (
     DuplicateToolCallIdentity,
@@ -320,7 +320,7 @@ class ToolTransport(Generic[Call]):
         call.correlate(candidate)
         call.start()
 
-    def tool_finished(self, event: ToolExecutionEnd, input_id: str) -> None:
+    def tool_finished(self, event: ToolExecutionEnd, input_id: InputId) -> None:
         identity, call = self.calls.require_current(
             FieldCodec.encode(event.tool_call_id), "Native tool terminal has no declared call"
         )

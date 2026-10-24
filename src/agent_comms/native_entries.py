@@ -24,6 +24,7 @@ from uuid import uuid4
 from .declared_family import DeclaredFamily, UnknownFamilyMember
 from .field_codec import (
     FieldCodec,
+    InputId,
     MalformedRecord,
     RecordedTimestamp,
     TimestampText,
@@ -180,7 +181,7 @@ class NativeEntry(RecordedEntry, DeclaredFamily, affix="Entry"):
         return None
 
     @property
-    def input_id(self) -> str | None:
+    def input_id(self) -> InputId | None:
         return None
 
     @property
@@ -320,7 +321,7 @@ class NativeEvidenceRead:
         self.source.close()
         self._forget()
 
-    def position(self, input_id: str) -> int:
+    def position(self, input_id: InputId) -> int:
         """Where the observed session committed this input; the one answer to whether it did."""
         from .native_pi import NativeInputUncommitted
 
@@ -330,7 +331,7 @@ class NativeEvidenceRead:
             raise NativeInputUncommitted(
                 "The specified input was never durably committed") from missing
 
-    def tracked(self, input_id: str) -> MessageEntry:
+    def tracked(self, input_id: InputId) -> MessageEntry:
         """The observed entry that holds this tracked input."""
         return self.entries[self.position(input_id)].require_tracked_user()
 
@@ -359,7 +360,7 @@ class NativeEvidenceRead:
         self.observe()
         return self.tracked(location.input_id)
 
-    def stopped_input(self, input_id: str):
+    def stopped_input(self, input_id: InputId):
         """Read only this input's contiguous branch, ending at the next input.
 
         A later turn, a fork or a partial tool round cannot finish this input.
@@ -555,16 +556,15 @@ class MessageEntry(NativeEntry):
         return self.message.assistant
 
     @property
-    def input_id(self) -> str | None:
+    def input_id(self) -> InputId | None:
         # NativeEntry declares absence as None for every entry; this hands Pi's answer over.
         return self.message.input_id.value_or(None)
 
     @property
     def tracked_user(self) -> MessageEntry | None:
-        from .field_codec import Id128Text, Sha256Text
+        from .field_codec import Sha256Text
 
         for input_id in self.message.input_id.present():
-            Id128Text.decode(input_id)
             if not self.message.user or not self.message.input_digest.reported or not self.id:
                 raise MalformedRecord("Native Pi session has ambiguous tracked user input")
             Sha256Text.from_text(self.message.input_digest.require())

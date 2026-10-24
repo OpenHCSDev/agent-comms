@@ -9,7 +9,7 @@ import pytest
 
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.comms import wire
-from agent_comms.field_codec import FieldCodec, TurnId, GoalId
+from agent_comms.field_codec import FieldCodec, GoalId, InputId, TurnId
 from agent_comms.goal_actions import (
     GoalPrecondition,
     OwnerInvocable,
@@ -24,8 +24,8 @@ from agent_comms.goal_states import BlockedGoal, GoalState, UnrecordedBlockGoal
 from agent_comms.goal_waits import GoalWait, GoalWaits
 from agent_comms.goals import Goal
 from agent_comms.input_disposition import InputDispositions
-from stored_inputs import stored_inputs
 from agent_comms.threads import Thread
+from stored_inputs import stored_inputs
 
 
 def register(comms, name):
@@ -148,13 +148,13 @@ def test_standby_uses_native_receipts_and_explicit_reviews_not_read_ack(tmp_path
         second_key,
         claim_scope=claim_scope,
         turn_id=TurnId('d139335a14223f343b5786bbd9e20434'),
-        native_id="a" * 32,
+        native_id=InputId("a" * 32),
         text=second.body,
     )
     assert store.started(
         second_key,
         turn_id=TurnId('d139335a14223f343b5786bbd9e20434'),
-        native_id="a" * 32,
+        native_id=InputId("a" * 32),
         text=second.body,
     )
     comms.goals.update_goal("owner", action)

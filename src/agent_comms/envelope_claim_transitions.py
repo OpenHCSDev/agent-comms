@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from .class_fact import ClassFact
 import stat
 from abc import ABC, abstractmethod
 from collections.abc import Callable, Iterator, Mapping
@@ -11,29 +10,30 @@ from pathlib import Path
 from types import MappingProxyType
 from typing import TYPE_CHECKING, Annotated, ClassVar, Literal
 
-
-from .projection_source import ProducedRow, ProjectionSource
+from .class_fact import ClassFact
 from .coordination_errors import IdentityConflict
 from .field_codec import (
-    ClaimId,
     BoundedText,
+    ClaimId,
     EnvelopeSequence,
     FieldCodec,
+    InputId,
     MessageId,
-    TurnId,
     NullMember,
     ProjectionSequence,
     RecordMember,
     ResourcePathText,
+    RootId,
     Sha256Text,
     SubclassUnion,
+    ThreadLookup,
+    TurnId,
     WireName,
     WireOmitDefault,
     WireRequired,
-    RootId,
-    ThreadLookup,
 )
 from .message_reference import MessageReference
+from .projection_source import ProducedRow, ProjectionSource
 from .thread_identity import GenerationCounter, RecordedThreadIncarnation
 
 if TYPE_CHECKING:
@@ -199,7 +199,7 @@ class RecordedScope(ClaimScope, declared_name=None):
 class NativeClaim(RecordMember, RecordedScope):
     """A tool acquisition belongs to one ordinary native input."""
 
-    input_id: Annotated[str, BoundedText]
+    input_id: InputId
 
     def reuses(self, other: RecordedScope) -> bool:
         return replace(self, operation_id=other.operation_id) == other

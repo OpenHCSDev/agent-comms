@@ -4,10 +4,16 @@ import pytest
 
 from agent_comms.comms import wire
 from agent_comms.envelope_claim_transitions import (
-    ClaimProjection, ClaimRelease, ClaimTransition, NativeClaim, ReleasedClaims,
-    UnrecordedScope, UnscopedClaims, WakeClaims,
+    ClaimProjection,
+    ClaimRelease,
+    ClaimTransition,
+    NativeClaim,
+    ReleasedClaims,
+    UnrecordedScope,
+    UnscopedClaims,
+    WakeClaims,
 )
-from agent_comms.field_codec import ClaimId, FieldCodec, MalformedRecord, MessageId, TurnId
+from agent_comms.field_codec import ClaimId, FieldCodec, InputId, MalformedRecord, MessageId, TurnId
 from agent_comms.thread_status import RunningThreadStatus
 from agent_comms.threads import Thread
 
@@ -50,7 +56,7 @@ def test_unscoped_history_row_decodes_projects_never_live_and_releases(tmp_path)
             owner_claimed_generation=1,
             operation_id=ClaimId("c" * 32),
             turn_id=TurnId('ff33c94032d9f01447a779689c1dff6a'),
-            input_id="input-2",
+            input_id=InputId.mint(),
         ),
     ).apply(held, registry)
     assert taken[resource].owner == "peer"

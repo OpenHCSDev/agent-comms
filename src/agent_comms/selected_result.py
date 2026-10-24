@@ -21,7 +21,7 @@ from .turn_outcome import TurnOutcome
 class CoordinatedTurn(TurnOutcome):
     assignment_ids: Annotated[tuple[str, ...], field_codec.WireName("claim_ids")]
     disposition: type[AssignmentState]
-    input_id: str
+    input_id: InputId
     publications: tuple[PublicationEvidence, ...]
     cursor_status: str
     notices: tuple[str, ...] = ()

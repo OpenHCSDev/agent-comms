@@ -4,23 +4,21 @@ from __future__ import annotations
 
 from abc import abstractmethod
 from dataclasses import dataclass, field, fields, replace
-from typing import TYPE_CHECKING, ClassVar, Annotated
-
+from typing import TYPE_CHECKING, Annotated, ClassVar
 
 from .declared_family import DeclaredFamily
-from .lifecycle_capability import LifecycleCapability, Unresolved
 from .errors import RelationViolationError
 from .field_codec import (
-    GoalId,
     FieldCodec,
-    Id128Text,
-    TurnId,
+    GoalId,
+    InputId,
     NullMember,
     PublicExclude,
+    RootId,
+    TurnId,
     WireName,
     WireOmitDefault,
     WireRequired,
-    RootId,
 )
 from .input_origin import (
     InputDelivery,
@@ -29,9 +27,10 @@ from .input_origin import (
     UnattributedInputOrigin,
     UndeliveredInput,
 )
+from .lifecycle_capability import LifecycleCapability, Unresolved
+from .reported_turn import ReportedTurnState
 from .text_digest import TextDigest
 from .thread_identity import GenerationCounter, ThreadIncarnation
-from .reported_turn import ReportedTurnState
 
 if TYPE_CHECKING:
     from .registry_document import RegistrySnapshot
@@ -125,12 +124,12 @@ class InputAttempt(LifecycleCapability, DeclaredFamily, affix="Input"):
         raise RelationViolationError("Constraint lacks its original input")
 
     def bind(
-        self, *, claim_scope: int, turn_id: TurnId, native_id: str, text: str
+        self, *, claim_scope: int, turn_id: TurnId, native_id: InputId, text: str
     ) -> InputTransition:
         self.require_not_cleared()
         return UnchangedInput(self)
 
-    def started(self, *, turn_id: TurnId, native_id: str, text: str) -> InputTransition:
+    def started(self, *, turn_id: TurnId, native_id: InputId, text: str) -> InputTransition:
         return UnchangedInput(self)
 
     def finish_unbound(self) -> InputTransition:
@@ -139,19 +138,19 @@ class InputAttempt(LifecycleCapability, DeclaredFamily, affix="Input"):
     def clear_unbound(self) -> InputTransition:
         return UnchangedInput(self)
 
-    def clear_native(self, native_id: str, text: str) -> InputTransition:
+    def clear_native(self, native_id: InputId, text: str) -> InputTransition:
         return UnchangedInput(self)
 
     def require_not_cleared(self) -> None:
         """Non-cleared states retain their existing write checks."""
 
-    def matches_native(self, *, turn_id: TurnId, native_id: str, text: str) -> bool:
+    def matches_native(self, *, turn_id: TurnId, native_id: InputId, text: str) -> bool:
         return False
 
     def started_for_native(
         self,
         lease: TurnLeaseFence,
-        native_id: str,
+        native_id: InputId,
         sent_text: str,
         *,
         snapshot: RegistrySnapshot,
@@ -345,7 +344,7 @@ class ReservedInput(Unresolved, RecoverableUnboundInput):
         )
 
     def bind(
-        self, *, claim_scope: int, turn_id: TurnId, native_id: str, text: str
+        self, *, claim_scope: int, turn_id: TurnId, native_id: InputId, text: str
     ) -> InputTransition:
         if self.claim_generation != claim_scope:
             return UnchangedInput(self)
@@ -365,7 +364,7 @@ class SentInput(StoredInput):
     has_native_binding = True
     turn_id: Annotated[TurnId, PublicExclude(), WireRequired()]
     native_id: Annotated[
-        str, PublicExclude(), WireRequired()
+        InputId, PublicExclude(), WireRequired()
     ]
     # The native session owns the sent text; this row only proves which text it was.
     sent_digest: Annotated[
@@ -374,24 +373,20 @@ class SentInput(StoredInput):
 
     def __post_init__(self) -> None:
         super().__post_init__()
-        try:
-            Id128Text.decode(self.native_id)
-        except ValueError as error:
-            raise ValueError("Invalid native input attempt") from error
 
-    def matches_native(self, *, turn_id: TurnId, native_id: str, text: str) -> bool:
+    def matches_native(self, *, turn_id: TurnId, native_id: InputId, text: str) -> bool:
         return (self.turn_id, self.native_id) == (turn_id, native_id) and self.sent_digest.matches(text)
 
 
 class BoundUnknownInput(Unresolved, SentInput):
     public_status = "unknown"
 
-    def clear_native(self, native_id: str, text: str) -> InputTransition:
+    def clear_native(self, native_id: InputId, text: str) -> InputTransition:
         if self.native_id == native_id and self.sent_digest.matches(text):
             return MovedInput(self._transition(ClearedNativeInput))
         return UnchangedInput(self)
 
-    def started(self, *, turn_id: TurnId, native_id: str, text: str) -> InputTransition:
+    def started(self, *, turn_id: TurnId, native_id: InputId, text: str) -> InputTransition:
         if self.matches_native(turn_id=turn_id, native_id=native_id, text=text):
             return MovedInput(self._transition(StartedInput))
         return UnchangedInput(self)
@@ -430,7 +425,7 @@ class StartedInput(SentInput):
     def started_for_native(
         self,
         lease: TurnLeaseFence,
-        native_id: str,
+        native_id: InputId,
         sent_text: str,
         *,
         snapshot: RegistrySnapshot,

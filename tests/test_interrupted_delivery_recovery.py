@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from conftest import publish_initial
 from functools import partial
 
 import pytest
@@ -11,13 +10,13 @@ from agent_comms.assignment_states import DeferredAssignment, FullPendingAssignm
 from agent_comms.cohort_foreground import _accept_visible_deliveries
 from agent_comms.coordination_cohort import pending_sealed_assignments
 from agent_comms.coordinator import Coordination
-from agent_comms.field_codec import TurnId
+from agent_comms.field_codec import InputId, TurnId
 from agent_comms.input_attempt import NotSentInput
 from agent_comms.queued_input import DeliveredInput
+from conftest import publish_initial
+from stored_inputs import stored_inputs
 from test_acp_private_nk_delivery import _session
 from test_coordinated_runtime import tmp_path as private_root_fixture
-from stored_inputs import stored_inputs
-
 
 tmp_path = private_root_fixture
 
@@ -65,7 +64,7 @@ async def test_interrupted_following_delivery_recovers_only_before_native_send(
             item.key,
             claim_scope=row.claim_generation,
             turn_id=leased.thread.require_turn_lease().turn_id,
-            native_id="a" * 32,
+            native_id=InputId("a" * 32),
             text=row.source_text,
         )
         assert comms.agents.finish_turn(leased.turn_lease)

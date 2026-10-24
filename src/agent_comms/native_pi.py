@@ -21,11 +21,10 @@ from pydantic import JsonValue
 
 from agent_comms.participant_identity import ParticipantIdentity
 
-from .locked_store import SQLiteFile
 from .errors import RelationViolationError
 from .field_codec import (
     FieldCodec,
-    Id128Text,
+    InputId,
     MalformedRecord,
     Sha256Text,
     WireName,
@@ -33,6 +32,7 @@ from .field_codec import (
 )
 from .launch_root import LaunchRoot
 from .launch_runtime import LaunchRuntime, RestartEnvironment, ThreadLaunch
+from .locked_store import SQLiteFile
 from .native_arguments import NativeArguments, SelectedModel
 from .native_failures import NativePiUnavailable, NativeRequestFailure
 from .native_input_record import NativeInputCommit, NativeInputLocation
@@ -284,10 +284,11 @@ class NativeContextJournal(
 
     @classmethod
     def for_input(
-        cls, db: sqlite3.Connection, input_id: str, generation: int | None = None
+        cls, db: sqlite3.Connection, input_id: InputId, generation: int | None = None
     ) -> NativeContextJournal | None:
         """The primary key answers one input without scanning lifetime history."""
-        where, parameters = "input_id=?", (input_id,)
+        where = "input_id=?"
+        parameters: tuple[InputId | int, ...] = (input_id,)
         if generation is not None:
             where += " AND request_generation=?"
             parameters += (generation,)
@@ -314,7 +315,7 @@ class NativeContextProof(NativeContextRecord, NativeInputLocation):
     session_file: Path
 
     def corroborates_input(
-        self, input_id: str, *, files: NativeSessionFiles,
+        self, input_id: InputId, *, files: NativeSessionFiles,
         evidence: NativeEvidenceRead,
     ) -> bool:
         """Check an already-observed live event against its isolated saved proof.
@@ -333,12 +334,11 @@ class NativeContextProof(NativeContextRecord, NativeInputLocation):
     @classmethod
     @boundary_decoder
     def read_evidence(
-        cls, files: NativeSessionFiles, input_id: str, *, request_generation: int | None = None,
+        cls, files: NativeSessionFiles, input_id: InputId, *, request_generation: int | None = None,
         evidence: NativeEvidenceRead | None = None,
         session_entry_start: int,
     ) -> NativeContextProof:
         """Corroborate live recorded events; parsed bytes alone grant no authority."""
-        Id128Text.decode(input_id)
         session_file = files.session.absolute()
         from .native_entries import NativeInputEvidenceRead
         with NativeInputEvidenceRead.borrow(session_file, evidence) as evidence:
@@ -882,7 +882,7 @@ def _session_location(directory: Path, candidate: str) -> Path:
 
 
 def read_tracked_input_commitment(
-    session_file: Path, input_id: str, *, evidence: NativeEvidenceRead | None = None
+    session_file: Path, input_id: InputId, *, evidence: NativeEvidenceRead | None = None
 ) -> InputCommitment:
     """Corroborating commitment only; this cannot authorize recovery or input replay.
 
@@ -901,7 +901,7 @@ def read_tracked_input_commitment(
 
 def _verify_context(
     files: NativeSessionFiles,
-    input_id: str,
+    input_id: InputId,
     session_id: str,
     input_event: pi.InputCommitted,
     context_event: pi.ContextCommitted,

@@ -19,7 +19,7 @@ from typing import TYPE_CHECKING, Annotated, ClassVar
 from uuid import uuid4
 
 from .declared_family import DeclaredFamily
-from .field_codec import FieldCodec, ThreadLookup
+from .field_codec import FieldCodec, InputId, ThreadLookup
 from .locked_store import RegistryFile
 from .native_transcript import RecordsCut
 from .recorded_time import EventTime, GeneratedTimestamp
@@ -274,7 +274,7 @@ class DraftRow(ExternalTranscriptRows, TypedTable, TranscriptDraft, declared_nam
 
     @classmethod
     @contextmanager
-    def publication(cls, root: Path, input_id: str):
+    def publication(cls, root: Path, input_id: InputId):
         from .native_runtime_input import NativeRuntimeInput
         from .transcripts import TranscriptRead
         with TranscriptRead.publication_source(root) as connection:

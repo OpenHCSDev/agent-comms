@@ -6,11 +6,10 @@ records retain no raw wire mirror. FieldCodec is the sole primitive validator.
 
 from __future__ import annotations
 
-from asyncio import Future
-
 import re
 import typing
 from abc import abstractmethod
+from asyncio import Future
 from collections.abc import Mapping
 from dataclasses import dataclass, field, fields, replace
 from decimal import Decimal
@@ -32,13 +31,13 @@ from .field_codec import (
     ExternalNull,
     ExternalNullMember,
     FieldCodec,
-    Id128Text,
+    InputId,
     MalformedRecord,
     NullMember,
     PresentMember,
     RecordProblems,
-    SingleFieldValue,
     SingleExternalMember,
+    SingleFieldValue,
     TextRepresentation,
     ValidatedScalar,
     WireName,
@@ -139,6 +138,13 @@ class ReportedText(PiReported[str]):
     def text_or[D](self, default: D) -> str | D:
         """Pi's empty text falls back exactly as its omitted text does."""
         return self.value or default
+
+
+@dataclass(frozen=True)
+class ReportedInputId(PiReported[InputId]):
+    """The native input identity decoded from Pi's inputId field."""
+
+    value: InputId
 
 
 @dataclass(frozen=True)
@@ -802,7 +808,7 @@ class PiMessage(WithheldAnnotations, ExternalNull, OpenPayload, affix="Message")
     final_reply: ClassVar[bool] = False
     content: tuple[PiContent, ...] | str | None = None
     usage: Annotated[PiField[PiUsage], WireNullDefault()] = UnreportedUsage()
-    input_id: Annotated[PiField[ReportedText | PiOmitted], WireName("inputId")] = PiOmitted()
+    input_id: Annotated[PiField[ReportedInputId | PiOmitted], WireName("inputId")] = PiOmitted()
     input_digest: Annotated[
         PiField[ReportedText | PiOmitted], WireName("inputDigest")
     ] = PiOmitted()
@@ -1158,9 +1164,9 @@ class PiResponseData(ExternalNull, PiPayload, DeclaredFamily, affix="Data"):
 class QueueClearedData(PiResponseData):
     """Native IDs actually removed, never the texts of possible candidates."""
 
-    input_ids: Annotated[tuple[str, ...], WireName("inputIds")]
+    input_ids: Annotated[tuple[InputId, ...], WireName("inputIds")]
 
-    def require_requested(self, requested: tuple[str, ...]) -> tuple[str, ...]:
+    def require_requested(self, requested: tuple[InputId, ...]) -> tuple[InputId, ...]:
         if len(set(self.input_ids)) != len(self.input_ids) or not set(self.input_ids) <= set(requested):
             raise ValueError("Native clear returned duplicate or unrequested input IDs")
         return self.input_ids
@@ -1571,13 +1577,13 @@ class McpServerReceipt:
 class McpLiveAcknowledgement:
     version: Literal[1]
     source: Literal["pi-mcp-client"]
-    input_id: Annotated[str, WireName("inputId")]
+    input_id: Annotated[InputId, WireName("inputId")]
     state: Literal["running"]
     lifetime: Literal["turn"]
     servers: tuple[McpServerReceipt, ...]
 
     @classmethod
-    def from_status(cls, text: str | None, input_id: str) -> McpLiveAcknowledgement | None:
+    def from_status(cls, text: str | None, input_id: InputId) -> McpLiveAcknowledgement | None:
         """Decode the package's external status claim once at its boundary.
 
         Same-user extensions can imitate this claim. It is never a package
@@ -1592,7 +1598,6 @@ class McpLiveAcknowledgement:
         return acknowledgement if acknowledgement.input_id == input_id else None
 
     def __post_init__(self):
-        Id128Text.from_text(self.input_id)
         if len(self.servers) > 32 or len({server.id for server in self.servers}) != len(
             self.servers
         ):

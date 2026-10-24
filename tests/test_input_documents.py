@@ -1,6 +1,5 @@
 """Typed saved boundaries and durable acceptance precede process-local scheduling."""
 
-from agent_comms.lifecycle_capability import Unresolved
 import json
 import sqlite3
 from contextlib import ExitStack, closing
@@ -8,10 +7,11 @@ from dataclasses import replace
 
 import pytest
 
-from agent_comms.field_codec import FieldCodec, TurnId, GoalId
+from agent_comms.errors import RelationViolationError
+from agent_comms.field_codec import FieldCodec, GoalId, InputId, TurnId
 from agent_comms.input_attempt import (
-    GoalInputDecision,
     BoundUnknownInput,
+    GoalInputDecision,
     InputAttempt,
     MissingInput,
     NotSentInput,
@@ -20,12 +20,11 @@ from agent_comms.input_attempt import (
     UnresolvedInput,
 )
 from agent_comms.input_disposition import InputDispositionRow, InputDispositions, InputDocument
-from agent_comms.errors import RelationViolationError
-from agent_comms.thread_identity import RecordedThreadIncarnation
-from stored_inputs import insert_inputs, stored_inputs
-from agent_comms.threads import Thread
+from agent_comms.lifecycle_capability import Unresolved
 from agent_comms.reported_turn import ReportedTurn
-
+from agent_comms.thread_identity import RecordedThreadIncarnation
+from agent_comms.threads import Thread
+from stored_inputs import insert_inputs, stored_inputs
 
 TURN = TurnId('9b473845f684444f80a26586ae298d2b')
 
@@ -39,7 +38,7 @@ def test_original_batch_publication_preserves_prior_rows_and_reserves_only_new_i
         "unknown",
         claim_scope=1,
         turn_id=TurnId('cba06b5736faf67e54b07b561eae9439'),
-        native_id="a" * 32,
+        native_id=InputId("a" * 32),
         text="Original sent input",
     )
     prior = stored_inputs(store.root)
@@ -118,7 +117,7 @@ def test_saved_discriminator_and_optional_notices_roundtrip_without_replay(tmp_p
             target="worker",
             source_text="Retain me",
             turn_id=TURN,
-            native_id="a" * 32,
+            native_id=InputId("a" * 32),
             sent_digest=TextDigest.of("Exact sent text"),
             notice_dismissed=True,
             goal_reviews={
@@ -140,26 +139,26 @@ def test_saved_discriminator_and_optional_notices_roundtrip_without_replay(tmp_p
         row.key,
         claim_scope=1,
         turn_id=TurnId('b4c9e14061c2fd453b36700e3b0da008'),
-        native_id="b" * 32,
+        native_id=InputId("b" * 32),
         text="again",
     )
     assert not store.started(
         row.key,
         turn_id=TurnId('8810ad581e59f2bc3928b261707a7130'),
-        native_id="a" * 32,
+        native_id=InputId("a" * 32),
         text="Exact sent text",
     )
     assert store.started(
         row.key,
         turn_id=TURN,
-        native_id="a" * 32,
+        native_id=InputId("a" * 32),
         text="Exact sent text",
     )
     assert isinstance(stored_inputs(store.root).rows[row.key], StartedInput)
     assert not store.started(
         row.key,
         turn_id=TURN,
-        native_id="a" * 32,
+        native_id=InputId("a" * 32),
         text="Exact sent text",
     )
     row.require(Unresolved, ValueError("review required"))  # prior snapshot is immutable and unchanged
@@ -184,13 +183,13 @@ def test_original_native_user_receipts_include_group_and_corrected_final_only(tm
             key,
             claim_scope=claim_scope,
             turn_id=TURN,
-            native_id="a" * 32,
+            native_id=InputId("a" * 32),
             text="Actual grouped native user",
         )
         assert store.started(
             key,
             turn_id=TURN,
-            native_id="a" * 32,
+            native_id=InputId("a" * 32),
             text="Actual grouped native user",
         )
     registry.rename("worker", "renamed")
@@ -200,13 +199,13 @@ def test_original_native_user_receipts_include_group_and_corrected_final_only(tm
         "acp:correction",
         claim_scope=claim_scope,
         turn_id=TURN,
-        native_id="b" * 32,
+        native_id=InputId("b" * 32),
         text="Actual corrected native user",
     )
     assert store.started(
         "acp:correction",
         turn_id=TURN,
-        native_id="b" * 32,
+        native_id=InputId("b" * 32),
         text="Actual corrected native user",
     )
     document = store.in_turn(TURN)
@@ -270,7 +269,7 @@ def test_distinct_lifecycle_and_missing_state_never_supply_sent_evidence(tmp_pat
         "acp:missing",
         claim_scope=1,
         turn_id=TurnId('e3b98a4da31a127d4bde6e43033f66ba'),
-        native_id="a" * 32,
+        native_id=InputId("a" * 32),
         text="text",
     )
     assert not stored_inputs(store.root).all_started(("acp:missing",))
@@ -295,7 +294,7 @@ def test_distinct_lifecycle_and_missing_state_never_supply_sent_evidence(tmp_pat
         "acp:input",
         claim_scope=4,
         turn_id=TurnId('11507a0e2f5e69d5dfa40a62a1bd7b6e'),
-        native_id="b" * 32,
+        native_id=InputId("b" * 32),
         text="keep",
     )
     assert UnresolvedInput.of(unsent).status == "not_sent"
@@ -312,11 +311,11 @@ def test_batch_retirement_returns_published_cut_without_changing_native_evidence
                             target="owner", text=key)
     for key in ("acp:bound", "acp:started"):
         assert store.bind(key, claim_scope=1, turn_id=TurnId('ab87f599dc0a50a56b7c65de71c39426'),
-                          native_id="a" * 32, text=key)
+                          native_id=InputId("a" * 32), text=key)
     assert store.started(
         "acp:started",
         turn_id=TurnId('ab87f599dc0a50a56b7c65de71c39426'),
-        native_id="a" * 32,
+        native_id=InputId("a" * 32),
         text="acp:started",
     )
     store.settle_unbound(("acp:unsent",))
@@ -381,7 +380,7 @@ def test_reserved_input_is_queued_only_for_its_own_owner_claim_and_text():
     bound = reserved.bind(
         claim_scope=1,
         turn_id=TURN,
-        native_id="a" * 32,
+        native_id=InputId("a" * 32),
         text="wrapped input",
     )
     bound = bound.require_moved("Reserved input stayed reserved").state
@@ -408,13 +407,13 @@ def test_started_delivery_and_original_ingress_use_distinct_owned_relations(
         key,
         claim_scope=1,
         turn_id=TURN,
-        native_id="a" * 32,
+        native_id=InputId("a" * 32),
         text="wrapped input",
     )
     assert store.started(
         key,
         turn_id=TURN,
-        native_id="a" * 32,
+        native_id=InputId("a" * 32),
         text="wrapped input",
     )
     assert stored_inputs(store.root).lookup(key).has_started
@@ -437,11 +436,11 @@ def test_reads_select_only_the_rows_their_index_names(tmp_path):
         "acp:a",
         claim_scope=1,
         turn_id=TURN,
-        native_id="a" * 32,
+        native_id=InputId("a" * 32),
         text="sent",
     )
     assert store.started(
-        "acp:a", turn_id=TURN, native_id="a" * 32, text="sent"
+        "acp:a", turn_id=TURN, native_id=InputId("a" * 32), text="sent"
     )
     assert store.in_turn(TURN).rows.keys() == {"acp:a"}
     assert store.unresolved(frozenset({"owner"})).rows.keys() == {"acp:b"}

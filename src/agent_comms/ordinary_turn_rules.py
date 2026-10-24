@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
-from .field_codec import TurnId
+from .field_codec import InputId, TurnId
 from .reservation_rules import ReservationRule, RuleCheck
 
 if TYPE_CHECKING:
@@ -123,7 +123,7 @@ class AcceptedInputCheck(RuleCheck):
     acknowledgement: QueuedInput
     current: Thread
     claim_generation: int
-    input_id: str
+    input_id: InputId
     keys: tuple[str, ...]
     inputs: InputDrain
     session_id: str

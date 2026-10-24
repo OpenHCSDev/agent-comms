@@ -7,7 +7,7 @@ from pathlib import Path
 import pytest
 
 from agent_comms.errors import RelationViolationError
-from agent_comms.field_codec import MessageId, TurnId
+from agent_comms.field_codec import InputId, MessageId, TurnId
 from agent_comms.input_attempt import (
     BoundUnknownInput,
     ClearedNativeInput,
@@ -25,8 +25,8 @@ from agent_comms.input_disposition import InputDispositions
 from agent_comms.input_origin import DeliveredInput, UndeliveredInput, WireInputOrigin
 from agent_comms.message_reference import MessageReference
 from agent_comms.text_digest import TextDigest
-from stored_inputs import stored_inputs
 from agent_comms.threads import Thread
+from stored_inputs import stored_inputs
 
 
 @pytest.mark.parametrize("invalid_text", [["list"], [], {"text": "dict"}, 7, False, None])
@@ -56,7 +56,7 @@ def test_unknown_is_durable_and_native_start_is_a_cas(tmp_path: Path) -> None:
         == 7
     )
 
-    native_id = "a" * 32
+    native_id = InputId("a" * 32)
     assert store.bind(
         "bus:7",
         claim_scope=3,
@@ -67,7 +67,7 @@ def test_unknown_is_durable_and_native_start_is_a_cas(tmp_path: Path) -> None:
     assert not store.started(
         "bus:7",
         turn_id=TurnId('974cad2dd603827b06e9e6affa3de03d'),
-        native_id="b" * 32,
+        native_id=InputId("b" * 32),
         text="full ask",
     )
     assert not store.started(
@@ -111,7 +111,7 @@ def test_unresolved_projection_follows_rename_without_private_receipts(tmp_path:
         "bus:7",
         claim_scope=1,
         turn_id=TurnId('9b473845f684444f80a26586ae298d2b'),
-        native_id="a" * 32,
+        native_id=InputId("a" * 32),
         text="private wrapper",
     )
     comms.threads.rename_managed_thread("kid", "new-kid", owner=ProcessIdentity.capture(os.getpid()))
@@ -121,7 +121,7 @@ def test_unresolved_projection_follows_rename_without_private_receipts(tmp_path:
     assert store.started(
         "bus:7",
         turn_id=TurnId('9b473845f684444f80a26586ae298d2b'),
-        native_id="a" * 32,
+        native_id=InputId("a" * 32),
         text="private wrapper",
     )
     assert comms.goals.unresolved_inputs("new-kid") == ()
