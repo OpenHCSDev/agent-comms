@@ -35,6 +35,7 @@ from agent_comms.tool_caller import ThreadCaller
 from agent_comms.threads import ChosenModel, NextTurnConfiguration
 from agent_comms.thread_text import ForkedParent, GivenThreadText
 from agent_comms.thread_model import DeclaredModel
+from agent_comms.thread_status import HeartbeatThreadStatus
 from agent_comms.threads import Thread
 
 
@@ -267,7 +268,7 @@ class TestThreadOps:
     def test_list_threads_shape(self, wired: Comms) -> None:
         rows = {row.thread.name: row for row in wired.views.list_threads()}
         assert set(rows) == {"PR111", "fixer"}
-        assert rows["fixer"].status.declared_name == "running"
+        assert isinstance(rows["fixer"].status, HeartbeatThreadStatus)
         assert rows["fixer"].thread.parent == ForkedParent("PR111")
         assert rows["fixer"].pending == CountedInbox(0)
 
@@ -302,7 +303,7 @@ class TestThreadOps:
     def test_heartbeat_marks_running(self, wired: Comms) -> None:
         wired.owners.stop("fixer")
         wired.threads.heartbeat("fixer")
-        assert wired.registry.status("fixer").declared_name == "running"
+        assert isinstance(wired.registry.status("fixer"), HeartbeatThreadStatus)
 
     def test_attach_session_preserves_declaration_and_updates_runtime(self, wired: Comms, tmp_path: Path) -> None:
         wired.owners.stop("fixer")

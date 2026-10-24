@@ -49,6 +49,8 @@ async def test_live_drain_schema_failure_visible_until_real_recovery(tmp_path, b
     else:
         with sqlite3.connect(path) as db:
             db.execute("DROP TABLE claim_batch_members")
+    with sqlite3.connect(path) as db:
+        broken_schema = db.execute("SELECT name, sql FROM sqlite_master ORDER BY name").fetchall()
     try:
         agent.inputs.ensure_live_drain("beta")
         await until(lambda: agent.inputs.state("beta").observation_watcher is not None)
@@ -75,12 +77,7 @@ async def test_live_drain_schema_failure_visible_until_real_recovery(tmp_path, b
         await asyncio.sleep(1.3)
         assert comms.agents.activity.current("beta", active=True) == observed
         with sqlite3.connect(path) as db:
-            assert (
-                db.execute(
-                    "SELECT name FROM sqlite_master WHERE name=?", ("claim_batch_members",)
-                ).fetchone()
-                is None
-            )
+            assert db.execute("SELECT name, sql FROM sqlite_master ORDER BY name").fetchall() == broken_schema
         # Age and an unrelated turn may not turn this persistent failure into Ready.
         comms.agents.activity.emit(
             replace(failed.activity.source_event(), timestamp=time.time() - 1000)
