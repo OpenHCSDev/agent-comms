@@ -175,14 +175,6 @@ class BridgePhase(InstallPhase):
     """Discover, pause or resume the session bridges around the live swap."""
 
 
-class BindingStartBridgePhase(BridgePhase):
-    """Convert host bindings before starting services on the selected runtime."""
-
-
-class BindingStartRevertBridgePhase(BridgePhase):
-    """Undo the host binding conversion after a failed service start."""
-
-
 class ConfirmBridgePhase(BridgePhase):
     """Confirm bridges observe the selected runtime."""
 

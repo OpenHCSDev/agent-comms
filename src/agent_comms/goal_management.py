@@ -64,7 +64,7 @@ from .input_attempt import (
 from .input_disposition import DeliveryOverview, InputDispositions
 from .message_bus import MessageBus
 from .threads import Thread
-from .todos import SendBackVerdict, StrikeReason, Todo, TodoCommand, TodoStore
+from .todos import SendBackVerdict, StrikeReason, Todo, TodoCommand, TodoError, TodoStore
 from .turn_lease import TurnCompletion
 
 _LOG = logging.getLogger(__name__)
@@ -107,8 +107,17 @@ class Goals:
         return sent_back
 
     def fire(self, unit: str, reason: StrikeReason, actor: ThreadIncarnation) -> tuple[Todo, ...]:
+        """Refuse while a held problem's checkout retains work: the same owner the WORK HELD
+        standing rule reads, so a release never strands what the heartbeat would protect."""
         owner = self.registry.require(unit).incarnation
         store: TodoStore = self.todos
+        rule = self.registry.storage_rule
+        held = tuple(work for todo in store.held_by(actor.commanding_identity, owner)
+                     for work in rule.work_for_problem(todo, self.registry, store))
+        if held:
+            raise TodoError("; ".join(
+                f"{work.owner.name} retains work in {work.checkout}" for work in held)
+                + " -> the holder must commit and push it before the problem is released")
         return store.fire(owner, actor, reason)
 
     def open_goal_store(self) -> GoalAttemptStore:

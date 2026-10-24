@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import asyncio
 import ctypes
+import fcntl
 import io
 import json
 import math
@@ -37,11 +38,6 @@ from functools import partial
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from typing import TYPE_CHECKING, Any, BinaryIO, ClassVar, NoReturn, TextIO
-
-with suppress(ModuleNotFoundError):
-    import fcntl
-with suppress(ModuleNotFoundError):
-    import msvcrt
 
 from .declared_family import DeclaredFamily
 from .errors import RelationViolationError
@@ -304,7 +300,7 @@ class ProcessIdentity(RecordMember, ProcessState):
     ) -> RegistrationChange:
         return change.restarted() if incarnation != change.previous.incarnation else change
 
-    def members(self, platform: PosixPlatform) -> tuple[ProcessIdentity, ...]:
+    def members(self, platform: Platform) -> tuple[ProcessIdentity, ...]:
         return ()  # A stored, exited identity cannot grant group ownership.
 
 
@@ -312,13 +308,13 @@ NO_PROCESS = NoProcess()
 
 
 class GroupLeader(ProcessIdentity, declared_name=None):
-    def members(self, platform: PosixPlatform) -> tuple[ProcessIdentity, ...]:
+    def members(self, platform: Platform) -> tuple[ProcessIdentity, ...]:
         return tuple(member for member in platform.members_of_group(self.pid)
                      if member.start_time >= self.start_time)
 
 
 class GroupMember(ProcessIdentity, declared_name=None):
-    def members(self, platform: PosixPlatform) -> tuple[ProcessIdentity, ...]:
+    def members(self, platform: Platform) -> tuple[ProcessIdentity, ...]:
         return (self,) if platform.matches(self) else ()
 
 
@@ -393,43 +389,42 @@ class PidfdHandles:
 
 class Platform(DeclaredFamily, affix="Platform"):
     store_lock_interval = 0.025
-    sync_open_flags: ClassVar[int] = os.O_RDONLY
-    serves_local_socket: ClassVar[bool] = True
 
     @classmethod
     def current(cls) -> Platform:
         return cls.member_named(sys.platform)()
 
     def sync_file(self, path: Path) -> None:
-        descriptor = os.open(path, self.sync_open_flags)
+        descriptor = os.open(path, os.O_RDONLY)
+        try:
+            os.fsync(descriptor)
+        finally:
+            os.close(descriptor)
+
+    def sync_directory(self, path: Path) -> None:
+        descriptor = os.open(path, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
         try:
             os.fsync(descriptor)
         finally:
             os.close(descriptor)
 
     @abstractmethod
-    def sync_directory(self, path: Path) -> None: ...
-
-    @abstractmethod
-    def require_pinned_paths(self, refusal: Exception) -> None: ...
-
-    @abstractmethod
-    def require_posix(self, refusal: Exception) -> None: ...
-
-    @abstractmethod
     def require_watched_procfs(self, refusal: Exception) -> None: ...
 
-    @abstractmethod
-    def is_private(self, info: os.stat_result, permissions: int) -> bool: ...
+    def is_private(self, info: os.stat_result, permissions: int) -> bool:
+        return stat.S_IMODE(info.st_mode) == permissions and self.is_owned(info)
 
-    @abstractmethod
-    def is_owned(self, info: os.stat_result) -> bool: ...
+    def is_owned(self, info: os.stat_result) -> bool:
+        return info.st_uid == os.geteuid()
 
-    @abstractmethod
-    def make_private(self, path: Path, permissions: int) -> None: ...
+    def make_private(self, path: Path, permissions: int) -> None:
+        with suppress(FileNotFoundError):
+            if stat.S_IMODE(path.lstat().st_mode) != permissions:
+                os.chmod(path, permissions, follow_symlinks=False)
 
-    @abstractmethod
-    def make_private_descriptor(self, descriptor: int, permissions: int) -> None: ...
+    def make_private_descriptor(self, descriptor: int, permissions: int) -> None:
+        if stat.S_IMODE(os.fstat(descriptor).st_mode) != permissions:
+            os.fchmod(descriptor, permissions)
 
     @contextmanager
     def socket_address(self, path: Path, descriptor: int) -> Generator[Path, None, None]:
@@ -440,22 +435,17 @@ class Platform(DeclaredFamily, affix="Platform"):
                 raise ValueError("Socket directory changed during address acquisition")
             yield parent / path.name
 
-    @abstractmethod
     def try_store_lock(self, descriptor: int, *, mode: LockMode) -> None:
-        """One nonblocking native attempt; busy is BlockingIOError."""
+        fcntl.flock(descriptor, mode.flock() | fcntl.LOCK_NB)
 
-    def release_store_lock(self, descriptor: int) -> None:
-        """POSIX locks end at last close, including inherited descriptors."""
-
-    @abstractmethod
     def acquire_session_writer(self, descriptor: int) -> None:
-        """Wait in the kernel for this session's input writer; close releases it."""
+        fcntl.flock(descriptor, fcntl.LOCK_EX)
 
-    @abstractmethod
     def launch(
         self, command: tuple[str, ...], pass_fds: tuple[int, ...], runtime: LaunchRuntime,
         lifetime: type[ChildLifetime],
-    ) -> ChildLaunch: ...
+    ) -> ChildLaunch:
+        return ChildLaunch(self, command, pass_fds, runtime, lifetime)
 
     def terminate_group(self, identity: ProcessIdentity) -> None:
         self.signal_group(identity, signal.SIGTERM)
@@ -508,11 +498,18 @@ class Platform(DeclaredFamily, affix="Platform"):
                 return current
         raise IdentityMismatchError(f"Process incarnation changed: {identity.pid}")
 
-    @abstractmethod
-    def send(self, identity: ProcessIdentity, signum: int) -> None: ...
+    def send(self, identity: ProcessIdentity, signum: int) -> None:
+        self.require(identity)
+        os.kill(identity.pid, signum)
 
-    @abstractmethod
-    def group_members(self, leader: ProcessIdentity) -> tuple[ProcessIdentity, ...]: ...
+    def group_members(self, leader: ProcessIdentity) -> tuple[ProcessIdentity, ...]:
+        try:
+            current = self.identity(leader.pid)
+        except ProcessLookupError:
+            return leader.members(self)
+        if current != leader:
+            raise IdentityMismatchError(f"Process incarnation changed: {leader.pid}")
+        return current.members(self)
 
     def signal_group(self, leader: ProcessIdentity, signum: int) -> None:
         # Snapshot identities, then signal each exact member. Never signal a
@@ -527,69 +524,12 @@ class Platform(DeclaredFamily, affix="Platform"):
         if not signalled and self.matches(leader):
             raise RuntimeError(f"Live process {leader.pid} was not signalled")
 
-
-class PosixPlatform(Platform):
-    def require_posix(self, refusal: Exception) -> None:
-        return None
-
-    def require_pinned_paths(self, refusal: Exception) -> None:
-        return None
-
-    def sync_directory(self, path: Path) -> None:
-        descriptor = os.open(path, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
-        try:
-            os.fsync(descriptor)
-        finally:
-            os.close(descriptor)
-
-    def is_private(self, info: os.stat_result, permissions: int) -> bool:
-        return stat.S_IMODE(info.st_mode) == permissions and self.is_owned(info)
-
-    def is_owned(self, info: os.stat_result) -> bool:
-        return info.st_uid == os.geteuid()
-
-    def make_private(self, path: Path, permissions: int) -> None:
-        with suppress(FileNotFoundError):
-            if stat.S_IMODE(path.lstat().st_mode) != permissions:
-                os.chmod(path, permissions, follow_symlinks=False)
-
-    def make_private_descriptor(self, descriptor: int, permissions: int) -> None:
-        if stat.S_IMODE(os.fstat(descriptor).st_mode) != permissions:
-            os.fchmod(descriptor, permissions)
-
-    def try_store_lock(self, descriptor: int, *, mode: LockMode) -> None:
-        import fcntl
-
-        fcntl.flock(descriptor, mode.flock() | fcntl.LOCK_NB)
-
-    def acquire_session_writer(self, descriptor: int) -> None:
-        fcntl.flock(descriptor, fcntl.LOCK_EX)
-
-    def launch(
-        self, command: tuple[str, ...], pass_fds: tuple[int, ...], runtime: LaunchRuntime,
-        lifetime: type[ChildLifetime],
-    ) -> ChildLaunch:
-        return PosixLaunch(self, command, pass_fds, runtime, lifetime)
-
     def parent_death_binding(self) -> int:
         """Darwin has no parent-death signal: its exec gate binds no launcher."""
         return 0
 
-    def group_members(self, leader: ProcessIdentity) -> tuple[ProcessIdentity, ...]:
-        try:
-            current = self.identity(leader.pid)
-        except ProcessLookupError:
-            return leader.members(self)
-        if current != leader:
-            raise IdentityMismatchError(f"Process incarnation changed: {leader.pid}")
-        return current.members(self)
-
     @abstractmethod
     def members_of_group(self, pgid: int) -> tuple[ProcessIdentity, ...]: ...
-
-    def send(self, identity: ProcessIdentity, signum: int) -> None:
-        self.require(identity)
-        os.kill(identity.pid, signum)
 
 
 @dataclass(frozen=True)
@@ -599,7 +539,7 @@ class LinuxProcessRecord:
     parent: int
 
 
-class LinuxPlatform(PidfdHandles, PosixPlatform):
+class LinuxPlatform(PidfdHandles, Platform):
     def require_watched_procfs(self, refusal: Exception) -> None:
         return None
 
@@ -749,7 +689,7 @@ class LinuxPlatform(PidfdHandles, PosixPlatform):
             os.close(descriptor)
 
 
-class DarwinPlatform(PosixPlatform):
+class DarwinPlatform(Platform):
     """libproc exposes microsecond birth times, unlike formatted ps output."""
 
     def require_watched_procfs(self, refusal: Exception) -> None:
@@ -880,315 +820,6 @@ class DarwinPlatform(PosixPlatform):
                 return
 
 
-class Win32Platform(Platform):
-    """Kernel creation times and named job objects bind the complete child tree."""
-
-    serves_local_socket: ClassVar[bool] = False
-
-    def require_posix(self, refusal: Exception) -> None:
-        raise refusal
-
-    def require_watched_procfs(self, refusal: Exception) -> None:
-        raise refusal
-
-    def require_pinned_paths(self, refusal: Exception) -> None:
-        raise refusal
-
-    class InputLockOffset(ctypes.Structure):
-        _fields_ = [
-            ("Internal", ctypes.c_size_t),
-            ("InternalHigh", ctypes.c_size_t),
-            ("Offset", ctypes.c_uint32),
-            ("OffsetHigh", ctypes.c_uint32),
-            ("hEvent", ctypes.c_void_p),
-        ]
-
-    def acquire_session_writer(self, descriptor: int) -> None:
-        offset = self.InputLockOffset()
-        lock = self.kernel.LockFileEx
-        lock.argtypes = (ctypes.c_void_p, ctypes.c_uint32, ctypes.c_uint32,
-                         ctypes.c_uint32, ctypes.c_uint32, ctypes.POINTER(self.InputLockOffset))
-        lock.restype = ctypes.c_int
-        if not lock(msvcrt.get_osfhandle(descriptor), 2, 0, 1, 0, ctypes.byref(offset)):
-            self.raise_last_error()
-
-    store_lock_interval = 0.01
-    # Windows' CRT _commit (used by os.fsync) rejects a read-only descriptor.
-    sync_open_flags: ClassVar[int] = os.O_RDWR
-
-    def sync_directory(self, path: Path) -> None:
-        # The Windows CRT cannot open a directory for fsync.
-        pass
-
-    def is_private(self, info: os.stat_result, permissions: int) -> bool:
-        # NTFS ACLs, not POSIX mode bits, determine privacy.
-        return True
-
-    def is_owned(self, info: os.stat_result) -> bool:
-        return True
-
-    def make_private(self, path: Path, permissions: int) -> None:
-        pass
-
-    def make_private_descriptor(self, descriptor: int, permissions: int) -> None:
-        pass
-
-    def try_store_lock(self, descriptor: int, *, mode: LockMode) -> None:
-        import errno
-        import msvcrt
-
-        os.lseek(descriptor, 0, os.SEEK_SET)
-        try:
-            # The Windows runtime has no shared lock: LK_NBRLCK is LK_NBLCK.
-            msvcrt.locking(descriptor, msvcrt.LK_NBLCK, 1)
-        except OSError as error:
-            if error.errno not in {errno.EACCES, errno.EDEADLK}:
-                raise
-            raise BlockingIOError(error.errno, error.strerror) from error
-
-    def release_store_lock(self, descriptor: int) -> None:
-        import msvcrt
-
-        os.lseek(descriptor, 0, os.SEEK_SET)
-        msvcrt.locking(descriptor, msvcrt.LK_UNLCK, 1)
-
-    class ThreadEntry(ctypes.Structure):
-        _fields_ = [
-            ("size", ctypes.c_uint32),
-            ("usage", ctypes.c_uint32),
-            ("tid", ctypes.c_uint32),
-            ("owner", ctypes.c_uint32),
-            ("base_priority", ctypes.c_int32),
-            ("delta_priority", ctypes.c_int32),
-            ("flags", ctypes.c_uint32),
-        ]
-
-    def __init__(self):
-        self.kernel = ctypes.WinDLL("kernel32", use_last_error=True)
-        handle, dword, pointer = ctypes.c_void_p, ctypes.c_uint32, ctypes.c_void_p
-        self._api("OpenProcess", handle, dword, ctypes.c_int, dword)
-        self._api("CloseHandle", ctypes.c_int, handle)
-        self._api("GetProcessTimes", ctypes.c_int, handle, pointer, pointer, pointer, pointer)
-        self._api("GetSystemTimeAsFileTime", None, pointer)
-        self._api("WaitForSingleObject", dword, handle, dword)
-        self.wait_callback_type = ctypes.WINFUNCTYPE(None, pointer, ctypes.c_ubyte)
-        self._api("CreateEventW", handle, pointer, ctypes.c_int, ctypes.c_int, ctypes.c_wchar_p)
-        self._api("SetEvent", ctypes.c_int, handle)
-        self._api("RegisterWaitForSingleObject", ctypes.c_int, ctypes.POINTER(handle), handle,
-                  self.wait_callback_type, pointer, dword, dword)
-        self._api("UnregisterWaitEx", ctypes.c_int, handle, handle)
-        self._api("CreateJobObjectW", handle, pointer, ctypes.c_wchar_p)
-        self._api("OpenJobObjectW", handle, dword, ctypes.c_int, ctypes.c_wchar_p)
-        self._api("AssignProcessToJobObject", ctypes.c_int, handle, handle)
-        self._api(
-            "QueryInformationJobObject", ctypes.c_int, handle, ctypes.c_int, pointer, dword, pointer
-        )
-        self._api("TerminateJobObject", ctypes.c_int, handle, ctypes.c_uint)
-        self._api("TerminateProcess", ctypes.c_int, handle, ctypes.c_uint)
-        self._api("GenerateConsoleCtrlEvent", ctypes.c_int, dword, dword)
-        self._api("CreateToolhelp32Snapshot", handle, dword, dword)
-        self._api("Thread32First", ctypes.c_int, handle, pointer)
-        self._api("Thread32Next", ctypes.c_int, handle, pointer)
-        self._api("OpenThread", handle, dword, ctypes.c_int, dword)
-        self._api("ResumeThread", dword, handle)
-
-    def raise_last_error(self) -> NoReturn:
-        """Translate this thread's saved Windows error through ctypes once."""
-        raise ctypes.WinError(ctypes.get_last_error())
-
-    def _api(self, name: str, result, *arguments) -> None:
-        function = getattr(self.kernel, name)
-        function.restype, function.argtypes = result, arguments
-
-    @contextmanager
-    def process_handle(self, pid: int, rights: int = 0x101000):
-        handle = self.kernel.OpenProcess(rights, False, pid)
-        if not handle:
-            code = ctypes.get_last_error()
-            if code == 87:  # ERROR_INVALID_PARAMETER: PID no longer exists.
-                raise ProcessLookupError(pid)
-            raise ctypes.WinError(code)
-        try:
-            yield handle
-        finally:
-            self.kernel.CloseHandle(handle)
-
-    def _identity(self, pid: int, handle) -> ProcessIdentity:
-        if self.kernel.WaitForSingleObject(handle, 0) != 258:  # WAIT_TIMEOUT
-            raise ProcessLookupError(pid)
-        created, exited, kernel, user = (ctypes.c_uint64() for _ in range(4))
-        if not self.kernel.GetProcessTimes(
-            handle,
-            ctypes.byref(created),
-            ctypes.byref(exited),
-            ctypes.byref(kernel),
-            ctypes.byref(user),
-        ):
-            self.raise_last_error()
-        return ProcessIdentity(pid, created.value)
-
-    def identity(self, pid: int) -> ProcessIdentity:
-        with self.process_handle(pid) as handle:
-            return self._identity(pid, handle)
-
-    def started_at(self, identity: ProcessIdentity) -> float:
-        current = ctypes.c_uint64()
-        self.kernel.GetSystemTimeAsFileTime(ctypes.byref(current))
-        return time.monotonic() - (current.value - identity.start_time) / 10_000_000
-
-    def arguments(self, process: ProcessIdentity) -> tuple[str, ...]:
-        raise NotImplementedError(f"{type(self).__name__} does not read process arguments")
-
-    def environment(self, process: ProcessIdentity) -> dict[str, str]:
-        raise NotImplementedError(f"{type(self).__name__} does not read process environment")
-
-    def process_name(self, pid: int) -> str:
-        raise NotImplementedError(f"{type(self).__name__} does not read process names")
-
-    def wait_any_exited(
-        self, identities: tuple[ProcessIdentity, ...], timeout: float,
-    ) -> None:
-        event = self.kernel.CreateEventW(None, True, False, None)
-        if not event:
-            self.raise_last_error()
-        callback = self.wait_callback_type(lambda _context, _expired: self.kernel.SetEvent(event))
-        try:
-            with ExitStack() as waits:
-                for identity in identities:
-                    try:
-                        handle = waits.enter_context(self.process_handle(identity.pid))
-                        current = self._identity(identity.pid, handle)
-                    except ProcessLookupError:
-                        return
-                    if current != identity:
-                        return  # Another incarnation holds the pid: this member exited.
-                    registered = ctypes.c_void_p()
-                    if not self.kernel.RegisterWaitForSingleObject(
-                        ctypes.byref(registered), handle, callback, None, 0xFFFFFFFF, 8,
-                    ):  # INFINITE; WT_EXECUTEONLYONCE
-                        self.raise_last_error()
-                    # Join callbacks before closing their process handles and shared event.
-                    waits.callback(self.kernel.UnregisterWaitEx, registered, ctypes.c_void_p(-1))
-                milliseconds = (0xFFFFFFFF if math.isinf(timeout)
-                                else max(0, math.ceil(timeout * 1000)))
-                if self.kernel.WaitForSingleObject(event, milliseconds) == 0xFFFFFFFF:
-                    self.raise_last_error()
-        finally:
-            self.kernel.CloseHandle(event)
-
-    @staticmethod
-    def job_name(identity: ProcessIdentity) -> str:
-        return f"Local\\agent-comms-{identity.pid}-{identity.start_time}"
-
-    @contextmanager
-    def job(self, identity: ProcessIdentity):
-        handle = self.kernel.OpenJobObjectW(0x000C, False, self.job_name(identity))
-        if not handle:
-            self.raise_last_error()
-        try:
-            yield handle
-        finally:
-            self.kernel.CloseHandle(handle)
-
-    def group_members(self, leader: ProcessIdentity) -> tuple[ProcessIdentity, ...]:
-        try:
-            with self.job(leader) as job:
-                capacity = 16
-                while True:
-                    # JOBOBJECT_BASIC_PROCESS_ID_LIST: two DWORDs then ULONG_PTRs.
-                    buffer = ctypes.create_string_buffer(
-                        8 + ctypes.sizeof(ctypes.c_size_t) * capacity
-                    )
-                    if self.kernel.QueryInformationJobObject(job, 3, buffer, len(buffer), None):
-                        count = ctypes.c_uint32.from_buffer(buffer, 4).value
-                        identifiers = (ctypes.c_size_t * count).from_buffer(buffer, 8)
-                        members = []
-                        for pid in identifiers:
-                            with suppress(ProcessLookupError):
-                                members.append(self.identity(pid))
-                        return tuple(members)
-                    if ctypes.get_last_error() != 234:  # ERROR_MORE_DATA
-                        self.raise_last_error()
-                    capacity *= 2
-        except FileNotFoundError:
-            if self.matches(leader):
-                raise RuntimeError("Live process has no owned Windows job") from None
-            return ()
-
-    def send(self, identity: ProcessIdentity, signum: int) -> None:
-        with self.process_handle(identity.pid, 0x101001) as handle:
-            if self._identity(identity.pid, handle) != identity:
-                raise IdentityMismatchError(identity.pid)
-            if not self.kernel.TerminateProcess(handle, signum):
-                self.raise_last_error()
-
-    def terminate_group(self, identity: ProcessIdentity) -> None:
-        if not self.matches(identity):
-            return  # Surviving job members are still forced in the common stop plan.
-        # Console controls are best-effort: detached/non-console processes
-        # need not have a console or a handler. The common grace deadline still
-        # forces the exact named job; failure to force remains an error.
-        self.kernel.GenerateConsoleCtrlEvent(1, identity.pid)  # CTRL_BREAK_EVENT
-
-    def force_group(self, identity: ProcessIdentity) -> None:
-        try:
-            with self.job(identity) as job:
-                if not self.kernel.TerminateJobObject(job, 1):
-                    self.raise_last_error()
-        except FileNotFoundError:
-            if self.matches(identity):
-                raise RuntimeError("Refusing to kill a process without its owned job") from None
-
-    def bind_and_resume(self, identity: ProcessIdentity) -> None:
-        with self.process_handle(identity.pid, 0x101101) as process:
-            if self._identity(identity.pid, process) != identity:
-                raise IdentityMismatchError(identity.pid)
-            job = self.kernel.CreateJobObjectW(None, self.job_name(identity))
-            if not job:
-                self.raise_last_error()
-            try:
-                if not self.kernel.AssignProcessToJobObject(job, process):
-                    self.raise_last_error()
-                snapshot = self.kernel.CreateToolhelp32Snapshot(4, 0)  # TH32CS_SNAPTHREAD
-                if snapshot == ctypes.c_void_p(-1).value:
-                    self.raise_last_error()
-                try:
-                    entry = self.ThreadEntry()
-                    entry.size = ctypes.sizeof(entry)
-                    found = self.kernel.Thread32First(snapshot, ctypes.byref(entry))
-                    while found:
-                        if entry.owner == identity.pid:
-                            thread = self.kernel.OpenThread(2, False, entry.tid)
-                            if not thread:
-                                self.raise_last_error()
-                            try:
-                                if self.kernel.ResumeThread(thread) == 0xFFFFFFFF:
-                                    self.raise_last_error()
-                                return
-                            finally:
-                                self.kernel.CloseHandle(thread)
-                        found = self.kernel.Thread32Next(snapshot, ctypes.byref(entry))
-                    raise RuntimeError("Suspended child's primary thread is missing")
-                finally:
-                    self.kernel.CloseHandle(snapshot)
-            except BaseException:
-                self.kernel.TerminateProcess(process, 1)
-                raise
-            finally:
-                # Named job stays alive while it contains processes. Detached
-                # owners outlive this launcher; no kill-on-handle-close flag.
-                self.kernel.CloseHandle(job)
-
-    def launch(
-        self, command: tuple[str, ...], pass_fds: tuple[int, ...], runtime: LaunchRuntime,
-        lifetime: type[ChildLifetime],
-    ) -> ChildLaunch:
-        # Windows binds no launcher: its named job owns every child's lifetime.
-        if pass_fds:
-            raise NotImplementedError("POSIX descriptor inheritance is unavailable on Windows")
-        return WindowsLaunch(command, self, runtime)
-
-
 class ChildLifetime(DeclaredFamily, affix="Lifetime"):
     """Whether a launched child may outlive the process that launched it."""
 
@@ -1206,7 +837,7 @@ class ChildLifetime(DeclaredFamily, affix="Lifetime"):
 
     @classmethod
     @abstractmethod
-    def launcher(cls, platform: PosixPlatform) -> int:
+    def launcher(cls, platform: Platform) -> int:
         """The PID the exec gate binds the child's life to; zero binds none."""
 
 
@@ -1218,7 +849,7 @@ class DiesWithLauncherLifetime(ChildLifetime):
     """
 
     @classmethod
-    def launcher(cls, platform: PosixPlatform) -> int:
+    def launcher(cls, platform: Platform) -> int:
         return platform.parent_death_binding()
 
 
@@ -1257,7 +888,7 @@ class OutlivesLauncherLifetime(ChildLifetime):
         return HandedOffAttachedChild(process, identity, registration)
 
     @classmethod
-    def launcher(cls, platform: PosixPlatform) -> int:
+    def launcher(cls, platform: Platform) -> int:
         return 0
 
 
@@ -1278,15 +909,26 @@ class NoChildRegistration(ChildRegistration):
 NO_CHILD_REGISTRATION = NoChildRegistration()
 
 
-class ChildLaunch(ABC):
+class ChildLaunch:
     @property
     def children_store(self) -> type[RuntimeChildrenStore]:
         from .runtime_children import RuntimeChildrenStore
 
         return RuntimeChildrenStore
 
-    def __init__(self, runtime: LaunchRuntime):
+    def __init__(self, platform: Platform, command: tuple[str, ...],
+                 pass_fds: tuple[int, ...], runtime: LaunchRuntime,
+                 lifetime: type[ChildLifetime]):
         self.runtime = runtime
+        self.platform = platform
+        self.command = command
+        self.pass_fds = pass_fds
+        self.lifetime = lifetime
+        self.read_fd, self.write_fd = os.pipe()
+        self.error_r, error_w = os.pipe()
+        self.error_writer = os.fdopen(error_w, "wb", buffering=0)
+        self.identity_r, identity_w = os.pipe()
+        self.identity_writer = os.fdopen(identity_w, "wb", buffering=0)
 
     def record(self, identity: ProcessIdentity, reservation: RuntimeChildReservation) -> None:
         """Persist the gated child, or cancel before user code executes."""
@@ -1297,20 +939,37 @@ class ChildLaunch(ABC):
             raise
 
     @property
-    @abstractmethod
-    def argv(self) -> tuple[str, ...]: ...
+    def argv(self) -> tuple[str, ...]:
+        # The exec gate runs this decoder's code before exec of the selected command.
+        return (
+            str(LaunchRuntime.running().interpreter),
+            "-c",
+            _EXEC_GATE,
+            str(self.read_fd),
+            str(self.error_writer.fileno()),
+            str(self.lifetime.launcher(self.platform)),
+            str(int(self.lifetime.handoff)),
+            str(self.identity_writer.fileno()),
+            *self.command,
+        )
 
     @property
-    @abstractmethod
-    def options(self) -> dict: ...
+    def options(self) -> dict:
+        return {
+            "start_new_session": True,
+            "pass_fds": (self.read_fd, self.error_writer.fileno(),
+                         self.identity_writer.fileno(), *self.pass_fds),
+        }
 
     def spawned(self, process: subprocess.Popen[bytes], registration: ChildRegistration
                 ) -> SpawnedProcess:
-        return ChildLifetime.spawned(process, -1, registration)
+        self.identity_writer.close()
+        return self.lifetime.spawned(process, self.identity_r, registration)
 
     async def spawned_async(self, process: asyncio.subprocess.Process,
                             registration: ChildRegistration) -> AttachedChild:
-        return await ChildLifetime.spawned_async(process, -1, registration)
+        self.identity_writer.close()
+        return await self.lifetime.spawned_async(process, self.identity_r, registration)
 
     def spawn(
         self,
@@ -1352,111 +1011,6 @@ class ChildLaunch(ABC):
                 raise
         return child
 
-    @abstractmethod
-    def release(self, identity: ProcessIdentity) -> None: ...
-
-    @abstractmethod
-    def cancel_before_release(self, identity: ProcessIdentity) -> None: ...
-
-    @abstractmethod
-    def verify(self) -> None: ...
-
-    async def verify_async(self) -> None:
-        self.verify()
-
-    @abstractmethod
-    def close(self) -> None: ...
-
-    def __enter__(self):
-        return self
-
-    def __exit__(self, *_):
-        self.close()
-
-
-class WindowsLaunch(ChildLaunch):
-    def __init__(self, command: tuple[str, ...], platform: Win32Platform, runtime: LaunchRuntime):
-        super().__init__(runtime)
-        self.command, self.platform = command, platform
-
-    @property
-    def argv(self) -> tuple[str, ...]:
-        return self.command
-
-    @property
-    def options(self) -> dict:
-        # Job assignment precedes ResumeThread; arbitrary child code cannot
-        # create an uncontained descendant between CreateProcess and binding.
-        return {"creationflags": subprocess.CREATE_NEW_PROCESS_GROUP | 0x00000004}
-
-    def release(self, identity: ProcessIdentity) -> None:
-        try:
-            self.platform.bind_and_resume(identity)
-        except BaseException:
-            self.cancel_before_release(identity)
-            raise
-
-    def cancel_before_release(self, identity: ProcessIdentity) -> None:
-        # The executable is suspended: it cannot have created descendants.
-        # No job may exist yet; signal its verified process handle directly.
-        with suppress(ProcessLookupError):
-            self.platform.send(identity, 1)
-
-    def verify(self) -> None:
-        pass  # CreateProcess itself reports launch failure before returning.
-
-    def close(self) -> None:
-        pass  # The kernel named job owns the detached lifetime.
-
-
-class PosixLaunch(ChildLaunch):
-    def __init__(self, platform: PosixPlatform, command: tuple[str, ...],
-                 pass_fds: tuple[int, ...], runtime: LaunchRuntime,
-                 lifetime: type[ChildLifetime]):
-        super().__init__(runtime)
-        self.platform = platform
-        self.command = command
-        self.pass_fds = pass_fds
-        self.lifetime = lifetime
-        self.read_fd, self.write_fd = os.pipe()
-        self.error_r, error_w = os.pipe()
-        self.error_writer = os.fdopen(error_w, "wb", buffering=0)
-        self.identity_r, identity_w = os.pipe()
-        self.identity_writer = os.fdopen(identity_w, "wb", buffering=0)
-
-    @property
-    def argv(self) -> tuple[str, ...]:
-        # The exec gate runs this decoder's code before exec of the selected command.
-        return (
-            str(LaunchRuntime.running().interpreter),
-            "-c",
-            _EXEC_GATE,
-            str(self.read_fd),
-            str(self.error_writer.fileno()),
-            str(self.lifetime.launcher(self.platform)),
-            str(int(self.lifetime.handoff)),
-            str(self.identity_writer.fileno()),
-            *self.command,
-        )
-
-    @property
-    def options(self) -> dict:
-        return {
-            "start_new_session": True,
-            "pass_fds": (self.read_fd, self.error_writer.fileno(),
-                         self.identity_writer.fileno(), *self.pass_fds),
-        }
-
-    def spawned(self, process: subprocess.Popen[bytes], registration: ChildRegistration
-                ) -> SpawnedProcess:
-        self.identity_writer.close()
-        return self.lifetime.spawned(process, self.identity_r, registration)
-
-    async def spawned_async(self, process: asyncio.subprocess.Process,
-                            registration: ChildRegistration) -> AttachedChild:
-        self.identity_writer.close()
-        return await self.lifetime.spawned_async(process, self.identity_r, registration)
-
     def release(self, identity: ProcessIdentity) -> None:
         self.error_writer.close()
         os.write(self.write_fd, b"G")
@@ -1464,7 +1018,7 @@ class PosixLaunch(ChildLaunch):
     def cancel_before_release(self, identity: ProcessIdentity) -> None:
         # The exec gate has not released user code or spawned descendants.
         with suppress(ProcessLookupError):
-            Platform.current().send(identity, signal.SIGKILL)
+            self.platform.send(identity, signal.SIGKILL)
 
     def verify(self) -> None:
         error = os.read(self.error_r, 64)
@@ -1480,6 +1034,12 @@ class PosixLaunch(ChildLaunch):
         self.identity_writer.close()
         for fd in (self.read_fd, self.write_fd, self.error_r, self.identity_r):
             os.close(fd)
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *_):
+        self.close()
 
 
 class OrderCheckFailedError(ValueError):

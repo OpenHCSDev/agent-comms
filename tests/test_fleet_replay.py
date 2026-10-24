@@ -509,3 +509,11 @@ def test_replay_raises_each_incident_once(fleet):
     assert {rule.observation_key() for rule in first.rules} == {
         rule.observation_key() for rule in second.rules
     }
+
+
+def test_a_stopped_unit_is_not_spinning(fleet):
+    """2026-10-24: the heartbeat called a unit stopped with comms_stop SPINNING on its old calls."""
+    built, _ = fleet
+    assert any(type(rule) is SpinningUnit for rule in built.observe().rules)
+    built.comms.registry.unregister("spinning")
+    assert not any(type(rule) is SpinningUnit for rule in built.observe().rules)
