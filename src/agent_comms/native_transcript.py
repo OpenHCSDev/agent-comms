@@ -222,10 +222,6 @@ class NativeTranscript(TranscriptSource):
                 (RecordedEventTime(timestamp) for timestamp in times), UnrecordedEventTime(),
             )
 
-    def tool_call_between(self, since: float, through: float) -> bool:
-        with closing(self._tool_call_times(since)) as times:
-            return any(timestamp <= through for timestamp in times)
-
     @contextmanager
     def reading(self):
         """Keep the native record owner bound across one page projection."""

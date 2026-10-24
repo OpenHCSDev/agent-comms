@@ -123,7 +123,7 @@ from agent_comms.typed_table import (
     TextStorage,
     TypedTable,
 )
-from agent_comms.work_branches import BranchDifference, WorkBranchError, WorkBranches
+from agent_comms.work_branches import BranchDifference, SourceGrowth, WorkBranchError, WorkBranches
 
 if TYPE_CHECKING:
     from agent_comms.commander.order import (
@@ -1446,6 +1446,25 @@ class PlainText(DirectiveWords):
         return False
 
 
+class VerdictReason(PlainText):
+    """Why a reviewer decided a head, in words that stand on the public record."""
+
+    refusal = "Say why in {}+ words; jargon {} hides what happened."
+    least_words = 6
+
+
+class GrowthReason(PlainText):
+    """Why each growing source file needs its new lines, naming every one of them."""
+
+    refusal = "Say why the source grows in {}+ words; jargon {} hides what happened."
+    least_words = 12
+
+    def names(self, path: str) -> bool:
+        """One whole word of the reason is the file's path or its file name."""
+        words = {word.strip(".,;:()`'\"") for word in self.text.split()}
+        return bool({path, Path(path).name} & words)
+
+
 class CheckCorrectionReason(PlainText):
     """Why the recorded check was wrong, in enough words to stand on the record."""
 
@@ -1455,7 +1474,7 @@ class CheckCorrectionReason(PlainText):
     least_words = 8
 
 
-class StrikeReason(PlainText):
+class StrikeReason(VerdictReason):
     """What a unit did, plainly, in enough words to stand on the public record. A unit's
     wording is answered by a correction, never a strike: a reason whose every quoted span
     is jargon is about wording alone."""
@@ -3293,10 +3312,15 @@ class HeadVerdict(HeadReview, declared_name=None):
     def reviewed(self, goals: Goals, request: PullRequestHead, reviewer: ThreadIncarnation,
                  order: HeadReviewOrder) -> HeadReviewRecord:
         request = replace(request, head=request.current())
+        subject = self.subject(goals, request)
         recorded = order.record_review(goals, request, self, reviewer)
         self.after_record(goals, recorded)
-        self.post(request.repo, request.head, reviewer.name, f"#{request.pr}")
+        self.post(request.repo, request.head, reviewer.name, subject)
         return recorded
+
+    def subject(self, goals: Goals, request: PullRequestHead) -> str:
+        """What the published status names; acceptance also measures what the head grows."""
+        return f"#{request.pr}"
 
     def after_record(self, goals: Goals, record: HeadReviewRecord) -> None:
         """A rejection wakes its linked holder after the write; acceptance needs no directive."""
@@ -3309,20 +3333,52 @@ class HeadVerdict(HeadReview, declared_name=None):
 
 
 @dataclass(frozen=True)
-class ReviewedHeadVerdict(HeadVerdict):
-    state = "success"
+class DecidedHeadVerdict(HeadVerdict, declared_name=None):
+    """A decision on the record says why, on GitHub and in Core."""
+
+    reason: VerdictReason
+    verb: ClassVar[str]
 
     def description(self, reviewer: str, subject: str) -> str:
-        return f"Accepted by {reviewer} on {subject}"
+        return f"{self.verb} by {reviewer} on {subject}: {self.reason.text}"
 
 
 @dataclass(frozen=True)
-class RejectedHeadVerdict(HeadVerdict):
+class ReviewedHeadVerdict(DecidedHeadVerdict):
+    state = "success"
+    verb = "Accepted"
+
+    def subject(self, goals: Goals, request: PullRequestHead) -> str:
+        project = goals.registry.snapshot().commander_project.require()
+        growth = WorkBranches(Repo.selected(project.repos, request.repo.to_wire()).checkout
+                              ).reviewed_growth(request.pr, request.head)
+        self.require_growth(growth)
+        return f"#{request.pr} (src {growth.total:+d})"
+
+    def require_growth(self, growth: SourceGrowth) -> None:
+        if growth.exceeds:
+            raise TodoError(f"Source grows {growth.total:+d} code lines (limit {growth.limit}): "
+                            f"{growth.listing()}. Delete the slop or accept with --growth.")
+
+
+@dataclass(frozen=True)
+class GrownHeadVerdict(ReviewedHeadVerdict):
+    """Acceptance of a head whose source growth the reviewer explains file by file."""
+
+    growth: GrowthReason
+
+    def require_growth(self, growth: SourceGrowth) -> None:
+        if unnamed := [path for path in growth.growing()
+                       if not self.growth.names(path)]:
+            raise TodoError(f"--growth names no reason for {', '.join(unnamed)} "
+                            f"({growth.listing()}).")
+
+
+@dataclass(frozen=True)
+class RejectedHeadVerdict(DecidedHeadVerdict):
     reason: StrikeReason
     state = "failure"
-
-    def description(self, reviewer: str, subject: str) -> str:
-        return f"Sent back by {reviewer} on {subject}: {self.reason.text}"
+    verb = "Sent back"
 
     def after_record(self, goals: Goals, record: HeadReviewRecord) -> None:
         record.order.rejected(goals, record)

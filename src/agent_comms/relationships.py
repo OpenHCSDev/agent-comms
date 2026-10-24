@@ -706,9 +706,10 @@ class ThreadRelationships:
 
     @staticmethod
     def _goal_contacts(
-        registry: RegistrySnapshot,
+        registry: RegistrySnapshot, thread: Thread,
     ) -> tuple[tuple[GoalDerivedContact, ...], tuple[GoalMentionDiagnostic, ...]]:
-        """Resolve only saved incarnations from active goals in ONE registry snapshot."""
+        """The contacts touching ``thread`` and its own unresolved mentions, resolved from
+        active goals in ONE registry snapshot; never changes an explicit contact or delivery."""
         contacts: list[GoalDerivedContact] = []
         diagnostics: list[GoalMentionDiagnostic] = []
         for owner in (
@@ -718,7 +719,8 @@ class ThreadRelationships:
         ):
             for goal in owner.goal.active():
                 ThreadRelationships._project_goal_contacts(goal, owner, registry, contacts, diagnostics)
-        return tuple(contacts), tuple(diagnostics)
+        return (tuple(row for row in contacts if row.incident(thread)),
+                tuple(row for row in diagnostics if row.owner == thread.name))
 
     @staticmethod
     def _project_goal_contacts(goal: Goal, owner: Thread, registry: RegistrySnapshot,
@@ -736,21 +738,14 @@ class ThreadRelationships:
     def goal_contacts(
         self, owner: str
     ) -> tuple[tuple[GoalDerivedContact, ...], tuple[GoalMentionDiagnostic, ...]]:
-        """Read-only mutual view; never changes an explicit contact or delivery."""
-        registry = self.registry.snapshot()
-        thread = self.registry.require(owner)
-        contacts, diagnostics = self._goal_contacts(registry)
-        return (
-            tuple(row for row in contacts if row.counterpart(thread) is not None),
-            tuple(row for row in diagnostics if row.owner == thread.name),
-        )
+        return self._goal_contacts(self.registry.snapshot(), self.registry.require(owner))
 
     def peer_relations(self, owner: str) -> tuple[PeerRelation, ...]:
         """Every other registered thread with its relevance to ``owner``, most relevant first."""
         registry = self.registry.snapshot()
         thread = self.registry.require(owner)
         edges = self.store.read().resolved(registry).collaborations
-        contacts, _ = self._goal_contacts(registry)
+        contacts, _ = self._goal_contacts(registry, thread)
         granted: dict[ThreadIncarnation, list[type[PeerRelevance]]] = {}
         records: dict[ThreadIncarnation, list[RelationRecord]] = {}
         for peer in registry.threads.values():
@@ -809,19 +804,17 @@ class ThreadRelationships:
         thread = self.registry.require(owner)
         edges = self.store.read().resolved(registry).collaborations
         explicit = tuple(edge.oriented(thread) for edge in edges if edge.incident(thread))
-        contacts, diagnostics = self._goal_contacts(registry)
+        contacts, diagnostics = self._goal_contacts(registry, thread)
         visible: dict[ThreadIncarnation, RelationshipEntry] = {}
         for relation in (*explicit, *contacts):
             identity = relation.counterpart(thread)
-            if identity is None:
-                continue
             visible[identity] = relation.entry(
                 identity, None, identity.current(registry), visible.get(identity),
             )
         return Contacts(
             explicit,
             tuple(sorted(visible.values(), key=lambda row: (row.target, not row.available))),
-            tuple(row for row in diagnostics if row.owner == thread.name),
+            diagnostics,
         )
 
     def edit(
@@ -865,7 +858,7 @@ class ThreadRelationships:
         thread = registry.require(owner)
         state = self.store.read().resolved(registry)
         edges = state.collaborations
-        goal_contacts, goal_diagnostics = self._goal_contacts(registry)
+        goal_contacts, goal_diagnostics = self._goal_contacts(registry, thread)
         delivery = DeliveryScope.capture(thread.name, registry, self.views.channels.catalog.read())
         people = {
             view.thread.name: view
@@ -889,7 +882,5 @@ class ThreadRelationships:
             tuple(group.build(context) for group in RelationshipGroup.members_with(RelationshipGroup)),
             limited,
             len(messages),
-            unresolved_goal_mentions=tuple(
-                row for row in goal_diagnostics if row.owner == thread.name
-            ),
+            unresolved_goal_mentions=goal_diagnostics,
         )
