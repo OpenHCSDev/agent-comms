@@ -139,11 +139,15 @@ def test_projection_digest_tracks_declared_column_spelling(projection_source: Pa
     related = "digits: ClassVar[int] = 12"
     assert original.count(related) == 1
     codec.write_text(original.replace(related, "digits: ClassVar[int] = 13"))
-    assert json.loads(projection_source_digest(projection_source))["message_identity_source"] != before
+    assert (
+        json.loads(projection_source_digest(projection_source))["message_identity_source"] != before
+    )
     unrelated = 'spelling = re.compile("[0-9a-f]{7,40}")'
     assert original.count(unrelated) == 1
     codec.write_text(original.replace(unrelated, 'spelling = re.compile("[0-9a-f]{8,40}")'))
-    assert json.loads(projection_source_digest(projection_source))["message_identity_source"] == before
+    assert (
+        json.loads(projection_source_digest(projection_source))["message_identity_source"] == before
+    )
 
 
 def test_nominal_message_id_column_stores_plain_text() -> None:
