@@ -12,12 +12,15 @@ from typing import TYPE_CHECKING, ClassVar, Self
 from agent_comms.build_identity import RecordedBuildIdentity
 from agent_comms.bus import BusReader
 from agent_comms.channel_targets import CommsTag
+from agent_comms.cli_commands import InstallCliCommand
 from agent_comms.commander.questions import UnansweredUnitAsks
 from agent_comms.commander_heartbeat import CommanderHeartbeat
 from agent_comms.comms import Comms
 from agent_comms.goal_actions import ReissuedOrderGoalAction
 from agent_comms.heartbeat_frame import HeartbeatFrame
 from agent_comms.held_orders import HeldOrders
+from agent_comms.installer import launch as installer_launch
+from agent_comms.installer.runtime_resolution import CorePackage
 from agent_comms.message_bus import WatchPass
 from agent_comms.message_page import MessageReadRequest
 from agent_comms.messages import Message
@@ -27,6 +30,7 @@ from agent_comms.plan_phases import PlanPhase
 from agent_comms.read_basis import RepliesDisplayScope
 from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.registry_document import RegistrySnapshot
+from agent_comms.repo import Repo
 from agent_comms.repository_name import RepositoryName
 from agent_comms.service_passes import ServicePassStore
 from agent_comms.standing_rules import (
@@ -56,6 +60,8 @@ class InstallDue(IndependentStandingRule, UndatedStandingRule):
 
     Every install stops every running unit, so merges batch into one install instead of
     one install each. The window is read from the merges' own git times, not a schedule.
+    Each due repository merge launches Core's installer once, including dependency
+    merges. The log record selects the member that owns that action.
     """
 
     repo: RepositoryName
@@ -63,16 +69,31 @@ class InstallDue(IndependentStandingRule, UndatedStandingRule):
     installed: str
     commits: int = field(compare=False)
     oldest_minutes: int = field(compare=False)
+    logs: installer_launch.InstallLogs = field(compare=False)
+    core: Repo = field(compare=False)
+    target: str = field(compare=False)
     settle: ClassVar[float] = 30 * 60
 
+    @property
+    @abstractmethod
+    def action(self) -> str: ...
+
     @classmethod
-    def violations(cls, comms: Comms, commander: str) -> tuple[Self, ...]:
+    def scan_owner(cls) -> type[StandingRule]:
+        return InstallDue
+
+    @classmethod
+    def violations(cls, comms: Comms, commander: str) -> tuple[InstallDue, ...]:
         repos = comms.registry.snapshot().commander_project.require().repos
         installed = RecordedBuildIdentity.installed()
         now = time.time()
-        due: list[Self] = []
+        logs = installer_launch.InstallLogs(comms.root)
+        due: list[InstallDue] = []
         for repo in repos:
             repo.git(repo.checkout, "fetch", "-q", "origin", "main")
+        core = {repo.github: repo for repo in repos}[CorePackage.repository]
+        target = core.git(core.checkout, "rev-parse", "origin/main").strip()
+        for repo in repos:
             main = repo.git(repo.checkout, "rev-parse", "origin/main").strip()
             if installed.contains(main, repo.checkout):
                 continue
@@ -81,15 +102,37 @@ class InstallDue(IndependentStandingRule, UndatedStandingRule):
                               f"{recorded.commit}..{main}").split()
             waited = now - min(map(int, merged), default=now - cls.settle)
             if waited >= cls.settle:
-                due.append(cls(repo.github, main, recorded.commit,
-                               len(merged), int(waited // 60)))
+                member = logs.member(repo.github, main)
+                due.append(member(repo.github, main, recorded.commit,
+                                  len(merged), int(waited // 60), logs, core, target))
         return tuple(due)
+
+    def enforce(self, comms: Comms, commander: str) -> None:
+        """An already-launched merge needs no second attempt."""
 
     def line(self) -> str:
         return (f"INSTALL DUE ({self.repo.to_wire()}: main {self.main}, installed "
                 f"{self.installed}, {self.commits} commits, oldest {self.oldest_minutes} min) "
-                "-> the installer rehearses and installs main with agent-comms install "
-                "and posts the result to the commander")
+                f"-> {self.action}")
+
+
+class PendingInstallDue(InstallDue):
+    @property
+    def action(self) -> str:
+        return f"launched an install of Core main {self.target}"
+
+    def enforce(self, comms: Comms, commander: str) -> None:
+        command = InstallCliCommand(checkout=self.core.checkout, to=self.target,
+                                    project=self.core.checkout)
+        run = installer_launch.InstallRun.start(command, comms.root)
+        run.spawn()
+        self.logs.record(run.logs, self.repo, self.main)
+
+
+class LaunchedInstallDue(InstallDue):
+    @property
+    def action(self) -> str:
+        return "an install for this merge was already launched"
 
 
 @dataclass(frozen=True)
