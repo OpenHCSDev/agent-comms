@@ -232,17 +232,19 @@ class HeldBranchRule(UndatedStandingRule, declared_name=None):
     def scan_observed(cls, comms: Comms, commander: str,
                       observed: Sequence[UnitState], frame: HeartbeatFrame) -> tuple[Self, ...]:
         storage = comms.registry.storage_rule
+        snapshot = comms.registry.snapshot()
         branches = []
         for state in observed:
             for unit in state.readable_units():
-                for todo in state.source.todos:
-                    path = storage.order_checkout(unit.name, todo.id)
-                    if path.is_dir():
-                        branches.append(HeldBranch(
-                            todo, unit, frame.pulls.branch_difference(path), path,
-                            frame.pulls.checkout(todo.order.checked().check.directory),
-                            state.source,
-                        ))
+                for thread in snapshot.threads_for(unit.require_recorded()):
+                    for todo in state.source.todos:
+                        path = storage.order_checkout(storage.roots_of(thread), todo.id)
+                        if path.is_dir():
+                            branches.append(HeldBranch(
+                                todo, unit, frame.pulls.branch_difference(path), path,
+                                frame.pulls.checkout(todo.order.checked().check.directory),
+                                state.source,
+                            ))
         ordered = tuple(sorted(branches, key=lambda held: (
             held.difference.repository.to_wire(), held.difference.branch,
             held.holder.require_recorded().lookup, held.problem,

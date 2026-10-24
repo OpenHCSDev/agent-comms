@@ -1983,7 +1983,7 @@ class CheckoutCliCommand(PreparedCheckoutCliCommand,
     help = "Create, repair or remove an owned problem checkout with its pinned submodules"
 
     def destination(self, rule: StorageRule, thread: Thread) -> Path:
-        return rule.order_checkout(thread.name, self.problem)
+        return rule.order_checkout(rule.roots_of(thread), self.problem)
 
     def source(self, ctx: Comms, todo: Todo) -> Repo:
         return todo.repository
@@ -1996,7 +1996,7 @@ class RepositoryCheckoutCliCommand(PreparedCheckoutCliCommand,
     repository: Annotated[RepositoryName, Argument(flags=("repository",))]
 
     def destination(self, rule: StorageRule, thread: Thread) -> Path:
-        return rule.repository_checkout(thread.name, self.problem, self.repository)
+        return rule.repository_checkout(rule.roots_of(thread), self.problem, self.repository)
 
     def source(self, ctx: Comms, todo: Todo) -> Repo:
         repositories = ctx.registry.snapshot().commander_project.require().repos

@@ -2282,10 +2282,13 @@ class PendingProblemOrder(Pending, DeliverableProblemOrder):
             context.comms.goals.todos.history_for_commander(context.incarnation))
         problems = list(self.phase.order_refusals(reading, document.unplanned_reason))
         held = tuple(todo for todo in listed.values() if todo.holder_state.current_assignments())
-        busy = tuple(todo for todo in held if todo.held().owner == unit and todo.id not in group)
+        holder = context.comms.registry.require(unit).incarnation
+        busy = tuple(todo for todo in held
+                     if todo.held().owner_identity == holder and todo.id not in group)
         if busy:
             snapshot = context.comms.registry.snapshot()
-            occupied = {todo.held().owner for todo in held} | {context.commander}
+            occupied = {thread.name for todo in held
+                        for thread in todo.held().holder_in(snapshot)} | {context.commander}
             idle = sorted(
                 candidate.name
                 for thread in snapshot.active_threads(snapshot.active_candidates())
@@ -2353,10 +2356,11 @@ class PendingProblemOrder(Pending, DeliverableProblemOrder):
         """Validate the complete issuance before recording, then publish its owned effects."""
         group = target.group(document)
         listed = {todo.id: todo for todo in context.todos()}
+        holder = context.comms.registry.require(unit).incarnation
         holders = sorted({assignment.owner for pid in group if pid in listed
                           for assignment in listed[pid].holder_state.current_assignments()
-                          if assignment.owner != unit})
-        replacing = target.replacing(unit, group, listed)
+                          if assignment.owner_identity != holder})
+        replacing = target.replacing(holder, group, listed)
         self.require_send(context, document, unit, group, listed, target,
                           reassign, holders, clean, traced)
         struck_already = replacing and listed[group[0]].struck_on_order(unit)
@@ -4562,11 +4566,11 @@ class TodoStore(OwnerRequestStore):
     def history_for_commander(self, commander: ThreadIncarnation) -> tuple[Todo, ...]:
         return self._select("creator=? AND creator_created=?", (commander.name, commander.wire_birth))
 
-    def units(self, commander: ThreadIncarnation) -> frozenset[str]:
+    def units(self, commander: ThreadIncarnation) -> frozenset[ThreadIncarnation]:
         """The threads this commander gives orders to: everyone who holds or held one of its
-        problems."""
+        problems, by birth, so a renamed holder stays one unit."""
         return frozenset(
-            assignment.owner for todo in self.history_for_commander(commander)
+            assignment.owner_identity for todo in self.history_for_commander(commander)
             for assignment in (*todo.holder_state.current_assignments(),
                                *(release.previous for release in todo.released)))
 

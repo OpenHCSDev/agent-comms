@@ -59,7 +59,7 @@ class WorkDispatch:
         # A concurrent rotation contends on one checkout. Never adopt a partial attempt.
         name = self.name
         storage = comms.registry.storage_rule
-        checkout = storage.order_checkout(name, self.action.problem)
+        checkout = storage.order_checkout(storage.initial_roots(name), self.action.problem)
         candidate = Thread(
             name,
             frozenset(),

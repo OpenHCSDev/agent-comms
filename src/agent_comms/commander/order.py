@@ -407,7 +407,10 @@ class CommanderContext(BaseModel):
             self.incarnation, self.comms.registry.require(unit).incarnation)
 
     def units(self) -> frozenset[str]:
-        return self.comms.goals.todos.units(self.incarnation)
+        """The current registry names of every unit this commander ordered."""
+        snapshot = self.comms.registry.snapshot()
+        return frozenset(thread.name for unit in self.comms.goals.todos.units(self.incarnation)
+                         for thread in snapshot.threads_for(unit.require_recorded()))
 
     def progress(self) -> dict[str, OrderProgress]:
         listed: TodoList = self.call(CommsTodoListTool(thread=self.commander))
@@ -440,7 +443,8 @@ class OrderedProblems(ABC):
                  listed: Mapping[str, Todo]) -> list[str]: ...
 
     @abstractmethod
-    def replacing(self, unit: str, group: Sequence[str], listed: Mapping[str, Todo]) -> bool:
+    def replacing(self, unit: ThreadIncarnation, group: Sequence[str],
+                  listed: Mapping[str, Todo]) -> bool:
         """Whether this order replaces the unit's own earlier order on the same problems."""
 
     @abstractmethod
@@ -463,7 +467,8 @@ class NewProblem(OrderedProblems):
                  listed: Mapping[str, Todo]) -> list[str]:
         return ['problems: fix: omit IDs when creating a new problem'] if document.problems else []
 
-    def replacing(self, unit: str, group: Sequence[str], listed: Mapping[str, Todo]) -> bool:
+    def replacing(self, unit: ThreadIncarnation, group: Sequence[str],
+                  listed: Mapping[str, Todo]) -> bool:
         return False
 
     def record(self, context: CommanderContext, order: PendingProblemOrder, unit: str,
@@ -487,8 +492,12 @@ class ListedProblems(OrderedProblems):
         missing = [pid for pid in group if pid not in listed]
         return [f'{missing} not open problems; fix: name existing open problem IDs'] if missing else []
 
-    def replacing(self, unit: str, group: Sequence[str], listed: Mapping[str, Todo]) -> bool:
-        return bool(group) and all(pid in listed and listed[pid].holder == unit for pid in group)
+    def replacing(self, unit: ThreadIncarnation, group: Sequence[str],
+                  listed: Mapping[str, Todo]) -> bool:
+        return bool(group) and all(
+            pid in listed and any(assignment.owner_identity == unit for assignment
+                                  in listed[pid].holder_state.current_assignments())
+            for pid in group)
 
     def record(self, context: CommanderContext, order: PendingProblemOrder, unit: str,
                group: Sequence[str], traced: FileLine | NoSourceReference, request: OwnerRequestId,
