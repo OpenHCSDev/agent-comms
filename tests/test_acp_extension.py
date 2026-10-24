@@ -1,7 +1,7 @@
 """Declared extension decoding is strict and shares its owner with consumers."""
 
 from agent_comms.child_process import ProcessIdentity
-from agent_comms.field_codec import TurnId
+from agent_comms.field_codec import MessageId, TurnId
 from agent_comms.acp_failure import ACPFailure
 
 import pytest
@@ -150,7 +150,7 @@ def test_request_family_strict_boundary():
         CompactRequest("focus"),
         ClearQueueRequest(),
         SendNowRequest(),
-        SelectedWriteRequest(1, "message", "/file", "bytes"),
+        SelectedWriteRequest(1, MessageId.mint("message"), "/file", "bytes"),
     )
     assert {type(value) for value in samples} == set(CommsRequest.members_with(CommsRequest))
     for value in samples:

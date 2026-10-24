@@ -53,7 +53,7 @@ from agent_comms.config_options import CatalogChoice, CatalogConfigOption, Catal
 from agent_comms.coordination_errors import CoordinationError
 from agent_comms.declared_family import DeclaredFamily
 from agent_comms.declared_verb import DeclaredOptions
-from agent_comms.field_codec import FieldCodec, PathText
+from agent_comms.field_codec import FieldCodec, MessageId, PathText
 from agent_comms.launch_runtime import LaunchRuntime
 from agent_comms.message_reference import (
     BridgeBeginning,
@@ -387,7 +387,7 @@ class ObservedMonitor(MonitorEvidence):
 
 @dataclass(frozen=True)
 class ObservedPart(BridgeStateTable, TypedTable):
-    id: Annotated[str, Column(primary_key=True)]
+    id: Annotated[MessageId, Column(primary_key=True)]
     number: Annotated[int, Column(primary_key=True)]
     sender: str
     body: str
@@ -399,7 +399,7 @@ class ObservedPart(BridgeStateTable, TypedTable):
 class JournalMessage(TypedRow):
     """Journal identity and payload are enough to recover a delivery position."""
 
-    id: Annotated[str, Column(primary_key=True)]
+    id: Annotated[MessageId, Column(primary_key=True)]
     payload: str
 
     @cached_property
@@ -1317,7 +1317,7 @@ class LineMonitorBridge(TranscriptConfirmsDelivery, TranscriptBridge[Options]):
     async def confirm_probe(self, probe: MonitorProbe) -> None:
         await self.reader.confirm_probe(self, probe)
 
-    async def part_observed(self, message_id: str, number: int) -> None:
+    async def part_observed(self, message_id: MessageId, number: int) -> None:
         await self.reader.part_observed(message_id, number)
 
     @staticmethod

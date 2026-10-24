@@ -116,17 +116,21 @@ class OpenCodeConnection:
                 raise ValueError('OpenCode returned a different session or working directory')
             yield cls(http, actual)
 
-    async def saved_input(self, message_id: str) -> UserMessage:
-        async with self.http.get(self.path + '/message/' + quote(message_id, safe='')) as response:
+    async def saved_input(self, opencode_message_id: str) -> UserMessage:
+        async with self.http.get(
+            self.path + '/message/' + quote(opencode_message_id, safe='')
+        ) as response:
             saved = SavedInput.model_validate_json(await response.read())
-        if saved.info.id != message_id or saved.info.sessionID != self.session:
+        if saved.info.id != opencode_message_id or saved.info.sessionID != self.session:
             raise ValueError('OpenCode returned a different saved message')
         return saved.info
 
-    async def message(self, message_id: str) -> SavedMessage:
-        async with self.http.get(self.path + '/message/' + quote(message_id, safe='')) as response:
+    async def message(self, opencode_message_id: str) -> SavedMessage:
+        async with self.http.get(
+            self.path + '/message/' + quote(opencode_message_id, safe='')
+        ) as response:
             saved = SavedMessage.model_validate_json(await response.read())
-        if saved.info.id != message_id or saved.info.sessionID != self.session:
+        if saved.info.id != opencode_message_id or saved.info.sessionID != self.session:
             raise ValueError('OpenCode returned a different saved message')
         return saved
 

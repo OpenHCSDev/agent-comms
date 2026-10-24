@@ -270,7 +270,7 @@ class ClaimIdentity:
     owner: Annotated[str, BoundedText]
     incarnation: Annotated[str, BoundedText]
     seq: Annotated[int, EnvelopeSequence]
-    message_id: Annotated[str, BoundedText]
+    message_id: MessageId
 
 
 @dataclass(frozen=True)

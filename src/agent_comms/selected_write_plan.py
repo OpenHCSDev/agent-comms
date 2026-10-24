@@ -164,7 +164,7 @@ class SelectedWritePlans(DurableFile, PatternFile):
         *,
         owner_name: str,
         source_seq: int,
-        source_message_id: str,
+        source_message_id: MessageId,
         resource: str,
         contents: str,
     ) -> SelectedWriteAcceptedUpdate:
@@ -172,7 +172,6 @@ class SelectedWritePlans(DurableFile, PatternFile):
         if type(source_seq) is not int or source_seq <= 0:
             raise IdentityConflict("Selected write requires a positive source sequence")
         try:
-            source_message_id = FieldCodec.decode(MessageId, source_message_id)
             FieldCodec.decode(str, resource)
             FieldCodec.decode(str, contents)
         except MalformedRecord as error:

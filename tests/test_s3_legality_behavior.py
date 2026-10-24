@@ -24,7 +24,7 @@ from agent_comms.execution_states import (
     ExecutionState,
     FailedExecution,
 )
-from agent_comms.field_codec import FieldCodec
+from agent_comms.field_codec import FieldCodec, MalformedRecord
 from agent_comms.response_acknowledgement import canonical_publication_key
 from agent_comms.messages import InfoKind, Message
 from agent_comms.obligation_states import PublishedResponse, ResponseState
@@ -142,8 +142,11 @@ def test_response_receipt_and_publication_constraints(owner, pending):
     publication = published_snapshot(pending)
     intent = publication.publication_intents[0]
     acknowledgement = publication.publication_evidence[0]
+    record = {ResponseState.family_discriminator: owner.declared_name}
     if owner.published:
-        state = owner.load(acknowledgement.message_id, acknowledgement.seq)
+        state = FieldCodec.decode(ResponseState, {
+            **record, 'message_id': acknowledgement.message_id, 'seq': acknowledgement.seq,
+        })
         for message_id, seq in (
             (None, 1),
             ("acknowledgement", None),
@@ -152,12 +155,12 @@ def test_response_receipt_and_publication_constraints(owner, pending):
             ("acknowledgement", 0),
         ):
             with pytest.raises((ValueError, IntegrityViolationError)):
-                owner.load(message_id, seq)
+                FieldCodec.decode(ResponseState, {**record, 'message_id': message_id, 'seq': seq})
     else:
-        state = owner.load(None, None)
+        state = FieldCodec.decode(ResponseState, record)
         for message_id, seq in (("acknowledgement", None), (None, 1), ("acknowledgement", 1)):
-            with pytest.raises(IntegrityViolationError):
-                owner.load(message_id, seq)
+            with pytest.raises(MalformedRecord):
+                FieldCodec.decode(ResponseState, {**record, 'message_id': message_id, 'seq': seq})
     # Exhaust the declaration-owned publication contract without copying its roster.
     for has_intent, has_receipt in product((False, True), repeat=2):
         permitted = (
@@ -274,7 +277,7 @@ def terminal_snapshot(active, execution_owner, attempt_owner, response_owner, *,
         execution=execution,
         attempt=replace(active.attempt, lifecycle=phase),
         assignments=claims,
-        obligations=(replace(active.obligations[0], lifecycle=response_owner.load(None, None)),),
+        obligations=(replace(active.obligations[0], lifecycle=response_owner()),),
         replay=replay,
         current_execution_id=NoPointedExecution(),
         current_attempt_ordinal=NoPointedAttempt(),

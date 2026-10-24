@@ -19,7 +19,7 @@ from typing import TYPE_CHECKING, Annotated, ClassVar, NoReturn, get_args, get_o
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.cli_protocol import Outcome
 from agent_comms.declared_family import DeclaredFamily
-from agent_comms.field_codec import FieldCodec, MalformedRecord, PathText
+from agent_comms.field_codec import FieldCodec, MalformedRecord, MessageId, PathText
 from agent_comms.launch_runtime import LaunchRuntime
 from agent_comms.messages import Message
 from agent_comms.thread_status import ConnectedThreadStatus, PausedBridgeThreadStatus
@@ -112,7 +112,7 @@ class ReaderState:
     async def confirm_probe(self, bridge: LineMonitorBridge, probe: MonitorProbe) -> None:
         """Only an unproven attachment consumes a probe."""
 
-    async def part_observed(self, message_id: str, number: int) -> None:
+    async def part_observed(self, message_id: MessageId, number: int) -> None:
         """Only an attached reader has a flow-control window."""
 
     async def attach(self, service: MonitorService, peer: MonitorPeer) -> SessionReply:
@@ -144,10 +144,10 @@ class NoReader(ReaderState):
 class MonitorAttachment:
     peer: MonitorPeer
     probe: MonitorProbe
-    pending_parts: dict[tuple[str, int], int] = field(default_factory=dict)
+    pending_parts: dict[tuple[MessageId, int], int] = field(default_factory=dict)
     window_changed: asyncio.Condition = field(default_factory=asyncio.Condition)
 
-    async def emit(self, message_id: str, number: int, line: str, window_bytes: int) -> None:
+    async def emit(self, message_id: MessageId, number: int, line: str, window_bytes: int) -> None:
         size = len((line + "\n").encode("utf-16-le"))
         async with self.window_changed:
             await self.window_changed.wait_for(
@@ -158,7 +158,7 @@ class MonitorAttachment:
             self.pending_parts[message_id, number] = size
             await self.peer.write(line)
 
-    async def observed(self, message_id: str, number: int) -> None:
+    async def observed(self, message_id: MessageId, number: int) -> None:
         async with self.window_changed:
             self.pending_parts.pop((message_id, number), None)
             self.window_changed.notify_all()
@@ -187,7 +187,7 @@ class AttachedReader(UnreadyReader):
     async def confirm_probe(self, bridge: LineMonitorBridge, probe: MonitorProbe) -> None:
         """Overlapping observations cannot prove a different attachment."""
 
-    async def part_observed(self, message_id: str, number: int) -> None:
+    async def part_observed(self, message_id: MessageId, number: int) -> None:
         await self.attachment.observed(message_id, number)
 
     async def deliver(self, bridge: LineMonitorBridge, message: Message) -> type[Outcome]:

@@ -31,6 +31,7 @@ from .field_codec import (
     Id128Text,
     InputId,
     MalformedRecord,
+    MessageId,
     WireValue,
     WireName,
     WireOmitDefault,
@@ -724,7 +725,7 @@ class CompactRequest(CommsRequest):
 @dataclass(frozen=True)
 class SelectedWriteRequest(CommsRequest):
     source_seq: int
-    source_message_id: str
+    source_message_id: MessageId
     resource: str
     contents: str
 
