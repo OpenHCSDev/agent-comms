@@ -39,7 +39,6 @@ if TYPE_CHECKING:
     from .native_entries import NativeEvidenceScope
     from .private_registry_guard import RegistryPrivacy
 
-
 @dataclass(frozen=True)
 class SourcePrefix(PresentPath):
     """One immutable SQLite prefix; identity is not a message position."""
@@ -220,8 +219,8 @@ class SourceCoverage:
 
         Count messages with no wake or no recipients without submitting input.
         At the end of a page, use the last checked message for this recipient,
-        not the last message anywhere on the bus. The page is bounded by its row
-        limit; elapsed time never decides whether it is readable.
+        not the last message anywhere on the bus. The page is bounded by
+        ``limit`` through the recipient index, never by a clock.
         """
         request = CoveragePage.capture(lookup=self.recipient_lookup, limit=limit,
                                        after_seq=after_seq, partial=partial)
