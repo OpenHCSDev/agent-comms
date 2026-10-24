@@ -20,6 +20,7 @@ from agent_comms.field_codec import FieldCodec, MalformedRecord, MessageId
 from agent_comms.recorded_time import EventTime
 from agent_comms.runtime_updates import (
     ActiveItem,
+    AllTurnsEnded,
     FinishedItem,
     HiddenItem,
     HistoryNotice,
@@ -31,7 +32,6 @@ from agent_comms.runtime_updates import (
     StatusUpdate,
     Summarized,
     ToolDraft,
-    TurnEnded,
     TurnStarted,
 )
 from agent_comms.thread_identity import OfferedTools, ToolName, UnobservedTools
@@ -509,7 +509,7 @@ class UserText(TextWire, UserBlock, TextContent, declared_name='text'):
 
     def updates(self, record: UserRecord, session: ClaudeSession) -> tuple[RuntimeUpdate, ...]:
         if self.text.startswith('[Request interrupted by user'):
-            return (TurnEnded(),)
+            return (AllTurnsEnded(),)
         return record.origin.prompt(record, self.text, session)
 
 
@@ -651,7 +651,7 @@ class SystemEvent(TaggedWire, ABC, affix=""):
 class TurnDuration(SystemEvent, declared_name='turn_duration'):
 
     def updates(self, session: ClaudeSession) -> tuple[RuntimeUpdate, ...]:
-        return (TurnEnded(),)
+        return (AllTurnsEnded(),)
 
 
 class CompactBoundary(SystemEvent, TimedRecord, declared_name='compact_boundary'):

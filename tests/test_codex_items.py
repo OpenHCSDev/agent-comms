@@ -38,7 +38,7 @@ def test_codex_stream_reports_activity_and_finishes_items(tmp_path):
     t1_turn_id = NativeTurnId('t1')
     from agent_comms.turn_phase import ModelWaitPhase, ToolRunningPhase
     from agent_comms.cli_bridges.codex_protocol import ItemStream, RpcNotification
-    from agent_comms.runtime_updates import ActiveItem, FinishedItem, TurnEnded, TurnStarted
+    from agent_comms.runtime_updates import ActiveItem, FinishedItem, FinishedTurn, TurnStarted
     from agent_comms.native_tools import BashTool
     from agent_comms.transcript_events import ToolEndTranscript, ToolStartTranscript
 
@@ -68,7 +68,8 @@ def test_codex_stream_reports_activity_and_finishes_items(tmp_path):
     assert receive("item/started", turnId="t1", item=thinking, startedAtMs=3000) \
         == ActiveItem(t1_turn_id, "r1", ModelWaitPhase())
     assert receive("item/completed", turnId="t1", item=thinking, completedAtMs=4000).events == ()
-    assert receive("turn/completed", turn={"id": "t1", "status": "completed"}) == TurnEnded()
+    assert receive("turn/completed", turn={"id": "t1", "status": "completed"}) \
+        == FinishedTurn(t1_turn_id)
 
 
 def test_attaching_reports_the_status_codex_gives_its_thread():
@@ -91,8 +92,10 @@ def test_deltas_require_start_and_finish_retires_the_assembly(tmp_path):
 
     def receive(method, **params):
         updates = stream.receive(RpcNotification(method=method, params={"threadId": "th", "turnId": "t", **params}))
-        parts = tuple(part for update in updates for part in update.accumulate(output))
-        return parts[-1] if parts else None
+        pending = []
+        for update in updates:
+            update.accumulate_into(output, pending)
+        return pending[-1] if pending else None
 
     assert receive("item/agentMessage/delta", itemId="a", delta="suffix") is None
     receive("item/started", item={"type": "agentMessage", "id": "a", "text": ""}, startedAtMs=1000)
