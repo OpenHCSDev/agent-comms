@@ -11,6 +11,7 @@ from typing import TYPE_CHECKING, Self
 from .declared_family import DeclaredFamily
 from .errors import ToolRefusedError
 from .external_transcript import ExternalTranscript, StoreRead
+from .held_orders import HeldOrders, LiveHold
 from .order_work import OrderWork
 from .thread_execution import ConversationPreparation
 from .thread_identity import ThreadIncarnation
@@ -24,7 +25,7 @@ if TYPE_CHECKING:
     from .comms import Comms
     from .threads import Thread
     from .transcript_sources import TranscriptSource
-    from .todos import LiveHold, Todo
+    from .todos import Todo
 
 
 @dataclass(frozen=True)
@@ -188,8 +189,6 @@ class OrderRead[Result](TranscriptRead[Result]):
 
     @classmethod
     def for_commander(cls, comms: Comms, commander: str) -> Iterator[Self]:
-        from .todos import HeldOrders
-
         yield from cls.for_orders(comms.root, HeldOrders.read(comms, commander).live)
 
     @classmethod

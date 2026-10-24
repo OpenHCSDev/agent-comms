@@ -5,11 +5,11 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Self
 
+from agent_comms.held_orders import HeldOrders
 from agent_comms.phase_evidence import MainTree, PlanReading
 from agent_comms.plan_phases import PlanPhase
 from agent_comms.repo import Repo
 from agent_comms.standing_rules import OwedAnswer
-from agent_comms.todos import HeldOrders
 
 if TYPE_CHECKING:
     from agent_comms.comms import Comms

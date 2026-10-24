@@ -38,7 +38,8 @@ from agent_comms.standing_rules import (
 from agent_comms.storage_rules import OrderCheckoutWork
 from agent_comms.thread_identity import ThreadIncarnation
 from agent_comms.threads import Thread
-from agent_comms.todos import HeldOrders, OwnerRequest, Todo
+from agent_comms.held_orders import HeldOrders
+from agent_comms.todos import OwnerRequest, Todo
 from agent_comms.turn_digests import OrderEditCountRead, TurnDigestRead, TurnsSince
 from agent_comms.ui_model.unit_state import AwaitingCommander, UnitState
 from agent_comms.work_dispatch import ReusedWorkDispatch, WorkDispatch

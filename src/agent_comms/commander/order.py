@@ -66,8 +66,8 @@ from agent_comms.registry_document import RegisteredCommanderProject
 from agent_comms.standing_rules import HuntDue, OwedAnswer
 from agent_comms.storage_rules import UnitStorage
 from agent_comms.thread_identity import ThreadIncarnation
+from agent_comms.held_orders import HeldOrders
 from agent_comms.todos import (
-    HeldOrders,
     BluntText,
     CheckedDelivery,
     CleanHunt,

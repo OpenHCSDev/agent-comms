@@ -41,7 +41,8 @@ from agent_comms.standing_rules import (
     UndatedStandingRule,
 )
 from agent_comms.thread_identity import ThreadIncarnation
-from agent_comms.todos import HeldOrders, OwnerRequest, ProgressRead, Todo
+from agent_comms.held_orders import HeldOrders
+from agent_comms.todos import OwnerRequest, ProgressRead, Todo
 from agent_comms.tool_result import ToolResult
 from agent_comms.ui_model.unit_state import UnitState
 from agent_comms.turn_digests import OrderEditCountRead

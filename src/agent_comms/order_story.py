@@ -11,7 +11,8 @@ from .recorded_time import EventTime
 from .tool_result import ToolResult
 
 if TYPE_CHECKING:
-    from .todos import HeldOrders, Todo
+    from .held_orders import HeldOrders
+    from .todos import Todo
 
 
 @dataclass(frozen=True)

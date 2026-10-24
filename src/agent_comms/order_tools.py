@@ -19,7 +19,6 @@ from agent_comms.todos import (
     PlainText,
     ProgressRead,
     HeadReviewOrder,
-    HeldOrders,
     HeadReviewRecord,
     HeadVerdict,
     NoHeadOrder,
@@ -38,6 +37,7 @@ from .goal_actions import CreateProblemGoalAction, OrderGoalAction
 from .goals import Goal, OrderCheck
 from .heartbeat_frame import HeartbeatFrame
 from .head_review import PullRequestHead
+from .held_orders import HeldOrders
 from .order_story import FleetStory, OrderStory
 from .order_work import OrderWork
 from .plan_phases import OrderPhase

@@ -4065,49 +4065,6 @@ class OwnerRequestStore(DurableStore):
             return tuple(Todo.select(db, request=request))
 
 
-@dataclass(frozen=True)
-class LiveHold:
-    """A held order and the registered thread its recorded holder still is."""
-
-    todo: Todo
-    holder: Thread
-
-
-@dataclass(frozen=True)
-class HeldOrders:
-    """A commander's held orders split once against one registry cut: live holds, whose
-    recorded holder is still registered, and orphaned holds, whose holder was deleted or
-    registered again since the order. Every reader takes its side of this split."""
-
-    live: tuple[LiveHold, ...]
-    orphaned: tuple[Todo, ...]
-
-    @classmethod
-    def read(cls, comms: Comms, commander: str) -> Self:
-        """The commander's held orders captured once; filtering never reopens the store."""
-        snapshot = comms.registry.snapshot()
-        held = comms.goals.todos.held_for_commander(snapshot.require(commander).incarnation)
-        return cls.split(held, snapshot)
-
-    @classmethod
-    def split(cls, todos: Sequence[Todo], snapshot: RegistrySnapshot) -> Self:
-        holds = tuple((todo, todo.held().holder_in(snapshot)) for todo in todos)
-        return cls(tuple(LiveHold(todo, thread) for todo, threads in holds for thread in threads),
-                   tuple(todo for todo, threads in holds if not threads))
-
-    @property
-    def todos(self) -> tuple[Todo, ...]:
-        return tuple(hold.todo for hold in self.live)
-
-    @property
-    def holders(self) -> dict[ThreadIncarnation, list[Todo]]:
-        """Live holds by their holder's current registration."""
-        held: dict[ThreadIncarnation, list[Todo]] = {}
-        for hold in self.live:
-            held.setdefault(hold.holder.incarnation, []).append(hold.todo)
-        return held
-
-
 @dataclass(frozen=True, slots=True)
 class TodoStore(OwnerRequestStore):
     """One SQLite row owns both todo state and its exclusive assignment.

@@ -23,6 +23,7 @@ from agent_comms.recorded_time import EventTime, RecordedEventTime
 from agent_comms.repo import Repo
 from agent_comms.repository_name import RepositoryName
 from agent_comms.head_review import PullRequestHead
+from agent_comms.held_orders import HeldOrders
 from agent_comms.thread_identity import ThreadIncarnation
 from agent_comms.work_branches import BranchDifference
 from agent_comms.service_passes import ServicePassStore
@@ -35,9 +36,7 @@ if TYPE_CHECKING:
     from agent_comms.messages import Message
     from agent_comms.registry_document import RegistrySnapshot
     from agent_comms.storage_rules import MemoryUse, StorageRule
-    from agent_comms.todos import (
-        HeldOrders, OrderClaim, OwnerRequest, ProgressRead, PullRequest, Todo,
-    )
+    from agent_comms.todos import OrderClaim, OwnerRequest, ProgressRead, PullRequest, Todo
     from agent_comms.goal_management import Goals
     from agent_comms.ui_model.unit_state import UnitObservation, UnitState
 
@@ -386,8 +385,6 @@ class OwedAnswer(IndependentStandingRule, declared_name=None):
 
     @classmethod
     def opened(cls, comms: Comms, commander: str) -> tuple[Self, ...]:
-        from agent_comms.todos import HeldOrders
-
         return cls.read_scan(comms, commander, HeldOrders.read(comms, commander))
 
     @classmethod
