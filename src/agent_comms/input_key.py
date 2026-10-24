@@ -71,7 +71,7 @@ class BusInputKey(InputKey):
     sequence: int
     prefix = "bus:"
     body = r"([1-9][0-9]*)"
-    readers = (int,)
+    readers: ClassVar[tuple[Callable[[str], object], ...]] = (int,)
 
     def text(self) -> str:
         return str(self.sequence)

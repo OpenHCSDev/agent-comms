@@ -13,7 +13,7 @@ from agent_comms.native_arguments import (
     NativeArguments,
     OneShotArgument,
     OptionArgument,
-    Selected,
+    ProviderArgument,
     SelectedModel,
     ValueArgument,
 )
@@ -97,7 +97,8 @@ def test_entries_answer_selection_and_replacement_for_themselves():
     arguments = NativeArguments.parse(
         ("--provider", "p1", "--model", "m1", "--offline", "--thinking", "low", "--provider", "p2")
     )
-    assert (arguments.provider, arguments.model) == (Selected("p2"), Selected("m1"))
+    assert arguments.provider == ProviderArgument("p2")
+    assert ThreadModel.selected_by(arguments) == DeclaredModel("p2/m1")
     assert arguments.with_model("p3/m3").argv == (
         "--offline", "--thinking", "low", "--provider", "p3", "--model", "m3",
     )
@@ -128,7 +129,7 @@ def test_option_declaration_extends_consumption_rendering_and_mode_validation():
     for member in OptionArgument.members_with(OneShotArgument):
         with pytest.raises(ValueError) as declared:
             member().validate_rpc()
-        for flag in (value for value in (member.flag(), member.short) if value is not None):
+        for flag in (member.flag(), *member.shorts):
             with pytest.raises(ValueError):
                 NativeArguments.parse((flag,)).rpc()
     for mode in (("--mode", "text"), ("--mode=json",), ("--mode",)):

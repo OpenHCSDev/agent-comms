@@ -16,10 +16,12 @@ from .coordination_errors import IdentityConflict
 from .declared_family import DeclaredFamily
 from .field_codec import FieldCodec, NullMember, SingleFieldValue, SubclassUnion
 from .launch_runtime import LaunchRuntime
-from .thread_text import AbsentText, GivenText, TextChoice
 
 if TYPE_CHECKING:
     from .owner_lifecycle import OwnerLifecycle
+    from .thread_model import ThreadModel
+
+    type ProviderChoice = ProviderArgument | type[NoSelectedModel]
 from .pi_vocabulary import (
     NoThinkingOverride,
     ThinkingChoice,
@@ -39,10 +41,10 @@ class NativeArgument(DeclaredFamily, affix="Argument"):
     def apply_thinking(self, current: type[ThinkingChoice]) -> type[ThinkingChoice]:
         return current
 
-    def apply_provider(self, current: Selection) -> Selection:
+    def apply_provider(self, current: ProviderChoice) -> ProviderChoice:
         return current
 
-    def apply_model(self, current: Selection) -> Selection:
+    def apply_model(self, current: ThreadModel) -> ThreadModel:
         return current
 
     def kept_on_model_change(self) -> tuple[NativeArgument, ...]:
@@ -65,7 +67,7 @@ class ExternalArgument(NativeArgument):
 
 
 class OptionArgument(NativeArgument):
-    short: ClassVar[str | None] = None
+    shorts: ClassVar[tuple[str, ...]] = ()
 
     @classmethod
     @abstractmethod
@@ -109,23 +111,31 @@ class ValueArgument(ValueOption):
 
 
 class ProviderArgument(NamedOption, ValueArgument):
-    def apply_provider(self, current: Selection) -> Selection:
-        return Selected(self.value)
+    def apply_provider(self, current: ProviderChoice) -> ProviderChoice:
+        return self
+
+    def qualified(self, model: str) -> str:
+        return SelectedModel(self.value, model.removeprefix(self.value + "/")).qualified
+
+    def provider_type(self) -> type[ModelProvider]:
+        return ModelProvider.member_named(self.value)
 
     def kept_on_model_change(self) -> tuple[NativeArgument, ...]:
         return ()
 
 
 class ModelArgument(NamedOption, ValueArgument):
-    def apply_model(self, current: Selection) -> Selection:
-        return Selected(self.value)
+    def apply_model(self, current: ThreadModel) -> ThreadModel:
+        from .thread_model import DeclaredModel
+
+        return DeclaredModel(self.value)
 
     def kept_on_model_change(self) -> tuple[NativeArgument, ...]:
         return ()
 
 
 class ExtensionArgument(NamedOption, ValueArgument):
-    short = "-e"
+    shorts = ("-e",)
 
 
 class ModelProvider(DeclaredFamily, affix="Provider"):
@@ -138,6 +148,14 @@ class NoSelectedModel(ModelProvider, declared_name=None):
     """External commanders without a native model remain valid commanders."""
     may_command = True
 
+    @classmethod
+    def qualified(cls, model: str) -> str:
+        return model
+
+    @classmethod
+    def provider_type(cls) -> type[ModelProvider]:
+        return cls
+
 
 class AnthropicProvider(ModelProvider, declared_name="anthropic"):
     may_command = True
@@ -149,46 +167,6 @@ class OpenAIProvider(ModelProvider, declared_name="openai"):
 
 class OpenAICodexProvider(ModelProvider, declared_name="openai-codex"):
     may_command = False
-
-
-class Selection(TextChoice):
-    """A provider or model the arguments select, or no selection, as thinking has no override."""
-
-    @abstractmethod
-    def qualified(self, model: str) -> str:
-        """The model name as this provider qualifies it."""
-
-    @abstractmethod
-    def provider_type(self) -> type[ModelProvider]: ...
-
-    @abstractmethod
-    def chosen[T](self, given: Callable[[str], T], absent: T) -> T: ...
-
-
-@dataclass(frozen=True, slots=True)
-class Selected(GivenText, Selection):
-    text: str
-
-    def qualified(self, model: str) -> str:
-        return SelectedModel(self.text, model.removeprefix(self.text + "/")).qualified
-
-    def provider_type(self) -> type[ModelProvider]:
-        return ModelProvider.member_named(self.text)
-
-    def chosen[T](self, given: Callable[[str], T], absent: T) -> T:
-        return given(self.text)
-
-
-@dataclass(frozen=True, slots=True)
-class NoSelection(AbsentText, Selection):
-    def qualified(self, model: str) -> str:
-        return model
-
-    def provider_type(self) -> type[ModelProvider]:
-        return NoSelectedModel
-
-    def chosen[T](self, given: Callable[[str], T], absent: T) -> T:
-        return absent
 
 
 @dataclass(frozen=True)
@@ -303,11 +281,11 @@ class OneShotArgument(FlagArgument):
 
 
 class ContinueArgument(SessionSelectionArgument, NamedOption, OneShotArgument):
-    short = "-c"
+    shorts = ("-c",)
 
 
 class ResumeArgument(SessionSelectionArgument, NamedOption, OneShotArgument):
-    short = "-r"
+    shorts = ("-r",)
 
 
 class NoSessionArgument(SessionSelectionArgument, NamedOption, OneShotArgument):
@@ -315,15 +293,15 @@ class NoSessionArgument(SessionSelectionArgument, NamedOption, OneShotArgument):
 
 
 class PrintArgument(NamedOption, OneShotArgument):
-    short = "-p"
+    shorts = ("-p",)
 
 
 class HelpArgument(NamedOption, OneShotArgument):
-    short = "-h"
+    shorts = ("-h",)
 
 
 class VersionArgument(NamedOption, OneShotArgument):
-    short = "-v"
+    shorts = ("-v",)
 
 
 class NoExtensionsArgument(NamedOption, FlagArgument):
@@ -350,8 +328,7 @@ class NativeArguments:
         options = {
             flag: member
             for member in OptionArgument.members_with(OptionArgument)
-            for flag in (member.flag(), member.short)
-            if flag is not None
+            for flag in (member.flag(), *member.shorts)
         }
         result = []
         source = iter(arguments)
@@ -378,21 +355,18 @@ class NativeArguments:
     def provider_type(self) -> type[ModelProvider]:
         return self.provider.provider_type()
 
-    def last[T](self, start: T, apply: Callable[[NativeArgument], Callable[[T], T]]) -> T:
+    def last[T](self, apply: Callable[[NativeArgument], Callable[[T], T]]) -> Callable[[T], T]:
         """Pi lets the last argument of a setting win: each entry's apply hook owns its part."""
-        return reduce(lambda selected, entry: apply(entry)(selected), self.entries, start)
+        return lambda start: reduce(
+            lambda selected, entry: apply(entry)(selected), self.entries, start)
 
     @property
-    def provider(self) -> Selection:
-        return self.last(NoSelection(), lambda entry: entry.apply_provider)
-
-    @property
-    def model(self) -> Selection:
-        return self.last(NoSelection(), lambda entry: entry.apply_model)
+    def provider(self) -> ProviderChoice:
+        return self.last(lambda entry: entry.apply_provider)(NoSelectedModel)
 
     @property
     def thinking(self) -> type[ThinkingChoice]:
-        return self.last(NoThinkingOverride, lambda entry: entry.apply_thinking)
+        return self.last(lambda entry: entry.apply_thinking)(NoThinkingOverride)
 
     def with_model(self, selected: str) -> NativeArguments:
         return NativeArguments(
