@@ -1,17 +1,16 @@
 import io
 import os
-import uuid
 from dataclasses import dataclass
 
 import pytest
 
-from agent_comms.field_codec import FieldCodec
+from agent_comms.field_codec import ClaimId, FieldCodec
 from agent_comms.installer.commands import InstallCommands
 from agent_comms.installer.refusals import InterpreterWorkerDied
 from agent_comms.installer.probes.packages import DistributionVersionsProbe, InstalledPackagesProbe
 from agent_comms.installer.interpreter_operation import ProbeReply, ProbeRequest, RuntimeProbe, serve
 from agent_comms.launch_runtime import LaunchRuntime
-from agent_comms.maintenance_barrier import HOLDER_NONCE, MaintenanceHolder
+from agent_comms.maintenance_barrier import HOLDER_NONCE, MaintenanceClaimHolder
 
 
 @dataclass(frozen=True)
@@ -24,7 +23,7 @@ def test_probes_under_successive_holds_share_one_worker():
     runtime = LaunchRuntime.running()
     with InstallCommands() as commands:
         for _ in range(2):
-            with MaintenanceHolder(uuid.uuid4().hex).acting():
+            with MaintenanceClaimHolder(ClaimId.mint()).acting():
                 commands.probe(DistributionVersionsProbe(), runtime.interpreter,
                                env=runtime.environment(os.environ))
         assert len(commands.workers) == 1
@@ -33,14 +32,14 @@ def test_probes_under_successive_holds_share_one_worker():
 
 
 def test_worker_answers_each_request_as_that_request_s_holder(monkeypatch, tmp_path):
-    holders = ("first-hold", "second-hold", "")
+    holders = (ClaimId.mint(), ClaimId.mint(), "")
     lines = "".join(FieldCodec.compact(FieldCodec.encode(ProbeRequest(HolderSeenProbe(), holder)))
                     + "\n" for holder in holders)
     # serve() takes over the descriptor of its stdout, so the answers need a real file.
     answers = tmp_path / "answers"
     monkeypatch.setattr("sys.stdin", io.StringIO(lines))
     monkeypatch.setattr("sys.stdout", answers.open("w"))
-    monkeypatch.setenv(HOLDER_NONCE, "the test's own hold")
+    monkeypatch.setenv(HOLDER_NONCE, ClaimId.mint())
     serve()
     assert [FieldCodec.decode(HolderSeenProbe().answer_type(),
                               FieldCodec.decode(ProbeReply, FieldCodec.parse(line)).answer)

@@ -359,8 +359,12 @@ class RuntimeServer(SessionUpdateSink):
             pass
         except asyncio.CancelledError:
             pass
-        except (ValueError, RequestRefused, CoordinationError, NativeRequestFailure) as error:
+        except RequestRefused as error:
             # Reply to this requester, then propagate the original failure to the server task.
+            with suppress(SubscriberClosed):
+                await client.send(OwnerFailure.refused(error))
+            raise
+        except (ValueError, CoordinationError, NativeRequestFailure) as error:
             with suppress(SubscriberClosed):
                 await client.send(OwnerFailure.of(error))
             raise

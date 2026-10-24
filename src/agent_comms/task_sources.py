@@ -26,6 +26,7 @@ if TYPE_CHECKING:
     from typing import Self
 
     from .bus import BusReader
+    from .commander_pings import CommanderUpdate
     from .goal_management import Goals
     from .input_attempt import StoredInput
     from .input_disposition import InputDispositions
@@ -212,6 +213,10 @@ class TaskAttachment(DeclaredFamily, ProjectionSource, affix="TaskAttachment"):
 
     def require_annotation_grant(self):
         raise RelationViolationError("Original wire message has no human disclosure grant")
+
+    def commander_update(self, commander: ThreadIncarnation) -> CommanderUpdate | None:
+        """The commander observations this attachment carries for that commander."""
+        return None
 
     def annotation_rules(self, message: Message, facts: RetainedTaskFacts) -> tuple[str, ...]:
         return ()

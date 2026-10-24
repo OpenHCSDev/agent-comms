@@ -216,10 +216,10 @@ class UnitState(UndatedStandingRule, declared_name=None):
         return False
 
     def merged_orders(self, comms: Comms, pulls: ProgressRead) -> tuple[Todo, ...]:
+        # The frame read these todos once; a second read by id can see an order closed since.
         return tuple(
             closed
-            for problem in self.orders
-            for todo in (comms.goals.todos.get(problem),)
+            for todo in self.source.todos
             for closed in todo.order.closed_by_merge(todo, comms.registry, pulls)
         )
 

@@ -22,7 +22,7 @@ from .acp_failure import (
 )
 from .child_process import ProcessIdentity
 from .declared_family import DeclaredFamily
-from .field_codec import NullMember
+from .field_codec import NullMember, TurnId
 from .input_attempt import InputAttempt
 from .mro_dispatch import MroDispatch, handles
 from .native_failures import NativePiUnavailable
@@ -456,7 +456,7 @@ class TurnState(AgentEvent):
 class TurnSettled(AgentEvent):
     """Subscriber publication of a settled ACP turn, distinct from the stream."""
 
-    turn_id: str
+    turn_id: TurnId
 
 
 class AgentEventConsumer(MroDispatch):

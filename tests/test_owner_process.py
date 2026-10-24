@@ -24,7 +24,7 @@ from agent_comms.child_process import ObservedProcess, SpawnedProcess
 from agent_comms.comms import wire
 from agent_comms.config_options import ThinkingLevelConfigOption
 from agent_comms.coordinator import Coordination
-from agent_comms.field_codec import compile_decoder
+from agent_comms.field_codec import TurnId, compile_decoder
 from agent_comms.pi_vocabulary import ThinkingLevelField
 from agent_comms.errors import RelationViolationError
 from agent_comms.runtime import RuntimeProxy, socket_path
@@ -264,7 +264,7 @@ async def test_real_batch_retains_each_launch_and_busy_refuses_every_stop(tmp_pa
         # Seed the foreign owner's busy record through its owning edit, without
         # pretending this fixture process is that owner's local caller.
         with comms.registry.store.editing() as edit:
-            busy, _ = edit.lease_turn(last, "protected-turn", None)
+            busy, _ = edit.lease_turn(last, TurnId.mint(), None)
             edit.commit()
         refusal_source = comms.registry.snapshot()
         with pytest.raises(RelationViolationError):

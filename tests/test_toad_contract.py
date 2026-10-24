@@ -12,6 +12,7 @@ from agent_comms.agent_events import Chunk
 from agent_comms.acp_extension import CoordinationChangedUpdate, TextRouteUpdate, decode_updates
 from agent_comms.comms import Comms, wire
 from agent_comms.goals import Goal
+from agent_comms.field_codec import TurnId
 from agent_comms.routing import MessageRoute
 from agent_comms.threads import Thread
 from agent_comms.transcripts import TranscriptCursor, TranscriptPage
@@ -19,8 +20,12 @@ from agent_comms.native_arguments import GivenBinary
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("consumer", (Routed, partial(RoutedTurnEventConsumer, turn_id="contract-turn")))
+@pytest.mark.parametrize("consumer", (
+    lambda turn_id: Routed,
+    lambda turn_id: partial(RoutedTurnEventConsumer, turn_id=turn_id),
+))
 async def test_toad_public_types_and_acp_agent_comms_metadata(tmp_path, consumer) -> None:
+    turn_id = TurnId.mint()
     assert all(
         isinstance(public_type, type)
         for public_type in (Comms, Goal, TranscriptCursor, TranscriptPage, MessageRoute)
@@ -49,7 +54,9 @@ async def test_toad_public_types_and_acp_agent_comms_metadata(tmp_path, consumer
 
     route = MessageRoute("worker", ("#team",))
     client = Client()
-    await consumer(agent=agent, session_id="worker", client=client, route=route).dispatch(Chunk(text="routed reply"))
+    await consumer(turn_id)(
+        agent=agent, session_id="worker", client=client, route=route
+    ).dispatch(Chunk(text="routed reply"))
     assert len(updates) == 1
     update = updates[0]
     assert update["content"]["text"] == "routed reply"

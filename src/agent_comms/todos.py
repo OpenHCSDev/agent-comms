@@ -2646,7 +2646,6 @@ class Assignment(TodoHolder):
             self.owner_identity.require_recorded()
         except ValueError as error:
             raise TodoError("Assignment requires a recorded owner incarnation") from error
-        _text(self.generation, "Assignment generation", 128)
 
     @property
     def owner_identity(self) -> ThreadIncarnation:

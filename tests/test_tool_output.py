@@ -115,6 +115,7 @@ def test_invalid_page_limit_precedes_ack(inbox_comms, limit):
 def test_large_standby_review_returns_complete_messages_without_files(
     inbox_comms, monkeypatch, large_body
 ):
+    turn_id = TurnId.mint()
     comms = inbox_comms
     monkeypatch.setenv("AGENT_COMMS_THREAD", "b")
     goal = comms.goals.update_goal(
@@ -147,7 +148,7 @@ def test_large_standby_review_returns_complete_messages_without_files(
         owners=frozenset({"b"}),
         goal_id=goal.id,
         goal_revision=goal.revision,
-        turn_id="earlier-review",
+        turn_id=turn_id,
     )
     review = comms.goals.goal_input_review("b", goal.id, ["a"])
     before = stored_inputs(dispositions.root)
@@ -190,6 +191,7 @@ def test_large_standby_review_returns_complete_messages_without_files(
 def test_dependency_review_and_ack_survive_large_excluded_history(
     inbox_comms, monkeypatch
 ):
+    turn_id = TurnId.mint()
     comms = inbox_comms
     monkeypatch.setenv("AGENT_COMMS_THREAD", "b")
     # The reviewed standby liveness gate refuses a declared dependency with
@@ -227,7 +229,7 @@ def test_dependency_review_and_ack_survive_large_excluded_history(
         owners=frozenset({"b"}),
         goal_id=goal.id,
         goal_revision=goal.revision,
-        turn_id="previous-review",
+        turn_id=turn_id,
     )
     before = stored_inputs(dispositions.root)
     result = invoke_tool(

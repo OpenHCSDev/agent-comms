@@ -162,8 +162,10 @@ class OwnerFailure(OwnerLine):
 
     @classmethod
     def of(cls, error: Exception) -> Self:
-        if not isinstance(error, RequestRefused):
-            return cls(error=str(error) or type(error).__name__)
+        return cls(error=str(error) or type(error).__name__)
+
+    @classmethod
+    def refused(cls, error: RequestRefused) -> Self:
         data = error.data if isinstance(error.data, dict) else {}
         reason = data.get("details") or data.get("reason")
         # The pi project extension shows the text; Core clients raise the RPC error.

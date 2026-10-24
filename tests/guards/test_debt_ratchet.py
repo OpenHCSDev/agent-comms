@@ -35,6 +35,7 @@ from tools.debt_ratchet import (
     DeclaredSpellings,
     NamedAccess,
     NamedDeclaration,
+    PlainStrIdAnnotation,
     StringFieldMetadata,
     StringIdentity,
     python_paths,
@@ -63,6 +64,34 @@ def test_measure_owner_rejects_a_new_absence() -> None:
 )
 def test_string_field_metadata_resolves_imports_and_refuses_opaque_keys(source, expected):
     assert StringFieldMetadata.count(source.encode(), "example.py") == expected
+
+
+@pytest.mark.parametrize(
+    ("source", "expected"),
+    [
+        ("turn_id: str", 1),
+        ("turn_id: TurnId", 0),
+        ("session_id: str", 1),
+        ("goal_id: str | None", 1),
+        ("goal_id: None | str", 1),
+        ("goal_id: Annotated[str, Id128Text]", 1),
+        ("goal_id: typing.Annotated[str, Id128Text] | None", 1),
+        ("goal_id: Annotated[GoalId, Metadata]", 0),
+        ("def f(turn_id: str, session_id: str | None): pass", 2),
+        ("def f(*, lookup: str, nonce: str, generation: str): pass", 3),
+        ("self.turn_id: str", 1),
+        ("description: str", 0),
+        ("turn_id: bytes", 0),
+    ],
+)
+def test_plain_str_id_annotations_block_growth_per_file(source, expected):
+    path = "src/example.py"
+    before = PlainStrIdAnnotation.snapshot([(path, b"description: str")])
+    after = PlainStrIdAnnotation.snapshot([(path, source.encode())])
+    identity = f"{PlainStrIdAnnotation.__name__}:{path}"
+    comparison = Comparison("src", "base", "head", (path,), before, after, {}, {})
+    assert comparison.delta[identity] == expected
+    assert comparison.failed == bool(expected)
 
 
 SOURCE = Path(__file__).resolve().parents[2]

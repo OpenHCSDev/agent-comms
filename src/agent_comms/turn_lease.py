@@ -45,7 +45,7 @@ class TurnDeclaration(LifecycleCapability, SubclassUnion, affix=""):
     """A recorded active turn or the idle state."""
 
     phase: TurnPhase
-    id: str | None
+    id: TurnId | None
     started_at: float | None
 
     @abstractmethod
@@ -338,7 +338,7 @@ class TurnLease(ABC):
 
     @abstractmethod
     @boundary_decoder
-    def stored_turn_id(self) -> str | None:
+    def stored_turn_id(self) -> TurnId | None:
         """The reporting turn ID a stored goal wait records."""
 
     @abstractmethod
@@ -373,7 +373,7 @@ class NoTurnLease(NullMember, TurnLease):
         return False
 
     @boundary_decoder
-    def stored_turn_id(self) -> str | None:
+    def stored_turn_id(self) -> TurnId | None:
         return None
 
     @boundary_decoder
@@ -408,7 +408,7 @@ class TurnLeaseFence(TurnFence, TurnLease):
         return (turn_id, generation) == (self.turn_id, self.identity.generation)
 
     @boundary_decoder
-    def stored_turn_id(self) -> str | None:
+    def stored_turn_id(self) -> TurnId | None:
         return self.turn_id
 
     @boundary_decoder
