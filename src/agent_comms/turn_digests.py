@@ -172,7 +172,7 @@ class TurnDigestRead(TranscriptRead[ThreadTurns]):
         # The owner's own sent outcomes share the wake's provenance; their sender tells them apart.
         incoming = {delivery.reference: IncomingTranscript.of(delivery, reader=self.thread.name)
                     for delivery in deliveries
-                    if delivery.audience.sender_lookup != self.thread.incarnation.lookup}
+                    if delivery.sender_lookup != self.thread.incarnation.lookup}
         return self.from_turns(tuple(
             turn.with_selected(chosen) if (chosen := tuple(
                 incoming[ref] for ref in selected.get(turn.turn_id, ()) if ref in incoming))

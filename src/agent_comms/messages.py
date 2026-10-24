@@ -788,6 +788,11 @@ class HistoricalMembershipNoticeRole(HistoricalRole, MembershipNoticeRole, decla
 
 
 @dataclass(frozen=True, slots=True)
+class PublicSender(NullMember):
+    """Public history has no frozen participant incarnation."""
+
+
+@dataclass(frozen=True, slots=True)
 class Message(Addressed, BusCapability, TurnOrigin):
     """Declares one inter-thread message.
 
@@ -841,14 +846,10 @@ class Message(Addressed, BusCapability, TurnOrigin):
     @classmethod
     def from_message(cls, message: Message, **capabilities: object) -> Self:
         return FieldCodec.construct(cls, {
-            **{item.name: getattr(message, item.name) for item in fields(Message)},
+            **{item.name: getattr(message, item.name) for item in fields(message)
+               if item.name in {target.name for target in fields(cls)}},
             **capabilities,
         })
-
-    @property
-    def sender_lookup(self) -> str:
-        """Public history has no frozen participant incarnation."""
-        return ""
 
     @property
     def message(self) -> Self:
@@ -962,7 +963,7 @@ class Message(Addressed, BusCapability, TurnOrigin):
         return {}
 
     def to_wire(self) -> dict:
-        return {"seq": self.seq, "id": self.message_id, **FieldCodec.encode(self)}
+        return {"seq": self.seq, "id": self.message_id, **FieldCodec.encode(self.envelope)}
 
     @classmethod
     def from_wire(cls, data: Mapping) -> Message:

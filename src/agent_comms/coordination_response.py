@@ -209,8 +209,8 @@ class SelectedResponseRoute(TypedRow):
         expected = SelectedResponseRoute(
             initial.message.message_id,
             initial.message.target,
-            initial.audience.wire_envelope_digest,
-            initial.audience.digest,
+            initial.wire_envelope_digest,
+            initial.digest,
             ClaimBatchAcknowledgements.decision_hash(initial),
             assignment.resolver_version,
             assignment.policy_version,
@@ -345,7 +345,7 @@ def _require_cohort_assignments(
         selected = {
             recipient.recipient_lookup
             for recipient, decision in zip(
-                initial.audience.recipients, initial.decisions, strict=True
+                initial.recipients, initial.decisions, strict=True
             )
             for selected in decision.claim_decisions()
         }

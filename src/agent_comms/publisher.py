@@ -232,10 +232,10 @@ class InitialWrites(Publisher):
                     revision, sender_lookup=sender_lookup, sender_name=sender,
                 )
                 decisions = resolve_wake_cohort(
-                    stored, frozen_audience=audience, control=OrdinaryControl,
+                    audience, control=OrdinaryControl,
                 )
                 return PrivateRecord.from_message(
-                    stored, audience=audience, decisions=decisions,
+                    audience, decisions=decisions,
                     control=OrdinaryControl.declared_name,
                 )
 

@@ -514,7 +514,7 @@ class DeliveredAssignment(
             (
                 reply.message
                 for reply in replies
-                if reply.audience.sender_lookup == recipient_lookup
+                if reply.sender_lookup == recipient_lookup
             ),
             None,
         )

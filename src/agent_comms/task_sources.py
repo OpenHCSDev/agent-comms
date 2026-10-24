@@ -561,9 +561,9 @@ class HumanConstraintPin(ScopedTaskDeclaration):
         delivery.message.sender_role.require_user(
             RelationViolationError("Original wording must come from a human sender")
         )
-        if delivery.audience.sender_lookup != self.source_user.lookup:
+        if delivery.sender_lookup != self.source_user.lookup:
             raise RelationViolationError("USER pin differs from its original human author")
-        if not delivery.audience.includes_lookup(self.recipient.lookup):
+        if not delivery.includes_lookup(self.recipient.lookup):
             raise RelationViolationError("USER pin recipient did not receive its original message")
 
     def user_task_facts(self, message: Message):

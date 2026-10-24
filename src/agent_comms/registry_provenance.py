@@ -12,7 +12,7 @@ from pathlib import Path
 from types import MappingProxyType
 from typing import TYPE_CHECKING, Generic, TypeVar
 
-from agent_comms.field_codec import ThreadLookup
+from agent_comms.field_codec import FieldCodec, ThreadLookup
 
 from .agent_activity import UnavailableRecipientActivity
 from .errors import RelationViolationError, UnregisteredThreadError
@@ -196,7 +196,7 @@ class RegistryProvenance(RegistryNames[ThreadProvenance]):
                 source.incarnation, partial(unrecorded.append, name)
             ))
         return MappingProxyType({
-            "senders": json.dumps(senders), "unrecorded": json.dumps(unrecorded),
+            "senders": FieldCodec.compact(senders), "unrecorded": json.dumps(unrecorded),
         })
 
     def retired(self, name: str) -> bool:

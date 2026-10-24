@@ -10,7 +10,7 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, ClassVar, Self
 
-from agent_comms.audience_manifest import FrozenAudience
+from agent_comms.audience_manifest import AudiencedMessage
 from agent_comms.messages import BusRow, BusRecord, Message
 from agent_comms.errors import (
     CommittedMessageError,
@@ -34,27 +34,22 @@ if TYPE_CHECKING:
     from .threads import Thread
 
 
-class Delivered(BusRecord, declared_name=None):
+class Delivered(BusRecord, AudiencedMessage, declared_name=None):
 
     @ClassFact
     def writes(cls) -> tuple[type[ProducedRow], ...]:
         from .bus_tables import SentSource, ReceivedSource, AwaitingAnswerSource
         return (SentSource, ReceivedSource, AwaitingAnswerSource)
 
-    audience: FrozenAudience
     decisions: tuple[RecipientDecision, ...]
     control: str
-
-    @property
-    def sender_lookup(self) -> ThreadLookup:
-        return self.audience.sender_lookup
 
     def projections(self):
         from .bus_tables import AwaitingAnswerSource, ReceivedSource, SentSource
 
         yield from super().projections()
-        yield SentSource(self.audience.sender_lookup, self.seq)
-        for recipient in self.audience.recipients:
+        yield SentSource(self.sender_lookup, self.seq)
+        for recipient in self.recipients:
             yield ReceivedSource(recipient.recipient_lookup, self.seq)
             scope = RepliesDisplayScope(
                 frozenset({recipient.canonical_thread}), frozenset({self.sender}),
@@ -72,11 +67,11 @@ class Delivered(BusRecord, declared_name=None):
         """Direct reply semantics and the committed addressed incarnation agree."""
         policy = self.message.role.response_policy(self.message)
         return (policy.starts_direct_turn
-                and self.audience.includes_lookup(recipient_lookup))
+                and self.includes_lookup(recipient_lookup))
 
     def compaction_messages_for(self, recipient_lookup: ThreadLookup) -> tuple[Message, ...]:
-        addressed = self.audience.includes_lookup(recipient_lookup)
-        authored = (self.audience.sender_lookup == recipient_lookup
+        addressed = self.includes_lookup(recipient_lookup)
+        authored = (self.sender_lookup == recipient_lookup
                     and self.message.retains_authored_task)
         return self.messages() if addressed or authored else ()
 

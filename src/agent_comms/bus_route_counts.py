@@ -1,18 +1,21 @@
 """Current delivery counts query derived rows in the bus's own read snapshot."""
 from __future__ import annotations
 
-from .class_fact import ClassFact
-from .projection_source import ProducedRow
 import json
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Annotated, ClassVar
 
 from .bus_tables import ReceivedSource
-from .messages import BusProjectionTables, BusRow, Message
+from .class_fact import ClassFact
+from .field_codec import FieldCodec, ThreadLookup
+from .messages import BusProjectionTables, BusRow, Message, PublicSender
+from .projection_source import ProducedRow
 from .read_basis import ReadCursor
 from .typed_table import Column, Index, TypedRow, TypedTable
 
 if TYPE_CHECKING:
+    from .bus import PublicRecord
+    from .bus_publication import Delivered
     from .page_traversal import PageTraversal
 
 
@@ -26,7 +29,7 @@ class BusRouteCounts(BusProjectionTables):
     seq: Annotated[int, Column(primary_key=True)]
     target: str
     sender: str
-    sender_lookup: str
+    sender_lookup: ThreadLookup | PublicSender
     timestamp: float
     indexes: ClassVar = (
         Index(("target", "sender", "sender_lookup", "seq")),
@@ -34,9 +37,9 @@ class BusRouteCounts(BusProjectionTables):
     )
 
     @classmethod
-    def from_message(cls, message: Message):
+    def from_message(cls, message: PublicRecord | Delivered):
         return cls(message.seq, message.target, message.sender,
-                   str(message.sender_lookup), message.timestamp)
+                   message.sender_lookup, message.timestamp)
 
 
 @dataclass(frozen=True)
@@ -65,7 +68,7 @@ class RouteCounts:
         SELECT target.target,source.value AS sender,
             (SELECT sender_lookup FROM "{BusRouteCounts.declared_name}" AS route
              WHERE route.target=target.target AND route.sender=source.value
-                 AND route.seq<=(SELECT through FROM arguments) AND route.sender_lookup<>''
+                 AND route.seq<=(SELECT through FROM arguments) AND route.sender_lookup IS NOT NULL
              ORDER BY route.seq LIMIT 1) AS sender_lookup
         FROM request_targets AS target,arguments,json_each(arguments.unrecorded) AS source
     ), route_keys AS (
@@ -85,7 +88,7 @@ class RouteCounts:
         WHERE EXISTS (
             SELECT 1 FROM "{BusRouteCounts.declared_name}" AS row
             WHERE row.target=route.target AND row.sender=route.sender
-                AND row.sender_lookup=route.sender_lookup
+                AND row.sender_lookup IS route.sender_lookup
                 AND row.seq>(SELECT after FROM arguments)
                 AND row.seq<=(SELECT through FROM arguments)
                 AND {ReadCursor.above_floor("row.seq", "owner.key", "row.target")}
@@ -95,7 +98,7 @@ class RouteCounts:
             CASE WHEN addressed.seq IS NULL THEN route.unaddressed ELSE route.addressed END AS since
         FROM route_since AS route
         CROSS JOIN "{BusRouteCounts.declared_name}" AS row ON row.target=route.target
-            AND row.sender=route.sender AND row.sender_lookup=route.sender_lookup
+            AND row.sender=route.sender AND row.sender_lookup IS route.sender_lookup
         LEFT JOIN "{ReceivedSource.declared_name}" AS addressed
             ON addressed.lookup=route.recipient_lookup AND addressed.seq=row.seq
         WHERE row.seq>(SELECT after FROM arguments) AND row.seq<=(SELECT through FROM arguments)
@@ -109,7 +112,10 @@ class RouteCounts:
             db.create_function(
                 "delivery_since", 5,
                 lambda actor, sender, target, lookup, received: registry.unread_since(
-                    actor, deliveries[actor].minimum_timestamp(sender, target, lookup, registry),
+                    actor, deliveries[actor].minimum_timestamp(
+                        sender, target, FieldCodec.decode(ThreadLookup | PublicSender, lookup),
+                        registry
+                    ),
                     bool(received)), deterministic=True,
             )
             senders = registry.sender_bindings

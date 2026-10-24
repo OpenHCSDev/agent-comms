@@ -33,7 +33,7 @@ class GoalWaitTarget(WireValue):
     incarnation: RecordedThreadIncarnation
 
     def sent(self, original: Delivered) -> bool:
-        return original.audience.sender_lookup == self.incarnation.lookup
+        return original.sender_lookup == self.incarnation.lookup
 
     def to_wire(self) -> dict[str, str | float]:
         return self.incarnation.to_wire()
