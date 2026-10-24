@@ -187,6 +187,11 @@ def test_nominal_message_id_column_stores_plain_text() -> None:
         ),
         (
             "messages.py",
+            "self.apply(db, transition, projected)",
+            "self.apply(db, transition, projected)\n            del projected",
+        ),
+        (
+            "messages.py",
             "return (SentActivity(message.sender, message.timestamp),)",
             "return (SentActivity(message.target, message.timestamp),)",
         ),
