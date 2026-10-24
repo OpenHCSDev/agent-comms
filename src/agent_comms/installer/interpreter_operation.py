@@ -104,11 +104,11 @@ class BuildPhase(InstallPhase):
 class CommandPhase(SubjectPhase):
     """An external command, identified by its actual invocation."""
 
-    command: tuple[str | Path, ...]
+    command: tuple[str, ...]
 
     @property
     def subject(self) -> str:
-        return shlex.join(map(str, self.command))
+        return shlex.join(self.command)
 
 
 @dataclass(frozen=True)
