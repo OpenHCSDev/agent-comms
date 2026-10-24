@@ -396,10 +396,21 @@ class CommanderContext(BaseModel):
 
     def post(self, audience: VerdictAudience, body: str,
              answers: tuple[MessageReference, ...] = ()) -> MessageId:
+        return self.published(audience, body, answers).message_id
+
+    def published(self, audience: VerdictAudience, body: str,
+                  answers: tuple[MessageReference, ...] = ()) -> Message:
         target = audience.target
-        published = self.comms.messaging.send(self.actor_name, target.name,
-            target.addressed(audience.threads, body), answers=answers)
-        return published.message.message_id
+        return self.comms.messaging.send(self.actor_name, target.name,
+            target.addressed(audience.threads, body), answers=answers).message
+
+    def delivery(self, reference: MessageReference) -> str:
+        """The recipients' delivery as the notification owner reports it; a publish alone is only queued."""
+        from agent_comms.presentation import MessageNotification
+
+        outcomes = MessageNotification.references(
+            self.comms.root, self.comms.registry, self.comms.bus.bus, (reference,))
+        return MessageNotification.summary(outcomes.get((reference.seq, reference.message_id), ()))
 
     def call(self, tool):
         return self.actor.as_thread(self.commander).invoke(tool, self.comms)
@@ -634,7 +645,8 @@ class Commander(CommanderContext):
         body = open(body_file).read()
         refuse(body, *DirectiveText.checks())
         try:
-            print(self.post(VerdictAudience(tuple(units.split(','))), body.rstrip(), answers))
+            message = self.published(VerdictAudience(tuple(units.split(','))), body.rstrip(), answers)
+            print(message.message_id, self.delivery(message.reference))
         except MaintenanceHeldError as held:
             # A say records nothing but its post, so the whole command is the resend.
             sys.exit(f'Refused, nothing sent: {held}\nAfter the install reports finished, '

@@ -61,7 +61,8 @@ def _member_decision(
     if not message.type.conversation_message:
         return NoWakeDecision(recipient.recipient_lookup)
     mode = message.role.wake_mode(target, recipient, effective_mentions, control)
-    return mode.recipient_decision(recipient.recipient_lookup, target.wake_audience(effective_mentions))
+    audience = message.sender_role.addressed(target.wake_audience(effective_mentions))
+    return mode.recipient_decision(recipient.recipient_lookup, audience)
 
 
 def resolve_wake(
