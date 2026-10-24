@@ -88,13 +88,6 @@ class HostService(DeclaredFamily, affix="Service", discovery_package=__name__):
         return tuple(instance for member in cls.members_with(cls) for instance in member.running())
 
     @classmethod
-    def stop_running(cls) -> tuple[HostService, ...]:
-        """Stop every running service, so nothing writes the root while it is restored."""
-        stopped = cls.instances()
-        cls.stop_all(stopped)
-        return stopped
-
-    @classmethod
     def start_enabled(cls) -> None:
         """Start every service this host enables, each by its own name, so one the install
         found already dead serves again; a member nothing enables starts nothing."""
