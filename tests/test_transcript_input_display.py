@@ -29,7 +29,7 @@ def saved_row(native_id, text, *, images=False, role="user"):
     if images:
         content.append({"type": "image", "mimeType": "image/png", "data": "secret-image"})
     return transcript_records.message(
-        {"role": role, "inputId": native_id, "content": content}, id=native_id[:8]
+        {"role": role, "inputId": str(native_id), "content": content}, id=native_id[:8]
     )
 
 

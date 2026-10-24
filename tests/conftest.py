@@ -76,10 +76,11 @@ class TranscriptRecords:
         encoded = FieldCodec.decode(dict[str, JsonValue], entry.to_wire())
         return {**encoded, "message": payload}
 
-    def session(self, **coordinates: JsonValue) -> SessionEntry:
+    def session(self, id: str, **coordinates: JsonValue) -> SessionEntry:
         from agent_comms.native_entries import SessionEntry
+        from agent_comms.turn_item import PiSessionId
 
-        return self.entry(SessionEntry, **coordinates)
+        return self.entry(SessionEntry, id=FieldCodec.decode(PiSessionId, id), **coordinates)
 
 
 transcript_records = TranscriptRecords()

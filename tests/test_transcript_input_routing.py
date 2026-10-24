@@ -21,7 +21,7 @@ def append_input(path, native_id, text, *, role="user"):
             json.dumps(
                 transcript_records.message({
                         "role": role,
-                        "inputId": native_id,
+                        "inputId": str(native_id),
                         "content": [{"type": "text", "text": text}],
                     }, id=native_id[:8])
             )
