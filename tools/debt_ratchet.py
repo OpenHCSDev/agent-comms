@@ -2194,7 +2194,8 @@ class UncarriedRecordFormat(ChangeMeasure):
                  os.pathsep.join(paths), *modules), cwd=scratch,
                 env=cls.environment(root, tree), timeout=300,
             )
-            result.check_returncode()
+        if result.returncode:
+            raise ValueError(f"{cls.__name__} could not measure {ref}: {result.stderr.decode()}")
         return {name: StoredForm(**form) for name, form in json.loads(result.stdout).items()}
 
     @classmethod

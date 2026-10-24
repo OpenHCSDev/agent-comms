@@ -326,6 +326,11 @@ class ThreadRows(ExternalJsonShape, WireValue, MutableMapping[str, Thread]):
                                for name, thread in self._decoded.items()}}
 
     @classmethod
+    def schema(cls) -> dict[str, JsonValue]:
+        """The stored rows are Thread records keyed by name, whatever is decoded yet."""
+        return {"type": "object", "additionalProperties": FieldCodec.record_schema(Thread)}
+
+    @classmethod
     def checked_rows(cls, raw: object) -> dict[str, JsonValue]:
         if not isinstance(raw, dict):
             raise MalformedRecord("registry threads must be an object")
