@@ -11,6 +11,7 @@ from urllib.parse import quote
 
 from pydantic import JsonValue
 
+from .turn_item import NativeTurnId
 from . import tool_declaration
 from .declared_family import DeclaredFamily
 from .field_codec import FieldCodec, NullMember, PresentMember, WireBind, WireOmitDefault
@@ -514,7 +515,7 @@ class OrderCall:
 class TurnDigest:
     """One turn's events in their recorded order, read from the unit's own records."""
 
-    turn_id: str
+    turn_id: NativeTurnId
     events: tuple[TranscriptEvent, ...]
 
     def with_selected(self, selected: tuple[TranscriptEvent, ...]) -> TurnDigest:

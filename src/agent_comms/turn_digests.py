@@ -8,6 +8,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Self
 
+from .turn_item import NativeTurnId
 from .declared_family import DeclaredFamily
 from .errors import ToolRefusedError
 from .external_transcript import ExternalTranscript, StoreRead
@@ -107,7 +108,7 @@ class TurnsBefore(LastTurns):
 class TurnsOlderThan(LastTurns):
     """Read older than an already returned original turn, not an offset from the newest."""
 
-    turn_id: str = field(kw_only=True)
+    turn_id: NativeTurnId = field(kw_only=True)
 
     def take(self, turns: Iterable[TurnDigest]) -> tuple[TurnDigest, ...]:
         remaining = iter(turns)

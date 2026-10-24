@@ -31,7 +31,8 @@ from .bus import Bus
 from .bus_publication import Delivered
 from .coordination_errors import StaleRevision, TranscriptChanged
 from .declared_family import DeclaredFamily
-from .field_codec import MalformedRecord
+from .field_codec import FieldCodec, MalformedRecord
+from .turn_item import NativeTurnId
 from .native_runtime_input import NativeRuntimeInput, PublishedReplyRevision
 from .recorded_time import EventTime, UnrecordedEventTime
 from .routing import TurnRouting
@@ -415,7 +416,8 @@ class TranscriptSource:
         for record in records:
             pending.append(record)
             for digest in record.project(lambda original: (
-                TurnDigest(original.entry.require_entry_id(), tuple(
+                TurnDigest(
+                    FieldCodec.decode(NativeTurnId, original.entry.require_entry_id()), tuple(
                     event for source in reversed(pending) for event in source.events)),
             ) if original.entry.input_boundary else ()):
                 yield digest

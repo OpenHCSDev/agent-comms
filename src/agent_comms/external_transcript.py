@@ -18,6 +18,7 @@ from sqlite3 import Connection
 from typing import TYPE_CHECKING, Annotated, ClassVar
 from uuid import uuid4
 
+from .turn_item import NativeTurnId
 from .declared_family import DeclaredFamily
 from .field_codec import FieldCodec
 from .locked_store import RegistryFile
@@ -47,7 +48,7 @@ if TYPE_CHECKING:
 
 @dataclass(frozen=True)
 class ExternalTurn(TypedRow):
-    turn_id: str
+    turn_id: NativeTurnId
 
 
 class ExternalPage(DeclaredFamily):
@@ -131,7 +132,7 @@ class NoItems:
 @dataclass(frozen=True)
 class ExternalPageRow(TypedRow):
     thread: Annotated[str, Column(primary_key=True)]
-    turn_id: Annotated[str, Column(primary_key=True)]
+    turn_id: Annotated[NativeTurnId, Column(primary_key=True)]
     item_id: Annotated[str, Column(primary_key=True)]
     seq: int
     earlier: ExternalPage = field(default_factory=NoEarlierPage, kw_only=True)
@@ -185,7 +186,7 @@ class ExternalItemRow(ExternalTranscriptRows, ExternalPageRow, TypedTable):
         return ExternalRecord(self.seq, self.events_in(connection))
 
     @classmethod
-    def recent_turn_ids(cls, connection: Connection, thread: str) -> Generator[str]:
+    def recent_turn_ids(cls, connection: Connection, thread: str) -> Generator[NativeTurnId]:
         """Yield turn starts newest first, using the existing per-turn position index.
 
         A later item in an older turn must not move that turn ahead of a newer start:
@@ -264,7 +265,7 @@ class DraftRow(ExternalTranscriptRows, TypedTable, TranscriptDraft, declared_nam
     """The assigned transcript's current message, shared by native and CLI writers."""
 
     thread: Annotated[str, Column(primary_key=True)]
-    turn_id: str
+    turn_id: NativeTurnId
     item_id: str
     events: tuple[TranscriptEvent, ...]
 
@@ -286,7 +287,8 @@ class DraftRow(ExternalTranscriptRows, TypedTable, TranscriptDraft, declared_nam
         original.owner_identity.require_recorded_owner(thread)
         transcript = ExternalTranscript(root, thread.incarnation)
         with transcript.writer_connection(check_same_thread=False) as connection:
-            publication = TurnDraftPublication(transcript, connection, input_id)
+            publication = TurnDraftPublication(
+                transcript, connection, FieldCodec.decode(NativeTurnId, input_id))
             try:
                 yield publication
             finally:
@@ -468,7 +470,7 @@ class ExternalTranscript(TranscriptSource, DurableStore):
             ).fetchone()[0]
         return GeneratedTimestamp.decode(timestamp)
 
-    def finish(self, *, turn_id: str, item_id: str,
+    def finish(self, *, turn_id: NativeTurnId, item_id: str,
                events: tuple[TranscriptEvent, ...]) -> None:
         """Append a finished item once; an item with no presentation adds nothing."""
         with self.writing() as connection:
@@ -524,7 +526,7 @@ class ExternalTranscript(TranscriptSource, DurableStore):
                         emit(frame)
                 previous = current
 
-    def draft(self, *, turn_id: str, item_id: str,
+    def draft(self, *, turn_id: NativeTurnId, item_id: str,
               events: tuple[TranscriptEvent, ...]) -> None:
         with self.writing() as connection:
             DraftRow(self.lookup, turn_id, item_id, events).upsert(connection)
@@ -568,7 +570,7 @@ class TurnDraftPublication(DraftPublication, StoreWriter):
 
     transcript: ExternalTranscript
     connection: Connection
-    turn_id: str
+    turn_id: NativeTurnId
 
     @property
     def store(self) -> ExternalTranscript:
