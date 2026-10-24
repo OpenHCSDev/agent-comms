@@ -9,7 +9,7 @@ from typing import Annotated, TYPE_CHECKING
 
 
 from .channel_targets import CommandTarget
-from .field_codec import FieldCodec, NullMember, WireOmitDefault
+from .field_codec import FieldCodec, NullMember, WireOmitDefault, GoalId
 from .message_reference import MessageReference
 from .read_basis import DMDisplayScope, MessageDisplayScope, ReadCursor
 
@@ -112,7 +112,7 @@ class TurnRouting:
 class ScheduledTurn:
     prompt: str
     origin: turn_origin.TurnOrigin = NO_TURN_ORIGIN
-    goal_id: str | None = None
+    goal_id: GoalId | None = None
     goal_wait_id: str | None = None
 
     @property

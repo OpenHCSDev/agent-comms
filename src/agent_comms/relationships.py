@@ -7,6 +7,7 @@ claim historical proof that a model consumed an old channel message.
 
 from __future__ import annotations
 
+from agent_comms.field_codec import GoalId
 import time
 from abc import ABC, abstractmethod
 from collections.abc import Sequence
@@ -200,7 +201,7 @@ class GoalDerivedContact(MutualThreadRelation):
     owner_created_at: float
     peer: str
     peer_created_at: float
-    goal_id: str
+    goal_id: GoalId
     text_revision: int
     relevance: ClassVar[type[PeerRelevance]] = GoalContactRelevance
     source: ClassVar[str] = "goal_mention"
@@ -231,7 +232,7 @@ class GoalDerivedContact(MutualThreadRelation):
 @dataclass(frozen=True, slots=True)
 class GoalMentionDiagnostic:
     owner: str
-    goal_id: str
+    goal_id: GoalId
     text_revision: int
     token: str
     reason: type[GoalMentionBinding] | Literal["stale_incarnation"]

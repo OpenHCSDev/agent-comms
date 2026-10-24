@@ -2,6 +2,8 @@
 
 from dataclasses import dataclass
 
+from agent_comms.field_codec import GoalId
+
 
 class FailureNotObserved(ValueError):
     """This lifecycle or record does not carry a bound passive failure."""
@@ -12,6 +14,6 @@ class FailureNotObserved(ValueError):
 
 @dataclass(frozen=True, slots=True)
 class GoalAttemptIdentity:
-    goal_id: str
+    goal_id: GoalId
     generation: int
     attempt_id: str

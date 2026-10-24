@@ -6,6 +6,7 @@ recheck the canonical registry/SQLite snapshot under their operation's locks.
 
 from __future__ import annotations
 
+from agent_comms.field_codec import GoalId
 import os
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, ClassVar
@@ -176,7 +177,7 @@ class GoalLaunchOwner(RegistryOwner):
 
     check_type = RegistryIdentityCheck
 
-    def require_ready(self, snapshot: RegistrySnapshot, goal_id: str) -> Goal:
+    def require_ready(self, snapshot: RegistrySnapshot, goal_id: GoalId) -> Goal:
         self.require_snapshot(snapshot, "Goal launch owner changed")
         current = snapshot.require_active(self.thread.name)
         snapshot.status(current.name).require_running()

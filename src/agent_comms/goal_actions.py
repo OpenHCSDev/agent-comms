@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from agent_comms.field_codec import GoalId
 import time
 from abc import abstractmethod
 from collections.abc import Awaitable, Callable
@@ -75,7 +76,7 @@ class OwnerControlInvocable:
 
 @dataclass(frozen=True)
 class GoalPrecondition:
-    goal_id: str | None = None
+    goal_id: GoalId | None = None
     expected_state: GoalState | None = None
     expected_goal: GoalDeclaration = NoGoal()
     expected_owner: ProcessIdentity | None = None
@@ -127,7 +128,7 @@ class GoalAction[Result: GoalDeclaration](
         return tuple(member.declared_name for member in cls.members_with(ModelInvocable))
 
     @classmethod
-    def model_precondition(cls, goal_id: str) -> GoalPrecondition:
+    def model_precondition(cls, goal_id: GoalId) -> GoalPrecondition:
         """What the unit's own goal tool expects before this action: its active goal."""
         return GoalPrecondition(goal_id=goal_id, expected_state=ActiveGoal())
 
@@ -483,7 +484,7 @@ class ReplacementGoalAction[Result: GoalDeclaration](GoalAction[Result]):
 class SetGoalAction(ReplacementGoalAction[Goal], OwnerInvocable, RuntimeInvocable):
     text: str
     order: GoalOrder = field(default_factory=UnorderedGoalOrder)
-    goal_id: str = field(default_factory=lambda: uuid4().hex)
+    goal_id: GoalId = field(default_factory=GoalId.mint)
 
     @classmethod
     async def submit_control(cls, observe, invoke, text: str = "") -> dict:
@@ -530,7 +531,7 @@ class ProblemOrderGoalAction(GoalAction[Goal], RuntimeInvocable):
         return replace(self, commander=commander.name, assigner=actor)
 
     @abstractmethod
-    def reserve(self, ctx: GoalActionContext, generation: str) -> Todo: ...
+    def reserve(self, ctx: GoalActionContext, generation: GoalId) -> Todo: ...
 
     def change(self, goal: Goal, ctx: GoalActionContext) -> Goal:
         return goal.state.accept_order(self, goal, ctx)
@@ -586,7 +587,7 @@ class OrderGoalAction(ProblemOrderGoalAction):
     traced: Annotated[FileLine | NoSourceReference, field_codec.WireOmitDefault()] = (
         NoSourceReference()
     )
-    def reserve(self, ctx: GoalActionContext, generation: str) -> Todo:
+    def reserve(self, ctx: GoalActionContext, generation: GoalId) -> Todo:
         return ctx.goals.todos.assign(self.problem, expected_revision=self.expected_revision,
             owner=ctx.thread, assigner=self.assigner,
             generation=generation, request=self.request, review_at=self.review_at, order=self.order,
@@ -623,7 +624,7 @@ class CreateProblemGoalAction(ProblemOrderGoalAction):
     repo: RepositoryName
     text: str
 
-    def reserve(self, ctx: GoalActionContext, generation: str) -> Todo:
+    def reserve(self, ctx: GoalActionContext, generation: GoalId) -> Todo:
         return ctx.goals.todos.create(self.problem, self.repo, self.text,
             creator=ctx.goals.registry.require(self.commander), owner=ctx.thread,
             assigner=self.assigner, generation=generation, request=self.request,
@@ -679,7 +680,7 @@ class RetryGoalAction(TransitionGoalAction, ModelInvocable, OwnerInvocable, Runt
     every attempt against the unresolved one."""
 
     @classmethod
-    def model_precondition(cls, goal_id: str) -> GoalPrecondition:
+    def model_precondition(cls, goal_id: GoalId) -> GoalPrecondition:
         return GoalPrecondition(goal_id=goal_id)
 
     @classmethod

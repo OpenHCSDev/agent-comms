@@ -13,7 +13,7 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Annotated
 
 from .turn_failure import TurnFailure
-from .field_codec import Id128Text
+from .field_codec import Id128Text, GoalId
 from .goal_attempt_identity import GoalAttemptIdentity
 from .thread_identity import (
     ClaimedIdentity,
@@ -38,12 +38,12 @@ class GoalLedgerTable(DurableTables):
 
 class GoalFailureEvidence(ABC):
     @abstractmethod
-    def execution(self, goal_id: str) -> GoalExecution: ...
+    def execution(self, goal_id: GoalId) -> GoalExecution: ...
 
 
 @dataclass(frozen=True)
 class NoFailedTurnEvidence(GoalFailureEvidence):
-    def execution(self, goal_id: str) -> GoalExecution:
+    def execution(self, goal_id: GoalId) -> GoalExecution:
         from .goal_presentation import AttemptUnresolvedExecution
         return AttemptUnresolvedExecution(goal_id)
 
@@ -51,7 +51,7 @@ class NoFailedTurnEvidence(GoalFailureEvidence):
 @dataclass(frozen=True)
 class FailedTurnEvidence(GoalLedgerTable, TypedTable, GoalFailureEvidence):
     attempt_id: Annotated[str, Column(primary_key=True)]
-    goal_id: str
+    goal_id: GoalId
     generation: Annotated[int, Column(check="generation>0")]
     owner: str
     owner_created_at: float
@@ -75,7 +75,7 @@ class FailedTurnEvidence(GoalLedgerTable, TypedTable, GoalFailureEvidence):
             raise ValueError("Observation incarnation must be finite")
         Id128Text.from_text(self.turn_id)
 
-    def execution(self, goal_id: str) -> GoalExecution:
+    def execution(self, goal_id: GoalId) -> GoalExecution:
         from .goal_presentation import AttemptFailedExecution
         return AttemptFailedExecution(goal_id, self)
 

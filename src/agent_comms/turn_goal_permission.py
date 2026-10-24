@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from agent_comms.field_codec import GoalId
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
@@ -60,7 +61,7 @@ class InactiveGoalPermission(GoalPermission):
 
 @dataclass(frozen=True)
 class AcceptedGoalPermission(GoalPermission):
-    goal_id: str | None
+    goal_id: GoalId | None
 
     def allows(self, current: GoalDeclaration) -> bool:
         active = current.active()

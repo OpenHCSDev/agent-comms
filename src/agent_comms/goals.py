@@ -21,6 +21,7 @@ from .context_segments.wake_values import NoWakeGoalContext, WakeGoalContext, Wa
 from .declared_family import DeclaredFamily
 from .errors import RejectedEnforcementError, RelationViolationError
 from .field_codec import (
+    GoalId,
     FieldCodec,
     JsonShapeFamily,
     JsonShapeMember,
@@ -158,7 +159,7 @@ class ResolvedMentionBinding(GoalMentionBinding):
 class GoalMentionSource:
     """Text-revision and owner-incarnation proof saved with its registry Goal."""
 
-    goal_id: str
+    goal_id: GoalId
     text_revision: int
     text_digest: str
     owner_name: str
@@ -195,12 +196,10 @@ class GoalMentionSource:
 class GoalRevision:
     """A particular revision, independent of text and execution state."""
 
-    id: str
+    id: GoalId
     revision: int
 
     def __post_init__(self) -> None:
-        if not FieldCodec.decode(str, self.id):
-            raise ValueError("Goal revision requires identity")
         try:
             revision = FieldCodec.decode(int, self.revision)
         except MalformedRecord as error:
@@ -218,7 +217,7 @@ class GoalCheckpoint(DeclaredFamily, affix="GoalCheckpoint"):
         return self == goal.captured
 
     @abstractmethod
-    def require_identity(self, goal_id: str) -> None: ...
+    def require_identity(self, goal_id: GoalId) -> None: ...
 
     @abstractmethod
     def __str__(self) -> str: ...
@@ -229,7 +228,7 @@ class UnobservedGoalCheckpoint(GoalCheckpoint):
     def matches(self, goal: GoalDeclaration) -> bool:
         return True
 
-    def require_identity(self, goal_id: str) -> None:
+    def require_identity(self, goal_id: GoalId) -> None:
         raise ValueError("No goal execution identity was observed")
 
     def __str__(self) -> str:
@@ -238,7 +237,7 @@ class UnobservedGoalCheckpoint(GoalCheckpoint):
 
 @dataclass(frozen=True)
 class AbsentGoalCheckpoint(GoalCheckpoint, declared_name="absent"):
-    def require_identity(self, goal_id: str) -> None:
+    def require_identity(self, goal_id: GoalId) -> None:
         raise ValueError("Goal execution identity does not match its declaration")
 
     def __str__(self) -> str:
@@ -249,7 +248,7 @@ class AbsentGoalCheckpoint(GoalCheckpoint, declared_name="absent"):
 class PresentGoalCheckpoint(GoalCheckpoint, declared_name="present"):
     revision: GoalRevision
 
-    def require_identity(self, goal_id: str) -> None:
+    def require_identity(self, goal_id: GoalId) -> None:
         if self.revision.id != goal_id:
             raise ValueError("Goal execution identity does not match its declaration")
 
@@ -457,7 +456,7 @@ class GoalOrder(DeclaredFamily, affix="GoalOrder"):
     def instructions(self, todos: Sequence[Todo]) -> str:
         return ""
 
-    def todos(self, goals: Goals, owner: ThreadIncarnation, goal_id: str) -> tuple[Todo, ...]:
+    def todos(self, goals: Goals, owner: ThreadIncarnation, goal_id: GoalId) -> tuple[Todo, ...]:
         return ()
 
     def goal_text(self, goal: Goal) -> str:
@@ -507,7 +506,7 @@ class ProblemGoalOrder(GoalOrder):
         if goals.todos.holds_pending(owner):
             raise ValueError("Finish or release the assigned problems before replacing this Goal.")
 
-    def todos(self, goals: Goals, owner: ThreadIncarnation, goal_id: str) -> tuple[Todo, ...]:
+    def todos(self, goals: Goals, owner: ThreadIncarnation, goal_id: GoalId) -> tuple[Todo, ...]:
         return goals.todos.for_goal(owner, goal_id)
 
     def instructions(self, todos: Sequence[Todo]) -> str:
@@ -539,7 +538,7 @@ class GoalAuthority:
     blocking, clearing or replacing the goal ends it.
     """
 
-    goal_id: str
+    goal_id: GoalId
     state: GoalState
 
     def keeps_turn_under(self, current: GoalAuthority | NoGoal) -> bool:
@@ -637,7 +636,7 @@ class GoalDeclaration(GoalDisplay, SubclassUnion, RegistrationInheritance["GoalD
         raise RelationViolationError("No goal is set for this thread.")
 
     @abstractmethod
-    def reported_id(self) -> str | None: ...
+    def reported_id(self) -> GoalId | None: ...
 
     @abstractmethod
     def clear_wait(self, waits: GoalWaits, *, wait_id: str | None = None) -> bool: ...
@@ -652,13 +651,13 @@ class GoalDeclaration(GoalDisplay, SubclassUnion, RegistrationInheritance["GoalD
             raise ValueError("The goal changed before this action; the action was not applied.")
         return self.require()
 
-    def matching(self, goal_id: str) -> GoalDeclaration:
+    def matching(self, goal_id: GoalId) -> GoalDeclaration:
         return self
 
     def active(self) -> GoalDeclaration:
         return self
 
-    def accepts_observation(self, goal_id: str, minimum_revision: int) -> bool:
+    def accepts_observation(self, goal_id: GoalId, minimum_revision: int) -> bool:
         return False
 
     def reports_turn(self, turn_id: str) -> bool:
@@ -768,7 +767,7 @@ class Goal(RecordMember, GoalDeclaration):
 
     # A presence row names the goal and its state; its body and bookkeeping stay with the goal tools.
     text: Annotated[str, PresenceExclude()]
-    id: str
+    id: GoalId
     published_seq: Annotated[int, PresenceExclude()]
     progress: Annotated[str, PresenceExclude()] = ""
     revision: Annotated[int, PresenceExclude()] = 0
@@ -798,7 +797,7 @@ class Goal(RecordMember, GoalDeclaration):
         return (self.render_instructions(self.order.instructions(
             self.order.todos(goals, owner, self.id))),)
 
-    def reported_id(self) -> str:
+    def reported_id(self) -> GoalId:
         return self.id
 
     def clear_wait(self, waits: GoalWaits, *, wait_id: str | None = None) -> bool:
@@ -867,7 +866,7 @@ class Goal(RecordMember, GoalDeclaration):
     def require(self) -> Goal:
         return self
 
-    def require_id(self, goal_id: str) -> Goal:
+    def require_id(self, goal_id: GoalId) -> Goal:
         if self.id != goal_id:
             raise RelationViolationError("This goal was replaced or cleared; refresh its state.")
         return self
@@ -876,7 +875,7 @@ class Goal(RecordMember, GoalDeclaration):
         if self.state != expected:
             raise ValueError(self.state.activity_refusal())
 
-    def matching(self, goal_id: str) -> GoalDeclaration:
+    def matching(self, goal_id: GoalId) -> GoalDeclaration:
         return self if self.id == goal_id else NoGoal()
 
     def active(self) -> GoalDeclaration:
@@ -903,7 +902,7 @@ class Goal(RecordMember, GoalDeclaration):
     def revision_key(self) -> GoalRevision:
         return GoalRevision(self.id, self.revision)
 
-    def accepts_observation(self, goal_id: str, minimum_revision: int) -> bool:
+    def accepts_observation(self, goal_id: GoalId, minimum_revision: int) -> bool:
         """Later revisions may describe the same failed goal, never a replacement."""
         return self.id == goal_id and self.revision >= minimum_revision
 

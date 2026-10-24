@@ -26,7 +26,7 @@ from .coordination_database import CoordinationStore
 from .coordinator import Coordination
 from .declared_family import DeclaredFamily
 from .errors import RelationViolationError
-from .field_codec import FieldCodec, NullMember, WireName, WireValue
+from .field_codec import FieldCodec, NullMember, WireName, WireValue, GoalId
 from .goal_actions import GoalAction
 from .goal_history import RecordedGoalRevision
 from .goals import Goal
@@ -353,7 +353,7 @@ class DismissHistoricalInputsRuntimeRequest(ResultRuntimeRequest):
 
 @dataclass(frozen=True, kw_only=True)
 class GoalHistoryRuntimeRequest(ResultRuntimeRequest):
-    goal_id: str | None = None
+    goal_id: GoalId | None = None
 
     async def result(self, ctx: RuntimeRequestContext) -> GoalHistoryReply:
         history = await Coordination.run_worker(partial(
@@ -386,7 +386,7 @@ class GoalSnapshotRuntimeRequest(GoalSnapshotResultRuntimeRequest):
 
 @dataclass(frozen=True, kw_only=True)
 class GoalRevisionRuntimeRequest(ResultRuntimeRequest):
-    goal_id: str
+    goal_id: GoalId
     expected_revision: int
 
 

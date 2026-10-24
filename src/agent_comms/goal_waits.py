@@ -13,7 +13,7 @@ from .bus import BusReader
 from .bus_publication import Delivered
 from .declared_family import DeclaredFamily
 from .errors import UnregisteredThreadError
-from .field_codec import NullMember
+from .field_codec import NullMember, GoalId
 from .goal_presentation import GoalExecution, GoalExecutionSource, GoalWaitTarget, StandbyExecution
 from .goals import Goal, GoalDeclaration
 from .input_attempt import StoredInput, UnresolvedInput
@@ -100,7 +100,7 @@ class NoGoalWait(GoalWait):
 
 @dataclass(frozen=True, slots=True)
 class RecordedGoalWait(GoalWait):
-    goal_id: str
+    goal_id: GoalId
     wait_id: str
     revision: int
     after_seq: int
@@ -242,7 +242,7 @@ class NoStandbyReview(NullMember):
 class StandbyReview:
     """The reply form of a goal input review: eligible messages and their exact keys."""
 
-    goal_id: str
+    goal_id: GoalId
     wait_for: tuple[str, ...]
     reviewed_inputs: tuple[str, ...]
     messages: tuple[UnresolvedInput, ...]
@@ -334,7 +334,7 @@ class GoalWaitReview:
                 return
 
     @property
-    def goal_id(self) -> str:
+    def goal_id(self) -> GoalId:
         return self.owner.goal.require().id
 
     @property
@@ -394,13 +394,13 @@ class GoalWaitsRows(StoreRows):
 
 @dataclass(frozen=True, slots=True)
 class StoredGoalWaitRow(GoalWaitsRows, TypedTable):
-    goal_id: Annotated[str, Column(primary_key=True)]
+    goal_id: Annotated[GoalId, Column(primary_key=True)]
     wait: RecordedGoalWait
 
 
 @dataclass(frozen=True, slots=True)
 class GoalWaitTargetRow(GoalWaitsRows, TypedTable):
-    goal_id: Annotated[str, Column(primary_key=True)]
+    goal_id: Annotated[GoalId, Column(primary_key=True)]
     position: Annotated[int, Column(primary_key=True)]
     target_lookup: str
     indexes = (Index(("target_lookup", "goal_id")),)
@@ -462,7 +462,7 @@ class GoalWaits(ThreadOwnedState, DurableStore, WireWakeFile):
                 if row.wait.owner.lookup in owners:
                     StoredGoalWaitRow.delete(db, goal_id=row.goal_id)
 
-    def clear(self, goal_id: str, *, wait_id: str | None = None) -> bool:
+    def clear(self, goal_id: GoalId, *, wait_id: str | None = None) -> bool:
         if not self.path.exists():
             return False
         with self.writing() as db:
