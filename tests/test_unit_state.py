@@ -5,7 +5,6 @@ import os
 import time
 from dataclasses import replace
 from datetime import UTC, datetime
-from pathlib import Path
 
 import pytest
 
@@ -258,7 +257,7 @@ def test_heartbeat_keeps_every_unit_when_one_checkout_is_unreadable(
     held_bus, tmp_path, primary, broken_metadata, installed_runtime
 ):
     if primary:
-        checkout = Path(held_bus.goals.todos.get("P1").order.checked().check.directory)
+        checkout = held_bus.goals.todos.get("P1").order.checked().check.directory
         (checkout / ".git").rename(checkout / "saved-git")
         (checkout / ".git").write_text("gitdir: ./removed-git-directory\n")
     else:

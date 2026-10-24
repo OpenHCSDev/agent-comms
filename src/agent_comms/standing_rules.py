@@ -20,7 +20,6 @@ from agent_comms.field_codec import FieldCodec
 from agent_comms.errors import RejectedEnforcementError
 from agent_comms.text_digest import TextDigest
 from agent_comms.recorded_time import EventTime, RecordedEventTime
-from agent_comms.repo import Repo
 from agent_comms.repository_name import RepositoryName
 from agent_comms.head_review import PullRequestHead
 from agent_comms.held_orders import HeldOrders
@@ -241,7 +240,7 @@ class HeldBranchRule(UndatedStandingRule, declared_name=None):
                     if path.is_dir():
                         branches.append(HeldBranch(
                             todo, unit, frame.pulls.branch_difference(path), path,
-                            frame.pulls.checkout(Path(todo.order.checked().check.directory)),
+                            frame.pulls.checkout(todo.order.checked().check.directory),
                             state.source,
                         ))
         ordered = tuple(sorted(branches, key=lambda held: (

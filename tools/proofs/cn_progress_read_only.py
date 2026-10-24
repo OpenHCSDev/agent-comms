@@ -23,7 +23,7 @@ def prepare() -> None:
     comms = wire(ROOT)
     todo = comms.goals.todos.get("P6")
     check = OrderCheck(
-        str(CHECKOUT), f"printf x >> {shlex.quote(str(MARKER))}; printf 0", CountCheckResult(0)
+        CHECKOUT, f"printf x >> {shlex.quote(str(MARKER))}; printf 0", CountCheckResult(0)
     )
     cli(
         "record-lead",

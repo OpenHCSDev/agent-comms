@@ -87,7 +87,7 @@ def checkout_command_bus(repository, tmp_path, monkeypatch, installed_runtime):
     now = time.time()
     order = PendingProblemOrder(
         id="prepare-checkout", owner=FileLine("owner.py", 1), scope=FIX_SCOPE,
-        run=MechanicalOrderRun(), check=OrderCheck(str(repository), "true"),
+        run=MechanicalOrderRun(), check=OrderCheck(repository, "true"),
         edits=("Create the order checkout through its pinned-submodule owner.",),
         banned=("No checkout creation bypassing its pinned submodules.",),
         report="Report the prepared checkout.", at=RecordedEventTime(now),

@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from agent_comms.lifecycle_capability import Active
 
-import re
 import shlex
 import signal
 import subprocess
@@ -299,15 +298,14 @@ class CountCheckResult(CheckResult):
         return result.outcome.printed_count(result.stdout).distance(self.expected)
 
 
-@dataclass(frozen=True)
-class OrderCheck:
-    directory: str
+class CheckCommand:
+    """Command validation shared by authored requests and stored checks."""
+
     command: str
-    result: CheckResult = field(default_factory=SilentCheckResult)
 
     def __post_init__(self):
-        if not self.directory.strip() or not self.command.strip():
-            raise ValueError("An order check requires a directory and command.")
+        if not self.command.strip():
+            raise ValueError("An order check requires a command.")
 
     def require_writable(self) -> None:
         """New checks cannot select revisions; saved checks remain readable for correction."""
@@ -316,25 +314,9 @@ class OrderCheck:
             raise ValueError("A check never checks out a revision: Core runs it at the "
                              "delivered commit and at each branch commit. Drop the checkout.")
 
-    def require_directory(self):
-        if not Path(self.directory).is_dir():
-            raise ValueError("The order check directory does not exist.")
-
-    LINE: ClassVar[re.Pattern] = re.compile(r"(\S+)\s*::\s*(.+?)\s*->\s*(\d+)", re.DOTALL)
     # The revision is the run's parameter; a check line that chooses one is refused.
     REVISION_COMMANDS: ClassVar[frozenset[str]] = frozenset({"checkout", "switch"})
     SEPARATORS: ClassVar[frozenset[str]] = frozenset({"&&", "||", ";", "|", "&", "\n"})
-    timeout: ClassVar[int] = 300
-
-    @classmethod
-    def parse(cls, line: str) -> OrderCheck | None:
-        """The one reading of a check line, `<repo> :: <shell command> -> <integer>`; else None."""
-        found = cls.LINE.fullmatch(line.strip())
-        if not found:
-            return None
-        check = cls(found[1], found[2], CountCheckResult(int(found[3])))
-        check.require_writable()
-        return check
 
     @classmethod
     def simple_commands(cls, command: str) -> list[list[str]]:
@@ -362,6 +344,18 @@ class OrderCheck:
             elif not word.startswith("-"):
                 return word
         return ""
+
+
+@dataclass(frozen=True)
+class OrderCheck(CheckCommand):
+    directory: Path
+    command: str
+    result: CheckResult = field(default_factory=SilentCheckResult)
+    timeout: ClassVar[int] = 300
+
+    def require_directory(self):
+        if not self.directory.is_dir():
+            raise ValueError("The order check directory does not exist.")
 
     def require_acceptance(self, base: str, checkout_base: Path) -> None:
         """The order state supplies the source preceding its delivered work."""

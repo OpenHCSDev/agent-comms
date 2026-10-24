@@ -5,7 +5,6 @@ from __future__ import annotations
 from abc import abstractmethod
 from collections.abc import Mapping
 from dataclasses import dataclass, field
-from pathlib import Path
 from typing import Annotated, Literal
 
 from agent_comms.todos import (
@@ -377,7 +376,7 @@ class CommsOrderDoneTool(CommsTodoTool):
         order = todo.order.checked()
         order.require_delivery(self.order_id)
         verified = order.scope.verified_claims(
-            self.delivery, self.claims, comms, Path(order.check.directory))
+            self.delivery, self.claims, comms, order.check.directory)
         return DeliverTodo(todo.revision, actor, self.delivery, self.order_id,
                            verified_claims=verified)
 

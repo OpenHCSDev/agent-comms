@@ -174,7 +174,7 @@ def corrected_order_file(ctx, source) -> str:
     now = time.time()
     document = OrderFile(
         replace(order(source), id="corrected-order",
-                check=OrderCheck(str(ctx.repos[0].checkout), f"test ! -e {shlex.quote(str(marker))}"),
+                check=OrderCheck(ctx.repos[0].checkout, f"test ! -e {shlex.quote(str(marker))}"),
                 at=RecordedEventTime(now), first_call_deadline=RecordedEventTime(now + 120)),
         "The claimed change keeps the duplicated decision the order told the unit to delete",
         "This is stupid because the commander's order named the wrong member to delete",

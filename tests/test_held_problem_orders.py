@@ -112,7 +112,7 @@ def test_clean_resend_derives_the_existing_order_and_leaves_no_strike(held_comma
     now = time.time()
     replacement = replace(
         order(cited_source), id="replacement-order",
-        check=OrderCheck(str(ctx.repos[0].checkout), f"test ! -e {shlex.quote(str(marker))}"),
+        check=OrderCheck(ctx.repos[0].checkout, f"test ! -e {shlex.quote(str(marker))}"),
         at=RecordedEventTime(now), first_call_deadline=RecordedEventTime(now + 120),
     )
     document = OrderFile(
@@ -141,7 +141,7 @@ def test_second_unplanned_order_is_refused_without_recording(held_commander, cit
     marker.touch()
     document = OrderFile(
         replace(order(cited_source), id="second-order",
-                check=OrderCheck(str(ctx.repos[0].checkout), f"test ! -e {shlex.quote(str(marker))}")),
+                check=OrderCheck(ctx.repos[0].checkout, f"test ! -e {shlex.quote(str(marker))}")),
         "The copied workflow still contains an unfinished decision that prevents completion",
         "This is stupid because assigning another order hides the already unfinished work",
         unplanned_reason="This isolated workflow verifies refusal rather than advancing the production plan.",
@@ -173,7 +173,7 @@ def test_done_checks_the_merged_tree_and_records_the_first_commit(
     ctx = held_commander
     base, first, merge = merge_two_commit_fix(cited_source, tmp_path / 'bin', 4)
     current = ctx.comms.goals.todos.get('P1')
-    check = OrderCheck(str(cited_source.checkout), 'cat count.txt', CountCheckResult(0))
+    check = OrderCheck(cited_source.checkout, 'cat count.txt', CountCheckResult(0))
     store = ctx.comms.goals.todos
     with store.writing() as connection:
         replace(current, order=replace(current.order, check=check),

@@ -77,7 +77,7 @@ def arguments(comms: Comms, name: str, project: Path, checkout: Path) -> dict:
         id="probe-order", scope=FIX_SCOPE,
         owner=FileLine(__file__, 1),
         run=MechanicalOrderRun(),
-        check=OrderCheck(str(project), "printf 1", CountCheckResult(1)),
+        check=OrderCheck(project, "printf 1", CountCheckResult(1)),
         edits=("Read the original saved source before changing its owner",),
         banned=("No second copy",),
         report="Report what worked",

@@ -16,8 +16,8 @@ from typing import ClassVar
 from agent_comms.commander.standing import PlanIdle, PlanStalled
 
 from .child_process import CountPrinted, NoIntegerPrinted
+from .commander.order import CheckRequest
 from .declared_family import DeclaredFamily
-from .goals import OrderCheck
 from .standing_rules import BoardDisagrees, StandingRule
 from .todos import PlainText, Todo, TodoStore, VoidStrikeTodo
 
@@ -520,7 +520,7 @@ class UncountedCheckPattern(BehaviourPattern):
         " integer, or already prints its target before any work."
     )
     checks = (
-        CallableCheck(OrderCheck.parse),
+        CallableCheck(CheckRequest.parse),
         CallableCheck(NoIntegerPrinted.unproven),
         CallableCheck(CountPrinted.unproven),
     )

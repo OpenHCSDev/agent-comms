@@ -102,7 +102,7 @@ def held_bus(comms, tmp_path, source_repository, configured_repository):
             review_at=RecordedEventTime(now + 3600),
             order=PendingProblemOrder(
                 id=f"order-{problem}", owner=scope.shape.parents[0], scope=scope, run=MechanicalOrderRun(),
-                check=OrderCheck(str(source.checkout), "printf 0", CountCheckResult(1)),
+                check=OrderCheck(source.checkout, "printf 0", CountCheckResult(1)),
                 edits=("Repair the existing owner",), banned=("No second store",),
                 report="Report the result", at=RecordedEventTime(now - 3600),
                 first_call_deadline=RecordedEventTime(now + 3600),
@@ -635,7 +635,7 @@ def test_send_and_check_accept_a_deletion_check_on_fresh_main(
     configured_repository(held_bus, source)
     worktrees = held_bus.registry.storage_rule.checkout_base
     original = held_bus.goals.todos.get('P1')
-    check = OrderCheck(str(source.checkout), 'grep -c obsolete owner.py', CountCheckResult(0))
+    check = OrderCheck(source.checkout, 'grep -c obsolete owner.py', CountCheckResult(0))
     order = replace(original.order.checked(), id='delete-obsolete', check=check,
                     banned=('optional guards', 'maybe.py'), report='Report optional examples')
     document = OrderFile(order, 'Four obsolete declarations remain after their reader was deleted.',

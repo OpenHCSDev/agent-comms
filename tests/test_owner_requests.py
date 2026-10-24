@@ -62,7 +62,7 @@ def test_independent_requests_orders_and_directives(comms: Comms, durable_home, 
     order = PendingProblemOrder(
         owner=FileLine.class_declaration(TodoStore, repository, MainRevision()),
         scope=TriageScope(),
-        check=OrderCheck(directory=str(repository.checkout), command="true"),
+        check=OrderCheck(directory=repository.checkout, command="true"),
         edits=("Read the request owner and its consumers.",),
         banned=("Leave the saved bus and its sessions unchanged.",),
         report="Report the result of the source investigation.",
