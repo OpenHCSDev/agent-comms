@@ -57,8 +57,9 @@ async def test_unconfirmed_monitor_reports_commander_deaf_once(
         binding.bind(db)
         bridge = ClaudeBridge(Options(operation, StoredBinding(), state), binding, db)
         service = MonitorService(bridge, owner, lambda: None)
-        serving = asyncio.create_task(service.run())
         endpoint = WatchClaim(binding.thread).socket_path
+        endpoint.parent.mkdir(parents=True, exist_ok=True)
+        serving = asyncio.create_task(service.run())
         try:
             async with asyncio.timeout(10):
                 while not endpoint.exists():
@@ -71,6 +72,7 @@ async def test_unconfirmed_monitor_reports_commander_deaf_once(
                 await writer.drain()
                 FieldCodec.decode(SessionReady, FieldCodec.parse(await reader.readline()))
                 probe = MonitorProbe.model_validate_json(await reader.readline())
+                unready = bridge.reader
             try:
                 snapshot = held_bus.registry.snapshot()
                 status = snapshot.status("lead")
@@ -107,6 +109,8 @@ async def test_unconfirmed_monitor_reports_commander_deaf_once(
                     await asyncio.sleep(0.01)
             snapshot = held_bus.registry.snapshot()
             assert snapshot.status("lead").paused_since(snapshot.seen_at("lead"))
+            await unready.confirm_probe(bridge, probe)
+            assert not held_bus.registry.snapshot().status("lead").receiving
             dead = replace(commander, process_identity=NoProcess())
             assert type(snapshot.statuses["lead"].registered(dead, paused)) is NoBridgeThreadStatus
         finally:

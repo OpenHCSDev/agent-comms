@@ -133,8 +133,7 @@ class NoReader(ReaderState):
         finally:
             async with bridge.reader_changed:
                 bridge.reader = NoReader()
-                await asyncio.to_thread(lambda: bridge.comms.registry.register(
-                    bridge.comms.registry.require(bridge.binding.bus), PausedBridgeThreadStatus()))
+                await bridge.declare_reader(PausedBridgeThreadStatus())
                 bridge.reader_changed.notify_all()
             async with attachment.window_changed:
                 attachment.window_changed.notify_all()
@@ -174,8 +173,7 @@ class UnreadyReader(ReaderState):
             async with bridge.reader_changed:
                 if bridge.reader is not self:
                     return
-                await asyncio.to_thread(lambda: bridge.comms.registry.register(
-                    bridge.comms.registry.require(bridge.binding.bus), ConnectedThreadStatus()))
+                await bridge.declare_reader(ConnectedThreadStatus())
                 bridge.reader = AttachedReader(self.attachment)
                 bridge.reader_changed.notify_all()
             bridge.log("Fresh Monitor probe observed; delivery enabled.")
@@ -378,9 +376,7 @@ class MonitorService:
             await self.bridge.report_failure(f"Monitor connection ended: {error}")
 
     async def run(self) -> None:
-        await asyncio.to_thread(lambda: self.bridge.comms.registry.register(
-            self.bridge.comms.registry.require(self.bridge.binding.bus),
-            PausedBridgeThreadStatus()))
+        await self.bridge.declare_reader(PausedBridgeThreadStatus())
         path = WatchClaim(self.bridge.binding.thread).socket_path
         path.unlink(missing_ok=True)
         try:

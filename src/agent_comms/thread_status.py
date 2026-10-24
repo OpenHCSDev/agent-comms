@@ -313,27 +313,25 @@ class CliInboxPresence(AlwaysListed):
         return self
 
 
-class ConnectedThreadStatus(CliInboxPresence, RunningThreadStatus):
-    """A CLI inbox whose bridge process is watching it."""
-
-    def declaration(self) -> ThreadStatus:
-        return ConnectedThreadStatus()
-
-    def external_registered(self, thread: Thread, now: float) -> ThreadStatus:
-        return self.registered(thread, now)
-
-
-class PausedBridgeThreadStatus(SelfRenaming, CliInboxPresence, StoppedThreadStatus):
-    """A live session bridge waiting for a Monitor to confirm its probe."""
+class DeclaredReaderPresence(CliInboxPresence):
+    """The session bridge's reader state survives registration and storage."""
 
     def declaration(self) -> ThreadStatus:
         return self
 
-    def registered(self, thread: Thread, last_seen: float) -> ThreadStatus:
-        return self if thread.process_identity.alive() else NoBridgeThreadStatus()
-
     def external_registered(self, thread: Thread, now: float) -> ThreadStatus:
         return self.registered(thread, now)
+
+
+class ConnectedThreadStatus(DeclaredReaderPresence, RunningThreadStatus):
+    """A CLI inbox whose bridge process is watching it."""
+
+
+class PausedBridgeThreadStatus(SelfRenaming, DeclaredReaderPresence, StoppedThreadStatus):
+    """A live session bridge waiting for a Monitor to confirm its probe."""
+
+    def registered(self, thread: Thread, last_seen: float) -> ThreadStatus:
+        return self if thread.process_identity.alive() else NoBridgeThreadStatus()
 
     def paused_since(self, last_seen: float) -> tuple[float, ...]:
         return (last_seen,)

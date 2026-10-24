@@ -57,6 +57,7 @@ from agent_comms.message_reference import AfterMessageStart, FirstUnreadStart, I
 from agent_comms.read_basis import ExplicitWatchAcknowledgment
 from agent_comms.runtime_updates import RuntimeUpdate, ThreadOutput
 from agent_comms.send_result import SendResult
+from agent_comms.thread_status import ThreadStatus
 from agent_comms.typed_table import (
     Column,
     DurableTables,
@@ -1128,6 +1129,10 @@ class LineMonitorBridge(TranscriptConfirmsDelivery, TranscriptBridge[Options]):
         self.reader: ReaderState = NoReader()
         self.reader_changed = asyncio.Condition()
         self.retirement: BridgeExit = BridgeExit()
+
+    async def declare_reader(self, status: ThreadStatus) -> None:
+        await asyncio.to_thread(lambda: self.comms.registry.register(
+            self.comms.registry.require(self.binding.bus), status))
 
     def watch_record(self) -> WatchRecord:
         command = (str(Path(sys.argv[0]).absolute()), Watch.__name__.lower(),
