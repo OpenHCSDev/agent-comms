@@ -16,9 +16,9 @@ from agent_comms.errors import RelationViolationError
 from agent_comms.field_codec import PathText
 from agent_comms.installer.interpreter_operation import (
     InstallClock,
-    InstallPhase,
     InterpreterOperation,
     RuntimeProbe,
+    SubjectPhase,
 )
 from agent_comms.locked_store import RootFile
 from agent_comms.store_files import is_store_lock
@@ -135,7 +135,7 @@ class CarryOperation[Answer](
 
 
 @dataclass(frozen=True, kw_only=True)
-class CarryPhase(InstallPhase):
+class CarryPhase(SubjectPhase):
     """Run a declared carry operation in its target interpreter."""
 
     operation: type[CarryOperation]
@@ -146,7 +146,7 @@ class CarryPhase(InstallPhase):
 
 
 @dataclass(frozen=True, kw_only=True)
-class CarryStepPhase(InstallPhase):
+class CarryStepPhase(SubjectPhase):
     """One carry step inside its operation's worker pass."""
 
     step: type[Carry]
