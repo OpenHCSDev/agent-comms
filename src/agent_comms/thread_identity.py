@@ -35,6 +35,7 @@ from .field_codec import (
 )
 from .projection_source import ProducedRow, ProjectionSource
 from .response_policy import CollectivePolicy, InformationalPolicy, ResponsePolicy
+from .wake_policy import MessageAudience
 
 if TYPE_CHECKING:
     from .child_process import ProcessIdentity
@@ -631,6 +632,11 @@ class ThreadRole(DeclaredFamily, ProjectionSource, affix="ThreadRole"):
     def channel_policy(cls) -> ResponsePolicy: ...
 
     @classmethod
+    def addressed(cls, audience: MessageAudience) -> MessageAudience:
+        """Who a delivery addresses: an agent's reaches only the audience its target names."""
+        return audience
+
+    @classmethod
     @abstractmethod
     def reply_target(cls, message: Message) -> str | None:
         """An external sender may receive an automatic live reply."""
@@ -748,6 +754,11 @@ class UserThreadRole(ThreadRole):
     @classmethod
     def channel_policy(cls) -> ResponsePolicy:
         return CollectivePolicy.instance()
+
+    @classmethod
+    def addressed(cls, audience: MessageAudience) -> MessageAudience:
+        """The owner addresses every member a channel reaches, so it joins their running turns."""
+        return MessageAudience.MENTIONED
 
     @classmethod
     def reply_target(cls, message: Message) -> str | None:
