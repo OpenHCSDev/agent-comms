@@ -201,7 +201,7 @@ class Binding(BindingIdentity, BridgeStateTable, TypedTable, BindingRequest):
             stored = StoredBinding().bind(db)
             if not stored.same_reader(self):
                 raise ValueError('This state directory belongs to another Core/CLI conversation')
-            Binding.update(db, thread=self.thread)
+            Binding.update(db, where='1', thread=self.thread)
             return replace(stored, thread=self.thread)
 
 
