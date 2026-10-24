@@ -33,7 +33,8 @@ def test_fork_default_retains_annotated_thinking_representation(tmp_path):
     command = ForkCliCommand(name='', parent='saved', project=str(tmp_path),
                              model=UndeclaredModel(), thinking_level=NoThinkingOverride)
     editable = {entry.name: entry for entry in command.editable_fields}
-    assert editable['thinking_level'].annotation == ThinkingLevelField
+    decoder = compile_decoder(editable['thinking_level'].annotation)
+    assert decoder.encode_editor(HighThinkingLevel) == '"high"'
     assert editable['thinking_level'].editor_default == 'null'
     payload = FieldCodec.encode(command)
     payload.update(command.editor_arguments({'thinking_level': '"high"'}))

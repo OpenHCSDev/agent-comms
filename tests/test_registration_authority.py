@@ -1,5 +1,4 @@
 """Actual persisted claim boundaries distinguish declaration from claim_scope drift."""
-from agent_comms.field_codec import TurnId
 
 import os
 from dataclasses import replace
@@ -9,6 +8,7 @@ import pytest
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.comms import wire
 from agent_comms.errors import RelationViolationError
+from agent_comms.field_codec import TurnId
 from agent_comms.goals import Goal
 from agent_comms.thread_identity import UserThreadRole
 from agent_comms.thread_text import GivenThreadText
@@ -36,7 +36,9 @@ def test_claim_claim_tolerates_metadata_and_finished_captured_turn(tmp_path, cap
         RelationViolationError,
     ):
         registry.lease_live_turn_with_generation(
-            captured, TurnId('16367aacb67a4a017c8da8ab95682ccb'), expected_owner_generation=generation,
+            captured,
+            TurnId('16367aacb67a4a017c8da8ab95682ccb'),
+            expected_owner_generation=generation,
         )
     claimed, current_claim = registry.lease_live_turn_with_claim(
         captured, TurnId('16367aacb67a4a017c8da8ab95682ccb'), expected_generation=claim_scope,
@@ -60,7 +62,9 @@ def test_raw_registry_writer_cannot_cross_captured_claim_identity(tmp_path, muta
         edit.commit()
     before = registry.store.path.read_bytes()
     with pytest.raises(RelationViolationError):
-        registry.lease_live_turn_with_claim(captured, TurnId('62d6c2330036f64bcf71b95791743d6c'), expected_generation=claim_scope)
+        registry.lease_live_turn_with_claim(
+            captured, TurnId('62d6c2330036f64bcf71b95791743d6c'), expected_generation=claim_scope
+        )
     assert registry.store.path.read_bytes() == before
 
 

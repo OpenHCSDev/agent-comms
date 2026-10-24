@@ -1,5 +1,4 @@
 """Inbox pages drain oldest first without changing uncertain inputs."""
-from agent_comms.field_codec import TurnId
 
 import asyncio
 import json
@@ -16,7 +15,7 @@ from agent_comms.message_page import PageBounds
 from agent_comms.read_basis import ExplicitWatchAcknowledgment
 from agent_comms.tools import invoke_tool
 from agent_comms.tool_caller import ThreadCaller, NoThreadCaller
-from agent_comms.field_codec import FieldCodec
+from agent_comms.field_codec import FieldCodec, TurnId
 from agent_comms.text_digest import TextDigest
 from stored_inputs import insert_inputs, stored_inputs
 from agent_comms.goal_waits import RecordedGoalWait
@@ -26,11 +25,19 @@ from agent_comms.threads import Thread
 def seed_unknown(comms, count, text):
     dispositions = InputDispositions(comms.root)
     rows = {
-        f"bus:{index}": FieldCodec.encode(BoundUnknownInput(
-            key=f"bus:{index}", sequence=index, owner="b", claim_generation=index,
-            target="b", source_text=f"{index}: {text}", turn_id=TurnId('9f73871819f6ae95a1bbcac63e1880f4'),
-            native_id="f" * 32, sent_digest=TextDigest.of("private-native-prompt"),
-        ))
+        f"bus:{index}": FieldCodec.encode(
+            BoundUnknownInput(
+                key=f"bus:{index}",
+                sequence=index,
+                owner="b",
+                claim_generation=index,
+                target="b",
+                source_text=f"{index}: {text}",
+                turn_id=TurnId('9f73871819f6ae95a1bbcac63e1880f4'),
+                native_id="f" * 32,
+                sent_digest=TextDigest.of("private-native-prompt"),
+            )
+        )
         for index in range(1, count + 1)
     }
     insert_inputs(comms.root, rows)

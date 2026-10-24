@@ -49,7 +49,7 @@ from source_programs import SourcePrograms
 from source_revision_fixture import SourceRepository
 from agent_comms.threads import Thread
 
-pytest_plugins = (goal_owner_fixture.__name__,)
+pytest_plugins = (goal_owner_fixture.__name__, "github_fixture")
 
 
 class TranscriptRecords:
@@ -339,7 +339,7 @@ def root(tmp_path: Path) -> Path:
 
 
 @pytest.fixture
-def configured_repository(durable_home: Path) -> Callable[[Comms, *tuple[Repo, ...]], Commander]:
+def configured_repository(durable_home: Path, github_cli) -> Callable[[Comms, *tuple[Repo, ...]], Commander]:
     """Declare the temporary commander on its bus and use its real plan-bearing checkout."""
     from agent_comms.commander.order import Commander
     from agent_comms.repo import Repo
@@ -347,6 +347,7 @@ def configured_repository(durable_home: Path) -> Callable[[Comms, *tuple[Repo, .
     repository = Repo.of(Path(__file__).resolve().parents[1])
 
     def configure(bus: Comms, *check_repositories: Repo) -> Commander:
+        github_cli.configure(*(repo.github for repo in (*check_repositories, repository)))
         return Commander.on_root(
             'lead', (*check_repositories, repository), bus.root,
         )

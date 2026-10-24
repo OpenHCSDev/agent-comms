@@ -1,5 +1,4 @@
 """Original authored ingress and neutral historical evidence share one input store."""
-from agent_comms.field_codec import TurnId
 from agent_comms.controller import Controller, SessionUpdateSink
 
 from agent_comms.channel_targets import CommandTarget
@@ -15,7 +14,7 @@ from acp.schema import TextContentBlock
 
 from agent_comms.acp_extension import QueuePromptRequest, decode_request, encode_request
 from agent_comms.errors import RelationViolationError
-from agent_comms.field_codec import FieldCodec
+from agent_comms.field_codec import FieldCodec, TurnId
 from agent_comms.goal_states import ActiveGoal, CompletedGoal, PausedGoal
 from agent_comms.goals import AbsentGoalCheckpoint, Goal, GoalRevision, NoGoal, PresentGoalCheckpoint
 from agent_comms.input_attempt import ReservedInput
@@ -100,15 +99,23 @@ async def test_original_human_followup_survives_forwarding_reservation_and_nativ
     assert len(stored_inputs(inputs.root).rows) == 1 and comms.bus.bus.revision() == before
     from agent_comms.turn_context import UserFollowupSegment
     queued = agent.inputs.state('beta').require_inbox().get_nowait()
-    assert queued.input_id.value == command.input_id
+    assert queued.input_id == command.input_id
     assert queued.content.text == 'User follow-up:\n' + command.user_text
     contribution, = queued.content.contributions
     assert contribution.kind is UserFollowupSegment
     assert row.context_provenance() in contribution.provenance
     native_id = "b" * 32
     sent = "User follow-up:\n" + command.user_text
-    assert inputs.bind(key, claim_scope=row.claim_generation, turn_id=TurnId('f6651da6017ff80246152c3c01c5507c'), native_id=native_id, text=sent)
-    assert inputs.started(key, turn_id=TurnId('f6651da6017ff80246152c3c01c5507c'), native_id=native_id, text=sent)
+    assert inputs.bind(
+        key,
+        claim_scope=row.claim_generation,
+        turn_id=TurnId('f6651da6017ff80246152c3c01c5507c'),
+        native_id=native_id,
+        text=sent,
+    )
+    assert inputs.started(
+        key, turn_id=TurnId('f6651da6017ff80246152c3c01c5507c'), native_id=native_id, text=sent
+    )
     # Existing terminal settlement never rewrites a started original as
     # unsent or grants a replay; the native completion owns that.
     assert inputs.settle_unbound((key,)).lookup(key).has_started

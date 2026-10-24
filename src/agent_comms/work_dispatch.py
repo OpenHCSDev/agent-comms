@@ -68,6 +68,7 @@ class WorkDispatch:
             model=defaults.model,
             thinking_level=defaults.thinking_level,
         )
+        self.action.require_reviewed(comms.goals)
         self.action.require_ready(GoalActionContext(comms.goals, candidate))
         comms.registry.require_declaration_available(candidate, StoppedThreadStatus())
         CheckoutStorageEffect(checkout, Path(self.action.order.check.directory)).check(

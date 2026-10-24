@@ -1,5 +1,4 @@
 """Reply reads leave the registry free, and publication keeps its observed state."""
-from agent_comms.field_codec import TurnId
 
 import fcntl
 import os
@@ -14,6 +13,7 @@ from agent_comms.bus_publication import Delivered
 from agent_comms.bus_tables import ReceivedSource
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.coordination_errors import StaleFence
+from agent_comms.field_codec import TurnId
 from agent_comms.goal_actions import (
     EditGoalAction,
     GoalActionContext,
@@ -413,7 +413,7 @@ def test_new_dependency_turn_during_silence_read_keeps_wait(reviewing):
     wait = reviewing.goals.goal_wait("owner")
     fence = reviewing.agents.finish_turn(reviewing.registry.require("child").require_turn_lease())
     reviewing.bus.bus = AfterReadBus(
-        reviewing.bus.bus.path, partial(reviewing.agents.begin_turn, "child", "new-child-turn"),
+        reviewing.bus.bus.path, partial(reviewing.agents.begin_turn, "child", TurnId.mint()),
     )
     assert reviewing.goals.release_waits_after_terminal_turn(fence) == ()
     assert reviewing.bus.bus.changed

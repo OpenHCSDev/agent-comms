@@ -63,11 +63,11 @@ from .thread_execution import NativeThreadExecution, ThreadExecution
 from .thread_identity import (
     AgentThreadRole,
     OfferedTools,
+    RegisteredTurn,
     ThreadIncarnation,
     ThreadIncarnationRecord,
     ThreadRole,
     TurnFence,
-    RegisteredTurn,
     TurnIdentity,
     UnobservedTools,
 )
@@ -601,10 +601,9 @@ class Thread(ThreadProvenance):
 
     def observed_turn(self, claim_scope: int) -> TurnFence | None:
         """Passive current/last-completed witness; never a begin-turn grant."""
-        turn_id = self.turn_state.observed_id()
-        if turn_id is None:
-            return None
-        return TurnFence(self.turn_identity, turn_id, claim_scope)
+        return self.turn_state.active.observed_turn(
+            self.turn_state.finished, self.turn_identity, claim_scope,
+        )
 
     def latest_idle_turn(self, fence: TurnFence, claim_scope: int) -> bool:
         """Only the exact latest completed turn can release a dependency."""

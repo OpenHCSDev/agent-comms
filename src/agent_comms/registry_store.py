@@ -16,7 +16,7 @@ from typing import ClassVar, Self
 
 from .coordination_database import CoordinationStore
 from .errors import RelationViolationError
-from .field_codec import FieldCodec, NullMember
+from .field_codec import FieldCodec, NullMember, TurnId
 from .locked_store import RegistryFile
 from .maintenance_barrier import CarriedDocument
 from .native_input_owner import RegistryOwner
@@ -166,7 +166,7 @@ class RegistryEdit:
     def lease_turn(
         self,
         current: Thread,
-        turn_id: str,
+        turn_id: TurnId,
         routing: TurnRouting | None,
     ) -> tuple[Thread, int]:
         """Allocate the original record under this bound registry transaction."""

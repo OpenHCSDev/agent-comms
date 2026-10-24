@@ -1,5 +1,4 @@
 """Standby liveness preserves goal authority and never replays an input."""
-from agent_comms.field_codec import TurnId
 
 
 from agent_comms.messages import ConversationRole, NoticeRole
@@ -12,6 +11,7 @@ from agent_comms.turn_lease import NoFinishedTurn
 
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.comms import wire
+from agent_comms.field_codec import TurnId
 from agent_comms.goal_actions import (
     EditGoalAction,
     GoalPrecondition,

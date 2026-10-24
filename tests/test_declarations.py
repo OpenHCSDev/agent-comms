@@ -1,4 +1,3 @@
-from agent_comms.field_codec import TurnId
 
 
 from bus_record_fixture import prepare_native_comms
@@ -17,7 +16,7 @@ from agent_comms.child_process import ProcessIdentity
 from agent_comms.comms import wire
 from agent_comms.context_reading import ContextUsage, UnmeasuredContext
 from agent_comms.errors import RelationViolationError, UnregisteredThreadError
-from agent_comms.field_codec import FieldCodec
+from agent_comms.field_codec import FieldCodec, TurnId
 from agent_comms.goals import Goal
 from agent_comms.launch_runtime import CallingThreadUnavailable
 from agent_comms.messages import HandoffKind, InfoKind, Message
@@ -208,7 +207,9 @@ class TestRegistration:
         assert registry.snapshot().owner_identity("a").generation > claimed_generation
         with pytest.raises(RelationViolationError):
             registry.lease_live_turn_with_generation(
-                expected, TurnId('18ab1892f9f48635ac465d11156044ce'), expected_owner_generation=claimed_generation
+                expected,
+                TurnId('18ab1892f9f48635ac465d11156044ce'),
+                expected_owner_generation=claimed_generation,
             )
 
     def test_owner_claim_survives_session_metadata_and_rotates_on_restart(
@@ -272,13 +273,17 @@ class TestRegistration:
         other = RegistryOwner.capture_local(snapshot, "b").thread
         other_generation = snapshot.owner_identity("b").generation
         registry.lease_live_turn_with_generation(
-            other, TurnId('d9298a10d1b0735837dc4bd85dac641b'), expected_owner_generation=other_generation
+            other,
+            TurnId('d9298a10d1b0735837dc4bd85dac641b'),
+            expected_owner_generation=other_generation,
         )
         snapshot = registry.snapshot()
         assert RegistryOwner.capture_local(snapshot, "a").thread == owner
         assert snapshot.owner_identity("a").generation == claimed_generation
         turn, _ = registry.lease_live_turn_with_generation(
-            owner, TurnId('3fd30542fe3f61b14bd4a4b2dc0b6fb3'), expected_owner_generation=claimed_generation
+            owner,
+            TurnId('3fd30542fe3f61b14bd4a4b2dc0b6fb3'),
+            expected_owner_generation=claimed_generation,
         )
         lease = turn.require_turn_lease()
         assert registry.release_turn(lease)[0]
@@ -295,7 +300,9 @@ class TestRegistration:
         owner = RegistryOwner.capture_local(snapshot, "a").thread
         claimed_generation = snapshot.owner_identity("a").generation
         leased, owner_generation = registry.lease_live_turn_with_generation(
-            owner, TurnId('d79d3458a58877cd8e48c18ebaf4c27b'), expected_owner_generation=claimed_generation
+            owner,
+            TurnId('d79d3458a58877cd8e48c18ebaf4c27b'),
+            expected_owner_generation=claimed_generation,
         )
         snapshot = registry.snapshot()
         assert RegistryOwner.capture_local(snapshot, "a").thread == leased
@@ -381,7 +388,7 @@ class TestRegistration:
             comms.registry.register(Thread(name='b', tags=frozenset(), worktree='/wt'))
         monkeypatch.undo()
         with pytest.raises(RelationViolationError):
-            Registration(root / "registry.json")
+            Registration(root / "registry.json").require("a")
 
     @pytest.mark.skipif(os.name == "nt", reason="private POSIX ownership unavailable on Windows")
     @pytest.mark.parametrize("damage", ["missing", "corrupt", "truncated", "strip_epochs"])
@@ -428,10 +435,14 @@ class TestRegistration:
         claimed_generation = snapshot.owner_identity("a").generation
         assert owner.name == "b"
         leased, _ = registry.lease_live_turn_with_generation(
-            owner, TurnId('d79d3458a58877cd8e48c18ebaf4c27b'), expected_owner_generation=claimed_generation
+            owner,
+            TurnId('d79d3458a58877cd8e48c18ebaf4c27b'),
+            expected_owner_generation=claimed_generation,
         )
         registry.rename("b", "c")
-        assert not registry.release_turn(replace(leased.turn_lease, turn_id=TurnId('d9298a10d1b0735837dc4bd85dac641b')))[0]
+        assert not registry.release_turn(
+            replace(leased.turn_lease, turn_id=TurnId('d9298a10d1b0735837dc4bd85dac641b'))
+        )[0]
         assert registry.release_turn(leased.turn_lease)[0]
 
 

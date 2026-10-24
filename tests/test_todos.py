@@ -7,7 +7,6 @@ from agent_comms.bus import Bus
 
 import argparse
 import json
-import logging
 import os
 import shlex
 import shutil
@@ -23,7 +22,7 @@ import pytest
 
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.commander.order import Commander, PullRequestVerb, SayVerb
-from agent_comms.standing_rules import OwedAnswer
+from agent_comms.standing_rules import OwedAnswer, StandingRule
 from agent_comms.ui_model.unit_state import AwaitingCommander
 from agent_comms.commander.standing import UnownedOrderWatch
 from agent_comms.commander_heartbeat import CommanderHeartbeat
@@ -73,7 +72,7 @@ from agent_comms.todos import (
 from agent_comms.work_branches import WorkBranches
 from source_revision_fixture import SourceRepository
 
-pytest_plugins = ("test_holder_standing_rules", "test_unowned_checkout_work", "test_proof_build")
+pytest_plugins = ("test_holder_standing_rules", "test_unowned_checkout_work", "test_proof_build", "github_fixture")
 
 
 def thread(name: str, root: Path, created: float) -> Thread:
@@ -272,7 +271,7 @@ def test_merged_order_keeps_its_checked_fields(tmp_path: Path, source_repository
 
 
 @pytest.fixture
-def pr_commander(tmp_path, monkeypatch, proof_build_checkouts, durable_home):
+def pr_commander(tmp_path, monkeypatch, proof_build_checkouts, durable_home, github_cli):
     """One cited source, its real bare remote and installed history; only GitHub is synthetic."""
     graph = next(graph for graph in proof_build_checkouts
                  if graph.repository.github == CorePackage.repository)
@@ -290,7 +289,7 @@ def pr_commander(tmp_path, monkeypatch, proof_build_checkouts, durable_home):
     for number in (1, 2):
         source.git(source.checkout, 'push', 'origin', f'{merged}:refs/pull/{number}/head')
     common = dict(branch="feature/orders", head=merged, updated="2026-10-20T12:00:00Z",
-                  base=WorkBranches.main)
+                  base=WorkBranches.main, reviewable_times=("2026-10-20T12:00:00Z",))
     requests = (
         (MergedListedPullRequest(number=1, merge=PullRequestCommit(merged),
                                  merged="2026-10-20T12:00:00Z", **common), "No order metadata."),
@@ -298,15 +297,9 @@ def pr_commander(tmp_path, monkeypatch, proof_build_checkouts, durable_home):
                                  merged="2026-10-20T12:00:00Z", **common), "## P343\n\n## P344"),
         (ClosedListedPullRequest(number=3, **common), "Closed without merging."),
     )
-    binaries = tmp_path / "bin"
-    binaries.mkdir()
-    (binaries / "gh").symlink_to(Path(__file__).with_name("github_cli_stub.py"))
-    (binaries / "pull_requests.json").write_text(json.dumps({
-        "repo": source.github.to_wire(),
-        "requests": {str(row.number): {"body": body, "listed": FieldCodec.encode(row)}
-                     for row, body in requests},
-    }))
-    monkeypatch.setenv("PATH", os.pathsep.join((str(binaries), os.environ["PATH"])))
+    github_cli.configure(source.github)
+    for row, body in requests:
+        github_cli.put(source.github, row, body)
     Bus.install(Bus.path_in(tmp_path))
     lead = Thread(
         'lead', frozenset(), str(source.checkout), created_at=1.0)
@@ -455,11 +448,10 @@ def test_watcher_git_and_github_reads_leave_wire_free(pr_commander, monkeypatch)
         assert c.goals.todos.get(original.id) == original
 
 
-def test_reused_enforcement_rejects_a_new_idle_goal(checkout_bus, caplog):
+def test_reused_enforcement_rejects_a_new_idle_goal(checkout_bus):
     from agent_comms.commander.standing import ReassignedWheelSpin
     from agent_comms.goals import GoalChangedError, NoGoal
 
-    caplog.set_level(logging.INFO)
     with LaunchRoot.from_path(checkout_bus.root).selected():
         watch = UnownedOrderWatch()
         observed = watch.observe(checkout_bus)
@@ -473,13 +465,12 @@ def test_reused_enforcement_rejects_a_new_idle_goal(checkout_bus, caplog):
         changed = checkout_bus.goals.update_goal(selected.name, SetGoalAction(
             text="New independent work after the idle observation"))
         before = checkout_bus.goals.todos.get(item.rule.todo.id)
-        watch.pass_body(checkout_bus, observed)
+        rejected = StandingRule.enforce_all(checkout_bus, item.commander.name, (item.rule,))
         assert checkout_bus.registry.require(selected.name).goal == changed
         assert checkout_bus.goals.todos.get(before.id) == before
-        rejected = caplog.records[-1].args[0]
-        assert isinstance(rejected, GoalChangedError)
-        assert rejected.thread.name == selected.name
-        assert rejected.expected == selected.goal.captured
+        assert isinstance(rejected[item.rule], GoalChangedError)
+        assert rejected[item.rule].thread.name == selected.name
+        assert rejected[item.rule].expected == selected.goal.captured
 
 
 @pytest.mark.parametrize("number", (0, -1))

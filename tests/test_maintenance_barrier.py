@@ -1,5 +1,4 @@
 """Provider-free disposable checks of the default-off maintenance claim seam."""
-from agent_comms.field_codec import TurnId
 
 
 import asyncio
@@ -15,7 +14,7 @@ from agent_comms.send_outcome import GrantedSend, HeldSend
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.comms import wire
 from agent_comms.errors import RelationViolationError
-from agent_comms.field_codec import FieldCodec
+from agent_comms.field_codec import FieldCodec, TurnId
 from agent_comms.maintenance_barrier import (
     HOLDER_NONCE,
     DrainingPhase,
@@ -114,7 +113,9 @@ def _claim_other_process(registry_path: str, ready: mp.Event, result: mp.Queue) 
         result.put(("timeout", ""))
         return
     try:
-        Registration(Path(registry_path)).lease_local_turn("owner", TurnId('da7607de21a76790f4facdb9960c47db'))
+        Registration(Path(registry_path)).lease_local_turn(
+            "owner", TurnId('da7607de21a76790f4facdb9960c47db')
+        )
     except RelationViolationError as error:
         result.put(("denied", str(error)))
     else:
@@ -151,7 +152,9 @@ def test_default_off_then_close_reopen_and_no_stale_transition(tmp_path: Path) -
     with pytest.raises(ValueError):
         control.advance(second, MaintenancePhase.member_named("ready"))
     with pytest.raises(RelationViolationError):
-        Registration(comms.registry.store.path).lease_local_turn("owner", TurnId('e272deecde720ffc773d7a6a81adabbc'))
+        Registration(comms.registry.store.path).lease_local_turn(
+            "owner", TurnId('e272deecde720ffc773d7a6a81adabbc')
+        )
     assert control.advance(
         second, MaintenancePhase.member_named("installing")
     ).phase == MaintenancePhase.member_named("installing")

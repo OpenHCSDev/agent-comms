@@ -1,7 +1,6 @@
 """A following message interrupted before native send returns to selected work."""
 
 from __future__ import annotations
-from agent_comms.field_codec import TurnId
 
 from conftest import publish_initial
 from functools import partial
@@ -12,6 +11,7 @@ from agent_comms.assignment_states import DeferredAssignment, FullPendingAssignm
 from agent_comms.cohort_foreground import _accept_visible_deliveries
 from agent_comms.coordination_cohort import pending_sealed_assignments
 from agent_comms.coordinator import Coordination
+from agent_comms.field_codec import TurnId
 from agent_comms.input_attempt import NotSentInput
 from agent_comms.queued_input import DeliveredInput
 from test_acp_private_nk_delivery import _session

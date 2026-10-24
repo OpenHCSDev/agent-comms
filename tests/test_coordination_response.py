@@ -1,10 +1,10 @@
 """Actual fsynced bus + SQLite response boundaries, default OFF outside opted-in roots."""
 
 from __future__ import annotations
-from agent_comms.field_codec import TurnId
 
 
 from bus_record_fixture import prepare_native_comms
+from agent_comms.field_codec import TurnId
 from agent_comms.lifecycle_capability import Active, Complete
 
 from conftest import publish_initial, responder

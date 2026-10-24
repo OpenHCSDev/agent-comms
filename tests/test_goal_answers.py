@@ -1,5 +1,4 @@
 """Goal absence is dispatched before work; a clear never revives a turn's goal."""
-from agent_comms.field_codec import TurnId
 
 import os
 from contextlib import ExitStack, contextmanager
@@ -8,6 +7,7 @@ import pytest
 
 from agent_comms import agent_events as events
 from agent_comms.child_process import ProcessIdentity
+from agent_comms.field_codec import TurnId
 from agent_comms.goal_actions import ClearGoalAction, SetGoalAction
 from agent_comms.goal_attempts import ProviderUsageTotal
 from agent_comms.goal_turn_permit import NoLaunchPermit

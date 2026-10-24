@@ -1,4 +1,5 @@
 """The real CLI dispatcher and its declaration-owned execution contract."""
+
 from __future__ import annotations
 
 import json
@@ -19,20 +20,28 @@ def isolated_cli(tmp_path):
     home = tmp_path / "home"
     home.mkdir()
     # Set HOME before the child imports declarations with path defaults. Install's
-    # default checkout is this non-Git directory, so it refuses before any install.
-    env = {**os.environ, "HOME": str(home),
-           "XDG_CONFIG_HOME": str(home / "config"),
-           "XDG_STATE_HOME": str(home / "state"),
-           "XDG_CACHE_HOME": str(home / "cache"),
-           "PYTHONPATH": str(Path(__file__).resolve().parents[1] / "src")}
+    # non-Git checkout fails with Git's own error as one JSON result before installation.
+    env = {
+        **os.environ,
+        "HOME": str(home),
+        "XDG_CONFIG_HOME": str(home / "config"),
+        "XDG_STATE_HOME": str(home / "state"),
+        "XDG_CACHE_HOME": str(home / "cache"),
+        "PYTHONPATH": str(Path(__file__).resolve().parents[1] / "src"),
+    }
 
     def run(root, *arguments):
         result = subprocess.run(
             [sys.executable, "-m", "agent_comms.cli", "--root", str(root), *arguments],
-            cwd=home, env=env, capture_output=True, text=True, timeout=20)
+            cwd=home,
+            env=env,
+            capture_output=True,
+            text=True,
+            timeout=20,
+        )
         assert result.returncode in (0, 1), result.stderr
-        # Defaults can legitimately refuse a domain precondition (notably
-        # install's non-Git checkout). Protocol TypeErrors must never be hidden.
+        # Install's non-Git checkout fails with Git's own error as one JSON result
+        # before installation. Protocol TypeErrors must never be hidden.
         assert "TypeError:" not in result.stderr, (arguments, result.stderr)
         value = json.loads(result.stdout) if result.stdout.strip() else None
         assert result.returncode != 0 or result.stdout.strip(), (arguments, result.stderr)
@@ -45,10 +54,10 @@ def isolated_cli(tmp_path):
 def test_every_registered_command_runs_through_dispatcher_with_parser_defaults(tmp_path):
     # Import once with HOME already isolated, then use the real dispatcher for
     # every declaration. Required options keep their genuine parser refusals.
-    # The default install refuses this non-Git cwd before doing any installation.
+    # Install fails with Git's own error as one JSON result before any installation.
     home = tmp_path / "home"
     home.mkdir()
-    worker = r'''
+    worker = r"""
 import io
 import json
 import sys
@@ -70,20 +79,30 @@ for declaration in CliCommand.members_with(CliCommand):
     json.loads(output.getvalue())
     visited.append(declaration.declared_name)
 print(json.dumps(visited))
-'''
-    env = {**os.environ, "HOME": str(home),
-           "XDG_CONFIG_HOME": str(home / "config"),
-           "XDG_STATE_HOME": str(home / "state"),
-           "XDG_CACHE_HOME": str(home / "cache"),
-           "PYTHONPATH": str(Path(__file__).resolve().parents[1] / "src")}
-    result = subprocess.run([sys.executable, "-c", worker, str(tmp_path)],
-                            cwd=home, env=env, capture_output=True, text=True, timeout=180)
+"""
+    env = {
+        **os.environ,
+        "HOME": str(home),
+        "XDG_CONFIG_HOME": str(home / "config"),
+        "XDG_STATE_HOME": str(home / "state"),
+        "XDG_CACHE_HOME": str(home / "cache"),
+        "PYTHONPATH": str(Path(__file__).resolve().parents[1] / "src"),
+    }
+    result = subprocess.run(
+        [sys.executable, "-c", worker, str(tmp_path)],
+        cwd=home,
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=180,
+    )
     assert result.returncode == 0, (result.stdout, result.stderr)
     assert json.loads(result.stdout) == list(CliCommand.names())
 
 
 def test_bridge_first_mro_is_refused_before_command_registration():
     with pytest.raises(TypeError, match="execute.*disagrees with CliExecution.execute"):
+
         class BridgeFirst(Send, CliCommand, declared_name=None):
             def apply(self, ctx):
                 raise AssertionError("A mismatched command must never execute")
@@ -91,6 +110,7 @@ def test_bridge_first_mro_is_refused_before_command_registration():
 
 def test_async_override_of_sync_dispatch_is_refused_at_class_creation():
     with pytest.raises(TypeError, match="execute.*disagrees with CliExecution.execute"):
+
         class AsyncDispatch(CliCommand, declared_name=None):
             async def execute(self, route, output):
                 return 0
@@ -103,13 +123,11 @@ def test_real_send_publishes_and_history_retains_it(tmp_path, isolated_cli):
     root = tmp_path / "bus"
     Bus.install(Bus.path_in(root))
     for name in ("sender", "reader"):
-        assert isolated_cli(root, "register", "--name", name,
-                            "--worktree", str(tmp_path))[0] == 0
+        assert isolated_cli(root, "register", "--name", name, "--worktree", str(tmp_path))[0] == 0
     body = "P363 real dispatcher publication"
     code, sent = isolated_cli(root, "send", "--from", "sender", "--to", "reader", "--body", body)
     assert code == 0
     code, history = isolated_cli(root, "history")
     assert code == 0
     entries = history["everything"]
-    assert any(entry["id"] == sent["id"] and entry["text"] == body
-               for entry in entries)
+    assert any(entry["id"] == sent["id"] and entry["text"] == body for entry in entries)

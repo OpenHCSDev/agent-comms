@@ -1,5 +1,4 @@
 """Real registry/turn files and the public Comms phase entrypoint."""
-from agent_comms.field_codec import TurnId
 
 import json
 import os
@@ -8,6 +7,7 @@ import pytest
 from shutil import copytree
 
 from agent_comms.errors import RelationViolationError
+from agent_comms.field_codec import TurnId
 from agent_comms.registry_store import RegistryStore
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.comms import wire
@@ -22,7 +22,9 @@ def test_copied_registry_resolves_turn_from_its_new_location(tmp_path):
         'worker', frozenset(), str(source),
         process_identity=ProcessIdentity.capture(os.getpid()),
     ))
-    original = comms.agents.begin_turn('worker', TurnId('0d8da7dc169a0c12f0a6f121b819ca38')).turn_lease.record
+    original = comms.agents.begin_turn(
+        'worker', TurnId('0d8da7dc169a0c12f0a6f121b819ca38')
+    ).turn_lease.record
     raw = json.loads((source / 'registry.json').read_text())
     reference = raw['threads']['worker']['turn_record']
     assert reference == {}
@@ -37,7 +39,8 @@ def test_copied_registry_resolves_turn_from_its_new_location(tmp_path):
 
     forged = json.loads((copied / 'registry.json').read_text())
     forged['threads']['worker']['turn_record']['lookup'] = 'wrong-identity'
+    (copied / 'registry.json').write_text(json.dumps(forged))
     with pytest.raises(RelationViolationError):
-        moved._decode(forged)
+        RegistryStore(copied / 'registry.json').read_entry('worker')
 
 

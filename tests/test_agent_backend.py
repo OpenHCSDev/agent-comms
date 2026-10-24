@@ -12,6 +12,7 @@ from types import MappingProxyType, SimpleNamespace
 import pytest
 
 import agent_comms.agent_backend as ab
+from agent_comms.field_codec import InputId
 from agent_comms.declared_family import DeclaredFamily
 from agent_comms.field_codec import FieldCodec
 from agent_comms.native_arguments import NativeArguments
@@ -314,10 +315,9 @@ def _session_lines(path: Path) -> None:
 
 
 def test_inbox_records_say_which_inputs_they_carry():
+    input_id = InputId.mint()
     request = ab.InputRequest(
-        input_id=ab.InputId("q1"), content=ab.InputContent(text="t"), when_busy=ab.SteerInputPolicy,
+        input_id=input_id, content=ab.InputContent(text="t"), when_busy=ab.SteerInputPolicy,
     )
-    assert request.carried_inputs == (ab.InputId("q1"),)
-    assert ab.SendNow((ab.InputId("q1"),)).carried_inputs == ()
-    with pytest.raises(ValueError):
-        ab.InputId("")
+    assert request.carried_inputs == (input_id,)
+    assert ab.SendNow((input_id,)).carried_inputs == ()

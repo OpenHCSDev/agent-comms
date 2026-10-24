@@ -149,7 +149,7 @@ def test_saved_colliding_creation_id_blocks_claim_write_before_append(tmp_path):
         acquire_message(reopened, "bob", Path("a.py"))
     assert reopened.bus.bus.since(0, 2) == (claimed,)
     with pytest.raises(RelationViolationError):
-        read_history(comms)
+        dict(reopened.registry.snapshot().by_lookup)
 
 
 def test_owner_can_release_acquisition_after_file_deletion(tmp_path):
@@ -235,6 +235,7 @@ import os, signal, sys
 from pathlib import Path
 sys.path.insert(0, sys.argv[2])
 sys.path.insert(0, str(Path(sys.argv[2]).parent / 'tests'))
+from agent_comms.bus import Bus
 from agent_comms.comms import wire
 from test_envelope_bus_integration import acquire_message
 """ + kill + """

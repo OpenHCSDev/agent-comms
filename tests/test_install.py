@@ -1,6 +1,5 @@
 """agent-comms install: the bus it creates or practises on, and the route to it."""
 from __future__ import annotations
-from agent_comms.field_codec import TurnId
 
 
 import json
@@ -10,6 +9,7 @@ from contextlib import closing
 from pathlib import Path
 
 import pytest
+from agent_comms.field_codec import TurnId
 from agent_comms.threads import ParkedThreadWorkState
 
 from agent_comms.active_route import ActiveRoute, read_active_route, route_new_bus

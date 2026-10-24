@@ -9,7 +9,6 @@ from pathlib import Path
 import pytest
 
 from agent_comms.acp_extension import EmptyCursorObservation, VerifiedCursorObservation
-from agent_comms.agent_backend import InputId
 from agent_comms.assignment_states import TriagePendingAssignment
 from agent_comms.comms import wire
 from agent_comms.coordination_errors import IdentityConflict
@@ -19,6 +18,7 @@ from agent_comms.cursor_owner import (
     RecordedCursor,
     UnstartedCursor,
 )
+from agent_comms.field_codec import InputId
 from agent_comms.historical_native_inputs import (
     FullHistoricalNativeInput,
     TriageHistoricalNativeInput,

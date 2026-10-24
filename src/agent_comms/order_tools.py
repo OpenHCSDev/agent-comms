@@ -18,7 +18,10 @@ from agent_comms.todos import (
     OrderProgress,
     PlainText,
     ProgressRead,
-    ReviewedHeadVerdict,
+    HeadReviewOrder,
+    HeadReviewRecord,
+    HeadVerdict,
+    NoHeadOrder,
     ServeTodo,
     StrikeReason,
     Todo,
@@ -33,6 +36,7 @@ from .field_codec import FieldCodec, WireName
 from .goal_actions import CreateProblemGoalAction, OrderGoalAction
 from .goals import Goal, OrderCheck
 from .heartbeat_frame import HeartbeatFrame
+from .head_review import PullRequestHead
 from .order_story import FleetStory, OrderStory
 from .order_work import OrderWork
 from .plan_phases import OrderPhase
@@ -151,26 +155,31 @@ class CommsVerdictTool(CommsChangeProblemTool):
     ]
 
 
+@dataclass(frozen=True)
+class HeadReviewed(ToolResult):
+    record: HeadReviewRecord
+
+
 @dataclass(frozen=True, kw_only=True)
-class CommsHeadVerdictTool(ThreadToolRequest):
-    """One reviewed commit judges the holder's whole diff: the commander, or any fork of it,
-    accepts an order's exact PR head, so every edit made before it is judged in one verdict and
-    the head carries agent-comms/review for the merge queue."""
-
-    label = "Accept an order's PR head"
+class HeadVerdictTool:
+    label = "Review a PR head"
     description = (
-        "Accept the exact pull request head commit an order's holder delivered: one verdict "
-        "judges every edit made before it and posts agent-comms/review on that commit. Quote "
-        "4+ words of the order it carries out."
+        "Record acceptance or rejection of an exact repository/PR/head and post "
+        "agent-comms/review. An order link is optional; linked reviews quote 4+ "
+        "words of the order, and rejection strikes its holder in the same write."
     )
-    problem: Annotated[str, *tool_field("Problem ID")]
-    operation: Annotated[ReviewedHeadVerdict, *tool_field("Accepted PR-head verdict")]
+    request: Annotated[PullRequestHead, *tool_field("Repository, PR number and reviewed head")]
+    operation: Annotated[HeadVerdict, *tool_field("Accepted or rejected head verdict")]
+    order: Annotated[HeadReviewOrder, *tool_field("Optional held-order link")] = NoHeadOrder()
 
-    def apply(self, comms: Comms, caller: ThreadCaller) -> TodoChanged:
-        reviewer = caller.identity(comms)
-        comms.goals.todos.get(self.problem).require_commander(reviewer)
-        todo = self.operation.reviewed(comms.goals, self.problem, reviewer)
-        return TodoChanged(todo, todo.strike_count)
+    def apply(self, comms: Comms, caller: ThreadCaller) -> HeadReviewed:
+        actor = caller.head_review_actor(comms, self.request, self.order)
+        return HeadReviewed(self.operation.reviewed(comms.goals, self.request, actor, self.order))
+
+
+@dataclass(frozen=True, kw_only=True)
+class CommsHeadVerdictTool(HeadVerdictTool, ThreadToolRequest):
+    """The native/CLI member of the shared authenticated head-review operation."""
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -279,7 +288,7 @@ class CommsStandingRulesTool(ThreadToolRequest):
         return StandingRulesRead(
             tuple(rule.line() for rule in broken
                   if rule.broke_after(self.after) and rule not in rejected)
-            + tuple(rule.rejected_line() for rule in broken
+            + tuple(rule.rejected_line(rejected[rule]) for rule in broken
                     if rule.broke_after(self.after) and rule in rejected))
 
 

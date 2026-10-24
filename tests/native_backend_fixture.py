@@ -14,7 +14,8 @@ from unittest.mock import patch
 
 import agent_comms.agent_events as events
 import agent_comms.backend as backend
-from agent_comms.agent_backend import InputContent, InputId, InputRequest, TurnInbox, SteerInputPolicy
+from agent_comms.agent_backend import InputContent, InputRequest, TurnInbox, SteerInputPolicy
+from agent_comms.field_codec import InputId
 from agent_comms.comms import wire
 from agent_comms.fresh_private_session import create_fresh_private_session
 from agent_comms.child_process import BoundedRun, join_retirement
@@ -185,7 +186,7 @@ manager.appendMessage({role:'assistant',content:[{type:'text',text:'Original sav
                 self.observed.append(event)
                 if followup is not None and isinstance(event, events.InputStarted):
                     queue.put_nowait(InputRequest(
-                        input_id=InputId("queued"),
+                        input_id=InputId.mint(),
                         content=InputContent(text=followup),
                         when_busy=SteerInputPolicy,
                     ))

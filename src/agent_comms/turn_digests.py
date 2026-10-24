@@ -184,6 +184,7 @@ class TurnDigestRead(TranscriptRead[ThreadTurns]):
 
 @dataclass(frozen=True)
 class OrderRead[Result](TranscriptRead[Result]):
+    bound: TurnsSince
     todo: Todo
 
     @classmethod
@@ -198,19 +199,22 @@ class OrderRead[Result](TranscriptRead[Result]):
     def for_orders(
         cls, root: Path, snapshot: RegistrySnapshot, todos: Iterable[Todo]
     ) -> Iterator[Self]:
-        """Read these orders against their captured roster, without reopening the registry."""
+        """Read these orders against their captured roster and canonical review cut."""
+        from .todos import TodoStore
+
+        store = TodoStore(root)
         for todo in todos:
             assignment = todo.held()
             holder = snapshot.require(assignment.owner)
             if holder.incarnation != assignment.owner_identity:
                 raise ToolRefusedError(f"Order {todo.id} holder incarnation no longer exists")
             yield cls(
-                root, holder, TurnsSince(todo.order.checked().at.recorded_at("An order")), todo
+                root, holder, TurnsSince(store.unjudged_since(todo)), todo
             )
 
     def edits_from_turns(self, turns: tuple[TurnDigest, ...]) -> tuple[EditCall, ...]:
         judged = frozenset(self.todo.judged_calls)
-        since = self.todo.unjudged_since
+        since = self.bound.at
         edits = {edit.id: edit for turn in reversed(turns)
                  for event in turn.events
                  for edit in event.edit_calls(self.thread.name, self.todo.id, since)
@@ -225,7 +229,7 @@ class OrderEditsRead(OrderRead[tuple[EditCall, ...]]):
         return self.edits_from_turns(turns)
 
     def from_external(self, source: StoreRead) -> tuple[EditCall, ...]:
-        return tuple(source.unjudged(self.todo))
+        return tuple(source.unjudged(self.todo, self.bound.at))
 
 
 class OrderEditCountRead(OrderRead[int]):
@@ -239,14 +243,12 @@ class OrderEditCountRead(OrderRead[int]):
         return len(self.edits_from_turns(turns))
 
     def from_external(self, source: StoreRead) -> int:
-        return source.unjudged_count(self.todo)
+        return source.unjudged_count(self.todo, self.bound.at)
 
 
 @dataclass(frozen=True)
 class OrderToolCallCountRead(OrderRead[int]):
     """Original tool starts since a captured head/order cut, without loading external bodies."""
-
-    bound: TurnsSince
 
     def from_turns(self, turns: tuple[TurnDigest, ...]) -> int:
         return len(OrderWork.read(

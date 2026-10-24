@@ -1,8 +1,8 @@
 """Read real persisted notification assignments without scheduling a model."""
-from agent_comms.field_codec import TurnId
 from dataclasses import replace
 from test_coordinated_runtime import _root, tmp_path  # noqa: F401
 from conftest import installed_comms
+from agent_comms.field_codec import TurnId
 from agent_comms.threads import Thread
 
 
@@ -59,7 +59,9 @@ def test_individual_view_keeps_alias_goal_and_active_owner_semantics(tmp_path): 
         assert individual.title == view.presentation.title
         assert individual.summary == view.presentation.summary
         assert individual.read_identity.thread.name == view.thread.name
-    lease = comms.agents.begin_turn('renamed', TurnId('6d520fcb678df3e43b0fa663d3e618be')).turn_lease
+    lease = comms.agents.begin_turn(
+        'renamed', TurnId('6d520fcb678df3e43b0fa663d3e618be')
+    ).turn_lease
     comms.agents.set_activity('renamed', ActivityState.IDLE)
     assert comms.views.thread_presentations(('beta',)).require('beta').status.working
     state = comms.registry.require('renamed').turn_state

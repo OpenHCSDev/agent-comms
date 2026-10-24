@@ -12,6 +12,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, ClassVar
 
 from agent_comms.declared_family import DeclaredFamily
+from agent_comms.field_codec import Id128, MessageId, NominalSpelling, NominalText
 from agent_comms.phase_evidence import (
     AllEvidence,
     BusStorageAbsent,
@@ -147,6 +148,7 @@ class RemainingSlopPhase(PlanPhase, declared_name=None):
 
 class Id128NominalPhase(PlanPhase, declared_name=None):
     plan = Id128NominalPlan
+    paths: ClassVar[tuple[str, ...]] = ("src", ":!src/agent_comms/skills/")
 
 
 class RetainedStorePhase(CommanderNativePhase):
@@ -174,7 +176,10 @@ class ReviewQueuePhase(CommanderNativePhase):
     """
 
     after = (RecordPlanePhase,)
-    evidence = RulesetGates()
+    evidence = AllEvidence((
+        ClassDeclared("HeadReviewRecord", ("src/agent_comms/todos.py",)),
+        RulesetGates(),
+    ))
 
 
 COMMANDER = "src/agent_comms/commander/"
@@ -801,17 +806,10 @@ class NominalIdTypePhase(Id128NominalPhase):
 
     evidence = AllEvidence(
         (
-            ClassDeclared("NominalText", ("src/agent_comms/field_codec.py",)),
-            ClassDeclared("NominalSpelling", ("src/agent_comms/field_codec.py",)),
-            ClassDeclared("Id128", ("src/agent_comms/field_codec.py",)),
-            ClassDeclared("MessageId", ("src/agent_comms/field_codec.py",)),
-            ClassDeclared("ClaimId", ("src/agent_comms/field_codec.py",)),
-            ClassDeclared("AssignmentGeneration", ("src/agent_comms/field_codec.py",)),
-            ClassDeclared("TurnId", ("src/agent_comms/field_codec.py",)),
-            ClassDeclared("GoalId", ("src/agent_comms/field_codec.py",)),
-            ClassDeclared("RootId", ("src/agent_comms/field_codec.py",)),
-            ClassDeclared("ThreadLookup", ("src/agent_comms/field_codec.py",)),
-            ClassDeclared("InputId", ("src/agent_comms/field_codec.py",)),
+            *(ClassDeclared(kind.__name__, ("src/agent_comms/field_codec.py",))
+              for kind in (
+                  NominalText, NominalSpelling, Id128, MessageId, *Id128.__subclasses__(),
+              )),
             PatternAbsent(
                 r"def mint\(cls(, text: str)?\) -> str:", ("src/agent_comms/field_codec.py",)
             ),
@@ -835,11 +833,11 @@ class ClaimIdsPhase(Id128NominalPhase):
             PatternAbsent(
                 r"\b(nonce|operation_id|generation): "
                 r"(str\b|Id128\b|Annotated\[(str|Id128)\b)",
-                ("src", ":!src/agent_comms/skills/"),
+                Id128NominalPhase.paths,
             ),
             PatternAbsent(
                 r"Id128Text\.decode\(self\.(nonce|operation_id)\)",
-                ("src", ":!src/agent_comms/skills/"),
+                Id128NominalPhase.paths,
             ),
         )
     )
@@ -854,11 +852,11 @@ class MessageIdsPhase(Id128NominalPhase):
             PatternAbsent(
                 r"\b(message_id|source_message_id): "
                 r"(str\b|Id128\b|Annotated\[(str|Id128)\b)",
-                ("src", ":!src/agent_comms/skills/"),
+                Id128NominalPhase.paths,
             ),
             PatternAbsent(
                 r"Annotated\[str, *MessageIdText\]",
-                ("src", ":!src/agent_comms/skills/"),
+                Id128NominalPhase.paths,
             ),
         )
     )
@@ -873,11 +871,11 @@ class TurnIdsPhase(Id128NominalPhase):
             PatternAbsent(
                 r"\b(turn_id|finished_turn_id|report_turn_id|current_turn_id)"
                 r": (str\b|Id128\b|Annotated\[(str|Id128)\b)",
-                ("src", ":!src/agent_comms/skills/"),
+                Id128NominalPhase.paths,
             ),
             PatternAbsent(
                 r"Id128Text\.(decode|from_text)\((self\.)?turn_id\)",
-                ("src", ":!src/agent_comms/skills/"),
+                Id128NominalPhase.paths,
             ),
         )
     )
@@ -889,7 +887,7 @@ class GoalIdsPhase(Id128NominalPhase):
     after = (NominalIdTypePhase,)
     evidence = PatternAbsent(
         r"\b(goal_id|original_goal_id): (str\b|Id128\b|Annotated\[(str|Id128)\b)",
-        ("src", ":!src/agent_comms/skills/"),
+        Id128NominalPhase.paths,
     )
 
 
@@ -902,15 +900,15 @@ class RootIdsPhase(Id128NominalPhase):
             PatternAbsent(
                 r"\b(wire_root_id|root_id|lookup|recipient_lookup): "
                 r"(str\b|Id128\b|Annotated\[(str|Id128)\b)",
-                ("src", ":!src/agent_comms/skills/"),
+                Id128NominalPhase.paths,
             ),
             PatternAbsent(
                 r"Id128Text\.decode\((self\.)?(owner\.)?(wire_root_id|root_id|lookup)\)",
-                ("src", ":!src/agent_comms/skills/"),
+                Id128NominalPhase.paths,
             ),
             PatternAbsent(
                 r"FieldCodec\.decode\(Annotated\[str, *Id128Text\]",
-                ("src", ":!src/agent_comms/skills/"),
+                Id128NominalPhase.paths,
             ),
         )
     )
@@ -925,11 +923,11 @@ class InputIdsPhase(Id128NominalPhase):
             PatternAbsent(
                 r"\b(input_id|accepted_input_id|native_id): "
                 r"(str\b|Id128\b|Annotated\[(str|Id128)\b)",
-                ("src", ":!src/agent_comms/skills/"),
+                Id128NominalPhase.paths,
             ),
             PatternAbsent(
                 r"Id128Text\.(decode|from_text)\((self\.)?(input_id|native_id)\)",
-                ("src", ":!src/agent_comms/skills/"),
+                Id128NominalPhase.paths,
             ),
         )
     )

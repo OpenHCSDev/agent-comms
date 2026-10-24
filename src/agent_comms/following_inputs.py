@@ -6,6 +6,7 @@ from dataclasses import dataclass, field
 from functools import partial
 from typing import TYPE_CHECKING
 
+from .field_codec import InputId
 from .acp_extension import LiveQueueScope
 from .agent_backend import TurnInbox
 from .coordinator import Coordination
@@ -42,7 +43,7 @@ class FollowingInputs:
     async def open(self, session: TrackedTurnSession) -> None:
         return None
 
-    async def started(self, input_id: str) -> AcceptedFollowingInput:
+    async def started(self, input_id: InputId) -> AcceptedFollowingInput:
         raise AssertionError("A turn without an inbox cannot start a following input")
 
     async def retired(self, event: InputRefused) -> None:
@@ -65,7 +66,7 @@ class OwnerFollowingInputs(FollowingInputs):
             if await self.pass_on(turns, input_id):
                 return  # The next turn owns the remaining live acceptances.
 
-    async def pass_on(self, turns: TurnRunner, input_id: str) -> bool:
+    async def pass_on(self, turns: TurnRunner, input_id: InputId) -> bool:
         inputs, session_id = self.inputs, self.session_id
         item = inputs.state(session_id).queued.get(input_id)
         try:
@@ -106,7 +107,7 @@ class OwnerFollowingInputs(FollowingInputs):
             after_seq=session.prompt_send_boundary.following_after_seq,  # type: ignore[union-attr]
         )
 
-    async def started(self, input_id: str) -> AcceptedFollowingInput:
+    async def started(self, input_id: InputId) -> AcceptedFollowingInput:
         source = self.inputs.state(self.session_id).following[input_id]
         await source.started(self.inputs, self.session_id, self.scope)
         await self.ready(self.inputs, self.session_id)

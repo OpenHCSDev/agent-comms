@@ -1,9 +1,9 @@
 """Current registration declarations, incarnation and saved relationship ownership."""
-from agent_comms.field_codec import TurnId
 
 from typing import Annotated
 from dataclasses import dataclass, replace
 
+from agent_comms.field_codec import TurnId
 from agent_comms.session_file import RegistrySessionLocation
 from agent_comms import field_codec
 from agent_comms.comms import wire

@@ -4,7 +4,7 @@
 
 import pytest
 
-from agent_comms.field_codec import FieldCodec
+from agent_comms.field_codec import FieldCodec, TurnId
 from agent_comms.input_disposition import InputDispositions
 from agent_comms.native_session_files import NativeSessionFiles
 from agent_comms.native_session_reopen import NativeSessionIdentity
@@ -70,9 +70,20 @@ def test_plural_originals_preserve_order_and_bind_without_partial_transition(tmp
     for key, text in zip(keys, ("first", "second"), strict=True):
         inputs.record(key, seq=None, owner=owner, claim_scope=1, target=owner, text=text)
     assert tuple(row.source_text for row in stored_inputs(inputs.root).originals(keys)) == ("first", "second")
-    assert inputs.bind(keys[1], claim_scope=1, turn_id="other", native_id="a" * 32, text="second")
+    assert inputs.bind(
+        keys[1],
+        claim_scope=1,
+        turn_id=TurnId('d9298a10d1b0735837dc4bd85dac641b'),
+        native_id="a" * 32,
+        text="second",
+    )
     before = stored_inputs(inputs.root)
-    assert not inputs.bind_originals(keys, claim_scope=1, turn_id="turn", native_id="b" * 32,
-                                     text="first\n\nsecond")
+    assert not inputs.bind_originals(
+        keys,
+        claim_scope=1,
+        turn_id=TurnId('9b473845f684444f80a26586ae298d2b'),
+        native_id="b" * 32,
+        text="first\n\nsecond",
+    )
     assert stored_inputs(inputs.root) == before
     assert stored_inputs(inputs.root).lookup(keys[0]).accepts_reservation

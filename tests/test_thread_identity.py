@@ -1,5 +1,4 @@
 """S5 identity boundaries: process, turn, provenance and saved-data preservation."""
-from agent_comms.field_codec import TurnId
 
 
 import json
@@ -14,7 +13,7 @@ from agent_comms.child_process import NoProcess, ProcessIdentity
 from agent_comms.comms import wire
 from conftest import installed_comms
 from agent_comms.errors import RelationViolationError
-from agent_comms.field_codec import FieldCodec
+from agent_comms.field_codec import FieldCodec, TurnId
 from agent_comms.read_basis import Conversation
 from agent_comms.turn_lease import NoTurnLease
 from agent_comms.read_ledger import ReadDocument
@@ -71,7 +70,9 @@ def test_metadata_and_turns_do_not_replace_process_owner(tmp_path):
     identity = before.owner_identity("owner")
     registry.register(replace(owner, title=GivenThreadText("new metadata")))
     registry.heartbeat("owner")
-    leased, generation = registry.lease_local_turn("owner", TurnId('9b473845f684444f80a26586ae298d2b'))
+    leased, generation = registry.lease_local_turn(
+        "owner", TurnId('9b473845f684444f80a26586ae298d2b')
+    )
     assert generation == identity.generation
     assert leased.require_turn_lease().identity == TurnIdentity(identity.incarnation, 1)
     assert registry.snapshot().owner_identity("owner") == identity
@@ -137,7 +138,9 @@ def test_exact_turn_identity_survives_alias_but_not_reused_turn_id(tmp_path):
     assert first.identity.incarnation == comms.registry.require("owner").incarnation
     comms.registry.rename("owner", "renamed")
     assert isinstance(comms.agents.finish_turn(first), FinishedTurnFence)
-    second = comms.agents.begin_turn("renamed", TurnId('7ad47c54939ef72323893e6c952c5f3a')).turn_lease
+    second = comms.agents.begin_turn(
+        "renamed", TurnId('7ad47c54939ef72323893e6c952c5f3a')
+    ).turn_lease
     assert second.identity.generation == first.identity.generation + 1
     assert isinstance(comms.agents.finish_turn(first), NoFinishedTurn)
     assert isinstance(comms.agents.finish_turn(second), FinishedTurnFence)

@@ -16,8 +16,8 @@ from .owner_requests import OwnerRequestId, RequestDirective
 from .projection_source import ProjectionSource
 from .thread_identity import (
     RecordedThreadIncarnation,
-    ThreadIncarnation,
     RegisteredTurn,
+    ThreadIncarnation,
     TurnIdentity,
     UserThreadRole,
 )

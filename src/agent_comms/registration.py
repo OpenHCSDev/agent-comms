@@ -11,6 +11,7 @@ from typing import TYPE_CHECKING, Concatenate
 from .catalog_store import ChannelCatalog
 from .child_process import NoProcess, ProcessIdentity
 from .errors import RelationViolationError
+from .field_codec import TurnId
 from .goal_history import GoalHistoryEntry, GoalHistoryStore
 from .native_input_owner import RegistryOwner
 from .private_registry_guard import PrivateRegistryGuard
@@ -31,9 +32,9 @@ from .thread_text import ForkedParent
 from .threads import Thread
 
 if TYPE_CHECKING:
+    from .agent_backend import RuntimeLocation
     from .goal_management import Goals
     from .selected_participant import SelectedParticipant
-    from .agent_backend import RuntimeLocation
 
 _DEFAULT_PRESENCE = ProcessThreadStatus()
 
@@ -321,7 +322,7 @@ class Registration:
         return owner.thread, owner.claimed_generation
 
     def lease_live_turn_with_claim(
-        self, expected: Thread, turn_id: str, *, expected_generation: int
+        self, expected: Thread, turn_id: TurnId, *, expected_generation: int
     ) -> tuple[Thread, int]:
         """Claim a turn against the input generation, allowing unrelated metadata changes."""
         Thread.require_declaration(expected)
@@ -337,7 +338,7 @@ class Registration:
     def lease_live_turn_with_generation(
         self,
         expected: Thread,
-        turn_id: str,
+        turn_id: TurnId,
         *,
         expected_owner_generation: int,
         routing: TurnRouting | None = None,
@@ -356,7 +357,7 @@ class Registration:
             return result
 
     def lease_local_turn(
-        self, name: str, turn_id: str, *, routing: TurnRouting | None = None
+        self, name: str, turn_id: TurnId, *, routing: TurnRouting | None = None
     ) -> tuple[Thread, int]:
         """Atomic local begin-turn, never reviving a stopped or replaced owner."""
         turn = RegisteredTurn(turn_id)

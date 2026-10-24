@@ -14,6 +14,7 @@ from functools import partial
 from typing import TYPE_CHECKING, Generic, Self, TypeVar
 
 
+from .agent_backend import InputRequest
 from .assignment_states import DeferredAssignment, DeliveredAssignment
 from .child_process import ProcessIdentity
 from .controller import Controller
@@ -23,7 +24,7 @@ from .coordination_errors import IdentityConflict, RequestRefused, StaleRevision
 from .coordination_session import ReadNativeCoordinationSession
 from .coordinator import Coordination
 from .errors import RelationViolationError
-from . import field_codec
+from .field_codec import InputId
 from .goals import GoalDeclaration, NoGoal
 from .image_input import ImageInput
 from .input_attempt import InputAttempt, ReservedInput
@@ -83,7 +84,7 @@ class QueuedInput:
     text: str
     echo: bool
     context: QueuedInputContext
-    input_id: str
+    input_id: InputId
     prompt: str
     images: tuple[ImageInput, ...] = ()
     controller: Controller | None = None
@@ -117,7 +118,7 @@ class QueuedInput:
         images: tuple[ImageInput, ...],
         controller: Controller | None,
         ownership: ExitStack,
-        input_id: str | None = None,
+        input_id: InputId | None = None,
         origin: InputOrigin = UnattributedInputOrigin(),
     ) -> tuple[Self, InputAttempt]:
         """Called under the registry lock; acceptance follows the durable reservation."""
@@ -133,7 +134,7 @@ class QueuedInput:
             text or prompt or "[image prompt]",
             echo,
             context,
-            field_codec.InputId.mint() if input_id is None else input_id,
+            InputId.mint() if input_id is None else input_id,
             prompt,
             images,
             controller,
@@ -164,7 +165,7 @@ class QueuedInput:
     async def reserve(
         cls, inputs: InputDrain, session_id: str, name: str, *, text: str, prompt: str,
         echo: bool, images: tuple[ImageInput, ...], controller: Controller | None,
-        input_id: str | None = None,
+        input_id: InputId | None = None,
         origin: InputOrigin = UnattributedInputOrigin(),
     ) -> AsyncIterator[InputReservation[Self]]:
         """Serialize local queue placement; reserve durable input in a worker."""
@@ -191,14 +192,12 @@ class QueuedInput:
         inbox: TurnInbox, content: InputContent,
     ) -> None:
         """The accepted input owns transfer into this turn's existing native queue."""
-        from .agent_backend import InputId, InputRequest
-
         inputs.require_inbox(session_id, inbox)
         source = self.source()
         inputs.state(session_id).following[self.input_id] = source
         inputs.state(session_id).queued[self.input_id] = self
         inbox.put_nowait(InputRequest(
-            input_id=InputId(self.input_id), content=content, when_busy=source.when_busy,
+            input_id=self.input_id, content=content, when_busy=source.when_busy,
         ))
 
     async def dispatch(self, turns: TurnRunner, session_id: str, name: str) -> None:
@@ -375,7 +374,7 @@ class DeliveredInput(QueuedInput):
                         reserved.append((
                             cls(
                                 text=row.source_text, echo=False, context=context,
-                                input_id=field_codec.InputId.mint(), prompt=rendered.text,
+                                input_id=InputId.mint(), prompt=rendered.text,
                                 bus_key=key, message=message, assignment=paused,
                             ),
                             InputContent(text=rendered.text, contributions=rendered.contributions),
@@ -548,7 +547,7 @@ class InitialInput(QueuedInput):
     async def run(
         cls, inputs: InputDrain, session_id: str, thread_name: str, task: str, *,
         images: tuple[ImageInput, ...] = (), display_text: str | None = None,
-        input_id: str | None = None,
+        input_id: InputId | None = None,
         origin: InputOrigin = UnattributedInputOrigin(),
     ) -> None:
         """Own original reservation, dispatch and unbound retirement as one lifetime."""

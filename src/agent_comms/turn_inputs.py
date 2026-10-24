@@ -14,16 +14,8 @@ from agent_comms.pi_payloads import RequestId
 
 from . import agent_events as events
 from . import pi_commands as commands
-from .agent_backend import (
-    ClearQueue,
-    InputId,
-    InputRequest,
-    SendNow,
-    TurnInbox,
-    TurnInboxItem,
-    UseSettings,
-)
-from . import field_codec
+from .agent_backend import ClearQueue, InputRequest, SendNow, TurnInbox, TurnInboxItem, UseSettings
+from .field_codec import InputId
 from .locked_store import RegistryFile
 from .maintenance_barrier import MaintenanceBarrier
 from .mro_dispatch import MroDispatch, handles
@@ -135,7 +127,7 @@ class InputForwarding(MroDispatch):
 
     async def queued(self, input_ids: tuple[InputId, ...]) -> tuple[str, ...]:
         """A native prompt acknowledgement proves it reached the child's queue."""
-        selected = frozenset(input_id.value for input_id in input_ids)
+        selected = frozenset(input_ids)
         while True:
             self.changed.clear()
             candidates = tuple(
@@ -195,8 +187,8 @@ class InputForwarding(MroDispatch):
 
     @handles(InputRequest)
     async def place(self, item: InputRequest, session: TurnSession) -> bool:
-        public_id = item.input_id.value
-        native_id = field_codec.InputId.mint()
+        public_id = item.input_id
+        native_id = InputId.mint()
         text = item.content.text
         command = commands.Prompt(
             id=RequestId(public_id),
@@ -221,7 +213,7 @@ class InputForwarding(MroDispatch):
 
     def refuse(self, session: TurnSession, input_ids: tuple[InputId, ...]) -> None:
         for input_id in input_ids:
-            session.rejected_commands.append(events.FollowingInputRefused(id=input_id.value))
+            session.rejected_commands.append(events.FollowingInputRefused(id=input_id))
             session.rejected_signal.set()
 
     def mark_started(self, session: TurnSession, payload: MessageStart) -> tuple[bool, str | None]:

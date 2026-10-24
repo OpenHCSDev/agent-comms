@@ -1,6 +1,6 @@
 """A new history declaration crosses real current and retained-source boundaries."""
-from agent_comms.field_codec import TurnId
 
+from agent_comms.field_codec import TurnId
 from agent_comms.historical_views import HistoryView
 from agent_comms.message_page import PageBounds
 from agent_comms.read_basis import ChannelDisplayScope, NoDisplaySelection

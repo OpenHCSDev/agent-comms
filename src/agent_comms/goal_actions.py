@@ -23,13 +23,15 @@ from agent_comms.goals import (
     UnorderedGoalOrder,
 )
 from agent_comms.input_disposition import InputDispositions
-from agent_comms.todos import PendingProblemOrder, SendBackVerdict, Todo, TodoOperation
+from agent_comms.todos import (
+    PendingProblemOrder, RecordOrderHeadVerdict, SendBackVerdict, Todo, TodoCommand, TodoOperation,
+)
 
 from .change_report import FileLine, NoSourceReference
 from .child_process import ProcessIdentity
 from .command import Command
 from .declared_family import DeclaredFamily
-from .errors import RelationViolationError
+from .errors import OverdueHeadRefusalError, RelationViolationError
 from .goal_mentions import bind_goal_mentions
 from .goal_states import (
     ActiveGoal,
@@ -397,10 +399,10 @@ class CompletedGoalAction(CompletionGoalAction, ModelInvocable, OwnerInvocable, 
 class HeldOrderGoalAction(GoalAction[Goal], RuntimeInvocable):
     """A Todo operation on a held order and the revision of the holder's Goal, in one write."""
     problem: str
-    operation: TodoOperation
+    operation: TodoCommand
 
-    @abstractmethod
-    def revised(self, goal: Goal, ctx: GoalActionContext) -> Goal: ...
+    def revised(self, goal: Goal, ctx: GoalActionContext) -> Goal:
+        return goal
 
     def prepare(self, goals, name, actor):
         ctx = GoalActionContext(goals, goals.registry.require(name), actor)
@@ -420,8 +422,10 @@ class HeldOrderGoalAction(GoalAction[Goal], RuntimeInvocable):
 class SentBackOrderGoalAction(HeldOrderGoalAction):
     operation: SendBackVerdict
 
-    def revised(self, goal: Goal, ctx: GoalActionContext) -> Goal:
-        return goal
+
+@dataclass(frozen=True, kw_only=True)
+class HeadReviewedOrderGoalAction(HeldOrderGoalAction):
+    operation: RecordOrderHeadVerdict
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -543,8 +547,19 @@ class ProblemOrderGoalAction(GoalAction[Goal], RuntimeInvocable):
                            ProblemGoalOrder.text, goal.id, revision, ctx.thread,
                            ctx.goals.registry.snapshot()))
 
+    def prepare(self, goals: Goals, name: str, actor: type) -> ProblemOrderGoalAction:
+        self.require_reviewed(goals)
+        return super().prepare(goals, name, actor)
+
+    def require_reviewed(self, goals: Goals) -> None:
+        """Read remote review facts before the registry lock or child allocation."""
+        from .standing_rules import OrderRefusingStandingRule
+
+        if refused := OrderRefusingStandingRule.refusals(goals, self.commander):
+            raise OverdueHeadRefusalError("Review overdue heads before sending new orders:\n" + "\n".join(refused))
+
     def require_ready(self, ctx: GoalActionContext) -> None:
-        """Refuse an invalid request before goal reservation or allocating a child."""
+        """Recheck local request facts before goal reservation or allocating a child."""
         self.require_sendable()
         commander = ctx.goals.registry.require(self.commander)
         ctx.goals.todos.owner_request(self.request).require_open(commander.incarnation)

@@ -7,7 +7,6 @@ the owner's event loop with the wire, bus and registry locks held.
 """
 
 from __future__ import annotations
-from agent_comms.field_codec import TurnId
 
 from agent_comms.context_store import UNREAD_CONTEXT
 
@@ -20,6 +19,7 @@ from dataclasses import replace
 
 import pytest
 
+from agent_comms.field_codec import TurnId
 from agent_comms.reason_codes import NoReasonCode
 from agent_comms.attempt_start import AttemptStart
 from agent_comms.bus import BusReader
@@ -65,12 +65,18 @@ def record_context(comms: Comms, name: str, generation: int) -> None:
         7,
         2,
     )
-    comms.contexts.record_after(UNREAD_CONTEXT, ContextManifest(
-        owner.incarnation,
-        RecordedContextTurn(RegisteredTurn(TurnId(f"{generation:032x}")), TurnIdentity(owner.incarnation, generation)),
-        (segment,),
-        "pi.estimateTokens",
-    ))
+    comms.contexts.record_after(
+        UNREAD_CONTEXT,
+        ContextManifest(
+            owner.incarnation,
+            RecordedContextTurn(
+                RegisteredTurn(TurnId(f"{generation:032x}")),
+                TurnIdentity(owner.incarnation, generation),
+            ),
+            (segment,),
+            "pi.estimateTokens",
+        ),
+    )
 
 
 @pytest.fixture

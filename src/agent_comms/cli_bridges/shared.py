@@ -904,9 +904,8 @@ class CliBridge(ExternalRuntime, DeliversInput, Generic[BridgeOptions]):
     async def show_sent(self, result: SendResult) -> None:
         """Display a completed send without publishing it again."""
 
-    @abstractmethod
     async def report_failure(self, text: str) -> None:
-        """Report a bridge failure through the CLI's visible output."""
+        self.log(text)
 
     def sent_text(self, result: SendResult) -> str:
         message = result.message
@@ -1183,9 +1182,6 @@ class LineMonitorBridge(TranscriptConfirmsDelivery, TranscriptBridge[Options]):
 
     async def show_sent(self, result: SendResult) -> None:
         print(self.encode(self.sent_text(result)), flush=True)
-
-    async def report_failure(self, text: str) -> None:
-        self.log(text)
 
 
 def run_bridge(bridge_type: type[CliBridge[BridgeOptions]], options: BridgeOptions) -> None:

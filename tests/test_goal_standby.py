@@ -1,5 +1,4 @@
 """Declared goal dependencies control scheduling without changing legacy registry rows."""
-from agent_comms.field_codec import TurnId
 
 import os
 from dataclasses import replace
@@ -7,6 +6,7 @@ from dataclasses import replace
 import pytest
 
 from agent_comms.child_process import ProcessIdentity
+from agent_comms.field_codec import TurnId
 from agent_comms.goal_actions import (
     EditGoalAction,
     GoalPrecondition,

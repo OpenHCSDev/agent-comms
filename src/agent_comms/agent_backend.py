@@ -25,6 +25,7 @@ from types import MappingProxyType
 from typing import TYPE_CHECKING, ClassVar, Self
 
 from .declared_family import DeclaredFamily
+from .field_codec import InputId
 from .pi_counts import PiCount
 from .pi_vocabulary import CompactionReason, ThinkingLevelField
 from .send_outcome import SendBoundary
@@ -108,17 +109,6 @@ class RuntimeLocation(DeclaredFamily, affix="Runtime"):
 # ---------------------------------------------------------------------------
 # Records Core owns. Every backend converts its runtime's values to these.
 # ---------------------------------------------------------------------------
-
-
-@dataclass(frozen=True)
-class InputId:
-    """Core's identity for one input; a durable backend uses it as its request ID."""
-
-    value: str
-
-    def __post_init__(self) -> None:
-        if type(self.value) is not str or not self.value:
-            raise ValueError("An input ID must be a nonempty string")
 
 
 class BusyInputPolicy(DeclaredFamily, affix="InputPolicy"):

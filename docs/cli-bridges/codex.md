@@ -54,8 +54,7 @@ journalctl --user -u codex-comms-inbox@ID -n 30 --no-pager
 The template is `~/.config/systemd/user/codex-comms-inbox@.service`. Each instance
 uses its session ID to select
 `~/.local/state/codex-comms-inbox/ID/delivery.sqlite3`, containing that session's
-binding and message attempts. Install retires the superseded single-instance unit
-during maintenance.
+binding and message attempts.
 
 For another existing conversation, supply its own `--bus-thread` and `--session`.
 Watch registers the Core thread if missing; it never creates a Codex conversation.

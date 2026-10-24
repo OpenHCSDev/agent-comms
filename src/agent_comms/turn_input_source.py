@@ -7,6 +7,7 @@ from contextlib import ExitStack
 from dataclasses import dataclass, replace
 from typing import TYPE_CHECKING, ClassVar
 
+from .field_codec import InputId
 from .agent_backend import BusyInputPolicy, SteerInputPolicy
 from .channel_input_batch import InputBatch, SingleInputBatch
 from .messages import Message
@@ -24,7 +25,7 @@ if TYPE_CHECKING:
 
 @dataclass(frozen=True, kw_only=True)
 class TurnInputSource(StartedInput, ABC):
-    accepted_id: str | None
+    accepted_id: InputId | None
     goal_permission: TurnGoalPermission
     bypasses_goal_permit: ClassVar[bool] = False
     origins: ClassVar[tuple[Message, ...]] = ()
@@ -119,7 +120,8 @@ class OriginalTurnInput(TurnInputSource):
         return super().valid_keys(text) or (self.batch.allows_multiple and text == self.prompt)
 
     def reserve(
-        self, dispositions: InputDispositions, owner: Thread, turn: RegisteredTurn, claim_scope: int,
+        self, dispositions: InputDispositions, owner: Thread, turn: RegisteredTurn,
+        claim_scope: int,
         *, ownership: ExitStack,
     ) -> OriginalTurnInput:
         """Every original uses the same durable input authority before native preparation.
