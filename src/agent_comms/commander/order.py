@@ -620,7 +620,6 @@ class Commander(CommanderContext):
         if not any(stage in caught for stage in STAGES):
             sys.exit(f'Refused: --caught must say who caught it and at which stage {STAGES}, e.g. "{self.commander} at review".')
         todo = self.comms.goals.todos.get(task)
-        todo.state.require_open(todo)
         if todo.held().owner != unit:
             sys.exit(f'Refused: {unit} does not hold {task}; strike the unit that holds it.')
         self.recorded(unit, todo, kind(todo.revision, self.actor_identity, todo.held(),
@@ -630,8 +629,6 @@ class Commander(CommanderContext):
     def recorded(self, unit: str, todo: Todo, strike: StrikeTodo,
                  answers: tuple[MessageReference, ...] = ()) -> None:
         """Core records the strike on the task's Todo, then posts it to #comms."""
-        refuse(strike.reason,
-            *DirectiveText.checks())  # posted to #comms, so refused before Core records the strike
         if (self.call(CommsChangeProblemTool(problem=todo.id, operation=strike))
                 .todo.revision == todo.revision):
             return
