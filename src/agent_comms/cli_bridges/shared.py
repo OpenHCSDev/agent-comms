@@ -201,7 +201,7 @@ class Options:
     operation: Operation
     binding: BindingRequest
     state: Path
-    family: Path
+    base_state: Path
 
     @classmethod
     def parse(cls, description: str | None, state: Path, bridge_type: type[CliBridge]) -> Self:
@@ -220,7 +220,7 @@ class Options:
         arguments = parser.parse_args(namespace=CliArguments())
         arguments.operation = arguments.operation.from_arguments(arguments)
         bridge_type.binding_arguments(arguments)
-        arguments.family = arguments.state
+        arguments.base_state = arguments.state
         arguments.binding = arguments.operation.binding(arguments)
         return cls(**{declared.name: vars(arguments)[key]
                       for declared, key in FieldCodec.record_fields(cls)})
@@ -925,7 +925,7 @@ class CliBridge(ExternalRuntime, DeliversInput, Generic[BridgeOptions]):
 
     def watch_record(self) -> WatchRecord:
         return WatchRecord(self.binding.bus, self.binding.root,
-                           (Path(sys.argv[0]).name, *sys.argv[1:]), self.options.family)
+                           (Path(sys.argv[0]).name, *sys.argv[1:]), self.options.base_state)
 
     def session_process(self) -> ProcessIdentity:
         """A line-monitor endpoint lives in the session-owned bridge process."""
@@ -1184,7 +1184,7 @@ class LineMonitorBridge(TranscriptConfirmsDelivery, TranscriptBridge[Options]):
     def watch_record(self) -> WatchRecord:
         command = (str(Path(sys.argv[0]).absolute()), Watch.__name__.lower(),
                    '--state', str(self.options.state.absolute()))
-        return WatchRecord(self.binding.bus, self.binding.root, command, self.options.family)
+        return WatchRecord(self.binding.bus, self.binding.root, command, self.options.base_state)
 
     async def watch_operation(self, operation: Watch) -> None:
         await read_monitor(

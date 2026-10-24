@@ -110,7 +110,7 @@ class ClaudeBridge(RunningClaude, LineMonitorBridge, declared_name=None):
         record, = bindings
         arguments.root = record.root
         arguments.bus_thread = record.bus
-        arguments.state = record.state
+        arguments.state = record.base_state
         arguments.session = session
 
     def __init__(self, options: Options, binding: Binding, db: sqlite3.Connection) -> None:
