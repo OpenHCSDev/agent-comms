@@ -14,7 +14,7 @@ from agent_comms.bus_publication import Delivered
 from agent_comms.bus_tables import ReceivedSource
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.coordination_errors import StaleFence
-from agent_comms.field_codec import TurnId
+from agent_comms.field_codec import GoalWaitId, TurnId
 from agent_comms.goal_actions import (
     EditGoalAction,
     GoalActionContext,
@@ -169,7 +169,7 @@ def replace_wait(comms, prepared):
     goal = owner.goal.require()
     target = comms.registry.require("child")
     comms.goals.waits.record(RecordedGoalWait(
-        goal.id, "newer-wait", goal.revision, prepared.review.through_seq,
+        goal.id, GoalWaitId.mint(), goal.revision, prepared.review.through_seq,
         prepared.review.targets, owner=owner.incarnation.require_recorded(),
         target_turn_generations=(target.require_turn_lease().identity.generation,),
         report_turn_id=None, report_turn_generation=None,
@@ -254,7 +254,7 @@ def test_terminal_reply_read_cannot_clear_a_newer_wait(reviewing):
     reviewing.goals.update_goal("owner", standby(reviewing))
     fence = reviewing.agents.finish_turn(reviewing.registry.require("child").require_turn_lease())
     goal = reviewing.registry.require("owner").goal
-    newer = replace(reviewing.goals.goal_wait("owner"), wait_id="newer-wait")
+    newer = replace(reviewing.goals.goal_wait("owner"), wait_id=GoalWaitId.mint())
     reviewing.bus.bus = AfterReadBus(
         reviewing.bus.bus.path, lambda: reviewing.goals.waits.record(newer),
     )
@@ -272,7 +272,7 @@ def completed_reply(comms):
 
 def test_completed_reply_rechecks_its_exact_wait(reviewing):
     witness, reply, wait = completed_reply(reviewing)
-    newer = replace(wait, wait_id="newer-wait")
+    newer = replace(wait, wait_id=GoalWaitId.mint())
     reviewing.bus.bus = AfterReadBus(
         reviewing.bus.bus.path, lambda: reviewing.goals.waits.record(newer),
     )

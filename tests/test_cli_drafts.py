@@ -1,7 +1,7 @@
 """The shared owner reconstructs prefixes, not the CLI decoders or the database."""
 import pytest
 
-from agent_comms.turn_item import NativeTurnId
+from agent_comms.turn_item import NativeItemId, NativeTurnId
 from agent_comms.turn_phase import ModelWaitPhase, ToolRunningPhase
 from agent_comms.runtime_updates import (
     ActiveItem, AllTurnsEnded, AppendDraftItem, CompletedItem, DraftAccumulator, FinishedItem,
@@ -17,7 +17,7 @@ from test_codex_items import _output
 def start(
     turn: NativeTurnId, item: str, text: str = '', accumulator: type[TextDraft] = TextDraft,
 ) -> StartedItem:
-    return StartedItem(turn, item, ModelWaitPhase('Replying'),
+    return StartedItem(turn, NativeItemId(item), ModelWaitPhase('Replying'),
                        accumulator.from_parts(AssistantTranscript, (text,), RecordedEventTime(1.0), item))
 
 
@@ -33,7 +33,9 @@ def test_batched_deltas_materialize_only_the_surviving_view(tmp_path):
 
     output = _output(tmp_path)
     begun = start(t_turn_id, 'a', accumulator=CountedDraft)
-    output.publish_batch([begun, *(AppendDraftItem(t_turn_id, 'a', 'x') for _ in range(1000))])
+    output.publish_batch(
+        [begun, *(AppendDraftItem(t_turn_id, NativeItemId("a"), "x") for _ in range(1000))]
+    )
     assert begun.accumulator.reads == 1
     draft = output.transcript.current_draft(output.transcript.root, output.transcript.incarnation)
     assert draft.events == (AssistantTranscript('x' * 1000, timestamp=1.0, position='a'),)
@@ -42,33 +44,44 @@ def test_batched_deltas_materialize_only_the_surviving_view(tmp_path):
 def test_prefix_required_and_completion_rejects_overlapping_start_and_suffix(tmp_path):
     t_turn_id = NativeTurnId('t')
     output = _output(tmp_path)
-    activity = ActiveItem(t_turn_id, 'a', ModelWaitPhase('Replying'))
+    activity = ActiveItem(t_turn_id, NativeItemId('a'), ModelWaitPhase('Replying'))
     assert activity.accumulate(output) == (activity,)
-    output.publish_batch([AppendDraftItem(t_turn_id, 'a', 'suffix')])
+    output.publish_batch([AppendDraftItem(t_turn_id, NativeItemId('a'), 'suffix')])
     assert output.transcript.current_draft(output.transcript.root, output.transcript.incarnation) == NoDraft()
     assert not output.drafts
-    output.publish_batch([start(t_turn_id, 'a'), AppendDraftItem(t_turn_id, 'a', 'Hello')])
+    output.publish_batch(
+        [start(t_turn_id, "a"), AppendDraftItem(t_turn_id, NativeItemId("a"), "Hello")]
+    )
     output.publish_batch([
-        CompletedItem(t_turn_id, 'a', (AssistantTranscript('Hello!', timestamp=9.0,
+        CompletedItem(t_turn_id, NativeItemId('a'), (AssistantTranscript('Hello!', timestamp=9.0,
             position='a'),)),
-        start(t_turn_id, 'a', 'stale'), AppendDraftItem(t_turn_id, 'a', ' late'),
+        start(t_turn_id, 'a', 'stale'), AppendDraftItem(t_turn_id, NativeItemId('a'), ' late'),
     ])
     assert output.transcript.current_draft(output.transcript.root, output.transcript.incarnation) == NoDraft()
     with output.transcript.reading() as snapshot:
         row, = snapshot.forward(0, snapshot.cut().offset)
         assert row.events == (AssistantTranscript('Hello!', timestamp=9.0, position='a'),)
-    assert ActiveItem(t_turn_id, 'a', ModelWaitPhase('stale')).accumulate(output) == ()
+    assert (
+        ActiveItem(t_turn_id, NativeItemId("a"), ModelWaitPhase("stale")).accumulate(output) == ()
+    )
 
 
 def test_saved_completion_survives_initial_idle_snapshot_until_ordered_end(tmp_path):
     old_turn_id = NativeTurnId('old')
     new_turn_id = NativeTurnId('new')
     output = _output(tmp_path)
-    output.publish_batch([
-        CompletedItem(old_turn_id, 'a', (AssistantTranscript('saved', timestamp=9.0,
-            position='a'),)), TurnEnded(),
-        start(old_turn_id, 'a', 'overlapping snapshot'), AppendDraftItem(old_turn_id, 'a', 'late'),
-    ])
+    output.publish_batch(
+        [
+            CompletedItem(
+                old_turn_id,
+                NativeItemId("a"),
+                (AssistantTranscript("saved", timestamp=9.0, position="a"),),
+            ),
+            TurnEnded(),
+            start(old_turn_id, "a", "overlapping snapshot"),
+            AppendDraftItem(old_turn_id, NativeItemId("a"), "late"),
+        ]
+    )
     assert output.transcript.current_draft(output.transcript.root, output.transcript.incarnation) == NoDraft()
     with output.transcript.reading() as snapshot:
         row, = snapshot.forward(0, snapshot.cut().offset)
@@ -81,13 +94,19 @@ def test_ending_one_turn_preserves_other_live_prefixes(tmp_path):
     one_turn_id = NativeTurnId('one')
     two_turn_id = NativeTurnId('two')
     output = _output(tmp_path)
-    output.publish_batch([start(one_turn_id, 'same-item', 'one'), start(two_turn_id,
-        'same-item', 'two'),
-                          FinishedTurn(one_turn_id), AppendDraftItem(two_turn_id, 'same-item',
-                              ' continued')])
+    output.publish_batch(
+        [
+            start(one_turn_id, "same-item", "one"),
+            start(two_turn_id, "same-item", "two"),
+            FinishedTurn(one_turn_id),
+            AppendDraftItem(two_turn_id, NativeItemId("same-item"), " continued"),
+        ]
+    )
     assert output.transcript.current_draft(output.transcript.root, output.transcript.incarnation).events[0].text == 'two continued'
-    assert AppendDraftItem(one_turn_id, 'same-item', 'late').accumulate(output) == ()
-    output.publish_batch([AllTurnsEnded(), AppendDraftItem(two_turn_id, 'same-item', 'late')])
+    assert AppendDraftItem(one_turn_id, NativeItemId('same-item'), 'late').accumulate(output) == ()
+    output.publish_batch(
+        [AllTurnsEnded(), AppendDraftItem(two_turn_id, NativeItemId("same-item"), "late")]
+    )
     assert output.transcript.current_draft(output.transcript.root, output.transcript.incarnation) == NoDraft()
 
 
@@ -97,11 +116,14 @@ def test_paragraph_identity_not_arrival_order_owns_summary_joining(tmp_path):
 
     output = _output(tmp_path)
     accumulator = ParagraphDraft.from_parts(ThinkingTranscript, [], RecordedEventTime(2.0), 'r')
-    output.publish_batch([
-        StartedItem(t_turn_id, 'r', ModelWaitPhase(), accumulator),
-        AppendDraftItem(t_turn_id, 'r', 'Two', 1), AppendDraftItem(t_turn_id, 'r', 'One', 0),
-        AppendDraftItem(t_turn_id, 'r', ' plus', 1),
-    ])
+    output.publish_batch(
+        [
+            StartedItem(t_turn_id, NativeItemId("r"), ModelWaitPhase(), accumulator),
+            AppendDraftItem(t_turn_id, NativeItemId("r"), "Two", 1),
+            AppendDraftItem(t_turn_id, NativeItemId("r"), "One", 0),
+            AppendDraftItem(t_turn_id, NativeItemId("r"), " plus", 1),
+        ]
+    )
     draft = output.transcript.current_draft(output.transcript.root, output.transcript.incarnation)
     completed = ReasoningItem(id='r', type='reasoning', summary=['One', 'Two plus'])
     assert draft.events[0].text == completed.events(2.0)[0].text == 'One\n\nTwo plus'
@@ -114,12 +136,13 @@ def test_tool_start_is_one_draft_row_then_one_completed_row(tmp_path):
     call = ToolCall('call', 'read', {'path': 'a.py'})
     start_event = call.started('call', 1.0)
     output.publish_batch([StartedItem(
-        t_turn_id, 'call', ToolRunningPhase(tools=(('call', 'Read a.py'),)),
+        t_turn_id, NativeItemId('call'), ToolRunningPhase(tools=(('call', 'Read a.py'),)),
         ToolDraft(RecordedEventTime(1.0), (start_event,)))])
     draft = output.transcript.current_draft(output.transcript.root, output.transcript.incarnation)
     assert draft.events == (start_event,)
-    output.publish_batch([CompletedItem(t_turn_id, 'call', call.finished('done', True, 'call',
-        2.0))])
+    output.publish_batch(
+        [CompletedItem(t_turn_id, NativeItemId("call"), call.finished("done", True, "call", 2.0))]
+    )
     assert output.transcript.current_draft(output.transcript.root, output.transcript.incarnation) == NoDraft()
     with output.transcript.reading() as snapshot:
         row, = snapshot.forward(0, snapshot.cut().offset)
@@ -130,7 +153,7 @@ def test_empty_tool_collection_has_activity_but_no_blank_row(tmp_path):
     t_turn_id = NativeTurnId('t')
     output = _output(tmp_path)
     phase = ToolRunningPhase('Editing files')
-    output.publish_batch([StartedItem(t_turn_id, 'empty', phase,
+    output.publish_batch([StartedItem(t_turn_id, NativeItemId('empty'), phase,
         ToolDraft(RecordedEventTime(1.0), ()))])
     assert output.transcript.current_draft(output.transcript.root, output.transcript.incarnation) == NoDraft()
 
@@ -138,10 +161,10 @@ def test_empty_tool_collection_has_activity_but_no_blank_row(tmp_path):
 def test_non_text_items_never_acquire_invented_text(tmp_path):
     t_turn_id = NativeTurnId('t')
     output = _output(tmp_path)
-    output.publish_batch([StartedItem(t_turn_id, 'tool', ToolRunningPhase('Run'),
+    output.publish_batch([StartedItem(t_turn_id, NativeItemId('tool'), ToolRunningPhase('Run'),
         DraftAccumulator(RecordedEventTime(1.0)))])
     with pytest.raises(ValueError):
-        AppendDraftItem(t_turn_id, 'tool', 'not a reply').accumulate(output)
+        AppendDraftItem(t_turn_id, NativeItemId('tool'), 'not a reply').accumulate(output)
     assert output.transcript.current_draft(output.transcript.root, output.transcript.incarnation) == NoDraft()
 
 
@@ -152,8 +175,8 @@ def test_completion_keeps_its_original_clock_for_every_start_time(tmp_path, star
     t_turn_id = NativeTurnId('t')
     output = _output(tmp_path)
     output.publish_batch([
-        StartedItem(t_turn_id, 'a', ModelWaitPhase(), DraftAccumulator(started_at)),
-        CompletedItem(t_turn_id, 'a', (AssistantTranscript('finished', timestamp=9.0,
+        StartedItem(t_turn_id, NativeItemId('a'), ModelWaitPhase(), DraftAccumulator(started_at)),
+        CompletedItem(t_turn_id, NativeItemId('a'), (AssistantTranscript('finished', timestamp=9.0,
             position='a'),)),
     ])
     with output.transcript.reading() as snapshot:
@@ -195,7 +218,14 @@ def test_wire_start_decoder_keeps_strict_integer_input(invalid):
 def test_completed_only_sources_do_not_retain_draft_state(tmp_path):
     t_turn_id = NativeTurnId('t')
     output = _output(tmp_path)
-    output.publish_batch([FinishedItem(t_turn_id, 'a', (AssistantTranscript('complete',
-        timestamp=1.0, position='a'),))])
+    output.publish_batch(
+        [
+            FinishedItem(
+                t_turn_id,
+                NativeItemId("a"),
+                (AssistantTranscript("complete", timestamp=1.0, position="a"),),
+            )
+        ]
+    )
     assert not output.drafts
     assert output.transcript.current_draft(output.transcript.root, output.transcript.incarnation) == NoDraft()

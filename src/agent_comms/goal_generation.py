@@ -24,6 +24,7 @@ from .lifecycle import LifecycleState
 from .lifecycle_capability import Complete, Failed, Terminal
 
 if TYPE_CHECKING:
+    from .attempt_resolution import WorkDecision
     from .goal_actions import GoalActionContext
     from .goal_attempts import Generation, GoalAttemptStore
     from .goal_failure_observation import GoalFailureEvidence
@@ -50,7 +51,9 @@ class GenerationState(DeclaredFamily, LifecycleState, affix="Generation"):
     def evidence(self, store: GoalAttemptStore, generation: Generation) -> GoalFailureEvidence:
         return NoFailedTurnEvidence()
 
-    def continue_work(self, store: GoalAttemptStore, generation: Generation, witness: str) -> None:
+    def continue_work(
+        self, store: GoalAttemptStore, generation: Generation, witness: WorkDecision
+    ) -> None:
         """An accepted order or verified progress does not resolve unknown work."""
         pass
 
@@ -84,7 +87,7 @@ class GenerationState(DeclaredFamily, LifecycleState, affix="Generation"):
         return NoLaunchPermit()
 
     def authorize_retry(
-        self, store: GoalAttemptStore, generation: Generation, decision: str
+        self, store: GoalAttemptStore, generation: Generation, decision: WorkDecision
     ) -> None:
         raise ValueError("The goal attempt is unresolved; inspect it before retrying.")
 
@@ -127,10 +130,10 @@ class ReadyGeneration(GenerationState):
         return True
 
     def authorize_retry(
-        self, store: GoalAttemptStore, generation: Generation, decision: str
+        self, store: GoalAttemptStore, generation: Generation, decision: WorkDecision
     ) -> None:
         store.authorize_ready_recovery(
-            generation.goal_id, expected_generation=generation.number, user_decision_id=decision
+            generation.goal_id, expected_generation=generation.number, decision=decision
         )
 
 
@@ -167,7 +170,9 @@ class BlockedGeneration(Failed, GenerationState):
     def idle_execution(self, source: GoalExecutionSource) -> GoalExecution:
         return source.evidence.execution(source.goal.id)
 
-    def continue_work(self, store: GoalAttemptStore, generation: Generation, witness: str) -> None:
+    def continue_work(
+        self, store: GoalAttemptStore, generation: Generation, witness: WorkDecision
+    ) -> None:
         store.authorize_current_retry(generation.goal_id, witness)
 
 
@@ -179,14 +184,14 @@ class BlockedGeneration(Failed, GenerationState):
         return ReadyGeneration, CancelledGeneration
 
     def authorize_retry(
-        self, store: GoalAttemptStore, generation: Generation, decision: str
+        self, store: GoalAttemptStore, generation: Generation, decision: WorkDecision
     ) -> None:
         identity = generation.attempt_identity
         store.authorize_retry(
             identity.goal_id,
             expected_generation=identity.generation,
             attempt_id=identity.attempt_id,
-            user_decision_id=decision,
+            decision=decision,
         )
 
 

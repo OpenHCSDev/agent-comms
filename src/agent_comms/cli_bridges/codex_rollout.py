@@ -37,6 +37,7 @@ from agent_comms.transcript_events import (
     UserTranscript,
 )
 from agent_comms.turn_context import CodexRolloutProvenance
+from agent_comms.turn_item import NativeItemId
 
 from ..wire_models import WireModel
 from .history import CodexHistory, JsonLinesFile, OfflineHistory
@@ -95,7 +96,13 @@ class MessageItem(RolloutItem, ABC, declared_name=None):
 class UserMessageItem(MessageItem, declared_name='message/user'):
 
     def updates(self, state: RolloutState, position: int, timestamp: float) -> tuple[RuntimeUpdate, ...]:
-        return (FinishedItem('', self.id, (UserTranscript(self.text, position=position, timestamp=timestamp),)),)
+        return (
+            FinishedItem(
+                "",
+                NativeItemId(self.id),
+                (UserTranscript(self.text, position=position, timestamp=timestamp),),
+            ),
+        )
 
     def request(self) -> str:
         return self.text
@@ -104,7 +111,13 @@ class UserMessageItem(MessageItem, declared_name='message/user'):
 class AssistantMessageItem(MessageItem, declared_name='message/assistant'):
 
     def updates(self, state: RolloutState, position: int, timestamp: float) -> tuple[RuntimeUpdate, ...]:
-        return (FinishedItem('', self.id, (AssistantTranscript(self.text, position=position, timestamp=timestamp),)),)
+        return (
+            FinishedItem(
+                "",
+                NativeItemId(self.id),
+                (AssistantTranscript(self.text, position=position, timestamp=timestamp),),
+            ),
+        )
 
 
 class InstructionMessage(MessageItem, ABC, declared_name=None):
@@ -134,7 +147,7 @@ class FunctionCallItem(RolloutItem, declared_name='function_call'):
 
     def updates(self, state: RolloutState, position: int, timestamp: float) -> tuple[RuntimeUpdate, ...]:
         state.tools[self.call_id] = self.name
-        return (FinishedItem('', self.call_id, (ToolStartTranscript(
+        return (FinishedItem('', NativeItemId(self.call_id), (ToolStartTranscript(
             position=position, timestamp=timestamp, tool_call_id=self.call_id, tool_name=self.name, raw_input=self.raw_input,
             tool=ToolDeclaration.record(self.name, self.raw_input, call_id=self.call_id)),)),)
 
@@ -157,7 +170,7 @@ class FunctionCallOutputItem(RolloutItem, declared_name='function_call_output'):
     output: Annotated[str, BeforeValidator(output_text)] = ''
 
     def updates(self, state: RolloutState, position: int, timestamp: float) -> tuple[RuntimeUpdate, ...]:
-        return (FinishedItem('', self.call_id + ':result', (ToolEndTranscript(
+        return (FinishedItem('', NativeItemId(self.call_id + ':result'), (ToolEndTranscript(
             position=position, timestamp=timestamp, tool_call_id=self.call_id,
             tool_name=state.tools.get(self.call_id, ''), text=self.output),)),)
 

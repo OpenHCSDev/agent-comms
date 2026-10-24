@@ -999,8 +999,13 @@ class _NominalIdentityRow:
 
 def test_nominal_ids_roundtrip_preserves_wire_schema_and_refuses_wrong_kind() -> None:
     value = Id128.mint()
-    row = _NominalIdentityRow(value, value, value, TurnId(value))
-    wire = {"nominal": str(value), "annotated": str(value), "plain": str(value), "turn": str(value)}
+    row = _NominalIdentityRow(value, value, "plain text", TurnId(value))
+    wire = {
+        "nominal": str(value),
+        "annotated": str(value),
+        "plain": "plain text",
+        "turn": str(value),
+    }
     encoded = FieldCodec.encode(row)
     assert encoded == wire
     assert all(type(item) is str for item in encoded.values())
@@ -1028,7 +1033,7 @@ def test_nominal_ids_roundtrip_preserves_wire_schema_and_refuses_wrong_kind() ->
 
     assert FieldCodec.encode(SpecializedTurnId(value), TurnId) == str(value)
     with pytest.raises(MalformedRecord):
-        FieldCodec.encode(_NominalIdentityRow(value, value, value, InputId(value)))
+        FieldCodec.encode(_NominalIdentityRow(value, value, "plain text", InputId(value)))
     with pytest.raises(MalformedRecord):
         FieldCodec.encode("not-an-id", Annotated[str, Id128Text])
 

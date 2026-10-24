@@ -50,7 +50,6 @@ from .goals import GoalDeclaration
 from .lifecycle_capability import Successful
 from .native_file_artifact import NativeFileArtifact
 from .native_session_reopen import NativeSessionIdentity
-from .turn_item import PiRequestKey
 from .pi_counts import NonnegativePiCount, PiCount, TotalPiCount, UnreportedCount
 from .pi_vocabulary import (
     NoThinkingOverride,
@@ -66,6 +65,7 @@ from .tool_declaration import ToolDeclaration
 from .tool_results import NoSentMessage, NoToolDiff, ToolDiff
 from .transcript_events import SentTranscript
 from .turn_failure import ProviderTransportFailed
+from .turn_item import PiRequestKey, PiSessionId
 
 if TYPE_CHECKING:
     from .agent_events import AgentEvent, ProviderUsage
@@ -1185,7 +1185,9 @@ class NativeSessionSnapshot(PiPayload):
         known = self._known_identity()
         if len(known) != len(fields(NativeSessionIdentity)):
             return None
-        return NativeSessionIdentity(**known)
+        return NativeSessionIdentity(
+            FieldCodec.decode(PiSessionId, known["session_id"]), known["session_file"]
+        )
 
     def conflicts(self, other: NativeSessionSnapshot) -> bool:
         known, observed = self._known_identity(), other._known_identity()

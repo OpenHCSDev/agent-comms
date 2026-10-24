@@ -49,7 +49,7 @@ from agent_comms.transcript_events import (
     TranscriptEvent,
     UserTranscript,
 )
-from agent_comms.turn_item import NativeTurnId
+from agent_comms.turn_item import NativeItemId, NativeTurnId
 from agent_comms.turn_phase import CompactionPhase, ModelWaitPhase, ToolRunningPhase, TurnPhase
 
 from ..wire_models import DeclaredWireFamily, WireModel
@@ -299,7 +299,7 @@ class Item(TaggedWire, ABC, affix=""):
     def completed(
         self, turn_id: NativeTurnId, events: tuple[TranscriptEvent, ...]
     ) -> RuntimeUpdate:
-        return CompletedItem(turn_id, self.id, events)
+        return CompletedItem(turn_id, NativeItemId(self.id), events)
 
     def accumulator(self, started_at: EventTime) -> DraftAccumulator:
         return DraftAccumulator(started_at)
@@ -762,8 +762,14 @@ class ItemsPage(WireModel):
                 earlier = EarlierPage(cursor)
             case None:
                 earlier = NoEarlierPage()
-        return PublishedPage(tuple(PageItem(entry.turn, entry.item.id, entry.publication())
-                                   for entry in reversed(self.data) if entry.completed), earlier)
+        return PublishedPage(
+            tuple(
+                PageItem(entry.turn, NativeItemId(entry.item.id), entry.publication())
+                for entry in reversed(self.data)
+                if entry.completed
+            ),
+            earlier,
+        )
 
 
 class TranscriptNotification(DeclaredWireFamily, WireModel, ABC, affix=""):
@@ -808,7 +814,7 @@ class Started(ItemNotification, declared_name='item/started'):
     startedAtMs: int
 
     def apply(self, stream: ItemStream) -> RuntimeUpdate:
-        return StartedItem(self.turn, self.item.id, self.item.phase,
+        return StartedItem(self.turn, NativeItemId(self.item.id), self.item.phase,
                            self.item.accumulator(EventTime.capture(self.startedAtMs / 1000)))
 
 
@@ -829,7 +835,7 @@ class TextDelta(ItemNotification, ABC, declared_name=None):
         return 0
 
     def apply(self, stream: ItemStream) -> AppendDraftItem:
-        return AppendDraftItem(self.turn, self.itemId, self.delta, self.section())
+        return AppendDraftItem(self.turn, NativeItemId(self.itemId), self.delta, self.section())
 
 
 class AssistantDelta(TextDelta, declared_name='item/agentMessage/delta'):

@@ -9,6 +9,7 @@ from agent_comms.native_attestation import ObservedAttestation
 from agent_comms.native_session_reopen import NativeSessionIdentity
 from agent_comms.pi_payloads import StateData
 from agent_comms.pi_rpc import PiRpcChannel
+from agent_comms.turn_item import PiSessionId
 
 
 def snapshot(command, data):
@@ -52,6 +53,6 @@ def test_partial_native_snapshot_only_conflicts_on_known_components(command, par
 @pytest.mark.parametrize("command", ["get_state", "get_session_stats"])
 def test_complete_native_snapshot_uses_existing_identity_owner(command):
     observed = snapshot(command, {"sessionId": "selected", "sessionFile": "/selected.jsonl"})
-    assert observed.identity == NativeSessionIdentity("selected", "/selected.jsonl")
+    assert observed.identity == NativeSessionIdentity(PiSessionId("selected"), "/selected.jsonl")
     assert not observed.conflicts(observed)
     assert type(observed).from_wire(observed.to_wire()) == observed

@@ -130,7 +130,7 @@ class NoItems:
 
 @dataclass(frozen=True)
 class ExternalPageRow(TypedRow):
-    thread: Annotated[str, Column(primary_key=True)]
+    thread: Annotated[ThreadLookup, Column(primary_key=True)]
     turn_id: Annotated[NativeTurnId, Column(primary_key=True)]
     item_id: Annotated[NativeItemId, Column(primary_key=True)]
     seq: int
@@ -185,7 +185,9 @@ class ExternalItemRow(ExternalTranscriptRows, ExternalPageRow, TypedTable):
         return ExternalRecord(self.seq, self.events_in(connection))
 
     @classmethod
-    def recent_turn_ids(cls, connection: Connection, thread: str) -> Generator[NativeTurnId]:
+    def recent_turn_ids(
+        cls, connection: Connection, thread: ThreadLookup
+    ) -> Generator[NativeTurnId]:
         """Yield turn starts newest first, using the existing per-turn position index.
 
         A later item in an older turn must not move that turn ahead of a newer start:
@@ -207,7 +209,7 @@ class ExternalItemRow(ExternalTranscriptRows, ExternalPageRow, TypedTable):
 class ExternalEventRow(ExternalTranscriptRows, TypedTable):
     """Each saved event exists once; SQL derives its query keys from that event."""
 
-    thread: Annotated[str, Column(primary_key=True)]
+    thread: Annotated[ThreadLookup, Column(primary_key=True)]
     seq: Annotated[int, Column(primary_key=True)]
     ordinal: Annotated[int, Column(primary_key=True)]
     event: TranscriptEvent
@@ -263,7 +265,7 @@ class ExternalEventRow(ExternalTranscriptRows, TypedTable):
 class DraftRow(ExternalTranscriptRows, TypedTable, TranscriptDraft, declared_name="external_draft"):
     """The assigned transcript's current message, shared by native and CLI writers."""
 
-    thread: Annotated[str, Column(primary_key=True)]
+    thread: Annotated[ThreadLookup, Column(primary_key=True)]
     turn_id: NativeTurnId
     item_id: NativeItemId
     events: tuple[TranscriptEvent, ...]

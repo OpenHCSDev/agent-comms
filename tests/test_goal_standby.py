@@ -6,7 +6,7 @@ from dataclasses import replace
 import pytest
 
 from agent_comms.child_process import ProcessIdentity
-from agent_comms.field_codec import TurnId
+from agent_comms.field_codec import GoalWaitId, TurnId
 from agent_comms.goal_actions import (
     EditGoalAction,
     GoalPrecondition,
@@ -208,7 +208,7 @@ def test_liveness_check_releases_preexisting_closed_wait_group(tmp_path, pending
     GoalWaits(tmp_path / "goal_waits.sqlite3").record(
         RecordedGoalWait(
             bob.id,
-            "bob-wait",
+            GoalWaitId.mint(),
             bob.revision,
             0,
             (GoalWaitTarget(peer.incarnation.require_recorded()),),
@@ -253,7 +253,7 @@ def test_new_live_dependency_turn_keeps_old_wait_group_open(tmp_path, bound_old_
     GoalWaits(tmp_path / "goal_waits.sqlite3").record(
         RecordedGoalWait(
             bob.id,
-            "bob-wait",
+            GoalWaitId.mint(),
             bob.revision,
             0,
             (GoalWaitTarget(peer.incarnation.require_recorded()),),

@@ -27,7 +27,7 @@ from agent_comms.transcript_events import AssistantTranscript, TurnDigest
 from agent_comms.turn_context import JournalProvenance, SegmentManifest, TranscriptSegment, WireProvenance
 from agent_comms.turn_digests import LastTurns, TurnBound, TurnsOlderThan, TurnsBefore, TurnsSince
 from agent_comms.bus import Bus
-from agent_comms.turn_item import NativeTurnId
+from agent_comms.turn_item import NativeItemId, NativeTurnId
 from agent_comms.watched import FileSource
 from agent_comms.threads import Thread
 
@@ -222,8 +222,11 @@ def test_recorded_claude_transcript_pages_through_tool_without_loss(tmp_path, mo
     # a second isolated transcript with one eventless harness item at the page edge.
     recorded = comms.transcripts.external('claude').turns(LastTurns(300))
     comms.registry.declare(Thread('paged', frozenset(), str(tmp_path), execution=ExternalThreadExecution))
-    items = [FinishedItem(turn.turn_id, turn.turn_id, turn.events) for turn in reversed(recorded)]
-    items.insert(empty_index, FinishedItem(undated_edge_turn_id, 'undated-edge', ()))
+    items = [
+        FinishedItem(turn.turn_id, NativeItemId(turn.turn_id), turn.events)
+        for turn in reversed(recorded)
+    ]
+    items.insert(empty_index, FinishedItem(undated_edge_turn_id, NativeItemId('undated-edge'), ()))
     comms.transcripts.external('paged').publish_page(items, NoEarlierPage())
     pages = list(paged_answers(comms, 'paged'))
     seen = [turn['turn_id'] for page in pages for turn in page['turns']]
@@ -264,7 +267,7 @@ def test_missing_native_session_is_empty_and_nonpositive_count_is_rejected(tmp_p
 def test_undated_and_equal_time_transcripts_page_without_timestamp_assumptions(tmp_path, events):
     comms = prepared(tmp_path)
     comms.registry.declare(Thread('undated', frozenset(), str(tmp_path), execution=ExternalThreadExecution))
-    items = tuple(FinishedItem(NativeTurnId(f'undated-{index}'), f'item-{index}',
+    items = tuple(FinishedItem(NativeTurnId(f'undated-{index}'), NativeItemId(f'item-{index}'),
         events) for index in range(251))
     comms.transcripts.external('undated').publish_page(items, NoEarlierPage())
     pages = list(paged_answers(comms, 'undated'))

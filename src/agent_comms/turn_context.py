@@ -34,7 +34,7 @@ from .native_session_reopen import NativeSessionIdentity
 from .peer_relevance import AlwaysListed, GoalShown, PeerRelevance
 from .thread_identity import ThreadIncarnation, TurnIdentity
 from .tool_result import DeclaredReply
-from .turn_item import PiRequestKey
+from .turn_item import NativeItemId, PiRequestKey
 
 if TYPE_CHECKING:
     from .context_store import RecordedContextState
@@ -388,14 +388,14 @@ class ContextEntryReference:
     """One native journal entry whose manifest is recorded independently."""
 
     identity: NativeSessionIdentity
-    entry_id: str
+    entry_id: NativeItemId
 
     @classmethod
     def from_sources(cls, sources: ContextSources) -> ContextEntryReference:
         entries = sources.journal_entries()
         if len(entries) != 1:
             raise ValueError("A context entry manifest must name exactly one journal entry")
-        return cls(sources.native_identity(), entries[0])
+        return cls(sources.native_identity(), NativeItemId(entries[0]))
 
 
 @dataclass(frozen=True)

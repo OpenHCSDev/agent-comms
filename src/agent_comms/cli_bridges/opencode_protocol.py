@@ -18,7 +18,7 @@ from agent_comms.runtime_updates import (
     TurnEnded,
     TurnStarted,
 )
-from agent_comms.turn_item import NativeTurnId
+from agent_comms.turn_item import NativeItemId, NativeTurnId
 
 from ..wire_models import DeclaredWireFamily, WireModel
 from .opencode_parts import MessageInfo, Part, SavedMessage, UserMessage
@@ -186,7 +186,7 @@ class PartChanged(OpenCodeEvent, declared_name='message.part.delta'):
         delta = self.properties
         if delta.sessionID != stream.connection.session:
             return ()
-        return (AppendDraftItem(delta.turn, delta.partID, delta.delta),)
+        return (AppendDraftItem(delta.turn, NativeItemId(delta.partID), delta.delta),)
 
 
 class MessageUpdated(OpenCodeEvent, declared_name='message.updated'):

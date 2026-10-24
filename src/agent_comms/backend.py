@@ -17,7 +17,6 @@ from __future__ import annotations
 
 import asyncio
 import json
-import secrets
 import unicodedata
 from abc import ABC, abstractmethod
 from collections.abc import (
@@ -70,6 +69,7 @@ from .turn_phase import SettlingStatsPhase, TurnPhase
 from .turn_stats import StatsRequest
 from .turn_usage import UsageAccount
 from .turn_watchdog import DEFAULT_MODEL_WAIT, ProgressWatchdog, TurnWait, TurnWaitExpired
+from .turn_item import PiRequestKey
 
 if TYPE_CHECKING:
     from .acp_failure import ProviderRetryResult
@@ -160,7 +160,7 @@ async def stream_agent_events(
                 TurnSession(
                     launch,
                     partial(commands.Prompt,
-                        id=RequestId(f"agent-comms-prompt-{secrets.token_hex(16)}"),
+                        id=RequestId(PiRequestKey.fresh()),
                         input_id=InputId.mint(), message=task, images=tuple(images),
                         context_contributions=context_contributions,
                     ),
@@ -355,7 +355,7 @@ class NativeSession(MroDispatch, ABC):
         abort_deadline = self.loop.time() + max(0.0, self.rpc_abort_grace)
         try:
             remaining = max(0.0, abort_deadline - self.loop.time())
-            abort = commands.Abort(id=RequestId("agent-comms-watchdog"))
+            abort = commands.Abort(id=RequestId(PiRequestKey("agent-comms-watchdog")))
             self.native.send(abort)
             await asyncio.wait_for(self.native.drain(), timeout=remaining)
             while remaining := max(0.0, abort_deadline - self.loop.time()):

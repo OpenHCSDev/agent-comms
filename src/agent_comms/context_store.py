@@ -30,7 +30,7 @@ from .turn_context import (
 )
 
 from .typed_table import StoreRows, Column, DurableStore, Generated, Index, SingletonRow, TypedTable
-from .turn_item import PiSessionId
+from .turn_item import NativeItemId, PiSessionId
 
 
 @dataclass(frozen=True)
@@ -150,7 +150,7 @@ class ContextStoreInfo(ContextStoreRows, ContextSourceState, SingletonRow):
 class ContextEntry(ContextStoreRows, TypedTable):
     session_id: Annotated[PiSessionId, Column(primary_key=True)]
     session_file: Annotated[str, Column(primary_key=True)]
-    entry_id: Annotated[str, Column(primary_key=True)]
+    entry_id: Annotated[NativeItemId, Column(primary_key=True)]
     manifest: SegmentManifest
 
     @classmethod
@@ -475,7 +475,7 @@ class ContextStore(DurableStore):
         return AbsentContext()
 
     def entries(
-        self, identity: NativeSessionIdentity, entry_ids: Iterable[str],
+        self, identity: NativeSessionIdentity, entry_ids: Iterable[NativeItemId],
     ) -> dict[str, SegmentManifest]:
         """The recorded manifest of each named journal entry that has one."""
         with self.snapshot() as db:

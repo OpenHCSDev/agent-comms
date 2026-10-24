@@ -2,7 +2,7 @@
 from agent_comms.cli_bridges.codex_protocol import BusInput, ItemsPage
 from agent_comms.transcript_events import UserTranscript
 from agent_comms.threads import Thread
-from agent_comms.turn_item import NativeTurnId
+from agent_comms.turn_item import NativeItemId, NativeTurnId
 
 
 def _output(tmp_path):
@@ -52,21 +52,22 @@ def test_codex_stream_reports_activity_and_finishes_items(tmp_path):
         return parts[0] if parts else None
 
     assert receive("turn/started", turn={"id": "t1"}) == TurnStarted()
-    assert receive("item/started", turnId="t1", item=command, startedAtMs=1000) \
-        == ActiveItem(t1_turn_id, "c1", ToolRunningPhase(tools=(("c1", "Run ls -la"),)))
+    assert receive("item/started", turnId="t1", item=command, startedAtMs=1000) == ActiveItem(
+        t1_turn_id, NativeItemId("c1"), ToolRunningPhase(tools=(("c1", "Run ls -la"),))
+    )
     assert receive("item/commandExecution/outputDelta", turnId="t1", itemId="c1",
                    delta="a") is None
     finished = receive("item/completed", turnId="t1", completedAtMs=2000,
                        item=command | {"status": "completed", "exitCode": 0,
                                        "aggregatedOutput": "a\n"})
-    assert finished == FinishedItem(t1_turn_id, "c1", (
+    assert finished == FinishedItem(t1_turn_id, NativeItemId("c1"), (
         ToolStartTranscript(position="c1", tool_call_id="c1", tool_name="bash",
                             raw_input={"command": "ls -la"}, tool=BashTool(call_id="c1", command="ls -la"), timestamp=2.0),
         ToolEndTranscript(position="c1", tool_call_id="c1", tool_name="bash", text="a\n", ok=True,
                           timestamp=2.0)))
     thinking = {"type": "reasoning", "id": "r1", "summary": []}
     assert receive("item/started", turnId="t1", item=thinking, startedAtMs=3000) \
-        == ActiveItem(t1_turn_id, "r1", ModelWaitPhase())
+        == ActiveItem(t1_turn_id, NativeItemId("r1"), ModelWaitPhase())
     assert receive("item/completed", turnId="t1", item=thinking, completedAtMs=4000).events == ()
     assert receive("turn/completed", turn={"id": "t1", "status": "completed"}) \
         == FinishedTurn(t1_turn_id)
@@ -128,7 +129,7 @@ def test_coalescing_preserves_completion_and_unrelated_updates():
         UnrecordedEventTime(), "a"))
     other = DraftItem(t_turn_id, "b", TextDraft.from_parts(AssistantTranscript, ("Other",),
         UnrecordedEventTime(), "b"))
-    final = FinishedItem(t_turn_id, "a", (AssistantTranscript("Hello!", timestamp=1.0,
+    final = FinishedItem(t_turn_id, NativeItemId("a"), (AssistantTranscript("Hello!", timestamp=1.0,
         position="a"),))
     end = TurnEnded()
     assert RuntimeUpdate.coalesced([first, other, newer]) == [other, newer]
@@ -168,8 +169,9 @@ def test_function_outputs_keep_wire_fields_and_source_clocks_in_page_and_live_de
         assert finished.events == (() if item_type is SendOutputItem else (
             ToolEndTranscript(position="out", tool_call_id="out", tool_name=name,
                               text="result", timestamp=2.0),))
-        assert entry.publication().accumulate(output) == (FinishedItem(turn_turn_id, 'out',
-            expected),)
+        assert entry.publication().accumulate(output) == (
+            FinishedItem(turn_turn_id, NativeItemId("out"), expected),
+        )
 
 
 def test_function_output_names_remain_required_and_strict():

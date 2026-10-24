@@ -19,10 +19,11 @@ from agent_comms.turn_context import (
     SegmentManifest, SystemLayerSegment, ToolCatalogSegment, TranscriptSegment,
 )
 from bus_record_fixture import context_comms
+from agent_comms.turn_item import PiRequestKey, PiSessionId
 
 
 def context(owner, path, count, turn):
-    native = NativeSessionIdentity('manifest-delta', str(path / 'history.jsonl'))
+    native = NativeSessionIdentity(PiSessionId('manifest-delta'), str(path / 'history.jsonl'))
     provenance = (NativeProvenance(native, 1, 'a' * 64),)
     def segment(kind, text, sources=provenance, contributors=()):
         raw = text.encode()
@@ -44,7 +45,7 @@ def context(owner, path, count, turn):
             transcript,
         ),
         'counter',
-        ObservedDispatchRequest(f'request-{turn}'),
+        ObservedDispatchRequest(PiRequestKey(f'request-{turn}')),
     )
 
 
@@ -62,7 +63,7 @@ def test_context_deltas_restore_original_text_and_incremental_membership(tmp_pat
             turn=replace(
                 second.turn, identity=TurnId('431ad49b3e0129a11ea5a0320c188024')
             ),
-            request_id=ObservedDispatchRequest('request-3'),
+            request_id=ObservedDispatchRequest(PiRequestKey('request-3')),
         ),
     ):
         # The writer keeps the request it recorded as the next request's prior.

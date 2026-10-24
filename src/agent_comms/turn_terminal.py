@@ -10,6 +10,7 @@ from typing import TYPE_CHECKING
 
 from .turn_failure import BackendFailed, TurnFailure
 from .goal_failure_observation import FailedTurnObservation
+from .attempt_resolution import FailedTurnResolution
 
 if TYPE_CHECKING:
     from .agent_events import Done
@@ -81,7 +82,7 @@ class FailedGoalTurn(TurnTerminal):
         observation = self.failure_observation(account, permit, captured)
         with suppress(StaleAttemptError):
             permit.reservation.fail(
-                store, self.failure_kind.declared_name,
+                store, FailedTurnResolution(self.failure_kind),
                 observation=observation,
             )
 

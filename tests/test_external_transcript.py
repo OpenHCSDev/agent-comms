@@ -10,7 +10,7 @@ from agent_comms.transcript_events import AssistantTranscript, NoticeTranscript
 from agent_comms.transcripts import TranscriptReadIdentity, UnreadTranscriptCursor
 from agent_comms.turn_digests import LastTurns
 from agent_comms.threads import Thread
-from agent_comms.turn_item import NativeTurnId
+from agent_comms.turn_item import NativeItemId, NativeTurnId
 
 
 @pytest.fixture(autouse=True)
@@ -122,7 +122,9 @@ async def test_earlier_page_requests_reach_initial_and_committed_watch_observati
     comms = wire(tmp_path / "wire")
     comms.registry.declare(Thread("cli", frozenset(), str(tmp_path)))
     transcript = comms.transcripts.external("cli")
-    transcript.publish_page((FinishedItem(turn_turn_id, "newest", ()),), EarlierPage("first"))
+    transcript.publish_page(
+        (FinishedItem(turn_turn_id, NativeItemId("newest"), ()),), EarlierPage("first")
+    )
     emitted = asyncio.Queue()
     watching = asyncio.create_task(transcript.watch_requests(emitted.put_nowait))
     try:
@@ -130,8 +132,10 @@ async def test_earlier_page_requests_reach_initial_and_committed_watch_observati
             assert records.request_earlier(0)
         first = await asyncio.wait_for(emitted.get(), 2)
         assert first.earlier.cursor == "first"
-        transcript.prepend(EarlierItems.from_row(first),
-                           (FinishedItem(turn_turn_id, "older", ()),), EarlierPage("second"))
+        transcript.prepend(
+            EarlierItems.from_row(first),
+            (FinishedItem(turn_turn_id, NativeItemId("older"), ()),), EarlierPage("second")
+        )
         with transcript.reading() as records:
             assert records.request_earlier(-1)
         second = await asyncio.wait_for(emitted.get(), 2)
@@ -179,7 +183,10 @@ def test_draft_is_current_state_and_finishes_atomically(tmp_path):
         read.current_draft()
     with transcript.reading() as records:
         assert records.current_draft(transcript.root, transcript.incarnation).external_row() is None
-    assert [e.text for e in comms.transcripts.thread_transcript_page("codex").events] == ["Tool", "Hello!"]
+    assert [e.text for e in comms.transcripts.thread_transcript_page("codex").events] == [
+        "Tool",
+        "Hello!",
+    ]
     transcript.draft(turn_id=t2_turn_id, item_id="b", events=(AssistantTranscript("Interrupted",
         timestamp=1.0, position='b'),))
     transcript.end_turn()

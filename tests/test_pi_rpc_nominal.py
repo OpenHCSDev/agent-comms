@@ -22,6 +22,7 @@ from agent_comms.pi_native_backend import PersistentPiSession
 from agent_comms.pi_payloads import AnonymousRequest, ReportedText, RequestId
 from agent_comms.pi_rpc import PiRpcChannel
 from agent_comms.selected_session import SelectedSession
+from agent_comms.turn_item import PiRequestKey
 from agent_comms.turn_phase import (
     CompactionPhase,
     Excursion,
@@ -124,7 +125,7 @@ def test_failure_precedence_and_text_have_one_owner(left, right):
 def test_external_formats_are_derived_and_pin_wire_spellings():
     input_id = InputId.mint()
     assert commands.Prompt(
-        id=RequestId("p"), input_id=input_id, message="hello",
+        id=RequestId(PiRequestKey("p")), input_id=input_id, message="hello",
         owner_tools=OwnerToolConnection("/unused", "a" * 64),
     ).to_rpc() == {
         "type": "prompt",
@@ -133,7 +134,9 @@ def test_external_formats_are_derived_and_pin_wire_spellings():
         "message": "hello",
         "ownerTools": {"path": "/unused", "token": "a" * 64},
     }
-    assert commands.SetModel(id=RequestId("s"), provider="configured", model_id="kept").to_rpc() == {
+    assert commands.SetModel(
+        id=RequestId(PiRequestKey("s")), provider="configured", model_id="kept"
+    ).to_rpc() == {
         "type": "set_model",
         "id": "s",
         "provider": "configured",
@@ -153,8 +156,8 @@ def test_external_formats_are_derived_and_pin_wire_spellings():
 
 async def test_correlation_handles_out_of_order_ids_and_anonymous_commands():
     channel = PiRpcChannel(asyncio.StreamReader())
-    first = commands.SetModel(id=RequestId("a"), provider="p", model_id="one")
-    second = commands.SetModel(id=RequestId("b"), provider="p", model_id="two")
+    first = commands.SetModel(id=RequestId(PiRequestKey("a")), provider="p", model_id="one")
+    second = commands.SetModel(id=RequestId(PiRequestKey("b")), provider="p", model_id="two")
     channel.track(first)
     channel.track(second)
 
@@ -198,7 +201,10 @@ for line in sys.stdin:
         child = PiChild(proc, PiRpcChannel(proc.stdout))
         for index in range(2):
             request = commands.SetSteeringMode(
-                id=AnonymousRequest() if anonymous else RequestId(f"exchange-{index}"),
+                id=(
+                    AnonymousRequest() if anonymous
+                    else RequestId(PiRequestKey(f"exchange-{index}"))
+                ),
                 mode="all",
             )
             assert (await request.exchange(child, strict=True)).succeeded
@@ -257,8 +263,8 @@ def test_turn_runner_and_duplicate_pi_decoders_are_retired():
                         decoders.append((name, method.name))
     assert decoders == [("pi_rpc.py", "decode_record")]
 
-    from agent_comms.native_pi import PrivateEvidenceRead
     from agent_comms.native_failures import NativePiUnavailable
+    from agent_comms.native_pi import PrivateEvidenceRead
 
     with pytest.raises(NativePiUnavailable):
         PrivateEvidenceRead._decode_row(b'{"type":"session","type":"message"}\n')

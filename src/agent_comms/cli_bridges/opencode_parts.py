@@ -28,7 +28,7 @@ from agent_comms.transcript_events import (
     ThinkingTranscript,
     UserTranscript,
 )
-from agent_comms.turn_item import NativeTurnId
+from agent_comms.turn_item import NativeItemId, NativeTurnId
 from agent_comms.turn_phase import ModelWaitPhase, ToolRunningPhase, TurnPhase
 
 from ..wire_models import WireModel
@@ -142,8 +142,8 @@ class TextualPart(Part, ABC, declared_name=None):
     def present(self, message: AssistantMessage) -> tuple[RuntimeUpdate, ...]:
         accumulator = self.accumulator(message)
         if self.finished(message):
-            return (CompletedItem(message.turn, self.id, accumulator.events),)
-        return (StartedItem(message.turn, self.id, self.phase, accumulator),)
+            return (CompletedItem(message.turn, NativeItemId(self.id), accumulator.events),)
+        return (StartedItem(message.turn, NativeItemId(self.id), self.phase, accumulator),)
 
 
 class TextPart(TextWire, TextualPart, declared_name='text'):
@@ -198,7 +198,7 @@ class PendingTool(ToolState, declared_name='pending'):
     def present(self, part: ToolPart, message: AssistantMessage) -> tuple[RuntimeUpdate, ...]:
         call = self.call(part)
         started_at = self.started_at(message)
-        return (StartedItem(message.turn, part.id,
+        return (StartedItem(message.turn, NativeItemId(part.id),
                             ToolRunningPhase(tools=((part.callID, call.title),)),
                             ToolDraft(started_at, (call.started(part.id, started_at.at),))),)
 
@@ -225,7 +225,7 @@ class EndedTool(ToolState, ABC):
 
     def present(self, part: ToolPart, message: AssistantMessage) -> tuple[RuntimeUpdate, ...]:
         call = self.call(part)
-        return (CompletedItem(message.turn, part.id, (
+        return (CompletedItem(message.turn, NativeItemId(part.id), (
             call.started(part.id, self.time.start / 1000),
             call.ended(self.result, self.ok, part.id, self.time.end / 1000),
         )),)

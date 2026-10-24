@@ -1727,8 +1727,14 @@ class NominalSpelling[V: NominalText](SpelledText):
         return cls.value_type(super().from_text(value))
 
     @classmethod
-    def encode(cls, value: object) -> str:
-        return str(cls.decode(value))
+    def decode(cls, value: object) -> V:
+        if not isinstance(value, str):
+            raise MalformedRecord(f"Expected text for {cls.__name__}")
+        return cls.from_text(value)
+
+    @classmethod
+    def encode(cls, value: V) -> str:
+        return str(cls.from_text(value))
 
 
 class PathText(TextRepresentation[Path]):
@@ -2502,10 +2508,6 @@ class _TextDecoder(_ExactScalarDecoder[str]):
     __slots__ = ()
     annotations = (str,)
     json_type = "string"
-
-    def accepts(self, data: object) -> TypeGuard[str]:
-        # RedecodesDeletedPhase removes nominal values from plain str fields.
-        return super().accepts(data) or isinstance(data, NominalText)
 
     def encode(self, value: str) -> str:
         return str(super().encode(value))

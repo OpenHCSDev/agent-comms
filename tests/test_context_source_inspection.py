@@ -30,6 +30,7 @@ from agent_comms.turn_context import (
     TurnContext,
 )
 from bus_record_fixture import context_comms
+from agent_comms.turn_item import PiRequestKey, PiSessionId
 
 
 def system(provenance, content="Original instruction π"):
@@ -39,7 +40,7 @@ def system(provenance, content="Original instruction π"):
 
 
 def identity(tmp_path):
-    return NativeSessionIdentity("original-native", str(tmp_path / "session.jsonl"))
+    return NativeSessionIdentity(PiSessionId("original-native"), str(tmp_path / "session.jsonl"))
 
 
 def recorded(segments):
@@ -48,7 +49,7 @@ def recorded(segments):
         TurnId('ab87f599dc0a50a56b7c65de71c39426'), TurnIdentity(owner, 2)
     )
     return ContextManifest(owner, turn, tuple(segments), "pi.estimateTokens",
-                           ObservedDispatchRequest("request-one"))
+                           ObservedDispatchRequest(PiRequestKey("request-one")))
 
 
 def test_current_native89_shape_and_authenticated_file_read(tmp_path):
@@ -142,9 +143,13 @@ def test_captured_sdk_value_is_original_and_public_only(tmp_path):
     raw = json.dumps(list(messages), ensure_ascii=False, separators=(",", ":")).encode()
     value = TranscriptSegment(provenance=(source,), messages=messages, tokens=7,
                               sha256=hashlib.sha256(raw).hexdigest(), utf8_bytes=len(raw))
-    observed = NativeContextManifestData("pi.estimateTokens", (value.measured_manifest(),),
-                                        offered_tools=ReportedTools("fixture-pi", frozenset()),
-                                        request_id=ObservedDispatchRequest("request-one"), values=(value,))
+    observed = NativeContextManifestData(
+        "pi.estimateTokens",
+        (value.measured_manifest(),),
+        offered_tools=ReportedTools("fixture-pi", frozenset()),
+        request_id=ObservedDispatchRequest(PiRequestKey("request-one")),
+        values=(value,),
+    )
     original = recorded(())
     captured = observed.for_turn(original.thread, original.turn)
     assert captured.segments[0].captured_text == ("Public original answer",)

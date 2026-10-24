@@ -7,9 +7,8 @@ from abc import abstractmethod
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field, replace
 from typing import TYPE_CHECKING, Annotated, ClassVar, Self
-from uuid import uuid4
 
-from agent_comms.field_codec import GoalId, GoalWaitId
+from agent_comms.field_codec import GoalId, GoalWaitId, MessageId, RetryDecisionId
 from agent_comms import field_codec
 from agent_comms.goals import (
     Goal,
@@ -53,6 +52,7 @@ from .repository_name import RepositoryName
 from .thread_identity import ThreadIncarnation
 from .threads import Thread
 from .reported_turn import ReportedTurnState
+from .attempt_resolution import ComplianceDecision, OrderDecision, RetryDecision
 
 if TYPE_CHECKING:
     from .goal_management import Goals
@@ -255,7 +255,7 @@ class CompliedGoalAction(TransitionGoalAction, OwnerInvocable):
     as a fresh order continues it (continue_work), where a status-only resume is refused.
     Only Core's release takes it; no model or control surface can name a witness."""
 
-    witness: str
+    witness: MessageId
 
     def require_order(self, goal: Goal, ctx: GoalActionContext) -> None:
         """Lifting the heartbeat's hold restores the goal it paused. Its problems may close
@@ -267,7 +267,7 @@ class CompliedGoalAction(TransitionGoalAction, OwnerInvocable):
     def before_transition(self, goal: Goal, ctx: GoalActionContext) -> None:
         store = ctx.goals.open_goal_store()
         generation = store.require_generation(goal.id)
-        generation.lifecycle.continue_work(store, generation, self.witness)
+        generation.lifecycle.continue_work(store, generation, ComplianceDecision(self.witness))
         resumed = store.require_generation(goal.id)
         resumed.lifecycle.resume_status(resumed, goal, ctx)
 
@@ -554,7 +554,7 @@ class ProblemOrderGoalAction(GoalAction[Goal], RuntimeInvocable):
         self.reserve(ctx, goal.id)
         store = ctx.goals.open_goal_store()
         generation = store.require_generation(goal.id)
-        generation.lifecycle.continue_work(store, generation, self.order.id)
+        generation.lifecycle.continue_work(store, generation, OrderDecision(self.order))
         revision = goal.revision + 1
         return replace(goal, order=ProblemGoalOrder(), text=ProblemGoalOrder.text, progress="",
                        revision=revision, mention_source=bind_goal_mentions(
@@ -712,4 +712,4 @@ class RetryGoalAction(TransitionGoalAction, ModelInvocable, OwnerInvocable, Runt
     def require_transition(self, goal: Goal, state: GoalState, ctx: GoalActionContext) -> None:
         """A blocked goal leaves its state machine only through the attempt ledger's retry."""
         store = ctx.goals.open_goal_store()
-        store.authorize_current_retry(goal.id, uuid4().hex)
+        store.authorize_current_retry(goal.id, RetryDecision(RetryDecisionId.mint()))
