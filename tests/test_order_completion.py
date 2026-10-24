@@ -118,7 +118,7 @@ class TestOrderCompletion:
                     if graph.repository.github == CorePackage.repository)
         runtime = LaunchRuntime.installed()
         resolution = RuntimeResolution.at(runtime.prefix)
-        replace(resolution, core_commit=core.newer).save(runtime.prefix)
+        resolution.model_copy(update={'core_commit': core.newer}).save(runtime.prefix)
         current_build = RecordedBuildIdentity.installed()
         assert current_build != previous_build
         current_evidence = ctx.root / 'current-proof.txt'
