@@ -1446,11 +1446,11 @@ class PlainText(DirectiveWords):
         return False
 
 
-class CheckCorrectionReason(PlainText):
-    """Why the recorded check was wrong, in enough words to stand on the record."""
+class OrderCorrectionReason(PlainText):
+    """Why the recorded check or run was wrong, in enough words to stand on the record."""
 
     refusal = (
-        "Say what was wrong with the recorded check in {}+ words; jargon {} hides what happened."
+        "Say what was wrong with the recorded order in {}+ words; jargon {} hides what happened."
     )
     least_words = 8
 
@@ -1666,8 +1666,8 @@ class ProblemOrder(LifecycleCapability, DeclaredFamily, StorySource, affix="Prob
     def check_base(self, repo: Path) -> str:
         raise TodoError("This problem has no active checked order.")
 
-    def corrected(self, correction: CorrectCheckTodo) -> ProblemOrder:
-        raise TodoError("Only an active checked order takes a check correction.")
+    def corrected(self, correction: CorrectOrderTodo) -> ProblemOrder:
+        raise TodoError("Only an active checked order takes a correction.")
 
     finding: Annotated[ProblemFinding, WireOmitDefault()] = field(
         default_factory=UnlocatedProblemFinding
@@ -2033,6 +2033,7 @@ class CheckedProblemOrder(ProblemOrder, declared_name=None):
         tuple[CorrectCheckTodo, ...], WireOmitDefault()
     ] = ()
     run: OrderRun
+    run_corrections: Annotated[tuple[CorrectRunTodo, ...], WireOmitDefault()] = ()
     deletes: Annotated[OrderDeletion, WireOmitDefault()] = field(
         default_factory=NoOrderDeletion
     )
@@ -2173,11 +2174,8 @@ class CheckedProblemOrder(ProblemOrder, declared_name=None):
 class OpenProblemOrder(CheckedProblemOrder, declared_name=None):
     """An active order keeps corrections and accepts its checked delivery by identity."""
 
-    def corrected(self, correction: CorrectCheckTodo) -> Self:
-        if correction.previous != self.check:
-            raise TodoError("The order's check changed since it was read; read it again.")
-        return replace(self, check=correction.check,
-                       check_corrections=(*self.check_corrections, correction))
+    def corrected(self, correction: CorrectOrderTodo) -> Self:
+        return correction.corrected(self)
 
     def require_delivery(self, order_id: str) -> None:
         if self.id != order_id:
@@ -3680,30 +3678,60 @@ class ReleaseTodo(TodoOperation, StoryEvent, TodoHolder):
 
 
 @dataclass(frozen=True)
-class CorrectCheckTodo(TodoOperation):
-    """The commander replaces a wrong check of an open order.
+class CorrectOrderTodo(TodoOperation, declared_name=None):
+    """The commander replaces a wrong part of an open order.
 
     The order keeps its id, holder, review timer and strikes; a correction is not a resend."""
     actor: ThreadIncarnation
-    previous: OrderCheck
-    check: OrderCheck
     reason: str
-    at: EventTime = field(default_factory=lambda: EventTime.capture(time.time()))
+    at: EventTime = field(default_factory=lambda: EventTime.capture(time.time()), kw_only=True)
 
     def prepare(self, goals: Goals, current: Todo) -> Self:
-        CheckCorrectionReason(self.reason)
-        self.check.require_directory()
-        current.order.checked().require_check_acceptance(
-            self.check, goals.registry.storage_rule.checkout_base
-        )
+        OrderCorrectionReason(self.reason)
         return self
 
     def changed(self, current: Todo) -> Todo:
         current.require_commander(self.actor)
         current.state.require_open(current)
-        _text(self.reason, "Check correction reason", 2000)
-        self.check.require_writable()
+        _text(self.reason, "Correction reason", 2000)
         return replace(current, order=current.order.corrected(self), revision=current.revision + 1)
+
+    @abstractmethod
+    def corrected(self, order: OpenProblemOrder) -> OpenProblemOrder:
+        """The order with this correction's part replaced and the correction recorded."""
+
+
+@dataclass(frozen=True)
+class CorrectCheckTodo(CorrectOrderTodo):
+    """The commander replaces a wrong check of an open order."""
+    previous: OrderCheck
+    check: OrderCheck
+
+    def prepare(self, goals: Goals, current: Todo) -> Self:
+        self.check.require_directory()
+        current.order.checked().require_check_acceptance(
+            self.check, goals.registry.storage_rule.checkout_base
+        )
+        return super().prepare(goals, current)
+
+    def corrected(self, order: OpenProblemOrder) -> OpenProblemOrder:
+        if self.previous != order.check:
+            raise TodoError("The order's check changed since it was read; read it again.")
+        self.check.require_writable()
+        return replace(order, check=self.check,
+                       check_corrections=(*order.check_corrections, self))
+
+
+@dataclass(frozen=True)
+class CorrectRunTodo(CorrectOrderTodo):
+    """The commander replaces the run that closes an open order, e.g. one naming deleted code."""
+    previous: OrderRun
+    run: OrderRun
+
+    def corrected(self, order: OpenProblemOrder) -> OpenProblemOrder:
+        if self.previous != order.run:
+            raise TodoError("The order's run changed since it was read; read it again.")
+        return replace(order, run=self.run, run_corrections=(*order.run_corrections, self))
 
 
 @dataclass(frozen=True)
