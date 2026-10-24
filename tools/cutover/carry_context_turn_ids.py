@@ -25,12 +25,16 @@ class ContextTurnIds(Carry):
     def rewrite(path: Path, record: type, payload: dict[str, object]) -> dict[str, object]:
         try:
             identity = payload["identity"]
-            current = payload if isinstance(identity, str) else {
-                **payload,
-                "identity": FieldCodec.encode(
-                    FieldCodec.decode(StoredRegisteredTurn, identity).value
-                ),
-            }
+            current = (
+                payload
+                if isinstance(identity, str)
+                else {
+                    **payload,
+                    "identity": FieldCodec.encode(
+                        FieldCodec.decode(StoredRegisteredTurn, identity).value
+                    ),
+                }
+            )
             FieldCodec.decode(RecordedContextTurn, current)
             return current
         except MalformedRecord as error:
