@@ -56,6 +56,12 @@ def test_quiet_completion_is_per_commander_even_when_a_later_recipient_fails(not
     # A quiet pass still completes after its original notice was committed.
     beat(comms)
     assert len(notifications(comms)) == 1
+    # A pass that misses a still-registered commander retires nothing.
+    CommanderHeartbeat().pass_body(comms, ())
+    assert set(ServicePassStore.at(comms.root).read().commander_completed) == {lead.incarnation}
+    # Only the registry retiring the incarnation drops its completion.
+    comms.registry.unregister("lead")
+    comms.registry.remove("lead")
     CommanderHeartbeat().pass_body(comms, ())
     assert not ServicePassStore.at(comms.root).read().commander_completed
 
