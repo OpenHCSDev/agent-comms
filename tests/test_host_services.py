@@ -132,12 +132,14 @@ def test_codex_inbox_template_publication_reloads_each_rewrite(tmp_path, monkeyp
 
 
 @pytest.fixture
-def connector_service(comms, tmp_path, monkeypatch):
+def connector_service(comms, tmp_path, monkeypatch, pinned_native):
     """A real supervisor on a copied bus; only systemd's process control is replaced."""
     for name in ("claude-ai", "worker"):
         comms.registry.declare(Thread(name, frozenset(), str(comms.root)))
     copied = tmp_path / "copied-bus"
     StoreBackup.copy_tree(comms.root, copied)
+    with client_wire(copied) as copied_comms:
+        copied_comms.registry.prepare_native_root()
     home = tmp_path / "home"
     home.mkdir()
     monkeypatch.setenv("HOME", str(home))
