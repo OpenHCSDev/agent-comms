@@ -12,6 +12,7 @@ from agent_comms.native_failures import NativePiUnavailable
 from agent_comms.thread_text import AbsentText, GivenText, TextChoice
 
 if TYPE_CHECKING:
+    from agent_comms.native_arguments import ProviderChoice
     from agent_comms.pi_commands import SetModel
 
 
@@ -28,11 +29,8 @@ class ThreadModel(SubclassUnion, TextChoice, affix="Model"):
     @boundary_decoder
     def selected_by(arguments: NativeArguments) -> ThreadModel:
         """The model a launch's native arguments select, or none."""
-        selected = arguments.model
-        provider = arguments.provider
-        if selected is None or provider is None:
-            return ThreadModel.reported(selected)
-        return DeclaredModel(SelectedModel(provider, selected.removeprefix(provider + "/")).qualified)
+        selected = arguments.last(lambda entry: entry.apply_model)(UndeclaredModel())
+        return selected.qualified_by(arguments.provider)
 
     @staticmethod
     @boundary_decoder
@@ -54,6 +52,9 @@ class ThreadModel(SubclassUnion, TextChoice, affix="Model"):
     @abstractmethod
     def require_reported(self) -> DeclaredModel:
         """A native runtime's configuration report must name its model."""
+
+    @abstractmethod
+    def qualified_by(self, provider: ProviderChoice) -> ThreadModel: ...
 
 
 @dataclass(frozen=True, slots=True)
@@ -77,6 +78,9 @@ class DeclaredModel(GivenText, ThreadModel):
     def require_reported(self) -> DeclaredModel:
         return self
 
+    def qualified_by(self, provider: ProviderChoice) -> DeclaredModel:
+        return DeclaredModel(provider.qualified(self.text))
+
 
 @dataclass(frozen=True, slots=True)
 class UndeclaredModel(AbsentText, ThreadModel):
@@ -91,3 +95,6 @@ class UndeclaredModel(AbsentText, ThreadModel):
 
     def require_reported(self) -> DeclaredModel:
         raise NativePiUnavailable("Native configuration did not report a model")
+
+    def qualified_by(self, provider: ProviderChoice) -> UndeclaredModel:
+        return self

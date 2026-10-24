@@ -5,7 +5,7 @@ from __future__ import annotations
 import os
 import re
 import shlex
-from abc import abstractmethod
+from abc import ABC, abstractmethod
 from collections.abc import Callable, Iterator, Mapping, Sequence
 from dataclasses import dataclass
 from functools import reduce
@@ -19,6 +19,7 @@ from .launch_runtime import LaunchRuntime
 
 if TYPE_CHECKING:
     from .owner_lifecycle import OwnerLifecycle
+    from .thread_model import ThreadModel
 from .pi_vocabulary import (
     NoThinkingOverride,
     ThinkingChoice,
@@ -38,10 +39,10 @@ class NativeArgument(DeclaredFamily, affix="Argument"):
     def apply_thinking(self, current: type[ThinkingChoice]) -> type[ThinkingChoice]:
         return current
 
-    def apply_provider(self, current: str | None) -> str | None:
+    def apply_provider(self, current: ProviderChoice) -> ProviderChoice:
         return current
 
-    def apply_model(self, current: str | None) -> str | None:
+    def apply_model(self, current: ThreadModel) -> ThreadModel:
         return current
 
     def kept_on_model_change(self) -> tuple[NativeArgument, ...]:
@@ -64,7 +65,7 @@ class ExternalArgument(NativeArgument):
 
 
 class OptionArgument(NativeArgument):
-    short: ClassVar[str | None] = None
+    shorts: ClassVar[tuple[str, ...]] = ()
 
     @classmethod
     @abstractmethod
@@ -107,24 +108,51 @@ class ValueArgument(ValueOption):
         return self.flag(), self.value
 
 
-class ProviderArgument(NamedOption, ValueArgument):
-    def apply_provider(self, current: str | None) -> str | None:
-        return self.value
+class ProviderChoice(ABC):
+    """The provider the arguments select, or none; it qualifies a model name."""
+
+    @abstractmethod
+    def qualified(self, model: str) -> str: ...
+
+    @abstractmethod
+    def provider_type(self) -> type[ModelProvider]: ...
+
+
+@dataclass(frozen=True)
+class NoProviderChoice(ProviderChoice):
+    def qualified(self, model: str) -> str:
+        return model
+
+    def provider_type(self) -> type[ModelProvider]:
+        return NoSelectedModel
+
+
+class ProviderArgument(NamedOption, ValueArgument, ProviderChoice):
+    def apply_provider(self, current: ProviderChoice) -> ProviderChoice:
+        return self
+
+    def qualified(self, model: str) -> str:
+        return SelectedModel(self.value, model.removeprefix(self.value + "/")).qualified
+
+    def provider_type(self) -> type[ModelProvider]:
+        return ModelProvider.member_named(self.value)
 
     def kept_on_model_change(self) -> tuple[NativeArgument, ...]:
         return ()
 
 
 class ModelArgument(NamedOption, ValueArgument):
-    def apply_model(self, current: str | None) -> str | None:
-        return self.value
+    def apply_model(self, current: ThreadModel) -> ThreadModel:
+        from .thread_model import DeclaredModel
+
+        return DeclaredModel(self.value)
 
     def kept_on_model_change(self) -> tuple[NativeArgument, ...]:
         return ()
 
 
 class ExtensionArgument(NamedOption, ValueArgument):
-    short = "-e"
+    shorts = ("-e",)
 
 
 class ModelProvider(DeclaredFamily, affix="Provider"):
@@ -262,11 +290,11 @@ class OneShotArgument(FlagArgument):
 
 
 class ContinueArgument(SessionSelectionArgument, NamedOption, OneShotArgument):
-    short = "-c"
+    shorts = ("-c",)
 
 
 class ResumeArgument(SessionSelectionArgument, NamedOption, OneShotArgument):
-    short = "-r"
+    shorts = ("-r",)
 
 
 class NoSessionArgument(SessionSelectionArgument, NamedOption, OneShotArgument):
@@ -274,15 +302,15 @@ class NoSessionArgument(SessionSelectionArgument, NamedOption, OneShotArgument):
 
 
 class PrintArgument(NamedOption, OneShotArgument):
-    short = "-p"
+    shorts = ("-p",)
 
 
 class HelpArgument(NamedOption, OneShotArgument):
-    short = "-h"
+    shorts = ("-h",)
 
 
 class VersionArgument(NamedOption, OneShotArgument):
-    short = "-v"
+    shorts = ("-v",)
 
 
 class NoExtensionsArgument(NamedOption, FlagArgument):
@@ -309,8 +337,7 @@ class NativeArguments:
         options = {
             flag: member
             for member in OptionArgument.members_with(OptionArgument)
-            for flag in (member.flag(), member.short)
-            if flag is not None
+            for flag in (member.flag(), *member.shorts)
         }
         result = []
         source = iter(arguments)
@@ -335,24 +362,20 @@ class NativeArguments:
 
     @property
     def provider_type(self) -> type[ModelProvider]:
-        provider = self.provider
-        return NoSelectedModel if provider is None else ModelProvider.member_named(provider)
+        return self.provider.provider_type()
 
-    def last[T](self, start: T, apply: Callable[[NativeArgument], Callable[[T], T]]) -> T:
+    def last[T](self, apply: Callable[[NativeArgument], Callable[[T], T]]) -> Callable[[T], T]:
         """Pi lets the last argument of a setting win: each entry's apply hook owns its part."""
-        return reduce(lambda selected, entry: apply(entry)(selected), self.entries, start)
+        return lambda start: reduce(
+            lambda selected, entry: apply(entry)(selected), self.entries, start)
 
     @property
-    def provider(self) -> str | None:
-        return self.last(None, lambda entry: entry.apply_provider)
-
-    @property
-    def model(self) -> str | None:
-        return self.last(None, lambda entry: entry.apply_model)
+    def provider(self) -> ProviderChoice:
+        return self.last(lambda entry: entry.apply_provider)(NoProviderChoice())
 
     @property
     def thinking(self) -> type[ThinkingChoice]:
-        return self.last(NoThinkingOverride, lambda entry: entry.apply_thinking)
+        return self.last(lambda entry: entry.apply_thinking)(NoThinkingOverride)
 
     def with_model(self, selected: str) -> NativeArguments:
         return NativeArguments(

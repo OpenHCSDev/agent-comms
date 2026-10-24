@@ -30,20 +30,19 @@ class InputKey(DeclaredFamily):
         return self.prefix + self.text()
 
     @classmethod
-    def parse(cls, text: str) -> InputKey | None:
-        return (match := re.fullmatch(re.escape(cls.prefix) + cls.body, text)) and cls(
-            *(read(group) for read, group in zip(cls.readers, match.groups(), strict=True)))
+    def public_prefix(cls) -> str:
+        return cls.prefix
+
+    @classmethod
+    def read(cls, match: re.Match[str]) -> InputKey:
+        return cls(*(read(group) for read, group in zip(cls.readers, match.groups(), strict=True)))
 
     def require_sequence(self, sequence: int | None) -> None:
         if sequence is not None:
             raise ValueError("Input key cannot have a bus sequence")
 
     def public_text(self) -> str:
-        return str(self)
-
-    @classmethod
-    def parse_public(cls, text: str) -> InputKey | None:
-        return cls.parse(text)
+        return self.public_prefix() + self.text()
 
     def identify(self, update: InputStartedUpdate) -> InputStartedUpdate:
         return update
@@ -60,13 +59,8 @@ class AcpInputKey(InputKey):
         return self.input_id
 
     @classmethod
-    def parse_public(cls, text: str) -> AcpInputKey | None:
-        if re.fullmatch(InputId.spelled_by.spelling.pattern, text):
-            return cls(FieldCodec.decode(InputId, text))
-        return None
-
-    def public_text(self) -> str:
-        return self.input_id
+    def public_prefix(cls) -> str:
+        return ""
 
     def identify(self, update: InputStartedUpdate) -> InputStartedUpdate:
         return update.identified(self.input_id)
@@ -77,7 +71,7 @@ class BusInputKey(InputKey):
     sequence: int
     prefix = "bus:"
     body = r"([1-9][0-9]*)"
-    readers = (int,)
+    readers: ClassVar[tuple[Callable[[str], object], ...]] = (int,)
 
     def text(self) -> str:
         return str(self.sequence)
@@ -114,13 +108,13 @@ class InputKeyText(TextRepresentation[InputKey]):
     @classmethod
     def from_text(cls, value: str) -> InputKey:
         for member in InputKey.members_with(InputKey):
-            if (key := cls.parse_member(member, value)) is not None:
-                return key
+            if match := re.fullmatch(re.escape(cls.prefix(member)) + member.body, value):
+                return member.read(match)
         raise MalformedRecord("Expected a declared input key")
 
     @classmethod
-    def parse_member(cls, member: type[InputKey], value: str) -> InputKey | None:
-        return member.parse(value)
+    def prefix(cls, member: type[InputKey]) -> str:
+        return member.prefix
 
     @classmethod
     def schema(cls) -> dict[str, str]:
@@ -133,5 +127,5 @@ class PublicInputKeyText(InputKeyText):
         return value.public_text()
 
     @classmethod
-    def parse_member(cls, member: type[InputKey], value: str) -> InputKey | None:
-        return member.parse_public(value)
+    def prefix(cls, member: type[InputKey]) -> str:
+        return member.public_prefix()
