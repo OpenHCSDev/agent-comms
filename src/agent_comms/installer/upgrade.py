@@ -667,10 +667,13 @@ class Stack:
 
     @contextmanager
     def services_stopped(self, restore_on: Stack) -> Iterator[ServicesStopped]:
-        with StopServicesPhase().running(self.commands.clock):
-            stopped = HostService.stop_running()
+        """The restart is registered before the stop, so a stop interrupted after systemd
+        acted (a SIGTERM to an installer inside the stopped unit) still starts them again."""
+        stopped = HostService.instances()
         with ExitStack() as give_back:
             give_back.callback(restore_on.start_services, stopped)
+            with StopServicesPhase().running(self.commands.clock):
+                HostService.stop_all(stopped)
             yield ServicesStopped(stopped, give_back)
 
     def start_services(self, stopped: tuple[HostService, ...]) -> tuple[RestartedService, ...]:
