@@ -76,28 +76,6 @@ class BlocksRelease:
     the signal is gone: a quote is the answer, never the relief."""
 
 
-@dataclass(frozen=True)
-class StandingScan:
-    """The held orders captured once for this scan; filtering never reopens the store."""
-
-    held: HeldOrders
-
-    @classmethod
-    def read(cls, comms: Comms, commander: str) -> Self:
-        snapshot = comms.registry.snapshot()
-        return cls(comms.goals.todos.holds_for_commander(
-            snapshot.require(commander).incarnation, snapshot))
-
-    @property
-    def todos(self) -> tuple[Todo, ...]:
-        """The orders a registered unit holds."""
-        return self.held.todos
-
-    @property
-    def holders(self) -> dict[ThreadIncarnation, list[Todo]]:
-        return self.held.holders
-
-
 class StandingRule(DeclaredFamily, affix="StandingRule", discovery_package="agent_comms.commander"):
     @classmethod
     @abstractmethod
@@ -408,10 +386,12 @@ class OwedAnswer(IndependentStandingRule, declared_name=None):
 
     @classmethod
     def opened(cls, comms: Comms, commander: str) -> tuple[Self, ...]:
-        return cls.read_scan(comms, commander, StandingScan.read(comms, commander))
+        from agent_comms.todos import HeldOrders
+
+        return cls.read_scan(comms, commander, HeldOrders.read(comms, commander))
 
     @classmethod
-    def read_scan(cls, comms: Comms, commander: str, scan: StandingScan) -> tuple[Self, ...]:
+    def read_scan(cls, comms: Comms, commander: str, scan: HeldOrders) -> tuple[Self, ...]:
         # Capture committed order/directive references before the bus cut.
         snapshot = comms.registry.snapshot()
         requests = comms.goals.todos.open_requests(snapshot.require(commander).incarnation)

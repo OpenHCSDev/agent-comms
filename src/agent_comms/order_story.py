@@ -77,6 +77,8 @@ class FleetStory(ToolResult):
     def collect(cls, held: HeldOrders) -> Self:
         lines = [f"{hold.todo.id} {hold.holder.name}: {hold.todo.order.line}" for hold in held.live]
         if held.orphaned:
-            lines.append(f"{len(held.orphaned)} orders held by units no longer registered: "
-                         + ", ".join(f"{todo.id} {todo.held().owner}" for todo in held.orphaned))
+            lines.append(
+                f"{len(held.orphaned)} orders held by units no longer registered: "
+                + ", ".join(f"{todo.id} {todo.held().owner}" for todo in held.orphaned)
+            )
         return cls(tuple(lines))

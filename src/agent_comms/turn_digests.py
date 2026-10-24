@@ -188,11 +188,9 @@ class OrderRead[Result](TranscriptRead[Result]):
 
     @classmethod
     def for_commander(cls, comms: Comms, commander: str) -> Iterator[Self]:
-        snapshot = comms.registry.snapshot()
-        actor = snapshot.require(commander).incarnation
-        yield from cls.for_orders(
-            comms.root, comms.goals.todos.holds_for_commander(actor, snapshot).live
-        )
+        from .todos import HeldOrders
+
+        yield from cls.for_orders(comms.root, HeldOrders.read(comms, commander).live)
 
     @classmethod
     def for_orders(cls, root: Path, holds: Iterable[LiveHold]) -> Iterator[Self]:

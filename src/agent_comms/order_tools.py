@@ -465,9 +465,7 @@ class CommsFleetStoryTool(ThreadReadTool):
                    "order; orders held by units no longer registered collapse into one line.")
 
     def apply(self, comms: Comms, caller: ToolCaller) -> FleetStory:
-        snapshot = comms.registry.snapshot()
-        actor = snapshot.require(caller.subject(self.thread)).incarnation
-        return FleetStory.collect(comms.goals.todos.holds_for_commander(actor, snapshot))
+        return FleetStory.collect(HeldOrders.read(comms, caller.subject(self.thread)))
 
 
 @dataclass(frozen=True, kw_only=True)

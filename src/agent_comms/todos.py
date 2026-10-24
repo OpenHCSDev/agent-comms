@@ -4083,6 +4083,13 @@ class HeldOrders:
     orphaned: tuple[Todo, ...]
 
     @classmethod
+    def read(cls, comms: Comms, commander: str) -> Self:
+        """The commander's held orders captured once; filtering never reopens the store."""
+        snapshot = comms.registry.snapshot()
+        held = comms.goals.todos.held_for_commander(snapshot.require(commander).incarnation)
+        return cls.split(held, snapshot)
+
+    @classmethod
     def split(cls, todos: Sequence[Todo], snapshot: RegistrySnapshot) -> Self:
         holds = tuple((todo, todo.held().holder_in(snapshot)) for todo in todos)
         return cls(tuple(LiveHold(todo, thread) for todo, threads in holds for thread in threads),
@@ -4341,9 +4348,6 @@ class TodoStore(OwnerRequestStore):
     def held_for_commander(self, commander: ThreadIncarnation) -> tuple[Todo, ...]:
         return self._select("creator=? AND creator_created=? AND assignment IS NOT NULL",
             (commander.name, commander.wire_birth), reader=self._open)
-
-    def holds_for_commander(self, commander: ThreadIncarnation, snapshot: RegistrySnapshot) -> HeldOrders:
-        return HeldOrders.split(self.held_for_commander(commander), snapshot)
 
     def held_by(self, commander: ThreadIncarnation, unit: ThreadIncarnation) -> tuple[Todo, ...]:
         return self._select('creator=? AND creator_created=?',

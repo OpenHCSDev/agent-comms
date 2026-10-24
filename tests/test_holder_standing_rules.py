@@ -57,13 +57,14 @@ from agent_comms.read_basis import DMDisplayScope, RepliesDisplayScope
 from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.repository_name import RepositoryName
 from agent_comms.heartbeat_frame import HeartbeatFrame
-from agent_comms.standing_rules import StandingRule, StandingScan
+from agent_comms.standing_rules import StandingRule
 from agent_comms.thread_identity import CoreWatcherIncarnation
 from agent_comms.thread_model import DeclaredModel
 from agent_comms.thread_status import StoppedThreadStatus
 from agent_comms.tool_caller import NoThreadCaller
 from agent_comms.turn_digests import OrderEditCountRead
 from agent_comms.todos import (
+    HeldOrders,
     ClaimOrder,
     OrderClaim,
     OrderMessage,
@@ -613,7 +614,7 @@ def test_channel_messages_without_a_commander_addressee_are_not_a_question(held_
     with held_bus.bus.bus.reading() as source:
         questions = UnansweredUnitAsks.for_orders(
             source, held_bus.registry.snapshot(), 'lead',
-            StandingScan.read(held_bus, 'lead').holders, time.time(),
+            HeldOrders.read(held_bus, 'lead').holders, time.time(),
         )
     assert not any(questions.values())
 
