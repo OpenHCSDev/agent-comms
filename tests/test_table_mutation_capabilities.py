@@ -6,6 +6,7 @@ from typing import Annotated, ClassVar
 
 import pytest
 
+from bus_record_fixture import OWNER_LOOKUP
 from conftest import maintenance_held
 
 from agent_comms.coordination_database import CoordinationStore
@@ -343,18 +344,19 @@ def test_declared_insert_validator_receives_the_field_values(db):
 def test_owner_counter_refuses_skipping_a_generation():
     with closing(SQLiteFile.writer(":memory:", isolation_level=None)) as connection:
         CoordinatorTable.create_schema(connection)
-        Participants(participant_lookup="owner", committed=True).insert(connection)
-        OwnerGenerations(owner_lookup="owner",  generation=1).insert(connection)
+        Participants(participant_lookup=OWNER_LOOKUP, committed=True).insert(connection)
+        OwnerGenerations(owner_lookup=OWNER_LOOKUP,  generation=1).insert(connection)
         with pytest.raises(sqlite3.IntegrityError):
-            OwnerGenerations.update(connection, where="owner_lookup='owner'", generation=3)
-        OwnerGenerations.update(connection, where="owner_lookup='owner'", generation=2)
+            OwnerGenerations.update(
+                connection, where=f"owner_lookup='{OWNER_LOOKUP}'", generation=3)
+        OwnerGenerations.update(connection, where=f"owner_lookup='{OWNER_LOOKUP}'", generation=2)
 
 
 def test_normal_writer_replaces_old_guards_without_rewriting_rows(tmp_path):
     path = tmp_path / CoordinationStore.filename
     with closing(CoordinationStore(path)) as store:
         connection = store._connection
-        Participants(participant_lookup="owner", committed=True).insert(
+        Participants(participant_lookup=OWNER_LOOKUP, committed=True).insert(
             connection
         )
         before = Participants.select(connection)

@@ -5,6 +5,8 @@ from itertools import product
 
 import pytest
 
+from bus_record_fixture import OWNER_LOOKUP
+
 from agent_comms.coordination_tables.executions import NoPointedAttempt, NoPointedExecution
 from agent_comms.assignment_states import AssignmentState, BoundAssignment
 from agent_comms.attempt_states import AttemptState, LiveAttempt
@@ -70,7 +72,7 @@ def test_assignment_positive_numbers_and_timestamps(pending, field):
 
 @pytest.mark.parametrize("policy", members(WakePolicy), ids=lambda c: c.declared_name)
 def test_assignment_decision_and_binding_owned_by_policy(policy):
-    decision = policy().recipient_decision("owner", MessageAudience.DIRECT)
+    decision = policy().recipient_decision(OWNER_LOOKUP, MessageAudience.DIRECT)
     assert RecipientDecision.from_wire(decision.to_wire()) == decision
     for claim in decision.claim_decisions():
         mode = claim.wake_policy()

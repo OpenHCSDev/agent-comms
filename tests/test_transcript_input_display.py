@@ -15,6 +15,7 @@ from conftest import installed_comms
 from agent_comms.native_entries import TranscriptProjection
 from agent_comms.pi_payloads import PiMessage
 from agent_comms.threads import Thread
+from bus_record_fixture import FIRST_INPUT_ID, SECOND_INPUT_ID, THIRD_INPUT_ID
 
 GOAL_PROMPT = (
     "Persistent goal deadbeef: Read files until stopped.\n"
@@ -36,21 +37,23 @@ def test_saved_goal_prompt_hidden_but_followup_and_images_survive_reopen(tmp_pat
     comms = installed_comms(tmp_path / "wire")
     comms.registry.declare(Thread('worker', frozenset(), str(tmp_path)))
     # These annotations are committed before sending, before Pi creates its first file.
-    comms.transcripts.routes.record_input_display("a" * 32, None)
+    comms.transcripts.routes.record_input_display(FIRST_INPUT_ID, None)
     comms.transcripts.routes.record_input_display(
-        "b" * 32, "Please inspect this image\nthen continue."
+        SECOND_INPUT_ID, "Please inspect this image\nthen continue."
     )
     # Send now checks the same already-bound ID again; it cannot change its display.
-    comms.transcripts.routes.record_input_display("b" * 32, "User follow-up: private wrapper")
+    comms.transcripts.routes.record_input_display(
+        SECOND_INPUT_ID, "User follow-up: private wrapper")
     session = tmp_path / "session.jsonl"
     rows = [
-        saved_row("a" * 32, GOAL_PROMPT),
+        saved_row(FIRST_INPUT_ID, GOAL_PROMPT),
         saved_row(
-            "b" * 32, "User follow-up:\nPlease inspect this image\nthen continue.", images=True
+            SECOND_INPUT_ID, "User follow-up:\nPlease inspect this image\nthen continue.",
+            images=True,
         ),
         # A genuine user may quote these exact words; never filter by prefix.
-        saved_row("c" * 32, GOAL_PROMPT),
-        saved_row("a" * 32, "assistant reply", role="assistant"),
+        saved_row(THIRD_INPUT_ID, GOAL_PROMPT),
+        saved_row(FIRST_INPUT_ID, "assistant reply", role="assistant"),
     ]
     session.write_text("".join(json.dumps(row) + "\n" for row in rows))
     comms.threads.attach_session((attachment_owner := comms.registry.require("worker")), str(session), process=attachment_owner.process_identity)
@@ -72,14 +75,14 @@ def test_saved_goal_prompt_hidden_but_followup_and_images_survive_reopen(tmp_pat
 
 def test_incomplete_durable_annotation_schema_is_not_repaired(tmp_path):
     comms = wire(tmp_path / "wire")
-    comms.transcripts.routes.record_input_display("a" * 32, "first input")
+    comms.transcripts.routes.record_input_display(FIRST_INPUT_ID, "first input")
     path = comms.transcripts.routes.path
     with sqlite3.connect(path) as connection:
         connection.execute("DROP TABLE transcript_route")
     before = path.read_bytes()
     reopened = wire(comms.root)
     with pytest.raises(ValueError):
-        reopened.transcripts.routes.record_input_display("b" * 32, None)
+        reopened.transcripts.routes.record_input_display(SECOND_INPUT_ID, None)
     with pytest.raises(ValueError):
         reopened.transcripts.routes.input_bindings()
     assert path.read_bytes() == before
@@ -93,15 +96,15 @@ async def test_acp_saved_transcript_replay_hides_only_owned_internal_input(tmp_p
         "".join(
             json.dumps(row) + "\n"
             for row in [
-                saved_row("a" * 32, GOAL_PROMPT),
-                saved_row("b" * 32, "User follow-up:\ntest2"),
-                saved_row("c" * 32, "Done reading", role="assistant"),
+                saved_row(FIRST_INPUT_ID, GOAL_PROMPT),
+                saved_row(SECOND_INPUT_ID, "User follow-up:\ntest2"),
+                saved_row(THIRD_INPUT_ID, "Done reading", role="assistant"),
             ]
         )
     )
     comms.registry.declare(Thread('worker', frozenset(), str(tmp_path), session_file=RegistrySessionLocation.from_path(str(session), comms.root)))
-    comms.transcripts.routes.record_input_display("a" * 32, None)
-    comms.transcripts.routes.record_input_display("b" * 32, "test2")
+    comms.transcripts.routes.record_input_display(FIRST_INPUT_ID, None)
+    comms.transcripts.routes.record_input_display(SECOND_INPUT_ID, "test2")
     agent = CommsAgent(wire(comms.root))
     updates = []
 
