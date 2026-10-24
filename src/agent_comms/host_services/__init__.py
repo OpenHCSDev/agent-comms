@@ -12,6 +12,7 @@ import subprocess
 import time
 from abc import abstractmethod
 from dataclasses import dataclass
+from itertools import groupby
 from pathlib import Path
 from typing import Annotated, ClassVar, Self
 
@@ -52,6 +53,8 @@ class HostService(DeclaredFamily, affix="Service", discovery_package=__name__):
     @abstractmethod
     def stop_all(cls, instances: tuple[Self, ...]) -> None:
         """Stop these running instances of this member together; their launchers stay installed."""
+        for member, selected in groupby(instances, type):
+            member.stop_all(tuple(selected))
 
     @abstractmethod
     def start(self) -> None:
@@ -79,12 +82,9 @@ class HostService(DeclaredFamily, affix="Service", discovery_package=__name__):
     @classmethod
     def stop_running(cls) -> tuple[HostService, ...]:
         """Stop every running service, so nothing writes the root while it is restored."""
-        stopped: list[HostService] = []
-        for member in cls.members_with(cls):
-            instances = member.running()
-            member.stop_all(instances)
-            stopped.extend(instances)
-        return tuple(stopped)
+        stopped = cls.instances()
+        cls.stop_all(stopped)
+        return stopped
 
     def start_onto(self, installed: Path) -> RestartedService:
         self.start()

@@ -457,6 +457,19 @@ class UnresumedUpgrade(InstalledUpgrade):
 
 
 @dataclass(frozen=True)
+class ServicesStopped:
+    """Stopped services return to their original stack until a start succeeds."""
+
+    services: tuple[HostService, ...]
+    give_back: ExitStack
+
+    def start_on(self, stack: Stack) -> tuple[RestartedService, ...]:
+        restarted = stack.start_services(self.services)
+        self.give_back.pop_all()
+        return restarted
+
+
+@dataclass(frozen=True)
 class Stack:
     """One built installation and the source checkout containing its install tools."""
 
@@ -660,9 +673,13 @@ class Stack:
         return tuple(outcome.owner_start()
                      for outcome in self.owners(root, StartCliCommand, names).outcomes)
 
-    def stop_services(self) -> tuple[HostService, ...]:
+    @contextmanager
+    def services_stopped(self, restore_on: Stack) -> Iterator[ServicesStopped]:
         with StopServicesPhase().running(self.commands.clock):
-            return HostService.stop_running()
+            stopped = HostService.stop_running()
+        with ExitStack() as give_back:
+            give_back.callback(restore_on.start_services, stopped)
+            yield ServicesStopped(stopped, give_back)
 
     def start_services(self, stopped: tuple[HostService, ...]) -> tuple[RestartedService, ...]:
         with StartServicesPhase().running(self.commands.clock):
@@ -1072,102 +1089,103 @@ class ChangedInstall(ExistingBusInstall[RehearsedFiles]):
         with OutgoingRuntimeMaintenancePhase().running(self.staged.commands.clock):
             RootRuntimeStore.at(self.root).adopt(self.installed.runtime)
         running = self.installed.running_owners(self.root)
-        services = self.staged.stop_services()
-        with BeginMaintenancePhase().running(self.staged.commands.clock):
-            maintenance = MaintenanceBarrier(RegistryStore.at(self.root).path)
-            try:
+        with self.staged.services_stopped(self.installed) as stopped:
+            with BeginMaintenancePhase().running(self.staged.commands.clock):
+                maintenance = MaintenanceBarrier(RegistryStore.at(self.root).path)
                 held = maintenance.begin(MaintenanceOperator.current())
-            except BaseException:
-                self.installed.start_services(services)
-                raise
-            holder = ExitStack()
-            holder.enter_context(held.holding())  # this run's own CLI calls read under its hold
-        try:
+                holder = ExitStack()
+                holder.enter_context(held.holding())  # this run's CLI calls read under its hold
             try:
-                self.installed.owners(self.root, StopCliCommand, running).require_success(UpgradeRefused)
-                with RetargetMaintenancePhase().running(self.staged.commands.clock):
-                    held = maintenance.retarget(held, self.staged.runtime)
-                    holder.close()
-                    holder.enter_context(held.holding())
-                planned = self.staged.cli(self.root, PlannedReconcileCliCommand)
-                unrehearsed = sorted(frozenset(planned.rewritten) - frozenset(rehearsal.files.names))
-                if unrehearsed:
-                    raise UpgradeRefused(
-                        f"Reconcile would rewrite files the rehearsal did not: {unrehearsed}")
-                original = PreparedMigration.capture(held, self.installed)
-                backup, selected_route = self.backed_up(selected)
-                migration = original.extended(BackedUpMigration, backup=backup)
-            except BaseException as error:
-                with AbortMaintenancePhase().running(self.staged.commands.clock):
-                    holder.close()
-                    maintenance.clear(held)
-                started = self.installed.start(self.root, running)
-                self.installed.start_services(services)
-                print(f"install: aborted before the backup ({type(error).__name__}: {error}); "
-                      f"maintenance cleared; owners: {started}", file=sys.stderr)
-                raise
-            try:
-                with LiveCheckoutPreparePhase().running(self.staged.commands.clock):
-                    self.staged.commands.git(self.checkout, "merge", "--ff-only", "-q", self.target)
-                    Checkout(self.checkout).prepare()
-                passed = migration.carry(self.pending, self.staged)
-                passed.files.require_rehearsal(rehearsal.files)
-                self.publish(migration.backup, selected_route)
-                with ClearMaintenancePhase().running(self.staged.commands.clock):
-                    holder.close()
-                    maintenance.clear(held)
-                restarted_services = BindingStartCutover(
-                    self.staged, self.checkout, self.installed.home, self.root,
-                ).around(lambda: self.staged.start_services(services))
-            except BaseException as error:
-                print(f"install: install failed ({type(error).__name__}: {error}); "
-                      "restoring original installation", file=sys.stderr)
-                # A running service writes the root (the connector its passes), so none may
-                # run while the backup is restored; they start again on the original runtime.
-                self.staged.stop_services()
-                state = maintenance.read()
-                recovery = state.phase.hold_for(maintenance, state, MaintenanceOperator.current())
-                holder.close()
-                holder.enter_context(recovery.holding())
-                migration.restore()
-                restored = maintenance.read()
-                restored_hold = restored.phase.hold_for(
-                    maintenance, restored, MaintenanceOperator.current())
-                holder.close()
-                holder.enter_context(restored_hold.holding())
-                head = self.installed.commands.git(self.checkout, "rev-parse", "HEAD").strip()
-                if head != self.current:
-                    with RestoredCheckoutPreparePhase().running(self.staged.commands.clock):
-                        self.installed.commands.git(self.checkout, "reset", "-q", "--keep", self.current)
+                try:
+                    self.installed.owners(self.root, StopCliCommand, running).require_success(
+                        UpgradeRefused)
+                    with RetargetMaintenancePhase().running(self.staged.commands.clock):
+                        held = maintenance.retarget(held, self.staged.runtime)
+                        holder.close()
+                        holder.enter_context(held.holding())
+                    planned = self.staged.cli(self.root, PlannedReconcileCliCommand)
+                    unrehearsed = sorted(
+                        frozenset(planned.rewritten) - frozenset(rehearsal.files.names))
+                    if unrehearsed:
+                        raise UpgradeRefused(
+                            f"Reconcile would rewrite files the rehearsal did not: {unrehearsed}")
+                    original = PreparedMigration.capture(held, self.installed)
+                    backup, selected_route = self.backed_up(selected)
+                    migration = original.extended(BackedUpMigration, backup=backup)
+                except BaseException as error:
+                    with AbortMaintenancePhase().running(self.staged.commands.clock):
+                        holder.close()
+                        maintenance.clear(held)
+                    started = self.installed.start(self.root, running)
+                    print(
+                        f"install: aborted before the backup ({type(error).__name__}: {error}); "
+                        f"maintenance cleared; owners: {started}", file=sys.stderr)
+                    raise
+                try:
+                    with LiveCheckoutPreparePhase().running(self.staged.commands.clock):
+                        self.staged.commands.git(
+                            self.checkout, "merge", "--ff-only", "-q", self.target)
                         Checkout(self.checkout).prepare()
-                self.installed.publish(self.root)
-                holder.close()
-                maintenance.clear(restored_hold)
-                started = self.installed.start(self.root, running)
-                self.installed.start_services(services)
-                print(f"install: restored after failure ({type(error).__name__}: {error}); "
-                      f"original runtime selected; owners: {started}; "
-                      f"backup: {migration.backup.description}",
-                      file=sys.stderr)
-                raise InstallRolledBack(error, started, migration.backup.description,
-                                        runtime=self.installed.runtime) from error
-            # Installed: the carries ran and the runtime is published. Starting the owners it
-            # stopped is reported per owner and never rolls the install back.
-            report.writer = RuntimeWriter(self.root, self.staged)
-            try:
-                retirement = tuple(replace(
-                    step, spill_dir=migration.backup.spill_directory(self.spill_dir),
-                ) for step in self.pending)
-                passed = passed.after_acceptance(retirement, self.staged)
+                    passed = migration.carry(self.pending, self.staged)
+                    passed.files.require_rehearsal(rehearsal.files)
+                    self.publish(migration.backup, selected_route)
+                    with ClearMaintenancePhase().running(self.staged.commands.clock):
+                        holder.close()
+                        maintenance.clear(held)
+                    restarted_services = BindingStartCutover(
+                        self.staged, self.checkout, self.installed.home, self.root,
+                    ).around(lambda: stopped.start_on(self.staged))
+                except BaseException as error:
+                    print(f"install: install failed ({type(error).__name__}: {error}); "
+                          "restoring original installation", file=sys.stderr)
+                    # Only the services this run stopped may write the root on its behalf.
+                    HostService.stop_all(stopped.services)
+                    state = maintenance.read()
+                    recovery = state.phase.hold_for(
+                        maintenance, state, MaintenanceOperator.current())
+                    holder.close()
+                    holder.enter_context(recovery.holding())
+                    migration.restore()
+                    restored = maintenance.read()
+                    restored_hold = restored.phase.hold_for(
+                        maintenance, restored, MaintenanceOperator.current())
+                    holder.close()
+                    holder.enter_context(restored_hold.holding())
+                    head = self.installed.commands.git(
+                        self.checkout, "rev-parse", "HEAD").strip()
+                    if head != self.current:
+                        with RestoredCheckoutPreparePhase().running(self.staged.commands.clock):
+                            self.installed.commands.git(
+                                self.checkout, "reset", "-q", "--keep", self.current)
+                            Checkout(self.checkout).prepare()
+                    self.installed.publish(self.root)
+                    holder.close()
+                    maintenance.clear(restored_hold)
+                    started = self.installed.start(self.root, running)
+                    print(f"install: restored after failure ({type(error).__name__}: {error}); "
+                          f"original runtime selected; owners: {started}; "
+                          f"backup: {migration.backup.description}",
+                          file=sys.stderr)
+                    raise InstallRolledBack(
+                        error, started, migration.backup.description,
+                        runtime=self.installed.runtime) from error
+                # Owner startup is reported per owner and never rolls the install back.
+                report.writer = RuntimeWriter(self.root, self.staged)
+                try:
+                    retirement = tuple(replace(
+                        step, spill_dir=migration.backup.spill_directory(self.spill_dir),
+                    ) for step in self.pending)
+                    passed = passed.after_acceptance(retirement, self.staged)
+                finally:
+                    started = self.staged.start(self.root, running)
+                with BackupRetirePhase().running(self.staged.commands.clock):
+                    retired_backups = migration.backup.retain(self.spill_dir)
+                return passed.extended(
+                    CarriedRun, stopped=tuple(running), services=restarted_services,
+                    started=started, restore_space=restore, backup=migration.backup.report(),
+                    retired_backups=retired_backups)
             finally:
-                started = self.staged.start(self.root, running)
-            with BackupRetirePhase().running(self.staged.commands.clock):
-                retired_backups = migration.backup.retain(self.spill_dir)
-            return passed.extended(CarriedRun, stopped=tuple(running), services=restarted_services,
-                                   started=started, restore_space=restore, backup=migration.backup.report(),
-                                   retired_backups=retired_backups)
-        finally:
-            holder.close()
+                holder.close()
 
 
 class UnchangedInstall(ExistingBusInstall[UnchangedRehearsal]):
@@ -1217,19 +1235,18 @@ class FreshInstall(Install[FreshRehearsal]):
         wire(self.root).registry.prepare_native_root()
         report.writer = RuntimeWriter(self.root, self.staged)
         backup, selected_route = self.backed_up(())
-        stopped = self.staged.stop_services()
-        try:
-            route = self.publish(backup, selected_route)
-            services = self.staged.start_services(stopped)
-        except BaseException:
-            self.staged.stop_services()
-            backup.restore_route()
-            self.installed.publish(self.root)
-            self.installed.start_services(stopped)
-            raise
-        with BackupRetirePhase().running(self.staged.commands.clock):
-            backup.retain(self.spill_dir)
-        return CreatedRun(services, route)
+        with self.staged.services_stopped(self.installed) as stopped:
+            try:
+                route = self.publish(backup, selected_route)
+                services = stopped.start_on(self.staged)
+            except BaseException:
+                HostService.stop_all(stopped.services)
+                backup.restore_route()
+                self.installed.publish(self.root)
+                raise
+            with BackupRetirePhase().running(self.staged.commands.clock):
+                backup.retain(self.spill_dir)
+            return CreatedRun(services, route)
 
 
 class RetiringInstall(FreshInstall):
