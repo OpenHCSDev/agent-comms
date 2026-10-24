@@ -20,7 +20,7 @@ from agent_comms.bus_publication import Delivered
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.cohort_schema import AwarenessClaimGenerations, ClaimBatchAcknowledgements
 from agent_comms.comms import Comms, wire
-from agent_comms.coordination_cohort import accept_delivery_cohort
+from conftest import accept_initial
 from agent_comms.coordination_errors import IdentityConflict
 from agent_comms.coordination_tables.assignments import WakeAssignment
 from agent_comms.assignment_states import EngagedAssignment
@@ -68,9 +68,8 @@ def _accepted(
             recipient.recipient_lookup,
             committed=True,
         )
-    acknowledgement = accept_delivery_cohort(comms.bus, root_id, message.seq, store).value
-    assert len(acknowledgement.assignments) == 1
-    return initial, acknowledgement.assignments[0]
+    (assignment,) = accept_initial(comms.bus, root_id, message.seq, store)
+    return initial, assignment
 
 
 def _owner(comms: Comms, name: str) -> Thread:
@@ -300,9 +299,7 @@ def test_normal_rename_preserves_selected_claims_for_the_same_owner(
         comms.threads._rename_thread("member000", "gamma")
         current_message = publish_initial(comms, "sender", "gamma", "new selected")
         current = comms.bus.bus.delivery(current_message.seq)
-        acknowledgement = accept_delivery_cohort(comms.bus, root_id, current_message.seq, store).value
-        assert len(acknowledgement.assignments) == 1
-        current_claim = acknowledgement.assignments[0]
+        (current_claim,) = accept_initial(comms.bus, root_id, current_message.seq, store)
         owner = _owner(comms, "gamma")
         result = _projection(index, store, owner, 0, current.message.seq)(
             current, current_claim, owner
@@ -397,7 +394,7 @@ def test_saved_wire_awareness_preserves_passive_authority_and_rejects_incomplete
         notice = publish_initial(comms,
             "sender", "member000", "Passive retained context", role=NoticeRole()
         )
-        passive = accept_delivery_cohort(comms.bus, root_id, notice.seq, store).value.assignments[0]
+        passive = accept_initial(comms.bus, root_id, notice.seq, store)[0]
         assert isinstance(passive.lifecycle, PassiveAssignment)
         with pytest.raises(IdentityConflict):
             passive.lifecycle.require_engageable()

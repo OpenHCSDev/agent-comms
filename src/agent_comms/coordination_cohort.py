@@ -15,7 +15,6 @@ from typing import Annotated
 
 from agent_comms.assignment_states import AssignmentState, PendingNotification
 from agent_comms.bus_publication import Delivered
-from agent_comms.coordination_session import NativeBoundary
 from agent_comms.private_registry_guard import RegistryPrivacy
 from agent_comms.cohort_schema import (
     AwarenessClaimGenerations,
@@ -35,7 +34,6 @@ from agent_comms.coordination_results import AlreadyApplied, Applied
 from agent_comms.coordination_tables.assignments import WakeAssignment
 from agent_comms.coordination_tables.participants import OwnerGenerations, Participants
 from agent_comms.coordinator import Coordination
-from agent_comms.message_bus import MessageBus
 
 from .field_codec import MalformedRecord, MessageId, WireName, RootId, ThreadLookup
 
@@ -236,24 +234,6 @@ def _record_optional_owner_generations(
         _LOG.warning("Optional generation provenance omitted: %r", error, exc_info=error)
     finally:
         db.execute("RELEASE optional_awareness_claims")
-
-
-def accept_delivery_cohort(
-    bus: MessageBus,
-    wire_root_id: RootId,
-    wire_seq: int,
-    store: Coordination,
-) -> Applied[AcceptedCohort] | AlreadyApplied[AcceptedCohort]:
-    """Bus-read first, then one SQLite transaction for every N/K fact.
-
-    Participants are separately durable identities; this cannot manufacture a
-    participant owner or commit one based merely on a bus message. If the
-    coordinator has not registered each frozen stable lookup, no N is accepted.
-    """
-    with NativeBoundary(bus) as boundary, bus.bus.reading() as source, store.session.writing() as db:
-        boundary.privacy.require_root(wire_root_id, IdentityConflict("cohort native namespace changed"))
-        initial = source.delivery(wire_seq)
-        return AcceptedCohort.record(initial, boundary.privacy, store, db)
 
 
 def next_sealed_assignment(
