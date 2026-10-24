@@ -8,8 +8,8 @@ import subprocess
 import sys
 from contextlib import AsyncExitStack
 
+from acp.exceptions import RequestError
 import pytest
-from agent_comms.coordination_errors import RequestRefused
 from acp.schema import PromptRequest, TextContentBlock
 
 from agent_comms.acp import CommsAgent
@@ -80,7 +80,7 @@ async def test_cli_registration_refuses_unbound_then_uses_original_owned_session
             ),
             ("goal_history", {}),
         ):
-            with pytest.raises(RequestRefused) as caught:
+            with pytest.raises(RequestError) as caught:
                 await proxy.request(action, **parameters)
             assert caught.value.code == -32602
             assert caught.value.data["owner"] == "registered"
