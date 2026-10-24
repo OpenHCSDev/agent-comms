@@ -37,7 +37,9 @@ if TYPE_CHECKING:
     from agent_comms.messages import Message
     from agent_comms.registry_document import RegistrySnapshot
     from agent_comms.storage_rules import MemoryUse, StorageRule
-    from agent_comms.todos import OrderClaim, OwnerRequest, ProgressRead, PullRequest, Todo
+    from agent_comms.todos import (
+        OrderClaim, OwnerRequest, PresentCheckout, ProgressRead, PullRequest, Todo,
+    )
     from agent_comms.goal_management import Goals
     from agent_comms.ui_model.unit_state import UnitObservation, UnitState
 
@@ -204,11 +206,12 @@ class LostTools(UndatedStandingRule):
 
 @dataclass(frozen=True)
 class HeldBranch:
-    """One open order joined to the holder's current recorded checkout."""
+    """One open order joined to its own allocated checkout."""
 
     todo: Todo
     holder: ThreadIncarnation
     difference: BranchDifference
+    checkout: PresentCheckout = field(compare=False, repr=False)
     source: UnitObservation = field(compare=False, repr=False)
 
     @property
@@ -226,11 +229,17 @@ class HeldBranchRule(UndatedStandingRule, declared_name=None):
     @classmethod
     def scan_observed(cls, comms: Comms, commander: str,
                       observed: Sequence[UnitState], frame: HeartbeatFrame) -> tuple[Self, ...]:
-        branches = tuple(
-            HeldBranch(todo, unit, frame.pulls.branch_difference(
-                state.source.thread.project_path), state.source)
-            for state in observed for unit in state.readable_units() for todo in state.source.todos
-        )
+        storage = comms.registry.storage_rule
+        branches = []
+        for state in observed:
+            for unit in state.readable_units():
+                for todo in state.source.todos:
+                    path = storage.order_checkout(unit.name, todo.id)
+                    if path.is_dir():
+                        branches.append(HeldBranch(
+                            todo, unit, frame.pulls.branch_difference(path),
+                            frame.pulls.checkout(path), state.source,
+                        ))
         ordered = tuple(sorted(branches, key=lambda held: (
             held.difference.repository.to_wire(), held.difference.branch,
             held.holder.require_recorded().lookup, held.problem,
