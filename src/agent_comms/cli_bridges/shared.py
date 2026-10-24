@@ -83,7 +83,7 @@ from agent_comms.typed_table import (
     WriterOwnedFile,
 )
 from agent_comms.wire_models import WireModel
-from agent_comms_hooks.watch import HeldClaim, WatchClaim, WatchRecord
+from agent_comms_hooks.watch import HeldClaim, NoSessionBridge, WatchClaim, WatchRecord
 
 from ..locked_store import RegistryFile, SQLiteFile
 from .monitor import (
@@ -1000,25 +1000,28 @@ class ReleasedSessionBridge(ConfirmableBridge):
     runtime: LaunchRuntime
 
     def confirm(self) -> BridgeResume:
+        """The claim says whether the successor is still starting: its lock outlives the exec
+        and is released only when the process exits, so no deadline guesses it."""
         observed = self.bridge.observed
-        name = self.bridge.claim.thread
+        claim = self.bridge.claim
         runtime = self.runtime
-        deadline = time.monotonic() + 30
-        while observed.process.alive() and time.monotonic() < deadline:
-            try:
-                current = InspectSession().information(self.bridge.claim.socket_path)
-            except (FileNotFoundError, ConnectionRefusedError):
-                time.sleep(.05)
-                continue
-            except OSError as error:
-                return UnobservedBridge(name, f"{type(error).__name__}: {error}")
-            if current.process != observed.process or current.owner != observed.owner:
-                return ReplacedBridge(name, observed.process, current.process)
-            if current.runtime.prefix != runtime.prefix:
-                return UnobservedBridge(
-                    name, f"observed {current.runtime.prefix}, expected {runtime.prefix}")
-            return ResumedBridge(name, observed.runtime, current.runtime)
-        return UnobservedBridge(name, f"process exited or resume deadline expired for {runtime.prefix}")
+        try:
+            current = InspectSession().awaited(claim, self.announce)
+        except NoSessionBridge:
+            return UnobservedBridge(
+                claim.thread, f"process exited before serving {runtime.prefix}")
+        except OSError as error:
+            return UnobservedBridge(claim.thread, f"{type(error).__name__}: {error}")
+        if current.process != observed.process or current.owner != observed.owner:
+            return ReplacedBridge(claim.thread, observed.process, current.process)
+        if current.runtime.prefix != runtime.prefix:
+            return UnobservedBridge(
+                claim.thread, f"observed {current.runtime.prefix}, expected {runtime.prefix}")
+        return ResumedBridge(claim.thread, observed.runtime, current.runtime)
+
+    def announce(self, claim: WatchClaim) -> None:
+        print(f"Waiting for session bridge {claim.thread} to serve {self.runtime.prefix}",
+              file=sys.stderr, flush=True)
 
 
 class Enrol(Operation):
