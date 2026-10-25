@@ -348,8 +348,8 @@ class Binding(BindingIdentity, BridgeStateTable, TypedTable):
             stored = Binding.require(db)
             if stored.root != self.root or stored.owner != self.owner:
                 raise ValueError('This state directory belongs to another Core/CLI conversation')
-            Binding.update(db, where='1', thread=self.thread, owner=self.owner)
-            return replace(stored, thread=self.thread, owner=self.owner)
+            Binding.update(db, where='1', thread=self.thread)
+            return replace(stored, thread=self.thread)
 
 
 @dataclass
