@@ -25,7 +25,7 @@ class TodoStories(Carry):
 
     def carry(self, *, apply: bool) -> Carried:
         path = TodoStore.path_in(self.root)
-        self.require_confined(self.root, path)
+        self.require_confined(path)
         if not path.exists():
             return Carried(0)
         with TodoStore.observing(path) as db:
@@ -47,7 +47,7 @@ class TodoStories(Carry):
             for problem, *histories in db.execute(
                 f'SELECT id,{columns} FROM "{Todo.declared_name}" ORDER BY rowid'
             ).fetchall():
-                decoded = []
+                decoded: list[TodoCommand | CheckedProblemOrder] = []
                 for name, history in zip(INLINE_FIELDS, histories, strict=True):
                     raw = FieldCodec.parse(history)
                     if not isinstance(raw, list):
