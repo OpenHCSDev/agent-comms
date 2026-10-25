@@ -29,6 +29,7 @@ from .field_codec import InputId
 from .pi_counts import PiCount
 from .pi_vocabulary import CompactionReason, ThinkingLevelField
 from .send_outcome import SendBoundary
+from .session_revision import NoSessionObservation, SessionObservation
 from .tool_result import DeclaredReply
 from .turn_outcome import TurnOutcome
 
@@ -40,7 +41,6 @@ if TYPE_CHECKING:
     from .launch_runtime import LaunchRuntime
     from .native_tool_call import NativeToolMode
     from .pi_events import DialogUiRequest, ExtensionUiChoice
-    from .session_revision import SessionObservation
     from .thread_model import ThreadModel
     from .threads import Thread
     from .transcript_sources import TranscriptSource
@@ -104,8 +104,8 @@ class RuntimeLocation(DeclaredFamily, affix="Runtime"):
     @abstractmethod
     def storage_files(self): ...
 
-    @abstractmethod
-    def session_observation(self, root: Path, thread: Thread) -> SessionObservation: ...
+    def session_observation(self, root: Path, thread: Thread) -> SessionObservation:
+        return NoSessionObservation()
 
     @property
     def model_choice(self):
