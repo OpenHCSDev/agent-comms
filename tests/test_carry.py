@@ -22,6 +22,7 @@ from agent_comms.installer.commands import InstallCommands
 from agent_comms.installer.interpreter_operation import InstallClock, TargetProgram
 from agent_comms.installer.practice import PracticeCopy
 from agent_comms.installer.upgrade import (
+    ExistingBusInstall,
     PracticeBus,
     PreparedMigration,
     RehearsalFiles,
@@ -31,12 +32,17 @@ from agent_comms.installer.upgrade import (
     carried,
 )
 from agent_comms.launch_runtime import LaunchRuntime, RestoredRuntime
-from agent_comms.maintenance_barrier import MaintenanceBarrier, MaintenanceOperator
+from agent_comms.maintenance_barrier import (
+    DrainingPhase,
+    MaintenanceBarrier,
+    MaintenanceOperator,
+    ReadyPhase,
+)
 from agent_comms.registry_store import RegistryStore
 from agent_comms.thread_execution import ExternalThreadExecution
 from agent_comms.thread_status import RunningThreadStatus
 from agent_comms.threads import Thread
-from conftest import ledger_one_failure_short, maintenance_held
+from conftest import ledger_one_failure_short
 from fixture_git import IDENTITY
 
 REPO = Path(__file__).resolve().parents[1]
@@ -264,14 +270,29 @@ def test_owner_stop_batch_reports_refusal_after_stopping_available_owners(comms,
     assert all(saved.status(name).stopped for name in names[1:])
 
 
-def test_the_target_stops_owners_on_a_ledger_the_outgoing_runtime_cannot_open(comms, stack):
+def test_the_install_start_stops_owners_on_a_ledger_the_outgoing_runtime_cannot_open(
+        comms, stack):
     """Install 14: f23ca8968 refused this ledger at every opening, so its stop answered
-    nothing. The target stops them under the install's hold and carries the ledger."""
+    nothing. The install's start holds the root, and the target stops the owners under
+    that hold, carrying the ledger, which stays held until the install releases it."""
+    from agent_comms.child_process import ProcessIdentity
+
     path = ledger_one_failure_short(comms.root)
-    comms.registry.declare(Thread("unit", frozenset(), str(comms.root)), RunningThreadStatus())
-    with maintenance_held(comms.root):
-        stack.owners(comms.root, StopCliCommand, ["unit"]).require_success(UpgradeRefused)
-    assert comms.registry.snapshot().status("unit").stopped
+    maintenance = MaintenanceBarrier(RegistryStore.at(comms.root).path)
+    with subprocess.Popen(("sleep", "600")) as owner:
+        try:
+            comms.registry.declare(replace(Thread("unit", frozenset(), str(comms.root)),
+                                           process_identity=ProcessIdentity.capture(owner.pid)),
+                                   RunningThreadStatus())
+            with ExistingBusInstall.owners_stopped(comms.root, stack, stack) as owners:
+                assert owners.stopped == ["unit"]
+                assert stack.running_owners(comms.root) == []
+                assert maintenance.read().phase is DrainingPhase
+                owners.retired()
+                owners.release()
+                assert maintenance.read().phase is ReadyPhase
+        finally:
+            owner.kill()
     GoalAttemptStore(path.parent)
 
 

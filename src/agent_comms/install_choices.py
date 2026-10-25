@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from abc import abstractmethod
+from contextlib import AbstractContextManager
 from dataclasses import dataclass
 from pathlib import Path
 from collections.abc import Callable
@@ -17,7 +18,13 @@ if TYPE_CHECKING:
     from agent_comms.installer.probes.harnesses import InstallResult
     from agent_comms.installer.launch import InstallReport
     from agent_comms.installer.reporting import RootWriter
-    from agent_comms.installer.upgrade import Install, Rehearsal, RehearsedUpgrade, Stack
+    from agent_comms.installer.upgrade import (
+        Install,
+        OwnersStopped,
+        Rehearsal,
+        RehearsedUpgrade,
+        Stack,
+    )
 
 
 class InstallerChoice(SubclassUnion, TextChoice, affix="Installer"):
@@ -49,6 +56,10 @@ class RunMode(SubclassUnion, affix="Mode"):
     def destination(self, live: RootWriter) -> RootWriter: ...
 
     @abstractmethod
+    def owners_stopped(self, member: type[Install], root: Path, installed: Stack,
+                       staged: Stack) -> AbstractContextManager[OwnersStopped]: ...
+
+    @abstractmethod
     def finish[Rehearsed: Rehearsal](self, install: Install[Rehearsed], rehearsal: Rehearsed,
                bridges: SessionBridgeResumes, harnesses: Callable[[Stack], InstallResult],
                report: InstallReport) -> RehearsedUpgrade: ...
@@ -62,6 +73,10 @@ class RehearsalMode(SingleFieldValue, RunMode):
         from agent_comms.installer.reporting import UnpostedWriter
         return UnpostedWriter()
 
+    def owners_stopped(self, member: type[Install], root: Path, installed: Stack,
+                       staged: Stack) -> AbstractContextManager[OwnersStopped]:
+        return member.owners_kept(root, installed, staged)
+
     def finish[Rehearsed: Rehearsal](self, install: Install[Rehearsed], rehearsal: Rehearsed,
                bridges: SessionBridgeResumes, harnesses: Callable[[Stack], InstallResult],
                report: InstallReport) -> RehearsedUpgrade:
@@ -74,6 +89,10 @@ class LiveMode(SingleFieldValue, RunMode):
 
     def destination(self, live: RootWriter) -> RootWriter:
         return live
+
+    def owners_stopped(self, member: type[Install], root: Path, installed: Stack,
+                       staged: Stack) -> AbstractContextManager[OwnersStopped]:
+        return member.owners_stopped(root, installed, staged)
 
     def finish[Rehearsed: Rehearsal](self, install: Install[Rehearsed], rehearsal: Rehearsed,
                bridges: SessionBridgeResumes, harnesses: Callable[[Stack], InstallResult],

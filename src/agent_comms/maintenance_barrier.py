@@ -546,6 +546,11 @@ class MaintenanceBarrier(MaintenanceIngress):
     def read(self) -> MaintenanceStatus:
         return self.current_unlocked()
 
+    def held_by(self, operator: MaintenanceOperator) -> MaintenanceState:
+        """``operator``'s hold as the root records it now, in whatever phase it is in."""
+        state = self.read()
+        return state.phase.hold_for(self, state, operator)
+
     def _write_unlocked(self, hold: MaintenanceState) -> None:
         marker = MaintenanceMarker(version=hold.version, root=hold.root,
                                    generation=hold.generation)

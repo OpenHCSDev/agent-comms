@@ -54,6 +54,7 @@ from agent_comms.installer.reporting import (
 from agent_comms.installer.runtime_resolution import CorePackage
 from agent_comms.installer.upgrade import (
     LiveRun,
+    OwnersStopped,
     RehearsedUpgrade,
     Stack,
     TargetTree,
@@ -73,6 +74,7 @@ class InstallReport(MroDispatch):
     writer: RootWriter = field(default_factory=UnpostedWriter)
     outcome: InstallOutcome = field(default_factory=UnfinishedInstall, init=False)
     bridges: SessionBridgeResumes = field(default_factory=SessionBridgeResumes, init=False)
+    owners: OwnersStopped = field(default_factory=OwnersStopped, init=False)
     inherited_phases: list[PhaseTiming] = field(default_factory=list)
     source: Repo = field(init=False, repr=False)
 
@@ -125,7 +127,8 @@ class InstallReport(MroDispatch):
             self.outcome = FailedInstall(self.outcome, next(self.handlers_for(error))(error))
             try:
                 with FailureReportPublicationPhase().running(clock):
-                    self.writer.post((*self.outcome.lines(), *self.bridges.lines()))
+                    self.writer.post((*self.outcome.lines(), *self.owners.lines(),
+                                      *self.bridges.lines()))
             except BaseException as publication_error:
                 error.add_note(f"Install failure report also failed: {publication_error}")
                 print(f"install: failure report also failed: {publication_error}", file=sys.stderr)
