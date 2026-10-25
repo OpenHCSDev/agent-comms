@@ -796,14 +796,6 @@ class SQLiteCatalogObject(TypedRow):
             "WHERE sql IS NOT NULL AND name NOT LIKE 'sqlite_%' ORDER BY type,name")))
 
     @classmethod
-    def release_guards(cls, db: sqlite3.Connection, row: type[TypedTable]) -> None:
-        """Inside the caller's write transaction, lift every stored guard on the row's table,
-        declared or not, so a carry can rewrite rows an older schema refused to change."""
-        for item in cls.stored(db):
-            if item.tbl_name == row.declared_name:
-                item.type.release(db, item)
-
-    @classmethod
     def carry(cls, db: sqlite3.Connection, declared: Mapping[str, str],
               compared: frozenset[str]) -> None:
         """Inside the caller's write transaction, the compared objects onto the declaration:
@@ -1630,6 +1622,14 @@ class TypedTable(
     renamed_from: ClassVar[tuple[str, ...]] = ()
     """Table names this row's rows were stored under before; the writer renames the one it
     finds, so a renamed declaration needs no hand-written step."""
+
+    @classmethod
+    def release_guards(cls, db: sqlite3.Connection) -> None:
+        """Inside the caller's write transaction, lift every stored guard on this table,
+        declared or not, so a carry can rewrite rows an older schema refused to change."""
+        for item in SQLiteCatalogObject.stored(db):
+            if item.tbl_name == cls.declared_name:
+                item.type.release(db, item)
 
     @classmethod
     def _member_declarations(cls) -> tuple[type[DeclaredFamily], ...]:
