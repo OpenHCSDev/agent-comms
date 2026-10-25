@@ -5,6 +5,7 @@ Standard library only, because every hook imports it on every tool call.
 
 from __future__ import annotations
 
+import io
 import shlex
 from collections.abc import Iterable, Iterator
 from dataclasses import dataclass
@@ -13,29 +14,38 @@ from pathlib import Path
 from typing import ClassVar, Self
 
 
+def without_here_documents(command: str) -> str:
+    """The command's own text: one lexer reads each quoted word whole across newlines,
+    stops at the end of the line that opens here-documents, and resumes after their
+    bodies, so a body is never lexed as shell."""
+    kept = []
+    while command:
+        text = io.StringIO(command)
+        lex = shlex.shlex(text, posix=False, punctuation_chars="<>")
+        lex.whitespace_split = True
+        delimiters, previous, line_end = [], None, len(command)
+        for word in lex:
+            if delimiters and text.tell() > line_end + 1:
+                break
+            if previous in ("<<", "<<-"):
+                if not delimiters:
+                    found = command.find("\n", text.tell() - 1)
+                    line_end = len(command) if found < 0 else found
+                delimiters.append(shlex.split(word)[0])
+            previous = word
+        lines = iter(command[line_end + 1:].splitlines(keepends=True))
+        kept.append(command[:line_end + 1])
+        for delimiter in delimiters:
+            for line in lines:
+                if line.rstrip("\r\n").lstrip("\t") == delimiter:
+                    break
+        command = "".join(lines) if delimiters else ""
+    return "".join(kept)
+
+
 def shell_commands(command: str) -> Iterator[list[str]]:
     """Shell words, not matches in quoted code or here-document bodies."""
-    body = []
-    pending = ""
-    lines = iter(command.splitlines(keepends=True))
-    for line in lines:
-        body.append(line)
-        pending += line
-        lex = shlex.shlex(pending, posix=False, punctuation_chars="<>")
-        lex.whitespace_split = True
-        try:
-            words = list(lex)
-        except ValueError:
-            # A quoted word continues past this newline, so the next line extends it.
-            continue
-        pending = ""
-        for index, word in enumerate(words[:-1]):
-            if word in ("<<", "<<-"):
-                delimiter = shlex.split(words[index + 1])[0]
-                for line in lines:
-                    if line.rstrip("\r\n").lstrip("\t") == delimiter:
-                        break
-    lex = shlex.shlex("".join(body), posix=True, punctuation_chars=";&|><()\n")
+    lex = shlex.shlex(without_here_documents(command), posix=True, punctuation_chars=";&|><()\n")
     lex.whitespace = " \t\r"
     lex.whitespace_split = True
     separators = set(";&|()\n")
