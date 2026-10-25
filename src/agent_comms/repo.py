@@ -354,10 +354,14 @@ class Checkout(SingleFieldValue):
 
     @classmethod
     def from_wire(cls, data: object) -> Self:
-        value = FieldCodec.decode(str, data)
-        if not value:
+        return cls(cls.path_from_input(FieldCodec.decode(str, data)))
+
+    @staticmethod
+    def path_from_input(path: Path | str) -> Path:
+        """Keep empty input distinct from Path(''), which silently means the cwd."""
+        if path == "":
             raise ValueError("Project path must not be empty")
-        return cls(Path(value))
+        return Path(path)
 
     def __fspath__(self) -> str:
         return str(self.path)
@@ -380,9 +384,7 @@ class Checkout(SingleFieldValue):
     @classmethod
     def checked(cls, path: Path | str) -> Self:
         """Resolve a supplied project and require a Git checkout, never the shell's cwd."""
-        if path == "":
-            raise ValueError("Project path must not be empty")
-        path = Path(path).expanduser().resolve(strict=True)
+        path = cls.path_from_input(path).expanduser().resolve(strict=True)
         if not cls.present(path):
             raise ValueError(f"Project {path} is not a Git checkout")
         return cls(path)

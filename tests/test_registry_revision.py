@@ -30,7 +30,7 @@ def test_missing_registry_version_is_rejected_without_rewriting_the_file(tmp_pat
 def test_malformed_replacement_never_serves_stale_success(tmp_path):
     path = tmp_path / "registry.json"
     registry = Registration(path)
-    registry.register(Thread(name='worker', tags=frozenset(), worktree=Checkout.from_wire(str(tmp_path))))
+    registry.register(Thread(name='worker', tags=frozenset(), worktree=Checkout(tmp_path)))
     saved = path.read_text()
     registry.require("worker")
     AtomicFile(path).write_text("{")
@@ -47,7 +47,7 @@ def test_a_new_revision_decodes_only_the_threads_that_changed(tmp_path):
     path = tmp_path / "registry.json"
     writer = Registration(path)
     for name in ("first", "second", "third"):
-        writer.register(Thread(name=name, tags=frozenset(), worktree=Checkout.from_wire(str(tmp_path))))
+        writer.register(Thread(name=name, tags=frozenset(), worktree=Checkout(tmp_path)))
     reader = Registration(path)
     before = dict(reader.all_threads())
     statuses = {name: reader.status(name) for name in before}
@@ -57,7 +57,7 @@ def test_a_new_revision_decodes_only_the_threads_that_changed(tmp_path):
     # Another process stops one thread: an external replacement of the file.
     raw = json.loads(path.read_text())
     stopped = Registration(tmp_path / "other" / "registry.json")
-    stopped.register(Thread(name='second', tags=frozenset(), worktree=Checkout.from_wire(str(tmp_path))))
+    stopped.register(Thread(name='second', tags=frozenset(), worktree=Checkout(tmp_path)))
     stopped.unregister("second")
     raw["statuses"]["second"] = json.loads(stopped.store.path.read_text())["statuses"]["second"]
     AtomicFile(path).write_text(json.dumps(raw, indent=2))
@@ -82,7 +82,7 @@ def test_a_changed_revision_is_checked_as_a_whole(tmp_path):
     path = tmp_path / "registry.json"
     registry = Registration(path)
     for name in ("first", "second"):
-        registry.register(Thread(name=name, tags=frozenset(), worktree=Checkout.from_wire(str(tmp_path))))
+        registry.register(Thread(name=name, tags=frozenset(), worktree=Checkout(tmp_path)))
     registry.require("first")
     # A declaration without its status: the unchanged rows do not excuse it.
     raw = json.loads(path.read_text())
@@ -103,9 +103,9 @@ def test_a_reused_revision_still_finds_its_user_thread(tmp_path):
 
     path = tmp_path / "registry.json"
     writer = Registration(path)
-    writer.register(Thread(name="user", tags=frozenset(), worktree=Checkout.from_wire(str(tmp_path)),
+    writer.register(Thread(name="user", tags=frozenset(), worktree=Checkout(tmp_path),
                            role=UserThreadRole))
-    writer.register(Thread(name="worker", tags=frozenset(), worktree=Checkout.from_wire(str(tmp_path))))
+    writer.register(Thread(name="worker", tags=frozenset(), worktree=Checkout(tmp_path)))
     reader = Registration(path)
     with reader.store.reading() as document:
         assert [thread.name for thread in document.user_thread().existing()] == ["user"]

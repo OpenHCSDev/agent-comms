@@ -41,7 +41,7 @@ def working(comms, name, created):
         comms.registry.register(replace(comms.registry.require(name), session_file=RegistrySessionLocation.from_path(str(path), comms.root)))
     else:
         comms.registry.declare(Thread(
-            name, frozenset(), Checkout.from_wire(str(comms.root)), session_file=RegistrySessionLocation.from_path(str(path), tmp_path), created_at=created))
+            name, frozenset(), Checkout(comms.root), session_file=RegistrySessionLocation.from_path(str(path), tmp_path), created_at=created))
 
 
 def test_plain_messages_need_no_order_labels():
@@ -55,7 +55,7 @@ def test_plain_messages_need_no_order_labels():
 ))
 def test_blocked_goal_leads_the_board_and_clears_when_active(comms, tmp_path, state, reason):
     """No order is needed; the current state owns appearance and disappearance."""
-    comms.registry.declare(Thread("paper", frozenset(), Checkout.from_wire(str(tmp_path))))
+    comms.registry.declare(Thread("paper", frozenset(), Checkout(tmp_path)))
     comms.goals.update_goal("paper", SetGoalAction(text="Finish the paper"))
     thread = comms.registry.require("paper")
     comms.registry.register(replace(thread, goal=replace(thread.goal.require(), state=state)),

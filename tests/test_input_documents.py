@@ -194,7 +194,7 @@ def test_original_native_user_receipts_include_group_and_corrected_final_only(tm
     from agent_comms.registration import Registration
 
     registry = Registration(tmp_path / "registry.json")
-    registry.register(Thread('worker', frozenset(), Checkout.from_wire(str(tmp_path)), created_at=123.0, process_identity=ProcessIdentity.capture(os.getpid())))
+    registry.register(Thread('worker', frozenset(), Checkout(tmp_path), created_at=123.0, process_identity=ProcessIdentity.capture(os.getpid())))
     registry.lease_local_turn("worker", TURN)
     lease = registry.require("worker").turn_lease
     claim_scope = lease.claimed_generation
@@ -276,7 +276,7 @@ def test_original_native_user_receipts_include_group_and_corrected_final_only(tm
     registry.release_turn(lease)
     registry.unregister("renamed")
     registry.remove("renamed")
-    registry.register(Thread('renamed', frozenset(), Checkout.from_wire(str(tmp_path)), created_at=321.0, process_identity=ProcessIdentity.capture(os.getpid())))
+    registry.register(Thread('renamed', frozenset(), Checkout(tmp_path), created_at=321.0, process_identity=ProcessIdentity.capture(os.getpid())))
     assert not document.started_for_native(
         lease, "b" * 32, "Actual corrected native user", snapshot=registry.snapshot()
     )

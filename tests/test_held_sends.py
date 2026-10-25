@@ -55,7 +55,7 @@ def test_refusal_writer_keeps_registry_permission_until_its_sql_write_finishes(p
 def held_bus(tmp_path):
     comms = wire(tmp_path)
     for name in ('sender', 'recipient'):
-        comms.registry.declare(Thread(name, frozenset(), Checkout.from_wire(str(tmp_path))))
+        comms.registry.declare(Thread(name, frozenset(), Checkout(tmp_path)))
     assert comms.bus.inbox('recipient').page.messages == ()
     barrier = comms.owners.maintenance
     hold = barrier.begin(MaintenanceOperator.current())

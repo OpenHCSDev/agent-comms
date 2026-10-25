@@ -293,7 +293,7 @@ def test_exact_stored_channel_routes_no_wildcard_or_silence_inference(
 ) -> None:
     comms = installed_comms(tmp_path / "wire")
     for name in ("sender", "alpha", "beta"):
-        comms.registry.declare(Thread(name, frozenset({'team'}), Checkout.from_wire(str(tmp_path))))
+        comms.registry.declare(Thread(name, frozenset({'team'}), Checkout(tmp_path)))
     channel = comms.messaging.send("sender", "#team", "channel note").message
     broadcast = comms.messaging.send("sender", "#all", "everyone please respond").message
     dm = comms.messaging.send("sender", "alpha", "direct note").message
@@ -313,7 +313,7 @@ def test_exact_stored_channel_routes_no_wildcard_or_silence_inference(
 def test_pure_shadow_does_not_mutate_envelope_state_or_live_cursor(tmp_path: Path) -> None:
     comms = installed_comms(tmp_path / "wire")
     for name in ("sender", "alpha"):
-        comms.registry.declare(Thread(name, frozenset({'team'}), Checkout.from_wire(str(tmp_path))))
+        comms.registry.declare(Thread(name, frozenset({'team'}), Checkout(tmp_path)))
     message = comms.messaging.send("sender", "#team", "status update").message
     manifest = audience(message, MEMBERS[:1])
     before = message.to_wire()

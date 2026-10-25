@@ -1,4 +1,5 @@
 """The connector reads one conversation through the existing bounded pager."""
+from pathlib import Path
 from agent_comms.repo import Checkout
 import pytest
 
@@ -11,7 +12,7 @@ from agent_comms.threads import Thread
 def conversation(comms):
     for name in ("claude-ai", "commander", "user", "other"):
         comms.registry.declare(Thread(
-            name=name, tags=frozenset(), worktree=Checkout.from_wire("/work"),
+            name=name, tags=frozenset(), worktree=Checkout(Path("/work")),
         ))
     expected = []
     for number in range(5):

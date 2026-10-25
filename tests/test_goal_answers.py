@@ -26,7 +26,7 @@ from agent_comms.threads import Thread
 @contextmanager
 def goal_turn(comms, original_goal):
     comms.registry.declare(Thread(
-        "worker", frozenset(), Checkout.from_wire(str(comms.root.parent)),
+        "worker", frozenset(), Checkout(comms.root.parent),
         process_identity=ProcessIdentity.capture(os.getpid()),
     ))
     if original_goal:

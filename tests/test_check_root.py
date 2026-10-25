@@ -27,7 +27,7 @@ def source(scratch_root, durable_home):
     root = scratch_root / "source"
     c = wire(root)
     for name in ("A", "B", "other"):
-        c.registry.declare(Thread(name, frozenset({"comms"}), Checkout.from_wire(str(scratch_root))),
+        c.registry.declare(Thread(name, frozenset({"comms"}), Checkout(scratch_root)),
                            StoppedThreadStatus())
     c.messaging.send("A", "B", "old history is not a new input")
     c.registry.register(c.registry.require("other"), RunningThreadStatus())

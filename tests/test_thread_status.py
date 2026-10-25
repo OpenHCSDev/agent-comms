@@ -41,7 +41,7 @@ def test_captured_owner_presentation_survives_exit_until_fresh_acquisition(tmp_p
     comms = wire(tmp_path)
     child = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(30)"])
     try:
-        thread = Thread('owner', frozenset(), Checkout.from_wire(str(tmp_path)), process_identity=ProcessIdentity.capture(child.pid))
+        thread = Thread('owner', frozenset(), Checkout(tmp_path), process_identity=ProcessIdentity.capture(child.pid))
         comms.registry.register(thread, RunningThreadStatus())
         view, = comms.views.thread_views()
         displayed = view.presentation
@@ -68,7 +68,7 @@ def test_saved_presence_roundtrip_and_wire_views_preserve_data(tmp_path, status,
     comms = installed_comms(tmp_path)
     child = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(30)"])
     try:
-        thread = Thread('owner', frozenset({'team'}), Checkout.from_wire(str(tmp_path)), process_identity=ProcessIdentity.capture(child.pid), title=GivenThreadText('Retained title'), session_file=RegistrySessionLocation.from_path('/retained/session.jsonl', comms.root), created_at=12.5)
+        thread = Thread('owner', frozenset({'team'}), Checkout(tmp_path), process_identity=ProcessIdentity.capture(child.pid), title=GivenThreadText('Retained title'), session_file=RegistrySessionLocation.from_path('/retained/session.jsonl', comms.root), created_at=12.5)
         comms.registry.register(thread, status)
         with comms.registry.store.editing() as edit:
             edit.document.last_seen[thread.name] = time.time() - age
@@ -119,7 +119,7 @@ def test_saved_presence_roundtrip_and_wire_views_preserve_data(tmp_path, status,
 def test_live_owner_cannot_be_deleted_and_heartbeat_keeps_both_counters(tmp_path, status):
     registry = Registration(tmp_path / "registry.json")
     registry.register(
-        Thread('owner', frozenset(), Checkout.from_wire(str(tmp_path)), process_identity=ProcessIdentity.capture(os.getpid())),
+        Thread('owner', frozenset(), Checkout(tmp_path), process_identity=ProcessIdentity.capture(os.getpid())),
         status,
     )
     before = registry.snapshot()
@@ -137,7 +137,7 @@ def test_live_owner_cannot_be_deleted_and_heartbeat_keeps_both_counters(tmp_path
 def test_reactivation_rotates_owner_and_claim_without_rebinding_history(tmp_path, status):
     registry = Registration(tmp_path / "registry.json")
     registry.register(
-        Thread('owner', frozenset(), Checkout.from_wire(str(tmp_path)), process_identity=ProcessIdentity.capture(os.getpid())),
+        Thread('owner', frozenset(), Checkout(tmp_path), process_identity=ProcessIdentity.capture(os.getpid())),
         status,
     )
     before = registry.snapshot()
@@ -151,7 +151,7 @@ def test_reactivation_rotates_owner_and_claim_without_rebinding_history(tmp_path
 
 def test_delete_fence_rejects_metadata_and_presence_without_erasing_data(tmp_path):
     registry = Registration(tmp_path / "registry.json")
-    registry.register(Thread('owner', frozenset(), Checkout.from_wire(str(tmp_path))), StoppedThreadStatus())
+    registry.register(Thread('owner', frozenset(), Checkout(tmp_path)), StoppedThreadStatus())
     registry.begin_delete("owner")
     before = registry.store.path.read_bytes()
     with pytest.raises(RelationViolationError):
@@ -168,7 +168,7 @@ def test_inactive_owner_survives_a_refused_viewer(tmp_path, status):
     from agent_comms.ui_model.status import ThreadStatusModel
 
     comms = wire(tmp_path)
-    comms.registry.register(Thread('owner', frozenset(), Checkout.from_wire(str(tmp_path))), status)
+    comms.registry.register(Thread('owner', frozenset(), Checkout(tmp_path)), status)
     view = comms.views.thread_presentations(('owner',)).views['owner']
     transferred = FieldCodec.decode(ThreadView, FieldCodec.encode(view)).presentation
     row = ThreadStatusModel.known('owner', transferred)
@@ -207,9 +207,9 @@ def test_presence_owns_roster_membership_and_self_rename(status, listed, rename)
 ])
 def test_reconfiguration_keeps_caller_authority_across_renaming(tmp_path, status, allows_other_caller):
     comms = wire(tmp_path)
-    comms.registry.declare(Thread("subject", frozenset(), Checkout.from_wire(str(tmp_path)),
+    comms.registry.declare(Thread("subject", frozenset(), Checkout(tmp_path),
                                   process_identity=ProcessIdentity.capture(os.getpid())))
-    comms.registry.declare(Thread("other", frozenset(), Checkout.from_wire(str(tmp_path))))
+    comms.registry.declare(Thread("other", frozenset(), Checkout(tmp_path)))
     comms.registry.rename("subject", "renamed")
     comms.registry.register(comms.registry.require("renamed"), status)
     assert ThreadCaller("subject").may_reconfigure(comms, "renamed")
@@ -221,7 +221,7 @@ def test_reconfiguration_keeps_caller_authority_across_renaming(tmp_path, status
 @pytest.mark.parametrize("status", [RunningThreadStatus(), IdleThreadStatus()])
 def test_configure_command_keeps_active_configuration_in_its_session(tmp_path, status):
     comms = wire(tmp_path)
-    comms.registry.register(Thread("subject", frozenset(), Checkout.from_wire(str(tmp_path)),
+    comms.registry.register(Thread("subject", frozenset(), Checkout(tmp_path),
                                    process_identity=ProcessIdentity.capture(os.getpid())), status)
     with pytest.raises(RelationViolationError, match="change its settings through its session"):
         ConfigureCliCommand(name="subject").apply(comms)
@@ -249,7 +249,7 @@ def test_batch_source_rename_keeps_the_original_registry_fence(comms):
     from agent_comms.coordination_errors import StaleRevision
 
     comms.registry.register(
-        Thread('alpha', frozenset(), Checkout.from_wire(str(comms.root)), process_identity=ProcessIdentity.capture(os.getpid())),
+        Thread('alpha', frozenset(), Checkout(comms.root), process_identity=ProcessIdentity.capture(os.getpid())),
         RunningThreadStatus(),
     )
     batch = comms.views.thread_presentations(("alpha",))

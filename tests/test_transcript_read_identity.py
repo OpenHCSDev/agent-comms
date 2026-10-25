@@ -26,7 +26,7 @@ def test_saved_input_annotation_revokes_page_without_journal_change(tmp_path, jo
             "role": "user", "inputId": native_id, "content": "private wrapper",
         },
     }) + "\n")
-    comms.registry.declare(Thread('worker', frozenset(), Checkout.from_wire(str(tmp_path)), session_file=RegistrySessionLocation.from_path(str(path), comms.root)))
+    comms.registry.declare(Thread('worker', frozenset(), Checkout(tmp_path), session_file=RegistrySessionLocation.from_path(str(path), comms.root)))
     comms.transcripts.routes.record_input_display(SECOND_INPUT_ID, NoDisplayText())
     with closing(sqlite3.connect(comms.transcripts.routes.path)) as connection:
         assert connection.execute("PRAGMA journal_mode=" + journal_mode).fetchone()[0] == journal_mode.lower()
@@ -47,8 +47,8 @@ def test_native_append_preserves_captured_cut_and_fork_source_change_revokes_it(
     parent.write_text(json.dumps({"type": "message", "id": "parent-1", "timestamp": "2026-10-19T00:00:00Z", "message": {
         "role": "assistant", "content": [{"type": "text", "text": "parent answer"}],
     }}) + "\n")
-    comms.registry.declare(Thread('parent', frozenset(), Checkout.from_wire(str(tmp_path)), session_file=RegistrySessionLocation.from_path(str(parent), comms.root)))
-    comms.registry.declare(Thread('child', frozenset(), Checkout.from_wire(str(tmp_path)), parent=ForkedParent('parent'), task=GivenThreadText('continue')))
+    comms.registry.declare(Thread('parent', frozenset(), Checkout(tmp_path), session_file=RegistrySessionLocation.from_path(str(parent), comms.root)))
+    comms.registry.declare(Thread('child', frozenset(), Checkout(tmp_path), parent=ForkedParent('parent'), task=GivenThreadText('continue')))
     captured = comms.transcripts.capture_page_read("child")
     assert any(event.text == "parent answer" for event in captured.read().events)
     with parent.open("a") as output:
@@ -82,7 +82,7 @@ def test_native_rewrite_inside_captured_cut_revokes_the_read(tmp_path):
     replacement = original.replace("first answer", "other answer")
     assert len(replacement) == len(original)
     path.write_text(original)
-    comms.registry.declare(Thread('worker', frozenset(), Checkout.from_wire(str(tmp_path)), session_file=RegistrySessionLocation.from_path(str(path), comms.root)))
+    comms.registry.declare(Thread('worker', frozenset(), Checkout(tmp_path), session_file=RegistrySessionLocation.from_path(str(path), comms.root)))
     captured = comms.transcripts.capture_page_read("worker")
 
     path.write_text(replacement)
@@ -101,7 +101,7 @@ def test_thread_activity_and_annotations_do_not_replay_saved_content(tmp_path):
     path.write_text(json.dumps({"type": "message", "id": "entry", "timestamp": "2026-10-19T00:00:00Z", "message": {
         "role": "assistant", "content": [{"type": "text", "text": "Original retained answer"}],
     }}) + "\n")
-    comms.registry.declare(Thread('worker', frozenset(), Checkout.from_wire(str(tmp_path)), session_file=RegistrySessionLocation.from_path(str(path), comms.root)))
+    comms.registry.declare(Thread('worker', frozenset(), Checkout(tmp_path), session_file=RegistrySessionLocation.from_path(str(path), comms.root)))
     captured = comms.transcripts.capture_page_read("worker")
     original = captured.read()
     comms.registry.heartbeat("worker")

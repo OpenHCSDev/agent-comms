@@ -516,8 +516,8 @@ def thread_registration(tmp_path_factory: pytest.TempPathFactory) -> Registratio
 def wired(comms: Comms) -> Comms:
     """A wire with PR111 (parent) and fixer (child) registered."""
     return declare_test_bus(comms, channels=("base", "auth"), threads=(
-        Thread(name='PR111', tags=frozenset({'base'}), worktree=Checkout.from_wire('/tmp/wt1')),
-        Thread(name='fixer', tags=frozenset({'auth'}), worktree=Checkout.from_wire('/tmp/wt1'), parent=ForkedParent('PR111'), task=GivenThreadText('fix auth')),
+        Thread(name='PR111', tags=frozenset({'base'}), worktree=Checkout(Path('/tmp/wt1'))),
+        Thread(name='fixer', tags=frozenset({'auth'}), worktree=Checkout(Path('/tmp/wt1')), parent=ForkedParent('PR111'), task=GivenThreadText('fix auth')),
     ))
 
 

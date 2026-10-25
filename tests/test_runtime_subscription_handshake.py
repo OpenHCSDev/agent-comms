@@ -33,7 +33,7 @@ async def test_subscription_busy_read_retains_original_traceback(tmp_path, caplo
         "timestamp": "2026-10-10T00:00:00.000Z", "cwd": str(tmp_path),
     }) + "\n")
     session_file.chmod(0o600)
-    thread = Thread('owner', frozenset(), Checkout.from_wire(str(tmp_path)), process_identity=ProcessIdentity.capture(os.getpid()), session_file=RegistrySessionLocation.from_path(str(session_file), comms.root))
+    thread = Thread('owner', frozenset(), Checkout(tmp_path), process_identity=ProcessIdentity.capture(os.getpid()), session_file=RegistrySessionLocation.from_path(str(session_file), comms.root))
     comms.registry.declare(thread)
     await owner.sessions.bind_owned(thread, thread.name)
     database = comms.root / "coordination.sqlite3"
@@ -89,7 +89,7 @@ async def test_subscription_rejects_invalid_ready_and_closes_socket(
 ):
     comms = wire(tmp_path / "wire")
     comms.registry.declare(
-        Thread('owner', frozenset(), Checkout.from_wire(str(tmp_path)), process_identity=ProcessIdentity.capture(os.getpid()))
+        Thread('owner', frozenset(), Checkout(tmp_path), process_identity=ProcessIdentity.capture(os.getpid()))
     )
     path = socket_path(comms.root, os.getpid())
     path.parent.mkdir(parents=True, exist_ok=True)

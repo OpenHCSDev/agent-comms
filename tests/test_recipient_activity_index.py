@@ -29,7 +29,7 @@ from agent_comms.threads import Thread
 def test_archived_duplicate_birth_keeps_names_without_selecting_an_arbitrary_owner(tmp_path):
     comms = wire(tmp_path / "bus")
     for name, birth in (("old", 1700.0), ("second", 1701.0)):
-        comms.registry.declare(Thread(name, frozenset(), Checkout.from_wire(str(tmp_path)), created_at=birth))
+        comms.registry.declare(Thread(name, frozenset(), Checkout(tmp_path), created_at=birth))
     source = comms.registry.snapshot()
     with pytest.raises(RelationViolationError):
         RegistrySnapshot.capture(replace(comms.registry.store.read(), threads=ThreadRows.from_threads({
@@ -81,7 +81,7 @@ def test_activity_store_selects_only_requested_threads(tmp_path):
 def test_viewer_selects_the_outcomes_of_a_delivery_window(tmp_path, viewer_of, seen):
     comms = canonical_goal_wire(tmp_path / "bus")
     for name in ("sender", "peer-a", "peer-b"):
-        comms.registry.declare(Thread(name, frozenset({"ci"}), Checkout.from_wire(str(tmp_path))))
+        comms.registry.declare(Thread(name, frozenset({"ci"}), Checkout(tmp_path)))
     sent = comms.messaging.send("sender", "#ci", "channel outcome").message
     original = comms.bus.bus.delivery(sent.seq)
     lookups = {name: thread.incarnation.lookup

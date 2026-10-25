@@ -27,7 +27,7 @@ def test_collected_reader_cancels_and_joins_its_worker_then_closes_sqlite(tmp_pa
     }}) + "\n")
     state = native_reader(tmp_path / 'read_ledger.json')
     registry = wire(tmp_path).registry
-    registry.declare(Thread('worker', frozenset(), Checkout.from_wire(str(tmp_path)), session_file=RegistrySessionLocation.from_path(str(source), tmp_path)))
+    registry.declare(Thread('worker', frozenset(), Checkout(tmp_path), session_file=RegistrySessionLocation.from_path(str(source), tmp_path)))
     assert state.counts('viewer', registry=registry.snapshot(), document=state.reads.read(), visibility=DEFAULT_ROSTER).counts == {"worker": IndexingUnread()}
     for future in state.watch(frozenset(), lambda _: None):
         future.result(timeout=10)

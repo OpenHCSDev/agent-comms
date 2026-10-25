@@ -18,7 +18,7 @@ from stored_inputs import stored_inputs
 async def test_wake_lock_wait_shutdown_keeps_input_unsent_and_controller_private(tmp_path):
     comms = wire(tmp_path)
     comms.registry.declare(
-        Thread('owner', frozenset(), Checkout.from_wire(str(tmp_path)), process_identity=ProcessIdentity.capture(os.getpid()))
+        Thread('owner', frozenset(), Checkout(tmp_path), process_identity=ProcessIdentity.capture(os.getpid()))
     )
     agent = CommsAgent(comms, auto_wake=True, runtime_enabled=True)
     agent.sessions.bindings["owner"] = "owner"

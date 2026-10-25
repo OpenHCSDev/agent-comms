@@ -245,7 +245,7 @@ def test_published_source_binding_keeps_exact_original_request(tmp_path):  # noq
     assert comms.transcripts.bind_page_read("renamed", identity).identity is identity
     comms.registry.unregister("renamed")
     comms.registry.remove("renamed")
-    comms.registry.declare(Thread('renamed', frozenset(), Checkout.from_wire(str(tmp_path))))
+    comms.registry.declare(Thread('renamed', frozenset(), Checkout(tmp_path)))
     with pytest.raises(StaleRevision):
         comms.transcripts.bind_page_read("renamed", identity)
 

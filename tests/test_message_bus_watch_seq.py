@@ -21,7 +21,7 @@ async def test_real_message_bus_watch_recipient_suffix_and_rollback(bus):
     registry = Registration(RegistryFile.path_in(root))
     people = {
         name: registry.declare(Thread(
-            name, frozenset(), Checkout.from_wire(str(root)))).incarnation.require_recorded()
+            name, frozenset(), Checkout(root))).incarnation.require_recorded()
         for name in ("sender", "target", "idle")
     }
     messages = wire(root, Publisher)

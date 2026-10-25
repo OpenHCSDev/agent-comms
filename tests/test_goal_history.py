@@ -39,7 +39,7 @@ from agent_comms.threads import Thread
 
 def _wire(tmp_path) -> Comms:
     comms = installed_comms(tmp_path / "wire")
-    comms.registry.declare(Thread('worker', frozenset(), Checkout.from_wire(str(tmp_path))))
+    comms.registry.declare(Thread('worker', frozenset(), Checkout(tmp_path)))
     return comms
 
 

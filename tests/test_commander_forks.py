@@ -76,7 +76,7 @@ def fork_bus(tmp_path, configured_repository):
             Thread(
                 name,
                 frozenset({"comms"}),
-                Checkout.from_wire(str(worktree)),
+                Checkout(worktree),
                 model=DeclaredModel("anthropic/claude-opus-4-6"),
                 execution=ExternalThreadExecution,
             )

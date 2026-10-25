@@ -1,4 +1,5 @@
 """IRC model: channels, DMs, presence, history views."""
+from pathlib import Path
 
 from agent_comms.repo import Checkout
 from agent_comms.channel_targets import CommandTarget, DeclaredTag
@@ -24,9 +25,9 @@ def chat(comms):
     from conftest import declare_test_bus
 
     return declare_test_bus(comms, channels=("ci", "docs"), threads=(
-        Thread('PR111', frozenset({'ci'}), Checkout.from_wire('/tmp/wt1'), process_identity=ProcessIdentity.capture(os.getpid())),
-        Thread('fixer', frozenset({'ci'}), Checkout.from_wire('/tmp/wt1'), parent=ForkedParent('PR111'), task=GivenThreadText('fix auth')),
-        Thread('PR112', frozenset({'docs'}), Checkout.from_wire('/tmp/wt2')),
+        Thread('PR111', frozenset({'ci'}), Checkout(Path('/tmp/wt1')), process_identity=ProcessIdentity.capture(os.getpid())),
+        Thread('fixer', frozenset({'ci'}), Checkout(Path('/tmp/wt1')), parent=ForkedParent('PR111'), task=GivenThreadText('fix auth')),
+        Thread('PR112', frozenset({'docs'}), Checkout(Path('/tmp/wt2'))),
     ))
 
 
@@ -91,7 +92,7 @@ class TestChannelDelivery:
 
     def test_untagged_thread_does_not_receive_tag_channel(self, chat):
         # A thread with no tags receives only DMs and the global channel.
-        chat.registry.declare(Thread(name='loner', tags=frozenset(), worktree=Checkout.from_wire('/wt')))
+        chat.registry.declare(Thread(name='loner', tags=frozenset(), worktree=Checkout(Path('/wt'))))
         chat.messaging.send("PR111", "#ci", "only tagged see this").message.message_id
         assert chat.bus.pending_count("loner") == 0
 
@@ -139,12 +140,12 @@ class TestChannelsDerived:
 class TestPresence:
     def test_register_sets_last_seen(self, tmp_path):
         registry = Registration(tmp_path / "r.json")
-        registry.register(Thread(name='a', tags=frozenset(), worktree=Checkout.from_wire('/wt')))
+        registry.register(Thread(name='a', tags=frozenset(), worktree=Checkout(Path('/wt'))))
         assert registry.last_seen("a") > 0
 
     def test_heartbeat_updates_last_seen(self, tmp_path):
         registry = Registration(tmp_path / "r.json")
-        registry.register(Thread(name='a', tags=frozenset(), worktree=Checkout.from_wire('/wt')))
+        registry.register(Thread(name='a', tags=frozenset(), worktree=Checkout(Path('/wt'))))
         before = registry.last_seen("a")
         import time
 
@@ -160,7 +161,7 @@ class TestPresence:
     def test_last_seen_persists(self, tmp_path):
         path = tmp_path / "r.json"
         registry = Registration(path)
-        registry.register(Thread(name='a', tags=frozenset(), worktree=Checkout.from_wire('/wt')))
+        registry.register(Thread(name='a', tags=frozenset(), worktree=Checkout(Path('/wt'))))
         seen = registry.last_seen("a")
         assert Registration(path).last_seen("a") == seen
 

@@ -21,7 +21,7 @@ def test_fresh_send_uses_canonical_publication_and_human_delivery_has_no_wake(tm
     comms = installed_comms(tmp_path / "wire")
     for name in ("sender", "beta"):
         comms.registry.declare(
-            Thread(name, frozenset(), Checkout.from_wire(str(tmp_path)), process_identity=ProcessIdentity.capture(os.getpid()))
+            Thread(name, frozenset(), Checkout(tmp_path), process_identity=ProcessIdentity.capture(os.getpid()))
         )
     message = comms.messaging.send("sender", "beta", "ordinary send").message
     initial = comms.bus.bus.delivery(message.seq)

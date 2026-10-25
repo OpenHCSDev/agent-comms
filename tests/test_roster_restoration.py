@@ -30,8 +30,8 @@ from agent_comms.threads import Thread
 def test_restore_keeps_live_owner_and_bus_while_importing_saved_stopped_identity(tmp_path):
     old = installed_comms(tmp_path / "old")
     current = installed_comms(tmp_path / "current")
-    live = Thread('live', frozenset({'comms'}), Checkout.from_wire(str(tmp_path)), process_identity=ProcessIdentity.capture(os.getpid()))
-    missing = Thread('missing', frozenset({'nra', 'openhcs'}), Checkout.from_wire(str(tmp_path)), process_identity=ProcessIdentity.capture(os.getpid()), session_file=RegistrySessionLocation.from_path(str(tmp_path / 'saved.jsonl'), old.root), title=GivenThreadText('Preserved title'), task=GivenThreadText('Original task'))
+    live = Thread('live', frozenset({'comms'}), Checkout(tmp_path), process_identity=ProcessIdentity.capture(os.getpid()))
+    missing = Thread('missing', frozenset({'nra', 'openhcs'}), Checkout(tmp_path), process_identity=ProcessIdentity.capture(os.getpid()), session_file=RegistrySessionLocation.from_path(str(tmp_path / 'saved.jsonl'), old.root), title=GivenThreadText('Preserved title'), task=GivenThreadText('Original task'))
     old.registry.declare(live)
     old.registry.declare(missing)
     missing = old.agents.begin_turn("missing", TurnId('310c74d7ac243239a928d4021c709acb')).thread
@@ -63,10 +63,10 @@ def test_restore_keeps_live_owner_and_bus_while_importing_saved_stopped_identity
 def test_restore_conflict_has_no_partial_registry_write(tmp_path, collision):
     old = wire(tmp_path / "old")
     current = wire(tmp_path / "current")
-    original = Thread('owner', frozenset(), Checkout.from_wire(str(tmp_path)))
+    original = Thread('owner', frozenset(), Checkout(tmp_path))
     current.registry.declare(original)
-    good = Thread('good', frozenset(), Checkout.from_wire(str(tmp_path)))
-    conflicting = Thread('owner' if collision == 'name' else 'other', frozenset(), Checkout.from_wire(str(tmp_path)))
+    good = Thread('good', frozenset(), Checkout(tmp_path))
+    conflicting = Thread('owner' if collision == 'name' else 'other', frozenset(), Checkout(tmp_path))
     if collision == "incarnation":
         conflicting = replace(conflicting, created_at=original.created_at)
     old.registry.declare(good)
@@ -85,7 +85,7 @@ def test_restore_conflict_has_no_partial_registry_write(tmp_path, collision):
 def test_restore_keeps_archived_status(tmp_path):
     old = wire(tmp_path / "old")
     new = wire(tmp_path / "new")
-    thread = Thread('archived', frozenset(), Checkout.from_wire(str(tmp_path)))
+    thread = Thread('archived', frozenset(), Checkout(tmp_path))
     old.registry.register(thread, ArchivedThreadStatus())
     new.registry.restore_stopped(old.registry.snapshot(), (thread.name,))
     assert new.registry.status(thread.name) == ArchivedThreadStatus()
@@ -134,8 +134,8 @@ def test_private_restoration_allows_new_cohort_without_starting_old_subscribers(
     from agent_comms.coordinator import Coordination
 
     old, current = wire(tmp_path / "old"), prepare_native_comms(wire(tmp_path / "current"))
-    live = Thread('live', frozenset({'comms'}), Checkout.from_wire(str(tmp_path)), process_identity=ProcessIdentity.capture(os.getpid()))
-    missing = Thread('missing', frozenset({'comms'}), Checkout.from_wire(str(tmp_path)), process_identity=ProcessIdentity.capture(os.getpid()))
+    live = Thread('live', frozenset({'comms'}), Checkout(tmp_path), process_identity=ProcessIdentity.capture(os.getpid()))
+    missing = Thread('missing', frozenset({'comms'}), Checkout(tmp_path), process_identity=ProcessIdentity.capture(os.getpid()))
     old.registry.declare(missing)
     # The registry assigns storage roots at declaration; restoration must leave that thread alone.
     live = current.registry.declare(live)
@@ -191,7 +191,7 @@ def test_private_restoration_allows_new_cohort_without_starting_old_subscribers(
 
 def test_public_restoration_declares_participant_without_native_authority(tmp_path):
     old, current = wire(tmp_path / "old"), wire(tmp_path / "current")
-    old.registry.declare(Thread('missing', frozenset({'comms'}), Checkout.from_wire(str(tmp_path))))
+    old.registry.declare(Thread('missing', frozenset({'comms'}), Checkout(tmp_path)))
     assert current.registry.restore_stopped(old.registry.snapshot(), ("missing",)) == ("missing",)
     from agent_comms.coordinator import Coordination
     with Coordination(str(current.root / "coordination.sqlite3")) as store:

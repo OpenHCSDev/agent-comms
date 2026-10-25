@@ -33,7 +33,7 @@ async def test_toad_public_types_and_acp_agent_comms_metadata(tmp_path, consumer
     )
     comms = wire(tmp_path / "wire")
     assert isinstance(comms, Comms)
-    comms.registry.declare(Thread('worker', frozenset(), Checkout.from_wire(str(tmp_path))))
+    comms.registry.declare(Thread('worker', frozenset(), Checkout(tmp_path)))
     agent = CommsAgent(comms, agent_bin=GivenBinary("nonexistent-pi"), runtime_enabled=False, auto_wake=False)
 
     session = NewSessionResponse(

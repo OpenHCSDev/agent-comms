@@ -51,7 +51,7 @@ def test_saved_projection_preserves_preferences_history_and_has_no_writable_alia
     Bus.install(Bus.path_in(tmp_path))
     comms = wire(tmp_path)
     for name, tags in (("a", {"api"}), ("b", {"ui"}), ("other", set())):
-        comms.registry.declare(Thread(name, frozenset(tags), Checkout.from_wire(str(tmp_path))))
+        comms.registry.declare(Thread(name, frozenset(tags), Checkout(tmp_path)))
     original = saved_catalog(tmp_path)
     rows = [
         Message("other", target, str(i), InfoKind, timestamp=i, seq=i)

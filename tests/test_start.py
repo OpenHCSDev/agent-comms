@@ -22,7 +22,7 @@ async def test_real_stopped_owner_starts_through_shared_agent_tool(tmp_path, mon
     source.touch()
     comms = wire(tmp_path / "wire")
     declared = RegistrySessionLocation.from_path(str(source), comms.root)
-    comms.registry.declare(Thread('worker', frozenset(), Checkout.from_wire(str(tmp_path)), session_file=declared))
+    comms.registry.declare(Thread('worker', frozenset(), Checkout(tmp_path), session_file=declared))
     comms.registry.unregister("worker")
     try:
         result = await asyncio.to_thread(invoke_tool, comms, "comms_start", {"name": "worker"}, caller=NoThreadCaller())

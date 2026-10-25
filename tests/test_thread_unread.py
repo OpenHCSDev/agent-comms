@@ -51,7 +51,7 @@ def setup_thread(tmp_path):
     session(source)
     comms = installed_comms(tmp_path / 'wire')
     comms.registry.declare(Thread('worker', frozenset({'ci'}),
-        Checkout.from_wire(str(tmp_path)), session_file=RegistrySessionLocation.from_path(str(source), comms.root)))
+        Checkout(tmp_path), session_file=RegistrySessionLocation.from_path(str(source), comms.root)))
     return comms, source
 
 

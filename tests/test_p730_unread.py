@@ -16,7 +16,7 @@ from agent_comms.threads import Thread
 def test_indexing_roster_and_exact_count_share_required_maps(tmp_path):
     comms = installed_comms(tmp_path)
     comms.registry.declare(Thread(
-        "peer", frozenset(), Checkout.from_wire(str(tmp_path / "peer")), execution=ExternalThreadExecution,
+        "peer", frozenset(), Checkout(tmp_path / "peer"), execution=ExternalThreadExecution,
     ))
     viewer = comms.messaging.user_identity(str(tmp_path)).name
     roster = comms.views.presentation.roster(viewer)

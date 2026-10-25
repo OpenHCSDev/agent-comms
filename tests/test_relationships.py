@@ -41,7 +41,7 @@ def setup_wire(tmp_path):
     comms = installed_comms(tmp_path / "wire")
     for name, parent in (("origin", NoParent()), ("owner", ForkedParent("origin")), ("peer", NoParent()),
                          ("child", ForkedParent("owner"))):
-        comms.registry.declare(Thread(name, frozenset({'team'}), Checkout.from_wire(str(tmp_path)), parent=parent))
+        comms.registry.declare(Thread(name, frozenset({'team'}), Checkout(tmp_path), parent=parent))
     return comms
 
 
@@ -124,7 +124,7 @@ def test_concurrent_declaring_agents_do_not_lose_updates(tmp_path):
     comms = setup_wire(tmp_path)
     names = [f"worker-{index}" for index in range(8)]
     for name in names:
-        comms.registry.declare(Thread(name, frozenset(), Checkout.from_wire(str(tmp_path))))
+        comms.registry.declare(Thread(name, frozenset(), Checkout(tmp_path)))
     with ProcessPoolExecutor(max_workers=4) as pool:
         list(pool.map(add_peer, [comms.root] * len(names), names))
     assert {edge.peer for edge in comms.relationships.collaborations("owner")} == set(names)
@@ -222,7 +222,7 @@ def test_reused_peer_name_does_not_rebind_or_overwrite_historical_work(tmp_path)
     comms.owners.stop("peer")
     comms.registry.remove("peer")
     comms.registry.declare(
-        Thread('peer', frozenset(), Checkout.from_wire(str(tmp_path)), created_at=old_peer.created_at + 1)
+        Thread('peer', frozenset(), Checkout(tmp_path), created_at=old_peer.created_at + 1)
     )
 
     row = collaboration_rows(comms)[0]
@@ -255,7 +255,7 @@ def test_deleted_owner_edges_are_not_purged_or_inherited_by_new_owner(tmp_path):
     comms.registry.remove("owner")
     comms.relationships.edit("origin", RelationshipEdit.member_named("add"), "peer", "Independent work")
     comms.registry.declare(
-        Thread('owner', frozenset(), Checkout.from_wire(str(tmp_path)), created_at=original.owner_created + 1)
+        Thread('owner', frozenset(), Checkout(tmp_path), created_at=original.owner_created + 1)
     )
     assert comms.relationships.collaborations("owner") == ()
     assert collaboration_rows(comms) == ()

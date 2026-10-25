@@ -34,9 +34,9 @@ SENDER = "sender"  # the notification carries its sender's lookup; these tests r
 def archived_notification(tmp_path, *, thread_registration):
     old, live = (prepare_native_comms(wire(tmp_path / name)) for name in ("old", "live"))
     for comms in (old, live):
-        comms.registry.declare(Thread('sender', frozenset(), Checkout.from_wire(str(tmp_path)), created_at=10.0))
-        comms.registry.declare(Thread('reader', frozenset(), Checkout.from_wire(str(tmp_path)), created_at=11.0, role=AgentThreadRole if comms is old else UserThreadRole))
-        comms.registry.declare(Thread('agent', frozenset(), Checkout.from_wire(str(tmp_path)), created_at=12.0 if comms is old else 212.0))
+        comms.registry.declare(Thread('sender', frozenset(), Checkout(tmp_path), created_at=10.0))
+        comms.registry.declare(Thread('reader', frozenset(), Checkout(tmp_path), created_at=11.0, role=AgentThreadRole if comms is old else UserThreadRole))
+        comms.registry.declare(Thread('agent', frozenset(), Checkout(tmp_path), created_at=12.0 if comms is old else 212.0))
     root_id = old.registry.prepare_native_root().namespace
     messages = (
         publish_initial(old, "sender", "agent", "authored pending delivery"),

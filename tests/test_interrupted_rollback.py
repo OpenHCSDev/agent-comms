@@ -67,7 +67,7 @@ def test_next_install_completes_a_killed_registry_restore(tmp_path, installed_ru
     # The temporary installation's HOME selects only this test's route and runtime.
     # Neither process can replace the developer's route.
     comms = prepare_native_comms(wire(tmp_path / "wire"))
-    comms.registry.declare(Thread("worker", frozenset(), Checkout.from_wire(str(tmp_path))))
+    comms.registry.declare(Thread("worker", frozenset(), Checkout(tmp_path)))
     registry = RegistryStore.at(comms.root)
     route = active_route_path()
     route.parent.mkdir(mode=0o700, parents=True)
@@ -98,7 +98,7 @@ def test_next_install_leaves_a_completed_installs_backup_alone(tmp_path, install
     # it carried. Differing is not a restore that began, so the next install must neither
     # roll the bus back to it nor take the maintenance hold.
     comms = prepare_native_comms(wire(tmp_path / "wire"))
-    comms.registry.declare(Thread("worker", frozenset(), Checkout.from_wire(str(tmp_path))))
+    comms.registry.declare(Thread("worker", frozenset(), Checkout(tmp_path)))
     registry = RegistryStore.at(comms.root)
     route = active_route_path()
     route.parent.mkdir(mode=0o700, parents=True)

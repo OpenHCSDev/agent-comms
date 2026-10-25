@@ -17,7 +17,7 @@ from bus_record_fixture import UNRELATED_LOOKUP
 
 def test_incarnation_has_one_participant_before_registration_returns(tmp_path):
     comms = wire(tmp_path / "wire")
-    first = comms.registry.declare(Thread("person", frozenset(), Checkout.from_wire(str(tmp_path)), role=UserThreadRole))
+    first = comms.registry.declare(Thread("person", frozenset(), Checkout(tmp_path), role=UserThreadRole))
     lookup = first.incarnation.lookup
     with CoordinationSession(str(CoordinationStore.path_in(comms.root))) as session:
         original = ParticipantStore(session).get(lookup)
@@ -41,13 +41,13 @@ def test_participant_failure_cannot_publish_registry_incarnation(tmp_path, monke
     with monkeypatch.context() as changed:
         changed.setattr(ParticipantStore, "register", failed)
         with pytest.raises(IntegrityViolationError, match="participant creation failed"):
-            comms.registry.declare(Thread("missing", frozenset(), Checkout.from_wire(str(tmp_path))))
+            comms.registry.declare(Thread("missing", frozenset(), Checkout(tmp_path)))
     assert "missing" not in comms.registry.snapshot().threads
 
 
 def test_existing_public_participant_survives_native_root_preparation(tmp_path):
     comms = wire(tmp_path / "wire")
-    thread = comms.registry.declare(Thread("public-first", frozenset(), Checkout.from_wire(str(tmp_path))))
+    thread = comms.registry.declare(Thread("public-first", frozenset(), Checkout(tmp_path)))
     with CoordinationSession(str(CoordinationStore.path_in(comms.root))) as session:
         before = ParticipantStore(session).get(thread.incarnation.lookup)
     comms.registry.prepare_native_root()

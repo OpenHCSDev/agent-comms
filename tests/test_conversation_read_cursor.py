@@ -51,7 +51,7 @@ def setup_conversations(root):
     comms = installed_comms(root)
     for name in ("sender", "reader"):
         comms.registry.declare(Thread(
-            name, frozenset({"a", "b"}), Checkout.from_wire(str(root)),
+            name, frozenset({"a", "b"}), Checkout(root),
         ))
     messages = [comms.messaging.send("sender", target, target).message
                 for target in ("#a", "#b", "#a", "#b")]

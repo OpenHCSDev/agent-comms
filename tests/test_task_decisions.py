@@ -43,7 +43,7 @@ def saved_source(path):
 
 
 def admit(comms, name):
-    comms.registry.declare(Thread(name, frozenset({'team'}), Checkout.from_wire(str(comms.root)), process_identity=ProcessIdentity.capture(os.getpid())))
+    comms.registry.declare(Thread(name, frozenset({'team'}), Checkout(comms.root), process_identity=ProcessIdentity.capture(os.getpid())))
     owner, claim_scope = comms.registry.live_owner_with_claim(name)
     owner, _ = comms.registry.lease_live_turn_with_claim(
         owner, TurnId.mint(), expected_generation=claim_scope
@@ -58,8 +58,8 @@ def test_user_pin_original_source_without_model_lease_and_complete_lineage(comms
         TurnTaskScope, UserTaskDrop, UserTaskSupersession,
     )
 
-    owner = comms.registry.declare(Thread('recipient', frozenset({'team'}), Checkout.from_wire(str(comms.root))))
-    comms.registry.declare(Thread('unaddressed', frozenset(), Checkout.from_wire(str(comms.root))))
+    owner = comms.registry.declare(Thread('recipient', frozenset({'team'}), Checkout(comms.root)))
+    comms.registry.declare(Thread('unaddressed', frozenset(), Checkout(comms.root)))
     exact = "Never replay UNKNOWN.\nUse original λ /artifacts/source; no substitute."
     subject = comms.messaging.send_user_message(CommandTarget.named('recipient'), exact, worktree=str(owner.worktree))
     original_rows = read_history(comms)
@@ -84,7 +84,7 @@ def test_user_pin_original_source_without_model_lease_and_complete_lineage(comms
     with pytest.raises(RelationViolationError):
         comms.messaging.pin_user_constraint(owner.name, subject.reference, worktree=str(owner.worktree),
             scope=ExplicitTaskScopeSelection(TurnTaskScope(project=str(owner.worktree))))
-    comms.registry.declare(Thread('peer', frozenset(), Checkout.from_wire(str(comms.root))))
+    comms.registry.declare(Thread('peer', frozenset(), Checkout(comms.root)))
     with pytest.raises(RelationViolationError):
         comms.messaging.send("peer", owner.name, "claim human source", task=pin.task).message
     assert read_history(comms) == before
@@ -109,7 +109,7 @@ def test_user_pin_original_source_without_model_lease_and_complete_lineage(comms
     assert comms.views.retained_context(renamed.name).retained.current_authored_sources(
         renamed, comms.registry.snapshot()) == (Message.from_message(repeated_pin),)
     assert current.original_text_source(new_pin.reference) == Message.from_message(second)
-    comms.registry.register(replace(renamed, worktree=Checkout.from_wire(str(comms.root / "new-project"))))
+    comms.registry.register(replace(renamed, worktree=Checkout(comms.root / "new-project")))
     assert comms.views.retained_context(renamed.name).retained.current_authored_sources(
         comms.registry.require(renamed.name), comms.registry.snapshot()) == ()
 
@@ -119,7 +119,7 @@ def test_user_pin_goal_scope_replacement_and_original_subject_fences(comms):
     goal_two_goal_id = GoalId.mint()
     from agent_comms.task_sources import CorrectionTaskChange, GoalTaskScope
 
-    owner = comms.registry.declare(Thread('recipient', frozenset(), Checkout.from_wire(str(comms.root)),
+    owner = comms.registry.declare(Thread('recipient', frozenset(), Checkout(comms.root),
         goal=Goal('Original goal', goal_one_goal_id, published_seq=0)))
     subject = comms.messaging.send_user_message(CommandTarget.named(owner.name), "Use the original coordinates.",
                                                 worktree=str(owner.worktree))

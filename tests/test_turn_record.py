@@ -20,7 +20,7 @@ def test_copied_registry_resolves_turn_from_its_new_location(tmp_path):
     copied = tmp_path / 'copied'
     comms = wire(source)
     comms.registry.declare(Thread(
-        'worker', frozenset(), Checkout.from_wire(str(source)),
+        'worker', frozenset(), Checkout(source),
         process_identity=ProcessIdentity.capture(os.getpid()),
     ))
     original = comms.agents.begin_turn(

@@ -60,8 +60,8 @@ def test_successful_send_preserves_original_publication_in_live_and_saved_conten
     from agent_comms.transcript_events import SentTranscript
 
     comms = installed_comms(tmp_path / "wire")
-    comms.registry.declare(Thread('sender', frozenset(), Checkout.from_wire(str(tmp_path))))
-    comms.registry.declare(Thread('recipient', frozenset(), Checkout.from_wire(str(tmp_path))))
+    comms.registry.declare(Thread('sender', frozenset(), Checkout(tmp_path)))
+    comms.registry.declare(Thread('recipient', frozenset(), Checkout(tmp_path)))
     published = invoke_tool(comms, "comms_send", {
         "to": "recipient", "body": "Original private publication"}, caller=ThreadCaller("sender"))
     raw = {"content": [{"type": "text", "text": json.dumps(published)}], "details": published}

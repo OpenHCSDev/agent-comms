@@ -24,7 +24,7 @@ from agent_comms.goal_scope import OneGoal
 def selected_goal(tmp_path):
     comms = canonical_goal_wire(tmp_path / "wire")
     for name in ("worker", "peer", "other"):
-        comms.registry.declare(Thread(name, frozenset(), Checkout.from_wire(str(tmp_path)), process_identity=ProcessIdentity.capture(os.getpid())))
+        comms.registry.declare(Thread(name, frozenset(), Checkout(tmp_path), process_identity=ProcessIdentity.capture(os.getpid())))
     goal = comms.goals.update_goal("worker", SetGoalAction(text="Original objective"))
     return comms, goal
 

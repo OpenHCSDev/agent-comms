@@ -35,9 +35,9 @@ def _private_comms(tmp_path):
     root = tmp_path / "wire"
     comms = prepare_native_comms(wire(root))
     comms.registry.declare(
-        Thread('sender', frozenset(), Checkout.from_wire(str(tmp_path)), process_identity=ProcessIdentity.capture(os.getpid()))
+        Thread('sender', frozenset(), Checkout(tmp_path), process_identity=ProcessIdentity.capture(os.getpid()))
     )
-    owner = comms.registry.declare(Thread('beta', frozenset({'team'}), Checkout.from_wire(str(tmp_path)), process_identity=ProcessIdentity.capture(os.getpid()), model=DeclaredModel('test/model')))
+    owner = comms.registry.declare(Thread('beta', frozenset({'team'}), Checkout(tmp_path), process_identity=ProcessIdentity.capture(os.getpid()), model=DeclaredModel('test/model')))
     root_id = comms.registry.prepare_native_root().namespace
     with Coordination(str(root / "coordination.sqlite3")) as store:
         store.participants.register(

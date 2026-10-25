@@ -21,7 +21,7 @@ def test_newer_read_moves_past_a_line_still_being_appended(tmp_path, private_com
     session = tmp_path / "saved.jsonl"
     session.write_text(line({"type": "session", "version": 3, "id": "saved-session",
                              "timestamp": "2026-10-20T00:00:00.000Z"}) + line(answer("first", "First answer")))
-    comms.registry.declare(Thread("saved", frozenset(), Checkout.from_wire(str(tmp_path)), session_file=RegistrySessionLocation.from_path(str(session), comms.root)))
+    comms.registry.declare(Thread("saved", frozenset(), Checkout(tmp_path), session_file=RegistrySessionLocation.from_path(str(session), comms.root)))
     complete = session.stat().st_size
     pending = line(answer("second", "Second answer " + "x" * 200_000))
     with session.open("a") as stream:

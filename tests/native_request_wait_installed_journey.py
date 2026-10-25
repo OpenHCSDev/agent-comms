@@ -112,7 +112,7 @@ async def run(arguments):
     for name in ("PYTHONPATH", "PI_PROMPT", "PI_TASK", "PI_PARENT_ID", "AGENT_COMMS_STARTUP_INPUT_KEY"):
         environment.pop(name, None)
     os.environ.clear(); os.environ.update(environment)
-    service.registry.declare(Thread('wait-native', frozenset(), Checkout.from_wire(str(project)), model=DeclaredModel('wait-local/fixture'), thinking_level=OffThinkingLevel))
+    service.registry.declare(Thread('wait-native', frozenset(), Checkout(project), model=DeclaredModel('wait-local/fixture'), thinking_level=OffThinkingLevel))
     definition = AgentDefinition.decode({"name": "Native request wait", "identity": "wait",
         "short_name": "wait", "protocol": "acp",
         "run_command": {"*": shlex.join([sys.executable, "-m", "agent_comms.acp"])}})

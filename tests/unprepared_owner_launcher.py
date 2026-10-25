@@ -17,7 +17,7 @@ from agent_comms.threads import Thread
 
 def main(root: Path, name: str) -> None:
     comms = wire(root)
-    comms.registry.declare(Thread(name, frozenset(), Checkout.from_wire(str(root))))
+    comms.registry.declare(Thread(name, frozenset(), Checkout(root)))
     print(comms.owners.start(name).pid)
 
 

@@ -68,7 +68,7 @@ def _ready(tmp_path: Path, *, direct: bool = False, extra_targets: tuple[str, ..
     comms = prepare_native_comms(wire(tmp_path / "wire"))
     for name in ("sender", "owner"):
         comms.registry.declare(
-            Thread(name, frozenset({'team'}), worktree=Checkout.from_wire(str(tmp_path)), process_identity=ProcessIdentity.capture(os.getpid()))
+            Thread(name, frozenset({'team'}), worktree=Checkout(tmp_path), process_identity=ProcessIdentity.capture(os.getpid()))
         )
     root_id = comms.registry.prepare_native_root().namespace
     target = "owner" if direct else "#team"

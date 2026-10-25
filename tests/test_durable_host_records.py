@@ -124,7 +124,7 @@ def test_real_host_context_and_request_error_remain_typed_and_live(tmp_path, thr
     async def journey():
         backend = PiDurableBackend()
         location = DurableDatabase(str(tmp_path / 'records.sqlite3'))
-        thread = Thread('records', frozenset(), Checkout.from_wire(str(tmp_path)), backend=PiDurableBackend,
+        thread = Thread('records', frozenset(), Checkout(tmp_path), backend=PiDurableBackend,
                         session_file=RegistrySessionLocation.from_path(location.path, tmp_path))
         try:
             outcome = await backend.compact(thread, 'retain the empty plan')

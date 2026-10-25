@@ -60,7 +60,7 @@ def test_pi_native_serves_threads_with_every_thread_capability():
     (NoSessionFile(), UnstartedRuntime(PiNativeBackend)),
 ])
 def test_runtime_location_round_trip_uses_declared_backend(session_file, location, *, thread_registration):
-    thread = thread_registration.declare(Thread('location', frozenset(), Checkout.from_wire('/home/ts/wt/test'), session_file=session_file))
+    thread = thread_registration.declare(Thread('location', frozenset(), Checkout(Path('/home/ts/wt/test')), session_file=session_file))
     restored = FieldCodec.decode(Thread, FieldCodec.encode(thread))
     restored = replace(restored, session_file=restored.session_file.bound_to(Path("/home/ts/wt")))
     assert restored.runtime == location
@@ -223,7 +223,7 @@ def test_pi_event_family_matches_pi_0_85_1_when_imported_fresh():
 
 
 def test_thread_declares_its_backend_once_and_keeps_it_on_reregistration(*, thread_registration):
-    thread = thread_registration.declare(Thread('owner', frozenset(), Checkout.from_wire('/tmp/owner')))
+    thread = thread_registration.declare(Thread('owner', frozenset(), Checkout(Path('/tmp/owner'))))
     assert thread.backend is PiNativeBackend
     encoded = FieldCodec.encode(thread)
     assert "backend" not in encoded
@@ -275,7 +275,7 @@ def test_runner_obtains_one_backend_per_session_from_the_thread_declaration(comm
     from agent_comms.turn_runner import TurnRunner
 
     runner = _Runner(comms)
-    thread = Thread('owner', frozenset(), Checkout.from_wire('/tmp/owner'), model=DeclaredModel('p/m'))
+    thread = Thread('owner', frozenset(), Checkout(Path('/tmp/owner')), model=DeclaredModel('p/m'))
     backend = TurnRunner.backend_for(runner, "session", thread)
     assert type(backend) is PiNativeBackend
     assert TurnRunner.backend_for(runner, "session", thread) is backend

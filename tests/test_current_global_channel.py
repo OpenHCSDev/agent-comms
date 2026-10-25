@@ -11,7 +11,7 @@ from conftest import installed_comms
 def test_all_is_the_only_global_target(tmp_path):
     comms = installed_comms(tmp_path)
     for name in ("sender", "first", "second"):
-        comms.registry.declare(Thread(name, frozenset(), Checkout.from_wire(str(tmp_path))))
+        comms.registry.declare(Thread(name, frozenset(), Checkout(tmp_path)))
     with pytest.raises(ValueError):
         BuiltinChannelView.member_named("broadcast")
     with pytest.raises(UnregisteredThreadError):
@@ -22,7 +22,7 @@ def test_all_is_the_only_global_target(tmp_path):
     assert global_message.target == "#all"
     assert comms.bus.pending_count("first") == comms.bus.pending_count("second") == 1
 
-    comms.registry.declare(Thread('broadcast', frozenset(), Checkout.from_wire(str(tmp_path))))
+    comms.registry.declare(Thread('broadcast', frozenset(), Checkout(tmp_path)))
     direct = comms.messaging.send("sender", "broadcast", "ordinary named recipient").message
     assert direct.target == "broadcast"
     assert comms.bus.pending_count("first") == comms.bus.pending_count("second") == 1

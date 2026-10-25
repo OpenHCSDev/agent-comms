@@ -54,7 +54,7 @@ class NativeBackendFixture(AnnouncedInputStart):
     def participant_at(root: Path, project: Path) -> RecordedThreadIncarnation:
         """The real thread incarnation used by a direct native turn on this bus."""
         return Thread(
-            'direct-native', frozenset(), Checkout.from_wire(str(project)),
+            'direct-native', frozenset(), Checkout(project),
         ).incarnation.require_recorded()
 
     def __init__(self, root, project, session, provider, config, package: VerifiedNativePackage):

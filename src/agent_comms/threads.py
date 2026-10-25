@@ -378,7 +378,7 @@ class Thread(ThreadProvenance, CatalogSelection):
         earlier = self.project_path
         current = Path(project).expanduser().resolve()
         return replace(
-            self, worktree=Checkout.from_wire(project),
+            self, worktree=Checkout(current),
             earlier_projects=tuple(dict.fromkeys(
                 path for path in (*self.earlier_projects, earlier) if path != current
             )),
@@ -647,7 +647,7 @@ def current_thread(registry) -> Thread:
     return Thread(
         name=launch.name,
         tags=launch.tags,
-        worktree=Checkout.from_wire(launch.worktree),
+        worktree=Checkout(Path(launch.worktree)),
         parent=launch.parent,
         task=launch.task,
         process_identity=ProcessIdentity.capture(os.getpid()),

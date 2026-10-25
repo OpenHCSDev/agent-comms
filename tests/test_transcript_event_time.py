@@ -18,7 +18,7 @@ from agent_comms.threads import Thread
 def test_original_record_clock_survives_split_and_routed_projection(tmp_path, stamp):
     comms = installed_comms(tmp_path / "wire")
     for name in ("peer", "owner"):
-        comms.registry.declare(Thread(name, frozenset(), Checkout.from_wire(str(tmp_path))))
+        comms.registry.declare(Thread(name, frozenset(), Checkout(tmp_path)))
     requests = tuple(
         comms.messaging.send("peer", "owner", text).message for text in ("first", "second")
     )

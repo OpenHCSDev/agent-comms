@@ -1,4 +1,5 @@
 """Session-owned parts, not stdout writes, confirm monitor delivery."""
+from pathlib import Path
 from agent_comms.repo import Checkout
 from contextlib import suppress
 import asyncio
@@ -41,7 +42,7 @@ from agent_comms.threads import Thread
 @pytest.mark.asyncio
 async def test_empty_journal_starts_at_binding_and_ignores_user_reads(comms, tmp_path):
     declare_test_bus(comms, threads=tuple(
-        Thread(name, frozenset(), Checkout.from_wire(str(tmp_path))) for name in ('viewer', 'peer')
+        Thread(name, frozenset(), Checkout(tmp_path)) for name in ('viewer', 'peer')
     ))
     before = comms.messaging.send('peer', 'viewer', 'before this session was bound').message
     state = tmp_path / 'bridge-state'
@@ -103,7 +104,7 @@ async def test_empty_journal_starts_at_binding_and_ignores_user_reads(comms, tmp
 @pytest.fixture
 def bridge(comms, tmp_path):
     declare_test_bus(comms, threads=tuple(
-        Thread(name, frozenset(), Checkout.from_wire(str(tmp_path)))
+        Thread(name, frozenset(), Checkout(tmp_path))
         for name in ('claude-code', 'viewer', 'peer')
     ))
     practice = PracticeCopy(comms.root, tmp_path / 'copied-bus')
@@ -310,8 +311,8 @@ async def test_harness_outcome_lives_on_the_threads_claim_across_a_rehome(tmp_pa
     from agent_comms.thread_execution import ExternalThreadExecution
 
     comms = prepare_native_comms(wire(tmp_path / 'wire'))
-    comms.registry.declare(Thread('peer', frozenset(), Checkout.from_wire(str(tmp_path))))
-    comms.registry.declare(Thread('viewer', frozenset(), Checkout.from_wire(str(tmp_path)),
+    comms.registry.declare(Thread('peer', frozenset(), Checkout(tmp_path)))
+    comms.registry.declare(Thread('viewer', frozenset(), Checkout(tmp_path),
                                   execution=ExternalThreadExecution))
     root_id = comms.registry.prepare_native_root().namespace
     lookup = comms.registry.require('viewer').incarnation.require_recorded().lookup
@@ -395,8 +396,8 @@ async def test_a_bridge_waits_out_maintenance_and_then_records_its_delivery(tmp_
     from agent_comms.thread_execution import ExternalThreadExecution
 
     comms = prepare_native_comms(wire(tmp_path / 'wire'))
-    comms.registry.declare(Thread('peer', frozenset(), Checkout.from_wire(str(tmp_path))))
-    comms.registry.declare(Thread('viewer', frozenset(), Checkout.from_wire(str(tmp_path)),
+    comms.registry.declare(Thread('peer', frozenset(), Checkout(tmp_path)))
+    comms.registry.declare(Thread('viewer', frozenset(), Checkout(tmp_path),
                                   execution=ExternalThreadExecution))
     root_id = comms.registry.prepare_native_root().namespace
     lookup = comms.registry.require('viewer').incarnation.require_recorded().lookup
@@ -452,7 +453,7 @@ def test_only_commanded_sessions_reply_to_their_delivered_senders(comms):
     from agent_comms.turn_item import NativeItemId, NativeTurnId
 
     lead, unit = (comms.registry.declare(Thread(
-        name, frozenset(), Checkout.from_wire("/tmp"), execution=ExternalThreadExecution)) for name in ("lead", "unit"))
+        name, frozenset(), Checkout(Path("/tmp")), execution=ExternalThreadExecution)) for name in ("lead", "unit"))
     comms.registry.set_commander_project(RegisteredCommanderProject(lead.incarnation, ()))
     for speaker, sender in ((lead, unit), (unit, lead)):
         output = ReplyingThreadOutput.for_comms(comms.transcripts.external(speaker.name), comms)

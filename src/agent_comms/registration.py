@@ -123,7 +123,7 @@ class Registration:
             if edit.document.taken(name):
                 return self._declare_in(edit, edit.document.require(name), _DEFAULT_PRESENCE)
             child = edit.document.require(commander).commanded_child(Thread(
-                name, frozenset(), Checkout.from_wire(worktree),
+                name, frozenset(), Checkout(Path(worktree)),
                 process_identity=process, execution=ExternalThreadExecution,
             ))
             return self._declare_in(edit, child, _DEFAULT_PRESENCE)

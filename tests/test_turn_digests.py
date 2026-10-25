@@ -74,7 +74,7 @@ def test_external_turns_preserve_interleaving_and_the_whole_selected_turn(tmp_pa
     one_turn_id = NativeTurnId('one')
     two_turn_id = NativeTurnId('two')
     comms = prepared(tmp_path)
-    comms.registry.declare(Thread('cli', frozenset(), Checkout.from_wire(str(tmp_path)), execution=ExternalThreadExecution))
+    comms.registry.declare(Thread('cli', frozenset(), Checkout(tmp_path), execution=ExternalThreadExecution))
     source = comms.transcripts.external('cli')
     for at, (turn, item, text) in enumerate([
             (old_turn_id, 'a', 'older'), (one_turn_id, 'b', 'first'),
@@ -124,7 +124,7 @@ def test_native_turns_keep_original_calls_results_and_input_identity(tmp_path):
     ]
     source.write_text(''.join(json.dumps(row) + '\n' for row in rows))
     source.chmod(0o600)
-    comms.registry.declare(Thread('native', frozenset(), Checkout.from_wire(str(tmp_path)), session_file=RegistrySessionLocation.from_path(str(source), comms.root)))
+    comms.registry.declare(Thread('native', frozenset(), Checkout(tmp_path), session_file=RegistrySessionLocation.from_path(str(source), comms.root)))
     answer = endpoint(comms, 'native', LastTurns(1))
     turn, = answer['turns']
     assert turn['turn_id'] == 'u2'
@@ -150,8 +150,8 @@ def test_woken_native_turn_reads_its_selected_messages_not_the_stored_frame(tmp_
     ]
     source.write_text(''.join(json.dumps(row) + '\n' for row in rows))
     source.chmod(0o600)
-    comms.registry.declare(Thread('lead', frozenset(), Checkout.from_wire(str(tmp_path))))
-    comms.registry.declare(Thread('native', frozenset(), Checkout.from_wire(str(tmp_path)), session_file=RegistrySessionLocation.from_path(str(source), comms.root)))
+    comms.registry.declare(Thread('lead', frozenset(), Checkout(tmp_path)))
+    comms.registry.declare(Thread('native', frozenset(), Checkout(tmp_path), session_file=RegistrySessionLocation.from_path(str(source), comms.root)))
     asked = comms.messaging.send('lead', 'native', 'How many opens are left?').message
     sent_outcome = comms.messaging.send('native', 'lead', 'An earlier answer.').message
     digest = hashlib.sha256(frame.encode()).hexdigest()
@@ -199,7 +199,7 @@ def test_recorded_claude_transcript_pages_through_tool_without_loss(tmp_path, mo
     path, final = recorded_claude_transcript
     monkeypatch.setenv('HOME', str(tmp_path / 'home'))
     comms = prepared(tmp_path / 'wire')
-    comms.registry.declare(Thread('claude', frozenset(), Checkout.from_wire(str(tmp_path)), execution=ExternalThreadExecution))
+    comms.registry.declare(Thread('claude', frozenset(), Checkout(tmp_path), execution=ExternalThreadExecution))
     state = tmp_path / 'state'
     store = Binding.open(state)
     db = store.__enter__()
@@ -232,7 +232,7 @@ def test_recorded_claude_transcript_pages_through_tool_without_loss(tmp_path, mo
     # Keep the original bridge recording intact. Publish its real recorded events to
     # a second isolated transcript with one eventless harness item at the page edge.
     recorded = comms.transcripts.external('claude').turns(LastTurns(300))
-    comms.registry.declare(Thread('paged', frozenset(), Checkout.from_wire(str(tmp_path)), execution=ExternalThreadExecution))
+    comms.registry.declare(Thread('paged', frozenset(), Checkout(tmp_path), execution=ExternalThreadExecution))
     items = [
         FinishedItem(turn.turn_id, NativeItemId(turn.turn_id), turn.events)
         for turn in reversed(recorded)
@@ -262,7 +262,7 @@ def test_recorded_claude_transcript_pages_through_tool_without_loss(tmp_path, mo
 def test_missing_native_session_is_empty_and_nonpositive_count_is_rejected(tmp_path):
     missing_turn_id = NativeTurnId('missing')
     comms = prepared(tmp_path)
-    comms.registry.declare(Thread('new', frozenset(), Checkout.from_wire(str(tmp_path))))
+    comms.registry.declare(Thread('new', frozenset(), Checkout(tmp_path)))
     for window in (LastTurns(), TurnsBefore(at=1.0, count=100), TurnsSince(1.0)):
         answer = comms.transcripts.turns('new', window)
         assert not answer.turns
@@ -277,7 +277,7 @@ def test_missing_native_session_is_empty_and_nonpositive_count_is_rejected(tmp_p
 @pytest.mark.parametrize('events', ((), (AssistantTranscript('same time', position=1, timestamp=1.0),)))
 def test_undated_and_equal_time_transcripts_page_without_timestamp_assumptions(tmp_path, events):
     comms = prepared(tmp_path)
-    comms.registry.declare(Thread('undated', frozenset(), Checkout.from_wire(str(tmp_path)), execution=ExternalThreadExecution))
+    comms.registry.declare(Thread('undated', frozenset(), Checkout(tmp_path), execution=ExternalThreadExecution))
     items = tuple(FinishedItem(NativeTurnId(f'undated-{index}'), NativeItemId(f'item-{index}'),
         events) for index in range(251))
     comms.transcripts.external('undated').publish_page(items, NoEarlierPage())

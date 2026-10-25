@@ -1759,7 +1759,7 @@ class RegisterCliCommand(NameArgument, CliCommand):
         thread = Thread(
             name=self.name,
             tags=self.tags,
-            worktree=Checkout.from_wire(self.worktree),
+            worktree=Checkout(Path(self.worktree)),
             parent=self.parent,
             task=self.task,
             process_identity=self.process,
@@ -2350,7 +2350,7 @@ class NewThreadCliCommand(NameArgument, CatalogSelection, CliCommand, declared_n
     @classmethod
     def project_bindings(cls, comms: Comms, project: str) -> tuple[Self, ...]:
         defaults = NativeThreadDefaults()
-        return (cls(name='', project=Checkout.from_wire(project), model=defaults.model,
+        return (cls(name='', project=Checkout(Path(project)), model=defaults.model,
                     thinking_level=defaults.thinking_level),)
 
     def project_directory(self) -> Path:

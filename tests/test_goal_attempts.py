@@ -423,7 +423,7 @@ def claimed_owner(comms):
     )
     try:
         owner = Thread(
-            "stopped-goal", frozenset(), Checkout.from_wire(str(comms.root)),
+            "stopped-goal", frozenset(), Checkout(comms.root),
             process_identity=ProcessIdentity.capture(child.pid),
         )
         comms.registry.declare(owner)

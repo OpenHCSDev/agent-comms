@@ -41,7 +41,7 @@ def board_read(tool, comms, caller, thread="lead"):
 def test_order_story_copied_bus_strike_and_send_back_once(comms, tmp_path):
     source = SourceRepository.create(tmp_path / 'source')
     for name in ("lead", "worker"):
-        comms.registry.declare(Thread(name, frozenset({"comms"}), Checkout.from_wire(str(tmp_path))))
+        comms.registry.declare(Thread(name, frozenset({"comms"}), Checkout(tmp_path)))
     request = comms.goals.todos.add_request(
         comms.registry.require('lead').incarnation, 'Repair the worker').id
     caller = ThreadCaller("lead")
@@ -142,7 +142,7 @@ def edit_order(comms, tmp_path):
     source = SourceRepository.create(tmp_path / 'source')
     other = SourceRepository.create(tmp_path / 'other', RepositoryName.from_wire("org/other"))
     for name in ("lead", "worker"):
-        comms.registry.declare(Thread(name, frozenset({"comms"}), Checkout.from_wire(str(tmp_path))))
+        comms.registry.declare(Thread(name, frozenset({"comms"}), Checkout(tmp_path)))
     lead = comms.registry.require('lead').incarnation
     request = comms.goals.todos.add_request(lead, 'Repair the worker').id
     caller = ThreadCaller("lead")

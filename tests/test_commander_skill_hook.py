@@ -196,7 +196,7 @@ def commander_bus(tmp_path):
     bus = wire(tmp_path / "bus")
     for name in ("claude-code", "unit-x"):
         bus.registry.declare(Thread(
-            name, frozenset(), Checkout.from_wire(str(tmp_path)),
+            name, frozenset(), Checkout(tmp_path),
             model=DeclaredModel("anthropic/claude-opus-4-6")))
     bus.registry.set_commander_project(RegisteredCommanderProject(
         bus.registry.require("claude-code").incarnation, ()))

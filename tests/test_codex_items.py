@@ -12,7 +12,7 @@ def _output(tmp_path):
     from agent_comms.thread_execution import ExternalThreadExecution
 
     comms = wire(tmp_path)
-    comms.registry.declare(Thread('cli', frozenset(), Checkout.from_wire(str(tmp_path)), execution=ExternalThreadExecution))
+    comms.registry.declare(Thread('cli', frozenset(), Checkout(tmp_path), execution=ExternalThreadExecution))
     return ThreadOutput(comms.transcripts.external('cli'), comms.agents)
 
 

@@ -54,7 +54,7 @@ def context_comms(directory: Path) -> Comms:
         ("outsider", {"else"}, 17004.0),
     ):
         comms.registry.declare(Thread(
-            name, frozenset(tags), Checkout.from_wire(str(directory)), process_identity=process, created_at=stamp))
+            name, frozenset(tags), Checkout(directory), process_identity=process, created_at=stamp))
     return comms
 
 

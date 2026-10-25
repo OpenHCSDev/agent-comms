@@ -28,7 +28,7 @@ async def test_real_idle_owner_is_replaced_without_losing_session(
         comms = wire(native.root)
         with LaunchRoot.from_path(comms.root).selected():
             comms.registry.declare(Thread(
-                'worker', frozenset(), Checkout.from_wire(str(native.project)), session_file=RegistrySessionLocation.from_path(str(native.session), comms.root)))
+                'worker', frozenset(), Checkout(native.project), session_file=RegistrySessionLocation.from_path(str(native.session), comms.root)))
             comms.agents.observe_runtime_info('worker', ContextUsageObservation(
                 context_used=PiCount.from_wire(23)))
             comms.agents.observe_runtime_info('worker', AgentInfo(
@@ -73,7 +73,7 @@ async def test_busy_owner_restart_queues_and_runs_at_idle(
         comms = wire(native.root)
         with LaunchRoot.from_path(comms.root).selected():
             session = RegistrySessionLocation.from_path(str(native.session), comms.root)
-            comms.registry.declare(Thread('worker', frozenset(), Checkout.from_wire(str(native.project)),
+            comms.registry.declare(Thread('worker', frozenset(), Checkout(native.project),
                                           session_file=session))
             owner = await asyncio.to_thread(comms.owners.ensure_owner, 'worker', agent_bin='pi')
             process = owner.require_process()

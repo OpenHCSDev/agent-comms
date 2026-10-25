@@ -25,7 +25,7 @@ from agent_comms.threads import Thread
 def registered(root):
     g_goal_id = GoalId.mint()
     comms = wire(root)
-    comms.registry.register(Thread('owner', frozenset({'team'}), Checkout.from_wire(str(root)),
+    comms.registry.register(Thread('owner', frozenset({'team'}), Checkout(root),
         process_identity=ProcessIdentity.capture(os.getpid()),
         goal=Goal('task', g_goal_id, published_seq=0)))
     return comms.registry

@@ -21,13 +21,13 @@ from agent_comms.turn_phase import (
 def test_running_native_activity_is_derived_from_current_turn_phase(tmp_path):
     comms = wire(tmp_path)
     comms.registry.declare(
-        Thread('worker', frozenset(), Checkout.from_wire(str(tmp_path)), process_identity=ProcessIdentity.capture(os.getpid()))
+        Thread('worker', frozenset(), Checkout(tmp_path), process_identity=ProcessIdentity.capture(os.getpid()))
     )
     first = comms.agents.begin_turn(
         "worker", TurnId('a7937b64b8caa58f03721bb6bacf5c78'), "Long-running work"
     ).turn_lease
     before = comms.registry.snapshot()
-    comms.registry.declare(Thread('worker', frozenset(), Checkout.from_wire(str(tmp_path))))
+    comms.registry.declare(Thread('worker', frozenset(), Checkout(tmp_path)))
     after = comms.registry.snapshot()
     assert after.owner_generations == before.owner_generations
     assert after.claim_generation('worker') == before.claim_generation('worker')

@@ -56,7 +56,7 @@ async def test_turn_after_order_replacement_is_allowed(tmp_path, native_runtime_
             comms = agent._comms
             worker = agent.sessions.require(session_id)
             comms.registry.declare(Thread(
-                'lead', frozenset(), Checkout.from_wire(str(saved.project)),
+                'lead', frozenset(), Checkout(saved.project),
                 process_identity=ProcessIdentity.capture(os.getpid()),
             ))
             request = comms.goals.todos.add_request(
@@ -122,7 +122,7 @@ async def test_goal_published_during_preparation_is_current_at_reservation(tmp_p
     comms = installed_comms(tmp_path)
     for name in ('lead', 'worker'):
         comms.registry.declare(Thread(
-            name, frozenset(), Checkout.from_wire(str(tmp_path)),
+            name, frozenset(), Checkout(tmp_path),
             process_identity=ProcessIdentity.capture(os.getpid()),
         ))
     request = comms.goals.todos.add_request(
@@ -188,7 +188,7 @@ async def test_order_reactivating_a_blocked_goal_keeps_the_running_turn(tmp_path
     comms = installed_comms(tmp_path)
     for name in ('lead', 'worker'):
         comms.registry.declare(Thread(
-            name, frozenset(), Checkout.from_wire(str(tmp_path)),
+            name, frozenset(), Checkout(tmp_path),
             process_identity=ProcessIdentity.capture(os.getpid()),
         ))
     request = comms.goals.todos.add_request(

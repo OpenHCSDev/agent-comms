@@ -79,9 +79,9 @@ def checkout_command_bus(repository, tmp_path, monkeypatch, installed_runtime):
     Bus.install(Bus.path_in(root))
     comms = wire(root)
     lead = comms.registry.declare(Thread(
-        "lead", frozenset(), Checkout.from_wire(str(tmp_path / "lead")), execution=ExternalThreadExecution))
+        "lead", frozenset(), Checkout(tmp_path / "lead"), execution=ExternalThreadExecution))
     worker = comms.registry.declare(Thread(
-        "worker", frozenset(), Checkout.from_wire(str(repository)), execution=ExternalThreadExecution))
+        "worker", frozenset(), Checkout(repository), execution=ExternalThreadExecution))
     comms.registry.set_commander_project(RegisteredCommanderProject(
         lead.incarnation, (Repo(checkout=repository, github=identity),)))
     request = comms.goals.todos.add_request(lead.incarnation, "Prepare the pinned checkout").id
@@ -126,6 +126,16 @@ def test_launch_checkout_refuses_empty_or_plain_project(tmp_path, monkeypatch, s
     monkeypatch.chdir(tmp_path)
     with pytest.raises(ValueError):
         FieldCodec.decode(LaunchCheckout, spelling)
+
+
+def test_empty_project_does_not_become_the_callers_checkout(tmp_path, monkeypatch):
+    git(tmp_path, 'init', '-q')
+    monkeypatch.chdir(tmp_path)
+    comms = wire(tmp_path / 'wire')
+    result = core('--root', str(comms.root), 'new', '--name', 'empty-project', '--project', '')
+    assert result.returncode != 0
+    assert 'Project path must not be empty' in result.stdout + result.stderr
+    assert 'empty-project' not in comms.registry.snapshot().threads
 
 
 def test_checkout_add_prepares_the_order_repository_submodule(checkout_command_bus):

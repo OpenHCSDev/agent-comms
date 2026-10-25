@@ -80,7 +80,7 @@ def _root(tmp_path: Path) -> tuple[Comms, Coordination, str, dict[str, str]]:
     comms.channels.create_tag("team")
     lookups: dict[str, str] = {}
     for name, created_at in (("alice", 17001.0), ("bob", 17002.0)):
-        comms.registry.declare(Thread(name, frozenset({'team'}), Checkout.from_wire(str(root)), created_at=created_at))
+        comms.registry.declare(Thread(name, frozenset({'team'}), Checkout(root), created_at=created_at))
         lookups[name] = RecordedThreadIncarnation("fixture", created_at).lookup
     store = Coordination(str(CoordinationStore.path_in(root)), clock_ms=lambda: 9999)
     for name in lookups:

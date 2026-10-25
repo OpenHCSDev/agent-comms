@@ -97,10 +97,10 @@ def test_storage_family_reads_once_and_renders_each_broken_fact(
         json.dumps(FieldCodec.encode(StorageRule(checkout_base=base)))
     )
     comms = wire(root)
-    lead = comms.registry.declare(Thread("lead", frozenset(), Checkout.from_wire(str(repository))))
+    lead = comms.registry.declare(Thread("lead", frozenset(), Checkout(repository)))
     configured_repository(comms)
     worker = comms.registry.declare(
-        Thread("worker", frozenset(), Checkout.from_wire(str(home)))
+        Thread("worker", frozenset(), Checkout(home))
     )
     comms.goals.todos.create(
         "P1",

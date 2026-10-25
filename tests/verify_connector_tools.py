@@ -55,7 +55,7 @@ def seed(root: Path, project: Path) -> None:
     comms = wire(root)
     for name in ("claude-ai", "worker", "archivable"):
         comms.registry.declare(
-            Thread(name, frozenset({"probe"}), Checkout.from_wire(str(project))),
+            Thread(name, frozenset({"probe"}), Checkout(project)),
             status=StoppedThreadStatus(),
         )
     comms.channels.set_saved_view(

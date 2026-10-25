@@ -105,7 +105,7 @@ def claims(tmp_path: Path) -> ClaimBus:
     for name in ("alice", "bob"):
         turns[name] = TurnId.mint()
         registry.declare(Thread(
-            name, frozenset(), Checkout.from_wire(str(tmp_path)), process_identity=ProcessIdentity.capture(os.getpid()),
+            name, frozenset(), Checkout(tmp_path), process_identity=ProcessIdentity.capture(os.getpid()),
         ), RunningThreadStatus())
     bus = Bus.install(Bus.path_in(root))
     with bus.writing():

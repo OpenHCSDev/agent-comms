@@ -79,7 +79,7 @@ def test_scoped_page_rows_and_edges_share_the_admitted_cut(tmp_path, traversal):
 def test_archived_database_pages_read_only(tmp_path):
     live = channel_bus(tmp_path / "live")
     registry = Registration(RegistryFile.path_in(live.bus.path.parent))
-    registry.declare(Thread("author", frozenset({"history"}), Checkout.from_wire(str(tmp_path))))
+    registry.declare(Thread("author", frozenset({"history"}), Checkout(tmp_path)))
     source = HistoryArchive(Bus.path_in(tmp_path / "reader")).attach(live.bus.path.parent)
     archive = Path(source.root)
     archived = MessageBus(archive, Registration(RegistryFile.path_in(archive)), Publisher)

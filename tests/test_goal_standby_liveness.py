@@ -34,7 +34,7 @@ from agent_comms.goal_scope import OneGoal
 
 def _thread(comms, name, worktree):
     comms.registry.declare(
-        Thread(name, frozenset(), Checkout.from_wire(str(worktree)), process_identity=ProcessIdentity.capture(os.getpid()))
+        Thread(name, frozenset(), Checkout(worktree), process_identity=ProcessIdentity.capture(os.getpid()))
     )
 
 

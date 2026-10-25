@@ -126,7 +126,7 @@ async def journey(package: Path, evidence: Path, installed: Path, *, repeat_load
     }))
     comms = wire(root)
     fresh = create_fresh_private_session(evidence / "sessions", worktree=project)
-    comms.registry.declare(Thread('error-native', frozenset(), Checkout.from_wire(str(project)), session_file=RegistrySessionLocation.from_path(str(fresh.path), comms.root), model=DeclaredModel('error-local/error-fixture'), thinking_level=OffThinkingLevel))
+    comms.registry.declare(Thread('error-native', frozenset(), Checkout(project), session_file=RegistrySessionLocation.from_path(str(fresh.path), comms.root), model=DeclaredModel('error-local/error-fixture'), thinking_level=OffThinkingLevel))
     environment = {key: value for key, value in os.environ.items()
                    if not key.startswith(("PI_", "AGENT_COMMS_")) and key != "PYTHONPATH"}
     environment.update(

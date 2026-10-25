@@ -21,7 +21,7 @@ from agent_comms.message_page import PageBounds
 
 def _thread(root: Path, name: str) -> Thread:
     thread_registration = Registration(Path(root) / "registry.json")
-    return Thread(name, frozenset({'talk'}), Checkout.from_wire(str(root)), process_identity=ProcessIdentity.capture(os.getpid()))
+    return Thread(name, frozenset({'talk'}), Checkout(root), process_identity=ProcessIdentity.capture(os.getpid()))
 
 
 def test_dm_page_marks_covered_range_preserving_omitted_older_unread(tmp_path: Path):

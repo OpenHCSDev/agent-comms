@@ -1,3 +1,4 @@
+from pathlib import Path
 from agent_comms.repo import Checkout
 import json
 
@@ -22,7 +23,7 @@ class TestToolCatalog:
         monkeypatch.setenv("AGENT_COMMS_NATIVE_CONFIG_DIR", str(tmp_path / "config"))
 
         thread = Thread(
-            name="catalog-owner", tags=frozenset(), worktree=Checkout.from_wire("/wt"), service_tier=ServiceTier.STANDARD,
+            name="catalog-owner", tags=frozenset(), worktree=Checkout(Path("/wt")), service_tier=ServiceTier.STANDARD,
         )
         comms.registry.declare(thread)
         flag, path = thread.native_launch_arguments(NativeArguments(()), tmp_path / "package", comms.root)
@@ -36,8 +37,8 @@ class TestToolCatalog:
 
     def test_collaboration_tools_share_one_mutual_contact(self, comms, monkeypatch):
         monkeypatch.setenv("AGENT_COMMS_THREAD", "a")
-        comms.registry.declare(Thread(name='a', tags=frozenset(), worktree=Checkout.from_wire('/wt')))
-        comms.registry.declare(Thread(name='b', tags=frozenset(), worktree=Checkout.from_wire('/wt')))
+        comms.registry.declare(Thread(name='a', tags=frozenset(), worktree=Checkout(Path('/wt'))))
+        comms.registry.declare(Thread(name='b', tags=frozenset(), worktree=Checkout(Path('/wt'))))
         before = comms.registry.snapshot()
         result = invoke_tool(comms, "comms_collaboration", {"action": "add", "peer": "b"}, caller=ThreadCaller("a"))
         assert result["collaboration"]["owner"] == "a"
@@ -92,8 +93,8 @@ class TestToolCatalog:
         assert all(tool["parameters"]["additionalProperties"] is False for tool in catalog)
 
     def test_inbox_ack_behavior_is_owned_by_declared_tool(self, comms):
-        comms.registry.declare(Thread(name='a', tags=frozenset(), worktree=Checkout.from_wire('/wt')))
-        comms.registry.declare(Thread(name='b', tags=frozenset(), worktree=Checkout.from_wire('/wt')))
+        comms.registry.declare(Thread(name='a', tags=frozenset(), worktree=Checkout(Path('/wt'))))
+        comms.registry.declare(Thread(name='b', tags=frozenset(), worktree=Checkout(Path('/wt'))))
         comms.messaging.send("a", "b", "hello").message.message_id
 
         result = invoke_tool(comms, "comms_inbox", {"thread": "b"}, caller=NoThreadCaller())
@@ -116,7 +117,7 @@ class TestToolCatalog:
         from agent_comms.launch_runtime import CallingThreadUnavailable
 
         monkeypatch.delenv("AGENT_COMMS_THREAD", raising=False)
-        comms.registry.declare(Thread(name='listed', tags=frozenset(), worktree=Checkout.from_wire('/wt')))
+        comms.registry.declare(Thread(name='listed', tags=frozenset(), worktree=Checkout(Path('/wt'))))
         result = invoke_tool(comms, "comms_threads", {"active_only": True}, caller=NoThreadCaller())
         assert [thread["name"] for thread in result["threads"]] == ["listed"]
         assert result["sent_notifications"] == []
@@ -126,8 +127,8 @@ class TestToolCatalog:
     def test_threads_tool_includes_callers_bounded_sent_outcomes(self, comms, monkeypatch):
         # A tool consumes its bound caller, never a subsequently changed environment.
         monkeypatch.setenv("AGENT_COMMS_THREAD", "not-the-invoker")
-        comms.registry.declare(Thread(name='sender', tags=frozenset(), worktree=Checkout.from_wire('/wt')))
-        comms.registry.declare(Thread(name='recipient', tags=frozenset(), worktree=Checkout.from_wire('/wt')))
+        comms.registry.declare(Thread(name='sender', tags=frozenset(), worktree=Checkout(Path('/wt'))))
+        comms.registry.declare(Thread(name='recipient', tags=frozenset(), worktree=Checkout(Path('/wt'))))
         sent = comms.messaging.send("sender", "recipient", "track me").message
         for index in range(6):
             comms.messaging.send("recipient", "sender", f"incoming {index}").message
@@ -154,9 +155,9 @@ class TestToolCatalog:
         )]
 
     def test_inbox_ack_can_target_one_conversation(self, comms):
-        comms.registry.declare(Thread(name='a', tags=frozenset(), worktree=Checkout.from_wire('/wt')))
-        comms.registry.declare(Thread(name='b', tags=frozenset(), worktree=Checkout.from_wire('/wt')))
-        comms.registry.declare(Thread(name='c', tags=frozenset(), worktree=Checkout.from_wire('/wt')))
+        comms.registry.declare(Thread(name='a', tags=frozenset(), worktree=Checkout(Path('/wt'))))
+        comms.registry.declare(Thread(name='b', tags=frozenset(), worktree=Checkout(Path('/wt'))))
+        comms.registry.declare(Thread(name='c', tags=frozenset(), worktree=Checkout(Path('/wt'))))
         comms.messaging.send("a", "b", "from a").message.message_id
         comms.messaging.send("c", "b", "from c").message.message_id
 

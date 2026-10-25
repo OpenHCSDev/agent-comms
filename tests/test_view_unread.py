@@ -38,8 +38,8 @@ def test_reply_suffix_counts_only_its_revision_or_a_fully_read_source(tmp_path):
 
 def test_any_mode_expansion_keeps_unpainted_dm_unread(tmp_path):
     comms = installed_comms(tmp_path)
-    comms.registry.declare(Thread('alice', frozenset({'team'}), Checkout.from_wire(str(tmp_path))))
-    comms.registry.declare(Thread('bob', frozenset({'team'}), Checkout.from_wire(str(tmp_path))))
+    comms.registry.declare(Thread('alice', frozenset({'team'}), Checkout(tmp_path)))
+    comms.registry.declare(Thread('bob', frozenset({'team'}), Checkout(tmp_path)))
     comms.messaging.send("alice", "bob", "hidden until any-mode").message.message_id
     assert comms.views.viewer_snapshot(str(tmp_path)).channel_unread["#team"].count == 0
     comms.views.mark_user_view_read("#team", worktree=str(tmp_path))
@@ -50,10 +50,10 @@ def test_any_mode_expansion_keeps_unpainted_dm_unread(tmp_path):
 
 def test_any_mode_ack_covers_only_the_painted_participant_basis(tmp_path):
     comms = installed_comms(tmp_path)
-    comms.registry.declare(Thread('alice', frozenset({'team'}), Checkout.from_wire(str(tmp_path))))
-    comms.registry.declare(Thread('bob', frozenset({'team'}), Checkout.from_wire(str(tmp_path))))
-    comms.registry.declare(Thread('carol', frozenset(), Checkout.from_wire(str(tmp_path))))
-    comms.registry.declare(Thread('dave', frozenset(), Checkout.from_wire(str(tmp_path))))
+    comms.registry.declare(Thread('alice', frozenset({'team'}), Checkout(tmp_path)))
+    comms.registry.declare(Thread('bob', frozenset({'team'}), Checkout(tmp_path)))
+    comms.registry.declare(Thread('carol', frozenset(), Checkout(tmp_path)))
+    comms.registry.declare(Thread('dave', frozenset(), Checkout(tmp_path)))
     comms.channels.set_channel_any_mode("#team", True)
     comms.messaging.send("carol", "dave", "unpainted older DM").message
     comms.messaging.send("alice", "bob", "painted DM").message
@@ -69,10 +69,10 @@ def test_any_mode_ack_covers_only_the_painted_participant_basis(tmp_path):
 
 def test_any_mode_rejects_stale_painted_page_after_participant_joins(tmp_path):
     comms = installed_comms(tmp_path)
-    comms.registry.declare(Thread('alice', frozenset({'team'}), Checkout.from_wire(str(tmp_path))))
-    comms.registry.declare(Thread('bob', frozenset({'team'}), Checkout.from_wire(str(tmp_path))))
-    comms.registry.declare(Thread('carol', frozenset(), Checkout.from_wire(str(tmp_path))))
-    comms.registry.declare(Thread('dave', frozenset(), Checkout.from_wire(str(tmp_path))))
+    comms.registry.declare(Thread('alice', frozenset({'team'}), Checkout(tmp_path)))
+    comms.registry.declare(Thread('bob', frozenset({'team'}), Checkout(tmp_path)))
+    comms.registry.declare(Thread('carol', frozenset(), Checkout(tmp_path)))
+    comms.registry.declare(Thread('dave', frozenset(), Checkout(tmp_path)))
     comms.channels.set_channel_any_mode("#team", True)
     comms.messaging.send("carol", "dave", "hidden old DM").message
     comms.messaging.send("alice", "bob", "painted DM").message
@@ -93,8 +93,8 @@ def test_crashed_sender_reopen_does_not_hide_unpainted_any_mode_dm():
     with tempfile.TemporaryDirectory(dir="/var/tmp") as directory:
         root = Path(directory)
         comms = installed_comms(root)
-        comms.registry.declare(Thread('alice', frozenset({'team'}), Checkout.from_wire(str(root))))
-        comms.registry.declare(Thread('bob', frozenset({'team'}), Checkout.from_wire(str(root))))
+        comms.registry.declare(Thread('alice', frozenset({'team'}), Checkout(root)))
+        comms.registry.declare(Thread('bob', frozenset({'team'}), Checkout(root)))
         comms.messaging.send("alice", "bob", "hidden before crash").message
         comms.views.mark_user_view_read("#team", worktree=str(root))
         child = subprocess.run(

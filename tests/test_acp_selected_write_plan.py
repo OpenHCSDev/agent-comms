@@ -52,10 +52,10 @@ async def test_second_pid_public_acp_owner_ipc_preplan(tmp_path, native_runtime_
         comms = prepare_native_comms(wire(root))
         sender_pid = os.getpid()
         comms.registry.declare(
-            Thread('sender', frozenset(), Checkout.from_wire(str(work)), process_identity=ProcessIdentity.capture(sender_pid), created_at=61001.0)
+            Thread('sender', frozenset(), Checkout(work), process_identity=ProcessIdentity.capture(sender_pid), created_at=61001.0)
         )
         alpha = comms.registry.declare(
-            Thread('alpha', frozenset({'team'}), Checkout.from_wire(str(work)), process_identity=ProcessIdentity.capture(sender_pid), created_at=61002.0, model=DeclaredModel('response-local/fixture'))
+            Thread('alpha', frozenset({'team'}), Checkout(work), process_identity=ProcessIdentity.capture(sender_pid), created_at=61002.0, model=DeclaredModel('response-local/fixture'))
         )
         root_id = comms.owners.require_private_launch().wire_root_id
         with Coordination(str(root / "coordination.sqlite3")) as store:
@@ -86,7 +86,7 @@ async def test_second_pid_public_acp_owner_ipc_preplan(tmp_path, native_runtime_
         try:
             assert process.pid != sender_pid
             beta = comms.registry.declare(
-                Thread('beta', frozenset({'team'}), Checkout.from_wire(str(work)), process_identity=ProcessIdentity.capture(process.pid), created_at=61003.0, model=DeclaredModel('response-local/fixture'))
+                Thread('beta', frozenset({'team'}), Checkout(work), process_identity=ProcessIdentity.capture(process.pid), created_at=61003.0, model=DeclaredModel('response-local/fixture'))
             )
             with Coordination(str(root / "coordination.sqlite3")) as store:
                 store.participants.register(

@@ -44,7 +44,7 @@ def main(scratch: Path):
         Bus.install(Bus.path_in(root))
         comms = wire(root)
         for name in ("claude-ai", "worker"):
-            comms.registry.declare(Thread(name, frozenset(), Checkout.from_wire(str(base))))
+            comms.registry.declare(Thread(name, frozenset(), Checkout(base)))
         home = base / "home"
         store_root = home / ".local/state/agent-comms/connector"
         store_root.mkdir(mode=0o700, parents=True)

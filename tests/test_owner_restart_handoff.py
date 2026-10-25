@@ -57,7 +57,7 @@ def test_runtime_path_is_idempotent_and_keeps_other_search_entries(inherited, ex
 
 def stopped(registry):
     # A declared absent synthetic process, never a borrowed original identity.
-    thread = Thread("authored", frozenset(), Checkout.from_wire("/authored"),
+    thread = Thread("authored", frozenset(), Checkout(Path("/authored")),
                     process_identity=ProcessIdentity(2147483647, 1), created_at=1.0)
     snapshot = RegistrySnapshot.capture(RegistryDocument(
         threads=ThreadRows.from_threads({thread.name: thread}), statuses={thread.name: StoppedThreadStatus()},

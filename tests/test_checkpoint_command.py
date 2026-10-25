@@ -51,7 +51,7 @@ def test_a_dirty_worktree_is_committed_and_pushed_to_the_derived_branch(
     _git(worktree, "commit", "-q", "-m", "base")
     (worktree / "step.py").write_text("print('step 2')\n")  # uncommitted at compaction
     comms.registry.register(
-        Thread('Repo', frozenset({'team'}), Checkout.from_wire(str(worktree)), created_at=17007.0)
+        Thread('Repo', frozenset({'team'}), Checkout(worktree), created_at=17007.0)
     )
 
     result = CheckpointCliCommand(name="Repo").apply(comms)
@@ -86,7 +86,7 @@ def test_production_git_never_discovers_a_checkout_above_the_declaration(
     monkeypatch.chdir(tmp_path)
     declared = nested.relative_to(tmp_path) if relative else nested
     comms.registry.register(
-        Thread('Nested', frozenset({'team'}), Checkout.from_wire(str(declared)), created_at=17008.0)
+        Thread('Nested', frozenset({'team'}), Checkout(declared), created_at=17008.0)
     )
     refused = CheckpointCliCommand(name="Nested").apply(comms)
     assert isinstance(refused, RefusedCheckpoint)
@@ -104,7 +104,7 @@ def test_a_stale_declaration_or_broken_transport_never_names_a_fake_push(
     outside = tmp_path / "outside"
     outside.mkdir()
     comms.registry.register(
-        Thread('NoGit', frozenset({'team'}), Checkout.from_wire(str(outside)), created_at=17005.0)
+        Thread('NoGit', frozenset({'team'}), Checkout(outside), created_at=17005.0)
     )
     refused = CheckpointCliCommand(name="NoGit").apply(comms)
     assert isinstance(refused, RefusedCheckpoint)
@@ -114,7 +114,7 @@ def test_a_stale_declaration_or_broken_transport_never_names_a_fake_push(
     _git(broken, "remote", "add", "origin", str(tmp_path / "missing.git"))
     (broken / "left.txt").write_text("uncommitted\n")
     comms.registry.register(
-        Thread('Broken', frozenset({'team'}), Checkout.from_wire(str(broken)), created_at=17006.0)
+        Thread('Broken', frozenset({'team'}), Checkout(broken), created_at=17006.0)
     )
     unknown = CheckpointCliCommand(name="Broken").apply(comms)
     assert isinstance(unknown, PushUnknownCheckpoint)

@@ -1,4 +1,5 @@
 """One registry answer turns wanted text into a free thread name."""
+from pathlib import Path
 
 from agent_comms.repo import Checkout
 import os
@@ -13,7 +14,7 @@ from agent_comms.threads import Thread
 
 def _declare(comms, name, worktree):
     comms.registry.declare(Thread(
-        name, frozenset(), Checkout.from_wire(worktree), process_identity=ProcessIdentity.capture(os.getpid())))
+        name, frozenset(), Checkout(Path(worktree)), process_identity=ProcessIdentity.capture(os.getpid())))
 
 
 def test_wanted_text_gets_one_slug_and_the_first_free_suffix(tmp_path):

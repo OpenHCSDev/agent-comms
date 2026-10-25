@@ -323,7 +323,7 @@ class ThreadManagement:
         thread = Thread(
             name=RegistryNames.thread_slug(wanted),
             tags=tags,
-            worktree=Checkout.from_wire(worktree),
+            worktree=Checkout(Path(worktree)),
             process_identity=process,
             model=model,
             thinking_level=thinking_level,

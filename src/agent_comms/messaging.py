@@ -116,7 +116,7 @@ class Messaging:
 
     def _register_user(self, worktree: str) -> Thread:
         name = self.registry.snapshot().claim_name("user")
-        thread = Thread(name, frozenset(), Checkout.from_wire(worktree), role=UserThreadRole)
+        thread = Thread(name, frozenset(), Checkout(Path(worktree)), role=UserThreadRole)
         self.registry.register(thread)
         return thread
 

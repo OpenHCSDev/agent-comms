@@ -57,7 +57,7 @@ def test_registry_assigns_a_new_thread_its_roots_at_declaration(tmp_path):
     }))
     comms = wire(tmp_path)
     rule = comms.registry.storage_rule
-    thread = Thread('worker', frozenset(), Checkout.from_wire(str(tmp_path / 'home')))
+    thread = Thread('worker', frozenset(), Checkout(tmp_path / 'home'))
     assert thread.storage_roots == UnassignedThreadStorage()
     assert rule.floor_gib == 47
     declared = comms.registry.declare(thread)
@@ -82,8 +82,8 @@ def test_removed_worktree_frees_quota_and_another_home_cannot_claim_its_parent(t
     rule = StorageRule(checkout_base=base, scratch_base=tmp_path / 'scratch', floor_gib=0, max_checkouts=1)
     comms = wire(tmp_path / 'wire')
     comms.registry.storage_rule = rule
-    thread = comms.registry.declare(Thread('worker', frozenset(), Checkout.from_wire(str(home))))
-    other = comms.registry.declare(Thread('other', frozenset(), Checkout.from_wire(str(tmp_path))))
+    thread = comms.registry.declare(Thread('worker', frozenset(), Checkout(home)))
+    other = comms.registry.declare(Thread('other', frozenset(), Checkout(tmp_path)))
     assert rule.checkouts_of(thread) == (home, old)
     storage = UnitStorage.read(rule, thread)
     assert storage.home == home
@@ -119,7 +119,7 @@ def test_cannot_remove_current_project_but_can_remove_another_checkout(tmp_path)
     project_link.symlink_to(current, target_is_directory=True)
     comms = wire(tmp_path / 'wire')
     comms.registry.storage_rule = StorageRule(checkout_base=base, scratch_base=tmp_path / 'scratch')
-    thread = comms.registry.declare(Thread('worker', frozenset(), Checkout.from_wire(str(project_link))))
+    thread = comms.registry.declare(Thread('worker', frozenset(), Checkout(project_link)))
     assert thread.project_path == current
     assert UnitStorage.read(comms.registry.storage_rule, thread).home == current
     with pytest.raises(StorageDenied):
@@ -140,7 +140,7 @@ def test_cannot_remove_current_project_but_can_remove_another_checkout(tmp_path)
                                      'git -C ~/wt/other--P3 reset --hard', 'touch ~/wt/x-check/file'])
 def test_forbidden_shell_operations_use_declared_rule(tmp_path, command):
     rule = StorageRule()
-    thread = Thread('worker', frozenset(), Checkout.from_wire(str(tmp_path)), storage_roots=rule.initial_roots('worker'))
+    thread = Thread('worker', frozenset(), Checkout(tmp_path), storage_roots=rule.initial_roots('worker'))
     with pytest.raises(SelectedToolDenied):
         StorageProjection(rule, thread).check(shell_storage_effects(command, tmp_path))
 

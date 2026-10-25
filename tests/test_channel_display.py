@@ -41,7 +41,7 @@ def populated(tmp_path):
         ("bob", {"ui"}),
         ("outsider", set()),
     ):
-        comms.registry.declare(Thread(name, frozenset(tags), Checkout.from_wire(str(tmp_path))))
+        comms.registry.declare(Thread(name, frozenset(tags), Checkout(tmp_path)))
     return comms
 
 

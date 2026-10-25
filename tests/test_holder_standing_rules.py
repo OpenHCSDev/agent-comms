@@ -1,4 +1,5 @@
 """Held-order recovery and unanswered DMs on an independently copied bus."""
+from pathlib import Path
 
 
 from agent_comms.repo import Checkout
@@ -99,7 +100,7 @@ def held_bus(comms, tmp_path, source_repository, configured_repository):
     outsider = tmp_path / 'outsider-checkout'
     source.git(source.checkout, 'worktree', 'add', '-q', '-b', 'outsider-work', str(outsider))
     declare_test_bus(comms, channels=('comms',), threads=tuple(
-        Thread(name=name, tags=frozenset({'comms'}), worktree=Checkout.from_wire(str(worktree)))
+        Thread(name=name, tags=frozenset({'comms'}), worktree=Checkout(worktree))
         for name, worktree in (('lead', source.checkout), ('worker', source.checkout),
                                ('outsider', outsider))
     ))
@@ -199,7 +200,7 @@ def test_order_claim_publishes_only_to_its_retained_commander_birth(
         comms.registry.unregister("lead")
         comms.registry.remove("lead")
         if change == "recreate":
-            comms.registry.declare(Thread("lead", frozenset({"comms"}), Checkout.from_wire(worktree)))
+            comms.registry.declare(Thread("lead", frozenset({"comms"}), Checkout(Path(worktree))))
     before = comms.bus.bus.revision()
     operation = ClaimOrder(todo.revision, worker, todo.held().generation, claim)
     if change in ("rename", "rename_holder"):

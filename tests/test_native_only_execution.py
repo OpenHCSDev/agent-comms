@@ -58,7 +58,7 @@ async def test_headless_uses_existing_owner_runtime_and_owner_project(tmp_path, 
         caller_project.mkdir()
         # Headless execution requires a private bus root (worker.py); its owner prepares one.
         comms = prepare_native_comms(wire(base / "wire"))
-        comms.registry.declare(Thread('headless', frozenset(), Checkout.from_wire(str(project))))
+        comms.registry.declare(Thread('headless', frozenset(), Checkout(project)))
         env = dict(
             os.environ,
             AGENT_COMMS_ROOT=str(comms.root),

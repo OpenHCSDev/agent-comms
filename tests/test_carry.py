@@ -355,9 +355,9 @@ def test_restart_selection_uses_receiving_declaration_with_connected_cli_inbox(c
 
     process = ProcessIdentity.capture(os.getpid())
     native = comms.registry.declare(replace(Thread(
-        'native-copy', frozenset(), Checkout.from_wire(str(comms.root))), process_identity=process))
+        'native-copy', frozenset(), Checkout(comms.root)), process_identity=process))
     external = comms.registry.declare(Thread(
-        'cli-inbox-copy', frozenset(), Checkout.from_wire(str(comms.root)), execution=ExternalThreadExecution))
+        'cli-inbox-copy', frozenset(), Checkout(comms.root), execution=ExternalThreadExecution))
     with comms.registry.external_process(external.name, process):
         assert stack.running_owners(comms.root) == [native.name]
         native.execution.require_native()
@@ -369,7 +369,7 @@ def test_owner_stop_batch_reports_refusal_after_stopping_available_owners(comms,
     names = ["failed", "other", "last"]
     for name in names[1:]:
         comms.registry.declare(
-            Thread(name, frozenset(), Checkout.from_wire(str(comms.root))), RunningThreadStatus()
+            Thread(name, frozenset(), Checkout(comms.root)), RunningThreadStatus()
         )
 
     # A missing target must not prevent the batch from stopping its available owners.
@@ -388,7 +388,7 @@ def test_the_install_start_stops_owners_under_its_hold(comms, stack):
     path = ledger_one_failure_short(comms.root)
     maintenance = MaintenanceBarrier(RegistryStore.at(comms.root).path)
     with SpawnedProcess.launch(("sleep", "600")) as owner:
-        comms.registry.declare(replace(Thread("unit", frozenset(), Checkout.from_wire(str(comms.root))),
+        comms.registry.declare(replace(Thread("unit", frozenset(), Checkout(comms.root)),
                                        process_identity=owner.identity),
                                RunningThreadStatus())
         with ExistingBusInstall.owners_stopped(comms.root, stack, stack) as owners:

@@ -61,7 +61,7 @@ def test_autonomous_turns_keep_message_batches_and_delivery_keys_separate(tmp_pa
     assert ScheduledTurn.take_batch([first, second, goal]) == ([first, second], [goal])
     assert ScheduledTurn.take_batch([direct, direct]) == ([direct], [direct])
 
-    owner = Thread("owner", frozenset(), Checkout.from_wire(str(tmp_path)))
+    owner = Thread("owner", frozenset(), Checkout(tmp_path))
     dispositions = InputDispositions(tmp_path)
     assert goal.origin.messages() == ()
     assert goal.origin.bus_keys(dispositions, owner) == ()

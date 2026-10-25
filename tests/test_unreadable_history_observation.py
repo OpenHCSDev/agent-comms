@@ -59,7 +59,7 @@ class ReadRecordedContext(ReadRequest):
 
 
 def saved_row(comms):
-    owner = Thread('saved', frozenset(), Checkout.from_wire(str(comms.root.parent)), created_at=17003.0)
+    owner = Thread('saved', frozenset(), Checkout(comms.root.parent), created_at=17003.0)
     comms.registry.declare(owner)
     comms.contexts.record_after(UNREAD_CONTEXT, manifest(owner))
     with comms.contexts.snapshot() as db:

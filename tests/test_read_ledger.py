@@ -38,7 +38,7 @@ from agent_comms.threads import Thread
 def prepared(root):
     comms = prepare_native_comms(wire(root))
     for name, tags in (("alice", {"team"}), ("bob", set())):
-        comms.registry.declare(Thread(name, frozenset(tags), Checkout.from_wire(str(root))))
+        comms.registry.declare(Thread(name, frozenset(tags), Checkout(root)))
     return comms
 
 
@@ -75,7 +75,7 @@ def test_mark_all_uses_conversation_prefixes_without_sparse_message_lists(tmp_pa
 
 def test_member_activity_mark_all_does_not_read_hidden_conversation_rows(tmp_path):
     comms = prepared(tmp_path)
-    comms.registry.declare(Thread('carol', frozenset(), Checkout.from_wire(str(tmp_path))))
+    comms.registry.declare(Thread('carol', frozenset(), Checkout(tmp_path)))
     viewer = comms.messaging.user_identity(str(tmp_path)).name
     hidden = comms.messaging.send('bob', 'carol', 'outside the selected activity').message
     shown = comms.messaging.send('bob', 'carol', '@alice selected activity').message
@@ -165,7 +165,7 @@ def test_displayed_message_is_read_in_every_projection(tmp_path):
 
 def test_any_mode_expansion_cannot_read_unshown_message_in_same_conversation(tmp_path):
     comms = prepared(tmp_path)
-    comms.registry.declare(Thread('carol', frozenset(), Checkout.from_wire(str(tmp_path))))
+    comms.registry.declare(Thread('carol', frozenset(), Checkout(tmp_path)))
     hidden = comms.messaging.send("bob", "carol", "no member mentioned").message
     shown = comms.messaging.send("bob", "carol", "@alice shown by mention").message
     comms.channels.set_channel_any_mode("#team", True)
@@ -194,7 +194,7 @@ def test_turn_lease_and_unrelated_registry_changes_do_not_invalidate_dm(tmp_path
     comms.registry.lease_local_turn("alice", TurnId('0b225c32b06b9107d59b5d92d13b83a3'))
     fresh = comms.views.dm_display_page(ThreadTarget("alice"), worktree=str(tmp_path))
     assert fresh.selection.basis.peer_identity == page.selection.basis.peer_identity
-    comms.registry.register(Thread('unrelated', frozenset(), Checkout.from_wire(str(tmp_path))))
+    comms.registry.register(Thread('unrelated', frozenset(), Checkout(tmp_path)))
     comms.views.mark_page_read(page, worktree=str(tmp_path))
     assert wire(tmp_path).bus.pending_count(viewer, CommandTarget.named("alice")) == 0
 
@@ -226,7 +226,7 @@ def test_dm_ack_survives_process_exit_and_rebind_does_not_inherit_reads(tmp_path
     assert comms.bus.pending_count(viewer, CommandTarget.named("alice")) == 0
     comms.registry.unregister("alice")
     comms.registry.remove("alice")
-    comms.registry.declare(Thread('alice', frozenset({'team'}), Checkout.from_wire(str(tmp_path))))
+    comms.registry.declare(Thread('alice', frozenset({'team'}), Checkout(tmp_path)))
     fresh = comms.messaging.send("alice", viewer, "new incarnation unseen").message
     assert not read_message(comms, viewer, old)
     assert comms.bus.pending_count(viewer, CommandTarget.named("alice")) == 1
@@ -396,7 +396,7 @@ def test_partial_paints_share_one_basis_across_read_progress(tmp_path):
         )
         # Unrelated registry changes and previous ACKs do not invalidate the
         # remaining captured proof; participant identity still does.
-        comms.registry.register(Thread('unrelated', frozenset(), Checkout.from_wire(str(tmp_path))))
+        comms.registry.register(Thread('unrelated', frozenset(), Checkout(tmp_path)))
     reopened = wire(tmp_path)
     viewer = reopened.messaging.user_identity(str(tmp_path)).name
     assert reopened.bus.reads.cursor(viewer, reopened.registry.snapshot()) == ReadCursor({ChannelConversation(target="#team"): ConversationCursor(exceptions=(messages[2].seq, messages[4].seq))})
@@ -490,7 +490,7 @@ def test_read_property_includes_dm_rebind_stale_paints_and_abrupt_reopen(tmp_pat
         elif operation == "rebind":
             comms.registry.unregister("alice")
             comms.registry.remove("alice")
-            comms.registry.declare(Thread('alice', frozenset({'team'}), Checkout.from_wire(str(tmp_path))))
+            comms.registry.declare(Thread('alice', frozenset({'team'}), Checkout(tmp_path)))
         elif operation == "crash":
             # The child loads the actual durable store, then exits without
             # Python cleanup. No synthetic read document or mocked reopen.

@@ -91,7 +91,7 @@ pytest_plugins = ("test_holder_standing_rules", "test_unowned_checkout_work", "t
 
 def thread(name: str, root: Path, created: float) -> Thread:
     thread_registration = Registration(Path(root) / "registry.json")
-    return Thread(name, frozenset(), Checkout.from_wire(str(root)), created_at=created)
+    return Thread(name, frozenset(), Checkout(root), created_at=created)
 
 
 def order(source: SourceRepository):
@@ -392,7 +392,7 @@ def pr_commander(tmp_path, monkeypatch, proof_build_checkouts, durable_home, git
         github_cli.put(source.github, row, body)
     Bus.install(Bus.path_in(tmp_path))
     lead = Thread(
-        'lead', frozenset(), Checkout.from_wire(str(source.checkout)), created_at=1.0)
+        'lead', frozenset(), Checkout(source.checkout), created_at=1.0)
     # The volume is the tmp_path HOME; the machine's floor belongs to the live bus's rule.
     rule = StorageRule(checkout_base=source.checkout.parent, floor_gib=0)
     (tmp_path / "storage.json").write_text(json.dumps(FieldCodec.encode(rule)))
@@ -452,7 +452,7 @@ def released_published_orders(pr_commander, github_cli):
         source.git(checkout, 'commit', '-q', '--allow-empty', '-m', 'Published work')
         source.git(checkout, 'push', '-q', '-u', 'origin', name)
         declared[name] = c.registry.declare(Thread(
-            name, frozenset(), Checkout.from_wire(str(checkout)), execution=ExternalThreadExecution,
+            name, frozenset(), Checkout(checkout), execution=ExternalThreadExecution,
             process_identity=ProcessIdentity.capture(os.getpid())))
         c.transcripts.external(name).finish(
             turn_id=NativeTurnId(name), item_id='idle', events=(AssistantTranscript(
@@ -600,7 +600,7 @@ def test_watcher_git_and_github_reads_leave_wire_free(pr_commander, monkeypatch)
         c.registry.register(replace(lead, process_identity=ProcessIdentity.capture(os.getpid())))
         worker_checkout = ctx.root.parent / "worker-checkout"
         source.git(source.checkout, "worktree", "add", "-q", "--detach", str(worker_checkout))
-        worker = Thread("worker", frozenset(), Checkout.from_wire(str(worker_checkout)), created_at=2.0)
+        worker = Thread("worker", frozenset(), Checkout(worker_checkout), created_at=2.0)
         c.registry.register(worker)
         original = adopt_pr(ctx, pr_order(ctx, "P1", ApplicationOrderRun(
             'Read the copied board and confirm the application order remains assigned',

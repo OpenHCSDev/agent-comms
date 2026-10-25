@@ -48,11 +48,11 @@ def _root(
     root.mkdir(mode=0o700)
     comms = prepare_native_comms(wire(root))
     comms.registry.declare(
-        Thread('sender', frozenset(), Checkout.from_wire(str(tmp_path)), process_identity=ProcessIdentity.capture(os.getpid()))
+        Thread('sender', frozenset(), Checkout(tmp_path), process_identity=ProcessIdentity.capture(os.getpid()))
     )
     for number in range(recipients):
         comms.registry.declare(
-            Thread(f'member{number:03}', frozenset({'team'}), Checkout.from_wire(str(tmp_path)), process_identity=ProcessIdentity.capture(os.getpid()), model=DeclaredModel('openai-codex/gpt-6-sol'))
+            Thread(f'member{number:03}', frozenset({'team'}), Checkout(tmp_path), process_identity=ProcessIdentity.capture(os.getpid()), model=DeclaredModel('openai-codex/gpt-6-sol'))
         )
     root_id = comms.registry.prepare_native_root().namespace
     store = Coordination(str(root / "coordination.sqlite3"))

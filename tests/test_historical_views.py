@@ -56,8 +56,8 @@ def test_missing_catalogue_is_empty_without_creating_it(tmp_path):
 
 def setup(root, count=5):
     comms = wire(root)
-    comms.registry.declare(Thread('alice', frozenset({'team'}), Checkout.from_wire(str(root)), created_at=10.0))
-    comms.registry.declare(Thread('bob', frozenset({'team'}), Checkout.from_wire(str(root)), created_at=11.0))
+    comms.registry.declare(Thread('alice', frozenset({'team'}), Checkout(root), created_at=10.0))
+    comms.registry.declare(Thread('bob', frozenset({'team'}), Checkout(root), created_at=11.0))
     viewer = comms.messaging.user_identity(str(root)).name
     for i in range(count):
         comms.messaging.send("alice", "#team", f"{root.name} channel {i}").message.message_id

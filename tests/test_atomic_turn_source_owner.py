@@ -28,7 +28,7 @@ from conftest import installed_comms
 @pytest.mark.parametrize("goal_changed", [False, True])
 async def test_begin_callback_and_native_attachment_share_original_owner(tmp_path, goal_changed):
     comms = installed_comms(tmp_path)
-    comms.registry.declare(Thread('owner', frozenset(), Checkout.from_wire(str(tmp_path)), process_identity=ProcessIdentity.capture(os.getpid())))
+    comms.registry.declare(Thread('owner', frozenset(), Checkout(tmp_path), process_identity=ProcessIdentity.capture(os.getpid())))
     agent = CommsAgent(comms, auto_wake=False)
     turn = OwnedTurn(
         agent.turns, "owner-session", "owner", "new original input", acceptance=NoTurnAcceptance(),
@@ -69,7 +69,7 @@ async def test_begin_callback_and_native_attachment_share_original_owner(tmp_pat
 @pytest.mark.parametrize("replacement", ["same-turn-id", "new-claim_scope"])
 def test_source_attachment_refuses_replaced_original_owner(tmp_path, replacement):
     comms = wire(tmp_path)
-    comms.registry.declare(Thread('owner', frozenset(), Checkout.from_wire(str(tmp_path)), process_identity=ProcessIdentity.capture(os.getpid())))
+    comms.registry.declare(Thread('owner', frozenset(), Checkout(tmp_path), process_identity=ProcessIdentity.capture(os.getpid())))
     original = comms.agents.begin_turn("owner", TurnId('058be655fae2a4c37a21d2c091ba7661'))
     assert comms.agents.finish_turn(original.turn_lease)
     if replacement == "new-claim_scope":
@@ -85,7 +85,7 @@ def test_source_attachment_refuses_replaced_original_owner(tmp_path, replacement
 def test_native_source_publication_retains_original_claim_across_rename(tmp_path):
     comms = wire(tmp_path)
     comms.registry.declare(Thread(
-        'owner', frozenset(), Checkout.from_wire(str(tmp_path)),
+        'owner', frozenset(), Checkout(tmp_path),
         process_identity=ProcessIdentity.capture(os.getpid()),
     ))
     original = comms.agents.begin_turn('owner', TurnId('9848d76b0bc0fadfe6c6463059c2c99b'))
@@ -103,7 +103,7 @@ def test_native_source_publication_retains_original_claim_across_rename(tmp_path
 
 def test_native_source_publication_retains_captured_configuration(tmp_path):
     comms = wire(tmp_path)
-    comms.registry.declare(Thread('owner', frozenset(), Checkout.from_wire(str(tmp_path)), process_identity=ProcessIdentity.capture(os.getpid()), model=DeclaredModel('test/old')))
+    comms.registry.declare(Thread('owner', frozenset(), Checkout(tmp_path), process_identity=ProcessIdentity.capture(os.getpid()), model=DeclaredModel('test/old')))
     original = comms.agents.begin_turn("owner", TurnId('353fe4ec44fe236b973ecec2489ac459'))
     comms.threads.set_thread_configuration(
             comms.registry.require('owner'), NextTurnConfiguration(model=ChosenModel(DeclaredModel('test/next'))))

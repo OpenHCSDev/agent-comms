@@ -46,7 +46,7 @@ def export_comms(comms: Comms, tmp_path) -> Comms:
     comms.channels.create_tag("team")
     for name in ("alice", "bob"):
         comms.registry.declare(Thread(
-            name, frozenset({"team"}), Checkout.from_wire(str(tmp_path))))
+            name, frozenset({"team"}), Checkout(tmp_path)))
     return comms
 
 

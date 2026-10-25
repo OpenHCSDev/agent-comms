@@ -36,7 +36,7 @@ def prove(scratch: Path) -> None:
         base = Path(directory)
         original = wire(base / "original")
         for name in ("claude-ai", "worker"):
-            original.registry.declare(Thread(name, frozenset(), Checkout.from_wire(str(base))))
+            original.registry.declare(Thread(name, frozenset(), Checkout(base)))
         original.messaging.send("worker", "claude-ai", "Ready for your message")
         for worker in threading.enumerate():
             if worker.name == "agent-comms-candidate-maintenance":

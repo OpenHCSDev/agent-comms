@@ -96,7 +96,7 @@ def test_connector_round_trip_reads_this_bus_as_its_caller(comms, tmp_path, regi
     import subprocess
     import sys
 
-    comms.registry.declare(Thread("claude-ai", frozenset(), Checkout.from_wire(str(comms.root))))
+    comms.registry.declare(Thread("claude-ai", frozenset(), Checkout(comms.root)))
     with socket.socket() as probe:
         probe.bind(("127.0.0.1", 0))
         port = probe.getsockname()[1]
@@ -143,7 +143,7 @@ def store(tmp_path: Path) -> ConnectorStore:
 @pytest.fixture
 def connector(store: ConnectorStore, root: Path, comms: Comms):
     for created_at, name in enumerate(("worker", "claude-ai"), start=1):
-        comms.registry.declare(Thread(name, frozenset(), Checkout.from_wire(str(root)), created_at=created_at))
+        comms.registry.declare(Thread(name, frozenset(), Checkout(root), created_at=created_at))
     return Connector(store, "http://127.0.0.1:18766", root)
 
 
@@ -479,7 +479,7 @@ async def test_connector_lists_every_tool(client, store, comms):
 
 
 async def test_connector_reads_two_newest_first_conversation_pages(client, store, comms):
-    comms.registry.declare(Thread("commander", frozenset(), Checkout.from_wire(str(comms.root))))
+    comms.registry.declare(Thread("commander", frozenset(), Checkout(comms.root)))
     originals = [comms.messaging.send("worker", "claude-ai", f"history {number}").message
                  for number in range(5)]
     comms.messaging.send("commander", "claude-ai", "not this conversation")

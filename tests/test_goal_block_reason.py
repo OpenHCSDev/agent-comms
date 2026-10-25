@@ -30,7 +30,7 @@ from conftest import installed_comms
 
 def _owner(tmp_path):
     comms = installed_comms(tmp_path)
-    comms.registry.declare(Thread(name='worker', tags=frozenset(), worktree=Checkout.from_wire(str(tmp_path))))
+    comms.registry.declare(Thread(name='worker', tags=frozenset(), worktree=Checkout(tmp_path)))
     goal = comms.goals.update_goal("worker", SetGoalAction(text="Finish selected work"))
     assert goal is not None
     return comms, goal

@@ -50,8 +50,8 @@ def seed(comms, name):
 
 def test_history_clear_is_notice_only_and_survives_rename_and_reopen(tmp_path):
     comms = wire(tmp_path)
-    comms.registry.declare(Thread('owner', frozenset(), Checkout.from_wire(str(tmp_path))))
-    comms.registry.declare(Thread('peer', frozenset(), Checkout.from_wire(str(tmp_path))))
+    comms.registry.declare(Thread('owner', frozenset(), Checkout(tmp_path)))
+    comms.registry.declare(Thread('peer', frozenset(), Checkout(tmp_path)))
     ledger = seed(comms, "owner")
     scope = OwnerQueueInputDeliveryScope(frozenset({BusInputKey(2), BusInputKey(8), UI_KEY}))
     ledger.record(BusInputKey(3), seq=3, owner="peer", claim_scope=1, target="peer", text="Peer")
@@ -106,7 +106,7 @@ def test_history_clear_is_notice_only_and_survives_rename_and_reopen(tmp_path):
 def test_commander_reads_a_units_failed_inputs_through_the_tool(tmp_path):
     """2026-10-24: the commander hand-wrote SQL against the bus to list pi-mi's lost inputs."""
     comms = wire(tmp_path)
-    comms.registry.declare(Thread('owner', frozenset(), Checkout.from_wire(str(tmp_path))))
+    comms.registry.declare(Thread('owner', frozenset(), Checkout(tmp_path)))
     seed(comms, 'owner')
     output = io.StringIO()
     with redirect_stdout(output):
@@ -119,7 +119,7 @@ def test_commander_reads_a_units_failed_inputs_through_the_tool(tmp_path):
 
 def test_no_owner_queue_observation_never_dismisses_inputs(tmp_path):
     comms = wire(tmp_path)
-    comms.registry.declare(Thread('owner', frozenset(), Checkout.from_wire(str(tmp_path))))
+    comms.registry.declare(Thread('owner', frozenset(), Checkout(tmp_path)))
     ledger = InputDispositions(tmp_path)
     ledger.record(BusInputKey(1), seq=1, owner="owner", claim_scope=1, target="owner", text="Hello")
     before = ledger.path.read_bytes()

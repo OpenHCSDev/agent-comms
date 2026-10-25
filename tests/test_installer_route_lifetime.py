@@ -220,7 +220,7 @@ def test_a_client_call_never_holds_publication_and_the_bus_refuses_writes_held_b
     with Comms.client(route_bus) as comms:
         for name in ("sender", "recipient"):
             comms.registry.declare(Thread(
-                name, frozenset(), Checkout.from_wire(str(tmp_path)), execution=ExternalThreadExecution))
+                name, frozenset(), Checkout(tmp_path), execution=ExternalThreadExecution))
         with route_directory(path):
             pass  # A publisher never waits on an open client call.
         bus = comms.bus.bus

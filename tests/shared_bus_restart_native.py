@@ -163,10 +163,10 @@ async def configured_pure_channel(arguments):
             'source_session_file': str(original),
             'source_session_sha256':before, 'owned_fork':fork.session_file,
             'original_task_sha256':hashlib.sha256((source.task or '').encode()).hexdigest()})
-    service.registry.declare(Thread('human', frozenset(), Checkout.from_wire(str(project)), role=UserThreadRole))
+    service.registry.declare(Thread('human', frozenset(), Checkout(project), role=UserThreadRole))
     if arguments.busy_reader:
-        service.registry.declare(Thread('history-sender', frozenset(), Checkout.from_wire(str(project))))
-        service.registry.declare(Thread('history-recipient', frozenset(), Checkout.from_wire(str(project))))
+        service.registry.declare(Thread('history-sender', frozenset(), Checkout(project)))
+        service.registry.declare(Thread('history-recipient', frozenset(), Checkout(project)))
         for index in range(arguments.history):
             publish_initial(service, 'history-sender', 'history-recipient',
                 f'Original private retained history {index}: ' + 'history ' * 400)
@@ -488,8 +488,8 @@ async def configured_mixed_routes(arguments):
     assert configured.model, "Configured owner has no selected model"
     stage, project, service, root_id, source_hashes = configured_stage(arguments, configured, snapshot)
     name = 'batch-receiver'
-    service.registry.declare(Thread('human', frozenset(), Checkout.from_wire(str(project)), role=UserThreadRole))
-    service.registry.declare(Thread(name, frozenset({'team'}), Checkout.from_wire(str(project)), model=configured.model, thinking_level=configured.thinking_level, task=GivenThreadText('Answer each original route accurately once; do not expose direct-message content to a channel.')))
+    service.registry.declare(Thread('human', frozenset(), Checkout(project), role=UserThreadRole))
+    service.registry.declare(Thread(name, frozenset({'team'}), Checkout(project), model=configured.model, thinking_level=configured.thinking_level, task=GivenThreadText('Answer each original route accurately once; do not expose direct-message content to a channel.')))
     sender = service.registry.require('human')
     with _store_lock(service._wire_lock_path, ExclusiveLock(), UNBOUNDED_CONTENTION):
         originals = [service.bus.publisher.publish_ordinary(Message(sender.name, target, body,
@@ -819,14 +819,14 @@ async def run(arguments):
         env.pop(key, None)
     os.environ.clear();os.environ.update(env)
     names = [f'restart-worker-{index}' for index in range(arguments.owners)]
-    service.registry.declare(Thread('fixture-sender', frozenset(), Checkout.from_wire(str(project))))
-    service.registry.declare(Thread('history-recipient', frozenset(), Checkout.from_wire(str(project))))
+    service.registry.declare(Thread('fixture-sender', frozenset(), Checkout(project)))
+    service.registry.declare(Thread('history-recipient', frozenset(), Checkout(project)))
     if arguments.collective:
-        service.registry.declare(Thread('human', frozenset(), Checkout.from_wire(str(project)), role=UserThreadRole))
+        service.registry.declare(Thread('human', frozenset(), Checkout(project), role=UserThreadRole))
     for index in range(arguments.registry_size):
-        service.registry.declare(Thread(f'unrelated-{index}', frozenset(), Checkout.from_wire(str(project))))
+        service.registry.declare(Thread(f'unrelated-{index}', frozenset(), Checkout(project)))
     for name in names:
-        service.registry.declare(Thread(name, frozenset({'team'} if arguments.collective else ()), Checkout.from_wire(str(project)), model=DeclaredModel('restart-local/fixture'), thinking_level=OffThinkingLevel, task=GivenThreadText('Provider-free isolated restart acceptance; reply to each original once')))
+        service.registry.declare(Thread(name, frozenset({'team'} if arguments.collective else ()), Checkout(project), model=DeclaredModel('restart-local/fixture'), thinking_level=OffThinkingLevel, task=GivenThreadText('Provider-free isolated restart acceptance; reply to each original once')))
     if arguments.saved_source:
         for name in names:
             owner = service.registry.require(name)

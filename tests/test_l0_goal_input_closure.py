@@ -35,7 +35,7 @@ from agent_comms.goal_scope import OneGoal
 
 def register(comms, name):
     comms.registry.declare(
-        Thread(name, frozenset(), Checkout.from_wire(str(comms.root)), process_identity=ProcessIdentity.capture(os.getpid()))
+        Thread(name, frozenset(), Checkout(comms.root), process_identity=ProcessIdentity.capture(os.getpid()))
     )
 
 

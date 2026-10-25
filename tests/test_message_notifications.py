@@ -25,7 +25,7 @@ def test_new_reader_has_no_fabricated_receipts(tmp_path):  # noqa: F811
 
     root = tmp_path / 'new'
     comms = installed_comms(root)
-    comms.registry.declare(Thread('reader', frozenset(), Checkout.from_wire(str(tmp_path))))
+    comms.registry.declare(Thread('reader', frozenset(), Checkout(tmp_path)))
     assert comms.views.thread_presentations(('reader',)).require('reader').notifications == ()
 
 

@@ -202,7 +202,7 @@ def test_codex_inbox_template_publication_reloads_each_rewrite(tmp_path, monkeyp
 def connector_service(comms, tmp_path, monkeypatch, pinned_native):
     """A real supervisor on a copied bus; only systemd's process control is replaced."""
     for name in ("claude-ai", "worker"):
-        comms.registry.declare(Thread(name, frozenset(), Checkout.from_wire(str(comms.root))))
+        comms.registry.declare(Thread(name, frozenset(), Checkout(comms.root)))
     copied = tmp_path / "copied-bus"
     StoreBackup.copy_tree(comms.root, copied)
     with client_wire(copied) as copied_comms:
@@ -399,7 +399,7 @@ def test_connector_accepts_bus_writes_during_its_proof(connector_service, monkey
             comms.channels.create_tag("proof-race")
             comms.registry.declare(Thread(
                 name="proof-writer", tags=frozenset({"proof-race"}),
-                worktree=Checkout.from_wire(str(service.launch.path)),
+                worktree=Checkout(service.launch.path),
             ))
 
     monkeypatch.setattr(urllib.request, "urlopen", read_then_write)

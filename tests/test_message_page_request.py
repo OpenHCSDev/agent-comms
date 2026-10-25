@@ -18,7 +18,7 @@ from agent_comms.threads import Thread
 def review_comms(tmp_path):
     comms = prepare_native_comms(wire(tmp_path))
     for name in ("sender", "recipient"):
-        comms.registry.declare(Thread(name, frozenset({'review'}), Checkout.from_wire(str(tmp_path))))
+        comms.registry.declare(Thread(name, frozenset({'review'}), Checkout(tmp_path)))
     return comms
 
 
