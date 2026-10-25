@@ -22,7 +22,7 @@ from agent_comms.tool_caller import ThreadCaller
 from agent_comms.work_branches import SourceGrowth
 from agent_comms.order_tools import CommsHeadVerdictTool
 from agent_comms.todos import (
-    ConflictMergeBlock, DraftListedPullRequest, FailedCheckMergeBlock, GrownHeadVerdict, GrowthReason, HeadReviewOrder, LinkedHeadReview,
+    ConflictMergeBlock, DraftListedPullRequest, FailedCheckMergeBlock, GrownHeadVerdict, GrowthReason, OrderHeadReview, LinkedHeadReview,
     NoHeadOrder, ProgressRead, PullRequestLink, RecordPullRequest, RejectedHeadVerdict,
     ReviewedHeadVerdict, StoredHeadReview, UnquotedHeadReview,
     StrikeReason, UnderReviewHeadVerdict, UnmergedListedPullRequest, VerdictReason,
@@ -190,13 +190,13 @@ def test_linked_head_rejection_strikes_revises_and_notifies_its_holder(head_bus)
     RecordPullRequest(todo.revision, held.owner_identity,
                       PullRequestLink(request.repo, request.pr), held.generation).record(comms.goals, todo.id)
     todo = comms.goals.todos.get(todo.id)
-    scope = HeadReviewOrder.for_request(
+    scope = OrderHeadReview.for_request(
         (todo,), request, lambda linked: LinkedHeadReview.of(
             linked, "Repair the existing owner", (linked.order.checked().owner,)),
     )
     invoke(comms, request, ReviewedHeadVerdict(ACCEPTED), scope)
     todo = comms.goals.todos.get(todo.id)
-    scope = HeadReviewOrder.for_request(
+    scope = OrderHeadReview.for_request(
         (todo,), request, lambda linked: UnquotedHeadReview.of(
             linked, (linked.order.checked().owner,)),
     )

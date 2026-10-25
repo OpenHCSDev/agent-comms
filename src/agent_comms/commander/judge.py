@@ -44,7 +44,7 @@ from agent_comms.field_codec import (
     SelectingArgumentDefault,
 )
 from agent_comms.declared_family import DeclaredFamily
-from agent_comms.head_review import PullRequestHead
+from agent_comms.head_review import HeadReviewOrder, PullRequestHead
 from agent_comms.heartbeat_subjects import HeadSubject, HeartbeatSubject, UnitSubject
 from agent_comms.recorded_time import EventTime
 from agent_comms.errors import TodoError
@@ -61,7 +61,7 @@ from agent_comms.todos import (
     ReviewedHeadVerdict,
     RejectedHeadVerdict,
     HeadVerdict,
-    HeadReviewOrder,
+    OrderHeadReview,
     JudgedCall,
     LinkedHeadReview,
     OrderLink,
@@ -82,6 +82,7 @@ from agent_comms.tool_declaration import EditCall, ReplacementEdit
 from agent_comms.commander import order
 from agent_comms.commander.order import CommanderVerb
 from agent_comms.commander.standing import DeliveryAwaitingJudgement
+from agent_comms.standing_rules import LinkedUnreviewedHead, OrderlessUnreviewedHead, ReviewTimerUp
 
 EDIT_LINE = "required with edit IDs: an exact diff line each edit contains; repeat for each"
 BRANCH = re.compile(r"\bisinstance\(|\bhasattr\(|^\s*(if|elif|match|case)\b|\bif\b.*\belse\b")
@@ -314,12 +315,12 @@ class PullRequestReview(ReviewSubject):
     def acts_on(self, ctx: order.Commander) -> tuple[HeartbeatSubject, ...]:
         """The head, and the unit holding it: a verdict reaches that unit's own lines."""
         return (HeadSubject(self.request),
-                *(UnitSubject(todo.held().owner_identity)
-                  for todo in HeadReviewOrder.holding(ctx.held_orders(), self.request)))
+                *(UnitSubject(todo.holder_state.previous_assignment().owner_identity)
+                  for todo in HeadReviewOrder.holding(ctx.todos(), self.request)))
 
     def run(self, options: HeadVerdictVerb, ctx: order.Commander) -> None:
         options.check_edits([])
-        linked = HeadReviewOrder.for_request(ctx.held_orders(), self.request, options.order_link,
+        linked = OrderHeadReview.for_request(ctx.todos(), self.request, options.order_link,
                                             options.problem)
         ctx.call(CommsHeadVerdictTool(request=self.request,
                                     operation=options.head_operation(), order=linked))
@@ -442,6 +443,13 @@ class VerdictVerb(JudgeVerb):
 
 @dataclass(frozen=True, kw_only=True)
 class HeadVerdictVerb(VerdictVerb, order.HeartbeatGated, declared_name=None):
+    clears = (DeliveryAwaitingJudgement, LinkedUnreviewedHead, OrderlessUnreviewedHead, ReviewTimerUp)
+    verdict: ClassVar[type[HeadVerdict]]
+
+    @classmethod
+    def review_allowed(cls, verdicts: tuple[type[HeadVerdict], ...]) -> bool:
+        return cls.verdict.permitted_by(verdicts)
+
     pr: Annotated[int, Argument(options={"help": "review this PR instead of individual edits"})] = 0
     head: Annotated[str, Argument(options={"help": "the exact reviewed SHA; required with --pr"})] = ""
     repo: Annotated[str, Argument(options={
@@ -493,12 +501,13 @@ class QuotingVerb(HeadVerdictVerb, declared_name=None):
 
 @dataclass(frozen=True, kw_only=True)
 class OkVerb(ReasonedVerb, QuotingVerb):
+    verdict = ReviewedHeadVerdict
     help = "the edit or exact PR head is accepted"
 
     def head_operation(self) -> HeadVerdict:
         reason = VerdictReason(self.why)
         return (GrownHeadVerdict(reason, GrowthReason.every(self.growth)) if self.growth
-                else ReviewedHeadVerdict(reason))
+                else self.verdict(reason))
     growth: Annotated[
         tuple[str, ...],
         Argument(options={"action": "append", "metavar": "REASON",
@@ -546,10 +555,10 @@ class OkVerb(ReasonedVerb, QuotingVerb):
 @dataclass(frozen=True, kw_only=True)
 class ReviewingVerb(HeadVerdictVerb):
     help = "a fork is reading this exact PR head; its delivery is not owed until ok or back"
-    clears = (DeliveryAwaitingJudgement,)
+    verdict = UnderReviewHeadVerdict
 
     def head_operation(self) -> HeadVerdict:
-        return UnderReviewHeadVerdict()
+        return self.verdict()
 
     def edit_problems(self) -> dict[str, str]:
         return super().edit_problems() | MalformedRecord(
@@ -597,6 +606,7 @@ class DroppedVerb(VerdictVerb):
 @dataclass(frozen=True, kw_only=True)
 class BackVerb(ReasonedVerb, HeadVerdictVerb):
     """A correctness send-back: the head is broken at a line, whether or not it restates a fact."""
+    verdict = RejectedHeadVerdict
     help = ("reject the edit or exact PR head; Core records its reason once. With --slop and its "
             "statement it is a slop send-back, without them a correctness one")
     roast: Annotated[
@@ -660,7 +670,7 @@ class BackVerb(ReasonedVerb, HeadVerdictVerb):
         return (FileLine.from_wire(self.at),)
 
     def head_operation(self) -> HeadVerdict:
-        return RejectedHeadVerdict(self.rejection_reason)
+        return self.verdict(self.rejection_reason)
 
     @cached_property
     def judged_at(self) -> EventTime:

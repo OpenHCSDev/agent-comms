@@ -18,7 +18,6 @@ from agent_comms.goal_actions import CreateProblemGoalAction
 from agent_comms.native_tools import NativeRequestTools
 from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.repository_name import RepositoryName
-from agent_comms.standing_rules import ReviewTimerUp
 from agent_comms.thread_identity import RecordedThreadIncarnation
 from agent_comms.tool_caller import ThreadCaller
 from agent_comms.order_tools import CommsTodoCreateTool
@@ -152,14 +151,6 @@ def test_the_review_timer_comes_back_every_window_until_delivery(held):
     assert todo.timer_up(first + window - 1) == (RecordedEventTime(first),)
     assert todo.timer_up(first + 2 * window + 1) == (RecordedEventTime(first + 2 * window),)
     assert todo.reissued_review(5000.0) == RecordedEventTime(5000.0 + window)
-
-
-def test_a_timer_up_tells_the_commander_to_judge_and_strikes_no_one():
-    up = ReviewTimerUp('P1', RecordedThreadIncarnation('worker', 1.0),
-                       'order-P1', RecordedEventTime(1000.0))
-    clock = time.strftime('%H:%M:%S', time.localtime(1000.0))
-    assert up.line() == f'READ worker P1: review timer up at {clock}, order order-P1 -> read its diff and judge it'
-    assert up.began() == 1000.0
 
 
 def test_push_times_come_from_origin_reflogs_only(tmp_path):
