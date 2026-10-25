@@ -471,10 +471,10 @@ class Bus(BusReader, ReconciledFile, WalStore, CarriedWriter, BusFile, Watched):
             return ReceivedSource.exists(db, where="{seq} > ?", parameters=(after,), lookup=lookup)
 
     @classmethod
-    def install(cls, path: Path, *, history: Iterable[Message] = ()) -> Self:
-        """Install declared schemas and commit optional display-only history atomically.
+    def install(cls, path: Path, *, history: Iterable[BusRecord] = ()) -> Self:
+        """Install declared schemas and commit optional copied history atomically.
 
-        Original sequences survive; frozen deliveries and resource claims do not.
+        Original sequences and frozen deliveries survive; resource claims do not.
         Existing-file migrations still belong to declared carries and their backups.
         """
         bus = cls(path)
@@ -483,7 +483,7 @@ class Bus(BusReader, ReconciledFile, WalStore, CarriedWriter, BusFile, Watched):
             with bus.write_transaction(db):
                 BusSchema.require_installed(db)
                 for message in history:
-                    PublicRecord.from_message(message.history_snapshot).append_to(db, message.seq)
+                    message.history_record.append_to(db, message.seq)
         return bus
 
     @classmethod
