@@ -2,18 +2,21 @@
 from dataclasses import replace
 import sqlite3
 import sys
+import time
 
 import pytest
 
 from agent_comms.field_codec import FieldCodec, GoalId, MessageId
 from agent_comms.maintenance_barrier import MaintenanceBarrier, MaintenanceOperator
+from agent_comms.order_story import StoryEvent
 from agent_comms.order_tools import CommsTodoListTool
-from agent_comms.recorded_time import RecordedEventTime
+from agent_comms.recorded_time import RecordedEventTime, UnrecordedEventTime
 from agent_comms.registry_store import RegistryStore
 from agent_comms.threads import Thread
 from agent_comms.todos import (
-    AcceptedVerdict, Assignment, OrderMessage, ReleaseTodo, StoredOrderStory,
-    StrikeReason, StrikeTodo, Todo, VoidStrikeTodo, WordingCorrection,
+    AcceptedVerdict, Assignment, DroppedVerdict, FailedCheckStrike, OrderMessage,
+    PeerAcceptedVerdict, ReleaseTodo, SendBackVerdict, StoredOrderStory,
+    StrikeReason, StrikeTodo, SupersededVerdict, Todo, TodoCommand, VoidStrikeTodo, WordingCorrection,
 )
 from agent_comms.tool_caller import NoThreadCaller
 from cutover.carry_todo_stories import INLINE_FIELDS, TodoStories
@@ -60,6 +63,19 @@ def story_members(comms):
 def test_story_members_round_trip_in_one_append_only_table(recorded_problem):
     store = recorded_problem.goals.todos
     events = story_members(recorded_problem)
+    todo = store.get("P1")
+    actor = recorded_problem.registry.require("lead").incarnation
+    events += (
+        FailedCheckStrike.make(todo, 4000, "The declared acceptance command failed at its source owner."),
+        PeerAcceptedVerdict(todo.revision, actor, todo.held(), "peer-call",
+            quote="Repair the existing record owner", peer=MessageId.mint("peer review")),
+        SupersededVerdict(todo.revision, actor, todo.held(), "superseded-call", "P2",
+                          "The replacement order removes this original implementation entirely."),
+        DroppedVerdict(todo.revision, actor, todo.held(), "dropped-call", "owner.py", ("discarded text",)),
+        SendBackVerdict(todo.revision, actor, todo.held(), "sent-back-call",
+                        StrikeReason("The repair still copies the record shape outside its declaration.")),
+    )
+    assert {type(event) for event in events} >= set(TodoCommand.members_with(StoryEvent))
     with store.writing() as db:
         for event in events:
             StoredOrderStory.append(db, "P1", event)
@@ -85,6 +101,15 @@ def test_voided_strike_uses_its_stored_sequence_and_count_returns_to_zero(record
     with store.snapshot() as db:
         first, void = tuple(StoredOrderStory.select(db, problem=original.id, order_by=("seq",)))
         assert void.voids == first.seq
+
+
+def test_wording_writer_records_its_actual_time(recorded_problem):
+    comms = recorded_problem
+    before = time.time()
+    (corrected,) = comms.goals.todos.correct(comms.registry.require("worker").incarnation,
+        MessageId.mint("wording correction"), "The custody is ready.")
+    after = time.time()
+    assert before <= corrected.corrections[0].at.recorded_at("A wording correction") <= after
 
 
 def test_board_of_forty_orders_and_two_thousand_verdicts_decodes_no_story_rows(recorded_problem):
@@ -128,6 +153,10 @@ def test_inline_history_is_carried_once_without_losing_void_links(recorded_probl
     retired = dict.fromkeys(INLINE_FIELDS, ())
     retired.update(strikes=(strike,), voided=(void,), released=(release,), verdicts=(verdict,),
                    corrections=(correction,), messages=(message,), prior_orders=(prior,))
+    retired = {column: tuple(FieldCodec.encode_record(event) for event in events)
+               for column, events in retired.items()}
+    for entry in (*retired["corrections"], *retired["messages"]):
+        entry.pop(FieldCodec.record_key(OrderMessage, "at"))
     with store.writing() as db:
         StoredOrderStory.drop(db)
         for column in INLINE_FIELDS:
@@ -149,8 +178,8 @@ def test_inline_history_is_carried_once_without_losing_void_links(recorded_probl
     saved = store.get("P1")
     assert saved.strike_count == 0
     assert saved.prior_orders == (prior,)
-    assert saved.latest_message == message
-    assert saved.corrections == (correction,)
+    assert saved.latest_message == replace(message, at=UnrecordedEventTime())
+    assert saved.corrections == (replace(correction, at=UnrecordedEventTime()),)
     with store.snapshot() as db:
         assert not set(INLINE_FIELDS).intersection(Todo.stored_columns(db))
         assert StoredOrderStory.count(db, problem="P1") == 7
