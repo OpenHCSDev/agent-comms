@@ -6,12 +6,14 @@ consumers neither inspect JSON fields nor rediscover what kind of item it is.
 from __future__ import annotations
 
 import json
+import time
 from abc import ABC, abstractmethod
 from typing import TYPE_CHECKING, Annotated, ClassVar, Generic, Literal, TypeVar
 
 from pydantic import (
     Field,
     JsonValue,
+    PlainSerializer,
     ValidateAs,
     field_validator,
 )
@@ -22,7 +24,7 @@ from agent_comms.external_transcript import EarlierPage, NoEarlierPage
 from agent_comms.field_codec import FieldCodec, MessageId, boundary_decoder
 from agent_comms.native_tool_call import ToolCallId
 from agent_comms.native_tools import FilePatchTool
-from agent_comms.recorded_time import EventTime, UnrecordedEventTime
+from agent_comms.recorded_time import EventTime, RecordedEventTime, UnrecordedEventTime
 from agent_comms.runtime_updates import (
     AppendDraftItem,
     CompletedItem,
@@ -129,6 +131,38 @@ class MentionInput(UserInput, declared_name='mention'):
 
 class RequestParams(WireModel):
     method: ClassVar[str]
+
+
+class ReadRateLimits(RequestParams):
+    method = 'account/rateLimits/read'
+
+
+class RateWindow(WireModel):
+    used_percent: float = Field(alias='usedPercent')
+    window_minutes: int = Field(alias='windowDurationMins')
+    resets_at: Annotated[
+        RecordedEventTime, ValidateAs(float, RecordedEventTime),
+        PlainSerializer(lambda instant: instant.at, return_type=float),
+    ] = Field(alias='resetsAt')
+
+    def line(self) -> str:
+        period = 'weekly' if self.window_minutes == 7 * 24 * 60 else f'{self.window_minutes}-minute'
+        reset = time.strftime('%a %b %d %H:%M', time.localtime(self.resets_at.at))
+        return f'usage {self.used_percent:g}% {period}, resets {reset}'
+
+
+class RateLimits(WireModel):
+    primary: RateWindow
+
+    def line(self) -> str:
+        return self.primary.line()
+
+    def needs_hand(self) -> bool:
+        return False
+
+
+class RateLimitsResponse(WireModel):
+    rate_limits: RateLimits = Field(alias='rateLimits')
 
 
 class TurnInput(RequestParams):

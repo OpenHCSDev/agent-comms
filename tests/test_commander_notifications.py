@@ -8,7 +8,7 @@ import pytest
 
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.commander_heartbeat import CommanderHeartbeat, CommanderObservation
-from agent_comms.commander_hud import CommanderFrame, CommanderHud
+from agent_comms.commander_hud import CommanderFrame, CommanderHud, CodexUsage, UnreadableUsage
 from agent_comms.commander_pings import CommanderDecisions, CommanderNotice, CommanderUpdate, RulePing
 from agent_comms.errors import OverdueHeadRefusalError, UnregisteredThreadError
 from agent_comms.heartbeat_frame import HeartbeatFrame
@@ -71,12 +71,13 @@ def test_frame_puts_hands_first_and_folds_finished_phases_per_plan(notification_
         CommanderPhase(DesignReconciledPhase, False, False, (worker,)),
         CommanderPhase(RecordPlanePhase, False, True, ()),
         CommanderPhase(ReviewQueuePhase, True, False, (worker,)),
-    ), OverloadDegradation.from_orders((), 0, 0), (worker,))
+    ), OverloadDegradation.from_orders((), 0, 0), (worker,), CodexUsage(UnreadableUsage('not requested')))
     assert hud.frame == (
         str(hud.load),
         "commander_native/record_plane done=False ready=True holders=",
         "commander_native/review_queue done=True ready=False holders=worker",
         "commander_native/design_reconciled done=False ready=False holders=worker",
+        "usage unreadable: not requested",
         "forks: worker",
         "commander_native: 2 phases done",
     )
@@ -223,3 +224,25 @@ def test_commander_page_reads_each_beats_frame_and_nothing_between(notification_
     assert not list(reading.read(comms, comms.views.revision()))
     beat(comms, states=states)
     assert isinstance(next(reading.read(comms, comms.views.revision())), CommanderHudObserved)
+
+
+def test_codex_usage_decodes_window_and_keeps_refusal_visible():
+    import json
+    from datetime import datetime
+    from agent_comms.cli_bridges.codex_protocol import RateLimitsResponse
+    from agent_comms.field_codec import FieldCodec
+
+    reply = FieldCodec.decode(RateLimitsResponse, json.loads('''{
+        "rateLimits": {"primary": {
+            "usedPercent": 37, "windowDurationMins": 10080, "resetsAt": 1793513456
+        }}
+    }'''))
+    usage = CodexUsage(reply.rate_limits)
+    reset = datetime.fromtimestamp(1793513456).strftime('%a %b %d %H:%M')
+    assert usage.line() == f'usage 37% weekly, resets {reset}'
+    assert not usage.needs_hand()
+    assert FieldCodec.decode(CodexUsage, FieldCodec.encode(usage)) == usage
+    refused = CodexUsage(UnreadableUsage('Codex: account unavailable'))
+    assert refused.line() == 'usage unreadable: Codex: account unavailable'
+    assert refused.needs_hand()
+    assert FieldCodec.decode(CodexUsage, FieldCodec.encode(refused)) == refused
