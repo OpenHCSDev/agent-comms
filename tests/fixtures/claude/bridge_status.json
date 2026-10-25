@@ -1,0 +1,18 @@
+{
+  "parentUuid": "3937fb18-ac52-4897-83a6-ab9996aa1b76",
+  "isSidechain": false,
+  "type": "system",
+  "subtype": "bridge_status",
+  "content": "/remote-control is active · Continue here, on your phone, or at https://claude.ai/code/session_bridge_status_fixture",
+  "url": "https://claude.ai/code/session_bridge_status_fixture",
+  "isMeta": false,
+  "timestamp": "2026-10-25T01:22:23.517Z",
+  "uuid": "f38e9fcd-0b55-4d5e-80da-c22d579abead",
+  "userType": "external",
+  "entrypoint": "cli",
+  "cwd": "/workspace/project",
+  "sessionId": "47220aa9-6fd1-4a99-adc3-768ec5c63db3",
+  "version": "2.1.310",
+  "gitBranch": "main",
+  "slug": "parsed-twirling-yeti"
+}
