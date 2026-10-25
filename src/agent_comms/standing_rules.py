@@ -6,7 +6,9 @@ files are declared in ``agent_comms.commander.standing`` until those files move 
 
 from __future__ import annotations
 
+import logging
 import time
+import traceback
 from abc import abstractmethod
 from collections import Counter
 from collections.abc import Iterable, Mapping, Sequence
@@ -15,6 +17,7 @@ from pathlib import Path
 from itertools import combinations
 from typing import TYPE_CHECKING, ClassVar, Self
 
+from agent_comms.change_report import FileLine
 from agent_comms.declared_family import DeclaredFamily
 from agent_comms.field_codec import FieldCodec, OrderId
 from agent_comms.errors import RejectedEnforcementError, TodoConflict
@@ -111,6 +114,24 @@ class StandingRule(DeclaredFamily, affix="StandingRule", discovery_package="agen
     def scan_observed(cls, comms: Comms, commander: str,
                       observed: Sequence[UnitState], frame: HeartbeatFrame) -> tuple[Self, ...]: ...
 
+    @classmethod
+    def scanned(cls, comms: Comms, commander: str,
+                observed: Sequence[UnitState], frame: HeartbeatFrame) -> tuple[StandingRule, ...]:
+        """A failed scan is one visible rule, not the end of the independent scans."""
+        try:
+            return tuple(cls.scan_observed(comms, commander, observed, frame))
+        except Exception as error:
+            logging.exception("Standing rule %s crashed", cls.__name__)
+            package = Path(__file__).parent
+            place = next(location for location in reversed(traceback.extract_tb(error.__traceback__))
+                         if Path(location.filename).is_relative_to(package))
+            source = Path("src") / package.name / Path(place.filename).relative_to(package)
+            return (CrashedStandingRule(cls.__name__, type(error).__name__,
+                                        FileLine(str(source), place.lineno)),)
+
+    def belongs_to(self, family: type[StandingRule]) -> bool:
+        return isinstance(self, family)
+
     @abstractmethod
     def line(self) -> str: ...
 
@@ -177,13 +198,13 @@ class StandingRule(DeclaredFamily, affix="StandingRule", discovery_package="agen
 
     @classmethod
     def broken(cls, comms: Comms, commander: str, after: float = 0.0, *,
-               observed: Sequence[UnitState], frame: HeartbeatFrame) -> tuple[Self, ...]:
+               observed: Sequence[UnitState], frame: HeartbeatFrame) -> tuple[StandingRule, ...]:
         """Read each owner once against the supplied frame and its one progress reader,
         preserving the requested family."""
         owners = dict.fromkeys(rule.scan_owner() for rule in cls.members_with(cls))
         return tuple(rule for owner in owners
-                     for rule in owner.scan_observed(comms, commander, observed, frame)
-                     if isinstance(rule, cls) and rule.attention() and rule.broke_after(after))
+                     for rule in owner.scanned(comms, commander, observed, frame)
+                     if rule.belongs_to(cls) and rule.attention() and rule.broke_after(after))
 
 
 class OrderRefusingStandingRule(StandingRule, declared_name=None):
@@ -226,6 +247,26 @@ class UndatedStandingRule(StandingRule, declared_name=None):
 
     def broke_after(self, after: float) -> bool:
         return True
+
+
+@dataclass(frozen=True)
+class CrashedStandingRule(UndatedStandingRule, declared_name=None):
+    """One failed scan, reported without registering another owner to scan."""
+
+    rule: str
+    error: str
+    place: FileLine
+
+    @classmethod
+    def scan_observed(cls, comms: Comms, commander: str,
+                      observed: Sequence[UnitState], frame: HeartbeatFrame) -> tuple[Self, ...]:
+        return ()
+
+    def belongs_to(self, family: type[StandingRule]) -> bool:
+        return True
+
+    def line(self) -> str:
+        return f"{self.rule}: crashed {self.error} {self.place.to_wire()}"
 
 
 @dataclass(frozen=True)
