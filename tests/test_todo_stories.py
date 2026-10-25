@@ -99,6 +99,10 @@ def test_voided_strike_uses_its_stored_sequence_and_count_returns_to_zero(record
         "The original source trace shows this strike was issued in error."))
     assert cleared.strike_count == 0
     assert cleared.live_strikes() == ()
+    assert struck.strike_count == 1
+    assert len(struck.live_strikes()) == 1
+    assert original.strike_count == 0
+    assert original.strikes == ()
     with store.snapshot() as db:
         first, void = tuple(StoredOrderStory.select(db, problem=original.id, order_by=("seq",)))
         assert void.voids == first.seq

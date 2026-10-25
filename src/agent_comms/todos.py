@@ -4468,6 +4468,7 @@ class StoryFacts(TypedRow):
     """One disposable aggregate per problem, not another persisted board."""
 
     problem: str
+    last_seq: int = 0
     strike_totals: tuple[StrikeTotal, ...] = ()
     order_ids: tuple[str, ...] = ()
     ordered_at: tuple[float, ...] = ()
@@ -4537,18 +4538,19 @@ class StoredOrderStory(TodoStoreRows, NoUpdate, NoDelete, TypedTable):
     @classmethod
     def events_as[Event: TodoCommand | CheckedProblemOrder](
         cls, db: sqlite3.Connection, problem: str, member: type[Event], *,
-        limit: int = -1, descending: bool = False,
+        before: int, limit: int = -1, descending: bool = False,
     ) -> tuple[Event, ...]:
         return tuple(cast(Event, row.event) for row in cls.select(
-            db, problem=problem, where=f"{{kind}} IN {member.sql_choices()}",
-            order_by=("seq",), descending=descending, limit=limit))
+            db, problem=problem, where=f"{{kind}} IN {member.sql_choices()} AND {{seq}}<=?",
+            parameters=(before,), order_by=("seq",), descending=descending, limit=limit))
 
     @classmethod
-    def live_strikes(cls, db: sqlite3.Connection, problem: str, unit: str | None) -> tuple[StrikeTodo, ...]:
+    def live_strikes(cls, db: sqlite3.Connection, problem: str, unit: str | None, *,
+                     before: int) -> tuple[StrikeTodo, ...]:
         return tuple(cast(StrikeTodo, row.event) for row in cls.select(
             db, problem=problem, where=f"{{kind}} IN {StrikeTodo.sql_choices()} "
-            f"AND NOT EXISTS (SELECT 1 FROM {cls.declared_name} v WHERE v.voids={cls.declared_name}.seq) "
-            "AND (? IS NULL OR {strike_owner}=?)", parameters=(unit, unit),
+            f"AND NOT EXISTS (SELECT 1 FROM {cls.declared_name} v WHERE v.voids={cls.declared_name}.seq AND v.seq<=?) "
+            "AND {seq}<=? AND (? IS NULL OR {strike_owner}=?)", parameters=(before, before, unit, unit),
             order_by=("seq",), descending=True))
 
     @classmethod
@@ -4577,7 +4579,7 @@ class StoredOrderStory(TodoStoreRows, NoUpdate, NoDelete, TypedTable):
                 SELECT problem, actor, max(seq) FROM selected
                 WHERE kind IN {ReleaseTodo.sql_choices()} GROUP BY problem
             ), facts AS (
-                SELECT problem,
+                SELECT problem, max(seq) last_seq,
                     json_group_array(order_id ORDER BY seq DESC) FILTER (WHERE order_id IS NOT NULL) order_ids,
                     json_group_array(event_at) FILTER (WHERE kind IN {CheckedProblemOrder.sql_choices()}
                         AND event_at IS NOT NULL) ordered_at,
@@ -4586,7 +4588,7 @@ class StoredOrderStory(TodoStoreRows, NoUpdate, NoDelete, TypedTable):
                         AND event_at IS NOT NULL) send_backs
                 FROM selected GROUP BY problem
             )
-            SELECT f.problem, COALESCE(c.strike_totals, '[]') strike_totals,
+            SELECT f.problem, f.last_seq, COALESCE(c.strike_totals, '[]') strike_totals,
                 f.order_ids, f.ordered_at, f.judged_calls, f.send_backs,
                 json_group_array(json(r.actor)) FILTER (WHERE r.actor IS NOT NULL) release_actors
             FROM facts f LEFT JOIN counts c ON c.problem=f.problem
@@ -4612,16 +4614,18 @@ class TodoHistory:
         self, problem: str, member: type[Event], *, limit: int = -1, descending: bool = False,
     ) -> tuple[Event, ...]:
         with self.snapshot() as db:
-            return StoredOrderStory.events_as(db, problem, member, limit=limit, descending=descending)
+            return StoredOrderStory.events_as(db, problem, member, before=self.facts_for(problem).last_seq,
+                                              limit=limit, descending=descending)
 
     def sources(self, problem: str) -> tuple[TodoCommand | CheckedProblemOrder, ...]:
         with self.snapshot() as db:
             return tuple(row.event for row in StoredOrderStory.select(
-                db, problem=problem, order_by=("seq",), descending=True))
+                db, problem=problem, where="{seq}<=?", parameters=(self.facts_for(problem).last_seq,),
+                order_by=("seq",), descending=True))
 
     def live_strikes(self, problem: str, unit: str | None = None) -> tuple[StrikeTodo, ...]:
         with self.snapshot() as db:
-            return StoredOrderStory.live_strikes(db, problem, unit)
+            return StoredOrderStory.live_strikes(db, problem, unit, before=self.facts_for(problem).last_seq)
 
 
 @dataclass(frozen=True)
@@ -4684,12 +4688,17 @@ class OwnerRequestStore(DurableStore):
     def serving_orders(self, request: OwnerRequestId) -> tuple[Todo, ...]:
         """Pending work and unaccepted claims, through the request's partial index."""
         with self.snapshot() as db:
-            return tuple(replace(todo, history=self) for todo in self._serving(db, request))
+            return self._snapshot_rows(db, self._serving(db, request))
 
     def for_request(self, request: OwnerRequestId) -> tuple[Todo, ...]:
         """Every order that served this independent request, open or done."""
         with self.snapshot() as db:
-            return tuple(replace(todo, history=self) for todo in Todo.select(db, request=request))
+            return self._snapshot_rows(db, tuple(Todo.select(db, request=request)))
+
+    def _snapshot_rows(self, db: sqlite3.Connection, rows: tuple[Todo, ...]) -> tuple[Todo, ...]:
+        history = BoardTodoHistory(self.root, MappingProxyType(StoredOrderStory.facts_for(
+            db, tuple(todo.id for todo in rows))))
+        return tuple(replace(todo, history=history) for todo in rows)
 
 
 @dataclass(frozen=True, slots=True)
@@ -4799,7 +4808,7 @@ class TodoStore(OwnerRequestStore, TodoHistory):
             ))
             StoredOrderStory.archive(db, current, result.order)
             result.upsert(db)
-            return replace(result, history=self)
+            return self._snapshot_rows(db, (result,))[0]
 
     def fold(self, commander: ThreadIncarnation, problem: str, into: str, why: str) -> None:
         with self.writing() as db:
@@ -4856,10 +4865,7 @@ class TodoStore(OwnerRequestStore, TodoHistory):
         if not self.path.exists():
             return ()
         with self.snapshot() as db:
-            rows = reader(db, where, parameters)
-            history = BoardTodoHistory(self.root, MappingProxyType(StoredOrderStory.facts_for(
-                db, tuple(todo.id for todo in rows))))
-            return tuple(replace(todo, history=history) for todo in rows)
+            return self._snapshot_rows(db, reader(db, where, parameters))
 
     @classmethod
     def _one(cls, rows: tuple[Todo, ...], todo_id: str) -> Todo:
@@ -5001,7 +5007,7 @@ class TodoStore(OwnerRequestStore, TodoHistory):
             current.require_same_creation(proposed)
             current.require_assignment(proposed.assignment)
             ProblemAllocation.delete(db, number=number.number)
-            return replace(current, history=self)
+            return self._snapshot_rows(db, (current,))[0]
 
     def record_head(self, record: HeadReviewRecord) -> None:
         with self.writing() as db:
@@ -5028,7 +5034,7 @@ class TodoStore(OwnerRequestStore, TodoHistory):
         with self.writing() as db:
             current = self._current(db, todo_id)
             command.write(db, current, self)
-            return replace(self._current(db, todo_id), history=self)
+            return self._snapshot_rows(db, (self._current(db, todo_id),))[0]
 
     def correct(
         self, unit: ThreadIncarnation, message_id: MessageId, text: str,
@@ -5041,7 +5047,7 @@ class TodoStore(OwnerRequestStore, TodoHistory):
             at = EventTime.capture(time.time())
             corrected = tuple(WordingCorrection(todo.revision, message_id, words, at=at).write(db, todo, self)
                               for todo in held)
-            return tuple(replace(todo, history=self) for todo in corrected)
+            return self._snapshot_rows(db, corrected)
 
     def fire(
         self, unit: ThreadIncarnation, actor: ThreadIncarnation, reason: StrikeReason,
@@ -5057,7 +5063,7 @@ class TodoStore(OwnerRequestStore, TodoHistory):
                 raise TodoError(f"{unit} holds no open problem.")
             released = tuple(ReleaseTodo(todo.revision, actor, assignment, reason).write(db, todo, self)
                              for todo, assignment in held)
-            return tuple(replace(todo, history=self) for todo in released)
+            return self._snapshot_rows(db, released)
 
     def assign(
         self,
