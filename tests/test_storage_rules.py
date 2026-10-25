@@ -168,8 +168,15 @@ def test_programs_do_not_claim_to_be_effect_values():
     ("echo '<<' 'EOF'\npython -m venv env", 'ForbiddenStorageEffect'),
     ("cat <<'A' <<'B'\ngit clone remote target\nA\nuv sync\nB\nmkdir target", 'WriteStorageEffect'),
     ("echo 'git clone remote target'\nmkdir target", 'WriteStorageEffect'),
+    ("python -c 'import sys\nprint(\"<<\")'\nmkdir target", 'WriteStorageEffect'),
+    ('echo "first\nsecond" > target', 'WriteStorageEffect'),
 ])
 def test_program_decoders_preserve_command_shapes(tmp_path, command, kind):
     effects = shell_storage_effects(command, tmp_path)
     assert len(effects) == 1
     assert type(effects[0]).__name__ == kind
+
+
+def test_an_unterminated_quote_is_a_declared_refusal(tmp_path):
+    with pytest.raises(StorageDenied, match='no tool was started'):
+        shell_storage_effects("echo 'never closed\nmkdir target", tmp_path)

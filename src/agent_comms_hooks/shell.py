@@ -16,12 +16,19 @@ from typing import ClassVar, Self
 def shell_commands(command: str) -> Iterator[list[str]]:
     """Shell words, not matches in quoted code or here-document bodies."""
     body = []
+    pending = ""
     lines = iter(command.splitlines(keepends=True))
     for line in lines:
         body.append(line)
-        lex = shlex.shlex(line, posix=False, punctuation_chars="<>")
+        pending += line
+        lex = shlex.shlex(pending, posix=False, punctuation_chars="<>")
         lex.whitespace_split = True
-        words = list(lex)
+        try:
+            words = list(lex)
+        except ValueError:
+            # A quoted word continues past this newline, so the next line extends it.
+            continue
+        pending = ""
         for index, word in enumerate(words[:-1]):
             if word in ("<<", "<<-"):
                 delimiter = shlex.split(words[index + 1])[0]

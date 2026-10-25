@@ -3,11 +3,13 @@
 // connection owner ending the socket makes its outcome unavailable.
 import { createConnection } from "node:net";
 
+const NOT_STARTED = "Tool owner is unavailable; no tool was started.";
+
 class UnavailableOwnerToolConnection {
   same(other) { return other === this; }
 
   request() {
-    return Promise.reject(new Error("Tool owner is unavailable; no tool was started."));
+    return Promise.reject(new Error(NOT_STARTED));
   }
 }
 
@@ -47,12 +49,18 @@ export function requestOwnerTool(path, request, maxResponse, unavailable) {
   return new Promise((resolve, reject) => {
     const socket = createConnection(path);
     let received = Buffer.alloc(0);
+    // Until the request is written the owner cannot have claimed anything; only a
+    // failure after the write leaves the claim's outcome unknown.
+    let outcome = NOT_STARTED;
     const fail = () => {
       socket.destroy();
-      reject(new Error(unavailable));
+      reject(new Error(outcome));
     };
     socket.once("error", fail);
-    socket.once("connect", () => socket.write(request));
+    socket.once("connect", () => {
+      outcome = unavailable;
+      socket.write(request);
+    });
     socket.on("data", (part) => {
       received = Buffer.concat([received, part]);
       if (received.length > maxResponse) return fail();
