@@ -24,7 +24,6 @@ from agent_comms.child_process import NoProcess, ProcessIdentity
 from agent_comms.commander.order import Commander, PullRequestVerb, SayVerb
 from agent_comms.standing_rules import OwedAnswer, StandingRule
 from agent_comms.task_attachments.commander_pings import RulePing
-from agent_comms_hooks.board import BoardLine
 from agent_comms.ui_model.unit_state import AwaitingCommander
 from agent_comms.commander.standing import RetainedHolderWheelSpin, UnownedOrderWatch, UnownedWheelSpin
 from agent_comms.commander_heartbeat import CommanderHeartbeat
@@ -457,7 +456,7 @@ def test_released_open_work_restores_its_own_holder_never_swaps(released_publish
         assert {rule.todo.id for rule in rules} == set(originals)
         assert all(isinstance(rule, RetainedHolderWheelSpin) for rule in rules)
         # 2026-10-25: Core restores the holder itself; KEEP lines locked the verbs for 169 min.
-        assert all(RulePing.capture(rule).board(BoardLine) == () for rule in rules)
+        assert all(not RulePing.capture(rule).commander_disposes for rule in rules)
         assert StandingRule.enforce_all(c, ctx.commander, rules) == {}
         for problem, before in originals.items():
             after = c.goals.todos.get(problem)

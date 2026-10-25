@@ -28,7 +28,7 @@ from agent_comms.tool_result import ToolResult
 from agent_comms.turn_digests import OrderEditCountRead
 from agent_comms.ui_model.unit_state import UnitClock, UnitState
 from agent_comms.task_attachments.commander_pings import CommanderUpdate
-from agent_comms_hooks.board import BoardLine
+from agent_comms_hooks.board import BoardEntry
 
 if TYPE_CHECKING:
     from agent_comms.comms import Comms
@@ -80,7 +80,7 @@ class CommanderUnit(HudRow):
             f"{order.problem}: {order.state}; {order.progress.line}" for order in self.orders
         )
         return (
-            f"{self.state.verb} {self.unit.name}: orders={orders} "
+            f"{self.unit.name}: {self.state.question} orders={orders} "
             f"review timers={sum(len(order.review_timers_up) for order in self.orders)} "
             f"strikes={self.strikes} edits={sum(order.unjudged_edits for order in self.orders)} "
             f"ready={','.join(str(pr.number) for pr in self.ready_prs)} "
@@ -124,7 +124,7 @@ class CommanderPhase(HudRow):
 class BoardRow(HudRow):
     """A committed board line, without another interpretation or ordering."""
 
-    entry: BoardLine
+    entry: BoardEntry
 
     def needs_hand(self) -> bool:
         return True
@@ -210,7 +210,7 @@ class CommanderHud(ToolResult):
     load: OverloadDegradation
     forks: tuple[ThreadIncarnation, ...]
     usage: CodexUsage
-    board: tuple[BoardLine, ...] = ()
+    board: tuple[BoardEntry, ...] = ()
 
     @classmethod
     def read(cls, comms: Comms, commander: str) -> CommanderHud:
@@ -263,7 +263,7 @@ class CommanderHud(ToolResult):
         packet = CommanderUpdate.latest(comms, owner)
         return cls(owner, tuple(units), phases,
                    OverloadDegradation.from_orders(held, len(timers), sum(edits.values())),
-                   forks, CodexUsage.read(), packet.board(BoardLine) if packet else ())
+                   forks, CodexUsage.read(), packet.board(comms, commander) if packet else ())
 
     def rows(self) -> tuple[HudRow, ...]:
         """Committed board order, actionable cards, live phases, then folded quiet units."""

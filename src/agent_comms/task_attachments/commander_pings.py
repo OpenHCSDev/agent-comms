@@ -18,7 +18,7 @@ from agent_comms.declared_family import DeclaredFamily
 from agent_comms.cli_protocol import DeliveredOutcome, Outcome
 from agent_comms.commander_service import CommanderService
 from agent_comms.errors import RelationViolationError
-from agent_comms.field_codec import OrderId
+from agent_comms.field_codec import FieldCodec, OrderId
 from agent_comms.message_reference import MessageReference
 from agent_comms.heartbeat_subjects import HeartbeatSubject
 from agent_comms.messages import (
@@ -30,6 +30,7 @@ from agent_comms.task_sources import TaskAttachment
 from agent_comms.text_digest import TextDigest
 from agent_comms.thread_identity import ThreadIncarnation
 from agent_comms.ui_model.unit_state import AwaitingCommander, UnitState
+from agent_comms_hooks.board import BoardEntry
 
 if TYPE_CHECKING:
     from agent_comms.bus import BusReader
@@ -94,11 +95,14 @@ class Ping(DeclaredFamily, affix="Ping"):
     def commander_disposes(self) -> bool:
         """Whether a commander verb disposes of this line; only such a line goes on the board."""
 
-    def board_line(self, now: float, cut: float) -> str:
-        """This line as the commander's tool calls print it: locked as the gate refuses on it,
-        once a line a verb can dispose of is past the answer window. The verb stays last."""
-        locked = " LOCKED, your writing verbs refuse until you act" if self.waits_on_commander(cut) else ""
-        return f"BOARD{locked}: {self.render(now)}"
+    def board_entry(self) -> BoardEntry:
+        """Content uses precisely this dataclass's equality, never its rendered text or age."""
+        ignored = {key for declared, key in FieldCodec.record_fields(type(self)) if not declared.compare}
+        content = TextDigest.of(FieldCodec.compact({
+            key: value for key, value in FieldCodec.encode(self).items() if key not in ignored
+        }))
+        since = self.since.recorded_at("A heartbeat line")
+        return BoardEntry(content.value, self.text, since, since + AwaitingCommander.seconds)
 
     def render(self, now: float) -> str:
         since = self.since.recorded_at("A heartbeat line")
@@ -175,12 +179,11 @@ class CommanderUpdate(TaskAttachment, declared_name=None):
         a status feed and the action lines scrolled under it."""
         return "\n".join((self.header, *self.lines(now), *frame))
 
-    def board(self, comms: Comms, commander: str, now: float) -> tuple[str, ...]:
+    def board(self, comms: Comms, commander: str) -> tuple[BoardEntry, ...]:
         """This packet's lines the commander disposes of, through the same recorded actions the
         gate reads: a verdict drops its line on the next read, not the next packet."""
         actors = CommanderService.actors(comms.registry.snapshot(), commander)
-        cut = now - AwaitingCommander.seconds
-        return tuple(ping.board_line(now, cut) for ping in self.handled
+        return tuple(ping.board_entry() for ping in self.handled
                      if ping.on_board(comms, actors))
 
     async def delivered_by(self, bridge: CliBridge, message: Message) -> type[Outcome]:
@@ -222,10 +225,10 @@ class CommanderUpdate(TaskAttachment, declared_name=None):
         return latest.undisposed(comms, commander, cut) if latest else ()
 
     @classmethod
-    def current_board(cls, comms: Comms, commander: str, now: float) -> tuple[str, ...]:
+    def current_board(cls, comms: Comms, commander: str) -> tuple[BoardEntry, ...]:
         """The newest packet's board, derived at the moment of asking."""
         latest = cls.latest(comms, comms.registry.require(commander).incarnation)
-        return latest.board(comms, commander, now) if latest else ()
+        return latest.board(comms, commander) if latest else ()
 
     @classmethod
     def derive(cls, commander: ThreadIncarnation, states: tuple[UnitState, ...],
@@ -261,7 +264,7 @@ class CommanderUpdate(TaskAttachment, declared_name=None):
 
         message = Message(
             sender=CommanderHeartbeat.sender, target=self.commander.name,
-            body=self.body(now, replace(hud, units=()).frame),
+            body=self.body(now, replace(hud, units=(), board=()).frame),
             type=InfoKind, role=self.role, task=self,
         )
         return comms.bus.publisher.publish_ordinary(

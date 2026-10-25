@@ -851,9 +851,9 @@ class CommanderVerb(DeclaredVerb, affix="Verb"):
 
 
 class HeartbeatGated(CommanderVerb, declared_name=None):
-    """A writing verb run while a heartbeat line sits undisposed past the answer window prints
-    the board beside its result instead of refusing: the board already reaches the commander
-    on every tool call, so a refusal only stopped unit answers, reviews and owner fixes that
+    """A writing verb names only the count and oldest overdue heartbeat line beside its result:
+    the hook delivers changes, so a full board dump only hid the verb's own errors. A refusal
+    stopped unit answers, reviews and owner fixes that
     touched no line. Core records each action, and the record is what disposes of a line.
     Nothing the commander says about a line counts."""
 
@@ -865,13 +865,12 @@ class HeartbeatGated(CommanderVerb, declared_name=None):
     def gate_on(self, ctx: Commander, subjects: tuple[HeartbeatSubject, ...]) -> None:
         self.gate(ctx)
         now = time.time()
-        board = CommanderUpdate.owed(ctx.comms, ctx.commander, now)
+        board = CommanderUpdate.owed(ctx.comms, ctx.commander, now - AwaitingCommander.seconds)
         acted = frozenset(subjects)
-        if (any(ping.waits_on_commander(now - AwaitingCommander.seconds) for ping in board)
-                and not any(ping.acted_on(acted) for ping in board)):
-            print(f'BOARD: heartbeat lines undisposed past '
-                  f'{AwaitingCommander.seconds // 60} min; act on them next:\n'
-                  + '\n'.join(ping.render(now) for ping in board), file=sys.stderr)
+        if board and not any(ping.acted_on(acted) for ping in board):
+            oldest = min(board, key=lambda ping: ping.since.chronology())
+            print(f'BOARD: {len(board)} undisposed past {AwaitingCommander.seconds // 60} min; '
+                  f'oldest: {oldest.text[:60]}', file=sys.stderr)
 
 
 @dataclass(frozen=True, kw_only=True)

@@ -100,8 +100,10 @@ class ClaudeBridge(RunningClaude, LineMonitorBridge, declared_name=None):
     frames Monitor events as routine background, so a line said once there scrolls away. The
     Monitor only gets a wake line, since an idle session runs no tool calls."""
 
-    board_wake: ClassVar[str] = ("Heartbeat: your board changed. Its lines print as BOARD: on"
-                                 " every tool call until a recorded action disposes of them.")
+    board_wake: ClassVar[str] = (
+        "Heartbeat: your board changed. New and changed lines print once as BOARD: on your next "
+        "tool call; later calls print one unchanged count."
+    )
 
     incoming_frame = ClaudeMonitorFrame
     window_bytes = ClaudeMonitorFrame.BATCH_CHARS * 2

@@ -32,7 +32,7 @@ from agent_comms.ui_model.unit_state import (
     AwaitingApplicationRun, AwaitingCommander, NoPendingClock, PendingClock, Stuck, UnitState,
 )
 from agent_comms.thread_identity import RecordedThreadIncarnation
-from agent_comms_hooks.board import BoardLine
+from agent_comms_hooks.board import BoardEntry
 from agent_comms.wake_policy import PassiveWake
 from test_holder_standing_rules import state_cards
 
@@ -106,8 +106,8 @@ def test_frame_keeps_committed_board_order_and_folds_units_needing_no_hand(tmp_p
         state=Stuck, clock=PendingClock(now - 3600, now - 3600),
     )
     board = (
-        BoardLine("BLOCKED waiting-run", now - 120, now + 3600, urgent=True),
-        BoardLine("JUDGE #1", now - 240, now + 3600),
+        BoardEntry("blocked", "BLOCKED waiting-run", now - 120, now + 3600),
+        BoardEntry("judge", "JUDGE #1", now - 240, now + 3600),
     )
     hud = CommanderHud(
         RecordedThreadIncarnation("lead", 3.0), (awaiting, stuck), (),
@@ -122,7 +122,6 @@ def test_frame_keeps_committed_board_order_and_folds_units_needing_no_hand(tmp_p
     assert rows[:4] == (
         BoardRow(board[0]), BoardRow(board[1]), stuck, QuietUnits((awaiting,)),
     )
-    assert rows[2].line().startswith(f"{Stuck.verb} {stuck.unit.name}:")
     assert awaiting.unit.name in rows[3].line()
     assert all("AwaitingApplicationRun" not in line for line in restored.frame)
 

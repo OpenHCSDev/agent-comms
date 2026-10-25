@@ -67,8 +67,10 @@ class DeafReminder(SliceReminder):
 
 @dataclass(frozen=True)
 class BoardReminder(DeafReminder):
-    """Beside those, every line of the newest heartbeat packet the commander still owes an
-    action, as its bridge derives them from Core at this tool call."""
+    """New and changed current lines once, then one unchanged count per tool call.
+
+    The bridge derives current lines from Core and owns their delivery evidence.
+    """
 
     def take(self) -> tuple[str, ...]:
         return super().take() + WatchClaim(self.session_id).state().board()

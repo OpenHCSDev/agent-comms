@@ -340,6 +340,7 @@ class Unreadable(NeedsCommanderAttention, UnitState):
 @dataclass(frozen=True)
 class Blocked(NeedsCommanderAttention, UnitState):
     goal: GoalSnapshot
+    question = "its goal is blocked. what does it need?"
     action = "follow the blocked goal's declared response"
 
     @classmethod

@@ -1,4 +1,4 @@
-"""The commander's board, printed on every tool call of its Claude session.
+"""The commander's current board: changes once, then one unchanged count per tool call.
 
 The board is the newest heartbeat packet's lines that no recorded action has disposed of yet.
 Only Core can answer that, and importing Core costs the hook over a second, so the hook asks
@@ -24,6 +24,22 @@ class SessionWire:
 
 
 @dataclass(frozen=True)
+class BoardEntry:
+    """A current Core observation, never a separately stored board."""
+
+    content: str
+    text: str
+    since: float
+    alarm_at: float
+
+    def aged(self, now: float) -> str:
+        return f"{self.text} (seen for {int((now - self.since) // 60)} min)"
+
+    def line(self, now: float) -> str:
+        return f"BOARD: {self.aged(now)}"
+
+
+@dataclass(frozen=True)
 class SessionBoard(SessionWire):
     """The board lines the bridge derived from Core at the moment of asking."""
 
@@ -32,6 +48,16 @@ class SessionBoard(SessionWire):
     timeout: ClassVar[float] = 2
 
     lines: tuple[str, ...]
+
+    @classmethod
+    def presented(cls, due: Sequence[BoardEntry], unchanged: Sequence[BoardEntry], now: float) -> SessionBoard:
+        """Each change once, then exactly one summary of the current unchanged lines."""
+        lines = tuple(entry.line(now) for entry in due)
+        if unchanged:
+            oldest = min(unchanged, key=lambda entry: entry.since)
+            lines += (f"BOARD: {len(unchanged)} unchanged (oldest: {oldest.text[:60]}, "
+                      f"seen {int((now - oldest.since) // 60)} min)",)
+        return cls(lines)
 
     @classmethod
     def asked(cls, endpoint: Path) -> SessionBoard:

@@ -4,15 +4,12 @@ from dataclasses import replace
 
 import pytest
 
-from agent_comms.cli_bridges.claude import BoardLineRow
-from agent_comms.cli_bridges.shared import Binding
 from agent_comms.commander.standing import GoalBlocked, RequestStalled
 from agent_comms.goal_actions import SetGoalAction
 from agent_comms.goal_states import ActiveGoal, BlockedGoal, UnrecordedBlockGoal
 from agent_comms.task_attachments.commander_pings import CommanderDecisions, CommanderUpdate, RulePing
 from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.text_digest import TextDigest
-from agent_comms_hooks.board import BoardLine
 
 
 from agent_comms.session_file import RegistrySessionLocation
@@ -73,23 +70,14 @@ def test_blocked_goal_leads_the_board_and_clears_when_active(comms, tmp_path, st
     update = CommanderUpdate.derive(thread.incarnation, (), (rule,), previous, now=now)
     assert update is not None
     assert update.handled[0].urgent
-    assert "seen for 0 min" in update.handled[0].render(now)
-    urgent, = update.handled
-    with Binding.open(tmp_path / "bridge") as db:
-        BoardLineRow.record(db, CommanderDecisions(thread.incarnation, (old, urgent), (), ()))
-        first, second = BoardLine.recorded(tmp_path / "bridge" / "delivery.sqlite3")
-        assert first.urgent and first.text == rule.line()
-        assert not second.urgent and second.text == old.text
-
-        current = comms.registry.require("paper")
-        comms.registry.register(
-            replace(current, goal=replace(current.goal.require(), state=ActiveGoal())),
-            comms.registry.status("paper"),
-        )
-        assert GoalBlocked.violations(comms, "paper") == ()
-        cleared = CommanderUpdate.derive(thread.incarnation, (), (), update, now=now + 60)
-        assert cleared is not None
-        BoardLineRow.record(db, cleared)
-        assert BoardLine.recorded(tmp_path / "bridge" / "delivery.sqlite3") == ()
+    current = comms.registry.require("paper")
+    comms.registry.register(
+        replace(current, goal=replace(current.goal.require(), state=ActiveGoal())),
+        comms.registry.status("paper"),
+    )
+    assert GoalBlocked.violations(comms, "paper") == ()
+    cleared = CommanderUpdate.derive(thread.incarnation, (), (), update, now=now + 60)
+    assert cleared is not None
+    assert cleared.handled == ()
 
 

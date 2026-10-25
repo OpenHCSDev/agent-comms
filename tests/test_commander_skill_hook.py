@@ -8,11 +8,14 @@ import subprocess
 import sys
 import time
 from concurrent.futures import ThreadPoolExecutor
+from dataclasses import replace
 from pathlib import Path
 
 import pytest
 
 from agent_comms.cli_bridges.monitor import BoardReply, ReadBoard, SessionRequest
+from agent_comms.cli_bridges.shared import Binding, DeliveredBoardContent
+from agent_comms.heartbeat_subjects import UnitSubject
 from agent_comms.commander.package import CommanderPackage
 from agent_comms.commander.rule_file import RuleFile
 from agent_comms.comms import wire
@@ -23,15 +26,17 @@ from agent_comms.slop import Slop
 from agent_comms.commander.spinning import SpinningUnit
 from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.standing_rules import OrderlessUnreviewedHead, ReviewTimerUp
+from agent_comms.text_digest import TextDigest
 from agent_comms.thread_identity import RecordedThreadIncarnation
-from agent_comms.task_attachments.commander_pings import CommanderUpdate
+from agent_comms.task_attachments.commander_pings import CommanderDecisions, CommanderUpdate, RulePing
 from agent_comms.thread_model import DeclaredModel
 from agent_comms.threads import Thread
+from agent_comms.ui_model.unit_state import AwaitingCommander
 from agent_comms.todos import ProgressRead, ReviewedHeadVerdict
 from agent_comms_hooks.reread import BoardReminder, DeafReminder, SliceReminder
 from agent_comms_hooks.skill import CommanderStart
 from agent_comms_hooks.watch import DeafWatch, WatchClaim, WatchRecord
-from test_commander_notifications import beat
+from test_commander_notifications import beat, lead_hud
 from test_head_review import ACCEPTED, invoke
 
 pytest_plugins = ("test_head_review", "test_commander_notifications")
@@ -114,7 +119,7 @@ def test_rearm_rides_every_tool_call_while_a_running_bridge_has_no_monitor(tmp_p
             assert hook.take() == ()
 
 
-def tool_call(hook, server, comms):
+def tool_call(hook, server, comms, db, now):
     """One tool call's board: the hook asks over the session socket while this thread answers
     as the bridge does, deriving the board from Core at the moment of asking."""
     with ThreadPoolExecutor(1) as pool:
@@ -122,7 +127,8 @@ def tool_call(hook, server, comms):
         peer, _ = server.accept()
         with peer, peer.makefile("rwb") as stream:
             assert FieldCodec.decode(SessionRequest, FieldCodec.parse(stream.readline())) == ReadBoard()
-            reply = BoardReply(CommanderUpdate.current_board(comms, "lead", time.time()))
+            entries = CommanderUpdate.current_board(comms, "lead")
+            reply = BoardReply(DeliveredBoardContent.deliver(db, entries, now).lines)
             stream.write(FieldCodec.compact(FieldCodec.encode(reply)).encode() + b"\n")
         return taken.result(timeout=5)
 
@@ -147,19 +153,68 @@ def test_a_recorded_verdict_drops_its_board_line_on_the_next_tool_call(
              SpinningUnit("P2", worker, 92))
     beat(comms, rules)
     beat(comms, rules)
-    with (claim.held(record), claim.reader_held(),
+    with (claim.held(record), claim.reader_held(), Binding.open(tmp_path / "delivery") as db,
           socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as server):
         server.bind(str(claim.socket_path))
         server.listen()
         server.settimeout(5)
-        board = tool_call(hook, server, comms)
-        # Each kind prints once, as the owner's question, with its owner's verb last.
-        assert sorted(line.rsplit(" -> ", 1)[1] for line in board) == sorted(
-            rule.line().rsplit(" -> ", 1)[1] for rule in rules)
-        assert all("?" in line.rsplit(" -> ", 1)[0] for line in board)
+        board = tool_call(hook, server, comms, db, time.time())
+        assert len(board) == len(rules)
         invoke(comms, request, ReviewedHeadVerdict(ACCEPTED))
-        assert [line for line in tool_call(hook, server, comms)
+        assert [line for line in tool_call(hook, server, comms, db, time.time())
                 if f"--pr {request.pr} --head {request.head}" in line] == []
+
+
+def test_the_board_prints_changes_once_then_an_unchanged_count(notification_bus, tmp_path, monkeypatch):
+    """Real packets, bridge delivery journal and session socket; no hook-side state."""
+    comms = notification_bus
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("HOME", "home")
+    hook = BoardReminder.decode(hook_record(tmp_path / "session.jsonl"))
+    claim = WatchClaim(hook.session_id)
+    claim.path.parent.mkdir(parents=True)
+    record = WatchRecord("lead", str(comms.root), ("watch",), tmp_path / "inbox")
+    lead = comms.registry.require("lead").incarnation
+    worker = comms.registry.require("worker").incarnation
+    began = time.time()
+    first = RulePing(SpinningUnit, TextDigest.of("first"), text="Read worker P1",
+                     subjects=(UnitSubject(worker),), since=RecordedEventTime(began))
+    second = RulePing(ReviewTimerUp, TextDigest.of("second"), text="Review worker P2",
+                      subjects=(UnitSubject(worker),), since=RecordedEventTime(began))
+    hud = lead_hud(comms)
+    CommanderDecisions(lead, (first, second), (first, second), ()).send(comms, began + 90, hud)
+    with (claim.held(record), claim.reader_held(), Binding.open(tmp_path / "delivery") as db,
+          socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as server):
+        server.bind(str(claim.socket_path))
+        server.listen()
+        server.settimeout(5)
+        assert tool_call(hook, server, comms, db, began + 90) == (
+            "BOARD: Read worker P1 (seen for 1 min)",
+            "BOARD: Review worker P2 (seen for 1 min)",
+        )
+        assert tool_call(hook, server, comms, db, began + 91) == (
+            "BOARD: 2 unchanged (oldest: Read worker P1, seen 1 min)",
+        )
+        changed = replace(first, observation=TextDigest.of("changed"), since=RecordedEventTime(began + 90))
+        CommanderDecisions(lead, (changed, second), (changed,), ()).send(comms, began + 92, hud)
+        assert tool_call(hook, server, comms, db, began + 92) == (
+            "BOARD: Read worker P1 (seen for 0 min)",
+            "BOARD: 1 unchanged (oldest: Review worker P2, seen 1 min)",
+        )
+        # A fresh packet does not reset delivery, and the answer window rings only once.
+        CommanderDecisions(lead, (changed, second), (), ()).send(comms, began + 93, hud)
+        alarm = began + AwaitingCommander.seconds
+        assert tool_call(hook, server, comms, db, alarm + 1) == (
+            "BOARD: Review worker P2 (seen for 5 min)",
+            "BOARD: 1 unchanged (oldest: Read worker P1, seen 3 min)",
+        )
+        assert tool_call(hook, server, comms, db, alarm + 2) == (
+            "BOARD: 2 unchanged (oldest: Review worker P2, seen 5 min)",
+        )
+        assert DeliveredBoardContent.count(db) == 2
+        CommanderDecisions(lead, (), (), ()).send(comms, alarm + 3, hud)
+        assert tool_call(hook, server, comms, db, alarm + 3) == ()
+        assert DeliveredBoardContent.count(db) == 0
 
 
 def test_the_deck_carries_the_voice_every_fourth_slice_every_drift_tell_and_every_failure():

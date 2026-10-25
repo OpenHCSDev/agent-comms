@@ -87,6 +87,7 @@ from agent_comms.typed_table import (
     WriterOwnedFile,
 )
 from agent_comms.wire_models import WireModel
+from agent_comms_hooks.board import BoardEntry, SessionBoard
 from agent_comms_hooks.watch import HeldClaim, NoSessionBridge, WatchClaim, WatchRecord
 
 from ..locked_store import RegistryFile, SQLiteFile
@@ -116,6 +117,38 @@ class BridgeStateTable(DurableTables):
 
     __slots__ = ()
     filename = 'delivery.sqlite3'
+
+
+@dataclass(frozen=True)
+class DeliveredBoardContent(BridgeStateTable, TypedTable, declared_name="board_delivery"):
+    """This bridge's delivery evidence, not a copy of Core's board."""
+
+    content: Annotated[str, Column(primary_key=True)]
+    since: float
+    delivered_at: float
+
+    def alarm_due(self, entry: BoardEntry, now: float) -> bool:
+        return self.delivered_at < entry.alarm_at <= now
+
+    @classmethod
+    def deliver(cls, db: sqlite3.Connection, entries: tuple[BoardEntry, ...], now: float) -> SessionBoard:
+        """Select and stamp together: concurrent hooks cannot deliver the same change."""
+        due: list[BoardEntry] = []
+        unchanged: list[BoardEntry] = []
+        with db:
+            db.execute("BEGIN IMMEDIATE")
+            current = {entry.content for entry in entries}
+            for receipt in cls.select(db):
+                if receipt.content not in current:
+                    cls.delete(db, content=receipt.content)
+            for entry in entries:
+                receipts = cls.select(db, content=entry.content, since=entry.since)
+                if all(receipt.alarm_due(entry, now) for receipt in receipts):
+                    cls(entry.content, entry.since, now).upsert(db)
+                    due.append(entry)
+                else:
+                    unchanged.append(entry)
+        return SessionBoard.presented(due, unchanged, now)
 
 
 class BindingRequest(ABC):
@@ -1430,8 +1463,9 @@ class LineMonitorBridge(TranscriptConfirmsDelivery, TranscriptBridge[Options]):
 
     async def board(self) -> tuple[str, ...]:
         """The commander board this session's tool calls print, derived from Core when asked."""
-        return await self.comms.bus.when_open(partial(
-            CommanderUpdate.current_board, self.comms, self.binding.bus, time.time()))
+        entries = await self.comms.bus.when_open(partial(
+            CommanderUpdate.current_board, self.comms, self.binding.bus))
+        return DeliveredBoardContent.deliver(self.db, entries, time.time()).lines
 
     def watch_record(self) -> WatchRecord:
         command = (str(Path(sys.argv[0]).absolute()), Watch.__name__.lower(),
