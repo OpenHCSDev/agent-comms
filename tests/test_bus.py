@@ -45,7 +45,7 @@ from agent_comms.errors import (
     RelationViolationError,
     UnclaimedError,
 )
-from agent_comms.field_codec import MessageId
+from agent_comms.field_codec import MessageId, TimestampText
 from agent_comms.message_reference import MessageReference
 from agent_comms.read_basis import RepliesDisplayScope
 from agent_comms.response_acknowledgement import (
@@ -109,32 +109,25 @@ def projection_source_digest(source: Path) -> str:
     ).stdout.strip()
 
 
-@pytest.mark.parametrize(
-    ("module", "old", "new"),
-    (
-        (
-            "typed_table.py",
-            "Durable files compare their stored DDL text",
-            "An unrelated infrastructure docstring: durable files compare their stored DDL text",
-        ),
-        (
-            "field_codec.py",
-            "class TimestampText(",
-            "def unrelated_projection_probe():\n    return 17\n\n\nclass TimestampText(",
-        ),
-    ),
-)
+def edit_inside(source: Path, owner: type) -> None:
+    """Insert a line inside the class's own declaration, so no test copies our source."""
+    path = source.joinpath(*owner.__module__.split(".")[1:]).with_suffix(".py")
+    lines = path.read_text().splitlines(keepends=True)
+    declaration = next(
+        node for node in ast.walk(ast.parse("".join(lines)))
+        if isinstance(node, ast.ClassDef) and node.name == owner.__name__
+    )
+    first = declaration.body[0]
+    lines.insert(first.lineno - 1, " " * first.col_offset + "# an edit inside the class\n")
+    path.write_text("".join(lines))
+
+
+@pytest.mark.parametrize("owner", (TypedTable, TimestampText))
 def test_projection_digest_ignores_infrastructure_source(
-    projection_source: Path,
-    module: str,
-    old: str,
-    new: str,
+    projection_source: Path, owner: type
 ) -> None:
     before = projection_source_digest(projection_source)
-    path = projection_source / module
-    original = path.read_text()
-    assert original.count(old) == 1
-    path.write_text(original.replace(old, new))
+    edit_inside(projection_source, owner)
     assert projection_source_digest(projection_source) == before
 
 
@@ -187,18 +180,9 @@ def test_nominal_message_id_column_stores_plain_text() -> None:
     ),
 )
 def test_projection_digest_tracks_producing_source(projection_source: Path, owner: type) -> None:
-    """An edit inside a producing class changes the digest; the class names the place, so no
-    test holds a copy of its source to go stale."""
+    """An edit inside a producing class changes the digest."""
     before = projection_source_digest(projection_source)
-    path = projection_source.joinpath(*owner.__module__.split(".")[1:]).with_suffix(".py")
-    lines = path.read_text().splitlines(keepends=True)
-    declaration = next(
-        node for node in ast.walk(ast.parse("".join(lines)))
-        if isinstance(node, ast.ClassDef) and node.name == owner.__name__
-    )
-    first = declaration.body[0]
-    lines.insert(first.lineno - 1, " " * first.col_offset + "# an edit inside the producer\n")
-    path.write_text("".join(lines))
+    edit_inside(projection_source, owner)
     assert projection_source_digest(projection_source) != before
 
 
