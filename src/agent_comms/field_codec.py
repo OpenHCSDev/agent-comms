@@ -1610,9 +1610,8 @@ class JsonShapeFamily(AcceptsNull, ExternalJsonShape, SingleValueEncoding):
 class TextRepresentation[V](FieldRepresentation[V]):
     """External text scalars share strict decoding at the canonical boundary.
 
-    A text field's stored format is its wire spelling: the JSON type and the pattern it
-    accepts. The schema's description names the representation for readers and is
-    documentation, never part of the format.
+    Its schema names the representation, so text with no declared spelling never shares a stored
+    form with plain ``str`` or with another representation; SpelledText declares one.
     """
 
     @classmethod
@@ -1674,7 +1673,7 @@ class SpelledText(TextRepresentation[str], ValidatedScalar):
         return f"^(?:{cls.spelling.pattern})$"
 
     @classmethod
-    def schema(cls) -> dict[str, object]:
+    def schema(cls) -> dict[str, JsonValue]:
         return {"type": "string", "pattern": cls.anchored()}
 
 
@@ -1992,9 +1991,13 @@ class AssignmentId(NominalText):
 
 
 class AssignmentIdText(NominalSpelling[AssignmentId]):
-    """Any bounded text, so the wake claim's stored ``BoundedText`` form is unchanged."""
+    """Spelled and stored as BoundedText, so the wake claim's stored form is unchanged."""
 
     spelling = re.compile(rf"[\s\S]{{1,{BoundedText.max_length}}}")
+
+    @classmethod
+    def schema(cls) -> dict[str, JsonValue]:
+        return BoundedText.schema()
 
 
 class Token256Text(Hex256Text):

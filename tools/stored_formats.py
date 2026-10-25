@@ -15,7 +15,7 @@ import inspect
 import json
 from dataclasses import dataclass
 
-from agent_comms.field_codec import BoundedText, FieldCodec
+from agent_comms.field_codec import FieldCodec
 
 
 @dataclass(frozen=True)
@@ -32,32 +32,12 @@ class StoredForm:
         """Decode the record schema once. The version is a single-valued stored field, or the
         ClassVar the writer stamps beside the fields."""
         declared = vars(record).get("version")
-        schema = FieldCodec.record_schema(record)
-        for entry in FieldCodec._record_plan(record).fields:
-            schema["properties"][entry.key] = wire_spelling(
-                schema["properties"][entry.key], FieldCodec.representation(entry.annotation)[1])
-        match schema:
+        match FieldCodec.record_schema(record):
             case {"properties": {"version": {"enum": [stamped]}, **stored}, "required": required}:
                 return cls(stamped, stored, [key for key in required if key in stored])
             case {"properties": properties, "required": required} if isinstance(declared, int):
                 return cls(declared, properties, required)
         return None
-
-
-def wire_spelling(schema: object, representation: type) -> object:
-    """A field's stored form is the text it accepts. A description documents a schema and is
-    never part of it, and BoundedText spells what it accepts by its bound, so it shares a form
-    with any spelled text accepting the same set."""
-    match schema:
-        case dict():
-            spelled = {key: wire_spelling(value, object) for key, value in schema.items()
-                       if key != "description"}
-            if issubclass(representation, BoundedText):
-                spelled["pattern"] = rf"^(?:[\s\S]{{1,{representation.max_length}}})$"
-            return spelled
-        case list():
-            return [wire_spelling(item, object) for item in schema]
-    return schema
 
 
 def stored_formats(module_name: str) -> dict[str, StoredForm]:

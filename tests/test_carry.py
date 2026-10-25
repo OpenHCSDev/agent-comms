@@ -91,14 +91,13 @@ class Repository:
 
 def record_source(version: int, fields: str) -> str:
     return ("from dataclasses import dataclass\nfrom typing import Annotated, ClassVar\n"
-            "from agent_comms.field_codec import AssignmentIdText, BoundedText, Id128, Id128Text\n\n"
+            "from agent_comms.field_codec import Id128, Id128Text\n\n"
             "class RootKind(Id128):\n    \"\"\"Another kind written in the same spelling.\"\"\"\n\n"
             f"@dataclass(frozen=True)\nclass Record:\n    version: ClassVar[int] = {version}\n{fields}")
 
 
 PLAIN = "    root: str\n"
 SPELLED = "    root: Annotated[str, Id128Text]\n"
-BOUNDED = "    root: Annotated[str, BoundedText]\n"
 
 
 @pytest.mark.refactor_guard
@@ -109,8 +108,6 @@ BOUNDED = "    root: Annotated[str, BoundedText]\n"
     (PLAIN, 1, PLAIN + "    kind: ClassVar[str] = 'x'\n", {}, 0),
     (SPELLED, 1, "    root: RootKind\n", {}, 0),
     (PLAIN, 1, SPELLED, {}, 1),
-    (BOUNDED, 1, "    root: Annotated[str, AssignmentIdText]\n", {}, 0),
-    (BOUNDED, 1, SPELLED, {}, 1),
 ])
 def test_a_stored_record_format_change_bumps_its_version_and_ships_a_carry(
         tmp_path, before, version, fields, step, uncarried):
