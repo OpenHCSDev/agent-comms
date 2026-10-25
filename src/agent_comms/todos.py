@@ -29,6 +29,7 @@ from typing import TYPE_CHECKING, Annotated, ClassVar, Self, cast, get_args, get
 from agent_comms.build_identity import (
     BuildIdentity,
     CommitInstallation,
+    InstalledBuild,
     RecordedBuildIdentity,
     UnrecordedBuildIdentity,
 )
@@ -1871,7 +1872,7 @@ class ProblemOrder(LifecycleCapability, DeclaredFamily, StorySource, affix="Prob
     def line(self) -> str:
         return "No order"
 
-    def installed_line(self, installed: RecordedBuildIdentity) -> str:
+    def installed_line(self, installed: InstalledBuild) -> str:
         """The board's line, read against the build its one read resolved."""
         return self.line
 
@@ -2435,7 +2436,7 @@ class MergedProblemOrder(AwaitingInstallationProblemOrder):
     def line(self) -> str:
         return self.run.merged_line(f"at {self.sha[:9]}")
 
-    def installed_line(self, installed: RecordedBuildIdentity) -> str:
+    def installed_line(self, installed: InstalledBuild) -> str:
         """The installed build, not the merge, says whether the install is still owed."""
         return self.run.merged_line(
             installed.containing(self.installation_commits, self.check.directory).merged_state)
