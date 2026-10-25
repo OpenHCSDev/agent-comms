@@ -23,7 +23,7 @@ import sys
 import threading
 import time
 from abc import ABC, abstractmethod
-from collections.abc import Callable, Generator, Hashable, Iterator, Mapping
+from collections.abc import Callable, Generator, Iterator, Mapping
 from concurrent.futures import Future, ProcessPoolExecutor
 from contextlib import (
     AbstractContextManager,
@@ -39,7 +39,7 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 from typing import TYPE_CHECKING, Any, BinaryIO, ClassVar, NoReturn, TextIO
 
-from .declared_family import DeclaredFamily, UnknownFamilyMember
+from .declared_family import DeclaredFamily
 from .errors import RelationViolationError
 from .field_codec import FieldCodec, Id128, NullMember, RecordMember, SubclassUnion
 from .launch_runtime import INHERITED_ENVIRONMENT, LaunchRuntime
@@ -319,13 +319,10 @@ class GroupMember(ProcessIdentity, declared_name=None):
 
 
 class LockHolder(DeclaredFamily, affix="LockHolder"):
-    """An observed flock owner; diagnosis, and authority to signal it where a member says so."""
+    """An observed flock owner; diagnosis, not authority to signal it."""
 
     @abstractmethod
     def describe(self) -> str: ...
-
-    def evict(self) -> None:
-        """A holder that owns real work keeps its lock; the waiter refuses with its PID."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -341,35 +338,10 @@ class IdentifiedLockHolder(LockHolder):
 
 @dataclass(frozen=True, slots=True)
 class RunningLockHolder(IdentifiedLockHolder):
-    process: ProcessIdentity
     command: str
-
-    @classmethod
-    def observed(cls, platform: Platform, process: ProcessIdentity, command: str) -> LockHolder:
-        """Decode the holder's kind once, from the program name the kernel reports."""
-        try:
-            member = cls.member_selected(platform.process_name(process.pid))
-        except UnknownFamilyMember:
-            member = RunningLockHolder
-        return member(process.pid, process, command)
 
     def detail(self) -> str:
         return self.command
-
-
-class ToadLockHolder(RunningLockHolder):
-    """Toad is a view of the bus: it holds nothing the bus cannot serve again, so a waiter
-    ends it instead of waiting out its lifetime."""
-
-    @classmethod
-    def selection_key(cls) -> Hashable:
-        return "toad"
-
-    def evict(self) -> None:
-        """A Toad that outlives its forced stop fails the waiter loudly, never holds it."""
-        with suppress(ProcessLookupError):
-            ObservedProcess(self.process).stop_sync(
-                deadline=time.monotonic() + 2 * STOP_GRACE_SECONDS)
 
 
 class ExitedLockHolder(IdentifiedLockHolder):
@@ -643,11 +615,11 @@ class LinuxPlatform(PidfdHandles, Platform):
                     holders.append(UnidentifiedLockHolder())
                     continue
                 try:
-                    process = self.identity(pid)
-                    command = " ".join(self.arguments(process))
-                    holders.append(RunningLockHolder.observed(self, process, command))
+                    command = " ".join(self.arguments(self.identity(pid)))
                 except ProcessLookupError:
                     holders.append(ExitedLockHolder(pid))
+                else:
+                    holders.append(RunningLockHolder(pid, command))
         return tuple(holders)
 
     def parent_identity(self, pid: int) -> ProcessIdentity:
@@ -1209,6 +1181,9 @@ class ChildOutcome(DeclaredFamily, affix="Outcome"):
     def report_forced(self, report: Callable[[str], None]) -> None:
         pass
 
+    def report_stopped(self, report: Callable[[], None], stop_exits: frozenset[int]) -> None:
+        """Only a signal, or a program's declared stop exit, ends a child as stopped."""
+
     def fork_failure(self, interrupted_consequence: Callable[[], str]) -> str:
         return ""
 
@@ -1235,6 +1210,10 @@ class ExitedOutcome(ChildOutcome):
     def printed_count(self, stdout: bytes) -> CheckPrinted:
         return CheckPrinted.decoded(stdout)
 
+    def report_stopped(self, report: Callable[[], None], stop_exits: frozenset[int]) -> None:
+        if self.code in stop_exits:
+            report()
+
     @property
     def summary(self) -> str:
         return f"exited with code {self.code}"
@@ -1255,6 +1234,9 @@ class InterruptedForkOutcome(ChildOutcome):
 class SignaledOutcome(InterruptedForkOutcome):
     interrupted: ClassVar[bool] = True
     signal_number: int
+
+    def report_stopped(self, report: Callable[[], None], stop_exits: frozenset[int]) -> None:
+        report()
 
     @property
     def summary(self) -> str:

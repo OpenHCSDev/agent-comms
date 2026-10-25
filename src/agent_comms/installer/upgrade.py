@@ -104,7 +104,6 @@ from agent_comms.installer.interpreter_operation import (
     RetainedProgram,
     RetargetMaintenancePhase,
     RouteAndRuntimePublicationPhase,
-    RouteHoldersPhase,
     RuntimeProbe,
     RuntimePublicationPhase,
     StartingReportPublicationPhase,
@@ -1080,9 +1079,6 @@ class ChangedInstall(ExistingBusInstall[RehearsedFiles]):
             restore.require()
         with OutgoingRuntimeMaintenancePhase().running(self.staged.commands.clock):
             RootRuntimeStore.at(self.root).adopt(self.installed.runtime)
-        with RouteHoldersPhase().running(self.staged.commands.clock), route_directory(
-                active_route_path()):
-            pass
         running = self.installed.running_owners(self.root)
         with self.staged.services_stopped(self.installed) as stopped:
             with BeginMaintenancePhase().running(self.staged.commands.clock):

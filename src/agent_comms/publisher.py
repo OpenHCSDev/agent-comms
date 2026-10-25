@@ -23,7 +23,6 @@ from agent_comms.field_codec import ClaimId
 from agent_comms.messages import BusRecord, ClaimNoticeKind, Message
 from agent_comms.response_acknowledgement import canonical_publication_key
 
-from .active_route import guard_original_root_write
 from .channel_targets import CommandTarget, NamedTarget
 from .coordination_database import CoordinationStore
 from .coordinator import Coordination
@@ -194,7 +193,6 @@ class InitialWrites(Publisher):
         """Hold the registry/catalog cut; check source conditions in the append transaction."""
         with (
             self.opened_activity() as activity,
-            guard_original_root_write(self.bus.path.parent),
             self.channels.reading(self.registry.store) as catalog,
         ):
             snapshot = self.registry.snapshot()

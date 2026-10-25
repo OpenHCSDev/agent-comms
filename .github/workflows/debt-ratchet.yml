@@ -211,7 +211,7 @@ jobs:
         run: |
           marker="<!-- $KIND findings -->"
           { echo "$marker"; echo "**$KIND** at $(git rev-parse --short HEAD), every finding:"; echo '```';
-            grep -E '^(introduced|grew) ' ratchet.txt; echo '```'; } > body.md
+            grep -E '^(introduced|found|grew) ' ratchet.txt; echo '```'; } > body.md
           old=$(gh api "repos/$GITHUB_REPOSITORY/issues/$PR/comments" --paginate \
                 --jq ".[] | select(.body | startswith(\"$marker\")) | .id" | head -1)
           if [ -n "$old" ]; then
