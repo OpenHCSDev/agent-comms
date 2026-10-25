@@ -344,13 +344,13 @@ class PreparedStandbyGoalAction(StandbyGoalAction, declared_name=None):
             )
         snapshot = ctx.goals.registry.snapshot()
         if not any(
-            ctx.goals.agents.is_live(target.incarnation, snapshot)
+            ctx.goals.agents.answers_later(target.incarnation, snapshot)
             for target in wait_targets
         ):
             names = ", ".join(f"@{target.incarnation.name}" for target in wait_targets)
             raise ValueError(
-                f"No declared dependency is live ({names}). "
-                "Inspect its registered process before declaring standby."
+                f"No thread this wait names will answer ({names}): none has a live bridge or "
+                "process. Inspect its registered process before declaring standby."
             )
         closed = GoalWaits.closed_wait_group(
             thread.name,

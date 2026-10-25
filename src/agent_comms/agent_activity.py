@@ -21,6 +21,7 @@ if TYPE_CHECKING:
     from .presentation import MessageNotification
     from .registration import Registration
     from .registry_document import RegistrySnapshot
+    from .thread_status import ThreadStatus
 from .activity import (
     Activity,
     ActivityCapture,
@@ -129,10 +130,16 @@ class AgentActivity:
 
     def is_live(self, incarnation: ThreadIncarnation, snapshot: RegistrySnapshot) -> bool:
         """The registered presence owns liveness for this exact incarnation."""
-        if not incarnation.current(snapshot):
-            return False
-        name = snapshot.canonical_name(incarnation.name)
-        return snapshot.status(name).running
+        return incarnation.current(snapshot) and self.presence(incarnation, snapshot).running
+
+    def answers_later(self, incarnation: ThreadIncarnation, snapshot: RegistrySnapshot) -> bool:
+        """Whether a wait on this exact incarnation is answered once it reads its inbox."""
+        return (incarnation.current(snapshot)
+                and self.presence(incarnation, snapshot).answers_later)
+
+    @staticmethod
+    def presence(incarnation: ThreadIncarnation, snapshot: RegistrySnapshot) -> ThreadStatus:
+        return snapshot.status(snapshot.canonical_name(incarnation.name))
 
     def is_working(self, incarnation: ThreadIncarnation, snapshot: RegistrySnapshot) -> bool:
         return self.is_live(incarnation, snapshot) and self.activity_of(
