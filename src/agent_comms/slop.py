@@ -30,10 +30,6 @@ class Derivation(DeclaredFamily, affix="Derivation"):
     sentence: ClassVar[str]
 
     @classmethod
-    def declaration_elsewhere(cls, by: FileLine, where: FileLine, root: Path) -> bool:
-        return not cls.recurrence_refusal(by, where, root)
-
-    @classmethod
     def recurrence_refusal(cls, by: FileLine, where: FileLine, root: Path) -> str:
         return f"derive {cls.declared_name} never satisfies recurrence"
 
