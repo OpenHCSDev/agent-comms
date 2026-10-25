@@ -817,6 +817,10 @@ class CommanderVerb(DeclaredVerb, affix="Verb"):
         ctx.comms.registry.require(ctx.commander).require_commander()
         self.fork.commanding(ctx.comms, ctx.commander)
         ctx = ctx.model_copy(update={'actor': self.fork})
+        self.act(ctx)
+
+    def act(self, ctx: Commander) -> None:
+        """Gate, then run."""
         self.gate(ctx)
         self.run(ctx)
 
@@ -845,19 +849,20 @@ class HeartbeatGated(CommanderVerb, declared_name=None):
     fresh line asks for. Core records that action, and the record is what disposes of the line.
     Nothing the commander says about a line counts."""
 
-    def gate(self, ctx: Commander) -> None:
-        super().gate(ctx)
+    @abstractmethod
+    def act(self, ctx: Commander) -> None:
+        """Gate on the heartbeat subjects this verb's recorded action touches, then run;
+        each verb decodes those subjects once, beside the action that records them."""
+
+    def gate_on(self, ctx: Commander, subjects: tuple[HeartbeatSubject, ...]) -> None:
+        self.gate(ctx)
         now = time.time()
         board = CommanderUpdate.owed(ctx.comms, ctx.commander, now)
-        acted = frozenset(self.acts_on(ctx))
+        acted = frozenset(subjects)
         if board and not any(ping.acted_on(acted) for ping in board):
             sys.exit(f'REFUSED, nothing recorded: heartbeat lines undisposed past '
                      f'{AwaitingCommander.seconds // 60} min; act on any line on the board:\n'
                      + '\n'.join(ping.render(now) for ping in board))
-
-    @abstractmethod
-    def acts_on(self, ctx: Commander) -> tuple[HeartbeatSubject, ...]:
-        """The heartbeat subjects this verb's recorded action touches."""
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -931,6 +936,10 @@ class DirectiveVerb(HeartbeatGated):
     @abstractmethod
     def addressed(self) -> tuple[str, ...]:
         """The threads this action's message is for; only their asks can it answer."""
+
+    def act(self, ctx: Commander) -> None:
+        self.gate_on(ctx, self.acts_on(ctx))
+        self.run(ctx)
 
     def acts_on(self, ctx: Commander) -> tuple[HeartbeatSubject, ...]:
         snapshot = ctx.comms.registry.snapshot()
