@@ -12,18 +12,25 @@ each part, once. The reminder hook then puts one short slice inline every few to
 from __future__ import annotations
 
 import json
+from collections.abc import Iterator
 from dataclasses import dataclass
 from pathlib import Path
-from typing import ClassVar
+from typing import TYPE_CHECKING, ClassVar
 
 from agent_comms.commander.package import CommanderPackage
 from agent_comms.commander.rule_file import RuleFile
+from agent_comms.held_orders import HeldOrders
 from agent_comms.pattern_sources import PostmortemFailure
 from agent_comms.registry_store import RegistryStore
 from agent_comms.slop import Slop
+from agent_comms.todos import TodoStore
 from agent_comms_hooks import ClaudeHookProgram
 from agent_comms_hooks.reread import CommanderDeck
 from agent_comms_hooks.watch import WatchClaim
+
+if TYPE_CHECKING:
+    from agent_comms.registry_document import RegistrySnapshot
+    from agent_comms.threads import Thread
 
 
 @dataclass(frozen=True)
@@ -54,7 +61,25 @@ class CommanderStart(CommanderDeck):
             " does not count as reading them. This order is given once per session start or"
             " compaction; a short slice of them comes back inline every few tool calls.\n"
             + "\n".join(str(part) for part in parts),
+            self.held(),
         )
+
+    def held(self) -> str:
+        """Every order the units hold, from the Todo store: a summary is a paraphrase."""
+        return "\n".join((
+            "FUCK YOUR COMPACTION. Your summary is a paraphrase. What your units actually hold:",
+            *(hold.recalled()
+              for root, snapshot, commander in self.commanders()
+              for hold in HeldOrders.of(TodoStore(root), snapshot, commander.name).live),
+        ))
+
+    def commanders(self) -> Iterator[tuple[Path, RegistrySnapshot, Thread]]:
+        """Each commander registered on a bus this session is bound to, with that bus's cut."""
+        for record in WatchClaim(self.session_id).state().bindings():
+            root = Path(record.root)
+            snapshot = RegistryStore.at(root).read_snapshot_unlocked()
+            for thread in snapshot.commander_project.commanders(snapshot):
+                yield root, snapshot, thread
 
     def prepare(self) -> None:
         """A start or compaction drops what was read: the deck is dealt again from its start."""
@@ -116,10 +141,7 @@ class CommanderStart(CommanderDeck):
         )
 
     def notice(self) -> str:
-        names = []
-        for record in WatchClaim(self.session_id).state().bindings():
-            snapshot = RegistryStore.at(Path(record.root)).read_snapshot_unlocked()
-            names.extend(thread.name for thread in snapshot.commander_project.commanders(snapshot))
+        names = [thread.name for _, _, thread in self.commanders()]
         return ("Commander: " + ", ".join(names) + "." if names
                 else "No commander project is registered for this session.")
 

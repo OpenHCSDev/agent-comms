@@ -39,7 +39,7 @@ class DeclarationDerivation(Derivation):
 
     @classmethod
     def declaration_elsewhere(cls, by: FileLine, where: FileLine, root: Path) -> bool:
-        return not by.same_file(where, root)
+        return by.declaration(root) != where.declaration(root)
 
 
 class NominalKeyDerivation(Derivation, declared_name="nominal-key"):

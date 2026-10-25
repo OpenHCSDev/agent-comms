@@ -4,6 +4,7 @@
 import asyncio
 import json
 import os
+import re
 import time
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import replace
@@ -585,6 +586,17 @@ def test_answering_one_owed_message_leaves_another_owed(held_bus, tmp_path, caps
     assert [owed.message.message_id for owed in unanswered(held_bus)] == [second.message_id]
     with pytest.raises(RecordProblems, match=second.message_id):
         SendVerb(unit="worker", body_file=order_file(held_bus, tmp_path)).apply(ctx)
+
+
+def test_a_refusal_lists_the_asks_still_inside_their_answer_window(held_bus, tmp_path):
+    """A retry costs a call, so the refusal names the asks that fall due before it lands too."""
+    owed = publish(held_bus, "worker", "lead", time.time() - AwaitingCommander.seconds - 1)
+    ripening = publish(held_bus, "worker", "lead", time.time() - 60)
+    ctx = Commander.read_root(held_bus.root)
+    with pytest.raises(RecordProblems) as refused:
+        SendVerb(unit="worker", body_file=order_file(held_bus, tmp_path)).apply(ctx)
+    assert {owed.message_id, ripening.message_id} <= set(
+        re.search(r"order say worker BODYFILE --answers (.*)", str(refused.value)).group(1).split())
 
 
 def test_an_owed_answer_is_a_heartbeat_line_and_never_a_vibe_check(held_bus):
