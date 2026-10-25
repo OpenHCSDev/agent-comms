@@ -93,7 +93,12 @@ class LaunchRuntime:
 
     @classmethod
     def installed(cls) -> LaunchRuntime:
-        return cls(cls.current_pointer().resolve(strict=True) / "bin/python")
+        return cls.at_prefix(cls.current_pointer().resolve(strict=True))
+
+    @classmethod
+    def at_prefix(cls, prefix: Path) -> Self:
+        """The interpreter layout shared by installed and newly built runtimes."""
+        return cls(prefix / "bin/python")
 
     @property
     def prefix(self) -> Path:

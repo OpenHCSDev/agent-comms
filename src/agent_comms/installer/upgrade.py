@@ -580,7 +580,7 @@ class Stack:
             resolution = hashlib.sha256(source.lock.read_bytes()).hexdigest()[:16]
             runtimes = home / ".local/share/agent-comms/runtimes"
             prefix = runtimes / f"core-{core[:9]}-lock-{resolution}"
-            built = replace(source, runtime=LaunchRuntime(prefix / "bin/python"),
+            built = replace(source, runtime=LaunchRuntime.at_prefix(prefix),
                             program=TargetProgram(checkout.path / STEPS.parent))
             if prefix.exists():
                 if not RuntimeResolution.at(prefix).matches(source.lock, built, core):
@@ -707,7 +707,7 @@ class Stack:
     def restore_stores(self, hold: MaintenanceState) -> MaintenanceState:
         """Retarget the caller's hold while the outgoing runtime rebuilds projections."""
         root = Path(hold.root)
-        runtime = LaunchRuntime(RootRuntimeStore.at(root).read().prefix / "bin/python")
+        runtime = RootRuntimeStore.at(root).read().runtime()
         outgoing = replace(self, runtime=runtime)
         maintenance = MaintenanceBarrier(RegistryStore.at(root).path)
         hold = maintenance.retarget(hold, runtime)
