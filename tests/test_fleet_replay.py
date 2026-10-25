@@ -176,7 +176,7 @@ class Fleet:
             self.commander, unit.name, todo.order.instructions(todo)
         ).message
         todo = self.comms.goals.todos.apply(
-            todo.id, OrderMessage(todo.revision, lead, original.message_id)
+            todo.id, OrderMessage(todo.revision, lead, original.message_id, at=RecordedEventTime(time.time()))
         )
         claimed = OrderClaim.for_order(
             todo,

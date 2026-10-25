@@ -153,7 +153,7 @@ def claim_order(held_bus):
         worker = held_bus.registry.require("worker").incarnation
         original = held_bus.messaging.send("lead", "worker", todo.order.instructions(todo)).message
         todo = held_bus.goals.todos.apply(
-            todo.id, OrderMessage(todo.revision, lead, original.message_id))
+            todo.id, OrderMessage(todo.revision, lead, original.message_id, at=RecordedEventTime(time.time())))
         claimed = OrderClaim.for_order(todo, worker, 1, "a" * 40,
                                       "Review the published repair", original.reference,
                                       store=held_bus.goals.todos)
@@ -184,7 +184,7 @@ def test_order_claim_publishes_only_to_its_retained_commander_birth(
     worker = comms.registry.require("worker").incarnation
     original = comms.messaging.send("lead", "worker", todo.order.instructions(todo)).message
     todo = comms.goals.todos.apply(
-        todo.id, OrderMessage(todo.revision, lead, original.message_id))
+        todo.id, OrderMessage(todo.revision, lead, original.message_id, at=RecordedEventTime(time.time())))
     claim = OrderClaim.for_order(
         todo, worker, 1, "a" * 40, "Review this published repair with @outsider", original.reference,
         store=comms.goals.todos)
@@ -651,7 +651,7 @@ def test_send_and_check_accept_a_deletion_check_on_fresh_main(
     # Problem creates the first order through Commander.send, including its message link.
     cli('problem', str(order_file), '--to', 'outsider', '--where', 'owner.py:2')
     first = held_bus.goals.todos.get('P3')
-    assert first.messages
+    assert first.latest_message.message_id
     document = replace(document, problems=('P3',),
                        order=replace(document.order, id='replacement-deletion'))
     order_file.write_text(json.dumps(FieldCodec.encode(document)))
@@ -663,7 +663,7 @@ def test_send_and_check_accept_a_deletion_check_on_fresh_main(
         'The original count also included comments rather than only declarations')
     current = held_bus.goals.todos.get('P3')
     assert current.order.id == sent.order.id
-    assert current.review_at == sent.review_at and current.strikes == sent.strikes
+    assert current.review_at == sent.review_at and current.strike_count == sent.strike_count
     assert current.order.check.command == corrected
     assert current.order.check.result == CountCheckResult(0)
     # Done's result rule remains the inverse: the delivered commit must meet the target.

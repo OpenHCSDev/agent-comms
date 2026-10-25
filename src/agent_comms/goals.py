@@ -527,9 +527,7 @@ class ProblemGoalOrder(GoalOrder):
 
     def progress(self, goal: Goal, todos: Sequence[Todo]) -> str:
         """Each problem's order state and latest verdict, as Core records them on its Todo."""
-        return "\n".join(" · ".join((f"{todo.id}: {todo.order.line}",
-                                     *(verdict.line for verdict in todo.verdicts[-1:])))
-                         for todo in todos)
+        return "\n".join(todo.progress_line() for todo in todos)
 
     def require_model_block(self) -> None:
         raise ValueError("A problem goal is not blocked by text: ask the commander to block the "

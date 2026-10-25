@@ -430,7 +430,7 @@ class UnownedWheelSpin(IndependentStandingRule, UndatedStandingRule):
         idle, found = cls.idle(comms, commander, scan), []
         for todo in (todo for todo in rows if todo.id not in protected):
             for unit in idle:
-                if not todo.live_strikes(unit.name):
+                if not todo.strikes_against(unit.incarnation):
                     idle.remove(unit)
                     found.append(ReassignedWheelSpin(todo, ReusedWorkDispatch.for_unit(
                         ReissuedOrderGoalAction.for_todo(todo, commander), unit)))

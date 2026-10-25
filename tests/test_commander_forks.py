@@ -189,7 +189,7 @@ def test_registered_fork_sends_parent_problem_with_fork_actor(fork_bus, tmp_path
     assert saved.creator_identity == parent.incarnation
     assert store.owner_request(saved.request.require()).commander == parent.incarnation
     assert saved.held().parent_identity == fork.incarnation
-    assert saved.messages[-1].actor == fork.incarnation
+    assert saved.latest_message.actor == fork.incarnation
     assert fork.parent.named(parent.name)
     assert fork.goal.require().id != parent.goal.require().id
     # Core's reissue acts as the fork that assigned the unit, under the fork's commander.

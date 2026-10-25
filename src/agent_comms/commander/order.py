@@ -107,11 +107,6 @@ def refuse(text, *families):
         sys.exit('REFUSED, nothing recorded: ' + ' '.join(refused))
 
 
-def struck(todo, unit):
-    """Strikes count per unit and task, across every order of that task the unit held."""
-    return len(todo.live_strikes(unit))
-
-
 # Eliminate forwarding with inheritance and multiple parents; decompose the hierarchy if it is not sound.
 # A forwarder restates an implementation pair (OOPSLA paper, Fig. 3: fields + forwarding leave routes to maintain), so
 # nothing the commander approves, delivers or orders may add or keep one. The cure is the hierarchy, never a
@@ -521,7 +516,7 @@ class ListedProblems(OrderedProblems):
                   listed: Mapping[str, Todo]) -> bool:
         return bool(group) and all(
             pid in listed and any(assignment.owner_identity == unit for assignment
-                                  in listed[pid].holder_state.current_assignments())
+                                  in listed[pid].current_holder.current_assignments())
             for pid in group)
 
     def record(self, context: CommanderContext, order: PendingProblemOrder, unit: str,
@@ -700,7 +695,7 @@ class Commander(CommanderContext):
     def posted(self, unit: str, todo: Todo, strike: StrikeTodo,
                answers: tuple[MessageReference, ...] = ()) -> None:
         """Publish a strike Core already recorded on the task's Todo to #comms."""
-        n = struck(todo, unit)
+        n = todo.strikes_against(self.comms.registry.require(unit).incarnation)
         taken = f", {todo.id} taken away" if todo.holder != unit else ""
         line = (f'{time.strftime("%Y-%m-%d")} {strike.at.clock()} {unit} (strike {n} on {todo.id}'
                 f'{taken}): {strike.reason}')
@@ -730,13 +725,14 @@ class Commander(CommanderContext):
         live = [s for s in todo.live_strikes() if at.selects(s)]
         if not live:
             sys.exit(at.refusal(task))
-        voided = live[-1]
+        voided = live[0]
         # posted to #comms, so refused before Core records the void
         refuse(why, *DirectiveText.checks())
         self.call(CommsChangeProblemTool(problem=task, operation=VoidStrikeTodo(
             todo.revision, self.incarnation, voided, why)))
         unit = voided.previous.owner
-        n = struck(self.comms.goals.todos.get(task), unit)
+        todo = self.comms.goals.todos.get(task)
+        n = todo.strikes_against(self.comms.registry.require(unit).incarnation)
         line = (f'{time.strftime("%Y-%m-%d %H:%M")} {unit} (strike voided on {task}, '
                 f'recorded {voided.at.clock()}; {n} strike(s) remain): {why}')
         self.on_record(line, 'Void', VerdictAudience.of(unit, todo))

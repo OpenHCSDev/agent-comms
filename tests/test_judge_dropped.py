@@ -67,7 +67,8 @@ def test_edit_only_on_a_deleted_branch_settles_as_dropped(discarded_and_kept):
     edits = unjudged(ctx)
     judge_dropped(ctx, edits["dropped-call"], DROPPED)
     assert "dropped-call" not in unjudged(ctx)
-    verdict = ctx.comms.goals.todos.get("P1").verdicts[-1]
+    todo = ctx.comms.goals.todos.get("P1")
+    verdict, = todo.history.events(todo.id, DroppedVerdict, limit=1, descending=True)
     assert isinstance(verdict, DroppedVerdict) and verdict.tool_call_id == "dropped-call"
 
 
@@ -123,8 +124,9 @@ def test_rewritten_settles_only_edits_the_pushed_commit_no_longer_holds(discarde
           "the later pushed commit replaced the formatter module entirely"], ctx)
     left = unjudged(ctx)
     assert "dropped-call" not in left and "kept-call" in left
-    verdict = ctx.comms.goals.todos.get("P1").verdicts[-1]
-    assert isinstance(verdict, RewrittenVerdict) and verdict.commit == head
+    todo = ctx.comms.goals.todos.get("P1")
+    (verdict,) = todo.history.events(todo.id, RewrittenVerdict, limit=1, descending=True)
+    assert verdict.commit == head
     assert "kept-call" in capsys.readouterr().out.splitlines()[-1]
 
 
@@ -156,5 +158,6 @@ def test_rewritten_reads_the_repository_the_edit_was_made_in(discarded_and_kept,
     why = "the later pushed commit replaced the marker module entirely"
     main(["rewritten", "worker", "--by", head, "--why", why], ctx)
     assert "other-call" not in unjudged(ctx)
-    verdict = ctx.comms.goals.todos.get("P1").verdicts[-1]
-    assert isinstance(verdict, RewrittenVerdict) and verdict.reason == why
+    todo = ctx.comms.goals.todos.get("P1")
+    (verdict,) = todo.history.events(todo.id, RewrittenVerdict, limit=1, descending=True)
+    assert verdict.reason == why

@@ -416,8 +416,7 @@ class Spinning(NeedsCommanderAttention, PendingWorkState, UnitState):
         sends = sorted(
             at
             for todo in source.pending
-            for verdict in todo.verdicts
-            for at in verdict.send_back_times()
+            for at in todo.history.facts_for(todo.id).send_backs[:2]
         )
         calls = source.calls
         repeats = len(calls) >= 2 and calls[-1].digest == calls[-2].digest
