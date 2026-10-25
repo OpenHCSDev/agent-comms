@@ -86,6 +86,7 @@ from agent_comms.installer.interpreter_operation import (
     GitPhase,
     InstallClock,
     InstallRunPhase,
+    InstalledProgram,
     LiveCheckoutPreparePhase,
     LivePhase,
     OutgoingRuntimeMaintenancePhase,
@@ -98,7 +99,6 @@ from agent_comms.installer.interpreter_operation import (
     ReleaseBridgePhase,
     RestoredCheckoutPreparePhase,
     RestoreSpaceBackupPhase,
-    RetainedProgram,
     RetargetMaintenancePhase,
     RouteAndRuntimePublicationPhase,
     RuntimeProbe,
@@ -518,10 +518,10 @@ class Stack:
     commands: InstallCommands
     home: Path = HOME
     runtime: LaunchRuntime = field(default_factory=LaunchRuntime.installed)
-    program: ProbeProgram = field(default_factory=RetainedProgram.current)
-    """How this runtime's worker reaches the operation family: the outgoing runtime runs
-    the target's source of it, read once so reports outlive the tree; a runtime built
-    from the target declares it itself."""
+    program: ProbeProgram = InstalledProgram()
+    """How this runtime's worker reaches the operation family: the outgoing runtime answers
+    from its own installed installer; a runtime built from the target declares it too,
+    with the tree's carry steps beside it."""
 
     @property
     def python(self) -> Path:
