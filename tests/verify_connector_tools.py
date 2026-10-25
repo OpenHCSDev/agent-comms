@@ -29,7 +29,7 @@ from agent_comms.child_process import ProcessIdentity
 from agent_comms.comms import Comms, wire
 from agent_comms.connector_caller import CALLER
 from agent_comms.connector_store import ConnectorStore
-from agent_comms.field_codec import FieldCodec, TurnId, GoalId
+from agent_comms.field_codec import FieldCodec, TurnId, GoalId, OrderId
 from agent_comms.goal_actions import CreateProblemGoalAction, PausedGoalAction, SetGoalAction
 from agent_comms.goals import CountCheckResult, OrderCheck
 from agent_comms.owner_requests import NewestOpenRequest
@@ -43,6 +43,9 @@ from agent_comms.order_tools import CommsOrderDoneTool, CommsTodoCreateTool
 from connector_readiness import ConnectorReadiness
 from order_scope_fixture import FIX_SCOPE
 from agent_comms.threads import Thread
+
+
+PROBE_ORDER_ID = OrderId.mint()
 
 
 def seed(root: Path, project: Path) -> None:
@@ -74,7 +77,7 @@ def arguments(comms: Comms, name: str, project: Path, checkout: Path) -> dict:
     goal_id = comms.registry.require("claude-ai").goal.require().id
     actor = FieldCodec.encode(comms.registry.require("claude-ai").incarnation)
     pending = PendingProblemOrder(
-        id="probe-order", scope=FIX_SCOPE,
+        id=PROBE_ORDER_ID, scope=FIX_SCOPE,
         owner=FileLine(__file__, 1),
         run=MechanicalOrderRun(),
         check=OrderCheck(project, "printf 1", CountCheckResult(1)),
@@ -97,6 +100,7 @@ def arguments(comms: Comms, name: str, project: Path, checkout: Path) -> dict:
     order_tools = {
         "comms_todo",
         "comms_verdict",
+        "comms_verdicts",
         "comms_fire",
         "comms_correct_wording",
         "comms_todo_list",
@@ -104,6 +108,7 @@ def arguments(comms: Comms, name: str, project: Path, checkout: Path) -> dict:
         "comms_todo_create",
         "comms_order_done",
         "comms_order_check",
+        "comms_order_run",
         "comms_order_serve",
         "comms_problem_close",
         "comms_order_work",
@@ -130,7 +135,7 @@ def arguments(comms: Comms, name: str, project: Path, checkout: Path) -> dict:
     if name == "comms_problem_close":
         CommsOrderDoneTool(
             problem="P1",
-            order_id="probe-order",
+            order_id=PROBE_ORDER_ID,
             delivery=OperationDelivery(),
             claims=(WorkingClaim(str(screenshot)),),
         ).apply(comms, ThreadCaller("claude-ai"))
@@ -184,6 +189,7 @@ def arguments(comms: Comms, name: str, project: Path, checkout: Path) -> dict:
             },
         },
         "comms_verdict": {"id": "P1", "operation": verdict},
+        "comms_verdicts": {"verdicts": [{"problem": "P1", "operation": verdict}]},
         "comms_unjudged": {},
         "comms_fire": {
             "unit": "worker",
@@ -199,9 +205,6 @@ def arguments(comms: Comms, name: str, project: Path, checkout: Path) -> dict:
         },
         "comms_todo_list": {},
         "comms_standing_rules": {},
-        "comms_rule_review": {
-            "entry": {"kind": "drawn", "drawn": ["Read the original source."], "cited": 1}
-        },
         "comms_order": {
             "owner": "worker",
             "order": {
@@ -213,7 +216,7 @@ def arguments(comms: Comms, name: str, project: Path, checkout: Path) -> dict:
         "comms_todo_create": {"owner": "worker", "order": FieldCodec.encode(order)},
         "comms_order_done": {
             "problem": "P1",
-            "order_id": "probe-order",
+            "order_id": str(PROBE_ORDER_ID),
             "delivery": {"kind": "operation"},
             "claims": [{"kind": "working", "screenshot": str(screenshot)}],
         },
@@ -222,6 +225,11 @@ def arguments(comms: Comms, name: str, project: Path, checkout: Path) -> dict:
             "check": FieldCodec.encode(pending.check),
             "why": "The earlier check counted the wrong output.",
         },
+        "comms_order_run": {
+            "problem": "P1",
+            "run": "The scratch application shows the original recorded answer.",
+            "why": "The earlier run named a view the scratch app deleted.",
+        },
         "comms_order_serve": {"problem": "P1", "serves": "skill"},
         "comms_problem_close": {
             "problem": "P1",
@@ -229,6 +237,7 @@ def arguments(comms: Comms, name: str, project: Path, checkout: Path) -> dict:
             "artifact": str(screenshot),
         },
         "comms_turns": {"thread": "worker"},
+        "comms_input_delivery": {"thread": "worker"},
         "comms_order_work": {"problem": "P1"},
         "comms_threads": {},
         "comms_work_branches": {"checkout": str(checkout)},

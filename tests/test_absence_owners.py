@@ -8,6 +8,7 @@ from agent_comms import agent_events as events
 from agent_comms.agent_backend import InputStartListener, NoInputStartListener, SendNow, TurnInbox
 from agent_comms.backend import EventFinishSignal, FinishSignal, NoFinishSignal
 from agent_comms.change_report import FileLine, NoSourceReference
+from agent_comms.errors import TodoError
 from agent_comms.field_codec import FieldCodec, InputId
 from agent_comms.input_drain import DrainedSession
 from agent_comms.native_child import NoInputForwarder
@@ -17,23 +18,24 @@ from agent_comms.pi_commands import GetState
 from agent_comms.pi_payloads import AnonymousRequest, RequestId
 from agent_comms.turn_goal_permission import InactiveGoalPermission, TurnGoalPermission
 from agent_comms.turn_input_source import SelectedOriginalInput
+from agent_comms.turn_item import PiRequestKey
 
 
 def test_drain_lifecycle_keeps_inbox_and_original_in_one_owner():
     state = DrainedSession()
-    assert not state.turn_open() and not state.turn_started()
+    assert not state.turn_open() and not state.turn.has_source
     with pytest.raises(KeyError):
         state.require_inbox()
     state.to_turn(SendNow((InputId.mint(),)))
     inbox = state.open_inbox()
     assert state.open_inbox() is inbox and inbox.empty()
-    assert state.turn_open() and not state.turn_started()
+    assert state.turn_open() and not state.turn.has_source
     with pytest.raises(KeyError):
         state.require_first_source()
     original = SelectedOriginalInput.answering(
         "original input", TurnGoalPermission(InactiveGoalPermission()))
     state.capture_first_source(original)
-    assert state.turn_started() and state.require_first_source() is original
+    assert state.turn.has_source and state.require_first_source() is original
     item = SendNow((InputId.mint(),))
     state.to_turn(item)
     assert inbox.get_nowait() is item
@@ -42,14 +44,14 @@ def test_drain_lifecycle_keeps_inbox_and_original_in_one_owner():
     assert state.require_inbox() is inbox and state.require_first_source() is original
     retired = state.retire_turn(inbox)
     assert retired.require_source() is original
-    assert not state.turn_open() and not state.turn_started()
+    assert not state.turn_open() and not state.turn.has_source
     assert state.open_inbox() is not inbox
 
 
 def test_absent_holder_and_attempt_preserve_refusals_without_runtime_probes():
     from agent_comms.coordination_errors import RecoveryBlocked, StaleFence
     from agent_comms.coordination_tables.attempts import NoPreviousAttempt
-    from agent_comms.todos import NoTodoHolder, TodoError
+    from agent_comms.todos import NoTodoHolder
 
     holder = NoTodoHolder()
     assert holder.current_assignments() == ()
@@ -143,4 +145,4 @@ def test_optional_rpc_id_is_refused_when_an_input_requires_correlation():
     assert "id" not in command.to_rpc()
     with pytest.raises(ValueError):
         command.require_id()
-    assert GetState(id=RequestId("correlated")).require_id() == "correlated"
+    assert GetState(id=RequestId(PiRequestKey("correlated"))).require_id() == "correlated"

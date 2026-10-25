@@ -15,6 +15,7 @@ import sys
 from abc import ABC, abstractmethod
 from collections.abc import Mapping
 from dataclasses import dataclass, fields
+from functools import cache
 from importlib import import_module
 from importlib.metadata import entry_points
 from pathlib import Path
@@ -37,10 +38,11 @@ class HookRecord:
 
     @staticmethod
     def field(declared: type, value: object) -> object:
-        """A nested record is decoded by its own fields; a JSON scalar is kept as written."""
+        """A nested record is decoded by its own fields; any other JSON value is built by its
+        declared type, so a nominal identity such as `SubagentId` is one from decode on."""
         if isinstance(value, Mapping) and issubclass(declared, HookRecord):
             return declared.decode(value)
-        return value
+        return declared(value)
 
 
 @dataclass(frozen=True)
@@ -63,14 +65,6 @@ class ClaudeHook(HookRecord):
 
 
 @dataclass(frozen=True)
-class ClaudeToolHook(ClaudeHook):
-    """What Claude Code adds for a tool-call event: the tool and its input."""
-
-    tool_name: str
-    tool_input: dict
-
-
-@dataclass(frozen=True)
 class ClaudeTranscriptHook(ClaudeHook):
     """A hook that reads the session's transcript, which Claude Code names on every event."""
 
@@ -90,6 +84,14 @@ class ClaudeTranscriptHook(ClaudeHook):
             start = max(0, transcript.seek(0, 2) - self.window)
             transcript.seek(start)
             return transcript.read().splitlines()[1 if start else 0 :]
+
+
+@dataclass(frozen=True)
+class ClaudeToolHook(ClaudeTranscriptHook):
+    """What Claude Code adds for a tool-call event: the tool and its input."""
+
+    tool_name: str
+    tool_input: dict
 
 
 class ClaudeHookProgram(ABC):
@@ -127,13 +129,30 @@ class ClaudeHookProgram(ABC):
 
     @classmethod
     def owns_entry(cls, entry: Mapping[str, object]) -> bool:
-        """Ownership survives deletion of a program and its console script."""
-        return entry.get("writer") == cls.writer
+        """Ownership survives deletion of a program and its console script. An untagged
+        entry running only this package's hooks was written before the tag existed;
+        install adopts it, so each hook keeps one entry."""
+        match entry:
+            case {"writer": writer} if writer == cls.writer:
+                return True
+            case {"hooks": [_, *_] as hooks}:
+                return all(hook in cls.hooks() for hook in hooks)
+        return False
+
+    @classmethod
+    @cache
+    def hooks(cls) -> tuple[dict[str, str], ...]:
+        """The hook every declared program installs."""
+        return tuple(program.hook() for program in cls.members())
+
+    @classmethod
+    def hook(cls) -> dict[str, str]:
+        return {"type": "command", "command": cls.command()}
 
     @classmethod
     def entry(cls) -> dict[str, object]:
         """This program's entry, marked so install can replace what it wrote."""
-        return {"writer": cls.writer, "hooks": [{"type": "command", "command": cls.command()}]}
+        return {"writer": cls.writer, "hooks": [cls.hook()]}
 
 
 class ClaudeToolHookProgram(ClaudeHookProgram, ABC):
@@ -172,8 +191,15 @@ class BashRefusal(ClaudeToolHookProgram, ABC):
         return cls.console_script(f"{cls.__module__}:main")
 
     @classmethod
+    def binds(cls, hook: ClaudeToolHook) -> bool:
+        """Whether the refusal holds in this hook's session; it holds in every session."""
+        return True
+
+    @classmethod
     def main(cls) -> None:
         hook = ClaudeToolHook.read()
+        if not cls.binds(hook):
+            return
         reasons = cls.reasons(Bash.decode(hook.tool_input).command)
         if reasons:
             hook.respond(

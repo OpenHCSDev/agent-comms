@@ -1,0 +1,203 @@
+#!/usr/bin/env bash
+# Build the pinned input-ID Pi copy on persistent disk. Never alter stock Pi.
+set -euo pipefail
+umask 077
+# Preparation runs Node only for version/syntax checks, never ambient preloads.
+unset NODE_OPTIONS NODE_PATH NODE_COMPILE_CACHE
+export NODE_DISABLE_COMPILE_CACHE=1
+update_pins=false
+publish_root=
+source "${BASH_SOURCE[0]%/*}/native-source"
+# agent_comms and the patch scripts run under the stack environment `uv sync
+# --project stack` installs, or the --python interpreter that has its dependencies.
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --python)
+            [[ $# -ge 2 ]] || {
+                printf 'Usage: stack/native/prepare-pi-native [--update-pins] [--publish DEPLOYMENT_ROOT] [--python PATH]\n' >&2
+                exit 1
+            }
+            python=$2
+            shift 2
+            ;;
+        --update-pins)
+            update_pins=true
+            shift
+            ;;
+        --publish)
+            [[ $# -ge 2 && -z "$publish_root" ]] || {
+                printf 'Usage: stack/native/prepare-pi-native [--update-pins] [--publish DEPLOYMENT_ROOT] [--python PATH]\n' >&2
+                exit 1
+            }
+            publish_root=$2
+            shift 2
+            ;;
+        *)
+            printf 'Usage: stack/native/prepare-pi-native [--update-pins] [--publish DEPLOYMENT_ROOT] [--python PATH]\n' >&2
+            exit 1
+            ;;
+    esac
+done
+
+if [[ ! -x "$python" ]]; then
+    printf 'The stack environment is unavailable; run uv sync --project %s first.\n' "$stack_root" >&2
+    exit 1
+fi
+manifest="$stack_root/pi-native.sha256"
+# Build verification renders the unit prompt, never a unit's first turn.
+identity=$("$python" -I "$repo_root/src/agent_comms/native_build_inputs.py" \
+    "$repo_root" "$(node --version)" "$(npm --version)" "${PI_MCP_DEPENDENCY_PACKAGE:-}")
+read -r build_id preparation_stamp <<< "$identity"
+store_root=$(native store)
+target="$store_root/.pi-native-$build_id"
+stamp_name=.prepared-inputs.sha256
+bedrock=node_modules/@earendil-works/pi-ai/dist/api/bedrock-converse-stream.js
+
+verify() (
+    cd -- "$1/node_modules/@earendil-works/pi-coding-agent"
+    sha256sum --check --status "$manifest" &&
+        native verify "$PWD"
+)
+
+publish() (
+    local prepared=$1 deployment
+    if [[ -z "$publish_root" ]]; then
+        native qualify "$prepared/node_modules/@earendil-works/pi-coding-agent"
+    else
+        mkdir -p -- "$publish_root"
+        publish_root=$(cd -- "$publish_root" && pwd -P)
+        deployment="$publish_root/.pi-native-$build_id"
+        native publish_sources "$repo_root" "$prepared/node_modules/@earendil-works/pi-coding-agent"
+        native link "$publish_root"
+        printf 'PI_NATIVE_DEPLOYMENT=%s\n' "$deployment"
+    fi
+    printf 'PI_NATIVE_BIN=%s/bin/pi-native\n' "$stack_root"
+)
+
+accept() (
+    publish "$target"
+    native link "$stack_root"
+    # Checkouts own only links. A build can still serve another runtime after a
+    # checkout drops its link, so artifact retirement belongs to the store.
+    for stale in "$stack_root"/.pi-native-????????????????; do
+        if [[ -L "$stale" && "$stale" != "$stack_root/.pi-native-$build_id" ]]; then
+            rm -- "$stale"
+        fi
+    done
+)
+
+if [[ "$update_pins" == false && -f "$target/$stamp_name" \
+      && $(< "$target/$stamp_name") == "$preparation_stamp" ]]; then
+    accept
+    exit 0
+fi
+
+# Stock Pi is the published package with the dependencies its own
+# npm-shrinkwrap.json names. A global install resolves them afresh, so its tree
+# depends on the day it ran. npm 12 reads only package-lock.json, and `npm ci`
+# also checks devDependencies, which the published lock leaves out; both are
+# changed for the install alone and the published package.json is restored.
+stock_spec=$(sed -n 's/^# agent-comms-native-stock-v1 //p' "$manifest")
+if [[ "$stock_spec" != @earendil-works/pi-coding-agent@* ]]; then
+    printf 'Pinned stock Pi is unavailable in %s\n' "$manifest" >&2
+    exit 1
+fi
+stock_root=$(mktemp -d "${TMPDIR:-/var/tmp}/agent-comms-pi-stock-XXXXXXXX")
+trap 'rm -rf -- "$stock_root"' EXIT
+stock="$stock_root/package"
+tarball=$(cd -- "$stock_root" && npm pack --silent "$stock_spec")
+tar -xzf "$stock_root/$tarball" -C "$stock_root"
+cp -- "$stock/package.json" "$stock_root/package.json"
+(
+    cd -- "$stock"
+    npm pkg delete devDependencies
+    cp -- npm-shrinkwrap.json package-lock.json
+    npm ci --omit=dev --ignore-scripts --no-audit --no-fund --loglevel=error
+    rm -- package-lock.json node_modules/.package-lock.json
+)
+cp -- "$stock_root/package.json" "$stock/package.json"
+
+# The experiment validates stock bytes, applies the pinned native ID patch with
+# zero fuzz, and checks JS syntax. Its Bedrock transport edit is intentionally
+# restored below: the running stack must not fork Pi's network layer.
+prepared=$(
+    PI_STOCK_DIR="$stock" "$native_root/prepare-copied-pi.sh" "$stock_spec" \
+        | sed -n 's/^PI_PACKAGE_DIR=//p'
+)
+scratch_root=${prepared%/node_modules/@earendil-works/pi-coding-agent}
+if [[ "$prepared" != "${TMPDIR:-/var/tmp}"/agent-comms-pi-native-*/node_modules/@earendil-works/pi-coding-agent \
+      || ! -d "$prepared" ]]; then
+    printf 'Native Pi preparation did not return a validated package.\n' >&2
+    exit 1
+fi
+
+stage=$(mktemp -d "$store_root/.pi-native.stage.XXXXXXXX")
+trap 'native retire "$stage"; rm -rf -- "$scratch_root" "$stock_root"' EXIT
+mv -- "$scratch_root/node_modules" "$stage/node_modules"
+cp -- "$stock/$bedrock" "$stage/node_modules/@earendil-works/pi-coding-agent/$bedrock"
+compaction=dist/core/compaction/compaction.js
+session=dist/core/agent-session.js
+"$python" "$native_root/patch-native-steering.py" \
+    "$stage/node_modules/@earendil-works/pi-coding-agent"
+manager=dist/core/session-manager.js
+services=dist/core/agent-session-services.js
+"$python" "$native_root/patch-native-model-config.py" \
+    "$stage/node_modules/@earendil-works/pi-coding-agent/$services"
+rpc=dist/modes/rpc/rpc-mode.js
+# One SessionManager storage owner; replace eager loaders and their consumers together.
+native_package="$stage/node_modules/@earendil-works/pi-coding-agent"
+patch --batch --fuzz=0 --no-backup-if-mismatch -p1 -d "$native_package" < "$native_root/native-session-storage.patch"
+cp -- "$native_root/native-session-entry-store.mjs" "$native_package/dist/core/session-entry-store.js"
+cp -- "$native_root/native-session-entry-store.d.ts" "$native_package/dist/core/session-entry-store.d.ts"
+cp -- "$native_root/native-proof-journal.mjs" "$native_package/dist/core/native-proof-journal.js"
+cp -- "$native_root/native-proof-journal.d.ts" "$native_package/dist/core/native-proof-journal.d.ts"
+cp -- "$native_root/native-private-file.mjs" "$native_package/dist/core/native-private-file.js"
+cp -- "$native_root/native-proof-schema.mjs" "$native_package/dist/core/native-proof-schema.js"
+"$python" "$native_root/patch-native-compaction-brief.py" "$native_package/$session"
+"$python" "$native_root/patch-native-compaction-wip.py" "$native_package/$session"
+"$python" "$native_root/patch-native-compaction-cap.py" "$native_package"
+"$python" "$native_root/patch-native-turn-context.py" \
+    "$stage/node_modules/@earendil-works/pi-coding-agent"
+"$python" "$native_root/patch-native-file-artifact.py" \
+    "$stage/node_modules/@earendil-works/pi-coding-agent"
+patch --batch --fuzz=0 --no-backup-if-mismatch -p1 \
+    -d "$stage/node_modules/@earendil-works/pi-coding-agent" < "$native_root/native-request-progress-adapters.patch"
+"$python" "$native_root/patch-native-request-observation.py" \
+    "$stage/node_modules/@earendil-works/pi-coding-agent"
+"$python" "$native_root/prepare-native-import-boundary.py" \
+    "$stage/node_modules/@earendil-works/pi-coding-agent" \
+    ${PI_MCP_DEPENDENCY_PACKAGE:+"$PI_MCP_DEPENDENCY_PACKAGE"}
+native share_resources \
+    "$stage/node_modules/@earendil-works/pi-coding-agent" "$store_root"
+if [[ "$update_pins" == true ]]; then
+    native write_manifest "$native_package"
+    identity=$("$python" -I "$repo_root/src/agent_comms/native_build_inputs.py" \
+        "$repo_root" "$(node --version)" "$(npm --version)" "${PI_MCP_DEPENDENCY_PACKAGE:-}")
+    read -r build_id preparation_stamp <<< "$identity"
+    target="$store_root/.pi-native-$build_id"
+fi
+if ! verify "$stage"; then
+    printf 'The built native tree differs from %s. If a source or the stock release\n' "$manifest" >&2
+    printf 'changed on purpose, run %s --update-pins and commit the manifest.\n' "$0" >&2
+    printf 'Built tree: %s (npm %s)\n' \
+        "$(native digest \
+            "$stage/node_modules/@earendil-works/pi-coding-agent")" "$(npm --version)" >&2
+    exit 1
+fi
+node --check "$stage/node_modules/@earendil-works/pi-coding-agent/$manager"
+node --check "$stage/node_modules/@earendil-works/pi-coding-agent/dist/core/settings-manager.js"
+node --check "$stage/node_modules/@earendil-works/pi-coding-agent/$bedrock"
+node --check "$stage/node_modules/@earendil-works/pi-coding-agent/$compaction"
+node --check "$stage/node_modules/@earendil-works/pi-coding-agent/$session"
+node --check "$stage/node_modules/@earendil-works/pi-coding-agent/$rpc"
+node --check "$stage/node_modules/@earendil-works/pi-coding-agent/$services"
+if [[ -e "$target" ]]; then
+    verify "$target"
+    accept
+    printf '%s\n' "$preparation_stamp" > "$target/$stamp_name"
+    exit 0
+fi
+mv -- "$stage" "$target"
+trap 'rm -rf -- "$scratch_root" "$stock_root"' EXIT
+accept
+printf '%s\n' "$preparation_stamp" > "$target/$stamp_name"

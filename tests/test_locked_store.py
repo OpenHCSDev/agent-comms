@@ -1,19 +1,30 @@
 """Canonical locks and durable bytes through a real declared document store."""
 from __future__ import annotations
 
+import fcntl
 import json
 import multiprocessing
 import os
 import stat
-from contextlib import contextmanager
+import threading
+from contextlib import contextmanager, redirect_stderr
 from dataclasses import dataclass, replace
 
 import pytest
 
 from agent_comms.locked_store import DocumentChange, LockedStore
 from agent_comms.pi_counts import PiCount
+from agent_comms.registry_store import RegistryStore
 from agent_comms.runtime_info import AgentRuntimeInfo, RuntimeInfoDocument, RuntimeInfoStore
-from agent_comms.store_files import ExclusiveLock, SharedLock, StoreLockContention, _store_lock
+from agent_comms.child_process import Platform
+from agent_comms.store_files import (
+    ExclusiveLock,
+    HolderNamingContention,
+    StoreLockBusyError,
+    StoreLockContention,
+    UNBOUNDED_CONTENTION,
+    _store_lock,
+)
 
 
 def observation(thread="goal"):
@@ -39,16 +50,25 @@ def clear(store, thread, *, timestamp=None):
 
 
 def _hold_lock(path, mode, ready, release):
-    with _store_lock(path, mode=mode):
+    with _store_lock(path, mode, UNBOUNDED_CONTENTION):
         ready.set()
         if not release.wait(10):
             raise TimeoutError("lock holder was not released")
 
 
-def _read(path, started, done):
-    started.set()
-    RuntimeInfoStore(path).read()
-    done.set()
+def _hold_store_write(owner, path, ready, release):
+    with owner.write_guard(path):
+        ready.set()
+        if not release.wait(15):
+            raise TimeoutError("store writer was not released")
+
+
+def _guarded_read(owner, path, started, done, diagnostics):
+    with diagnostics.open("w") as report, redirect_stderr(report):
+        store = owner(path)
+        started.set()
+        with store.guarded_read():
+            done.set()
 
 
 def _record(path, start, prefix):
@@ -59,7 +79,7 @@ def _record(path, start, prefix):
 
 
 def _record_under_wire(path, ready):
-    with _store_lock(path.parent / "wire"):
+    with _store_lock(path.parent / 'wire', ExclusiveLock(), UNBOUNDED_CONTENTION):
         store = RuntimeInfoStore(path)
         record(store, observation())
         assert store.read().observations == {"goal": observation()}
@@ -91,7 +111,7 @@ def event():
 
 
 def _writer_refused(path):
-    with pytest.raises(BlockingIOError), _store_lock(path, contention=StoreLockContention(0)):
+    with pytest.raises(BlockingIOError), _store_lock(path, ExclusiveLock(), StoreLockContention(0)):
         pytest.fail("writer entered during reader")
 
 
@@ -226,39 +246,23 @@ def test_invalid_boundary_is_not_overwritten(tmp_path):
 
 
 @pytest.mark.skipif(os.name != "posix", reason="POSIX flock contention contract")
-def test_shared_readers_overlap_and_exclude_writer(tmp_path):
-    path = tmp_path / "runtime_info.json"
-    record(RuntimeInfoStore(path), observation())
-    ready1, ready2, release = event(), event(), event()
-    with (
-        process(_hold_lock, path, SharedLock(), ready1, release),
-        process(_hold_lock, path, SharedLock(), ready2, release),
-    ):
-        try:
-            assert ready1.wait(5) and ready2.wait(5)
-            started, done = event(), event()
-            with process(_read, path, started, done):
-                assert done.wait(5), "snapshot did not share the held read locks"
-            with pytest.raises(BlockingIOError), _store_lock(path, contention=StoreLockContention(0)):
-                pass
-        finally:
-            release.set()
-
-
-@pytest.mark.skipif(os.name != "posix", reason="POSIX flock contention contract")
-def test_exclusive_writer_blocks_snapshot_and_other_writer(tmp_path):
-    path = tmp_path / "runtime_info.json"
+def test_registry_reads_wait_and_name_the_writer(tmp_path):
+    """A multi-file registry cut waits and names its writer."""
+    registry = RegistryStore(tmp_path / "registry.json")
     ready, release, started, done = event(), event(), event(), event()
-    with process(_hold_lock, path, ExclusiveLock(), ready, release):
+    diagnostics = tmp_path / "registry-wait.log"
+    with process(_hold_store_write, RegistryStore, registry.path, ready, release) as writer:
         try:
             assert ready.wait(5)
-            with process(_read, path, started, done):
+            with pytest.raises(StoreLockBusyError), registry.read_now():
+                pytest.fail("a registry try-read entered during a write")
+            with process(_guarded_read, RegistryStore, registry.path, started, done, diagnostics):
                 assert started.wait(5)
-                assert not done.wait(0.2)
-                with pytest.raises(BlockingIOError), _store_lock(path, contention=StoreLockContention(0)):
-                    pass
+                assert not done.wait(5.2), "a registry read crossed its held write lock"
+                assert "store lock still waiting after 5 s, " in diagnostics.read_text()
+                assert f"PID {writer.pid}: " in diagnostics.read_text()
                 release.set()
-                assert done.wait(5)
+                assert done.wait(5), "a registry read did not resume after its writer"
         finally:
             release.set()
 
@@ -276,3 +280,17 @@ def test_wire_nesting_does_not_reacquire_document_lock(tmp_path):
     done = event()
     with process(_record_under_wire, tmp_path / "runtime_info.json", done):
         assert done.wait(5)
+
+
+def test_slow_lock_wait_names_its_holder_once(tmp_path, capsys):
+    """Install 18 waited 59 s for the registry lock and nobody could say who held it."""
+    path = tmp_path / "held"
+    path.write_bytes(b"")
+    with open(path, "rb") as held, open(path, "rb") as waiting:
+        fcntl.flock(held, fcntl.LOCK_EX)
+        threading.Timer(.5, fcntl.flock, (held, fcntl.LOCK_UN)).start()
+        HolderNamingContention(.1).acquire(
+            waiting.fileno(), Platform.current(), mode=ExclusiveLock())
+    err = capsys.readouterr().err
+    assert err.count("store lock still waiting after 0.1 s, held by ") == 1, err
+    assert f"PID {os.getpid()}: " in err

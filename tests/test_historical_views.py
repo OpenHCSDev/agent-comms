@@ -7,11 +7,13 @@ from pathlib import Path
 
 import pytest
 
+from agent_comms.locked_store import LiveFilesRequest
 from agent_comms.bus import Bus, PublicRecord
 from agent_comms.channel_targets import CommandTarget, ThreadTarget
 from agent_comms.comms import wire
 from agent_comms.coordination_errors import HistoricalSourceChanged
 from agent_comms.field_codec import InputId
+from agent_comms.turn_item import FreshNativeId
 from agent_comms.historical_views import HistoricalMessage, HistoryArchive
 from agent_comms.installer.backup import bus_files
 from agent_comms.message_page import MessagePageRequest, PageBounds
@@ -29,6 +31,7 @@ from agent_comms.read_basis import (
 )
 from agent_comms.read_ledger import ReadLedger
 from agent_comms.routing import MessageRoute, TurnRouting
+from agent_comms.transcript_routes import DisplayText
 from agent_comms.session_file import RegistrySessionLocation
 from agent_comms.threads import Thread
 
@@ -119,7 +122,7 @@ def test_original_identity_and_no_delivery_authority(migrated):
     original = list(old.views.history_page(CommandTarget.named("#team")).messages)
     assert [m.to_wire() for m in historical] == [Message.from_message(m).to_wire() for m in original]
     assert all(m.sender_created_at == 10.0 for m in historical)
-    assert len(live.bus.incoming_page("bob", after=0).messages) == 2
+    assert len(live.bus.inbox("bob").page.messages) == 2
     assert live.bus.bus.revision() == 4
     assert live.views.attach_history(old.root) == source
     assert len(live.bus.history.sources()) == 2
@@ -204,8 +207,8 @@ def test_duplicate_and_newer_incarnations_sessions(tmp_path):
         edit.document.threads["alice"] = replace(edit.document.threads["alice"], session_file=RegistrySessionLocation.from_path(str(session), tmp_path))
         edit.commit()
     routing = TurnRouting(reply=MessageRoute("alice", ("#team",)))
-    old.transcripts.routes.record(str(session), ("two",), routing)
-    old.transcripts.routes.record_input_display(native_id, "original owner question")
+    old.transcripts.routes.record(str(session), (FreshNativeId("two"),), routing)
+    old.transcripts.routes.record_input_display(native_id, DisplayText("original owner question"))
     live = setup(tmp_path / "live", 0)
     newer = replace(live.registry.require("alice"), created_at=20.0)
     live.registry.unregister("alice")
@@ -214,20 +217,16 @@ def test_duplicate_and_newer_incarnations_sessions(tmp_path):
     source = live.views.attach_history(old.root)
     # Later source annotations cannot change the already attached snapshot.
     old.transcripts.routes.record(
-        str(session), ("two",), TurnRouting(reply=MessageRoute("alice", ("#later",)))
+        str(session), (FreshNativeId("two"),), TurnRouting(reply=MessageRoute("alice", ("#later",)))
     )
     declarations = {h.thread.name: h.thread for h in live.views.historical_threads()}
     assert declarations["alice"].created_at == declarations["bob"].created_at == 10.0
     assert live.registry.require("alice").created_at == 20.0
-    page = live.transcripts.thread_transcript_page(
-        "alice", historical_source=source.key, max_messages=1
-    )
-    assert [e.text for e in page.events] == ["old answer"]
-    assert page.events[0].routing == routing
-    earlier = live.transcripts.thread_transcript_page(
-        "alice", historical_source=source.key, before=page.before, max_messages=1
-    )
-    assert [e.text for e in earlier.events if e.declared_name == "user"] == [
+    page = live.transcripts.capture_page_read("alice", historical_source=source.key).read()
+    (answer,) = (e for e in page.events if e.declared_name == "assistant")
+    assert answer.text == "old answer"
+    assert answer.routing == routing
+    assert [e.text for e in page.events if e.declared_name == "user"] == [
         "original owner question"
     ]
     assert session.read_text() == "".join(json.dumps(r) + "\n" for r in records)
@@ -314,7 +313,7 @@ def test_normal_comms_api_contains_history_and_execution_stays_live(migrated):
 def root_bytes(root: Path) -> dict[Path, bytes]:
     """The bytes of every member the backup owner records for this root."""
     return {path: (root / path).read_bytes()
-            for members in bus_files(root).values() for path in members}
+            for members in bus_files(LiveFilesRequest(root)).values() for path in members}
 
 
 def test_attach_only_reads_original_roots_and_rejects_changed_snapshot(tmp_path):

@@ -14,7 +14,7 @@ from agent_comms.bus_publication import Delivered
 from agent_comms.bus_tables import ReceivedSource
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.coordination_errors import StaleFence
-from agent_comms.field_codec import TurnId
+from agent_comms.field_codec import GoalWaitId, TurnId
 from agent_comms.goal_actions import (
     EditGoalAction,
     GoalActionContext,
@@ -34,6 +34,7 @@ from agent_comms.tools import CommsGoalTool
 from agent_comms.reported_turn import NoReportedTurn
 from goal_owner_fixture import canonical_goal_wire
 from agent_comms.threads import Thread
+from agent_comms.goal_scope import OneGoal
 
 
 class RegistryProbeBus(Bus):
@@ -106,7 +107,7 @@ def probed(reviewing):
 
 def standby(comms, reviewed_inputs=()):
     return StandbyGoalAction(
-        expect=GoalPrecondition(goal_id=comms.registry.require("owner").goal.require().id),
+        expect=GoalPrecondition(goal_id=OneGoal(comms.registry.require("owner").goal.require().id)),
         wait_for=("child",), reviewed_inputs=reviewed_inputs,
     )
 
@@ -149,7 +150,7 @@ def test_reply_appended_between_review_and_publication_is_still_eligible(reviewi
     cut = reviewing.bus.bus.revision()
     prepared = standby(reviewing).prepare(reviewing.goals, "owner", RuntimeInvocable)
     reply = reviewing.messaging.send("child", "owner", "Arrived during review").message
-    with reviewing.registry.store.locked():
+    with reviewing.registry.store.guarded_write():
         prepared.apply(GoalActionContext(
             reviewing.goals, reviewing.registry.require("owner"), RuntimeInvocable,
         ))
@@ -169,7 +170,7 @@ def replace_wait(comms, prepared):
     goal = owner.goal.require()
     target = comms.registry.require("child")
     comms.goals.waits.record(RecordedGoalWait(
-        goal.id, "newer-wait", goal.revision, prepared.review.through_seq,
+        goal.id, GoalWaitId.mint(), goal.revision, prepared.review.through_seq,
         prepared.review.targets, owner=owner.incarnation.require_recorded(),
         target_turn_generations=(target.require_turn_lease().identity.generation,),
         report_turn_id=None, report_turn_generation=None,
@@ -219,7 +220,7 @@ def test_stale_review_never_writes_inputs_or_replaces_newer_wait(reviewing, chan
     before = inputs.read(prepared.reviewed_inputs)
     wait_before = reviewing.goals.goal_wait("owner")
     goal_before = reviewing.registry.require("owner").goal
-    with reviewing.registry.store.locked(), pytest.raises(ValueError):
+    with reviewing.registry.store.guarded_write(), pytest.raises(ValueError):
         prepared.apply(GoalActionContext(
             reviewing.goals, reviewing.registry.require("owner"), RuntimeInvocable,
         ))
@@ -254,7 +255,7 @@ def test_terminal_reply_read_cannot_clear_a_newer_wait(reviewing):
     reviewing.goals.update_goal("owner", standby(reviewing))
     fence = reviewing.agents.finish_turn(reviewing.registry.require("child").require_turn_lease())
     goal = reviewing.registry.require("owner").goal
-    newer = replace(reviewing.goals.goal_wait("owner"), wait_id="newer-wait")
+    newer = replace(reviewing.goals.goal_wait("owner"), wait_id=GoalWaitId.mint())
     reviewing.bus.bus = AfterReadBus(
         reviewing.bus.bus.path, lambda: reviewing.goals.waits.record(newer),
     )
@@ -272,7 +273,7 @@ def completed_reply(comms):
 
 def test_completed_reply_rechecks_its_exact_wait(reviewing):
     witness, reply, wait = completed_reply(reviewing)
-    newer = replace(wait, wait_id="newer-wait")
+    newer = replace(wait, wait_id=GoalWaitId.mint())
     reviewing.bus.bus = AfterReadBus(
         reviewing.bus.bus.path, lambda: reviewing.goals.waits.record(newer),
     )
@@ -302,7 +303,7 @@ def test_capture_keeps_incarnation_across_rename(reviewing):
 
 
 def test_probe_observes_actual_exclusive_lock(probed):
-    with probed.registry.store.locked():
+    with probed.registry.store.guarded_write():
         probed.bus.bus.probe(ReceivedSource.declared_name)
     assert probed.bus.bus.checks == [11]
 
@@ -314,7 +315,7 @@ def test_display_edit_during_standby_review_is_preserved(reviewing, rename):
     reviewing.registry.register(replace(reviewing.registry.require("owner"), title=title))
     if rename:
         reviewing.registry.rename("owner", "renamed-owner")
-    with reviewing.registry.store.locked():
+    with reviewing.registry.store.guarded_write():
         prepared.apply(GoalActionContext(
             reviewing.goals, reviewing.registry.require("owner"), RuntimeInvocable,
         ))

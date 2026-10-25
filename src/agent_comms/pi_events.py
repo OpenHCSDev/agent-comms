@@ -14,6 +14,7 @@ from .declared_family import DeclaredFamily
 from .field_codec import FieldCodec, FieldPlan, TurnId, WireName, WireNullDefault, WireOmitDefault
 from .native_input_record import NativeInputCommit, NativeInputLocation
 from .native_pi import NativePiOperationFailed
+from .native_tool_call import ToolCallId
 from .native_turn_context import NativeContextManifestData
 from .pi_commands import ExtensionUiResponse, PiCommand, UnknownCommand
 from .pi_payloads import (
@@ -319,7 +320,7 @@ class AutoRetryStart(RetryAttemptEvent, DurablePiEvent, starts=phases.ProviderRe
 class NativeRetryStart(AutoRetryStart):
     """The native turn recovery re-requests a refused empty response.
 
-    stack/native-turn-recovery.mjs owns whether a provider refusal is retryable
+    stack/native/native-turn-recovery.mjs owns whether a provider refusal is retryable
     and how many times (RecoveryBudget); this wire kind carries that decision
     before the refused assistant message, so Core reports only the recovery's
     final outcome and never counts a refusal itself.
@@ -353,7 +354,7 @@ class CompactionEnd(ReasonedCompaction, ends=phases.CompactionPhase):
         session.watchdog.progress()
         completed = self.completed
         for result in completed:
-            for event in result.charge(session):
+            for event in result.charge():
                 yield event
             session.native.forget_context()
             session.watchdog.compacted(session.prompt_state.started)
@@ -806,8 +807,8 @@ class PiToolCallEvent:
         return self.tool_name.text_or("tool")
 
     @property
-    def tool_id(self) -> str:
-        return self.tool_call_id.text_or(self.tool_label)
+    def tool_id(self) -> ToolCallId:
+        return FieldCodec.decode(ToolCallId, self.tool_call_id.text_or(self.tool_label))
 
 
 @dataclass(frozen=True, kw_only=True)

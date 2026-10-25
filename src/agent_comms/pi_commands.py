@@ -9,13 +9,13 @@ from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Annotated, ClassVar
-from uuid import uuid4
 
 from pydantic import JsonValue
 
 from . import agent_events as events
 from . import turn_phase as phases
 from .agent_backend import StreamingInputPolicy
+from .child_process import BoundedRun
 from .declared_family import DeclaredFamily, UnknownFamilyMember
 from .field_codec import (
     FieldCodec,
@@ -28,6 +28,7 @@ from .field_codec import (
 from .image_input import ImageInput
 from .native_failures import NativePiUnavailable
 from .native_package import VerifiedNativePackage
+from .native_pi import NativePiRpcLaunch
 from .native_session_reopen import NativeSessionIdentity
 from .native_tool_call import OwnerToolConnection
 from .native_turn_context import NativeContextData
@@ -47,6 +48,7 @@ from .pi_payloads import (
     UnknownData,
 )
 from .turn_context import InputContributionCoordinates, SegmentManifest
+from .turn_item import PiRequestKey
 
 if TYPE_CHECKING:
     from .backend import TurnSession
@@ -78,10 +80,10 @@ class PiCommand(DeclaredFamily):
     # The answering child appends to its own session file (a retained child stays current).
     writes_session: ClassVar[bool] = False
     id: Annotated[PiRequestId, WireAbsentNone()] = field(
-        default_factory=lambda: RequestId(uuid4().hex)
+        default_factory=lambda: RequestId(PiRequestKey.fresh())
     )
 
-    def require_id(self) -> str:
+    def require_id(self) -> PiRequestKey:
         """Operations that correlate an input require the command's actual ID."""
         return self.id.require()
 
@@ -247,7 +249,9 @@ class GetSessionStats(SessionSnapshot, NativeQuery):
             yield session.context_info()
 
 
-CATALOG_TIMEOUT = 10  # seconds for one metadata child to start and answer
+# Seconds for one metadata child to start and answer. An idle Pi boot answers in 6-7 s, so
+# 10 s timed out `fork --model` on a loaded host (CI, a machine running tests).
+CATALOG_TIMEOUT = 30
 
 
 class CatalogQuery(NativeQuery):
@@ -259,9 +263,7 @@ class CatalogQuery(NativeQuery):
         worktree: Path | None = None, root: Path | str | None = None,
     ):
         """Acquire metadata commands without borrowing a saved or executing session."""
-        from .child_process import BoundedRun
         from .native_child import PiChild
-        from .native_pi import NativePiRpcLaunch
         from .pi_rpc import PiRpcChannel
 
         try:

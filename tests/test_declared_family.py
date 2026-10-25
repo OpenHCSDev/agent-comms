@@ -1,3 +1,5 @@
+import subprocess
+import sys
 from abc import abstractmethod
 from dataclasses import dataclass
 
@@ -164,3 +166,18 @@ def test_plain_order_uses_the_first_rank_in_the_mro_and_requires_a_rank():
     assert Rank.position_of(Override) == Rank.position_of(First)
     with pytest.raises(ValueError):
         Rank.position_of(object)
+
+
+def test_attachment_names_decode_in_a_process_that_never_imported_their_module():
+    """A heartbeat on the bus decodes before anything imports its member module."""
+    probe = (
+        "import sys\n"
+        "from agent_comms.task_sources import TaskAttachment\n"
+        "assert 'agent_comms.task_attachments.commander_pings' not in sys.modules\n"
+        "print(TaskAttachment.member_named('commander_decisions').__module__)\n"
+    )
+    result = subprocess.run(
+        [sys.executable, "-c", probe], capture_output=True, text=True, timeout=120, check=True,
+    )
+
+    assert result.stdout.split() == ["agent_comms.task_attachments.commander_pings"]

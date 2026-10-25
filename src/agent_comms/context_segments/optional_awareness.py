@@ -24,6 +24,7 @@ from ..cohort_schema import (
     ClaimBatchAcknowledgements,
     ClaimBatchMembers,
     CohortDeliveries,
+    SelectedClaim,
 )
 from ..field_codec import FieldCodec, ThreadLookup
 from ..turn_context import ContextSegment, InstructionFile, InstructionSegment, TurnContext
@@ -61,8 +62,7 @@ class _SelectedDecision:
             ordinal=delivery.ordinal,
             recipient_lookup=assignment.recipient_lookup,
             canonical_thread=assignment.recipient,
-            kind="selected",
-            claim_id=assignment.assignment_id,
+            claim_id=SelectedClaim(assignment.assignment_id),
         )
         if delivery != expected_delivery:
             raise ProjectionUnavailableError("selected source delivery changed")

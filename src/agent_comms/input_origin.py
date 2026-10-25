@@ -126,9 +126,7 @@ class HumanInputOrigin(InputOrigin, ClaimScoped):
 
     @classmethod
     def capture(cls, comms: Comms, claim_scope: ClaimedIdentity) -> HumanInputOrigin:
-        from .active_route import guard_original_root_write
-
-        with guard_original_root_write(comms.root), comms.registry.store.locked():
+        with comms.registry.store.guarded_write():
             snapshot = comms.registry.store.read_snapshot_unlocked()
             owner = snapshot.require_active(claim_scope.incarnation.name)
             if snapshot.claimed_identity(owner.name) != claim_scope:
@@ -147,9 +145,8 @@ class HumanInputOrigin(InputOrigin, ClaimScoped):
     def require_ingress(self, comms, snapshot, claim_scope, controller):
         if controller is None or controller.attached(None) is None:
             raise RelationViolationError("User input origin requires its attached ACP controller")
-        from .store_files import SharedLock
 
-        with comms.registry.store.locked(mode=SharedLock()):
+        with comms.registry.store.guarded_read():
             comms.registry.store.private_guard_unlocked().require_root(
                 self.root_id, RelationViolationError("User input origin belongs to another native namespace"),
             )

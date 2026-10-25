@@ -10,7 +10,6 @@ from typing import TYPE_CHECKING, ClassVar
 
 from agent_comms.channel_targets import CommandTarget
 
-from .active_route import guard_original_root_write
 from .bus_publication import AgentOrigin
 from .channel_targets import ChannelTarget, Tag
 from .channels import Channel, SavedView
@@ -177,18 +176,16 @@ class ChannelManagement:
     ) -> Thread:
         for tag in add | remove:
             Tag.validate(tag)
-        with guard_original_root_write(self.root):
-            return self._update_tags(name, ChangedTags(add, remove))
+        return self._update_tags(name, ChangedTags(add, remove))
 
     def replace_tags(self, name: str, tags: frozenset[str]) -> Thread:
         for tag in tags:
             Tag.validate(tag)
-        with guard_original_root_write(self.root):
-            return self._update_tags(name, GivenTags(tags))
+        return self._update_tags(name, GivenTags(tags))
 
     def _update_tags(self, name: str, choice: TagChoice) -> Thread:
         previous_channels = self.bus.channel_declarations()
-        with self.registry.store.locked(), self.catalog.editing() as document:
+        with self.registry.store.guarded_write(), self.catalog.editing() as document:
             thread = self.registry.require(name)
             updated = replace(thread, tags=choice.for_child(thread.tags))
             for tag in updated.tags - document.tags:
@@ -232,7 +229,7 @@ class ChannelManagement:
             return document.set_metadata(name, activity, parent=parent, archived=archived)
 
     def set_channel_archived(self, name: str, archived: bool) -> Channel:
-        with self.bus.opened_activity() as activity, guard_original_root_write(self.root), self.catalog.editing() as document:
+        with self.bus.opened_activity() as activity, self.catalog.editing() as document:
             channel = document.require_channel(name, activity)
             return document.set_metadata(channel.name, activity, parent=channel.parent, archived=archived)
 
@@ -282,24 +279,22 @@ class ChannelManagement:
         Tag.validate(name)
         if disposition.requires_confirmation and not confirmed:
             raise ValueError(disposition.confirmation(name))
-        with guard_original_root_write(self.root):
-            snapshot = self.registry.snapshot()
-            self.catalog.read().require_changeable_tag(name)
-            cohort = tuple(thread for thread in snapshot.threads.values() if name in thread.tags)
-            return disposition.apply(self, name, cohort)
+        snapshot = self.registry.snapshot()
+        self.catalog.read().require_changeable_tag(name)
+        cohort = tuple(thread for thread in snapshot.threads.values() if name in thread.tags)
+        return disposition.apply(self, name, cohort)
 
     def _change_tag(self, name: str, replacement: str | None) -> None:
         Tag.validate(name)
-        with guard_original_root_write(self.root):
-            self.catalog.read().require_changeable_tag(name)
-            if replacement is not None:
-                self.catalog.read().require_available_rename(name, replacement)
+        self.catalog.read().require_changeable_tag(name)
+        if replacement is not None:
+            self.catalog.read().require_available_rename(name, replacement)
 
-            cohort = tuple(thread for thread in self.registry.all_threads().values() if name in thread.tags)
-            self._apply_tag_change(name, replacement, cohort)
+        cohort = tuple(thread for thread in self.registry.all_threads().values() if name in thread.tags)
+        self._apply_tag_change(name, replacement, cohort)
 
     def _apply_tag_change(self, name: str, replacement: str | None,
                              cohort: tuple[Thread, ...]) -> None:
-        with self.registry.store.locked(), self.catalog.editing() as document:
+        with self.registry.store.guarded_write(), self.catalog.editing() as document:
             document.change_tag(name, replacement)
             self.registry.change_tag(cohort, name, replacement)

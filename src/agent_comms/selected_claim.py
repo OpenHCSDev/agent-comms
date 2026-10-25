@@ -30,11 +30,9 @@ from .envelope_claim_transitions import (
     WakeClaim,
 )
 from .errors import RelationViolationError
-from .child_process import Platform
 from .native_input_owner import RegistryOwner
 from .private_registry_guard import RegistryPrivacy
 from .registry_document import RegistrySnapshot
-from .store_files import SharedLock
 from .threads import Thread
 
 
@@ -128,7 +126,7 @@ def _selected_claim_boundary(
     """
     if store.session.path.resolve() != (CoordinationStore.path_in(comms.root)).resolve():
         raise IdentityConflict("Wake coordinator does not belong to this wire root")
-    with comms.registry.store.locked(mode=SharedLock()):
+    with comms.registry.store.guarded_read():
         registry = comms.registry.store.read_snapshot_unlocked()
         canonical = registry.canonical_name(owner_name)
         try:
@@ -192,7 +190,6 @@ def _opened_selected_file(
     """
     relative = Path(normalized).relative_to(worktree)
     refusal = IdentityConflict("Selected write needs a physical directory chain")
-    Platform.current().require_pinned_paths(refusal)
     if not relative.parts:
         raise refusal
     directory_flags = os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW | os.O_CLOEXEC
@@ -260,8 +257,6 @@ def write_selected_claimed_file(
     """
     if len(contents) > 1024 * 1024:
         raise IdentityConflict("Selected write requires bounded bytes")
-    Platform.current().require_pinned_paths(
-        IdentityConflict("Selected write requires no-follow file descriptors"))
     with Coordination(str(store.session.path)) as scoped:
         # Native settlement's existing coordinator -> Bus order also protects the
         # exact resource claim through fsync, without any root or file-bus gate.

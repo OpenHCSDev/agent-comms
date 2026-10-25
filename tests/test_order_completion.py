@@ -1,4 +1,5 @@
 """One copied-bus command family owns check correction, delivery and closure."""
+import time
 from dataclasses import replace
 
 import pytest
@@ -10,17 +11,20 @@ from agent_comms.goals import CountCheckResult, OrderCheck
 from agent_comms.installer.runtime_resolution import CorePackage, RuntimeResolution
 from agent_comms.launch_runtime import LaunchRuntime
 from agent_comms.order_runs import ApplicationOrderRun
+from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.todos import (
     DeliveredProblemOrder,
     DoneTodoState,
     InstalledMergedProblemOrder,
     MergedProblemOrder,
     OperationDelivery,
+    ProgressRead,
     PullRequestLink,
     ReportDelivery,
     ReportedProblemOrder,
     TriageScope,
 )
+from agent_comms.ui_model.unit_state import AwaitingApplicationRun, UnitObservation
 from agent_comms.work_branches import WorkBranches
 
 pytest_plugins = ('test_todos', 'test_held_problem_orders')
@@ -34,6 +38,30 @@ class TestOrderCompletion:
         with store.writing() as connection:
             replace(current, order=order, revision=current.revision + 1).upsert(connection)
         return store.get('P1')
+
+    def test_await_run_names_only_its_orders_and_yields_to_source_work(
+        self, held_commander, proof_build_checkouts,
+    ):
+        """2026-10-25: "AWAIT RUN unit-backend P483 P739" named P739, sent with no commit,
+        and hid that the unit was still writing it."""
+        ctx = held_commander
+        repo = ctx.repos[0]
+        graph = next(graph for graph in proof_build_checkouts if graph.repository.github == repo.github)
+        pending = ctx.comms.goals.todos.get('P1')
+        run = ApplicationOrderRun("The real application shows the merged fix after a restart.")
+        awaiting = self.record(ctx, replace(pending.order, run=run).merged(graph.installed))
+        delivered = replace(pending, id='P2', order=pending.order.delivered(
+            OperationDelivery(at=RecordedEventTime(time.time()))))
+        writing = replace(pending, id='P3')
+
+        def orders(*todos):
+            unit = UnitObservation(ctx.comms, ctx.comms.registry.require('worker'), todos,
+                                   ProgressRead(), (), time.time(),
+                                   ctx.comms.registry.snapshot().status('worker'), False)
+            return [state.orders for state in AwaitingApplicationRun.derive(unit)]
+
+        assert orders(awaiting, delivered) == [('P1',)]
+        assert orders(awaiting, delivered, writing) == []
 
     def test_merged_correction_and_done_use_the_current_check(
         self, held_commander, proof_build_checkouts,
@@ -52,7 +80,7 @@ class TestOrderCompletion:
         corrected = ctx.comms.goals.todos.get('P1')
         assert isinstance(corrected.order, MergedProblemOrder)
         assert corrected.order.check_base(repo.checkout) == f'{graph.installed}^1'
-        assert corrected.order.check_corrections[-1].previous == merged.check
+        assert corrected.order.corrections[-1].previous == merged.check
         main(['done', 'worker', 'P1'], ctx)
         delivered = ctx.comms.goals.todos.get('P1')
         assert isinstance(delivered.order, DeliveredProblemOrder)
@@ -72,8 +100,8 @@ class TestOrderCompletion:
         assert corrected.order.check_base(repo.checkout) == f"origin/{WorkBranches.main}"
         assert corrected.order.check.command == 'printf 1'
         assert (corrected.order.id, corrected.assignment,
-                corrected.review_at, corrected.strikes) == (
-                    original.order.id, original.assignment, original.review_at, original.strikes)
+                corrected.review_at, corrected.strike_count) == (
+                    original.order.id, original.assignment, original.review_at, original.strike_count)
 
     def test_triage_done_reads_the_report_without_a_sha(self, held_commander):
         ctx = held_commander

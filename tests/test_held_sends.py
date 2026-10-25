@@ -1,4 +1,5 @@
-"""Real send entrypoints wait through a private bus hold and publish once."""
+"""CLI send entrypoints wait through a private bus hold and publish once; native tool
+publications refuse while held (test_connector.test_publishing_tool_held_mid_call_refuses_at_once)."""
 
 
 import asyncio
@@ -16,9 +17,7 @@ from agent_comms.coordination_tables.refusals import SendRefusal
 from agent_comms.coordination_database import CoordinationStore
 from agent_comms.errors import ToolRefusedError
 from agent_comms.maintenance_barrier import MaintenanceOperator
-from agent_comms.store_files import StoreLockContention, _store_lock
-from agent_comms.tool_caller import ThreadCaller
-from agent_comms.tools import invoke_tool
+from agent_comms.store_files import ExclusiveLock, StoreLockContention, _store_lock
 from test_locked_store import event, process
 from agent_comms.threads import Thread
 
@@ -39,7 +38,7 @@ def test_refusal_writer_keeps_registry_permission_until_its_sql_write_finishes(p
                 deadline = time.monotonic() + 5
                 while time.monotonic() < deadline:
                     try:
-                        with _store_lock(private_comms.registry.store.path, contention=StoreLockContention(0)):
+                        with _store_lock(private_comms.registry.store.path, ExclusiveLock(), StoreLockContention(0)):
                             pass
                     except BlockingIOError:
                         break
@@ -100,19 +99,3 @@ async def test_cli_child_waits_then_publishes_once(held_bus, arguments):
     assert child.returncode == 0, (stdout.decode(), stderr.decode())
     assert_published_once(comms)
     print(f'{arguments[0]} child: held without publication; exit 0; published exactly once; no refusal')
-
-
-async def test_native_thread_caller_waits_then_publishes_once(held_bus):
-    comms = held_bus
-    before = comms.bus.bus.revision()
-    pending = asyncio.create_task(asyncio.to_thread(
-        invoke_tool, comms, 'comms_send',
-        {'to': 'recipient', 'body': 'held publication'},
-        caller=ThreadCaller('sender')))
-    with pytest.raises(TimeoutError):
-        await asyncio.wait_for(asyncio.shield(pending), .25)
-    assert comms.bus.bus.revision() == before
-    comms.owners.maintenance.clear(comms.owners.maintenance.read())
-    await asyncio.wait_for(pending, 15)
-    assert_published_once(comms)
-    print('native ThreadCaller: held without publication; published exactly once; no refusal')

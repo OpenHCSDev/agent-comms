@@ -25,9 +25,11 @@ from agent_comms.child_process import (
     ObservedProcess,
     Platform,
     ProcessIdentity,
+    ResidentManager,
     STOP_GRACE_SECONDS,
     SpawnedProcess,
     SynchronousProcess,
+    SystemdUserManager,
     TimedOutOutcome,
 )
 from agent_comms.field_codec import FieldCodec
@@ -121,7 +123,7 @@ async def test_fork_pool_parent_death_retires_workers_and_nested_child_group(tmp
     )
     observed = ()
     try:
-        await ready(announcement)
+        await ready(announcement, child.alive)
         observed = identities(announcement)
         assert all(member.alive() for member in observed)
         assert len(child.platform.group_members(child.identity)) > 1
@@ -252,7 +254,7 @@ async def test_stored_leader_keeps_group_scope_after_term_exits_leader(tmp_path:
     child = SpawnedProcess.launch((sys.executable, "-c", TREE, str(acknowledgement)))
     stored = FieldCodec.decode(ProcessIdentity, FieldCodec.encode(child.identity))
     try:
-        await ready(acknowledgement)
+        await ready(acknowledgement, child.alive)
         await ObservedProcess(stored).stop()
         assert all(not member.alive() for member in identities(acknowledgement))
     finally:
@@ -276,7 +278,7 @@ async def test_cancellation_retains_child_cleanup(tmp_path: Path) -> None:
     task = asyncio.create_task(
         BoundedRun.run((sys.executable, "-c", TREE, str(acknowledgement)), timeout=10)
     )
-    await ready(acknowledgement)
+    await ready(acknowledgement, lambda: not task.done())
     task.cancel()
     with pytest.raises(asyncio.CancelledError):
         await task
@@ -347,7 +349,7 @@ time.sleep(60)
             env=life.environment,
             pass_fds=(life.read_fd,),
         )
-        await ready(acknowledgement)
+        await ready(acknowledgement, child.alive)
         with closing(sqlite3.connect(database, timeout=0.05, isolation_level=None)) as db:
             db.execute("BEGIN IMMEDIATE")
             db.execute("INSERT INTO state VALUES (1)")
@@ -384,7 +386,7 @@ async def test_killed_launcher_takes_its_child_and_leaves_its_resident(tmp_path:
     launcher = SpawnedProcess.launch((sys.executable, "-c", LAUNCHER, str(announcement)))
     observed = ()
     try:
-        await ready(announcement)
+        await ready(announcement, launcher.alive)
         tied, resident = observed = identities(announcement)
         assert tied.alive() and resident.alive()
         # SIGKILL runs no exit handler: only the kernel binding can retire the child.
@@ -400,6 +402,43 @@ async def test_killed_launcher_takes_its_child_and_leaves_its_resident(tmp_path:
             if member.alive():
                 ObservedProcess(member).stop_sync()
 
+
+
+UNIT_LAUNCHER = """import json,subprocess,sys
+from pathlib import Path
+from agent_comms.child_process import OutlivesLauncherLifetime, Platform, SpawnedProcess
+from agent_comms.field_codec import FieldCodec
+sleeper = (sys.executable, '-c', 'import time; time.sleep(60)')
+# A new session and a reparent to init leave the process tree, never the unit's cgroup.
+plain = Platform.current().identity(subprocess.Popen(sleeper, start_new_session=True).pid)
+resident = SpawnedProcess.launch(sleeper, lifetime=OutlivesLauncherLifetime).identity
+Path(sys.argv[1]).write_text(json.dumps([FieldCodec.encode(c) for c in (plain, resident)]))
+"""
+
+
+@pytest.mark.skipif(ResidentManager.current() is not SystemdUserManager,
+                    reason="the cgroup a unit kills exists only under a user manager")
+@pytest.mark.asyncio
+async def test_ended_unit_takes_its_plain_child_and_leaves_its_resident(tmp_path: Path) -> None:
+    announcement = tmp_path / "children.json"
+    # Default KillMode: ending the unit signals every process left in its cgroup.
+    subprocess.run(
+        ("systemd-run", "--user", "--wait", "--quiet", "--collect",
+         f"--unit=agent-comms-test-launcher-{os.getpid()}",
+         f"--working-directory={Path.cwd()}", f"--setenv=HOME={os.environ['HOME']}",
+         f"--setenv=PYTHONPATH={os.pathsep.join(sys.path)}",
+         sys.executable, "-c", UNIT_LAUNCHER, str(announcement)),
+        check=True, timeout=30)
+    plain, resident = observed = identities(announcement)
+    try:
+        async with asyncio.timeout(5):
+            while plain.alive():
+                await asyncio.sleep(.01)
+        assert resident.alive(), "a declared resident must outlive its launcher's unit"
+    finally:
+        for member in observed:
+            if member.alive():
+                ObservedProcess(member).stop_sync()
 
 def test_detached_reserves_identity_before_child_can_execute(tmp_path: Path) -> None:
     acknowledgement = tmp_path / "started"
@@ -458,7 +497,7 @@ async def test_repeated_cancellation_joins_real_tree_before_return(
                 await asyncio.Event().wait()
 
     task = asyncio.create_task(operation())
-    await ready(acknowledgement)
+    await ready(acknowledgement, lambda: not task.done())
     task.cancel()
     await asyncio.sleep(0.1)
     task.cancel()

@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import json
+import shutil
+import tempfile
 from abc import ABC, abstractmethod
 from collections import deque
 from collections.abc import Callable, Iterator
@@ -13,6 +15,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from .bus import Bus
+from .catalog_store import ChannelCatalog
 from .channel_targets import NamedTarget, ThreadTarget
 from .channels import Channel
 from .coordination_errors import HistoricalSourceChanged
@@ -28,6 +31,7 @@ from .message_page import (
 )
 from .messages import CarriesEnvelope, Message
 from .page_traversal import HistoryCursor, OlderTraversal
+from .presentation import MessageNotification
 from .private_path import FileObservation, FileRevision, ObservedPath
 from .read_basis import (
     AnonymousViewer,
@@ -36,6 +40,7 @@ from .read_basis import (
     DisplayBasis,
     DisplayIdentity,
     DisplayViewer,
+    DMDisplayBasis,
     DMDisplayIdentity,
     DMDisplayScope,
     MessageDisplayScope,
@@ -50,6 +55,7 @@ from .revision_views import BusSourceView
 from .store_files import AtomicFile, SourceTier
 from .thread_identity import UnrecordedThreadIncarnation
 from .threads import ThreadProvenance
+from .transcript_routes import TranscriptRoutes
 
 if TYPE_CHECKING:
     from .catalog_document import CatalogDocument
@@ -228,8 +234,6 @@ class DMDisplayHistory(ConversationHistoryView, DMHistory):
         return NamedViewer(self.first)
 
     def live_page(self, presentation: BusPresentation, bounds: PageBounds) -> MessagePage:
-        from .read_basis import DMDisplayBasis
-
         bus = presentation.bus
         with presentation.registry.store.reading_snapshot() as snapshot:
             peer = self.second.selected_name(snapshot)
@@ -313,9 +317,6 @@ class HistorySource:
 
     def notification_references(self, sources: tuple[HistorySource, ...], references):
         """Read this namespace within its archive's current catalogue read."""
-        from functools import partial
-
-        from .presentation import MessageNotification
 
         if self.require(sources, self.key) != self:
             raise HistoricalSourceChanged("Historical source changed; refresh history")
@@ -455,17 +456,13 @@ class HistoryArchive(DurableFile, LockedFile, SourceTier):
         inboxes, execution inputs, or source sequence allocator are touched.
         A source is attached once. Its original bytes and identity survive.
         """
-        import shutil
-        import tempfile
 
-        from .catalog_store import ChannelCatalog
         from .historical_views import HistorySource
-        from .transcript_routes import TranscriptRoutes
 
         source_root = source_root.resolve()
         if source_root == self.bus_path.parent.resolve():
             raise ValueError("The live bus cannot be its own history source")
-        with self.locked():
+        with self.guarded_write():
             sources = self.sources()
             existing = next((s for s in sources if s.original_root == str(source_root)), None)
             if existing is not None:

@@ -20,7 +20,7 @@ from agent_comms.cli_protocol import CliArguments, DeliveredOutcome, Outcome
 
 from .history import HarnessAddress, OnlineHistory, OpenCodeHistory
 from .shared import (
-    Binding, CliBridge, GivenBinding, GivenThread, IncomingFrame, Options, SuppliedSession,
+    SessionBinding, CliBridge, GivenBinding, GivenThread, IncomingFrame, Options, SuppliedSession,
     TranscriptBridge, Watch, run_bridge,
 )
 from agent_comms.runtime_updates import RuntimeUpdate
@@ -206,7 +206,7 @@ class OpenCodeBridge(OpenCodeServer, TranscriptBridge[OpenCodeOptions], declared
     state_directory = Path('.local/state/opencode-comms-inbox')
     query = {'limit': '20'}  # A restarted bridge publishes again only the newest messages.
 
-    def __init__(self, options: OpenCodeOptions, binding: Binding, db: sqlite3.Connection) -> None:
+    def __init__(self, options: OpenCodeOptions, binding: SessionBinding, db: sqlite3.Connection) -> None:
         TranscriptBridge.__init__(self, options, binding, db)
         OpenCodeServer.__init__(self, binding.thread, options.server, options.directory)
 

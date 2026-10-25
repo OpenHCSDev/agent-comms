@@ -5,6 +5,7 @@ import errno
 import json
 import os
 import subprocess
+import sys
 from concurrent.futures import ThreadPoolExecutor
 from threading import Event
 
@@ -20,6 +21,7 @@ from agent_comms.active_route import (
     route_directory,
 )
 from agent_comms.bus import Bus
+from agent_comms.child_process import SpawnedProcess
 from agent_comms.comms import Comms, wire
 from agent_comms.installer.backup import StoreBackup
 from agent_comms.installer.refusals import UpgradeRefused
@@ -27,7 +29,10 @@ from agent_comms.installer.commands import InstallCommands
 from agent_comms.installer.probes.publication import SelectedRouteProbe
 from agent_comms.installer.interpreter_operation import InstalledProgram
 from agent_comms.launch_runtime import LaunchRuntime
+from agent_comms.maintenance_barrier import MaintenanceHeldError, MaintenanceOperator
 from agent_comms.recorded_bus import RecordedBusIdentity
+from agent_comms.thread_execution import ExternalThreadExecution
+from agent_comms.threads import Thread
 from bus_record_fixture import prepare_native_comms
 
 
@@ -60,7 +65,7 @@ def test_route_publication_and_rollback_with_no_sql_changes(tmp_path, route_bus,
     backup.rebind_route(route_bus, selected)
     assert read_active_route(path) == route_bus
     assert not backup.original()
-    backup.restore()
+    backup.restore(lambda: None)
     assert backup.original()
     if had_route:
         assert path.read_bytes() == original
@@ -90,7 +95,7 @@ def test_concurrent_publication_before_rebind_is_preserved_on_rollback(tmp_path,
     concurrent = path.read_bytes()
     with pytest.raises(UpgradeRefused, match="route changed"):
         backup.rebind_route(route_bus, PublishedRouteSelection(route_bus.root))
-    backup.restore()
+    backup.restore(lambda: None)
     assert path.read_bytes() == concurrent
     assert read_active_route(path) == route_bus
 
@@ -111,7 +116,7 @@ def test_concurrent_publication_after_rebind_is_preserved_on_rollback(tmp_path, 
     other = ActiveRoute(other_root, RecordedBusIdentity.capture(Bus.path_in(other_root)))
     route_new_bus(other, path)
     concurrent = path.read_bytes()
-    backup.restore()
+    backup.restore(lambda: None)
     assert path.read_bytes() == concurrent
     assert read_active_route(path) == other
 
@@ -139,7 +144,7 @@ def test_unknown_publication_is_still_owned_by_rollback(tmp_path, route_bus, had
         backup.rebind_route(route_bus, selected)
     assert failed
     assert read_active_route(path) == route_bus
-    backup.restore()
+    backup.restore(lambda: None)
     assert backup.original()
     if had_route:
         assert path.read_bytes() == original
@@ -152,7 +157,7 @@ def test_staged_probe_reads_the_published_route(tmp_path, route_bus):
     home = tmp_path / "outgoing-home"
     root = route_bus.root
     environment = {
-        **runtime.child_environment(runtime.environment(os.environ)), "HOME": str(home),
+        **runtime.environment(os.environ), "HOME": str(home),
     }
     path = home / ".local/state/agent-comms/active-route.json"
     old_route(path, route_bus)
@@ -197,43 +202,76 @@ def test_failure_after_backup_link_restores_a_single_private_route(tmp_path, rou
     assert path.read_bytes() == original
     assert path.stat().st_nlink == 2
     assert not backup.original()
-    backup.restore()
+    backup.restore(lambda: None)
     assert backup.original()
     assert path.read_bytes() == original
     assert path.stat().st_nlink == 1
 
 
-def test_route_publication_waits_for_a_client_call_but_not_an_idle_service(
+def test_a_client_call_never_holds_publication_and_the_bus_refuses_writes_held_by_install(
     tmp_path, route_bus, monkeypatch,
 ):
+    """Toad is a client: an open call no longer stalls the installer's route step, and the
+    store itself refuses writes once maintenance holds the root, under its write lock."""
     path = tmp_path / "state" / "active-route.json"
     route_new_bus(route_bus, path)
     monkeypatch.setattr("agent_comms.active_route.active_route_path", lambda: path)
-    entered, release, publishing, published = Event(), Event(), Event(), Event()
-
-    def write():
-        with Comms.client(route_bus) as comms:
-            entered.set()
-            assert release.wait(5)
-            comms.messaging.user_identity(str(tmp_path))
-
-    def publish():
-        publishing.set()
+    with Comms.client(route_bus) as comms:
+        for name in ("sender", "recipient"):
+            comms.registry.declare(Thread(
+                name, frozenset(), str(tmp_path), execution=ExternalThreadExecution))
         with route_directory(path):
-            published.set()
+            pass  # A publisher never waits on an open client call.
+        bus = comms.bus.bus
+        entered, release = Event(), Event()
 
-    with ThreadPoolExecutor(max_workers=2) as workers:
-        writing = workers.submit(write)
-        assert entered.wait(5)
-        publication = workers.submit(publish)
-        try:
-            assert publishing.wait(5)
-            assert not published.wait(0.1)
-        finally:
-            release.set()
-        writing.result(timeout=5)
-        publication.result(timeout=5)
+        def in_flight():
+            with bus.writing():
+                entered.set()
+                assert release.wait(5)
 
-    idle = Comms(route_bus)
-    with route_directory(path):
-        assert idle.root == route_bus.root
+        def drain():
+            with Bus.writers_drained(bus.path):
+                pass
+
+        gate = comms.owners.maintenance
+        with ThreadPoolExecutor(max_workers=2) as workers:
+            writing = workers.submit(in_flight)
+            assert entered.wait(5)
+            hold = gate.begin(MaintenanceOperator.current())
+            draining = workers.submit(drain)
+            try:
+                with pytest.raises(TimeoutError):
+                    draining.result(timeout=0.2)
+            finally:
+                release.set()
+            writing.result(timeout=5)
+            draining.result(timeout=5)
+        with pytest.raises(MaintenanceHeldError):
+            with bus.writing():
+                pytest.fail("A write began under the hold")
+        gate.clear(hold)
+        sent = comms.messaging.send("sender", "recipient", "after the hold").message
+    assert sent.body == "after the hold"
+
+
+ROUTE_HOLDER = """import ctypes, fcntl, os, sys, time
+ctypes.CDLL(None).prctl(15, sys.argv[2].encode())  # PR_SET_NAME: the comm the kernel reports
+fcntl.flock(os.open(sys.argv[1], os.O_RDONLY | os.O_DIRECTORY), fcntl.LOCK_SH)
+print("held", flush=True)
+time.sleep(60)
+"""
+
+
+def test_route_publication_neither_waits_for_nor_ends_an_old_toad_holding_the_directory(
+    tmp_path,
+):
+    """An old runtime's Toad still flocks the route directory; publishers no longer do."""
+    directory = tmp_path / "state"
+    directory.mkdir(mode=0o700)
+    with SpawnedProcess.launch((sys.executable, "-c", ROUTE_HOLDER, str(directory), "toad"),
+                               output=subprocess.PIPE) as holder:
+        assert holder.process.stdout.readline() == b"held\n"
+        with route_directory(directory / "active-route.json"):
+            pass
+        assert holder.process.poll() is None

@@ -1,4 +1,5 @@
 import os
+from pathlib import Path
 
 import pytest
 
@@ -6,20 +7,17 @@ from agent_comms.field_codec import FieldCodec
 from agent_comms.installer.refusals import UpgradeRefused
 from agent_comms.installer.commands import InstallCommands
 from agent_comms.installer.probes.packages import InstalledPackagesProbe
-from agent_comms.installer.interpreter_operation import RetainedProgram, SourceProgram
 from agent_comms.installer.runtime_resolution import ResolvedLock, RuntimeResolution
 from agent_comms.launch_runtime import LaunchRuntime
 
 
-@pytest.mark.parametrize("program", [SourceProgram(), RetainedProgram.current()])
-def test_package_probe_entry_uses_one_declaration_before_refusing_build_identity(program):
+def test_package_probe_entry_uses_one_declaration_before_refusing_build_identity():
     runtime = LaunchRuntime.running()
     with InstallCommands() as commands, pytest.raises(
             UpgradeRefused, match="Core is editable|wheel stamp does not name"):
         commands.probe(
             InstalledPackagesProbe("not-a-built-wheel"), runtime.interpreter,
             env=runtime.environment(os.environ),
-            program=program,
         )
 
 
@@ -101,3 +99,18 @@ def test_missing_and_ambiguous_lock_evidence_refuses():
     ambiguous.package.append(ambiguous.package[0])
     with pytest.raises(ValueError):
         ambiguous.pins({"agent-comms": "1"}, "core")
+
+
+def test_the_stack_relocks_every_branch_tracking_package_and_refuses_a_unit_branch():
+    """resolve() upgraded only stack/pyproject.toml's sources, so transitive metaclass-registry
+    stayed at fb7c871 before MroDispatch; Toad pinned to work/unit-toad--P694 after its merge
+    relocked the same branch head while InstallDue saw main ahead."""
+    path = Path(__file__).resolve().parents[1] / "stack" / "uv.lock"
+    lock = ResolvedLock.read(path)
+    tracked = lock.tracked()
+    assert {"batrachian-toad", "metaclass-registry", "textual"} <= set(tracked)
+    assert "objectstate" not in tracked
+    toad = next(entry for entry in lock.package if entry.name == "batrachian-toad")
+    toad.source.git = toad.source.git.replace("branch=main", "branch=work/unit-toad--P694")
+    with pytest.raises(ValueError, match="batrachian-toad"):
+        lock.tracked()

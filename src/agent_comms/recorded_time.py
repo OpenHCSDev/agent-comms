@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import re
 import time
 from abc import abstractmethod
 from dataclasses import dataclass
@@ -137,15 +136,6 @@ class RecordedEventTime(EventTime):
 
     def clock(self) -> str:
         return time.strftime("%H:%M:%S", time.localtime(self.at))
-
-    def at_clock(self, clock: str) -> RecordedEventTime:
-        """The next local HH:MM minute, anchored to this recorded instant."""
-        if not re.fullmatch(r'(?:[01]?\d|2[0-3]):[0-5]\d', clock):
-            raise ValueError('supply HH:MM local time (00:00 through 23:59)')
-        hour, minute = map(int, clock.split(':'))
-        day = time.localtime(self.at)
-        at = time.mktime((day.tm_year, day.tm_mon, day.tm_mday, hour, minute, 0, 0, 0, -1))
-        return RecordedEventTime(at + 86400 if at < self.at - 60 else at)
 
     def to_number(self, units_per_second: int) -> float:
         return self.at * units_per_second

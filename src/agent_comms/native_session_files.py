@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+from abc import abstractmethod
 import hashlib
 import os
 from collections.abc import AsyncIterator
@@ -21,6 +22,7 @@ from agent_comms.private_path import PrivateDirectoryRole, TrustedAncestorRole
 
 from .errors import RelationViolationError
 from .native_failures import NativePiUnavailable
+from .process_claim import ProcessSingleton
 from agent_comms.typed_table import ReconciledFile, TableSchema
 
 
@@ -30,6 +32,15 @@ class SessionFiles:
     __slots__ = ()
     session: Path
     members: tuple[Path, ...]
+
+    @property
+    @abstractmethod
+    def writer_lock(self) -> Path: ...
+
+    @property
+    def writer_claim(self) -> ProcessSingleton:
+        """The one writer of this session, across processes."""
+        return ProcessSingleton(self.writer_lock)
 
     @property
     def schema_paths(self) -> tuple[Path, ...]:
@@ -118,12 +129,12 @@ class NativeTranscriptFiles(SessionFiles):
         Acquire before reserving a NativeRuntimeInput. Its original queued wake
         assignments remain unchanged while the kernel waits, across processes.
         """
-        descriptor = os.open(self.writer_lock, os.O_CREAT | os.O_RDWR | os.O_NOFOLLOW, 0o600)
+        descriptor = self.writer_claim.descriptor()
         # Lock waiters must not exhaust the workers the current input needs
         # to finish. This worker retires as soon as its kernel wait completes.
         waiter = ThreadPoolExecutor(max_workers=1, thread_name_prefix="session-input")
         acquisition = asyncio.get_running_loop().run_in_executor(
-            waiter, Platform.current().acquire_session_writer, descriptor)
+            waiter, self.writer_claim.wait, descriptor)
         waiter.shutdown(wait=False)
         try:
             await asyncio.shield(acquisition)
@@ -268,22 +279,25 @@ class BusTranscriptFile(PatternFile):
         return super().files_in(root) | frozenset(
             root.glob(str(NativeSessionLocks(cls.pattern()).writer_lock)))
 
-    @classmethod
-    def sessions_in(cls, root: Path) -> tuple[NativeSessionLocks, ...]:
-        """Every saved session under ``root``, found relative to it, so a practice copy's
-        sessions are its own and never the live bus the copied registry still names."""
-        return tuple(
-            NativeSessionLocks(path)
-            for owner, directory in cls.declarations_in(root)
-            for path in sorted(owner.matching_in(directory))
-        )
-
 
 class PrivateSession(DurableFile, BusTranscriptFile):
     """A thread's own session, created fresh for it."""
 
     __slots__ = ()
     filename = "sessions/enrolled-{session_id}.jsonl"
+
+
+class ForkedSession(DurableFile, BusTranscriptFile):
+    """A fork's copy of its parent's history; the native fork names it in this directory."""
+
+    __slots__ = ()
+    filename = "sessions/{stamp}_{session_id}.jsonl"
+
+    @classmethod
+    def prepared_directory(cls, root: Path) -> Path:
+        directory = (Path(root) / cls.pattern()).parent
+        NativeSessionFiles.prepare_private_directory(directory)
+        return directory
 
 
 class CheckSession(DurableFile, BusTranscriptFile):

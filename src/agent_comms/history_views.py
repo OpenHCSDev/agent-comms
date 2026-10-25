@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from .activity import ActivityCapture, ObservedActivity
 from .activity_clocks import ChannelActivity
 import logging
 import time
@@ -13,16 +14,22 @@ from typing import TYPE_CHECKING, Annotated
 
 from .catalog_store import ChannelCatalog
 from .cli_result import CliResult
+from .context_segments.retained import RetainedSegment
 from .declared_family import DeclaredFamily
 from .field_codec import FieldCodec, WireForm
+from .input_disposition import InputDispositions
 from .registration import Registration
 from .registry_document import DEFAULT_ROSTER, RosterVisibility
+from .retained_task_facts import RetainedTaskFacts
 from .shared_ledger import LedgerDocument
 from .thread_execution import ConversationPreparation
 from .thread_identity import ThreadIncarnation
 from .transcript_sources import AssignedSourceIdentity
+from .view_unread import transcript_read_state
+
 
 if TYPE_CHECKING:
+    from .registry_provenance import DeletedThread
     from .historical_views import HistoricalThread, HistorySource
     from .registry_document import RegistrySnapshot
     from .threads import Thread
@@ -51,11 +58,14 @@ from .messages import Message
 from .messaging import Messaging
 from .page_traversal import LiveCursor
 from .presentation import (
+    BusPresentation,
     ChannelView,
     CoordinationSnapshot,
     CountedRead,
     InboxRead,
     MessageNotification,
+    NoRevision,
+    ReadState,
     ThreadRecord,
     ThreadView,
     WireRevision,
@@ -177,9 +187,6 @@ class HistoryViews:
         goals: Goals,
         ledger: CollaborationLedger,
     ):
-        from .presentation import BusPresentation
-        from .view_unread import transcript_read_state
-
         self.root = root
         self.registry = registry
         self.bus = bus
@@ -191,6 +198,26 @@ class HistoryViews:
         self.ledger = ledger
         self.presentation = BusPresentation(bus, registry, channels.catalog, agents, goals)
         self.transcript_reads = transcript_read_state(bus.reads.path)
+        self.captured_activity: tuple[ReadState, ActivityCapture[ObservedActivity | DeletedThread]] = (
+            NoRevision(), ActivityCapture.empty())
+
+    def observed_activity(
+        self, revision: WireRevision, names: Iterable[str],
+    ) -> dict[str, ObservedActivity | DeletedThread]:
+        """The named threads' activity as of one observer revision.
+
+        Every notification request and every thread read asks; each revision captures
+        a name once, so a busy bus opens the activity and room stores once per
+        revision instead of once per reader. A busy row turning idle with age moves
+        no revision field, so the capture also ends when its own expiry passes."""
+        held, capture = self.captured_activity
+        if held != revision or capture.expired():
+            capture = ActivityCapture.empty()
+        wanted = tuple(names)
+        if missing := set(wanted) - capture.activity.keys():
+            capture = capture.joined(self.registry.snapshot().observed_activity(self.agents, missing))
+        self.captured_activity = (revision, capture)
+        return {name: capture.activity[name] for name in wanted if name in capture.activity}
 
     def message_notifications_for_references(self, references: Sequence[MessageReference]):
         return MessageNotification.references(self.root, self.registry, self.bus.bus, references)
@@ -251,10 +278,6 @@ class HistoryViews:
 
     def retained_context(self, name: str):
         """Project authored context and its export boundary from one captured bus read."""
-        from .context_segments.retained import RetainedSegment
-        from .input_disposition import InputDispositions
-        from .retained_task_facts import RetainedTaskFacts
-
         snapshot = self.registry.snapshot()
         owner = snapshot.require(name)
         with self.bus.bus.reading() as source:

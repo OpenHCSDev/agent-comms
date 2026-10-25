@@ -13,12 +13,13 @@ from .child_process import NoProcess, ProcessIdentity
 from .errors import RelationViolationError
 from .field_codec import GoalId, TurnId
 from .goal_history import GoalHistoryEntry, GoalHistoryStore
+from .goal_scope import AllGoals, GoalScope
 from .native_input_owner import RegistryOwner
 from .private_registry_guard import PrivateRegistryGuard
 from .registration_change import RegistrationChange
 from .registry_document import RegistryDocument, RegistrySnapshot
 from .registry_store import RegistryEdit, RegistryEntryRevision, RegistryStore
-from .routing import TurnRouting
+from .routing import NoTurnRouting, Routing
 from .storage_rules import StorageRule
 from .thread_execution import CommanderForkExecution, ExternalThreadExecution
 from .thread_identity import GenerationCounter
@@ -86,7 +87,7 @@ class Registration:
 
     def prepare_native_root(self) -> PrivateRegistryGuard:
         """Prepare native authority, then its complete runtime outside the registry lock."""
-        with self.store.locked():
+        with self.store.guarded_write():
             self.store.read_snapshot_unlocked().purpose.require_write()
             guard = self.store.private_guard_unlocked().prepare_native(self.store.path)
         guard.prepare_runtime()
@@ -264,9 +265,6 @@ class Registration:
     def _commit_registration(self, edit: RegistryEdit, change: RegistrationChange) -> RegistrationChange:
         """Every registration commits here, after inheritance kept a redeclared thread's
         roots; the registry assigns a new thread its storage roots in this one place."""
-        # The registry write refuses during maintenance; refuse first, so the goal journal
-        # never records an intent for a registration that cannot commit.
-        self.store.require_maintenance_open()
         change.prepare_participant(self.store.path.parent)
         thread = change.thread
         change = replace(change, thread=replace(
@@ -343,32 +341,12 @@ class Registration:
         with self.store.editing() as edit:
             owner = RegistryOwner.capture_local(edit.original.snapshot, expected.name)
             owner.require_claim(expected, generation)
-            leased, _ = edit.lease_turn(owner.thread, turn_id, None)
+            leased, _ = edit.lease_turn(owner.thread, turn_id, NoTurnRouting())
             edit.commit()
             return leased, generation
 
-    def lease_live_turn_with_generation(
-        self,
-        expected: Thread,
-        turn_id: TurnId,
-        *,
-        expected_owner_generation: int,
-        routing: TurnRouting | None = None,
-    ) -> tuple[Thread, int]:
-        """Claim against the exact captured declaration and stable owner generation."""
-        Thread.require_declaration(expected)
-        generation = GenerationCounter.require_positive(expected_owner_generation)
-        with self.store.editing() as edit:
-            snapshot = edit.original.snapshot
-            owner = RegistryOwner.capture_local(snapshot, expected.name)
-            owner.require_exact(snapshot, expected, generation)
-            owner.thread.turn_record.read().require_idle()
-            result = edit.lease_turn(owner.thread, turn_id, routing)
-            edit.commit()
-            return result
-
     def lease_local_turn(
-        self, name: str, turn_id: TurnId, *, routing: TurnRouting | None = None
+        self, name: str, turn_id: TurnId, *, routing: Routing = NoTurnRouting()
     ) -> tuple[Thread, int]:
         """Atomic local begin-turn, never reviving a stopped or replaced owner."""
         with self.store.editing() as edit:
@@ -393,16 +371,14 @@ class Registration:
     user_thread = reading(RegistryDocument.user_thread)
 
     def goal_history(
-        self, name: str, *, goal_id: GoalId | None = None
+        self, name: str, scope: GoalScope = AllGoals()
     ) -> tuple[GoalHistoryEntry, ...]:
-        """Read this owner's recorded transitions, reconciling crash cuts first."""
-
-        with self.store.locked():
-            document = self.store._read_unlocked()
-            thread = document.require(name)
-            return GoalHistoryStore(self.store.path).history(
-                thread.incarnation.wire_birth, thread.goal, goal_id=goal_id
-            )
+        """Read this owner's recorded transitions without waiting on a registry writer;
+        goal history's own transaction settles what the snapshot already shows."""
+        thread = self.store.read_snapshot_unlocked().require(name)
+        return GoalHistoryStore(self.store.path).history(
+            thread.incarnation.wire_birth, thread.goal, scope
+        )
 
     def session_thread(
         self, project_path: Path, preferred: str | None = None,

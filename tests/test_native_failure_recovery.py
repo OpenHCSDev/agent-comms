@@ -1,34 +1,24 @@
-"""Released-owner recovery refuses damaged original evidence; it grants no replay."""
+"""Released native input histories shared by the unknown-recovery tests."""
 from __future__ import annotations
 
 
-import asyncio
-import json
-import multiprocessing
 import os
 from abc import abstractmethod
 from contextlib import closing
-from dataclasses import dataclass
 from functools import partial
-from multiprocessing.process import BaseProcess
-from multiprocessing.synchronize import Event
 from pathlib import Path
 from typing import NamedTuple
 
 import pytest
 
-from agent_comms.attempt_recovery import RecoveryMonitorCapability
-from agent_comms.comms import wire
-from agent_comms.coordination_errors import IdentityConflict, RecoveryBlocked
-from agent_comms.coordination_tables.executions import ExecutionProvenance, WireOrigin
+from agent_comms.coordination_errors import IdentityConflict
+from agent_comms.coordination_tables.executions import WireOrigin
 from agent_comms.coordinator import Coordination
 from agent_comms.cursor_publication import CursorDelivery
 from agent_comms.declared_family import DeclaredFamily
 from agent_comms.fresh_private_session import create_fresh_private_session
 from agent_comms.launch_runtime import ThreadLaunch
-from agent_comms.native_failures import NativePiUnavailable
 from agent_comms.native_runtime_input import NativeRuntimeInput
-from agent_comms.owner_lifecycle import OwnerReleaseEvidence
 from agent_comms.selected_actions import CodingSelectedAction
 from agent_comms.selected_participant import SelectedParticipant
 from agent_comms.selected_session import SelectedSession
@@ -152,123 +142,3 @@ async def release_native_input(directory: Path, history: type[NativeSendHistory]
                 os.environ.update(environment)
                 comms.owners.release("beta")
                 return ReleasedNativeInput(root, root_id, participant.batch.execution_id, claim.input_id, identity.path)
-
-
-def failed_owner(directory, output, exit_allowed):
-    output.put(asyncio.run(release_native_input(Path(directory))))
-    if not exit_allowed.wait(15):
-        raise TimeoutError("test failed to release fixture process")
-
-
-@dataclass
-class ReleasedNativeFailure:
-    source: ReleasedNativeInput
-    process: BaseProcess
-    exit_allowed: Event
-
-    def leave(self):
-        self.exit_allowed.set()
-        self.process.join(5)
-        assert self.process.exitcode == 0
-
-
-@pytest.fixture
-def released_failure(tmp_path):  # noqa: F811
-    context = multiprocessing.get_context("spawn")
-    output, exit_allowed = context.Queue(), context.Event()
-    process = context.Process(target=failed_owner, args=(str(tmp_path), output, exit_allowed))
-    process.start()
-    try:
-        yield ReleasedNativeFailure(output.get(timeout=15), process, exit_allowed)
-    finally:
-        exit_allowed.set()
-        process.join(10)
-        if process.is_alive():
-            process.terminate()
-            process.join(5)
-        output.close()
-        assert process.exitcode == 0
-
-
-def test_recovery_refuses_released_but_live_owner(released_failure):
-    source = released_failure.source
-    with Coordination(source.root / "coordination.sqlite3") as store:
-        with pytest.raises(RecoveryBlocked):
-            RecoveryMonitorCapability.recover_native_failure(store, source.execution_id, source.session_file)
-        assert store.get(source.execution_id).is_current
-
-
-class EvidenceDamage(DeclaredFamily, affix="Damage"):
-    refusal = (RecoveryBlocked, NativePiUnavailable)
-
-    def alter(self, source):
-        rows = [json.loads(line) for line in source.session_file.read_text().splitlines()]
-        self.alter_rows(rows)
-        source.session_file.write_text("".join(json.dumps(row) + "\n" for row in rows))
-        return source.session_file
-
-    def alter_rows(self, rows):
-        raise NotImplementedError
-
-
-class UnfinishedDamage(EvidenceDamage):
-    def alter_rows(self, rows):
-        rows.pop()
-
-
-class SuccessDamage(EvidenceDamage):
-    def alter_rows(self, rows):
-        rows[-1]["message"]["stopReason"] = "stop"
-
-
-class DifferentParentDamage(EvidenceDamage):
-    def alter_rows(self, rows):
-        rows[-1]["parentId"] = "other"
-
-
-class AdditionalInputDamage(EvidenceDamage):
-    def alter_rows(self, rows):
-        rows.append({
-            "type": "message", "id": "additional-input", "parentId": rows[-1]["id"],
-            "timestamp": "2026-10-01T00:00:00.002Z",
-            "message": {"role": "user", "content": []},
-        })
-
-
-class ToolDamage(EvidenceDamage):
-    def alter_rows(self, rows):
-        rows[-1]["message"]["content"] = [{
-            "type": "toolCall", "id": "unexpected-tool", "name": "bash",
-            "arguments": {"command": "true"},
-        }]
-
-
-class WrongEpochDamage(EvidenceDamage):
-    def alter(self, source):
-        releases = wire(source.root).owners.releases
-        original = releases.read_many(("beta",))["beta"]
-        with releases.writing() as db:
-            OwnerReleaseEvidence.update(db, where="name=?", parameters=("beta",), before=original.after + 1)
-        return source.session_file
-
-
-class WrongSessionDamage(EvidenceDamage):
-    refusal = ValueError
-
-    def alter(self, source):
-        return source.session_file.parent.parent / "other.jsonl"
-
-
-@pytest.mark.parametrize("damage", EvidenceDamage.members_with(EvidenceDamage), ids=lambda damage: damage.declared_name)
-def test_recovery_refuses_ambiguous_evidence(released_failure, damage):
-    released_failure.leave()
-    source = released_failure.source
-    case = damage()
-    session_file = case.alter(source)
-    before = source.session_file.read_bytes()
-    with Coordination(source.root / "coordination.sqlite3") as store:
-        with pytest.raises(case.refusal):
-            RecoveryMonitorCapability.recover_native_failure(store, source.execution_id, session_file)
-        assert store.get(source.execution_id).is_current
-        assert len(NativeRuntimeInput.select(store.session._connection)) == 1
-    assert source.session_file.read_bytes() == before

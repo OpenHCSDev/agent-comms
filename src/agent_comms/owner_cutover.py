@@ -5,11 +5,11 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from collections.abc import Sequence
 from contextlib import nullcontext
-from pathlib import Path
 from typing import TYPE_CHECKING, NoReturn
 
 from .errors import RelationViolationError
 from .launch_runtime import LaunchRuntime
+from .restart_refusals import OwnerMaintenancePendingRefusal
 
 if TYPE_CHECKING:
     from .maintenance_barrier import MaintenanceState
@@ -48,8 +48,6 @@ class OwnerCutover(ABC):
 
     def require_restart_phase(self, lifecycle: OwnerLifecycle) -> None:
         """Ordinary restarts require READY; maintained cutovers bind their hold."""
-        from .restart_refusals import OwnerMaintenancePendingRefusal
-
         if lifecycle.maintenance.current_unlocked().turn_pending:
             raise OwnerMaintenancePendingRefusal()
 
@@ -112,10 +110,6 @@ class MaintainedOwnerCutover(OwnerCutover):
 
 class StoppedOwnerInstallation(OwnerCutover):
     """A same-format operation needs no cross-runtime completion transfer."""
-
-    def recovery_paths(self) -> frozenset[Path]:
-        """Original file destinations whose change forbids source restoration."""
-        return frozenset()
 
     def complete(self, stopped: StoppedOwnerBatch) -> tuple[OwnerRestartResult, ...]:
         self.after_stopped(stopped.lifecycle)

@@ -1,49 +1,40 @@
 """Session-owned parts, not stdout writes, confirm monitor delivery."""
+from contextlib import suppress
 import asyncio
-import json
 import os
 import socket
-import sqlite3
-from collections import Counter
-from contextlib import closing, suppress
 from html import escape
+import json
+
 
 import pytest
 
-from agent_comms.child_process import ProcessIdentity
-from agent_comms.cli_bridges.claude import ClaudeBridge, ClaudeJsonLines
-from agent_comms.cli_bridges.claude_protocol import (
-    ClaudeMonitorFrame,
-    ClaudeSession,
-    ForeignAttachment,
-    ForeignTaskNotification,
-)
-from agent_comms.cli_bridges.monitor import MonitorPeer, MonitorService
-from agent_comms.cli_bridges.shared import (
-    MONITOR_FRAME,
-    Binding,
-    BridgeStateTable,
-    DeliveryRow,
-    ForeignMonitorFrame,
-    GivenBinding,
-    MismatchedMonitor,
-    MonitorPart,
-    ObservedMonitor,
-    ObservedPart,
-    Options,
-    ReceivingMonitor,
-    StoredBinding,
-    UnrecordedMonitor,
-    Watch,
-)
-from agent_comms.cli_protocol import DeliveredOutcome, EmittedOutcome, UnconfirmedOutcome
-from agent_comms.comms import wire
+from conftest import declare_test_bus
+
 from agent_comms.installer.practice import PracticeCopy
 from agent_comms.locked_store import RootFile
-from agent_comms.messages import InfoKind, Message
+
+from agent_comms.cli_bridges.claude import ClaudeBridge, ClaudeJsonLines
+from agent_comms.child_process import ProcessIdentity
+from agent_comms.cli_bridges.monitor import MonitorPeer, MonitorService
+from agent_comms.cli_bridges.claude_protocol import (
+    ClaudeSession, ClaudeMonitorFrame, ForeignTaskNotification,
+    ForeignAttachment, KnownTurn,
+)
+from agent_comms.cli_bridges.shared import (
+    Binding, DeliveryRow, ObservedPart, ReceivingMonitor, UnrecordedMonitor, MonitorPart,
+    ForeignMonitorFrame, Options, ObservedMonitor, MismatchedMonitor, Watch, StoredBinding,
+    MonitorObservation,
+    GivenBinding, MONITOR_FRAME,
+)
+from agent_comms.cli_protocol import UnconfirmedOutcome, EmittedOutcome, DeliveredOutcome
+from agent_comms.field_codec import FieldCodec, MalformedRecord
+from agent_comms.message_reference import BridgeStart, MessageReference
+from agent_comms.runtime_updates import HiddenItem
+from agent_comms.turn_item import NativeTurnId
+from agent_comms.messages import InfoKind, Message, TaskAttachment
 from agent_comms.read_basis import ExplicitWatchAcknowledgment
 from agent_comms.threads import Thread
-from conftest import declare_test_bus
 
 
 @pytest.mark.asyncio
@@ -57,9 +48,8 @@ async def test_empty_journal_starts_at_binding_and_ignores_user_reads(comms, tmp
         binding = GivenBinding({
             Binding.family_discriminator: Binding.declared_name,
             'root': str(comms.root), 'bus_thread': 'viewer', 'session': 'session',
-        }).bind(db)
+        }).bind(db).registered(comms).bind(db)
         selected = ClaudeBridge(Options(Watch(), StoredBinding(), state, state.parent), binding, db)
-        selected.binding = await selected.options.operation.prepare(selected)
         fresh = comms.messaging.send(
             'peer', 'viewer', 'after binding, already read in Toad').message
         comms.messaging.acknowledge('viewer', (fresh.reference,))
@@ -119,7 +109,7 @@ def bridge(comms, tmp_path):
     practice.include(tuple(RootFile.existing_in(practice.root)))
     (root, _measurement) = practice.path, practice.measurement
     state = tmp_path / 'bridge-state'
-    binding = Binding(root=str(root), owner=wire(root).registry.require('viewer').incarnation,
+    binding = Binding(root=str(root), owner=comms.registry.require('viewer').incarnation,
                       thread='session', start=Binding.bus_head(str(root)))
     with Binding.open(state) as db:
         binding.bind(db)
@@ -137,6 +127,16 @@ def emitted_delivery(bridge):
         return delivery
     return emit
 
+
+def test_resume_cursor_reads_seq_and_id_without_decoding_an_old_payload(bridge):
+    message = bridge.comms.messaging.send('claude-code', 'viewer', 'older wire shape').message
+    retired = {**message.to_wire(), 'task': {TaskAttachment.family_discriminator: 'RetiredTask'}}
+    with pytest.raises(MalformedRecord):
+        Message.from_wire(retired)
+    with bridge.db:
+        DeliveryRow(message.message_id, json.dumps(retired), DeliveredOutcome).insert(bridge.db)
+    assert DeliveryRow.resume_after(bridge.db, bridge.binding) == BridgeStart(
+        MessageReference(message.seq, message.message_id))
 
 def decoded_record(data):
     return ClaudeJsonLines().decode_line(json.dumps(data).encode(), 0)
@@ -223,15 +223,33 @@ def test_foreign_task_notifications_are_named_and_malformed_matching_xml_fails()
     assert isinstance(ClaudeMonitorFrame.decode_line('"Comms in · old format...(truncated)'),ForeignMonitorFrame)
 
 
-def test_non_task_attachments_and_pending_queue_records_do_not_confirm():
-    record=decoded_record(dict(type='attachment', uuid='foreign-record',
+def queued_prompt(kind, prompt):
+    return decoded_record(dict(type='attachment', uuid='queued-record',
         timestamp='2026-10-16T16:40:05.123Z', attachment=dict(type='queued_command',
-        origin=dict(kind='peer'), prompt='Not a Monitor notification')))
-    assert isinstance(record.attachment, ForeignAttachment)
-    assert record.updates(ClaudeSession())==()
+        origin=dict(kind=kind), prompt=prompt)))
+
+
+def test_non_task_attachments_and_pending_queue_records_do_not_confirm():
+    session=ClaudeSession(turn=KnownTurn(FieldCodec.decode(NativeTurnId, 'turn')))
+    for kind in ('peer', 'human'):
+        updates=queued_prompt(kind, 'Not a Monitor notification').updates(session)
+        assert not any(isinstance(update, MonitorObservation) for update in updates)
+    hook=decoded_record(dict(type='attachment', uuid='foreign-record',
+        timestamp='2026-10-16T16:40:05.123Z', attachment=dict(type='hook_success')))
+    assert isinstance(hook.attachment, ForeignAttachment)
+    assert hook.updates(ClaudeSession())==()
     queued=decoded_record(dict(type='queue-operation', operation='enqueue',
         sessionId='session', content='<task-notification><event>not yet received</event></task-notification>'))
     assert queued.updates(ClaudeSession())==()
+
+
+def test_remote_control_session_record_decodes_without_updates():
+    record = decoded_record({'type': 'bridge-session',
+        'sessionId': '00000000-0000-4000-8000-000000000001',
+        'bridgeSessionId': 'cse_000000000000000000000000', 'lastSequenceNum': 0,
+        'ownerAccountUuid': '00000000-0000-4000-8000-000000000002',
+        'ownerOrganizationUuid': '00000000-0000-4000-8000-000000000003'})
+    assert record.updates(ClaudeSession()) == ()
 
 
 @pytest.mark.asyncio
@@ -278,141 +296,173 @@ async def test_explicit_watch_does_not_mark_streamed_messages_read(wired):
     assert [m.reference for m in wired.bus.inbox('fixer').page.messages]==[second.reference]
 
 
-# delivery.sqlite3 as bridges wrote it before the sequence index was declared:
-# its outcome index held the name the sequence index now declares.
-_OLD_DELIVERY_FILE = (
-    'CREATE TABLE "binding" ("root" TEXT NOT NULL, "bus" TEXT NOT NULL, "thread" TEXT NOT NULL) STRICT',
-    'CREATE TABLE "delivery" ("id" TEXT NOT NULL, "payload" TEXT NOT NULL, "outcome" TEXT NOT NULL'
-    ' CHECK ("outcome" IN (\'filtered\', \'unconfirmed\', \'delivered\', \'emitted\')),'
-    ' "monitor" TEXT NOT NULL, PRIMARY KEY ("id")) STRICT',
-    'CREATE INDEX "delivery_0_idx" ON "delivery" ("outcome")',
-    'CREATE INDEX "delivery_sequence" ON "delivery" (json_extract(payload, \'$.seq\'))',
-    'CREATE TABLE "observed_part" ("id" TEXT NOT NULL, "number" INTEGER NOT NULL, "sender" TEXT NOT NULL,'
-    ' "body" TEXT NOT NULL, "record_id" TEXT NOT NULL, "timestamp" REAL NOT NULL,'
-    ' PRIMARY KEY ("id", "number")) STRICT',
-)
+@pytest.mark.asyncio
+async def test_harness_outcome_lives_on_the_threads_claim_across_a_rehome(tmp_path, monkeypatch):
+    from bus_record_fixture import prepare_native_comms
+    from conftest import publish_initial
+    from agent_comms.assignment_states import DeferredAssignment, DeliveredAssignment
+    from agent_comms.comms import wire
+    from conftest import accept_initial
+    from agent_comms.coordination_cohort import pending_sealed_assignments
+    from agent_comms.coordination_database import CoordinationStore
+    from agent_comms.coordination_tables.assignments import WakeAssignment
+    from agent_comms.coordinator import Coordination
+    from agent_comms.thread_execution import ExternalThreadExecution
 
+    comms = prepare_native_comms(wire(tmp_path / 'wire'))
+    comms.registry.declare(Thread('peer', frozenset(), str(tmp_path)))
+    comms.registry.declare(Thread('viewer', frozenset(), str(tmp_path),
+                                  execution=ExternalThreadExecution))
+    root_id = comms.registry.prepare_native_root().namespace
+    lookup = comms.registry.require('viewer').incarnation.require_recorded().lookup
+    with Coordination(str(CoordinationStore.path_in(comms.root))) as store:
+        store.participants.register(lookup, committed=True)
 
-_OLD_FIRST = Message(
-    sender='peer', target='viewer', body='first', type=InfoKind, timestamp=1., seq=7)
-_OLD_SECOND = Message(
-    sender='peer', target='viewer', body='second', type=InfoKind, timestamp=2., seq=8)
+        def publish(body):
+            message = publish_initial(comms, 'peer', 'viewer', body).message
+            accept_initial(comms.bus, root_id, message.seq, store)
+            return message
 
-_OLD_DELIVERY_ROWS = (
-    ('binding', ('/root', 'viewer', 'session')),
-    ('delivery', (_OLD_FIRST.message_id, json.dumps(_OLD_FIRST.to_wire()),
-                  'unconfirmed', '{"kind":"receiving","total":1}')),
-    ('delivery', (_OLD_SECOND.message_id, json.dumps(_OLD_SECOND.to_wire()),
-                  'emitted', '{"kind":"unrecorded"}')),
-    ('observed_part', (_OLD_FIRST.message_id, 1, 'peer', 'part one', 'record-1', 12.5)),
-)
+        taken, confirmed, waiting = (publish(body) for body in (
+            'taken, start unproved', 'taken and confirmed', 'never reached the harness'))
 
+    def claim(message):
+        with Coordination(str(CoordinationStore.path_in(comms.root))) as store:
+            row, = WakeAssignment.select(store.session._connection,
+                                         recipient_lookup=lookup, wire_seq=message.seq)
+            return row.lifecycle
 
-def _old_delivery_file(state):
-    path = state / BridgeStateTable.filename
-    with closing(sqlite3.connect(path)) as db:
-        for statement in _OLD_DELIVERY_FILE:
-            db.execute(statement)
-        for table, values in _OLD_DELIVERY_ROWS:
-            db.execute(f'INSERT INTO "{table}" VALUES ({",".join("?" for _ in values)})', values)
-        db.commit()
-    return path
+    def owed():
+        with Coordination(str(CoordinationStore.path_in(comms.root))) as store:
+            return tuple(row.wire_seq for row in pending_sealed_assignments(store, lookup, after_seq=0))
 
+    async def emitted(message):
+        return EmittedOutcome
 
-def test_old_delivery_index_set_is_carried_onto_the_declaration_with_every_row(tmp_path, comms):
-    """A durable store derives its declared schema on the writer's open (a5b3cd8a7): the old
-    index set is replaced by the declared one and no row is lost."""
-    from cutover.binding_start import SavedJournal, migrate
+    async def attached():
+        pass
 
-    comms.registry.declare(Thread('viewer', frozenset(), str(tmp_path), created_at=0.5))
-    path = _old_delivery_file(tmp_path)
-    with closing(sqlite3.connect(path)) as db:
-        db.execute('UPDATE binding SET root = ?', (str(comms.root),))
-        db.commit()
-        before = {table: db.execute(f'SELECT * FROM "{table}"').fetchall()
-                  for table in ('binding', 'delivery', 'observed_part')}
-    original = SavedJournal(tmp_path, tmp_path / "original")
-    original.save()
-    assert migrate(tmp_path).report() == 1
-    assert migrate(tmp_path).report() == 0
-    with Binding.open(tmp_path) as db:
-        assert not BridgeStateTable.schema_differs(db)
-        assert {table: db.execute(f'SELECT count(*) FROM "{table}"').fetchone()[0]
-                for table in ('binding', 'delivery', 'observed_part')} == Counter(
-            table for table, _ in _OLD_DELIVERY_ROWS)
-    original.restore()
-    with closing(sqlite3.connect(path)) as db:
-        assert {table: db.execute(f'SELECT * FROM "{table}"').fetchall()
-                for table in before} == before
-
-
-def test_binding_carry_reports_every_refusal_before_changing_any_journal(comms, tmp_path, capsys):
-    from cutover.binding_start import merge_directories
-
-    home = tmp_path / 'carry-home'
-    comms.registry.declare(Thread('viewer', frozenset(), str(tmp_path), created_at=0.5))
-    comms.registry.declare(Thread('reused', frozenset(), str(tmp_path), created_at=3.0))
-    comms.registry.declare(Thread('deleted', frozenset(), str(tmp_path), created_at=0.25))
-    comms.registry.unregister('deleted')
-    comms.registry.remove('deleted')
-    originals = {}
-    for name in ('viewer', 'missing', 'deleted', 'reused', 'empty'):
-        state = home / ClaudeBridge.state_directory / name
-        state.mkdir(parents=True)
-        path = _old_delivery_file(state)
-        with closing(sqlite3.connect(path)) as db:
-            db.execute('UPDATE binding SET root = ?, bus = ?',
-                       (str(comms.root), 'viewer' if name == 'empty' else name))
-            if name == 'empty':
-                db.execute('DELETE FROM delivery')
-                db.execute('DELETE FROM observed_part')
-            db.commit()
-        originals[path] = path.read_bytes()
-    with pytest.raises(ExceptionGroup, match='4 bindings require explicit rebinding'):
-        merge_directories(home, comms.root)
-    output = capsys.readouterr().out
-    assert '1 proven, 4 refused, 8 deliveries retained' in output
-    for name in ('missing', 'deleted', 'reused', 'empty'):
-        assert f'{home / ClaudeBridge.state_directory / name}: Refused binding' in output
-    assert {path: path.read_bytes() for path in originals} == originals
-
-
-def test_inactive_binding_carry_keeps_start_deliveries_and_current_run_rollback(
-        comms, tmp_path, capsys):
-    from cutover.binding_start import DirectoryBackup, merge_directories, revert
-
-    from agent_comms.field_codec import FieldCodec
-    from agent_comms.message_reference import BridgeStart
-
-    comms.registry.declare(Thread('viewer', frozenset(), str(tmp_path), created_at=0.5))
-    home = tmp_path / 'carry-home'
-    state = home / ClaudeBridge.state_directory / 'inactive'
-    state.mkdir(parents=True)
-    path = _old_delivery_file(state)
-    start = BridgeStart(_OLD_FIRST.reference)
-    with closing(sqlite3.connect(path)) as db:
-        db.execute('UPDATE binding SET root = ?', (str(comms.root),))
-        db.execute('ALTER TABLE binding ADD COLUMN start TEXT')
-        db.execute('UPDATE binding SET start = ?', (FieldCodec.compact(FieldCodec.encode(start)),))
-        db.commit()
-        deliveries = db.execute('SELECT * FROM delivery').fetchall()
-        parts = db.execute('SELECT * FROM observed_part').fetchall()
-    original = path.read_bytes()
-    stale = state.parent / '.binding-start-backup'
-    stale.mkdir()
-    sentinel = stale / 'manifest.json'
-    sentinel.write_text('not this run; never read or restored')
-
-    assert merge_directories(home, comms.root) == 1
-    assert '1 rows carried, 0 refused, 2 delivery records retained' in capsys.readouterr().out
+    state = tmp_path / 'bridge-state'
     with Binding.open(state) as db:
-        binding, = Binding.select(db)
-        assert binding.owner == comms.registry.require('viewer').incarnation
-        assert binding.start == start
-        assert db.execute('SELECT * FROM delivery').fetchall() == deliveries
-        assert db.execute('SELECT * FROM observed_part').fetchall() == parts
-    assert merge_directories(home, comms.root) == 0
-    assert revert(home, comms.root) == 1
-    assert path.read_bytes() == original
-    assert sentinel.read_text() == 'not this run; never read or restored'
-    assert not DirectoryBackup.path_in(home).exists()
+        binding = Binding(root=str(comms.root), owner=comms.registry.require('viewer').incarnation,
+                          thread='session', start=Binding.bus_head(str(comms.root)))
+        binding.bind(db)
+        bridge = ClaudeBridge(Options(Watch(), StoredBinding(), state, state.parent), binding, db)
+        monkeypatch.setattr(bridge, 'prepare_delivery', attached)
+        monkeypatch.setattr(bridge, 'deliver', emitted)
+        assert owed() == (taken.seq, confirmed.seq, waiting.seq)
+        await bridge.accept(taken)
+        await bridge.accept(confirmed)
+        row, = DeliveryRow.select(db, id=confirmed.message_id)
+        await row.finish(bridge, DeliveredOutcome)
+        await bridge.accept(taken)
+
+    # Whatever execution owns the thread next reads this one record: only the
+    # message no harness took is still owed, and the UNKNOWN one never replays.
+    assert owed() == (waiting.seq,)
+    unknown = claim(taken)
+    assert unknown == DeferredAssignment.build(unknown.mode, None, None)
+    assert type(claim(confirmed)) is DeliveredAssignment
+
+
+def test_prompt_typed_during_a_turn_is_shown_and_an_agents_is_hidden():
+    session=ClaudeSession(turn=KnownTurn(FieldCodec.decode(NativeTurnId, 'turn')))
+    shown,=queued_prompt('human', 'typed while you worked').updates(session)
+    assert [event.text for event in shown.events]==['typed while you worked']
+    assert not isinstance(shown, HiddenItem)
+    hidden,=queued_prompt('peer', 'a fork reporting').updates(session)
+    assert isinstance(hidden, HiddenItem)
+
+
+def test_prompt_typed_with_an_image_during_a_turn_shows_its_text():
+    session=ClaudeSession(turn=KnownTurn(FieldCodec.decode(NativeTurnId, 'turn')))
+    image=dict(type='base64', media_type='image/png', data='AA==')
+    prompt=[dict(type='text', text='[Image #16] look'), dict(type='image', source=image)]
+    shown,=queued_prompt('human', prompt).updates(session)
+    assert [event.text for event in shown.events]==['[Image #16] look']
+
+@pytest.mark.asyncio
+async def test_a_bridge_waits_out_maintenance_and_then_records_its_delivery(tmp_path, monkeypatch):
+    """An install holds the bus: the bridge's harness hand-off and delivery record wait
+    for the hold to clear instead of dying on MaintenanceHeldError (install 18, 10-24)."""
+    from bus_record_fixture import prepare_native_comms
+    from conftest import accept_initial, publish_initial
+    from agent_comms.assignment_states import DeliveredAssignment
+    from agent_comms.comms import wire
+    from agent_comms.coordination_database import CoordinationStore
+    from agent_comms.coordination_tables.assignments import WakeAssignment
+    from agent_comms.coordinator import Coordination
+    from agent_comms.maintenance_barrier import MaintenanceBarrier, MaintenanceOperator
+    from agent_comms.thread_execution import ExternalThreadExecution
+
+    comms = prepare_native_comms(wire(tmp_path / 'wire'))
+    comms.registry.declare(Thread('peer', frozenset(), str(tmp_path)))
+    comms.registry.declare(Thread('viewer', frozenset(), str(tmp_path),
+                                  execution=ExternalThreadExecution))
+    root_id = comms.registry.prepare_native_root().namespace
+    lookup = comms.registry.require('viewer').incarnation.require_recorded().lookup
+    with Coordination(str(CoordinationStore.path_in(comms.root))) as store:
+        store.participants.register(lookup, committed=True)
+        message = publish_initial(comms, 'peer', 'viewer', 'held during install').message
+        accept_initial(comms.bus, root_id, message.seq, store)
+
+    def claim():
+        with Coordination(str(CoordinationStore.path_in(comms.root))) as store:
+            row, = WakeAssignment.select(store.session._connection,
+                                         recipient_lookup=lookup, wire_seq=message.seq)
+            return row.lifecycle
+
+    barrier = MaintenanceBarrier(comms.registry.store.path)
+    holds = []
+
+    async def delivered(message):
+        # The harness took it; the install's hold lands before the bus records that.
+        holds.append(barrier.begin(MaintenanceOperator.current()))
+        return DeliveredOutcome
+
+    async def attached():
+        pass
+
+    async def waits_until_cleared(pending):
+        with pytest.raises(TimeoutError):
+            async with asyncio.timeout(.2):
+                await asyncio.shield(pending)
+        barrier.clear(holds.pop())
+
+    state = tmp_path / 'bridge-state'
+    with Binding.open(state) as db:
+        binding = Binding(root=str(comms.root), owner=comms.registry.require('viewer').incarnation,
+                          thread='session', start=Binding.bus_head(str(comms.root)))
+        binding.bind(db)
+        bridge = ClaudeBridge(Options(Watch(), StoredBinding(), state, state.parent), binding, db)
+        monkeypatch.setattr(bridge, 'prepare_delivery', attached)
+        monkeypatch.setattr(bridge, 'deliver', delivered)
+        holds.append(barrier.begin(MaintenanceOperator.current()))
+        pending = asyncio.create_task(bridge.accept(message))
+        await waits_until_cleared(pending)  # the hand-off to the harness
+        await waits_until_cleared(pending)  # the delivery record
+        await asyncio.wait_for(pending, 5)
+    assert type(claim()) is DeliveredAssignment
+
+def test_only_commanded_sessions_reply_to_their_delivered_senders(comms):
+    """The commander answers its owner in its own transcript: a unit that messaged it
+    mid-turn never receives that turn's answer as a direct message."""
+    from agent_comms.registry_document import RegisteredCommanderProject
+    from agent_comms.runtime_updates import FinishedItem, ReplyingThreadOutput
+    from agent_comms.thread_execution import ExternalThreadExecution
+    from agent_comms.transcript_events import AssistantTranscript
+    from agent_comms.turn_item import NativeItemId, NativeTurnId
+
+    lead, unit = (comms.registry.declare(Thread(
+        name, frozenset(), "/tmp", execution=ExternalThreadExecution)) for name in ("lead", "unit"))
+    comms.registry.set_commander_project(RegisteredCommanderProject(lead.incarnation, ()))
+    for speaker, sender in ((lead, unit), (unit, lead)):
+        output = ReplyingThreadOutput.for_comms(comms.transcripts.external(speaker.name), comms)
+        output.delivered_targets((sender.name,))
+        turn = NativeTurnId(f"{speaker.name}-turn")
+        item_id = NativeItemId("a")
+        output.publish_item(FinishedItem(turn, item_id, (AssistantTranscript(
+            f"{speaker.name} answers", timestamp=1.0, position=item_id),)))
+        output.end_turn(turn)
+    assert comms.bus.pending_count("unit") == 0
+    assert comms.bus.pending_count("lead") == 1

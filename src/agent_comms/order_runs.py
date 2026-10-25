@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from abc import abstractmethod
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import TYPE_CHECKING, ClassVar
 
@@ -26,9 +26,15 @@ class OrderRun(DeclaredFamily, affix="OrderRun"):
     def require_artifact(self, path: str) -> None:
         pass
 
-    @property
-    def merged_line(self) -> str:
-        return "Merged, waiting on install"
+    def retexted(self, text: str) -> OrderRun:
+        raise ToolRefusedError("A mechanical run has no text; its check alone closes the order.")
+
+    def merged_line(self, state: str) -> str:
+        return f"Merged, {state}"
+
+    def holder_runs(self) -> bool:
+        """Whether, once installed, the next action is the holder's run, not the commander's."""
+        return False
 
     @abstractmethod
     def after_merge(self, todo: Todo, merged: MergedProblemOrder) -> Todo: ...
@@ -71,9 +77,11 @@ class ApplicationOrderRun(OrderRun):
                 f"Reassign them; only a mechanical run reaches {unit.name}."
             )
 
-    @property
-    def merged_line(self) -> str:
-        return f"{super().merged_line}, waiting on the run"
+    def merged_line(self, state: str) -> str:
+        return f"{super().merged_line(state)}, waiting on the run"
+
+    def holder_runs(self) -> bool:
+        return True
 
     def after_merge(self, todo: Todo, merged: MergedProblemOrder) -> Todo:
         return merged.waiting_in(todo)
@@ -86,6 +94,9 @@ class ApplicationOrderRun(OrderRun):
     def require_artifact(self, path: str) -> None:
         if not Path(path).is_file():
             raise ToolRefusedError("This order needs --seen FILE showing its requested run.")
+
+    def retexted(self, text: str) -> OrderRun:
+        return replace(self, text=text)
 
     text: str
     least_words: ClassVar[int] = 8  # the run, and the evidence that it happened

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, replace
 
-from agent_comms.reason_codes import GivenReasonCode, NoDetail, NoReasonCode, ReasonCode, RecoveryDetail
+from agent_comms.reason_codes import GivenReasonCode, NoReasonCode, ReasonCode
 from agent_comms.assignment_states import EngagedAssignment
 from agent_comms.attempt_start import AttemptStart
 from agent_comms.attempt_states import AttemptState, TerminalAttempt, UnknownOutcomeAttempt
@@ -18,12 +18,10 @@ from agent_comms.coordination_results import AlreadyApplied, Applied
 from agent_comms.coordination_session import NativeBoundary
 from agent_comms.coordination_snapshot import RecoverySnapshot
 from agent_comms.coordination_tables.assignments import WakeAssignment
-from agent_comms.coordination_tables.attempts import AttemptRecord, ReplayFact
-from agent_comms.coordination_tables.recovery import RecoveryAudit
+from agent_comms.coordination_tables.attempts import AttemptRecord
 from agent_comms.owner_fence import OwnerFence
 from agent_comms.turn_failure import TurnFailure
 from agent_comms.recovery_reader import RecoveryReader
-from agent_comms.recovery_states import RecoveryCondition
 
 
 @dataclass(frozen=True, slots=True)
@@ -32,7 +30,6 @@ class StartResult:
     fence: OwnerFence
 
 
-MAX_LEASE_RENEWAL_MS = 300_000
 
 
 class AttemptStore(RecoveryReader):
@@ -85,34 +82,6 @@ class AttemptStore(RecoveryReader):
                     updated_at_ms=self.session.now(assignment.updated_at_ms),
                 )
 
-    def renew_lease(
-        self,
-        fence: OwnerFence,
-        *,
-        expected_pointer_revision: int,
-        duration_ms: int,
-    ) -> Applied[StartResult]:
-        if not 1 <= duration_ms <= MAX_LEASE_RENEWAL_MS:
-            raise ValueError("renewal duration is outside the bounded policy")
-        with self.session.writing() as db:
-            snapshot, attempt = self.require_fence(fence)
-            if snapshot.pointer_revision != expected_pointer_revision:
-                raise StaleRevision("pointer revision changed")
-            lifecycle = attempt.lifecycle.renewed(
-                self.session.now(attempt.updated_at_ms) + duration_ms
-            )
-            AttemptRecord.update(
-                db,
-                where="execution_id=? AND attempt_ordinal=?",
-                parameters=(fence.execution_id, fence.attempt_ordinal),
-                lifecycle=lifecycle,
-                revision=attempt.revision + 1,
-                updated_at_ms=self.session.now(attempt.updated_at_ms),
-            )
-            after = self.get(fence.execution_id)
-            assert after.attempt is not None
-            return Applied(StartResult(after, replace(fence, revision=after.attempt.revision)))
-
     def advance(
         self,
         fence: OwnerFence,
@@ -145,32 +114,6 @@ class AttemptStore(RecoveryReader):
                 StartResult(after, replace(fence, revision=after.require_attempt().revision))
             )
 
-    def observe_replay(
-        self,
-        fence: OwnerFence,
-        *,
-        expected_pointer_revision: int,
-        expected_replay_revision: int | None,
-        facts: ReplayFact,
-        replay_safe: bool,
-        side_effects_possible: bool,
-    ) -> Applied[RecoverySnapshot] | AlreadyApplied[RecoverySnapshot]:
-        if type(replay_safe) is not bool or type(side_effects_possible) is not bool:
-            raise ValueError("replay assessment flags must be booleans")
-        facts = ReplayFact(facts)
-        with self.session.writing():
-            snapshot, _ = self.require_fence(fence)
-            if snapshot.pointer_revision != expected_pointer_revision:
-                raise StaleRevision("pointer revision changed")
-            before = snapshot.replay
-            before.require_revision(expected_replay_revision)
-            if not before.observe(
-                self.session._connection, fence.execution_id, facts=facts,
-                replay_safe=replay_safe, side_effects_possible=side_effects_possible,
-            ):
-                return AlreadyApplied(snapshot)
-            return Applied(self.get(fence.execution_id))
-
     def fail_unknown(
         self,
         fence: OwnerFence,
@@ -201,34 +144,6 @@ class AttemptStore(RecoveryReader):
             self.get(fence.execution_id).settle(
                 self.session, UnknownOutcomeAttempt(), GivenReasonCode("native_unknown"), acquired
             )
-            return Applied(self.get(fence.execution_id))
-
-    def append_recovery_audit(
-        self,
-        fence: OwnerFence,
-        *,
-        expected_pointer_revision: int,
-        kind: type[RecoveryCondition],
-        reason_code: GivenReasonCode,
-        sanitized_detail: RecoveryDetail = NoDetail(),
-        elapsed_ms: int = 0,
-    ) -> Applied[RecoverySnapshot]:
-        if elapsed_ms < 0:
-            raise ValueError("invalid recovery audit")
-        with self.session.writing() as db:
-            snapshot, attempt = self.require_fence(fence)
-            if snapshot.pointer_revision != expected_pointer_revision:
-                raise StaleRevision("pointer revision changed")
-            kind.validate_audit(snapshot, attempt)
-            RecoveryAudit(
-                execution_id=fence.execution_id,
-                kind=kind,
-                reason_code=reason_code,
-                sanitized_detail=sanitized_detail,
-                attempt=attempt.attempt_ordinal,
-                elapsed_ms=elapsed_ms,
-                observed_at_ms=self.session.now(attempt.updated_at_ms),
-            ).insert(db)
             return Applied(self.get(fence.execution_id))
 
     def settle_nonpublication(

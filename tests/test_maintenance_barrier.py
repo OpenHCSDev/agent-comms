@@ -28,9 +28,14 @@ from agent_comms.maintenance_barrier import (
     ReadyPhase,
 )
 from agent_comms.registration import Registration
-from agent_comms.store_files import _async_store_lock, _store_lock
+from agent_comms.store_files import (
+    ExclusiveLock,
+    UNBOUNDED_CONTENTION,
+    _async_store_lock,
+    _store_lock,
+)
 from agent_comms.threads import Thread
-from agent_comms.turn_item import NativeTurnId
+from agent_comms.turn_item import NativeItemId, NativeTurnId
 
 
 def test_nested_holds_restore_the_previous_authority_on_failure(tmp_path, monkeypatch):
@@ -100,7 +105,7 @@ def test_only_hold_bound_cutover_may_retire_during_draining(tmp_path: Path) -> N
     hold = comms.owners.maintenance.begin(MaintenanceOperator.current())
     cutover = ScratchCutover()
     cutover.maintenance_hold = hold
-    with comms.registry.store.locked():
+    with comms.registry.store.guarded_write():
         cutover.require_restart_phase(comms.owners)
         from agent_comms.restart_refusals import OwnerMaintenancePendingRefusal
 
@@ -110,7 +115,7 @@ def test_only_hold_bound_cutover_may_retire_during_draining(tmp_path: Path) -> N
 
         assert refused.value.queue_state().items_with(Pending, refused.value)  # Idle reload remains queued, not UNKNOWN.
     comms.owners.maintenance.clear(hold)
-    with comms.registry.store.locked():
+    with comms.registry.store.guarded_write():
         with pytest.raises(RelationViolationError):
             cutover.require_restart_phase(comms.owners)
 
@@ -288,7 +293,7 @@ async def test_native_ingress_waits_without_blocking_exclusive_owner(tmp_path: P
             with status.phase.send_running(None, None, "native", "original"):
                 entered.set()
 
-    async with _async_store_lock(root / "registry.json"):
+    async with _async_store_lock(root / 'registry.json', ExclusiveLock(), UNBOUNDED_CONTENTION):
         send = asyncio.create_task(native_write())
         try:
             # The original exclusive owner must resume on the same loop while
@@ -334,7 +339,7 @@ def test_phase_change_waits_for_final_native_write_lock(tmp_path: Path) -> None:
     sender.join(5)
     closer.join(5)
     assert changed.is_set()
-    with _store_lock(root / "registry.json"), pytest.raises(RelationViolationError):
+    with _store_lock(root / 'registry.json', ExclusiveLock(), UNBOUNDED_CONTENTION), pytest.raises(RelationViolationError):
         gate.assert_open_unlocked()
 
 
@@ -376,9 +381,17 @@ async def test_bus_waits_before_mutating_a_transcript_batch(tmp_path: Path) -> N
     comms = wire(tmp_path)
     comms.registry.declare(Thread('cli', frozenset(), str(tmp_path)))
     output = ThreadOutput(comms.transcripts.external('cli'), comms.agents)
-    updates = [StartedItem(turn_turn_id, 'item', ModelWaitPhase('Replying'),
-                          TextDraft.from_parts(AssistantTranscript, ('prefix',), RecordedEventTime(1.), 'item')),
-               AppendDraftItem(turn_turn_id, 'item', ' once')]
+    updates = [
+        StartedItem(
+            turn_turn_id,
+            NativeItemId("item"),
+            ModelWaitPhase("Replying"),
+            TextDraft.from_parts(
+                AssistantTranscript, ("prefix",), RecordedEventTime(1.0), NativeItemId("item")
+            ),
+        ),
+        AppendDraftItem(turn_turn_id, NativeItemId("item"), " once"),
+    ]
     barrier = MaintenanceBarrier(comms.registry.store.path)
     hold = barrier.begin(MaintenanceOperator.current())
     pending = asyncio.create_task(comms.bus.when_open(partial(output.publish_batch, updates)))
@@ -392,25 +405,38 @@ async def test_bus_waits_before_mutating_a_transcript_batch(tmp_path: Path) -> N
         barrier.clear(hold)
     await asyncio.wait_for(pending, 3)
     with output.transcript.reading() as source:
-        assert source.current_draft(output.transcript.root, output.transcript.incarnation).external_row().events == (AssistantTranscript('prefix once', timestamp=1., position='item'),)
+        assert source.current_draft(
+            output.transcript.root, output.transcript.incarnation
+        ).external_row().events == (
+            AssistantTranscript("prefix once", timestamp=1.0, position=NativeItemId("item")),
+        )
 
 
 def test_a_registry_write_is_refused_to_all_but_the_maintenance_holder(tmp_path: Path, monkeypatch) -> None:
     """The installer stops only its owners; the connector, bridges and forks keep running, so the
     registry itself refuses their writes during a hold, and the holder's own writes still land."""
+    from agent_comms.coordination_errors import ParticipantNotRegistered
+    from agent_comms.coordination_session import CoordinationSession
     from agent_comms.maintenance_barrier import HOLDER_NONCE
+    from agent_comms.participant_store import ParticipantStore
 
     comms = wire(tmp_path)
     comms.registry.declare(Thread(name='a', tags=frozenset(), worktree='/wt'))
+    requested = Thread(name='b', tags=frozenset(), worktree='/wt')
     before = comms.registry.store.path.read_bytes()
     gate = MaintenanceBarrier(comms.registry.store.path)
     hold = gate.begin(MaintenanceOperator.current())
     monkeypatch.delenv(HOLDER_NONCE, raising=False)
     with pytest.raises(RelationViolationError):
-        comms.registry.declare(Thread(name='b', tags=frozenset(), worktree='/wt'))
+        comms.registry.declare(requested)
     assert comms.registry.store.path.read_bytes() == before
-    monkeypatch.setenv(HOLDER_NONCE, hold.nonce)
-    comms.registry.declare(Thread(name='b', tags=frozenset(), worktree='/wt'))
+    with CoordinationSession(str(CoordinationSession.path_in(tmp_path))) as session:
+        participants = ParticipantStore(session)
+        with pytest.raises(ParticipantNotRegistered):
+            participants.get(requested.incarnation.lookup)
+        monkeypatch.setenv(HOLDER_NONCE, hold.nonce)
+        comms.registry.declare(requested)
+        assert participants.get(requested.incarnation.lookup).committed
     assert 'b' in comms.registry
     gate.clear(hold)
 
@@ -438,6 +464,52 @@ def test_a_carried_store_write_is_refused_to_all_but_the_maintenance_holder(tmp_
     monkeypatch.setenv(HOLDER_NONCE, hold.nonce)
     todos.allocate_problem()
     gate.clear(hold)
+
+
+def test_the_goal_ledger_refuses_other_writers_once_the_drained_hold_is_retargeted(
+        tmp_path: Path, monkeypatch) -> None:
+    """Install 11 rolled back on "Carries changed files no step names: goal_attempts.sqlite3":
+    the ledger committed for a non-holder after the install captured the bus. Draining owners
+    still settle their turns in it; once retargeted, only the holder commits."""
+    from agent_comms.field_codec import GoalId
+    from agent_comms.launch_runtime import LaunchRuntime
+    from agent_comms.maintenance_barrier import HOLDER_NONCE
+
+    comms = wire(tmp_path)
+    ledger = comms.goals.open_goal_store()
+    gate = MaintenanceBarrier(comms.registry.store.path)
+    monkeypatch.delenv(HOLDER_NONCE, raising=False)
+    draining = gate.begin(MaintenanceOperator.current())
+    ledger.create_goal(GoalId.mint())
+    held = gate.retarget(draining, LaunchRuntime(tmp_path / "target/bin/python"))
+    before = ledger.path.read_bytes()
+    with pytest.raises(RelationViolationError):
+        ledger.create_goal(GoalId.mint())
+    assert ledger.path.read_bytes() == before
+    monkeypatch.setenv(HOLDER_NONCE, held.nonce)
+    ledger.create_goal(GoalId.mint())
+
+
+def test_a_ledger_created_after_the_drain_is_refused_and_leaves_no_file(
+        tmp_path: Path, monkeypatch) -> None:
+    """Creation publishes the ledger by link before any store transaction exists, so it asks
+    the same drain-settled policy its writes inherit, and the carry check meets no new file."""
+    from agent_comms.goal_attempts import GoalAttemptStore
+    from agent_comms.launch_runtime import LaunchRuntime
+    from agent_comms.maintenance_barrier import HOLDER_NONCE
+
+    comms = wire(tmp_path)
+    directory = GoalAttemptStore.directory_in(comms.root)
+    directory.mkdir(mode=0o700)
+    gate = MaintenanceBarrier(comms.registry.store.path)
+    monkeypatch.delenv(HOLDER_NONCE, raising=False)
+    held = gate.retarget(gate.begin(MaintenanceOperator.current()),
+                         LaunchRuntime(tmp_path / "target/bin/python"))
+    with pytest.raises(RelationViolationError):
+        GoalAttemptStore.initialize(directory)
+    assert list(directory.iterdir()) == []
+    monkeypatch.setenv(HOLDER_NONCE, held.nonce)
+    assert GoalAttemptStore.initialize(directory).path.is_file()
 
 
 def test_every_carried_json_document_writes_through_the_maintenance_gate() -> None:

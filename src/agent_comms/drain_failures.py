@@ -15,12 +15,12 @@ from .activity import (
     StoppedDrainDiagnostic,
     UnavailableDrainDiagnostic,
 )
-from .coordination_errors import DrainDeferred, DrainUnavailable, RequestRefused
+from .coordination_errors import DrainDeferred, DrainUnavailable
 from .coordinator import Coordination
 from .native_failures import NativeRequestFailure
 
 # Failures raised outside our hierarchy, which cannot inherit the drain capabilities.
-EXTERNAL_UNAVAILABLE_ERRORS = (OSError, sqlite3.Error, RequestRefused)
+EXTERNAL_UNAVAILABLE_ERRORS = (OSError, sqlite3.Error)
 UNAVAILABLE_DRAIN_ERRORS = (DrainUnavailable, *EXTERNAL_UNAVAILABLE_ERRORS)
 DEFERRED_DRAIN_ERRORS = (DrainDeferred, *EXTERNAL_UNAVAILABLE_ERRORS)
 

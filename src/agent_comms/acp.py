@@ -23,9 +23,9 @@ import os
 import re
 import sys
 import time
-from collections.abc import Awaitable, Callable, Sequence
-from contextlib import AsyncExitStack
-from functools import partial, wraps
+from collections.abc import Iterator, Sequence
+from contextlib import AsyncExitStack, contextmanager
+from functools import partial
 from typing import TYPE_CHECKING
 
 from acp import RequestError
@@ -52,21 +52,29 @@ from acp.schema import (
 from acp.stdio import stdio_streams
 from pydantic import BaseModel, JsonValue, ValidationError
 
-from agent_comms.coordination_errors import IdentityConflict, RequestRefused
+from agent_comms.coordination_errors import IdentityConflict, Refused
 from agent_comms.coordinator import Coordination
 
-from . import acp_extension
+from . import (
+    acp_extension,
+    manual_compaction_bridge,
+)
 from .acp_extension import (
     CompactRequest,
+    decode_request,
     encode_updates,
 )
 from .acp_failure import NativeTurnError
+from .acp_request_consumer import AcpRequestConsumer
+from .active_route import ActiveRoute
+from .agent_backend import CompactionOutcome
 from .channel_targets import NamedTarget
 from .cohort_foreground import _accept_visible_deliveries
 from .comms import Comms, wire
 from .controller import (
     ACP_PERMISSION_TIMEOUT_SECONDS, Controller, SessionUpdateSink,
 )
+from .coordinated_runtime import SelectedExecution
 from .coordination_cohort import next_sealed_assignment
 from .coordination_database import CoordinationStore
 from .cursor_owner import CursorOwner
@@ -82,16 +90,20 @@ from .queued_input import DeliveredInput
 from .runtime import (
     RuntimeProxy,
     RuntimeServer,
-    client_refusals,
     socket_path,
 )
 from .schedule_rules import SelectedWakeCheck
+from .selected_write_authority import AcpSelectedWriteAuthority
+from .selected_write_plan import SelectedWritePlans
 from .session_effects import SessionEffects
 from .session_lifecycle import AttachedSessionLifecycle, SessionLifecycle
 from .threads import Thread
 from .turn_effects import TurnEffects
 from .turn_runner import TurnRunner
 from .turn_terminal import EndedWithoutResult, TurnInterruption
+from .working_memory_policy import AnnotationPolicy
+from .working_memory_worker import AnnotationWorker
+
 
 if TYPE_CHECKING:
     from .selected_tool_broker import SelectedToolIntent
@@ -99,20 +111,6 @@ if TYPE_CHECKING:
 
 from .native_arguments import ConfiguredBinary, InheritedArguments, LaunchArguments, LaunchBinary
 from .turn_runner import RELAY_PREFIX
-
-
-def answers_refusals[**Parameters, Answer](
-    method: Callable[Parameters, Awaitable[Answer]],
-) -> Callable[Parameters, Awaitable[Answer]]:
-    """Only declared ACP entries translate Core refusals into SDK wire errors."""
-    @wraps(method)
-    async def answer(*args: Parameters.args, **kwargs: Parameters.kwargs) -> Answer:
-        try:
-            return await method(*args, **kwargs)
-        except RequestRefused as error:
-            raise RequestError(error.code, error.message, error.data) from error
-
-    return answer
 
 
 class SdkSessionConnection(AgentSideConnection, Controller, SessionUpdateSink):
@@ -133,13 +131,12 @@ class SdkSessionConnection(AgentSideConnection, Controller, SessionUpdateSink):
     ) -> dict[str, object] | None:
         tool_call, options = request
         if self is runner.sessions.client:
-            with client_refusals():
-                response = await asyncio.wait_for(
-                    self.request_permission(
-                        session_id=session_id, tool_call=tool_call, options=options
-                    ),
-                    timeout=ACP_PERMISSION_TIMEOUT_SECONDS,
-                )
+            response = await asyncio.wait_for(
+                self.request_permission(
+                    session_id=session_id, tool_call=tool_call, options=options
+                ),
+                timeout=ACP_PERMISSION_TIMEOUT_SECONDS,
+            )
             return RequestPermissionResponse.model_validate(response).outcome.model_dump(
                 by_alias=True, exclude_none=True
             )
@@ -181,8 +178,6 @@ class CommsAgent(SessionEffects, InputEffects, TurnEffects):
         # Enabled for verified native owners by default. Explicit construction
         # may disable it; model/tool content cannot change this owner policy.
         self._runtime = RuntimeServer(self)
-        from .working_memory_policy import AnnotationPolicy
-        from .working_memory_worker import AnnotationWorker
 
         self.annotations = AnnotationWorker(comms, self._runtime, self, AnnotationPolicy.configured())
         self.cursors = CursorPublication(comms, self._runtime)
@@ -217,14 +212,25 @@ class CommsAgent(SessionEffects, InputEffects, TurnEffects):
 
     # ─── ACP methods ─────────────────────────────────────────────────────────
 
-    @answers_refusals
+    @staticmethod
+    @contextmanager
+    def refusals() -> Iterator[None]:
+        """Core exceptions acquire protocol form only when answering an ACP request."""
+        try:
+            yield
+        except Refused as error:
+            raise RequestError(error.code, error.message, error.data) from error
+        except NativeTurnError as error:
+            raise RequestError.internal_error(error.request.error_data()) from error.__cause__
+
     async def initialize(
         self,
         protocol_version: int,
         client_capabilities: ClientCapabilities | None = None,
         client_info: Implementation | None = None,
     ) -> InitializeResponse:
-        return await self.sessions.initialize(protocol_version, client_capabilities, client_info)
+        with self.refusals():
+            return await self.sessions.initialize(protocol_version, client_capabilities, client_info)
 
     @staticmethod
     def _sdk_request[Request: BaseModel](
@@ -233,7 +239,7 @@ class CommsAgent(SessionEffects, InputEffects, TurnEffects):
         """Reassemble SDK fields and expanded metadata using the SDK declaration."""
         metadata = parameters.pop("_meta", None) or parameters.pop("field_meta", None) or {}
         if not isinstance(metadata, dict):
-            raise RequestRefused.invalid_params(
+            raise RequestError.invalid_params(
                 {"reason": "ACP metadata must be an object"}
             )
         fields = {name: value for name, value in parameters.items() if name in model.model_fields}
@@ -243,9 +249,8 @@ class CommsAgent(SessionEffects, InputEffects, TurnEffects):
         try:
             return model.model_validate({**fields, "field_meta": {**metadata, **expanded}})
         except ValidationError as error:
-            raise RequestRefused.invalid_params({"reason": str(error)}) from error
+            raise RequestError.invalid_params({"reason": str(error)}) from error
 
-    @answers_refusals
     async def new_session(
         self, cwd: str, mcp_servers: Sequence[BaseModel] | None = None, **kwargs: JsonValue
     ) -> NewSessionResponse:
@@ -255,9 +260,9 @@ class CommsAgent(SessionEffects, InputEffects, TurnEffects):
             mcp_servers=[] if mcp_servers is None else mcp_servers,
             **kwargs,
         )
-        return await self.sessions.new_session(request)
+        with self.refusals():
+            return await self.sessions.new_session(request)
 
-    @answers_refusals
     async def load_session(
         self,
         cwd: str,
@@ -272,9 +277,9 @@ class CommsAgent(SessionEffects, InputEffects, TurnEffects):
             mcp_servers=[] if mcp_servers is None else mcp_servers,
             **kwargs,
         )
-        return await self.sessions.load_session(request)
+        with self.refusals():
+            return await self.sessions.load_session(request)
 
-    @answers_refusals
     async def prompt(
         self, session_id: str, prompt: Sequence[BaseModel], **kwargs: JsonValue
     ) -> PromptResponse:
@@ -282,27 +287,19 @@ class CommsAgent(SessionEffects, InputEffects, TurnEffects):
         return await self.receive_prompt(request)
 
     async def receive_prompt(self, request: PromptRequest) -> PromptResponse:
-        from .acp_extension import decode_request
-        from .acp_request_consumer import AcpRequestConsumer
-
         try:
             command = decode_request(request.field_meta)
         except MalformedRecord as error:
-            raise RequestRefused.invalid_params({"reason": str(error)}) from error
+            raise RequestError.invalid_params({"reason": str(error)}) from error
         # Literal /compact is the external ACP text command; ours uses a record.
         text = self._prompt_text(request).strip()
         if re.match(r"^/compact(?:\s|$)", text):
             self._require_compaction_text(request)
             command = CompactRequest(text[len("/compact") :].strip())
-        try:
+        with self.refusals():
             return await AcpRequestConsumer(self, request).run(command)
-        except NativeTurnError as error:
-            raise RequestRefused.internal_error(error.request.error_data()) from error.__cause__
 
     async def _compact_request(self, session_id: str, instructions: str | None) -> PromptResponse:
-        from . import manual_compaction_bridge
-        from .agent_backend import CompactionOutcome
-
         # The owner process's bridge alone owns the turn lock.
         if session_id in self.sessions.proxies:
             outcome = FieldCodec.decode(
@@ -318,13 +315,11 @@ class CommsAgent(SessionEffects, InputEffects, TurnEffects):
         return manual_compaction_bridge.CompactionReply().reply(outcome)
 
     async def _selected_write_request(self, session_id: str, request) -> PromptResponse:
-        from .selected_write_plan import SelectedWritePlans
-
         owner = self.sessions.require(session_id)
         controller = self._runtime.controller.get()
         attached = controller.attached(self.sessions.client) if controller is not None else None
         if attached is None:
-            raise RequestRefused.invalid_params(
+            raise RequestError.invalid_params(
                 {"reason": "Selected write requires attached ACP controller"}
             )
         scope = await Coordination.run_worker(partial(self.cursors.scope, owner, session_id))
@@ -354,9 +349,9 @@ class CommsAgent(SessionEffects, InputEffects, TurnEffects):
         try:
             images = prompt_images(request)
         except ValueError as error:
-            raise RequestRefused.invalid_params({"reason": str(error)}) from error
+            raise RequestError.invalid_params({"reason": str(error)}) from error
         if images and text.lstrip().startswith((*NamedTarget.sigils(), RELAY_PREFIX)):
-            raise RequestRefused.invalid_params(
+            raise RequestError.invalid_params(
                 {"reason": "Send images to an agent thread, not as a coordination relay."}
             )
         if (
@@ -370,7 +365,8 @@ class CommsAgent(SessionEffects, InputEffects, TurnEffects):
                 request=command,
                 images=images,
             )
-        async with self.turns.turn_locks.setdefault(session_id, asyncio.Lock()):
+        self.inputs.ensure_live_drain(session_id)
+        async with self.inputs.state(session_id).turn_lock:
             # A direct ACP prompt owns this one controller. Owner-socket prompts
             # already carry a private subscriber binding (including None when
             # absent); never fall back to a passive ACP client in that case.
@@ -395,11 +391,11 @@ class CommsAgent(SessionEffects, InputEffects, TurnEffects):
     @staticmethod
     def _require_compaction_text(request: PromptRequest) -> None:
         if len(request.prompt) != 1:
-            raise RequestRefused.invalid_params(
+            raise RequestError.invalid_params(
                 {"reason": "/compact requires one text block."}
             )
         if not isinstance(request.prompt[0], TextContentBlock):
-            raise RequestRefused.invalid_params(
+            raise RequestError.invalid_params(
                 {"reason": "/compact requires text only."}
             )
 
@@ -422,23 +418,22 @@ class CommsAgent(SessionEffects, InputEffects, TurnEffects):
             with open(debug_path, "a") as debug_log:
                 debug_log.write(f"[{time.time():.3f}] {message}\n")
 
-    @answers_refusals
     async def cancel(self, session_id: str, **kwargs: JsonValue) -> None:
-        return await self.turns.cancel(session_id, **kwargs)
+        with self.refusals():
+            return await self.turns.cancel(session_id, **kwargs)
 
-    @answers_refusals
     async def close_session(self, session_id: str, **kwargs: JsonValue):
-        return await self.sessions.close_session(session_id)
+        with self.refusals():
+            return await self.sessions.close_session(session_id)
 
-    @answers_refusals
     async def set_config_option(
         self, config_id: str, session_id: str, value: str | bool, **kwargs: JsonValue
     ) -> SetSessionConfigOptionResponse:
-        return await self.sessions.config.set_option(config_id, session_id, value)
+        with self.refusals():
+            return await self.sessions.config.set_option(config_id, session_id, value)
 
-    @answers_refusals
     async def authenticate(self, method_id: str, **kwargs: JsonValue) -> None:
-        raise RequestRefused.auth_required({"reason": "agent-comms requires no authentication"})
+        raise RequestError.auth_required({"reason": "agent-comms requires no authentication"})
 
     # ─── Helpers ─────────────────────────────────────────────────────────────
 
@@ -450,10 +445,6 @@ class CommsAgent(SessionEffects, InputEffects, TurnEffects):
         both must already belong to the same private root. A failing or
         uncertain native turn propagates and cannot be replayed by a drain.
         """
-        from .coordinated_runtime import SelectedExecution
-        from .selected_write_authority import AcpSelectedWriteAuthority
-        from .selected_write_plan import SelectedWritePlans
-
         launch = self._comms.owners.require_private_launch()
         package = launch.native_package
         thread_name = await self.sessions.sync_identity(session_id)
@@ -567,8 +558,6 @@ class CommsClient(CommsAgent):
 
 
 def main() -> int:
-    from .active_route import ActiveRoute
-
     LaunchRoot.startup(sys.argv, ActiveRoute.published_launch)
     if "--login" in sys.argv[1:]:
         from .login import run_login

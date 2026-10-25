@@ -15,8 +15,11 @@ from pydantic import (
     model_validator,
 )
 
-from agent_comms.cli_protocol import TaggedWire, TextWire, TimestampedWire, WireHeader
+from agent_comms.agent_events import TranscriptModelUsage
+from agent_comms.cli_protocol import Declared, OpenWire, TaggedWire, TextWire, TimestampedWire, WireHeader
 from agent_comms.field_codec import FieldCodec, MalformedRecord, MessageId
+from agent_comms.native_tool_call import ToolCallId
+from agent_comms.pi_counts import PiCount, PiCountWire
 from agent_comms.recorded_time import EventTime
 from agent_comms.runtime_updates import (
     ActiveItem,
@@ -26,6 +29,7 @@ from agent_comms.runtime_updates import (
     HistoryNotice,
     OfferedToolsObserved,
     ReadingPhase,
+    RuntimeInfoObserved,
     RuntimeUpdate,
     SessionFacts,
     StartedItem,
@@ -35,6 +39,7 @@ from agent_comms.runtime_updates import (
     TurnStarted,
 )
 from agent_comms.thread_identity import OfferedTools, ToolName, UnobservedTools
+from agent_comms.thread_model import ThreadModel
 from agent_comms.thread_text import ThreadText
 from agent_comms.tool_calls import CliToolArguments, ToolCall
 from agent_comms.transcript_events import (
@@ -43,7 +48,7 @@ from agent_comms.transcript_events import (
     TranscriptEvent,
     UserTranscript,
 )
-from agent_comms.turn_item import NativeTurnId
+from agent_comms.turn_item import NativeItemId, NativeTurnId
 from agent_comms.turn_phase import ModelWaitPhase, ToolRunningPhase, TurnPhase
 
 from ..wire_models import WireModel
@@ -146,9 +151,14 @@ class ClaudeReaderPhase(ReadingPhase):
 class CatchUp(ClaudeReaderPhase):
     pending: tuple[StatusUpdate, ...] = ()
     latest_tools: tuple[OfferedToolsObserved, ...] = ()
+    latest_info: tuple[RuntimeInfoObserved, ...] = ()
 
     def offered(self, update: OfferedToolsObserved) -> tuple[RuntimeUpdate, ...]:
         self.latest_tools = (update,)
+        return ()
+
+    def runtime_info(self, update: RuntimeInfoObserved) -> tuple[RuntimeUpdate, ...]:
+        self.latest_info = (update,)
         return ()
 
     def status(self, update: StatusUpdate) -> tuple[RuntimeUpdate, ...]:
@@ -157,7 +167,7 @@ class CatchUp(ClaudeReaderPhase):
 
     def window_ended(self, session: ClaudeSession) -> tuple[RuntimeUpdate, ...]:
         session.phase = Live()
-        return (*self.latest_tools, *self.pending)
+        return (*self.latest_tools, *self.latest_info, *self.pending)
 
     def missing_tool(self, tool_id: str) -> tuple[RuntimeUpdate, ...]:
         return ()
@@ -228,16 +238,16 @@ class KnownTurn(ClaudeTurn):
 
     def started(self, tool: ClaudeToolDraft,
                 phase: ClaudeReaderPhase) -> tuple[RuntimeUpdate, ...]:
-        return (StartedItem(self.id, tool.call.id,
+        return (StartedItem(self.id, NativeItemId(tool.call.id),
                             ToolRunningPhase(tools=((tool.call.id, tool.call.title),)), tool),)
 
     def finished(self, item: str, events: tuple[TranscriptEvent, ...],
                  phase: ClaudeReaderPhase) -> tuple[RuntimeUpdate, ...]:
-        return (FinishedItem(self.id, item, events),)
+        return (FinishedItem(self.id, NativeItemId(item), events),)
 
     def active(self, tool_id: str, phase: ClaudeReaderPhase,
                turn_phase: TurnPhase) -> tuple[RuntimeUpdate, ...]:
-        return (ActiveItem(self.id, tool_id, turn_phase),)
+        return (ActiveItem(self.id, NativeItemId(tool_id), turn_phase),)
 
 
 @dataclass
@@ -247,6 +257,7 @@ class ClaudeSession:
     phase: ClaudeReaderPhase = field(default_factory=CatchUp)
     project: str = ''
     offered_tools: OfferedTools = field(default_factory=UnobservedTools)
+    answered_by: TranscriptModelUsage = field(default_factory=TranscriptModelUsage)
 
     def version_reported(self, version: str | None) -> tuple[RuntimeUpdate, ...]:
         if version is None:
@@ -257,6 +268,16 @@ class ClaudeSession:
     def offered(self, offered: OfferedTools) -> tuple[RuntimeUpdate, ...]:
         self.offered_tools = offered
         return (OfferedToolsObserved(offered),)
+
+    def answered(self, message: AssistantMessage) -> tuple[RuntimeUpdate, ...]:
+        """A model call reports its model and usage once; Claude repeats them on every block."""
+        for used in message.usage.context_used.present():
+            observation = TranscriptModelUsage(
+                model=ThreadModel.reported(message.model), context_used=used)
+            if observation != self.answered_by:
+                self.answered_by = observation
+                return (RuntimeInfoObserved(observation),)
+        return ()
 
     def located(self, cwd: str) -> tuple[RuntimeUpdate, ...]:
         if not cwd or cwd == self.project:
@@ -380,7 +401,7 @@ class NarrationBlock(RedactedThinking, declared_name='thinking'):
 
 
 class ToolUse(AssistantBlock, declared_name='tool_use'):
-    id: str
+    id: ToolCallId
     name: str
     input: dict[str, JsonValue]
 
@@ -395,15 +416,32 @@ class ToolUse(AssistantBlock, declared_name='tool_use'):
         return CliToolArguments.decode(ToolCall(self.id, self.name, self.input), self.input)
 
 
+class ClaudeUsage(WireModel):
+    """Tokens one model call read; their sum is the context the next call starts from."""
+
+    input_tokens: int = 0
+    cache_creation_input_tokens: int = 0
+    cache_read_input_tokens: int = 0
+
+    @property
+    def context_used(self) -> PiCount:
+        """Claude's local notices carry zero usage: no model call, nothing reported."""
+        return PiCountWire.decode(
+            self.input_tokens + self.cache_creation_input_tokens + self.cache_read_input_tokens)
+
+
 class AssistantMessage(WireModel):
-    content: list[AssistantBlock.declared_union()]
+    content: list[Declared[AssistantBlock]]
+    model: str = ''
+    usage: ClaudeUsage = Field(default_factory=ClaudeUsage)
 
 
 class AssistantRecord(ClaudeRecord, TimedRecord, declared_name='assistant'):
     message: AssistantMessage
 
     def updates(self, session: ClaudeSession) -> tuple[RuntimeUpdate, ...]:
-        return tuple(update for block in self.message.content for update in block.updates(self, session))
+        return (*(update for block in self.message.content for update in block.updates(self, session)),
+                *session.answered(self.message))
 
 
 class ResultPart(TaggedWire, ABC, affix=""):
@@ -432,12 +470,17 @@ class KindHeader(WireHeader):
 
 
 class PromptOrigin(TaggedWire, ABC, affix=""):
-    """Who wrote a user record. Only a person's prompt is shown live as input;
+    """Who wrote a prompt. Only a person's prompt is shown live as input;
     another agent's message is conversation history the live view hides."""
     header = KindHeader
 
     def prompt(self, record: TimedRecord, text: str,
                session: ClaudeSession) -> tuple[RuntimeUpdate, ...]:
+        return ()
+
+    def absorbed(self, record: TimedRecord, text: str,
+                 session: ClaudeSession) -> tuple[RuntimeUpdate, ...]:
+        """The prompt Claude folded into the turn already running."""
         return ()
 
     def request(self, text: str) -> str:
@@ -450,26 +493,40 @@ class Prompting(PromptOrigin, ABC, declared_name=None):
     def request(self, text: str) -> str:
         return text
 
+    def prompt(self, record: TimedRecord, text: str,
+               session: ClaudeSession) -> tuple[RuntimeUpdate, ...]:
+        return (TurnStarted(), *self.absorbed(record, text, session))
+
+    def absorbed(self, record: TimedRecord, text: str,
+                 session: ClaudeSession) -> tuple[RuntimeUpdate, ...]:
+        return (HiddenItem((UserTranscript(text, timestamp=record.timestamp, position=record.position),)),)
+
 
 class AgentPrompt(Prompting, declared_name=None):
-    """Input another agent wrote: the commanding session, or a peer session."""
+    """Input another agent wrote: the commanding session, or a peer session. It never
+    starts a turn of its own."""
 
     def prompt(self, record: TimedRecord, text: str,
                session: ClaudeSession) -> tuple[RuntimeUpdate, ...]:
-        return (HiddenItem((UserTranscript(text, timestamp=record.timestamp, position=record.position),)),)
+        return self.absorbed(record, text, session)
 
 
 class HumanPrompt(Prompting, declared_name='human'):
 
-    def prompt(self, record: TimedRecord, text: str,
-               session: ClaudeSession) -> tuple[RuntimeUpdate, ...]:
-        return (TurnStarted(), *session.finished(
-            record.uuid, (UserTranscript(text, timestamp=record.timestamp, position=record.position),)))
+    def absorbed(self, record: TimedRecord, text: str,
+                 session: ClaudeSession) -> tuple[RuntimeUpdate, ...]:
+        return session.finished(
+            record.uuid, (UserTranscript(text, timestamp=record.timestamp, position=record.position),))
 
 
 class TaskNotification(PromptOrigin, declared_name='task-notification'):
-    """Its specialized user record owns task-envelope decoding."""
+    """Its specialized user record owns task-envelope decoding; queued into a running
+    turn, the envelope arrives as the prompt."""
     kind: Literal['task-notification']
+
+    def absorbed(self, record: TimedRecord, text: str,
+                 session: ClaudeSession) -> tuple[RuntimeUpdate, ...]:
+        return TaskEnvelope.from_text(text).updates(record)
 
 
 class PeerMessage(AgentPrompt, declared_name='peer'):
@@ -488,9 +545,10 @@ class ToolSupplied(Prompting, declared_name=None):
     """Text Claude records without a sender: a subagent's task, or a local command's echo.
     It starts a turn; the live view does not show it as the person's prompt."""
 
-    def prompt(self, record: TimedRecord, text: str,
-               session: ClaudeSession) -> tuple[RuntimeUpdate, ...]:
-        return (TurnStarted(), HiddenItem((UserTranscript(text, timestamp=record.timestamp, position=record.position),)))
+
+class Originated(WireModel):
+    """Who wrote a prompt, whether it opened a user record or was queued into a running turn."""
+    origin: Declared[PromptOrigin] = Field(default_factory=ToolSupplied)
 
 
 class UserBlock(TaggedWire, ABC, affix=""):
@@ -584,8 +642,8 @@ class TaskMessage(ContentBlocks):
 
 
 class ToolResult(UserBlock, ContentBlocks, declared_name='tool_result'):
-    tool_use_id: str
-    content: list[ResultPart.declared_union()]
+    tool_use_id: ToolCallId
+    content: list[Declared[ResultPart]]
     is_error: bool = False
 
     def updates(self, record: TimedRecord, session: ClaudeSession) -> tuple[RuntimeUpdate, ...]:
@@ -595,24 +653,22 @@ class ToolResult(UserBlock, ContentBlocks, declared_name='tool_result'):
 
 
 class UserMessage(ContentBlocks):
-    content: list[UserBlock.declared_union()]
+    content: list[Declared[UserBlock]]
+
+    def text(self) -> str:
+        return '\n'.join(text for block in self.content if (text := block.prompt_text()))
 
 
-class UserRecord(ClaudeRecord, TimedRecord, declared_name='user'):
+class UserRecord(ClaudeRecord, TimedRecord, Originated, declared_name='user'):
     promptId: str
     message: UserMessage
-    origin: PromptOrigin.declared_union() = Field(default_factory=ToolSupplied)
 
     def updates(self, session: ClaudeSession) -> tuple[RuntimeUpdate, ...]:
         session.turn = KnownTurn(FieldCodec.decode(NativeTurnId, self.promptId))
         return tuple(update for block in self.message.content for update in block.updates(self, session))
 
-    @property
-    def text(self) -> str:
-        return '\n'.join(text for block in self.message.content if (text := block.prompt_text()))
-
     def request(self) -> str:
-        return self.origin.request(self.text)
+        return self.origin.request(self.message.text())
 
 
 class CompactSummary(UserRecord, declared_name='compact-summary'):
@@ -620,7 +676,7 @@ class CompactSummary(UserRecord, declared_name='compact-summary'):
 
     def updates(self, session: ClaudeSession) -> tuple[RuntimeUpdate, ...]:
         session.turn = KnownTurn(FieldCodec.decode(NativeTurnId, self.promptId))
-        return (TurnStarted(), Summarized(self.text))
+        return (TurnStarted(), Summarized(self.message.text()))
 
     def request(self) -> str:
         return ''
@@ -692,7 +748,7 @@ class ModelRefusalNoFallback(SystemEvent, declared_name='model_refusal_no_fallba
 
 
 class SystemRecord(ClaudeRecord, declared_name='system'):
-    subtype: SystemEvent.declared_union()
+    subtype: Declared[SystemEvent]
 
     @model_validator(mode='before')
     @classmethod
@@ -712,39 +768,37 @@ class MetadataRecord(ClaudeRecord, ABC, declared_name=None):
     pass
 
 
-class AttachmentHeader(WireHeader):
-    @model_validator(mode='before')
-    @classmethod
-    def task_notification(cls, value: dict) -> dict:
-        if (value.get('type') == QueuedTaskNotification.declared_name
-                and value.get('origin', {}).get('kind') == TaskNotification.declared_name):
-            return value
-        return {'type': ForeignAttachment.declared_name}
-
-
-class AttachmentPayload(TaggedWire, ABC, affix=""):
-    header = AttachmentHeader
+class AttachmentPayload(OpenWire, ABC, affix=""):
 
     @abstractmethod
-    def updates(self, record: TimedRecord) -> tuple[RuntimeUpdate, ...]: ...
+    def updates(self, record: TimedRecord, session: ClaudeSession) -> tuple[RuntimeUpdate, ...]: ...
 
 
-class QueuedTaskNotification(TaskContent, AttachmentPayload, declared_name='queued_command'):
-    text: TaskEnvelope = Field(alias='prompt')
-    origin: TaskNotification
+class QueuedCommand(Originated, AttachmentPayload, declared_name='queued_command'):
+    """A prompt sent while a turn runs: its origin decides what the folded-in text is."""
+    prompt: UserMessage
+
+    @field_validator('prompt', mode='before')
+    @classmethod
+    def message(cls, value: str | list) -> dict:
+        # Claude stores the queued prompt as a bare user message content.
+        return {'content': value}
+
+    def updates(self, record: TimedRecord, session: ClaudeSession) -> tuple[RuntimeUpdate, ...]:
+        return self.origin.absorbed(record, self.prompt.text(), session)
 
 
 class ForeignAttachment(AttachmentPayload, declared_name='foreign'):
 
-    def updates(self, record: TimedRecord) -> tuple[RuntimeUpdate, ...]:
+    def updates(self, record: TimedRecord, session: ClaudeSession) -> tuple[RuntimeUpdate, ...]:
         return ()
 
 
 class Attachment(ClaudeRecord, TimedRecord, declared_name='attachment'):
-    attachment: AttachmentPayload.declared_union()
+    attachment: Declared[AttachmentPayload]
 
     def updates(self, session: ClaudeSession) -> tuple[RuntimeUpdate, ...]:
-        return self.attachment.updates(self)
+        return self.attachment.updates(self, session)
 
 
 class QueueOperation(MetadataRecord, declared_name='queue-operation'):
@@ -839,6 +893,10 @@ class CustomTitle(MetadataRecord, declared_name='custom-title'):
 
     def updates(self, session: ClaudeSession) -> tuple[RuntimeUpdate, ...]:
         return (SessionFacts(title=ThreadText.external(self.customTitle)),)
+
+
+class BridgeSession(MetadataRecord, declared_name='bridge-session'):
+    """The session was opened to claude.ai by /remote-control; nothing here reaches the bus."""
 
 
 class AgentName(MetadataRecord, declared_name='agent-name'):

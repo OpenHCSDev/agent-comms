@@ -8,8 +8,8 @@ import subprocess
 import sys
 from contextlib import AsyncExitStack
 
+from agent_comms.coordination_errors import Refused
 import pytest
-from agent_comms.coordination_errors import RequestRefused
 from acp.schema import PromptRequest, TextContentBlock
 
 from agent_comms.acp import CommsAgent
@@ -80,9 +80,9 @@ async def test_cli_registration_refuses_unbound_then_uses_original_owned_session
             ),
             ("goal_history", {}),
         ):
-            with pytest.raises(RequestRefused) as caught:
+            with pytest.raises(Refused) as caught:
                 await proxy.request(action, **parameters)
-            assert caught.value.code == -32602
+            assert caught.value.code == Refused.INVALID_PARAMS
             assert caught.value.data["owner"] == "registered"
             assert "no loaded ACP session" in caught.value.data["reason"]
         assert not owner.sessions.bindings
@@ -104,9 +104,9 @@ async def test_cli_registration_refuses_unbound_then_uses_original_owned_session
         # Use the original production publisher before another independent read.
         # The failed prompt is never resent or turned into a binding.
         await owner.sessions.bind_owned(thread, "original-acp-session")
-        assert await proxy.request("goal_history") == {"history": []}
+        assert await proxy.request("goal_history") == {"history": [], "failures": []}
         comms.registry.rename("registered", "renamed-owner")
-        assert await proxy.request("goal_history") == {"history": []}
+        assert await proxy.request("goal_history") == {"history": [], "failures": []}
         assert (
             owner.sessions.require_owned_session(comms.registry.entry("renamed-owner").entry)
             == "original-acp-session"

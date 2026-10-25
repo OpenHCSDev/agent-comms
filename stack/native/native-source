@@ -1,0 +1,19 @@
+#!/usr/bin/env bash
+# One checkout owns the stack paths and every native-package import.
+stack_root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)
+native_root=$stack_root/native
+repo_root=$(cd -- "$stack_root/.." && pwd)
+python="$stack_root/.venv/bin/python"
+
+native() {
+    "$python" -c 'import runpy, sys; sys.path.insert(0, sys.argv.pop(1)); runpy.run_module("agent_comms.cli_native_package", run_name="__main__")' \
+        "$repo_root/src" "$@"
+}
+
+# Python preparation callers supply their already selected interpreter too.
+if [[ ${BASH_SOURCE[0]} == "$0" ]]; then
+    set -euo pipefail
+    python=$1
+    shift
+    native "$@"
+fi

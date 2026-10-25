@@ -50,10 +50,10 @@ from .command import Command
 from .comms import Comms, client_wire, wire
 from .declared_family import DeclaredFamily, UnknownFamilyMember
 from .errors import RelationViolationError, ToolRefusedError, UnregisteredThreadError
-from .coordination_errors import CoordinationError
+from .coordination_errors import CoordinationError, Refused
 from .field_codec import (
     Argument, FieldCodec, GitCommitText, MalformedRecord, PathText, WireName, WireOmitDefault,
-    boundary_decoder,
+    boundary_decoder, projected,
 )
 from agent_comms.channel_targets import NamedTarget
 from agent_comms.owner_requests import NewestOpenRequest, RequestSelection
@@ -75,7 +75,7 @@ from .tool_result import ToolResult
 from .task_sources import OwnerRequestAttachment
 from .tools import CommsSendTool, SendTool
 from .order_tools import CommsHeadVerdictTool, HeadVerdictTool, MessagePublished
-from .tool_request import ReadTool, ToolRequest, tool_field
+from .tool_request import ReadTool, ToolCall, ToolRequest, tool_field
 
 LOOPBACK = "127.0.0.1"
 PORT = 18766
@@ -269,7 +269,9 @@ class InvalidRequestError(McpError):
 
 @dataclass(frozen=True)
 class MethodNotFoundError(McpError):
-    code: Literal[-32601] = -32601
+    @projected(view="wire")
+    def code(self) -> int:
+        return Refused.METHOD_NOT_FOUND
 
 
 @dataclass(frozen=True)
@@ -346,21 +348,6 @@ class ToolDescription:
 @dataclass(frozen=True)
 class ToolsListResult(McpResult):
     tools: tuple[ToolDescription, ...]
-
-
-@dataclass(frozen=True)
-class ToolCall:
-    name: str
-    arguments: dict[str, object] = field(default_factory=dict)
-    meta: Annotated[dict[str, object], WireName("_meta")] = field(
-        default_factory=dict
-    )
-
-    @classmethod
-    def of(cls, tool: type[ToolRequest]) -> ToolCall:
-        """A call of a tool the connector exposes, by the name it exposes it under."""
-        (name,) = (name for name, exposed in CALLER.exposed().items() if exposed is tool)
-        return cls(name)
 
 
 @dataclass(frozen=True, kw_only=True)

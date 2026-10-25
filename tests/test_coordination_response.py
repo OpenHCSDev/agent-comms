@@ -8,31 +8,30 @@ from pathlib import Path
 
 import pytest
 
-from agent_comms.assignment_states import CompletedAssignment
 from agent_comms.attempt_start import AttemptStart
 from agent_comms.attempt_states import ModelRunningAttempt, PromptAcceptedAttempt, SettlingAttempt
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.comms import Comms, wire
-from agent_comms.coordination_cohort import accept_delivery_cohort
+from conftest import accept_initial
 from agent_comms.coordination_errors import (
     IdentityConflict,
-    PublicationUncertain,
+    StaleFence,
     StaleRevision,
 )
 from agent_comms.coordination_response import (
     LiveResponseOwner,
     prepare_fenced_response,
     publish_fenced_response,
-    resolve_existing_response,
 )
-from agent_comms.coordination_results import AlreadyApplied
 from agent_comms.coordination_tables.executions import NoPointedExecution, WireOrigin
 from agent_comms.coordination_tables.responses import ResponseObligation
 from agent_comms.coordinator import Coordination
-from agent_comms.execution_states import CompletedExecution
 from agent_comms.field_codec import InputId, RootId, ThreadLookup, TurnId
 from agent_comms.lifecycle_capability import Active, Complete
 from agent_comms.message_bus import MessageBus
+from agent_comms.assignment_states import CompletedAssignment
+from agent_comms.coordination_results import AlreadyApplied
+from agent_comms.execution_states import CompletedExecution
 from agent_comms.obligation_states import PendingResponse, PublishedResponse, PublishingResponse
 from agent_comms.owner_fence import prepare_fence_token
 from agent_comms.publisher import ParticipantPublisher
@@ -84,15 +83,12 @@ def _ready(tmp_path: Path, *, direct: bool = False, extra_targets: tuple[str, ..
         recipient.recipient_lookup,
         committed=True,
     )
-    accepted = accept_delivery_cohort(comms.bus, root_id, original.seq, store)
-    assert accepted.value.member_count == accepted.value.assignment_count == 1
-    assignment = accepted.value.assignments[0]
+    (assignment,) = accept_initial(comms.bus, root_id, original.seq, store)
     sources = [SelectedSource(assignment.assignment_id, store.assignments, original_record)]
     for extra_target in extra_targets:
         message = publish_initial(comms, "sender", extra_target, "Another original question")
         delivery = comms.bus.bus.delivery(message.seq)
-        acknowledgement = accept_delivery_cohort(comms.bus, root_id, message.seq, store).value
-        (extra_assignment,) = acknowledgement.assignments
+        (extra_assignment,) = accept_initial(comms.bus, root_id, message.seq, store)
         sources.append(SelectedSource(extra_assignment.assignment_id, store.assignments, delivery))
     reply_target = original.exact_reply_target
     assert reply_target is not None
@@ -215,42 +211,35 @@ def test_real_bus_sql_tx1_exact_reply_tx2_and_lost_ack_replay(tmp_path: Path, di
         assert intent.exact_target == case.reply_target
         assert type(case.store.get("exec").require_wire_response(case.reply_target).lifecycle) is PublishingResponse
         assert intent.published_message(case.bus.bus) is None
-        with pytest.raises(PublicationUncertain):
-            resolve_existing_response(case.store, case.bus, case.fence, exact_target=case.reply_target, owner_witness=case.witness)
         assert case.comms.bus.bus.revision() == case.origin_seq
-        assert isinstance(
-            prepare_fenced_response(
-                case.store,
+
+        def replay(store):
+            return prepare_fenced_response(
+                store,
                 case.bus,
                 case.fence,
                 intent.message.body,
                 timestamp=intent.message.timestamp,
                 exact_target=case.reply_target, owner_witness=case.witness,
-            ),
-            AlreadyApplied,
-        )
+            )
+
+        assert isinstance(replay(case.store), AlreadyApplied)
         published = publish_fenced_response(
             case.store, case.bus, case.fence, exact_target=case.reply_target, owner_witness=case.witness
         ).value
         assert type(published.execution.lifecycle) is CompletedExecution
         assert type(published.require_wire_response(case.reply_target).lifecycle) is PublishedResponse
-        assert ResponseObligation.response_record(published.publication_evidence, case.reply_target) is not None
         assert type(published.assignments[0].lifecycle) is CompletedAssignment
         assert ResponseObligation.response_record(published.publication_evidence, case.reply_target).seq == case.origin_seq + 1
         response = intent.published_message(case.bus.bus)
         assert response is not None and response.target == case.reply_target
-        assert isinstance(
-            resolve_existing_response(case.store, case.bus, case.fence, exact_target=case.reply_target, owner_witness=case.witness),
-            AlreadyApplied,
-        )
         assert published == case.store.get("exec")
         case.store.close()
         with Coordination(str(case.comms.root / "coordination.sqlite3")) as reopened:
-            reread = resolve_existing_response(
-                reopened, case.bus, case.fence, exact_target=case.reply_target, owner_witness=case.witness
-            )
-            assert isinstance(reread, AlreadyApplied)
-            assert ResponseObligation.response_record(reread.value.publication_evidence, case.reply_target) == ResponseObligation.response_record(published.publication_evidence, case.reply_target)
+            assert reopened.get("exec") == published
+            with pytest.raises(StaleFence):
+                replay(reopened)
+        assert case.comms.bus.bus.revision() == case.origin_seq + 1
     finally:
         case.close()
 

@@ -11,6 +11,9 @@ from math import inf
 from pathlib import Path
 from typing import TYPE_CHECKING, BinaryIO
 
+from .errors import RelationViolationError
+from .native_pi import NativeContextJournal
+
 if TYPE_CHECKING:
     from .native_pi import NativeContextProof
     from .read_ledger import ReadLedger
@@ -22,6 +25,7 @@ from .declared_family import DeclaredFamily
 from .field_codec import MalformedRecord
 from .native_entries import (
     NativeEntry,
+    NoEntryId,
     RecordedEntry,
     RootEntry,
     SessionEntry,
@@ -32,6 +36,7 @@ from .native_session_reopen import NativeSessionIdentity
 from .private_path import FileRevision
 from .recorded_time import EventTime, RecordedEventTime, UnrecordedEventTime
 from .transcript_sources import TranscriptRecord, TranscriptSource
+from .turn_item import FreshNativeId, NativeItemId
 
 
 def reverse_records(
@@ -176,9 +181,9 @@ class NativeRecord(TranscriptRecord):
         return self.end - self.start
 
     @property
-    def annotation_id(self) -> str | None:
+    def annotation_id(self) -> FreshNativeId | NoEntryId:
         entry = self.entry
-        return entry.id if entry is not None and entry.is_message else None
+        return entry.annotation_id if entry is not None else NoEntryId()
 
     @property
     def events(self):
@@ -222,10 +227,6 @@ class NativeTranscript(TranscriptSource):
                 (RecordedEventTime(timestamp) for timestamp in times), UnrecordedEventTime(),
             )
 
-    def tool_call_between(self, since: float, through: float) -> bool:
-        with closing(self._tool_call_times(since)) as times:
-            return any(timestamp <= through for timestamp in times)
-
     @contextmanager
     def reading(self):
         """Keep the native record owner bound across one page projection."""
@@ -240,8 +241,7 @@ class NativeTranscript(TranscriptSource):
         """
         revision = FileRevision.from_stat(self.path.stat())
         with self.path.open("rb") as stream:
-            header = SessionEntry.read(stream.readline())
-            header.require_header()
+            SessionEntry.read(stream.readline())
             sources = []
             for raw in stream:
                 entry = NativeEntry.read(raw)
@@ -296,7 +296,8 @@ class NativeTranscript(TranscriptSource):
             yield tuple(fragment)
 
     def recorded_contexts(self, contexts, entry_ids):
-        return contexts.entries(NativeSessionIdentity(self.session_id, str(self.path)), entry_ids)
+        return contexts.entries(NativeSessionIdentity(self.session_id, str(self.path)),
+                               tuple(NativeItemId(identity) for identity in entry_ids))
 
     @property
     def session_id(self):
@@ -307,9 +308,9 @@ class NativeTranscript(TranscriptSource):
                 return None
         return entry.id
 
-    def annotation_ids(self, after: int, through: int) -> tuple[str, ...]:
+    def annotation_ids(self, after: int, through: int) -> tuple[FreshNativeId, ...]:
         return tuple(identity for record in self.forward(after, through)
-                     if (identity := record.annotation_id) is not None)
+                     for identity in record.annotation_id.present())
 
     def require_publication_context(
         self, user: NativeEntry, *, session_entry_start: int, files: NativeSessionFiles,
@@ -321,12 +322,9 @@ class NativeTranscript(TranscriptSource):
         journal owns context inclusion for the actual header/input/entry identity;
         this bounded indexed lookup does not guess a request kind or options.
         """
-        from .native_pi import NativeContextJournal
-
         files.require_private_directory(self.path.parent)
         with self.path.open("rb") as stream:
             header = SessionEntry.read(stream.readline())
-        header.require_header()
         with NativeContextJournal.open_evidence(files) as db:
             proof = NativeContextJournal.for_input(db, user.input_id)
             if proof is None:
@@ -383,8 +381,6 @@ class NativeTranscript(TranscriptSource):
         This bounded reverse walk runs before any BUS/registry lock is acquired.
         A display-tolerant malformed record cannot supply publication evidence.
         """
-        from .errors import RelationViolationError
-
         for record in self.reverse(through):
             if record.start < after:
                 break

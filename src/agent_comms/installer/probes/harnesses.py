@@ -9,10 +9,13 @@ from typing import Annotated
 
 from agent_comms.cli_result import CliResult
 from agent_comms.commander.config import CommanderChoice, KeptCommander, KeptRepos, RepoChoice
-from agent_comms.comms import Comms
+from agent_comms.comms import (
+    Comms,
+    client_wire,
+)
 from agent_comms.field_codec import AbsolutePathText, Argument, PathText
 from agent_comms.harness_install import Harness
-from agent_comms.installer.interpreter_operation import RuntimeProbe
+from agent_comms.installer.interpreter_operation import RuntimeProbe, TargetProbe
 from agent_comms.registry_document import CommanderProject
 from agent_comms.thread_execution import ExternalThreadExecution
 from agent_comms.threads import Thread
@@ -87,12 +90,10 @@ class HarnessInstallation:
 
 
 @dataclass(frozen=True)
-class HarnessesProbe(RuntimeProbe[InstallResult]):
+class HarnessesProbe(TargetProbe, RuntimeProbe[InstallResult]):
     root: Annotated[Path, PathText]
     install: HarnessInstallation
 
     def run(self) -> InstallResult:
-        from agent_comms.comms import client_wire
-
         with client_wire(self.root) as comms:
             return self.install.apply(comms)

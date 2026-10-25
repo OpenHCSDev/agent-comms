@@ -6,6 +6,7 @@ from dataclasses import dataclass, replace
 from typing import Annotated, ClassVar
 
 from agent_comms.assignment_states import AssignmentState, EngagedAssignment
+from agent_comms.audience_manifest import FrozenRecipient
 from agent_comms.coordination_contracts import (
     MAX_IDENTIFIER_CHARS,
     POLICY_VERSION,
@@ -15,9 +16,13 @@ from agent_comms.coordination_contracts import (
     require_optional_nonempty,
     validate_execution_id,
 )
+from agent_comms.coordination_errors import IdentityConflict
 from agent_comms.coordination_schema import CoordinatorRow
+from agent_comms.coordination_tables.executions import ExecutionRecord
+from agent_comms.coordination_tables.participants import Participants
+from agent_comms.coordination_tables.responses import ResponseObligation
 from agent_comms.envelope_claim_transitions import AssignmentBinding
-from agent_comms.field_codec import MessageId, SnapshotExclude, ThreadLookup, WireName, projected
+from agent_comms.field_codec import AssignmentId, MessageId, SnapshotExclude, ThreadLookup, WireName, projected
 from agent_comms.message_reference import MessageReference
 from agent_comms.typed_table import (
     Column,
@@ -37,7 +42,10 @@ from agent_comms.typed_table import (
     RequiredColumn,
     WriteOnceColumns,
 )
-from agent_comms.wake_policy import MessageAudience
+from agent_comms.wake_policy import (
+    MessageAudience,
+    WakeDecision,
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -63,14 +71,9 @@ class WakeAssignment(
 
     @property
     def recipient_identity(self):
-        from agent_comms.audience_manifest import FrozenRecipient
-
         return FrozenRecipient(self.recipient_lookup, self.recipient)
 
     def require_selected_source(self, initial, owner) -> None:
-        from agent_comms.audience_manifest import FrozenRecipient
-        from agent_comms.coordination_errors import IdentityConflict
-
         if self.recipient_identity != FrozenRecipient(
             owner.incarnation.lookup, owner.name
         ):
@@ -78,9 +81,6 @@ class WakeAssignment(
         self.require_committed_source(initial)
 
     def require_committed_source(self, initial) -> None:
-        from agent_comms.coordination_errors import IdentityConflict
-        from agent_comms.wake_policy import WakeDecision
-
         if self.source != MessageReference(initial.message.seq, initial.message.message_id):
             raise IdentityConflict("wake frame does not match a committed source")
         expected = WakeDecision(self.recipient_lookup, self.audience, self.lifecycle.mode)
@@ -137,13 +137,13 @@ class WakeAssignment(
         )
 
     assignment_id: Annotated[
-        str,
+        AssignmentId,
         WireName("claim_id"),
-        FrozenColumn(primary_key=True, check="length(assignment_id) BETWEEN 1 AND 256"),
+        FrozenColumn(primary_key=True),
     ]
     recipient: Annotated[str, FrozenColumn(check="length(recipient) BETWEEN 1 AND 256")]
     recipient_lookup: Annotated[ThreadLookup, FrozenColumn()]
-    wire_seq: Annotated[int, FrozenColumn(check="wire_seq > 0")]
+    wire_seq: Annotated[int, FrozenColumn(check="wire_seq > 0", index=True)]
     message_id: Annotated[MessageId, FrozenColumn(check="length(message_id) BETWEEN 1 AND 256")]
     audience: Annotated[MessageAudience, FrozenColumn()]
     lifecycle: Annotated[AssignmentState, SnapshotExclude()]
@@ -196,11 +196,6 @@ class WakeAssignment(
             raise ValueError("wire_seq and revision must be positive")
         if self.accepted_at_ms < 0 or self.updated_at_ms < self.accepted_at_ms:
             raise ValueError("claim timestamps are inconsistent")
-        object.__setattr__(self, "audience", MessageAudience(self.audience))
-
-    @property
-    def durable_key(self) -> tuple[str, int]:
-        return (self.recipient_lookup, self.wire_seq)
 
     exact_target: ClassVar[Generated] = Generated(
         str,
@@ -246,10 +241,6 @@ class WakeAssignment(
 
     @classmethod
     def references(cls):
-        from agent_comms.coordination_tables.executions import ExecutionRecord
-        from agent_comms.coordination_tables.participants import Participants
-        from agent_comms.coordination_tables.responses import ResponseObligation
-
         return (
             ForeignKey(columns=("recipient_lookup",), target=Participants, target_columns=("participant_lookup",)),
             ForeignKey(columns=("execution_id",), target=ExecutionRecord, target_columns=("execution_id",)),
@@ -285,7 +276,7 @@ class ExecutionAssignmentLink(
         AND c.exact_target IS NOT NULL AND c.recipient_lookup = e.owner_lookup ))"""
 
     execution_id: Annotated[str, Column(primary_key=True)]
-    assignment_id: Annotated[str, WireName("claim_id"), Column(unique=True)]
+    assignment_id: Annotated[AssignmentId, WireName("claim_id"), Column(unique=True)]
     ordinal: Annotated[int, Column(primary_key=True, check="ordinal>=0")]
     unique = (("execution_id", "assignment_id"),)
 
@@ -298,8 +289,6 @@ class ExecutionAssignmentLink(
 
     @classmethod
     def references(cls):
-        from agent_comms.coordination_tables.executions import ExecutionRecord
-
         return (
             ForeignKey(columns=("execution_id",), target=ExecutionRecord, target_columns=("execution_id",), on_delete="RESTRICT"),
             ForeignKey(

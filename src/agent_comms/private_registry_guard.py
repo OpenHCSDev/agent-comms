@@ -30,14 +30,23 @@ from .child_process import Platform
 from . import store_files
 from .coordination_database import CoordinationStore
 from .cohort_schema import AcceptanceFrontier
+from .coordination_errors import PublicationActivationBlocked
+from .coordination_schema import CoordinatorTable
 from .coordination_tables.participants import Participants
 from .coordinator import Coordination
 from .errors import RelationViolationError
 from .field_codec import RootId, ThreadLookup
-from .locked_store import DurableFile, WireWakeFile
+from .locked_store import RollbackRetained, WireWakeFile
+from .native_input_owner import RegistryOwner
 from .native_runtime_input import NativeRuntimeInput, NativeRuntimeTable
+from .private_nk_entrypoint import (
+    PrivateNkLaunch,
+    SharedRootLaunch,
+)
 from .private_path import PrivateFileRole
 from .private_runtime_schema import PrivateCoordinatorSchema, PrivateCoordinatorTable
+from .thread_identity import ClaimedIdentity
+
 
 if TYPE_CHECKING:
     from .acp_extension import CursorAdvancedUpdate, CursorScope
@@ -120,10 +129,9 @@ class RegistryPrivacy(ABC):
     def capture(root: Path) -> RegistryPrivacy:
         """Read original privacy authority under its registry's existing lock."""
         from .registry_store import RegistryStore
-        from .store_files import SharedLock
 
         registry = RegistryStore.at(root)
-        with registry.locked(mode=SharedLock()):
+        with registry.guarded_read():
             return registry.private_guard_unlocked()
 
     @abstractmethod
@@ -185,8 +193,6 @@ class PublicRegistry(RegistryPrivacy):
         """Public attached history has no private native publication relations."""
 
     def coordinator_schema(self) -> type[TableSchema]:
-        from .coordination_schema import CoordinatorTable
-
         CoordinatorTable.declarations()
         return CoordinatorTable
 
@@ -223,8 +229,6 @@ class PublicRegistry(RegistryPrivacy):
         store_files.AtomicFile(registry_path).write_text(text)
 
     def launch(self, root: Path) -> RootLaunch:
-        from .private_nk_entrypoint import SharedRootLaunch
-
         return SharedRootLaunch(root)
 
     def prepare_native(self, registry_path: Path) -> PrivateRegistryGuard:
@@ -247,7 +251,7 @@ class PublicRegistry(RegistryPrivacy):
         raise error
 
 
-class PrivateRegistryGuard(DurableFile, WireWakeFile, RegistryPrivacy):
+class PrivateRegistryGuard(RollbackRetained, WireWakeFile, RegistryPrivacy):
 
 
     filename = ".registry-owner-guard"
@@ -280,8 +284,6 @@ class PrivateRegistryGuard(DurableFile, WireWakeFile, RegistryPrivacy):
     def missing_notification_assignments(
         self, sources: Sequence[Delivered],
     ) -> NotificationAssignmentRead:
-        from .coordination_errors import PublicationActivationBlocked
-
         raise PublicationActivationBlocked("Private notification coordinator is missing")
 
     def __init__(self, registry_path: Path, wire_root_id: RootId):
@@ -315,8 +317,6 @@ class PrivateRegistryGuard(DurableFile, WireWakeFile, RegistryPrivacy):
         self, snapshot: RegistrySnapshot, thread_name: str, session_id: str,
     ) -> CursorScope:
         from .acp_extension import LiveCursorScope, NoCursorScope
-        from .native_input_owner import RegistryOwner
-        from .thread_identity import ClaimedIdentity
 
         try:
             owner = RegistryOwner.capture_local(snapshot, thread_name)
@@ -334,8 +334,6 @@ class PrivateRegistryGuard(DurableFile, WireWakeFile, RegistryPrivacy):
         return await publication.observed_metadata(thread_name, session_id)
 
     def launch(self, root: Path) -> RootLaunch:
-        from .private_nk_entrypoint import PrivateNkLaunch
-
         return PrivateNkLaunch.installed(root, self.namespace)
 
     def prepare_native(self, registry_path: Path) -> PrivateRegistryGuard:
@@ -349,8 +347,6 @@ class PrivateRegistryGuard(DurableFile, WireWakeFile, RegistryPrivacy):
             raise error
 
     def _trusted_root(self) -> None:
-        Platform.current().require_pinned_paths(RelationViolationError(
-            "Private registry guard requires POSIX directory and fixed-slot durability"))
         if ".." in self.registry_path.parts:
             _reject("has an ambiguous root path")
         root = self.registry_path.parent.absolute()

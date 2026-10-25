@@ -12,6 +12,13 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, ClassVar
 
 from agent_comms.declared_family import DeclaredFamily
+from agent_comms.process_claim import ProcessSingleton
+from agent_comms.store_files import SqliteStore
+from agent_comms.installer.probes.carry import Carry
+from agent_comms.pi_events import PiEvent
+from agent_comms.private_registry_guard import RegistryPrivacy
+from agent_comms.thread_identity import BirthlessIncarnation
+from agent_comms.tool_calls import CliToolArguments
 from agent_comms.field_codec import Id128, MessageId, NominalSpelling, NominalText
 from agent_comms.phase_evidence import (
     AllEvidence,
@@ -68,6 +75,10 @@ class Id128NominalPlan(Plan):
     document = "plans/ID128-NOMINAL-PLAN.md"
 
 
+class StoreGuardsPlan(Plan):
+    document = "plans/STORE-GUARDS-PLAN.md"
+
+
 class OrderPhase(DeclaredFamily, affix="Phase"):
     """What an order serves: one plan phase, or nothing in any plan."""
 
@@ -79,8 +90,11 @@ class OrderPhase(DeclaredFamily, affix="Phase"):
 class UnplannedPhase(OrderPhase):
     @classmethod
     def order_refusals(cls, reading: PlanReading, reason: str) -> tuple[str, ...]:
+        """A stated reason answers the refusal, so main is read only when it is missing."""
+        if len(reason.split()) >= 8:
+            return ()
         ready = tuple(phase for phase in PlanPhase.members_with(PlanPhase) if phase.ready(reading))
-        if ready and len(reason.split()) < 8:
+        if ready:
             return (
                 "Plan phases are ready: "
                 + ", ".join(phase.declared_name for phase in ready)
@@ -119,11 +133,7 @@ class PlanPhase(OrderPhase, declared_name=None):
     def ordered_since(cls, reading: PlanReading) -> float:
         """When the phase was first ordered to its current holders; a re-sent order keeps the
         time of the first, so re-sending never restarts the clock."""
-        return min(
-            order.at.recorded_at("A plan order")
-            for todo in cls.holding(reading)
-            for order in (*todo.prior_orders, todo.order.checked())
-        )
+        return min(todo.first_ordered_at for todo in cls.holding(reading))
 
     @classmethod
     def ready(cls, reading: PlanReading) -> bool:
@@ -149,6 +159,23 @@ class RemainingSlopPhase(PlanPhase, declared_name=None):
 class Id128NominalPhase(PlanPhase, declared_name=None):
     plan = Id128NominalPlan
     paths: ClassVar[tuple[str, ...]] = ("src", ":!src/agent_comms/skills/")
+
+    @classmethod
+    def absent(cls, pattern: str) -> PatternAbsent:
+        return PatternAbsent(pattern, cls.paths)
+
+    @classmethod
+    def plain(cls, names: str) -> PatternAbsent:
+        """No field or parameter named ``names`` keeps a plain ``str`` or bare ``Id128``."""
+        return cls.absent(rf"\b({names}): (str\b|Id128\b|Annotated\[(str|Id128)\b)")
+
+
+class StoreGuardsPhase(PlanPhase, declared_name=None):
+    plan = StoreGuardsPlan
+    owners: ClassVar[tuple[str, ...]] = (
+        ":!src/agent_comms/store_files.py", ":!src/agent_comms/locked_store.py",
+        ":!src/agent_comms/skills/",
+    )
 
 
 class RetainedStorePhase(CommanderNativePhase):
@@ -501,15 +528,8 @@ class ClaimIdsPhase(Id128NominalPhase):
     after = (NominalIdTypePhase,)
     evidence = AllEvidence(
         (
-            PatternAbsent(
-                r"\b(nonce|operation_id|generation): "
-                r"(str\b|Id128\b|Annotated\[(str|Id128)\b)",
-                Id128NominalPhase.paths,
-            ),
-            PatternAbsent(
-                r"Id128Text\.decode\(self\.(nonce|operation_id)\)",
-                Id128NominalPhase.paths,
-            ),
+            Id128NominalPhase.plain("nonce|operation_id|generation"),
+            Id128NominalPhase.absent(r"Id128Text\.decode\(self\.(nonce|operation_id)\)"),
         )
     )
 
@@ -520,15 +540,8 @@ class MessageIdsPhase(Id128NominalPhase):
     after = (NominalIdTypePhase,)
     evidence = AllEvidence(
         (
-            PatternAbsent(
-                r"\b(message_id|source_message_id): "
-                r"(str\b|Id128\b|Annotated\[(str|Id128)\b)",
-                Id128NominalPhase.paths,
-            ),
-            PatternAbsent(
-                r"Annotated\[str, *MessageIdText\]",
-                Id128NominalPhase.paths,
-            ),
+            Id128NominalPhase.plain("message_id|source_message_id"),
+            Id128NominalPhase.absent(r"Annotated\[str, *MessageIdText\]"),
         )
     )
 
@@ -539,27 +552,17 @@ class TurnIdsPhase(Id128NominalPhase):
     after = (NominalIdTypePhase,)
     evidence = AllEvidence(
         (
-            PatternAbsent(
-                r"\b(turn_id|finished_turn_id|report_turn_id|current_turn_id)"
-                r": (str\b|Id128\b|Annotated\[(str|Id128)\b)",
-                Id128NominalPhase.paths,
-            ),
-            PatternAbsent(
-                r"Id128Text\.(decode|from_text)\((self\.)?turn_id\)",
-                Id128NominalPhase.paths,
-            ),
+            Id128NominalPhase.plain("turn_id|finished_turn_id|report_turn_id|current_turn_id"),
+            Id128NominalPhase.absent(r"Id128Text\.(decode|from_text)\((self\.)?turn_id\)"),
         )
     )
 
 
 class GoalIdsPhase(Id128NominalPhase):
-    """6: goal ids are ``GoalId``, minted by it, never by a hand-written ``uuid4().hex``."""
+    """6: goal ids are ``GoalId``, minted by it, never minted by hand."""
 
     after = (NominalIdTypePhase,)
-    evidence = PatternAbsent(
-        r"\b(goal_id|original_goal_id): (str\b|Id128\b|Annotated\[(str|Id128)\b)",
-        Id128NominalPhase.paths,
-    )
+    evidence = Id128NominalPhase.plain("goal_id|original_goal_id")
 
 
 class RootIdsPhase(Id128NominalPhase):
@@ -568,19 +571,10 @@ class RootIdsPhase(Id128NominalPhase):
     after = (NominalIdTypePhase,)
     evidence = AllEvidence(
         (
-            PatternAbsent(
-                r"\b(wire_root_id|root_id|lookup|recipient_lookup): "
-                r"(str\b|Id128\b|Annotated\[(str|Id128)\b)",
-                Id128NominalPhase.paths,
-            ),
-            PatternAbsent(
-                r"Id128Text\.decode\((self\.)?(owner\.)?(wire_root_id|root_id|lookup)\)",
-                Id128NominalPhase.paths,
-            ),
-            PatternAbsent(
-                r"FieldCodec\.decode\(Annotated\[str, *Id128Text\]",
-                Id128NominalPhase.paths,
-            ),
+            Id128NominalPhase.plain("wire_root_id|root_id|lookup|recipient_lookup"),
+            Id128NominalPhase.absent(
+                r"Id128Text\.decode\((self\.)?(owner\.)?(wire_root_id|root_id|lookup)\)"),
+            Id128NominalPhase.absent(r"FieldCodec\.decode\(Annotated\[str, *Id128Text\]"),
         )
     )
 
@@ -591,15 +585,9 @@ class InputIdsPhase(Id128NominalPhase):
     after = (NominalIdTypePhase,)
     evidence = AllEvidence(
         (
-            PatternAbsent(
-                r"\b(input_id|native_id): "
-                r"(str\b|Id128\b|Annotated\[(str|Id128)\b)",
-                Id128NominalPhase.paths,
-            ),
-            PatternAbsent(
-                r"Id128Text\.(decode|from_text)\((self\.)?(input_id|native_id)\)",
-                Id128NominalPhase.paths,
-            ),
+            Id128NominalPhase.plain("input_id|native_id"),
+            Id128NominalPhase.absent(
+                r"Id128Text\.(decode|from_text)\((self\.)?(input_id|native_id)\)"),
         )
     )
 
@@ -847,12 +835,12 @@ class RostersPhase(RemainingSlopPhase):
             *(
                 ClassFlagsAbsent(r"^\s*" + attribute + r"\s*[:=]", owners=(owner,))
                 for owner, attribute in (
-                    (QualifiedName.of("agent_comms.installer.probes.carry.Carry"), "declared"),
-                    (QualifiedName.of("agent_comms.private_registry_guard.RegistryPrivacy"), "kinds"),
-                    (QualifiedName.of("agent_comms.thread_identity.BirthlessIncarnation"), "members"),
-                    (QualifiedName.of("agent_comms.tool_calls.CliToolArguments"), "types"),
-                    (QualifiedName.of("agent_comms.pi_events.PiEvent"), "_start_phases"),
-                    (QualifiedName.of("agent_comms.pi_events.PiEvent"), "_end_events"),
+                    (QualifiedName.of_class(Carry), "declared"),
+                    (QualifiedName.of_class(RegistryPrivacy), "kinds"),
+                    (QualifiedName.of_class(BirthlessIncarnation), "members"),
+                    (QualifiedName.of_class(CliToolArguments), "types"),
+                    (QualifiedName.of_class(PiEvent), "_start_phases"),
+                    (QualifiedName.of_class(PiEvent), "_end_events"),
                 )
             ),
         )
@@ -945,3 +933,58 @@ class FleetReplayPhase(FleetAwarenessPhase):
         LostToolsPhase,
     )
     evidence = FunctionDeclared("test_replay_raises_each_incident_once", ("tests",))
+
+
+class StoreGuardFamiliesPhase(StoreGuardsPhase):
+    """1: each store's guard is declared on its family; SQLite and hand flocks go."""
+
+    evidence = AllEvidence(
+        (
+            ClassDeclared(SqliteStore.__name__, ("src/agent_comms/store_files.py",)),
+            ClassDeclared(ProcessSingleton.__name__, ("src/agent_comms/process_claim.py",)),
+            PatternAbsent(r"fcntl\.flock\(",
+                          ("src", ":!src/agent_comms/process_claim.py", ":!src/agent_comms/skills/")),
+            PatternAbsent(r"_store_lock\(", ("src/agent_comms/typed_table.py",)),
+            PatternAbsent(r"_store_lock\(path\), closing", ("src/agent_comms/locked_store.py",)),
+        )
+    )
+
+
+class ReadWriteMembersPhase(StoreGuardsPhase):
+    """2: stores expose reading and writing; no caller picks a mode, a wait or ``locked()``."""
+
+    after = (StoreGuardFamiliesPhase,)
+    evidence = AllEvidence(
+        (
+            ClassDeclared("SingleFileStore", ("src/agent_comms/store_files.py",)),
+            ClassDeclared("MultiFileStore", ("src/agent_comms/store_files.py",)),
+            PatternAbsent(r"(\.locked|_store_lock|_async_store_lock|ordered)\([^)]*(mode|contention)=",
+                          ("src", ":!src/agent_comms/skills/")),
+            PatternAbsent(r"def locked\(", ("src", *StoreGuardsPhase.owners)),
+        )
+    )
+
+
+class BoundedWaitPhase(StoreGuardsPhase):
+    """3: every guard's wait is bounded and declared on its family."""
+
+    after = (ReadWriteMembersPhase,)
+    evidence = PatternAbsent(r"UNBOUNDED_CONTENTION|UnboundedContention",
+                             ("src", ":!src/agent_comms/skills/"))
+
+
+class MaintenanceInWritePhase(StoreGuardsPhase):
+    """4: a guard's write asks its store kind about maintenance; no hand-placed check."""
+
+    after = (ReadWriteMembersPhase,)
+    evidence = PatternAbsent(
+        r"assert_open_unlocked\(\)|require_maintenance_open\((path)?\)",
+        ("src", *StoreGuardsPhase.owners, ":!src/agent_comms/typed_table.py",
+         ":!src/agent_comms/maintenance_barrier.py"),
+    )
+
+
+class LockCensusPhase(StoreGuardsPhase):
+    """5: the debt ratchet counts lock calls outside the store owners and refuses growth."""
+
+    evidence = PatternPresent(r"^class StoreLockCalls\(", ("tools/debt_ratchet.py",))

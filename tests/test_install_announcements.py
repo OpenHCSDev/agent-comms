@@ -113,8 +113,7 @@ def test_rollback_and_refusal_are_published_from_their_error_types(private_comms
     comms = declare_test_bus(private_comms, channels=("comms",))
     error = UpgradeRefused("carry_order_scopes refused its rows")
     runtime = LaunchRuntime(Path("/saved-original-runtime/bin/python"))
-    restored = InstallRolledBack(error, (StartedOwner("worker"),), "saved-original-bus",
-                                runtime=runtime)
+    restored = InstallRolledBack(error, "saved-original-bus", runtime=runtime)
     InstallReportProbe(comms.root, "\n".join(error.lines())).run()
     InstallReportProbe(comms.root, "\n".join(restored.lines())).run()
     messages = tuple(reversed(HistoryCliCommand(target="#comms").apply(comms).messages))
@@ -192,7 +191,7 @@ def test_terminal_report_follows_real_tree_cleanup_and_keeps_original_error(
                     raise refusal
                 if failure == "cleanup":
                     source.git(source.checkout, "worktree", "lock", str(tree.path))
-                published = replace(stack, program=InstalledProgram())
+                published = stack.extended(Stack, program=InstalledProgram())
                 report.writer = RuntimeWriter(comms.root, published)
                 report.complete(installed)
         except (UpgradeRefused, GitCommandError) as error:

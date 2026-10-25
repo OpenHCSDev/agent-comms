@@ -15,39 +15,45 @@ from agent_comms.field_codec import FieldCodec, boundary_decoder
 
 
 class RuleAudience(DeclaredFamily, affix="Audience"):
-    """Who a packaged rule governs; each audience owns what it adds to a unit's system prompt."""
+    """Who a packaged rule governs. Every unit carries every rule, so it can hold the fleet
+    and the commander to them; each audience owns how its rules are introduced."""
+
+    heading: ClassVar[str]
 
     @classmethod
     @abstractmethod
-    def unit_rules(cls, rule: RuleFile) -> tuple[str, ...]: ...
+    def order_line(cls, names: str) -> str:
+        """The order footer line naming this audience's rules."""
 
     @classmethod
-    @abstractmethod
-    def order_reference(cls, rule: RuleFile) -> tuple[str, ...]: ...
-
-
-class CommanderAudience(RuleAudience):
-    """The commander's own process (roasts, strikes, timers, coordination): units never carry it."""
-
-    @classmethod
-    def unit_rules(cls, rule: RuleFile) -> tuple[str, ...]:
-        return ()
-
-    @classmethod
-    def order_reference(cls, rule: RuleFile) -> tuple[str, ...]:
-        return ()
+    def grouped(cls, rules: tuple[RuleFile, ...]) -> tuple[tuple[type[RuleAudience], tuple[RuleFile, ...]], ...]:
+        """The rules under each audience, audiences in declaration order."""
+        audiences = sorted({rule.audience for rule in rules}, key=lambda audience: audience.declared_position())
+        return tuple((audience, tuple(rule for rule in rules if rule.audience is audience))
+                     for audience in audiences)
 
 
 class FleetAudience(RuleAudience):
-    """How code and reports are judged: every unit carries it, and so does the commander."""
+    """How code and reports are judged: every unit follows it, and so does the commander."""
+
+    heading = "# Rules every unit follows"
 
     @classmethod
-    def unit_rules(cls, rule: RuleFile) -> tuple[str, ...]:
-        return (rule.render(),)
+    def order_line(cls, names: str) -> str:
+        return f"Standing rules for this order: follow the fleet rules {names} in {CommanderPackage.rules()}."
+
+
+class CommanderAudience(RuleAudience):
+    """The commander's own process (roasts, strikes, timers, coordination): units carry it to
+    judge the commander by it, never to act as the commander."""
+
+    heading = ("# Rules the commander follows\n\nThey apply to the commander too: roast it with "
+               "file:line when it breaks one. They give no unit a commander action.")
 
     @classmethod
-    def order_reference(cls, rule: RuleFile) -> tuple[str, ...]:
-        return (rule.name,)
+    def order_line(cls, names: str) -> str:
+        return (f"The commander's rules {names} in {CommanderPackage.rules()} apply to the "
+                "commander too; roast it with file:line when it breaks one.")
 
 
 @dataclass(frozen=True)
@@ -118,9 +124,6 @@ class RuleFile(DeclaredFamily, affix="RuleFile"):
 
     def render(self) -> str:
         return f"{self.summary}\n\n{self.body}".rstrip()
-
-    def unit_rules(self) -> tuple[str, ...]:
-        return self.audience.unit_rules(self)
 
     @classmethod
     def drift_tells(cls) -> tuple[str, ...]:

@@ -10,7 +10,6 @@ import time
 from abc import ABC, abstractmethod
 from collections.abc import Iterable, Iterator, Sequence
 from dataclasses import dataclass, field, replace
-from enum import StrEnum
 from functools import cached_property
 from pathlib import Path
 from typing import TYPE_CHECKING, Annotated, ClassVar, Self, cast
@@ -31,7 +30,7 @@ from agent_comms.locked_store import DurableFile
 from agent_comms.problem_number import ProblemNumber
 from agent_comms.repo import GitCommandError, Repo
 from agent_comms.repository_name import RepositoryName
-from agent_comms.standing_rules import UndatedStandingRule
+from agent_comms.standing_rules import FamilyScan, UndatedStandingRule
 from agent_comms.storage_room import (
     AllocationRoomWork,
     BuildRoomWork,
@@ -274,6 +273,14 @@ class StorageRule(RoomAllocation, DurableFile):
         checkout = self.order_checkout(roots, problem)
         return checkout.with_name(f'{checkout.name}--{repository.name}')
 
+    def checkout_problem(self, roots: StorageRoots, path: Path, other: str) -> str:
+        """The problem whose checkout holds path, read back from order_checkout's own name;
+        other for a path in no problem checkout."""
+        allocated = self.order_checkout(roots, '')
+        names = path.relative_to(allocated.parent).parts[:1] if path.is_relative_to(allocated.parent) else ()
+        return next((name.removeprefix(allocated.name).split('--')[0] for name in names
+                     if name.startswith(allocated.name)), other)
+
     def problem_checkouts(self, roots: StorageRoots, problem: str) -> tuple[Path, ...]:
         """Every checkout allocated to one problem: its check repository's, then each other's."""
         checkout = self.order_checkout(roots, problem)
@@ -501,14 +508,10 @@ class UnitStorage:
 
 
 @dataclass(frozen=True)
-class StorageViolation(UndatedStandingRule, declared_name=None):
+class StorageViolation(UndatedStandingRule, FamilyScan, declared_name=None):
     """One family scan shares each held unit's storage snapshot between its violations."""
 
     storage: UnitStorage
-
-    @classmethod
-    def scan_owner(cls) -> type[StorageViolation]:
-        return __class__
 
     @classmethod
     def scan_observed(cls, comms: Comms, commander: str,
@@ -686,7 +689,12 @@ class ShellInvocation(ShellCommand):
 
     @classmethod
     def parse(cls, command: str, cwd: Path) -> Iterator[ShellInvocation]:
-        for decoded in ShellCommand.split(command):
+        try:
+            decoded_commands = tuple(ShellCommand.split(command))
+        except ValueError as error:
+            raise StorageDenied(f'StorageRule: the shell command cannot be decoded ({error}); '
+                                'no tool was started') from error
+        for decoded in decoded_commands:
             words = decoded.words
             if decoded.program == 'cd' and len(words) > 1:
                 target = words[2] if words[1] == '--' and len(words) > 2 else words[1]
@@ -695,20 +703,10 @@ class ShellInvocation(ShellCommand):
             yield cls(words, cwd)
 
 
-class GitWriteOperation(StrEnum):
-    COMMIT = 'commit'
-    PUSH = 'push'
-
-
 @dataclass(frozen=True)
 class GitInvocation:
     args: list[str]
     cwd: Path
-    directories: tuple[Path, ...]
-
-    @property
-    def writes_source(self) -> bool:
-        return bool(self.args) and self.args[0] in GitWriteOperation
 
 
 class ForbidsCommands(ShellProgram):
@@ -761,7 +759,7 @@ class WritesTargets(ShellProgram):
 
 
 class WritesWorkingTree(ShellProgram):
-    verbs = (('switch',), ('checkout',), (GitWriteOperation.COMMIT,),
+    verbs = (('switch',), ('checkout',), ('commit',),
              ('merge',), ('reset',), ('stash',))
 
     def decode(self, args: list[str], cwd: Path) -> tuple[StorageEffect, ...]:
@@ -796,14 +794,12 @@ class GitProgram(ForbidsCommands, WritesWorkingTree):
         except getopt.GetoptError as error:
             raise SelectedToolDenied(
                 f'StorageRule: incomplete or unknown git option: {error}') from error
-        directories = [cwd]
         for option, value in options:
             if option in cls.directory_options:
                 path = physical_path(value, cwd)
-                directories.append(path)
                 if option == cls.chdir_option:
                     cwd = path
-        return GitInvocation(remaining, cwd, tuple(directories))
+        return GitInvocation(remaining, cwd)
 
     def effects(self, args, cwd):
         invocation = self.invocation(args, cwd)

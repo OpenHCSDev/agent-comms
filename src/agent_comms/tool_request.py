@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from abc import abstractmethod
 from collections.abc import Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from functools import partial
 from typing import Annotated, ClassVar, NoReturn
 
@@ -25,7 +25,6 @@ from .field_codec import (
     WireChoices,
     WireName,
 )
-from .message_bus import HeldBusWrite
 from .native_tools import ArgumentTool, NativeRequestTools, NativeToolDeclaration
 from .thread_execution import ThreadCommandAvailability
 from .tool_caller import NoThreadCaller, ThreadCaller, ToolCaller
@@ -82,6 +81,15 @@ class OmittedNames(NullMember):
     names: ClassVar[tuple[str, ...]] = ()
 
 
+@dataclass(frozen=True)
+class ToolCall:
+    """The MCP tools/call parameters: a tool by the name the connector exposes it under."""
+
+    name: str
+    arguments: dict[str, object] = field(default_factory=dict)
+    meta: Annotated[dict[str, object], WireName("_meta")] = field(default_factory=dict)
+
+
 @dataclass(frozen=True, kw_only=True)
 class ToolRequest[Caller: ToolCaller = ToolCaller](
     ArgumentTool, ThreadCommandAvailability, NativeRequestTools, NativeToolDeclaration
@@ -100,6 +108,11 @@ class ToolRequest[Caller: ToolCaller = ToolCaller](
             for plan in FieldCodec.field_plans(cls)
             for binding in ContextSource.single(plan.annotation)
         }
+
+    @classmethod
+    def called(cls) -> ToolCall:
+        """A connector call of this tool; the connector exposes it under its declared name."""
+        return ToolCall(cls.declared_name)
 
     @classmethod
     def schema(cls) -> dict[str, object]:
@@ -157,11 +170,12 @@ class ToolRequest[Caller: ToolCaller = ToolCaller](
         return self.apply(comms, caller)
 
 
-class PublishingTool[Caller: ToolCaller = ToolCaller](HeldBusWrite):
-    """A publication waits at the bus owner before any caller or message mutation."""
+class PublishingTool[Caller: ToolCaller = ToolCaller]:
+    """A publication is refused while maintenance holds the bus, as the call's entry is
+    (Comms.client): a request waiting out the hold would hold its connector's stop."""
 
     def apply(self, comms: Comms, caller: Caller) -> ToolResult:
-        return self.write_when_open(comms, partial(self.publish, comms, caller))
+        return comms.bus.write_open(partial(self.publish, comms, caller))
 
     @abstractmethod
     def publish(self, comms: Comms, caller: Caller) -> ToolResult: ...

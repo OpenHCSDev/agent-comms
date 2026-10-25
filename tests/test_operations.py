@@ -185,7 +185,7 @@ class TestThreadOps:
             Thread(name='transcript-thread', tags=frozenset(), worktree=str(tmp_path), session_file=RegistrySessionLocation.from_path(str(session_file), wired.root))
         )
 
-        events = wired.transcripts.thread_transcript_page("transcript-thread").events
+        events = wired.transcripts.capture_page_read("transcript-thread").read().events
 
         assert [event.declared_name for event in events] == [
             "user",
@@ -214,7 +214,7 @@ class TestThreadOps:
             Thread(name='compacted-thread', tags=frozenset(), worktree=str(tmp_path), session_file=RegistrySessionLocation.from_path(str(session_file), wired.root))
         )
 
-        events = wired.transcripts.thread_transcript_page("compacted-thread").events
+        events = wired.transcripts.capture_page_read("compacted-thread").read().events
 
         assert len(events) == 1
         notice = events[0]
@@ -319,7 +319,6 @@ class TestThreadOps:
         assert attached.process_identity == ProcessIdentity.capture(os.getpid())
         assert attached.session_file == RegistrySessionLocation.from_path(str(session_file.resolve()), wired.root)
         assert wired.registry.status("fixer").declared_name == "running"
-
 
     def test_release_only_allows_the_calling_thread(self, wired: Comms, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setenv("AGENT_COMMS_THREAD", "fixer")
@@ -530,7 +529,7 @@ class TestLedgerOps:
         wired.registry.declare(
             Thread(name='large', tags=frozenset(), worktree=str(tmp_path), session_file=RegistrySessionLocation.from_path(str(path), wired.root))
         )
-        page = wired.transcripts.thread_transcript_page("large")
+        page = wired.transcripts.capture_page_read("large").read()
         assert page.has_older
         texts: list[str] = []
         for event in page.events:
@@ -570,13 +569,6 @@ class TestPollAndWire:
         snap = FieldCodec.decode(dict[str, JsonValue], wired.views.poll(CallingThreadTarget()).to_wire())
         thread = FieldCodec.decode(dict[str, JsonValue], snap["thread"])
         assert thread["name"] == "fixer"
-
-    def test_adopt_current_registers_from_env(self, comms: Comms, monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
-        monkeypatch.setenv("AGENT_COMMS_THREAD", "me")
-        monkeypatch.setenv("PI_WORKTREE", str(tmp_path))
-        thread = comms.threads.adopt_current()
-        assert thread.name == "me"
-        assert comms.registry.status("me").declared_name == "running"
 
     def test_runtime_files_created_on_demand(self, tmp_path: Path) -> None:
         comms = wire(tmp_path / "fresh")

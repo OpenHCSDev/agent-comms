@@ -15,7 +15,7 @@ from .acp_extension import InputStartedUpdate, NoQueueScope, UnidentifiedInputSt
 from .agent_backend import BusyInputPolicy, SteerInputPolicy
 from .channel_input_batch import InputBatch, SingleInputBatch
 from .field_codec import InputId, TurnId
-from .input_attempt import InputAlreadyCleared
+from .input_attempt import InputAlreadyCleared, MissingInput
 from .input_key import InputKey
 from .messages import Message
 from .ordinary_turn_rules import (
@@ -25,9 +25,10 @@ from .ordinary_turn_rules import (
     UnconsumedDependencyRule,
 )
 from .reservation_rules import ReservationViolationError
-from .routing import TurnRouting
+from .routing import NoTurnRouting, TurnRouting
 from .send_outcome import DeferredSend, GrantedSend, RefusedSend, SendOutcome
 from .started_input import StartedInput
+from .transcript_routes import DisplayText, NoDisplayText, SentInputText
 
 if TYPE_CHECKING:
     from .acp_extension import QueueScope
@@ -186,10 +187,10 @@ class TurnInputSource(StartedInput, ABC):
         sender.comms.transcripts.routes.record_input_display(
             native_id,
             self.display(sender.inputs.dispositions, sent_text),
-            sent_text=sent_text,
+            sent_text=SentInputText(sent_text),
             routing=TurnRouting(
-                tuple(origin.reference for origin in self.origins), None
-            ) if self.origins else None,
+                tuple(origin.reference for origin in self.origins)
+            ) if self.origins else NoTurnRouting(),
         )
         return GrantedSend()
 
@@ -207,7 +208,7 @@ class TurnInputSource(StartedInput, ABC):
     def allows_goal_input(self, goal: GoalDeclaration) -> bool: ...
 
     @abstractmethod
-    def display(self, dispositions: InputDispositions, text: str) -> str | None: ...
+    def display(self, dispositions: InputDispositions, text: str) -> DisplayText | NoDisplayText: ...
 
     def consume_wait(self, comms: Comms, canonical: str, wait: GoalWait) -> bool:
         return True
@@ -217,6 +218,12 @@ class TurnInputSource(StartedInput, ABC):
 
 
 class InputDependency(ABC):
+    def authorizes(self, wait: GoalWait, owner_input: bool) -> bool:
+        return self.current(wait)
+
+    def original_type(self) -> type[OriginalTurnInput]:
+        return RoutedOriginalInput
+
     @abstractmethod
     def current(self, wait: GoalWait) -> bool: ...
 
@@ -229,6 +236,9 @@ class InputDependency(ABC):
 
 
 class NoInputDependency(InputDependency):
+    def authorizes(self, wait: GoalWait, owner_input: bool) -> bool:
+        return owner_input or wait.allows_routed_input()
+
     def current(self, wait: GoalWait) -> bool:
         return True
 
@@ -240,34 +250,10 @@ class NoInputDependency(InputDependency):
         return True
 
 
-@dataclass(frozen=True)
-class CapturedInputDependency(InputDependency):
-    wait_id: str
-
-    def current(self, wait: GoalWait) -> bool:
-        return wait.matches_id(self.wait_id)
-
-    def allows(self, wait: GoalWait, comms: Comms, origins: tuple[Message, ...],
-               owner: RecordedThreadIncarnation) -> bool:
-        if wait.allows_routed_input():
-            return True
-        if not self.current(wait):
-            return False
-        with comms.bus.bus.reading() as source:
-            for origin in origins:
-                original = source.delivery(origin.seq)
-                if original.message.reference == origin.reference and wait.matches(original, owner):
-                    return True
-        return False
-
-    def consume(self, comms: Comms, canonical: str, wait: GoalWait) -> bool:
-        return wait.consume_dependency(comms, canonical)
-
-
 @dataclass(frozen=True, kw_only=True)
 class OriginalTurnInput(TurnInputSource):
     prompt: str
-    original_display: str | None
+    original_display: DisplayText | NoDisplayText
     origins: tuple[Message, ...]
     dependency: InputDependency
     batch: InputBatch
@@ -296,7 +282,7 @@ class OriginalTurnInput(TurnInputSource):
         )
         return replace(self, batch=batch)
 
-    def display(self, dispositions: InputDispositions, text: str) -> str | None:
+    def display(self, dispositions: InputDispositions, text: str) -> DisplayText | NoDisplayText:
         return self.original_display
 
     def consume_wait(self, comms: Comms, canonical: str, wait: GoalWait) -> bool:
@@ -329,7 +315,7 @@ class OwnerOriginalInput(OriginalTurnInput, DirectInput):
 
     @property
     def notice_text(self) -> str:
-        return self.original_display or self.prompt
+        return self.original_display.prompt_or(self.prompt)
 
 
 class RoutedInput(TurnInputSource):
@@ -354,25 +340,22 @@ class SelectedOriginalInput(RoutedOriginalInput):
             acceptance=NoTurnAcceptance(),
             goal_permission=permission,
             prompt=prompt,
-            original_display=None,
+            original_display=NoDisplayText(),
             origins=(),
             dependency=NoInputDependency(),
             batch=SingleInputBatch(()),
         )
 
 
-class DependencyOriginalInput(OriginalTurnInput, DirectInput):
+class ScheduledOriginalInput(OriginalTurnInput, DirectInput):
+    """Captured goal permission and a launch permit authorize an internal input.
+
+    Having a durable input key cannot turn it into an unsolicited routed message.
+    """
+
     def allows_wait(self, wait: GoalWait, comms: Comms,
                     owner: RecordedThreadIncarnation) -> bool:
         return self.dependency.allows(wait, comms, self.origins, owner)
-
-
-class ScheduledOriginalInput(DependencyOriginalInput):
-    """An internal scheduled original inherits reservation and dependency checks.
-
-    Captured goal permission and an applicable launch permit authorize this input;
-    having a durable input key cannot turn it into an unsolicited routed message.
-    """
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -384,9 +367,9 @@ class FollowingTurnInput(TurnInputSource):
         """An actual following request may revise the turn's automatic answer."""
         return response.later_input(parts)
 
-    def display(self, dispositions: InputDispositions, text: str) -> str:
-        row = dispositions.lookup(self.keys[0]) if self.keys else None
-        return row.source_text if row is not None and row.exists else text
+    def display(self, dispositions: InputDispositions, text: str) -> DisplayText:
+        row = next((dispositions.lookup(key) for key in self.keys), MissingInput())
+        return DisplayText(row.source_text_or(text))
 
     def defers_for_goal(self, original: GoalPermission, current: GoalDeclaration) -> bool:
         return not original.allows(current)

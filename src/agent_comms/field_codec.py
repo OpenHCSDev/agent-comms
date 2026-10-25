@@ -14,7 +14,7 @@ from collections.abc import Callable, Iterable, Iterator, Mapping
 from dataclasses import MISSING, Field, dataclass, field, fields, is_dataclass
 from datetime import datetime
 from enum import Enum
-from functools import cache, cached_property, lru_cache, reduce
+from functools import cache, cached_property, lru_cache, partial, reduce
 from operator import or_
 from pathlib import Path
 from typing import (
@@ -22,6 +22,7 @@ from typing import (
     Annotated,
     ClassVar,
     Literal,
+    Never,
     Protocol,
     Self,
     TypeGuard,
@@ -36,7 +37,8 @@ from typing import (
 from uuid import uuid4
 from weakref import WeakKeyDictionary
 
-from pydantic import BaseModel, JsonValue
+from pydantic import BaseModel, GetCoreSchemaHandler, JsonValue
+from pydantic_core import core_schema
 from typing_extensions import TypeAliasType, TypeForm
 
 from .declared_family import DeclaredFamily
@@ -51,8 +53,6 @@ if TYPE_CHECKING:
 
 T = TypeVar("T")
 
-type WireRecordChange = Callable[[type, dict[str, object]], dict[str, object]]
-type WireRecordFilter = Callable[[type], bool]
 
 
 class MalformedRecord(ValueError):  # noqa: N818 - names the refused data
@@ -353,6 +353,15 @@ class InferredArgumentDefault(ArgumentDefault):
 
 
 @dataclass(frozen=True)
+class SelectingArgumentDefault(ArgumentDefault):
+    """An option that chooses its command's member: absent, it stays absent, and the member
+    the given options chose reports every one of its own it still lacks."""
+
+    def options(self, plan: FieldPlan) -> Mapping[str, object]:
+        return {"default": argparse.SUPPRESS}
+
+
+@dataclass(frozen=True)
 class GivenArgumentDefault(ArgumentDefault):
     value: object
 
@@ -553,18 +562,6 @@ class FieldPlan:
     def encoded(self, value, *, key=None):
         return {key or self.key: value}
 
-    @property
-    def wire_children(self) -> tuple[DecoderPlan, ...]:
-        return (self.value,) if self.wire_keys else ()
-
-    def rewrite_wire(
-        self, data: dict[str, object], change: WireRecordChange, select: WireRecordFilter,
-    ) -> dict[str, object]:
-        if self.key not in data or not self.wire_keys:
-            return data
-        current = self.value.rewrite_records(data[self.key], change, select)
-        return data if current is data[self.key] else {**data, self.key: current}
-
     def schema_fields(self):
         annotation, declared = self.annotation, self.declared
         base = FieldCodec.representation(annotation)[0]
@@ -751,11 +748,6 @@ class InlineFieldPlan(DeclaredFieldPlan):
     def encoded(self, value, *, key=None):
         return value
 
-    def rewrite_wire(
-        self, data: dict[str, object], change: WireRecordChange, select: WireRecordFilter,
-    ) -> dict[str, object]:
-        return cast(dict[str, object], self.value.rewrite_records(data, change, select))
-
     def captured(self, data: object) -> dict[str, object]:
         if not isinstance(data, dict):
             raise MalformedRecord("Expected a record object.")
@@ -870,8 +862,8 @@ class DecoderPlan(ABC):
     target: object
 
     @property
-    def wire_children(self) -> tuple[DecoderPlan, ...]:
-        return ()
+    def accepts_null(self) -> bool:
+        return False
 
     def fits_wire(self, data: object) -> bool:
         """Check outer wire shape without decoding nested values.
@@ -890,41 +882,6 @@ class DecoderPlan(ABC):
 
     def external_decoders(self, data: object) -> Iterable[ExternalDecoder]:
         return ()
-
-    def selects_record(self, select: WireRecordFilter) -> bool:
-        return False
-
-    def contains_records(
-        self, select: WireRecordFilter, seen: frozenset[object] = frozenset(),
-    ) -> bool:
-        """Whether this immutable plan reaches a selected declared record; no payload read."""
-        if self in seen:
-            return False
-        return self.selects_record(select) or any(
-            child.contains_records(select, seen | {self}) for child in self.wire_children
-        )
-
-    def rewrite_records(
-        self, data: object, change: WireRecordChange, select: WireRecordFilter,
-    ) -> object:
-        """Transform declared raw records without decoding opaque JSON or losing other keys.
-
-        The caller owns the record change. This decoder owns wire layout, child
-        membership and union selection. ``select`` is a pure declaration predicate.
-        """
-        if data is None or not self.contains_records(select):
-            return data
-        return self._rewrite_records(data, change, select)
-
-    def _rewrite_records(
-        self, data: object, change: WireRecordChange, select: WireRecordFilter,
-    ) -> object:
-        return data
-
-    def rewrite_document(
-        self, data: object, change: WireRecordChange, select: WireRecordFilter,
-    ) -> object:
-        return self.rewrite_records(data, change, select)
 
 
 @dataclass(frozen=True, slots=True)
@@ -1085,8 +1042,8 @@ class _RepresentedDecoder[T](ValueDecoder[T]):
         return self.representation.wire_structure(self.structural)
 
     @property
-    def wire_children(self) -> tuple[DecoderPlan, ...]:
-        return (self.wire_structure,)
+    def accepts_null(self) -> bool:
+        return self.wire_structure.accepts_null
 
     @boundary_decoder
     def fits_wire(self, data: object) -> bool:
@@ -1100,11 +1057,6 @@ class _RepresentedDecoder[T](ValueDecoder[T]):
 
     def shape_refusal(self, data: object) -> MalformedRecord:
         return self.wire_structure.shape_refusal(data)
-
-    def _rewrite_records(
-        self, data: object, change: WireRecordChange, select: WireRecordFilter,
-    ) -> object:
-        return self.wire_structure.rewrite_records(data, change, select)
 
     def external_decoders(self, data: object) -> Iterable[ExternalDecoder]:
         return FieldCodec.external_decoders(self.representation)
@@ -1426,12 +1378,24 @@ class PresentMember:
     def present(self) -> tuple[Self]:
         return (self,)
 
+    def require_present(self) -> Self:
+        return self
+
+    def require_absent(self, reason: str = "A value was supplied where absence is required.") -> None:
+        raise ValueError(reason)
+
 
 class NullMember(ExternalField, AcceptsNull, WireValue):
     """One declared empty member owns the JSON null representation."""
 
     def present(self) -> tuple[()]:
         return ()
+
+    def require_present(self) -> Never:
+        raise ValueError("A required value is absent.")
+
+    def require_absent(self, reason: str = "") -> None:
+        pass
 
     @classmethod
     def wire_structure(cls, structural: DecoderPlan) -> DecoderPlan:
@@ -1507,6 +1471,18 @@ class RecordMember(WireValue):
 
     def to_wire(self) -> dict[str, object]:
         return FieldCodec.encode_record(self)
+
+
+class TaggedRecordMember(RecordMember):
+    """A record member whose wire shape retains its declared family selector."""
+
+    @classmethod
+    def wire_structure(cls, structural: DecoderPlan) -> DecoderPlan:
+        return structural
+
+    @classmethod
+    def from_wire(cls, data: object) -> Self:
+        return cast(Self, _structural_decoder(cls).decode(data))
 
 
 class RepresentedProjection(MroDispatch):
@@ -1675,8 +1651,12 @@ class SpelledText(TextRepresentation[str], ValidatedScalar):
     spelling: ClassVar[re.Pattern[str]]
 
     @classmethod
+    def spells(cls, value: str) -> bool:
+        return bool(cls.spelling.fullmatch(value))
+
+    @classmethod
     def from_text(cls, value: str) -> str:
-        if cls.spelling.fullmatch(value) is None:
+        if not cls.spells(value):
             raise MalformedRecord(f"{cls.__name__} is spelled {cls.spelling.pattern}")
         return value
 
@@ -1692,11 +1672,30 @@ class SpelledText(TextRepresentation[str], ValidatedScalar):
         return {"type": cls.command_line}
 
     @classmethod
-    def schema(cls) -> dict[str, object]:
-        return {"type": "string", "pattern": f"^(?:{cls.spelling.pattern})$"}
+    def anchored(cls) -> str:
+        """The whole-value pattern every schema of this spelling declares."""
+        return f"^(?:{cls.spelling.pattern})$"
+
+    @classmethod
+    def schema(cls) -> dict[str, JsonValue]:
+        return {"type": "string", "pattern": cls.anchored()}
 
 
-class NominalText(str):
+class HexDigits(SpelledText):
+    """Lowercase hexadecimal text; members declare their digit count."""
+
+    digits: ClassVar[int]
+
+    @classmethod
+    def repetition(cls) -> str:
+        return str(cls.digits)
+
+    def __init_subclass__(cls, **options: object) -> None:
+        super().__init_subclass__(**options)
+        cls.spelling = re.compile(f"[0-9a-f]{{{cls.repetition()}}}")
+
+
+class NominalText(PresentMember, str):
     """Text whose declared class carries its identity."""
 
     __slots__ = ()
@@ -1705,6 +1704,18 @@ class NominalText(str):
     @classmethod
     def representation(cls) -> type[FieldRepresentation]:
         return cls.spelled_by
+
+    @classmethod
+    def __get_pydantic_core_schema__(
+        cls, _source: object, _handler: GetCoreSchemaHandler
+    ) -> core_schema.CoreSchema:
+        return core_schema.no_info_plain_validator_function(
+            partial(FieldCodec.decode, cls),
+            json_schema_input_schema=core_schema.str_schema(
+                strict=True, pattern=cls.spelled_by.anchored()
+            ),
+            serialization=core_schema.plain_serializer_function_ser_schema(cls.spelled_by.encode),
+        )
 
 
 class NominalSpelling[V: NominalText](SpelledText):
@@ -1725,6 +1736,12 @@ class NominalSpelling[V: NominalText](SpelledText):
     @classmethod
     def from_text(cls, value: str) -> V:
         return cls.value_type(super().from_text(value))
+
+    @classmethod
+    def decode(cls, value: object) -> V:
+        if not isinstance(value, str):
+            raise MalformedRecord(f"Expected text for {cls.__name__}")
+        return cls.from_text(value)
 
     @classmethod
     def encode(cls, value: object) -> str:
@@ -1868,10 +1885,59 @@ class SlotId(Id128):
     """The consumed tool slot, distinct from the input that produced it."""
 
 
-class Id128Text(NominalSpelling[Id128]):
+class GoalWaitId(Id128):
+    """One recorded dependency wait for a goal."""
+
+
+class AttemptId(Id128):
+    """One reserved execution attempt of a goal generation."""
+
+
+@dataclass(frozen=True)
+class NoAttemptId(NullMember):
+    """A ready goal generation has not reserved an attempt."""
+
+
+class AttemptToken(Id128):
+    """The authority held by the owner of a reserved attempt."""
+
+
+class RetryDecisionId(Id128):
+    """One explicit authorization to retry goal work."""
+
+
+class PageRequestId(Id128):
+    """One request for an earlier transcript page."""
+
+
+class RestartId(Id128):
+    """One queued owner restart."""
+
+
+class RoomTicket(Id128):
+    """One storage-room claim."""
+
+
+class HuntId(Id128):
+    """One recorded commander hunt."""
+
+
+class ContextStoreId(Id128):
+    """The original context store shared by its recorded turns."""
+
+
+class ScratchName(Id128):
+    """A unique suffix for a disposable file."""
+
+
+class OwnerRequestKey(Id128):
+    """One original owner directive and the work serving it."""
+
+
+class Id128Text(NominalSpelling[Id128], HexDigits):
     """A 128-bit identity: an input, turn, bus root, recipient lookup or claim generation."""
 
-    spelling = re.compile("[0-9a-f]{32}")
+    digits = 32
 
 
 class MessageId(NominalText):
@@ -1880,33 +1946,77 @@ class MessageId(NominalText):
         return cls(hashlib.sha256(text.encode()).hexdigest()[:MessageIdText.digits])
 
 
-class MessageIdText(NominalSpelling[MessageId]):
+class MessageIdText(NominalSpelling[MessageId], HexDigits):
     """A bus message's content identity, the first twelve hex digits of the SHA-256
     of sender, target, timestamp and body.
     """
 
-    digits: ClassVar[int] = 12
-    spelling = re.compile(f"[0-9a-f]{{{digits}}}")
+    digits = 12
 
 
-class Hex256Text(SpelledText):
+class OrderId(NominalText):
+    """One immutable problem order identity."""
+
+    @classmethod
+    def mint(cls) -> Self:
+        return cls(Id128.mint()[:OrderIdText.digits])
+
+
+class OrderIdText(NominalSpelling[OrderId], HexDigits):
+    digits = 12
+
+
+class Hex256Text(HexDigits):
     """256 bits written as 64 lowercase hex digits."""
 
-    spelling = re.compile("[0-9a-f]{64}")
+    digits = 64
 
 
 class Sha256Text(Hex256Text):
     """A SHA-256 digest."""
 
 
+class AssignmentId(NominalText):
+    """One recipient's wake claim on one bus message."""
+
+    cohort_codec: ClassVar[str] = "cohort-v1:"
+
+    @classmethod
+    def cohort(cls, identity: bytes) -> Self:
+        """The claim a sealed cohort mints for one member's identity."""
+        return cls(cls.cohort_codec + hashlib.sha256(identity).hexdigest())
+
+    def require_cohort(self) -> Self:
+        """Only a cohort-minted claim binds a wake."""
+        if not self.startswith(self.cohort_codec):
+            raise MalformedRecord("AssignmentId is not cohort-minted")
+        Sha256Text.from_text(self.removeprefix(self.cohort_codec))
+        return self
+
+
+class AssignmentIdText(NominalSpelling[AssignmentId]):
+    """Spelled and stored as BoundedText, so the wake claim's stored form is unchanged."""
+
+    spelling = re.compile(rf"[\s\S]{{1,{BoundedText.max_length}}}")
+
+    @classmethod
+    def schema(cls) -> dict[str, JsonValue]:
+        return BoundedText.schema()
+
+
 class Token256Text(Hex256Text):
     """A random 256-bit secret token."""
 
 
-class GitCommitText(SpelledText):
+class GitCommitText(HexDigits):
     """A git commit, abbreviated to no fewer than seven digits."""
 
-    spelling = re.compile("[0-9a-f]{7,40}")
+    digits = 40
+    minimum_digits: ClassVar[int] = 7
+
+    @classmethod
+    def repetition(cls) -> str:
+        return f"{cls.minimum_digits},{cls.digits}"
 
 
 class Projected(property):
@@ -2146,13 +2256,6 @@ class FieldCodec(MroDispatch, Sealed):
     @classmethod
     def decode(cls, target: TypeForm[T], data: object) -> T:
         return cast(T, compile_decoder(target).decode_bound(data, {}))
-
-    @classmethod
-    def record_member[Member: DeclaredFamily](
-        cls, family: type[Member], data: object
-    ) -> tuple[type[Member], dict]:
-        """Read a record's declared selector without decoding its payload."""
-        return _FamilyRecordDecoder(family).member(data)
 
     @classmethod
     def field_plan(cls, record: type, name: str) -> FieldPlan:
@@ -2395,6 +2498,10 @@ class _ScalarDecoder[T, Target = object](ValueDecoder[T]):
 
     target: Target
 
+    @property
+    def accepts_null(self) -> bool:
+        return self.accepts(None)
+
     def decode(self, data: object) -> T:
         if self.accepts(data):
             return data
@@ -2450,10 +2557,6 @@ class _TextDecoder(_ExactScalarDecoder[str]):
     __slots__ = ()
     annotations = (str,)
     json_type = "string"
-
-    def accepts(self, data: object) -> TypeGuard[str]:
-        # RedecodesDeletedPhase removes nominal values from plain str fields.
-        return super().accepts(data) or isinstance(data, NominalText)
 
     def encode(self, value: str) -> str:
         return str(super().encode(value))
@@ -2647,31 +2750,11 @@ class UnionDecoder[T](_ContextDecoder[T]):
     alternatives: tuple[ValueDecoder[T], ...]
 
     @property
-    def wire_children(self) -> tuple[DecoderPlan, ...]:
-        return self.alternatives
+    def accepts_null(self) -> bool:
+        return any(alternative.accepts_null for alternative in self.alternatives)
 
     def fits_wire(self, data: object) -> bool:
         return any(alternative.fits_wire(data) for alternative in self.alternatives)
-
-    def _rewrite_records(
-        self, data: object, change: WireRecordChange, select: WireRecordFilter,
-    ) -> object:
-        answers = []
-        for alternative in self.alternatives:
-            if not alternative.fits_wire(data):
-                continue
-            current = alternative.rewrite_records(data, change, select)
-            try:
-                alternative.decode_bound(current, {})
-            except MalformedRecord:
-                continue
-            if current not in answers:
-                answers.append(current)
-        if len(answers) != 1:
-            raise MalformedRecord(
-                f"Record rewrite cannot select exactly one declared {self.target}: "
-                f"{len(answers)} different results")
-        return answers[0]
 
     @classmethod
     def from_annotation(cls, target, args):
@@ -2760,22 +2843,11 @@ class _ArrayDecoder[T: Iterable[object]](ValueDecoder[T]):
     container: ClassVar[type]
     items: tuple[ValueDecoder[object], ...]
 
-    @property
-    def wire_children(self) -> tuple[DecoderPlan, ...]:
-        return self.items
-
     def fits_wire(self, data: object) -> bool:
         return isinstance(data, list)
 
     def shape_refusal(self, data: object) -> MalformedRecord:
         return MalformedRecord("Expected a JSON array.")
-
-    def _rewrite_records(
-        self, data: object, change: WireRecordChange, select: WireRecordFilter,
-    ) -> object:
-        if not isinstance(data, list):
-            raise _ArrayDecoder.shape_refusal(self, data)
-        return [plan.rewrite_records(value, change, select) for plan, value in self.plan_items(data)]
 
     @classmethod
     def from_annotation(cls, target, args):
@@ -2903,22 +2975,9 @@ class _DictDecoder[K, V](ValueDecoder[dict[K, V]]):
     value: ValueDecoder[V]
     origins = (dict,)
 
-    @property
-    def wire_children(self) -> tuple[DecoderPlan, ...]:
-        return self.key, self.value
-
     @staticmethod
     @abstractmethod
     def wire_mapping(entries: Iterable[tuple[object, object]]) -> object: ...
-
-    def _rewrite_records(
-        self, data: object, change: WireRecordChange, select: WireRecordFilter,
-    ) -> object:
-        return self.wire_mapping(
-            (self.key.rewrite_records(key, change, select),
-             self.value.rewrite_records(value, change, select))
-            for key, value in self.entries(data)
-        )
 
     def argument_options(self, argument: Argument) -> dict[str, object]:
         return {"type": FieldCodec.parse}
@@ -3020,16 +3079,6 @@ class _FamilyRecordDecoder[Member: DeclaredFamily](_ContextDecoder[Member]):
     def fits_wire(self, data: object) -> bool:
         return self.tagged(data)
 
-    @property
-    def wire_children(self) -> tuple[DecoderPlan, ...]:
-        return tuple(_member_decoder(member) for member in self.target.members_with(self.target))
-
-    def _rewrite_records(
-        self, data: object, change: WireRecordChange, select: WireRecordFilter,
-    ) -> object:
-        member, _ = self.member(data)
-        return _member_decoder(member).rewrite_records(data, change, select)
-
     def encode(self, value: Member) -> dict[str, object]:
         return {**value.record_tag(), **_member_decoder(type(value)).encode(value)}
 
@@ -3089,11 +3138,6 @@ class _LeafDocumentDecoder(_FamilyRecordDecoder):
     def decode_document(self, data: object) -> object:
         return self.leaf.decode_bound(data, {})
 
-    def rewrite_document(
-        self, data: object, change: WireRecordChange, select: WireRecordFilter,
-    ) -> object:
-        return self.leaf.rewrite_records(data, change, select)
-
 
 @dataclass(frozen=True, slots=True)
 class _RecordDecoder[T](_ContextDecoder[T]):
@@ -3111,24 +3155,6 @@ class _RecordDecoder[T](_ContextDecoder[T]):
             return False
         plan = self.plan
         return plan.required_wire_keys <= data.keys() <= plan.accepted_keys
-
-    @property
-    def wire_children(self) -> tuple[DecoderPlan, ...]:
-        return tuple(child for entry in self.plan.bindings
-                     for child in entry.wire_children)
-
-    def selects_record(self, select: WireRecordFilter) -> bool:
-        return select(self.target)
-
-    def _rewrite_records(
-        self, data: object, change: WireRecordChange, select: WireRecordFilter,
-    ) -> object:
-        if not isinstance(data, dict):
-            raise MalformedRecord(f"Expected {self.target.__name__} record")
-        result = change(self.target, data) if self.selects_record(select) else data
-        for entry in self.plan.bindings:
-            result = entry.rewrite_wire(result, change, select)
-        return result
 
     def encode(self, value: object) -> dict[str, object]:
         if not isinstance(value, self.target):

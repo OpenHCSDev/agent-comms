@@ -13,8 +13,10 @@ from agent_comms.acp_extension import TranscriptSnapshotUpdate, decode_updates
 from agent_comms.comms import wire
 from conftest import installed_comms
 from agent_comms.native_entries import TranscriptProjection
-from agent_comms.pi_payloads import PiMessage
+from agent_comms.pi_payloads import PiMessage, UserMessage
 from agent_comms.threads import Thread
+from agent_comms.transcript_routes import DisplayText, InputDisplay, NoDisplayText, SentInputText
+from bus_record_fixture import FIRST_INPUT_ID, SECOND_INPUT_ID, THIRD_INPUT_ID
 
 GOAL_PROMPT = (
     "Persistent goal deadbeef: Read files until stopped.\n"
@@ -28,7 +30,7 @@ def saved_row(native_id, text, *, images=False, role="user"):
     if images:
         content.append({"type": "image", "mimeType": "image/png", "data": "secret-image"})
     return transcript_records.message(
-        {"role": role, "inputId": native_id, "content": content}, id=native_id[:8]
+        {"role": role, "inputId": str(native_id), "content": content}, id=native_id[:8]
     )
 
 
@@ -36,26 +38,28 @@ def test_saved_goal_prompt_hidden_but_followup_and_images_survive_reopen(tmp_pat
     comms = installed_comms(tmp_path / "wire")
     comms.registry.declare(Thread('worker', frozenset(), str(tmp_path)))
     # These annotations are committed before sending, before Pi creates its first file.
-    comms.transcripts.routes.record_input_display("a" * 32, None)
+    comms.transcripts.routes.record_input_display(FIRST_INPUT_ID, NoDisplayText())
     comms.transcripts.routes.record_input_display(
-        "b" * 32, "Please inspect this image\nthen continue."
+        SECOND_INPUT_ID, DisplayText("Please inspect this image\nthen continue.")
     )
     # Send now checks the same already-bound ID again; it cannot change its display.
-    comms.transcripts.routes.record_input_display("b" * 32, "User follow-up: private wrapper")
+    comms.transcripts.routes.record_input_display(
+        SECOND_INPUT_ID, DisplayText("User follow-up: private wrapper"))
     session = tmp_path / "session.jsonl"
     rows = [
-        saved_row("a" * 32, GOAL_PROMPT),
+        saved_row(FIRST_INPUT_ID, GOAL_PROMPT),
         saved_row(
-            "b" * 32, "User follow-up:\nPlease inspect this image\nthen continue.", images=True
+            SECOND_INPUT_ID, "User follow-up:\nPlease inspect this image\nthen continue.",
+            images=True,
         ),
         # A genuine user may quote these exact words; never filter by prefix.
-        saved_row("c" * 32, GOAL_PROMPT),
-        saved_row("a" * 32, "assistant reply", role="assistant"),
+        saved_row(THIRD_INPUT_ID, GOAL_PROMPT),
+        saved_row(FIRST_INPUT_ID, "assistant reply", role="assistant"),
     ]
     session.write_text("".join(json.dumps(row) + "\n" for row in rows))
     comms.threads.attach_session((attachment_owner := comms.registry.require("worker")), str(session), process=attachment_owner.process_identity)
     reopened = wire(comms.root)
-    events = reopened.transcripts.thread_transcript_page("worker").events
+    events = reopened.transcripts.capture_page_read("worker").read().events
     assert [event.text for event in events if event.declared_name == "context"] == [
         GOAL_PROMPT,
         "User follow-up:\nPlease inspect this image\nthen continue.",
@@ -72,16 +76,16 @@ def test_saved_goal_prompt_hidden_but_followup_and_images_survive_reopen(tmp_pat
 
 def test_incomplete_durable_annotation_schema_is_not_repaired(tmp_path):
     comms = wire(tmp_path / "wire")
-    comms.transcripts.routes.record_input_display("a" * 32, "first input")
+    comms.transcripts.routes.record_input_display(FIRST_INPUT_ID, DisplayText("first input"))
     path = comms.transcripts.routes.path
     with sqlite3.connect(path) as connection:
         connection.execute("DROP TABLE transcript_route")
     before = path.read_bytes()
     reopened = wire(comms.root)
     with pytest.raises(ValueError):
-        reopened.transcripts.routes.record_input_display("b" * 32, None)
-    with pytest.raises(ValueError):
-        reopened.transcripts.routes.input_bindings()
+        reopened.transcripts.routes.record_input_display(SECOND_INPUT_ID, NoDisplayText())
+    with pytest.raises(ValueError), reopened.transcripts.routes.for_session("session") as routes:
+        routes.input_display(FIRST_INPUT_ID)
     assert path.read_bytes() == before
 
 
@@ -93,15 +97,15 @@ async def test_acp_saved_transcript_replay_hides_only_owned_internal_input(tmp_p
         "".join(
             json.dumps(row) + "\n"
             for row in [
-                saved_row("a" * 32, GOAL_PROMPT),
-                saved_row("b" * 32, "User follow-up:\ntest2"),
-                saved_row("c" * 32, "Done reading", role="assistant"),
+                saved_row(FIRST_INPUT_ID, GOAL_PROMPT),
+                saved_row(SECOND_INPUT_ID, "User follow-up:\ntest2"),
+                saved_row(THIRD_INPUT_ID, "Done reading", role="assistant"),
             ]
         )
     )
     comms.registry.declare(Thread('worker', frozenset(), str(tmp_path), session_file=RegistrySessionLocation.from_path(str(session), comms.root)))
-    comms.transcripts.routes.record_input_display("a" * 32, None)
-    comms.transcripts.routes.record_input_display("b" * 32, "test2")
+    comms.transcripts.routes.record_input_display(FIRST_INPUT_ID, NoDisplayText())
+    comms.transcripts.routes.record_input_display(SECOND_INPUT_ID, DisplayText("test2"))
     agent = CommsAgent(wire(comms.root))
     updates = []
 
@@ -127,6 +131,19 @@ async def test_acp_saved_transcript_replay_hides_only_owned_internal_input(tmp_p
         ]
     finally:
         await agent.shutdown()
+
+
+@pytest.mark.parametrize(("content", "expected"), [
+    ({}, False), ({"content": None}, False),
+    ({"content": ""}, True), ({"content": []}, True),
+])
+def test_empty_reported_content_is_not_omitted(content, expected):
+    message = UserMessage.from_wire({"role": "user", **content})
+    display = InputDisplay(
+        FIRST_INPUT_ID, NoDisplayText(), sent_text_digest=SentInputText("").digest,
+    )
+    assert message.matches_display(display.sent_text_digest) is expected
+    assert message.to_wire()["content"] == content.get("content")
 
 
 def test_adjacent_assistant_text_parts_preserve_one_markdown_message(tmp_path):

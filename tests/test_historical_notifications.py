@@ -19,7 +19,7 @@ from agent_comms.assignment_states import (
 )
 from agent_comms.comms import wire
 from agent_comms.coordination_errors import DMScopeChanged, SchemaVersionError
-from agent_comms.field_codec import MessageId, TurnId
+from agent_comms.field_codec import InputId, MessageId, TurnId
 from agent_comms.read_basis import HistoricalDisplay, ReadCursor
 from agent_comms.read_ledger import ReadLedger
 from agent_comms.thread_identity import AgentThreadRole, UserThreadRole
@@ -237,15 +237,15 @@ def test_sent_recipient_progresses_through_durable_read_and_answer(archived_noti
 
 def test_delivered_assignment_uses_its_recorded_conversation_response(archived_notification):
     from agent_comms.assignment_states import DeferredAssignment
-    from agent_comms.coordination_cohort import accept_delivery_cohort
+    from conftest import accept_initial
     from agent_comms.coordinator import Coordination
 
     old, _live, _source, messages, root_id = archived_notification
     original = messages[0]
     with Coordination(str(old.root / "coordination.sqlite3")) as store:
-        assignment, = accept_delivery_cohort(
+        assignment, = accept_initial(
             old.bus, root_id, original.seq, store
-        ).value.assignments
+        )
         paused = store.assignments.transition_preengagement(
             assignment.assignment_id,
             DeferredAssignment,
@@ -291,7 +291,7 @@ def test_delivered_assignment_uses_its_recorded_conversation_response(archived_n
         text=source_text,
         origin=WireInputOrigin(root_id, original.reference),
     )
-    native_id = uuid4().hex
+    native_id = InputId(uuid4().hex)
     assert inputs.bind(
         key,
         claim_scope=lease.claimed_generation,
@@ -318,7 +318,7 @@ def test_recorded_response_resolution_keeps_other_collective_lifecycles(
     archived_notification,
 ):
     from agent_comms.assignment_states import DeferredAssignment
-    from agent_comms.coordination_cohort import accept_delivery_cohort
+    from conftest import accept_initial
     from agent_comms.coordinator import Coordination
 
     old, _live, _source, _messages, root_id = archived_notification
@@ -332,9 +332,9 @@ def test_recorded_response_resolution_keeps_other_collective_lifecycles(
         "sender", "#team", "collective mixed response states"
     )
     with Coordination(str(old.root / "coordination.sqlite3")) as store:
-        assignments = accept_delivery_cohort(
+        assignments = accept_initial(
             old.bus, root_id, original.seq, store
-        ).value.assignments
+        )
         delivered = assignments[0]
         paused = store.assignments.transition_preengagement(
             delivered.assignment_id,

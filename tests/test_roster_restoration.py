@@ -129,7 +129,7 @@ def test_catalog_restore_preserves_current_preferences_and_historical_channels(t
 def test_private_restoration_allows_new_cohort_without_starting_old_subscribers(
     tmp_path, repair_existing
 ):
-    from agent_comms.coordination_cohort import accept_delivery_cohort
+    from conftest import accept_initial
     from agent_comms.coordinator import Coordination
 
     old, current = wire(tmp_path / "old"), prepare_native_comms(wire(tmp_path / "current"))
@@ -169,7 +169,7 @@ def test_private_restoration_allows_new_cohort_without_starting_old_subscribers(
             message = current.messaging.send_user_message(
                 CommandTarget.named('#comms'), "@live Reply once", worktree=str(tmp_path)
             )
-        accept_delivery_cohort(current.bus, root_id, message.seq, store)
+        accept_initial(current.bus, root_id, message.seq, store)
         assert tuple(
             store.session._connection.execute(
                 "SELECT member_count, claim_count, sealed FROM claim_batch_receipts "

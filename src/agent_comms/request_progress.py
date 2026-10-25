@@ -8,7 +8,7 @@ from agent_comms import field_codec
 
 from .child_process import ProcessIdentity
 from .pi_counts import PiCount, UnreportedCount
-from .pi_payloads import PiField, PiModel, PiOmitted, PiPayload, ReportedInputId, UnreportedModel
+from .pi_payloads import PiModel, PiPayload, UnreportedModel
 
 
 @dataclass(frozen=True, slots=True)
@@ -28,10 +28,6 @@ class RequestProgress(PiPayload):
     callback_count: Annotated[int, field_codec.WireName("callbackCount")]
     callback_max_ms: Annotated[float, field_codec.WireName("callbackMaxMs")]
     stage: str
-    # Summary requests answer no input; the agent loop refuses to observe one without it.
-    input_id: Annotated[PiField[ReportedInputId | PiOmitted], field_codec.WireName("inputId")] = (
-        PiOmitted()
-    )
     detail: str = ""
     transport: str = ""
     attempt: int = 0

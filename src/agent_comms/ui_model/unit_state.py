@@ -15,12 +15,15 @@ from functools import cached_property
 from subprocess import TimeoutExpired
 from typing import TYPE_CHECKING, ClassVar, Self
 
+from agent_comms.declared_family import DeclaredFamily
 from agent_comms.field_codec import MalformedRecord
 from agent_comms.goal_presentation import GoalSnapshot
+from agent_comms.heartbeat_subjects import HeartbeatSubject, UnitSubject
 from agent_comms.messages import Message
 from agent_comms.native_failures import NativePiUnavailable
+from agent_comms.native_tool_call import ToolCallId
 from agent_comms.repo import GitCommandError
-from agent_comms.standing_rules import StandingRule, UndatedStandingRule
+from agent_comms.standing_rules import FamilyScan, StandingRule, UndatedStandingRule
 from agent_comms.thread_identity import ThreadIncarnation
 from agent_comms.thread_status import ThreadStatus
 from agent_comms.todos import (
@@ -39,6 +42,39 @@ if TYPE_CHECKING:
     from agent_comms.comms import Comms
     from agent_comms.heartbeat_frame import HeartbeatFrame
     from agent_comms.threads import Thread
+
+
+class UnitClock(DeclaredFamily, affix="Clock"):
+    """When a holder last acted and last committed on its pending orders."""
+
+    @abstractmethod
+    def line(self, now: float) -> str: ...
+
+
+@dataclass(frozen=True)
+class PendingClock(UnitClock):
+    last_call_at: float
+    last_commit_at: float
+
+    def line(self, now: float) -> str:
+        return (
+            f"last call {round((now - self.last_call_at) / 60)} min ago, "
+            f"last commit {round((now - self.last_commit_at) / 60)} min ago"
+        )
+
+
+@dataclass(frozen=True)
+class NoPendingClock(UnitClock):
+    def line(self, now: float) -> str:
+        return "no pending order"
+
+
+@dataclass(frozen=True)
+class UnreadableClock(UnitClock):
+    """Its checkout cannot be read, so neither time is known."""
+
+    def line(self, now: float) -> str:
+        return "times unreadable"
 
 
 @dataclass(frozen=True)
@@ -81,7 +117,7 @@ class UnitObservation:
 
     @cached_property
     def calls(self) -> tuple[OrderCall, ...]:
-        calls: dict[str, OrderCall] = {}
+        calls: dict[ToolCallId, OrderCall] = {}
         for turn in reversed(self.turns):
             for event in turn.events:
                 event.record_call(calls, self.since)
@@ -90,6 +126,26 @@ class UnitObservation:
     @cached_property
     def since(self) -> float:
         return min(todo.order.checked().at.recorded_at("A held order") for todo in self.pending)
+
+    @cached_property
+    def last_call_at(self) -> float:
+        """The newest recorded event of its last turns, or the order's start without one."""
+        return max(
+            (event.timestamp for turn in self.turns for event in turn.events), default=self.since
+        )
+
+    @cached_property
+    def last_commit_at(self) -> float:
+        return max(
+            (commit.at for origin in self.sources for commit in origin.commits()),
+            default=self.since,
+        )
+
+    @cached_property
+    def clock(self) -> UnitClock:
+        if self.pending:
+            return PendingClock(self.last_call_at, self.last_commit_at)
+        return NoPendingClock()
 
     @cached_property
     def sources(self) -> tuple[ProgressSource, ...]:
@@ -109,29 +165,32 @@ class UnitObservation:
     def orders(self) -> tuple[str, ...]:
         return tuple(todo.id for todo in self.todos)
 
+    def merges(self) -> dict[str, OrderProgress]:
+        """Each held order's merge as its progress reads it; unmerged orders read no commit."""
+        return {origin.todo.id: next(MergedProgress.found(origin), NoCommitProgress())
+                for origin in self.sources}
+
 
 class NeedsCommanderAttention:
     """Urgent siblings share their ping behavior without claiming each other's state."""
 
-    def attention(self) -> bool:
+    @classmethod
+    def attention(cls) -> bool:
         return True
 
 
 @dataclass(frozen=True)
-class UnitState(UndatedStandingRule, declared_name=None):
+class UnitState(UndatedStandingRule, FamilyScan, declared_name=None):
     unit: ThreadIncarnation
     orders: tuple[str, ...]
     presence: ThreadStatus
     source: UnitObservation = field(compare=False, repr=False)
+    verb: ClassVar[str]
     action: ClassVar[str]
 
     @classmethod
     def worst_first(cls) -> tuple[type[UnitState], ...]:
         return UnitState.members_with(UnitState)
-
-    @classmethod
-    def scan_owner(cls) -> type[StandingRule]:
-        return UnitState
 
     @classmethod
     def scan_observed(
@@ -180,13 +239,13 @@ class UnitState(UndatedStandingRule, declared_name=None):
             )
             for thread in snapshot.threads.values()
         )
-        candidates = tuple(reading for reading in readings if reading.thread.name != commander)
-        eligible = set(held)
-        eligible.update(
-            reading.thread.incarnation
-            for reading in candidates
-            if reading.thread.parent.named(commander)
+        candidates = tuple(
+            reading
+            for reading in readings
+            if reading.thread.name != commander
+            for _ in reading.thread.execution.commanded_units(reading.thread)
         )
+        eligible = set(held)
         eligible.update(
             reading.thread.incarnation
             for reading in candidates
@@ -210,18 +269,25 @@ class UnitState(UndatedStandingRule, declared_name=None):
     def readable_units(self) -> tuple[ThreadIncarnation, ...]:
         return (self.unit,)
 
-    def attention(self) -> bool:
+    def clock(self) -> UnitClock:
+        return self.source.clock
+
+    @classmethod
+    def attention(cls) -> bool:
         return False
 
     @property
     def default_action(self) -> str:
         return self.action
 
+    def subjects(self) -> tuple[HeartbeatSubject, ...]:
+        return (UnitSubject(self.unit),)
+
     def detail(self) -> str:
-        return f"orders {', '.join(self.orders)}"
+        return " ".join(self.orders)
 
     def line(self) -> str:
-        return f"{type(self).__name__} {self.unit.name}: {self.detail()} -> {self.default_action}"
+        return f"{self.verb} {self.unit.name} {self.detail()} -> {self.default_action}"
 
 
 class ConditionalState(UnitState, declared_name=None):
@@ -249,6 +315,7 @@ class PendingWorkState(ConditionalState, declared_name=None):
 @dataclass(frozen=True)
 class Unreadable(NeedsCommanderAttention, UnitState):
     reason: str
+    verb = "REPAIR"
     action = "repair the unreadable source; do not infer that the unit is idle"
 
     @classmethod
@@ -260,6 +327,9 @@ class Unreadable(NeedsCommanderAttention, UnitState):
     def readable_units(self) -> tuple[ThreadIncarnation, ...]:
         return ()
 
+    def clock(self) -> UnitClock:
+        return UnreadableClock()
+
     def detail(self) -> str:
         return f"{super().detail()}; {self.reason}"
 
@@ -267,6 +337,7 @@ class Unreadable(NeedsCommanderAttention, UnitState):
 @dataclass(frozen=True)
 class Blocked(NeedsCommanderAttention, UnitState):
     goal: GoalSnapshot
+    verb = "UNBLOCK"
     action = "follow the blocked goal's declared response"
 
     @classmethod
@@ -291,27 +362,26 @@ class Blocked(NeedsCommanderAttention, UnitState):
 
 @dataclass(frozen=True)
 class Detached(NeedsCommanderAttention, UnitState):
-    unread: int = field(compare=False)
+    """A pending order whose holder's presence takes no delivery: an order sent now is not
+    read now. The registered status owns that fact; the inbox's read marker is the owner's,
+    marks what he opened, and says nothing about the unit."""
+
+    verb = "WAKE"
     action = "wake it or reassign the order"
 
     @classmethod
     def derive(cls, source: UnitObservation) -> Iterator[Self]:
         if source.pending and not source.presence.receiving:
-            yield cls(
-                source.thread.incarnation,
-                source.orders,
-                source.presence,
-                source,
-                source.comms.bus.pending_count(source.thread.name),
-            )
+            yield cls(source.thread.incarnation, source.orders, source.presence, source)
 
     def detail(self) -> str:
-        return f"{self.unread} unread; {super().detail()}"
+        return f"{self.presence.declared_name}, takes no delivery; {super().detail()}"
 
 
 @dataclass(frozen=True)
 class AwaitingCommander(NeedsCommanderAttention, UnitState):
     seconds: ClassVar[int] = 5 * 60
+    verb = "ANSWER"
     action = "answer the original message"
 
     @classmethod
@@ -327,15 +397,12 @@ class AwaitingCommander(NeedsCommanderAttention, UnitState):
 
 class Stuck(NeedsCommanderAttention, PendingWorkState, UnitState):
     seconds: ClassVar[int] = 20 * 60
+    verb = "READ"
     action = "inspect its last turn and restart only known-safe work"
 
     @classmethod
     def matches(cls, source: UnitObservation) -> bool:
         calls = source.calls
-        latest = max(
-            (event.timestamp for turn in source.turns for event in turn.events),
-            default=source.since,
-        )
         return bool(
             not calls
             and any(
@@ -343,11 +410,12 @@ class Stuck(NeedsCommanderAttention, PendingWorkState, UnitState):
                 for todo in source.pending
             )
             or calls
-            and latest < source.now - cls.seconds
+            and source.last_call_at < source.now - cls.seconds
         )
 
 
 class Spinning(NeedsCommanderAttention, PendingWorkState, UnitState):
+    verb = "RESHAPE"
     action = "read the failed approach and change it before another rerun"
 
     @classmethod
@@ -355,17 +423,13 @@ class Spinning(NeedsCommanderAttention, PendingWorkState, UnitState):
         sends = sorted(
             at
             for todo in source.pending
-            for verdict in todo.verdicts
-            for at in verdict.send_back_times()
+            for at in todo.history.facts_for(todo.id).send_backs[:2]
         )
         calls = source.calls
         repeats = len(calls) >= 2 and calls[-1].digest == calls[-2].digest
         if len(sends) < 2 and not repeats:
             return False
-        commit_at = max(
-            (commit.at for origin in source.sources for commit in origin.commits()),
-            default=source.since,
-        )
+        commit_at = source.last_commit_at
         return (
             len(sends) >= 2
             and sends[-2] > commit_at
@@ -375,6 +439,7 @@ class Spinning(NeedsCommanderAttention, PendingWorkState, UnitState):
 
 
 class StalledOnNothing(NeedsCommanderAttention, PendingWorkState, UnitState):
+    verb = "RESUME"
     action = "resume its work or give it the missing next step"
 
     @classmethod
@@ -387,21 +452,40 @@ class StalledOnNothing(NeedsCommanderAttention, PendingWorkState, UnitState):
 
 
 class DeliveredUnclosed(NeedsCommanderAttention, ConditionalState, UnitState):
+    verb = "CLOSE"
     action = "install the merge or close with the working application evidence"
 
     @classmethod
     def matches(cls, source: UnitObservation) -> bool:
-        progress: dict[str, OrderProgress] = {
-            origin.todo.id: next(MergedProgress.found(origin), NoCommitProgress())
-            for origin in source.sources
-        }
+        progress = source.merges()
         return any(
-            todo.order.accepted or todo.order.waiting_on_install(todo, progress)
+            todo.order.accepted
+            or (todo.order.waiting_on_install(todo, progress) and not todo.order.awaits_holder_run())
             for todo in source.todos
         )
 
 
+class AwaitingApplicationRun(NeedsCommanderAttention, UnitState):
+    """Installed merged orders wait on their holder's application run, so no commander verb
+    disposes of the line and it locks none. The line names only those orders; while the unit
+    still writes source for another, that order's state is the unit's."""
+
+    verb = "AWAIT RUN"
+    action = "its holder runs the application proof on the installed build; close it on its evidence"
+    commander_disposes = False
+
+    @classmethod
+    def derive(cls, source: UnitObservation) -> Iterator[Self]:
+        merges = source.merges()
+        if any(todo.order.writes_source(todo, merges) for todo in source.todos):
+            return
+        awaiting = tuple(todo.id for todo in source.todos if todo.order.awaits_holder_run())
+        if awaiting:
+            yield cls(source.thread.incarnation, awaiting, source.presence, source)
+
+
 class Moving(ConditionalState, UnitState):
+    verb = "WATCH"
     action = "let it continue"
 
     @classmethod
@@ -410,6 +494,7 @@ class Moving(ConditionalState, UnitState):
 
 
 class Idle(ConditionalState, UnitState):
+    verb = "ORDER"
     action = "give it the next useful order"
 
     @classmethod

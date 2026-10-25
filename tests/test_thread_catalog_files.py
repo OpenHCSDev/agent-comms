@@ -2,6 +2,7 @@
 
 import pytest
 
+from agent_comms.locked_store import LiveFilesRequest
 from agent_comms.locked_store import LockedFile, RootFile
 from agent_comms.read_ledger import ReadLedger
 from agent_comms.store_files import store_lock_path
@@ -36,10 +37,10 @@ def test_copy_locks_only_files_their_writers_lock(tmp_path):
         path.write_text("{}")
     store = ReadLedger.path_in(root)
     store.write_text("{}")
-    for resource, owner in RootFile.owned_files(root, (*plain, store)).items():
+    for resource in RootFile.owned_files(LiveFilesRequest(root), (*plain, store)):
         target = copy / resource.path
         target.parent.mkdir(parents=True, exist_ok=True)
-        owner.copy_group(root / resource.path, target)
+        resource.owner.copy_group(resource.live(root), target)
     assert not any(directory.glob(".*.lock"))
     assert store_lock_path(store).exists()
     assert sorted(path.name for path in (copy / directory.relative_to(root)).iterdir()) == [

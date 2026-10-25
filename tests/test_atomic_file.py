@@ -5,7 +5,6 @@ import stat
 
 import pytest
 
-from agent_comms.child_process import Platform, Win32Platform
 from agent_comms.store_files import AtomicFile, ExclusiveAtomicFile
 
 
@@ -62,27 +61,3 @@ def test_exclusive_publication_never_replaces_an_existing_destination(tmp_path):
         ExclusiveAtomicFile(target).write_text("replacement")
     assert target.read_text() == "original"
     assert set(tmp_path.iterdir()) == {target}
-
-
-def test_windows_publication_and_existing_file_sync_use_writable_handles(tmp_path, monkeypatch):
-    # These file operations need no kernel32 process handles, so exercise the
-    # actual Windows implementation on either host without initializing them.
-    platform = object.__new__(Win32Platform)
-    monkeypatch.setattr(Platform, "current", classmethod(lambda cls: platform))
-    fsync = os.fsync
-
-    def writable_sync(descriptor):
-        os.write(descriptor, b"")
-        fsync(descriptor)
-
-    monkeypatch.setattr(os, "fsync", writable_sync)
-    target = tmp_path / "value"
-    AtomicFile(target).write_bytes(b"first")
-    staged = tmp_path / "prepared"
-    staged.write_bytes(b"second")
-    AtomicFile(target).replace(staged)
-    AtomicFile(target).sync()
-    assert target.read_bytes() == b"second"
-    # A Windows directory flush does not open the directory, including a path
-    # that does not exist; it must not ask os for POSIX-only flags.
-    platform.sync_directory(tmp_path / "absent")

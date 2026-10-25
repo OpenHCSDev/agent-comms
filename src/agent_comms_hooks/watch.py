@@ -7,7 +7,6 @@ process dies, so a claim with a record and no holder is a watch that lapsed.
 
 from __future__ import annotations
 
-import fcntl
 import hashlib
 import json
 import os
@@ -16,7 +15,10 @@ from collections.abc import Callable, Iterator, Sequence
 from contextlib import contextmanager
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
-from typing import TYPE_CHECKING, TextIO
+from typing import TYPE_CHECKING, ClassVar, TextIO
+
+from agent_comms.process_claim import ProcessSingleton
+from agent_comms_hooks.board import BoardLine
 
 if TYPE_CHECKING:
     from agent_comms.cli_bridges.monitor import SessionRequest
@@ -37,11 +39,30 @@ class NoSessionBridge(RuntimeError):
 
 
 @dataclass(frozen=True)
+class DeafWatch:
+    """A session bridge with no Monitor reading it: every line to it waits unread. Core's
+    heartbeat and the session's own tool-call hook say it in this one sentence."""
+
+    since: str
+
+    def line(self) -> str:
+        return (f"RE-ARM the commander watch: its bridge has no confirmed Monitor {self.since},"
+                " so every Core line to it waits unread -> re-arm its watch:"
+                " agent-comms-claude-bridge watch (bare, no pipe)")
+
+
+@dataclass(frozen=True)
 class WatchRecord:
     bus: str
     root: str
     command: tuple[str, ...]
     base_state: Path
+    store_name: ClassVar[str] = "delivery.sqlite3"
+
+    @property
+    def store(self) -> Path:
+        """The bridge's delivery store, in its bus thread's folder under the base directory."""
+        return self.base_state / self.bus / self.store_name
 
     @classmethod
     def decode(cls, bus: str, root: str, command: Sequence[str], base_state: str) -> WatchRecord:
@@ -99,61 +120,59 @@ class WatchClaim:
         return self.path.with_name(self.path.stem[:32] + ".sock")
 
     @property
-    def reader_path(self) -> Path:
-        return self.path.with_suffix(".reader.lock")
+    def claim(self) -> ProcessSingleton:
+        return ProcessSingleton(self.path)
+
+    @property
+    def reader_claim(self) -> ProcessSingleton:
+        return ProcessSingleton(self.path.with_suffix(".reader.lock"))
+
+    @property
+    def launch_claim(self) -> ProcessSingleton:
+        return ProcessSingleton(self.path.with_suffix(".launch.lock"))
 
     @contextmanager
     def launching(self) -> Iterator[None]:
         self.path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
-        with self.path.with_suffix(".launch.lock").open("a") as lock:
-            fcntl.flock(lock, fcntl.LOCK_EX)
+        with self.launch_claim.waited():
             yield
 
     @contextmanager
     def held(self, record: WatchRecord) -> Iterator[HeldClaim]:
         """One watch per conversation, independent of --state and bus aliases."""
         self.path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
-        with self.path.open("a") as lock:
-            fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        with self.claim.claimed() as lock:
             yield HeldClaim(lock).record(record)
 
     @contextmanager
     def adopted(self, descriptor: int, record: WatchRecord) -> Iterator[HeldClaim]:
         """A replaced bridge's successor takes over the description its predecessor kept
         locked through exec, so the claim never reads as lapsed, and records its own command."""
-        if not os.path.samestat(os.fstat(descriptor), os.stat(self.path)):
-            raise ValueError(f'Inherited descriptor {descriptor} is not the claim {self.path}')
-        os.set_inheritable(descriptor, False)
-        with os.fdopen(descriptor, "a") as lock:
-            # Same open description: the flock is already this process's, so this cannot block.
-            fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        with self.claim.adopted(descriptor) as lock:
             yield HeldClaim(lock).record(record)
 
     @contextmanager
     def reader_held(self) -> Iterator[None]:
-        with self.reader_path.open("a") as lock:
-            fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        with self.reader_claim.claimed():
             yield
 
     def has_reader(self) -> bool:
-        if not self.reader_path.exists():
-            return False
-        with self.reader_path.open() as lock:
-            try:
-                fcntl.flock(lock, fcntl.LOCK_SH | fcntl.LOCK_NB)
-            except BlockingIOError:
-                return True
-        return False
+        return self.reader_claim.held_elsewhere()
+
+    def deaf(self) -> tuple[DeafWatch, ...]:
+        """A running bridge whose reader claim nobody holds; a session with no bridge is
+        not deaf, it never bound one."""
+        if self.claim.held_elsewhere() and not self.has_reader():
+            return (DeafWatch("now (no Monitor holds its reader claim)"),)
+        return ()
 
     def state(self) -> WatchState:
         if not self.path.exists():
             return UnclaimedWatch()
-        with self.path.open() as lock:
-            try:
-                fcntl.flock(lock, fcntl.LOCK_SH | fcntl.LOCK_NB)
-            except BlockingIOError:
-                return LiveWatch(self, WatchRecord.decode(**json.load(lock)))
-            text = lock.read()
+        with self.claim.observed() as claim:
+            if claim.held:
+                return LiveWatch(self, WatchRecord.decode(**json.load(claim.file)))
+            text = claim.file.read()
         if not text:
             return UnclaimedWatch()
         return LapsedWatch(self, WatchRecord.decode(**json.loads(text)))
@@ -181,12 +200,12 @@ class WatchState:
         with claim.held(record):
             pass
 
-    def may_serve(self, bus: str) -> bool:
-        """Whether this session can be the bus thread named; unbound, it cannot be ruled out."""
-        return True
-
     def bindings(self) -> tuple[WatchRecord, ...]:
         """No session binding exists until this watch is enrolled."""
+        return ()
+
+    def board(self) -> tuple[BoardLine, ...]:
+        """Only a running bridge keeps a board; a lapsed one's last packet is stale."""
         return ()
 
     def announce_absence(self, announce: Callable[[], None]) -> bool:
@@ -233,11 +252,12 @@ class RecordedWatch(WatchState):
     def reconnect(self, serve: Serve, request: SessionRequest) -> None:
         serve.launch_record(self.claim, self.record, request)
 
-    def may_serve(self, bus: str) -> bool:
-        return self.record.bus == bus
-
 
 class LiveWatch(RecordedWatch):
+    def board(self) -> tuple[BoardLine, ...]:
+        """The heartbeat lines this session's bridge recorded from its newest packet."""
+        return BoardLine.recorded(self.record.store)
+
     def reconnect(self, serve: Serve, request: SessionRequest) -> None:
         raise RuntimeError(
             'An older watch still owns this session, or an install is replacing it. '

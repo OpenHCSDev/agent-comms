@@ -16,7 +16,6 @@ from typing import TYPE_CHECKING, Final, Self, TypeVar
 from .assignment_store import AssignmentStore
 from .attempt_store import AttemptStore
 from .child_process import join_retirement
-from .locked_store import DEFAULT_STORE_CONTENTION, StoreContention
 from .coordination_session import (
     CoordinationSession,
     NativeCoordinationSession,
@@ -25,7 +24,7 @@ from .coordination_session import (
 )
 from .execution_store import ExecutionStore
 from .participant_store import ParticipantStore
-from .store_files import StoreLock
+from .store_files import DEFAULT_STORE_CONTENTION, StoreContention, StoreLock
 from .working_memory_annotations import WorkingMemoryAnnotations
 
 if TYPE_CHECKING:
@@ -139,7 +138,7 @@ class Coordination(ExecutionStore, AttemptStore):
         name = type(watch).__name__
         while True:
             (outcome,) = await asyncio.gather(
-                cls.run_worker(partial(watch.watch_pass, opened_wire)), return_exceptions=True,
+                watch.run(opened_wire), return_exceptions=True,
             )
             if isinstance(outcome, Exception):
                 logging.error("Service worker pass failed: %s", name, exc_info=outcome)

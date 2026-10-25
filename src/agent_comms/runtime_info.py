@@ -14,7 +14,7 @@ from .field_codec import FieldCodec, SingleFieldValue, WireName, WireRequired
 from .locked_store import DocumentChange
 from .maintenance_barrier import CarriedDocument
 from .pi_counts import PiCount, UnreportedCount
-from .store_files import DependentStateTier
+from .store_files import DependentStateTier, SingleFileStore
 from .thread_model import ThreadModel, UndeclaredModel
 from .thread_owned_state import ThreadOwnedState
 
@@ -28,9 +28,6 @@ class RuntimeInfo(DeclaredFamily, affix="RuntimeInfo"):
 
     @abstractmethod
     def context_reading(self) -> ContextReading: ...
-
-    def model_or(self, default: str) -> str:
-        return self.model.otherwise(default)
 
     model: ThreadModel
     context_used: PiCount
@@ -78,7 +75,7 @@ class RuntimeInfoDocument(SingleFieldValue):
 
 
 @dataclass(frozen=True, slots=True)
-class RuntimeInfoStore(ThreadOwnedState, CarriedDocument[RuntimeInfoDocument], DependentStateTier):
+class RuntimeInfoStore(SingleFileStore, ThreadOwnedState, CarriedDocument[RuntimeInfoDocument], DependentStateTier):
     """Latest observations, independently committed from the registry/log."""
 
     filename: ClassVar[str] = "runtime_info.json"

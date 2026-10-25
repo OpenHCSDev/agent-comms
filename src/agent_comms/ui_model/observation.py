@@ -30,23 +30,36 @@ from functools import partial
 from pathlib import Path
 from typing import TYPE_CHECKING, ClassVar, Self, final
 
-from agent_comms.acp_extension import TranscriptDraftUpdate, TranscriptSnapshotUpdate
+from agent_comms.acp_extension import (
+    GoalSnapshotReply,
+    TranscriptDraftUpdate,
+    TranscriptSnapshotUpdate,
+)
 from agent_comms.active_route import CommsRoute
 from agent_comms.activity import ObservedActivity
+from agent_comms.commander_hud import CommanderFrame, CommanderHud
+from agent_comms.comms import Comms
 from agent_comms.coordination_errors import (
     CoordinationError,
     CoordinationReadUnavailable,
     DeferredRead,
     ReloadRequired,
-    RequestRefused,
+    Refused,
     StaleRevision,
 )
 from agent_comms.errors import RelationViolationError, ToolRefusedError
 from agent_comms.field_codec import FieldCodec
+from agent_comms.historical_views import HistorySource
 from agent_comms.presentation import NoRevision, ReadState, WireRevision
 from agent_comms.registry_document import RosterVisibility
 from agent_comms.registry_provenance import DeletedThread
-from agent_comms.revision_views import NotificationsView, RegistrationsView, SidebarView, StoresView
+from agent_comms.revision_views import (
+    CommanderFramesView,
+    NotificationsView,
+    RegistrationsView,
+    SidebarView,
+    StoresView,
+)
 from agent_comms.ui_model.delivery import ReadDeliveryView
 from agent_comms.ui_model.sidebar import (
     ChannelRowModel,
@@ -56,6 +69,7 @@ from agent_comms.ui_model.sidebar import (
 )
 from agent_comms.ui_model.status import OpenThreadStatus, ThreadStatusModel
 from agent_comms.view_unread import ReplyIndexResult
+from agent_comms.watched import FileSource
 
 if TYPE_CHECKING:
     from concurrent.futures import Future
@@ -70,7 +84,6 @@ if TYPE_CHECKING:
     from agent_comms.thread_identity import ThreadIncarnation
     from agent_comms.thread_presentation import ThreadPresentation
     from agent_comms.transcripts import TranscriptCursor, TranscriptRead, TranscriptReadIdentity
-
 
 
 class ObservationRequest(ABC):
@@ -142,6 +155,7 @@ class LiveObservationInterest(ObservationInterest):
     def prepared(self, observation: SidebarReading, service: ObservationService) -> None:
         if self.observations.get(type(observation)) is observation:
             observation.sent = NoSidebarSent()
+            observation.invalidate()
             service.observe_again()
 
     async def observe(self, service: ObservationService, revision: WireRevision,
@@ -211,23 +225,28 @@ class ReadingObservation[InterestT: InterestRequest](Observation[InterestT]):
     def __init__(self, request: InterestT):
         super().__init__(request)
         self.steps: Generator[ObservationStep] = (_ for _ in ())
+        self.read_revision: ReadState = NoRevision()
 
     def close(self) -> None:
         self.steps.close()
 
+    def invalidate(self) -> None:
+        """A changed read stage or completed preparation needs a new read, not a new file."""
+        self.read_revision = NoRevision()
+
     def step(self, service: ObservationService, revision: WireRevision) -> None:
-        """Advance one yielded step, never drain an interest before its siblings."""
+        """Advance one yield; a completed current revision has no work to schedule."""
         try:
             result = next(self.steps)
         except StopIteration:
             self.after_read(service)
-            self.steps = self.read(service.comms, revision)
-            try:
-                result = next(self.steps)
-            except StopIteration:
-                return
-        result.publish(service)
-        service.observe_again()
+            if revision.changed_since_any(self.read_revision):
+                self.read_revision = revision
+                self.steps = self.read(service.comms, revision)
+                self.step(service, revision)
+        else:
+            result.publish(service)
+            service.observe_again()
 
     @abstractmethod
     def read(
@@ -404,7 +423,7 @@ class OwnerRead(AwaitedRead):
     def refusal_errors(self) -> tuple[type[Exception], ...]:
         return (
             *super().refusal_errors,
-            RequestRefused, CoordinationError, ToolRefusedError, ConnectionError, TimeoutError,
+            Refused, CoordinationError, ToolRefusedError, ConnectionError, TimeoutError,
         )
 
     def receive(self, service: ObservationService) -> None:
@@ -573,8 +592,6 @@ class ReadRecordedNotifications(ReadNotifications):
     source: str
 
     def read(self, comms: Comms) -> Mapping[tuple[int, str], tuple[MessageNotification, ...]]:
-        from agent_comms.historical_views import HistorySource
-
         with comms.bus.history.read_sources() as sources:
             source = HistorySource.require(sources, self.source)
             return source.notification_references(sources, self.references)
@@ -600,16 +617,14 @@ class NotificationsRead:
            ) -> NotificationsRead:
         names = {name for items in outcomes.values()
                  for item in items for name in item.activity_names()}
-        known = {**comms.registry.snapshot().observed_activity(comms.agents, names - known.keys()),
-                 **known}
+        known = {**comms.views.observed_activity(revision, names - known.keys()), **known}
         return cls(revision, {name: known.get(name) for name in names})
 
     def live_changed(self, comms: Comms, revision: WireRevision) -> bool:
         """The whole window changed, or one of its participants' activity did."""
         if revision.changed_since(NotificationsView(), self.revision):
             return True
-        current = (comms.registry.snapshot().observed_activity(comms.agents, self.activity)
-                   if self.activity else {})
+        current = comms.views.observed_activity(revision, self.activity) if self.activity else {}
         return any(current.get(name) != seen for name, seen in self.activity.items())
 
 
@@ -625,8 +640,6 @@ class ReadOwnerGoal(OwnerRead):
     """The owner's goal snapshot and the turn it read with it."""
 
     async def read(self, owner: RuntimeConnection) -> GoalSnapshotReply:
-        from agent_comms.acp_extension import GoalSnapshotReply
-
         return FieldCodec.decode(GoalSnapshotReply, await owner.request("goal_snapshot"))
 
 
@@ -682,6 +695,7 @@ class RosterSidebarRead(SidebarReadStage):
 
     def advance(self, reading: SidebarReading, snapshot: CoordinationSnapshot) -> None:
         reading.stage = SidebarReadStage()
+        reading.invalidate()
         if snapshot.has_indexing_unread():
             reading.sent = NoSidebarSent()
 
@@ -760,6 +774,34 @@ class ObserveThreads(InterestRequest):
 
 
 @dataclass(frozen=True)
+class ObserveCommanderHud(InterestRequest):
+    """Each commander's newest heartbeat frame; Core derived it, a view only shows it."""
+
+    def observation(self) -> CommanderHudReading:
+        return CommanderHudReading(self)
+
+
+@dataclass(frozen=True)
+class StopCommanderHud(ObservationRequest):
+    def receive(self, service: ObservationService) -> None:
+        service.interest.remove(CommanderHudReading)
+
+
+class CommanderHudReading(ReadingObservation[ObserveCommanderHud]):
+    """Reads the frame files only when the heartbeat replaced one of them."""
+
+    def __init__(self, request: ObserveCommanderHud):
+        super().__init__(request)
+        self.revision: ReadState = NoRevision()
+
+    def read(self, comms: Comms, revision: WireRevision) -> Generator[ObservationStep]:
+        if not self.revision.changed_since(CommanderFramesView(), revision):
+            return
+        self.revision = revision
+        yield CommanderHudObserved(revision, CommanderFrame.read_all(comms.root))
+
+
+@dataclass(frozen=True)
 class ObserveViews(InterestRequest):
     """The thread incarnations and channel views open in the UI, to learn when one is retired."""
 
@@ -794,8 +836,7 @@ class NotificationReading(ReadingObservation[ObserveNotifications]):
 
     def notifications(self, request: ReadNotifications, comms: Comms, revision: WireRevision,
                       previous: NotificationsRead | None) -> ObservationStep:
-        known = comms.registry.snapshot().observed_activity(
-            comms.agents, () if previous is None else previous.activity)
+        known = comms.views.observed_activity(revision, () if previous is None else previous.activity)
 
         def read() -> Mapping[tuple[int, str], tuple[MessageNotification, ...]]:
             request.require_root(comms)
@@ -858,7 +899,7 @@ class ThreadReading(ReadingObservation[ObserveThreads]):
         names = self.located_threads.names
         watched = names | frozenset(actor for view in readable.values()
                                     for actor in view.notification_activity_names())
-        activity = comms.registry.snapshot().observed_activity(comms.agents, watched)
+        activity = comms.views.observed_activity(revision, watched)
         self.located_threads = replace(self.located_threads, activity=activity)
         names = (revision.changed_threads(previous, comms, activity) | names - previous.results.keys()) & names
         self.located_threads = replace(self.located_threads, names=names)
@@ -1127,6 +1168,13 @@ class NotificationsUnreadable(Observed):
 
 
 @dataclass(frozen=True)
+class CommanderHudObserved(Observed):
+    """Every beating commander's newest frame, by commander name."""
+
+    huds: tuple[CommanderHud, ...]
+
+
+@dataclass(frozen=True)
 class ViewsRetired(Observed):
     """Open views whose thread was deleted or replaced, or whose channel is gone or archived."""
 
@@ -1231,8 +1279,6 @@ class ObservationService:
             request.receive(self)
 
     async def watch(self) -> None:
-        from agent_comms.watched import FileSource
-
         sources = tuple(FileSource(path)
                         for group in WireRevision.source_paths(self.comms.views).values()
                         for path in group)
@@ -1312,8 +1358,6 @@ class ObservationService:
 
 def serve(route: CommsRoute, connection: Connection) -> None:
     """Observe the caller's selected route, including its reviewed native package."""
-    from agent_comms.comms import Comms
-
     try:
         asyncio.run(ObservationService(Comms(route), connection).run())
     except BaseException:

@@ -33,6 +33,7 @@ from .goals import (
     NoGoal,
 )
 from .launch_root import LaunchRoot
+from .launch_runtime import ThreadLaunch
 from .lifecycle import LifecycleState
 from .lifecycle_capability import Executing
 from .locked_store import DurableFile, PatternFile
@@ -418,8 +419,6 @@ class Thread(ThreadProvenance):
 
     def launch(self) -> ThreadLaunch:
         """The launch environment this thread's owner process carries."""
-        from .launch_runtime import ThreadLaunch
-
         return ThreadLaunch.from_thread(self)
 
     def catalog_path(self, root: Path) -> Path:
@@ -491,9 +490,6 @@ class Thread(ThreadProvenance):
         if self.executing:
             raise RelationViolationError("live owner already has an active turn")
 
-    def require_current_turn(self, claim_scope: int) -> None:
-        self.turn_record.read().require_current(claim_scope, self.turn_generation)
-
     def require_turn(self, turn_id: TurnId, claim_scope: int) -> None:
         if not self.turn_lease.attests(claim_scope, turn_id):
             raise RelationViolationError("live owner does not hold the requested turn")
@@ -536,6 +532,10 @@ class Thread(ThreadProvenance):
     def without_turn(self) -> Thread:
         """Drop the reference; the registry transaction owns revoking the record."""
         return replace(self, turn_record=self.turn_record.released())
+
+    def without_process(self) -> Thread:
+        """This record in another root: its turn and process stay with the root it came from."""
+        return replace(self.without_turn(), process_identity=NoProcess())
 
     def preserve_registration_history(self, previous: Thread) -> Thread:
         """Metadata writers cannot forge channel scope or reset a finished turn."""
@@ -634,8 +634,6 @@ class Thread(ThreadProvenance):
 
 def current_thread(registry) -> Thread:
     """Declare the current thread from its owner launch environment."""
-    from .launch_runtime import ThreadLaunch
-
     launch = ThreadLaunch.current()
     return Thread(
         name=launch.name,

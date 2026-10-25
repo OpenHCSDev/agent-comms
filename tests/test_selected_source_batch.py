@@ -10,7 +10,8 @@ import pytest
 
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.comms import wire
-from agent_comms.coordination_cohort import accept_delivery_cohort, pending_sealed_assignments
+from conftest import accept_initial
+from agent_comms.coordination_cohort import pending_sealed_assignments
 from agent_comms.coordinator import Coordination
 from agent_comms.selected_participant import SelectedParticipant
 from agent_comms.thread_model import DeclaredModel
@@ -37,7 +38,7 @@ async def test_a_mixed_route_wave_turns_one_route_at_a_time(tmp_path, *, cursor_
 
         def send(target, body):
             message = publish_initial(comms, "sender", target, body)
-            accept_delivery_cohort(comms.bus, root_id, message.seq, store)
+            accept_initial(comms.bus, root_id, message.seq, store)
             return message
 
         direct = send("receiver", "A private question")          # reply route: sender

@@ -1,7 +1,10 @@
 """Real turn acquisition and terminal handling share the execution owner."""
 
 import os
+import signal
 import sqlite3
+import subprocess
+import sys
 from contextlib import AsyncExitStack, asynccontextmanager, closing
 from dataclasses import fields
 
@@ -9,9 +12,10 @@ import pytest
 
 from agent_comms import agent_events as events
 from agent_comms.acp import CommsAgent
-from agent_comms.child_process import ProcessIdentity
+from agent_comms.acp_failure import NativeTurnError
+from agent_comms.child_process import ChildOutcome, ProcessIdentity
 from agent_comms.comms import wire
-from agent_comms.field_codec import FieldCodec
+from agent_comms.field_codec import FieldCodec, GoalId
 from agent_comms.goal_actions import (
     PausedGoalAction,
     RetryGoalAction,
@@ -25,9 +29,14 @@ from agent_comms.goal_presentation import (
     RunnableExecution,
     RunningExecution,
 )
+from agent_comms.goal_scope import OneGoal
 from agent_comms.goal_states import ActiveGoal
+from agent_comms.maintenance_barrier import MaintenanceOperator
 from agent_comms.owned_turn import OwnedTurn
 from agent_comms.threads import Thread
+from agent_comms.tool_caller import ToolCaller
+from agent_comms.tools import CommsGoalHistoryTool, GoalHistory
+from agent_comms.turn_failure import NativeChildSignaled
 from agent_comms.turn_input_source import NoTurnAcceptance
 from agent_comms.turn_terminal import OwnerStop
 
@@ -60,7 +69,7 @@ def test_execution_identity_survives_wire_and_change_detection(execution_bus, ex
 
 @asynccontextmanager
 async def turn_on(comms, *, original_owner_input=False):
-    agent = CommsAgent(comms, auto_wake=False, owner_stop=OwnerStop())
+    agent = CommsAgent(comms, auto_wake=False, owner_stop=OwnerStop(comms.owners.maintenance))
     owner = comms.registry.require("worker")
     session = "goal-execution-session"
     await agent.sessions.bind_owned(owner, session)
@@ -89,13 +98,34 @@ async def test_failed_turn_writes_ledger_once_and_reads_failed_execution(executi
         turn.finish_goals()
         assert failure_count(comms) == 1
         assert comms.registry.require("worker").goal == goal
-        assert isinstance(comms.goals.goal_execution("worker"), RunningExecution)
+        assert isinstance(comms.goals.goal_execution("worker"), AttemptFailedExecution)
     execution = comms.goals.goal_execution("worker")
     assert isinstance(execution, AttemptFailedExecution)
+    async with turn_on(comms):
+        # A message turn on the blocked goal leaves the block on the heartbeat.
+        assert comms.goals.goal_execution("worker") == execution
     assert execution.toggle is RetryGoalAction
     assert execution.evidence.turn_id == turn.turn_id
     assert failure_count(comms) == 1
     assert comms.registry.require("worker").goal.state == ActiveGoal()
+
+
+@pytest.mark.asyncio
+async def test_goal_history_shows_the_ledgers_failed_attempt_beside_active_revisions(
+    execution_bus,
+):
+    comms = execution_bus
+    goal = comms.registry.require("worker").goal.require()
+    async with turn_on(comms) as turn:
+        await turn.progress.done(events.Done("backend failed", False))
+        turn.finish_goals()
+    recorded = CommsGoalHistoryTool(thread="worker").apply(comms, ToolCaller.from_actor("worker"))
+    assert recorded.history[-1].after.state == ActiveGoal()
+    assert recorded.failures == (comms.goals.goal_execution("worker").evidence,)
+    assert recorded.failures[0].turn_id == turn.turn_id
+    other = CommsGoalHistoryTool(thread="worker", goal_id=OneGoal(GoalId.mint())).apply(
+        comms, ToolCaller.from_actor("worker"))
+    assert other == GoalHistory.empty()
 
 
 @pytest.mark.asyncio
@@ -135,6 +165,48 @@ async def test_owner_stop_beats_backend_failure_and_next_turn_runs_without_retry
 
 
 @pytest.mark.asyncio
+async def test_turn_failing_under_install_hold_is_stopped_not_blocked(execution_bus):
+    """An install holds maintenance before it signals owners; the hold is the stop."""
+    comms = execution_bus
+    async with turn_on(comms) as turn:
+        await turn.progress.done(events.Done("tool claim refused under maintenance", False))
+        held = comms.owners.maintenance.begin(MaintenanceOperator.current())
+        turn.finish_goals()
+        comms.owners.maintenance.clear(held)
+    assert isinstance(comms.goals.goal_execution("worker"), RunnableExecution)
+    assert failure_count(comms) == 0
+
+
+def stopped_after(script: str) -> bool:
+    """Whether the outcome a real child process leaves behind reports a stop."""
+    code = subprocess.run([sys.executable, "-c", script], timeout=30).returncode
+    reports: list[None] = []
+    ChildOutcome.from_returncode(code).report_stopped(
+        lambda: reports.append(None), NativeChildSignaled.stop_exits)
+    return bool(reports)
+
+
+def test_only_a_signal_ends_the_native_child_as_stopped():
+    """A kill, and Pi's own SIGTERM/SIGHUP shutdown exits, are stops; a crash is not."""
+    assert stopped_after("import os, signal; os.kill(os.getpid(), signal.SIGKILL)")
+    assert stopped_after(f"raise SystemExit({128 + signal.SIGTERM})")
+    assert stopped_after(f"raise SystemExit({128 + signal.SIGHUP})")
+    assert not stopped_after("raise SystemExit(1)")
+    assert not stopped_after("raise SystemExit(0)")
+
+
+@pytest.mark.asyncio
+async def test_turn_whose_child_was_signaled_is_stopped_not_blocked(execution_bus):
+    """A group kill reaches the child before the owner's stop callback; the goal stays runnable."""
+    comms = execution_bus
+    async with turn_on(comms) as turn:
+        await turn.progress.done(events.Done(
+            "killed with its owner", False, failure=NativeChildSignaled("Pi exited 143")))
+    assert isinstance(comms.goals.goal_execution("worker"), RunnableExecution)
+    assert failure_count(comms) == 0
+
+
+@pytest.mark.asyncio
 async def test_verified_productive_turn_recovers_blocked_generation(execution_bus):
     comms = execution_bus
     async with turn_on(comms) as failed:
@@ -146,3 +218,18 @@ async def test_verified_productive_turn_recovers_blocked_generation(execution_bu
     assert isinstance(comms.goals.goal_execution("worker"), RunnableExecution)
     assert comms.registry.require("worker").goal.state == ActiveGoal()
     assert failure_count(comms) == 1  # The old failure remains evidence, never replayed.
+
+
+@pytest.mark.asyncio
+async def test_turn_refused_by_coordination_is_resumable_not_blocked(execution_bus):
+    """A bus refusal inside the turn's own drain says nothing about the backend; the goal resumes.
+
+    The copied bus is not a private root, so the turn's drain (prepare_native) is refused
+    by the real coordinator, as a stale fence or coverage deadline refuses it on a live bus.
+    """
+    comms = execution_bus
+    async with turn_on(comms) as turn:
+        with pytest.raises(NativeTurnError, match="PublicationActivationBlocked"):
+            await turn.run_native()
+    assert isinstance(comms.goals.goal_execution("worker"), RunnableExecution)
+    assert failure_count(comms) == 0

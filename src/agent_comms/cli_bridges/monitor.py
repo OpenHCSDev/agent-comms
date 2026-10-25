@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import io
 import os
 import secrets
 import select
@@ -14,11 +15,12 @@ from contextlib import contextmanager
 from dataclasses import dataclass, field
 from pathlib import Path
 from types import get_original_bases
-from typing import TYPE_CHECKING, Annotated, ClassVar, NoReturn, get_args, get_origin
+from typing import TYPE_CHECKING, Annotated, BinaryIO, ClassVar, NoReturn, get_args, get_origin
 
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.cli_protocol import Outcome
 from agent_comms.declared_family import DeclaredFamily
+from agent_comms.installer.runtime_wire import CrossesRuntimes
 from agent_comms.field_codec import FieldCodec, MalformedRecord, MessageId, PathText
 from agent_comms.launch_runtime import LaunchRuntime
 from agent_comms.messages import Message
@@ -58,26 +60,33 @@ class ClaimedReplacement(BridgeReplacement):
 
     claim: int
 
+    @staticmethod
+    def left_stopped(why: str) -> None:
+        print(f"Session bridge {why}; left stopped", file=sys.stderr)
+
     def finish(self, operation: Serve, record: WatchRecord) -> None:
         self.peer.setblocking(True)
-        with self.peer, self.peer.makefile("rwb", buffering=0) as stream:
-            stream.write((FieldCodec.compact(FieldCodec.encode(SessionReady())) + "\n").encode())
-            while operation.owner.alive():
-                if select.select((self.peer,), (), (), 1)[0]:
-                    break
-            else:
-                print(f"Session bridge owner {operation.owner.pid} exited; left stopped",
-                      file=sys.stderr)
-                return
-            # EOF means the installer died. Never select a fallback runtime.
-            self.peer.settimeout(30)
-            raw = stream.readline(4096)
-            if not raw:
-                return
-            runtime = FieldCodec.decode(LaunchRuntime, FieldCodec.parse(raw.decode()))
+        try:
+            with self.peer, self.peer.makefile("rwb", buffering=0) as stream:
+                ready = FieldCodec.compact(FieldCodec.encode(SessionReady()))
+                stream.write((ready + "\n").encode())
+                while operation.owner.alive():
+                    if select.select((self.peer,), (), (), 1)[0]:
+                        break
+                else:
+                    self.left_stopped(f"owner {operation.owner.pid} exited")
+                    return
+                self.peer.settimeout(30)
+                raw = stream.readline(4096)
+                if not raw:
+                    raise ConnectionResetError("Installer closed before selecting a runtime")
+                runtime = FieldCodec.decode(LaunchRuntime, FieldCodec.parse(raw.decode()))
+        except ConnectionError:
+            # A broken pipe or EOF means the installer died. Never select a fallback runtime.
+            self.left_stopped("installer gone before ready")
+            return
         if not operation.owner.alive():
-            print(f"Session bridge owner {operation.owner.pid} exited; left stopped",
-                  file=sys.stderr)
+            self.left_stopped(f"owner {operation.owner.pid} exited")
             return
         operation.owner.require_alive()
         runtime.require_available()
@@ -129,11 +138,16 @@ class NoReader(ReaderState):
             await SessionReady().publish(peer)
             await peer.write(attachment.probe.model_dump_json())
             await peer.reader.read()
+            # Only a reader leaving a bridge that keeps serving is declared. A stopping bridge
+            # skips this registry write: its install pause is acknowledged only once teardown
+            # ends, and a successor declares its own reader state when it starts serving.
+            async with bridge.reader_changed:
+                bridge.reader = NoReader()
+                await bridge.declare_reader(PausedBridgeThreadStatus())
             return PeerGone()
         finally:
             async with bridge.reader_changed:
                 bridge.reader = NoReader()
-                await bridge.declare_reader(PausedBridgeThreadStatus())
                 bridge.reader_changed.notify_all()
             async with attachment.window_changed:
                 attachment.window_changed.notify_all()
@@ -251,9 +265,10 @@ class PeerGone(SessionReply, declared_name='gone'):
 
 
 @dataclass(frozen=True)
-class SessionRequest[Reply: SessionReply](DeclaredFamily, affix=""):
+class SessionRequest[Reply: SessionReply](CrossesRuntimes, DeclaredFamily, affix=""):
     family_discriminator: ClassVar[str] = "type"
     reply_class: ClassVar[type[SessionReply]]
+    reply_timeout: ClassVar[float] = 30
 
     def __init_subclass__(cls, **options):
         super().__init_subclass__(**options)
@@ -267,19 +282,20 @@ class SessionRequest[Reply: SessionReply](DeclaredFamily, affix=""):
     @contextmanager
     def connection(self, endpoint: Path) -> Iterator[socket.socket]:
         with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as peer:
-            peer.settimeout(30)
+            peer.settimeout(self.reply_timeout)
             peer.connect(str(endpoint))
             peer.sendall((FieldCodec.compact(FieldCodec.encode(self)) + "\n").encode())
             yield peer
 
     def exchange(self, endpoint: Path) -> Reply:
         with self.connection(endpoint) as peer, peer.makefile("rb") as stream:
-            raw = stream.readline(4096)
-            if not raw:
-                raise ConnectionResetError('Session bridge closed before replying')
-            return self.decode_reply(raw)
+            return self.read_reply(stream)
 
-    def decode_reply(self, raw: bytes) -> Reply:
+    def read_reply(self, stream: BinaryIO) -> Reply:
+        """The bridge's one answer line; a socket closed before it is no answer at all."""
+        raw = stream.readline(4096)
+        if not raw:
+            raise ConnectionResetError('Session bridge closed before replying')
         reply = FieldCodec.decode(self.reply_class | SessionRefused, FieldCodec.parse(raw))
         reply.require()
         return reply
@@ -384,14 +400,22 @@ class MonitorService:
                 lambda reader, writer: clients.create_task(self.accept(reader, writer)),
                 str(path), start_serving=False,
             )
-            # Clients retire before Server.wait_closed waits for their transports.
-            async with server, asyncio.TaskGroup() as clients:
-                await server.start_serving()
-                self.bridge.log(f"Session bridge ready for Claude PID {self.owner.pid}.")
+            async with server:
                 try:
-                    await self.owner.wait_exited()
+                    async with asyncio.TaskGroup() as clients:
+                        await server.start_serving()
+                        self.bridge.log(f"Session bridge ready for Claude PID {self.owner.pid}.")
+                        try:
+                            await self.owner.wait_exited()
+                        finally:
+                            # The listener stops before the clients retire, so no new
+                            # connection reaches a group that is shutting down.
+                            server.close()
+                            self.stop()
                 finally:
-                    self.stop()
+                    # A connection accepted in the same loop step as close has no client
+                    # task; closing it keeps Server.wait_closed from waiting forever.
+                    server.close_clients()
         finally:
             path.unlink(missing_ok=True)
 
@@ -413,7 +437,7 @@ async def read_monitor(
                 try:
                     request = AttachMonitor()
                     await peer.write(FieldCodec.compact(FieldCodec.encode(request)))
-                    request.decode_reply(await reader.readline())
+                    request.read_reply(io.BytesIO(await reader.readline()))
                     announced = False
                     async for line in reader:
                         sys.stdout.write(line.decode())

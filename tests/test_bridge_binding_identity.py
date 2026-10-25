@@ -45,7 +45,7 @@ async def test_enrol_register_rename_and_rebind_preserve_reader(comms, tmp_path,
         bridge.binding = await operation.prepare(bridge)
         renamed, = Binding.select(db)
         assert renamed.bus == 'renamed-reader'
-        assert renamed.same_reader(original)
+        assert renamed.owner == original.owner
         assert renamed.start == original.start
 
         # A reused address is not the old reader, even in the same bus root.
@@ -57,3 +57,8 @@ async def test_enrol_register_rename_and_rebind_preserve_reader(comms, tmp_path,
         with pytest.raises(ValueError, match='another Core/CLI conversation'):
             await operation.prepare(bridge)
         assert Binding.select(db) == [renamed]
+        bridge.binding = renamed
+        message = comms.messaging.send('commander', 'renamed-reader', 'new incarnation only').message
+        with pytest.raises(KeyError):
+            await bridge.accept(message)
+        assert comms.bus.pending_count('renamed-reader') == 1

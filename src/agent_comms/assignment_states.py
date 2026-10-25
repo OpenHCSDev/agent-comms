@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING, ClassVar
 
 from .coordination_errors import IdentityConflict, IntegrityViolationError
 from .coordinator_vocabulary import CoordinatorVocabulary
-from .field_codec import FieldCodec, ThreadLookup
+from .field_codec import AssignmentId, FieldCodec, ThreadLookup
 from .lifecycle import LifecycleState
 from .lifecycle_capability import Active, Complete, Deferred, Failed, Pending, Terminal
 from .notification_progress import (
@@ -64,7 +64,7 @@ class PendingDecision:
 @dataclass(frozen=True)
 class AssignmentState(CoordinatorVocabulary, LifecycleState, affix="Assignment"):
     def source_settlement(
-        self, evidence: tuple[HistoricalNativeInput, ...], policy: WakePolicy, claim_id: str,
+        self, evidence: tuple[HistoricalNativeInput, ...], policy: WakePolicy, claim_id: AssignmentId,
     ) -> SourceSettlement:
         if not policy.items_with(Active, policy):
             return SettledWithoutInput()
@@ -217,6 +217,14 @@ class AssignmentState(CoordinatorVocabulary, LifecycleState, affix="Assignment")
     def build_preengagement(cls, mode: WakePolicy) -> AssignmentState:
         raise IdentityConflict("preengagement transition is not declared")
 
+    def harness_handoff(self) -> tuple[type[AssignmentState], ...]:
+        """Steps when a harness outside Core takes the message; a settled claim keeps its state."""
+        return ()
+
+    def harness_delivery(self) -> tuple[type[AssignmentState], ...]:
+        """Steps when that harness confirms the message started; a settled claim keeps its state."""
+        return ()
+
     def preengagement(self, disposition: type[AssignmentState]) -> AssignmentState:
         if self.execution_id is not None or disposition not in self.successors():
             raise IdentityConflict("preengagement transition is not declared")
@@ -241,6 +249,13 @@ class EngageableAssignment:
 
 class PendingNotification(EngageableAssignment, Pending):
     """Pending relevance/full execution membership, not another display state."""
+
+    def harness_handoff(self) -> tuple[type[AssignmentState], ...]:
+        # Unbound DEFERRED is UNKNOWN input: never selected, so never replayed natively.
+        return (DeferredAssignment,)
+
+    def harness_delivery(self) -> tuple[type[AssignmentState], ...]:
+        return (DeferredAssignment, DeliveredAssignment)
 
     @classmethod
     def extend_selection(cls, predicate: str, alias: str) -> str:
@@ -483,6 +498,9 @@ class DeferredAssignment(
 
     notification_state = InterruptedProgress
 
+    def harness_delivery(self) -> tuple[type[AssignmentState], ...]:
+        return (DeliveredAssignment,)
+
     @classmethod
     def successors(cls):
         return (
@@ -501,7 +519,8 @@ class DeliveredAssignment(
     """The recipient's running turn took this message as one of its inputs.
 
     No execution answers it: the agent replies with its own tools. Only the
-    proved start of that input in the running turn reaches this state.
+    proved start of that input reaches this state: the native turn's own
+    record, or the confirmed outcome of the external harness that took it.
     """
 
     decision: PendingDecision
@@ -547,7 +566,7 @@ class DeliveredAssignment(
 
 class FailedAssignment(Failed, Terminal, InterruptedAssignment):
     def source_settlement(
-        self, evidence: tuple[HistoricalNativeInput, ...], policy: WakePolicy, claim_id: str,
+        self, evidence: tuple[HistoricalNativeInput, ...], policy: WakePolicy, claim_id: AssignmentId,
     ) -> SourceSettlement:
         return (super().source_settlement(evidence, policy, claim_id)
                 if evidence else SettledWithoutInput())

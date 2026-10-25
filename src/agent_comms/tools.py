@@ -34,6 +34,7 @@ from .cli_commands import (
     HistoryCliCommand,
     PinChannelCliCommand,
     PinThreadCliCommand,
+    QueueRestartCliCommand,
     StartCliCommand,
     StopCliCommand,
     ThreadArchivedResult,
@@ -59,18 +60,18 @@ from .field_codec import (
     GoalId,
 )
 from .goal_actions import ActiveGoalAction, EditGoalAction, GoalAction, GoalPrecondition, ModelInvocable, SetGoalAction, TransitionGoalAction
-from .goal_history import RecordedGoalRevision
+from .goal_history import RecordedGoalHistory
+from .goal_scope import AllGoals, OneGoal
 from .goal_presentation import GoalExecution, GoalSnapshot
 from .goal_waits import NoStandbyReview, StandbyReview
 from .goals import GoalDeclaration
 from .history_result import HistoryPageResult
 from .input_attempt import UnresolvedInput
-from .launch_runtime import LaunchRuntime
 from .message_page import PageBounds
 from .message_reference import MessageReference
 from .messages import InfoKind, Message, MessageKind, NoticeRole, SendableMessageKind
 from .native_tools import NativeRequestTools
-from .owner_lifecycle import OwnerRestartSelection, OwnerStartResult
+from .owner_lifecycle import OwnerStartResult
 from .page_traversal import NewestCursor, PageCursor
 from .pi_payloads import PublishedGoalToolDetails
 from .pi_vocabulary import ServiceTier, ThinkingLevelField
@@ -90,7 +91,7 @@ from .restart_queue import (
     cancel as cancel_restart,
 )
 from .restart_queue import (
-    enqueue as enqueue_restart,
+    RestartQueued,
 )
 from .restart_queue import (
     status as restart_status,
@@ -191,8 +192,8 @@ class GoalUpdated(OwnGoalPublication):
 
 
 @dataclass(frozen=True)
-class GoalHistory(ToolResult):
-    history: tuple[RecordedGoalRevision, ...]
+class GoalHistory(ToolResult, RecordedGoalHistory):
+    pass
 
 
 
@@ -257,11 +258,6 @@ class InboxPageRead(ToolResult):
     standby_review: Annotated[StandbyReview | NoStandbyReview, WireOmitDefault()] = (
         NoStandbyReview()
     )
-
-
-@dataclass(frozen=True)
-class RestartQueued(ToolResult):
-    restart: QueuedRestart
 
 
 @dataclass(frozen=True)
@@ -613,7 +609,7 @@ class CommsResumeGoalTool(ThreadToolRequest):
             ActiveGoalAction(
                 expect=GoalPrecondition(
                     expected_goal=current,
-                    goal_id=goal_id,
+                    goal_id=OneGoal(goal_id),
                 ),
                 progress=progress,
             ),
@@ -641,7 +637,7 @@ class CommsEditGoalTool(ThreadToolRequest):
         goal = comms.goals.update_goal(
             name,
             EditGoalAction(
-                expect=GoalPrecondition(expected_goal=current, goal_id=goal_id), text=self.text
+                expect=GoalPrecondition(expected_goal=current, goal_id=OneGoal(goal_id)), text=self.text
             ),
         )
         return GoalUpdated(goal)
@@ -652,12 +648,11 @@ class CommsGoalHistoryTool(ThreadReadTool):
     label = "Goal history"
     description = "Read recorded goal revisions and recorded provenance and observation gaps."
     goal_id: Annotated[
-        GoalId | None, *tool_field("Optional goal ID; omit for this thread's full history")
-    ] = None
+        OneGoal | AllGoals, *tool_field("Optional goal ID; omit for this thread's full history")
+    ] = AllGoals()
 
     def apply(self, comms: Comms, caller: ToolCaller) -> GoalHistory:
-        entries = comms.goals.goal_history(caller.subject(self.thread), goal_id=self.goal_id)
-        return GoalHistory(tuple(entry.recorded() for entry in entries))
+        return comms.goals.recorded_history(GoalHistory, caller.subject(self.thread), self.goal_id)
 
 
 
@@ -1125,9 +1120,7 @@ class CommsQueueRestartTool(LiveOwnerTool, NativeOwnerCommand, OwnerLifecycleCon
     name: Annotated[str, *tool_field("Live agent thread", binding=SubjectBinding)]
 
     def apply(self, comms: Comms, caller: ToolCaller) -> RestartQueued:
-        return RestartQueued(
-            enqueue_restart(comms, OwnerRestartSelection.capture(comms.registry.snapshot(), self.name),
-                            launch_runtime=LaunchRuntime.running()))
+        return QueueRestartCliCommand(name=self.name).apply(comms)
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -1195,30 +1188,7 @@ class InvokeCliCommand(CliCommand[ToolReplyResult], declared_name="tool"):
         return ToolReplyResult(invoke_tool(ctx, self.tool, self.arguments, caller=self.caller))
 
 
-def context_tool_catalog(context: str) -> list[dict[str, object]]:
-    return [tool.schema() for tool in ToolRequest.members_with(ToolRequest)
-            if tool.context == context]
-
-
 def invoke_tool(
     comms: Comms, name: str, arguments: Mapping[str, object], *, caller: ToolCaller
 ) -> dict[str, JsonValue]:
     return ToolRequest.member_named(name).invoke(comms, arguments, caller=caller)
-
-
-def invoke_context_tool(
-    comms: Comms,
-    name: str,
-    *,
-    subject: str,
-    actor: str | None,
-    arguments: Mapping[str, object] | None = None,
-) -> dict[str, JsonValue]:
-    tool = ToolRequest.member_named(name)
-    if tool.context is None:
-        raise ToolRefusedError(f"Tool {name!r} is not a context action.")
-    bound = dict(arguments or {})
-    bound.update(
-        (key, binding.resolve(subject, actor)) for key, binding in tool.context_bindings().items()
-    )
-    return tool.invoke(comms, bound, caller=ToolCaller.from_actor(actor))

@@ -1,0 +1,206 @@
+"""An install runs as its own transient systemd unit, so stopping its caller cannot kill it."""
+
+import json
+import os
+import subprocess
+import sys
+
+import pytest
+
+from agent_comms.child_process import NoResidentManager, ResidentManager, SystemdUserManager
+from agent_comms.cli_commands import InstallCliCommand
+from agent_comms.commander import standing
+from agent_comms.field_codec import FieldCodec, Id128
+from agent_comms.installer.backup import StoreBackup
+from agent_comms.installer.launch import (
+    InstallLogs,
+    InstallRun,
+    InstallRunning,
+    InstallUnit,
+)
+from agent_comms.repo import Repo
+from agent_comms.repository_name import RepositoryName
+
+FAKE = """#!{python}
+import json, sys
+with open({record!r}, "w") as record:
+    json.dump(sys.argv[1:], record)
+"""
+
+
+@pytest.fixture
+def systemd(tmp_path, monkeypatch, user_manager):
+    """A systemd-run on PATH that records its argv; ``show`` answers a collected unit."""
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    record = tmp_path / "argv.json"
+    fake = bin_dir / "systemd-run"
+    fake.write_text(FAKE.format(python=sys.executable, record=str(record)))
+    fake.chmod(0o755)
+    monkeypatch.setenv("PATH", f"{bin_dir}{os.pathsep}{os.environ['PATH']}")
+    monkeypatch.setattr(user_manager, "shown", staticmethod(lambda unit, name: "inactive"))
+    return record
+
+
+def test_spawn_starts_a_unit_whose_request_round_trips(tmp_path, systemd):
+    root = tmp_path / "bus"
+    root.mkdir()
+    command = InstallCliCommand(checkout=tmp_path / "checkout", to="HEAD")
+    run = InstallRun(command, root, tmp_path / "scratch", "a" * 40)
+
+    run.spawn(wait=False)
+
+    argv = json.loads(systemd.read_text())
+    assert f"--unit={run.unit.unit}" in argv
+    assert run.unit.unit == f"agent-comms-install-{run.unit.identity}.service"
+    # Values never reach a command line: systemd-run copies each declared name itself.
+    settings = [word.removeprefix("--setenv=") for word in argv if word.startswith("--setenv=")]
+    assert settings[:-1] == list(InstallUnit.inherited)
+    assert settings[-1].startswith("PYTHONPATH=")
+    assert f"--property=StandardInput=file:{run.unit.request}" in argv
+    assert f"--property=StandardOutput=file:{run.unit.result}" in argv
+    assert f"--property=StandardError=file:{run.unit.errors}" in argv
+    # Owners leave by their own scope, so ending the unit still cleans up its own children.
+    assert not any(word.startswith("--property=KillMode") for word in argv)
+    assert argv[-3:] == [sys.executable, "-m", "agent_comms.installer"]
+    assert FieldCodec.decode(InstallRun, FieldCodec.parse(run.unit.request.read_text())) == run
+
+
+DECODED = """
+import runpy
+from agent_comms.installer.launch import InstallRun
+from agent_comms.installer.refusals import UpgradeRefused
+
+def run(self):
+    raise UpgradeRefused(f"decoded {self.target}")
+
+InstallRun.run = run
+runpy.run_module("agent_comms.installer", run_name="__main__")
+"""
+
+
+def test_the_installed_launcher_hands_its_request_on_stdin(tmp_path):
+    """Installs 5 and 6 died at IndexError: the live 878da2817 launcher pipes the request on
+    stdin with no argument, and the tree it starts must read it there."""
+    root = tmp_path / "bus"
+    root.mkdir()
+    run = InstallRun(InstallCliCommand(checkout=tmp_path / "checkout", to="HEAD"), root,
+                     tmp_path / "scratch", "a" * 40)
+    finished = subprocess.run(
+        (sys.executable, "-c", DECODED), input=json.dumps(FieldCodec.encode(run)),
+        capture_output=True, text=True, timeout=60, check=False,
+    )
+    assert finished.stderr.strip().splitlines()[-1].endswith(f"decoded {'a' * 40}")
+    assert finished.returncode == 1
+
+
+def test_a_launched_unit_gone_without_a_result_died(tmp_path, systemd):
+    root = tmp_path / "bus"
+    logs = InstallLogs(root)
+    repo = RepositoryName.from_wire("OpenHCSDev/agent-comms")
+    run = logs.minted()
+    logs.record(run.logs, repo, "b" * 40)
+    run.result.write_text("")
+    run.errors.write_text("Traceback\nBrokenPipeError: [Errno 32]\n\n")
+
+    assert logs.launched(repo, "b" * 40) == (run,)
+    assert logs.member(repo, "b" * 40).func is standing.DiedInstallDue
+    assert logs.member(repo, "b" * 40).keywords == {"unit": run}
+    assert run.last_error() == "BrokenPipeError: [Errno 32]"
+    run.result.write_text("{}")
+    assert logs.member(repo, "b" * 40).func is standing.LaunchedInstallDue
+    assert logs.member(repo, "c" * 40) is standing.PendingInstallDue
+
+
+def test_a_died_run_renders_from_the_run_that_selected_it(tmp_path, systemd):
+    """The heartbeat crashed every 70 s at IndexError: the died member re-read the launched
+    runs to render, and the cause file was gone by then. The selecting run rides along."""
+    logs = InstallLogs(tmp_path / "bus")
+    repo = RepositoryName.from_wire("OpenHCSDev/agent-comms")
+    core = Repo(checkout=tmp_path / "checkout", github=repo)
+    run = logs.minted()
+    logs.record(run.logs, repo, "b" * 40)
+    run.result.write_text("")
+    run.errors.write_text("Traceback\nBrokenPipeError: [Errno 32]\n")
+    member = logs.member(repo, "b" * 40)
+    (run.logs / InstallLogs.cause_file).unlink()
+
+    due = member(repo, "b" * 40, "0" * 40, 1, 31, logs, core, "a" * 40)
+
+    assert logs.launched(repo, "b" * 40) == ()
+    assert due.action == f"target {'a' * 12}; {run.errors}: BrokenPipeError: [Errno 32]"
+
+
+def test_a_missing_systemd_run_refuses_at_once(tmp_path, monkeypatch, user_manager):
+    monkeypatch.setenv("PATH", str(tmp_path))
+    with pytest.raises(FileNotFoundError, match="systemd-run"):
+        InstallUnit(Id128.mint(), tmp_path).start(tmp_path, ("true",), "", wait=False)
+
+
+def test_a_home_without_a_manager_runs_its_install_in_the_waiting_caller(tmp_path, monkeypatch):
+    """A private home owns its install only while its caller waits; nothing outlives it."""
+    monkeypatch.setattr(ResidentManager, "current", staticmethod(lambda: NoResidentManager))
+    unit = InstallUnit(Id128.mint(), tmp_path)
+    unit.request.write_text("request ")
+    echo = "import os, sys; print(sys.stdin.read() + os.environ['PYTHONPATH'])"
+    unit.start(tmp_path, (sys.executable, "-c", echo), "tree", wait=True)
+    assert unit.result.read_text() == "request tree\n"
+    assert not unit.running()
+    with pytest.raises(subprocess.CalledProcessError):
+        unit.start(tmp_path, (sys.executable, "-c", "raise SystemExit(3)"), "", wait=True)
+
+
+def test_a_second_launch_on_one_root_refuses_until_the_first_lets_go(tmp_path, systemd):
+    """2026-10-24 18:54: three installs of one commit ran on one bus at once."""
+    logs = InstallLogs(tmp_path / "bus")
+    with (logs.launching(), pytest.raises(InstallRunning, match="another install holds"),
+          logs.launching()):
+        pass
+    with logs.launching():
+        pass
+
+
+def running_only(monkeypatch, unit: InstallUnit) -> None:
+    monkeypatch.setattr(SystemdUserManager, "shown", staticmethod(
+        lambda name, field: "active" if name == unit.unit else "inactive"))
+
+
+def test_every_merge_due_counts_the_running_install_of_its_target(tmp_path, systemd,
+                                                                    monkeypatch):
+    """The Core and Toad merges install one Core target, so the second merge's turn finds
+    the first one's unit running and records itself on it instead of launching again."""
+    root = tmp_path / "bus"
+    root.mkdir()
+    logs = InstallLogs(root)
+    core = Repo(checkout=tmp_path / "checkout",
+                github=RepositoryName.from_wire("OpenHCSDev/agent-comms"))
+    toad = RepositoryName.from_wire("OpenHCSDev/toad")
+    run = InstallRun(InstallCliCommand(checkout=core.checkout, to="HEAD"), root,
+                     tmp_path / "scratch", "a" * 40)
+    with logs.launching():
+        run.spawn(wait=False)
+    logs.record(run.unit.logs, core.github, "a" * 40)
+    running_only(monkeypatch, run.unit)
+
+    standing.PendingInstallDue(toad, "c" * 40, "0" * 40, (), (), logs, core, "a" * 40).launch(
+        None)  # type: ignore[arg-type]
+    standing.PendingInstallDue(toad, "d" * 40, "0" * 40, (), (), logs, core, "e" * 40).launch(
+        None)  # type: ignore[arg-type]
+
+    assert logs.launched(toad, "c" * 40) == (run.unit,)
+    assert logs.member(toad, "c" * 40).func is standing.LaunchedInstallDue
+    assert logs.launched(core.github, "a" * 40) == (run.unit,)
+    assert logs.member(toad, "d" * 40) is standing.PendingInstallDue
+    assert logs.units() == (run.unit,)
+
+
+def test_retiring_old_logs_spares_a_running_units_directory(tmp_path, systemd, monkeypatch):
+    """A fresh mint retired the running install's directory and killed it at 18:55."""
+    logs = InstallLogs(tmp_path / "bus")
+    live = logs.minted()
+    running_only(monkeypatch, live)
+    later = [logs.minted() for _ in range(StoreBackup.kept + 2)]
+
+    assert live.logs.is_dir()
+    assert sorted(unit.logs for unit in logs.units()) == sorted(
+        [live.logs, *(unit.logs for unit in later[-StoreBackup.kept:])])

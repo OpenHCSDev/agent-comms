@@ -22,7 +22,10 @@ from .native_arguments import (
     LaunchBinary,
 )
 from .owner_launch import RetainedOwnerLaunch
-from .owner_lifecycle import OwnerRestartSelection
+from .owner_lifecycle import (
+    OwnerRestartResult,
+    OwnerRestartSelection,
+)
 from .restart_refusals import OwnerSelectionChangedRefusal
 from .restart_scope import AllOwners, RestartScope
 from .thread_identity import ThreadAuthority
@@ -116,7 +119,7 @@ class OwnerRestartHandoff:
 
     def restore(self, lifecycle: OwnerLifecycle) -> tuple[OwnerRestartResult, ...]:
         """Restore EACH acquired launch unchanged under its authentic decoder."""
-        runtime = RestoredRuntime.running()
+        runtime = RestoredRuntime(LaunchRuntime.running().interpreter)
         if any(owner.launch.interpreter != str(runtime.interpreter) for owner in self.owners):
             raise RelationViolationError('Original restoration requires the acquired source interpreter')
 
@@ -126,8 +129,6 @@ class OwnerRestartHandoff:
         ))
 
     def _launch(self, lifecycle: OwnerLifecycle, launch) -> tuple[OwnerRestartResult, ...]:
-        from .owner_lifecycle import OwnerRestartResult
-
         if str(lifecycle.root) != self.root:
             raise RelationViolationError('Retained batch belongs to another root')
         snapshot = lifecycle.registry.snapshot()
@@ -226,7 +227,7 @@ class FencedOwnerBatch:
             if any(thread.process_alive for thread, _ in self.captured):
                 raise RelationViolationError('Owner survived retirement')
             self.lifecycle._finish_stopped_owners(self.captured)
-            with self.lifecycle.registry.store.locked():
+            with self.lifecycle.registry.store.guarded_write():
                 snapshot = self.lifecycle.registry.snapshot()
                 releases = self.lifecycle.releases.read_many(
                     tuple(thread.name for thread, _ in self.captured))
@@ -266,7 +267,7 @@ class ClaimedOwnerBatch:
     @classmethod
     def restart(cls, lifecycle: OwnerLifecycle, request: OwnerRestartRequest,
                 cutover: OwnerCutover) -> tuple[OwnerRestartResult, ...]:
-        with lifecycle.registry.store.locked():
+        with lifecycle.registry.store.guarded_write():
             cutover.require_restart_phase(lifecycle)
             snapshot = lifecycle.registry.snapshot()
             threads = request.scope.threads(snapshot)

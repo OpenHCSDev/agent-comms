@@ -50,10 +50,6 @@ def test_new_concrete_marker_drives_the_existing_decoder(identity_family):
     class HistoricalMarker(identity_family.BirthlessIncarnation):
         WIRE_BIRTH = -91.0
 
-        @property
-        def birth_description(self) -> str:
-            return 'historical marker'
-
     wire = {'name': 'historical', 'created_at': HistoricalMarker.WIRE_BIRTH}
     identity = identity_family.ThreadIncarnation.from_wire(wire)
     assert type(identity) is HistoricalMarker
@@ -74,8 +70,8 @@ def test_abstract_specialization_does_not_contest_an_existing_marker(identity_fa
     assert type(decoded) is identity_family.DeletedThreadIncarnation
 
 
-def test_new_abstract_marker_is_not_a_decoder(identity_family):
-    class UnfinishedMarker(identity_family.BirthlessIncarnation):
+def test_unnamed_marker_declaration_is_not_a_decoder(identity_family):
+    class UnfinishedMarker(identity_family.BirthlessIncarnation, declared_name=None):
         WIRE_BIRTH = -92.0
 
     with pytest.raises(ValueError, match='positive recorded birth'):

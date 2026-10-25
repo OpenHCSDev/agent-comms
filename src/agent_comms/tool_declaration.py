@@ -27,7 +27,7 @@ class ReplacementEdit:
 
 @dataclass(frozen=True)
 class EditCall:
-    id: str
+    id: ToolCallId
     at: EventTime
     thread: str
     path: str
@@ -101,7 +101,7 @@ class ToolDeclaration(DeclaredFamily, affix="Tool"):
 
     @classmethod
     def record(
-        cls, name: str, arguments: object, *, call_id: str
+        cls, name: str, arguments: object, *, call_id: ToolCallId
     ) -> ToolDeclaration | NoToolRecord:
         """The call decoded once as Core's tool record, or no record when Core does not decode it."""
         try:
@@ -116,7 +116,7 @@ class ToolDeclaration(DeclaredFamily, affix="Tool"):
         return shown.recorded(self)
 
     def edit_calls(
-        self, call_id: str, at: EventTime, thread: str, problem: str
+        self, call_id: ToolCallId, at: EventTime, thread: str, problem: str
     ) -> tuple[EditCall, ...]:
         return ()
 
@@ -152,7 +152,7 @@ class NoToolRecord(NullMember):
         return ""
 
     def edit_calls(
-        self, call_id: str, at: EventTime, thread: str, problem: str
+        self, call_id: ToolCallId, at: EventTime, thread: str, problem: str
     ) -> tuple[EditCall, ...]:
         return ()
 

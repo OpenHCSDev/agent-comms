@@ -74,13 +74,11 @@ async def test_pager_requests_two_older_pages_through_the_bridges_real_socket(tm
             output = ThreadOutput(transcript, comms.agents)
             output.publish_batch([update async for update in bridge.history()])
             assert seen == [None]
-            newest = comms.transcripts.thread_transcript_page('cli', max_messages=1)
-            assert [event.text for event in newest.events] == ['recent2']
-            middle = comms.transcripts.thread_transcript_page('cli', before=newest.before, max_messages=1)
-            assert [event.text for event in middle.events] == ['recent1']
-            assert middle.has_older
+            newest = comms.transcripts.capture_page_read('cli').read()
+            assert [event.text for event in newest.events] == ['recent1', 'recent2']
+            assert newest.has_older
             with pytest.raises(CoordinationReadUnavailable):
-                comms.transcripts.thread_transcript_page('cli', before=middle.before)
+                comms.transcripts.capture_page_read('cli', before=newest.before).read()
             request = await asyncio.wait_for(frames.get(), 3)
             # The exact JSON line parser used by the running bridge owns decoding.
             request = WATCH_LINE.validate_json(request.model_dump_json())
@@ -89,24 +87,22 @@ async def test_pager_requests_two_older_pages_through_the_bridges_real_socket(tm
             # An already handled frame neither fetches nor republishes the page.
             await request.handle(bridge, None)
             assert seen == [None, 'p1']
-            older2 = comms.transcripts.thread_transcript_page('cli', before=middle.before, max_messages=1)
-            assert [event.text for event in older2.events] == ['older2']
             # Zero is a real external item coordinate, including a pinned read.
-            older1 = comms.transcripts.thread_transcript_page('cli', before=older2.before,
-                                                            through=middle.before, max_messages=1)
-            assert [event.text for event in older1.events] == ['older1']
+            older = comms.transcripts.capture_page_read('cli', before=newest.before,
+                                                        through=newest.before).read()
+            assert [event.text for event in older.events] == ['older1', 'older2']
             with pytest.raises(CoordinationReadUnavailable):
-                comms.transcripts.thread_transcript_page('cli', before=older1.before)
+                comms.transcripts.capture_page_read('cli', before=older.before).read()
             request = await asyncio.wait_for(frames.get(), 3)
             await WATCH_LINE.validate_json(request.model_dump_json()).handle(bridge, None)
-            oldest = comms.transcripts.thread_transcript_page('cli', before=older1.before)
+            oldest = comms.transcripts.capture_page_read('cli', before=older.before).read()
             assert [event.text for event in oldest.events] == ['oldest']
             assert not oldest.has_older
             assert seen == [None, 'p1', 'p2']
             # Existing source coordinates survived both prepends.
-            assert comms.transcripts.thread_transcript_page('cli', before=newest.before,
-                                                           max_messages=1).events == middle.events
-            assert [event.text for event in comms.transcripts.thread_transcript_page('cli').events] == [
+            assert [event.text for event in comms.transcripts.capture_page_read(
+                'cli', before=newest.before).read().events] == ['oldest', 'older1', 'older2']
+            assert [event.text for event in comms.transcripts.capture_page_read('cli').read().events] == [
                 'oldest', 'older1', 'older2', 'recent1', 'recent2']
             with transcript.snapshot() as connection:
                 positions = ExternalItemRow.select(connection, thread=transcript.lookup, order_by=('seq',))

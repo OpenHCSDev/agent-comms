@@ -16,6 +16,7 @@ from typing import TYPE_CHECKING
 from agent_comms.audience_manifest import FrozenRecipient, freeze_audience
 from agent_comms.bus import Bus, BusReader, BusSnapshot, ClaimRecord, PrivateRecord, RecordBuilder
 from agent_comms.bus_publication import InitialOrigin
+from agent_comms.change_report import OrderRoots
 from agent_comms.coordination_tables.publications import (
     PublicationIntents,
 )
@@ -23,7 +24,6 @@ from agent_comms.field_codec import ClaimId
 from agent_comms.messages import BusRecord, ClaimNoticeKind, Message
 from agent_comms.response_acknowledgement import canonical_publication_key
 
-from .active_route import guard_original_root_write
 from .channel_targets import CommandTarget, NamedTarget
 from .coordination_database import CoordinationStore
 from .coordinator import Coordination
@@ -194,7 +194,6 @@ class InitialWrites(Publisher):
         """Hold the registry/catalog cut; check source conditions in the append transaction."""
         with (
             self.opened_activity() as activity,
-            guard_original_root_write(self.bus.path.parent),
             self.channels.reading(self.registry.store) as catalog,
         ):
             snapshot = self.registry.snapshot()
@@ -205,7 +204,8 @@ class InitialWrites(Publisher):
             snapshot.status(sender).require_visible()
             # The kind owns its own validation; one publication check, before
             # any sequence reservation, refusing with what is missing.
-            message.type.require_publishable(message, Path(sender_thread.worktree))
+            message.type.require_publishable(
+                message, OrderRoots(Path(sender_thread.worktree), snapshot.commander_project))
             origin.require_sender(message, sender_thread, snapshot)
             target, message, names = target.initial_delivery(
                 sender, message, snapshot, require_channel)

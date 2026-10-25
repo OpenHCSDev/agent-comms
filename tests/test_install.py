@@ -9,11 +9,12 @@ from contextlib import closing
 from pathlib import Path
 
 import pytest
+from agent_comms.locked_store import LiveFilesRequest
 from agent_comms.field_codec import TurnId
 from agent_comms.threads import ParkedThreadWorkState
 
 from agent_comms.active_route import ActiveRoute, read_active_route, route_new_bus
-from agent_comms.child_process import ProcessIdentity
+from agent_comms.child_process import NoProcess, ProcessIdentity
 from agent_comms.bus import Bus
 from agent_comms.recorded_bus import RecordedBusIdentity
 from bus_record_fixture import prepare_native_comms
@@ -25,7 +26,7 @@ from agent_comms.installer.refusals import UpgradeRefused
 from agent_comms.installer.backup import bus_files
 from agent_comms.installer.carry import CarryChain
 from agent_comms.installer.practice import PracticeCopy
-from agent_comms.locked_store import BusFile, RootFile, SQLiteFile
+from agent_comms.locked_store import BusFile, RegistryFile, RootFile, SQLiteFile
 from agent_comms.maintenance_barrier import MaintenanceBarrier, MaintenanceOperator
 from agent_comms.threads import Thread
 
@@ -91,7 +92,7 @@ def test_practice_copy_is_the_declared_files_without_its_maintenance_witnesses(p
     # listing: an undeclared file has no owner, so the copy never meets it.
     (root / "sessions").mkdir(exist_ok=True)
     (root / "sessions/.pr48-writer-transient").write_text("claim")
-    saved = bus_files(root)
+    saved = bus_files(LiveFilesRequest(root))
     files = RootFile.existing_in(root)
     declared = {str(path.relative_to(root)) for path in files}
     databases = {str(path.relative_to(root)) for path, owner in files.items()
@@ -103,7 +104,10 @@ def test_practice_copy_is_the_declared_files_without_its_maintenance_witnesses(p
     copy = practice.path
     measurement = practice.measurement
     copied = {str(path.relative_to(copy)) for path in copy.rglob("*") if path.is_file()}
-    assert copied == declared - witnesses
+    # The copy's own registry writer takes its own lock.
+    own_lock = {str(path.relative_to(copy))
+                for path in RegistryFile.transient_paths(RegistryFile.path_in(copy))}
+    assert copied - own_lock == declared - witnesses
     assert measurement.bytes > 0
     for name in databases:
         query = "SELECT name FROM sqlite_schema ORDER BY name"
@@ -112,7 +116,7 @@ def test_practice_copy_is_the_declared_files_without_its_maintenance_witnesses(p
             assert practised.execute(query).fetchall() == original.execute(query).fetchall()
     for name in copied - databases:
         assert (copy / name).read_bytes() == (root / name).read_bytes()
-    assert bus_files(root) == saved
+    assert bus_files(LiveFilesRequest(root)) == saved
 
 
 def test_a_message_sent_while_the_bus_is_copied_preserves_one_database_cut(
@@ -240,7 +244,7 @@ def test_a_practice_copy_of_a_bus_without_messages_reads_its_history_twice(priva
         assert '"failed"' not in capsys.readouterr().out
 
 
-def test_practice_copy_takes_turn_files_in_the_registry_cut(private_directory):
+def test_practice_copy_takes_turn_files_but_no_live_process(private_directory):
     root = private_directory / "bus"
     Bus.install(Bus.path_in(root))
     comms = wire(root)
@@ -254,6 +258,9 @@ def test_practice_copy_takes_turn_files_in_the_registry_cut(private_directory):
     practice = PracticeCopy(root, private_directory / 'practice/bus')
     practice.include(tuple(RootFile.existing_in(root)))
     copy = practice.path
+    # Install 20's copy still named unit-signal's live pid 2128765: a start, stop or wake
+    # on the copy aimed at the live unit. The copy keeps the turn file, never its owner.
+    assert (copy / turn.relative_to(root)).read_bytes() == turn.read_bytes()
     copied = wire(copy).registry.require("owner")
-    assert copied.turn_lease.identity == lease.identity
-    assert copied.executing
+    assert (copied.process_identity, copied.executing) == (NoProcess(), False)
+    assert comms.registry.require("owner").turn_lease.identity == lease.identity

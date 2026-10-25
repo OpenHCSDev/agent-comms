@@ -4,21 +4,15 @@ from __future__ import annotations
 
 import json
 import sqlite3
-import uuid
 from abc import ABC, abstractmethod
 from collections.abc import Iterable, Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Annotated, ClassVar, Self, cast
+from typing import Annotated, ClassVar, Self
 
 from .errors import RelationViolationError, StoredHistoryUnreadable
-from .field_codec import (
-    FieldCodec,
-    Id128Text,
-    MalformedRecord,
-    NullMember,
-)
+from .field_codec import ContextStoreId, FieldCodec, MalformedRecord, NullMember
 from .native_session_reopen import NativeSessionIdentity
 from .registration import Registration
 from .thread_identity import ThreadIncarnation
@@ -35,15 +29,14 @@ from .turn_context import (
     UnrecordedSegment,
 )
 
-from .typed_table import StoreRows, Column, DurableStore, Generated, Index, SingletonRow, TypedTable
+from .typed_table import StoreRows, Column, DurableStore, Generated, Index, RowidSequenced, SingletonRow, TypedTable
+from .turn_item import NativeItemId
+from .native_session_reopen import PiSessionId
 
 
 @dataclass(frozen=True)
 class ContextStoreIdentity:
-    value: str
-
-    def __post_init__(self) -> None:
-        Id128Text.from_text(self.value)
+    value: ContextStoreId
 
 
 class ContextSourceState(ABC):
@@ -69,7 +62,7 @@ class ContextSourceState(ABC):
 
 class UnrecordedContextSource(ContextSourceState):
     def initialized(self, db: sqlite3.Connection) -> ContextStoreInfo:
-        stored = ContextStoreInfo(1, ContextStoreIdentity(uuid.uuid4().hex))
+        stored = ContextStoreInfo(1, ContextStoreIdentity(ContextStoreId.mint()))
         stored.insert(db)
         return stored
 
@@ -156,9 +149,9 @@ class ContextStoreInfo(ContextStoreRows, ContextSourceState, SingletonRow):
 
 @dataclass(frozen=True)
 class ContextEntry(ContextStoreRows, TypedTable):
-    session_id: Annotated[str, Column(primary_key=True)]
+    session_id: Annotated[PiSessionId, Column(primary_key=True)]
     session_file: Annotated[str, Column(primary_key=True)]
-    entry_id: Annotated[str, Column(primary_key=True)]
+    entry_id: Annotated[NativeItemId, Column(primary_key=True)]
     manifest: SegmentManifest
 
     @classmethod
@@ -181,7 +174,7 @@ class ContextEntry(ContextStoreRows, TypedTable):
 
 
 @dataclass(frozen=True)
-class ContextSegmentVersion(ContextStoreRows, TypedTable):
+class ContextSegmentVersion(ContextStoreRows, RowidSequenced):
     id: Annotated[int, Column(primary_key=True, auto_increment=True)]
     digest: str
     segment: RecordedSegmentManifest
@@ -196,11 +189,11 @@ class ContextSegmentVersion(ContextStoreRows, TypedTable):
             if existing.segment != segment:
                 raise RelationViolationError("Context segment version hash collision")
             return existing.id
-        return cast(int, cls.insert_values(db, digest=digest, segment=segment).lastrowid)
+        return cls.insert_sequence(db, digest=digest, segment=segment)
 
 
 @dataclass(frozen=True)
-class ContextRequest(ContextStoreRows, TypedTable):
+class ContextRequest(ContextStoreRows, RowidSequenced):
     id: Annotated[int, Column(primary_key=True, auto_increment=True)]
     identity: RecordedContextIdentity
     thread_birth: ClassVar[Generated] = Generated(
@@ -234,14 +227,11 @@ class ContextRequest(ContextStoreRows, TypedTable):
             RecordedContextIdentity, FieldCodec.project(record, "identity")
         )
         identity.thread.require_recorded()
-        return cast(
-            int,
-            cls.insert_values(
-                db,
-                identity=identity,
-                versions=versions,
-                size=len(json.dumps(FieldCodec.encode(record)).encode()),
-            ).lastrowid,
+        return cls.insert_sequence(
+            db,
+            identity=identity,
+            versions=versions,
+            size=len(json.dumps(FieldCodec.encode(record)).encode()),
         )
 
     def recorded(self, db: sqlite3.Connection) -> RecordedContextManifest:
@@ -483,8 +473,8 @@ class ContextStore(DurableStore):
         return AbsentContext()
 
     def entries(
-        self, identity: NativeSessionIdentity, entry_ids: Iterable[str],
-    ) -> dict[str, SegmentManifest]:
+        self, identity: NativeSessionIdentity, entry_ids: Iterable[NativeItemId],
+    ) -> dict[NativeItemId, SegmentManifest]:
         """The recorded manifest of each named journal entry that has one."""
         with self.snapshot() as db:
             return {row.entry_id: row.manifest for entry_id in entry_ids

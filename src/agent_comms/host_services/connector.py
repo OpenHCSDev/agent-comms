@@ -11,13 +11,13 @@ from typing import Annotated, Self
 
 from ..active_route import ActiveRoute
 from ..bus import Bus
+from ..child_process import ResidentManager
 from ..connector import (
     LOOPBACK,
     PORT,
     ConnectorOptions,
     ConnectorVerb,
     ServeVerb,
-    ToolCall,
     ToolsCallMessage,
     ToolsCallReply,
 )
@@ -51,7 +51,7 @@ class ConnectorService:
         return RoundTripResult(f"{CommsChannelsTool.declared_name} answered on port {self.port}")
 
     def serves(self) -> None:
-        read = ToolCall.of(CommsChannelsTool)
+        read = CommsChannelsTool.called()
         call = ToolsCallMessage(jsonrpc="2.0", id=0, params=read)
         try:
             with self.store.granted("upgrade round trip") as token:
@@ -126,7 +126,8 @@ class InstallServiceVerb(ConnectorOptions, declared_name="install-service"):
             store=ctx,
             port=self.port,
         )
-        service.install(service.exec_arguments(self.issuer), home=Path.home())
+        ResidentManager.current().install(
+            type(service), service.exec_arguments(self.issuer), home=Path.home())
         service.enable()
         print(service.unit_file(Path.home()))
         return 0

@@ -7,6 +7,7 @@ from agent_comms.activity import (
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.comms import wire
 from agent_comms.field_codec import TurnId
+from agent_comms.native_tool_call import ToolCallId
 from agent_comms.threads import Thread
 from agent_comms.turn_phase import (
     CompactionPhase,
@@ -42,7 +43,7 @@ def test_running_native_activity_is_derived_from_current_turn_phase(tmp_path):
     comms.agents.observe_native_phase(first, ModelWaitPhase())
     assert comms.agents.activity_of("worker", snapshot=comms.registry.snapshot()).state is ActivityState.THINKING
 
-    comms.agents.transition_turn(first, ToolRunningPhase(tools=(("call", "bash"),)))
+    comms.agents.transition_turn(first, ToolRunningPhase(tools=((ToolCallId("call"), "bash"),)))
     assert comms.agents.activity_of("worker", snapshot=comms.registry.snapshot()).presentation("Worker").summary == "Working · bash"
     comms.agents.observe_native_phase(first, ModelWaitPhase())
     assert comms.agents.activity_of("worker", snapshot=comms.registry.snapshot()).presentation("Worker").summary == "Thinking"

@@ -28,6 +28,7 @@ from agent_comms.tool_caller import ThreadCaller
 from agent_comms.read_basis import NamedViewer
 from stored_inputs import stored_inputs
 from agent_comms.threads import Thread
+from agent_comms.goal_scope import OneGoal
 
 
 OWNER_INPUT_KEY = AcpInputKey(InputId.mint())
@@ -114,18 +115,18 @@ def test_inspected_canonical_dependencies_allow_standby_without_replay(tmp_path,
     assert not stored_inputs(ledger.root).rows[OWNER_INPUT_KEY].goal_reviews
     generation = comms.goals.open_goal_store().snapshot(goal.id)
     assert generation is not None and generation.lifecycle.ready
-    assert generation.attempt_id is None
+    assert generation.attempt_id.present() == ()
     reopened = wire(comms.root)
-    reopened.goals.update_goal("worker", ActiveGoalAction(expect=GoalPrecondition(goal_id=goal.id)))
+    reopened.goals.update_goal("worker", ActiveGoalAction(expect=GoalPrecondition(goal_id=OneGoal(goal.id))))
     reopened.goals.update_goal(
-        "worker", StandbyGoalAction(expect=GoalPrecondition(goal_id=goal.id), wait_for=("parent",))
+        "worker", StandbyGoalAction(expect=GoalPrecondition(goal_id=OneGoal(goal.id)), wait_for=("parent",))
     )
     fresh = comms.messaging.send("parent", "worker", "New result").message
     assert reopened.goals.goal_input_review("worker", goal.id, ["parent"]).reviewed_inputs == (
         BusInputKey(fresh.seq),
     )
     comms.goals.update_goal(
-        "worker", PausedGoalAction(expect=GoalPrecondition(goal_id=goal.id)), actor=OwnerInvocable
+        "worker", PausedGoalAction(expect=GoalPrecondition(goal_id=OneGoal(goal.id))), actor=OwnerInvocable
     )
     with pytest.raises(ValueError):
         report.invoke(comms, {**args, "reviewed_inputs": keys}, caller=ThreadCaller("worker"))
@@ -148,7 +149,7 @@ def test_standby_excludes_retained_rebound_history_but_retains_rename(tmp_path, 
     comms.agents.begin_turn("parent", TurnId('18ab1892f9f48635ac465d11156044ce'))
     goal = comms.goals.update_goal("worker", SetGoalAction(text="Current goal"))
     assert comms.goals.goal_input_review("worker", goal.id, ["parent"]).reviewed_inputs == ()
-    action = StandbyGoalAction(expect=GoalPrecondition(goal_id=goal.id), wait_for=("parent",))
+    action = StandbyGoalAction(expect=GoalPrecondition(goal_id=OneGoal(goal.id)), wait_for=("parent",))
     comms.goals.update_goal("worker", action)
     current = comms.messaging.send("parent", "worker", "Current incarnation").message
     comms.registry.rename("parent", "renamed-parent")

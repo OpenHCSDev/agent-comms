@@ -7,30 +7,32 @@ from contextlib import closing
 import pytest
 
 from agent_comms.session_file import RegistrySessionLocation
+from bus_record_fixture import FIRST_INPUT_ID, SECOND_INPUT_ID
 from conftest import installed_comms
 from agent_comms.coordination_errors import StaleRevision
 from agent_comms.thread_text import ForkedParent, GivenThreadText
 from agent_comms.threads import Thread
+from agent_comms.transcript_routes import NoDisplayText
 
 
 @pytest.mark.parametrize("journal_mode", ["DELETE", "WAL"])
 def test_saved_input_annotation_revokes_page_without_journal_change(tmp_path, journal_mode):
     comms = installed_comms(tmp_path / "wire")
     path = tmp_path / "native.jsonl"
-    native_id = "a" * 32
+    native_id = FIRST_INPUT_ID
     path.write_text(json.dumps({
         "type": "message", "id": "entry", "timestamp": "2026-10-19T00:00:00Z", "message": {
             "role": "user", "inputId": native_id, "content": "private wrapper",
         },
     }) + "\n")
     comms.registry.declare(Thread('worker', frozenset(), str(tmp_path), session_file=RegistrySessionLocation.from_path(str(path), comms.root)))
-    comms.transcripts.routes.record_input_display("b" * 32, None)
+    comms.transcripts.routes.record_input_display(SECOND_INPUT_ID, NoDisplayText())
     with closing(sqlite3.connect(comms.transcripts.routes.path)) as connection:
         assert connection.execute("PRAGMA journal_mode=" + journal_mode).fetchone()[0] == journal_mode.lower()
         captured = comms.transcripts.capture_page_read("worker")
         assert captured.read().events[0].declared_name == "user"
         original = path.read_bytes()
-        comms.transcripts.routes.record_input_display(native_id, None)
+        comms.transcripts.routes.record_input_display(native_id, NoDisplayText())
         assert path.read_bytes() == original
         assert not captured.current()
         with pytest.raises(StaleRevision):

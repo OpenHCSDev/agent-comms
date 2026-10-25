@@ -22,6 +22,7 @@ from agent_comms.goal_states import BlockedGoal
 from agent_comms.goals import Goal
 from agent_comms.input_disposition import InputDispositions
 from agent_comms.threads import Thread
+from agent_comms.goal_scope import OneGoal
 
 
 UNKNOWN_ORIGINAL_KEY = AcpInputKey(InputId.mint())
@@ -48,9 +49,9 @@ def test_carried_blocked_goal_requires_explicit_retry_preserving_unknown(tmp_pat
     # checks. This is a new unreserved generation, not evidence of no past run.
     store.create_goal(goal.id)
     assert (comms.root / 'registry.json').read_bytes() == original_registry
-    reopened = GoalAttemptStore(comms.root / 'goal-private')
+    reopened = GoalAttemptStore.at(comms.root / 'goal-private')
     assert reopened.require_generation(goal.id).lifecycle == ReadyGeneration()
-    expect = GoalPrecondition(goal_id=goal.id, expected_goal=goal,
+    expect = GoalPrecondition(goal_id=OneGoal(goal.id), expected_goal=goal,
                               expected_owner=thread.process_identity)
     for actor in (ModelInvocable, RuntimeInvocable, OwnerInvocable):
         with pytest.raises(ValueError):
@@ -67,7 +68,7 @@ def test_carried_blocked_goal_requires_explicit_retry_preserving_unknown(tmp_pat
     retried.require_active()
     assert retried.id == goal.id
     generation = store.require_generation(goal.id)
-    assert generation.number == 2 and generation.attempt_id is None
+    assert generation.number == 2 and generation.attempt_id.present() == ()
     assert inputs.path.read_bytes() == original_inputs
     with closing(sqlite3.connect(store.path)) as conn:
         assert conn.execute('SELECT COUNT(*) FROM attempt_record').fetchone()[0] == 0

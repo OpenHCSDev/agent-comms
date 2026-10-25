@@ -9,7 +9,6 @@ historical watermark grants no current-owner, provider, write or reply permit.
 from __future__ import annotations
 
 import sqlite3
-import time
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
@@ -39,9 +38,6 @@ if TYPE_CHECKING:
     from .cursor_owner import CursorOwner, CursorState
     from .native_entries import NativeEvidenceScope
     from .private_registry_guard import RegistryPrivacy
-
-_MAX_SCAN_SECONDS = 0.25
-
 
 @dataclass(frozen=True)
 class SourcePrefix(PresentPath):
@@ -124,10 +120,12 @@ class InjectedInput(CoverageInput):
 
     def input_fields(self) -> dict:
         original = self.original
+        input_id, session_id = original.input_id, original.context.session_id
         return dict(
-            injected_seq=original.source_seq, input_id=TextNativeColumn(original.input_id),
+            injected_seq=original.source_seq,
+            input_id=TextNativeColumn(input_id.spelled_by.encode(input_id)),
             stage=TextNativeColumn(FieldCodec.encode(type(original.execution))),
-            session_id=TextNativeColumn(original.context.session_id),
+            session_id=TextNativeColumn(session_id.spelled_by.encode(session_id)),
             request_generation=NumberNativeColumn(original.context.request_generation),
         )
     def injected_for(self, state: CursorState) -> int:
@@ -139,20 +137,20 @@ class InjectedInput(CoverageInput):
         return self.build(owner, coverage.covered_seq)
 
     def allows(self, owner: CursorOwner, db: sqlite3.Connection, state: CursorState) -> bool:
-        if self.original.owner_identity != owner.participant_identity:
+        if not self.original.owner_identity.within(owner.participant_identity):
             raise IdentityConflict('current cursor native proof belongs to another owner')
         state.require_input_progress(self.original)
         if not owner.permits_input(self.original.input_id):
             return False
         row = NativeRuntimeInput.one(db, input_id=self.original.input_id)
-        if row is not None and not row.sent_owner_claimed_generation.matches(owner.claimed_generation):
+        if row is not None and not row.sent_owner_claimed_generation.sent_by_lineage(owner.claimed_generation):
             return state.claim_mismatch(self.original.source_seq)
         owner.require_recorded_reference(db, self.original.reference)
         return True
 
     def require_reference(self, owner: CursorOwner, cursor: CurrentNativeCursor) -> None:
         if cursor.injected_seq == self.original.source_seq and (
-            cursor.reference != self.original.reference or self.original.owner_identity != owner.participant_identity
+            cursor.reference != self.original.reference or not self.original.owner_identity.within(owner.participant_identity)
         ):
             raise IdentityConflict('current native cursor proof differs from journal')
 
@@ -223,8 +221,8 @@ class SourceCoverage:
 
         Count messages with no wake or no recipients without submitting input.
         At the end of a page, use the last checked message for this recipient,
-        not the last message anywhere on the bus. Filesystem flushes and locks
-        can still take longer than the requested time limit.
+        not the last message anywhere on the bus. The page is bounded by
+        ``limit`` through the recipient index, never by a clock.
         """
         request = CoveragePage.capture(lookup=self.recipient_lookup, limit=limit,
                                        after_seq=after_seq, partial=partial)
@@ -239,7 +237,6 @@ class SourceCoverage:
             if self.store.session._connection.in_transaction:
                 raise IdentityConflict("source coverage requires a committed coordinator snapshot")
             prefix.require_start(request.after_seq)
-            deadline = time.monotonic() + _MAX_SCAN_SECONDS
             records = self.bus.bus.received(
                 self.recipient_lookup, after=request.after_seq, before=prefix.through_seq + 1,
                 descending=False, limit=request.limit + 1,
@@ -248,8 +245,6 @@ class SourceCoverage:
             request.require_exhausted(more)
             initials = tuple(delivery for record in records[:request.limit]
                              for delivery in record.deliveries())
-            if time.monotonic() > deadline:
-                raise IdentityConflict("source coverage exceeded its scan deadline")
             prefix.require_current(self.bus.bus)
             horizon = initials[-1].seq if more else prefix.through_seq
             covered, inputs, no_wake, blocked = request.after_seq if request.partial else 0, [], [], None

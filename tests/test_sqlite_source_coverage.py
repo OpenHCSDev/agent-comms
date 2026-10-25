@@ -77,3 +77,24 @@ def test_prefix_rejects_replaced_database_with_the_same_sequence(coverage, tmp_p
     replacement.replace(bus.path)
     with pytest.raises(IdentityConflict):
         prefix.require_current(bus)
+
+
+@pytest.mark.parametrize("declaration", BusRecord.members_with(BusRecord))
+def test_slow_page_is_still_read_and_covered(coverage, declaration, source_reads, monkeypatch):
+    """Elapsed time never decides whether a bounded page is readable."""
+    import time
+
+    bus = coverage.bus.bus
+    record = bus.append(lambda seq, db: record_from(
+        declaration, Message("author", "worker", "source", InfoKind, seq=seq)))
+    received = type(bus).received
+
+    def slow(self, *args, **kwargs):
+        time.sleep(0.3)
+        return received(self, *args, **kwargs)
+
+    monkeypatch.setattr(type(bus), "received", slow)
+    result = coverage.read(source_reads=source_reads)
+    assert result.blocked_seq == next((row.seq for row in record.deliveries()), None)
+    assert result.covered_seq == (0 if record.deliveries() else record.seq)
+    assert result.source_prefix.through_seq == record.seq

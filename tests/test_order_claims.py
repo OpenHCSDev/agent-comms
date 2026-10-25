@@ -1,39 +1,47 @@
 """A holder claims through the real tool boundary on a copied bus."""
-from contextlib import chdir
-from dataclasses import replace
 import json
 import shlex
 import time
+from contextlib import chdir
+from dataclasses import replace
 
 import pytest
 
 from agent_comms.commander.order import OrderFile, main
-from agent_comms.field_codec import FieldCodec, GoalId
-from agent_comms.goal_actions import SetGoalAction
 from agent_comms.commander.package import CommanderPackage
-from agent_comms.errors import ToolRefusedError
+from agent_comms.errors import TodoConflict, TodoError, ToolRefusedError
+from agent_comms.field_codec import FieldCodec, GoalId, OrderId, RecordProblems
+from agent_comms.goal_actions import SetGoalAction
 from agent_comms.goals import OrderCheck, ProblemGoalOrder
+from agent_comms.messages import QuestionKind
+from agent_comms.native_tool_call import ToolCallId
+from agent_comms.order_tools import (
+    CommsHudTool,
+    CommsOrderDeliverTool,
+    CommsVerdictTool,
+    TodoChanged,
+)
 from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.todos import (
-    ClaimOrder,
     ClaimedProblemOrder,
+    CheckedProblemOrder,
+    ClaimOrder,
     CorrectCheckTodo,
-    DoneTodoState,
-    FailedCheckStrike,
     DeliveredProblemOrder,
     DeliveryReport,
-    PendingProblemOrder,
+    DoneTodoState,
+    FailedCheckStrike,
     OrderClaim,
+    PendingProblemOrder,
+    ReleaseTodo,
     SendBackVerdict,
     StrikeReason,
     StrikeTodo,
-    TodoConflict,
-    TodoError,
     Todo,
 )
 from agent_comms.tool_caller import ThreadCaller
 from agent_comms.tools import CommsHistoryTool
-from agent_comms.order_tools import CommsHudTool, CommsOrderDeliverTool, CommsVerdictTool, TodoChanged
+from agent_comms.order_runs import ApplicationOrderRun
 from test_held_problem_orders import merge_two_commit_fix
 from test_todos import order, thread
 
@@ -92,7 +100,7 @@ def test_claim_verdict_family_on_retained_copy(held_commander):
     )
     ThreadCaller(ctx.commander).invoke(CommsVerdictTool(
         problem="P1", operation=SendBackVerdict(
-            claimed.revision, ctx.incarnation, claimed.held(), "fixture-call", why,
+            claimed.revision, ctx.incarnation, claimed.held(), ToolCallId("fixture-call"), why,
             evidence=(claimed.order.owner,),
         ),
     ), comms)
@@ -100,7 +108,7 @@ def test_claim_verdict_family_on_retained_copy(held_commander):
     assert isinstance(pending.order, PendingProblemOrder)
     assert pending.order.id != claimed.order.id
     assert why.text in pending.order.edits
-    assert claimed.order in pending.prior_orders
+    assert claimed.order in pending.history.events(pending.id, CheckedProblemOrder)
     assert pending.strike_count == claimed.strike_count + 1
     response = CommsOrderDeliverTool.invoke(comms, request.arguments, caller=ThreadCaller("worker"))
     assert isinstance(FieldCodec.decode(TodoChanged, response).todo.order, ClaimedProblemOrder)
@@ -160,11 +168,73 @@ def test_failed_check_strike_releases_at_the_updated_revision(held_commander):
     released = store.apply(first.id, failure)
     assert released.assignment is None
     assert released.revision == first.revision + 2
-    assert released.strikes == (*first.strikes, failure)
-    assert released.released[-1].expected_revision == first.revision + 1
+    assert released.strike_count == first.strike_count + 1
+    latest_failure, = released.history.events(released.id, FailedCheckStrike, limit=1, descending=True)
+    latest_release, = released.history.events(released.id, ReleaseTodo, limit=1, descending=True)
+    assert latest_failure == failure
+    assert latest_release.expected_revision == first.revision + 1
     with pytest.raises(TodoConflict):
         store.apply(first.id, failure)
     assert store.get(first.id) == released
+
+
+def test_second_commander_strike_takes_the_task_away(held_commander):
+    ctx = held_commander
+    store = ctx.comms.goals.todos
+    todo = store.get("P1")
+    for reason in ("The first review found the original duplicated decision still present.",
+                   "The second review found the same duplicated decision restated in a new file."):
+        todo = store.apply(todo.id, StrikeTodo(
+            todo.revision, ctx.incarnation, todo.held(), reason,
+            evidence=(todo.order.checked().owner,),
+        ))
+    assert todo.holder is None
+    assert todo.strike_count == 2
+    latest_release, = todo.history.events(todo.id, ReleaseTodo, limit=1, descending=True)
+    latest_strike, = todo.history.events(todo.id, StrikeTodo, limit=1, descending=True)
+    assert latest_release.previous == latest_strike.previous
+
+
+def test_unstrike_below_the_limit_gives_the_task_back(held_commander):
+    """Two strikes take the task away; voiding the one recorded in error restores its holder
+    in the same write."""
+    ctx = held_commander
+    store = ctx.comms.goals.todos
+    todo = store.get("P1")
+    holder = todo.held()
+    for reason in ("The first review found the original duplicated decision still present.",
+                   "The same review counted the duplicated decision a second time in error."):
+        todo = store.apply(todo.id, StrikeTodo(
+            todo.revision, ctx.incarnation, todo.held(), reason,
+            evidence=(todo.order.checked().owner,),
+        ))
+    assert todo.holder is None
+    releases = todo.history.events(todo.id, ReleaseTodo)
+    main(["unstrike", "P1", "--why", "The second strike counted the same duplicated decision from the first review twice."], ctx)
+    restored = store.get("P1")
+    assert restored.held() == holder
+    assert len(restored.live_strikes()) == 1
+    assert restored.history.events(restored.id, ReleaseTodo) == releases
+
+
+def test_unstrike_does_not_undo_an_explicit_release(held_commander):
+    ctx = held_commander
+    store = ctx.comms.goals.todos
+    todo = store.get('P1')
+    struck = store.apply(todo.id, StrikeTodo(
+        todo.revision, ctx.incarnation, todo.held(),
+        'The first review counted a duplicated decision that the source did not contain.',
+        evidence=(todo.order.checked().owner,)))
+    released = store.apply(todo.id, ReleaseTodo(
+        struck.revision, ctx.incarnation, struck.held(),
+        StrikeReason('The commander deliberately moved the problem off this unit for independent work.')))
+    releases = released.history.events(released.id, ReleaseTodo)
+    main(['unstrike', 'P1', '--why',
+          'The cited duplicated decision was absent and this strike was recorded in error.'], ctx)
+    after = store.get(todo.id)
+    assert after.holder is None
+    assert not after.live_strikes()
+    assert after.history.events(after.id, ReleaseTodo) == releases
 
 
 def claimed_by_worker(ctx) -> Todo:
@@ -188,7 +258,7 @@ def corrected_order_file(ctx, source) -> str:
     marker.touch()
     now = time.time()
     document = OrderFile(
-        replace(order(source), id="corrected-order",
+        replace(order(source), id=OrderId.mint(),
                 check=OrderCheck(ctx.repos[0].checkout, f"test ! -e {shlex.quote(str(marker))}"),
                 at=RecordedEventTime(now), first_call_deadline=RecordedEventTime(now + 120)),
         "The claimed change keeps the duplicated decision the order told the unit to delete",
@@ -208,7 +278,7 @@ def test_corrected_order_to_the_claimant_replaces_its_claim(held_commander, cite
     corrected = ctx.comms.goals.todos.get("P1")
     assert isinstance(corrected.order, PendingProblemOrder)
     assert corrected.order.id != claimed.order.id
-    assert claimed.order in corrected.prior_orders
+    assert claimed.order in corrected.history.events(corrected.id, CheckedProblemOrder)
     assert corrected.holder == "worker"
     assert corrected.strike_count == claimed.strike_count
 
@@ -232,7 +302,7 @@ def test_two_delivery_claims_warn_without_deadlocking_other_orders(
         "P2", original.repo, "Repair the other held workflow", creator=lead,
         assigner=ctx.incarnation, owner=other, generation=other_order_goal_id,
         request=original.request.require(), review_at=RecordedEventTime(time.time() + 1000),
-        order=replace(original.order.checked(), id="other-order"),
+        order=replace(original.order.checked(), id=OrderId.mint()),
     )
     head = source.git(source.checkout, "rev-parse", "HEAD").strip()
     claims = []
@@ -255,20 +325,25 @@ def test_two_delivery_claims_warn_without_deadlocking_other_orders(
     capsys.readouterr()
     main(["say", "third", str(reply)], ctx)
     warning = capsys.readouterr().out
-    assert "WARNING: DELIVERY AWAITING JUDGEMENT worker P1" in warning
-    assert "WARNING: DELIVERY AWAITING JUDGEMENT other P2" in warning
+    assert "WARNING: JUDGE worker P1 delivery" in warning
+    assert "WARNING: JUDGE other P2 delivery" in warning
     assert store.get("P1") == claims[0]
     assert store.get("P2") == claims[1]
-    with pytest.raises(SystemExit, match="DELIVERY AWAITING JUDGEMENT worker P1"):
+    with pytest.raises(RecordProblems, match="JUDGE worker P1 delivery"):
         main(["say", "worker", str(reply), "--answers",
               claims[0].order.claim.message.message_id], ctx)
+    assert store.get("P1") == claims[0]
+    ask = comms.messaging.send(
+        "worker", ctx.commander, "Which owner do I wait on?", type=QuestionKind,
+    ).message
+    main(["say", "worker", str(reply), "--answers", ask.message_id], ctx)
     assert store.get("P1") == claims[0]
 
     main(["send", "worker", corrected_order_file(ctx, cited_source), "--clean"], ctx)
     corrected = store.get("P1")
     assert isinstance(corrected.order, PendingProblemOrder)
     assert corrected.order.commander_claims() == ()
-    assert claims[0].order in corrected.prior_orders
+    assert claims[0].order in corrected.history.events(corrected.id, CheckedProblemOrder)
     assert store.get("P2") == claims[1]
 
 
@@ -292,10 +367,30 @@ def test_claimed_order_takes_a_check_correction_through_the_real_verb(held_comma
     corrected = ctx.comms.goals.todos.get("P1")
     assert isinstance(corrected.order, ClaimedProblemOrder)
     assert corrected.order.check.command == "printf 1"
-    assert corrected.order.check_corrections[-1].previous == claimed.order.check
+    assert corrected.order.corrections[-1].previous == claimed.order.check
     assert (corrected.order.id, corrected.order.claim) == (claimed.order.id, claimed.order.claim)
     assert (corrected.holder, corrected.review_at, corrected.strike_count) == (
         claimed.holder, claimed.review_at, claimed.strike_count)
+
+
+def test_held_application_order_takes_a_run_correction_through_the_real_verb(held_commander):
+    ctx = held_commander
+    store = ctx.comms.goals.todos
+    current = store.get("P1")
+    stale = ApplicationOrderRun("The turn view shows the unit's newest turn after it ends.")
+    with store.writing() as connection:
+        replace(current, order=replace(current.order, run=stale),
+                revision=current.revision + 1).upsert(connection)
+    held = store.get("P1")
+
+    main(["run", "P1", "--run", "The order story shows the unit's newest tool call after it ends.",
+          "--why", "the recorded run names a turn view that a merged deletion removed"], ctx)
+    corrected = store.get("P1")
+    assert corrected.order.run == ApplicationOrderRun(
+        "The order story shows the unit's newest tool call after it ends.")
+    assert corrected.order.corrections[-1].previous == stale
+    assert (corrected.holder, corrected.review_at, corrected.strike_count) == (
+        held.holder, held.review_at, held.strike_count)
 
 
 def test_closed_problem_refuses_a_check_correction_and_writes_nothing(held_commander):

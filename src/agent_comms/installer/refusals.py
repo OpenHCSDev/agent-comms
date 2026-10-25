@@ -6,7 +6,6 @@ from typing import ClassVar
 
 from agent_comms.child_process import ChildOutcome
 from agent_comms.coordination_errors import CoordinationError
-from agent_comms.installer.owner_starts import OwnerStart
 from agent_comms.launch_runtime import LaunchRuntime
 
 
@@ -20,6 +19,13 @@ class UpgradeRefused(CoordinationError):
 
     def lines(self) -> tuple[str, ...]:
         return (f"Install failed: {self}",)
+
+
+class RuntimeWireChanged(UpgradeRefused):
+    """The outgoing runtime cannot decode the target's cross-runtime declarations."""
+
+    def __init__(self, commit: str, drift: tuple[str, ...]) -> None:
+        super().__init__(f"Installed Core {commit} has incompatible runtime wire: " + "; ".join(drift))
 
 
 class InterpreterWorkerDied(UpgradeRefused):
@@ -38,13 +44,11 @@ class InstallRolledBack(UpgradeRefused):
     def __init__(
         self,
         error: BaseException,
-        started: tuple[OwnerStart, ...],
         backup: str,
         *,
         runtime: LaunchRuntime,
     ):
         self.error = error
-        self.started = started
         self.backup = backup
         self.runtime = runtime
         super().__init__("; ".join(self.lines()))
@@ -53,6 +57,5 @@ class InstallRolledBack(UpgradeRefused):
         return (
             f"Install rolled back: {type(self.error).__name__}: {self.error}",
             f"Original runtime selected again: {self.runtime.prefix}",
-            *(line for owner in self.started for line in owner.lines()),
             f"Backup: {self.backup}",
         )

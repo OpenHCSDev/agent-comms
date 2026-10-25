@@ -11,7 +11,9 @@ from dataclasses import FrozenInstanceError, replace
 import pytest
 
 from agent_comms.child_process import SpawnedProcess
-from agent_comms.maintenance_barrier import MaintenanceNotHeldError
+from bus_record_fixture import (
+    OWNER_LOOKUP, RECIPIENT_LOOKUP, RENAMED_OWNER_LOOKUP, UNRELATED_LOOKUP,
+)
 from conftest import maintenance_held
 
 from agent_comms.coordination_tables.executions import NoPointedAttempt, NoPointedExecution, PointedAttempt, PointedExecution
@@ -31,7 +33,7 @@ from agent_comms.attempt_states import (
     SucceededAttempt,
 )
 from agent_comms.coordination_database import CoordinationStore
-from agent_comms.locked_store import StoreBusy
+from agent_comms.store_files import StoreBusy
 from agent_comms.coordination_errors import IntegrityViolationError, SchemaVersionError
 from agent_comms.coordination_schema import COORDINATION_SNAPSHOT_VERSION, CoordinatorTable
 from agent_comms.coordination_snapshot import RecoverySnapshot
@@ -66,8 +68,8 @@ from agent_comms.execution_states import (
     PendingExecution,
 )
 from agent_comms.attempt_states import AttemptState, LiveAttempt
-from agent_comms.field_codec import FieldCodec, MessageId
-from agent_comms.typed_table import JsonStorage
+from agent_comms.field_codec import AssignmentId, FieldCodec, MessageId
+from agent_comms.typed_table import HeldBusFile, JsonStorage
 from agent_comms.messages import InfoKind, Message
 from agent_comms.obligation_states import (
     PendingResponse,
@@ -81,7 +83,7 @@ def execution(*, status=PendingExecution, ordinal=None, origin=AcpOrigin):
     return ExecutionRecord(
         execution_id="execution-1",
         origin=origin,
-        owner_lookup="owner-1",
+        owner_lookup=OWNER_LOOKUP,
         revision=1,
         max_attempts=3,
         reason_code=NoReasonCode(),
@@ -95,7 +97,7 @@ def attempt(*, ordinal=1, phase=PromptStartingAttempt, generation=1, done=False,
     return AttemptRecord(
         execution_id="execution-1",
         attempt_ordinal=ordinal,
-        owner_lookup="owner-1",
+        owner_lookup=OWNER_LOOKUP,
         owner_generation=generation,
         owner_token_digest=f"digest-{generation}",
         revision=1,
@@ -109,9 +111,9 @@ def attempt(*, ordinal=1, phase=PromptStartingAttempt, generation=1, done=False,
 
 def assignment():
     return WakeAssignment(
-        assignment_id="claim-1",
+        assignment_id=AssignmentId("claim-1"),
         recipient="worker",
-        recipient_lookup="owner-1",
+        recipient_lookup=OWNER_LOOKUP,
         wire_seq=2,
         message_id=MessageId.mint("message-1"),
         audience=MessageAudience.DIRECT,
@@ -150,7 +152,7 @@ def snapshot(
         execution=record,
         attempt=attempt_record,
         links=(
-            (ExecutionAssignmentLink(record.execution_id, "claim-1", 0),)
+            (ExecutionAssignmentLink(record.execution_id, AssignmentId("claim-1"), 0),)
             if record.origin is WireOrigin
             else ()
         ),
@@ -190,7 +192,7 @@ def sql_execution(
     origin="acp",
     ordinal=None,
     max_attempts=3,
-    owner="p",
+    owner=OWNER_LOOKUP,
 ):
     ExecutionRecord(
         execution_id=name, origin=ExecutionProvenance.member_named(origin),
@@ -204,12 +206,12 @@ def sql_wire_execution(db, *, pending=True, name="e", target="requester"):
     db.execute("BEGIN IMMEDIATE")
     sql_execution(db, name=name, status="queued", origin="wire")
     WakeAssignment(
-        assignment_id="a", recipient="worker", recipient_lookup="p",
+        assignment_id=AssignmentId("a"), recipient="worker", recipient_lookup=OWNER_LOOKUP,
         wire_seq=2, message_id=MessageId.mint("m"), audience=MessageAudience.DIRECT,
         lifecycle=EngagedAssignment.build(FullWake(), name, target),
         accepted_at_ms=0, updated_at_ms=0, revision=1,
     ).insert(db)
-    ExecutionAssignmentLink(name, "a", 0).insert(db)
+    ExecutionAssignmentLink(name, AssignmentId("a"), 0).insert(db)
     ResponseObligation(name, target, PendingResponse(), None, 0, 0, 1).insert(db)
     if pending:
         db.execute(
@@ -222,7 +224,7 @@ def sql_wire_execution(db, *, pending=True, name="e", target="requester"):
     db.execute("COMMIT")
 
 
-def sql_attempt(db, name="e", ordinal=1, generation=1, owner="p", digest=None):
+def sql_attempt(db, name="e", ordinal=1, generation=1, owner=OWNER_LOOKUP, digest=None):
     AttemptRecord(
         execution_id=name, attempt_ordinal=ordinal, owner_lookup=owner,
          owner_generation=generation,
@@ -232,10 +234,11 @@ def sql_attempt(db, name="e", ordinal=1, generation=1, owner="p", digest=None):
     ).insert(db)
 
 
-def owner(db):
-    Participants(participant_lookup="p", committed=True).insert(db)
-    OwnerGenerations(owner_lookup="p",  generation=1).insert(db)
-    CurrentExecutions(owner_lookup="p", execution_id=NoPointedExecution(), attempt_ordinal=NoPointedAttempt(),
+def owner(db, lookup=OWNER_LOOKUP):
+    Participants(participant_lookup=lookup, committed=True).insert(db)
+    OwnerGenerations(owner_lookup=lookup, generation=1).insert(db)
+    CurrentExecutions(owner_lookup=lookup, execution_id=NoPointedExecution(),
+                      attempt_ordinal=NoPointedAttempt(),
                       pointer_revision=0).insert(db)
 
 
@@ -251,7 +254,7 @@ def activate(db, name="e", ordinal=1, generation=1):
     )
     db.execute(
         "UPDATE current_executions SET execution_id=?,attempt_ordinal=?,"
-        "pointer_revision=pointer_revision+1 WHERE owner_lookup='p'",
+        f"pointer_revision=pointer_revision+1 WHERE owner_lookup='{OWNER_LOOKUP}'",
         (name, ordinal),
     )
     db.execute("COMMIT")
@@ -280,7 +283,7 @@ def fail_defer(db, name="e", ordinal=1):
     )
     db.execute(
         "UPDATE current_executions SET execution_id=NULL,attempt_ordinal=NULL,"
-        "pointer_revision=pointer_revision+1 WHERE owner_lookup='p'"
+        f"pointer_revision=pointer_revision+1 WHERE owner_lookup='{OWNER_LOOKUP}'"
     )
     db.execute("COMMIT")
 
@@ -374,11 +377,11 @@ def test_wire_claim_obligation_and_publication_contract():
         item["claim_id"] for item in primitive["execution_claims"]
     ]
     with pytest.raises(IntegrityViolationError):
-        replace(valid, links=(ExecutionAssignmentLink(record.execution_id, "claim-1", 1),))
+        replace(valid, links=(ExecutionAssignmentLink(record.execution_id, AssignmentId("claim-1"), 1),))
     with pytest.raises(IntegrityViolationError):
-        replace(valid, links=(ExecutionAssignmentLink("other", "claim-1", 0),))
+        replace(valid, links=(ExecutionAssignmentLink("other", AssignmentId("claim-1"), 0),))
     with pytest.raises(IntegrityViolationError):
-        replace(valid, assignments=(replace(assignment(), recipient_lookup="other"),))
+        replace(valid, assignments=(replace(assignment(), recipient_lookup=RECIPIENT_LOOKUP),))
     with pytest.raises(IntegrityViolationError):
         replace(
             valid,
@@ -462,7 +465,7 @@ def test_database_version_privacy_and_reopen(db):
             reopened._connection.execute("SELECT participant_lookup FROM participants").fetchone()[
                 0
             ]
-            == "p"
+            == OWNER_LOOKUP
         )
 
 
@@ -719,7 +722,7 @@ def test_retry_creates_contiguous_fresh_attempt_and_preserves_n(db):
     fail_defer(c)
     with pytest.raises(sqlite3.IntegrityError):
         sql_attempt(c, ordinal=3, generation=1)
-    c.execute("UPDATE owner_generations SET generation=2 WHERE owner_lookup='p'")
+    c.execute(f"UPDATE owner_generations SET generation=2 WHERE owner_lookup='{OWNER_LOOKUP}'")
     c.execute("BEGIN IMMEDIATE")
     sql_attempt(c, ordinal=2, generation=2)
     c.execute(
@@ -730,7 +733,7 @@ def test_retry_creates_contiguous_fresh_attempt_and_preserves_n(db):
     )
     c.execute(
         "UPDATE current_executions SET execution_id='e',attempt_ordinal=2,"
-        "pointer_revision=3 WHERE owner_lookup='p'"
+        f"pointer_revision=3 WHERE owner_lookup='{OWNER_LOOKUP}'"
     )
     c.execute("COMMIT")
     with CoordinationStore(path) as reopened:
@@ -773,7 +776,7 @@ def test_retry_creates_contiguous_fresh_attempt_and_preserves_n(db):
     )
     c.execute(
         "UPDATE current_executions SET execution_id=NULL,attempt_ordinal=NULL,"
-        "pointer_revision=4 WHERE owner_lookup='p'"
+        f"pointer_revision=4 WHERE owner_lookup='{OWNER_LOOKUP}'"
     )
     c.execute(
         (
@@ -851,7 +854,7 @@ def test_failed_attempt_must_settle_failed_when_retry_unauthorized(db, authority
             )
         c.execute(
             "UPDATE current_executions SET execution_id=NULL,attempt_ordinal=NULL,"
-            "pointer_revision=2 WHERE owner_lookup='p'"
+            f"pointer_revision=2 WHERE owner_lookup='{OWNER_LOOKUP}'"
         )
         c.execute("COMMIT")
     c.execute("ROLLBACK")
@@ -871,7 +874,7 @@ def test_failed_attempt_must_settle_failed_when_retry_unauthorized(db, authority
         )
     c.execute(
         "UPDATE current_executions SET execution_id=NULL,attempt_ordinal=NULL,"
-        "pointer_revision=2 WHERE owner_lookup='p'"
+        f"pointer_revision=2 WHERE owner_lookup='{OWNER_LOOKUP}'"
     )
     c.execute("COMMIT")
     with CoordinationStore(path) as reopened:
@@ -910,7 +913,7 @@ def test_authorized_retry_rejects_post_attempt_failed_and_cannot_arrive_later(db
     )
     c.execute(
         "UPDATE current_executions SET execution_id=NULL,attempt_ordinal=NULL,"
-        "pointer_revision=2 WHERE owner_lookup='p'"
+        f"pointer_revision=2 WHERE owner_lookup='{OWNER_LOOKUP}'"
     )
     c.execute("COMMIT")
     with pytest.raises(sqlite3.IntegrityError):
@@ -938,7 +941,7 @@ def test_missing_replay_cannot_later_reauthorize_failed(db):
     )
     c.execute(
         "UPDATE current_executions SET execution_id=NULL,attempt_ordinal=NULL,"
-        "pointer_revision=2 WHERE owner_lookup='p'"
+        f"pointer_revision=2 WHERE owner_lookup='{OWNER_LOOKUP}'"
     )
     c.execute("COMMIT")
     with CoordinationStore(path) as reopened:
@@ -991,7 +994,7 @@ def test_owner_generation_cannot_advance_while_attempt_active(db):
     sql_execution(c)
     activate(c)
     with pytest.raises(sqlite3.IntegrityError):
-        c.execute("UPDATE owner_generations SET generation=2 WHERE owner_lookup='p'")
+        c.execute(f"UPDATE owner_generations SET generation=2 WHERE owner_lookup='{OWNER_LOOKUP}'")
     with pytest.raises(sqlite3.IntegrityError):
         sql_attempt(c, ordinal=2, generation=1)
     with pytest.raises(sqlite3.IntegrityError):
@@ -1006,7 +1009,7 @@ def test_direct_sql_immutable_attempt_identity_and_monotonic_evidence(db):
         "attempt_ordinal=2",
         "owner_generation=2",
         "owner_token_digest='changed'",
-        "owner_lookup='renamed'",
+        f"owner_lookup='{RENAMED_OWNER_LOOKUP}'",
         "lifecycle=json_set(lifecycle,'$.backend_done',json('true'),'$.process_dead',json('true'),"
         "'$.lease_expires_at_ms',499),revision=2,last_progress_at_ms=5,updated_at_ms=5",
     ):
@@ -1070,7 +1073,8 @@ def test_completed_wire_requires_succeeded_attempt_and_terminal_obligation(
                                   lifecycle=SilentResponse())
     WakeAssignment.update(c, where="assignment_id='a'", revision=2,
                           lifecycle=CompletedAssignment.build(FullWake(), "e", "requester"))
-    CurrentExecutions.update(c, where="owner_lookup='p'", execution_id=NoPointedExecution(),
+    CurrentExecutions.update(c, where=f"owner_lookup='{OWNER_LOOKUP}'",
+                             execution_id=NoPointedExecution(),
                              attempt_ordinal=NoPointedAttempt(), pointer_revision=2)
     completion = (
         "UPDATE executions SET lifecycle=json_set(lifecycle,'$.kind','completed'),"
@@ -1143,11 +1147,11 @@ def test_membership_ordinals_contiguous_and_frozen_after_activation(db):
     c, path = db
     sql_wire_execution(c, pending=False)
 
-    original = WakeAssignment.one(c, assignment_id="a")
+    original = WakeAssignment.one(c, assignment_id=AssignmentId("a"))
     assert original is not None
 
     def bind(identifier, seq):
-        replace(original, assignment_id=identifier, wire_seq=seq).insert(c)
+        replace(original, assignment_id=AssignmentId(identifier), wire_seq=seq).insert(c)
 
     c.execute("BEGIN IMMEDIATE")
     bind("b", 3)
@@ -1187,10 +1191,10 @@ def test_new_attempt_fence_must_advance_and_change_digest(db):
     fail_defer(c)
     with pytest.raises(sqlite3.IntegrityError):
         sql_attempt(c, ordinal=2, generation=1)
-    c.execute("UPDATE owner_generations SET generation=2 WHERE owner_lookup='p'")
+    c.execute(f"UPDATE owner_generations SET generation=2 WHERE owner_lookup='{OWNER_LOOKUP}'")
     with pytest.raises(sqlite3.IntegrityError):
         sql_attempt(c, ordinal=2, generation=2, digest="digest-1")
-    c.execute("UPDATE owner_generations SET generation=3 WHERE owner_lookup='p'")
+    c.execute(f"UPDATE owner_generations SET generation=3 WHERE owner_lookup='{OWNER_LOOKUP}'")
     c.execute("BEGIN IMMEDIATE")
     sql_attempt(c, ordinal=2, generation=3)
     c.execute(
@@ -1201,7 +1205,7 @@ def test_new_attempt_fence_must_advance_and_change_digest(db):
     )
     c.execute(
         "UPDATE current_executions SET execution_id='e',attempt_ordinal=2,"
-        "pointer_revision=3 WHERE owner_lookup='p'"
+        f"pointer_revision=3 WHERE owner_lookup='{OWNER_LOOKUP}'"
     )
     c.execute("COMMIT")
     with CoordinationStore(path) as reopened:
@@ -1215,14 +1219,11 @@ def test_fence_digest_is_globally_unique_across_executions(db):
     c, path = db
     sql_execution(c)
     activate(c)
-    Participants(participant_lookup="q", committed=True).insert(c)
-    OwnerGenerations(owner_lookup="q",  generation=1).insert(c)
-    CurrentExecutions(owner_lookup="q", execution_id=NoPointedExecution(), attempt_ordinal=NoPointedAttempt(),
-                      pointer_revision=0).insert(c)
-    sql_execution(c, name="other-e", owner="q")
+    owner(c, UNRELATED_LOOKUP)
+    sql_execution(c, name="other-e", owner=UNRELATED_LOOKUP)
     c.execute("BEGIN IMMEDIATE")
     with pytest.raises(sqlite3.IntegrityError):
-        sql_attempt(c, name="other-e", owner="q", digest="digest-1")
+        sql_attempt(c, name="other-e", owner=UNRELATED_LOOKUP, digest="digest-1")
     c.execute("ROLLBACK")
     with CoordinationStore(path) as reopened:
         assert reopened._connection.execute("SELECT count(*) FROM attempts").fetchone()[0] == 1
@@ -1233,12 +1234,12 @@ def test_fence_digest_is_globally_unique_across_executions(db):
 def test_claim_target_and_recipient_lineage_is_immutable(db):
     c, path = db
     sql_wire_execution(c, pending=False)
-    Participants(participant_lookup="other", committed=True).insert(c)
-    original = WakeAssignment.one(c, assignment_id="a")
+    Participants(participant_lookup=RECIPIENT_LOOKUP, committed=True).insert(c)
+    original = WakeAssignment.one(c, assignment_id=AssignmentId("a"))
     assert original is not None
     c.execute("BEGIN IMMEDIATE")
-    replace(original, assignment_id="b", recipient="other-worker",
-            recipient_lookup="other", wire_seq=3).insert(c)
+    replace(original, assignment_id=AssignmentId("b"), recipient="other-worker",
+            recipient_lookup=RECIPIENT_LOOKUP, wire_seq=3).insert(c)
     with pytest.raises(sqlite3.IntegrityError):
         c.execute("INSERT INTO execution_claims VALUES ('e','b',1)")
     with pytest.raises(sqlite3.IntegrityError):
@@ -1421,10 +1422,10 @@ def test_unexplained_columns_and_symlinks_rejected(tmp_path):
         pass
     with sqlite3.connect(path) as c:
         c.execute("ALTER TABLE participants ADD COLUMN unexplained TEXT")
-    with pytest.raises(MaintenanceNotHeldError):
+    with pytest.raises(SchemaVersionError, match=HeldBusFile.carry_verb):
         CoordinationStore(path)
     with maintenance_held(tmp_path), pytest.raises(SchemaVersionError):
-        CoordinationStore(path)
+        CoordinationStore.reconcile_at(path)
     link = tmp_path / "link"
     link.symlink_to(path)
     with pytest.raises(IntegrityViolationError):

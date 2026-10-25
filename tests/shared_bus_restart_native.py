@@ -3,6 +3,7 @@
 Only the localhost provider is controlled. Worker, registry, bus, selected
 claim_scope, native process, source proof and response publication remain real.
 """
+from agent_comms.store_files import ExclusiveLock, UNBOUNDED_CONTENTION
 from agent_comms.controller import SessionUpdateSink
 
 from agent_comms.channel_targets import CommandTarget
@@ -202,7 +203,7 @@ async def configured_pure_channel(arguments):
     observer = asyncio.create_task(observe_original_bus()) if arguments.busy_reader else None
     try:
         sender = service.registry.require('human')
-        with _store_lock(service._wire_lock_path):
+        with _store_lock(service._wire_lock_path, ExclusiveLock(), UNBOUNDED_CONTENTION):
             originals = [service.bus.publisher.publish_ordinary(Message(sender.name, '#openhcs',
                 f'{stage.name} original {ordinal}: New isolated user channel question to all participants: '
                 'please answer here with the value of 10+2. This is a fresh question, '
@@ -394,7 +395,7 @@ async def configured_cancel_continue(arguments, service, attachment, name, sende
     from agent_comms.store_files import _store_lock
 
     def publish(label):
-        with _store_lock(service._wire_lock_path):
+        with _store_lock(service._wire_lock_path, ExclusiveLock(), UNBOUNDED_CONTENTION):
             return service.bus.publisher.publish_ordinary(Message(sender.name, '#openhcs',
                 f'{stage.name} {label}: Fresh isolated acceptance question, not a retry. '
                 'Please answer here with 10+2 only; do not resume inherited work or edit files.',
@@ -489,7 +490,7 @@ async def configured_mixed_routes(arguments):
     service.registry.declare(Thread('human', frozenset(), str(project), role=UserThreadRole))
     service.registry.declare(Thread(name, frozenset({'team'}), str(project), model=configured.model, thinking_level=configured.thinking_level, task=GivenThreadText('Answer each original route accurately once; do not expose direct-message content to a channel.')))
     sender = service.registry.require('human')
-    with _store_lock(service._wire_lock_path):
+    with _store_lock(service._wire_lock_path, ExclusiveLock(), UNBOUNDED_CONTENTION):
         originals = [service.bus.publisher.publish_ordinary(Message(sender.name, target, body,
             InfoKind), destination=CommandTarget.named(target), origin=HumanOrigin(sender.name,sender.created_at,sender.worktree))
             for target, body in (
@@ -525,7 +526,7 @@ async def configured_mixed_routes(arguments):
                         assert len(inputs) == 1 and inputs[0].reference_stage is FullNativeExecution
                         membership = inputs[0].execution.source_assignment_ids(db,inputs[0].input_id)
                         assert len(membership) == len(originals), "First native input did not capture the whole wave"
-                        with _store_lock(service._wire_lock_path):
+                        with _store_lock(service._wire_lock_path, ExclusiveLock(), UNBOUNDED_CONTENTION):
                             late = service.bus.publisher.publish_ordinary(Message(sender.name,name,
                                 f'{stage.name}: Separate late batch: compute 20+3; reply directly and once.',InfoKind),
                                 destination=CommandTarget.named(name), origin=HumanOrigin(sender.name,sender.created_at,sender.worktree))
@@ -725,7 +726,7 @@ class PublishOriginalsAtStoppedBatch(StoppedOwnerInstallation):
 
         # Both original publications precede claim_scope, under the same existing
         # wire ownership. No observer can reserve the first between the two.
-        with _store_lock(self.service._wire_lock_path):
+        with _store_lock(self.service._wire_lock_path, ExclusiveLock(), UNBOUNDED_CONTENTION):
             sender = self.service.registry.require('human')
             self.originals = [self.service.bus.publisher.publish_ordinary(
                 Message(sender.name, '#team', body, InfoKind),
@@ -914,7 +915,7 @@ async def run(arguments):
             for owner in opened_owners:
                 # The real ignored claim and still-open original journal place
                 # this hold after native result settlement, inside corroboration.
-                with _store_lock(service.root/'wire'):
+                with _store_lock(service.root / 'wire', ExclusiveLock(), UNBOUNDED_CONTENTION):
                     begun = time.monotonic()
                     while not contention_release.is_set() and time.monotonic()-begun < 15:
                         stack = subprocess.run(
@@ -967,18 +968,18 @@ async def run(arguments):
             contender.start()
         if arguments.saved_source:
             from agent_comms.store_files import _store_lock
-            with _store_lock(service.root/'wire'):
+            with _store_lock(service.root / 'wire', ExclusiveLock(), UNBOUNDED_CONTENTION):
                 sender = service.registry.require('human')
                 cutover.originals = [service.bus.publisher.publish_ordinary(
                     Message(sender.name, '#team',
                         'New isolated retained-source triage: ignore THIS original once.', InfoKind),
                     destination=CommandTarget.named('#team'), origin=HumanOrigin(sender.name, sender.created_at, sender.worktree))]
-            from agent_comms.coordination_cohort import accept_delivery_cohort
+            from conftest import accept_initial
             initial = service.bus.bus.delivery(cutover.originals[0].seq)
             with Coordination(str(service.root/'coordination.sqlite3')) as store:
                 for audience in initial.recipients:
                     store.participants.register(audience.recipient_lookup, committed=True)
-                accept_delivery_cohort(service.bus, root_id, cutover.originals[0].seq, store)
+                accept_initial(service.bus, root_id, cutover.originals[0].seq, store)
         else:
             result = await asyncio.to_thread(
                 service.owners.restart_owners, OwnersNamed(tuple(names)), cutover=cutover)

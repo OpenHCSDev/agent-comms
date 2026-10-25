@@ -7,9 +7,8 @@ from abc import abstractmethod
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field, replace
 from typing import TYPE_CHECKING, Annotated, ClassVar, Self
-from uuid import uuid4
 
-from agent_comms.field_codec import GoalId
+from agent_comms.field_codec import GoalId, GoalWaitId, MessageId, RetryDecisionId
 from agent_comms import field_codec
 from agent_comms.goals import (
     Goal,
@@ -22,6 +21,8 @@ from agent_comms.goals import (
     UnobservedGoalCheckpoint,
     UnorderedGoalOrder,
 )
+
+from .field_codec import FieldCodec
 from .input_key import InputKey, InputKeyText
 from agent_comms.input_disposition import InputDispositions
 from agent_comms.todos import (
@@ -34,6 +35,7 @@ from .command import Command
 from .declared_family import DeclaredFamily
 from .errors import OverdueHeadRefusalError, RelationViolationError
 from .goal_mentions import bind_goal_mentions
+from .goal_scope import AllGoals, OneGoal
 from .goal_states import (
     ActiveGoal,
     BlockedGoal,
@@ -50,13 +52,17 @@ from .owner_requests import OwnerRequestId
 from .progress_claims import ProgressClaim
 from .recorded_time import EventTime
 from .repository_name import RepositoryName
+from .standing_rules import OrderRefusingStandingRule
 from .thread_identity import ThreadIncarnation
 from .threads import Thread
 from .reported_turn import ReportedTurnState
+from .attempt_resolution import ComplianceDecision, OrderDecision, RetryDecision
 
 if TYPE_CHECKING:
     from .goal_management import Goals
+    from .registry_document import CommanderProject
     from .goal_presentation import GoalSnapshot
+
 
 
 class ModelInvocable:
@@ -77,7 +83,7 @@ class OwnerControlInvocable:
 
 @dataclass(frozen=True)
 class GoalPrecondition:
-    goal_id: GoalId | None = None
+    goal_id: OneGoal | AllGoals = AllGoals()
     expected_state: GoalState | None = None
     expected_goal: GoalDeclaration = NoGoal()
     expected_owner: ProcessIdentity | None = None
@@ -95,8 +101,7 @@ class GoalPrecondition:
         ):
             raise ValueError("The goal owner changed; refresh its state.")
         self.expected_goal.check_expected(goal)
-        if self.goal_id is not None:
-            goal.require().require_id(self.goal_id)
+        self.goal_id.require(goal)
         if self.expected_state is not None:
             goal.require().require_state(self.expected_state)
 
@@ -131,7 +136,7 @@ class GoalAction[Result: GoalDeclaration](
     @classmethod
     def model_precondition(cls, goal_id: GoalId) -> GoalPrecondition:
         """What the unit's own goal tool expects before this action: its active goal."""
-        return GoalPrecondition(goal_id=goal_id, expected_state=ActiveGoal())
+        return GoalPrecondition(goal_id=OneGoal(goal_id), expected_state=ActiveGoal())
 
     @classmethod
     async def submit_control(
@@ -145,7 +150,6 @@ class GoalAction[Result: GoalDeclaration](
 
     @classmethod
     async def submit_checkpoint(cls, invoke: Callable[..., Awaitable[dict]], goal: Goal) -> dict:
-        from .field_codec import FieldCodec
         from .runtime_requests import UpdateGoalRuntimeRequest
 
         return await invoke(
@@ -255,7 +259,7 @@ class CompliedGoalAction(TransitionGoalAction, OwnerInvocable):
     as a fresh order continues it (continue_work), where a status-only resume is refused.
     Only Core's release takes it; no model or control surface can name a witness."""
 
-    witness: str
+    witness: MessageId
 
     def require_order(self, goal: Goal, ctx: GoalActionContext) -> None:
         """Lifting the heartbeat's hold restores the goal it paused. Its problems may close
@@ -267,7 +271,7 @@ class CompliedGoalAction(TransitionGoalAction, OwnerInvocable):
     def before_transition(self, goal: Goal, ctx: GoalActionContext) -> None:
         store = ctx.goals.open_goal_store()
         generation = store.require_generation(goal.id)
-        generation.lifecycle.continue_work(store, generation, self.witness)
+        generation.lifecycle.continue_work(store, generation, ComplianceDecision(self.witness))
         resumed = store.require_generation(goal.id)
         resumed.lifecycle.resume_status(resumed, goal, ctx)
 
@@ -341,13 +345,13 @@ class PreparedStandbyGoalAction(StandbyGoalAction, declared_name=None):
             )
         snapshot = ctx.goals.registry.snapshot()
         if not any(
-            ctx.goals.agents.is_live(target.incarnation, snapshot)
+            ctx.goals.agents.answers_later(target.incarnation, snapshot)
             for target in wait_targets
         ):
             names = ", ".join(f"@{target.incarnation.name}" for target in wait_targets)
             raise ValueError(
-                f"No declared dependency is live ({names}). "
-                "Inspect its registered process before declaring standby."
+                f"No thread this wait names will answer ({names}): none has a live bridge or "
+                "process. Inspect its registered process before declaring standby."
             )
         closed = GoalWaits.closed_wait_group(
             thread.name,
@@ -377,7 +381,7 @@ class PreparedStandbyGoalAction(StandbyGoalAction, declared_name=None):
         ctx.goals.waits.record(
             RecordedGoalWait(
                 goal.id,
-                uuid4().hex,
+                GoalWaitId.mint(),
                 goal.revision,
                 review.through_seq,
                 wait_targets,
@@ -501,7 +505,6 @@ class SetGoalAction(ReplacementGoalAction[Goal], OwnerInvocable, RuntimeInvocabl
 
     @classmethod
     async def submit_control(cls, observe, invoke, text: str = "") -> dict:
-        from .field_codec import FieldCodec
         from .runtime_requests import SetGoalRuntimeRequest
 
         return await invoke(FieldCodec.encode(SetGoalRuntimeRequest), text=text)
@@ -554,7 +557,7 @@ class ProblemOrderGoalAction(GoalAction[Goal], RuntimeInvocable):
         self.reserve(ctx, goal.id)
         store = ctx.goals.open_goal_store()
         generation = store.require_generation(goal.id)
-        generation.lifecycle.continue_work(store, generation, self.order.id)
+        generation.lifecycle.continue_work(store, generation, OrderDecision(self.order.id))
         revision = goal.revision + 1
         return replace(goal, order=ProblemGoalOrder(), text=ProblemGoalOrder.text, progress="",
                        revision=revision, mention_source=bind_goal_mentions(
@@ -567,22 +570,20 @@ class ProblemOrderGoalAction(GoalAction[Goal], RuntimeInvocable):
 
     def require_reviewed(self, goals: Goals) -> None:
         """Read remote review facts before the registry lock or child allocation."""
-        from .standing_rules import OrderRefusingStandingRule
-
         if refused := OrderRefusingStandingRule.refusals(goals, self.commander):
             raise OverdueHeadRefusalError("Review overdue heads before sending new orders:\n" + "\n".join(refused))
 
     def require_ready(self, ctx: GoalActionContext) -> None:
         """Recheck local request facts before goal reservation or allocating a child."""
-        self.require_sendable()
+        self.require_sendable(ctx.goals.registry.snapshot().commander_project)
         commander = ctx.goals.registry.require(self.commander)
         ctx.goals.todos.owner_request(self.request).require_open(commander.incarnation)
         self.review_at.require_recorded("A review time")
 
-    def require_sendable(self) -> None:
+    def require_sendable(self, project: CommanderProject) -> None:
         """A new order's wording and source references hold at its declared revision."""
         self.order.require_wording()
-        self.order.require_references()
+        self.order.require_references(project)
         self.order.check.require_directory()
 
     def create(self, ctx: GoalActionContext) -> Goal:
@@ -628,7 +629,7 @@ class ReissuedOrderGoalAction(OrderGoalAction):
             assigner=todo.acting_assigner,
             traced=order.owner)
 
-    def require_sendable(self) -> None:
+    def require_sendable(self, project: CommanderProject) -> None:
         pass
 
 
@@ -694,11 +695,10 @@ class RetryGoalAction(TransitionGoalAction, ModelInvocable, OwnerInvocable, Runt
 
     @classmethod
     def model_precondition(cls, goal_id: GoalId) -> GoalPrecondition:
-        return GoalPrecondition(goal_id=goal_id)
+        return GoalPrecondition(goal_id=OneGoal(goal_id))
 
     @classmethod
     async def submit_checkpoint(cls, invoke, goal: Goal) -> dict:
-        from .field_codec import FieldCodec
         from .runtime_requests import RetryGoalRuntimeRequest
 
         return await invoke(
@@ -712,4 +712,4 @@ class RetryGoalAction(TransitionGoalAction, ModelInvocable, OwnerInvocable, Runt
     def require_transition(self, goal: Goal, state: GoalState, ctx: GoalActionContext) -> None:
         """A blocked goal leaves its state machine only through the attempt ledger's retry."""
         store = ctx.goals.open_goal_store()
-        store.authorize_current_retry(goal.id, uuid4().hex)
+        store.authorize_current_retry(goal.id, RetryDecision(RetryDecisionId.mint()))

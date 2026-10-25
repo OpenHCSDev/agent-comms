@@ -15,13 +15,13 @@ import time
 import traceback
 from abc import ABC, abstractmethod
 from collections import deque
-from collections.abc import Callable
+from collections.abc import Callable, Iterable, Iterator
 from contextlib import AbstractContextManager, ExitStack, closing, contextmanager, suppress
 from dataclasses import dataclass, field, replace
 from datetime import datetime
 from functools import cached_property, partial
 from pathlib import Path
-from typing import Annotated, ClassVar, Generic, Literal, Self, TextIO, TypeVar
+from typing import TYPE_CHECKING, Annotated, ClassVar, Generic, Literal, Self, TextIO, TypeVar
 
 from pydantic import Field, InstanceOf, PlainSerializer, PlainValidator, model_validator
 
@@ -33,6 +33,7 @@ from agent_comms.change_report import NoChangeReport, ReportEvidence
 from agent_comms.child_process import (
     AttachedChild,
     OutlivesLauncherLifetime,
+    Platform,
     ProcessIdentity,
     SpawnedProcess,
     StreamingChildStdio,
@@ -59,6 +60,7 @@ from agent_comms.coordination_errors import CoordinationError
 from agent_comms.declared_family import DeclaredFamily
 from agent_comms.declared_verb import DeclaredOptions
 from agent_comms.field_codec import FieldCodec, MessageId, PathText, SubclassUnion
+from agent_comms.installer.refusals import UpgradeRefused
 from agent_comms.launch_runtime import LaunchRuntime
 from agent_comms.message_reference import (
     BridgeBeginning,
@@ -68,6 +70,7 @@ from agent_comms.message_reference import (
     MessageReference,
 )
 from agent_comms.read_basis import ExplicitWatchAcknowledgment
+from agent_comms.registration import Registration
 from agent_comms.runtime_updates import ReplyingThreadOutput, RuntimeUpdate, ThreadOutput
 from agent_comms.send_result import SendResult
 from agent_comms.thread_execution import ExternalThreadExecution
@@ -84,7 +87,7 @@ from agent_comms.typed_table import (
     WriterOwnedFile,
 )
 from agent_comms.wire_models import WireModel
-from agent_comms_hooks.watch import HeldClaim, WatchClaim, WatchRecord
+from agent_comms_hooks.watch import HeldClaim, NoSessionBridge, WatchClaim, WatchRecord
 
 from ..locked_store import RegistryFile, SQLiteFile
 from .monitor import (
@@ -102,6 +105,9 @@ from .monitor import (
     read_monitor,
 )
 
+if TYPE_CHECKING:
+    from agent_comms.task_attachments.commander_pings import CommanderUpdate
+
 
 class BridgeStateTable(DurableTables):
     """The bridge's delivery.sqlite3: its binding and every delivery attempt.
@@ -112,7 +118,7 @@ class BridgeStateTable(DurableTables):
     """
 
     __slots__ = ()
-    filename = 'delivery.sqlite3'
+    filename = WatchRecord.store_name
 
 
 class BindingRequest(ABC):
@@ -302,11 +308,6 @@ class BindingIdentity(SessionBinding):
         current = comms.registry.snapshot().by_lookup[self.owner.require_recorded().lookup]
         return current.incarnation
 
-    def same_reader(self, other: BindingIdentity) -> bool:
-        """A transport session may change without changing the bus reader."""
-        return self.owner == other.owner
-
-
 @dataclass(frozen=True)
 class Binding(BindingIdentity, BridgeStateTable, TypedTable, BindingRequest):
 
@@ -346,7 +347,7 @@ class Binding(BindingIdentity, BridgeStateTable, TypedTable, BindingRequest):
             if not Binding.select(db):
                 self.insert(db)
             stored = StoredBinding().bind(db)
-            if not stored.same_reader(self):
+            if stored.owner != self.owner:
                 raise ValueError('This state directory belongs to another Core/CLI conversation')
             Binding.update(db, where='1', root=self.root, thread=self.thread, owner=self.owner)
             return replace(stored, root=self.root, thread=self.thread, owner=self.owner)
@@ -460,17 +461,21 @@ class DeliveryRow(JournalMessage, BridgeStateTable, TypedTable):
     indexes = (ExpressionIndex((sequence_sql,)),)
 
     @classmethod
-    def latest(cls, db: sqlite3.Connection) -> tuple[JournalMessage, ...]:
-        """The sequence index selects the newest attempt, including uncertain emissions."""
-        return tuple(JournalMessage.read(db.execute(
-            f'SELECT {JournalMessage._select_list(cls)} FROM "{cls.declared_name}" '
-            f'ORDER BY {cls._sql(cls.sequence_sql)} DESC LIMIT 1')))
+    def latest_reference(cls, db: sqlite3.Connection) -> tuple[MessageReference, ...]:
+        """The sequence index selects the newest attempt, including uncertain emissions;
+        the cursor is its seq and id, so a payload in an older wire shape never decodes."""
+        sequence = cls._sql(cls.sequence_sql)
+        return tuple(
+            MessageReference(seq, FieldCodec.decode(MessageId, message_id))
+            for seq, message_id in db.execute(
+                f'SELECT {sequence}, {cls._sql("{id}")} FROM "{cls.declared_name}" '
+                f'ORDER BY {sequence} DESC LIMIT 1'))
 
     @classmethod
     def resume_after(cls, db: sqlite3.Connection, binding: SessionBinding) -> InboxStart:
         """The binding and journal own progress, including uncertain emissions."""
-        latest = cls.latest(db)
-        return max((binding.start, *(BridgeStart(row.message.reference) for row in latest)),
+        return max((binding.start, *(BridgeStart(reference)
+                                     for reference in cls.latest_reference(db))),
                    key=lambda point: point.cursor())
 
     outcome: Annotated[type[Outcome], Column(index=True)]
@@ -675,8 +680,6 @@ class Inbox(Operation[OperationBridge]):
 
     async def start(self, bridge: OperationBridge, tasks: asyncio.TaskGroup,
                     endpoint: ExitStack) -> None:
-        from agent_comms.registration import Registration
-
         registry = await asyncio.to_thread(
             Registration, RegistryFile.path_in(Path(bridge.binding.root)))
         await bridge.comms.bus.when_open(lambda: endpoint.enter_context(
@@ -878,6 +881,9 @@ class ResumableBridge(ABC):
     @abstractmethod
     def release(self) -> ConfirmableBridge: ...
 
+    def require_paused(self) -> None:  # noqa: B027 - default hook
+        """A pause the bridge acknowledged, or one with nothing left to pause, refuses nothing."""
+
 
 @dataclass(frozen=True)
 class BridgeResume(ResumableBridge, ConfirmableBridge, DeclaredFamily, affix="Bridge"):
@@ -918,9 +924,44 @@ class ResumedBridge(BridgeResume):
 
 
 @dataclass(frozen=True)
-class OwnerExitedBridge(BridgeResume):
+class UnacknowledgedPause(UnresumedBridge):
+    """A bridge that never answered pause may still hold bus resources: install refuses."""
+
+    socket: Path
+    timeout: float
+    paused: PausedSessionBridge = field(compare=False, repr=False)
+
+    def require_paused(self) -> None:
+        raise UpgradeRefused(str(self))
+
+    def release(self) -> Self:
+        """The bridge may still be closing its bus resources; its runtime waits in the socket
+        for the ready it writes once they close, so it resumes instead of staying stopped.
+        The refusal stands."""
+        self.paused.release()
+        return self
+
+    def lines(self) -> tuple[str, ...]:
+        return (f"Session bridge {self.name} at {self.socket} did not acknowledge pause "
+                f"within {self.timeout:g} s",)
+
+
+class StoppedBridge(BridgeResume):
+    """Nothing is left serving the claim, which is all a pause asks: no failure."""
+
+
+@dataclass(frozen=True)
+class OwnerExitedBridge(StoppedBridge):
     def lines(self) -> tuple[str, ...]:
         return (f"Session bridge {self.name}: owner exited; left stopped",)
+
+
+@dataclass(frozen=True)
+class ExitedBridge(StoppedBridge):
+    """Its socket closed unanswered and its own process has exited."""
+
+    def lines(self) -> tuple[str, ...]:
+        return (f"Session bridge {self.name}: bridge exited during pause; left stopped",)
 
 
 @dataclass(frozen=True)
@@ -958,8 +999,23 @@ class SessionBridge:
         request = PauseSession(owner=self.observed.owner, process=self.observed.process)
         peer = resources.enter_context(request.connection(self.claim.socket_path))
         stream = resources.enter_context(peer.makefile('rb'))
-        request.decode_reply(stream.readline(4096))
-        return PausedSessionBridge(self, peer)
+        paused = PausedSessionBridge(self, peer)
+        try:
+            request.read_reply(stream)
+        except TimeoutError:
+            return UnacknowledgedPause(self.claim.thread, self.claim.socket_path,
+                                       request.reply_timeout, paused)
+        except ConnectionResetError:
+            return self.closed(paused, request.reply_timeout)
+        return paused
+
+    def closed(self, paused: PausedSessionBridge, timeout: float) -> ResumableBridge:
+        """A socket closed unanswered: stopped once its own process has exited, otherwise the
+        live process may still hold bus resources and the pause stays unacknowledged."""
+        Platform.current().wait_any_exited((self.observed.process,), timeout)
+        if self.observed.process.alive():
+            return UnacknowledgedPause(self.claim.thread, self.claim.socket_path, timeout, paused)
+        return ExitedBridge(self.claim.thread)
 
 
 @dataclass
@@ -971,8 +1027,19 @@ class SessionBridgeResumes:
     released: deque[ConfirmableBridge] = field(default_factory=deque)
     outcomes: list[BridgeResume] = field(default_factory=list)
 
-    def pause(self, bridge: SessionBridge, resources: ExitStack) -> None:
-        self.paused.append(bridge.pause(resources))
+    @contextmanager
+    def holding(self, bridges: Iterable[SessionBridge]) -> Iterator[None]:
+        """Each paused peer keeps its socket until released. Every exit releases and confirms
+        what is still paused, so no bridge waits on a runtime that never comes."""
+        with ExitStack() as resources:
+            try:
+                for bridge in bridges:
+                    self.paused.append(bridge.pause(resources))
+                    self.paused[-1].require_paused()
+                yield
+            finally:
+                self.release()
+                self.confirm()
 
     def release(self) -> None:
         """Give every paused peer its selected runtime before waiting for any successor."""
@@ -1025,25 +1092,28 @@ class ReleasedSessionBridge(ConfirmableBridge):
     runtime: LaunchRuntime
 
     def confirm(self) -> BridgeResume:
+        """The claim says whether the successor is still starting: its lock outlives the exec
+        and is released only when the process exits, so no deadline guesses it."""
         observed = self.bridge.observed
-        name = self.bridge.claim.thread
+        claim = self.bridge.claim
         runtime = self.runtime
-        deadline = time.monotonic() + 30
-        while observed.process.alive() and time.monotonic() < deadline:
-            try:
-                current = InspectSession().information(self.bridge.claim.socket_path)
-            except (FileNotFoundError, ConnectionRefusedError):
-                time.sleep(.05)
-                continue
-            except OSError as error:
-                return UnobservedBridge(name, f"{type(error).__name__}: {error}")
-            if current.process != observed.process or current.owner != observed.owner:
-                return ReplacedBridge(name, observed.process, current.process)
-            if current.runtime.prefix != runtime.prefix:
-                return UnobservedBridge(
-                    name, f"observed {current.runtime.prefix}, expected {runtime.prefix}")
-            return ResumedBridge(name, observed.runtime, current.runtime)
-        return UnobservedBridge(name, f"process exited or resume deadline expired for {runtime.prefix}")
+        try:
+            current = InspectSession().awaited(claim, self.announce)
+        except NoSessionBridge:
+            return UnobservedBridge(
+                claim.thread, f"process exited before serving {runtime.prefix}")
+        except OSError as error:
+            return UnobservedBridge(claim.thread, f"{type(error).__name__}: {error}")
+        if current.process != observed.process or current.owner != observed.owner:
+            return ReplacedBridge(claim.thread, observed.process, current.process)
+        if current.runtime.prefix != runtime.prefix:
+            return UnobservedBridge(
+                claim.thread, f"observed {current.runtime.prefix}, expected {runtime.prefix}")
+        return ResumedBridge(claim.thread, observed.runtime, current.runtime)
+
+    def announce(self, claim: WatchClaim) -> None:
+        print(f"Waiting for session bridge {claim.thread} to serve {self.runtime.prefix}",
+              file=sys.stderr, flush=True)
 
 
 class Enrol(Operation):
@@ -1165,15 +1235,24 @@ class CliBridge(ExternalRuntime, DeliversInput, Generic[BridgeOptions]):
     async def prepare_delivery(self) -> None:
         """API transports already bind the intended harness on each request."""
 
+    async def deliver_board(self, update: CommanderUpdate, message: messages.Message) -> type[Outcome]:
+        """A harness with no tool-call route takes a heartbeat packet like any message."""
+        return await self.deliver(message)
+
     async def accept(self, message: messages.Message) -> None:
         conversation = message.type.conversation_message
         outcome = UnconfirmedOutcome if conversation else FilteredOutcome
         delivery = DeliveryRow(message.message_id, FieldCodec.compact(message.to_wire()) + '\n', outcome)
+        # The thread's claim leaves the native queue before the journal row exists,
+        # so no crash between them lets a later native owner replay this message.
+        await self.comms.bus.when_open(partial(
+            self.comms.bus.hand_to_harness, self.binding.recipient(self.comms).name,
+            (message.reference,)))
         with self.db:
             first = delivery.insert_if_absent(self.db).rowcount
         if not first:
             return
-        result = await self.deliver(message) if conversation else outcome
+        result = await message.task.delivered_by(self, message) if conversation else outcome
         delivery, = DeliveryRow.select(self.db, id=message.message_id)
         await delivery.finish(self, result)
         self.log(f'{result.declared_name}: {message.message_id} from {message.sender}')
@@ -1188,7 +1267,8 @@ class CliBridge(ExternalRuntime, DeliversInput, Generic[BridgeOptions]):
         """One child stream; the bus owns waiting and its next attempt after a hold."""
         child = await AttachedChild.start((
             str(LaunchRuntime.running().interpreter.with_name('agent-comms')),
-            '--root', self.binding.root, 'watch', '--thread', self.binding.bus,
+            '--root', self.binding.root, 'watch', '--thread',
+            self.binding.recipient(self.comms).name,
             '--after', json.dumps(FieldCodec.encode(
                 DeliveryRow.resume_after(self.db, self.binding))),
             '--acknowledgment', FieldCodec.encode(ExplicitWatchAcknowledgment)),
@@ -1388,14 +1468,14 @@ class LineMonitorBridge(TranscriptConfirmsDelivery, TranscriptBridge[Options]):
     incoming_frame: ClassVar[type[MonitorIncomingFrame]]
     window_bytes: ClassVar[int]
 
-    def __init__(self, options: Options, binding: Binding, db: sqlite3.Connection) -> None:
+    def __init__(self, options: Options, binding: SessionBinding, db: sqlite3.Connection) -> None:
         super().__init__(options, binding, db)
         self.reader: ReaderState = NoReader()
         self.reader_changed = asyncio.Condition()
         self.retirement: BridgeExit = BridgeExit()
 
     async def declare_reader(self, status: ThreadStatus) -> None:
-        await asyncio.to_thread(lambda: self.comms.registry.register(
+        await self.comms.bus.when_open(lambda: self.comms.registry.register(
             self.comms.registry.require(self.binding.bus), status))
 
     def watch_record(self) -> WatchRecord:

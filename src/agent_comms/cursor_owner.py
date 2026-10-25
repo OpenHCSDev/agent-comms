@@ -155,22 +155,25 @@ class CursorOwner(RegistryOwner):
             raise StaleFence(reason)
 
     def cursor(self, db: sqlite3.Connection) -> CurrentNativeCursor | None:
-        return CurrentNativeCursor.one(
-            db, wire_root_id=self.wire_root_id, recipient_lookup=self.lookup,
-            owner_generation=self.generation, owner_claimed_generation=self.claimed_generation,
-        )
+        """The thread's one cursor; a restart or retry continues it."""
+        return CurrentNativeCursor.one(db, wire_root_id=self.wire_root_id, recipient_lookup=self.lookup)
 
     def state(self, db: sqlite3.Connection) -> CursorState:
         """Classify recipient progress once, at its storage boundary."""
         row = self.cursor(db)
         if row is None:
             return UnstartedCursor()
+        if (not row.owner_identity.within(self.participant_identity)
+                or row.owner_claimed_generation > self.claimed_generation):
+            raise StaleFence("current cursor was written by a newer owner")
         self.require_recorded_input(db, row)
+        if (row.owner_generation, row.owner_claimed_generation) != (self.generation, self.claimed_generation):
+            return InheritedCursor(row)
         return RecordedCursor(row)
 
     def _matches_input(self, row: NativeRuntimeInput | None, reference: NativeInputReference) -> bool:
-        return (row is not None and row.owner_identity == self.participant_identity
-                and row.sent_owner_claimed_generation.matches(self.claimed_generation)
+        return (row is not None and row.owner_identity.within(self.participant_identity)
+                and row.sent_owner_claimed_generation.sent_by_lineage(self.claimed_generation)
                 and row.reference == reference)
 
     def matches_prefix(self, db: Connection, evidence: tuple[HistoricalNativeInput, ...]) -> bool:
@@ -181,7 +184,7 @@ class CursorOwner(RegistryOwner):
         cursor.reference.require_recorded_input(self, db)
 
     def require_coverage(self, db: Connection, cursor: CurrentNativeCursor, coverage: ProvenSourceCoverage) -> None:
-        if cursor.owner_identity != self.participant_identity:
+        if not cursor.owner_identity.within(self.participant_identity):
             raise IdentityConflict("current native cursor owner identity differs")
         if cursor.covered_seq > coverage.covered_seq:
             raise IdentityConflict("current native cursor exceeds canonical source proof")
@@ -191,7 +194,7 @@ class CursorOwner(RegistryOwner):
 
     def require_recorded_reference(self, db: Connection, reference: NativeInputReference) -> None:
         row = NativeRuntimeInput.one(db, input_id=reference.input_id)
-        if row is None or not row.sent_owner_claimed_generation.matches(self.claimed_generation):
+        if row is None or not row.sent_owner_claimed_generation.sent_by_lineage(self.claimed_generation):
             raise IdentityConflict("current cursor input claim_scope differs")
         if not self._matches_input(row, reference):
             raise IdentityConflict("current cursor proof differs from journal")
@@ -305,7 +308,8 @@ class RecordedCursor(CursorState):
         return self.row.injected_seq
 
     def without_input(self, proof: NoInjectedInput, owner: CursorOwner, coverage: ProvenSourceCoverage) -> CurrentNativeCursor:
-        return replace(self.row, covered_seq=coverage.covered_seq)
+        return replace(self.row, owner_generation=owner.generation, owner_claimed_generation=owner.claimed_generation,
+                       covered_seq=coverage.covered_seq)
 
     def observation(self) -> CursorObservation:
         return VerifiedCursorObservation(self.row)
@@ -315,7 +319,7 @@ class RecordedCursor(CursorState):
 
     def require_progress(self, owner: CursorOwner, coverage: ProvenSourceCoverage, injected: int) -> None:
         super().require_progress(owner, coverage, injected)
-        if (self.row.owner_identity != owner.participant_identity
+        if (not self.row.owner_identity.within(owner.participant_identity)
                 or injected < self.row.injected_seq):
             raise IdentityConflict("current cursor would change owner or regress")
 
@@ -330,13 +334,14 @@ class RecordedCursor(CursorState):
 
     def publish(self, db: Connection, owner: CursorOwner, coverage: ProvenSourceCoverage, proof: CoverageInput) -> CursorState:
         cursor = proof.candidate(self, owner, coverage)
-        if cursor.covered_seq == self.row.covered_seq and cursor.injected_seq == self.row.injected_seq:
-            return self
+        if cursor == self.row:
+            return self  # An inherited row differs in its fence, so its first publish stamps it.
         updated = CurrentNativeCursor.update(
             db, where="wire_root_id=? AND recipient_lookup=? AND owner_generation=? "
             "AND {owner_claimed_generation}=? AND covered_seq=? AND injected_seq=?",
-            parameters=(owner.wire_root_id, owner.lookup, owner.generation, owner.claimed_generation,
-                        self.row.covered_seq, self.row.injected_seq),
+            parameters=(owner.wire_root_id, owner.lookup, self.row.owner_generation,
+                        self.row.owner_claimed_generation, self.row.covered_seq, self.row.injected_seq),
+            owner_generation=cursor.owner_generation, owner_claimed_generation=cursor.owner_claimed_generation,
             covered_seq=cursor.covered_seq, injected_seq=cursor.injected_seq,
             input_id=cursor.input_id, stage=cursor.stage, session_id=cursor.session_id,
             request_generation=cursor.request_generation,
@@ -348,3 +353,12 @@ class RecordedCursor(CursorState):
     def require_coverage(self, owner: CursorOwner, db: Connection, coverage: ProvenSourceCoverage, proof: CoverageInput) -> None:
         owner.require_coverage(db, self.row, coverage)
         proof.require_reference(owner, self.row)
+
+
+@dataclass(frozen=True)
+class InheritedCursor(RecordedCursor):
+    """The thread's row under an earlier fence; this owner's first publish stamps its own."""
+
+    def observation(self) -> CursorObservation:
+        # ACP scopes a cursor to the live claim (acp_extension.py validate_scope): none until it publishes.
+        return EmptyCursorObservation()

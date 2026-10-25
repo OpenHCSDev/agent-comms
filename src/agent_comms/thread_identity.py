@@ -204,11 +204,6 @@ class ThreadIncarnation(JsonFlagRecord, WireValue, ABC):
     def require_recorded(self) -> RecordedThreadIncarnation:
         """Only the recorded member can expose a lookup capability."""
 
-    @property
-    @abstractmethod
-    def birth_description(self) -> str:
-        """Describe recorded or missing birth evidence without inventing a date."""
-
     @abstractmethod
     def renamed(self, name: str) -> ThreadIncarnation:
         """Retain this member's birth state under an original alias."""
@@ -307,10 +302,6 @@ class RecordedThreadIncarnation(ThreadIncarnation, ParticipantIdentity):
     def acting_for(self, authority: ThreadIncarnation) -> CommanderForkIdentity:
         return CommanderForkIdentity(self.name, self.created_at, authority)
 
-    @property
-    def birth_description(self) -> str:
-        return f"created {self.created_at}"
-
     def renamed(self, name: str) -> RecordedThreadIncarnation:
         return RecordedThreadIncarnation(name, self.created_at)
 
@@ -382,20 +373,12 @@ class DeletedThreadIncarnation(BirthlessIncarnation):
     def resolved(self, snapshot: RegistryProvenance) -> DeletedThreadIncarnation:
         return self
 
-    @property
-    def birth_description(self) -> str:
-        return "deleted declaration"
-
 
 @dataclass(frozen=True)
 class UnrecordedThreadIncarnation(BirthlessIncarnation):
     """Historical zero-birth evidence cannot select a live recipient."""
 
     WIRE_BIRTH: ClassVar[float] = 0.0
-
-    @property
-    def birth_description(self) -> str:
-        return "birth unrecorded"
 
 
 @dataclass(frozen=True)
@@ -418,10 +401,6 @@ class CoreWatcherIncarnation(BirthlessIncarnation):
     def recorded_as(cls, name: str) -> CoreWatcherIncarnation:
         """The class owns the watcher's name; a stored spelling is never its identity."""
         return cls.watcher()
-
-    @property
-    def birth_description(self) -> str:
-        return "Core's watcher"
 
 
 @dataclass(frozen=True, slots=True)
@@ -649,11 +628,6 @@ class ThreadRole(DeclaredFamily, ProjectionSource, affix="ThreadRole"):
 
     @classmethod
     @abstractmethod
-    def page_human_sender(cls) -> bool:
-        """The bus page row's stored human-sender column."""
-
-    @classmethod
-    @abstractmethod
     def channel_policy(cls) -> ResponsePolicy: ...
 
     @classmethod
@@ -707,10 +681,6 @@ class AgentThreadRole(ThreadRole):
         document: ReadDocument | None,
     ) -> object:
         return ()
-
-    @classmethod
-    def page_human_sender(cls) -> bool:
-        return False
 
     @classmethod
     def channel_policy(cls) -> ResponsePolicy:
@@ -774,10 +744,6 @@ class UserThreadRole(ThreadRole):
         document: ReadDocument | None,
     ) -> object:
         return reads.displayed_incarnation(message, thread.incarnation, snapshot, document=document)
-
-    @classmethod
-    def page_human_sender(cls) -> bool:
-        return True
 
     @classmethod
     def channel_policy(cls) -> ResponsePolicy:

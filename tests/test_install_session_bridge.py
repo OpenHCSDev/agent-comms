@@ -5,6 +5,7 @@
 import json
 import os
 import select
+import socket
 import subprocess
 import sys
 import time
@@ -13,27 +14,25 @@ from pathlib import Path
 
 import pytest
 
-from agent_comms.child_process import ProcessIdentity
-from agent_comms.cli_bridges import claude
-from agent_comms.cli_bridges.monitor import InspectSession, PauseSession
-from agent_comms.cli_bridges.shared import (
-    MONITOR_FRAME,
-    Binding,
-    MonitorBridgeStopped,
-    MonitorBridgeSwapping,
-    MonitorProbe,
-    Serve,
-    SessionBridgeResumes,
+from agent_comms.child_process import ProcessIdentity, SpawnedProcess
+from agent_comms.cli_bridges.monitor import (
+    ClaimedReplacement, InspectSession, PauseSession, SessionInformation,
 )
+from agent_comms.cli_bridges import claude
+from agent_comms.cli_bridges.shared import (
+    MONITOR_FRAME, Binding, MonitorBridgeStopped, MonitorBridgeSwapping, MonitorProbe, Serve, SessionBridge, SessionBridgeResumes,
+    ReleasedSessionBridge, UnacknowledgedPause, UnobservedBridge,
+)
+from conftest import installed_comms
 from agent_comms.field_codec import FieldCodec
+from agent_comms.installer.refusals import UpgradeRefused
 from agent_comms.launch_runtime import LaunchRuntime
 from agent_comms.root_runtime import RootRuntime
 from agent_comms.thread_execution import ExternalThreadExecution
-from agent_comms.threads import Thread
 from agent_comms_hooks.session import started
 from agent_comms_hooks.watch import LapsedWatch, LiveWatch, NoSessionBridge, WatchClaim, WatchRecord
-from conftest import installed_comms
 from source_programs import SourcePrograms
+from agent_comms.threads import Thread
 
 SERVE_FROM_SOURCE = (sys.executable, '-c', 'from agent_comms.cli_bridges.claude import main; main()')
 
@@ -52,8 +51,9 @@ def session_bridge(tmp_path, home, program=SERVE_FROM_SOURCE, *, state_directory
              if state_directory is None else state_directory)
     base_state = state
     state = base_state / 'bridge-copy'
-    binding = Binding(root=str(comms.root), owner=comms.registry.require('bridge-copy').incarnation,
-                      thread=transcript.stem, start=Binding.bus_head(str(comms.root)))
+    binding = Binding(
+        root=str(comms.root), owner=comms.registry.require('bridge-copy').incarnation,
+        thread=transcript.stem, start=Binding.bus_head(str(comms.root)))
     with Binding.open(state) as db:
         binding.bind(db)
     claim = WatchClaim(binding.thread, home)
@@ -246,9 +246,7 @@ def test_install_swap_keeps_the_claim_and_resumes_the_same_process_on_the_new_ru
         (bridge,) = Serve.running(home)
         bridges = SessionBridgeResumes()
         with ExitStack() as cleanup:
-            with ExitStack() as resources:
-                bridges.pause(bridge, resources)
-                resources.callback(bridges.release)
+            with bridges.holding((bridge,)):
                 assert not claim.socket_path.exists()
                 assert isinstance(claim.state(), LiveWatch)
                 hook = subprocess.run(
@@ -277,7 +275,6 @@ def test_install_swap_keeps_the_claim_and_resumes_the_same_process_on_the_new_ru
                     f'Waiting for the session bridge of {claim.thread}: '
                     'an install holds its claim and is replacing it.'
                 )
-            bridges.confirm()
             bridges.require_resumed()
             assert bridges.failures == ()
             resumed = InspectSession().information(claim.socket_path)
@@ -293,3 +290,91 @@ def test_install_swap_keeps_the_claim_and_resumes_the_same_process_on_the_new_ru
             # The next frame must be the probe, so a second swapping frame fails here.
             assert probe(monitor).session == claim.thread
             assert child.poll() is None, log.read_text()
+
+
+def test_a_bridge_that_never_answers_pause_refuses_the_install_by_name(
+        tmp_path, bridge_home, monkeypatch):
+    claim = WatchClaim('silent-session', bridge_home)
+    current = bridge_home / LaunchRuntime.current_pointer().relative_to(Path.home())
+    current.parent.mkdir(parents=True)
+    (tmp_path / 'runtime').mkdir()
+    current.symlink_to(tmp_path / 'runtime', target_is_directory=True)
+    monkeypatch.setenv('HOME', str(bridge_home))
+    claim.socket_path.parent.mkdir(parents=True, exist_ok=True)
+    me = ProcessIdentity.capture(os.getpid())
+    observed = SessionInformation(owner=me, process=me, runtime=LaunchRuntime.running(),
+                                  transcript=tmp_path / 'silent-session.jsonl')
+    bridges = SessionBridgeResumes()
+    with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as silent:
+        silent.bind(str(claim.socket_path))
+        silent.listen()
+        with pytest.raises(UpgradeRefused) as refused, bridges.holding(
+                (SessionBridge(claim, observed),)):
+            pass
+        # The late bridge finds its runtime waiting once it acknowledges.
+        accepted, _ = silent.accept()
+        with accepted, accepted.makefile('rb') as stream:
+            pause = FieldCodec.decode(PauseSession, FieldCodec.parse(stream.readline().decode()))
+            assert pause.process == me
+            assert FieldCodec.decode(LaunchRuntime, FieldCodec.parse(stream.readline().decode()))
+    unanswered = (f'Session bridge silent-session at {claim.socket_path} '
+                  'did not acknowledge pause within 30 s')
+    assert str(refused.value) == f'install: refused: {unanswered}'
+    (failure,) = bridges.failures
+    assert isinstance(failure, UnacknowledgedPause)
+    assert str(failure) == unanswered
+
+
+def test_a_successor_that_exits_before_serving_is_unobserved_without_a_deadline(
+        tmp_path, bridge_home):
+    """The released claim lock, not a clock, says the successor is gone."""
+    claim = WatchClaim('exited-session', bridge_home)
+    with claim.held(WatchRecord('bridge-copy', str(tmp_path), ('serve',), tmp_path)):
+        pass
+    assert isinstance(claim.state(), LapsedWatch)
+    me = ProcessIdentity.capture(os.getpid())
+    observed = SessionInformation(owner=me, process=me, runtime=LaunchRuntime.running(),
+                                  transcript=tmp_path / 'exited-session.jsonl')
+    runtime = LaunchRuntime.running()
+    outcome = ReleasedSessionBridge(SessionBridge(claim, observed), runtime).confirm()
+    assert outcome == UnobservedBridge(
+        'exited-session', f'process exited before serving {runtime.prefix}')
+
+
+def test_a_bridge_whose_installer_left_before_ready_stays_stopped(tmp_path, capsys):
+    installer, peer = socket.socketpair()
+    installer.close()
+    operation = Serve(owner=ProcessIdentity.capture(os.getpid()),
+                      transcript=tmp_path / 'copied-session.jsonl')
+    record = WatchRecord('bridge-copy', str(tmp_path), ('watch',), tmp_path)
+    ClaimedReplacement(peer, claim=-1).finish(operation, record)
+    assert 'Session bridge installer gone before ready; left stopped' in capsys.readouterr().err
+
+
+def test_a_bridge_that_dies_during_pause_counts_as_stopped(tmp_path, bridge_home, monkeypatch):
+    """Installs 21, 22 and 23 (2026-10-25): the outgoing bridge died writing the registry
+    under the install's hold and closed its socket unanswered; the pause parsed the empty
+    line. Its exited process, checked by identity, is the stop the pause asked for."""
+    claim = WatchClaim('dying-session', bridge_home)
+    current = bridge_home / LaunchRuntime.current_pointer().relative_to(Path.home())
+    current.parent.mkdir(parents=True)
+    (tmp_path / 'runtime').mkdir()
+    current.symlink_to(tmp_path / 'runtime', target_is_directory=True)
+    monkeypatch.setenv('HOME', str(bridge_home))
+    claim.socket_path.parent.mkdir(parents=True, exist_ok=True)
+    with SpawnedProcess.launch((sys.executable, '-c', (
+        'import socket, sys; s = socket.socket(socket.AF_UNIX); s.bind(sys.argv[1]); '
+        's.listen(); print(flush=True); peer, _ = s.accept(); peer.makefile("rb").readline()'),
+        str(claim.socket_path)), output=subprocess.PIPE) as dying:
+        dying.process.stdout.readline()
+        me = ProcessIdentity.capture(os.getpid())
+        observed = SessionInformation(owner=me, process=dying.identity,
+                                      runtime=LaunchRuntime.running(),
+                                      transcript=tmp_path / 'dying-session.jsonl')
+        bridges = SessionBridgeResumes()
+        with bridges.holding((SessionBridge(claim, observed),)):
+            pass
+        assert dying.process.wait(10) == 0
+    assert bridges.failures == ()
+    assert bridges.lines() == ('Session bridge dying-session: bridge exited during pause; '
+                               'left stopped',)

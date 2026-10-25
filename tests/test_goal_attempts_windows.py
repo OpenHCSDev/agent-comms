@@ -22,14 +22,14 @@ def test_windows_goal_attempt_can_finish_without_replay(tmp_path):
     permit = store.claim_launch(reservation)
     permit.record_verified_completion(store, "valid terminal")
 
-    reopened = GoalAttemptStore(root)
+    reopened = GoalAttemptStore.at(root)
     assert reopened.snapshot(goal_id).lifecycle == CompletedGeneration()
     with pytest.raises(ReservationConflictError):
         reopened.reserve(goal_id, 1)
 
     store.create_goal(crashed_goal_id)
     store.reserve(crashed_goal_id, 1)
-    after_crash = GoalAttemptStore(root)
+    after_crash = GoalAttemptStore.at(root)
     assert after_crash.snapshot(crashed_goal_id).lifecycle == ReservedGeneration()
     with pytest.raises(ReservationConflictError):
         after_crash.reserve(crashed_goal_id, 1)

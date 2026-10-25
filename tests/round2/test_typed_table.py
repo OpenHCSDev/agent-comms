@@ -1,7 +1,9 @@
 """Declaration families round-trip through real SQLite without a schema roster."""
 
 import sqlite3
+from contextlib import nullcontext
 from dataclasses import dataclass, field, replace
+from time import perf_counter
 from typing import Annotated, ClassVar, Type
 
 import pytest
@@ -10,7 +12,9 @@ from agent_comms.field_codec import FieldCodec, MalformedRecord, NullMember
 from agent_comms.messages import InfoKind, MessageKind
 from agent_comms.typed_table import (
     Column,
+    DurableTables,
     ExactStorage,
+    FULL_SCHEMA_REBUILD,
     ForeignKey,
     Generated,
     Index,
@@ -21,6 +25,7 @@ from agent_comms.typed_table import (
     TypedRow,
     TypedTable,
     RowNotFoundError,
+    WriterOwnedFile,
 )
 
 
@@ -131,6 +136,64 @@ def test_rebuild_converts_a_field_and_preserves_the_declared_rows_and_constraint
         db.execute(f'ALTER TABLE "{TableChildRow.declared_name}" DROP COLUMN weight')
         TableChildRow.rebuild(db)
         assert TableChildRow.select(db, order_by=('key',)) == [replace(row, weight=None) for row in rows]
+
+
+@pytest.mark.parametrize("changed", ({}, {"key": '"key" + 1'}),
+                         ids=("preserve-children", "reject-orphan"))
+def test_schema_carry_preserves_foreign_children_and_rolls_back_orphans(tmp_path, changed):
+    class CarrySchema(DurableTables):
+        @classmethod
+        def carry_schema(cls, db, sharing=(), *, rebuild=FULL_SCHEMA_REBUILD):
+            CarryParent.rebuild(db, changed)
+            cls.require_schema(db, sharing)
+
+    @dataclass(frozen=True)
+    class CarryParent(CarrySchema, TypedTable, declared_name=f"carry_parent_{len(changed)}"):
+        key: Annotated[int, Column(primary_key=True)]
+        checks = ("key >= 0",)
+
+    @dataclass(frozen=True)
+    class CarryChild(CarrySchema, TypedTable, declared_name=f"{CarryParent.declared_name}_child"):
+        key: Annotated[int, Column(primary_key=True)]
+        parent: int
+        cascade_parent: int
+
+        @classmethod
+        def references(cls):
+            return (
+                ForeignKey(target=CarryParent, target_columns=("key",), columns=("parent",)),
+                ForeignKey(target=CarryParent, target_columns=("key",),
+                           columns=("cascade_parent",), on_delete="CASCADE"),
+            )
+
+    parents = [CarryParent(key) for key in range(2000)]
+    children = [CarryChild(row.key, row.key, row.key) for row in parents]
+    with sqlite3.connect(tmp_path / "relations.sqlite3") as db:
+        db.execute("PRAGMA foreign_keys = ON")
+        previous = CarryParent.ddl()[0].replace("CHECK (key >= 0)", "CHECK (key > -1)")
+        assert previous != CarryParent.ddl()[0]
+        db.execute(previous)
+        CarryChild.create(db)
+        for row in (*parents, *children):
+            row.insert(db)
+        db.commit()
+        stored = CarrySchema.stored_schema(db)
+        outcome = pytest.raises(
+            CarrySchema.schema_error,
+            match=f"table={CarryChild.declared_name}, parent={CarryParent.declared_name}, fkid=0",
+        ) if changed else nullcontext()
+        started = perf_counter()
+        with outcome:
+            assert CarrySchema.reconcile_schema(db, WriterOwnedFile())
+        assert perf_counter() - started < 2
+        assert not db.in_transaction
+        assert db.execute("PRAGMA foreign_keys").fetchone() == (1,)
+        assert CarryChild.select(db, order_by=("key",)) == children
+        assert CarryParent.select(db, order_by=("key",)) == parents
+        if changed:
+            assert CarrySchema.stored_schema(db) == stored
+        else:
+            CarrySchema.require_schema(db)
 
 
 def test_writer_derives_missing_nullable_fields_but_refuses_unclaimed_data():
@@ -364,45 +427,3 @@ def test_streamed_query_decodes_only_consumed_rows_and_releases_cursor():
         rows = StreamProjection.iterate(db.execute("SELECT 2 AS enabled"))
         with pytest.raises(ValueError):
             next(rows)
-
-
-def test_declared_column_rename_preserves_rows_and_refuses_both_names():
-    from agent_comms.errors import RelationViolationError
-    from agent_comms.typed_table import DurableTables, FrozenColumn, WriterOwnedFile
-
-    @dataclass(frozen=True)
-    class RenamedFieldRow(DurableTables, TypedTable, declared_name="renamed_field_carry"):
-        key: Annotated[str, FrozenColumn(primary_key=True, renamed_from=("prior_key",))]
-        value: str
-
-    rows = [RenamedFieldRow("first", "one"), RenamedFieldRow("second", "λ two")]
-    with sqlite3.connect(":memory:") as db:
-        RenamedFieldRow.create(db)
-        for row in rows:
-            row.insert(db)
-        db.execute('ALTER TABLE renamed_field_carry RENAME COLUMN key TO prior_key')
-        db.commit()
-        before = db.execute('SELECT prior_key, value FROM renamed_field_carry').fetchall()
-
-        RenamedFieldRow.reconcile_schema(db, WriterOwnedFile())
-
-        assert RenamedFieldRow.select(db, order_by=("key",)) == rows
-        assert db.execute('SELECT key, value FROM renamed_field_carry').fetchall() == before
-        assert RenamedFieldRow.count(db) == len(rows)
-        with pytest.raises(sqlite3.IntegrityError):
-            db.execute('UPDATE renamed_field_carry SET key = ?', ("changed",))
-
-    with sqlite3.connect(":memory:") as db:
-        RenamedFieldRow.create(db)
-        for row in rows:
-            row.insert(db)
-        db.execute('ALTER TABLE renamed_field_carry ADD COLUMN prior_key TEXT')
-        db.execute('UPDATE renamed_field_carry SET prior_key = ?', ("keep this too",))
-        db.commit()
-        before = db.execute('SELECT key, value, prior_key FROM renamed_field_carry').fetchall()
-
-        with pytest.raises(RelationViolationError):
-            RenamedFieldRow.reconcile_schema(db, WriterOwnedFile())
-
-        assert db.execute(
-            'SELECT key, value, prior_key FROM renamed_field_carry').fetchall() == before

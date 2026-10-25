@@ -86,7 +86,7 @@ def checkout_command_bus(repository, tmp_path, monkeypatch, installed_runtime):
     request = comms.goals.todos.add_request(lead.incarnation, "Prepare the pinned checkout").id
     now = time.time()
     order = PendingProblemOrder(
-        id="prepare-checkout", owner=FileLine("owner.py", 1), scope=FIX_SCOPE,
+        owner=FileLine("owner.py", 1), scope=FIX_SCOPE,
         run=MechanicalOrderRun(), check=OrderCheck(repository, "true"),
         edits=("Create the order checkout through its pinned-submodule owner.",),
         banned=("No checkout creation bypassing its pinned submodules.",),

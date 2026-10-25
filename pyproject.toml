@@ -10,7 +10,7 @@ authors = [{ name = "Tristan Simas", email = "tristan.simas@mail.mcgill.ca" }]
 license = "MIT"
 license-files = ["LICENSE"]
 readme = "README.md"
-requires-python = ">=3.14,<3.15"
+requires-python = ">=3.14.8,<3.15"
 classifiers = [
     "Development Status :: 4 - Beta",
     "Intended Audience :: Developers",
@@ -42,6 +42,7 @@ dev = [
     "ruff==0.16.0",
     "mypy==2.3.0",
     "uv==0.13.1",
+    "nominal-refactor-advisor @ git+https://github.com/OpenHCSDev/NominalRefactorAdvisor@main",
 ]
 
 [project.urls]
@@ -67,6 +68,8 @@ agent-comms-queue-bypass-guard = "agent_comms_hooks.queue_bypass:main"
 agent-comms-test-ceremony-guard = "agent_comms_hooks.test_ceremony:main"
 agent-comms-claude-session-started = "agent_comms_hooks.session:started"
 agent-comms-claude-session-ended = "agent_comms_hooks.session:ended"
+agent-comms-claude-subagent-started = "agent_comms_hooks.forks:started"
+agent-comms-claude-subagent-stopped = "agent_comms_hooks.forks:stopped"
 agent-comms-connector = "agent_comms.connector:main"
 opencode-comms = "agent_comms.cli_bridges.opencode_launch:main"
 
@@ -128,7 +131,7 @@ src = ["src", "tests"]
 select = ["E", "F", "I", "N", "W", "UP", "B", "SIM"]
 
 [tool.ruff.lint.flake8-bugbear]
-extend-immutable-calls = ["agent_comms.store_files.ExclusiveLock"]
+extend-immutable-calls = ["agent_comms.store_files.ExclusiveLock", "agent_comms.importing.ImportLimits"]
 
 [tool.mypy]
 warn_return_any = true

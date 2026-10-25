@@ -260,7 +260,7 @@ def test_source_shape_evidence_reads_declarations_on_main(tmp_path):
 def test_only_foreign_comparison_refusal_exempts_an_owned_type_check(source, allowed):
     checks = ClassChecks()
     checks.visit(ast.parse(source))
-    assert (not checks.declared & checks.checked) is allowed
+    assert (not checks.owned()) is allowed
 
 
 @pytest.mark.parametrize(("required", "unskipped", "expected"), (
@@ -370,6 +370,10 @@ def test_lifecycle_flags_count_class_bodies_not_locals(tmp_path):
                                                  "class Scope:\n    complete: bool = True\n"})
     assert not flagged.holds(ClassFlagsAbsent(r"^\s+(complete|active)" + FLAG))
     assert flagged.holds(ClassFlagsAbsent(r"^\s+(complete)" + FLAG))
+
+    # A transcript quoting a flag is prose, not a module: never parsed, never counted.
+    quoted = main_of(tmp_path, {"src/log.md": "I’ll check it.\n    complete = True\n"})
+    assert quoted.holds(ClassFlagsAbsent(r"^\s+(complete)" + FLAG))
 
 
 def test_main_evidence_reads_once_per_commit_and_unknown_is_reported(tmp_path):

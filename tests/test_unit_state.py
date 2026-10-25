@@ -11,10 +11,12 @@ import pytest
 from agent_comms.activity import ActivityState
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.commander_heartbeat import CommanderHeartbeat
+from agent_comms.commander_hud import CommanderFrame
 from agent_comms.external_transcript import ExternalTranscript
 from agent_comms.heartbeat_frame import HeartbeatFrame
 from agent_comms.launch_runtime import LaunchRoot
 from agent_comms.message_page import MessagePageRequest
+from agent_comms.native_tool_call import ToolCallId
 from agent_comms.read_basis import DMDisplayScope
 from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.session_file import RegistrySessionLocation
@@ -23,7 +25,7 @@ from agent_comms.thread_status import StoppedThreadStatus
 from agent_comms.thread_text import ForkedParent
 from agent_comms.todos import DeliverTodo, OperationDelivery, ProgressRead
 from agent_comms.transcript_events import ToolStartTranscript
-from agent_comms.turn_item import NativeTurnId
+from agent_comms.turn_item import NativeItemId, NativeTurnId
 from agent_comms.ui_model.unit_state import (
     AwaitingCommander,
     Blocked,
@@ -187,10 +189,10 @@ def test_started_turn_on_delivered_order_is_moving_not_stalled(held_bus):
     held_bus.registry.register(worker)
     ExternalTranscript(held_bus.root, worker.incarnation).finish(
         turn_id=turn_turn_id,
-        item_id="call",
+        item_id=NativeItemId("call"),
         events=(
             ToolStartTranscript(
-                position=0, tool_call_id="call", tool_name="bash", timestamp=time.time()
+                position=0, tool_call_id=ToolCallId("call"), tool_name="bash", timestamp=time.time()
             ),
         ),
     )
@@ -221,18 +223,23 @@ def test_claim_is_a_commander_question_not_a_verified_delivery(held_bus, claim_o
         assert state_cards(comms, DeliveredUnclosed) == ()
 
 
-def test_stopped_child_without_lead_orders_remains_in_the_frame(held_bus):
+def test_a_stopped_child_holding_no_order_is_no_unit(held_bus):
+    """Being the commander's child makes nothing a unit: an order or a receiving executor does
+    (cl49, ready, drafts and fork-triage sat on the HUD as Idle units for five days)."""
     child = replace(held_bus.registry.require("outsider"), parent=ForkedParent("lead"))
     held_bus.registry.register(child, StoppedThreadStatus())
     with LaunchRoot.from_path(held_bus.root).selected():
-        (state,) = (
-            state
-            for state in UnitState.current(
-                held_bus, "lead", HeartbeatFrame.read(held_bus, "lead", ProgressRead()))
-            if state.unit == child.incarnation
-        )
-        assert isinstance(state, Idle)
-        assert state.presence == StoppedThreadStatus()
+        states = UnitState.current(
+            held_bus, "lead", HeartbeatFrame.read(held_bus, "lead", ProgressRead()))
+    assert child.incarnation not in {state.unit for state in states}
+
+
+def test_commander_fork_gets_no_unit_card(held_bus):
+    fork = held_bus.registry.register_commander_child("judge-fork", "lead", held_bus.goals)
+    with LaunchRoot.from_path(held_bus.root).selected():
+        states = UnitState.current(
+            held_bus, "lead", HeartbeatFrame.read(held_bus, "lead", ProgressRead()))
+    assert fork.incarnation not in {state.unit for state in states}
 
 
 def test_malformed_native_source_is_unreadable_not_idle(held_bus):
@@ -273,6 +280,7 @@ def test_heartbeat_keeps_every_unit_when_one_checkout_is_unreadable(
         assert isinstance(cards[0], Unreadable)
         assert {card.unit.name for card in cards} >= {"worker", "outsider"}
         heartbeat.pass_body(held_bus, observed)
+        assert CommanderFrame.read_all(held_bus.root) == (observed[0].hud,)
         page = MessagePageRequest(
             DMDisplayScope.capture(
                 heartbeat.sender,

@@ -11,7 +11,7 @@ from test_todos import order, thread
 
 from agent_comms.commander.order import OrderFile, main
 from agent_comms.commander.request import RequestAddVerb
-from agent_comms.field_codec import FieldCodec, GoalId
+from agent_comms.field_codec import FieldCodec, GoalId, OrderId
 from agent_comms.installer.practice import PracticeCopy
 from agent_comms.locked_store import RootFile
 from agent_comms.goals import CountCheckResult, OrderCheck
@@ -52,7 +52,8 @@ def held_commander(pr_commander, cited_source):
         review_at=RecordedEventTime(time.time() + 1000), order=order(cited_source),
     )
     published = source.comms.messaging.send(source.commander, worker.name, "Repair the held workflow through its existing declaration.")
-    source.comms.goals.todos.apply(todo.id, OrderMessage(todo.revision, lead.incarnation, published.message.message_id))
+    source.comms.goals.todos.apply(todo.id, OrderMessage(todo.revision, lead.incarnation, published.message.message_id,
+                                                      at=RecordedEventTime(time.time())))
     original = source.comms.goals.todos.get(todo.id)
     practice = PracticeCopy(source.root, source.root.parent / f"{source.root.name}-copied")
     practice.include(tuple(RootFile.existing_in(practice.root)))
@@ -111,7 +112,7 @@ def test_clean_resend_derives_the_existing_order_and_leaves_no_strike(held_comma
     marker.touch()
     now = time.time()
     replacement = replace(
-        order(cited_source), id="replacement-order",
+        order(cited_source), id=OrderId.mint(),
         check=OrderCheck(ctx.repos[0].checkout, f"test ! -e {shlex.quote(str(marker))}"),
         at=RecordedEventTime(now), first_call_deadline=RecordedEventTime(now + 120),
     )
@@ -127,8 +128,8 @@ def test_clean_resend_derives_the_existing_order_and_leaves_no_strike(held_comma
     main(["send", "worker", str(path), "--clean"], ctx)
     saved = ctx.comms.goals.todos.get("P1")
     assert saved.order.id != original.order.id
-    assert saved.messages[-1].message_id != original.messages[-1].message_id
-    assert saved.strikes == original.strikes == ()
+    assert saved.latest_message.message_id != original.latest_message.message_id
+    assert saved.strike_count == original.strike_count == 0
     assert ctx.comms.registry.require("worker").goal.require().id == saved.held().generation
     ThreadCaller("worker").invoke(CommsChannelsTool(), ctx.comms)
 
@@ -140,7 +141,7 @@ def test_second_unplanned_order_is_refused_without_recording(held_commander, cit
     marker = ctx.root / "unfinished"
     marker.touch()
     document = OrderFile(
-        replace(order(cited_source), id="second-order",
+        replace(order(cited_source), id=OrderId.mint(),
                 check=OrderCheck(ctx.repos[0].checkout, f"test ! -e {shlex.quote(str(marker))}")),
         "The copied workflow still contains an unfinished decision that prevents completion",
         "This is stupid because assigning another order hides the already unfinished work",
@@ -164,6 +165,45 @@ def test_second_unplanned_order_is_refused_without_recording(held_commander, cit
     assert ctx.comms.goals.todos.get("P1") == original
     assert ctx.comms.registry.require("worker").goal == goal
     print(str(refused.value))
+
+
+def test_an_order_waiting_on_install_frees_its_holder_for_the_next_order(
+    held_commander, cited_source, tmp_path,
+):
+    """Delivered work waits only on its run; its holder takes the next order."""
+    ctx = held_commander
+    merge_two_commit_fix(cited_source, tmp_path / 'bin', 4)
+    current = ctx.comms.goals.todos.get('P1')
+    check = OrderCheck(cited_source.checkout, 'cat count.txt', CountCheckResult(0))
+    with ctx.comms.goals.todos.writing() as connection:
+        replace(current, order=replace(current.order, check=check),
+                revision=current.revision + 1).upsert(connection)
+    link_pull_request(ctx, 'P1', 4)
+    with chdir(cited_source.checkout):
+        main(["done", "worker", "P1"], ctx)
+    assert not ctx.comms.goals.todos.get("P1").order.occupies_holder()
+    marker = ctx.root / "unfinished"
+    marker.touch()
+    second = replace(order(cited_source), id=OrderId.mint(),
+                     check=OrderCheck(ctx.repos[0].checkout,
+                                      f"test ! -e {shlex.quote(str(marker))}"))
+    document = OrderFile(
+        second,
+        "The copied workflow still contains an unfinished decision that prevents completion",
+        "This is stupid because finished work waiting on its run must not idle its holder",
+        unplanned_reason=(
+            "This isolated workflow verifies holder release"
+            " rather than advancing the production plan."
+        ),
+    )
+    path = ctx.root / "second-order.json"
+    path.write_text(json.dumps(FieldCodec.encode(document)))
+    before = {todo.id for todo in ctx.comms.goals.todos.for_commander(ctx.incarnation)}
+    where = f"{second.owner.file}:{second.owner.line}"
+    main(["problem", str(path), "--to", "worker", "--where", where], ctx)
+    created = [todo for todo in ctx.comms.goals.todos.for_commander(ctx.incarnation)
+               if todo.id not in before]
+    assert [todo.holder for todo in created] == ["worker"]
 
 
 def test_done_checks_the_merged_tree_and_records_the_first_commit(

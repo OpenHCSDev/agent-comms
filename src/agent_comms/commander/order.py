@@ -33,10 +33,14 @@ from typing import Annotated, ClassVar, Self
 
 from pydantic import BaseModel, ConfigDict, Field, InstanceOf, PrivateAttr
 
-from agent_comms.change_report import FileLine, MainRevision, NoSourceReference
+from agent_comms.change_report import FileLine, MainRevision, NoSourceReference, RegisteredRoots
 from agent_comms.channel_targets import CommsTag
 from agent_comms.declared_verb import DeclaredVerb
-from agent_comms.commander.standing import UnownedWheelSpin
+from agent_comms.commander.standing import (
+    DeliveryAwaitingJudgement,
+    InstallDue,
+    UnownedWheelSpin,
+)
 from agent_comms.comms import Comms, wire
 from agent_comms.declared_family import DeclaredFamily
 from agent_comms.errors import RelationViolationError
@@ -46,6 +50,7 @@ from agent_comms.field_codec import (
     FieldCodec,
     MalformedRecord,
     Normalize,
+    RecordProblems,
     NullMember,
     SingleFieldValue,
     SubclassUnion,
@@ -59,12 +64,17 @@ from agent_comms.messages import Message
 from agent_comms.owner_requests import NewestOpenRequest, OwnerRequestId, RequestSelection
 from agent_comms.phase_evidence import MainTree, PlanReading
 from agent_comms.plan_phases import OrderPhase, PlanPhase
+from agent_comms.presentation import MessageNotification
 from agent_comms.problem_number import ProblemNumber
 from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.repo import Repo
 from agent_comms.registry_document import RegisteredCommanderProject
-from agent_comms.standing_rules import HuntDue, OwedAnswer
+from agent_comms.task_attachments.commander_pings import CommanderUpdate
+from agent_comms.heartbeat_subjects import AnswerSubject, HeartbeatSubject, UnitSubject
+from agent_comms.standing_rules import HuntDue, OwedAnswer, StandingRule
+from agent_comms.ui_model.unit_state import AwaitingCommander
 from agent_comms.thread_identity import ThreadIncarnation
+from agent_comms.typed_table import RowNotFoundError
 from agent_comms.held_orders import HeldOrders
 from agent_comms.todos import (
     BluntText,
@@ -82,6 +92,7 @@ from agent_comms.todos import (
     OrderText,
     OrderWords,
     PendingProblemOrder,
+    ProgressRead,
     ProblemFinding,
     PullRequestLink,
     PullRequests,
@@ -97,18 +108,13 @@ from agent_comms.todos import (
 )
 from agent_comms.slop import Slop
 from agent_comms.tool_caller import CommanderForkCaller, NoThreadCaller
-from agent_comms.order_tools import CommsChangeProblemTool, CommsFireTool, CommsOrderCheckTool, CommsOrderDoneTool, CommsOrderServeTool, CommsOrderTool, CommsProblemCloseTool, CommsTodoCreateTool, CommsTodoListTool, TodoList
+from agent_comms.order_tools import CommsChangeProblemTool, CommsFireTool, CommsOrderCheckTool, CommsOrderDoneTool, CommsOrderRunTool, CommsOrderServeTool, CommsOrderTool, CommsProblemCloseTool, CommsTodoCreateTool, CommsTodoListTool, TodoList
 
 
 def refuse(text, *families):
     """Core's text families decide what the commander may write; nothing is recorded when one refuses."""
     if refused := [r for family in families if (r := family.refused(text))]:
         sys.exit('REFUSED, nothing recorded: ' + ' '.join(refused))
-
-
-def struck(todo, unit):
-    """Strikes count per unit and task, across every order of that task the unit held."""
-    return len(todo.live_strikes(unit))
 
 
 # Eliminate forwarding with inheritance and multiple parents; decompose the hierarchy if it is not sound.
@@ -344,15 +350,18 @@ class CommanderContext(BaseModel):
         return context
 
     @property
+    def project(self) -> RegisteredCommanderProject:
+        return self.comms.registry.snapshot().commander_project.require()
+
+    @property
     def commander(self) -> str:
         snapshot = self.comms.registry.snapshot()
-        project = snapshot.commander_project.require()
-        (thread,) = project.commanders(snapshot)
+        (thread,) = snapshot.commander_project.require().commanders(snapshot)
         return thread.name
 
     @property
     def repos(self) -> tuple[Repo, ...]:
-        return self.comms.registry.snapshot().commander_project.require().repos
+        return self.project.repos
 
     def order_file(self, path: str) -> OrderFile:
         """The order file with its check bound to a registered checkout, once, where it enters."""
@@ -396,10 +405,21 @@ class CommanderContext(BaseModel):
 
     def post(self, audience: VerdictAudience, body: str,
              answers: tuple[MessageReference, ...] = ()) -> MessageId:
+        return self.published(audience, body, answers).message_id
+
+    def published(self, audience: VerdictAudience, body: str,
+                  answers: tuple[MessageReference, ...] = ()) -> Message:
         target = audience.target
-        published = self.comms.messaging.send(self.actor_name, target.name,
-            target.addressed(audience.threads, body), answers=answers)
-        return published.message.message_id
+        return self.comms.messaging.send(self.actor_name, target.name,
+            target.addressed(audience.threads, body), answers=answers).message
+
+    def delivery(self, reference: MessageReference) -> str:
+        """The recipients' delivery as the notification owner reports it.
+
+        A publish alone is only queued."""
+        outcomes = MessageNotification.references(
+            self.comms.root, self.comms.registry, self.comms.bus.bus, (reference,))
+        return MessageNotification.summary(outcomes.get((reference.seq, reference.message_id), ()))
 
     def call(self, tool):
         return self.actor.as_thread(self.commander).invoke(tool, self.comms)
@@ -413,7 +433,8 @@ class CommanderContext(BaseModel):
         return request.resolve(self.repos)
 
     def held_orders(self) -> tuple[Todo, ...]:
-        return tuple(todo for todo in self.todos() if todo.holder)
+        """The live holds Core lists unjudged edits under, so a verdict finds every edit shown."""
+        return HeldOrders.read(self.comms, self.commander).todos
 
     def held_by(self, unit: str) -> tuple[Todo, ...]:
         return self.comms.goals.todos.held_by(
@@ -459,6 +480,11 @@ class OrderedProblems(ABC):
     def replacing(self, unit: ThreadIncarnation, group: Sequence[str],
                   listed: Mapping[str, Todo]) -> bool:
         """Whether this order replaces the unit's own earlier order on the same problems."""
+
+    def carried(self, order: PendingProblemOrder, group: Sequence[str],
+                listed: Mapping[str, Todo]) -> PendingProblemOrder:
+        """The order with the pull requests its problems already hold; a new problem holds none."""
+        return order
 
     @abstractmethod
     def record(self, context: CommanderContext, order: PendingProblemOrder, unit: str,
@@ -509,8 +535,14 @@ class ListedProblems(OrderedProblems):
                   listed: Mapping[str, Todo]) -> bool:
         return bool(group) and all(
             pid in listed and any(assignment.owner_identity == unit for assignment
-                                  in listed[pid].holder_state.current_assignments())
+                                  in listed[pid].current_holder.current_assignments())
             for pid in group)
+
+    def carried(self, order: PendingProblemOrder, group: Sequence[str],
+                listed: Mapping[str, Todo]) -> PendingProblemOrder:
+        """A replacement order keeps the problem's pull requests: a restore cites their heads."""
+        return order.carrying(link for pid in group if pid in listed
+                              for link in listed[pid].order.linked_requests)
 
     def record(self, context: CommanderContext, order: PendingProblemOrder, unit: str,
                group: Sequence[str], traced: FileLine | NoSourceReference, request: OwnerRequestId,
@@ -634,7 +666,9 @@ class Commander(CommanderContext):
         body = open(body_file).read()
         refuse(body, *DirectiveText.checks())
         try:
-            print(self.post(VerdictAudience(tuple(units.split(','))), body.rstrip(), answers))
+            audience = VerdictAudience(tuple(units.split(',')))
+            message = self.published(audience, body.rstrip(), answers)
+            print(message.message_id, self.delivery(message.reference))
         except MaintenanceHeldError as held:
             # A say records nothing but its post, so the whole command is the resend.
             sys.exit(f'Refused, nothing sent: {held}\nAfter the install reports finished, '
@@ -686,21 +720,20 @@ class Commander(CommanderContext):
     def posted(self, unit: str, todo: Todo, strike: StrikeTodo,
                answers: tuple[MessageReference, ...] = ()) -> None:
         """Publish a strike Core already recorded on the task's Todo to #comms."""
-        n = struck(todo, unit)
+        n = todo.strikes_against(self.comms.registry.require(unit).incarnation)
+        taken = f", {todo.id} taken away" if todo.holder != unit else ""
         line = (f'{time.strftime("%Y-%m-%d")} {strike.at.clock()} {unit} (strike {n} on {todo.id}'
-                f'{f", {todo.id} taken away" if n >= 2 else ""}): {strike.reason}')
+                f'{taken}): {strike.reason}')
         self.on_record(line, 'Strike', VerdictAudience.of(unit, todo), answers)
-        print(f'{unit}: {n} strike(s) on {todo.id}' + (f'. Reassign {todo.id} now and freeze its branch.' if n >= 2 else ''))
+        print(f'{unit}: {n} strike(s) on {todo.id}{taken}')
 
-    def hunt(self, where, why, sent, repository=""):
+    def hunt(self, where, why, sent):
         """Record the commander's source read, whether or not it became an order.
-        FILE:LINE is read in the registered repository's checkout, never the shell's cwd."""
+        FILE:LINE is read in the registered repository it names, never the shell's cwd."""
         ref = FileLine.from_wire(where)
-        try:
-            directory = Repo.selected(self.repos, repository).checkout
-        except ValueError as error:
-            sys.exit(f'Refused: {error}')
-        ref.require_exists(directory, MainRevision())
+        roots = RegisteredRoots(self.project)
+        ref.require_exists(roots, MainRevision())
+        directory, _ = ref.repository.source(roots, MainRevision())
         if len(why.split()) < 10:
             sys.exit('Refused: say what the code does per event or per history row, and the fix or why it is clean (10+ words)')
         ref = FileLine(str((directory / ref.file).resolve()), ref.line)
@@ -715,17 +748,19 @@ class Commander(CommanderContext):
         live = [s for s in todo.live_strikes() if at.selects(s)]
         if not live:
             sys.exit(at.refusal(task))
-        voided = live[-1]
+        voided = live[0]
         # posted to #comms, so refused before Core records the void
         refuse(why, *DirectiveText.checks())
         self.call(CommsChangeProblemTool(problem=task, operation=VoidStrikeTodo(
             todo.revision, self.incarnation, voided, why)))
         unit = voided.previous.owner
-        n = struck(self.comms.goals.todos.get(task), unit)
+        after = self.comms.goals.todos.get(task)
+        n = after.strikes_against(self.comms.registry.require(unit).incarnation)
         line = (f'{time.strftime("%Y-%m-%d %H:%M")} {unit} (strike voided on {task}, '
-                f'recorded {voided.at.clock()}; {n} strike(s) remain): {why}')
+                f'recorded {voided.at.clock()}; {n} strike(s) remain; held by '
+                f'{after.holder or "nobody"}): {why}')
         self.on_record(line, 'Void', VerdictAudience.of(unit, todo))
-        print(f'{unit}: {n} strike(s) on {task}')
+        print(f'{unit}: {n} strike(s) on {task}; held by {after.holder or "nobody"}')
 
     def withdraw(self, pid: str, why: str, superseded_by: Successor = NoSuccessor()) -> None:
         """Core retires an undelivered order sent in error.
@@ -765,6 +800,13 @@ class CommanderVerb(DeclaredVerb, affix="Verb"):
             flags=("--fork",), options={"type": CommanderForkCaller, "help": "the acting thread's name"}
         ),
     ] = NoThreadCaller()
+    clears: ClassVar[tuple[type[StandingRule], ...]] = ()
+
+    def __init_subclass__(cls, **options: object) -> None:
+        """A verb names the owed answers it clears; each rule's hint is rendered from them."""
+        super().__init_subclass__()
+        for rule in vars(cls).get("clears", ()):
+            rule.cleared_by(cls)
 
     def who(self, ctx: Commander) -> str:
         return ctx.actor_name
@@ -773,6 +815,10 @@ class CommanderVerb(DeclaredVerb, affix="Verb"):
         ctx.comms.registry.require(ctx.commander).require_commander()
         self.fork.commanding(ctx.comms, ctx.commander)
         ctx = ctx.model_copy(update={'actor': self.fork})
+        self.act(ctx)
+
+    def act(self, ctx: Commander) -> None:
+        """Gate, then run."""
         self.gate(ctx)
         self.run(ctx)
 
@@ -794,8 +840,32 @@ class CommanderVerb(DeclaredVerb, affix="Verb"):
         return ' '.join(next(iter(verbs.choices.values())).format_usage().split()[1:])
 
 
+class HeartbeatGated(CommanderVerb, declared_name=None):
+    """A writing verb run while a heartbeat line sits undisposed past the answer window prints
+    the board beside its result instead of refusing: the board already reaches the commander
+    on every tool call, so a refusal only stopped unit answers, reviews and owner fixes that
+    touched no line. Core records each action, and the record is what disposes of a line.
+    Nothing the commander says about a line counts."""
+
+    @abstractmethod
+    def act(self, ctx: Commander) -> None:
+        """Gate on the heartbeat subjects this verb's recorded action touches, then run;
+        each verb decodes those subjects once, beside the action that records them."""
+
+    def gate_on(self, ctx: Commander, subjects: tuple[HeartbeatSubject, ...]) -> None:
+        self.gate(ctx)
+        now = time.time()
+        board = CommanderUpdate.owed(ctx.comms, ctx.commander, now)
+        acted = frozenset(subjects)
+        if (any(ping.waits_on_commander(now - AwaitingCommander.seconds) for ping in board)
+                and not any(ping.acted_on(acted) for ping in board)):
+            print(f'BOARD: heartbeat lines undisposed past '
+                  f'{AwaitingCommander.seconds // 60} min; act on them next:\n'
+                  + '\n'.join(ping.render(now) for ping in board), file=sys.stderr)
+
+
 @dataclass(frozen=True, kw_only=True)
-class DirectiveVerb(CommanderVerb):
+class DirectiveVerb(HeartbeatGated):
     """An action may answer named directives; unrelated work cannot clear them."""
 
     answers: Annotated[
@@ -810,35 +880,51 @@ class DirectiveVerb(CommanderVerb):
     def run(self, ctx: Commander) -> None:
         """Resolve names and uncovered debt once, then pass the exact references to the action.
 
-        Closed or unknown names are dropped: a stale name must not livelock an otherwise
-        valid answer. A wrong name still leaves its real debt uncovered and refuses the action.
+        Closed names answer nothing; unknown identities refuse instead of recording a reply
+        that silently drops its references. A wrong addressee leaves its real debt uncovered.
+        A refusal lists every misaddressed name and every blocking debt together, with the
+        replies that answer all of them at once, so one round trip clears the gate.
         """
         now = time.time()
         opened = OwedAnswer.opened(ctx.comms, self.who(ctx))
         snapshot = ctx.comms.registry.snapshot()
+        problems: dict[str, str] = {}
+        with ctx.comms.bus.bus.reading() as source:
+            for identity in self.answers:
+                try:
+                    source.message_reference(identity)
+                except RowNotFoundError:
+                    problems[f'--answers {identity}'] = 'unknown message id'
         reached = frozenset(snapshot.canonical_name(name) for name in self.addressed)
         named = (tuple(rule.message for rule in opened
                        if rule.message.message_id in self.answers)
                  if self.answers else self.unnamed_answers(opened, reached))
-        misaddressed = tuple(reason for rule in opened
-                             if (reason := rule.misaddressed(named, reached)))
-        if misaddressed:
-            sys.exit('REFUSED, nothing recorded: --answers names a message this action never'
-                     ' reaches:\n' + '\n'.join(misaddressed))
+        answered = tuple(rule for rule in opened if rule.answered_by(named))
+        problems |= {rule.cited: reason for rule in opened
+                     if (reason := rule.misaddressed(named, reached))}
         owed = tuple(rule for rule in opened if rule.due(now) and not rule.answered_by(named))
-        blocked = []
         for rule in owed:
-            if rule.blocks(reached, self):
-                blocked.append(rule)
+            if rule.blocks(reached, self, answered):
+                problems[rule.cited] = (f'{rule.line()}: {rule.message.body[:80]}\n'
+                                        f'{rule.clearing_action()}')
             else:
                 print(f'WARNING: {rule.line()}')
-        if blocked:
-            lines = '\n'.join(
-                f'{rule.line()}: {rule.message.body[:80]}\n{rule.clearing_action()}'
-                for rule in blocked
-            )
-            sys.exit('REFUSED, nothing recorded: messages owed an answer:\n' + lines)
+        if problems:
+            raise RecordProblems(problems | self.replies_clearing(
+                tuple(rule for rule in opened if rule.cited in problems)))
         self.respond(ctx, tuple(dict.fromkeys(message.reference for message in named)))
+
+    @staticmethod
+    def replies_clearing(refused: tuple[OwedAnswer, ...]) -> dict[str, str]:
+        """One `order say` per asker, naming every refused debt a reply to that asker answers."""
+        askers: dict[str, list[str]] = {}
+        for rule in refused:
+            for asker in rule.answered_in():
+                askers.setdefault(asker, []).append(str(rule.message.message_id))
+        return {f'--answers {" ".join(ids)} ({asker})':
+                f'agent-comms-commander {SayVerb.tool()} {SayVerb.declared_name} {asker} BODYFILE'
+                f' --answers {" ".join(ids)}'
+                for asker, ids in askers.items()}
 
     def unnamed_answers(self, opened: tuple[OwedAnswer, ...],
                         reached: frozenset[str]) -> tuple[Message, ...]:
@@ -849,6 +935,18 @@ class DirectiveVerb(CommanderVerb):
     @abstractmethod
     def addressed(self) -> tuple[str, ...]:
         """The threads this action's message is for; only their asks can it answer."""
+
+    def act(self, ctx: Commander) -> None:
+        self.gate_on(ctx, self.acts_on(ctx))
+        self.run(ctx)
+
+    def acts_on(self, ctx: Commander) -> tuple[HeartbeatSubject, ...]:
+        snapshot = ctx.comms.registry.snapshot()
+        reached = (snapshot.canonical_name(name) for name in self.addressed)
+        # A channel reaches no unit line; only registered threads are subjects.
+        return (*(UnitSubject(snapshot.threads[name].incarnation)
+                  for name in reached if name in snapshot.threads),
+                *(AnswerSubject(identity) for identity in self.answers))
 
     @abstractmethod
     def respond(self, ctx: Commander, references: tuple[MessageReference, ...]) -> None: ...
@@ -871,27 +969,12 @@ class RequestedOrderVerb(OrderVerb, DirectiveVerb, declared_name=None):
         RequestSelection, Argument(flags=("--request",),
                                    options={"help": "owner request ID; defaults to newest open"}),
     ] = NewestOpenRequest()
-
-
-@dataclass(frozen=True, kw_only=True)
-class SendVerb(RequestedOrderVerb):
-    help = "record the order in Core and send it"
-    unit: Annotated[str, Argument(flags=("unit",))]
-    body_file: Annotated[
-        str, Argument(flags=("body_file",), options={"metavar": "ORDER.json"})
-    ]
     clean: Annotated[
         bool,
         Argument(
             flags=("--clean",), options={"help": "the unit showed no incompetence"}
         ),
     ] = False
-    reassign: Annotated[
-        Reassignment,
-        Argument(
-            flags=("--reassign",), options={"help": "the concrete failure that forces replacement"}
-        ),
-    ] = NoReassignment()
     disk: Annotated[
         bool,
         Argument(
@@ -899,6 +982,22 @@ class SendVerb(RequestedOrderVerb):
             options={"help": "a cleanup order; never overrides a tool's storage rule"},
         ),
     ] = False
+
+
+@dataclass(frozen=True, kw_only=True)
+class SendVerb(RequestedOrderVerb):
+    help = "record the order in Core and send it"
+    clears = (DeliveryAwaitingJudgement,)
+    unit: Annotated[str, Argument(flags=("unit",))]
+    body_file: Annotated[
+        str, Argument(flags=("body_file",), options={"metavar": "ORDER.json"})
+    ]
+    reassign: Annotated[
+        Reassignment,
+        Argument(
+            flags=("--reassign",), options={"help": "the concrete failure that forces replacement"}
+        ),
+    ] = NoReassignment()
     traced: Annotated[
         FileLine | NoSourceReference,
         Argument(
@@ -913,6 +1012,14 @@ class SendVerb(RequestedOrderVerb):
     @property
     def addressed(self) -> tuple[str, ...]:
         return (self.unit,)
+
+    def acts_on(self, ctx: Commander) -> tuple[HeartbeatSubject, ...]:
+        """Taking held problems over acts on their holders too: reassigning a stopped unit's
+        order is the action its WAKE line asks for."""
+        named = frozenset(OrderFile.read(Path(self.body_file).read_text()).problems)
+        return (*super().acts_on(ctx),
+                *(UnitSubject(assignment.owner_identity) for todo in ctx.todos() if todo.id in named
+                  for assignment in todo.current_holder.current_assignments()))
 
     def resolves_claim(self, unit: str, problem: str) -> bool:
         return (self.unit == unit
@@ -996,6 +1103,7 @@ class WithdrawVerb(Reasoned, OrderVerb):
 @dataclass(frozen=True, kw_only=True)
 class DoneVerb(OrderVerb):
     help = "Core checks the order's merged PR at its merge commit; late delivery is a strike"
+    clears = (DeliveryAwaitingJudgement,)
     unit: Annotated[str, Argument(flags=("unit",), options={"metavar": "UNIT"})]
     problem: Annotated[
         str,
@@ -1132,6 +1240,22 @@ class CheckVerb(OrderVerb):
 
 
 @dataclass(frozen=True, kw_only=True)
+class RunVerb(OrderVerb):
+    help = "replace an open application order's wrong run text; keeps its review timer and strikes"
+    pid: Annotated[str, Argument(flags=("pid",))]
+    text: Annotated[
+        str, Argument(flags=("--run",), options={"help": "what the installed app must show"})
+    ]
+    why: Annotated[
+        str, Argument(flags=("--why",), options={"help": "what was wrong with the recorded run"})
+    ]
+
+    def run(self, ctx: Commander) -> None:
+        ctx.call(CommsOrderRunTool(problem=self.pid, run=self.text, why=self.why))
+        print(f'{self.pid}: order now works when {self.text}')
+
+
+@dataclass(frozen=True, kw_only=True)
 class ServeVerb(OrderVerb):
     help = "name the plan phase an open order serves; keeps its id, review timer and strikes"
     pid: Annotated[str, Argument(flags=("pid",))]
@@ -1174,8 +1298,16 @@ class SayVerb(OrderVerb, DirectiveVerb):
 
 
 @dataclass(frozen=True, kw_only=True)
+class JoinVerb(OrderVerb):
+    help = "register a commander fork before its first record"
+
+    def run(self, ctx: Commander) -> None:
+        print(f'{ctx.actor_name} registered')
+
+
+@dataclass(frozen=True, kw_only=True)
 class RetireVerb(OrderVerb):
-    help = "stop a commander fork without discarding its open orders"
+    help = "stop and archive a commander fork without discarding its open orders"
 
     def run(self, ctx: Commander) -> None:
         ctx.actor.retire(ctx.comms)
@@ -1195,8 +1327,6 @@ class ProblemVerb(RequestedOrderVerb):
             flags=("--where",), options={"help": "the actual file:line where this problem occurs"}
         ),
     ]
-    disk: Annotated[bool, Argument(flags=("--disk",))] = False
-
     @property
     def addressed(self) -> tuple[str, ...]:
         return (self.to,)
@@ -1209,7 +1339,8 @@ class ProblemVerb(RequestedOrderVerb):
             ctx.comms.goals.todos.require_recurrence_declaration(
                 document.order, location, checkout, document.slop, time.time())
         pid = ctx.comms.goals.todos.allocate_problem()
-        ctx.send(self.to, document, target=NewProblem(pid, document.defect), disk=self.disk,
+        ctx.send(self.to, document, clean=self.clean,
+                 target=NewProblem(pid, document.defect), disk=self.disk,
                  finding=LocatedProblemFinding(location), answers=references,
                  request=self.request)
         print(pid)
@@ -1300,14 +1431,9 @@ class HuntVerb(Reasoned, OrderVerb):
             },
         ),
     ] = ""
-    repository: Annotated[
-        str,
-        Argument(flags=("--repo",), options={
-            "help": "registered repository FILE:LINE is in; required when several are registered"}),
-    ] = ""
 
     def run(self, ctx: Commander) -> None:
-        ctx.hunt(self.where, self.why, self.sent, self.repository)
+        ctx.hunt(self.where, self.why, self.sent)
 
 
 class NextHuntVerb(OrderVerb, declared_name="next-hunt"):
@@ -1317,6 +1443,15 @@ class NextHuntVerb(OrderVerb, declared_name="next-hunt"):
         for path in HuntDue.next_hunt(ctx.comms, ctx.commander,
                                       HeldOrders.read(ctx.comms, ctx.commander).todos):
             print(path)
+
+
+class InstallVerb(OrderVerb):
+    help = "launch Core's installer for every configured main the installed build lacks"
+    clears = (InstallDue,)
+
+    def run(self, ctx: Commander) -> None:
+        for due in InstallDue.due(ctx.comms, ProgressRead()):
+            print(f"{due.repo.to_wire()} main {due.main[:12]}: {due.launch(ctx.comms)}")
 
 
 class IdleVerb(OrderVerb):

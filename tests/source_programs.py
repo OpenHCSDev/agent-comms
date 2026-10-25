@@ -1,6 +1,5 @@
 """Real console targets from this checkout, using the existing shared Python."""
 
-import shutil
 import sys
 import sysconfig
 import tomllib
@@ -43,7 +42,11 @@ class SourcePrograms:
         # runtime, and borrow only the shared Python's dependencies.
         interpreter = binary / 'python'
         interpreter.symlink_to(sys.executable)
-        shutil.copy(Path(sys.prefix) / 'pyvenv.cfg', prefix / 'pyvenv.cfg')
+        # Written, not copied: the shared Python is a venv locally and a bare interpreter in CI.
+        (prefix / 'pyvenv.cfg').write_text(
+            f'home = {Path(sys.base_prefix) / "bin"}\n'
+            f'version = {".".join(map(str, sys.version_info[:3]))}\n'
+            'include-system-site-packages = false\n')
         shared = sysconfig.get_path('purelib')
         site = prefix / Path(shared).relative_to(sys.prefix)
         site.mkdir(parents=True)

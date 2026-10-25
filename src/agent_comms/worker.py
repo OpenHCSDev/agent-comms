@@ -35,7 +35,7 @@ async def run_owner(comms: Comms) -> None:
     async with Coordination.worker(CoordinationStore.path_in(comms.root)):
         name = ThreadLaunch.current().name
         thread = await Coordination.run_worker(partial(comms.registry.require, name))
-        stopped = OwnerStop()
+        stopped = OwnerStop(comms.owners.maintenance)
         agent = CommsAgent(
             comms,
             runtime_enabled=True,
@@ -58,26 +58,28 @@ async def run_owner(comms: Comms) -> None:
 
 async def run_startup_input(agent: CommsAgent, name: str, key: InputKey) -> None:
     """Consume this launch's explicitly authorized input, never scan for retries."""
-    async with agent.turns.turn_locks.setdefault(name, asyncio.Lock()):
-        def capture():
-            snapshot = agent._comms.registry.snapshot()
-            owner = snapshot.threads[name]
-            row = agent.inputs.dispositions.lookup(key)
-            if not row.queued_for(
-                owner.incarnation, snapshot.claim_generation(name), row.source_text
-            ):
-                raise ValueError("Startup input no longer belongs to this owner claim_scope")
-            return row
-        row = await Coordination.run_worker(capture)
-        await agent.inputs.emit_input_disposition(name, row)
-        await agent.turns.run_agent_turn(
-            name,
-            name,
-            row.source_text,
-            acceptance=NoTurnAcceptance(),
-            original_keys=(key,),
-            original_owner_input=True,
-        )
+    agent.inputs.ensure_live_drain(name)
+    async with agent.inputs.state(name).turn_lock:
+        async with agent.inputs.state(name).own_turn_task():
+            def capture():
+                snapshot = agent._comms.registry.snapshot()
+                owner = snapshot.threads[name]
+                row = agent.inputs.dispositions.lookup(key)
+                if not row.queued_for(
+                    owner.incarnation, snapshot.claim_generation(name), row.source_text
+                ):
+                    raise ValueError("Startup input no longer belongs to this owner claim_scope")
+                return row
+            row = await Coordination.run_worker(capture)
+            await agent.inputs.emit_input_delivery_changed(name)
+            await agent.turns.run_agent_turn(
+                name,
+                name,
+                row.source_text,
+                acceptance=NoTurnAcceptance(),
+                original_keys=(key,),
+                original_owner_input=True,
+            )
 
 
 # An owner is background work: under CPU contention it yields to interactive

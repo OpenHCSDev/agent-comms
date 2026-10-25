@@ -16,7 +16,7 @@ from agent_comms.locked_store import DocumentChange, LockedStore
 from agent_comms.registration import Registration
 from agent_comms.registry_document import RegistryDocument, ThreadSlice
 from agent_comms.registry_store import RegistryStore, UncachedRegistry
-from agent_comms.store_files import SharedLock, StoreLockContention
+from agent_comms.store_files import ExclusiveLock, StoreLockContention, _store_lock
 from agent_comms.threads import Thread
 from agent_comms.thread_text import GivenThreadText
 
@@ -38,7 +38,7 @@ def test_edit_owns_turn_and_document_owns_later_changes(tmp_path, *, thread_regi
     document.unregister("renamed")
     document.begin_delete("renamed")
     assert document.remove("renamed") == ()
-    assert document.threads == {}
+    assert not document.threads
     assert not list(tmp_path.iterdir())
 
 
@@ -118,10 +118,10 @@ def test_registry_readers_share_lock_and_exclude_writer(tmp_path):
     registry.register(owner(tmp_path, registry=registry))
     other = RegistryStore(registry.store.path)
     with registry.store.reading():
-        with other.locked(mode=SharedLock(), contention=StoreLockContention(0)):
+        with other.read_now():
             assert other._read_unlocked().threads["owner"].name == "owner"
         assert_writer_excluded(other.path)
-    with other.locked(contention=StoreLockContention(0)):
+    with _store_lock(other.path, ExclusiveLock(), StoreLockContention(0)):
         assert other._read_unlocked().threads["owner"].name == "owner"
 
 
@@ -181,3 +181,19 @@ print(json.dumps(steps,sort_keys=True))
     restored = Registration(tmp_path / "current" / "registry.json")
     assert restored.require("child").created_at == 20.0
     assert restored.snapshot().owner_generations["renamed"] > 0
+
+
+def test_thread_rows_compare_unread_rows_as_stored_and_decode_only_what_changed(tmp_path):
+    from agent_comms.registry_document import ThreadRows
+    from agent_comms.thread_execution import ExternalThreadExecution
+
+    # A row that cannot decode proves an unread, unchanged row is never decoded to compare.
+    stored = {'unread': {'name': 'unread', 'not': 'a thread'}}
+    assert ThreadRows.from_wire(stored) == ThreadRows.from_wire(stored)
+    written = ThreadRows.from_wire(stored)
+    written['unread'] = Thread(
+        'unread', frozenset(), str(tmp_path), execution=ExternalThreadExecution)
+    other = ThreadRows.from_wire({})
+    other['unread'] = written['unread']
+    assert written == other
+    assert written != ThreadRows.from_wire({})

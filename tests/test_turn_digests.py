@@ -2,15 +2,14 @@
 
 import asyncio
 import hashlib
+from contextlib import aclosing, redirect_stdout, suppress
+from datetime import datetime, timedelta
 import io
 import json
 import os
-from contextlib import aclosing, redirect_stdout, suppress
-from datetime import datetime, timedelta
 
 import pytest
 
-from agent_comms.bus import Bus
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.cli import main
 from agent_comms.cli_bridges.claude import ClaudeBridge
@@ -22,14 +21,16 @@ from agent_comms.errors import ToolRefusedError
 from agent_comms.external_transcript import NoEarlierPage
 from agent_comms.field_codec import FieldCodec
 from agent_comms.runtime_updates import FinishedItem
-from agent_comms.session_file import RegistrySessionLocation
 from agent_comms.thread_execution import ExternalThreadExecution
-from agent_comms.threads import Thread
+from agent_comms.session_file import RegistrySessionLocation
 from agent_comms.transcript_events import AssistantTranscript, TurnDigest
 from agent_comms.turn_context import JournalProvenance, SegmentManifest, TranscriptSegment, WireProvenance
 from agent_comms.turn_digests import LastTurns, TurnBound, TurnsOlderThan, TurnsBefore, TurnsSince
-from agent_comms.turn_item import NativeTurnId
+from agent_comms.bus import Bus
+from agent_comms.turn_item import NativeItemId, NativeTurnId
+from agent_comms.native_session_reopen import PiSessionId
 from agent_comms.watched import FileSource
+from agent_comms.threads import Thread
 
 
 def prepared(tmp_path):
@@ -77,8 +78,15 @@ def test_external_turns_preserve_interleaving_and_the_whole_selected_turn(tmp_pa
     for at, (turn, item, text) in enumerate([
             (old_turn_id, 'a', 'older'), (one_turn_id, 'b', 'first'),
             (two_turn_id, 'c', 'other'), (one_turn_id, 'd', 'continued')], start=1):
-        source.finish(turn_id=turn, item_id=item,
-                      events=(AssistantTranscript(text, position=item, timestamp=float(at)),))
+        source.finish(
+            turn_id=turn,
+            item_id=NativeItemId(item),
+            events=(
+                AssistantTranscript(
+                    text, position=FieldCodec.decode(int | NativeItemId, item), timestamp=float(at)
+                ),
+            ),
+        )
     answer = endpoint(comms, 'cli', LastTurns(2))
     assert [turn['turn_id'] for turn in answer['turns']] == ['two', 'one']
     assert [event['text'] for event in answer['turns'][0]['events']] == ['other']
@@ -151,7 +159,9 @@ def test_woken_native_turn_reads_its_selected_messages_not_the_stored_frame(tmp_
     entry = SegmentManifest(TranscriptSegment, (JournalProvenance(str(source), ('u1',)),),
                             digest, len(frame), 1, contributors=(wake,))
     with comms.contexts.writing() as db:
-        ContextEntry('source', str(source), 'u1', entry).insert_if_absent(db)
+        ContextEntry(
+            PiSessionId("source"), str(source), NativeItemId("u1"), entry
+        ).insert_if_absent(db)
     turn, = endpoint(comms, 'native', LastTurns(1))['turns']
     assert [(event['kind'], event['message']['text'] if 'message' in event else event['text'])
             for event in turn['events']] == [
@@ -223,8 +233,11 @@ def test_recorded_claude_transcript_pages_through_tool_without_loss(tmp_path, mo
     # a second isolated transcript with one eventless harness item at the page edge.
     recorded = comms.transcripts.external('claude').turns(LastTurns(300))
     comms.registry.declare(Thread('paged', frozenset(), str(tmp_path), execution=ExternalThreadExecution))
-    items = [FinishedItem(turn.turn_id, turn.turn_id, turn.events) for turn in reversed(recorded)]
-    items.insert(empty_index, FinishedItem(undated_edge_turn_id, 'undated-edge', ()))
+    items = [
+        FinishedItem(turn.turn_id, NativeItemId(turn.turn_id), turn.events)
+        for turn in reversed(recorded)
+    ]
+    items.insert(empty_index, FinishedItem(undated_edge_turn_id, NativeItemId('undated-edge'), ()))
     comms.transcripts.external('paged').publish_page(items, NoEarlierPage())
     pages = list(paged_answers(comms, 'paged'))
     seen = [turn['turn_id'] for page in pages for turn in page['turns']]
@@ -265,7 +278,7 @@ def test_missing_native_session_is_empty_and_nonpositive_count_is_rejected(tmp_p
 def test_undated_and_equal_time_transcripts_page_without_timestamp_assumptions(tmp_path, events):
     comms = prepared(tmp_path)
     comms.registry.declare(Thread('undated', frozenset(), str(tmp_path), execution=ExternalThreadExecution))
-    items = tuple(FinishedItem(NativeTurnId(f'undated-{index}'), f'item-{index}',
+    items = tuple(FinishedItem(NativeTurnId(f'undated-{index}'), NativeItemId(f'item-{index}'),
         events) for index in range(251))
     comms.transcripts.external('undated').publish_page(items, NoEarlierPage())
     pages = list(paged_answers(comms, 'undated'))

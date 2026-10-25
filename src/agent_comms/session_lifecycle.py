@@ -8,7 +8,7 @@ from functools import partial
 from pathlib import Path
 from typing import TYPE_CHECKING, cast
 
-from agent_comms.coordination_errors import RequestRefused
+from .coordination_errors import Refused
 from acp.schema import (
     AgentCapabilities,
     ClientCapabilities,
@@ -122,12 +122,12 @@ class SessionLifecycle:
     async def close_session(self, session_id: str) -> CloseSessionResponse:
         # An executing owner is not an attachment. Its turn/input retirement
         # remains with shutdown, rather than treating tab close as owner stop.
-        raise RequestRefused.method_not_found("session/close")
+        raise Refused.method_not_found("session/close")
 
     def require(self, session_id: str) -> str:
         name = self.bindings.get(session_id)
         if name is None:
-            raise RequestRefused.invalid_params({"reason": f"Unknown sessionId: {session_id!r}"})
+            raise Refused.invalid_params({"reason": f"Unknown sessionId: {session_id!r}"})
         return name
 
     def require_owned_session(self, entry: RegistryEntry) -> str:
@@ -135,7 +135,7 @@ class SessionLifecycle:
         for session_id, name in self.bindings.items():
             if entry.matches_name(name):
                 return session_id
-        raise RequestRefused.invalid_params({
+        raise Refused.invalid_params({
             "reason": f"Registered owner {entry.thread.name!r} has no loaded ACP session. "
                       "PID registration does not attach a session.",
             "owner": entry.thread.name,
@@ -144,7 +144,7 @@ class SessionLifecycle:
     @staticmethod
     def reject_foreign_mcp(request: NewSessionRequest | LoadSessionRequest) -> None:
         if request.mcp_servers:
-            raise RequestRefused.invalid_params(
+            raise Refused.invalid_params(
                 {
                     "reason": (
                         "ACP mcpServers are unsupported; use Pi's native MCP package configuration."
@@ -174,7 +174,7 @@ class SessionLifecycle:
         thread = self.comms.registry.require(session_id)
         thread.execution.require_native()
         if not thread.contains_worktree(cwd, self.comms.registry.storage_rule):
-            raise RequestRefused.invalid_params(
+            raise Refused.invalid_params(
                 {"reason": "The saved thread belongs to a different working directory."}
             )
         return thread
@@ -275,7 +275,7 @@ class SessionLifecycle:
                     **error.owner.failure_metadata(), **ExistingSessionLoadPlan(binding).metadata(),
                 })
             except (OSError, RuntimeError, RelationViolationError, MalformedRecord) as error:
-                raise RequestRefused.invalid_params(
+                raise Refused.invalid_params(
                     {"reason": (
                         f"Unable to attach to {thread.name!r} owner {thread.process_identity}: {error}"
                      ), **failed_command.failure_metadata()}
@@ -410,10 +410,10 @@ class AttachedSessionLifecycle(SessionLifecycle):
 
     async def close_session(self, session_id: str) -> CloseSessionResponse:
         if not self.effects.use_unstable_protocol:
-            raise RequestRefused.method_not_found("session/close")
+            raise Refused.method_not_found("session/close")
         async with self._attachment_lock:
             if session_id not in self.proxies:
-                raise RequestRefused.invalid_params({"reason": "Unknown attached session"})
+                raise Refused.invalid_params({"reason": "Unknown attached session"})
             await self.retire_proxy(session_id)
         return CloseSessionResponse()
 
@@ -456,7 +456,7 @@ class AttachedSessionLifecycle(SessionLifecycle):
             plan = SessionLoadPlan.at_ingress(load_metadata)
             owner = await plan.resolve(self, thread)
         except (OSError, RuntimeError, RelationViolationError, MalformedRecord) as error:
-            raise RequestRefused.invalid_params(
+            raise Refused.invalid_params(
                 {"reason": f"Session load not authorized for {thread.name!r}: {error}"}
             ) from error
         return await self.attach_owner(owner, session_id, subscription)

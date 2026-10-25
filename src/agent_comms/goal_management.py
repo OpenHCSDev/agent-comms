@@ -2,6 +2,11 @@
 
 from __future__ import annotations
 
+from .agent_events import (
+    GoalChanged,
+    GoalUnchanged,
+)
+
 from .errors import StaleAttemptError
 import logging
 from collections.abc import Iterator, Sequence
@@ -9,9 +14,9 @@ from contextlib import contextmanager
 from dataclasses import replace
 from functools import cached_property
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, TypeVar
 
-from agent_comms.field_codec import GoalId
+from agent_comms.field_codec import GoalId, GoalWaitId
 from .agent_activity import AgentActivity
 from .coordination_errors import StaleFence
 from .errors import RelationViolationError, UnregisteredThreadError
@@ -25,7 +30,8 @@ from .goal_actions import (
 )
 from .goal_attempts import Generation, GoalAttemptStore
 from .errors import UnresolvedAttemptError
-from .goal_history import GoalHistoryEntry
+from .goal_history import GoalHistoryEntry, RecordedGoalHistory
+from .goal_scope import AllGoals, GoalScope, OneGoal
 from .goal_waits import (
     GoalInputReview,
     GoalWait,
@@ -37,7 +43,6 @@ from .goal_waits import (
 from .native_input_owner import GoalLaunchOwner
 from .owner_requests import NewestOpenRequest, RequestDirective
 from .registration import Registration
-from .store_files import SharedLock
 
 if TYPE_CHECKING:
     from .agent_events import GoalChange
@@ -64,10 +69,12 @@ from .input_attempt import (
 from .input_disposition import DeliveryOverview, InputDispositions
 from .message_bus import MessageBus
 from .threads import Thread
-from .todos import SendBackVerdict, StrikeReason, Todo, TodoCommand, TodoStore
+from .errors import TodoError
+from .todos import SendBackVerdict, StrikeReason, Todo, JudgedCall, TodoBatch, TodoCommand, TodoStore
 from .turn_lease import TurnCompletion
 
 _LOG = logging.getLogger(__name__)
+HistoryReply = TypeVar("HistoryReply", bound=RecordedGoalHistory)
 
 
 class Goals:
@@ -76,7 +83,7 @@ class Goals:
         self.registry = registry
         self.bus = bus
         self.agents = agents
-        self.waits = GoalWaits.at(root)
+        self.waits = GoalWaits(root)
         self.goal_store: GoalAttemptStore | None = None
 
     def fork_goal(self, parent: Thread, child: Thread) -> Goal:
@@ -95,6 +102,37 @@ class Goals:
         current.require_commander(actor)
         return operation.prepare(self, current).record(self, problem)
 
+    def judge_calls(self, verdicts: Sequence[JudgedCall], commander: str) -> tuple[Todo, ...]:
+        """Check every verdict on its order's state as the earlier ones leave it, list every
+        refusal together, and write only when none is refused."""
+        actor = self.registry.require(commander).incarnation
+        staged, ready = TodoBatch(), TodoBatch()
+        for call in verdicts:
+            call.operation.staged(staged, call)
+        states: dict[str, Todo] = {}
+        read_at: dict[str, int] = {}
+        refusals: list[str] = []
+        for call in staged.ordered():
+            problem, verdict = call.problem, call.operation
+            # Every verdict on a problem is built from the revision its judge read; the first
+            # checks that revision against the store and the rest follow the ones before them.
+            if problem not in states:
+                states[problem] = self.todos.get(problem)
+                read_at[problem] = verdict.expected_revision
+            elif verdict.expected_revision == read_at[problem]:
+                verdict = replace(verdict, expected_revision=states[problem].revision)
+            try:
+                states[problem].require_commander(actor)
+                prepared = verdict.prepare(self, states[problem])
+                states[problem] = prepared.apply(states[problem])
+            except TodoError as refused:
+                refusals.append(f"{verdict.tool_call_id}: {refused}")
+                continue
+            prepared.staged(ready, replace(call, operation=prepared))
+        if refusals:
+            raise TodoError("; ".join(refusals))
+        return ready.record(self)
+
     def apply_problem(self, problem: str, operation: TodoCommand) -> Todo:
         return self.todos.apply(problem, operation)
 
@@ -102,13 +140,22 @@ class Goals:
         """The verdict and strike land on the Todo in the write that revises the holder's Goal."""
         holder = verdict.previous
         self.update_goal(holder.owner, SentBackOrderGoalAction(
-            expect=GoalPrecondition(goal_id=holder.generation), problem=problem, operation=verdict))
+            expect=GoalPrecondition(goal_id=OneGoal(holder.generation)), problem=problem, operation=verdict))
         sent_back: Todo = self.todos.get(problem)
         return sent_back
 
     def fire(self, unit: str, reason: StrikeReason, actor: ThreadIncarnation) -> tuple[Todo, ...]:
+        """Refuse while a held problem's checkout retains work: the same owner the WORK HELD
+        standing rule reads, so a release never strands what the heartbeat would protect."""
         owner = self.registry.require(unit).incarnation
         store: TodoStore = self.todos
+        rule = self.registry.storage_rule
+        held = tuple(work for todo in store.held_by(actor.commanding_identity, owner)
+                     for work in rule.work_for_problem(todo, self.registry, store))
+        if held:
+            raise TodoError("; ".join(
+                f"{work.owner.name} retains work in {work.checkout}" for work in held)
+                + " -> the holder must commit and push it before the problem is released")
         return store.fire(owner, actor, reason)
 
     def open_goal_store(self) -> GoalAttemptStore:
@@ -253,10 +300,20 @@ class Goals:
         )
 
     def goal_history(
-        self, name: str, *, goal_id: GoalId | None = None
+        self, name: str, scope: GoalScope = AllGoals()
     ) -> tuple[GoalHistoryEntry, ...]:
-        """Read durable revisions for one thread incarnation and optional goal ID."""
-        return self.registry.goal_history(name, goal_id=goal_id)
+        """Read durable revisions for one thread incarnation within ``scope``."""
+        return self.registry.goal_history(name, scope)
+
+    def recorded_history(
+        self, reply: type[HistoryReply], name: str, scope: GoalScope
+    ) -> HistoryReply:
+        """Revisions from goal history, execution failures from the attempt ledger."""
+        owner = self.registry.require(name).incarnation.wire_birth
+        return reply(
+            tuple(entry.recorded() for entry in self.goal_history(name, scope)),
+            self.open_goal_store().failures(owner, scope),
+        )
 
     def goal_wait(self, name: str) -> GoalWait:
         goal = self.registry.require(name).goal
@@ -370,8 +427,6 @@ class Goals:
         Existing registry/history and wait persistence are the cross-process
         authority. Each observer supplies its last successfully published view.
         """
-        from .agent_events import GoalChanged, GoalUnchanged
-
         current = self.goal_snapshot(name)
         return GoalChanged(current) if previous.changed_by(current) else GoalUnchanged()
 
@@ -397,14 +452,14 @@ class Goals:
             return GoalSnapshot(goal, source.execution())
         return GoalSnapshot(owner.goal, IdleGoalExecution())
 
-    def consume_goal_wait(self, name: str, wait_id: str) -> bool:
+    def consume_goal_wait(self, name: str, wait_id: GoalWaitId) -> bool:
         """Consume the exact wait after reserving its original attempt."""
         goal = self.registry.require(name).goal.active()
-        return goal.clear_wait(self.waits, wait_id=wait_id)
+        return goal.consume_wait(self.waits, wait_id)
 
     def consume_reply_wait(self, owner: RegistryOwner, reference: MessageReference) -> bool:
         """Read the exact completed delivery before checking its original owner fence."""
-        with self.registry.store.locked(mode=SharedLock()):
+        with self.registry.store.guarded_read():
             owner.require_registry(self.registry)
             review = GoalWaitReview.capture(self, owner.thread.incarnation.require_recorded())
         incarnation = review.owner.incarnation.require_recorded()
@@ -413,7 +468,7 @@ class Goals:
         original, = self.bus.bus.deliveries_for_references((reference,))
         if not review.wait.matches(original, incarnation):
             return False
-        with self.registry.store.locked():
+        with self.registry.store.guarded_write():
             owner.require_registry(self.registry)
             if not review.current_for(self):
                 return False
@@ -454,5 +509,5 @@ class Goals:
         """Run checks before locking, then recheck the original goal at publication."""
         action.require_actor(actor)
         action = action.prepare(self, name, actor)
-        with self.registry.store.locked():
+        with self.registry.store.guarded_write():
             yield action.apply(GoalActionContext(self, self.registry.require(name), actor))

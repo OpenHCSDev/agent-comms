@@ -7,24 +7,44 @@ from copyreg import __newobj__
 from typing import ClassVar, Never, Self
 
 
-class RequestRefused(Exception):  # noqa: N818 - domain request outcome
-    """A Core request refusal, independent of the transport carrying it."""
+class DrainDeferred(Exception):  # noqa: N818 - capability, not an outcome
+    """A failure an inbox drain records and retries later instead of stopping on."""
+
+
+class CommandFailure(Exception):  # noqa: N818 - capability, not an outcome
+    """A failure a command reports to its caller as a failed result instead of crashing.
+
+    It crosses a worker's pipe as its class, args and state, never through a member's own
+    ``__init__``, whose parameters are not its args, and keeps its original cause."""
+
+    def __reduce__(self):
+        return __newobj__, (type(self), *self.args), self.__dict__ | {"__cause__": self.__cause__}
+
+
+class DrainUnavailable(DrainDeferred):
+    """A failure meaning the drain's store or coordinator is unavailable right now."""
+
+
+class Refused(CommandFailure, DrainUnavailable):
+    """A Core refusal; JSON-RPC 2.0 section 5.1 declares its standard wire codes.
+
+    ACP translates this value at its boundary, never inside Core's producers.
+    """
 
     INVALID_PARAMS: ClassVar[int] = -32602
     METHOD_NOT_FOUND: ClassVar[int] = -32601
     INTERNAL_ERROR: ClassVar[int] = -32603
-    AUTH_REQUIRED: ClassVar[int] = -32000
 
     code: int
-    message: str
     data: object
 
     def __init__(self, code: int, message: str, data: object = None) -> None:
-        self.code, self.message, self.data = code, message, data
-        super().__init__(code, message, data)
+        super().__init__(message)
+        self.code, self.data = code, data
 
-    def __str__(self) -> str:
-        return self.message
+    @property
+    def message(self) -> str:
+        return str(self)
 
     @classmethod
     def invalid_params(cls, data: object = None) -> Self:
@@ -34,29 +54,9 @@ class RequestRefused(Exception):  # noqa: N818 - domain request outcome
     def method_not_found(cls, method: str) -> Self:
         return cls(cls.METHOD_NOT_FOUND, "Method not found", {"method": method})
 
-    @classmethod
-    def internal_error(cls, data: object = None, *, message: str = "Internal error") -> Self:
-        return cls(cls.INTERNAL_ERROR, message, data)
 
-    @classmethod
-    def auth_required(cls, data: object = None) -> Self:
-        return cls(cls.AUTH_REQUIRED, "Authentication required", data)
-
-
-class DrainDeferred(Exception):  # noqa: N818 - capability, not an outcome
-    """A failure an inbox drain records and retries later instead of stopping on."""
-
-
-class DrainUnavailable(DrainDeferred):
-    """A failure meaning the drain's store or coordinator is unavailable right now."""
-
-
-class CoordinationError(RuntimeError, DrainUnavailable):
+class CoordinationError(RuntimeError, DrainUnavailable, CommandFailure):
     """Base class for fail-loud coordinator errors."""
-
-    def __reduce__(self):
-        """Keep the original cause when an observation sends this error over its pipe."""
-        return __newobj__, (type(self), *self.args), self.__dict__ | {"__cause__": self.__cause__}
 
 
 class DeferredRead(Exception):  # noqa: N818 - capability, not an outcome

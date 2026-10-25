@@ -341,11 +341,13 @@ class TestSelectedTargetActions:
             project=str(tmp_path))
         assert any(action.declaration is ArchiveCliCommand for action in actions)
 
-    def test_restart_catalog_uses_original_owner_and_idle_requirements(self, tmp_path):
+    def test_restart_catalog_queues_for_the_original_owner_even_while_busy(self, tmp_path):
         import os
         from dataclasses import replace
         from agent_comms.child_process import ProcessIdentity
-        from agent_comms.cli_commands import CliCommand, RestartCliCommand, StopCliCommand
+        from agent_comms.cli_commands import (
+            CliCommand, QueueRestartCliCommand, RestartCliCommand, StopCliCommand,
+        )
         from agent_comms.restart_scope import OneOwner
         from agent_comms.thread_execution import ExternalThreadExecution
         from agent_comms.thread_status import RunningThreadStatus, StoppedThreadStatus
@@ -361,14 +363,10 @@ class TestSelectedTargetActions:
         action = next(action for action in CliCommand.target_catalog(
             comms, CliCommand.selected_targets((CommandTarget.named('alpha'),)),
             project=str(tmp_path))
-            if action.declaration is RestartCliCommand)
-        assert action.bound == (RestartCliCommand(name=OneOwner('alpha')),)
+            if action.declaration is QueueRestartCliCommand)
+        assert action.bound == (QueueRestartCliCommand(name='alpha'),)
         assert action.editable_fields == ()
-        assert action.encode()['parameters']['properties'] == {}
-        assert action.edited({}).bound == action.bound
         for arguments in ({'agent_bin': json.dumps('/other/native')}, {'agent_args': '--other'}):
-            with pytest.raises(ValueError):
-                action.edited(arguments)
             with pytest.raises(ValueError):
                 RestartCliCommand.execute_target(
                     comms, RestartCliCommand.selected_targets((CommandTarget.named('alpha'),)),
@@ -381,10 +379,8 @@ class TestSelectedTargetActions:
             '--agent-args=--no-extensions'])
         parsed = CliCommand.member_named(options.command).from_arguments(options)
         assert parsed == explicit
-        with pytest.raises(ValueError):
-            action.bound[0].edited({'all': True})
         assert StopCliCommand.help == 'Stop process'
-        assert not RestartCliCommand.thread_bindings(comms, owner, StoppedThreadStatus())
+        assert not QueueRestartCliCommand.thread_bindings(comms, owner, StoppedThreadStatus())
         busy = TurnIdentity(owner.incarnation, owner.turn_generation + 1)
         record = StoredTurnRecord.begin(
             comms.registry.store.path,
@@ -395,11 +391,11 @@ class TestSelectedTargetActions:
                 turn_generation=RecordedGeneration(busy.generation),
             ),
         )
-        assert not RestartCliCommand.thread_bindings(comms,
+        assert QueueRestartCliCommand.thread_bindings(comms,
             replace(owner, turn_record=record, turn_generation=busy.generation), status)
-        assert not RestartCliCommand.thread_bindings(comms,
+        assert not QueueRestartCliCommand.thread_bindings(comms,
             replace(owner, process_identity=ProcessIdentity.capture(os.getpid())), status)
-        assert not RestartCliCommand.thread_bindings(comms,
+        assert not QueueRestartCliCommand.thread_bindings(comms,
             replace(owner, execution=ExternalThreadExecution), status)
 
     def test_tag_batch_requires_each_confirmation_before_removing_any_tag(self, tmp_path):
@@ -442,7 +438,8 @@ class TestSelectedTargetActions:
             {'disposition': compile_decoder(TagDisposition).encode_editor(ArchiveThreadsTagDisposition())},
             confirmed=True).apply(comms)
         assert not result.successful
-        assert tuple(outcome.target for outcome in result.outcomes) == selected
+        assert tuple(outcome.target for outcome in result.outcomes) == tuple(
+            CommandTarget.named(name) for name in selected)
         assert result.outcomes[0].items_with(Successful, result.outcomes[0])
         assert not any(outcome.items_with(Successful, outcome) for outcome in result.outcomes[1:])
         with pytest.raises(ValueError, match="Initial direct target must be visible"):
@@ -481,7 +478,9 @@ class TestSelectedTargetActions:
         code, result = cli(tmp_path, "target-action", "--targets", "alpha", "active", "#team",
                            "--operation", "archive", "--confirmed")
         assert code == 1
-        assert [outcome["target"] for outcome in result["outcomes"]] == ["alpha", "active", "#team"]
+        assert tuple(FieldCodec.decode(CommandTarget, outcome["target"])
+                     for outcome in result["outcomes"]) == tuple(
+                         CommandTarget.named(name) for name in ("alpha", "active", "#team"))
         assert result["outcomes"][0]["result"] == {"archived": "alpha"}
         assert result["outcomes"][1]["error_type"] == CommandSelectionChanged.__name__
         assert "no longer available" in result["outcomes"][1]["error"]
@@ -645,7 +644,7 @@ class TestSelectedTargetActions:
         assert {action.declaration.declared_name for action in actions} >= {"archive", "read-target"}
         result = TargetEdit(ArchiveCliCommand, ArchiveCliCommand.selected_targets((CommandTarget.named('missing'), CommandTarget.named('alpha'))), {}).apply(comms)
         assert not result.successful
-        assert result.outcomes[0].target == "missing" and not result.outcomes[0].items_with(Successful, result.outcomes[0])
+        assert result.outcomes[0].target == CommandTarget.named("missing") and not result.outcomes[0].items_with(Successful, result.outcomes[0])
         assert result.outcomes[1].result.archived == "alpha"
         with pytest.raises(ValueError):
             TargetEdit(ForkCliCommand, ForkCliCommand.selected_targets((CommandTarget.named('alpha'), CommandTarget.named('beta'))), {}).apply(comms)
@@ -662,9 +661,9 @@ def test_result_kind_decides_exit_code_and_navigation_targets():
     launched = OwnerStartResult("alpha", 11, True)
     attached = OwnerStartResult("beta", 12, False)
     batch = TargetBatchResult((
-        TargetCompleted("alpha", StartCliCommand(name="alpha"), launched),
-        TargetCompleted("beta", StartCliCommand(name="beta"), attached),
-        TargetFailed("gamma", "ValueError", "gone"),
+        TargetCompleted(CommandTarget.named("alpha"), StartCliCommand(name="alpha"), launched),
+        TargetCompleted(CommandTarget.named("beta"), StartCliCommand(name="beta"), attached),
+        TargetFailed(CommandTarget.named("gamma"), "ValueError", "gone"),
     ))
     assert launched.reconnect_targets() == ("alpha",) and attached.reconnect_targets() == ()
     assert batch.reconnect_targets() == ("alpha",)
@@ -678,5 +677,7 @@ def test_result_kind_decides_exit_code_and_navigation_targets():
     created = ThreadCreatedResult("child", NoProcess())
     assert created.open_targets() == ("child",)
     command = NewThreadCliCommand(name="child", project="/project", model=UndeclaredModel())
-    completed = TargetCompleted("/project", command, created)
+    from agent_comms.channel_targets import ProjectTarget
+
+    completed = TargetCompleted(ProjectTarget("/project"), command, created)
     assert TargetBatchResult((completed, batch.outcomes[-1], completed)).open_targets() == ("child",)

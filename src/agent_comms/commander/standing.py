@@ -12,14 +12,19 @@ from typing import TYPE_CHECKING, ClassVar, Self
 from agent_comms.build_identity import RecordedBuildIdentity
 from agent_comms.bus import BusReader
 from agent_comms.channel_targets import CommsTag
+from agent_comms import commander
 from agent_comms.cli_commands import InstallCliCommand
 from agent_comms.commander.questions import UnansweredUnitAsks
 from agent_comms.commander_service import CommanderService
 from agent_comms.comms import Comms
+from agent_comms.declared_family import DeclaredFamily
 from agent_comms.goal_actions import ReissuedOrderGoalAction
+from agent_comms.head_review import PullRequestHead
 from agent_comms.heartbeat_frame import HeartbeatFrame
+from agent_comms.heartbeat_subjects import HeadSubject, HeartbeatSubject
 from agent_comms.held_orders import HeldOrders
 from agent_comms.installer import launch as installer_launch
+from agent_comms.installer.interpreter_operation import LauncherPhase
 from agent_comms.installer.runtime_resolution import CorePackage
 from agent_comms.message_bus import WatchPass
 from agent_comms.message_page import MessageReadRequest
@@ -34,59 +39,93 @@ from agent_comms.repo import Repo
 from agent_comms.repository_name import RepositoryName
 from agent_comms.service_passes import ServicePassStore
 from agent_comms.standing_rules import (
+    CoreActsStandingRule,
     DatedStandingRule,
     IndependentStandingRule,
     OwedAnswer,
     ReasonedStandingRule,
     StandingRule,
+    FamilyScan,
     UndatedStandingRule,
 )
-from agent_comms.storage_rules import OrderCheckoutWork
 from agent_comms.thread_identity import ThreadIncarnation
 from agent_comms.threads import Thread
-from agent_comms.todos import OrderClaim, OwnerRequest, Todo
+from agent_comms.todos import (
+    Assignment,
+    OwnerRequest,
+    PullRequests,
+    UnmergedListedPullRequest,
+    RestoreHolderTodo,
+    Todo,
+)
 from agent_comms.turn_digests import OrderEditCountRead, TurnDigestRead, TurnsSince
 from agent_comms.ui_model.unit_state import AwaitingCommander, UnitState
 from agent_comms.work_dispatch import ReusedWorkDispatch, WorkDispatch
+from agent_comms_hooks.watch import DeafWatch
 
 if TYPE_CHECKING:
     from agent_comms.commander.order import CommanderVerb
 
 
 @dataclass(frozen=True)
-class InstallDue(IndependentStandingRule, UndatedStandingRule):
-    """A configured main not contained in the installed build needs an install once its
-    oldest uninstalled merge has stood for the settle window.
+class UninstalledMerge:
+    """One first-parent commit on main the installed build lacks, decoded from git's log once."""
 
-    Every install stops every running unit, so merges batch into one install instead of
-    one install each. The window is read from the merges' own git times, not a schedule.
-    Each due repository merge launches Core's installer once, including dependency
-    merges. The log record selects the member that owns that action.
+    at: int
+    request: str
+    title: str
+    format: ClassVar[str] = "%ct%x1f%s%x1f%b%x1e"
+
+    @classmethod
+    def read(cls, repo: Repo, installed: str, main: str) -> tuple[Self, ...]:
+        """GitHub's merge subject names the request; its body's first line is the title."""
+        log = repo.git(repo.checkout, "log", "--first-parent", f"--format={cls.format}",
+                       f"{installed}..{main}")
+        return tuple(cls(int(at), subject.removeprefix("Merge pull request ").partition(" from ")[0],
+                         body.strip().partition("\n")[0])
+                     for record in log.split("\x1e")[:-1]
+                     for at, subject, body in (record.lstrip("\n").split("\x1f"),))
+
+    @property
+    def line(self) -> str:
+        return f"{self.request} {self.title}"
+
+
+@dataclass(frozen=True)
+class InstallDue(UndatedStandingRule, FamilyScan):
+    """A configured main not contained in the installed build can use an install, from the
+    pass it leaves the build: due is a disposition, never a launch.
+
+    Every install stops every running unit, so the line names what an install now would
+    carry and the open requests about to land, and the commander batches them into one
+    `order install`. That verb launches Core's installer; the log record of its run
+    selects the member that renders it.
     """
 
     repo: RepositoryName
     main: str
     installed: str
-    commits: int = field(compare=False)
-    oldest_minutes: int = field(compare=False)
+    merges: tuple[UninstalledMerge, ...] = field(compare=False)
+    landing: tuple[UnmergedListedPullRequest, ...] = field(compare=False)
     logs: installer_launch.InstallLogs = field(compare=False)
     core: Repo = field(compare=False)
     target: str = field(compare=False)
-    settle: ClassVar[float] = 30 * 60
+    headline: ClassVar[str] = "INSTALL DUE"
 
     @property
     @abstractmethod
     def action(self) -> str: ...
 
     @classmethod
-    def scan_owner(cls) -> type[StandingRule]:
-        return InstallDue
+    def scan_observed(cls, comms: Comms, commander: str,
+                      observed: Sequence[UnitState], frame: HeartbeatFrame) -> tuple[InstallDue, ...]:
+        return cls.due(comms, frame.pulls)
 
     @classmethod
-    def violations(cls, comms: Comms, commander: str) -> tuple[InstallDue, ...]:
+    def due(cls, comms: Comms, pulls: PullRequests) -> tuple[InstallDue, ...]:
+        DeclaredFamily.discover_package(commander)  # The verbs that clear it, for its action.
         repos = comms.registry.snapshot().commander_project.require().repos
         installed = RecordedBuildIdentity.installed()
-        now = time.time()
         logs = installer_launch.InstallLogs(comms.root)
         due: list[InstallDue] = []
         for repo in repos:
@@ -95,44 +134,78 @@ class InstallDue(IndependentStandingRule, UndatedStandingRule):
         target = core.git(core.checkout, "rev-parse", "origin/main").strip()
         for repo in repos:
             main = repo.git(repo.checkout, "rev-parse", "origin/main").strip()
-            if installed.contains(main, repo.checkout):
-                continue
             recorded = installed.for_repository(repo)
-            merged = repo.git(repo.checkout, "log", "--first-parent", "--format=%ct",
-                              f"{recorded.commit}..{main}").split()
-            waited = now - min(map(int, merged), default=now - cls.settle)
-            if waited >= cls.settle:
-                member = logs.member(repo.github, main)
-                due.append(member(repo.github, main, recorded.commit,
-                                  len(merged), int(waited // 60), logs, core, target))
+            # Main is in the build exactly when git logs no first-parent commit past it.
+            merges = UninstalledMerge.read(repo, recorded.commit, main)
+            if not merges:
+                continue
+            member = logs.member(repo.github, main)
+            due.append(member(repo.github, main, recorded.commit, merges,
+                              tuple(row for row in pulls.open(repo.github) if row.landing()),
+                              logs, core, target))
         return tuple(due)
 
-    def enforce(self, comms: Comms, commander: str) -> None:
+    def launch(self, comms: Comms) -> str:
         """An already-launched merge needs no second attempt."""
+        return self.action
+
+    def enforce(self, comms: Comms, commander: str) -> None:
+        """Due is a disposition: the commander's `order install` launches."""
 
     def line(self) -> str:
-        return (f"INSTALL DUE ({self.repo.to_wire()}: main {self.main}, installed "
-                f"{self.installed}, {self.commits} commits, oldest {self.oldest_minutes} min) "
+        oldest = int((time.time() - min(merge.at for merge in self.merges)) // 60)
+        landing = ", ".join(f"#{row.number} {row.branch}" for row in self.landing) or "none"
+        return (f"{self.headline} ({self.repo.to_wire()}: main {self.main[:12]}, installed "
+                f"{self.installed[:12]}, {len(self.merges)} merges, oldest {oldest} min: "
+                f"{'; '.join(merge.line for merge in self.merges)}; landing: {landing}) "
                 f"-> {self.action}")
 
 
 class PendingInstallDue(InstallDue):
     @property
     def action(self) -> str:
-        return f"launched an install of Core main {self.target}"
+        verbs = " or ".join(f"`{verb.usage()}`" for verb in self.clearing_verbs)
+        return f"{verbs} installs Core main {self.target[:12]}; batch the landing requests first"
 
-    def enforce(self, comms: Comms, commander: str) -> None:
+    def launch(self, comms: Comms) -> str:
+        """Every repository's merge installs the same Core target, so a run of that target
+        already going is this merge's launch too; any other run is waited out."""
         command = InstallCliCommand(checkout=self.core.checkout, to=self.target,
                                     project=self.core.checkout)
-        run = installer_launch.InstallRun.start(command, comms.root)
-        run.spawn()
-        self.logs.record(run.logs, self.repo, self.main)
+        try:
+            with self.logs.launching():
+                run = installer_launch.InstallRun.start(command, comms.root, LauncherPhase())
+                run.spawn(wait=False)
+        except installer_launch.InstallRunning as running:
+            for unit in running.installing(self.target):
+                self.logs.record(unit.logs, self.repo, self.main)
+            return str(running)
+        self.logs.record(run.unit.logs, self.repo, self.main)
+        return f"launched an install of Core main {self.target}"
 
 
-class LaunchedInstallDue(InstallDue):
+@dataclass(frozen=True)
+class RunInstallDue(InstallDue, declared_name=None):
+    """A merge whose launched run selected this member; the run rides along so its
+    rendering reads the unit that selected it, not a second look at the logs."""
+
+    unit: installer_launch.InstallUnit = field(compare=False, kw_only=True)
+
+
+class LaunchedInstallDue(RunInstallDue):
     @property
     def action(self) -> str:
         return "an install for this merge was already launched"
+
+
+class DiedInstallDue(RunInstallDue):
+    """Its unit ended without a result; nothing relaunches it until main moves."""
+
+    headline = "INSTALL DIED"
+
+    @property
+    def action(self) -> str:
+        return f"target {self.target[:12]}; {self.unit.errors}: {self.unit.last_error()}"
 
 
 @dataclass(frozen=True)
@@ -147,7 +220,7 @@ class RequestStalled(IndependentStandingRule, UndatedStandingRule):
                      if not store.serving_orders(request.id))
 
     def line(self) -> str:
-        return (f"REQUEST STALLED: {self.request.id.value} {self.request.text}"
+        return (f"ADVANCE request {self.request.id.value} {self.request.text}"
                 " -> order its next step or mark it done")
 
 
@@ -165,12 +238,8 @@ class AnswersTo(MessageReadRequest[tuple[Message, ...]]):
         )
 
 
-class PlanRule(UndatedStandingRule, declared_name=None):
+class PlanRule(UndatedStandingRule, FamilyScan, declared_name=None):
     """Rules read from the heartbeat's one look at the plans and the commander's orders."""
-
-    @classmethod
-    def scan_owner(cls) -> type[StandingRule]:
-        return PlanRule
 
     @classmethod
     def scan_observed(cls, comms: Comms, commander: str,
@@ -202,8 +271,8 @@ class PlanIdle(PlanRule):
 
     def line(self) -> str:
         return (
-            f"PLAN IDLE: {self.phase.plan.declared_name} phase {self.phase.declared_name} ready"
-            f" ({self.phase.plan.document}), no open order; done when"
+            f"START {self.phase.plan.declared_name}/{self.phase.declared_name}"
+            f" ({self.phase.plan.document}): ready, no open order; done when"
             f" {self.reading.describe(self.phase.evidence)} -> {self.phase.task.instruction}"
         )
 
@@ -232,7 +301,7 @@ class PlanStalled(PlanRule):
     def line(self) -> str:
         hours = (time.time() - self.since) / 3600
         return (
-            f"PLAN STALLED: {self.phase.plan.declared_name} phase {self.phase.declared_name}"
+            f"UNSTALL {self.phase.plan.declared_name}/{self.phase.declared_name}:"
             f" held {hours:.1f}h and not on main ({self.phase.plan.document}) -> find what holds"
             " it still and change that this wake: integrate steps that only land together,"
             " take it over, or reassign it"
@@ -273,6 +342,9 @@ class UnitAskUnanswered(UnitOwedAnswer, UndatedStandingRule):
     def asked_by(self, reached: frozenset[str]) -> bool:
         return self.unit in reached
 
+    def answered_in(self) -> tuple[str, ...]:
+        return (self.unit,)
+
     def misaddressed(self, named: tuple[Message, ...], reached: frozenset[str]) -> str:
         """A unit's ask is answered only by a message that reaches that unit."""
         if self.unit in reached or not self.answered_by(named):
@@ -282,8 +354,7 @@ class UnitAskUnanswered(UnitOwedAnswer, UndatedStandingRule):
 
     def line(self) -> str:
         age = max(0, int((time.time() - self.message.timestamp) // 60))
-        return (f"UNANSWERED {self.unit}: message {self.cited}, "
-                f"{age} min old -> commander must answer")
+        return f"ANSWER {self.unit} message {self.cited}: {age} min old"
 
 
 @dataclass(frozen=True)
@@ -291,34 +362,40 @@ class DeliveryAwaitingJudgement(UnitOwedAnswer, UndatedStandingRule):
     """A holder's delivery needs a verdict or a replacement order, never a chat reply."""
 
     problem: str
+    request: PullRequestHead
 
     @classmethod
     def read_open(cls, source: BusReader, snapshot: RegistrySnapshot,
                   held: Mapping[ThreadIncarnation, Sequence[Todo]], commander: str,
                   requests: Sequence[OwnerRequest]) -> tuple[Self, ...]:
-        originals = OrderClaim.originals(
-            source,
-            {(owner, todo.id): todo.order.owed_claims()
-             for owner, todos in held.items() for todo in todos},
-        )
-        return tuple(cls(message, owner.name, problem)
-                     for (owner, problem), messages in originals.items() for message in messages)
+        return tuple(cls(claim.original(source), owner.name, todo.id, claim.request())
+                     for owner, todos in held.items() for todo in todos
+                     for claim in todo.order.owed_claims())
+
+    def subjects(self) -> tuple[HeartbeatSubject, ...]:
+        """A verdict on the delivered head acts on the delivery; a chat reply does not."""
+        return (HeadSubject(self.request),)
 
     def clearing_action(self) -> str:
-        return (f"order done {self.unit} {self.problem} (with --seen FILE for an application run)"
-                " or send the unit its replacement order"
-                " or `judge reviewing --pr N --head SHA --serves WORDS --fork NAME`"
-                " while a fork reads it.")
+        """The verbs that declare they clear this debt render their own command lines."""
+        DeclaredFamily.discover_package(commander)
+        lines = " or ".join(f"`{verb.usage()}`" for verb in self.clearing_verbs)
+        return (f"{lines} (UNIT {self.unit}, PROBLEM {self.problem})."
+                f" --repo: {Repo.selection_refusal()}")
 
     def answered_by(self, named: tuple[Message, ...]) -> bool:
         return False
 
-    def blocks(self, reached: frozenset[str], action: CommanderVerb) -> bool:
-        return self.unit in reached and not action.resolves_claim(self.unit, self.problem)
+    def blocks(self, reached: frozenset[str], action: CommanderVerb,
+               answered: tuple[OwedAnswer, ...]) -> bool:
+        """Work sent to the holder waits on this judgement; an answer to the holder's own ask
+        never does, or the gate would refuse the conversation the answer gate demands."""
+        return (self.unit in reached and not action.resolves_claim(self.unit, self.problem)
+                and not any(rule.asked_by(frozenset((self.unit,))) for rule in answered))
 
     def line(self) -> str:
-        return (f"DELIVERY AWAITING JUDGEMENT {self.unit} {self.problem}: "
-                f"message {self.cited} -> {self.clearing_action()}")
+        return (f"JUDGE {self.unit} {self.problem} delivery {self.cited}"
+                f" -> {self.clearing_action()}")
 
 
 @dataclass(frozen=True)
@@ -343,12 +420,12 @@ class HolderGone(IndependentStandingRule, UndatedStandingRule):
 
     def line(self) -> str:
         held = self.todo.held()
-        return (f"HOLDER GONE: {self.todo.id} is held by {held.owner} born {held.owner_created}, "
-                f"no longer registered -> {self.todo.order.orphan_clearing(self.todo)}")
+        return (f"REHOME {self.todo.id}: holder {held.owner} born {held.owner_created} is no"
+                f" longer registered -> {self.todo.order.orphan_clearing(self.todo)}")
 
 
 @dataclass(frozen=True)
-class UnownedWheelSpin(IndependentStandingRule, UndatedStandingRule):
+class UnownedWheelSpin(IndependentStandingRule, UndatedStandingRule, FamilyScan):
     """A unit holds no next order while the board has unowned rows; Core hands the row to it
     without a commander turn, restarting the row's review window at the handoff."""
 
@@ -382,35 +459,41 @@ class UnownedWheelSpin(IndependentStandingRule, UndatedStandingRule):
 
     @classmethod
     def violations(cls, comms: Comms, commander: str) -> tuple[UnownedWheelSpin, ...]:
-        return cls.scan_orders(comms, commander, HeldOrders.read(comms, commander))
+        return cls.scan_orders(comms, commander, HeldOrders.read(comms, commander), PullRequests())
 
     @classmethod
     def scan_observed(cls, comms: Comms, commander: str,
                       observed: Sequence[UnitState], frame: HeartbeatFrame) -> tuple[Self, ...]:
-        return cls.scan_orders(comms, commander, frame)
+        return cls.scan_orders(comms, commander, frame, frame.pulls)
 
     @classmethod
     def scan_orders(cls, comms: Comms, commander: str,
-                    scan: HeldOrders) -> tuple[UnownedWheelSpin, ...]:
+                    scan: HeldOrders, pulls: PullRequests) -> tuple[UnownedWheelSpin, ...]:
         actor = comms.registry.require(commander).incarnation
-        rows = tuple(todo for todo in comms.goals.todos.for_commander(actor)
-                     if not todo.holder_state.current_assignments())
-        return cls.paired(comms, commander, rows, scan)
+        return cls.paired(comms, commander, comms.goals.todos.for_commander(actor), scan, pulls)
 
     @classmethod
     def paired(cls, comms: Comms, commander: str,
-               todos: Iterable[Todo], scan: HeldOrders) -> tuple[UnownedWheelSpin, ...]:
-        """Both the heartbeat and automatic watcher preserve work before any dispatch."""
-        rows = tuple(todo for todo in todos if todo.pending)
-        retained = tuple(CheckoutHeldWheelSpin(todo, work)
+               todos: Iterable[Todo], scan: HeldOrders,
+               pulls: PullRequests) -> tuple[UnownedWheelSpin, ...]:
+        """Restore recorded live holders before proposing any cross-unit dispatch."""
+        rows = tuple(todo for todo in todos
+                     if todo.pending and not todo.holder_state.current_assignments())
+        snapshot = comms.registry.snapshot()
+        retained = tuple(RetainedHolderWheelSpin(todo, assignment)
                          for todo in rows
-                         for work in comms.registry.storage_rule.work_for_problem(
-                             todo, comms.registry, comms.goals.todos))
+                         for assignment in todo.holder_state.retained_assignments(todo, pulls)
+                         if assignment.running_holders(snapshot))
         protected = {rule.todo.id for rule in retained}
-        idle, found = cls.idle(comms, commander, scan), []
-        for todo in (todo for todo in rows if todo.id not in protected):
+        owners = {rule.previous.owner_identity for rule in retained}
+        unowned = tuple(todo for todo in rows if todo.id not in protected)
+        # Reading every candidate's recent turns is the expensive part; no unowned row, no read.
+        idle = [unit for unit in cls.idle(comms, commander, scan)
+                if unit.incarnation not in owners] if unowned else []
+        found = []
+        for todo in unowned:
             for unit in idle:
-                if not todo.live_strikes(unit.name):
+                if not todo.strikes_against(unit.incarnation):
                     idle.remove(unit)
                     found.append(ReassignedWheelSpin(todo, ReusedWorkDispatch.for_unit(
                         ReissuedOrderGoalAction.for_todo(todo, commander), unit)))
@@ -419,12 +502,15 @@ class UnownedWheelSpin(IndependentStandingRule, UndatedStandingRule):
         return (*retained, *found,
                 *(WaitingUnownedWheelSpin(todo) for todo in rows if todo.id not in covered))
 
+    def redecided(self, comms: Comms, commander: str, current: Todo) -> tuple[StandingRule, ...]:
+        return type(self).paired(comms, commander, (current,), HeldOrders.read(comms, commander), PullRequests())
+
     def line(self) -> str:
-        return f"UNOWNED ROW: {self.todo.id} waits for a new unit"
+        return f"STAFF {self.todo.id}: unowned, waits for a new unit"
 
 
 @dataclass(frozen=True, eq=False)
-class ReassignedWheelSpin(UnownedWheelSpin, declared_name=None):
+class ReassignedWheelSpin(CoreActsStandingRule, UnownedWheelSpin):
     dispatch: WorkDispatch
 
     @property
@@ -437,20 +523,25 @@ class ReassignedWheelSpin(UnownedWheelSpin, declared_name=None):
             f"{self.line()}\n{self.dispatch.action.order.instructions(self.todo)}")
 
     def line(self) -> str:
-        return (f"WHEEL SPIN: {self.unit} holds no order while {self.todo.id} is unowned"
+        return (f"STAFF {self.todo.id} with {self.unit}: it holds no order while the row is unowned"
                 f" -> Core gives it to {self.unit}")
 
 
 @dataclass(frozen=True, eq=False)
-class CheckoutHeldWheelSpin(UnownedWheelSpin, declared_name=None):
-    work: OrderCheckoutWork
+class RetainedHolderWheelSpin(CoreActsStandingRule, UnownedWheelSpin):
+    previous: Assignment
 
     def comparison_values(self) -> tuple[object, ...]:
-        return (*super().comparison_values(), self.work.owner.incarnation, self.work.checkout)
+        return (*super().comparison_values(), self.previous.owner_identity)
+
+    def enforce(self, comms: Comms, commander: str) -> None:
+        comms.goals.change_problem(self.todo.id, RestoreHolderTodo(
+            self.todo.revision, comms.registry.require(commander).incarnation, self.previous,
+        ), commander)
 
     def line(self) -> str:
-        return (f"WORK HELD: {self.todo.id} {self.work.owner.name} retains work in "
-                f"{self.work.checkout} -> restore its holder; do not hand the row away")
+        return (f"KEEP {self.todo.id} with {self.previous.owner}: Core restored its holder;"
+                " do not hand the row away")
 
 
 @dataclass(frozen=True)
@@ -465,13 +556,14 @@ class UnownedOrderWatch(WatchPass[tuple[UnownedObservation, ...]]):
     def observe(self, comms: Comms) -> tuple[UnownedObservation, ...]:
         available = comms.goals.todos.reassignable()
         observed: list[UnownedObservation] = []
+        pulls = PullRequests(available)
         for name in {todo.creator_identity.name for todo in available}:
             commander = comms.registry.require(name)
             mine = (todo for todo in available if todo.creator_identity.name == name)
             observed.extend(
                 UnownedObservation(commander, rule)
                 for rule in UnownedWheelSpin.paired(
-                    comms, name, mine, HeldOrders.read(comms, name),
+                    comms, name, mine, HeldOrders.read(comms, name), pulls,
                 )
             )
         return tuple(observed)
@@ -483,20 +575,16 @@ class UnownedOrderWatch(WatchPass[tuple[UnownedObservation, ...]]):
                 logging.info("%s", rule.rejected_line(error))
 
 
-class WaitingUnownedWheelSpin(UnownedWheelSpin, declared_name=None):
+class WaitingUnownedWheelSpin(UnownedWheelSpin):
     """A row needs a new unit; a proposed dispatch name is not an idle thread."""
 
 
 @dataclass(frozen=True)
-class HeartbeatSilent(IndependentStandingRule, DatedStandingRule, declared_name=None):
+class HeartbeatSilent(IndependentStandingRule, DatedStandingRule, FamilyScan, declared_name=None):
     """A missing or stale successful pass, independent of whether a DM needed sending."""
 
     seconds: ClassVar[int] = 180
     since: float
-
-    @classmethod
-    def scan_owner(cls) -> type[StandingRule]:
-        return HeartbeatSilent
 
     @classmethod
     def violations(cls, comms: Comms, commander: str) -> tuple[HeartbeatSilent, ...]:
@@ -520,7 +608,7 @@ class HeartbeatSilent(IndependentStandingRule, DatedStandingRule, declared_name=
 @dataclass(frozen=True)
 class MissedHeartbeat(HeartbeatSilent):
     def line(self) -> str:
-        return (f"HEARTBEAT SILENT: no completed pass since "
+        return (f"FIX THE HEARTBEAT: no completed pass since "
                 f"{RecordedEventTime(self.since - self.seconds).clock()}, silent past "
                 f"{RecordedEventTime(self.since).clock()}"
                 " -> read the connector journal for the failing pass and fix its owner")
@@ -531,48 +619,90 @@ class HeartbeatNotStarted(HeartbeatSilent):
     request: OwnerRequestId
 
     def line(self) -> str:
-        return (f"HEARTBEAT NOT STARTED: no beat for request {self.request.value}, overdue since "
+        return (f"START THE HEARTBEAT: no beat for request {self.request.value}, overdue since "
                 f"{RecordedEventTime(self.since).clock()}"
                 " -> start the connector heartbeat and fix its failing pass")
 
 
 @dataclass(frozen=True)
-class CommanderDeaf(IndependentStandingRule, DatedStandingRule):
-    """The session bridge has no confirmed Monitor; its own registration dates the pause."""
+class InboxUnavailable(IndependentStandingRule, DatedStandingRule, declared_name=None):
+    """A thread nothing can reach: every message sent to it waits undelivered.
+
+    Each member owns how its inbox reports the pause; the window and the date are shared.
+    """
 
     seconds: ClassVar[int] = 300
     since: float = field(compare=False)
 
     @classmethod
-    def violations(cls, comms: Comms, commander: str) -> tuple[CommanderDeaf, ...]:
-        snapshot = comms.registry.snapshot()
+    @abstractmethod
+    def paused(cls, comms: Comms, commander: str) -> tuple[Self, ...]:
+        """Each pause this member observes, dated when its window closes."""
+
+    @classmethod
+    def violations(cls, comms: Comms, commander: str) -> tuple[Self, ...]:
         now = time.time()
-        pauses = snapshot.status(commander).paused_since(snapshot.seen_at(commander))
-        return tuple(cls(paused + cls.seconds)
-                     for paused in pauses
-                     if paused + cls.seconds < now)
+        return tuple(rule for rule in cls.paused(comms, commander) if rule.since < now)
 
     def began(self) -> float:
         return self.since
 
+
+@dataclass(frozen=True)
+class CommanderDeaf(InboxUnavailable):
+    """The session bridge has no confirmed Monitor; its own registration dates the pause."""
+
+    @classmethod
+    def paused(cls, comms: Comms, commander: str) -> tuple[Self, ...]:
+        snapshot = comms.registry.snapshot()
+        pauses = snapshot.status(commander).paused_since(snapshot.seen_at(commander))
+        return tuple(cls(paused + cls.seconds) for paused in pauses)
+
     def line(self) -> str:
-        return (f"COMMANDER DEAF: its bridge has no confirmed Monitor since "
-                f"{RecordedEventTime(self.since - self.seconds).clock()}, so every Core line"
-                " to it waits unread -> re-arm its watch:"
-                " agent-comms-claude-bridge watch (bare, no pipe)")
+        return DeafWatch(f"since {RecordedEventTime(self.since - self.seconds).clock()}").line()
 
     def enforce(self, comms: Comms, commander: str) -> None:
         """The commander's own inbox is the dead path, so #comms hears it instead."""
         comms.messaging.send(
             CommanderService.sender, CommsTag.channel(), f"{commander}: {self.line()}")
 
+
+@dataclass(frozen=True)
+class UnitDeaf(InboxUnavailable):
+    """A unit's own drain recorded that it cannot read its inbox; that record dates the pause."""
+
+    unit: str
+
+    @classmethod
+    def paused(cls, comms: Comms, commander: str) -> tuple[Self, ...]:
+        snapshot = comms.registry.snapshot()
+        units = [thread for name, thread in comms.registry.active_threads().items()
+                 if name != commander]
+        activity = comms.agents.all_activity(units, snapshot=snapshot)
+        return tuple(cls(paused + cls.seconds, name)
+                     for name, observed in activity.items()
+                     for paused in observed.readiness.unavailable_since())
+
+    def line(self) -> str:
+        return (f"UNDEAFEN {self.unit}: it has read none of its inbox since "
+                f"{RecordedEventTime(self.since - self.seconds).clock()}, so every order to it"
+                " waits undelivered -> read its drain diagnostic and fix that owner")
+
+
 @dataclass(frozen=True)
 class Unjudged(ReasonedStandingRule, UndatedStandingRule):
     limit: ClassVar[int] = 30
-    text = ("UNJUDGED {why} edits -> accept each reviewed PR head with judge ok --pr N --head SHA"
+    text = ("UNJUDGED {why} -> accept each reviewed PR head with judge ok --pr N --head SHA"
             " (one verdict judges every edit before it), or fork judges for the rest")
 
     @classmethod
     def reason(cls, comms: Comms, commander: str) -> str | None:
-        total = OrderEditCountRead.count(comms, commander)
-        return str(total) if total > cls.limit else None
+        """The total, then each order's edits made since its last head verdict."""
+        counts = tuple((read, read.read())
+                       for read in OrderEditCountRead.for_commander(comms, commander))
+        total = sum(count for _, count in counts)
+        if total <= cls.limit:
+            return None
+        named = ", ".join(f"{read.thread.name} {read.todo.id} {count}"
+                          for read, count in counts if count)
+        return f"{total} edits since each order's last head verdict: {named}"

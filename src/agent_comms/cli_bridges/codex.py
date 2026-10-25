@@ -9,17 +9,19 @@ import struct
 from collections import deque
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
+from functools import partial
 from pathlib import Path
 from typing import AsyncIterator, Self
 
 import aiohttp
 from pydantic import JsonValue
 from agent_comms.child_process import ProcessIdentity
+from agent_comms.field_codec import FieldCodec
 from agent_comms.messages import Message
 from agent_comms.send_result import SendResult
 from agent_comms.cli_protocol import EarlierItems, Outcome, DeliveredOutcome
 from .history import CodexHistory, HarnessAddress, OnlineHistory
-from .shared import Binding, IncomingFrame, TranscriptBridge, Options, run_bridge
+from .shared import SessionBinding, IncomingFrame, TranscriptBridge, Options, run_bridge
 from agent_comms.runtime_updates import (
     EarlierPublishedPage, OfferedToolsObserved, PublishedPage, RuntimeUpdate, SessionFacts, ThreadOutput,
 )
@@ -28,6 +30,7 @@ from .codex_protocol import (
     Capabilities, ClientInfo, DisplayOutput, Initialize, InitializeResponse, Initialized,
     Request, RPC_RESPONSE, RpcReply, RpcNotification,
     ToolOutput, RequestParams, ResumeThread, ResumedThread, ItemsList, ItemsPage, ItemStream, BusInput,
+    ReadRateLimits, RateLimits, RateLimitsResponse,
 )
 
 
@@ -106,6 +109,14 @@ class CodexAppServer(CodexHistory, OnlineHistory):
     def connected(cls, thread: str, address: HarnessAddress, directory: Path) -> Self:
         return cls(thread, address.otherwise(str(cls.SOCKET)))
 
+    @classmethod
+    async def rate_limits(cls) -> RateLimits:
+        """Read account-wide usage from the running server, never from session logs."""
+        async with CodexConnection.open(str(cls.SOCKET)) as codex:
+            return FieldCodec.decode(
+                RateLimitsResponse, await codex.call(ReadRateLimits()),
+            ).rate_limits
+
     async def history(self) -> AsyncIterator[RuntimeUpdate]:
         async with CodexConnection.open(self.socket) as codex:
             async for update in self.seen(codex):
@@ -130,7 +141,7 @@ class CodexAppServer(CodexHistory, OnlineHistory):
 class CodexBridge(CodexAppServer, TranscriptBridge[CodexOptions], declared_name=None):
     state_directory = Path('.local/state/codex-comms-inbox')
 
-    def __init__(self, options: CodexOptions, binding: Binding, db: sqlite3.Connection) -> None:
+    def __init__(self, options: CodexOptions, binding: SessionBinding, db: sqlite3.Connection) -> None:
         TranscriptBridge.__init__(self, options, binding, db)
         CodexAppServer.__init__(self, binding.thread, options.socket)
 
@@ -170,8 +181,8 @@ class CodexBridge(CodexAppServer, TranscriptBridge[CodexOptions], declared_name=
         async with CodexConnection.open(self.socket) as codex:
             page = ItemsPage.model_validate(await codex.call(ItemsList(
                 threadId=self.thread, cursor=request.request.cursor))).publication()
-        await asyncio.to_thread(EarlierPublishedPage(page.items, page.earlier, request).publish,
-                                ThreadOutput(transcript, self.comms.agents))
+        await self.comms.bus.when_open(partial(EarlierPublishedPage(page.items, page.earlier, request).publish,
+                                               ThreadOutput(transcript, self.comms.agents)))
 
     async def deliver(self, message: Message) -> type[Outcome]:
         async with CodexConnection.open(self.socket) as codex:

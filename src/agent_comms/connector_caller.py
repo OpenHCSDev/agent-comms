@@ -61,8 +61,7 @@ class DirectorCaller(ConnectorCaller):
     message to a thread as a directive like the owner's own."""
 
     def require_directive(self, comms: Comms, body: str) -> None:
-        """A directive passes DirectiveText. claude-ai directs the commanders, so the
-        commander rules review does not gate it."""
+        """A directive passes DirectiveText."""
         DirectiveText.require(body)
 
     def origin(self) -> DirectorOrigin:

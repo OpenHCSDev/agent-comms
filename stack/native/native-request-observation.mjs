@@ -1,0 +1,90 @@
+/** Request timing is a diagnostic resource, never admission or retry authority. */
+import { randomUUID } from "node:crypto";
+
+export function observeRequest(options, record) {
+    // Transport work must not depend on a presentation observer succeeding.
+    try { options?.onRequestProgress?.(record); } catch { /* observer only */ }
+}
+
+export class NativeRequestObservation {
+    constructor(config) {
+        this.observer = config.onRequestProgress;
+        this.requestId = randomUUID();
+        this.sessionId = config.sessionId ?? "";
+        this.started = process.hrtime.bigint();
+        this.startedAtMs = Date.now();
+        this.callbackNs = 0n;
+        this.callbackCount = 0;
+        this.callbackMaxNs = 0n;
+    }
+
+    observe = (record) => {
+        const now = process.hrtime.bigint();
+        const progress = { requestId: this.requestId, sessionId: this.sessionId,
+            startedAtMs: this.startedAtMs,
+            observedAtMs: Date.now(), monotonicNs: now.toString(),
+            elapsedMs: Number(now - this.started) / 1e6,
+            callbackMs: Number(this.callbackNs) / 1e6,
+            callbackCount: this.callbackCount, callbackMaxMs: Number(this.callbackMaxNs) / 1e6,
+            ...record };
+        observeRequest({ onRequestProgress: this.observer }, progress);
+    };
+
+    async callback(name, action, announce = true, detail = "Publishing model response") {
+        const started = process.hrtime.bigint();
+        if (announce) this.observe({ stage: "callback", callback: name,
+            detail });
+        try { return await action(); }
+        finally {
+            const duration = process.hrtime.bigint() - started;
+            this.callbackNs += duration;
+            this.callbackCount++;
+            if (duration > this.callbackMaxNs) this.callbackMaxNs = duration;
+            if (announce) this.observe({ stage: "callback_end", callback: name,
+                detail: "Waiting for model progress" });
+        }
+    }
+
+    options(config) {
+        return { ...config, onRequestProgress: this.observe,
+            onPayload: (payload, model) => this.callback("before_provider_request",
+                () => config.onPayload?.(payload, model), true, "Preparing model request"),
+            onResponse: (response, model) => this.callback("after_provider_response",
+                () => config.onResponse?.(response, model), true, "Reading provider response") };
+    }
+
+    async *events(events) {
+        let firstDelta = true;
+        for await (const event of events) {
+            if (firstDelta && event.type.endsWith("_delta")) {
+                firstDelta = false;
+                this.observe({ stage: "first_delta_consumed", detail: "Receiving model response" });
+            }
+            yield event;
+        }
+    }
+
+    async emit(event, publish) {
+        return this.callback(event.type, () => publish(event), event.type !== "message_update");
+    }
+}
+
+/** Observe the original provider event iterator, before message projection.
+ * End is iterator custody release (including failure/cancel), not a commit proof.
+ */
+export async function* observeStream(options, events, transport) {
+    let first = true;
+    try {
+        for await (const event of events) {
+            if (first) {
+                first = false;
+                observeRequest(options, { stage: "first_event", transport,
+                    detail: "Provider stream started" });
+            }
+            yield event;
+        }
+    } finally {
+        observeRequest(options, { stage: "stream_end", transport,
+            detail: "Provider stream closed" });
+    }
+}

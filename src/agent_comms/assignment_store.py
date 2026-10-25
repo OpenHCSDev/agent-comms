@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
-from agent_comms.field_codec import ThreadLookup
+from agent_comms.field_codec import AssignmentId, ThreadLookup
 
+from collections.abc import Callable, Sequence
 from dataclasses import replace
 
 from agent_comms.assignment_states import AssignmentState, DeferredAssignment
@@ -22,7 +23,7 @@ class AssignmentStore:
     def __init__(self, session: CoordinationSession) -> None:
         self.session = session
 
-    def get(self, assignment_id: str) -> WakeAssignment:
+    def get(self, assignment_id: AssignmentId) -> WakeAssignment:
         row = WakeAssignment.one(self.session._connection, assignment_id=assignment_id)
         if row is None:
             raise IdentityConflict("unknown claim")
@@ -85,9 +86,35 @@ class AssignmentStore:
             expected_revision=current.revision,
         ).value
 
+    def settle_harness_inputs(
+        self,
+        recipient_lookup: ThreadLookup,
+        sources: Sequence[MessageReference],
+        steps: Callable[[AssignmentState], tuple[type[AssignmentState], ...]],
+    ) -> None:
+        """Record on the recipient's own claims what a harness outside Core did.
+
+        The claim is the thread's one record of delivery, so it survives a move
+        to another execution; each claim walks the steps its own state declares.
+        """
+        with self.session.read():
+            claims = WakeAssignment.select(
+                self.session._connection,
+                where=f"recipient_lookup=? AND wire_seq IN ({','.join('?' * len(sources))})",
+                parameters=(recipient_lookup, *(source.seq for source in sources)),
+            )
+        for claim in claims:
+            if claim.source not in sources:
+                raise IdentityConflict("harness delivery names another message at this sequence")
+            for disposition in steps(claim.lifecycle):
+                # The revision fence refuses a step if the native owner moved the claim meanwhile.
+                claim = self.transition_preengagement(
+                    claim.assignment_id, disposition, expected_revision=claim.revision,
+                ).value
+
     def transition_preengagement(
         self,
-        assignment_id: str,
+        assignment_id: AssignmentId,
         disposition: type[AssignmentState],
         *,
         expected_revision: int,

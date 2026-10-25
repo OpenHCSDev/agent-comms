@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import asyncio
-import secrets
 from collections.abc import AsyncIterator
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
@@ -13,6 +12,7 @@ from agent_comms.pi_payloads import RequestId
 from . import agent_events as events
 from . import pi_commands as commands
 from . import turn_phase as phases
+from .turn_item import PiRequestKey
 
 if TYPE_CHECKING:
     from .backend import NativeSession
@@ -58,9 +58,9 @@ class StatsRequest:
         self.generation = session.inputs.generation
         self.settlement_count = session.settlement_count
         requests = (
-            commands.GetState(id=RequestId(f"agent-comms-stats-state-{secrets.token_hex(16)}")),
+            commands.GetState(id=RequestId(PiRequestKey.fresh())),
             commands.GetSessionStats(
-                id=RequestId(f"agent-comms-stats-usage-{secrets.token_hex(16)}")
+                id=RequestId(PiRequestKey.fresh())
             ),
         )
         self._pending = tuple(session.native.send(command) for command in requests)

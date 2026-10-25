@@ -14,7 +14,9 @@ from pathlib import Path
 from agent_comms.cli_bridges.claude import ClaudeTranscript
 from agent_comms.comms import wire
 from agent_comms.storage_rules import StorageRoots
+from agent_comms.thread_management import GivenDirectory
 from agent_comms.thread_status import StoppedThreadStatus
+from agent_comms.thread_text import GivenThreadText
 from agent_comms.threads import Thread
 from agent_comms.ui_model.observation import ObserveSidebar, SidebarObserved, SidebarUnreadable
 
@@ -38,7 +40,7 @@ def writer(root: Path, stop: Event, result: Queue[int], imports: bool) -> None:
             comms.threads.import_thread(
                 ClaudeTranscript(root / "source.jsonl"),
                 name=name,
-                worktree=str(root),
+                worktree=GivenDirectory(str(root)),
                 tags=frozenset({"proof"}),
             )
         else:
@@ -47,7 +49,7 @@ def writer(root: Path, stop: Event, result: Queue[int], imports: bool) -> None:
                 if imports
                 else declaration(root, name, float(count % 85 + 1))
             )
-            comms.registry.register(replace(thread, title=f"write {count}"), StoppedThreadStatus())
+            comms.registry.register(replace(thread, title=GivenThreadText(f"write {count}")), StoppedThreadStatus())
         count += 1
     result.put(count)
 

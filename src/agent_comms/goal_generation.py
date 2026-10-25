@@ -9,6 +9,7 @@ from agent_comms.goal_turn_permit import GoalTurnPermit, NoLaunchPermit
 
 from .declared_family import DeclaredFamily
 from .errors import UnresolvedAttemptError
+from .field_codec import AttemptId, NoAttemptId
 from .goal_attempt_phase import (
     FailedAttempt,
     GoalAttemptPhase,
@@ -23,6 +24,7 @@ from .lifecycle import LifecycleState
 from .lifecycle_capability import Complete, Failed, Terminal
 
 if TYPE_CHECKING:
+    from .attempt_resolution import WorkDecision
     from .goal_actions import GoalActionContext
     from .goal_attempts import Generation, GoalAttemptStore
     from .goal_failure_observation import GoalFailureEvidence
@@ -49,7 +51,9 @@ class GenerationState(DeclaredFamily, LifecycleState, affix="Generation"):
     def evidence(self, store: GoalAttemptStore, generation: Generation) -> GoalFailureEvidence:
         return NoFailedTurnEvidence()
 
-    def continue_work(self, store: GoalAttemptStore, generation: Generation, witness: str) -> None:
+    def continue_work(
+        self, store: GoalAttemptStore, generation: Generation, witness: WorkDecision
+    ) -> None:
         """An accepted order or verified progress does not resolve unknown work."""
         pass
 
@@ -63,9 +67,8 @@ class GenerationState(DeclaredFamily, LifecycleState, affix="Generation"):
     ) -> GoalTurnPermit:
         return NoLaunchPermit()
 
-    def validate_attempt(self, attempt_id: str | None) -> None:
-        if not attempt_id:
-            raise ValueError("This generation requires an attempt identity.")
+    def validate_attempt(self, attempt_id: AttemptId | NoAttemptId) -> None:
+        attempt_id.require_present()
 
     def require_ready(self) -> None:
         raise UnresolvedAttemptError(UnresolvedAttemptError.diagnostic_text)
@@ -83,7 +86,7 @@ class GenerationState(DeclaredFamily, LifecycleState, affix="Generation"):
         return NoLaunchPermit()
 
     def authorize_retry(
-        self, store: GoalAttemptStore, generation: Generation, decision: str
+        self, store: GoalAttemptStore, generation: Generation, decision: WorkDecision
     ) -> None:
         raise ValueError("The goal attempt is unresolved; inspect it before retrying.")
 
@@ -111,9 +114,8 @@ class ReadyGeneration(GenerationState):
     def require_ready(self) -> None:
         pass
 
-    def validate_attempt(self, attempt_id: str | None) -> None:
-        if attempt_id is not None:
-            raise ValueError("READY cannot carry an attempt identity.")
+    def validate_attempt(self, attempt_id: AttemptId | NoAttemptId) -> None:
+        attempt_id.require_absent()
 
     def permits_retirement_without_attempt(self) -> bool:
         return True
@@ -126,10 +128,10 @@ class ReadyGeneration(GenerationState):
         return True
 
     def authorize_retry(
-        self, store: GoalAttemptStore, generation: Generation, decision: str
+        self, store: GoalAttemptStore, generation: Generation, decision: WorkDecision
     ) -> None:
         store.authorize_ready_recovery(
-            generation.goal_id, expected_generation=generation.number, user_decision_id=decision
+            generation.goal_id, expected_generation=generation.number, decision=decision
         )
 
 
@@ -153,20 +155,21 @@ class ReservedGeneration(GenerationState):
 class BlockedGeneration(Failed, GenerationState):
     def resume_status(self, generation: Generation, goal: Goal, ctx: GoalActionContext) -> None:
         """A status-only Resume cannot authorize an uncertain attempt."""
-        if generation.attempt_id:
-            raise ValueError(
-                "The interrupted goal attempt is unresolved. Inspect it, then use "
-                "Retry to authorize a new attempt. Your messages can still be sent."
-            )
-        super().resume_status(generation, goal, ctx)
+        raise ValueError(
+            "The interrupted goal attempt is unresolved. Inspect it, then use "
+            "Retry to authorize a new attempt. Your messages can still be sent."
+        )
 
     def evidence(self, store: GoalAttemptStore, generation: Generation) -> GoalFailureEvidence:
         return generation.failure_evidence(store)
 
-    def idle_execution(self, source: GoalExecutionSource) -> GoalExecution:
+    def execution(self, source: GoalExecutionSource) -> GoalExecution:
+        """No permit launches a blocked attempt, so a running turn is never the goal's own."""
         return source.evidence.execution(source.goal.id)
 
-    def continue_work(self, store: GoalAttemptStore, generation: Generation, witness: str) -> None:
+    def continue_work(
+        self, store: GoalAttemptStore, generation: Generation, witness: WorkDecision
+    ) -> None:
         store.authorize_current_retry(generation.goal_id, witness)
 
 
@@ -178,14 +181,14 @@ class BlockedGeneration(Failed, GenerationState):
         return ReadyGeneration, CancelledGeneration
 
     def authorize_retry(
-        self, store: GoalAttemptStore, generation: Generation, decision: str
+        self, store: GoalAttemptStore, generation: Generation, decision: WorkDecision
     ) -> None:
         identity = generation.attempt_identity
         store.authorize_retry(
             identity.goal_id,
             expected_generation=identity.generation,
             attempt_id=identity.attempt_id,
-            user_decision_id=decision,
+            decision=decision,
         )
 
 
@@ -197,6 +200,5 @@ class CompletedGeneration(Complete, Terminal, GenerationState):
 
 @dataclass(frozen=True)
 class CancelledGeneration(Terminal, GenerationState):
-    def validate_attempt(self, attempt_id: str | None) -> None:
-        if attempt_id is not None and not attempt_id:
-            raise ValueError("A retired attempt identity must be nonempty.")
+    def validate_attempt(self, attempt_id: AttemptId | NoAttemptId) -> None:
+        """Retirement preserves either the recorded attempt or its declared absence."""

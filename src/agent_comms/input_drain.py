@@ -4,10 +4,11 @@ from __future__ import annotations
 
 import asyncio
 from abc import ABC, abstractmethod
-from contextlib import aclosing
+from collections.abc import AsyncIterator, Awaitable, Callable
+from contextlib import aclosing, asynccontextmanager
 from dataclasses import dataclass, field, replace
 from functools import partial
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 
 from acp.schema import PromptResponse
 
@@ -23,7 +24,7 @@ from .acp_extension import (
     encode_updates,
 )
 from .activity import FailedWakeDiagnostic
-from .agent_backend import ClearQueue, InputContent, SendNow, TurnInbox, TurnInboxItem
+from .agent_backend import AgentBackend, ClearQueue, InputContent, SendNow, TurnInbox, TurnInboxItem
 from .bus import Bus
 from .child_process import join_retirement
 from .cohort_schema import AcceptanceFrontier
@@ -44,7 +45,6 @@ from .field_codec import InputId, RootId, ThreadLookup
 from .image_input import ImageInput
 from .input_attempt import (
     UNOBSERVED_DELIVERY_SCOPE,
-    InputAttempt,
     InputDeliveryScope,
     OwnerQueueInputDeliveryScope,
 )
@@ -129,7 +129,8 @@ class InputObservation(ABC):
     def state(self, session_id: str) -> DrainedSession: ...
 
     def turn_live(self, session_id: str) -> bool:
-        return self.state(session_id).turn_open() or session_id in self.effects.turns.turn_tasks
+        state = self.state(session_id)
+        return state.turn_open() or state.turn_task.busy
 
     def _retire_observer(self, session_id: str, task: asyncio.Task[None]) -> None:
         state = self.state(session_id)
@@ -137,10 +138,8 @@ class InputObservation(ABC):
             state.observation_watcher = None
 
     def wake_observer(self, session_id: str) -> None:
-        state = self.state(session_id)
-        # A process-local wake can carry work that did not change an input file.
-        state.repeat_observation = True
-        state.notify_observer()
+        self.ensure_live_drain(session_id)
+        self.state(session_id).wake_observer()
 
     def register_wake(self, session_id: str, task: asyncio.Task[WakeOutcome]) -> None:
         state = self.state(session_id)
@@ -196,10 +195,8 @@ class InputObservation(ABC):
         lookup = initial.entry.thread.incarnation.require_recorded().lookup
         state = self.state(session_id)
         state.forget_observation()
-        # The drain reads the coordination store, so its replacement or rewrite
-        # wakes this observer; ordinary wire observers do not watch it.
         sources = tuple(FileSource(path) for path in (
-            *bus.source_paths(self.comms.root), CoordinationStore.path_in(self.comms.root),
+            *bus.source_paths(self.comms.root), *CoordinationStore.source_paths(self.comms.root),
         ))
         async with aclosing(bus.watch_sources(*sources)) as observations:
             async for watcher in observations:
@@ -289,7 +286,7 @@ class InputObservation(ABC):
             self.sessions.runtime_enabled,
             self.sessions.bindings.get(session_id),
             self.state(session_id).turn_open(),
-            session_id in self.effects.turns.turn_tasks,
+            self.state(session_id).turn_task.busy,
             participant,
             pending,
             cursor,
@@ -305,11 +302,6 @@ class InputObservation(ABC):
         source_prefix = await Coordination.run_worker(partial(
             SourcePrefix.capture, self.comms.bus.bus, 0))
         entry = (await self._own_entry(session_id)).entry
-        return await self._observe_coordination(session_id, root_id, source_prefix, entry)
-
-    async def _observe_coordination(
-        self, session_id: str, root_id: RootId, source_prefix: SourcePrefix, entry: RegistryEntry,
-    ) -> PrivateObservation:
         # Release all bus locks before starting registry/SQL consumer work.
         # The original coordinator owns its bounded read acquisition policy;
         # the observation must not replace it with a zero-wait failure.
@@ -415,11 +407,49 @@ class StartedDrainTurn(AwaitingDrainTurn):
         await Coordination.run_worker(partial(inputs.finish_original_inputs, self.source.keys))
 
 
+class TurnTask:
+    """The session's idle task state; running tasks own their operations."""
+
+    @property
+    def busy(self) -> bool:
+        return False
+
+    async def prepare_cancel(self, transition: Callable[[], Awaitable[None]]) -> None:
+        pass
+
+    async def stop(self) -> None:
+        pass
+
+    async def abort(self, backend: AgentBackend) -> None:
+        pass
+
+
+@dataclass(frozen=True)
+class RunningTurnTask(TurnTask):
+    task: asyncio.Task[object]
+
+    @property
+    def busy(self) -> bool:
+        return True
+
+    async def prepare_cancel(self, transition: Callable[[], Awaitable[None]]) -> None:
+        await transition()
+
+    async def stop(self) -> None:
+        self.task.cancel()
+        await asyncio.gather(self.task, return_exceptions=True)
+
+    async def abort(self, backend: AgentBackend) -> None:
+        await backend.abort(self.task)
+
+
 @dataclass(eq=False)
 class DrainedSession:
     """One drained session's state, from its first use until the session ends."""
 
     lock: asyncio.Lock = field(default_factory=asyncio.Lock)
+    turn_lock: asyncio.Lock = field(default_factory=asyncio.Lock)
+    turn_task: TurnTask = field(default_factory=TurnTask)
     drain_task: asyncio.Task[None] | None = None
     wake_task: asyncio.Task[WakeOutcome] | None = None
     observation_watcher: ChangeSignal | None = None
@@ -435,6 +465,28 @@ class DrainedSession:
     # A changed read or process-local wake needs a full observation.
     # A completed stable drain consumes this pending work.
     repeat_observation: bool = False
+
+    @asynccontextmanager
+    async def own_turn_task(self) -> AsyncIterator[None]:
+        """Hold execution through cleanup; shutdown retirement suppresses the wake."""
+        # Every entry is awaited by an asyncio task; bind its foreign handle here.
+        running = RunningTurnTask(cast(asyncio.Task[object], asyncio.current_task()))
+        self.turn_task = running
+        try:
+            yield
+        finally:
+            if self.turn_task is running:
+                self.turn_task = TurnTask()
+                self.wake_observer()
+
+    def retire_turn_task(self) -> TurnTask:
+        previous, self.turn_task = self.turn_task, TurnTask()
+        return previous
+
+    def wake_observer(self) -> None:
+        # A process-local change need not add a new input file.
+        self.repeat_observation = True
+        self.notify_observer()
 
     def owes_tick(self, needs_refresh: bool) -> bool:
         """Keep work owed until its producer or another observation consumes it.
@@ -474,9 +526,6 @@ class DrainedSession:
 
     def turn_open(self) -> bool:
         return self.turn.is_open
-
-    def turn_started(self) -> bool:
-        return self.turn.has_source
 
     def observing(self) -> bool:
         return self.drain_task is not None and not self.drain_task.done()
@@ -624,11 +673,6 @@ class InputDrain(InputObservation):
             update=(await self.queue_state(session_id)).acp_chunk(),
         )
 
-    async def emit_input_disposition(
-        self, session_id: str, row: InputAttempt, client: SessionUpdateSink | None = None
-    ) -> None:
-        await self.emit_input_delivery_changed(session_id, client=client)
-
     async def emit_input_delivery_changed(
         self, session_id: str, *,
         client: SessionUpdateSink | None = None,
@@ -760,13 +804,11 @@ class InputDrain(InputObservation):
         """Retire input producers; their turns settle from the runner's owner stop."""
         self.closing = True
         tasks = tuple(task for state in self.drained.values() for task in state.producers())
+        for state in self.drained.values():
+            state.retire_producers()
         for task in tasks:
             task.cancel()
-        try:
-            await join_retirement(asyncio.gather(*tasks, return_exceptions=True))
-        finally:
-            for state in self.drained.values():
-                state.retire_producers()
+        await join_retirement(asyncio.gather(*tasks, return_exceptions=True))
 
     async def input_refused(self, session_id: str, input_id: InputId) -> None:
         state = self.state(session_id)

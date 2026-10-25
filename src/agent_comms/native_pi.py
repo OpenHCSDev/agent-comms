@@ -21,6 +21,11 @@ from pydantic import JsonValue
 
 from agent_comms.participant_identity import ParticipantIdentity
 
+from .active_route import (
+    ActiveRoute,
+    resolve_comms_route,
+)
+from .coordination_errors import IdentityConflict
 from .errors import RelationViolationError
 from .field_codec import (
     FieldCodec,
@@ -60,6 +65,7 @@ if TYPE_CHECKING:
     from .native_entries import NativeEntry, NativeEvidenceRead, SessionEntry
     from .selected_session import SelectedSession
     from .turn_failure import TurnFailure
+    from .native_session_reopen import PiSessionId
 
 CAPABILITY = "pi-native-input-v1-live-only"
 
@@ -141,7 +147,6 @@ class NativePiOperationFailed(NativePiUnavailable):
 
 def main() -> int:
     """Run the active route's pinned Pi for ordinary ACP owner sessions."""
-    from .active_route import ActiveRoute, resolve_comms_route
     LaunchRoot.startup(sys.argv, ActiveRoute.published_launch)
     package = resolve_comms_route().launch().require_private().validate()
     environment = dict(os.environ)
@@ -177,7 +182,10 @@ class NativeContextRecord(NativeInputCommit):
     ]
 
     @classmethod
-    def from_events(cls, input_id, session_id, input_event, context_event):
+    def from_events(
+        cls, input_id: InputId, session_id: PiSessionId,
+        input_event: pi.InputCommitted, context_event: pi.ContextCommitted,
+    ) -> NativeContextRecord:
         """Strictly join the two emitted records through the context declaration.
 
         This is an emitted acknowledgement, not proof of durable inclusion. A journal
@@ -382,8 +390,6 @@ class NativePiTerminalFailure(NativePiUnavailable):
 @dataclass(frozen=True, slots=True)
 class NativeTurnResult:
     def require_publishable(self) -> None:
-        from .coordination_errors import IdentityConflict
-
         if not self.text:
             raise IdentityConflict("successful model produced no publishable response")
 
@@ -486,8 +492,6 @@ class NativePiRpcLaunch:
         runtime = LaunchRuntime.running()
         cls._command_selection(command, runtime, package)
         cwd = worktree.resolve(strict=True)
-        if not cwd.is_dir():
-            raise NativePiUnavailable("Native Pi worktree is unavailable")
         return cls._managed(package, (*arguments, "--no-extensions", "--no-skills",
             "--no-context-files", "--no-session"), cwd, None, SelectedSession(cwd), runtime, cwd)
 
@@ -513,8 +517,6 @@ class NativePiRpcLaunch:
         runtime = LaunchRuntime.running()
         cls._command_selection(command, runtime, package)
         cwd = worktree.resolve(strict=True)
-        if not cwd.is_dir():
-            raise NativePiUnavailable("Native Pi worktree is unavailable")
         from .selected_session import SelectedSession
 
         saved = Path(session_file).absolute() if session_file is not None else None
@@ -608,16 +610,6 @@ class NativePiRpcLaunch:
             arguments.extend(("--session", str(session_file)))
         env, configuration = session.launch_environment(agent_dir, environment)
         return cls._build(package, tuple(arguments), worktree, env, session, configuration, runtime, root)
-
-
-def _read_private_file(path: Path):
-    """Yield strict private evidence rows, checking the same opened revision.
-
-    Historical bytes do not set the live input budget. A bounded byte snapshot is
-    validated before decoding; callers must exhaust the resulting observation.
-    """
-    with PrivateEvidenceRead.open(path) as evidence:
-        yield from evidence.rows()
 
 
 class NativeEvidencePrefixChanged(NativePiUnavailable):
@@ -902,7 +894,7 @@ def read_tracked_input_commitment(
 def _verify_context(
     files: NativeSessionFiles,
     input_id: InputId,
-    session_id: str,
+    session_id: PiSessionId,
     input_event: pi.InputCommitted,
     context_event: pi.ContextCommitted,
     *, evidence: NativeEvidenceRead | None = None,
