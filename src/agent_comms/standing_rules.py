@@ -15,7 +15,7 @@ from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass, field, fields
 from pathlib import Path
 from itertools import combinations
-from typing import TYPE_CHECKING, ClassVar, Self
+from typing import TYPE_CHECKING, ClassVar, Self, cast
 
 from agent_comms.change_report import FileLine
 from agent_comms.declared_family import DeclaredFamily
@@ -127,7 +127,7 @@ class StandingRule(DeclaredFamily, affix="StandingRule", discovery_package="agen
                          if Path(location.filename).is_relative_to(package))
             source = Path("src") / package.name / Path(place.filename).relative_to(package)
             return (CrashedStandingRule(cls.__name__, type(error).__name__,
-                                        FileLine(str(source), place.lineno)),)
+                                        FileLine(str(source), cast(int, place.lineno))),)
 
     def belongs_to(self, family: type[StandingRule]) -> bool:
         return isinstance(self, family)
