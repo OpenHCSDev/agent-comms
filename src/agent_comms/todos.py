@@ -4015,15 +4015,23 @@ class StoredHeadReview(TodoStoreRows, TypedTable):
     order_id: ClassVar[Generated] = Generated(
         OrderId, Column(generated=f"json_extract({{record}}, '$.{FieldCodec.record_key(HeadReviewRecord, 'order')}.{FieldCodec.record_key(OrderLink, 'order_id')}')", nullable=True),
     )
-    repo: ClassVar[Generated] = Generated(
-        RepositoryName,
-        Column(generated=f"{{request}} -> '$.{FieldCodec.record_key(PullRequestHead, 'repo')}'"),
-    )
-    pr: ClassVar[Generated] = Generated(
-        int, Column(generated=f"json_extract({{request}}, '$.{FieldCodec.record_key(PullRequestHead, 'pr')}')"),
-    )
+    pull_request_index: ClassVar[ExpressionIndex] = ExpressionIndex((
+        f"{{request}} -> '$.{FieldCodec.record_key(PullRequestHead, 'repo')}'",
+        f"json_extract({{request}}, '$.{FieldCodec.record_key(PullRequestHead, 'pr')}')",
+    ))
     indexes = (Index(("request", "seq")), Index(("problem", "order_id", "seq")),
-               Index(("repo", "pr", "seq")))
+               pull_request_index)
+
+    @classmethod
+    def latest_for_pull_request(
+        cls, db: sqlite3.Connection, request: PullRequestHead,
+    ) -> tuple[HeadReviewRecord, ...]:
+        """The access path and its predicate share this row's declared expression index."""
+        return tuple(row.record for row in cls.select(
+            db, where=" AND ".join(f"{term}=?" for term in cls.pull_request_index.terms),
+            parameters=(FieldCodec.compact(request.repo), request.pr),
+            order_by=("seq",), descending=True, limit=1,
+        ))
 
 
 @dataclass(frozen=True)
@@ -5552,10 +5560,7 @@ class TodoStore(OwnerRequestStore, TodoHistory):
     def pull_request_reviews(self, request: PullRequestHead) -> tuple[HeadReviewRecord, ...]:
         """The latest verdict on this PR, so a later back/reviewing mark defeats an old ok."""
         with self.snapshot() as db:
-            return tuple(row.record for row in StoredHeadReview.select(
-                db, repo=request.repo, pr=request.pr,
-                order_by=("seq",), descending=True, limit=1,
-            ))
+            return StoredHeadReview.latest_for_pull_request(db, request)
 
     def unjudged_since(self, todo: Todo) -> float:
         """The problem's work starts at its first order; a send-back reissues the order but
