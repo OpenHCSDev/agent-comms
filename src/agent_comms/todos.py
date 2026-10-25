@@ -3771,7 +3771,7 @@ class VoidStrikeTodo(TodoOperation, StoryEvent):
 
     def changed(self, current: Todo) -> Todo:
         current.require_commander(self.actor)
-        if self.strike not in current.live_strikes(self.strike.previous.owner):
+        if self.strike not in current.live_strikes():
             raise TodoConflict(current)
         _text(self.reason, "Void reason", 2000)
         StrikeReason(self.reason)
@@ -4307,9 +4307,9 @@ class Todo(TodoStoreRows, TypedTable):
     def strike_count(self) -> int:
         return self.current_holder.strike_count(self.history.facts_for(self.id))
 
-    def live_strikes(self, unit: str | None = None) -> tuple[StrikeTodo, ...]:
-        """The strikes still counting on this task, against ``unit`` on any order of it."""
-        return self.history.live_strikes(self.id, unit)
+    def live_strikes(self) -> tuple[StrikeTodo, ...]:
+        """The live strike records, newest first; scalar counts use the aggregate."""
+        return self.history.live_strikes(self.id)
 
     def struck_on_order(self, unit: ThreadIncarnation) -> bool:
         """A live strike on ``unit`` recorded since the current order was sent; a send-back that
@@ -4545,12 +4545,12 @@ class StoredOrderStory(TodoStoreRows, NoUpdate, NoDelete, TypedTable):
             parameters=(before,), order_by=("seq",), descending=descending, limit=limit))
 
     @classmethod
-    def live_strikes(cls, db: sqlite3.Connection, problem: str, unit: str | None, *,
+    def live_strikes(cls, db: sqlite3.Connection, problem: str, *,
                      before: int) -> tuple[StrikeTodo, ...]:
         return tuple(cast(StrikeTodo, row.event) for row in cls.select(
             db, problem=problem, where=f"{{kind}} IN {StrikeTodo.sql_choices()} "
             f"AND NOT EXISTS (SELECT 1 FROM {cls.declared_name} v WHERE v.voids={cls.declared_name}.seq AND v.seq<=?) "
-            "AND {seq}<=? AND (? IS NULL OR {strike_owner}=?)", parameters=(before, before, unit, unit),
+            "AND {seq}<=?", parameters=(before, before),
             order_by=("seq",), descending=True))
 
     @classmethod
@@ -4623,9 +4623,9 @@ class TodoHistory:
                 db, problem=problem, where="{seq}<=?", parameters=(self.facts_for(problem).last_seq,),
                 order_by=("seq",), descending=True))
 
-    def live_strikes(self, problem: str, unit: str | None = None) -> tuple[StrikeTodo, ...]:
+    def live_strikes(self, problem: str) -> tuple[StrikeTodo, ...]:
         with self.snapshot() as db:
-            return StoredOrderStory.live_strikes(db, problem, unit, before=self.facts_for(problem).last_seq)
+            return StoredOrderStory.live_strikes(db, problem, before=self.facts_for(problem).last_seq)
 
 
 @dataclass(frozen=True)

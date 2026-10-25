@@ -725,7 +725,7 @@ class Commander(CommanderContext):
         live = [s for s in todo.live_strikes() if at.selects(s)]
         if not live:
             sys.exit(at.refusal(task))
-        voided = live[-1]
+        voided = live[0]
         # posted to #comms, so refused before Core records the void
         refuse(why, *DirectiveText.checks())
         self.call(CommsChangeProblemTool(problem=task, operation=VoidStrikeTodo(

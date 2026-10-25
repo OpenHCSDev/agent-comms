@@ -6,6 +6,7 @@ import time
 
 import pytest
 
+from agent_comms.commander.order import Commander
 from agent_comms.field_codec import FieldCodec, GoalId, MessageId
 from agent_comms.maintenance_barrier import MaintenanceBarrier, MaintenanceOperator
 from agent_comms.order_story import StoryEvent
@@ -106,6 +107,19 @@ def test_voided_strike_uses_its_stored_sequence_and_count_returns_to_zero(record
     with store.snapshot() as db:
         first, void = tuple(StoredOrderStory.select(db, problem=original.id, order_by=("seq",)))
         assert void.voids == first.seq
+
+
+def test_commander_unstrike_selects_the_newest_live_record(recorded_problem, source_repository):
+    comms = recorded_problem
+    store = comms.goals.todos
+    first = story_members(comms)[0]
+    struck = store.apply("P1", first)
+    second = replace(first, expected_revision=struck.revision,
+        reason="The worker omitted the installed application check for its changed owner.")
+    store.apply("P1", second)
+    commander = Commander.on_root("lead", (source_repository,), comms.root)
+    commander.unstrike("P1", "The second strike was issued in error after the required owner was repaired.")
+    assert store.get("P1").live_strikes() == (first,)
 
 
 def test_strike_count_distinguishes_a_reused_thread_name(recorded_problem):
