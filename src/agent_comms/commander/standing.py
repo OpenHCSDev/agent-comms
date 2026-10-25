@@ -12,10 +12,12 @@ from typing import TYPE_CHECKING, ClassVar, Self
 from agent_comms.build_identity import RecordedBuildIdentity
 from agent_comms.bus import BusReader
 from agent_comms.channel_targets import CommsTag
+from agent_comms import commander
 from agent_comms.cli_commands import InstallCliCommand
 from agent_comms.commander.questions import UnansweredUnitAsks
 from agent_comms.commander_service import CommanderService
 from agent_comms.comms import Comms
+from agent_comms.declared_family import DeclaredFamily
 from agent_comms.goal_actions import ReissuedOrderGoalAction
 from agent_comms.heartbeat_frame import HeartbeatFrame
 from agent_comms.held_orders import HeldOrders
@@ -44,7 +46,14 @@ from agent_comms.standing_rules import (
 )
 from agent_comms.thread_identity import ThreadIncarnation
 from agent_comms.threads import Thread
-from agent_comms.todos import Assignment, OrderClaim, OwnerRequest, PullRequests, RestoreHolderTodo, Todo
+from agent_comms.todos import (
+    Assignment,
+    OrderClaim,
+    OwnerRequest,
+    PullRequests,
+    RestoreHolderTodo,
+    Todo,
+)
 from agent_comms.turn_digests import OrderEditCountRead, TurnDigestRead, TurnsSince
 from agent_comms.ui_model.unit_state import AwaitingCommander, UnitState
 from agent_comms.work_dispatch import ReusedWorkDispatch, WorkDispatch
@@ -327,9 +336,11 @@ class DeliveryAwaitingJudgement(UnitOwedAnswer, UndatedStandingRule):
                      for (owner, problem), messages in originals.items() for message in messages)
 
     def clearing_action(self) -> str:
-        return (f"order done {self.unit} {self.problem} (with --seen FILE for an application run)"
-                " or send the unit its replacement order"
-                " or `judge reviewing --pr N --head SHA --fork NAME` while a fork reads it.")
+        """The verbs that declare they clear this debt render their own command lines."""
+        DeclaredFamily.discover_package(commander)
+        lines = " or ".join(f"`{verb.usage()}`" for verb in self.clearing_verbs)
+        return (f"{lines} (UNIT {self.unit}, PROBLEM {self.problem})."
+                f" --repo: {Repo.selection_refusal()}")
 
     def answered_by(self, named: tuple[Message, ...]) -> bool:
         return False

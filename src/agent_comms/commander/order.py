@@ -36,7 +36,7 @@ from pydantic import BaseModel, ConfigDict, Field, InstanceOf, PrivateAttr
 from agent_comms.change_report import FileLine, MainRevision, NoSourceReference
 from agent_comms.channel_targets import CommsTag
 from agent_comms.declared_verb import DeclaredVerb
-from agent_comms.commander.standing import UnownedWheelSpin
+from agent_comms.commander.standing import DeliveryAwaitingJudgement, UnownedWheelSpin
 from agent_comms.comms import Comms, wire
 from agent_comms.declared_family import DeclaredFamily
 from agent_comms.errors import RelationViolationError
@@ -802,6 +802,13 @@ class CommanderVerb(DeclaredVerb, affix="Verb"):
             flags=("--fork",), options={"type": CommanderForkCaller, "help": "the acting thread's name"}
         ),
     ] = NoThreadCaller()
+    clears: ClassVar[tuple[type[OwedAnswer], ...]] = ()
+
+    def __init_subclass__(cls, **options: object) -> None:
+        """A verb names the owed answers it clears; each rule's hint is rendered from them."""
+        super().__init_subclass__()
+        for rule in vars(cls).get("clears", ()):
+            rule.cleared_by(cls)
 
     def who(self, ctx: Commander) -> str:
         return ctx.actor_name
@@ -969,6 +976,7 @@ class RequestedOrderVerb(OrderVerb, DirectiveVerb, declared_name=None):
 @dataclass(frozen=True, kw_only=True)
 class SendVerb(RequestedOrderVerb):
     help = "record the order in Core and send it"
+    clears = (DeliveryAwaitingJudgement,)
     unit: Annotated[str, Argument(flags=("unit",))]
     body_file: Annotated[
         str, Argument(flags=("body_file",), options={"metavar": "ORDER.json"})
@@ -1076,6 +1084,7 @@ class WithdrawVerb(Reasoned, OrderVerb):
 @dataclass(frozen=True, kw_only=True)
 class DoneVerb(OrderVerb):
     help = "Core checks the order's merged PR at its merge commit; late delivery is a strike"
+    clears = (DeliveryAwaitingJudgement,)
     unit: Annotated[str, Argument(flags=("unit",), options={"metavar": "UNIT"})]
     problem: Annotated[
         str,
