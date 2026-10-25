@@ -37,7 +37,7 @@ def test_published_change_signal_is_not_a_bus_resource(tmp_path: Path) -> None:
         pass
     CoordinationStore.publish_change(path)
 
-    resources = bus_files(tmp_path)
+    resources = bus_files(tmp_path, tmp_path)
     paths = {resource.path for resource in resources}
     assert path.relative_to(tmp_path) in paths
     assert Path("coordination.changed") not in paths
@@ -100,7 +100,7 @@ def test_parameterized_sqlite_resources_follow_their_file_owner(tmp_path: Path, 
         actual = {path for path in tmp_path.rglob("*") if path.is_file()}
         assert len(actual) > 1  # The real SQLite writer has an open journal/WAL.
         assert actual <= NativeInputProof.files_in(tmp_path)
-        assert DeclaredFile(NativeInputProof, proof.relative_to(tmp_path)) in bus_files(tmp_path)
+        assert DeclaredFile(NativeInputProof, proof.relative_to(tmp_path)) in bus_files(tmp_path, tmp_path)
 
 
 def test_installer_reconciles_a_native_proof_journal_onto_its_declaration(tmp_path: Path) -> None:

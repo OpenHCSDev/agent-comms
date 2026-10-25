@@ -1954,7 +1954,7 @@ class PlannedReconcileCliCommand(StoreReconcileCliCommand, declared_name="planne
 
     def answer(self, root: Path) -> ReconciledStoresResult:
         """A store outside the bus that the target's writer could not open refuses the plan."""
-        WriterOwnedStore.practice_openings(excluding=self.carrying)
+        WriterOwnedStore.practice_openings(root, excluding=self.carrying)
         return super().answer(root)
 
 @dataclass(frozen=True)

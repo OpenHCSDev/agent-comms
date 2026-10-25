@@ -180,7 +180,7 @@ def test_install_rehearses_without_changing_the_bus(installed_comms, installed_h
     publish_initial(comms, "worker", "#all", "One message before the install")
     rewritten = (drop_one_index(comms.root),) if drifted else ()
     checkout = install_checkout
-    before = bus_files(comms.root)
+    before = bus_files(comms.root, comms.root)
     given = (*repos, str(checkout)) if repos else ()
     installed = subprocess.run(
         [Path(sys.executable).with_name("agent-comms"), "--root", comms.root, "install",
@@ -198,7 +198,7 @@ def test_install_rehearses_without_changing_the_bus(installed_comms, installed_h
         assert isinstance(result.rehearsal, UncopiedRehearsal)
         assert result.rehearsal.copy.bytes == 0
         assert result.rehearsal.inputs == ()
-    assert bus_files(comms.root) == before
+    assert bus_files(comms.root, comms.root) == before
 
 
 @pytest.mark.timeout(280)

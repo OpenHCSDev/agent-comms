@@ -127,17 +127,17 @@ def test_a_store_compares_by_its_rows_and_not_by_its_companion_files(tmp_path):
         db.execute("CREATE TABLE todo (id)")
         db.execute("INSERT INTO todo VALUES (1)")
         db.commit()
-    before = bus_files(tmp_path)
+    before = bus_files(tmp_path, tmp_path)
     with closing(sqlite3.connect(store, autocommit=True)) as opened:
         opened.execute("BEGIN IMMEDIATE")
         opened.execute("ROLLBACK")
         assert {"todos.sqlite3-wal", "todos.sqlite3-shm"} <= {path.name for path in tmp_path.iterdir()}
         steps = (StepRun("carry_nothing", Carried(0)),)
-        assert carried(tmp_path, before, steps, RehearsalFiles.declared(steps)) == (
+        assert carried(tmp_path, before, steps, RehearsalFiles.declared(steps), tmp_path) == (
             RehearsalFiles(1, 0, (), 0))
         opened.execute("UPDATE todo SET id = 2")
         with pytest.raises(UpgradeRefused):
-            carried(tmp_path, before, steps, RehearsalFiles.declared(steps))
+            carried(tmp_path, before, steps, RehearsalFiles.declared(steps), tmp_path)
 
 
 @pytest.fixture

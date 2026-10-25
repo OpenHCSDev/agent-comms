@@ -59,6 +59,7 @@ from .field_codec import (
 )
 from .lifecycle import LifecycleState
 from .locked_store import (
+    DurableFile,
     FileStore,
     PublishedSQLiteFile,
     RegistryFile,
@@ -67,6 +68,7 @@ from .locked_store import (
     SQLiteFile,
     StoreCommittedError,
     WrittenFile,
+    WriterOwnedSQLiteFile,
 )
 from .maintenance_barrier import HolderWrittenFile, MaintenanceBarrier, MaintenanceHolder
 from .package_stamp import STAMP
@@ -2272,7 +2274,7 @@ class ReconciledFile(SQLiteFile, StoreLockFile):
             return schema.reconcile_schema(db, cls.schema_change(path))
 
 
-class WriterOwnedStore(DeclaredFamily, affix="Store"):
+class WriterOwnedStore(WriterOwnedSQLiteFile, DurableFile, DeclaredFamily, affix="Store"):
     """A durable file outside the bus that its own writer reconciles when it opens it
     (``WriterOwnedFile``). An installed package declares each one through the
     ``agent_comms.writer_owned_stores`` entry point. Before cutover the installer opens a
@@ -2281,6 +2283,51 @@ class WriterOwnedStore(DeclaredFamily, affix="Store"):
     launch."""
 
     entry_point_group: ClassVar[str] = "agent_comms.writer_owned_stores"
+    retained_directory: ClassVar[Path] = Path("writer-owned")
+
+    @classmethod
+    def retained_name(cls, root: Path, path: Path) -> Path:
+        return cls.retained_directory / cls.declared_name
+
+    @classmethod
+    def source_path(cls, root: Path, original_root: Path, name: Path) -> Path:
+        return cls.path() if root == original_root else root / name
+
+    @classmethod
+    def external_members(cls, root: Path, original_root: Path) -> Mapping[Path, type[RootFile]]:
+        cls.load_declarations()
+        return {store.source_path(root, original_root, store.retained_name(root, store.path())): store
+                for store in cls.members_with(cls)}
+
+    @classmethod
+    def require_retained_name(cls, name: Path) -> None:
+        names = {store.retained_name(Path(), store.path())
+                 for store in WriterOwnedStore.members_with(WriterOwnedStore)}
+        if name.is_relative_to(cls.retained_directory) and name not in names:
+            raise RelationViolationError(f"Unknown writer-owned installation file: {name}")
+
+    @classmethod
+    def practice_opening(cls, root: Path, original_root: Path, directory: Path) -> None:
+        path = cls.source_path(root, original_root, cls.retained_name(root, cls.path()))
+        if not path.is_file():
+            return
+        copied = directory / cls.declared_name
+        cls.copy_group(path, copied)
+        try:
+            with closing(cls.writer(copied)) as db, db:
+                cls.table_schema().install_schema(db, WriterOwnedFile())
+                cls.table_schema().require_readable(db)
+        except RelationViolationError as error:
+            raise RelationViolationError(
+                f"{path} cannot open on this runtime: {error}") from error
+
+    @staticmethod
+    def practice_openings(root: Path, excluding: tuple[type[WriterOwnedStore], ...] = ()) -> None:
+        WriterOwnedStore.load_declarations()
+        stores = set(WriterOwnedStore.members_with(WriterOwnedStore)) - set(excluding)
+        with TemporaryDirectory() as directory:
+            for store in stores:
+                store.practice_opening(root, root, Path(directory))
 
     @classmethod
     @abstractmethod
@@ -2296,28 +2343,6 @@ class WriterOwnedStore(DeclaredFamily, affix="Store"):
         """Import each module the installed distributions declare, once per process."""
         for entry in entry_points(group=WriterOwnedStore.entry_point_group):
             entry.load()
-
-    @classmethod
-    def practice_opening(cls, path: Path, directory: Path) -> None:
-        """The writer's own opening, run on a copy, so the stored file is never written."""
-        if not path.is_file():
-            return
-        copy = SQLiteFile.copy_file(path, directory / path.name)
-        try:
-            with closing(SQLiteFile.writer(copy)) as db, db:
-                cls.table_schema().install_schema(db, WriterOwnedFile())
-                cls.table_schema().require_readable(db)
-        except RelationViolationError as error:
-            raise RelationViolationError(
-                f"{path} cannot open on this runtime: {error}") from error
-
-    @staticmethod
-    def practice_openings(excluding: tuple[type[WriterOwnedStore], ...] = ()) -> None:
-        WriterOwnedStore.load_declarations()
-        stores = set(WriterOwnedStore.members_with(WriterOwnedStore)) - set(excluding)
-        with TemporaryDirectory() as directory:
-            for store in stores:
-                store.practice_opening(store.path(), Path(directory))
 
     @classmethod
     def member_named(cls, name: object) -> type[Self]:

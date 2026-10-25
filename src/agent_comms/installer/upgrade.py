@@ -59,6 +59,7 @@ from agent_comms.comms import wire
 from agent_comms.coordination_errors import CoordinationReadUnavailable
 from agent_comms.declared_family import DeclaredFamily
 from agent_comms.field_codec import PathText
+from agent_comms.typed_table import WriterOwnedStore
 from agent_comms.host_services import HostService, RestartedService
 from agent_comms.install_choices import InstallerChoice, RunMode
 from agent_comms.installer.backup import (
@@ -72,9 +73,6 @@ from agent_comms.installer.backup import (
 from agent_comms.installer.carry import STEPS, CarryChain
 from agent_comms.installer.commands import InstallCommands
 from agent_comms.installer.declared_uv import DeclaredUv
-from agent_comms.installer.files import (
-    InstallationFiles, SelectedWriterOwnedFile, WriterOwnedInstallationFile,
-)
 from agent_comms.installer.interpreter_operation import (
     AbortMaintenancePhase,
     AfterMigrationFileScanPhase,
@@ -150,7 +148,7 @@ from agent_comms.installer.reporting import (
 )
 from agent_comms.installer.runtime_resolution import RuntimeResolution, StackProject
 from agent_comms.launch_runtime import LaunchRuntime, RestartEnvironment
-from agent_comms.locked_store import BusFile, DeclaredFile, UndeclaredFile
+from agent_comms.locked_store import BusFile, DeclaredFile, RootFile, UndeclaredFile
 from agent_comms.maintenance_barrier import (
     MaintenanceBarrier,
     MaintenanceOperator,
@@ -222,10 +220,10 @@ def carried(
     root: Path,
     before: dict[DeclaredFile | UndeclaredFile, dict[Path, SavedFile]],
     steps: tuple[StepRun, ...], expected: frozenset[Path],
-    external: tuple[WriterOwnedInstallationFile, ...] = (),
+    original_root: Path, external: tuple[type[RootFile], ...] = (),
 ) -> RehearsalFiles:
     """Only the files a step names as rewritten may differ from ``before``."""
-    after = bus_files(root, external)
+    after = bus_files(root, original_root, external)
     physical = {key for key in before.keys() | after.keys()
                 if before.get(key) != after.get(key)}
     members = {member: resource.path for resource, snapshot in (*before.items(), *after.items())
@@ -1103,7 +1101,8 @@ class PreparedMigration(Extendable):
     hold: MaintenanceState
     before: dict[DeclaredFile | UndeclaredFile, dict[Path, SavedFile]]
     read: BusReadBack
-    writer_files: tuple[WriterOwnedInstallationFile, ...] = ()
+    original_root: Path
+    writer_stores: tuple[type[WriterOwnedStore], ...] = ()
 
     @property
     def root(self) -> Path:
@@ -1112,32 +1111,28 @@ class PreparedMigration(Extendable):
     @classmethod
     def capture(cls, hold: MaintenanceState, outgoing: Stack,
                 steps: tuple[Carry, ...] = ()) -> PreparedMigration:
-        """The maintenance barrier keeps every carried writer out until the caller's backup ends.
-        Settling first moves committed WAL frames into their files, as the practice copy's
-        backup did, so no later last close rewrites a file no step names."""
+        """Snapshot the held bus and the chain's declared external locations.
+        Only bus resources settle; external bytes reach backup without a prior write."""
         root = Path(hold.root)
-        external = {file.name: file for step in steps for store in step.writer_owned
-                    for file in (step.writer_file(store),)}
-        writer_files = tuple(external.values())
+        original_root = next((step.original_root for step in steps), root)
+        writer_stores = Carry.writer_declarations(steps)
         with BeforeMigrationFileScanPhase().running(outgoing.commands.clock):
-            settle_bus_files(root, writer_files)
-            before = bus_files(root, writer_files)
-        return cls(hold, before, outgoing.verify(root), writer_files)
+            settle_bus_files(root, original_root, writer_stores)
+            before = bus_files(root, original_root, writer_stores)
+        return cls(hold, before, outgoing.verify(root), original_root, writer_stores)
 
     def carry(self, pending: tuple[Carry, ...], staged: Stack) -> CarriedPass:
         """One migration sequence for rehearsal and the backed-up live bus."""
         steps = [StepRun(step.declared_name, carried) for step, carried in zip(
             pending, staged.call_steps(pending, MigrateOperation(apply=True)), strict=True)]
-        staged.probe(WriterOwnedOpeningProbe(tuple(
-            SelectedWriterOwnedFile(file.store, file.path) for file in self.writer_files
-        )))
+        staged.probe(WriterOwnedOpeningProbe(self.root, self.original_root, self.writer_stores))
         reconciled = staged.cli(self.root, ReconcileStoresCliCommand)
         steps.append(StepRun(ReconcileStoresCliCommand.declared_name, Carried(
             len(reconciled.rewritten), rewritten=reconciled.rewritten)))
         declared = tuple(steps)
         with AfterMigrationFileScanPhase().running(staged.commands.clock):
             files = carried(self.root, self.before, declared,
-                            RehearsalFiles.declared(declared), self.writer_files)
+                            RehearsalFiles.declared(declared), self.original_root, self.writer_stores)
         passed = CarriedPass(declared, files, staged.verify(self.root))
         passed.require_read(self.read)
         return passed
@@ -1168,7 +1163,9 @@ class ChangedInstall(ExistingBusInstall[RehearsedFiles]):
 
     def live(self, rehearsal: RehearsedFiles, report: InstallReport) -> CarriedRun:
         expected = frozenset(rehearsal.files.names) | frozenset(rehearsal.inputs)
-        selected = tuple(file.path for file in InstallationFiles(self.root).named(expected))
+        selected = tuple(owner.source_path(self.root, self.root, resource.path)
+                         for resource, owner in RootFile.named_files(
+                             self.root, expected, self.root).items())
         with RestoreSpaceBackupPhase().running(self.staged.commands.clock):
             restore = RestoreSpace.measure(max(
                 rehearsal.files.restore_bytes,

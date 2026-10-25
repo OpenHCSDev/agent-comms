@@ -16,9 +16,6 @@ from typing_extensions import TypeForm
 from agent_comms.declared_family import DeclaredFamily
 from agent_comms.errors import RelationViolationError
 from agent_comms.field_codec import PathText
-from agent_comms.installer.files import (
-    InstallationFiles, SelectedWriterOwnedFile, WriterOwnedInstallationFile,
-)
 from agent_comms.installer.interpreter_operation import (
     InstallClock,
     InterpreterOperation,
@@ -42,10 +39,12 @@ class Carried:
     Store locks are excluded from that inventory and cannot authorize a rewrite."""
 
     def for_step(self, step: Carry) -> Carried:
-        files = tuple(file for path in self.rewritten for file in step.files.referenced(path))
-        for file in files:
-            step.require_confined(file.path)
-        return replace(self, rewritten=tuple(file.name for file in files))
+        resources = tuple(item for path in self.rewritten
+                          for item in RootFile.referenced_files(
+                              step.root, step.original_root, path).items())
+        for resource, owner in resources:
+            step.require_confined(owner.source_path(step.root, step.original_root, resource.path))
+        return replace(self, rewritten=tuple(resource.path for resource, owner in resources))
 
     def __post_init__(self) -> None:
         for path in self.rewritten:
@@ -66,19 +65,14 @@ class Carry(DeclaredFamily, affix="", discovery_package="cutover"):
     writer_owned: ClassVar[tuple[type[WriterOwnedStore], ...]] = ()
     """External durable declarations this step is allowed to read and carry."""
 
-    @property
-    def files(self) -> InstallationFiles:
-        return InstallationFiles.for_carry(self.root, self.original_root)
-
-    def writer_file(self, store: type[WriterOwnedStore]) -> WriterOwnedInstallationFile:
+    def writer_path(self, store: type[WriterOwnedStore]) -> Path:
         """Only a named declaration can supply an external input, on this step's root."""
-        declared = {member: self.files.writer_file(member) for member in self.writer_owned}
-        try:
-            return declared[store]
-        except KeyError:
+        if store not in self.writer_owned:
             raise RelationViolationError(
                 f"{type(self).__name__} does not declare writer-owned input {store.declared_name}"
-            ) from None
+            )
+        name = store.retained_name(self.root, store.path())
+        return store.source_path(self.root, self.original_root, name)
 
     @staticmethod
     def writer_declarations(steps: Iterable[Carry | type[Carry]]) -> tuple[type[WriterOwnedStore], ...]:
@@ -98,7 +92,7 @@ class Carry(DeclaredFamily, affix="", discovery_package="cutover"):
         for owner, directory in RootFile.declarations_in(self.root):
             if issubclass(owner, self.opened_files):
                 paths.update(owner.matching_in(directory))
-        paths.update(self.writer_file(store).path for store in self.writer_owned)
+        paths.update(self.writer_path(store) for store in self.writer_owned)
         for path in paths:
             self.require_confined(path)
         return tuple(sorted(paths))
@@ -137,7 +131,7 @@ class Carry(DeclaredFamily, affix="", discovery_package="cutover"):
 
     def require_confined(self, path: Path) -> None:
         """A carry reaches its bus and exactly its declared external files, never aliases."""
-        external = {self.writer_file(store).path for store in self.writer_owned}
+        external = {self.writer_path(store) for store in self.writer_owned}
         if (not path.is_relative_to(self.root) and path not in external) or path.resolve() != path:
             raise RelationViolationError(f"Carry refuses an unconfined path: {path}")
 
@@ -218,14 +212,17 @@ class RetireInputsOperation(CarriedOperation):
 class WriterOwnedOpeningProbe(TargetProbe, RuntimeProbe[tuple[Annotated[Path, PathText], ...]]):
     """Validate carried external rows in the target, at the selected live or copied paths."""
 
-    files: tuple[SelectedWriterOwnedFile, ...]
+    root: Annotated[Path, PathText]
+    original_root: Annotated[Path, PathText]
+    stores: tuple[type[WriterOwnedStore], ...]
 
     def run(self) -> tuple[Annotated[Path, PathText], ...]:
         paths = []
         with TemporaryDirectory() as directory:
-            for file in self.files:
-                file.store.practice_opening(file.path, Path(directory))
-                paths.append(file.path)
+            for store in self.stores:
+                store.practice_opening(self.root, self.original_root, Path(directory))
+                name = store.retained_name(self.root, store.path())
+                paths.append(store.source_path(self.root, self.original_root, name))
         return tuple(paths)
 
 

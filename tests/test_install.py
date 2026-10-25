@@ -91,7 +91,7 @@ def test_practice_copy_is_the_declared_files_without_its_maintenance_witnesses(p
     # listing: an undeclared file has no owner, so the copy never meets it.
     (root / "sessions").mkdir(exist_ok=True)
     (root / "sessions/.pr48-writer-transient").write_text("claim")
-    saved = bus_files(root)
+    saved = bus_files(root, root)
     files = RootFile.existing_in(root)
     declared = {str(path.relative_to(root)) for path in files}
     databases = {str(path.relative_to(root)) for path, owner in files.items()
@@ -115,7 +115,7 @@ def test_practice_copy_is_the_declared_files_without_its_maintenance_witnesses(p
             assert practised.execute(query).fetchall() == original.execute(query).fetchall()
     for name in copied - databases:
         assert (copy / name).read_bytes() == (root / name).read_bytes()
-    assert bus_files(root) == saved
+    assert bus_files(root, root) == saved
 
 
 def test_a_message_sent_while_the_bus_is_copied_preserves_one_database_cut(
