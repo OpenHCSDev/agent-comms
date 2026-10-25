@@ -267,6 +267,7 @@ class PeerGone(SessionReply, declared_name='gone'):
 class SessionRequest[Reply: SessionReply](DeclaredFamily, affix=""):
     family_discriminator: ClassVar[str] = "type"
     reply_class: ClassVar[type[SessionReply]]
+    reply_timeout: ClassVar[float] = 30
 
     def __init_subclass__(cls, **options):
         super().__init_subclass__(**options)
@@ -280,7 +281,7 @@ class SessionRequest[Reply: SessionReply](DeclaredFamily, affix=""):
     @contextmanager
     def connection(self, endpoint: Path) -> Iterator[socket.socket]:
         with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as peer:
-            peer.settimeout(30)
+            peer.settimeout(self.reply_timeout)
             peer.connect(str(endpoint))
             peer.sendall((FieldCodec.compact(FieldCodec.encode(self)) + "\n").encode())
             yield peer
