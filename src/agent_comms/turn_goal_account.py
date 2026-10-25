@@ -6,7 +6,7 @@ owns only the live turn's permits and observations, never a reconstructed grant.
 
 from __future__ import annotations
 
-from acp.exceptions import RequestError
+from .coordination_errors import Refused
 
 from agent_comms.errors import GoalAttemptError
 from contextlib import ExitStack
@@ -15,6 +15,7 @@ from typing import TYPE_CHECKING
 
 
 from .field_codec import GoalId, TurnId
+from .turn_item import ProviderResponseId
 from agent_comms.goal_turn_permit import GoalTurnPermit, NoLaunchPermit
 from .goal_states import ActiveGoal, CompletedGoal, PausedGoal
 from .mro_dispatch import MroDispatch, handles
@@ -92,7 +93,7 @@ class TurnGoalAccount:
     pending_origins: dict[str, GoalId]
     claims: ExitStack
     originated: dict[GoalId, GoalTurnPermit] = field(default_factory=dict, init=False)
-    unattributed_usage: list[tuple[str, PiUsage]] = field(default_factory=list, init=False)
+    unattributed_usage: list[tuple[ProviderResponseId, PiUsage]] = field(default_factory=list, init=False)
     has_productive_tool: bool = field(default=False, init=False)
 
     @staticmethod
@@ -108,7 +109,7 @@ class TurnGoalAccount:
         except GoalAttemptError as error:
             if autonomous:
                 return NoLaunchPermit()
-            raise RequestError.invalid_params(
+            raise Refused.invalid_params(
                 {
                     "reason": "goal_attempt_unavailable",
                     "details": "The goal has no launchable attempt. Inspect its state and use "
@@ -124,9 +125,9 @@ class TurnGoalAccount:
     def provider_usage(self, event: events.ProviderUsage) -> None:
         for goal in self.comms.registry.require(self.thread_name).goal:
             permit = self.originated.get(goal.id, self.permit)
-            if permit.charge_for(goal.id, self.comms.goals, str(event.response_id), event.usage):
+            if permit.charge_for(goal.id, self.comms.goals, event.response_id, event.usage):
                 return
-        self.unattributed_usage.append((str(event.response_id), event.usage))
+        self.unattributed_usage.append((event.response_id, event.usage))
 
     def tool_ended(self, event: events.ToolEnd) -> None:
         self.has_productive_tool |= bool(event.ok)

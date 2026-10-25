@@ -312,11 +312,14 @@ def test_provider_reported_responses_are_attributed_once_and_survive_reopen(stor
     second = PiUsage.from_wire(
         {"input": 40, "output": 10, "totalTokens": 50, "cost": {"total": 0.2}})
 
-    permit.record_provider_usage(store, "response-1", first)
-    permit.record_provider_usage(store, "response-1", first)
-    permit.record_provider_usage(store, "response-2", second)
+    from agent_comms.turn_item import ProviderResponseId
+
+    first_response, second_response = ProviderResponseId.fresh(), ProviderResponseId.fresh()
+    permit.record_provider_usage(store, first_response, first)
+    permit.record_provider_usage(store, first_response, first)
+    permit.record_provider_usage(store, second_response, second)
     with pytest.raises(ValueError):
-        permit.record_provider_usage(store, "response-1", second)
+        permit.record_provider_usage(store, first_response, second)
 
     reopened = GoalAttemptStore.at(store.root)
     totals = ProviderUsageTotal.for_goal(reopened, goal_id)

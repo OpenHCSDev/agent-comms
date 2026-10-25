@@ -12,6 +12,7 @@ from agent_comms.channel_targets import CommandTarget, ThreadTarget
 from agent_comms.comms import wire
 from agent_comms.coordination_errors import HistoricalSourceChanged
 from agent_comms.field_codec import InputId
+from agent_comms.turn_item import FreshNativeId
 from agent_comms.historical_views import HistoricalMessage, HistoryArchive
 from agent_comms.installer.backup import bus_files
 from agent_comms.message_page import MessagePageRequest, PageBounds
@@ -205,7 +206,7 @@ def test_duplicate_and_newer_incarnations_sessions(tmp_path):
         edit.document.threads["alice"] = replace(edit.document.threads["alice"], session_file=RegistrySessionLocation.from_path(str(session), tmp_path))
         edit.commit()
     routing = TurnRouting(reply=MessageRoute("alice", ("#team",)))
-    old.transcripts.routes.record(str(session), ("two",), routing)
+    old.transcripts.routes.record(str(session), (FreshNativeId("two"),), routing)
     old.transcripts.routes.record_input_display(native_id, DisplayText("original owner question"))
     live = setup(tmp_path / "live", 0)
     newer = replace(live.registry.require("alice"), created_at=20.0)
@@ -215,7 +216,7 @@ def test_duplicate_and_newer_incarnations_sessions(tmp_path):
     source = live.views.attach_history(old.root)
     # Later source annotations cannot change the already attached snapshot.
     old.transcripts.routes.record(
-        str(session), ("two",), TurnRouting(reply=MessageRoute("alice", ("#later",)))
+        str(session), (FreshNativeId("two"),), TurnRouting(reply=MessageRoute("alice", ("#later",)))
     )
     declarations = {h.thread.name: h.thread for h in live.views.historical_threads()}
     assert declarations["alice"].created_at == declarations["bob"].created_at == 10.0

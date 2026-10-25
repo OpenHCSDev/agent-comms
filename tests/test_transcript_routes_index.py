@@ -7,6 +7,7 @@ from pathlib import Path
 
 from agent_comms.routing import MessageRoute, TurnRouting
 from agent_comms.text_digest import TextDigest
+from agent_comms.turn_item import FreshNativeId
 from agent_comms.transcript_routes import DisplayText, InputDisplay, NoDisplayText, SentInputText, TranscriptRoutes
 
 
@@ -29,17 +30,18 @@ def test_current_annotations_reopen_and_replace_only_addressed_entry(tmp_path):
 
     path = tmp_path / "annotations"
     owner = TranscriptRoutes(path)
+    first_id, second_id, absent_id = (FreshNativeId.fresh() for _ in range(3))
     with owner.for_session("session") as routes:
-        assert routes.get("a").present() == ()
+        assert routes.get(first_id).present() == ()
     assert not path.exists()
     first = TurnRouting(reply=MessageRoute("worker", ("#first",)))
     replacement = TurnRouting(reply=MessageRoute("worker", ("#replacement",)))
-    owner.record("session", ("a", "b"), first)
-    TranscriptRoutes(path).record("session", ("a",), replacement)
+    owner.record("session", (first_id, second_id), first)
+    TranscriptRoutes(path).record("session", (first_id,), replacement)
     with TranscriptRoutes(path).for_session("session") as routes:
-        assert routes.get("a") == replacement
-        assert routes.get("b") == first
-        assert routes.get("absent").present() == ()
+        assert routes.get(first_id) == replacement
+        assert routes.get(second_id) == first
+        assert routes.get(absent_id).present() == ()
 
 
 def test_binding_preserves_first_display_and_rejects_different_input(tmp_path):
@@ -82,7 +84,8 @@ def test_reading_an_installed_store_writes_nothing(tmp_path, monkeypatch):
     from agent_comms.transcript_routes import TranscriptRoutes
 
     routing = TurnRouting(reply=MessageRoute("worker", ("#first",)))
-    TranscriptRoutes(tmp_path).record("session", ("a",), routing)
+    entry_id = FreshNativeId.fresh()
+    TranscriptRoutes(tmp_path).record("session", (entry_id,), routing)
     TranscriptRoutes(tmp_path).record_input_display(INPUT_ID, DisplayText("shown"), sent_text=SentInputText("sent"))
     statements: list[str] = []
     connect = sqlite3.connect
@@ -95,7 +98,7 @@ def test_reading_an_installed_store_writes_nothing(tmp_path, monkeypatch):
     monkeypatch.setattr(sqlite3, "connect", traced)
     reader = TranscriptRoutes(tmp_path)
     with reader.for_session("session") as routes:
-        assert routes.get("a") == routing
+        assert routes.get(entry_id) == routing
         assert routes.input_display(INPUT_ID).sent_text_digest.matches("sent")
     written = [sql for sql in statements
                if sql.lstrip().split(None, 1)[0].upper()

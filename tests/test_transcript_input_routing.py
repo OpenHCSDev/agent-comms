@@ -14,6 +14,7 @@ from agent_comms.native_entries import TranscriptProjection
 from agent_comms.native_transcript import NativeTranscript
 from agent_comms.transcript_events import UserTranscript
 from agent_comms.transcript_routes import DisplayText, SentInputText
+from agent_comms.turn_item import FreshNativeId
 
 
 def append_input(path, native_id, text, *, role="user"):
@@ -50,7 +51,7 @@ def test_bound_input_overrides_turn_wide_annotation_without_attributing_quotes(t
     comms.threads.attach_session((attachment_owner := comms.registry.require("worker")), str(path), process=attachment_owner.process_identity)
     # Older settlement code labels all records with the initial origin.
     comms.transcripts.routes.record(
-        str(path), ("bbbbbbbb", "cccccccc"), TurnRouting((first.reference,))
+        str(path), (FreshNativeId("bbbbbbbb"), FreshNativeId("cccccccc")), TurnRouting((first.reference,))
     )
     reopened = wire(comms.root)
     with reopened.transcripts.routes.for_session(str(path)) as annotations:
@@ -90,6 +91,6 @@ def test_bound_route_rejects_changed_text_and_conflicting_rebind(tmp_path):
     path = tmp_path / "changed.jsonl"
     append_input(path, FIRST_INPUT_ID, "unrelated input")
     comms.threads.attach_session((attachment_owner := comms.registry.require("worker")), str(path), process=attachment_owner.process_identity)
-    comms.transcripts.routes.record(str(path), ("aaaaaaaa",), route)
+    comms.transcripts.routes.record(str(path), (FreshNativeId("aaaaaaaa"),), route)
     event = comms.transcripts.capture_page_read("worker").read().events[0]
     assert event.text == "unrelated input" and event.routing.present() == ()

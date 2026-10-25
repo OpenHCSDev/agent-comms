@@ -562,7 +562,7 @@ class PullRequest(DeclaredFamily, affix="PullRequest"):
     branch: str
     head: str
     updated_at: float = 0.0
-    orders: tuple[str, ...] = ()
+    orders: tuple[OrderId, ...] = ()
     base: str = field(default=WorkBranches.main, kw_only=True)
     problems: tuple[str, ...] = field(default=(), kw_only=True)
     status_contexts: tuple[str, ...] = field(default=(), kw_only=True)
@@ -604,7 +604,7 @@ class UnmergedPullRequest(PullRequest):
 
     @classmethod
     def from_listed(cls, row: ListedPullRequest, problems: tuple[str, ...],
-                    orders: tuple[str, ...]) -> Self:
+                    orders: tuple[OrderId, ...]) -> Self:
         return cls(row.number, row.branch, row.head, row.updated_at, orders,
                    base=row.base, problems=problems, status_contexts=row.status_contexts)
 
@@ -736,7 +736,7 @@ class ListedPullRequest(DeclaredFamily, affix="ListedPullRequest"):
         due = self.reviewable_at + seconds
         return () if now < due else (due,)
 
-    def parsed(self, problems: tuple[str, ...], orders: tuple[str, ...]) -> PullRequest:
+    def parsed(self, problems: tuple[str, ...], orders: tuple[OrderId, ...]) -> PullRequest:
         return UnmergedPullRequest.from_listed(self, problems, orders)
 
 
@@ -757,7 +757,7 @@ class DraftListedPullRequest(UnmergedListedPullRequest):
     def review_due(self, now: float, seconds: float) -> tuple[float, ...]:
         return ()
 
-    def parsed(self, problems: tuple[str, ...], orders: tuple[str, ...]) -> DraftPullRequest:
+    def parsed(self, problems: tuple[str, ...], orders: tuple[OrderId, ...]) -> DraftPullRequest:
         return DraftPullRequest.from_listed(self, problems, orders)
 
 
@@ -787,7 +787,7 @@ class MergedListedPullRequest(ListedPullRequest):
     def picked(cls, row: ListedPullRequest) -> tuple[MergedListedPullRequest, ...]:
         return row.as_merged()
 
-    def parsed(self, problems: tuple[str, ...], orders: tuple[str, ...]) -> MergedPullRequest:
+    def parsed(self, problems: tuple[str, ...], orders: tuple[OrderId, ...]) -> MergedPullRequest:
         return MergedPullRequest(self.number, self.branch, self.head, self.updated_at,
                                  orders, base=self.base,
                                  merge=self.merge.oid, merged_at=_github_time(self.merged),

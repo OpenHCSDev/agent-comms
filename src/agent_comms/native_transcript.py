@@ -35,7 +35,7 @@ from .native_session_reopen import NativeSessionIdentity
 from .private_path import FileRevision
 from .recorded_time import EventTime, RecordedEventTime, UnrecordedEventTime
 from .transcript_sources import TranscriptRecord, TranscriptSource
-from .turn_item import NativeItemId
+from .turn_item import FreshNativeId, NativeItemId
 
 
 def reverse_records(
@@ -180,7 +180,7 @@ class NativeRecord(TranscriptRecord):
         return self.end - self.start
 
     @property
-    def annotation_id(self) -> str | None:
+    def annotation_id(self) -> FreshNativeId | None:
         entry = self.entry
         return entry.id if entry is not None and entry.is_message else None
 
@@ -307,7 +307,7 @@ class NativeTranscript(TranscriptSource):
                 return None
         return entry.id
 
-    def annotation_ids(self, after: int, through: int) -> tuple[str, ...]:
+    def annotation_ids(self, after: int, through: int) -> tuple[FreshNativeId, ...]:
         return tuple(identity for record in self.forward(after, through)
                      if (identity := record.annotation_id) is not None)
 

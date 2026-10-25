@@ -18,6 +18,7 @@ from .input_disposition import InputDispositions
 from .private_path import FileObservation, FileRevision
 from .routing import NoTurnRouting, Routing, TurnRouting
 from .text_digest import TextDigest
+from .turn_item import FreshNativeId
 from .transcript_events import ContextTranscript, TranscriptEvent
 from .typed_table import Column, DurableStore, StoreRows, TextStorage, WithoutRowid
 
@@ -36,7 +37,7 @@ class TranscriptRoutesRows(StoreRows):
 @dataclass(frozen=True)
 class TranscriptRoute(TranscriptRoutesRows, WithoutRowid):
     session_file: Annotated[str, Column(primary_key=True)]
-    entry_id: Annotated[str, Column(primary_key=True)]
+    entry_id: Annotated[FreshNativeId, Column(primary_key=True)]
     routing: TurnRouting
 
     def require_publication(self, routing: TurnRouting) -> None:
@@ -176,10 +177,10 @@ class _SessionRoutes:
         self._lifetime = ExitStack()
         self._connection = self._lifetime.enter_context(store.snapshot())
         self._session_file = session_file
-        self._cache: dict[str, Routing] = {}
+        self._cache: dict[FreshNativeId, Routing] = {}
         self._input_cache: dict[str, InputPresentation] = {}
 
-    def get(self, entry_id: str | None) -> Routing:
+    def get(self, entry_id: FreshNativeId | None) -> Routing:
         if entry_id is None:
             return NoTurnRouting()
         if entry_id not in self._cache:
@@ -234,7 +235,7 @@ class TranscriptRoutes(DurableStore):
     def for_session(self, session_file: str) -> _SessionRoutes:
         return _SessionRoutes(self, session_file)
 
-    def record(self, session_file: str, entry_ids: tuple[str, ...], routing: TurnRouting) -> None:
+    def record(self, session_file: str, entry_ids: tuple[FreshNativeId, ...], routing: TurnRouting) -> None:
         if not entry_ids:
             return
         with self.writing() as connection:

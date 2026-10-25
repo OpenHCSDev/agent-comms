@@ -7,6 +7,7 @@ from dataclasses import dataclass, field
 from . import agent_events as events
 from .pi_counts import PiCount, UnreportedCount
 from .pi_payloads import PiUsage
+from .turn_item import ProviderResponseId
 
 
 @dataclass
@@ -23,7 +24,7 @@ class UsageAccount:
 
     def charge(self, usage: PiUsage) -> events.ProviderUsage:
         self.response_index += 1
-        return events.ProviderUsage(response_id=str(self.response_index), usage=usage)
+        return events.ProviderUsage(response_id=ProviderResponseId(str(self.response_index)), usage=usage)
 
     def observe(self, tokens: PiCount) -> None:
         self.used = tokens

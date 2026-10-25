@@ -39,6 +39,10 @@ class NativeItemId(FreshNativeId):
     """One item within a harness's turn."""
 
 
+class ProviderResponseId(FreshNativeId):
+    """One provider usage response charged to a goal attempt."""
+
+
 @dataclass(frozen=True)
 class TurnItem:
     turn_id: NativeTurnId

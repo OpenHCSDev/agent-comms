@@ -30,6 +30,7 @@ from typing import TYPE_CHECKING, Annotated, ClassVar, TypeVar
 from agent_comms.goal_turn_permit import GoalTurnPermit
 
 from .child_process import Platform
+from .turn_item import ProviderResponseId
 from .declared_family import DeclaredFamily
 from .field_codec import (
     AttemptId,
@@ -462,13 +463,13 @@ class GoalProviderUsage(GoalLedgerTable, TypedTable):
         AttemptId,
         Column(primary_key=True, references=TableReference(AttemptRecord, ("attempt_id",)))
     ]
-    response_id: Annotated[str, Column(primary_key=True)]
+    response_id: Annotated[ProviderResponseId, Column(primary_key=True)]
     # The canonical opaque provider object remains exact; no second native usage codec.
     usage_json: str
 
     @classmethod
     def readback(
-        cls, store: GoalAttemptStore, attempt_id: AttemptId, response_id: str
+        cls, store: GoalAttemptStore, attempt_id: AttemptId, response_id: ProviderResponseId
     ) -> str | None:
         with closing(store._connect()) as conn:
             row = GoalProviderUsage.one(conn, attempt_id=attempt_id, response_id=response_id)
@@ -490,7 +491,7 @@ class LaunchPermit(GoalTurnPermit):
             "Original launch attempt changed or is unavailable.",
         )).phase.verified_progress
 
-    def charge_for(self, goal_id: GoalId, goals: Goals, response: str,
+    def charge_for(self, goal_id: GoalId, goals: Goals, response: ProviderResponseId,
                    usage: PiUsage) -> bool:
         if goal_id != self.reservation.goal_id:
             return False
@@ -598,11 +599,9 @@ class LaunchPermit(GoalTurnPermit):
         )
 
     def record_provider_usage(
-        self, store: GoalAttemptStore, response_id: str, usage: PiUsage
+        self, store: GoalAttemptStore, response_id: ProviderResponseId, usage: PiUsage
     ) -> None:
         """Attribute one provider response to its claimed goal attempt exactly once."""
-        if not response_id:
-            raise ValueError("Provider response ID is required.")
         raw = FieldCodec.compact(usage.to_wire(), sort_keys=True, allow_nan=False)
         reservation = self.reservation
 

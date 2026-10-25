@@ -45,7 +45,7 @@ from .routing import NoTurnRouting, Routing
 from .transcript_events import ImportedMessage, NoticeTranscript, TranscriptEvent
 from .transcript_routes import InputPresentation, NoInputDisplay, _SessionRoutes
 from .native_session_reopen import PiSessionId
-from .turn_item import NativeItemId
+from .turn_item import FreshNativeId, NativeItemId
 
 
 @dataclass(frozen=True)
@@ -89,9 +89,6 @@ class RecordedEntry(PiPayload):
     def require_entry_id(self) -> str:
         return self.source_coordinates.original_id
 
-    def routing_in(self, routes: _SessionRoutes) -> Routing:
-        return routes.get(self.id)
-
     @property
     def source_coordinates(self):
         return self
@@ -113,7 +110,12 @@ class RecordedEntry(PiPayload):
 @dataclass(frozen=True, kw_only=True)
 class NativeEntry(RecordedEntry, DeclaredFamily, affix="Entry"):
     wire_tag = "type"
+    id: FreshNativeId | None = None
+    parent_id: Annotated[FreshNativeId | RootEntry, WireName("parentId")] = RootEntry()
     timestamp: Annotated[RecordedTimestamp, TimestampText]
+
+    def routing_in(self, routes: _SessionRoutes) -> Routing:
+        return routes.get(self.id)
 
     def events(self, context: TranscriptProjection) -> list[TranscriptEvent]:
         """Every part of a native record shares its original journal clock."""

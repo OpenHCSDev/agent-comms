@@ -16,7 +16,7 @@ from subprocess import TimeoutExpired
 from typing import TYPE_CHECKING, ClassVar, Self
 
 from agent_comms.declared_family import DeclaredFamily
-from agent_comms.field_codec import MalformedRecord
+from agent_comms.field_codec import MalformedRecord, OrderId
 from agent_comms.goal_presentation import GoalSnapshot
 from agent_comms.messages import Message
 from agent_comms.native_failures import NativePiUnavailable
@@ -160,7 +160,7 @@ class UnitObservation:
             source.checkout.require_read()
 
     @property
-    def orders(self) -> tuple[str, ...]:
+    def orders(self) -> tuple[OrderId, ...]:
         return tuple(todo.id for todo in self.todos)
 
 
@@ -175,7 +175,7 @@ class NeedsCommanderAttention:
 @dataclass(frozen=True)
 class UnitState(UndatedStandingRule, declared_name=None):
     unit: ThreadIncarnation
-    orders: tuple[str, ...]
+    orders: tuple[OrderId, ...]
     presence: ThreadStatus
     source: UnitObservation = field(compare=False, repr=False)
     action: ClassVar[str]
