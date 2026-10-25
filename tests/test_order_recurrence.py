@@ -6,19 +6,8 @@ from agent_comms.change_report import FileLine
 from agent_comms.slop import DeclarationDerivation, Derivation
 
 
-@pytest.mark.parametrize('mechanism', [
-    member for member in map(Derivation.member_named, Derivation.names())
-    if issubclass(member, DeclarationDerivation)
-])
-def test_declaration_derivations_require_another_file(mechanism, tmp_path):
-    where = FileLine('broken.py', 1)
-    assert mechanism.declaration_elsewhere(FileLine('owner.py', 1), where, tmp_path)
-    assert not mechanism.declaration_elsewhere(FileLine(str(tmp_path / 'broken.py'), 9), where, tmp_path)
-
-
-
-
-def test_recurrence_matches_the_enclosing_declaration_not_the_file(tmp_path):
+@pytest.fixture
+def source(tmp_path):
     (tmp_path / 'rules.py').write_text(
         'LIMIT = 1\n'
         '\n'
@@ -30,10 +19,27 @@ def test_recurrence_matches_the_enclosing_declaration_not_the_file(tmp_path):
         '    def check(self):\n'
         '        return 2\n'
     )
-    second = FileLine('rules.py', 9).declaration(tmp_path)
+    (tmp_path / 'other.py').write_text('class Owner:\n    pass\n')
+    return tmp_path
+
+
+@pytest.mark.parametrize('mechanism', Derivation.members_with(DeclarationDerivation))
+def test_declaration_derivations_require_another_declaration(mechanism, source):
+    where = FileLine('rules.py', 9)
+    assert mechanism.declaration_elsewhere(FileLine('rules.py', 3), where, source)
+    assert mechanism.declaration_elsewhere(FileLine('other.py', 1), where, source)
+    assert not mechanism.declaration_elsewhere(FileLine('rules.py', 8), where, source)
+    assert not mechanism.declaration_elsewhere(
+        FileLine(str(source / 'rules.py'), 9), where, source)
+
+
+def test_recurrence_matches_the_enclosing_declaration_not_the_file(source):
+    second = FileLine('rules.py', 9).declaration(source)
+    assert second.at == FileLine(str(source / 'rules.py'), 8)
+    assert second == FileLine(str(source / 'rules.py'), 8).declaration(source)
     assert second.lines == range(8, 10)
-    assert second.holds(FileLine('rules.py', 8), tmp_path)
-    assert not second.holds(FileLine('rules.py', 5), tmp_path)
-    assert not second.holds(FileLine('other.py', 9), tmp_path)
-    module = FileLine('rules.py', 1).declaration(tmp_path)
-    assert module.holds(FileLine('rules.py', 5), tmp_path)
+    assert second.holds(FileLine('rules.py', 8), source)
+    assert not second.holds(FileLine('rules.py', 5), source)
+    assert not second.holds(FileLine('other.py', 9), source)
+    module = FileLine('rules.py', 1).declaration(source)
+    assert module.holds(FileLine('rules.py', 5), source)

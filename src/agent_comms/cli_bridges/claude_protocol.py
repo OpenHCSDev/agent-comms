@@ -704,6 +704,13 @@ class SystemEvent(TaggedWire, ABC, affix=""):
         return False
 
 
+class BridgeStatus(SystemEvent, declared_name='bridge_status'):
+    """The remote-control banner and link, not a conversation or turn update."""
+
+    content: str
+    url: str
+
+
 class TurnDuration(SystemEvent, declared_name='turn_duration'):
 
     def updates(self, session: ClaudeSession) -> tuple[RuntimeUpdate, ...]:
