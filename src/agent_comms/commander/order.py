@@ -892,8 +892,9 @@ class DirectiveVerb(HeartbeatGated):
 
         Closed names answer nothing; unknown identities refuse instead of recording a reply
         that silently drops its references. A wrong addressee leaves its real debt uncovered.
-        A refusal lists every misaddressed name and every blocking debt together, with the
-        replies that answer all of them at once, so one round trip clears the gate.
+        A refusal lists every misaddressed name and every blocking debt together, debts still
+        inside their answer window included since they fall due before the retry lands, with
+        the replies that answer all of them at once, so one round trip clears the gate.
         """
         now = time.time()
         opened = OwedAnswer.opened(ctx.comms, self.who(ctx))
@@ -912,14 +913,15 @@ class DirectiveVerb(HeartbeatGated):
         answered = tuple(rule for rule in opened if rule.answered_by(named))
         problems |= {rule.cited: reason for rule in opened
                      if (reason := rule.misaddressed(named, reached))}
-        owed = tuple(rule for rule in opened if rule.due(now) and not rule.answered_by(named))
-        for rule in owed:
-            if rule.blocks(reached, self, answered):
-                problems[rule.cited] = (f'{rule.line()}: {rule.message.body[:80]}\n'
-                                        f'{rule.clearing_action()}')
-            else:
+        unanswered = tuple(rule for rule in opened if not rule.answered_by(named))
+        blocking = tuple(rule for rule in unanswered if rule.blocks(reached, self, answered))
+        for rule in unanswered:
+            if rule.due(now) and rule not in blocking:
                 print(f'WARNING: {rule.line()}')
-        if problems:
+        if problems or any(rule.due(now) for rule in blocking):
+            problems |= {rule.cited: f'{rule.line()}: {rule.message.body[:80]}\n'
+                                     f'{rule.clearing_action()}'
+                         for rule in blocking}
             raise RecordProblems(problems | self.replies_clearing(
                 tuple(rule for rule in opened if rule.cited in problems)))
         self.respond(ctx, tuple(dict.fromkeys(message.reference for message in named)))
