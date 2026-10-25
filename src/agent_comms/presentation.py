@@ -324,7 +324,7 @@ class MessageNotification:
     def direct_read_notification(
         cls, source, snapshot, reads, document, *, viewer: OutcomeViewer
     ) -> NotificationWindow:
-        """Retain even an absent human receipt so its first display is observable."""
+        """Keep a direct message with no human read mark so its first display is observable."""
         message = source.message
         if source.recipients or not viewer.sees_direct_read(source):
             return CapturedNotificationWindow({}, ())
