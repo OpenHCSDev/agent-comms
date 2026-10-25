@@ -83,7 +83,7 @@ from .turn_item import CompactionChargeId, PiRequestKey, ProviderResponseId, Usa
 from .native_session_reopen import PiSessionId
 
 if TYPE_CHECKING:
-    from .agent_events import AgentEvent, ProviderUsage
+    from .agent_events import AgentEvent
     from .backend import TurnSession
     from .native_entries import TranscriptProjection
     from .pending_requests import PendingRequests
@@ -462,19 +462,17 @@ class PiUsage(PiPayload):
         PiField[NonnegativePiCount], WireName("cacheWrite1h")
     ] = UnreportedCount()
 
-    def charges(self, identity: UsageChargeId | PiOmitted) -> tuple[ProviderUsage, ...]:
-        from .agent_events import ProviderUsage
-
+    def charges(self, identity: UsageChargeId | PiOmitted) -> tuple[events.ProviderUsage, ...]:
         # A failed terminal may have usage counters but no provider response.
         # Only an observed identity can name a provider billing entry.
-        return tuple(ProviderUsage(response_id=key, usage=self) for key in identity.present())
+        return tuple(events.ProviderUsage(response_id=key, usage=self) for key in identity.present())
 
 
 @dataclass(frozen=True)
 class UnreportedUsage(PiUsage):
     """Pi sent no usage object: nothing is charged and no token total is known."""
 
-    def charges(self, identity: UsageChargeId | PiOmitted) -> tuple[ProviderUsage, ...]:
+    def charges(self, identity: UsageChargeId | PiOmitted) -> tuple[events.ProviderUsage, ...]:
         return ()
 
 
