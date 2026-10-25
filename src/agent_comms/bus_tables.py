@@ -17,6 +17,7 @@ from agent_comms.typed_table import (
     ComposedSchemas,
     Index,
     ProjectionProducerTables,
+    RowNotFoundError,
     TableReference,
     TypedRow,
     TypedTable,
@@ -137,6 +138,17 @@ class MessageIdentitySource(MessageReference, messages.BusProjectionTables):
             raise refusal
 
     @classmethod
+    def require_sequences(cls, db: sqlite3.Connection, sequences: tuple[int, ...]) -> None:
+        matches = ReferenceMatch.read(db.execute(
+            f'SELECT identity.seq IS NOT NULL AS matched FROM json_each(?) AS supplied '
+            f'LEFT JOIN "{cls.declared_name}" AS identity ON identity.seq=supplied.value',
+            (json.dumps(sequences),),
+        ))
+        cls.require_matched(matches, RowNotFoundError(
+            f"Missing recorded {cls.declared_name} sequence",
+        ))
+
+    @classmethod
     def answering(
         cls, db: sqlite3.Connection, references: tuple[MessageReference, ...],
         route: NamedTarget, snapshot: RegistryProvenance,
@@ -183,8 +195,7 @@ class AnsweredSource(messages.BusProjectionTables):
         """Select recorded originals before loading any message or reply content."""
         if not sequences:
             return ()
-        for seq in sequences:
-            MessageIdentitySource.require(db, seq=seq)
+        MessageIdentitySource.require_sequences(db, sequences)
         asking = ",".join("?" for _ in sequences)
         replying = ",".join("?" for _ in responders)
         identity = MessageIdentitySource.declared_name
@@ -197,8 +208,7 @@ class AnsweredSource(messages.BusProjectionTables):
             + f'AND author.sender IN ({replying})) ORDER BY asked.seq',
             (*sequences, *responders),
         )
-        return tuple(MessageReference(FieldCodec.decode(int, row[0]),
-                                      FieldCodec.decode(str, row[1])) for row in rows)
+        return tuple(MessageReference.iterate(rows))
 
     @classmethod
     def unanswered(
