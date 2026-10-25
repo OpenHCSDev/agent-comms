@@ -1684,6 +1684,10 @@ class ProblemOrder(LifecycleCapability, DeclaredFamily, StorySource, affix="Prob
     def check_base(self, repo: Path) -> str:
         raise TodoError("This problem has no active checked order.")
 
+    def occupies_holder(self) -> bool:
+        """Whether this order still has work for the unit holding it."""
+        return True
+
     def corrected(self, correction: CorrectOrderTodo) -> ProblemOrder:
         raise TodoError("Only an active checked order takes a correction.")
 
@@ -2208,6 +2212,9 @@ class AwaitingInstallationProblemOrder(OpenProblemOrder, declared_name=None):
     def waiting_on_install(self, todo: Todo, read: dict[str, OrderProgress]) -> tuple[Todo, ...]:
         return (todo,)
 
+    def occupies_holder(self) -> bool:
+        return False
+
     def orphan_clearing(self, todo: Todo) -> str:
         return (f"its work is done and waits on install; once installed, close it with "
                 f"`order close {todo.id} --works WHAT-RAN --artifact FILE`")
@@ -2306,7 +2313,8 @@ class PendingProblemOrder(Pending, DeliverableProblemOrder):
         reading = context.plan_reading(
             context.comms.goals.todos.history_for_commander(context.incarnation))
         problems = list(self.phase.order_refusals(reading, document.unplanned_reason))
-        held = tuple(todo for todo in listed.values() if todo.holder_state.current_assignments())
+        held = tuple(todo for todo in listed.values()
+                     if todo.holder_state.current_assignments() and todo.order.occupies_holder())
         holder = context.comms.registry.require(unit).incarnation
         busy = tuple(todo for todo in held
                      if todo.held().owner_identity == holder and todo.id not in group)
