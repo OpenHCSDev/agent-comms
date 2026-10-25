@@ -15,7 +15,8 @@ from agent_comms.private_runtime_schema import PrivateCoordinatorTable
 
 from .audience_manifest import MAX_AUDIENCE_BYTES
 from .coordination_contracts import POLICY_VERSION, RESOLVER_VERSION
-from .field_codec import AssignmentId, MalformedRecord, MessageId, RootId, ThreadLookup, WireName
+from .field_codec import AssignmentId, MalformedRecord, MessageId, RootId, SubclassUnion, ThreadLookup, WireName
+from .thread_text import AbsentText, GivenText, TextChoice
 from .response_acknowledgement import _canonical
 from .typed_table import (
     Column,
@@ -31,6 +32,7 @@ from .typed_table import (
     InitialOneWayColumn,
     NoDelete,
     SharedFileTables,
+    TextStorage,
     TypedTable,
     WithoutRowid,
 )
@@ -207,6 +209,23 @@ class ClaimBatchMembers(GuardedInserts, ImmutableRows, CohortTable, WithoutRowid
             ),
         )
 
+class DeliveryClaim(SubclassUnion, TextChoice, affix="Claim"):
+    """A delivery's selected assignment, or no claim for an observer."""
+
+
+@dataclass(frozen=True, slots=True)
+class SelectedClaim(GivenText, DeliveryClaim):
+    text: AssignmentId
+
+    def __post_init__(self) -> None:
+        AssignmentId.spelled_by.from_text(self.text)
+
+
+@dataclass(frozen=True, slots=True)
+class NoDeliveryClaim(AbsentText, DeliveryClaim):
+    pass
+
+
 @dataclass(frozen=True, kw_only=True)
 class CohortDeliveries(
     GuardedRelatedInserts,
@@ -238,7 +257,7 @@ class CohortDeliveries(
         str, Column(check="length(canonical_thread) BETWEEN 1 AND 256")
     ]
     kind: Literal["selected", "unmentioned_observer"]
-    claim_id: AssignmentId | None
+    claim_id: Annotated[DeliveryClaim, Column(storage=TextStorage, nullable=True)]
     checks = (
         (
             "(kind = 'selected' AND claim_id IS NOT NULL)\n"
