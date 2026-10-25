@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 
+import fcntl
 import json
 import os
 from dataclasses import replace
@@ -11,7 +12,7 @@ import pytest
 
 from agent_comms.child_process import Platform
 from agent_comms.comms import Comms, wire
-from conftest import installed_comms
+from conftest import finishes_within, foreign_store_lock, installed_comms
 from agent_comms.goal_actions import (
     ClearGoalAction,
     CompletedGoalAction,
@@ -189,3 +190,24 @@ def test_unjournaled_current_registry_change_is_labeled_observed_gap(tmp_path):
     assert entries[-1].before == current
     assert entries[-1].after.text == "Unjournaled change"
     assert len(wire(comms.root).goals.goal_history("worker")) == 2
+
+
+def test_goal_history_reads_while_another_process_writes_the_registry(tmp_path):
+    comms = _wire(tmp_path)
+    goal = comms.goals.update_goal("worker", SetGoalAction(text="Ask @reviewer about the release"))
+    with foreign_store_lock(comms.registry.store.path, fcntl.LOCK_EX):
+        entries = finishes_within(10, lambda: comms.goals.goal_history("worker"))
+    assert [entry.after for entry in entries][-1:] == [goal]
+
+
+def test_a_lock_free_read_leaves_an_in_flight_intent_to_its_writer(tmp_path):
+    comms = _wire(tmp_path)
+    first = comms.goals.update_goal("worker", SetGoalAction(text="Ask @reviewer about the release"))
+    thread = comms.registry.require("worker")
+    history = GoalHistoryStore(comms.registry.store.path)
+    # A writer between its intent and its registry save: the registry still shows ``first``.
+    intent = history.begin(thread.incarnation.wire_birth, first, NoGoal())
+    assert comms.goals.goal_history("worker")[-1].after == first
+    history.commit(intent)
+    assert (TransitionRevision, first, NoGoal()) in [
+        (entry.kind, entry.before, entry.after) for entry in comms.goals.goal_history("worker")]
