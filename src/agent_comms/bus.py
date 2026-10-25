@@ -37,7 +37,7 @@ from agent_comms.messages import (
     ClaimMessage,
     Message,
     MessageKind,
-    PublicSender,
+    PublicRecord,
 )
 from agent_comms.envelope_claim_transitions import (
     ClaimOwner,
@@ -62,10 +62,6 @@ if TYPE_CHECKING:
     from agent_comms.registry_document import RegistrySnapshot
     from agent_comms.registry_provenance import RegistryProvenance
     from agent_comms.thread_identity import RecordedThreadIncarnation
-
-
-class PublicRecord(BusRecord):
-    sender_lookup: ClassVar[PublicSender] = PublicSender()
 
 
 class ClaimRecord(PublicRecord, ClaimMessage):
@@ -465,16 +461,23 @@ class Bus(BusReader, ReconciledFile, WalStore, CarriedWriter, BusFile, Watched):
     def __init__(self, path: Path):
         super().__init__(path)
 
+    def unreceived(self, lookup: ThreadLookup,
+                   references: Iterable[MessageReference]) -> tuple[MessageReference, ...]:
+        """The references outside this participant's frozen delivery audiences."""
+        with self.observing() as db:
+            return tuple(reference for reference in references if not ReceivedSource.exists(
+                db, where="{seq} = ?", parameters=(reference.seq,), lookup=lookup))
+
     def received_after(self, lookup: ThreadLookup, after: int) -> bool:
         """Whether this recipient has a newer candidate; read one indexed metadata row."""
         with self.observing() as db:
             return ReceivedSource.exists(db, where="{seq} > ?", parameters=(after,), lookup=lookup)
 
     @classmethod
-    def install(cls, path: Path, *, history: Iterable[Message] = ()) -> Self:
-        """Install declared schemas and commit optional display-only history atomically.
+    def install(cls, path: Path, *, history: Iterable[BusRecord] = ()) -> Self:
+        """Install declared schemas and commit optional copied history atomically.
 
-        Original sequences survive; frozen deliveries and resource claims do not.
+        Original sequences and frozen deliveries survive; resource claims do not.
         Existing-file migrations still belong to declared carries and their backups.
         """
         bus = cls(path)
@@ -483,7 +486,7 @@ class Bus(BusReader, ReconciledFile, WalStore, CarriedWriter, BusFile, Watched):
             with bus.write_transaction(db):
                 BusSchema.require_installed(db)
                 for message in history:
-                    PublicRecord.from_message(message.history_snapshot).append_to(db, message.seq)
+                    message.history_record.append_to(db, message.seq)
         return bus
 
     @classmethod
@@ -496,7 +499,8 @@ class Bus(BusReader, ReconciledFile, WalStore, CarriedWriter, BusFile, Watched):
     ) -> Iterator[sqlite3.Connection]:
         """Borrow one read-only snapshot, including for an archived bus. Root adoption
         creates the bus, so an absent file is a deleted bus and fails to open."""
-        with self._attached(lambda: SQLiteFile.observing(self.path), contention) as db:
+        with self.attached(
+                self.path, lambda: SQLiteFile.observing(self.path), contention) as db:
             yield db
 
     def backup(self, destination: Path) -> None:

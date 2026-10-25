@@ -6,11 +6,13 @@ from pathlib import Path
 import sys
 
 import pytest
+from bus_record_fixture import append_reply
 
 from agent_comms.check_root import CheckRoot
+from agent_comms.child_process import NoProcess
 from agent_comms.cli import main
 from agent_comms.comms import wire
-from agent_comms.errors import RelationViolationError
+from agent_comms.errors import UnreceivedAnswerError
 from agent_comms.external_transcript import ExternalTranscript
 from agent_comms.transcript_events import AssistantTranscript, NoticeTranscript, UserTranscript
 from agent_comms.native_entries import NativeEntry
@@ -95,26 +97,44 @@ def test_bounded_check_history_keeps_the_original_answered_before_its_tail(sourc
 
 
 def test_check_history_never_pulls_an_answered_message_from_outside_its_scope(source, scratch_root):
+    # unit-busdel's check root refused on live answer 23164, whose original 22950 was a DM
+    # between two other threads: the copy keeps the answer and names no undisclosed message.
+    # Send now refuses this answer; the record stands for ones appended before it did.
     original = source.messaging.send("unselected", "A", "Unselected private context").message
-    source.messaging.send("B", "A", "A reference does not expand the selected scope", answers=(original.reference,))
+    people = source.registry.snapshot()
+    reply = append_reply(
+        source.bus.bus, people.require("B").incarnation.require_recorded(),
+        people.require("A").incarnation.require_recorded(),
+        "A reference does not expand the selected scope", answers=(original.reference,))
     root = scratch_root / "outside-window"
     before = source.bus.bus.revision()
-    with pytest.raises(RelationViolationError):
-        with CheckRoot(source, ("B",), root).open():
-            pytest.fail("A selected check copied unselected private history")
+    with CheckRoot(source, ("B",), root).open() as copied:
+        history = tuple(copied.bus.bus.message_history())
+        assert original.seq not in {message.seq for message in history}
+        assert copied.bus.bus.lookup(reply.seq).answers == ()
+        assert all(thread.process_identity == NoProcess()
+                   for thread in copied.registry.snapshot().threads.values())
     assert source.bus.bus.revision() == before
     assert not root.exists()
 
 
+def test_a_message_answers_only_what_its_sender_received(source):
+    # Live 23164: unit-busdel answered 22950, fork-ledgerfold's DM to unit-installer.
+    private = source.messaging.send("unselected", "A", "Unselected private context").message
+    with pytest.raises(UnreceivedAnswerError, match=f"B never received {private.message_id}"):
+        source.messaging.send("B", "A", "Not mine to answer", answers=(private.reference,))
+    source.channels.create_tag("comms")
+    channel = source.messaging.send("A", "#comms", "A channel question").message
+    for sender, original in (("A", private), ("B", channel)):
+        reply = source.messaging.send(sender, "unselected", "Answered",
+                                      answers=(original.reference,)).message
+        assert source.bus.bus.lookup(reply.seq).answers == (original.reference,)
 
 
-
-
-
-
-
-
-
-
-
-
+def test_a_check_root_answers_a_dm_received_before_the_copy(source, scratch_root):
+    # A copy written as public records had no receipts, so send refused every old answer.
+    original = source.bus.bus.lookup(1)
+    with CheckRoot(source, ("A", "B"), scratch_root / "received").open() as copied:
+        reply = copied.messaging.send("B", "A", "Answered inside the copy",
+                                      answers=(original.reference,)).message
+        assert copied.bus.bus.lookup(reply.seq).answers == (original.reference,)

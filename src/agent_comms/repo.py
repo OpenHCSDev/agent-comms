@@ -12,6 +12,7 @@ from typing import TYPE_CHECKING, Annotated, Self
 
 from pydantic import BaseModel, ConfigDict, InstanceOf, PlainSerializer, PlainValidator
 
+from .coordination_errors import CommandFailure
 from .declared_family import DeclaredFamily
 from .errors import MissingSourceLine
 from .field_codec import FieldCodec, WireValue
@@ -34,7 +35,7 @@ class RepositorySelection(ABC):
     def without_commander(self) -> None: ...
 
 
-class GitCommandError(RuntimeError):
+class GitCommandError(RuntimeError, CommandFailure):
     """A Git operation failure, not malformed order data to aggregate and continue past."""
 
     def __init__(self, repository: str, run: subprocess.CompletedProcess[bytes]):

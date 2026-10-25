@@ -16,9 +16,9 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import ClassVar
 
-from agent_comms.behaviour_patterns import PostmortemFailure
 from agent_comms.commander.package import CommanderPackage
 from agent_comms.commander.rule_file import RuleFile
+from agent_comms.pattern_sources import PostmortemFailure
 from agent_comms.registry_store import RegistryStore
 from agent_comms.slop import Slop
 from agent_comms_hooks import ClaudeHookProgram

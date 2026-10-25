@@ -24,7 +24,7 @@ from contextlib import ExitStack, contextmanager
 from dataclasses import dataclass
 from functools import partial
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, ClassVar
 
 from agent_comms.locked_store import SQLiteFile
 from agent_comms.coordination_errors import IdentityConflict
@@ -35,7 +35,7 @@ if TYPE_CHECKING:
     from .agent_backend import StreamingInputPolicy
 
 from .private_path import ObservedPath, PrivateFileRole, TrustedAncestorRole
-from .store_files import StoreOwner
+from .store_files import ExclusiveLock, StoreOwner
 from .typed_table import (
     AllObjectsTables,
     ImmutableRows,
@@ -115,8 +115,6 @@ class _PinnedDirectory:
 
 @contextmanager
 def _locked_directory(path: Path) -> Iterator[_PinnedDirectory]:
-    import fcntl
-
     path = path.absolute()
     if ".." in path.parts or not path.name:
         raise IdentityConflict("Private sidecar path must be lexical.")
@@ -142,8 +140,8 @@ def _locked_directory(path: Path) -> Iterator[_PinnedDirectory]:
         )
         stack.callback(os.close, lock)
         PrivateFileRole.require(os.fstat(lock), UnprivateSidecarFile())
-        fcntl.flock(lock, fcntl.LOCK_EX)
-        stack.callback(fcntl.flock, lock, fcntl.LOCK_UN)
+        # Closing the description, already on the stack, gives the hold back.
+        ExclusiveLock().wait(lock)
         directory.unchanged(lock_name, os.fstat(lock))
         directory.lock_name = lock_name
         directory.lock_identity = _identity(os.fstat(lock))
@@ -237,6 +235,26 @@ def _verify_schema(connection: sqlite3.Connection, row_type: type[TypedTable]) -
         raise IdentityConflict("Sidecar foreign-key checking is disabled.")
     if _QuickCheck.read(connection.execute("PRAGMA quick_check")) != [_QuickCheck("ok")]:
         raise IdentityConflict("Sidecar snapshot integrity failed.")
+
+
+class VerifiedSnapshots:
+    """The snapshot content each sidecar last passed verification with, in this process.
+
+    Verification is a pure function of the snapshot bytes and the row type: a fresh
+    in-memory connection over the same bytes answers every check the same way. A
+    worker reopening an unchanged snapshot paid the full schema comparison and
+    `PRAGMA quick_check` on every open (10.8% of a bus worker, P666); it now pays
+    them once per content, and again the moment one byte differs."""
+
+    passed: ClassVar[dict[tuple[Path, type[TypedTable]], bytes]] = {}
+
+    @classmethod
+    def verify(cls, connection: sqlite3.Connection, row_type: type[TypedTable],
+               path: Path, raw: bytes) -> None:
+        digest = hashlib.sha256(raw).digest()
+        if cls.passed.get((path, row_type)) != digest:
+            _verify_schema(connection, row_type)
+            cls.passed[path, row_type] = digest
 
 
 def _write_all(fd: int, data: bytes) -> None:
@@ -337,7 +355,7 @@ def sidecar_connection(
         raw, identity = snapshot
         connection = _connect(raw)
         try:
-            _verify_schema(connection, row_type)
+            VerifiedSnapshots.verify(connection, row_type, path, raw)
             changes = connection.total_changes
             connection.execute(f"PRAGMA query_only={int(read_only)}")
             yield connection

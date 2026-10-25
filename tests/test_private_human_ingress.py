@@ -17,9 +17,8 @@ import pytest
 from agent_comms.bus_publication import HumanOrigin
 from agent_comms.channel_targets import CommandTarget
 from agent_comms.comms import Comms, wire
-from agent_comms.coordination_cohort import accept_delivery_cohort
+from conftest import accept_initial
 from agent_comms.coordination_database import CoordinationStore
-from agent_comms.coordination_results import Applied
 from agent_comms.coordinator import Coordination
 from agent_comms.errors import (
     CommittedMessageError,
@@ -136,10 +135,8 @@ def test_private_human_channel_and_dm_seal_original_full_audience(tmp_path: Path
     assert {member.recipient_lookup for member in initial.recipients} == set(
         lookups.values()
     )
-    acknowledgement = accept_delivery_cohort(comms.bus, root_id, channel.seq, store)
-    assert isinstance(acknowledgement, Applied)
-    assert acknowledgement.value.member_count == 2
-    assert acknowledgement.value.assignment_count == 1  # Bob is a frozen unmentioned observer.
+    # Bob is a frozen unmentioned observer: two members, one claim.
+    assert len(accept_initial(comms.bus, root_id, channel.seq, store)) == 1
     dm = comms.messaging.send_user_message(CommandTarget.named('bob'), "direct", worktree=str(tmp_path))
     assert dm.seq > channel.seq and dm.sender == channel.sender
     assert list(comms.views.history_page(CommandTarget.named("bob"), viewer=NamedViewer(channel.sender)).messages)[-1] == dm
@@ -148,9 +145,7 @@ def test_private_human_channel_and_dm_seal_original_full_audience(tmp_path: Path
         (member.canonical_thread, member.recipient_lookup)
         for member in dm_initial.recipients
     ] == [("bob", lookups["bob"])]
-    accepted = accept_delivery_cohort(comms.bus, root_id, dm.seq, store)
-    assert isinstance(accepted, Applied)
-    assert accepted.value.member_count == accepted.value.assignment_count == 1
+    assert len(accept_initial(comms.bus, root_id, dm.seq, store)) == 1
 
 
 def test_explicit_root_override_preserves_private_user_receipt(

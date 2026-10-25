@@ -16,7 +16,10 @@ from pydantic import JsonValue
 
 from .input_key import InputKey
 
-from . import agent_events as events
+from . import (
+    agent_events as events,
+    pi_events as pi,
+)
 from .agent_backend import AgentBackend
 from .agent_event_updates import AcpEventConsumer, TurnEventConsumer
 from .channel_targets import NamedTarget
@@ -38,6 +41,11 @@ from .messages import Message
 from .mro_dispatch import MroDispatch, handles
 from .native_arguments import LaunchArguments, LaunchBinary
 from .native_input_owner import RegistryOwner
+from .owned_turn import OwnedTurn
+from .pi_commands import (
+    AgentCommsInspectContext,
+    AgentCommsInspectContextSegment,
+)
 from .pi_payloads import StateData
 from .queued_input import InitialInput
 from .routing import TurnRouting
@@ -53,6 +61,7 @@ from .turn_input_source import TurnAcceptance
 from .turn_outcome import TurnOutcome
 from .turn_phase import CancellingPhase, TurnPhase
 from .turn_terminal import TurnInterruption
+from .goal_scope import OneGoal
 
 if TYPE_CHECKING:
     from . import pi_events as pi
@@ -166,13 +175,9 @@ class TurnRunner:
         await AcpEventConsumer(self.effects, session_id, self.runtime).dispatch(info)
 
     async def inspect_context(self, session_id, thread):
-        from .pi_commands import AgentCommsInspectContext
-
         return await self.inspect_native_request(session_id, thread, AgentCommsInspectContext())
 
     async def inspect_context_segment(self, session_id, thread, manifest):
-        from .pi_commands import AgentCommsInspectContextSegment
-
         request = AgentCommsInspectContextSegment.for_manifest(manifest)
         context = await self.inspect_native_request(session_id, thread, request)
         return context.recorded_public_text(manifest)
@@ -243,7 +248,7 @@ class TurnRunner:
     def pause_active_goal(self, thread: Thread) -> None:
         for goal in thread.goal.active():
             self.comms.goals.update_goal(
-                thread.name, PausedGoalAction(expect=GoalPrecondition(goal_id=goal.id)),
+                thread.name, PausedGoalAction(expect=GoalPrecondition(goal_id=OneGoal(goal.id))),
                 actor=OwnerInvocable,
             )
 
@@ -282,8 +287,6 @@ class TurnRunner:
         No ACP response updates package configuration, launch trust or call grants.
         The backend revalidates this result before replying to the same Pi child.
         """
-        from . import pi_events as pi
-
         if controller is None or not await Coordination.run_worker(partial(self.owns_turn, session_id, turn_id)):
             return pi.CancelledUiChoice()
         permission = request.permission(turn_id)
@@ -446,8 +449,6 @@ class TurnRunner:
         acceptance: TurnAcceptance,
         dependency_wait_id: str | None = None,
     ) -> None:
-        from .owned_turn import OwnedTurn
-
         await OwnedTurn(
             self,
             session_id=session_id,

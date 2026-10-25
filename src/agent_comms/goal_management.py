@@ -2,6 +2,11 @@
 
 from __future__ import annotations
 
+from .agent_events import (
+    GoalChanged,
+    GoalUnchanged,
+)
+
 from .errors import StaleAttemptError
 import logging
 from collections.abc import Iterator, Sequence
@@ -9,7 +14,7 @@ from contextlib import contextmanager
 from dataclasses import replace
 from functools import cached_property
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, TypeVar
 
 from agent_comms.field_codec import GoalId
 from .agent_activity import AgentActivity
@@ -25,7 +30,8 @@ from .goal_actions import (
 )
 from .goal_attempts import Generation, GoalAttemptStore
 from .errors import UnresolvedAttemptError
-from .goal_history import GoalHistoryEntry
+from .goal_history import GoalHistoryEntry, RecordedGoalHistory
+from .goal_scope import AllGoals, GoalScope, OneGoal
 from .goal_waits import (
     GoalInputReview,
     GoalWait,
@@ -64,10 +70,12 @@ from .input_attempt import (
 from .input_disposition import DeliveryOverview, InputDispositions
 from .message_bus import MessageBus
 from .threads import Thread
-from .todos import SendBackVerdict, StrikeReason, Todo, TodoCommand, TodoError, TodoStore
+from .errors import TodoError
+from .todos import SendBackVerdict, StrikeReason, Todo, JudgedCall, TodoBatch, TodoCommand, TodoStore
 from .turn_lease import TurnCompletion
 
 _LOG = logging.getLogger(__name__)
+HistoryReply = TypeVar("HistoryReply", bound=RecordedGoalHistory)
 
 
 class Goals:
@@ -95,6 +103,37 @@ class Goals:
         current.require_commander(actor)
         return operation.prepare(self, current).record(self, problem)
 
+    def judge_calls(self, verdicts: Sequence[JudgedCall], commander: str) -> tuple[Todo, ...]:
+        """Check every verdict on its order's state as the earlier ones leave it, list every
+        refusal together, and write only when none is refused."""
+        actor = self.registry.require(commander).incarnation
+        staged, ready = TodoBatch(), TodoBatch()
+        for call in verdicts:
+            call.operation.staged(staged, call)
+        states: dict[str, Todo] = {}
+        read_at: dict[str, int] = {}
+        refusals: list[str] = []
+        for call in staged.ordered():
+            problem, verdict = call.problem, call.operation
+            # Every verdict on a problem is built from the revision its judge read; the first
+            # checks that revision against the store and the rest follow the ones before them.
+            if problem not in states:
+                states[problem] = self.todos.get(problem)
+                read_at[problem] = verdict.expected_revision
+            elif verdict.expected_revision == read_at[problem]:
+                verdict = replace(verdict, expected_revision=states[problem].revision)
+            try:
+                states[problem].require_commander(actor)
+                prepared = verdict.prepare(self, states[problem])
+                states[problem] = prepared.apply(states[problem])
+            except TodoError as refused:
+                refusals.append(f"{verdict.tool_call_id}: {refused}")
+                continue
+            prepared.staged(ready, replace(call, operation=prepared))
+        if refusals:
+            raise TodoError("; ".join(refusals))
+        return ready.record(self)
+
     def apply_problem(self, problem: str, operation: TodoCommand) -> Todo:
         return self.todos.apply(problem, operation)
 
@@ -102,7 +141,7 @@ class Goals:
         """The verdict and strike land on the Todo in the write that revises the holder's Goal."""
         holder = verdict.previous
         self.update_goal(holder.owner, SentBackOrderGoalAction(
-            expect=GoalPrecondition(goal_id=holder.generation), problem=problem, operation=verdict))
+            expect=GoalPrecondition(goal_id=OneGoal(holder.generation)), problem=problem, operation=verdict))
         sent_back: Todo = self.todos.get(problem)
         return sent_back
 
@@ -262,10 +301,20 @@ class Goals:
         )
 
     def goal_history(
-        self, name: str, *, goal_id: GoalId | None = None
+        self, name: str, scope: GoalScope = AllGoals()
     ) -> tuple[GoalHistoryEntry, ...]:
-        """Read durable revisions for one thread incarnation and optional goal ID."""
-        return self.registry.goal_history(name, goal_id=goal_id)
+        """Read durable revisions for one thread incarnation within ``scope``."""
+        return self.registry.goal_history(name, scope)
+
+    def recorded_history(
+        self, reply: type[HistoryReply], name: str, scope: GoalScope
+    ) -> HistoryReply:
+        """Revisions from goal history, execution failures from the attempt ledger."""
+        owner = self.registry.require(name).incarnation.wire_birth
+        return reply(
+            tuple(entry.recorded() for entry in self.goal_history(name, scope)),
+            self.open_goal_store().failures(owner, scope),
+        )
 
     def goal_wait(self, name: str) -> GoalWait:
         goal = self.registry.require(name).goal
@@ -379,8 +428,6 @@ class Goals:
         Existing registry/history and wait persistence are the cross-process
         authority. Each observer supplies its last successfully published view.
         """
-        from .agent_events import GoalChanged, GoalUnchanged
-
         current = self.goal_snapshot(name)
         return GoalChanged(current) if previous.changed_by(current) else GoalUnchanged()
 

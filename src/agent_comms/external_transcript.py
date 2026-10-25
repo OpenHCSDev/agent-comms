@@ -21,11 +21,18 @@ from uuid import uuid4
 from .declared_family import DeclaredFamily
 from .field_codec import FieldCodec, InputId, ThreadLookup
 from .locked_store import RegistryFile
+from .native_runtime_input import NativeRuntimeInput
+from .native_tools import MutatingPathTool
 from .native_transcript import RecordsCut
 from .recorded_time import EventTime, GeneratedTimestamp
 from .thread_identity import ThreadIncarnation
 from .tool_declaration import ToolDeclaration
-from .transcript_events import ToolStartTranscript, TranscriptEvent, TurnDigest
+from .transcript_events import (
+    AssistantTranscript,
+    ToolStartTranscript,
+    TranscriptEvent,
+    TurnDigest,
+)
 from .transcript_sources import TranscriptDraft, TranscriptRecord, TranscriptSource
 from .turn_item import NativeTurnId
 from .typed_table import (
@@ -244,8 +251,6 @@ class ExternalEventRow(ExternalTranscriptRows, TypedTable):
 
     @classmethod
     def unjudged_query(cls, thread, todo, since):
-        from .native_tools import MutatingPathTool
-        from .tool_declaration import ToolDeclaration
         from .transcript_events import ToolStartTranscript
 
         tools = tuple(tool.declared_name for tool in ToolDeclaration.members_with(MutatingPathTool))
@@ -275,7 +280,6 @@ class DraftRow(ExternalTranscriptRows, TypedTable, TranscriptDraft, declared_nam
     @classmethod
     @contextmanager
     def publication(cls, root: Path, input_id: InputId):
-        from .native_runtime_input import NativeRuntimeInput
         from .transcripts import TranscriptRead
         with TranscriptRead.publication_source(root) as connection:
             original = NativeRuntimeInput.one(connection, input_id=input_id) if connection is not None else None
@@ -430,11 +434,6 @@ class StoreRead(TranscriptSource):
                 yield from tool.edit_calls(identity, GeneratedTimestamp.decode(timestamp),
                                            todo.held().owner, todo.id)
 
-    def unjudged_count(self, todo, since) -> int:
-        where, parameters = ExternalEventRow.unjudged_query(self.transcript.lookup, todo, since)
-        return self.connection.execute(
-            f'SELECT count(DISTINCT e.call_id) FROM "{ExternalEventRow.declared_name}" e WHERE {where}',
-            parameters).fetchone()[0]
 
 
 @dataclass(frozen=True, slots=True)
@@ -567,9 +566,6 @@ class TurnDraftPublication(DraftPublication, StoreWriter):
     def store(self) -> ExternalTranscript:
         return self.transcript
 
-    def require_maintenance_open(self) -> None:
-        self.transcript.require_maintenance_open()
-
     @contextmanager
     def writing(self):
         with self.transaction(self.connection):
@@ -580,7 +576,6 @@ class TurnDraftPublication(DraftPublication, StoreWriter):
         self.timestamp = timestamp
 
     def publish(self, parts: Iterable[str]) -> None:
-        from .transcript_events import AssistantTranscript
         DraftRow(self.transcript.lookup, self.turn_id, self.item_id,
                  (AssistantTranscript(''.join(parts), position=self.item_id,
                                       timestamp=self.timestamp),)).publish(self)

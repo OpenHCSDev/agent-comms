@@ -11,7 +11,7 @@ from agent_comms.commander.order import OrderFile, main
 from agent_comms.field_codec import FieldCodec, GoalId
 from agent_comms.goal_actions import SetGoalAction
 from agent_comms.commander.package import CommanderPackage
-from agent_comms.errors import ToolRefusedError
+from agent_comms.errors import TodoConflict, TodoError, ToolRefusedError
 from agent_comms.goals import OrderCheck, ProblemGoalOrder
 from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.todos import (
@@ -24,11 +24,10 @@ from agent_comms.todos import (
     DeliveryReport,
     PendingProblemOrder,
     OrderClaim,
+    ReleaseTodo,
     SendBackVerdict,
     StrikeReason,
     StrikeTodo,
-    TodoConflict,
-    TodoError,
     Todo,
 )
 from agent_comms.tool_caller import ThreadCaller
@@ -181,6 +180,46 @@ def test_second_commander_strike_takes_the_task_away(held_commander):
     assert todo.holder is None
     assert len(todo.strikes) == 2
     assert todo.released[-1].previous == todo.strikes[-1].previous
+
+
+def test_unstrike_below_the_limit_gives_the_task_back(held_commander):
+    """Two strikes take the task away; voiding the one recorded in error restores its holder
+    in the same write."""
+    ctx = held_commander
+    store = ctx.comms.goals.todos
+    todo = store.get("P1")
+    holder = todo.held()
+    for reason in ("The first review found the original duplicated decision still present.",
+                   "The same review counted the duplicated decision a second time in error."):
+        todo = store.apply(todo.id, StrikeTodo(
+            todo.revision, ctx.incarnation, todo.held(), reason,
+            evidence=(todo.order.checked().owner,),
+        ))
+    assert todo.holder is None
+    main(["unstrike", "P1", "--why", "The second strike counted the same duplicated decision from the first review twice."], ctx)
+    restored = store.get("P1")
+    assert restored.held() == holder
+    assert len(restored.live_strikes()) == 1
+    assert restored.released == todo.released
+
+
+def test_unstrike_does_not_undo_an_explicit_release(held_commander):
+    ctx = held_commander
+    store = ctx.comms.goals.todos
+    todo = store.get('P1')
+    struck = store.apply(todo.id, StrikeTodo(
+        todo.revision, ctx.incarnation, todo.held(),
+        'The first review counted a duplicated decision that the source did not contain.',
+        evidence=(todo.order.checked().owner,)))
+    released = store.apply(todo.id, ReleaseTodo(
+        struck.revision, ctx.incarnation, struck.held(),
+        StrikeReason('The commander deliberately moved the problem off this unit for independent work.')))
+    main(['unstrike', 'P1', '--why',
+          'The cited duplicated decision was absent and this strike was recorded in error.'], ctx)
+    after = store.get(todo.id)
+    assert after.holder is None
+    assert not after.live_strikes()
+    assert after.released == released.released
 
 
 def claimed_by_worker(ctx) -> Todo:

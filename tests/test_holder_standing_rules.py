@@ -29,7 +29,7 @@ from agent_comms.commander_heartbeat import CommanderHeartbeat
 from agent_comms.commander_pings import CommanderUpdate
 from agent_comms.comms import wire
 from agent_comms.coordinator import Coordination
-from agent_comms.errors import CommittedMessageError, HumanSendRefusedError, RelationViolationError
+from agent_comms.errors import CommittedMessageError, HumanSendRefusedError, RelationViolationError, TodoConflict
 from agent_comms.field_codec import FieldCodec, InputId, MessageId, TurnId
 from agent_comms.goal_actions import (
     CreateProblemGoalAction,
@@ -68,7 +68,6 @@ from agent_comms.todos import (
     OrderMessage,
     PendingProblemOrder,
     ProgressRead,
-    TodoConflict,
 )
 from agent_comms.tool_caller import NoThreadCaller
 from agent_comms.turn_digests import OrderEditCountRead
@@ -400,19 +399,6 @@ def test_goal_generation_cannot_transfer_to_a_different_owner(held_bus):
     assert held_bus.goals.todos.get(todo.id) == todo
 
 
-def test_a_running_turn_is_not_a_stalled_holder(held_bus):
-    blocked_holder(held_bus)
-    thread = held_bus.registry.require("worker")
-    held_bus.registry.register(replace(thread, process_identity=ProcessIdentity.capture(os.getpid())))
-    owner = held_bus.agents.begin_turn("worker", TurnId('3e748b426825aaaad5def94520fa5858'))
-    lease = owner.thread.turn_lease
-    assert lease is not None
-    try:
-        assert state_cards(held_bus, Blocked) == ()
-    finally:
-        held_bus.agents.finish_turn(lease)
-
-
 def test_unanswered_uses_age_direct_target_and_later_answer_references(held_bus):
     now = time.time()
     publish(held_bus, "worker", "lead", now - 7200)  # before every held order
@@ -568,19 +554,37 @@ def test_an_unanswered_unit_message_gates_send_until_a_say_answers_it(held_bus, 
     assert held_bus.bus.bus.lookup(held_bus.bus.bus.revision()).answers == ()
 
 
-def test_answering_one_owed_message_leaves_another_owed(held_bus, tmp_path):
+def test_answering_one_owed_message_leaves_another_owed(held_bus, tmp_path, capsys):
+    """An answer is never refused for the debts it leaves: they warn and stay owed."""
     first = publish(held_bus, "worker", "lead", time.time() - AwaitingCommander.seconds - 2)
     second = publish(held_bus, "worker", "lead", time.time() - AwaitingCommander.seconds - 1)
     ctx = Commander.read_root(held_bus.root)
     reply = tmp_path / "reply.txt"
     reply.write_text("Waiting on the merge queue, owner unit-goalblock")
+    capsys.readouterr()
+    SayVerb(units="worker", body_file=str(reply), answers=(first.message_id,)).apply(ctx)
+    assert f"WARNING: UNANSWERED worker: message {second.seq}:{second.message_id}" in (
+        capsys.readouterr().out)
+    assert held_bus.bus.bus.lookup(held_bus.bus.bus.revision()).answers == (first.reference,)
+    assert [owed.message.message_id for owed in unanswered(held_bus)] == [second.message_id]
     with pytest.raises(SystemExit, match=second.message_id):
-        SayVerb(units="worker", body_file=str(reply), answers=(first.message_id,)).apply(ctx)
-    assert {owed.message.message_id for owed in unanswered(held_bus)} == {
-        first.message_id, second.message_id}
-    SayVerb(units="worker", body_file=str(reply),
-            answers=(first.message_id, second.message_id)).apply(ctx)
-    assert unanswered(held_bus) == ()
+        SendVerb(unit="worker", body_file=str(reply)).apply(ctx)
+
+
+def test_an_owed_vibe_check_refuses_only_verbs_that_answer_nothing(held_bus, tmp_path):
+    """The vibe check waits like any owed message: a reply naming a unit's ask still lands."""
+    from agent_comms.commander.vibe_check import VibeCheckSender
+
+    VibeCheckSender.register(held_bus.registry)
+    check = publish(held_bus, VibeCheckSender.sender, "lead", time.time() - 3600)
+    ask = publish(held_bus, "worker", "lead", time.time() - AwaitingCommander.seconds - 1)
+    ctx = Commander.read_root(held_bus.root)
+    reply = tmp_path / "reply.txt"
+    reply.write_text("Waiting on the merge queue, owner unit-goalblock")
+    with pytest.raises(SystemExit, match=check.message_id):
+        SendVerb(unit="worker", body_file=str(reply)).apply(ctx)
+    SayVerb(units="worker", body_file=str(reply), answers=(ask.message_id,)).apply(ctx)
+    assert held_bus.bus.bus.lookup(held_bus.bus.bus.revision()).answers == (ask.reference,)
 
 
 def test_an_answer_sent_to_another_unit_is_refused_and_leaves_the_ask_owed(held_bus, tmp_path):

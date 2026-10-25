@@ -27,6 +27,7 @@ from agent_comms.goal_waits import NoGoalWait
 from agent_comms.goal_waits import RecordedGoalWait
 from agent_comms.thread_text import GivenThreadText
 from agent_comms.threads import Thread
+from agent_comms.goal_scope import OneGoal
 
 
 
@@ -65,7 +66,7 @@ def _waiting(tmp_path, *, second=False):
     assert goal is not None
     targets = ["child", "other"] if second else ["child"]
     comms.goals.update_goal(
-        "owner", StandbyGoalAction(expect=GoalPrecondition(goal_id=goal.id), wait_for=targets)
+        "owner", StandbyGoalAction(expect=GoalPrecondition(goal_id=OneGoal(goal.id)), wait_for=targets)
     )
     return comms, goal
 
@@ -85,7 +86,7 @@ def test_stopped_target_refusal_is_side_effect_free(tmp_path):
     with pytest.raises(ValueError):
         comms.goals.update_goal(
             "owner",
-            StandbyGoalAction(expect=GoalPrecondition(goal_id=goal.id), wait_for=("child",)),
+            StandbyGoalAction(expect=GoalPrecondition(goal_id=OneGoal(goal.id)), wait_for=("child",)),
         )
     assert {
         name: (comms.root / name).read_bytes() if (comms.root / name).exists() else None
@@ -189,7 +190,7 @@ def test_replaced_target_cannot_report_for_old_incarnation(tmp_path):
 def test_owner_pause_still_prevents_quiet_dependency_release(tmp_path):
     comms, goal = _waiting(tmp_path)
     paused = comms.goals.update_goal(
-        "owner", PausedGoalAction(expect=GoalPrecondition(goal_id=goal.id)), actor=OwnerInvocable
+        "owner", PausedGoalAction(expect=GoalPrecondition(goal_id=OneGoal(goal.id))), actor=OwnerInvocable
     )
     assert paused is not None
     fence = _finish(comms, "child", TurnId('9782df8c75cffb6a483d963ccaefc23b'))
@@ -204,7 +205,7 @@ def test_terminal_hook_rechecks_goal_and_owner_identity(tmp_path):
     child_fence = _finish(comms, "child", TurnId('9782df8c75cffb6a483d963ccaefc23b'))
     newer = comms.goals.update_goal(
         "owner",
-        EditGoalAction(expect=GoalPrecondition(goal_id=goal.id), text="new exact objective"),
+        EditGoalAction(expect=GoalPrecondition(goal_id=OneGoal(goal.id)), text="new exact objective"),
     )
     assert newer is not None
     # Goal text edits preserve wait; the exact current revision is updated, not lost.
@@ -226,7 +227,7 @@ def test_stopped_dependency_cannot_be_declared_live(tmp_path):
     with pytest.raises(ValueError):
         comms.goals.update_goal(
             "owner",
-            StandbyGoalAction(expect=GoalPrecondition(goal_id=goal.id), wait_for=("child",)),
+            StandbyGoalAction(expect=GoalPrecondition(goal_id=OneGoal(goal.id)), wait_for=("child",)),
         )
 
 

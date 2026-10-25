@@ -52,8 +52,7 @@ class EmptyPullRequest(HeldBranchRule):
             reader = held.repository.branches
             todo = held.todo
             for pull in held.source.pulls.listed(todo.repo, UnmergedListedPullRequest, todo):
-                compared = reader.pull_request_diff(pull.base, pull.head)
-                if not compared.paths:
+                for compared in pull.empty_changes(reader):
                     found.append(cls(held.problem, todo.order.checked().id, held.holder,
                                      PullRequestLink(todo.repo, pull.number),
                                      compared.base, compared.head))

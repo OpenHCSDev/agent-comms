@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING, ClassVar, Literal
 
 from pydantic import Field, JsonValue
 
-from agent_comms.cli_protocol import TaggedWire
+from agent_comms.cli_protocol import Declared, TaggedWire
 from agent_comms.declared_family import UnknownFamilyMember
 from agent_comms.field_codec import FieldCodec
 from agent_comms.runtime_updates import (
@@ -64,7 +64,7 @@ class SavedInput(WireModel):
 
 class PartUpdate(WireModel):
     sessionID: str
-    part: Part.declared_union()
+    part: Declared[Part]
 
 
 class PartDelta(WireModel):
@@ -124,17 +124,17 @@ class RetryStatus(SessionStatus, declared_name='retry'):
         return TurnStarted(f'Retry {self.attempt}: {self.message}')
 
 
-SESSION_STATUSES = WireModel.adapter(dict[str, SessionStatus.declared_union()])
+SESSION_STATUSES = WireModel.adapter(dict[str, Declared[SessionStatus]])
 MESSAGES = WireModel.adapter(list[SavedMessage])
 
 
 class StatusUpdate(WireModel):
     sessionID: str
-    status: SessionStatus.declared_union()
+    status: Declared[SessionStatus]
 
 
 class MessageUpdate(WireModel):
-    info: MessageInfo.declared_union()
+    info: Declared[MessageInfo]
 
 
 class EventHeader(WireModel):

@@ -1,15 +1,19 @@
 """Actual persisted claim boundaries distinguish declaration from claim_scope drift."""
 
 import os
+import threading
+import time
 from dataclasses import replace
 
 import pytest
 
 from agent_comms.child_process import ProcessIdentity
+from test_locked_store import _hold_lock, event, process
 from agent_comms.comms import wire
 from agent_comms.errors import RelationViolationError
 from agent_comms.field_codec import TurnId, GoalId
 from agent_comms.goals import Goal
+from agent_comms.store_files import SharedLock, store_lock_path
 from agent_comms.thread_identity import UserThreadRole
 from agent_comms.thread_text import GivenThreadText
 from agent_comms.turn_lease import RecordedGeneration
@@ -91,6 +95,7 @@ def test_a_superseded_generation_is_deleted_and_its_late_transition_changes_noth
     assert registry.release_turn(stale)[0]
     second, _ = registry.lease_local_turn('owner', TurnId('16367aacb67a4a017c8da8ab95682ccb'))
     assert not stale.record.path.exists() and second.turn_record.path.exists()
+    assert not store_lock_path(stale.record.path).exists()
     assert stale.record.transition(stale, PreparingPhase()) == ()
     assert stale.record.observe_native_phase(stale, PreparingPhase()) == ()
     assert second.turn_record.read().id == '16367aacb67a4a017c8da8ab95682ccb'
@@ -105,3 +110,48 @@ def test_an_older_snapshot_reads_the_turn_its_thread_names_now(tmp_path):
     assert not first.turn_record.path.exists()
     assert first.turn_state.active.id == '16367aacb67a4a017c8da8ab95682ccb'
     assert first.turn_record.read() == second.turn_record.read()
+
+
+def test_a_phase_change_completes_while_another_process_reads_the_registry(tmp_path):
+    registry = registered(tmp_path)
+    registry.live_owner_with_claim('owner')
+    leased, _ = registry.lease_local_turn('owner', TurnId('a7937b64b8caa58f03721bb6bacf5c78'))
+    lease = leased.require_turn_lease()
+    ready, release = event(), event()
+    # A phase change still waiting on the registry outlives the holder's bound, which fails it.
+    with process(_hold_lock, registry.store.path, SharedLock(), ready, release):
+        try:
+            assert ready.wait(5)
+            effects = lease.record.transition(lease, PreparingPhase('reading'))
+            assert [state.active.phase for state in effects] == [PreparingPhase('reading')]
+            assert lease.record.read().phase == PreparingPhase('reading')
+        finally:
+            release.set()
+
+
+
+def test_a_claim_drop_waiting_on_a_turn_retired_under_it_finds_the_retirement(tmp_path):
+    registry = registered(tmp_path)
+    registry.live_owner_with_claim('owner')
+    first, _ = registry.lease_local_turn('owner', TurnId('a7937b64b8caa58f03721bb6bacf5c78'))
+    record = first.turn_record
+    started, failures = threading.Event(), []
+
+    def drop_claim():
+        started.set()
+        try:
+            record.without_claim()
+        except Exception as error:
+            failures.append(error)
+
+    with record.writers.locked():
+        waiter = threading.Thread(target=drop_claim)
+        waiter.start()
+        assert started.wait(5)
+        time.sleep(0.2)  # The waiter is parked on the writer lock this thread holds.
+        assert registry.release_turn(first.turn_lease)[0]
+        second, _ = registry.lease_local_turn('owner', TurnId('16367aacb67a4a017c8da8ab95682ccb'))
+        assert not record.path.exists()
+    waiter.join(5)
+    assert not waiter.is_alive() and failures == []
+    assert second.turn_record.read().id == '16367aacb67a4a017c8da8ab95682ccb'

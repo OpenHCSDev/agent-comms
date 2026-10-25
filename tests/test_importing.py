@@ -36,7 +36,7 @@ from agent_comms.cli_bridges.opencode_parts import SavedMessage
 from agent_comms.cli_bridges.opencode_protocol import Session
 from agent_comms.cli_bridges.opencode_store import OpenCodeDatabase, OpenCodeExport
 from agent_comms.field_codec import FieldCodec
-from agent_comms.harness_install import ClaudeCodeHarness, CodexHarness, OpenCodeHarness
+from agent_comms.harness_install import ClaudeCodeHarness, CodexHarness, OpenCodeHarness, PiHarness
 from agent_comms.importing import ImportBuffer, ThreadImported, ImportSnapshot, ImportedSessionMetadata
 from agent_comms.native_entries import NativeEntry, ImportedMetadataEntry
 from agent_comms.threads import ThreadProvenance
@@ -384,12 +384,12 @@ def test_codex_import_uses_requested_name_not_rollout_filename(tmp_path: Path, c
 
 
 def test_rehome_moves_a_codex_unit_to_pi_on_its_own_birth(
-    tmp_path: Path, comms: Comms, monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path, comms: Comms, monkeypatch: pytest.MonkeyPatch, user_manager: type,
 ) -> None:
-    import agent_comms.host_services as host_services
+    import subprocess
 
     systemctl: list[tuple[str, ...]] = []
-    monkeypatch.setattr(host_services.subprocess, "run", lambda argv, **_: systemctl.append(argv))
+    monkeypatch.setattr(subprocess, "run", lambda argv, **_: systemctl.append(argv))
     worktree = tmp_path / "unit-worktree"
     worktree.mkdir()
     before = comms.registry.declare(Thread(
@@ -709,7 +709,7 @@ def test_opencode_snapshot_is_stopped_resumable_and_source_unchanged(tmp_path: P
         assert record["parentId"] == parent
         parent = record["id"]
     imported: list[ImportedMessage] = []
-    for event in comms.transcripts.thread_transcript_page(thread.name).events:
+    for event in comms.transcripts.capture_page_read(thread.name).read().events:
         event.import_to(imported.append)
     context = "\n".join(message.body for message in imported)
     assert "Keep model authority" in context and "42 passed" in context
@@ -832,3 +832,29 @@ def test_import_cli_and_invalid_sources(tmp_path: Path, capsys: pytest.CaptureFi
         read(OpenCodeHarness, tmp_path / "export.txt")
     with pytest.raises(ValueError):
         ImportLimits(messages=0)
+
+
+def test_pi_import_keeps_the_native_session_byte_for_byte(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str], comms: Comms,
+) -> None:
+    project = tmp_path / "papers"
+    project.mkdir()
+    source = lines(tmp_path / "retired.jsonl", [
+        {"type": "session", "version": 3, "id": "pi-session", "timestamp": "2026-10-16T15:00:00Z",
+         "cwd": str(project)},
+        {"type": "message", "id": "m1", "parentId": None, "timestamp": "2026-10-16T15:00:01Z",
+         "message": {"role": "user", "content": "Keep editing ünïcode", "timestamp": 1}},
+    ])
+    source.chmod(0o600)
+    original = source.read_bytes()
+    assert main(["--root", str(comms.root), "import-thread", "--harness", "pi", "--source", str(source),
+                 "--name", "oopsla_paper", "--tags", "papers", "--model", "openai-codex/gpt-6.1-sol"]) == 0
+    reply = json.loads(capsys.readouterr().out)
+    thread = comms.registry.require("oopsla_paper")
+    assert (reply["source_id"], reply["imported_messages"], reply["omitted_messages"]) == ("pi-session", 1, 0)
+    assert Path(reply["session_file"]).read_bytes() == original == source.read_bytes()
+    assert (thread.project_path, thread.tags) == (project.resolve(), frozenset({"papers"}))
+    assert FieldCodec.encode(thread.model) == "openai-codex/gpt-6.1-sol"
+    assert comms.registry.status(thread.name) == StoppedThreadStatus()
+    with pytest.raises(ValueError):
+        OfflineHistory.of(PiHarness, source, NamedSession("another")).imported(ImportLimits())

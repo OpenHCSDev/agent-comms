@@ -34,6 +34,7 @@ from agent_comms.thread_execution import ExternalThreadExecution
 from agent_comms.thread_identity import RecordedThreadIncarnation
 from agent_comms.thread_model import DeclaredModel
 from agent_comms.threads import Thread
+from agent_comms.errors import TodoError
 from agent_comms.todos import (
     PendingProblemOrder,
     ProblemAllocation,
@@ -41,7 +42,6 @@ from agent_comms.todos import (
     StrikeReason,
     SupersededVerdict,
     Todo,
-    TodoError,
 )
 from agent_comms.tool_caller import CommanderForkCaller
 from agent_comms.tool_declaration import ToolDeclaration
@@ -302,6 +302,30 @@ def test_open_unit_consumers_agree_on_one_assignment(fork_bus):
         print("Shared open-unit query plan:", [tuple(row) for row in plan])
 
 
+def test_a_sibling_fork_assigns_a_unit_whose_order_waits_on_install(fork_bus):
+    """Merged work waits only on its run, so its holder is free for any assigner."""
+    comms, source, order = fork_bus
+    store = comms.goals.todos
+    todo = store.get("P40")
+    owner = todo.held().owner_identity
+    sibling = comms.registry.require("other").incarnation
+    with store.snapshot() as db, pytest.raises(TodoError, match="finish or release"):
+        store.require_unit_in(db, owner, sibling)
+    with store.writing() as db:
+        replace(todo, order=todo.order.merged("0" * 40), revision=todo.revision + 1).upsert(db)
+    assert not store.get("P40").order.occupies_holder()
+    with store.snapshot() as db:
+        store.require_unit_in(db, owner, sibling)
+
+
+def test_a_value_error_refusal_prints_instead_of_a_traceback(fork_bus):
+    """The commander CLI fails on the comms CLI's one failure set."""
+    comms, _, _ = fork_bus
+    refused = command(comms, "order", "done", "retained", "P40")
+    assert refused.returncode == 1
+    assert refused.stderr.startswith("Refused: P40 has no merged pull request"), refused.stderr
+
+
 def test_two_commanders_allocate_distinct_global_problem_ids(fork_bus, tmp_path):
     comms, source, order = fork_bus
 
@@ -355,6 +379,7 @@ def test_two_commanders_cannot_assign_the_same_unit_concurrently(fork_bus, tmp_p
     assert len(held) == 1 and held[0].holder == "worker"
     refused = next(result for result in results if result.returncode)
     assert f"is assigned by {held[0].held().parent}" in refused.stderr
+    assert "Traceback" not in refused.stderr, refused.stderr
     print(refused.stderr.strip())
 
 

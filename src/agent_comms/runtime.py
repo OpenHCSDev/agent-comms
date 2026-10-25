@@ -7,6 +7,11 @@ or changes the registry PID. The socket is scoped to the wire and owner PID.
 from __future__ import annotations
 
 from functools import partial
+
+from .acp_extension import (
+    decode_updates,
+    encode_updates,
+)
 from .coordinator import Coordination
 
 import asyncio
@@ -376,8 +381,6 @@ class RuntimeServer(SessionUpdateSink):
 
 def present_session(metadata: dict[str, object], session_id: str) -> dict[str, object]:
     """Rebind presentation coordinates through their declared owners."""
-    from .acp_extension import decode_updates, encode_updates
-
     return {
         **metadata,
         **encode_updates(*(fact.for_session(session_id) for fact in decode_updates(metadata))),

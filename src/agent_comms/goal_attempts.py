@@ -20,8 +20,8 @@ import secrets
 import sqlite3
 import tempfile
 from abc import abstractmethod
-from collections.abc import Callable
-from contextlib import closing, suppress
+from collections.abc import Callable, Iterator
+from contextlib import closing, contextmanager, suppress
 from dataclasses import dataclass, field
 from decimal import Decimal
 from pathlib import Path
@@ -60,8 +60,8 @@ from .goal_generation import (
     ReservedGeneration,
 )
 from .lifecycle_capability import Failed
-from .locked_store import DurableFile, PublishedSQLiteFile, RegistryFile, WireWakeFile
-from .maintenance_barrier import MaintenanceBarrier
+from .locked_store import WireWakeFile
+from .maintenance_barrier import DrainSettledFile
 from .pi_counts import PiCount, UnreportedCount
 from .pi_payloads import PiUsage
 from .store_files import AtomicFile
@@ -70,11 +70,13 @@ from .typed_table import (
     Generated,
     ReconciledFile,
     SQLiteJournalMode,
+    StoreWriter,
     TableReference,
     TypedTable,
 )
 
 if TYPE_CHECKING:
+    from .goal_scope import GoalScope
     from .goal_management import Goals
     from .threads import Thread
     from .turn_context import TurnContext
@@ -642,11 +644,11 @@ class ProviderUsageTotal:
 _T = TypeVar("_T")
 
 
-class GoalAttemptStore(DurableFile, ReconciledFile, PublishedSQLiteFile, WireWakeFile):
+class GoalAttemptStore(DrainSettledFile, StoreWriter, ReconciledFile, WireWakeFile):
     """Owner-private SQLite authority; no synthetic model or context claims.
 
     The caller creates a private directory and explicitly initializes it in a
-    non-launching setup step. Each change uses SQLiteFile.write_transaction, SQLite's
+    non-launching setup step. Each change uses StoreWriter.transaction, SQLite's
     synchronous=EXTRA rollback journal, an explicit file fsync (plus directory
     fsync where supported), and a fresh-connection readback. Failure at any
     stage returns no permit.
@@ -661,9 +663,8 @@ class GoalAttemptStore(DurableFile, ReconciledFile, PublishedSQLiteFile, WireWak
     def table_schema(cls) -> type[GoalLedgerTable]:
         return GoalLedgerTable
 
-    def __init__(self, root: str | Path):
-        self.root = Path(root)
-        self.path = self.path_in(self.root)
+    def __init__(self, path: Path) -> None:
+        super().__init__(path)
         self._require_root()
         if not self.path.is_file():
             raise StorageUncertainError("Goal attempt store is not initialized.")
@@ -686,8 +687,7 @@ class GoalAttemptStore(DurableFile, ReconciledFile, PublishedSQLiteFile, WireWak
         path = cls.path_in(directory)
         if path.exists():
             # Existing state never recreates a process-local launch capability.
-            return cls(directory)
-        cls.require_maintenance_open(path)
+            return cls(path)
         try:
             fd, name = tempfile.mkstemp(prefix=".goal-attempts-init-", dir=directory)
         except OSError as error:
@@ -700,6 +700,8 @@ class GoalAttemptStore(DurableFile, ReconciledFile, PublishedSQLiteFile, WireWak
                 conn.execute("PRAGMA synchronous=EXTRA")
                 conn.execute("PRAGMA foreign_keys=ON")
                 with cls.write_transaction(conn):
+                    # Creation publishes the file by link, before any store transaction.
+                    cls.require_maintenance_open_at(path)
                     GoalLedgerTable.create_schema(conn)
             AtomicFile(staging).sync()
             # Publish only the complete schema; a concurrent initializer may win.
@@ -711,7 +713,11 @@ class GoalAttemptStore(DurableFile, ReconciledFile, PublishedSQLiteFile, WireWak
             raise StorageUncertainError("Goal attempt initialization is uncertain.") from error
         finally:
             staging.unlink()
-        return cls(directory)
+        return cls(path)
+
+    @property
+    def root(self) -> Path:
+        return self.path.parent
 
     def _require_root(self) -> None:
         if not self.root.is_dir() or not Platform.current().is_private(self.root.stat(), 0o700):
@@ -725,13 +731,6 @@ class GoalAttemptStore(DurableFile, ReconciledFile, PublishedSQLiteFile, WireWak
     def _connect(self) -> sqlite3.Connection:
         self._require_root()
         return self.database(self.path)
-
-    @classmethod
-    def require_maintenance_open(cls, path: Path) -> None:
-        """Every installation carries this ledger, and stopping owners settle their turns in
-        it: past the drain only the install's holder commits, so its carry check charges no
-        other writer's change."""
-        MaintenanceBarrier(RegistryFile.path_in(cls.bus_root(path))).assert_drained_writes_open_unlocked()
 
     @classmethod
     def database(cls, path: Path) -> sqlite3.Connection:
@@ -751,30 +750,33 @@ class GoalAttemptStore(DurableFile, ReconciledFile, PublishedSQLiteFile, WireWak
     def _sync(self) -> None:
         AtomicFile(self.path).sync()
 
+    @contextmanager
+    def writing(self, committed: Callable[[], None] = lambda: None) -> Iterator[sqlite3.Connection]:
+        with closing(self._connect()) as conn, self.transaction(conn, committed):
+            yield conn
+
     def _change(
         self, operation: Callable[[sqlite3.Connection], _T], verify: Callable[[_T], bool]
     ) -> _T:
-        """A failed commit, sync, or readback is never a launch authorization. Maintenance
-        is asked under the write lock, so an installer's drain of it waits out every write
-        that passed and refuses every later one."""
-        with closing(self._connect()) as conn:
+        """A failed commit, sync, or readback is never a launch authorization, and is never
+        announced: the fsync and readback run before the change is published."""
+        def attest() -> None:
+            self._sync()
             try:
-                with self.publishing_changes(conn, self.path):
-                    with self.write_transaction(conn):
-                        self.require_maintenance_open(self.path)
-                        result = operation(conn)
-                    self._sync()
-                    try:
-                        if not verify(result):
-                            raise StorageUncertainError("Goal attempt readback does not attest the write.")
-                    except sqlite3.Error as error:
-                        raise StorageUncertainError("Goal attempt readback failed.") from error
-            except errors.GoalAttemptError:
-                raise
-            except (sqlite3.Error, OSError) as error:
-                raise StorageUncertainError(
-                    "Goal attempt write durability is uncertain."
-                ) from error
+                if not verify(result):
+                    raise StorageUncertainError("Goal attempt readback does not attest the write.")
+            except sqlite3.Error as error:
+                raise StorageUncertainError("Goal attempt readback failed.") from error
+
+        try:
+            with self.writing(attest) as conn:
+                result = operation(conn)
+        except errors.GoalAttemptError:
+            raise
+        except (sqlite3.Error, OSError) as error:
+            raise StorageUncertainError(
+                "Goal attempt write durability is uncertain."
+            ) from error
         return result
 
     def snapshot(self, goal_id: GoalId) -> Generation | None:
@@ -793,6 +795,18 @@ class GoalAttemptStore(DurableFile, ReconciledFile, PublishedSQLiteFile, WireWak
     def read_attempt(self, attempt_id: str) -> LedgerAttempt:
         with closing(self._connect()) as conn:
             return AttemptRecord.read_in(conn, attempt_id)
+
+    def failures(
+        self, owner_created_at: float, scope: GoalScope
+    ) -> tuple[FailedTurnEvidence, ...]:
+        with closing(self._connect()) as conn:
+            try:
+                return tuple(FailedTurnEvidence.select(
+                    conn, order_by=("generation",), owner_created_at=owner_created_at,
+                    **scope.failure_key(),
+                ))
+            except (sqlite3.Error, MalformedRecord) as error:
+                raise StorageUncertainError("Cannot read goal attempt failures.") from error
 
     def stopped_permit(self, goal_id: GoalId) -> GoalTurnPermit:
         generation = self.require_generation(goal_id)

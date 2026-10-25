@@ -231,6 +231,15 @@ def test_non_task_attachments_and_pending_queue_records_do_not_confirm():
     assert queued.updates(ClaudeSession())==()
 
 
+def test_remote_control_session_record_decodes_without_updates():
+    record = decoded_record({'type': 'bridge-session',
+        'sessionId': '00000000-0000-4000-8000-000000000001',
+        'bridgeSessionId': 'cse_000000000000000000000000', 'lastSequenceNum': 0,
+        'ownerAccountUuid': '00000000-0000-4000-8000-000000000002',
+        'ownerOrganizationUuid': '00000000-0000-4000-8000-000000000003'})
+    assert record.updates(ClaudeSession()) == ()
+
+
 @pytest.mark.asyncio
 async def test_wrong_complete_parts_stay_pending_without_claiming_delivery(bridge, emitted_delivery, capsys):
     delivery = emitted_delivery('original')
@@ -281,7 +290,8 @@ async def test_harness_outcome_lives_on_the_threads_claim_across_a_rehome(tmp_pa
     from conftest import publish_initial
     from agent_comms.assignment_states import DeferredAssignment, DeliveredAssignment
     from agent_comms.comms import wire
-    from agent_comms.coordination_cohort import accept_delivery_cohort, pending_sealed_assignments
+    from conftest import accept_initial
+    from agent_comms.coordination_cohort import pending_sealed_assignments
     from agent_comms.coordination_database import CoordinationStore
     from agent_comms.coordination_tables.assignments import WakeAssignment
     from agent_comms.coordinator import Coordination
@@ -298,7 +308,7 @@ async def test_harness_outcome_lives_on_the_threads_claim_across_a_rehome(tmp_pa
 
         def publish(body):
             message = publish_initial(comms, 'peer', 'viewer', body).message
-            accept_delivery_cohort(comms.bus, root_id, message.seq, store)
+            accept_initial(comms.bus, root_id, message.seq, store)
             return message
 
         taken, confirmed, waiting = (publish(body) for body in (
@@ -357,3 +367,87 @@ def test_prompt_typed_with_an_image_during_a_turn_shows_its_text():
     prompt=[dict(type='text', text='[Image #16] look'), dict(type='image', source=image)]
     shown,=queued_prompt('human', prompt).updates(session)
     assert [event.text for event in shown.events]==['[Image #16] look']
+
+@pytest.mark.asyncio
+async def test_a_bridge_waits_out_maintenance_and_then_records_its_delivery(tmp_path, monkeypatch):
+    """An install holds the bus: the bridge's harness hand-off and delivery record wait
+    for the hold to clear instead of dying on MaintenanceHeldError (install 18, 10-24)."""
+    from bus_record_fixture import prepare_native_comms
+    from conftest import accept_initial, publish_initial
+    from agent_comms.assignment_states import DeliveredAssignment
+    from agent_comms.comms import wire
+    from agent_comms.coordination_database import CoordinationStore
+    from agent_comms.coordination_tables.assignments import WakeAssignment
+    from agent_comms.coordinator import Coordination
+    from agent_comms.maintenance_barrier import MaintenanceBarrier, MaintenanceOperator
+    from agent_comms.thread_execution import ExternalThreadExecution
+
+    comms = prepare_native_comms(wire(tmp_path / 'wire'))
+    comms.registry.declare(Thread('peer', frozenset(), str(tmp_path)))
+    comms.registry.declare(Thread('viewer', frozenset(), str(tmp_path),
+                                  execution=ExternalThreadExecution))
+    root_id = comms.registry.prepare_native_root().namespace
+    lookup = comms.registry.require('viewer').incarnation.require_recorded().lookup
+    with Coordination(str(CoordinationStore.path_in(comms.root))) as store:
+        store.participants.register(lookup, committed=True)
+        message = publish_initial(comms, 'peer', 'viewer', 'held during install').message
+        accept_initial(comms.bus, root_id, message.seq, store)
+
+    def claim():
+        with Coordination(str(CoordinationStore.path_in(comms.root))) as store:
+            row, = WakeAssignment.select(store.session._connection,
+                                         recipient_lookup=lookup, wire_seq=message.seq)
+            return row.lifecycle
+
+    barrier = MaintenanceBarrier(comms.registry.store.path)
+    holds = []
+
+    async def delivered(message):
+        # The harness took it; the install's hold lands before the bus records that.
+        holds.append(barrier.begin(MaintenanceOperator.current()))
+        return DeliveredOutcome
+
+    async def attached():
+        pass
+
+    async def waits_until_cleared(pending):
+        with pytest.raises(TimeoutError):
+            async with asyncio.timeout(.2):
+                await asyncio.shield(pending)
+        barrier.clear(holds.pop())
+
+    state = tmp_path / 'bridge-state'
+    with Binding.open(state) as db:
+        binding = Binding(str(comms.root), 'viewer', 'session', Binding.bus_head(str(comms.root)))
+        binding.bind(db)
+        bridge = ClaudeBridge(Options(Watch(), StoredBinding(), state, state.parent), binding, db)
+        monkeypatch.setattr(bridge, 'prepare_delivery', attached)
+        monkeypatch.setattr(bridge, 'deliver', delivered)
+        holds.append(barrier.begin(MaintenanceOperator.current()))
+        pending = asyncio.create_task(bridge.accept(message))
+        await waits_until_cleared(pending)  # the hand-off to the harness
+        await waits_until_cleared(pending)  # the delivery record
+        await asyncio.wait_for(pending, 5)
+    assert type(claim()) is DeliveredAssignment
+
+def test_only_commanded_sessions_reply_to_their_delivered_senders(comms):
+    """The commander answers its owner in its own transcript: a unit that messaged it
+    mid-turn never receives that turn's answer as a direct message."""
+    from agent_comms.registry_document import RegisteredCommanderProject
+    from agent_comms.runtime_updates import FinishedItem, ReplyingThreadOutput
+    from agent_comms.thread_execution import ExternalThreadExecution
+    from agent_comms.transcript_events import AssistantTranscript
+    from agent_comms.turn_item import NativeTurnId
+
+    lead, unit = (comms.registry.declare(Thread(
+        name, frozenset(), "/tmp", execution=ExternalThreadExecution)) for name in ("lead", "unit"))
+    comms.registry.set_commander_project(RegisteredCommanderProject(lead.incarnation, ()))
+    for speaker, sender in ((lead, unit), (unit, lead)):
+        output = ReplyingThreadOutput.for_comms(comms.transcripts.external(speaker.name), comms)
+        output.delivered_targets((sender.name,))
+        turn = NativeTurnId(f"{speaker.name}-turn")
+        output.publish_item(FinishedItem(turn, "a", (AssistantTranscript(
+            f"{speaker.name} answers", timestamp=1.0, position="a"),)))
+        output.end_turn(turn)
+    assert comms.bus.pending_count("unit") == 0
+    assert comms.bus.pending_count("lead") == 1

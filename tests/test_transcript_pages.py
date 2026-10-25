@@ -32,14 +32,13 @@ def test_pages_reach_beginning_and_return_to_tail_without_duplicates(tmp_path):
     transcript(path, 105)
     comms = installed_comms(tmp_path / "wire")
     comms.registry.declare(Thread('worker', frozenset(), str(tmp_path), session_file=RegistrySessionLocation.from_path(str(path), comms.root)))
-    page = comms.transcripts.thread_transcript_page("worker", max_messages=10)
+    page = comms.transcripts.capture_page_read("worker").read()
     through = page.after
     seen = [event.text for event in page.events]
-    assert seen == [f"Record {i}" for i in range(95, 105)]
+    assert seen == [f"Record {i}" for i in range(85, 105)]
     while page.has_older:
-        page = comms.transcripts.thread_transcript_page(
-            "worker", before=page.before, max_messages=10
-        )
+        page = comms.transcripts.capture_page_read(
+            "worker", before=page.before).read()
         seen[:0] = [event.text for event in page.events]
     assert seen == [f"Record {i}" for i in range(105)]
     assert page.before.offset == 0
@@ -51,9 +50,8 @@ def test_pages_reach_beginning_and_return_to_tail_without_duplicates(tmp_path):
         )
     seen = [event.text for event in page.events]
     while page.has_newer:
-        page = comms.transcripts.thread_transcript_page(
-            "worker", after=page.after, through=through, max_messages=10
-        )
+        page = comms.transcripts.capture_page_read(
+            "worker", after=page.after, through=through).read()
         seen.extend(event.text for event in page.events)
     assert seen == [f"Record {i}" for i in range(105)]
 
@@ -67,22 +65,20 @@ def test_oversized_message_and_file_identity(tmp_path):
     comms = installed_comms(tmp_path / "wire")
     thread = Thread('worker', frozenset(), str(tmp_path), session_file=RegistrySessionLocation.from_path(str(path), comms.root))
     comms.registry.declare(thread)
-    page = comms.transcripts.thread_transcript_page("worker", max_bytes=100)
+    page = comms.transcripts.capture_page_read("worker").read()
     assert page.events[0].text == text
     assert not page.has_older
     comms.registry.declare(replace(thread, session_file=RegistrySessionLocation.from_path(str(tmp_path / "other.jsonl"), comms.root)))
     with pytest.raises(TranscriptChanged):
-        comms.transcripts.thread_transcript_page("worker", before=page.before)
-    with pytest.raises(ValueError):
-        comms.transcripts.thread_transcript_page("worker", max_messages=0)
+        comms.transcripts.capture_page_read("worker", before=page.before).read()
     with pytest.raises(TranscriptChanged):
-        comms.transcripts.thread_transcript_page("worker", before=NativeTranscriptCursor(str(path), -1))
+        comms.transcripts.capture_page_read("worker", before=NativeTranscriptCursor(str(path), -1)).read()
 
 
 def test_empty_transcript_and_non_message_records(tmp_path):
     comms = installed_comms(tmp_path / "wire")
     comms.registry.declare(Thread('worker', frozenset(), str(tmp_path)))
-    page = comms.transcripts.thread_transcript_page("worker")
+    page = comms.transcripts.capture_page_read("worker").read()
     assert not page.events and not page.has_older and not page.has_newer
 
 
@@ -97,7 +93,7 @@ def test_new_fork_projects_parent_history_and_instruction_until_own_session_exis
         Thread('child', frozenset(), str(tmp_path), parent=ForkedParent('parent'), task=GivenThreadText('Inspect the renderer'))
     )
 
-    page = comms.transcripts.thread_transcript_page("child")
+    page = comms.transcripts.capture_page_read("child").read()
     assert page.after.session_file == str(parent_path)
     assert [event.text for event in page.events] == [
         "Record 0",
@@ -107,7 +103,7 @@ def test_new_fork_projects_parent_history_and_instruction_until_own_session_exis
         "Inspect the renderer",
     ]
     assert [event.declared_name for event in page.events[-2:]] == ["fork_origin", "fork_task"]
-    assert [event.text for event in comms.transcripts.thread_transcript_page("child").events][-2:] == [
+    assert [event.text for event in comms.transcripts.capture_page_read("child").read().events][-2:] == [
         "Forked from @parent. This thread started with:",
         "Inspect the renderer",
     ]
@@ -115,7 +111,7 @@ def test_new_fork_projects_parent_history_and_instruction_until_own_session_exis
     child_path = tmp_path / "child.jsonl"
     transcript(child_path, 1)
     comms.threads.attach_session((attachment_owner := comms.registry.require("child")), str(child_path), process=attachment_owner.process_identity)
-    assert [event.text for event in comms.transcripts.thread_transcript_page("child").events] == [
+    assert [event.text for event in comms.transcripts.capture_page_read("child").read().events] == [
         "Record 0"
     ]
 
@@ -130,25 +126,23 @@ def test_inherited_scroll_window_survives_child_session_persistence(tmp_path):
     comms.registry.declare(
         Thread('child', frozenset(), str(tmp_path), parent=ForkedParent('parent'), task=GivenThreadText('Child task'))
     )
-    page = comms.transcripts.thread_transcript_page("child", max_messages=5)
+    page = comms.transcripts.capture_page_read("child").read()
     through = page.after
     own_path = tmp_path / "child.jsonl"
     transcript(own_path, 1)
     comms.threads.attach_session((attachment_owner := comms.registry.require("child")), str(own_path), process=attachment_owner.process_identity)
     seen = [event.text for event in page.events if event.declared_name == "assistant"]
     while page.has_older:
-        page = comms.transcripts.thread_transcript_page(
-            "child", before=page.before, through=through, max_messages=5
-        )
+        page = comms.transcripts.capture_page_read(
+            "child", before=page.before, through=through).read()
         seen[:0] = [event.text for event in page.events if event.declared_name == "assistant"]
     assert seen == [f"Record {i}" for i in range(35)]
-    assert comms.transcripts.thread_transcript_page("child").after.session_file == str(own_path)
+    assert comms.transcripts.capture_page_read("child").read().after.session_file == str(own_path)
     unrelated = tmp_path / "unrelated.jsonl"
     transcript(unrelated, 1)
     with pytest.raises(TranscriptChanged):
-        comms.transcripts.thread_transcript_page(
-            "child", through=NativeTranscriptCursor(str(unrelated), unrelated.stat().st_size)
-        )
+        comms.transcripts.capture_page_read(
+            "child", through=NativeTranscriptCursor(str(unrelated), unrelated.stat().st_size)).read()
 
 
 def test_wire_cursor_keeps_the_furthest_committed_native_prefix_within_it():
@@ -179,7 +173,7 @@ def test_never_started_native_child_keeps_no_native_cursor_and_no_read_mark(tmp_
     RegisterCliCommand(name="child", worktree=str(tmp_path), parent=ForkedParent("parent"),
                        execution=NativeThreadExecution).apply(comms)
     checkpoint = comms.transcripts.transcript_checkpoint("child")
-    inherited = comms.transcripts.thread_transcript_page("child").after
+    inherited = comms.transcripts.capture_page_read("child").read().after
     painted = checkpoint.over_native((inherited,))
     assert painted == NoNativeTranscriptCursor(source=comms.registry.require("child").runtime,
                                                wire=checkpoint.wire)

@@ -14,8 +14,16 @@ from agent_comms.coordination_errors import (
     CoordinationReadUnavailable,
     IntegrityViolationError,
 )
-from agent_comms.locked_store import DEFAULT_STORE_CONTENTION, RegistryFile, StoreContention
-from agent_comms.store_files import UNBOUNDED_CONTENTION, StoreLockContention
+from agent_comms.diagnostics import PublicationMeasurements
+from agent_comms.locked_store import RegistryFile
+from agent_comms.store_files import (
+    DEFAULT_STORE_CONTENTION, UNBOUNDED_CONTENTION, StoreContention, StoreLockContention,
+)
+
+from .store_files import (
+    SharedLock,
+    _store_lock,
+)
 
 if TYPE_CHECKING:
     from .message_bus import MessageBus
@@ -81,7 +89,6 @@ class NativeBoundary(ExitStack):
         self, bus: MessageBus, *, contention: StoreLockContention = UNBOUNDED_CONTENTION,
     ) -> None:
         super().__init__()
-        from agent_comms.diagnostics import PublicationMeasurements
 
         # One budget for every lock the boundary takes, the activity cut included.
         self.bus = bus
@@ -89,8 +96,6 @@ class NativeBoundary(ExitStack):
         self.measurements = PublicationMeasurements()
 
     def __enter__(self):
-        from .store_files import SharedLock, _store_lock
-
         try:
             self.activity = self.enter_context(self.bus.opened_activity(self.contention))
             with self.measurements.operation("file_exclusion"):

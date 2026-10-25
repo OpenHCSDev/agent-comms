@@ -22,6 +22,8 @@ from agent_comms.goals import (
     UnobservedGoalCheckpoint,
     UnorderedGoalOrder,
 )
+
+from .field_codec import FieldCodec
 from .input_key import InputKey, InputKeyText
 from agent_comms.input_disposition import InputDispositions
 from agent_comms.todos import (
@@ -34,6 +36,7 @@ from .command import Command
 from .declared_family import DeclaredFamily
 from .errors import OverdueHeadRefusalError, RelationViolationError
 from .goal_mentions import bind_goal_mentions
+from .goal_scope import AllGoals, OneGoal
 from .goal_states import (
     ActiveGoal,
     BlockedGoal,
@@ -50,6 +53,7 @@ from .owner_requests import OwnerRequestId
 from .progress_claims import ProgressClaim
 from .recorded_time import EventTime
 from .repository_name import RepositoryName
+from .standing_rules import OrderRefusingStandingRule
 from .thread_identity import ThreadIncarnation
 from .threads import Thread
 from .reported_turn import ReportedTurnState
@@ -77,7 +81,7 @@ class OwnerControlInvocable:
 
 @dataclass(frozen=True)
 class GoalPrecondition:
-    goal_id: GoalId | None = None
+    goal_id: OneGoal | AllGoals = AllGoals()
     expected_state: GoalState | None = None
     expected_goal: GoalDeclaration = NoGoal()
     expected_owner: ProcessIdentity | None = None
@@ -95,8 +99,7 @@ class GoalPrecondition:
         ):
             raise ValueError("The goal owner changed; refresh its state.")
         self.expected_goal.check_expected(goal)
-        if self.goal_id is not None:
-            goal.require().require_id(self.goal_id)
+        self.goal_id.require(goal)
         if self.expected_state is not None:
             goal.require().require_state(self.expected_state)
 
@@ -131,7 +134,7 @@ class GoalAction[Result: GoalDeclaration](
     @classmethod
     def model_precondition(cls, goal_id: GoalId) -> GoalPrecondition:
         """What the unit's own goal tool expects before this action: its active goal."""
-        return GoalPrecondition(goal_id=goal_id, expected_state=ActiveGoal())
+        return GoalPrecondition(goal_id=OneGoal(goal_id), expected_state=ActiveGoal())
 
     @classmethod
     async def submit_control(
@@ -145,7 +148,6 @@ class GoalAction[Result: GoalDeclaration](
 
     @classmethod
     async def submit_checkpoint(cls, invoke: Callable[..., Awaitable[dict]], goal: Goal) -> dict:
-        from .field_codec import FieldCodec
         from .runtime_requests import UpdateGoalRuntimeRequest
 
         return await invoke(
@@ -501,7 +503,6 @@ class SetGoalAction(ReplacementGoalAction[Goal], OwnerInvocable, RuntimeInvocabl
 
     @classmethod
     async def submit_control(cls, observe, invoke, text: str = "") -> dict:
-        from .field_codec import FieldCodec
         from .runtime_requests import SetGoalRuntimeRequest
 
         return await invoke(FieldCodec.encode(SetGoalRuntimeRequest), text=text)
@@ -567,8 +568,6 @@ class ProblemOrderGoalAction(GoalAction[Goal], RuntimeInvocable):
 
     def require_reviewed(self, goals: Goals) -> None:
         """Read remote review facts before the registry lock or child allocation."""
-        from .standing_rules import OrderRefusingStandingRule
-
         if refused := OrderRefusingStandingRule.refusals(goals, self.commander):
             raise OverdueHeadRefusalError("Review overdue heads before sending new orders:\n" + "\n".join(refused))
 
@@ -694,11 +693,10 @@ class RetryGoalAction(TransitionGoalAction, ModelInvocable, OwnerInvocable, Runt
 
     @classmethod
     def model_precondition(cls, goal_id: GoalId) -> GoalPrecondition:
-        return GoalPrecondition(goal_id=goal_id)
+        return GoalPrecondition(goal_id=OneGoal(goal_id))
 
     @classmethod
     async def submit_checkpoint(cls, invoke, goal: Goal) -> dict:
-        from .field_codec import FieldCodec
         from .runtime_requests import RetryGoalRuntimeRequest
 
         return await invoke(

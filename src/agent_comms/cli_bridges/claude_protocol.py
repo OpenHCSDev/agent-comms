@@ -16,7 +16,7 @@ from pydantic import (
 )
 
 from agent_comms.agent_events import TranscriptModelUsage
-from agent_comms.cli_protocol import OpenWire, TaggedWire, TextWire, TimestampedWire, WireHeader
+from agent_comms.cli_protocol import Declared, OpenWire, TaggedWire, TextWire, TimestampedWire, WireHeader
 from agent_comms.field_codec import FieldCodec, MalformedRecord, MessageId
 from agent_comms.pi_counts import PiCount, PiCountWire
 from agent_comms.recorded_time import EventTime
@@ -430,7 +430,7 @@ class ClaudeUsage(WireModel):
 
 
 class AssistantMessage(WireModel):
-    content: list[AssistantBlock.declared_union()]
+    content: list[Declared[AssistantBlock]]
     model: str = ''
     usage: ClaudeUsage = Field(default_factory=ClaudeUsage)
 
@@ -547,7 +547,7 @@ class ToolSupplied(Prompting, declared_name=None):
 
 class Originated(WireModel):
     """Who wrote a prompt, whether it opened a user record or was queued into a running turn."""
-    origin: PromptOrigin.declared_union() = Field(default_factory=ToolSupplied)
+    origin: Declared[PromptOrigin] = Field(default_factory=ToolSupplied)
 
 
 class UserBlock(TaggedWire, ABC, affix=""):
@@ -642,7 +642,7 @@ class TaskMessage(ContentBlocks):
 
 class ToolResult(UserBlock, ContentBlocks, declared_name='tool_result'):
     tool_use_id: str
-    content: list[ResultPart.declared_union()]
+    content: list[Declared[ResultPart]]
     is_error: bool = False
 
     def updates(self, record: TimedRecord, session: ClaudeSession) -> tuple[RuntimeUpdate, ...]:
@@ -652,7 +652,7 @@ class ToolResult(UserBlock, ContentBlocks, declared_name='tool_result'):
 
 
 class UserMessage(ContentBlocks):
-    content: list[UserBlock.declared_union()]
+    content: list[Declared[UserBlock]]
 
     def text(self) -> str:
         return '\n'.join(text for block in self.content if (text := block.prompt_text()))
@@ -747,7 +747,7 @@ class ModelRefusalNoFallback(SystemEvent, declared_name='model_refusal_no_fallba
 
 
 class SystemRecord(ClaudeRecord, declared_name='system'):
-    subtype: SystemEvent.declared_union()
+    subtype: Declared[SystemEvent]
 
     @model_validator(mode='before')
     @classmethod
@@ -794,7 +794,7 @@ class ForeignAttachment(AttachmentPayload, declared_name='foreign'):
 
 
 class Attachment(ClaudeRecord, TimedRecord, declared_name='attachment'):
-    attachment: AttachmentPayload.declared_union()
+    attachment: Declared[AttachmentPayload]
 
     def updates(self, session: ClaudeSession) -> tuple[RuntimeUpdate, ...]:
         return self.attachment.updates(self, session)
@@ -892,6 +892,10 @@ class CustomTitle(MetadataRecord, declared_name='custom-title'):
 
     def updates(self, session: ClaudeSession) -> tuple[RuntimeUpdate, ...]:
         return (SessionFacts(title=ThreadText.external(self.customTitle)),)
+
+
+class BridgeSession(MetadataRecord, declared_name='bridge-session'):
+    """The session was opened to claude.ai by /remote-control; nothing here reaches the bus."""
 
 
 class AgentName(MetadataRecord, declared_name='agent-name'):

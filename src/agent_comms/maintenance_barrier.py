@@ -32,10 +32,11 @@ from .field_codec import (
 )
 from .launch_runtime import LaunchRuntime
 from .lifecycle import LifecycleState
-from .locked_store import DurableFile, LockedStore, RegistryFile
+from .locked_store import DurableFile, LockedStore, RegistryFile, WrittenFile
 from .send_outcome import GrantedSend, HeldSend
 from .store_files import (
     AtomicFile,
+    HolderNamingContention,
     SharedLock,
     _async_store_lock,
     _store_lock,
@@ -125,8 +126,8 @@ class TargetRuntime(LaunchRuntime, RecordMember, MaintenanceTarget):
 
     def require_drained_writes_open_to(self, state: MaintenanceState,
                                        holder: MaintenanceHolder) -> None:
-        """Retargeted after the outgoing owners stopped: the install has captured the bus,
-        so only its holder writes until the hold ends."""
+        """Retargeted once the outgoing runtime has stopped its owners: from then on only
+        the install's holder writes."""
         state.require_open_to(holder)
 
 
@@ -546,6 +547,11 @@ class MaintenanceBarrier(MaintenanceIngress):
     def read(self) -> MaintenanceStatus:
         return self.current_unlocked()
 
+    def held_by(self, operator: MaintenanceOperator) -> MaintenanceState:
+        """``operator``'s hold as the root records it now, in whatever phase it is in."""
+        state = self.read()
+        return state.phase.hold_for(self, state, operator)
+
     def _write_unlocked(self, hold: MaintenanceState) -> None:
         marker = MaintenanceMarker(version=hold.version, root=hold.root,
                                    generation=hold.generation)
@@ -564,8 +570,9 @@ class MaintenanceBarrier(MaintenanceIngress):
         AtomicFile(self.state_path).write_text(state_text)
 
     def begin(self, operator: MaintenanceOperator) -> MaintenanceState:
-        """Hold new turns before fleet drain; an uncertain write stays closed."""
-        with _store_lock(self.registry_path):
+        """Hold new turns before fleet drain; an uncertain write stays closed. A wait past
+        5 s names the registry's holders in the install's log."""
+        with _store_lock(self.registry_path, contention=HolderNamingContention(5)):
             current = self._current_unlocked()
             # A successor takes an abandoned hold without briefly reopening
             # ingress or making the owner repeat its install command.
@@ -578,7 +585,7 @@ class MaintenanceBarrier(MaintenanceIngress):
             return hold
 
     def retarget(self, expected: MaintenanceState, runtime: LaunchRuntime) -> MaintenanceState:
-        """Transfer a drained hold after its outgoing readers have stopped."""
+        """Transfer a drained hold to the runtime that stops its outgoing readers."""
         with _store_lock(self.registry_path):
             self.require_draining_unlocked(expected)
             hold = expected.advanced(ClaimId.mint(), target=TargetRuntime(runtime.interpreter))
@@ -632,15 +639,50 @@ class MaintenanceBarrier(MaintenanceIngress):
             yield self._current_unlocked()
 
 
-class CarriedDocument[T](DurableFile, LockedStore[T], declared_name=None):
-    """A JSON document every installation carries: while maintenance runs, only its holder
-    replaces it, so the install's carry check never charges another writer's change."""
+class CarriedFile(DurableFile, WrittenFile):
+    """A file every installation carries; its kind declares which writers maintenance refuses,
+    so the install's carry check never charges another writer's change."""
 
     __slots__ = ()
 
+    @classmethod
+    @abstractmethod
+    def require_maintenance_open_at(cls, path: Path) -> None:
+        """Refuse the writers this kind's maintenance policy holds out of ``path``."""
+
+    @classmethod
+    def maintenance_at(cls, path: Path) -> MaintenanceBarrier:
+        return MaintenanceBarrier(RegistryFile.path_in(cls.bus_root(path)))
+
     def require_maintenance_open(self) -> None:
-        """Refuse every writer but the maintenance holder."""
-        MaintenanceBarrier(RegistryFile.path_in(self.bus_root(self.path))).assert_open_unlocked()
+        self.require_maintenance_open_at(self.path)
+
+
+class HolderWrittenFile(CarriedFile):
+    """While maintenance runs, only its holder writes this file."""
+
+    __slots__ = ()
+
+    @classmethod
+    def require_maintenance_open_at(cls, path: Path) -> None:
+        cls.maintenance_at(path).assert_open_unlocked()
+
+
+class DrainSettledFile(CarriedFile):
+    """Stopping owners settle their turns in this file: past the drain only the install's
+    holder commits."""
+
+    __slots__ = ()
+
+    @classmethod
+    def require_maintenance_open_at(cls, path: Path) -> None:
+        cls.maintenance_at(path).assert_drained_writes_open_unlocked()
+
+
+class CarriedDocument[T](LockedStore[T], HolderWrittenFile, declared_name=None):
+    """A JSON document every installation carries, replaced only through its own write."""
+
+    __slots__ = ()
 
     def _write_unlocked(self, text: str) -> None:
         self.require_maintenance_open()

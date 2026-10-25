@@ -43,6 +43,10 @@ from agent_comms.field_codec import (
 )
 from agent_comms.reason_codes import ReasonCode
 
+from .attempt_states import SucceededAttempt
+from .execution_states import CompletedExecution
+
+
 if TYPE_CHECKING:
     from .attempt_states import TerminalAttempt
     from .coordination_session import NativeBoundary
@@ -309,9 +313,7 @@ class RecoverySnapshot:
 
     def finish_publications(self, session, boundary: NativeBoundary) -> None:
         """Release this one native attempt only when every original route settled."""
-        from .attempt_states import SucceededAttempt
         from .coordination_tables.executions import CurrentExecutions
-        from .execution_states import CompletedExecution
 
         if not all(row.lifecycle.published for row in self.require_wire_responses()):
             return

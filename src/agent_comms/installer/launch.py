@@ -6,7 +6,6 @@ rehearsal and harness setup are the target's, never the outgoing runtime's.
 """
 from __future__ import annotations
 
-import fcntl
 import glob
 import json
 import os
@@ -15,7 +14,7 @@ import subprocess
 import sys
 import tempfile
 from collections.abc import Iterator
-from contextlib import contextmanager
+from contextlib import ExitStack, contextmanager
 from dataclasses import dataclass, field
 from functools import cached_property
 from pathlib import Path
@@ -23,11 +22,11 @@ from traceback import extract_tb
 from typing import Annotated, ClassVar, TextIO
 
 import agent_comms.installer
+from agent_comms.child_process import ResidentManager
 from agent_comms.cli_bridges.shared import SessionBridgeResumes
 from agent_comms.cli_commands import InstallCliCommand
 from agent_comms.commander import standing
 from agent_comms.field_codec import FieldCodec, Id128, PathText
-from agent_comms.host_services import SystemdUnit
 from agent_comms.installer.backup import StoreBackup
 from agent_comms.installer.commands import InstallCommands
 from agent_comms.installer.interpreter_operation import (
@@ -54,6 +53,7 @@ from agent_comms.installer.reporting import (
 from agent_comms.installer.runtime_resolution import CorePackage
 from agent_comms.installer.upgrade import (
     LiveRun,
+    OwnersStopped,
     RehearsedUpgrade,
     Stack,
     TargetTree,
@@ -64,6 +64,7 @@ from agent_comms.mro_dispatch import MroDispatch, handles
 from agent_comms.repo import Repo
 from agent_comms.repository_name import RepositoryName
 from agent_comms.storage_rules import StorageRule
+from agent_comms.store_files import ClaimHeldError, ProcessSingleton
 
 
 @dataclass
@@ -73,6 +74,7 @@ class InstallReport(MroDispatch):
     writer: RootWriter = field(default_factory=UnpostedWriter)
     outcome: InstallOutcome = field(default_factory=UnfinishedInstall, init=False)
     bridges: SessionBridgeResumes = field(default_factory=SessionBridgeResumes, init=False)
+    owners: OwnersStopped = field(default_factory=OwnersStopped, init=False)
     inherited_phases: list[PhaseTiming] = field(default_factory=list)
     source: Repo = field(init=False, repr=False)
 
@@ -125,7 +127,8 @@ class InstallReport(MroDispatch):
             self.outcome = FailedInstall(self.outcome, next(self.handlers_for(error))(error))
             try:
                 with FailureReportPublicationPhase().running(clock):
-                    self.writer.post((*self.outcome.lines(), *self.bridges.lines()))
+                    self.writer.post((*self.outcome.lines(), *self.owners.lines(),
+                                      *self.bridges.lines()))
             except BaseException as publication_error:
                 error.add_note(f"Install failure report also failed: {publication_error}")
                 print(f"install: failure report also failed: {publication_error}", file=sys.stderr)
@@ -144,7 +147,7 @@ class InstallCause:
 
 
 @dataclass(frozen=True)
-class InstallUnit(SystemdUnit):
+class InstallUnit:
     """One install as a transient user unit, named by its diagnostics directory.
 
     Systemd owns its lifetime exactly as it owns the connector's, so an install the heartbeat
@@ -156,8 +159,7 @@ class InstallUnit(SystemdUnit):
         "HOME", "PATH", "XDG_RUNTIME_DIR", "XDG_CONFIG_HOME", "XDG_DATA_HOME", "XDG_STATE_HOME",
         "XDG_CACHE_HOME", "AGENT_COMMS_DEBUG_LOG",
     )
-    """The caller's variables the install reads; systemd-run copies each value itself, so
-    none is spelled on a command line."""
+    """The caller's variables the install reads, each copied by the manager that runs it."""
 
     @property
     def unit(self) -> str:
@@ -177,29 +179,28 @@ class InstallUnit(SystemdUnit):
         has sent it: the launcher is the installed runtime, older than the tree it starts."""
         return self.logs / "request.json"
 
-    def start(self, tree: Path, command: tuple[str, ...], pythonpath: str,
-              *options: str) -> None:
-        """Start the unit; ``--wait`` follows it to its end and raises on its failure."""
-        subprocess.run(
-            ("systemd-run", "--user", "--quiet", "--collect", *options, f"--unit={self.unit}",
-             f"--working-directory={tree}", f"--property=StandardInput=file:{self.request}",
-             f"--property=StandardOutput=file:{self.result}",
-             f"--property=StandardError=file:{self.errors}",
-             *(f"--setenv={name}" for name in self.inherited),
-             f"--setenv=PYTHONPATH={pythonpath}", *command),
-            check=True,
-        )
+    def start(self, tree: Path, command: tuple[str, ...], pythonpath: str, *,
+              wait: bool) -> None:
+        """Start the unit; ``wait`` follows it to its end and raises on its failure."""
+        ResidentManager.current().transient(
+            self.unit, command, cwd=tree, stdin=self.request, stdout=self.result,
+            stderr=self.errors, inherited=self.inherited, assigned={"PYTHONPATH": pythonpath},
+            wait=wait)
 
     def target(self) -> str:
         """The commit this unit installs, read from the request it was started with."""
         return FieldCodec.decode(InstallRun, FieldCodec.parse(self.request.read_text())).target
 
     def running(self) -> bool:
-        return not self.activity(self.unit).ended()
+        return not ResidentManager.current().activity(self.unit).ended()
+
+    def stop(self) -> None:
+        """Systemd signals the install, which runs its abort, and returns once the unit ends."""
+        ResidentManager.current().control("stop", self.unit)
 
     def due(self) -> type[standing.InstallDue]:
         """A run whose unit is gone without printing a result died; any other was launched."""
-        gone = self.activity(self.unit).ended()
+        gone = ResidentManager.current().activity(self.unit).ended()
         return (standing.DiedInstallDue if gone and not self.result.read_text()
                 else standing.LaunchedInstallDue)
 
@@ -229,20 +230,20 @@ class InstallLogs:
     cause_file: ClassVar[str] = "cause.json"
 
     @property
-    def lock(self) -> Path:
-        return self.root.parent / f".{self.root.name}.install.lock"
+    def launch_claim(self) -> ProcessSingleton:
+        return ProcessSingleton(self.root.parent / f".{self.root.name}.install.lock")
 
     @contextmanager
     def launching(self) -> Iterator[None]:
         """Held from the target checkout to the unit's start, and for a waiting launch to the
         unit's end; under it no other unit runs, so minting and retiring never race one."""
-        with self.lock.open("a") as held:
+        with ExitStack() as held:
             try:
-                fcntl.flock(held, fcntl.LOCK_EX | fcntl.LOCK_NB)
-            except BlockingIOError:
-                raise InstallRunning(self.lock, self.running()) from None
+                held.enter_context(self.launch_claim.claimed())
+            except ClaimHeldError:
+                raise InstallRunning(self.launch_claim.path, self.running()) from None
             if running := self.running():
-                raise InstallRunning(self.lock, running)
+                raise InstallRunning(self.launch_claim.path, running)
             yield
 
     def units(self) -> tuple[InstallUnit, ...]:
@@ -253,6 +254,12 @@ class InstallLogs:
 
     def running(self) -> tuple[InstallUnit, ...]:
         return tuple(unit for unit in self.units() if unit.running())
+
+    def stop_running(self) -> None:
+        """Systemd, not their caller, owns the root's installs, so whoever removes the root
+        stops them first; a caller killed mid-install leaves its unit writing otherwise."""
+        for unit in self.running():
+            unit.stop()
 
     def launched(self, repo: RepositoryName, main: str) -> tuple[InstallUnit, ...]:
         """The runs launched for this merge, decoded once from their launch records."""
@@ -327,7 +334,7 @@ class InstallRun:
     def unit(self) -> InstallUnit:
         return InstallLogs(self.root).minted()
 
-    def spawn(self, *options: str) -> None:
+    def spawn(self, *, wait: bool) -> None:
         """The install runs in its own unit and reads its request from a file beside the bus,
         so stopping the caller's unit, the connector's included, cannot cut it short."""
         tree = TargetTree(self.command.checkout, self.scratch, self.target)
@@ -336,12 +343,12 @@ class InstallRun:
               f"diagnostics {self.unit.errors}", file=sys.stderr, flush=True)
         self.unit.start(
             tree.path, (sys.executable, "-m", agent_comms.installer.__name__),
-            os.pathsep.join(map(str, tree.source_paths())), *options,
+            os.pathsep.join(map(str, tree.source_paths())), wait=wait,
         )
 
     def launch(self, output: TextIO) -> int:
         try:
-            self.spawn("--wait")
+            self.spawn(wait=True)
         except subprocess.CalledProcessError as failed:
             print(f"install failed ({failed.returncode}): {self.unit.errors.read_text().strip()}",
                   file=sys.stderr)

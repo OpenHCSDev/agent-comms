@@ -16,6 +16,7 @@ rows, and no longer competes with that work for its interpreter lock.
 from __future__ import annotations
 
 import asyncio
+import copyreg
 import itertools
 import multiprocessing
 import signal
@@ -32,10 +33,15 @@ from typing import TYPE_CHECKING, ClassVar, Self, final
 
 from acp.exceptions import RequestError
 
-from agent_comms.acp_extension import TranscriptDraftUpdate, TranscriptSnapshotUpdate
+from agent_comms.acp_extension import (
+    GoalSnapshotReply,
+    TranscriptDraftUpdate,
+    TranscriptSnapshotUpdate,
+)
 from agent_comms.active_route import CommsRoute
 from agent_comms.activity import ObservedActivity
 from agent_comms.commander_hud import CommanderFrame, CommanderHud
+from agent_comms.comms import Comms
 from agent_comms.coordination_errors import (
     CoordinationError,
     CoordinationReadUnavailable,
@@ -45,6 +51,7 @@ from agent_comms.coordination_errors import (
 )
 from agent_comms.errors import RelationViolationError, ToolRefusedError
 from agent_comms.field_codec import FieldCodec
+from agent_comms.historical_views import HistorySource
 from agent_comms.presentation import NoRevision, ReadState, WireRevision
 from agent_comms.registry_document import RosterVisibility
 from agent_comms.registry_provenance import DeletedThread
@@ -64,6 +71,7 @@ from agent_comms.ui_model.sidebar import (
 )
 from agent_comms.ui_model.status import OpenThreadStatus, ThreadStatusModel
 from agent_comms.view_unread import ReplyIndexResult
+from agent_comms.watched import FileSource
 
 if TYPE_CHECKING:
     from concurrent.futures import Future
@@ -79,6 +87,14 @@ if TYPE_CHECKING:
     from agent_comms.thread_presentation import ThreadPresentation
     from agent_comms.transcripts import TranscriptCursor, TranscriptRead, TranscriptReadIdentity
 
+
+def reduce_request_error(error: RequestError) -> tuple[type[RequestError], tuple[object, ...]]:
+    """The SDK error hands Exception only its message; this pipe carries it whole. The
+    spawned observer imports this module to run serve(), so it registers before sending."""
+    return RequestError, (error.code, str(error), error.data)
+
+
+copyreg.pickle(RequestError, reduce_request_error)
 
 
 class ObservationRequest(ABC):
@@ -150,6 +166,7 @@ class LiveObservationInterest(ObservationInterest):
     def prepared(self, observation: SidebarReading, service: ObservationService) -> None:
         if self.observations.get(type(observation)) is observation:
             observation.sent = NoSidebarSent()
+            observation.invalidate()
             service.observe_again()
 
     async def observe(self, service: ObservationService, revision: WireRevision,
@@ -219,23 +236,28 @@ class ReadingObservation[InterestT: InterestRequest](Observation[InterestT]):
     def __init__(self, request: InterestT):
         super().__init__(request)
         self.steps: Generator[ObservationStep] = (_ for _ in ())
+        self.read_revision: ReadState = NoRevision()
 
     def close(self) -> None:
         self.steps.close()
 
+    def invalidate(self) -> None:
+        """A changed read stage or completed preparation needs a new read, not a new file."""
+        self.read_revision = NoRevision()
+
     def step(self, service: ObservationService, revision: WireRevision) -> None:
-        """Advance one yielded step, never drain an interest before its siblings."""
+        """Advance one yield; a completed current revision has no work to schedule."""
         try:
             result = next(self.steps)
         except StopIteration:
             self.after_read(service)
-            self.steps = self.read(service.comms, revision)
-            try:
-                result = next(self.steps)
-            except StopIteration:
-                return
-        result.publish(service)
-        service.observe_again()
+            if revision.changed_since_any(self.read_revision):
+                self.read_revision = revision
+                self.steps = self.read(service.comms, revision)
+                self.step(service, revision)
+        else:
+            result.publish(service)
+            service.observe_again()
 
     @abstractmethod
     def read(
@@ -581,8 +603,6 @@ class ReadRecordedNotifications(ReadNotifications):
     source: str
 
     def read(self, comms: Comms) -> Mapping[tuple[int, str], tuple[MessageNotification, ...]]:
-        from agent_comms.historical_views import HistorySource
-
         with comms.bus.history.read_sources() as sources:
             source = HistorySource.require(sources, self.source)
             return source.notification_references(sources, self.references)
@@ -633,8 +653,6 @@ class ReadOwnerGoal(OwnerRead):
     """The owner's goal snapshot and the turn it read with it."""
 
     async def read(self, owner: RuntimeConnection) -> GoalSnapshotReply:
-        from agent_comms.acp_extension import GoalSnapshotReply
-
         return FieldCodec.decode(GoalSnapshotReply, await owner.request("goal_snapshot"))
 
 
@@ -690,6 +708,7 @@ class RosterSidebarRead(SidebarReadStage):
 
     def advance(self, reading: SidebarReading, snapshot: CoordinationSnapshot) -> None:
         reading.stage = SidebarReadStage()
+        reading.invalidate()
         if snapshot.has_indexing_unread():
             reading.sent = NoSidebarSent()
 
@@ -1274,8 +1293,6 @@ class ObservationService:
             request.receive(self)
 
     async def watch(self) -> None:
-        from agent_comms.watched import FileSource
-
         sources = tuple(FileSource(path)
                         for group in WireRevision.source_paths(self.comms.views).values()
                         for path in group)
@@ -1355,8 +1372,6 @@ class ObservationService:
 
 def serve(route: CommsRoute, connection: Connection) -> None:
     """Observe the caller's selected route, including its reviewed native package."""
-    from agent_comms.comms import Comms
-
     try:
         asyncio.run(ObservationService(Comms(route), connection).run())
     except BaseException:

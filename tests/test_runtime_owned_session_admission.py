@@ -104,9 +104,9 @@ async def test_cli_registration_refuses_unbound_then_uses_original_owned_session
         # Use the original production publisher before another independent read.
         # The failed prompt is never resent or turned into a binding.
         await owner.sessions.bind_owned(thread, "original-acp-session")
-        assert await proxy.request("goal_history") == {"history": []}
+        assert await proxy.request("goal_history") == {"history": [], "failures": []}
         comms.registry.rename("registered", "renamed-owner")
-        assert await proxy.request("goal_history") == {"history": []}
+        assert await proxy.request("goal_history") == {"history": [], "failures": []}
         assert (
             owner.sessions.require_owned_session(comms.registry.entry("renamed-owner").entry)
             == "original-acp-session"

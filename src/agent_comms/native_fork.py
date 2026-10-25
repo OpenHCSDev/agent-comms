@@ -20,7 +20,7 @@ from .pi_helper import PiHelper, PiHelperFailed, SessionHelperRequest
 @dataclass(frozen=True)
 class ForkSessionRequest(SessionHelperRequest):
     cwd: str
-    directory: str | None = None
+    directory: str
 
 
 class ForkSessionHelper(PiHelper):
@@ -57,7 +57,7 @@ class ForkSessionHelper(PiHelper):
         return (
             f"killed (bound {cls.timeout_for(request):.0f}s) while it may hold the native "
             f"writer locks of {request.file}; that lock and any partial fork in "
-            f"{request.directory or 'the default session directory for ' + request.cwd} "
+            f"{request.directory} "
             "remain and block later forks of this parent until reviewed (locks are never "
             "stolen automatically)"
         )

@@ -12,6 +12,7 @@ from agent_comms.native_session_reopen import NativeSessionIdentity
 
 from .errors import RelationViolationError
 from .field_codec import InputId, MalformedRecord
+from .input_disposition import InputDispositions
 from .private_path import FileObservation, FileRevision
 from .routing import TurnRouting
 from .typed_table import Column, DurableStore, StoreRows, WithoutRowid
@@ -111,13 +112,6 @@ class TranscriptRoutes(DurableStore):
     def for_session(self, session_file: str) -> _SessionRoutes:
         return _SessionRoutes(self, session_file)
 
-    def input_bindings(self) -> dict[str, InputDisplay]:
-        with self.snapshot() as connection:
-            return {
-                row.native_id: row
-                for row in InputDisplay.select(connection, where="sent_text_digest IS NOT NULL")
-            }
-
     def record(self, session_file: str, entry_ids: tuple[str, ...], routing: TurnRouting) -> None:
         if not entry_ids:
             return
@@ -132,7 +126,6 @@ class TranscriptRoutes(DurableStore):
         registry and input owners remain held until durable annotations commit.
         A partial successful send subset remains published if a later send fails.
         """
-        from .input_disposition import InputDispositions
         from .native_input_owner import RegistryOwner
         from .native_transcript import NativeTranscript
 

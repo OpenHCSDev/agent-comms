@@ -1,19 +1,20 @@
 """Named destinations own route behavior; strings are decoded at the boundary."""
 from __future__ import annotations
 
-from .class_fact import ClassFact
 from abc import ABC, abstractmethod
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, ClassVar
 
 from .activity_clocks import ActivityClocks
+from .class_fact import ClassFact
 from .declared_family import DeclaredFamily
 from .errors import HumanSendRefusedError, RelationViolationError, UnregisteredThreadError
 from .field_codec import NullMember, SingleFieldValue, SubclassUnion
 from .history_result import DmHistoryPageResult, HistoryPageResult
 from .projection_source import ProducedRow, ProjectionSource
 from .response_policy import DirectPolicy, MentionedOnlyPolicy
+from .thread_identity import ThreadIncarnation
 from .wake_policy import BoundedTriageWake, FullWake, MessageAudience, UnmentionedWake
 
 if TYPE_CHECKING:
@@ -38,7 +39,6 @@ if TYPE_CHECKING:
     from .registry_document import RegistrySnapshot
     from .registry_provenance import RegistryProvenance
     from .response_policy import ResponsePolicy
-    from .thread_identity import ThreadIncarnation
     from .thread_status import ThreadStatus
     from .threads import Thread
     from .wake_policy import WakePolicy
@@ -105,7 +105,7 @@ def exact_stored_target(name: str) -> bool:
             if name in BuiltinChannelView.addresses() else True)
 
 
-class CommandTarget(ABC, ProjectionSource):
+class CommandTarget(DeclaredFamily, ProjectionSource, affix="Target"):
     """A command destination owns its binding and catalog participation."""
 
     @ClassFact
@@ -115,6 +115,10 @@ class CommandTarget(ABC, ProjectionSource):
         return (BusDisplayIndex, AwaitingAnswerSource)
 
     needs_channel_state: ClassVar[bool] = False
+
+    def display_name(self) -> str:
+        """The selected destination's name, including an unresolved destination."""
+        return ", ".join(self.destination_names)
 
     @staticmethod
     def named(name: str) -> NamedTarget:
@@ -131,7 +135,7 @@ class CommandTarget(ABC, ProjectionSource):
 
     @property
     @abstractmethod
-    def names(self) -> tuple[str, ...]: ...
+    def destination_names(self) -> tuple[str, ...]: ...
 
     def available(self, snapshot: RegistrySnapshot) -> bool:
         return True
@@ -188,7 +192,7 @@ class NamedTarget(CommandTarget):
         return text.lstrip().startswith(NamedTarget.sigils())
 
     @property
-    def names(self) -> tuple[str, ...]:
+    def destination_names(self) -> tuple[str, ...]:
         return (self.name,)
 
     @abstractmethod
@@ -254,7 +258,7 @@ class NamedTarget(CommandTarget):
         return next((snapshot.threads.get(snapshot.canonical_name(name)) for name in self.direct_names), None)
 
     def inbound_relations(self, sender: str):
-        return (sender, *(name for name in self.names if name not in self.direct_names))
+        return (sender, *(name for name in self.destination_names if name not in self.direct_names))
 
     def response_recipients(self, recipients: tuple[FrozenRecipient, ...]) -> tuple[FrozenRecipient, ...]:
         return tuple(member for member in recipients if not self.direct_names or member.canonical_thread in self.direct_names)
@@ -291,7 +295,7 @@ class ThreadTarget(NamedTarget):
 
     @property
     def direct_names(self) -> tuple[str, ...]:
-        return self.names
+        return self.destination_names
 
     def canonical_name(self, canonical: Callable[[str], str]) -> str:
         return canonical(self.name)
@@ -561,12 +565,15 @@ class ChannelTarget(NamedTarget):
 class ProjectTarget(CommandTarget):
     project: str
 
+    def display_name(self) -> str:
+        return self.project
+
     @property
     def name(self) -> str:
         return self.project
 
     @property
-    def names(self) -> tuple[str, ...]:
+    def destination_names(self) -> tuple[str, ...]:
         return ()
 
     def resolve(self, snapshot: RegistrySnapshot, require_channel: Callable[[str], Channel]):

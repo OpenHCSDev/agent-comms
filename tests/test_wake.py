@@ -100,7 +100,7 @@ def decide(
 )
 @pytest.mark.parametrize("type", [InfoKind, AckKind, HandoffKind])
 def test_ordinary_unmentioned_channel_reaches_all_members_without_full_turns(
-    sender_role: Type[ThreadRole], policy, starts_turn: bool, type: Type[MessageKind]
+    sender_role: Type[ThreadRole], policy, starts_turn: bool, type: Type[MessageKind],
 ) -> None:
     message = stored(sender_role=sender_role, type=type)
     decisions = [decide(message, member.recipient_lookup) for member in MEMBERS]

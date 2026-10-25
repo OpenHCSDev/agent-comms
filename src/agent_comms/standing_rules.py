@@ -17,7 +17,7 @@ from typing import TYPE_CHECKING, ClassVar, Self
 
 from agent_comms.declared_family import DeclaredFamily
 from agent_comms.field_codec import FieldCodec
-from agent_comms.errors import RejectedEnforcementError
+from agent_comms.errors import RejectedEnforcementError, TodoConflict
 from agent_comms.text_digest import TextDigest
 from agent_comms.recorded_time import EventTime, RecordedEventTime
 from agent_comms.repository_name import RepositoryName
@@ -37,7 +37,7 @@ if TYPE_CHECKING:
     from agent_comms.registry_document import RegistrySnapshot
     from agent_comms.storage_rules import MemoryUse, StorageRule
     from agent_comms.todos import (
-        OrderClaim, OwnerRequest, PresentCheckout, ProgressRead, PullRequest, Todo,
+        MergeBlock, OrderClaim, OwnerRequest, PresentCheckout, ProgressRead, PullRequest, Todo,
     )
     from agent_comms.goal_management import Goals
     from agent_comms.ui_model.unit_state import UnitObservation, UnitState
@@ -77,6 +77,33 @@ class BlocksRelease:
     the signal is gone: a quote is the answer, never the relief."""
 
 
+class StaleTodoDecision(RejectedEnforcementError):
+    """A rule cannot refresh its decision after the row changes."""
+
+    reason: ClassVar[str] = "todo decision is stale"
+
+    def __init__(self, current: Todo) -> None:
+        self.current = current
+        super().__init__(self.explanation())
+
+    def explanation(self) -> str:
+        return f"{self.current.id}: decision is stale at revision {self.current.revision}"
+
+
+class RepeatedTodoChange(StaleTodoDecision):
+    """The one refreshed decision also lost its observed revision."""
+
+    reason: ClassVar[str] = "todo changed again"
+
+    def __init__(self, previous: Todo, current: Todo) -> None:
+        self.previous = previous
+        super().__init__(current)
+
+    def explanation(self) -> str:
+        return (f"{self.previous.id}: revision {self.previous.revision} changed again "
+                f"to revision {self.current.revision}")
+
+
 class StandingRule(DeclaredFamily, affix="StandingRule", discovery_package="agent_comms.commander"):
     @classmethod
     @abstractmethod
@@ -93,10 +120,14 @@ class StandingRule(DeclaredFamily, affix="StandingRule", discovery_package="agen
         return True
 
     def rejected_line(self, error: RejectedEnforcementError) -> str:
-        return f"Not applied ({error.reason}): {self.line()}"
+        return f"Not applied ({error.explanation()}): {self.line()}"
 
     def enforce(self, comms: Comms, commander: str) -> None:
         """What Core does itself when this rule breaks; a rule that only reports does nothing."""
+
+    def redecided(self, comms: Comms, commander: str, current: Todo) -> tuple[StandingRule, ...]:
+        """Rules without a Todo decision cannot refresh one."""
+        raise StaleTodoDecision(current)
 
     @staticmethod
     def enforce_all(
@@ -107,7 +138,15 @@ class StandingRule(DeclaredFamily, affix="StandingRule", discovery_package="agen
         rejected: dict[StandingRule, RejectedEnforcementError] = {}
         for rule in rules:
             try:
-                rule.enforce(comms, commander)
+                try:
+                    rule.enforce(comms, commander)
+                except TodoConflict as conflict:
+                    fresh = rule.redecided(comms, commander, conflict.current)
+                    try:
+                        for decided in fresh:
+                            decided.enforce(comms, commander)
+                    except TodoConflict as changed:
+                        raise RepeatedTodoChange(conflict.current, changed.current) from changed
             except RejectedEnforcementError as error:
                 rejected[rule] = error
         return rejected
@@ -414,9 +453,11 @@ class OwedAnswer(IndependentStandingRule, declared_name=None):
         """Whether an action naming these open messages answers this one."""
         return any(message.message_id == self.message.message_id for message in named)
 
-    def blocks(self, reached: frozenset[str], action: CommanderVerb) -> bool:
-        """An unanswered question must be answered before unrelated work."""
-        return True
+    def blocks(self, reached: frozenset[str], action: CommanderVerb,
+               named: tuple[Message, ...]) -> bool:
+        """An owed message refuses only an action that answers nothing: an answer to any open
+        message is progress and is never refused, so the others it leaves owed only warn."""
+        return not named
 
     def asked_by(self, reached: frozenset[str]) -> bool:
         """Whether one of these threads asked it, so a reply reaching them answers it unnamed."""
@@ -523,10 +564,9 @@ class DeliveredHeadReview(DatedStandingRule):
         request: PullRequest, now: float,
     ) -> tuple[Self, ...]:
         due_at = claim.message.timestamp + cls.minutes * 60
-        if request.draft or request.has_head_review or now < due_at:
-            return ()
-        return (cls(problem, holder, order, claim.pull_request.repo,
-                    request.number, request.head, due_at),)
+        return tuple(cls(problem, holder, order, claim.pull_request.repo,
+                         request.number, request.head, due)
+                     for due in request.head_review_due(now, due_at))
 
     @classmethod
     def scan_observed(
@@ -578,6 +618,36 @@ class UnreviewedHead(OrderRefusingStandingRule, DatedStandingRule):
         return (f"UNREVIEWED HEAD: {self.request.repo.to_wire()}#{self.request.pr} "
                 f"head {self.request.head} -> judge ok/back --pr {self.request.pr} "
                 f"--head {self.request.head}")
+
+
+@dataclass(frozen=True)
+class StuckMerge(DatedStandingRule):
+    """An armed head GitHub will not merge: approved, queued and going nowhere."""
+    request: PullRequestHead
+    block: MergeBlock
+
+    @classmethod
+    def scan_observed(cls, comms: Comms, commander: str,
+                      observed: Sequence[UnitState], frame: HeartbeatFrame) -> tuple[Self, ...]:
+        return cls.scan_pulls(comms.goals, frame.pulls)
+
+    @classmethod
+    def scan_pulls(cls, goals: Goals, pulls: ProgressRead) -> tuple[Self, ...]:
+        return tuple(
+            cls(PullRequestHead(repo, row.number, row.head), block)
+            for repo in goals.registry.snapshot().commander_project.repository_names()
+            for row in pulls.open(repo)
+            for block in row.stuck()
+        )
+
+    def began(self) -> float:
+        return self.block.since
+
+    def line(self) -> str:
+        minutes = int((time.time() - self.block.since) // 60)
+        return (f"STUCK MERGE: {self.request.repo.to_wire()}#{self.request.pr} "
+                f"head {self.request.head} has auto-merge armed but {self.block.what()} "
+                f"{minutes} min ago -> fix the check at its owner or give it an owner now")
 
 
 @dataclass(frozen=True)
@@ -661,8 +731,8 @@ class DirectiveUnacted(OwedAnswer, DatedStandingRule):
         )
 
     def clearing_action(self) -> str:
-        return (f"Reply to {self.message.sender} in the session or on the bus, "
-                f"or mark request {self.request.value} done.")
+        return (f"Order its next step with --answers {self.message.message_id}, reply to "
+                f"{self.message.sender} on the bus with it, or mark request {self.request.value} done.")
 
     def due(self, now: float) -> bool:
         return self.directive.deadline < now

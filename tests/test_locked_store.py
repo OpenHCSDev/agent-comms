@@ -1,10 +1,12 @@
 """Canonical locks and durable bytes through a real declared document store."""
 from __future__ import annotations
 
+import fcntl
 import json
 import multiprocessing
 import os
 import stat
+import threading
 from contextlib import contextmanager
 from dataclasses import dataclass, replace
 
@@ -13,7 +15,10 @@ import pytest
 from agent_comms.locked_store import DocumentChange, LockedStore
 from agent_comms.pi_counts import PiCount
 from agent_comms.runtime_info import AgentRuntimeInfo, RuntimeInfoDocument, RuntimeInfoStore
-from agent_comms.store_files import ExclusiveLock, SharedLock, StoreLockContention, _store_lock
+from agent_comms.child_process import Platform
+from agent_comms.store_files import (
+    ExclusiveLock, HolderNamingContention, SharedLock, StoreLockContention, _store_lock,
+)
 
 
 def observation(thread="goal"):
@@ -276,3 +281,17 @@ def test_wire_nesting_does_not_reacquire_document_lock(tmp_path):
     done = event()
     with process(_record_under_wire, tmp_path / "runtime_info.json", done):
         assert done.wait(5)
+
+
+def test_slow_lock_wait_names_its_holder_once(tmp_path, capsys):
+    """Install 18 waited 59 s for the registry lock and nobody could say who held it."""
+    path = tmp_path / "held"
+    path.write_bytes(b"")
+    with open(path, "rb") as held, open(path, "rb") as waiting:
+        fcntl.flock(held, fcntl.LOCK_EX)
+        threading.Timer(.5, fcntl.flock, (held, fcntl.LOCK_UN)).start()
+        HolderNamingContention(.1).acquire(
+            waiting.fileno(), Platform.current(), mode=ExclusiveLock())
+    err = capsys.readouterr().err
+    assert err.count("store lock still waiting after 0.1 s, held by ") == 1, err
+    assert f"PID {os.getpid()}: " in err

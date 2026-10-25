@@ -21,6 +21,7 @@ from .acp_failure import (
     UnresolvedNativeTurnOutcome,
 )
 from .child_process import ProcessIdentity
+from .coordinator import Coordination
 from .declared_family import DeclaredFamily
 from .field_codec import InputId, NullMember, TurnId
 from .input_attempt import InputAttempt
@@ -54,6 +55,7 @@ if TYPE_CHECKING:
     from .transcript_events import SentTranscript
     from .turn_input_source import OriginalTurnInput
     from .turn_phase import TurnPhase
+    from .turn_progress import TurnProgress
 
 
 class AgentEvent(ABC):
@@ -315,10 +317,12 @@ class Done(AgentEvent, FailedGoalTurn):
     def require_reported(self) -> Done:
         return self
 
-    async def prepare_publication(self, progress) -> Done:
+    async def prepare_publication(self, progress: TurnProgress) -> Done:
         return self
 
-    async def report_failure(self, progress, error):
+    async def report_failure(
+        self, progress: TurnProgress, error: Exception, kind: type[TurnFailure]
+    ) -> NativeTurnOutcome:
         return self.outcome
 
 
@@ -365,8 +369,6 @@ class RuntimeInfoObservation(AgentEvent):
         return current
 
     async def record_in(self, consumer: AgentEventConsumer) -> None:
-        from .coordinator import Coordination
-
         await Coordination.run_worker(partial(
             consumer.comms.agents.observe_runtime_info, consumer.thread_name, self,
         ))
