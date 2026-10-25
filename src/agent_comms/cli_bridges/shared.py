@@ -21,7 +21,7 @@ from dataclasses import dataclass, field, replace
 from datetime import datetime
 from functools import cached_property, partial
 from pathlib import Path
-from typing import Annotated, ClassVar, Generic, Literal, Self, TextIO, TypeVar
+from typing import TYPE_CHECKING, Annotated, ClassVar, Generic, Literal, Self, TextIO, TypeVar
 
 from pydantic import Field, InstanceOf, PlainSerializer, PlainValidator, model_validator
 
@@ -104,6 +104,9 @@ from .monitor import (
     read_monitor,
 )
 
+if TYPE_CHECKING:
+    from agent_comms.task_attachments.commander_pings import CommanderUpdate
+
 
 class BridgeStateTable(DurableTables):
     """The bridge's delivery.sqlite3: its binding and every delivery attempt.
@@ -114,7 +117,7 @@ class BridgeStateTable(DurableTables):
     """
 
     __slots__ = ()
-    filename = 'delivery.sqlite3'
+    filename = WatchRecord.store_name
 
 
 class BindingRequest(ABC):
@@ -1186,6 +1189,10 @@ class CliBridge(ExternalRuntime, DeliversInput, Generic[BridgeOptions]):
     async def prepare_delivery(self) -> None:
         """API transports already bind the intended harness on each request."""
 
+    async def deliver_board(self, update: CommanderUpdate, message: messages.Message) -> type[Outcome]:
+        """A harness with no tool-call route takes a heartbeat packet like any message."""
+        return await self.deliver(message)
+
     async def accept(self, message: messages.Message) -> None:
         conversation = message.type.conversation_message
         outcome = UnconfirmedOutcome if conversation else FilteredOutcome
@@ -1198,7 +1205,7 @@ class CliBridge(ExternalRuntime, DeliversInput, Generic[BridgeOptions]):
             first = delivery.insert_if_absent(self.db).rowcount
         if not first:
             return
-        result = await self.deliver(message) if conversation else outcome
+        result = await message.task.delivered_by(self, message) if conversation else outcome
         delivery, = DeliveryRow.select(self.db, id=message.message_id)
         await delivery.finish(self, result)
         self.log(f'{result.declared_name}: {message.message_id} from {message.sender}')
