@@ -117,3 +117,17 @@ async def test_observer_process_survives_deleted_interest_and_keeps_serving(comm
                 assert await process.read(ReadNotifications(str(comms.root), ())) == {}
         finally:
             loop.remove_reader(process.fileno())
+
+
+def test_one_revision_captures_each_thread_activity_once(comms):
+    """Every notification request and thread read asked the activity and room stores again:
+    376 opens a second on Tristan's observer. A revision now answers each name once."""
+    declare(comms, 'surviving')
+    comms.agents.set_activity('surviving', ActivityState.IDLE)
+    revision = comms.views.revision()
+    first = comms.views.observed_activity(revision, ('surviving', 'ghost'))
+    assert set(first) == {'surviving', 'ghost'}
+    comms.agents.set_activity('surviving', ActivityState.WORKING)
+    assert comms.views.observed_activity(revision, ('surviving',)) == {'surviving': first['surviving']}
+    later = comms.views.observed_activity(comms.views.revision(), ('surviving',))
+    assert later['surviving'].timestamp > first['surviving'].timestamp

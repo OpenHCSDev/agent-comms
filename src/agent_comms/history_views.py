@@ -28,6 +28,8 @@ from .view_unread import transcript_read_state
 
 
 if TYPE_CHECKING:
+    from .activity import ObservedActivity
+    from .registry_provenance import DeletedThread
     from .historical_views import HistoricalThread, HistorySource
     from .registry_document import RegistrySnapshot
     from .threads import Thread
@@ -62,6 +64,8 @@ from .presentation import (
     CountedRead,
     InboxRead,
     MessageNotification,
+    NoRevision,
+    ReadState,
     ThreadRecord,
     ThreadView,
     WireRevision,
@@ -194,6 +198,24 @@ class HistoryViews:
         self.ledger = ledger
         self.presentation = BusPresentation(bus, registry, channels.catalog, agents, goals)
         self.transcript_reads = transcript_read_state(bus.reads.path)
+        self.captured_activity: tuple[ReadState, dict[str, ObservedActivity | DeletedThread]] = (
+            NoRevision(), {})
+
+    def observed_activity(
+        self, revision: WireRevision, names: Iterable[str],
+    ) -> dict[str, ObservedActivity | DeletedThread]:
+        """The named threads' activity as of one observer revision.
+
+        Every notification request and every thread read asks; each revision captures
+        a name once, so a busy bus opens the activity and room stores once per
+        revision instead of once per reader."""
+        if self.captured_activity[0] != revision:
+            self.captured_activity = (revision, {})
+        captured = self.captured_activity[1]
+        wanted = tuple(names)
+        if missing := set(wanted) - captured.keys():
+            captured.update(self.registry.snapshot().observed_activity(self.agents, missing))
+        return {name: captured[name] for name in wanted if name in captured}
 
     def message_notifications_for_references(self, references: Sequence[MessageReference]):
         return MessageNotification.references(self.root, self.registry, self.bus.bus, references)
