@@ -285,7 +285,7 @@ class SessionBinding(ABC):
 class BindingAddress(SessionBinding):
     """A command-line address, resolved only after the operation registers its thread."""
 
-    bus: Annotated[str, field_codec.WireName("bus_thread")] = field()
+    bus: Annotated[str, field_codec.WireName("bus_thread")]
 
     def recipient(self, comms: Comms) -> ThreadIncarnation:
         return comms.registry.require(self.bus).incarnation
