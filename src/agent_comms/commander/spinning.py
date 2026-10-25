@@ -37,5 +37,5 @@ class SpinningUnit(HeldBranchRule):
         return tuple(found)
 
     def line(self) -> str:
-        return (f"SPINNING {self.holder.name}: {self.call_count} calls, 0 src lines since order "
-                f"{self.problem} -> commander sends the exact shape")
+        return (f"RESHAPE {self.holder.name} {self.problem}: {self.call_count} calls, 0 src lines"
+                " -> send the exact shape")

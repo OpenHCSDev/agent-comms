@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from .native_tool_call import ToolCallId
 from .thread_identity import ThreadIncarnation
 from .tool_result import ToolResult
 from .transcript_events import OrderCall, TurnDigest
@@ -21,7 +22,7 @@ class OrderWork(ToolResult):
         cls, problem: str, thread: ThreadIncarnation, since: float, turns: tuple[TurnDigest, ...]
     ) -> OrderWork:
         """Each call once by tool_call_id, newest first."""
-        calls: dict[str, OrderCall] = {}
+        calls: dict[ToolCallId, OrderCall] = {}
         for turn in reversed(turns):
             for event in turn.events:
                 event.record_call(calls, since)

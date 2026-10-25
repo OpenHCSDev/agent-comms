@@ -111,7 +111,7 @@ def test_storage_family_reads_once_and_renders_each_broken_fact(
         review_at=RecordedEventTime(1000),
         request=comms.goals.todos.add_request(lead.incarnation, "Fix the filesystem paths").id,
         order=PendingProblemOrder(
-            id="storage-case-order", scope=FIX_SCOPE,
+            scope=FIX_SCOPE,
             owner=FileLine(__file__, 1),
             run=MechanicalOrderRun(),
             check=OrderCheck(tmp_path, "true"),

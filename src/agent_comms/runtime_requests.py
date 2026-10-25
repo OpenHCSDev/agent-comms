@@ -56,6 +56,7 @@ from .turn_context import (
 from .working_memory_annotations import WorkingMemoryAnnotations
 from .working_memory_labels import ClassifierVersion, ModelLabel
 from .working_memory_questions import SpanAnswer
+from .turn_item import PiRequestKey
 
 if TYPE_CHECKING:
     from .acp_extension import GoalSnapshotReply
@@ -502,7 +503,7 @@ class ContextCoreSourceRuntimeRequest(ContextCoreRuntimeRequest):
 @dataclass(frozen=True, kw_only=True)
 class RecordedContextRuntimeRequest(ResultRuntimeRequest):
     turn: RecordedContextTurn
-    request_id: str
+    request_id: PiRequestKey
     record: ContextManifestReference
     segment: int
 

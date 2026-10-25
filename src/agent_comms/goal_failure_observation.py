@@ -13,7 +13,7 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Annotated
 
 from .turn_failure import TurnFailure
-from .field_codec import GoalId, TurnId
+from .field_codec import AttemptId, GoalId, TurnId
 from .goal_attempt_identity import GoalAttemptIdentity
 from .thread_identity import (
     ClaimedIdentity,
@@ -50,7 +50,7 @@ class NoFailedTurnEvidence(GoalFailureEvidence):
 
 @dataclass(frozen=True)
 class FailedTurnEvidence(GoalLedgerTable, TypedTable, GoalFailureEvidence):
-    attempt_id: Annotated[str, Column(primary_key=True)]
+    attempt_id: Annotated[AttemptId, Column(primary_key=True)]
     goal_id: GoalId
     generation: Annotated[int, Column(check="generation>0")]
     owner: str

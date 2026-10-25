@@ -1,6 +1,5 @@
 """New status text is bounded by activity; saved text is never repaired on read."""
 
-from agent_comms.pi_payloads import ReportedText
 import os
 from dataclasses import replace
 
@@ -8,17 +7,18 @@ import pytest
 
 from agent_comms.activity import Activity, ActivityState, ObservedActivity, ReadyDrainReadiness
 from agent_comms.child_process import ProcessIdentity
-from agent_comms.runtime_updates import ThreadOutput
-from agent_comms.external_transcript import ExternalTranscript
 from agent_comms.display_order import LastActivityThreadSort
+from agent_comms.external_transcript import ExternalTranscript
+from agent_comms.field_codec import FieldCodec, TurnId
+from agent_comms.native_tool_call import ToolCallId
+from agent_comms.pi_events import ToolExecutionStart
+from agent_comms.pi_payloads import CodelessProviderDiagnosticError, ReportedText
+from agent_comms.runtime_updates import ThreadOutput
+from agent_comms.thread_execution import ExternalThreadExecution
+from agent_comms.threads import Thread
+from agent_comms.turn_phase import FailedPhase, IdlePhase, ModelWaitPhase, ToolRunningPhase
 from agent_comms.ui_model.observation import ObserveSidebar, SidebarObserved
 from agent_comms.ui_model.sidebar import SidebarModel
-from agent_comms.field_codec import FieldCodec, TurnId
-from agent_comms.pi_events import ToolExecutionStart
-from agent_comms.thread_execution import ExternalThreadExecution
-from agent_comms.pi_payloads import CodelessProviderDiagnosticError
-from agent_comms.turn_phase import FailedPhase, IdlePhase, ModelWaitPhase, ToolRunningPhase
-from agent_comms.threads import Thread
 
 
 @pytest.mark.parametrize("length", [0, Activity.detail_limit - 1, Activity.detail_limit,
@@ -124,7 +124,7 @@ def test_native_and_cli_activity_publish_member_order_and_ignore_unchanged_phase
         external = observed()
         assert members(external) == (cli.name, native.name)
         assert not external.same_observation(started)
-        phase = ModelWaitPhase().tool_started("clock-tool", "Clock progress")
+        phase = ModelWaitPhase().tool_started(ToolCallId("clock-tool"), "Clock progress")
         comms.agents.observe_native_phase(lease, phase)
         progressed = observed()
         assert members(progressed) == (native.name, cli.name)

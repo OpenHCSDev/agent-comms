@@ -8,6 +8,7 @@ from contextlib import suppress
 from dataclasses import dataclass, replace
 from typing import TYPE_CHECKING, ClassVar
 
+from .attempt_resolution import RecordedResolution
 from .declared_family import DeclaredFamily
 from .errors import StaleAttemptError
 from .native_arguments import SelectedModel
@@ -60,7 +61,12 @@ class TurnFailure(DeclaredFamily):
     ) -> None:
         """A failed attempt blocks its goal until someone retries it."""
         with suppress(StaleAttemptError):
-            permit.reservation.fail(store, cls.declared_name, observation=observation)
+            permit.reservation.fail(store, FailedTurnResolution(cls), observation=observation)
+
+
+@dataclass(frozen=True)
+class FailedTurnResolution(RecordedResolution):
+    failure: type[TurnFailure]
 
 
 class InputIdUnavailable(TurnFailure):

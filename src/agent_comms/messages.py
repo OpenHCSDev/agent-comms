@@ -35,7 +35,7 @@ from .channel_targets import CommandTarget
 from .coordination_errors import IdentityConflict
 from .declared_family import DeclaredFamily
 from .envelope_claim_transitions import (
-    ClaimOwner, ClaimProjection, ClaimTransition, ClaimTransitionError, ResourceClaim,
+    ClaimOwner, ClaimProducer, ClaimProjection, ClaimTransition, ClaimTransitionError, ResourceClaim,
     UnclaimedResource,
 )
 from .errors import RelationViolationError
@@ -76,19 +76,25 @@ class BusProjectionTables(ProducedTable, SharedFileTables, DerivedTables, declar
     """Reverse lookups are derived from the record, in its append transaction."""
 
     @classmethod
-    def create_schema(
-        cls, db: sqlite3.Connection, rows: tuple[type[TypedTable], ...] | None = None,
+    def changed_rows(
+        cls, db: sqlite3.Connection, sharing: tuple[type[TypedTable], ...] = (),
+    ) -> tuple[type[TypedTable], ...]:
+        changed = set(super().changed_rows(db, sharing))
+        coupled = frozenset(row for row in cls.projection_rows() if row in ClaimTransition.writes)
+        if changed.intersection(coupled):
+            changed.update(coupled)
+        return tuple(row for row in cls.schema_rows() if row in changed)
+
+    @classmethod
+    def rebuild_rows(cls, db: sqlite3.Connection, rows: tuple[type[TypedTable], ...]) -> None:
+        """Rebuild from history after the schema creates the selected empty tables."""
+        ReplayedHolders(tables=frozenset(rows)).replay(db)
+
+    @classmethod
+    def replay(
+        cls, db: sqlite3.Connection, rows: tuple[type[TypedTable], ...], *, after: int,
     ) -> None:
-        """Create/rebuild rows from history using the append projection owner."""
-        selected = cls.schema_rows() if rows is None else rows
-        super().create_schema(db, selected)
-        projections = tuple(row for row in cls.projection_rows() if row in selected)
-        writers = {writer for row in projections for writer in ProjectionSource.writers_for(row)}
-        kinds = tuple(kind for kind in BusRecord.members_with(BusRecord) if kind in writers)
-        holders = ReplayedHolders(tables=frozenset(selected))
-        for record in BusCapability.history(db, kinds):
-            record.project_into(db, holders)
-        holders.flush(db)
+        StoredHolders(tables=frozenset(rows)).replay(db, after=after)
 
 
 @dataclass(frozen=True)
@@ -128,13 +134,8 @@ class ClaimOperations(BusProjectionTables):
 
 
 @dataclass(frozen=True)
-class HeldResources(BusProjectionTables):
+class HeldResources(ClaimProducer, BusProjectionTables):
     """Current membership references the canonical transition, never a copy."""
-
-    @ClassFact
-    def writes(cls) -> tuple[type[ProducedRow], ...]:
-        return (HeldResources, ClaimOperations)
-
 
     resource: Annotated[str, Column(primary_key=True)]
     claim_seq: int
@@ -193,15 +194,22 @@ class HeldResources(BusProjectionTables):
             raise RelationViolationError("Committed claim transition is inconsistent.") from error
 
 
+@dataclass
 class ProjectionPass(ABC, ProjectionSource):
-    """How one projection pass writes the rows its records derive: an append writes its
-    few rows at once."""
+    """A projection pass writes only its selected tables."""
+
+    tables: frozenset[type[TypedTable]] = field(
+        default_factory=lambda: frozenset(BusProjectionTables.schema_rows()))
 
     @ClassFact
     def writes(cls) -> tuple[type[ProducedRow], ...]:
         return BusProjectionTables.projection_rows()
 
     def write(self, db: sqlite3.Connection, row: TypedTable) -> None:
+        if type(row) in self.tables:
+            self.store(db, row)
+
+    def store(self, db: sqlite3.Connection, row: TypedTable) -> None:
         row.insert(db)
 
     def flush(self, db: sqlite3.Connection) -> None:
@@ -210,6 +218,20 @@ class ProjectionPass(ABC, ProjectionSource):
 
 class ClaimHolders(ProjectionPass):
     """The current holders a claim transition projects from, before it is applied."""
+
+    def replay(self, db: sqlite3.Connection, *, after: int = 0) -> None:
+        projections = tuple(row for row in BusProjectionTables.projection_rows()
+                            if row in self.tables)
+        writers = {writer for row in projections for writer in ProjectionSource.writers_for(row)}
+        kinds = tuple(kind for kind in BusRecord.members_with(BusRecord) if kind in writers)
+        for record in BusCapability.history(db, kinds, after=after):
+            record.project_into(db, self)
+        self.flush(db)
+
+    def project(self, db: sqlite3.Connection, transition: ClaimTransition) -> None:
+        if self.tables.intersection(ClaimTransition.writes):
+            projected = HeldResources.project(db, transition, self)
+            self.apply(db, transition, projected)
 
     @abstractmethod
     def before(self, db: sqlite3.Connection, transition: ClaimTransition) -> ClaimProjection: ...
@@ -248,8 +270,6 @@ class ReplayedHolders(ClaimHolders):
     transition projects from is validated again, as one ``ClaimProjection``.
     """
 
-    tables: frozenset[type[TypedTable]] = field(
-        default_factory=lambda: frozenset(BusProjectionTables.schema_rows()))
     last_seq: int = 0
     owners: dict[str, ClaimOwner] = field(default_factory=dict)
     operations: set[ClaimId] = field(default_factory=set)
@@ -257,10 +277,9 @@ class ReplayedHolders(ClaimHolders):
     """Derived rows by insert statement; nothing in the rebuild reads them back before
     ``flush``, which inserts each statement's rows with one ``executemany``."""
 
-    def write(self, db: sqlite3.Connection, row: TypedTable) -> None:
-        if type(row) in self.tables:
-            statement, values = row.insertion()
-            self.rows.setdefault(statement, []).append(values)
+    def store(self, db: sqlite3.Connection, row: TypedTable) -> None:
+        statement, values = row.insertion()
+        self.rows.setdefault(statement, []).append(values)
 
     def apply(
         self, db: sqlite3.Connection, transition: ClaimTransition, projected: ClaimProjection,
@@ -369,14 +388,15 @@ class BusCapability(TypedRow, ProjectionSource):
     @staticmethod
     def history(
         db: sqlite3.Connection, kinds: tuple[type[BusRecord], ...] | None = None,
+        *, after: int = 0,
     ) -> Iterator[BusCapability]:
-        """Every record in sequence order from one joined cursor, each stored row decoded once."""
+        """Records after one sequence, using the same joined cursor for full and tail replay."""
         tables = TypedTable.members_with(CapabilityRow)
         offsets = dict(zip(tables, accumulate(
             (len(BusRow.columns()), *(len(table.columns()) for table in tables)))))
         header = BusRow.qualified("seq")
         predicate, parameters = ("", ()) if kinds is None else (
-            f' WHERE {BusRow.qualified("kind")} IN ({", ".join("?" for _ in kinds)})',
+            f' AND {BusRow.qualified("kind")} IN ({", ".join("?" for _ in kinds)})',
             tuple(BusRow._fields_named(("kind",))[0].encode(kind) for kind in kinds),
         )
         with closing(db.execute(
@@ -384,7 +404,8 @@ class BusCapability(TypedRow, ProjectionSource):
             f'FROM "{BusRow.declared_name}" '
             + " ".join(f'LEFT JOIN "{table.declared_name}" ON {table.qualified("seq")} = {header}'
                        for table in tables)
-            + predicate + f" ORDER BY {header}", parameters,
+            + f" WHERE {header}>?" + predicate + f" ORDER BY {header}",
+            (after, *parameters),
         )) as cursor:
             for stored in cursor:
                 kind = BusRow.decode_at(stored, 0).kind
@@ -1065,13 +1086,8 @@ class PublicRecord(BusRecord):
 
 
 @dataclass(frozen=True, kw_only=True)
-class Claimed(BusCapability):
+class Claimed(ClaimProducer, BusCapability):
     """The transition attesting this row, stored in its append transaction."""
-
-    @ClassFact
-    def writes(cls) -> tuple[type[ProducedRow], ...]:
-        return (HeldResources, ClaimOperations)
-
 
     claim_transition: Annotated[ClaimTransition, WireOrder(11)]
 
@@ -1081,8 +1097,7 @@ class Claimed(BusCapability):
     def project_into(self, db: sqlite3.Connection, holders: ClaimHolders) -> None:
         """Append and the shared derived rebuild replay this same original transition."""
         super().project_into(db, holders)
-        projected = HeldResources.project(db, self.claim_transition, holders)
-        holders.apply(db, self.claim_transition, projected)
+        holders.project(db, self.claim_transition)
 
 
 @dataclass(frozen=True, kw_only=True)

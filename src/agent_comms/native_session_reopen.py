@@ -7,12 +7,14 @@ from .native_failures import NativePiUnavailable
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Annotated, TYPE_CHECKING
-from .field_codec import MalformedRecord, boundary_decoder, WireName
+from .field_codec import FieldCodec, MalformedRecord, NullMember, PresentMember, boundary_decoder, WireName
 from abc import ABC, abstractmethod
 from .private_path import FileRevision
+from .turn_item import FreshNativeId
 
 if TYPE_CHECKING:
     from .native_child import PiSessionChild
+    from .native_runtime_input import NativeRuntimeInput
     from .native_entries import NativeEvidenceRead
     from agent_comms.native_pi import NativeContextProof
     from .pi_native_backend import PersistentPiSession
@@ -20,6 +22,26 @@ if TYPE_CHECKING:
 
 class NativeReopenError(ValueError):
     """Saved session cannot be safely reloaded; no provider input may start."""
+
+
+class NativeSessionSelection:
+    """The selected-id declaration owns the saved-session answer for an input."""
+
+    def selected_session(self, row: NativeRuntimeInput) -> NativeSessionIdentity | NoSessionRetention:
+        FieldCodec.decode(type(None), row.session_file)
+        return NoSessionRetention()
+
+
+class PiSessionId(FreshNativeId, NativeSessionSelection):
+    """The Pi session manager's saved session identity."""
+
+    def selected_session(self, row: NativeRuntimeInput) -> NativeSessionIdentity:
+        return row.require_session_identity()
+
+
+@dataclass(frozen=True)
+class NoPiSessionId(NullMember, NativeSessionSelection):
+    """The original native input has not selected a saved session."""
 
 
 class SessionRetention(ABC):
@@ -34,16 +56,16 @@ class SessionRetention(ABC):
     def retain(self, child: PiSessionChild, session: PersistentPiSession) -> bool: ...
 
 
-class NoSessionRetention(SessionRetention):
+class NoSessionRetention(NullMember, SessionRetention):
     def retain(self, child: PiSessionChild, session: PersistentPiSession) -> bool:
         return False
 
 
 @dataclass(frozen=True)
-class NativeSessionIdentity(SessionRetention):
+class NativeSessionIdentity(PresentMember, SessionRetention):
     """SessionManager's observed saved-session identity."""
 
-    session_id: Annotated[str, WireName("sessionId")]
+    session_id: Annotated[PiSessionId, WireName("sessionId")]
     session_file: Annotated[str, WireName("sessionFile")]
 
     def __post_init__(self):
@@ -100,11 +122,10 @@ class NativeSessionIdentity(SessionRetention):
         """Derive selected identity from its recipient's already verified source."""
         file = evidence.source.path
         try:
-            header = evidence.header()
-            header.require_reopen()
+            session_id = evidence.header().require_reopen()
         except (MalformedRecord, NativePiUnavailable) as error:
             raise NativeReopenError("Saved native session identity cannot be read") from error
-        return cls(header.require_entry_id(), str(file))
+        return cls(session_id, str(file))
 
     @classmethod
     def locate(cls, session_file: str) -> NativeSessionIdentity:

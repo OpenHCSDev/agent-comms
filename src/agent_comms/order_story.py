@@ -7,6 +7,7 @@ from collections.abc import Iterable
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Self
 
+from .field_codec import OrderId
 from .recorded_time import EventTime
 from .tool_result import ToolResult
 
@@ -64,11 +65,11 @@ class ProblemStory:
 
 @dataclass(frozen=True)
 class OrderStory(ToolResult):
-    order_id: str
+    order_id: OrderId
     problems: tuple[ProblemStory, ...]
 
     @classmethod
-    def collect(cls, order_id: str, todos: Iterable[Todo]) -> Self:
+    def collect(cls, order_id: OrderId, todos: Iterable[Todo]) -> Self:
         """The requested declaration keeps its identity after its problems are reissued."""
         return cls(order_id, tuple(todo.story() for todo in todos))
 

@@ -36,7 +36,7 @@ from .commander.vibe_check import OverloadDegradation
 from .commander_hud import CommanderHud
 from .comms import Comms
 from .errors import ToolRefusedError
-from .field_codec import FieldCodec, MessageId, WireName
+from .field_codec import FieldCodec, MessageId, OrderId, WireName
 from .goal_actions import CreateProblemGoalAction, OrderGoalAction
 from .goals import Goal, OrderCheck
 from .heartbeat_frame import HeartbeatFrame
@@ -104,7 +104,7 @@ class ProblemClosed(ToolResult):
 class MessagePublished(ToolResult):
     """The Pi adapter decodes this reply as PublishedMessageToolDetails by its agentCommsKind."""
 
-    id: str
+    id: MessageId
     message: SentTranscript
     correction: CorrectionResult
     agent_comms_kind: Annotated[
@@ -398,7 +398,7 @@ class CommsOrderDeliverTool(PublishingToolRequest[ThreadCaller], ThreadToolReque
 class CommsOrderDoneTool(CommsTodoTool):
     label = "Check delivered order"
     description = "Verify and deliver an open order by its own ID; the unit's Goal is unchanged."
-    order_id: Annotated[str, *tool_field("Exact open order ID")]
+    order_id: Annotated[OrderId, *tool_field("Exact open order ID")]
     delivery: Annotated[
         OrderDelivery,
         *tool_field("A checked implementation delivery for fix, or a report for triage"),
@@ -522,7 +522,7 @@ class CommsOrderStoryTool(ReadTool, ToolRequest):
         "Send-back and its implied strike share one reason. "
         "Overwritten order bodies cannot be reconstructed."
     )
-    order_id: Annotated[str, *tool_field("Immutable order ID")]
+    order_id: Annotated[OrderId, *tool_field("Immutable order ID")]
 
     def apply(self, comms: Comms, caller: ToolCaller) -> OrderStory:
         return OrderStory.collect(self.order_id, comms.goals.todos.for_order(self.order_id))

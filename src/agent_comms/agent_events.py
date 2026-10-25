@@ -27,6 +27,8 @@ from .field_codec import InputId, NullMember, TurnId
 from .input_attempt import InputAttempt
 from .mro_dispatch import MroDispatch, handles
 from .native_failures import NativePiUnavailable
+from .native_tool_call import ToolCallId
+from .turn_item import UsageChargeId
 from .pi_counts import PiCount, UnreportedCount
 from .pi_payloads import McpLiveAcknowledgement, PiDiagnostic, PiRequestId, PiUsage
 from .pi_vocabulary import (
@@ -194,7 +196,7 @@ class ThinkingChanged(SettingChangeResult):
 
 @dataclass(frozen=True)
 class ToolEvent(AgentEvent):
-    id: str
+    id: ToolCallId
     name: str
 
 
@@ -205,7 +207,7 @@ class ToolStart(ToolEvent):
     kind: type[ToolAction] = OtherAction
 
     @classmethod
-    def from_call(cls, call_id: str, name: str, arguments: object) -> ToolStart:
+    def from_call(cls, call_id: ToolCallId, name: str, arguments: object) -> ToolStart:
         declaration = ToolDeclaration.for_name(name)
         title = ToolDeclaration.caption(name, ToolDeclaration.record(name, arguments, call_id=call_id))
         return cls(call_id, name, title, arguments, declaration.declared_action())
@@ -434,7 +436,7 @@ class AgentInfo(NativeMetadataObservation, ContextSizeObservation):
 
 @dataclass(frozen=True)
 class ProviderUsage(AgentEvent):
-    response_id: str
+    response_id: UsageChargeId
     usage: PiUsage
 
 

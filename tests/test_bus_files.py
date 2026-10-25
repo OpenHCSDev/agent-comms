@@ -1,28 +1,29 @@
 """The real bus publishes only files declared by their existing state owners."""
 
 
+import sqlite3
 from contextlib import closing
 from pathlib import Path
-import sqlite3
 
 import pytest
 
-from agent_comms.field_codec import ClaimId, GoalId, InputId, TurnId
-from agent_comms.installer.backup import bus_files
-from bus_record_fixture import prepare_native_comms
-from agent_comms.native_pi import NativeContextJournal
-from agent_comms.native_session_files import NativeInputProof
 from agent_comms.comms import Comms, wire
 from agent_comms.coordination_database import CoordinationStore
 from agent_comms.coordination_session import NativeBoundary
 from agent_comms.envelope_claim_transitions import ExistingFileClaim, NativeClaim
-from agent_comms.locked_store import DeclaredFile, DurableFile, RootFile, RuntimeFile, SQLiteFile
+from agent_comms.field_codec import ClaimId, GoalId, InputId, TurnId
+from agent_comms.installer.backup import bus_files
+from agent_comms.locked_store import DeclaredFile, DurableFile, LiveFilesRequest, RootFile, RuntimeFile, SQLiteFile
+from agent_comms.native_pi import NativeContextJournal
+from agent_comms.native_session_files import NativeInputProof
 from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.repository_name import RepositoryName
-from agent_comms.todos import TodoStore
-from agent_comms.typed_table import ReconciledFile
-from test_todos import order
 from agent_comms.threads import Thread
+from agent_comms.todos import TodoStore
+from agent_comms.native_session_reopen import PiSessionId
+from agent_comms.typed_table import ReconciledFile
+from bus_record_fixture import prepare_native_comms
+from test_todos import order
 
 
 @pytest.fixture
@@ -37,10 +38,11 @@ def test_published_change_signal_is_not_a_bus_resource(tmp_path: Path) -> None:
         pass
     CoordinationStore.publish_change(path)
 
-    resources = bus_files(tmp_path)
+    resources = bus_files(LiveFilesRequest(tmp_path))
     paths = {resource.path for resource in resources}
     assert path.relative_to(tmp_path) in paths
-    assert Path("coordination.changed") not in paths
+    assert all(marker.relative_to(tmp_path) not in paths
+               for marker in CoordinationStore.source_paths(tmp_path))
 
 
 def test_every_bus_file_is_a_declared_root_file(tmp_path: Path, source_repository, comms: Comms) -> None:
@@ -93,14 +95,14 @@ def test_parameterized_sqlite_resources_follow_their_file_owner(tmp_path: Path, 
             db.execute(statement)
         db.commit()
         NativeContextJournal(
-            input_id=InputId.mint(), session_id="session", session_entry_id="entry",
+            input_id=InputId.mint(), session_id=PiSessionId("session"), session_entry_id="entry",
             request_generation=1, llm_context_digest="c" * 64,
             committed_at_ms=1_791_964_800_001, schema=2, type="context_committed",
         ).insert(db)
         actual = {path for path in tmp_path.rglob("*") if path.is_file()}
         assert len(actual) > 1  # The real SQLite writer has an open journal/WAL.
         assert actual <= NativeInputProof.files_in(tmp_path)
-        assert DeclaredFile(NativeInputProof, proof.relative_to(tmp_path)) in bus_files(tmp_path)
+        assert DeclaredFile(NativeInputProof, proof.relative_to(tmp_path)) in bus_files(LiveFilesRequest(tmp_path))
 
 
 def test_installer_reconciles_a_native_proof_journal_onto_its_declaration(tmp_path: Path) -> None:
@@ -110,7 +112,7 @@ def test_installer_reconciles_a_native_proof_journal_onto_its_declaration(tmp_pa
         for statement in NativeContextJournal.schema_objects().values():
             db.execute(statement)
         NativeContextJournal(
-            input_id=InputId.mint(), session_id="session", session_entry_id="entry",
+            input_id=InputId.mint(), session_id=PiSessionId("session"), session_entry_id="entry",
             request_generation=1, llm_context_digest="c" * 64,
             committed_at_ms=1_791_964_800_001, schema=2, type="context_committed",
         ).insert(db)

@@ -53,6 +53,41 @@ def beat(comms, rules=(), *, states=()):
     CommanderHeartbeat().pass_body(comms, (frame,))
 
 
+def test_frame_puts_hands_first_and_folds_finished_phases_per_plan(notification_bus):
+    """Ready and done-but-held phases lead; finished phases are one count per plan."""
+    from agent_comms.commander.vibe_check import OverloadDegradation
+    from agent_comms.commander_hud import CommanderPhase
+    from agent_comms.plan_phases import (
+        DesignReconciledPhase, OneOrderOwnerPhase, RecordPlanePhase, RetainedStorePhase,
+        ReviewQueuePhase,
+    )
+
+    comms = notification_bus
+    lead = comms.registry.require("lead").incarnation
+    worker = comms.registry.require("worker").incarnation
+    hud = CommanderHud(lead, (), (
+        CommanderPhase(RetainedStorePhase, True, False, ()),
+        CommanderPhase(OneOrderOwnerPhase, True, False, ()),
+        CommanderPhase(DesignReconciledPhase, False, False, (worker,)),
+        CommanderPhase(RecordPlanePhase, False, True, ()),
+        CommanderPhase(ReviewQueuePhase, True, False, (worker,)),
+    ), OverloadDegradation.from_orders((), 0, 0), (worker,))
+    assert hud.frame == (
+        str(hud.load),
+        "commander_native/record_plane done=False ready=True holders=",
+        "commander_native/review_queue done=True ready=False holders=worker",
+        "commander_native/design_reconciled done=False ready=False holders=worker",
+        "forks: worker",
+        "commander_native: 2 phases done",
+    )
+
+
+def test_a_registered_commander_fork_is_on_the_hud(notification_bus):
+    comms = notification_bus
+    fork = comms.registry.register_commander_child("judge-fork", "lead", comms.goals)
+    assert fork.incarnation in lead_hud(comms).forks
+
+
 def test_quiet_completion_is_per_commander_even_when_a_later_recipient_fails(notification_bus):
     comms = notification_bus
     lead = comms.registry.require("lead")
@@ -114,16 +149,16 @@ def test_overdue_head_refusal_is_published_and_later_rule_still_runs(notificatio
         ServicePassStore.at(comms.root).read().commander_completed)
 
 
-def test_rule_packets_lead_with_five_and_publish_all_current_occurrences(notification_bus):
+def test_rule_packets_list_every_new_line_and_never_restate_one(notification_bus):
     comms = notification_bus
     rules = tuple(ServicePassFailing(f"watch-{index}", 1.0, "failed source read")
                   for index in range(7))
     beat(comms, rules)
     first, = notifications(comms)
     assert isinstance(first.task, CommanderDecisions)
-    assert len(first.task.decisions) == 5
-    assert set(first.task.handled) == (
-        {RulePing.capture(rule) for rule in rules} | set(lead_hud(comms).pings()))
+    assert set(first.task.decisions) == set(first.task.handled) == {
+        RulePing.capture(rule) for rule in rules}
+    assert first.body.splitlines() == [f"{rule.line()} (0 min)" for rule in rules]
     beat(comms, rules)
     assert len(notifications(comms)) == 1
     # Changed diagnostic wording is not another failed occurrence.
@@ -143,6 +178,9 @@ def test_resolution_is_passive_and_same_rule_can_recur(notification_bus):
     _, quiet = notifications(comms)
     assert isinstance(quiet.task, CommanderNotice)
     assert all(isinstance(decision.wake_mode, PassiveWake) for decision in quiet.decisions)
+    # Nothing new and nothing cleared sends nothing.
+    beat(comms, ServicePassFailing.violations(comms, "lead"))
+    assert len(notifications(comms)) == 2
     # Use the same source occurrence to prove it was retired, not merely hidden.
     beat(comms, rules)
     _, _, repeated = notifications(comms)
@@ -151,7 +189,7 @@ def test_resolution_is_passive_and_same_rule_can_recur(notification_bus):
 
 def test_latest_observation_follows_commander_and_service_rename_aliases(notification_bus):
     comms = notification_bus
-    beat(comms)
+    beat(comms, (ServicePassFailing("watch", 1.0, "failed source read"),))
     first, = notifications(comms)
     comms.threads._rename_thread("lead", "renamed-lead")
     comms.threads._rename_thread(CommanderHeartbeat.sender, "renamed-heartbeat")
@@ -171,8 +209,7 @@ def test_new_local_commit_on_an_unpushed_branch_is_not_a_resolution(notification
     assert RulePing.capture(first) == RulePing.capture(moved)
     beat(comms, (first,))
     beat(comms, (moved,))
-    announced, = notifications(comms)
-    assert "NO LONGER CURRENT" not in announced.body
+    assert len(notifications(comms)) == 1
 
 
 def test_commander_page_reads_each_beats_frame_and_nothing_between(notification_bus):

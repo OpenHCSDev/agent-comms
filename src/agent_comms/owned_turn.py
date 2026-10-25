@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, NoReturn
 
 
-from acp.exceptions import RequestError
+from .coordination_errors import Refused
 
 from agent_comms.following_inputs import OwnerFollowingInputs
 from agent_comms.goal_turn_permit import GoalTurnPermit, NoLaunchPermit
@@ -24,7 +24,7 @@ from .agent_backend import InputContent, TurnDelivery
 from .channel_input_batch import InputBatch
 from .coordination_errors import CoordinationError
 from .coordinator import Coordination
-from .field_codec import TurnId, GoalId
+from .field_codec import GoalId, TurnId
 from .goals import Goal
 from .image_input import ImageInput
 from .input_attempt import ReservedInput
@@ -33,18 +33,17 @@ from .messages import Message
 from .native_failures import NativeRequestFailure
 from .native_input_owner import RegistryOwner
 from .owned_send import OwnedSend
-from .routing import MessageRoute, ScheduledTurn, TurnRouting
+from .routing import MessageRoute, NoMessageRoute, ScheduledTurn, TurnRouting
+from .transcript_routes import DisplayText, NoDisplayText
 from .turn_goal_account import TurnGoalAccount
 from .turn_goal_permission import (
     OwnerGoalPermission,
     TurnGoalPermission,
 )
 from .turn_input_source import (
-    CapturedInputDependency,
-    DependencyOriginalInput,
+    InputDependency,
     NoInputDependency,
     OwnerOriginalInput,
-    RoutedOriginalInput,
     ScheduledOriginalInput,
     TurnAcceptance,
 )
@@ -98,7 +97,7 @@ class OwnedTurn:
         original_owner_input: bool = False,
         original_goal_id: GoalId | None = None,
         acceptance: TurnAcceptance,
-        dependency_wait_id: str | None = None,
+        dependency: InputDependency = NoInputDependency(),
     ) -> None:
         self.runner = runner
         self.session_id = session_id
@@ -112,12 +111,12 @@ class OwnedTurn:
         self.original_owner_input = original_owner_input
         self.original_goal_id = original_goal_id
         self.acceptance = acceptance
-        self.dependency_wait_id = dependency_wait_id
+        self.dependency = dependency
         self.terminal: TurnTerminal = EndedWithoutResult()
 
     def authorize(self):
         self.original_display = (
-            None if self.autonomous_goal else (self.initial_display_text or self.task)
+            NoDisplayText() if self.autonomous_goal else DisplayText(self.initial_display_text or self.task)
         )
         self.registry_owner = RegistryOwner.capture_local(
             self.runner.comms.registry.snapshot(), self.thread_name
@@ -125,15 +124,12 @@ class OwnedTurn:
         self.thread_name = self.thread.name
         wait = self.runner.comms.goals.goal_wait(self.thread_name)
         active_goal = self.thread.goal.active()
-        if self.dependency_wait_id is not None:
-            if not wait.matches_id(self.dependency_wait_id):
-                return
-        elif not wait.allows_routed_input() and not self.original_owner_input:
+        if not self.dependency.authorizes(wait, self.original_owner_input):
             return
         if self.original_owner_input and self.original_goal_id != (
             active_goal.reported_id()
         ):
-            raise RequestError.invalid_params({"reason": "input_authority_changed"})
+            raise Refused.invalid_params({"reason": "input_authority_changed"})
         self.goal_permit: GoalTurnPermit = NoLaunchPermit()
         return True
 
@@ -141,7 +137,7 @@ class OwnedTurn:
         self.turn_id = TurnId.mint()
         self.routing = TurnRouting(
             tuple(origin.reference for origin in self.origins),
-            MessageRoute(self.thread_name, self.reply_targets) if self.reply_targets else None,
+            MessageRoute(self.thread_name, self.reply_targets) if self.reply_targets else NoMessageRoute(),
         )
         self.checkpoint = self.runner.comms.transcripts.transcript_checkpoint(self.thread_name)
         self.input_cleanup = AsyncExitStack()
@@ -218,10 +214,10 @@ class OwnedTurn:
         )
         from .turn_context import (
             AutomaticTitleSegment,
-            OwnerProvenance,
             RecordedContextTurn,
             ReplyRouteSegment,
             TurnContext,
+            TurnProvenance,
         )
 
         self.relations = self.runner.comms.relationships.context_relations(self.thread.name)
@@ -238,11 +234,11 @@ class OwnedTurn:
         self.context = self.goal_permit.add_context(self.context, self.thread, self.runner.comms.goals)
         if self.thread.auto_title_pending:
             self.context = self.context.prepend(AutomaticTitleSegment.capture(
-                (OwnerProvenance(self.thread.incarnation, self.turn_id),)))
+                (TurnProvenance(self.thread.incarnation, self.turn_id),)))
         response_targets = batch.native_reply_targets or self.reply_targets
         if response_targets:
             self.context = self.context.prepend(ReplyRouteSegment.capture(
-                (OwnerProvenance(self.thread.incarnation, self.turn_id),), targets=response_targets))
+                (TurnProvenance(self.thread.incarnation, self.turn_id),), targets=response_targets))
 
     def reserve_input(self, batch: InputBatch):
         """Acquire the original durable input before opening loop capabilities."""
@@ -255,21 +251,15 @@ class OwnedTurn:
             source_type = OwnerOriginalInput
         elif not self.origins:
             source_type = ScheduledOriginalInput
-        elif self.dependency_wait_id is not None:
-            source_type = DependencyOriginalInput
         else:
-            source_type = RoutedOriginalInput
+            source_type = self.dependency.original_type()
         original = source_type(
             acceptance=self.acceptance,
             goal_permission=TurnGoalPermission(permission),
             prompt=self.context.render().text,
             original_display=self.original_display,
             origins=self.origins,
-            dependency=(
-                CapturedInputDependency(self.dependency_wait_id)
-                if self.dependency_wait_id is not None
-                else NoInputDependency()
-            ),
+            dependency=self.dependency,
             batch=batch,
         )
         with ExitStack() as reservation:
@@ -425,7 +415,7 @@ class OwnedTurn:
             state = await Coordination.run_worker(self.settle_unbound)
             await self.progress.consumer.dispatch(events.PromptCancelled(state))
             raise
-        except (NativeRequestFailure, RequestError) as error:
+        except (NativeRequestFailure, Refused) as error:
             await self.fail(error, error, BackendFailed)
         except CoordinationError as error:
             await self.fail(error, error, CoordinationRefused)

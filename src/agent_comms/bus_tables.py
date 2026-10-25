@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Annotated
 
 from agent_comms import messages
+from agent_comms.errors import RelationViolationError
 from agent_comms.field_codec import FieldCodec, ThreadLookup
 from agent_comms.message_reference import MessageReference
 from agent_comms.typed_table import (
@@ -96,6 +97,15 @@ class DirectReplySource(AwaitingAnswerSource, declared_name=None):
 @dataclass(frozen=True)
 class MessageIdentitySource(MessageReference, messages.BusProjectionTables):
     """A record's existing reference, searchable without recomputing its content hash."""
+
+    @classmethod
+    def practice_sequence(cls, db: sqlite3.Connection, source: sqlite3.Connection) -> int:
+        through = messages.BusRow.last_seq(source)
+        if through:
+            expected = cls.require(source, seq=through)
+            if cls.require(db, seq=through) != expected:
+                raise RelationViolationError("Practice bus identity differs at its last sequence")
+        return through
 
     sender: str
     indexes = (

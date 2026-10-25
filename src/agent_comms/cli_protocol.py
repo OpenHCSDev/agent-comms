@@ -29,7 +29,7 @@ from typing_extensions import TypeForm
 from .coordination_errors import CommandFailure, CoordinationReadUnavailable
 from .declared_family import DeclaredFamily, UnknownFamilyMember
 from .external_transcript import RequestedEarlierPage
-from .field_codec import FieldCodec, TimestampText
+from .field_codec import TimestampText
 from .maintenance_barrier import MaintenanceHeldError
 from .messages import Message
 from .recorded_time import UnrecordedTimeError
@@ -256,11 +256,7 @@ class ArrivedMessage(WatchLine, declared_name="message"):
 class EarlierItems(WatchLine, TurnItem, declared_name="earlier-items"):
     """The pager's outstanding continuation, handled only by its socket-owning bridge."""
 
-    turn_id: Annotated[
-        NativeTurnId,
-        PlainValidator(partial(FieldCodec.decode, NativeTurnId)),
-        PlainSerializer(str),
-    ]
+    turn_id: NativeTurnId
     request: RequestedEarlierPage
 
     @classmethod

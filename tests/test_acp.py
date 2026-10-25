@@ -32,6 +32,7 @@ from agent_comms.child_process import ProcessIdentity
 from agent_comms.comms import wire
 from agent_comms.context_reading import ContextUsage, UnmeasuredContext
 from agent_comms.errors import UnregisteredThreadError
+from agent_comms.coordination_errors import Refused
 from agent_comms.field_codec import TurnId
 from agent_comms.native_arguments import GivenArguments
 from agent_comms.pi_counts import PiCount
@@ -51,6 +52,21 @@ def native_stdio_root(native_runtime_package):
         pytest.skip("Requires existing prepared native package; no provider request")
     with tempfile.TemporaryDirectory(prefix="l0b-stdio-", dir="/var/tmp") as directory:
         yield Path(directory)
+
+
+@pytest.mark.parametrize("refusal", [
+    Refused.invalid_params({"reason": "goal_attempt_unavailable", "details": "Use Retry."}),
+    Refused.method_not_found("session/close"),
+    Refused(Refused.INTERNAL_ERROR, "Nothing to compact.", {"reason": "nothing_to_compact"}),
+])
+def test_core_refusal_gets_protocol_form_at_acp_boundary(refusal):
+    with pytest.raises(RequestError) as caught:
+        with CommsAgent.refusals():
+            raise refusal
+    assert (caught.value.code, str(caught.value), caught.value.data) == (
+        refusal.code, refusal.message, refusal.data,
+    )
+    assert caught.value.__cause__ is refusal
 
 
 class TestHandlers:
@@ -473,14 +489,14 @@ class TestActivityLayer:
     def test_activity_persistence(self, tmp_path):
         from agent_comms.activity import Activity, ActivityStore
 
-        store = ActivityStore.at(tmp_path)
+        store = ActivityStore(tmp_path)
         store.emit(Activity(thread="a", state=ActivityState.WORKING, detail="bash"))
-        assert ActivityStore.at(tmp_path).current("a").detail == "bash"
+        assert ActivityStore(tmp_path).current("a").detail == "bash"
 
     def test_all_current_latest_per_thread(self, tmp_path):
         from agent_comms.activity import Activity, ActivityStore
 
-        store = ActivityStore.at(tmp_path)
+        store = ActivityStore(tmp_path)
         store.emit(Activity(thread="a", state=ActivityState.THINKING))
         store.emit(Activity(thread="a", state=ActivityState.WORKING, detail="bash"))
         store.emit(Activity(thread="b", state=ActivityState.THINKING))

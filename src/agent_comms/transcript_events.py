@@ -16,11 +16,12 @@ from .declared_family import DeclaredFamily
 from .field_codec import FieldCodec, InputId, NullMember, PresentMember, WireBind, WireOmitDefault
 from .message_reference import MessageReference
 from .messages import Message
+from .native_tool_call import ToolCallId
 from .recorded_time import EventTime, UnrecordedEventTime
-from .routing import MessageRoute, TurnRouting
+from .routing import MessageRoute, NoTurnRouting, Routing, TurnRouting
 from .tool_results import SENT_MESSAGE_MIME, NoSentMessage, NoToolDiff, ToolDiff, ToolText
 from .transcript_merge import EventMerge, StreamingMerge
-from .turn_item import NativeTurnId
+from .turn_item import NativeItemId, NativeTurnId
 from .ui_model.message_category import (
     AgentCategory,
     InboundCategory,
@@ -108,7 +109,7 @@ class ImportedReply(ImportedMessage):
 @dataclass(frozen=True, kw_only=True)
 class TranscriptEvent(EventMerge, DeclaredFamily, affix="Transcript"):
     category: ClassVar[type[MessageCategory]]
-    position: int | str
+    position: int | NativeItemId
     timestamp: float
     routing = None
     source = None
@@ -150,7 +151,7 @@ class TranscriptEvent(EventMerge, DeclaredFamily, affix="Transcript"):
     def import_to(self, accept: Callable[[ImportedMessage], None]) -> None:
         """Non-conversation events produce no portable message."""
 
-    def record_call(self, calls: dict[str, OrderCall], since: float) -> None:
+    def record_call(self, calls: dict[ToolCallId, OrderCall], since: float) -> None:
         """Only tool events change a unit's calls."""
 
     def edit_calls(self, thread: str, problem: str, since: float) -> tuple[tool_declaration.EditCall, ...]:
@@ -182,7 +183,7 @@ class TranscriptCoverage:
 
 @dataclass(frozen=True, kw_only=True)
 class RecordedTranscript(TranscriptEvent):
-    routing: TurnRouting | None = None
+    routing: Routing = NoTurnRouting()
     source: MessageReference | None = None
 
 
@@ -220,7 +221,7 @@ class OutgoingRoute:
 
     @property
     def routed(self) -> bool:
-        return self.routing is not None and self.routing.reply is not None
+        return self.routing.outgoing
 
 
 class AgentTextTranscript(OutgoingRoute, LiveTextTranscript):
@@ -299,7 +300,7 @@ class UserTranscript(NativeTextTranscript):
 
     @property
     def routed(self) -> bool:
-        return self.routing is not None and bool(self.routing.requests)
+        return self.routing.incoming
 
     def import_to(self, accept: Callable[[ImportedMessage], None]) -> None:
         ImportedRequest(self.text).import_to(accept)
@@ -315,7 +316,7 @@ class UserTranscript(NativeTextTranscript):
         remaining = tuple(reference for reference in requests if reference not in originals)
         if not remaining:
             return ()
-        return (replace(self, routing=TurnRouting(remaining, self.routing.reply)),)
+        return (replace(self, routing=self.routing.with_requests(remaining)),)
 
 
 class AssistantTranscript(AgentTextTranscript):
@@ -338,7 +339,7 @@ class AssistantTranscript(AgentTextTranscript):
         return replace(self, routing=TurnRouting(publications=publications))
 
     def for_external_source(self, source: TranscriptSource) -> tuple[TranscriptEvent, ...]:
-        references = self.routing.publications if self.routing is not None else ()
+        references = self.routing.publications
         published = bool(references) and source.sent_messages(references).keys() >= set(references)
         return self.for_assigned_source(source, published)
 
@@ -426,7 +427,7 @@ class ContextTranscript(SilentTranscript, NativeTextTranscript):
 @dataclass(frozen=True, kw_only=True)
 class ToolTranscript(SilentTranscript, RecordedTranscript):
     category = ToolCategory
-    tool_call_id: str
+    tool_call_id: ToolCallId
     tool_name: str
 
     @property
@@ -457,7 +458,7 @@ class ToolStartTranscript(ToolTranscript):
     def title(self) -> str:
         return tool_declaration.ToolDeclaration.caption(self.tool_name, self.tool)
 
-    def record_call(self, calls: dict[str, OrderCall], since: float) -> None:
+    def record_call(self, calls: dict[ToolCallId, OrderCall], since: float) -> None:
         """A call recorded before ``since`` is not work since then."""
         if not self.before(since):
             digest = self.tool.call_digest(self.tool_name, self.raw_input)
@@ -484,7 +485,7 @@ class ToolEndTranscript(ToolTranscript):
     def text_size(self) -> int:
         return len(self.text)
 
-    def record_call(self, calls: dict[str, OrderCall], since: float) -> None:
+    def record_call(self, calls: dict[ToolCallId, OrderCall], since: float) -> None:
         if self.tool_call_id in calls:
             calls[self.tool_call_id] = replace(
                 calls[self.tool_call_id], state=SucceededCallState if self.ok else FailedCallState)
@@ -519,7 +520,7 @@ class FailedCallState(CallState):
 
 @dataclass(frozen=True)
 class OrderCall:
-    tool_call_id: str
+    tool_call_id: ToolCallId
     tool_name: str
     digest: str
     state: type[CallState]

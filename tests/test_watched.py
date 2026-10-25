@@ -10,7 +10,7 @@ from pathlib import Path
 
 import pytest
 
-from agent_comms.field_codec import GoalId
+from agent_comms.field_codec import GoalId, GoalWaitId
 from agent_comms.bus import Bus, PublicRecord
 from agent_comms.comms import wire
 from agent_comms.goal_attempts import Generation, GoalAttemptStore, StorageUncertainError
@@ -42,7 +42,7 @@ def recorded_wait(watched_bus):
     watched_goal_id = GoalId.mint()
     _, comms = watched_bus
     return RecordedGoalWait(
-        goal_id=watched_goal_id, wait_id="watched-wait", revision=0, after_seq=0,
+        goal_id=watched_goal_id, wait_id=GoalWaitId.mint(), revision=0, after_seq=0,
         targets=(GoalWaitTarget(comms.registry.require("peer").incarnation.require_recorded()),),
         owner=comms.registry.require("owner").incarnation.require_recorded(),
         target_turn_generations=(None,), report_turn_id=None, report_turn_generation=None,
@@ -52,7 +52,9 @@ def recorded_wait(watched_bus):
 def test_sqlite_wake_owners_resolve_the_commit_source_through_mro(watched_bus):
     bus, comms = watched_bus
     for owner in (Bus, GoalWaits):
-        assert owner.source_paths(comms.root) == (owner.path_in(comms.root).with_suffix(".changed"),), owner.__mro__
+        marker, = owner.source_paths(comms.root)
+        assert marker.parent != owner.path_in(comms.root).parent
+        assert marker in owner.transient_paths(owner.path_in(comms.root))
     assert RegistryFile.source_paths(comms.root) == (RegistryFile.path_in(comms.root),)
 
 
@@ -72,7 +74,7 @@ async def test_bus_append_wakes_after_each_committed_message(watched_bus):
 
 async def test_goal_wait_record_wakes_after_each_commit(watched_bus, recorded_wait):
     bus, comms = watched_bus
-    waits = GoalWaits(GoalWaits.path_in(comms.root))
+    waits = GoalWaits(comms.root)
     async with aclosing(bus.watch()) as observations:
         await anext(observations)
         for revision in (0, 1):
@@ -83,7 +85,7 @@ async def test_goal_wait_record_wakes_after_each_commit(watched_bus, recorded_wa
 
 async def test_goal_wait_read_and_bus_database_alone_do_not_wake(watched_bus, recorded_wait):
     bus, comms = watched_bus
-    waits = GoalWaits(GoalWaits.path_in(comms.root))
+    waits = GoalWaits(comms.root)
     waits.record(recorded_wait)
     bus.append(lambda seq, db: PublicRecord.from_message(Message("peer", "owner", "seed", InfoKind, seq=seq)))
     async with aclosing(bus.watch()) as observations:

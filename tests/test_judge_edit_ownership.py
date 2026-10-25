@@ -8,7 +8,8 @@ import pytest
 from test_judge_dropped import recorded_edit, unjudged
 from test_todos import order
 
-from agent_comms.field_codec import GoalId
+from agent_comms.field_codec import GoalId, OrderId
+from agent_comms.native_tool_call import ToolCallId
 from agent_comms.goal_actions import SetGoalAction
 from agent_comms.goals import ProblemGoalOrder
 from agent_comms.recorded_time import RecordedEventTime
@@ -33,7 +34,7 @@ def two_orders(held_commander, cited_source):
         assigner=lead.incarnation, owner=worker, generation=GoalId.mint(),
         request=NewestOpenRequest().for_order(ctx.comms.goals.todos, lead.incarnation),
         review_at=RecordedEventTime(time.time() + 1000),
-        order=replace(order(cited_source), id="second-order", at=RecordedEventTime(20.0)),
+        order=replace(order(cited_source), id=OrderId.mint(), at=RecordedEventTime(20.0)),
     )
     rule = StorageRule.load(ctx.root)
     checkout = {problem: rule.problem_checkouts(rule.roots_of(worker), problem)[0]
@@ -43,23 +44,23 @@ def two_orders(held_commander, cited_source):
 
 def test_an_edit_belongs_to_the_order_whose_checkout_it_is_in(two_orders):
     ctx, checkout = two_orders
-    recorded_edit(ctx, "p1-call", str(checkout["P1"] / "one.py"), "ONE = 'first problem'")
-    recorded_edit(ctx, "p2-call", str(checkout["P2"] / "two.py"), "TWO = 'second problem'")
-    recorded_edit(ctx, "scratch-call", str(ctx.root / "scratch" / "notes.md"), "notes for the PR")
+    recorded_edit(ctx, ToolCallId("p1-call"), str(checkout["P1"] / "one.py"), "ONE = 'first problem'")
+    recorded_edit(ctx, ToolCallId("p2-call"), str(checkout["P2"] / "two.py"), "TWO = 'second problem'")
+    recorded_edit(ctx, ToolCallId("scratch-call"), str(ctx.root / "scratch" / "notes.md"), "notes for the PR")
     filed = [(edit.id, edit.problem) for edit in unjudged(ctx).values()]
     assert sorted(filed) == [("p1-call", "P1"), ("p2-call", "P2"), ("scratch-call", "P2")]
 
 
 def test_a_send_back_leaves_the_edits_it_does_not_name_unjudged(two_orders):
     ctx, checkout = two_orders
-    recorded_edit(ctx, "early-call", str(checkout["P1"] / "early.py"), "EARLY = 'not cited'")
-    recorded_edit(ctx, "sent-call", str(checkout["P1"] / "sent.py"), "SENT = 'cited'")
+    recorded_edit(ctx, ToolCallId("early-call"), str(checkout["P1"] / "early.py"), "EARLY = 'not cited'")
+    recorded_edit(ctx, ToolCallId("sent-call"), str(checkout["P1"] / "sent.py"), "SENT = 'cited'")
     current = ctx.comms.goals.todos.get("P1")
     ctx.comms.goals.update_goal("worker", SetGoalAction(
         text=ProblemGoalOrder.text, order=ProblemGoalOrder(), goal_id=current.held().generation))
     lead = ctx.comms.registry.require(ctx.commander).incarnation
     reissued = ThreadCaller(ctx.commander).invoke(CommsVerdictTool(problem="P1", operation=SendBackVerdict(
-        current.revision, lead, current.held(), "sent-call",
+        current.revision, lead, current.held(), ToolCallId("sent-call"),
         reason=StrikeReason("The worker restated the owner's decision in a second copied branch."),
         evidence=(current.order.checked().owner,))), ctx.comms).todo
     assert reissued.order.id != current.order.id
@@ -68,11 +69,11 @@ def test_a_send_back_leaves_the_edits_it_does_not_name_unjudged(two_orders):
 
 def test_a_second_verdict_on_one_edit_is_refused(two_orders):
     ctx, checkout = two_orders
-    recorded_edit(ctx, "judged-call", str(checkout["P1"] / "judged.py"), "JUDGED = 'once'")
+    recorded_edit(ctx, ToolCallId("judged-call"), str(checkout["P1"] / "judged.py"), "JUDGED = 'once'")
     store = ctx.comms.goals.todos
     lead = ctx.comms.registry.require(ctx.commander).incarnation
     current = store.get("P1")
-    verdict = AcceptedVerdict(current.revision, lead, current.held(), "judged-call",
+    verdict = AcceptedVerdict(current.revision, lead, current.held(), ToolCallId("judged-call"),
                               quote="Report the delivered commit")
     judged = store.apply("P1", verdict)
     with pytest.raises(TodoError, match="already has a verdict"):

@@ -152,6 +152,13 @@ def test_publication_intent_joins_original_sender_and_target_only(tmp_path):  # 
     intent = TurnRouting((initial.message.reference,), MessageRoute("beta", ("sender", "alpha")))
     # A later send can fail; this first committed subset stays a valid relation.
     intent.require_publications(original, lookup)
+    absent = TurnRouting()
+    assert not absent.outgoing
+    assert FieldCodec.encode(absent)["reply"] is None
+    assert TurnRouting.from_wire(absent.to_wire()) == absent
+    absent.require_publications((), lookup)
+    with pytest.raises(RelationViolationError):
+        absent.require_publications(original, lookup)
     reference_only = FieldCodec.encode(intent)["requests"]
     assert reference_only == [FieldCodec.encode(initial.message.reference)]
     assert TurnRouting.from_wire(intent.to_wire()) == intent

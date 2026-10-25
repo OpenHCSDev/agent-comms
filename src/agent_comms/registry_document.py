@@ -14,6 +14,7 @@ from typing import TYPE_CHECKING, Literal, Annotated, Self
 from pydantic import JsonValue
 
 
+from .activity import ActivityCapture
 from .child_process import ProcessIdentity
 from .declared_family import DeclaredFamily
 from .errors import RelationViolationError, UnregisteredThreadError
@@ -530,7 +531,7 @@ class CommanderProject(DeclaredFamily, affix="CommanderProject"):
     def commanders(self, snapshot: RegistrySnapshot) -> tuple[Thread, ...]: ...
 
     @abstractmethod
-    def repository_names(self) -> tuple[RepositoryName, ...]: ...
+    def repository_names(self, name: str = "") -> tuple[RepositoryName, ...]: ...
 
     @abstractmethod
     def require(self) -> RegisteredCommanderProject: ...
@@ -553,7 +554,7 @@ class NoCommanderProject(CommanderProject):
     def commanders(self, snapshot: RegistrySnapshot) -> tuple[Thread, ...]:
         return ()
 
-    def repository_names(self) -> tuple[RepositoryName, ...]:
+    def repository_names(self, name: str = "") -> tuple[RepositoryName, ...]:
         return ()
 
     def require(self) -> RegisteredCommanderProject:
@@ -579,9 +580,9 @@ class RegisteredCommanderProject(CommanderProject):
             raise RelationViolationError("The registered commander thread no longer exists.")
         return selected
 
-    def repository_names(self) -> tuple[RepositoryName, ...]:
-        """Each GitHub repository once, however many registered checkouts point at it."""
-        return tuple(dict.fromkeys(repo.github for repo in self.repos))
+    def repository_names(self, name: str = "") -> tuple[RepositoryName, ...]:
+        """Each selected GitHub repository once, however many checkouts point at it."""
+        return tuple(dict.fromkeys(repo.github for repo in Repo.candidates(self.repos, name)))
 
     def require(self) -> RegisteredCommanderProject:
         return self
@@ -1135,18 +1136,18 @@ class RegistrySnapshot(RegistryPresence[Mapping[str, ThreadStatus]], RegistryPro
 
     def observed_activity(
         self, agents: AgentActivity, names: Iterable[str],
-    ) -> dict[str, ObservedActivity | DeletedThread]:
+    ) -> ActivityCapture[ObservedActivity | DeletedThread]:
         """Observe retained view names; absent declarations have no execution authority."""
         selected = {name: self.canonical_name(name) for name in names}
-        captured = agents.all_activity(
+        captured = agents.captured(
             self.visible_threads(DEFAULT_ROSTER, names=selected), snapshot=self)
         observed: dict[str, ObservedActivity | DeletedThread] = {}
         for name, canonical in selected.items():
-            if canonical in captured:
-                observed[name] = captured[canonical]
+            if canonical in captured.activity:
+                observed[name] = captured.activity[canonical]
             elif canonical not in self.threads:
                 observed[name] = DeletedThread(canonical)
-        return observed
+        return ActivityCapture(observed, captured.expires_at)
 
     def unread_since(
         self, actor: str, since: float | None, recorded_delivery: bool,

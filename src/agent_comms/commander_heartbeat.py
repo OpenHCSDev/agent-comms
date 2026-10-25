@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import time
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
@@ -14,7 +15,7 @@ from agent_comms.service_passes import ServicePassStore
 from agent_comms.standing_rules import StandingRule
 from agent_comms.threads import Thread
 from agent_comms.todos import ProgressRead
-from agent_comms.ui_model.unit_state import UnitState
+from agent_comms.ui_model.unit_state import AwaitingCommander, UnitState
 
 if TYPE_CHECKING:
     from agent_comms.comms import Comms
@@ -67,6 +68,7 @@ class CommanderHeartbeat(CommanderService, WatchPass[tuple[CommanderObservation,
         self.register(comms.registry)
         CommanderFrame.replace_all(comms.root, tuple(item.hud for item in observed))
         completed = []
+        now = time.time()
         try:
             for item in observed:
                 comms.goals.todos.record_merges(item.merged)
@@ -82,12 +84,15 @@ class CommanderHeartbeat(CommanderService, WatchPass[tuple[CommanderObservation,
                     item.thread.incarnation,
                     tuple(state for state in item.states if state not in rejected),
                     tuple(rule for rule in item.rules if rule not in rejected), previous,
-                    hud=item.hud.pings(),
+                    now=now,
+                    undisposed=(previous.undisposed(comms, item.thread.name,
+                                                    now - AwaitingCommander.seconds)
+                                if previous else ()),
                     not_applied=tuple(
                         rule.rejected_line(error) for rule, error in rejected.items()),
                 )
                 if update is not None:
-                    update.send(comms, previous)
+                    update.send(comms, now)
                 completed.append(item.thread.incarnation)
         finally:
             # A later commander's failure does not erase passes already completed.

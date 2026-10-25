@@ -17,8 +17,9 @@ from agent_comms.tool_caller import ThreadCaller
 from agent_comms.work_branches import SourceGrowth
 from agent_comms.order_tools import CommsHeadVerdictTool
 from agent_comms.todos import (
-    FailedCheckMergeBlock, GrownHeadVerdict, GrowthReason, HeadReviewOrder, NoHeadOrder,
-    ProgressRead, PullRequestLink, RecordPullRequest, RejectedHeadVerdict, ReviewedHeadVerdict, StoredHeadReview,
+    FailedCheckMergeBlock, GrownHeadVerdict, GrowthReason, HeadReviewOrder, LinkedHeadReview,
+    NoHeadOrder, ProgressRead, PullRequestLink, RecordPullRequest, RejectedHeadVerdict,
+    ReviewedHeadVerdict, StoredHeadReview, UnquotedHeadReview,
     StrikeReason, UnmergedListedPullRequest, VerdictReason,
 )
 from source_revision_fixture import SourceRepository
@@ -92,14 +93,22 @@ def test_judge_ok_and_back_dispatch_orderless_prs_without_positional_edit_ids(he
     assert len(tuple(call for call in github.calls() if f"statuses/{request.head}" in call[1])) == 2
 
 
-def test_judge_reviewing_after_ok_withdraws_the_accepted_status_on_that_head(head_bus):
+def test_judge_reviewing_after_ok_withdraws_the_accepted_status_on_that_head(
+        head_bus, reviewed_source, configured_repository, tmp_path):
     """GitHub keeps the newest status per context on a commit, so reviewing an approved head
     holds it out of the merge queue until a new ok."""
     comms, github, request = head_bus
     context = order.Commander.read_root(comms.root)
-    common = ["--repo", request.repo.to_wire(), "--pr", str(request.pr), "--head", request.head,
-              "--why", ACCEPTED.text]
-    judge.main(["ok", *common], context)
+    second_checkout = tmp_path / "second-review-checkout"
+    reviewed_source.git(reviewed_source.checkout, "worktree", "add", "-q", "--detach",
+                        str(second_checkout))
+    configured_repository(comms, reviewed_source,
+                          reviewed_source.model_copy(update={"checkout": second_checkout}))
+    project = comms.registry.snapshot().commander_project.require()
+    assert project.repository_names().count(request.repo) == 1
+    assert project.repository_names(str(second_checkout)) == (request.repo,)
+    common = ["--pr", str(request.pr), "--head", request.head]
+    judge.main(["ok", *common, "--why", ACCEPTED.text], context)
     judge.main(["reviewing", *common], context)
     posts = tuple(call for call in github.calls() if f"statuses/{request.head}" in call[1])
     assert [next(part for part in post if part.startswith("state=")) for post in posts] == [
@@ -142,12 +151,14 @@ def test_linked_head_rejection_strikes_revises_and_notifies_its_holder(head_bus)
                       PullRequestLink(request.repo, request.pr), held.generation).record(comms.goals, todo.id)
     todo = comms.goals.todos.get(todo.id)
     scope = HeadReviewOrder.for_request(
-        (todo,), request, "Repair the existing owner", (todo.order.checked().owner,),
+        (todo,), request, lambda linked: LinkedHeadReview.of(
+            linked, "Repair the existing owner", (linked.order.checked().owner,)),
     )
     invoke(comms, request, ReviewedHeadVerdict(ACCEPTED), scope)
     todo = comms.goals.todos.get(todo.id)
     scope = HeadReviewOrder.for_request(
-        (todo,), request, "Repair the existing owner", (todo.order.checked().owner,),
+        (todo,), request, lambda linked: UnquotedHeadReview.of(
+            linked, (linked.order.checked().owner,)),
     )
     before = comms.registry.require("worker").goal.require()
     invoke(comms, request, RejectedHeadVerdict(REASON), scope)

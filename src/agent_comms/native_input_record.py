@@ -35,7 +35,8 @@ from .field_codec import (
     NativeContext,
     WireName,
 )
-from .transcript_routes import InputDisplay
+from .native_session_reopen import PiSessionId
+from .transcript_routes import InputDisplay, NoDisplayText
 from .typed_table import Column, IntegerStorage, SqlStorage, TextStorage
 
 if TYPE_CHECKING:
@@ -62,7 +63,7 @@ class NativeInputCommit:
         WireName("inputId"),
         Column(primary_key=True, check="length(input_id)=32 AND input_id NOT GLOB '*[^a-f0-9]*'"),
     ]
-    session_id: Annotated[str, WireName("sessionId")]
+    session_id: Annotated[PiSessionId, WireName("sessionId")]
     session_entry_id: Annotated[str, WireName("sessionEntryId")]
 
     @property
@@ -191,7 +192,7 @@ class NativeInputExecution(DeclaredFamily, affix="NativeExecution"):
         """
 
         return entry.events(replace(
-            projection, input_display=InputDisplay(user.input_id, None)
+            projection, input_display=InputDisplay(user.input_id, NoDisplayText())
         ))
 
     def require_attempt(self) -> FullNativeExecution:
@@ -261,17 +262,26 @@ class TriageNativeExecution(NativeInputExecution):
 
     @classmethod
     def source_membership_sql(cls) -> str:
-        from .triage_native_sources import TriageNativeSources
+        from .triage_native_sources import TriageNativeSource
 
-        return (f"SELECT s.input_id, member.value AS assignment_id, CAST(member.key AS INTEGER) AS ordinal "
-                f"FROM {TriageNativeSources.declared_name} s, json_each(s.assignment_ids) member")
+        return (f"SELECT s.input_id, s.assignment_id, s.ordinal "
+                f"FROM {TriageNativeSource.declared_name} s")
 
     def record_sources(
         self, db: Connection, input_id: InputId, assignments: tuple[WakeAssignment, ...],
     ) -> None:
-        from .triage_native_sources import TriageNativeSources
+        from .triage_native_sources import TriageNativeSource
 
-        TriageNativeSources(input_id, tuple(row.assignment_id for row in assignments)).insert(db)
+        if not assignments:
+            raise IdentityConflict("Native input membership names at least one original source")
+        try:
+            for ordinal, row in enumerate(assignments):
+                TriageNativeSource(input_id, ordinal, row.assignment_id).insert(db)
+        except sqlite3.IntegrityError as error:
+            # Only assignment_id is UNIQUE here; a key, CHECK or guard refusal is a bug.
+            if error.sqlite_errorcode != sqlite3.SQLITE_CONSTRAINT_UNIQUE:
+                raise
+            raise IdentityConflict("Native input membership must name distinct original sources") from error
 
     @classmethod
     def from_columns(cls, execution_id: NativeColumn, attempt_ordinal: NativeColumn) -> TriageNativeExecution:
@@ -403,7 +413,7 @@ class NativeInputReference(NativeContextReference):
 
     input_id: InputId
     stage: type[NativeInputExecution]
-    session_id: str
+    session_id: PiSessionId
     request_generation: int
 
     recorded = True
@@ -456,7 +466,7 @@ class NativeInputContext:
 
     input_id: InputId | NativeColumn
     stage: type[NativeInputExecution] | NativeColumn
-    session_id: str | NativeColumn
+    session_id: PiSessionId | NativeColumn
     request_generation: NativeColumn
 
     @property

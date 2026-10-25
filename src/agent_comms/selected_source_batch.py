@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING
 from .bus_publication import Delivered
 from .coordination_errors import IdentityConflict
 from .coordination_tables.assignments import WakeAssignment
-from .field_codec import FieldCodec
+from .field_codec import AssignmentId, FieldCodec
 from .messages import InfoKind, Message
 from .native_failures import NativePiUnavailable
 from .turn_context import ReplyRouteSegment, WireProvenance
@@ -24,7 +24,7 @@ class SelectedSource:
     send stages separately capture exact rows for their reservation fences.
     """
 
-    assignment_id: str
+    assignment_id: AssignmentId
     store: AssignmentStore
     delivery: Delivered
 
@@ -79,7 +79,7 @@ class SelectedSourceBatch:
             return tuple(source.assignment for source in self.sources)
 
     @property
-    def assignment_ids(self) -> tuple[str, ...]:
+    def assignment_ids(self) -> tuple[AssignmentId, ...]:
         return tuple(source.assignment_id for source in self.sources)
 
     @property

@@ -43,12 +43,13 @@ from .native_fork import (
     RuntimeForkRequest,
 )
 from .native_pi import NativePiRpcLaunch
-from agent_comms.native_session_files import ForkedSession, NativeSessionLocks
+from agent_comms.native_session_files import ForkedSession, NativeSessionFiles, NativeSessionLocks
 from .native_session_reopen import NativeSessionIdentity
 from .native_transcript import NativeTranscript
 from .pi_commands import Compact
 from .selected_session import SavedSelectedSession
 from .session_revision import (
+    SessionObservation,
     SessionRevision,
     SessionRevisionUnavailable,
 )
@@ -113,6 +114,11 @@ class PiSessionFile(RuntimeLocation):
 
     def storage_files(self):
         return (NativeSessionLocks(Path(self.path)),)
+
+    def session_observation(self, root: Path, thread: Thread) -> SessionObservation:
+        return SessionRevision.observe(NativeSessionFiles.for_identity(
+            NativeSessionIdentity.locate(self.path),
+            root=root, owner=thread.incarnation.require_recorded()))
 
     @property
     def model_choice(self):

@@ -8,6 +8,7 @@ from typing import ClassVar, Self, TYPE_CHECKING
 from .declared_family import DeclaredFamily
 from .activity import Activity, ActivityState, ObservedActivity, ThreadOutput
 from .pi_payloads import ProviderDiagnosticError
+from .native_tool_call import ToolCallId
 if TYPE_CHECKING:
     from .agent_activity import AgentActivity
     from .turn_lease import TurnLeaseFence
@@ -107,10 +108,10 @@ class TurnPhase(DeclaredFamily, affix="Phase"):
     def input_started(self) -> TurnPhase:
         return ModelWaitPhase()
 
-    def tool_started(self, tool_id: str, title: str) -> TurnPhase:
+    def tool_started(self, tool_id: ToolCallId, title: str) -> TurnPhase:
         return ToolRunningPhase(tools=((tool_id, title),))
 
-    def tool_ended(self, tool_id: str) -> TurnPhase:
+    def tool_ended(self, tool_id: ToolCallId) -> TurnPhase:
         return ModelWaitPhase()
 
     def compacting(self) -> TurnPhase:
@@ -206,10 +207,10 @@ class CompactionPhase(StallExempt, NoModelWait, Excursion):
     def input_started(self) -> TurnPhase:
         return replace(self, resume=self.resume.input_started())
 
-    def tool_started(self, tool_id: str, title: str) -> TurnPhase:
+    def tool_started(self, tool_id: ToolCallId, title: str) -> TurnPhase:
         return replace(self, resume=self.resume.tool_started(tool_id, title))
 
-    def tool_ended(self, tool_id: str) -> TurnPhase:
+    def tool_ended(self, tool_id: ToolCallId) -> TurnPhase:
         return replace(self, resume=self.resume.tool_ended(tool_id))
 
     def compaction_ended(self) -> TurnPhase:
@@ -233,7 +234,7 @@ class SummarizationRetryPhase(StallExempt, Excursion):
 class ToolRunningPhase(StallExempt, NoModelWait, Excursion):
     """A running tool has no model budget; its terminal event ends the excursion."""
 
-    tools: tuple[tuple[str, str], ...] = ()
+    tools: tuple[tuple[ToolCallId, str], ...] = ()
     activity_state = ActivityState.WORKING
     label = "Running tool"
 
@@ -241,11 +242,11 @@ class ToolRunningPhase(StallExempt, NoModelWait, Excursion):
     def summary(self) -> str:
         return self.detail or (self.tools[-1][1] if self.tools else self.label)
 
-    def tool_started(self, tool_id: str, title: str) -> TurnPhase:
+    def tool_started(self, tool_id: ToolCallId, title: str) -> TurnPhase:
         retained = tuple(item for item in self.tools if item[0] != tool_id)
         return replace(self, detail="", tools=(*retained, (tool_id, title)))
 
-    def tool_ended(self, tool_id: str) -> TurnPhase:
+    def tool_ended(self, tool_id: ToolCallId) -> TurnPhase:
         retained = tuple(item for item in self.tools if item[0] != tool_id)
         return replace(self, tools=retained) if retained else ModelWaitPhase()
     def stalled(self, accepted: bool) -> TurnPhase:

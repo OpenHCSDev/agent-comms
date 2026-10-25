@@ -10,7 +10,7 @@ from dataclasses import dataclass
 from functools import cached_property
 from typing import TYPE_CHECKING, ClassVar, Protocol
 
-from acp.exceptions import RequestError
+from .coordination_errors import Refused
 
 from .active_route import resolve_comms_route
 from .declared_family import DeclaredFamily
@@ -152,7 +152,7 @@ class CatalogConfigOption(ConfigOption):
         try:
             await self.validate(thread, value)
         except InvalidConfigChoice as error:
-            raise RequestError.invalid_params({"reason": str(error)}) from error
+            raise Refused.invalid_params({"reason": str(error)}) from error
         await self.apply(owner, thread, value)
 
     def require_value(self, value: str | None, choices: list[CatalogChoice]) -> None:
