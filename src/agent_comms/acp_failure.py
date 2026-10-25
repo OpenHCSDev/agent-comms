@@ -324,7 +324,7 @@ class FailedNativeTurnOutcome(NativeTurnOutcome):
                 session_update="agent_message_chunk",
                 content=TextContentBlock(type="text", text=""),
                 field_meta=encode_updates(
-                    TextRouteUpdate(None), RequestFailedUpdate(failure, self.source),
+                    TextRouteUpdate(), RequestFailedUpdate(failure, self.source),
                     *((InputFailedUpdate(self.failed_input_text, failure),)
                       if self.failed_input_text else ()),
                 ),

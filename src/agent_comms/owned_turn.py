@@ -33,7 +33,7 @@ from .messages import Message
 from .native_failures import NativeRequestFailure
 from .native_input_owner import RegistryOwner
 from .owned_send import OwnedSend
-from .routing import MessageRoute, ScheduledTurn, TurnRouting
+from .routing import MessageRoute, NoMessageRoute, ScheduledTurn, TurnRouting
 from .turn_goal_account import TurnGoalAccount
 from .turn_goal_permission import (
     OwnerGoalPermission,
@@ -136,7 +136,7 @@ class OwnedTurn:
         self.turn_id = TurnId.mint()
         self.routing = TurnRouting(
             tuple(origin.reference for origin in self.origins),
-            MessageRoute(self.thread_name, self.reply_targets) if self.reply_targets else None,
+            MessageRoute(self.thread_name, self.reply_targets) if self.reply_targets else NoMessageRoute(),
         )
         self.checkpoint = self.runner.comms.transcripts.transcript_checkpoint(self.thread_name)
         self.input_cleanup = AsyncExitStack()

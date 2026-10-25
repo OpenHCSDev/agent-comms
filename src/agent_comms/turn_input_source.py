@@ -188,7 +188,7 @@ class TurnInputSource(StartedInput, ABC):
             self.display(sender.inputs.dispositions, sent_text),
             sent_text=sent_text,
             routing=TurnRouting(
-                tuple(origin.reference for origin in self.origins), None
+                tuple(origin.reference for origin in self.origins)
             ) if self.origins else NoTurnRouting(),
         )
         return GrantedSend()

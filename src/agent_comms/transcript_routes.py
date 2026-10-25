@@ -183,7 +183,7 @@ class TranscriptRoutes(DurableStore):
         ids = routing.annotation_ids(reader, checkpoint, thread.runtime, final.end)
         inputs = InputDispositions(log.path.parent)
         lookup = incarnation.lookup
-        with log.checked_read() as source, registry.store.reading_snapshot() as snapshot:
+        with log.reading() as source, registry.store.reading_snapshot() as snapshot:
             incarnation = lease.identity.incarnation.resolved(snapshot)
             current = RegistryOwner.capture_local(snapshot, incarnation.name).thread
             if current.turn_lease != lease:
@@ -198,16 +198,12 @@ class TranscriptRoutes(DurableStore):
             ):
                 raise RelationViolationError("Native publication has no original STARTED input")
             references = tuple(dict.fromkeys((*routing.requests, *published)))
-            marks = ",".join("?" for _ in references)
             originals = (
-                tuple(
-                    source.conversation_sources(
-                        lookup,
-                        f"w.seq IN ({marks})",
-                        tuple(ref.seq for ref in references),
-                        limit=len(references),
-                        ascending=True,
-                    )
+                source.conversation(
+                    lookup,
+                    sequences=tuple(ref.seq for ref in references),
+                    limit=len(references),
+                    descending=False,
                 )
                 if references
                 else ()

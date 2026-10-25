@@ -14,13 +14,14 @@ from typing import Annotated, TYPE_CHECKING
 
 from .channel_targets import CommandTarget
 from .field_codec import (
-    ThreadLookup, FieldCodec, NullMember, RecordMember, SubclassUnion, WireOmitDefault, GoalId,
+    ThreadLookup, FieldCodec, NullMember, PresentMember, RecordMember, SubclassUnion, WireOmitDefault, GoalId,
 )
 from .message_reference import MessageReference
 from .messages import PublicSender
 from .read_basis import DMDisplayScope, MessageDisplayScope
 
 if TYPE_CHECKING:
+    from .bus_publication import Delivered
     from .catalog_document import CatalogDocument
     from .registry_provenance import RegistryProvenance
     from .thread_identity import ThreadIncarnation
@@ -50,7 +51,7 @@ NO_TURN_ORIGIN = NoTurnOrigin()
 
 
 @dataclass(frozen=True, slots=True)
-class MessageRoute:
+class MessageRoute(PresentMember):
     sender: str
     targets: tuple[str, ...]
 
@@ -66,6 +67,24 @@ class MessageRoute:
     @classmethod
     def from_wire(cls, data: Mapping) -> MessageRoute:
         return FieldCodec.decode(cls, data)
+
+    def require_publications(self, originals: tuple[Delivered, ...], owner_lookup: ThreadLookup) -> None:
+        if len(originals) > len(self.targets):
+            raise RelationViolationError("Publication exceeds this turn's reply intent")
+        for original in originals:
+            if original.sender_lookup != owner_lookup:
+                raise RelationViolationError("Publication belongs to another original sender")
+            if original.message.target not in self.targets:
+                raise RelationViolationError("Publication is outside this turn's reply targets")
+
+
+@dataclass(frozen=True, slots=True)
+class NoMessageRoute(NullMember):
+    """The turn has no outgoing reply intent."""
+
+    def require_publications(self, originals: tuple[Delivered, ...], owner_lookup: ThreadLookup) -> None:
+        if originals:
+            raise RelationViolationError("Publication exceeds this turn's reply intent")
 
 
 class Routing(SubclassUnion, affix="Routing"):
@@ -102,7 +121,7 @@ class NoTurnRouting(NullMember, Routing):
 @dataclass(frozen=True, slots=True)
 class TurnRouting(RecordMember, Routing):
     requests: tuple[MessageReference, ...] = ()
-    reply: MessageRoute | None = None
+    reply: MessageRoute | NoMessageRoute = NoMessageRoute()
     publications: Annotated[
         tuple[MessageReference, ...], WireOmitDefault()
     ] = ()
@@ -113,7 +132,7 @@ class TurnRouting(RecordMember, Routing):
 
     @property
     def outgoing(self) -> bool:
-        return self.reply is not None
+        return bool(self.reply.present())
 
     def validate_input(self, sent_text: str | None) -> None:
         if sent_text is None or self.outgoing:
@@ -129,19 +148,11 @@ class TurnRouting(RecordMember, Routing):
         return (reader.annotation_ids(checkpoint.offset, through)
                 if self.requests and runtime.read_key == checkpoint.session_file else ())
 
-    def require_publications(self, originals, owner_lookup: str) -> None:
+    def require_publications(self, originals: tuple[Delivered, ...], owner_lookup: ThreadLookup) -> None:
         """Only committed originals addressed by this reply intent can be joined."""
         if self.publications:
             raise RelationViolationError("Turn intent cannot preclaim a publication")
-        if not originals:
-            return
-        if self.reply is None or len(originals) > len(self.reply.targets):
-            raise RelationViolationError("Publication exceeds this turn's reply intent")
-        for original in originals:
-            if original.sender_lookup != owner_lookup:
-                raise RelationViolationError("Publication belongs to another original sender")
-            if original.message.target not in self.reply.targets:
-                raise RelationViolationError("Publication is outside this turn's reply targets")
+        self.reply.require_publications(originals, owner_lookup)
 
 
 @dataclass(frozen=True, slots=True)

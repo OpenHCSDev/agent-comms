@@ -40,7 +40,7 @@ def test_bound_input_overrides_turn_wide_annotation_without_attributing_quotes(t
     # Bind before the session file exists, as on first-turn/fork startup.
     comms.transcripts.routes.record_input_display(
         SECOND_INPUT_ID, second.body, sent_text=raw_second,
-        routing=TurnRouting((second.reference,), None),
+        routing=TurnRouting((second.reference,)),
     )
     comms.transcripts.routes.record_input_display(THIRD_INPUT_ID, quote, sent_text=quote)
     path = tmp_path / "new-session.jsonl"
@@ -49,7 +49,7 @@ def test_bound_input_overrides_turn_wide_annotation_without_attributing_quotes(t
     comms.threads.attach_session((attachment_owner := comms.registry.require("worker")), str(path), process=attachment_owner.process_identity)
     # Older settlement code labels all records with the initial origin.
     comms.transcripts.routes.record(
-        str(path), ("bbbbbbbb", "cccccccc"), TurnRouting((first.reference,), None)
+        str(path), ("bbbbbbbb", "cccccccc"), TurnRouting((first.reference,))
     )
     reopened = wire(comms.root)
     with reopened.transcripts.routes.for_session(str(path)) as annotations:
@@ -76,7 +76,7 @@ def test_bound_route_rejects_changed_text_and_conflicting_rebind(tmp_path):
     comms.registry.declare(Thread('worker', frozenset(), str(tmp_path)))
     comms.registry.declare(Thread('peer', frozenset(), str(tmp_path)))
     incoming = comms.messaging.send("peer", "worker", "Verified input").message
-    route = TurnRouting((incoming.reference,), None)
+    route = TurnRouting((incoming.reference,))
     text = ScheduledTurn.incoming(incoming).prompt
     comms.transcripts.routes.record_input_display(
         FIRST_INPUT_ID, text, sent_text=text, routing=route)
