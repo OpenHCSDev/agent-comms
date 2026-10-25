@@ -15,3 +15,5 @@ type: feedback
 - Pin only PyPI releases; our own sibling packages track latest `main`. Tristan, 2026-10-18: "why would we not always use latest?"
 - Overcaution is performative stalling. Before adding or keeping a wait, gate, rehearsal or one-at-a-time step, name the failure it alone prevents, or delete it.
 - Profile a slow tool and order the fix the same tick. Tristan, 2026-10-19: "u should be impatient and ask yourself whether things are as slow as they are forced to be."
+- Tool friction hit twice, slow or refusing correct work, gets a fork that tick, ahead of plan work: routing around it pays its cost on every call by every unit. Tristan, 2026-10-25, ten hours after asking for it: "didnt we know this for over 10 hours now".
+- An install under 60 s is healthy: no order hunts single seconds below it, planned cuts still land, and above 60 s is a defect ordered that tick. Tristan, 2026-10-23: "if we stay below 60s its not broken".

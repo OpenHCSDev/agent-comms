@@ -14,4 +14,6 @@ type: feedback
 - An order check counts over the whole source tree (`grep -r ... src`), never one file.
 - Run verb gate loops under `bash -c`: zsh passes a quoted "order idle" as one argument.
 - A wait or kill by process pattern brackets its first letter (`grep -q "[v]erify"`) or waits on a file or PID, or it matches itself.
+- Never cut a check's output with `tail` or `head`; grep the lines that carry its verdict or read it whole. On 2026-10-23 a tail kept the tables and dropped the UNPUSHED alarms above them for 50 minutes. Tristan: "tailing is a terrible reflex of urs".
+- Every background wait also watches progress: when its log has not changed for 180 s it prints STALLED and exits, since a wait on a PID alone cannot tell slow from hung. Tristan, 2026-10-25, after a 9-minute install hang he found himself: "I have to send you a message to say that it's hung? Why?".
 - Lint warns, never blocks: the debt ratchet reports ruff and Black growth as warnings on the file and gates only restated facts. Read the warnings on lines you added or changed; fix one when it names a real defect, such as an undefined name or dead code. Never run `ruff format` on a whole file, never rename a class or function to quiet a lint rule, and never touch lines the order didn't name. Your reply includes `git diff --stat origin/main...HEAD`.
