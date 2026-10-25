@@ -59,7 +59,10 @@ class Ping(DeclaredFamily, affix="Ping"):
     text: str = field(compare=False, kw_only=True)
     subjects: tuple[HeartbeatSubject, ...] = field(default=(), compare=False, kw_only=True)
     since: EventTime = field(default_factory=UnrecordedEventTime, compare=False, kw_only=True)
-    urgent: bool = field(default=False, kw_only=True)
+
+    @property
+    def urgent(self) -> bool:
+        return False
 
     @property
     @abstractmethod
@@ -106,6 +109,10 @@ class RulePing(Ping):
     observation: TextDigest
 
     @property
+    def urgent(self) -> bool:
+        return self.rule.urgent
+
+    @property
     def key(self) -> TextDigest:
         return self.observation
 
@@ -115,8 +122,7 @@ class RulePing(Ping):
 
     @classmethod
     def capture(cls, rule: StandingRule) -> Self:
-        return cls(type(rule), rule.observation_key(), text=rule.line(), subjects=rule.subjects(),
-                   urgent=rule.urgent)
+        return cls(type(rule), rule.observation_key(), text=rule.line(), subjects=rule.subjects())
 
 
 @dataclass(frozen=True)
