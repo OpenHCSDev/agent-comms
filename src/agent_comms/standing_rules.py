@@ -589,7 +589,7 @@ class HeadReviewRule(StandingRule, declared_name=None):
 
 @dataclass(frozen=True)
 class HeadReviewCommands(HeadReviewRule, declared_name=None):
-    """A head and the current order that the judge's own predicate resolved for it."""
+    """A review head supplies the common arguments accepted by the judge."""
 
     request: PullRequestHead
 

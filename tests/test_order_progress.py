@@ -6,6 +6,7 @@ import json
 import os
 import subprocess
 import time
+from dataclasses import replace
 
 
 import pytest
@@ -22,7 +23,9 @@ from agent_comms.thread_identity import RecordedThreadIncarnation
 from agent_comms.tool_caller import ThreadCaller
 from agent_comms.order_tools import CommsTodoCreateTool
 from agent_comms.work_branches import WorkBranches
-from agent_comms.todos import EditingProgress, NoCommitProgress, OrderProgress, PresentCheckout
+from agent_comms.todos import (
+    EditingProgress, NoCommitProgress, OrderProgress, PresentCheckout, ProgressRead, ProgressSource,
+)
 from agent_comms.threads import Thread
 
 
@@ -36,20 +39,6 @@ def test_prior_declarations_do_not_enter_native_request_schemas():
     catalog = json.dumps(NativeRequestTools.catalog())
     assert 'prior_orders' not in catalog
     assert 'preceding' not in catalog
-
-
-class EmptySource:
-    since = 100.0
-    pushes = ()
-
-    def commits(self, *excluded):
-        return iter(())
-
-    def published(self):
-        return iter(())
-
-    def requests(self, state):
-        return []
 
 
 def unit_checkout(path):
@@ -67,24 +56,17 @@ def edited(path, name, at):
     os.utime(path / name, (at, at))
 
 
-class EditingSource(EmptySource):
-    """No commit, push or PR names the order; the holder's checkout is the real one."""
-
-    def __init__(self, worktree):
-        self.worktree = PresentCheckout(worktree)
-
-    @property
-    def edited_at(self):
-        return tuple(sorted(self.worktree.edits, reverse=True)[:1])
-
-
 @pytest.mark.parametrize('name', ['owner.py', 'new_module.py'])
-def test_a_unit_editing_before_its_first_commit_is_moving_not_stalled(tmp_path, name):
+def test_a_unit_editing_before_its_first_commit_is_moving_not_stalled(held, name):
     """20:07:17: P358's holder was fixing a send-back, uncommitted; Core read no commit as a stall."""
-    worktree = unit_checkout(tmp_path / 'worker--P1')
-    assert OrderProgress.from_source(EditingSource(worktree)) == NoCommitProgress()
+    comms, worktree = held
+    checkout = PresentCheckout(worktree)
+    source = ProgressSource(comms.goals.todos.get('P1'), ProgressRead(()), checkout,
+                            worktrees=(checkout,))
+    assert OrderProgress.from_source(source) == NoCommitProgress()
     edited(worktree, name, 100.0 + 500)
-    progress = OrderProgress.from_source(EditingSource(worktree))
+    checkout = PresentCheckout(worktree)
+    progress = OrderProgress.from_source(replace(source, checkout=checkout, worktrees=(checkout,)))
     assert progress == EditingProgress(at=600.0)
     edit = time.strftime('%H:%M:%S', time.localtime(600.0))
     assert progress.line == f'uncommitted edits at {edit}, no commit'
