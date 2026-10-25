@@ -196,7 +196,7 @@ from .turn_context import (
     Provenance,
     TurnContext,
 )
-from .typed_table import ReconciledFile
+from .typed_table import ReconciledFile, WriterOwnedStore
 from .working_memory_labels import ClassifierVersion, ModelLabel, QuestionVersion
 from .working_memory_questions import SpanAnswer
 
@@ -1947,6 +1947,11 @@ class PlannedReconcileCliCommand(StoreReconcileCliCommand, declared_name="planne
         schema = owner.schema_at(path)
         with closing(owner.read_snapshot(path)) as db:
             return schema.reconcile_writes(db)
+
+    def answer(self, root: Path) -> ReconciledStoresResult:
+        """A store outside the bus that the target's writer could not open refuses the plan."""
+        WriterOwnedStore.practice_openings()
+        return super().answer(root)
 
 @dataclass(frozen=True)
 class CheckoutResult(CliResult):
