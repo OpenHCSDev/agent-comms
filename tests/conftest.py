@@ -356,10 +356,14 @@ def private_comms(private_directory: Path) -> Iterator[Comms]:
 
     root = private_directory / "wire"
     comms = prepare_native_comms(wire(root))
+    from agent_comms.installer.launch import InstallLogs
     from agent_comms.launch_root import LaunchRoot
 
-    with LaunchRoot.from_path(root).selected():
-        yield comms
+    try:
+        with LaunchRoot.from_path(root).selected():
+            yield comms
+    finally:
+        InstallLogs(root).stop_running()
 
 
 @pytest.fixture

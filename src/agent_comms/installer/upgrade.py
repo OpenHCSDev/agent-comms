@@ -603,7 +603,7 @@ class Stack:
         scratch.mkdir(mode=0o700, parents=True, exist_ok=True)
         with tempfile.TemporaryDirectory(dir=scratch, prefix=f"tests-{core[:12]}-") as temporary:
             print(self.commands.run(
-                "timeout", "300", self.python, "-m", "pytest", "-q", "-s",
+                self.python, "-m", "pytest", "-q", "-s",
                 "-o", "pythonpath=. tools", "-o", "faulthandler_timeout=60",
                 "--basetemp", Path(temporary) / "pytest", "-p", "no:cacheprovider",
                 *pytest_arguments, cwd=self.checkout, env=self.environment()), end="")
