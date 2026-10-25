@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING, ClassVar
 
 from .coordination_errors import IdentityConflict, IntegrityViolationError
 from .coordinator_vocabulary import CoordinatorVocabulary
-from .field_codec import FieldCodec, ThreadLookup
+from .field_codec import AssignmentId, FieldCodec, ThreadLookup
 from .lifecycle import LifecycleState
 from .lifecycle_capability import Active, Complete, Deferred, Failed, Pending, Terminal
 from .notification_progress import (
@@ -64,7 +64,7 @@ class PendingDecision:
 @dataclass(frozen=True)
 class AssignmentState(CoordinatorVocabulary, LifecycleState, affix="Assignment"):
     def source_settlement(
-        self, evidence: tuple[HistoricalNativeInput, ...], policy: WakePolicy, claim_id: str,
+        self, evidence: tuple[HistoricalNativeInput, ...], policy: WakePolicy, claim_id: AssignmentId,
     ) -> SourceSettlement:
         if not policy.items_with(Active, policy):
             return SettledWithoutInput()
@@ -566,7 +566,7 @@ class DeliveredAssignment(
 
 class FailedAssignment(Failed, Terminal, InterruptedAssignment):
     def source_settlement(
-        self, evidence: tuple[HistoricalNativeInput, ...], policy: WakePolicy, claim_id: str,
+        self, evidence: tuple[HistoricalNativeInput, ...], policy: WakePolicy, claim_id: AssignmentId,
     ) -> SourceSettlement:
         return (super().source_settlement(evidence, policy, claim_id)
                 if evidence else SettledWithoutInput())

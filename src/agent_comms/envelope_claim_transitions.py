@@ -13,6 +13,7 @@ from typing import TYPE_CHECKING, Annotated, ClassVar, Literal
 from .class_fact import ClassFact
 from .coordination_errors import IdentityConflict
 from .field_codec import (
+    AssignmentId,
     BoundedText,
     ClaimId,
     EnvelopeSequence,
@@ -124,7 +125,7 @@ class WritableFileClaim(FileClaimPath):
 class AssignmentBinding(ProjectionSource):
     """The selected claim's revision and source, used for permission checks and its SQL row."""
 
-    assignment_id: Annotated[str, BoundedText]
+    assignment_id: AssignmentId
     revision: int
     recipient_lookup: ThreadLookup
     source: MessageReference
@@ -212,7 +213,7 @@ class WakeClaim(RecordMember, RecordedScope):
     wire_root_id: RootId
     source_seq: int
     source_message_id: MessageId
-    wake_assignment_id: Annotated[str, BoundedText, WireName("wake_claim_id")]
+    wake_assignment_id: Annotated[AssignmentId, WireName("wake_claim_id")]
     wake_revision: int
     recipient_lookup: ThreadLookup
     execution_id: Annotated[str, BoundedText]
@@ -253,7 +254,7 @@ class WakeClaim(RecordMember, RecordedScope):
                 "Wake claim_scope version or revision is invalid."
             ) from error
         try:
-            assignment = FieldCodec.decode(str, self.wake_assignment_id)
+            assignment = self.wake_assignment_id
             if not assignment.startswith("cohort-v1:"):
                 raise ValueError("Unknown wake claim codec")
             Sha256Text.from_text(assignment.removeprefix("cohort-v1:"))

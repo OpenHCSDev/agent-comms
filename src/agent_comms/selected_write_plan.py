@@ -33,7 +33,7 @@ from .child_process import Platform
 from .coordination_cohort import sealed_cohort_assignments
 from .declared_family import DeclaredFamily
 from .envelope_claim_transitions import ExistingFileClaim
-from .field_codec import ClaimId, FieldCodec, MalformedRecord, MessageId, RootId
+from .field_codec import AssignmentId, ClaimId, FieldCodec, MalformedRecord, MessageId, RootId
 from .message_reference import MessageReference
 from .private_path import PrivateDirectoryRole, PrivateFileRole
 from .thread_identity import ClaimedIdentity, ClaimScoped, RecordedThreadIncarnation
@@ -52,7 +52,7 @@ class PlannedWrite:
 class SelectedWriteBinding(ClaimScoped):
     root_id: RootId
     source: MessageReference
-    assignment_id: str
+    assignment_id: AssignmentId
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -64,7 +64,7 @@ class SelectedWriteIntent(DeclaredFamily, affix="WriteIntent"):
     root_id: RootId
     source_seq: int
     source_message_id: MessageId
-    claim_id: str
+    claim_id: AssignmentId
     owner: RecordedThreadIncarnation
     claim_epoch: int
     expected_attempt_ordinal: Literal[1]
