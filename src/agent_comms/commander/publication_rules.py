@@ -9,7 +9,7 @@ from typing import Annotated, Self
 from agent_comms.field_codec import OrderId, PathText
 from agent_comms.standing_rules import HeldBranch, HeldBranchRule
 from agent_comms.thread_identity import ThreadIncarnation
-from agent_comms.todos import PullRequestLink, UnmergedListedPullRequest
+from agent_comms.todos import PullRequestLink
 from agent_comms.work_branches import UnpushedHead
 
 
@@ -50,7 +50,7 @@ class EmptyPullRequest(HeldBranchRule):
         for held in branches:
             reader = held.repository.branches
             todo = held.todo
-            for pull in held.source.pulls.listed(todo.repo, UnmergedListedPullRequest, todo):
+            for pull in held.source.pulls.open_for(todo):
                 for compared in pull.empty_changes(reader):
                     found.append(cls(held.problem, todo.order.checked().id, held.holder,
                                      PullRequestLink(todo.repo, pull.number),

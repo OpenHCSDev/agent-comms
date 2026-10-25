@@ -52,6 +52,7 @@ from agent_comms.todos import (
     Assignment,
     OwnerRequest,
     PullRequests,
+    UnmergedListedPullRequest,
     RestoreHolderTodo,
     Todo,
 )
@@ -65,25 +66,48 @@ if TYPE_CHECKING:
 
 
 @dataclass(frozen=True)
-class InstallDue(IndependentStandingRule, UndatedStandingRule):
-    """A configured main not contained in the installed build needs an install once its
-    oldest uninstalled merge has stood for the settle window.
+class UninstalledMerge:
+    """One first-parent commit on main the installed build lacks, decoded from git's log once."""
 
-    Every install stops every running unit, so merges batch into one install instead of
-    one install each. The window is read from the merges' own git times, not a schedule.
-    Each due repository merge launches Core's installer once, including dependency
-    merges. The log record selects the member that owns that action.
+    at: int
+    request: str
+    title: str
+    format: ClassVar[str] = "%ct%x1f%s%x1f%b%x1e"
+
+    @classmethod
+    def read(cls, repo: Repo, installed: str, main: str) -> tuple[Self, ...]:
+        """GitHub's merge subject names the request; its body's first line is the title."""
+        log = repo.git(repo.checkout, "log", "--first-parent", f"--format={cls.format}",
+                       f"{installed}..{main}")
+        return tuple(cls(int(at), subject.removeprefix("Merge pull request ").partition(" from ")[0],
+                         body.strip().partition("\n")[0])
+                     for record in log.split("\x1e")[:-1]
+                     for at, subject, body in (record.lstrip("\n").split("\x1f"),))
+
+    @property
+    def line(self) -> str:
+        return f"{self.request} {self.title}"
+
+
+@dataclass(frozen=True)
+class InstallDue(UndatedStandingRule):
+    """A configured main not contained in the installed build can use an install, from the
+    pass it leaves the build: due is a disposition, never a launch.
+
+    Every install stops every running unit, so the line names what an install now would
+    carry and the open requests about to land, and the commander batches them into one
+    `order install`. That verb launches Core's installer; the log record of its run
+    selects the member that renders it.
     """
 
     repo: RepositoryName
     main: str
     installed: str
-    commits: int = field(compare=False)
-    oldest_minutes: int = field(compare=False)
+    merges: tuple[UninstalledMerge, ...] = field(compare=False)
+    landing: tuple[UnmergedListedPullRequest, ...] = field(compare=False)
     logs: installer_launch.InstallLogs = field(compare=False)
     core: Repo = field(compare=False)
     target: str = field(compare=False)
-    settle: ClassVar[float] = 30 * 60
     headline: ClassVar[str] = "INSTALL DUE"
 
     @property
@@ -95,10 +119,15 @@ class InstallDue(IndependentStandingRule, UndatedStandingRule):
         return InstallDue
 
     @classmethod
-    def violations(cls, comms: Comms, commander: str) -> tuple[InstallDue, ...]:
+    def scan_observed(cls, comms: Comms, commander: str,
+                      observed: Sequence[UnitState], frame: HeartbeatFrame) -> tuple[InstallDue, ...]:
+        return cls.due(comms, frame.pulls)
+
+    @classmethod
+    def due(cls, comms: Comms, pulls: PullRequests) -> tuple[InstallDue, ...]:
+        DeclaredFamily.discover_package(commander)  # The verbs that clear it, for its action.
         repos = comms.registry.snapshot().commander_project.require().repos
         installed = RecordedBuildIdentity.installed()
-        now = time.time()
         logs = installer_launch.InstallLogs(comms.root)
         due: list[InstallDue] = []
         for repo in repos:
@@ -107,33 +136,40 @@ class InstallDue(IndependentStandingRule, UndatedStandingRule):
         target = core.git(core.checkout, "rev-parse", "origin/main").strip()
         for repo in repos:
             main = repo.git(repo.checkout, "rev-parse", "origin/main").strip()
-            if installed.contains(main, repo.checkout):
-                continue
             recorded = installed.for_repository(repo)
-            merged = repo.git(repo.checkout, "log", "--first-parent", "--format=%ct",
-                              f"{recorded.commit}..{main}").split()
-            waited = now - min(map(int, merged), default=now - cls.settle)
-            if waited >= cls.settle:
-                member = logs.member(repo.github, main)
-                due.append(member(repo.github, main, recorded.commit,
-                                  len(merged), int(waited // 60), logs, core, target))
+            # Main is in the build exactly when git logs no first-parent commit past it.
+            merges = UninstalledMerge.read(repo, recorded.commit, main)
+            if not merges:
+                continue
+            member = logs.member(repo.github, main)
+            due.append(member(repo.github, main, recorded.commit, merges,
+                              tuple(row for row in pulls.open(repo.github) if row.landing()),
+                              logs, core, target))
         return tuple(due)
 
-    def enforce(self, comms: Comms, commander: str) -> None:
+    def launch(self, comms: Comms) -> str:
         """An already-launched merge needs no second attempt."""
+        return self.action
+
+    def enforce(self, comms: Comms, commander: str) -> None:
+        """Due is a disposition: the commander's `order install` launches."""
 
     def line(self) -> str:
-        return (f"{self.headline} ({self.repo.to_wire()}: main {self.main}, installed "
-                f"{self.installed}, {self.commits} commits, oldest {self.oldest_minutes} min) "
+        oldest = int((time.time() - min(merge.at for merge in self.merges)) // 60)
+        landing = ", ".join(f"#{row.number} {row.branch}" for row in self.landing) or "none"
+        return (f"{self.headline} ({self.repo.to_wire()}: main {self.main[:12]}, installed "
+                f"{self.installed[:12]}, {len(self.merges)} merges, oldest {oldest} min: "
+                f"{'; '.join(merge.line for merge in self.merges)}; landing: {landing}) "
                 f"-> {self.action}")
 
 
 class PendingInstallDue(InstallDue):
     @property
     def action(self) -> str:
-        return f"launched an install of Core main {self.target}"
+        verbs = " or ".join(f"`{verb.usage()}`" for verb in self.clearing_verbs)
+        return f"{verbs} installs Core main {self.target[:12]}; batch the landing requests first"
 
-    def enforce(self, comms: Comms, commander: str) -> None:
+    def launch(self, comms: Comms) -> str:
         """Every repository's merge installs the same Core target, so a run of that target
         already going is this merge's launch too; any other run is waited out."""
         command = InstallCliCommand(checkout=self.core.checkout, to=self.target,
@@ -145,8 +181,9 @@ class PendingInstallDue(InstallDue):
         except installer_launch.InstallRunning as running:
             for unit in running.installing(self.target):
                 self.logs.record(unit.logs, self.repo, self.main)
-            return
+            return str(running)
         self.logs.record(run.unit.logs, self.repo, self.main)
+        return f"launched an install of Core main {self.target}"
 
 
 @dataclass(frozen=True)
