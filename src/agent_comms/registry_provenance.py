@@ -9,7 +9,6 @@ from collections.abc import Iterator, Mapping
 from dataclasses import dataclass, replace
 from functools import cached_property, partial
 from pathlib import Path
-from types import MappingProxyType
 from typing import TYPE_CHECKING, Generic, TypeVar
 
 from agent_comms.field_codec import FieldCodec, ThreadLookup
@@ -163,6 +162,15 @@ class RegistryNames(Generic[Member]):
             raise UnregisteredThreadError(f"Thread {canonical!r} is not registered.") from error
 
 
+@dataclass(frozen=True, slots=True)
+class SenderBindings:
+    """The namespace's SQL inputs, built together from its original members."""
+
+    senders: str
+    unrecorded: str
+    births: str
+
+
 @dataclass(frozen=True, kw_only=True)
 class RegistryProvenance(RegistryNames[ThreadProvenance]):
     threads: dict[str, ThreadProvenance]
@@ -188,20 +196,23 @@ class RegistryProvenance(RegistryNames[ThreadProvenance]):
         return replace(self, threads=threads)
 
     @cached_property
-    def sender_bindings(self) -> Mapping[str, str]:
-        """One lazy SQL value for this namespace, including its historical names."""
+    def sender_bindings(self) -> SenderBindings:
+        """Current sender identities and births for one SQL read, including aliases."""
         senders = {}
+        births = {}
         unrecorded: list[str] = []
         for name, source in self.named_members():
+            births[name] = source.incarnation.wire_birth
             senders[name] = tuple(DeliveryScope.sender_lookups(
                 source.incarnation, partial(unrecorded.append, name)
             ))
-        return MappingProxyType({
-            "senders": FieldCodec.compact(FieldCodec.encode(
+        return SenderBindings(
+            senders=FieldCodec.compact(FieldCodec.encode(
                 senders, dict[str, tuple[ThreadLookup | PublicSender, ...]]
             )),
-            "unrecorded": json.dumps(unrecorded),
-        })
+            unrecorded=json.dumps(unrecorded),
+            births=json.dumps(births),
+        )
 
     def retired(self, name: str) -> bool:
         """A recorded namespace keeps no removal ledger. A name its own bus

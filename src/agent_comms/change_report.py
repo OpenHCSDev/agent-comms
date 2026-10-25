@@ -339,7 +339,9 @@ class FileLine(WireValue, SourceReference):
                       if isinstance(node, (ast.ClassDef, ast.FunctionDef, ast.AsyncFunctionDef))
                       for end in (cast(int, node.end_lineno),)
                       if node.lineno <= self.line <= end)
-        return Declaration(self, min(spans, key=len))
+        span = min(spans, key=len)
+        return Declaration(replace(self, file=str((root / self.file).resolve()),
+                                   line=span.start), span)
 
     def require_exists(self, roots: SourceRoots, revision: SourceText) -> None:
         repository, revision = self.repository.source(roots, revision)
