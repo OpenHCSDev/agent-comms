@@ -99,13 +99,13 @@ class MessageIdentitySource(MessageReference, messages.BusProjectionTables):
     """A record's existing reference, searchable without recomputing its content hash."""
 
     @classmethod
-    def require_prefix_identity(
-        cls, db: sqlite3.Connection, source: sqlite3.Connection, through: int,
-    ) -> None:
+    def practice_sequence(cls, db: sqlite3.Connection, source: sqlite3.Connection) -> int:
+        through = messages.BusRow.last_seq(source)
         if through:
             expected = cls.require(source, seq=through)
             if cls.require(db, seq=through) != expected:
                 raise RelationViolationError("Practice bus identity differs at its last sequence")
+        return through
 
     sender: str
     indexes = (

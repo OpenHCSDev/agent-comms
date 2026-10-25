@@ -27,8 +27,7 @@ from typing import (
 from agent_comms.response_policy import InformationalPolicy, ResponseEligibility, ResponsePolicy
 from agent_comms.typed_table import (
     AppendOnlyTables, Column, DerivedTables, DurableTables, ForeignKey, Index,
-    AttachedPracticeRebuild, ProducedTable, ProjectionProducer, SharedFileTables,
-    TableReference, TypedRow, TypedTable,
+    ProducedTable, SharedFileTables, TableReference, TypedRow, TypedTable,
 )
 
 from .change_report import FileLine, NoChangeReport, ReportEvidence
@@ -96,25 +95,10 @@ class BusProjectionTables(ProducedTable, SharedFileTables, DerivedTables, declar
         ReplayedHolders(tables=frozenset(selected)).replay(db)
 
     @classmethod
-    def require_practice(
-        cls, db: sqlite3.Connection, rows: tuple[type[TypedTable], ...],
-        source: sqlite3.Connection,
+    def replay(
+        cls, db: sqlite3.Connection, rows: tuple[type[TypedTable], ...], *, after: int,
     ) -> None:
-        projections = tuple(row for row in cls.projection_rows() if row in rows)
-        if not ProjectionProducer.matches(source, projections):
-            raise RelationViolationError("Practice projection producers differ from this runtime")
-        through = BusRow.last_seq(source)
-        for row in cls.projection_rows():
-            row.require_prefix_identity(db, source, through)
-
-    @classmethod
-    def create_from_practice(
-        cls, db: sqlite3.Connection, rows: tuple[type[TypedTable], ...],
-        rebuild: AttachedPracticeRebuild,
-    ) -> None:
-        super().create_schema(db, rows)
-        rebuild.copy_rows(db, rows)
-        StoredHolders(tables=frozenset(rows)).replay(db, after=BusRow.last_seq(rebuild.source))
+        StoredHolders(tables=frozenset(rows)).replay(db, after=after)
 
 
 @dataclass(frozen=True)

@@ -770,16 +770,11 @@ class SchemaRebuild:
     def attached(self, db: sqlite3.Connection) -> Iterator[SchemaRebuild]:
         yield self
 
-    def require(
+    def rebuild(
         self, schema: type[DerivedTables], db: sqlite3.Connection,
         rows: tuple[type[TypedTable], ...],
     ) -> None:
-        """History itself needs no practice-prefix proof."""
-
-    def create(
-        self, schema: type[DerivedTables], db: sqlite3.Connection,
-        rows: tuple[type[TypedTable], ...],
-    ) -> None:
+        schema.drop_rows(db, rows)
         schema.create_schema(db, rows)
 
 
@@ -808,22 +803,21 @@ class PracticeRebuild(SchemaRebuild):
 class AttachedPracticeRebuild(SchemaRebuild):
     source: sqlite3.Connection
 
-    def require(
+    def rebuild(
         self, schema: type[DerivedTables], db: sqlite3.Connection,
         rows: tuple[type[TypedTable], ...],
     ) -> None:
-        schema.require_practice(db, rows, self.source)
-
-    def create(
-        self, schema: type[DerivedTables], db: sqlite3.Connection,
-        rows: tuple[type[TypedTable], ...],
-    ) -> None:
-        schema.create_from_practice(db, rows, self)
-
-    def copy_rows(self, db: sqlite3.Connection, rows: tuple[type[TypedTable], ...]) -> None:
-        for row in rows:
+        projections = tuple(row for row in schema.projection_rows() if row in rows)
+        if not ProjectionProducer.matches(self.source, projections):
+            raise RelationViolationError("Practice projection producers differ from this runtime")
+        through = max((row.practice_sequence(db, self.source)
+                       for row in schema.projection_rows()), default=0)
+        schema.drop_rows(db, rows)
+        schema.create_tables(db, rows)
+        for row in projections:
             db.execute(f'INSERT INTO "{row.declared_name}" '
                        f'SELECT * FROM "{PracticeRebuild.database}"."{row.declared_name}"')
+        schema.replay(db, rows, after=through)
 
 
 class SchemaChange(ABC):
@@ -942,8 +936,14 @@ class TableSchema(ABC):
             raise cls.schema_error(f"{cls.__name__} foreign-key enforcement is disabled")
 
     @classmethod
-    def create_schema(cls, db: sqlite3.Connection) -> None:
-        for row in cls.schema_rows():
+    def create_schema(
+        cls, db: sqlite3.Connection, rows: tuple[type[TypedTable], ...] | None = None,
+    ) -> None:
+        cls.create_tables(db, cls.schema_rows() if rows is None else rows)
+
+    @classmethod
+    def create_tables(cls, db: sqlite3.Connection, rows: tuple[type[TypedTable], ...]) -> None:
+        for row in rows:
             row.create(db)
 
     @classmethod
@@ -1021,9 +1021,12 @@ class ComposedSchemas:
         return any(family.schema_differs(db, rows) for family in cls.schema_families())
 
     @classmethod
-    def create_schema(cls, db: sqlite3.Connection) -> None:
+    def create_schema(
+        cls, db: sqlite3.Connection, rows: tuple[type[TypedTable], ...] | None = None,
+    ) -> None:
+        selected = cls.schema_rows() if rows is None else rows
         for family in cls.schema_families():
-            family.create_schema(db)
+            family.create_schema(db, tuple(row for row in family.schema_rows() if row in selected))
 
     @classmethod
     def carry_schema(
@@ -1516,13 +1519,9 @@ class DerivedTables(TableSchema):
         ) or row in changed_producers)
 
     @classmethod
-    def create_schema(
-        cls, db: sqlite3.Connection, rows: tuple[type[TypedTable], ...] | None = None,
-    ) -> None:
-        selected = cls.schema_rows() if rows is None else rows
-        for row in selected:
-            row.create(db)
-        projections = tuple(row for row in cls.projection_rows() if row in selected)
+    def create_tables(cls, db: sqlite3.Connection, rows: tuple[type[TypedTable], ...]) -> None:
+        super().create_tables(db, rows)
+        projections = tuple(row for row in cls.projection_rows() if row in rows)
         for producer in ProjectionProducer.records_for(projections):
             producer.upsert(db)
 
@@ -1534,31 +1533,24 @@ class DerivedTables(TableSchema):
         changed = cls.changed_rows(db)
         if not changed:
             return
-        rebuild.require(cls, db, changed)
+        rebuild.rebuild(cls, db, changed)
+
+    @classmethod
+    def drop_rows(cls, db: sqlite3.Connection, rows: tuple[type[TypedTable], ...]) -> None:
         # Unchanged children may reference a rebuilt parent: check after its rows return.
         db.execute("PRAGMA defer_foreign_keys=ON")
-        for row in changed:
+        for row in rows:
             row.take_previous_name(db)
-        names = frozenset(row.declared_name for row in changed)
+        names = frozenset(row.declared_name for row in rows)
         for stored in cls.stored_tables(db):
             if stored.name in names:
                 stored.drop(db)
-        rebuild.create(cls, db, changed)
 
     @classmethod
-    def require_practice(
-        cls, db: sqlite3.Connection, rows: tuple[type[TypedTable], ...],
-        source: sqlite3.Connection,
+    def replay(
+        cls, db: sqlite3.Connection, rows: tuple[type[TypedTable], ...], *, after: int,
     ) -> None:
-        """Only a schema that consumes practice rows needs a prefix proof."""
-
-    @classmethod
-    def create_from_practice(
-        cls, db: sqlite3.Connection, rows: tuple[type[TypedTable], ...],
-        rebuild: AttachedPracticeRebuild,
-    ) -> None:
-        """Other derived schemas retain their existing full rebuild."""
-        cls.create_schema(db, rows)
+        """Projection metadata has no history of its own to replay."""
 
     @classmethod
     def carry_schema(
@@ -2153,10 +2145,9 @@ class ProducedTable(ProducedRow, TypedTable, ProjectionSource, declared_name=Non
     """A table derives its producers from the writers that declare it as an output."""
 
     @classmethod
-    def require_prefix_identity(
-        cls, db: sqlite3.Connection, source: sqlite3.Connection, through: int,
-    ) -> None:
-        """The row that owns bus identities proves the prefix; other outputs add no check."""
+    def practice_sequence(cls, db: sqlite3.Connection, source: sqlite3.Connection) -> int:
+        """Only the identity-owning row contributes a verified history prefix."""
+        return 0
 
     @classmethod
     def writer_declarations(cls) -> tuple[type[ProjectionSource], ...]:
@@ -2300,11 +2291,15 @@ class ReconciledFile(SQLiteFile, StoreLockFile):
         return HeldBusFile(cls, path)
 
     @classmethod
+    def schema_rebuild(cls, path: Path, practice_root: Path | None) -> SchemaRebuild:
+        """Files without a declared practice replay retain their normal rebuild."""
+        return FULL_SCHEMA_REBUILD
+
+    @classmethod
     def reconcile_at(cls, path: Path, practice_root: Path | None = None) -> bool:
         """Whether reconciling the file changed it, optionally using a retained practice file."""
         schema = cls.schema_at(path)
-        rebuild = (FULL_SCHEMA_REBUILD if practice_root is None else
-                   PracticeRebuild(practice_root / path.relative_to(cls.bus_root(path))))
+        rebuild = cls.schema_rebuild(path, practice_root)
         with _store_lock(path), closing(cls.writer(path, isolation_level=None, uri=True)) as db:
             return schema.reconcile_schema(db, cls.schema_change(path), rebuild=rebuild)
 

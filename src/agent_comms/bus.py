@@ -55,7 +55,10 @@ from agent_comms.read_basis import (
     ChannelDisplayScope, MessageDisplayScope, ReadCursor, RepliesDisplayScope,
 )
 from agent_comms.store_files import UNBOUNDED_CONTENTION, StoreLockContention
-from agent_comms.typed_table import CarriedWriter, ReconciledFile, SQLiteDatabase, WalStore
+from agent_comms.typed_table import (
+    FULL_SCHEMA_REBUILD, CarriedWriter, PracticeRebuild, ReconciledFile, SchemaRebuild,
+    SQLiteDatabase, WalStore,
+)
 from agent_comms.watched import Watched
 
 if TYPE_CHECKING:
@@ -489,6 +492,12 @@ class Bus(BusReader, ReconciledFile, WalStore, CarriedWriter, BusFile, Watched):
     @classmethod
     def table_schema(cls) -> type[BusSchema]:
         return BusSchema
+
+    @classmethod
+    def schema_rebuild(cls, path: Path, practice_root: Path | None) -> SchemaRebuild:
+        if practice_root is None:
+            return FULL_SCHEMA_REBUILD
+        return PracticeRebuild(practice_root / path.relative_to(cls.bus_root(path)))
 
     @contextmanager
     def observing(
