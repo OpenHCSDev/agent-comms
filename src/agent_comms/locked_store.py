@@ -17,7 +17,7 @@ from functools import cache
 from importlib import import_module
 from pathlib import Path
 from pkgutil import walk_packages
-from typing import ClassVar, Generic, Self, TypeVar
+from typing import TYPE_CHECKING, ClassVar, Generic, Self, TypeVar
 
 from pydantic import JsonValue
 
@@ -415,10 +415,31 @@ class DurableFile(RootFile):
     __slots__ = ()
 
 
-class RuntimeFile(RootFile):
+class WrittenFile(RootFile, ABC):
+    """A file whose kind declares when maintenance permits its writers."""
+
+    __slots__ = ()
+    if TYPE_CHECKING:
+        @property
+        def path(self) -> Path: ...
+
+    @property
+    def store(self) -> Self:
+        """A file writer publishes to itself; borrowed writers name their file instead."""
+        return self
+
+    @abstractmethod
+    def require_maintenance_open(self) -> None:
+        """Refuse writes that this file kind does not permit during maintenance."""
+
+
+class RuntimeFile(WrittenFile):
     """A bus file no carry writes: running owners rewrite it at any time, maintenance included."""
 
     __slots__ = ()
+
+    def require_maintenance_open(self) -> None:
+        """No installation reads this file, so maintenance never refuses its writers."""
 
 
 class BusFile(DurableFile):

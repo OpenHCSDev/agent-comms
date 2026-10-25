@@ -312,6 +312,8 @@ class RegistryStore(RegistryFile, CarriedDocument[RegistryDocument], RegistryTie
     @contextmanager
     def editing(self) -> Iterator[RegistryEdit]:
         with self.locked():
+            # Refuse before an editor can prepare participants or journal a registration.
+            self.require_maintenance_open()
             original = self.read_revision_unlocked()
             original.document.purpose.require_write()
             yield RegistryEdit(self, original.document.copy(), original)
