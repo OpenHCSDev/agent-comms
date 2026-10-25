@@ -382,13 +382,27 @@ class Package:
         self.root = self.src / PACKAGE / "__init__.py"  # read for reachability, never a unit
         self.clients = clients
 
+    def dotted(self, path: Path) -> str:
+        return ".".join(path.relative_to(self.src).with_suffix("").parts).removesuffix(
+            ".__init__"
+        )
+
     @cached_property
     def files(self) -> dict[str, Path]:
         return {
-            ".".join(path.relative_to(self.src).with_suffix("").parts).removesuffix(
-                ".__init__"
-            ): path
+            self.dotted(path): path
             for path in sorted(set((self.src / PACKAGE).rglob("*.py")) - {self.root})
+        }
+
+    @cached_property
+    def script_packages(self) -> dict[str, Path]:
+        """The modules of every other package a console script starts in, read for
+        reachability and never units: their imports of agent_comms run like a script's."""
+        roots = {script.partition(".")[0] for script in self.entry_points} - {PACKAGE}
+        return {
+            self.dotted(path): path
+            for root in sorted(roots)
+            for path in sorted((self.src / root).rglob("*.py"))
         }
 
     @cached_property
@@ -406,15 +420,15 @@ class Package:
         return ".".join(module.split(".")[:2])
 
     def resolve(self, name: str) -> str | None:
-        """The module an import names, or None when it is outside agent_comms."""
-        while name and name not in self.files:
+        """The module an import names, or None when this tree does not provide it."""
+        while name and name not in self.modules:
             name = name.rpartition(".")[0]
         return name or None
 
     @cached_property
     def modules(self) -> dict[str, Path]:
-        """Every importable module, the package root included."""
-        return {PACKAGE: self.root, **self.files}
+        """Every importable module: the units, the package root and the script packages."""
+        return {PACKAGE: self.root, **self.script_packages, **self.files}
 
     def contains(self, module: str) -> bool:
         """Whether an absolute module name lies inside this package, present or not."""
@@ -453,8 +467,10 @@ class Package:
 
     @cached_property
     def unit_imports(self) -> tuple[Import, ...]:
-        """Imports between units; the package root is read for reachability only."""
-        return tuple(edge for edge in self.imports if edge.source in self.files)
+        """Imports between units; the other modules are read for reachability only."""
+        return tuple(
+            edge for edge in self.imports if edge.source in self.files and edge.target in self.files
+        )
 
     @cached_property
     def violations(self) -> tuple[Import, ...]:
