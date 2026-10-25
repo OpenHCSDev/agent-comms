@@ -1,7 +1,10 @@
 """Real turn acquisition and terminal handling share the execution owner."""
 
 import os
+import signal
 import sqlite3
+import subprocess
+import sys
 from contextlib import AsyncExitStack, asynccontextmanager, closing
 from dataclasses import fields
 
@@ -29,6 +32,7 @@ from agent_comms.goal_states import ActiveGoal
 from agent_comms.maintenance_barrier import MaintenanceOperator
 from agent_comms.owned_turn import OwnedTurn
 from agent_comms.threads import Thread
+from agent_comms.turn_failure import NativeChildSignaled
 from agent_comms.turn_input_source import NoTurnAcceptance
 from agent_comms.turn_terminal import OwnerStop
 
@@ -144,6 +148,33 @@ async def test_turn_failing_under_install_hold_is_stopped_not_blocked(execution_
         held = comms.owners.maintenance.begin(MaintenanceOperator.current())
         turn.finish_goals()
         comms.owners.maintenance.clear(held)
+    assert isinstance(comms.goals.goal_execution("worker"), RunnableExecution)
+    assert failure_count(comms) == 0
+
+
+def exit_of(script: str) -> int:
+    """The return code a real child process leaves behind."""
+    return subprocess.run([sys.executable, "-c", script], timeout=30).returncode
+
+
+def test_only_a_signal_ends_the_native_child_as_signaled():
+    """A kill, and Pi's own SIGTERM/SIGHUP shutdown exits, are signals; a crash is not."""
+    killed = exit_of("import os, signal; os.kill(os.getpid(), signal.SIGKILL)")
+    pi_sigterm = exit_of(f"raise SystemExit({128 + signal.SIGTERM})")
+    assert killed == -signal.SIGKILL
+    assert NativeChildSignaled.ended_by(killed)
+    assert NativeChildSignaled.ended_by(pi_sigterm)
+    assert not NativeChildSignaled.ended_by(exit_of("raise SystemExit(1)"))
+    assert not NativeChildSignaled.ended_by(None)
+
+
+@pytest.mark.asyncio
+async def test_turn_whose_child_was_signaled_is_stopped_not_blocked(execution_bus):
+    """A group kill reaches the child before the owner's stop callback; the goal stays runnable."""
+    comms = execution_bus
+    async with turn_on(comms) as turn:
+        await turn.progress.done(events.Done(
+            "killed with its owner", False, failure=NativeChildSignaled("Pi exited 143")))
     assert isinstance(comms.goals.goal_execution("worker"), RunnableExecution)
     assert failure_count(comms) == 0
 

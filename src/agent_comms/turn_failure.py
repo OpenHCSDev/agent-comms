@@ -2,11 +2,14 @@
 
 from __future__ import annotations
 
+import signal
 from abc import abstractmethod
+from contextlib import suppress
 from dataclasses import dataclass, replace
 from typing import TYPE_CHECKING, ClassVar
 
 from .declared_family import DeclaredFamily
+from .errors import StaleAttemptError
 from .native_arguments import SelectedModel
 
 if TYPE_CHECKING:
@@ -46,6 +49,12 @@ class TurnFailure(DeclaredFamily):
 
     def retry_delay(self, attempt_ordinal: int) -> float:
         raise TypeError("Only a retryable provider failure has a retry delay")
+
+    @classmethod
+    def settle_attempt(cls, permit, store, observation) -> None:
+        """A failed attempt blocks its goal until someone retries it."""
+        with suppress(StaleAttemptError):
+            permit.reservation.fail(store, cls.declared_name, observation=observation)
 
 
 class InputIdUnavailable(TurnFailure):
@@ -184,3 +193,27 @@ class BackendFailed(TurnFailure):
 
 class NativeLaunchInvalid(BackendFailed):
     """The configured native launch could not be acquired."""
+
+
+class NativeChildSignaled(TerminalFailure):
+    """A signal ended the native child: the stop an operator gives, never a backend failure.
+
+    Declared last, so any failure the turn already recorded keeps precedence.
+    """
+
+    default_text = "Pi RPC child was stopped by a signal."
+    # Pi's rpc-mode shutdown exits 128 + SIGTERM or 128 + SIGHUP; an unhandled signal is negative.
+    handled_exits: ClassVar[frozenset[int]] = frozenset(
+        {128 + signal.SIGTERM, 128 + signal.SIGHUP})
+
+    @classmethod
+    def ended_by(cls, returncode: int | None) -> bool:
+        return returncode is not None and (returncode < 0 or returncode in cls.handled_exits)
+
+    @classmethod
+    def detected(cls, session: TurnSession, transport_ok: bool) -> bool:
+        return cls.ended_by(session.native.proc.returncode)
+
+    @classmethod
+    def settle_attempt(cls, permit, store, observation) -> None:
+        permit.stop(store)
