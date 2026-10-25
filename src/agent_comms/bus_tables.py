@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import json
 import sqlite3
+from collections.abc import Iterable
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Annotated
 
@@ -16,11 +18,26 @@ from agent_comms.typed_table import (
     Index,
     ProjectionProducerTables,
     TableReference,
+    TypedRow,
     TypedTable,
 )
 
 if TYPE_CHECKING:
+    from .channel_targets import NamedTarget
     from .read_basis import RepliesDisplayScope
+    from .registry_provenance import RegistryProvenance
+
+
+@dataclass(frozen=True)
+class ReferenceMatch(TypedRow):
+    """The identity join's computed result, not another stored reference."""
+
+    matched: bool
+
+
+@dataclass(frozen=True)
+class AnswerMatch(ReferenceMatch):
+    answers: bool
 
 
 class BusSchema(ComposedSchemas, messages.BusTables, ProjectionProducerTables, messages.BusProjectionTables,
@@ -113,6 +130,42 @@ class MessageIdentitySource(MessageReference, messages.BusProjectionTables):
         Index(("message_id",)),
         Index(("sender", "message_id")),
     )
+
+    @classmethod
+    def require_matched(cls, matches: Iterable[ReferenceMatch], refusal: Exception) -> None:
+        if not all(match.matched for match in matches):
+            raise refusal
+
+    @classmethod
+    def answering(
+        cls, db: sqlite3.Connection, references: tuple[MessageReference, ...],
+        route: NamedTarget, snapshot: RegistryProvenance,
+    ) -> tuple[MessageReference, ...]:
+        """Validate a batch's identities and select its exact reply destination once."""
+        predicate, parameters = route.answered_sql(
+            messages.Addressed.table._sql("addressed.{target}"), "identity.sender", snapshot,
+        )
+        query = (
+            "WITH supplied AS (SELECT key AS position, "
+            "json_extract(value,'$[0]') AS seq, json_extract(value,'$[1]') AS message_id "
+            "FROM json_each(?)) "
+            "SELECT supplied.seq, supplied.message_id, "
+            "identity.seq IS NOT NULL AND addressed.seq IS NOT NULL AS matched, "
+            f"COALESCE(({predicate}),0) AS answers FROM supplied "
+            f'LEFT JOIN "{cls.declared_name}" AS identity ON identity.seq=supplied.seq '
+            "AND identity.message_id=supplied.message_id "
+            f'LEFT JOIN "{messages.Addressed.table.declared_name}" AS addressed '
+            "ON addressed.seq=identity.seq ORDER BY supplied.position"
+        )
+        selected = MessageReference.joined(db.execute(query, (
+            json.dumps(tuple((reference.seq, reference.message_id) for reference in references)),
+            *parameters,
+        )), AnswerMatch)
+        cls.require_matched(
+            (match for _, match in selected),
+            RelationViolationError("Message reference does not match its bus record"),
+        )
+        return tuple(reference for reference, match in selected if match.answers)
 
 
 @dataclass(frozen=True)
