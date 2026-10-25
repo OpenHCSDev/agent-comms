@@ -17,6 +17,7 @@ from agent_comms.standing_rules import (
     IdlePullRequest, OrderlessUnreviewedHead, OrderRefusingStandingRule, StuckMerge,
 )
 from agent_comms.errors import ToolRefusedError
+from agent_comms.field_codec import RecordProblems
 from agent_comms.tool_caller import ThreadCaller
 from agent_comms.work_branches import SourceGrowth
 from agent_comms.order_tools import CommsHeadVerdictTool
@@ -95,6 +96,20 @@ def test_judge_ok_and_back_dispatch_orderless_prs_without_positional_edit_ids(he
                 "--at", location, "--derive", "base-method", "--by", location], context)
     assert isinstance(comms.goals.todos.head_reviews(request)[0].verdict, RejectedHeadVerdict)
     assert len(tuple(call for call in github.calls() if f"statuses/{request.head}" in call[1])) == 2
+
+
+def test_a_verdict_lists_every_argument_refusal_in_one_run_and_records_nothing(head_bus):
+    """ok with empty --serves and both edit IDs and --pr took one run per refusal."""
+    comms, github, request = head_bus
+    context = order.Commander.read_root(comms.root)
+    with pytest.raises(RecordProblems) as refused:
+        judge.main(["ok", "E1:abcd", "--pr", str(request.pr), "--head", request.head,
+                    "--why", ACCEPTED.text, "--serves", ""], context)
+    assert {"subject", "--serves"} <= refused.value.problems.keys()
+    assert "edit IDs or --pr" in refused.value.problems["subject"]
+    assert "0 words" in refused.value.problems["--serves"]
+    assert not comms.goals.todos.head_reviews(request)
+    assert not any(f"statuses/{request.head}" in call[1] for call in github.calls())
 
 
 def test_judge_reviewing_after_ok_withdraws_the_accepted_status_on_that_head(
@@ -258,18 +273,24 @@ def test_judge_ok_keeps_every_repeated_growth_reason():
 
 
 def test_an_armed_head_with_a_red_required_check_is_a_stuck_merge_every_pass(head_bus):
+    """2026-10-25: #3332, red and conflicting, printed two UNSTICK lines; one head is one line
+    naming every block on it, its age from the oldest."""
     comms, github, green = head_bus
     source_repo = green.repo
     stamp = datetime.fromtimestamp(time.time() - 3600, UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
+    later = datetime.fromtimestamp(time.time() - 600, UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
     github.put(source_repo, UnmergedListedPullRequest(
         8, "fix/head-8", green.head, stamp, "main", reviewable_times=(stamp,),
-        armed_times=(stamp,), merge_blocks=(FailedCheckMergeBlock(stamp, "debt-src"),),
+        armed_times=(stamp, later),
+        merge_blocks=(FailedCheckMergeBlock(stamp, "debt-src"), ConflictMergeBlock(later)),
     ))
-    found = StuckMerge.scan_pulls(comms.goals, ProgressRead(()))
-    assert [(rule.request.pr, rule.block.what()) for rule in found] == [
-        (8, "required check debt-src failed")]
+    found, = StuckMerge.scan_pulls(comms.goals, ProgressRead(()))
+    assert found.request.pr == 8
+    assert found.line().endswith(
+        ": auto-merge armed but required check debt-src failed; conflicts with its base"
+        " -> fix debt-src at its owner; merge main into it")
     # The age is the heartbeat Ping's to render, from began(); the line names no clock.
-    assert found[0].began() == found[0].block.since and found[0].broke_after(0)
+    assert found.began() == found.blocks[0].since and found.broke_after(0)
 
 
 def test_a_pr_verdict_acts_on_the_unit_holding_that_head(head_bus):

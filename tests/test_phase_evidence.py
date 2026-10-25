@@ -89,7 +89,7 @@ def test_boundary_evidence_ignores_its_declaration_and_exception_groups(tmp_path
 def test_every_plan_phase_declares_its_plan_and_evidence():
     phases = PlanPhase.members_with(PlanPhase)
     assert phases and all(phase.plan.document.startswith("plans/") for phase in phases)
-    assert all(isinstance(phase.evidence, PhaseEvidence) for phase in phases)
+    assert all(isinstance(phase.phase_evidence(), PhaseEvidence) for phase in phases)
 
 
 def main_of(tmp_path, files):

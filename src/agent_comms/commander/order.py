@@ -833,11 +833,21 @@ class CommanderVerb(DeclaredVerb, affix="Verb"):
     def run(self, ctx: Commander) -> None: ...
 
     @classmethod
-    def usage(cls) -> str:
-        """This verb's command line, rendered by the parser its options declare."""
+    def command(cls, values: Mapping[str, str]) -> str:
+        """This verb's name and the arguments ``values`` fills, in the order its parser
+        declares them; a required positional left unfilled shows its placeholder, and every
+        other option is left out."""
         verbs = argparse.ArgumentParser(prog=cls.tool()).add_subparsers()
         cls.add_parser(verbs)
-        return ' '.join(next(iter(verbs.choices.values())).format_usage().split()[1:])
+        parser, = verbs.choices.values()
+        placeholder = parser._get_formatter()._format_args  # the usage line's own metavar text
+        words = [cls.tool(), cls.declared_name]
+        for action in parser._actions:
+            if action.dest in values:
+                words += [*action.option_strings[:1], values[action.dest]]
+            elif action.required and not action.option_strings:
+                words.append(placeholder(action, action.dest))
+        return ' '.join(words)
 
 
 class HeartbeatGated(CommanderVerb, declared_name=None):
@@ -882,8 +892,9 @@ class DirectiveVerb(HeartbeatGated):
 
         Closed names answer nothing; unknown identities refuse instead of recording a reply
         that silently drops its references. A wrong addressee leaves its real debt uncovered.
-        A refusal lists every misaddressed name and every blocking debt together, with the
-        replies that answer all of them at once, so one round trip clears the gate.
+        A refusal lists every misaddressed name and every blocking debt together, debts still
+        inside their answer window included since they fall due before the retry lands, with
+        the replies that answer all of them at once, so one round trip clears the gate.
         """
         now = time.time()
         opened = OwedAnswer.opened(ctx.comms, self.who(ctx))
@@ -902,14 +913,15 @@ class DirectiveVerb(HeartbeatGated):
         answered = tuple(rule for rule in opened if rule.answered_by(named))
         problems |= {rule.cited: reason for rule in opened
                      if (reason := rule.misaddressed(named, reached))}
-        owed = tuple(rule for rule in opened if rule.due(now) and not rule.answered_by(named))
-        for rule in owed:
-            if rule.blocks(reached, self, answered):
-                problems[rule.cited] = (f'{rule.line()}: {rule.message.body[:80]}\n'
-                                        f'{rule.clearing_action()}')
-            else:
+        unanswered = tuple(rule for rule in opened if not rule.answered_by(named))
+        blocking = tuple(rule for rule in unanswered if rule.blocks(reached, self, answered))
+        for rule in unanswered:
+            if rule.due(now) and rule not in blocking:
                 print(f'WARNING: {rule.line()}')
-        if problems:
+        if problems or any(rule.due(now) for rule in blocking):
+            problems |= {rule.cited: f'{rule.line()}: {rule.message.body[:80]}\n'
+                                     f'{rule.clearing_action()}'
+                         for rule in blocking}
             raise RecordProblems(problems | self.replies_clearing(
                 tuple(rule for rule in opened if rule.cited in problems)))
         self.respond(ctx, tuple(dict.fromkeys(message.reference for message in named)))

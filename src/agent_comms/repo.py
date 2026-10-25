@@ -353,6 +353,13 @@ class Checkout:
     path: Path
 
     @classmethod
+    def present(cls, *paths: Path) -> tuple[Path, ...]:
+        """The given paths that are Git working trees, decided as Git decides: a `.git` file
+        links a worktree, a `.git` folder holds HEAD. A plain or empty-`.git` folder is none."""
+        return tuple(path for path in paths
+                     if (path / ".git").is_file() or (path / ".git" / "HEAD").is_file())
+
+    @classmethod
     def add(cls, repository: Path | str, path: Path | str, start: CheckoutStart) -> Self:
         Repo.git(repository, "worktree", "add", *start.worktree_arguments(Path(path)))
         return cls.prepared(Path(path))

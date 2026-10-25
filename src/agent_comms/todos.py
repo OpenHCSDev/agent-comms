@@ -110,7 +110,7 @@ from agent_comms.recorded_time import (
     UnrecordedEventTime,
 )
 from agent_comms.registry_store import RegistryStore
-from agent_comms.repo import Repo
+from agent_comms.repo import Checkout, Repo
 from agent_comms.repository_name import RepositoryName
 from agent_comms.slop import Slop
 from agent_comms.storage_rules import StorageRule, UnitStorage
@@ -731,7 +731,7 @@ class ListedPullRequest(DeclaredFamily, affix="ListedPullRequest"):
 
     def stuck(self) -> tuple[MergeBlock, ...]:
         """Blocks on a head whose auto-merge is armed: queued, and going nowhere."""
-        return tuple(block for _ in self.armed_times for block in self.merge_blocks)
+        return self.merge_blocks if self.armed_times else ()
 
     def landing(self) -> bool:
         """Armed, or carrying the commander's verdict, with nothing blocking the merge: the
@@ -1258,6 +1258,13 @@ class CheckoutReads:
         """This read's one reader of the checkout at path."""
         return self._checkouts.setdefault(path, PresentCheckout(path))
 
+    def progress_checkout(self, path: Path) -> ProgressCheckout:
+        """The checkout at path, or a retired one that holds no history: this read alone
+        turns the filesystem's answer into the progress family."""
+        if Checkout.present(path):
+            return self.checkout(path)
+        return MissingCheckout(path)
+
 
     def branch_difference(self, path: Path) -> BranchDifference:
         """All consumers share each branch read and one main commit per repository."""
@@ -1319,17 +1326,15 @@ class ProgressSource(PullRequestSource):
         storage = registry.storage_rule
         owned = storage.checkout_paths(owner)
         candidates = (todo.order.checked().check.directory, *owned)
-        path = next((path for path in candidates if (path / ".git").exists()),
-                    next(iter(owned), candidates[0]))
-        checkout: ProgressCheckout = (
-            pulls.checkout(path) if (path / ".git").exists() else MissingCheckout(path))
+        path = next(iter(Checkout.present(*candidates)), next(iter(owned), candidates[0]))
+        checkout = pulls.progress_checkout(path)
         try:
             references = checkout.references(storage, owner)
         except (OSError, GitCommandError, WorkBranchError, subprocess.TimeoutExpired) as failure:
             checkout, references = UnreadCheckout(path, str(failure)), ()
         return cls(
             todo=todo, pulls=pulls, checkout=checkout, references=references,
-            worktrees=tuple(pulls.checkout(path) for path in owned if (path / ".git").exists()),
+            worktrees=tuple(pulls.checkout(path) for path in Checkout.present(*owned)),
         )
 
     def commits(self, *excluded: str) -> Iterator[ProgressPoint]:
@@ -3142,15 +3147,15 @@ class Assignment(TodoHolder):
                              assigner: ThreadIncarnation, snapshot: RegistrySnapshot) -> None:
         """Validate this holder against open work using the transaction's registry snapshot."""
         TodoStore.require_unit_in(db, self.owner_identity, assigner)
-        worktrees = {owner.project_path for owner in self.holder_in(snapshot)}
+        worktrees = {path for owner in self.holder_in(snapshot) for path in owner.home_checkouts}
         for held in TodoStore._open(db, "assignment IS NOT NULL", ()):
             previous = held.held()
             if held.id == problem or previous.owner_identity == self.owner_identity:
                 continue
             for other in previous.holder_in(snapshot):
-                if other.project_path in worktrees:
+                for shared in worktrees.intersection(other.home_checkouts):
                     raise SharedWorktreeRefusal(
-                        problem, held.id, self.owner_identity, other.incarnation, other.project_path
+                        problem, held.id, self.owner_identity, other.incarnation, shared
                     )
 
     @property
@@ -3644,11 +3649,18 @@ class OrderQuote:
     quote: str
     rule: ClassVar[str] = "Quote 4+ words of the order this verdict carries out."
 
-    def require_quote(self, text: str) -> None:
-        """Whitespace-separated words, so a dotted or CamelCase name counts as one word."""
+    def word_refusal(self) -> tuple[str, ...]:
+        """Whitespace-separated words, so a dotted or CamelCase name counts as one word; the
+        count needs no order text, so a verdict reports it beside its other argument refusals."""
         quoted = " ".join(self.quote.split())
         if len(quoted.split()) < 4:
-            raise TodoError(f"--serves {quoted!r} is {len(quoted.split())} words. {self.rule}")
+            return (f"--serves {quoted!r} is {len(quoted.split())} words. {self.rule}",)
+        return ()
+
+    def require_quote(self, text: str) -> None:
+        for refused in self.word_refusal():
+            raise TodoError(refused)
+        quoted = " ".join(self.quote.split())
         if quoted not in " ".join(text.split()):
             raise TodoError(f"--serves {quoted!r} is not in the order. {self.rule} Copy consecutive words.")
 
