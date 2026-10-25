@@ -682,15 +682,30 @@ class SQLiteColumnShape(TypedRow):
     DDL: two tables with equal shapes hold the same rows."""
 
     name: str
-    type: str
+    sql_type: str
     notnull: bool
     pk: int
     hidden: int
 
     @classmethod
-    def of(cls, db: sqlite3.Connection, table: str) -> tuple[SQLiteColumnShape, ...]:
+    def of(cls, db: sqlite3.Connection, table: str) -> list[SQLiteColumnShape]:
         return cls.read(db.execute(
-            'SELECT name, type, "notnull", pk, hidden FROM pragma_table_xinfo(?)', (table,)))
+            'SELECT name, type AS sql_type, "notnull", pk, hidden FROM pragma_table_xinfo(?)',
+            (table,)))
+
+    @classmethod
+    def only_constraints_differ(cls, db: sqlite3.Connection, row: type[TypedTable]) -> bool:
+        """Whether the stored table holds the declared columns under other constraints, such
+        as a family CHECK that gained a member: rebuilding it carries every row, and SQLite
+        checks each against the declared constraints, so a row the declaration refuses fails
+        the carry."""
+        stored = {item.name: item.sql for item in row.stored_objects(db)}.get(row.declared_name)
+        declared = row.schema_objects()[row.declared_name]
+        if stored in (None, declared):
+            return False
+        with closing(sqlite3.connect(":memory:")) as scratch:
+            scratch.execute(declared)
+            return cls.of(db, row.declared_name) == cls.of(scratch, row.declared_name)
 
 
 @dataclass(frozen=True)
@@ -912,7 +927,8 @@ class TableSchema(ABC):
             row.take_previous_name(db)
             row.derive_nullable_fields(db)
             row.derive_relaxed_fields(db)
-            row.derive_constraints(db)
+            if SQLiteColumnShape.only_constraints_differ(db, row):
+                row.rebuild(db)
         SQLiteCatalogObject.carry(db, cls.declared_schema(),
                                   frozenset(item.name for item in cls.stored_schema(db, sharing)))
         cls.require_schema(db, sharing)
@@ -1793,22 +1809,6 @@ class TypedTable(
             return
         actual = {item.name: item.sql for item in cls.stored_objects(db)}
         if actual.get(cls.declared_name) == cls._table_sql(required=required):
-            cls.rebuild(db)
-
-    @classmethod
-    def derive_constraints(cls, db: sqlite3.Connection) -> None:
-        """A stored table with the declared columns whose constraints differ, such as a family
-        CHECK that gained a member, is rebuilt onto the declaration. SQLite checks every carried
-        row against the declared constraints, so a row the declaration refuses fails the carry.
-        """
-        actual = {item.name: item.sql for item in cls.stored_objects(db)}
-        declared = cls.schema_objects()[cls.declared_name]
-        if actual.get(cls.declared_name) in (None, declared):
-            return
-        with closing(sqlite3.connect(":memory:")) as scratch:
-            scratch.execute(declared)
-            columns = SQLiteColumnShape.of(scratch, cls.declared_name)
-        if SQLiteColumnShape.of(db, cls.declared_name) == columns:
             cls.rebuild(db)
 
     @classmethod
