@@ -31,8 +31,8 @@ export declare class SystemLayerSegment {
     sourceFile(): {kind: 'file'; path: string; sha256: string} | undefined;
 }
 export interface OwnerToolConnection {
-    request(payload: Record<string, unknown>, maxRequest: number, maxResponse: number,
-            unavailable: string): Promise<{ok?: boolean; error?: string}>;
+    request(payload: Record<string, unknown>, maxRequest: number,
+            maxResponse: number): Promise<{ok?: boolean; error?: string}>;
 }
 export interface OwnerToolEndpoint { path: string; token: string; }
 export declare class NativeInputClaim {
