@@ -1,4 +1,4 @@
-"""Native stories use one copied Todo record, including a resent send-back."""
+"""Native stories retain their append-only events across a copied bus and resend."""
 
 
 from agent_comms.repository_name import RepositoryName
@@ -97,8 +97,7 @@ def test_order_story_copied_bus_strike_and_send_back_once(comms, tmp_path):
     assert copied.goals.todos.path.stat().st_mtime_ns == stored_at
     with copied.goals.todos.writing() as db:
         for problem in ("P2", "P3"):
-            replace(saved, id=problem, assignment=None, order=UnorderedProblemOrder(),
-                    strikes=(), verdicts=(), messages=()).insert(db)
+            replace(saved, id=problem, assignment=None, order=UnorderedProblemOrder()).insert(db)
     copied.goals.todos.link(actor, "P2", "worker", saved.id)
     linked = FieldCodec.decode(OrderStory, CommsOrderStoryTool.invoke(
         copied, {"order_id": "resent-order"}, caller=caller))

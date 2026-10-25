@@ -12,7 +12,7 @@ from .tool_result import ToolResult
 
 if TYPE_CHECKING:
     from .held_orders import HeldOrders
-    from .todos import Todo
+    from .todos import StrikeTodo, Todo
 
 
 @dataclass(frozen=True)
@@ -22,12 +22,21 @@ class StoryLine:
 
 
 class StorySource:
+    def strikes_voided(self) -> tuple[StrikeTodo, ...]:
+        return ()
+
+    def history_events(self) -> tuple[StoryEvent, ...]:
+        return ()
+
     def story(self) -> tuple[StoryLine, ...]:
         return ()
 
 
 class StoryEvent(StorySource):
     at: EventTime
+
+    def history_events(self) -> tuple[StoryEvent, ...]:
+        return (self,)
 
     @abstractmethod
     def story_text(self) -> str: ...

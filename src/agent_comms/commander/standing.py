@@ -415,7 +415,7 @@ class UnownedWheelSpin(IndependentStandingRule, UndatedStandingRule):
                     scan: HeldOrders) -> tuple[UnownedWheelSpin, ...]:
         actor = comms.registry.require(commander).incarnation
         rows = tuple(todo for todo in comms.goals.todos.for_commander(actor)
-                     if not todo.holder_state.current_assignments())
+                     if not todo.current_holder.current_assignments())
         return cls.paired(comms, commander, rows, scan)
 
     @classmethod
@@ -431,7 +431,7 @@ class UnownedWheelSpin(IndependentStandingRule, UndatedStandingRule):
         idle, found = cls.idle(comms, commander, scan), []
         for todo in (todo for todo in rows if todo.id not in protected):
             for unit in idle:
-                if not todo.live_strikes(unit.name):
+                if not todo.history.strike_count(todo.id, unit.name):
                     idle.remove(unit)
                     found.append(ReassignedWheelSpin(todo, ReusedWorkDispatch.for_unit(
                         ReissuedOrderGoalAction.for_todo(todo, commander), unit)))

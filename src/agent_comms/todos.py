@@ -23,8 +23,8 @@ from functools import cached_property, partial
 from math import ceil
 from pathlib import Path
 from statistics import median
-from types import get_original_bases
-from typing import TYPE_CHECKING, Annotated, ClassVar, Self, get_args, get_origin
+from types import MappingProxyType, get_original_bases
+from typing import TYPE_CHECKING, Annotated, ClassVar, Self, cast, get_args, get_origin
 from uuid import uuid4
 
 from agent_comms.build_identity import (
@@ -117,9 +117,13 @@ from agent_comms.typed_table import (
     DurableTables,
     ExpressionIndex,
     Generated,
+    ForeignKey,
     Index,
+    NoDelete,
+    NoUpdate,
     SharedFileTables,
     TextStorage,
+    TypedRow,
     TypedTable,
 )
 from agent_comms.work_branches import BranchDifference, SourceGrowth, WorkBranchError, WorkBranches
@@ -2319,7 +2323,7 @@ class PendingProblemOrder(Pending, DeliverableProblemOrder):
             context.comms.goals.todos.history_for_commander(context.incarnation))
         problems = list(self.phase.order_refusals(reading, document.unplanned_reason))
         held = tuple(todo for todo in listed.values()
-                     if todo.holder_state.current_assignments() and todo.order.occupies_holder())
+                     if todo.current_holder.current_assignments() and todo.order.occupies_holder())
         holder = context.comms.registry.require(unit).incarnation
         busy = tuple(todo for todo in held
                      if todo.held().owner_identity == holder and todo.id not in group)
@@ -2396,7 +2400,7 @@ class PendingProblemOrder(Pending, DeliverableProblemOrder):
         listed = {todo.id: todo for todo in context.todos()}
         holder = context.comms.registry.require(unit).incarnation
         holders = sorted({assignment.owner for pid in group if pid in listed
-                          for assignment in listed[pid].holder_state.current_assignments()
+                          for assignment in listed[pid].current_holder.current_assignments()
                           if assignment.owner_identity != holder})
         replacing = target.replacing(holder, group, listed)
         self.require_send(context, document, unit, group, listed, target,
@@ -2839,6 +2843,9 @@ class TodoHolder(ABC):
     def current_assignments(self) -> tuple[Assignment, ...]:
         return ()
 
+    def last_known(self, history: TodoHistory, problem: str) -> TodoHolder:
+        return next(iter(history.events(problem, ReleaseTodo, limit=1, descending=True)), self)
+
 
 class NoTodoHolder(TodoHolder):
     def previous_assignment(self) -> Assignment:
@@ -2900,6 +2907,9 @@ class Assignment(TodoHolder):
 
     def current_assignments(self) -> tuple[Assignment, ...]:
         return (self,)
+
+    def last_known(self, history: TodoHistory, problem: str) -> TodoHolder:
+        return self
 
     def owned_by(self, actor: ThreadIncarnation, generation: GoalId) -> bool:
         return (self.owner_identity, self.generation) == (actor, generation)
@@ -3001,7 +3011,8 @@ type CommandedTodo = Todo
 
 
 @dataclass(frozen=True)
-class TodoCommand(Command[CommandedTodo, CommandedTodo], DeclaredFamily, affix="TodoOperation"):
+class TodoCommand(Command[CommandedTodo, CommandedTodo], DeclaredFamily, StorySource,
+                  affix="TodoOperation"):
     expected_revision: int
 
     def __post_init__(self) -> None:
@@ -3028,7 +3039,14 @@ class TodoCommand(Command[CommandedTodo, CommandedTodo], DeclaredFamily, affix="
         result = self.apply(current)
         if result != current:
             self.validate(db, current, store)
+            StoredOrderStory.archive(db, current, result.order)
+            for event in self.history_events():
+                StoredOrderStory.append(db, current.id, event)
             result.upsert(db)
+            result = self.after_write(db, result, store)
+        return result
+
+    def after_write(self, db: sqlite3.Connection, result: Todo, store: TodoStore) -> Todo:
         return result
 
     def apply(self, current: Todo) -> Todo:
@@ -3093,7 +3111,7 @@ class AssignTodo(TodoOperation):
         assigned = (current if current.assignment == self.proposed
                     else current.state.assign(current, self.proposed, self.traced))
         return replace(assigned, review_at=self.review_at,
-                       order=self.order, prior_orders=current.orders_before(self.order),
+                       order=self.order,
                        request=self.request,
                        revision=current.revision + 1)
 
@@ -3138,10 +3156,12 @@ class StrikeTodo(CitedStrike, StoryEvent):
         StrikeReason(self.reason)
         if any(self.repeats(recorded) for recorded in self.prior_strikes(current)):
             return current
-        return self.taken_away(
-            replace(current, strikes=(*current.strikes, self), revision=current.revision + 1))
+        return replace(current, revision=current.revision + 1)
 
-    def taken_away(self, struck: Todo) -> Todo:
+    def after_write(self, db: sqlite3.Connection, result: Todo, store: TodoStore) -> Todo:
+        return self.taken_away(db, result, store)
+
+    def taken_away(self, db: sqlite3.Connection, struck: Todo, store: TodoStore) -> Todo:
         """The strike that reaches StrikeLimit takes the task away in the same write, through
         the release `order fire` records. The release states its own reason, the limit; the
         strike already carries what the unit did."""
@@ -3149,7 +3169,8 @@ class StrikeTodo(CitedStrike, StoryEvent):
             return struck
         limit = StrikeReason(f"{self.previous.owner} took {ProblemGoalOrder.StrikeLimit} strikes "
                              f"on {struck.id}, so the task goes to another unit.")
-        return ReleaseTodo(struck.revision, self.actor, self.previous, limit, self.at).apply(struck)
+        return ReleaseTodo(struck.revision, self.actor, self.previous, limit, self.at).write(
+            db, struck, store)
 
     @classmethod
     def send_back(cls, current: Todo, actor: ThreadIncarnation, previous: Assignment,
@@ -3157,13 +3178,13 @@ class StrikeTodo(CitedStrike, StoryEvent):
         struck = cls(current.revision, actor, previous, reason.text, at,
                      evidence=evidence).apply(current)
         order = current.order.checked().sent_back(reason)
-        return replace(struck, order=order, prior_orders=current.orders_before(order))
+        return replace(struck, order=order)
 
     def story_text(self) -> str:
         return f"{self.actor.name} struck {self.previous.owner}: {self.reason}"
 
     def prior_strikes(self, current: Todo) -> tuple[StrikeTodo, ...]:
-        return current.live_strikes(self.previous.owner)
+        return ()
 
     def matches_failed_check(self, strike: FailedCheckStrike) -> bool:
         return False
@@ -3187,7 +3208,7 @@ class FailedCheckStrike(StrikeTodo):
 
     def prior_strikes(self, current: Todo) -> tuple[StrikeTodo, ...]:
         # A void is not permission to repeat this same automatic failure on every pass.
-        return current.strikes
+        return current.history.events(current.id, FailedCheckStrike)
 
     def matches_failed_check(self, strike: FailedCheckStrike) -> bool:
         return (self.order_id == strike.order_id
@@ -3270,7 +3291,15 @@ class OrderVerdict(TodoCommand, StoryEvent, declared_name=None):
     def changed(self, current: Todo) -> Todo:
         current.require_assignment(self.previous)
         judged = self.judged(current)
-        return replace(judged, verdicts=(*judged.verdicts, self), revision=current.revision + 1)
+        return replace(judged, revision=current.revision + 1)
+
+    def history_events(self) -> tuple[StoryEvent, ...]:
+        return (*self.implied_strikes(), self)
+
+    def after_write(self, db: sqlite3.Connection, result: Todo, store: TodoStore) -> Todo:
+        for strike in self.implied_strikes():
+            result = strike.taken_away(db, result, store)
+        return result
 
 
 @dataclass(frozen=True)
@@ -3350,6 +3379,9 @@ class HeadVerdict(HeadReview, declared_name=None):
     def judge_order(self, current: Todo, record: OrderHeadReviewRecord) -> Todo:
         return current
 
+    def order_events(self, record: OrderHeadReviewRecord, revision: int) -> tuple[StrikeTodo, ...]:
+        return ()
+
 
 @dataclass(frozen=True)
 class DecidedHeadVerdict(HeadVerdict, declared_name=None):
@@ -3408,6 +3440,11 @@ class RejectedHeadVerdict(DecidedHeadVerdict):
     def judge_order(self, current: Todo, record: OrderHeadReviewRecord) -> Todo:
         return StrikeTodo.send_back(current, record.actor, record.order.previous,
                                     self.reason, record.at, record.order.evidence)
+
+    def order_events(self, record: OrderHeadReviewRecord, revision: int) -> tuple[StrikeTodo, ...]:
+        return (StrikeTodo(revision, record.actor,
+                          record.order.previous, self.reason.text, record.at,
+                          evidence=record.order.evidence),)
 
 
 @dataclass(frozen=True)
@@ -3583,6 +3620,14 @@ class RecordOrderHeadVerdict(TodoCommand):
         judged = self.review.verdict.judge_order(current, self.review)
         return replace(judged, revision=current.revision + 1)
 
+    def history_events(self) -> tuple[StrikeTodo, ...]:
+        return self.review.verdict.order_events(self.review, self.expected_revision)
+
+    def after_write(self, db: sqlite3.Connection, result: Todo, store: TodoStore) -> Todo:
+        for strike in self.history_events():
+            result = strike.taken_away(db, result, store)
+        return result
+
     def write(self, db: sqlite3.Connection, current: Todo, store: TodoStore) -> Todo:
         changed = super().write(db, current, store)
         StoredHeadReview.insert_values(db, record=self.review)
@@ -3717,13 +3762,16 @@ class VoidStrikeTodo(TodoOperation, StoryEvent):
         return (f"{self.actor.name} voided a strike against {self.strike.previous.owner}: "
                 f"{self.reason}")
 
+    def strikes_voided(self) -> tuple[StrikeTodo, ...]:
+        return (self.strike,)
+
     def changed(self, current: Todo) -> Todo:
         current.require_commander(self.actor)
         if self.strike not in current.live_strikes(self.strike.previous.owner):
             raise TodoConflict(current)
         _text(self.reason, "Void reason", 2000)
         StrikeReason(self.reason)
-        return replace(current, voided=(*current.voided, self), revision=current.revision + 1)
+        return replace(current, revision=current.revision + 1)
 
 
 @dataclass(frozen=True)
@@ -3750,8 +3798,7 @@ class ReleaseTodo(TodoOperation, StoryEvent, TodoHolder):
     def changed(self, current: Todo) -> Todo:
         self.actor.require_may_change(current)
         current.require_assignment(self.previous)
-        return replace(current, assignment=None, released=(*current.released, self),
-                       revision=current.revision + 1)
+        return replace(current, assignment=None, revision=current.revision + 1)
 
 
 @dataclass(frozen=True)
@@ -3823,28 +3870,35 @@ class CorrectRunTodo(CorrectOrderTodo):
 
 
 @dataclass(frozen=True)
-class WordingCorrection(TodoOperation):
+class WordingCorrection(TodoOperation, StoryEvent):
     """Core's answer to a published unit message whose words hide what happened; no strike."""
     message_id: MessageId
     words: tuple[str, ...]
+    at: EventTime = field(default_factory=UnrecordedEventTime, kw_only=True)
+
+    def story_text(self) -> str:
+        return f"Wording corrected on {self.message_id}: {', '.join(self.words)}"
 
     def authored_by(self, actor: ThreadIncarnation) -> Self:
         return self
 
     def changed(self, current: Todo) -> Todo:
-        corrections = (*current.corrections, self)
-        return replace(current, corrections=corrections, revision=current.revision + 1)
+        return replace(current, revision=current.revision + 1)
 
 
 @dataclass(frozen=True)
-class OrderMessage(TodoOperation):
+class OrderMessage(TodoOperation, StoryEvent):
     """The bus message the commander sent this order in; a verdict citing it lands here."""
     actor: ThreadIncarnation
     message_id: MessageId
+    at: EventTime = field(default_factory=UnrecordedEventTime, kw_only=True)
+
+    def story_text(self) -> str:
+        return f"{self.actor.name} sent order message {self.message_id}"
 
     def changed(self, current: Todo) -> Todo:
         current.require_commander(self.actor)
-        return replace(current, messages=(*current.messages, self), revision=current.revision + 1)
+        return replace(current, revision=current.revision + 1)
 
 
 @dataclass(frozen=True)
@@ -4083,17 +4137,41 @@ class Todo(TodoStoreRows, TypedTable):
     order: ProblemOrder
     review_at: EventTime = field(default_factory=UnrecordedEventTime)
     """When the commander next reviews the held order; the unit is never shown it."""
-    strikes: tuple[StrikeTodo, ...] = ()
-    voided: tuple[VoidStrikeTodo, ...] = ()
-    released: tuple[ReleaseTodo, ...] = ()
-    verdicts: tuple[OrderVerdict, ...] = ()
-    corrections: tuple[WordingCorrection, ...] = ()
-    messages: tuple[OrderMessage, ...] = ()
-    prior_orders: tuple[CheckedProblemOrder, ...] = ()
+    history: Annotated[TodoHistory, WireTransient()] = field(
+        default_factory=lambda: TodoHistory(), compare=False, repr=False,
+    )
+
+    @property
+    def strikes(self) -> tuple[StrikeTodo, ...]:
+        return self.history.events(self.id, StrikeTodo)
+
+    @property
+    def voided(self) -> tuple[VoidStrikeTodo, ...]:
+        return self.history.events(self.id, VoidStrikeTodo)
+
+    @property
+    def released(self) -> tuple[ReleaseTodo, ...]:
+        return self.history.events(self.id, ReleaseTodo)
+
+    @property
+    def verdicts(self) -> tuple[OrderVerdict, ...]:
+        return self.history.events(self.id, OrderVerdict)
+
+    @property
+    def corrections(self) -> tuple[WordingCorrection, ...]:
+        return self.history.events(self.id, WordingCorrection)
+
+    @property
+    def messages(self) -> tuple[OrderMessage, ...]:
+        return self.history.events(self.id, OrderMessage)
+
+    @property
+    def prior_orders(self) -> tuple[CheckedProblemOrder, ...]:
+        return self.history.events(self.id, CheckedProblemOrder)
 
     @classmethod
     def rows(cls, db: sqlite3.Connection, where: str, parameters: tuple) -> tuple[Todo, ...]:
-        return tuple(cls.read(db.execute(
+        return tuple(replace(todo, history=TransactionTodoHistory(db)) for todo in cls.read(db.execute(
             f"SELECT * FROM {cls.declared_name} WHERE {cls._sql(where)} ORDER BY rowid",
             parameters)))
 
@@ -4103,7 +4181,7 @@ class Todo(TodoStoreRows, TypedTable):
 
     @property
     def judged_calls(self) -> tuple[str, ...]:
-        return tuple(call for verdict in self.verdicts for call in verdict.judged_calls())
+        return self.history.judged_calls(self.id)
 
     @property
     def order_history(self) -> tuple[CheckedProblemOrder, ...]:
@@ -4132,7 +4210,11 @@ class Todo(TodoStoreRows, TypedTable):
 
     @property
     def held_order_ids(self) -> tuple[str, ...]:
-        return tuple(order.id for order in self.order_history)
+        return (*self.history.order_ids(self.id), *(order.id for order in self.order.declarations))
+
+    @property
+    def first_ordered_at(self) -> float:
+        return self.history.first_ordered_at(self.id, self.order.checked().at.recorded_at("An order"))
 
     @property
     def reference_pattern(self) -> str:
@@ -4157,8 +4239,9 @@ class Todo(TodoStoreRows, TypedTable):
         implied = frozenset(strike for verdict in self.verdicts
                             for strike in verdict.implied_strikes())
         return (
-            self.order, *(strike for strike in self.strikes if strike not in implied),
-            *self.voided, *self.released, *self.verdicts,
+            *self.prior_orders, self.order,
+            *(strike for strike in self.strikes if strike not in implied),
+            *self.voided, *self.released, *self.verdicts, *self.corrections, *self.messages,
         )
 
     def story(self) -> ProblemStory:
@@ -4186,7 +4269,8 @@ class Todo(TodoStoreRows, TypedTable):
     @property
     def handed_out_on_release(self) -> bool:
         """Whoever released this row last says whether an idle unit gets it unasked."""
-        return any(release.actor.hands_out_released_work for release in self.released[-1:])
+        return any(actor.hands_out_released_work
+                   for actor in self.history.facts_for(self.id).release_actors)
 
     def reissued_review(self, at: float) -> EventTime:
         """A reissued order keeps its measured window from its reissue time."""
@@ -4199,41 +4283,42 @@ class Todo(TodoStoreRows, TypedTable):
     @property
     def holder(self) -> str | None:
         """The unit holding this problem; None once it is closed or released."""
-        return next((held.owner for held in self.holder_state.current_assignments()), None)
+        return next((held.owner for held in self.current_holder.current_assignments()), None)
 
     @property
     @boundary_decoder
-    def holder_state(self) -> TodoHolder:
-        """Decode the stored optional assignment once into its behaviour owner."""
+    def current_holder(self) -> TodoHolder:
+        """Current assignment is row state; board reads never open its story."""
         if self.assignment is not None:
             return self.assignment
-        return self.released[-1] if self.released else NoTodoHolder()
+        return NoTodoHolder()
+
+    @property
+    def holder_state(self) -> TodoHolder:
+        """Reassignment may consult the last release, not the whole release history."""
+        return self.current_holder.last_known(self.history, self.id)
 
     def held(self) -> Assignment:
         """The open order's assignment; a problem nobody holds has no order work."""
-        return self.holder_state.held(self)
+        return self.current_holder.held(self)
 
     @property
     def strike_count(self) -> int:
-        return len(self.live_strikes(self.holder))
+        return self.history.strike_count(self.id, self.holder)
 
     def live_strikes(self, unit: str | None = None) -> tuple[StrikeTodo, ...]:
         """The strikes still counting on this task, against ``unit`` on any order of it."""
-        taken_back = tuple(void.strike for void in self.voided)
-        return tuple(recorded for recorded in self.strikes
-                     if unit in (None, recorded.previous.owner) and recorded not in taken_back)
+        return self.history.live_strikes(self.id, unit)
 
     def struck_on_order(self, unit: str) -> bool:
         """A live strike on ``unit`` recorded since the current order was sent; a send-back that
         replaces this order is that same miss, so it counts no second strike."""
-        sent = self.order.at.recorded_at("An order")
-        return any(recorded.at.recorded_at("A strike") >= sent
-                   for recorded in self.live_strikes(unit))
+        return self.history.struck_since(self.id, unit, self.order.at.recorded_at("An order"))
 
     def struck_out(self, unit: str) -> bool:
         """The unit has taken its problem goal's StrikeLimit live strikes here; only mechanical
         orders reach it."""
-        return len(self.live_strikes(unit)) >= ProblemGoalOrder.StrikeLimit
+        return self.history.strike_count(self.id, unit) >= ProblemGoalOrder.StrikeLimit
 
     def require_result(self, result: Todo) -> None:
         if self != result:
@@ -4249,7 +4334,7 @@ class Todo(TodoStoreRows, TypedTable):
 
     @boundary_decoder
     def require_assignee(self, actor: ThreadIncarnation, generation: GoalId | None) -> None:
-        if generation is None or not self.holder_state.owned_by(actor, generation):
+        if generation is None or not self.current_holder.owned_by(actor, generation):
             raise TodoConflict(self)
 
     def proposed_assignment(self, proposed: Assignment) -> Assignment:
@@ -4263,14 +4348,15 @@ class Todo(TodoStoreRows, TypedTable):
         return replace(self, assignment=proposed, revision=self.revision + 1)
 
     def require_released_order(self, owner: ThreadIncarnation, goal_id: GoalId) -> None:
-        if self.holder_state.owned_by(owner, goal_id):
+        if self.current_holder.owned_by(owner, goal_id):
             raise TodoConflict(self)
 
     @property
     def latest_message(self) -> OrderMessage:
-        if not self.messages:
+        messages = self.history.events(self.id, OrderMessage, limit=1, descending=True)
+        if not messages:
             raise TodoError(f"{self.holder} holds {self.id}, but no order message was recorded.")
-        return self.messages[-1]
+        return messages[0]
 
     def require_fold(self, target: Todo, why: str) -> None:
         self.state.require_open(self)
@@ -4368,6 +4454,191 @@ class ProblemAllocation(TodoStoreRows, TypedTable):
         return cls.issue(db, ProblemNumber(number))
 
 
+@dataclass(frozen=True)
+class StrikeTotal:
+    owner: str
+    total: int
+    latest: float
+
+
+@dataclass(frozen=True)
+class StoryFacts(TypedRow):
+    """One disposable aggregate per problem, not another persisted board."""
+
+    problem: str
+    strike_totals: tuple[StrikeTotal, ...] = ()
+    order_ids: tuple[str, ...] = ()
+    ordered_at: tuple[float, ...] = ()
+    judged_calls: tuple[str, ...] = ()
+    send_backs: tuple[float, ...] = ()
+    release_actors: tuple[ThreadIncarnation, ...] = ()
+
+    def strike_count(self, unit: str | None) -> int:
+        return sum(count.total for count in self.strike_totals if unit in (None, count.owner))
+
+
+@dataclass(frozen=True)
+class StoredOrderStory(TodoStoreRows, NoUpdate, NoDelete, TypedTable):
+    """One append-only event. Scalar queries derive from these generated columns."""
+
+    seq: Annotated[int, Column(primary_key=True, auto_increment=True)]
+    problem: Annotated[str, Column(index=True)]
+    event: TodoCommand | CheckedProblemOrder
+    voids: Annotated[int | None, Column(index=True)] = None
+    kind: ClassVar[Generated] = Generated(
+        str, Column(generated=f"json_extract({{event}}, '$.{TodoCommand.family_discriminator}')"),
+    )
+    call_id: ClassVar[Generated] = Generated(str, Column(nullable=True, generated=
+        f"json_extract({{event}}, '$.{FieldCodec.record_key(ToolCallVerdict, 'tool_call_id')}')"))
+    order_id: ClassVar[Generated] = Generated(str, Column(nullable=True, generated=
+        f"json_extract({{event}}, '$.{FieldCodec.record_key(CheckedProblemOrder, 'id')}')"))
+    event_at: ClassVar[Generated] = Generated(float, Column(nullable=True, generated=
+        f"json_extract({{event}}, '$.{FieldCodec.record_key(StrikeTodo, 'at')}"
+        f".{FieldCodec.record_key(RecordedEventTime, 'at')}')"))
+    strike_owner: ClassVar[Generated] = Generated(str, Column(nullable=True, generated=
+        f"json_extract({{event}}, '$.{FieldCodec.record_key(StrikeTodo, 'previous')}"
+        f".{FieldCodec.record_key(Assignment, 'owner')}')"))
+    actor: ClassVar[Generated] = Generated(ThreadIncarnation, Column(nullable=True, generated=
+        f"json_extract({{event}}, '$.{FieldCodec.record_key(ReleaseTodo, 'actor')}')"))
+    indexes = (Index(("problem", "kind", "seq")),)
+
+    @classmethod
+    def references(cls) -> tuple[ForeignKey, ...]:
+        return (ForeignKey(cls, ("seq",), ("voids",)),)
+
+    @classmethod
+    def append(cls, db: sqlite3.Connection, problem: str,
+               event: TodoCommand | CheckedProblemOrder) -> None:
+        voids = next((cls.strike_seq(db, problem, strike) for strike in event.strikes_voided()), None)
+        cls.insert_values(db, problem=problem, event=event, voids=voids)
+
+    @classmethod
+    def strike_seq(cls, db: sqlite3.Connection, problem: str, strike: StrikeTodo) -> int:
+        for row in cls.select(db, problem=problem, where=f"{{kind}} IN {StrikeTodo.sql_choices()}",
+                              order_by=("seq",), descending=True):
+            if row.event == strike:
+                return row.seq
+        raise TodoError(f"{problem}: the strike being voided has no stored event.")
+
+    @classmethod
+    def archive(cls, db: sqlite3.Connection, current: Todo, following: ProblemOrder) -> None:
+        retained = {order.id for order in following.declarations}
+        for order in current.order.declarations:
+            if order.id not in retained and not cls.count(db, problem=current.id, order_id=order.id):
+                cls.append(db, current.id, order)
+
+    @classmethod
+    def events_as[Event: TodoCommand | CheckedProblemOrder](
+        cls, db: sqlite3.Connection, problem: str, member: type[Event], *,
+        limit: int = -1, descending: bool = False,
+    ) -> tuple[Event, ...]:
+        return tuple(cast(Event, row.event) for row in cls.select(
+            db, problem=problem, where=f"{{kind}} IN {member.sql_choices()}",
+            order_by=("seq",), descending=descending, limit=limit))
+
+    @classmethod
+    def live_strikes(cls, db: sqlite3.Connection, problem: str, unit: str | None) -> tuple[StrikeTodo, ...]:
+        return tuple(cast(StrikeTodo, row.event) for row in cls.select(
+            db, problem=problem, where=f"{{kind}} IN {StrikeTodo.sql_choices()} "
+            f"AND NOT EXISTS (SELECT 1 FROM {cls.declared_name} v WHERE v.voids={cls.declared_name}.seq) "
+            "AND (? IS NULL OR {strike_owner}=?)", parameters=(unit, unit),
+            order_by=("seq",), descending=True))
+
+    @classmethod
+    def facts_for(cls, db: sqlite3.Connection, problems: tuple[str, ...]) -> dict[str, StoryFacts]:
+        """One statement per listing. No event payload reaches a Python decoder."""
+        if not problems:
+            return {}
+        slots = ','.join('?' for _ in problems)
+        owner = FieldCodec.record_key(StrikeTotal, "owner")
+        total = FieldCodec.record_key(StrikeTotal, "total")
+        latest = FieldCodec.record_key(StrikeTotal, "latest")
+        query = cls._sql(f"""
+            WITH selected AS (
+                SELECT problem, seq, kind, call_id, order_id, event_at, strike_owner, actor
+                FROM {cls.declared_name} WHERE {{problem}} IN ({slots})
+            ), live AS (
+                SELECT s.problem, s.strike_owner, count(*) total, max(s.event_at) latest
+                FROM selected s LEFT JOIN {cls.declared_name} v ON v.voids=s.seq
+                WHERE s.kind IN {StrikeTodo.sql_choices()} AND v.seq IS NULL
+                GROUP BY s.problem, s.strike_owner
+            ), counts AS (
+                SELECT problem, json_group_array(json_object(
+                    '{owner}', strike_owner, '{total}', total, '{latest}', latest)) strike_totals
+                FROM live GROUP BY problem
+            ), releases AS (
+                SELECT problem, actor, max(seq) FROM selected
+                WHERE kind IN {ReleaseTodo.sql_choices()} GROUP BY problem
+            ), facts AS (
+                SELECT problem,
+                    json_group_array(order_id ORDER BY seq DESC) FILTER (WHERE order_id IS NOT NULL) order_ids,
+                    json_group_array(event_at) FILTER (WHERE kind IN {CheckedProblemOrder.sql_choices()}
+                        AND event_at IS NOT NULL) ordered_at,
+                    json_group_array(call_id ORDER BY seq DESC) FILTER (WHERE call_id IS NOT NULL) judged_calls,
+                    json_group_array(event_at ORDER BY seq DESC) FILTER (WHERE kind IN {SendBackVerdict.sql_choices()}
+                        AND event_at IS NOT NULL) send_backs
+                FROM selected GROUP BY problem
+            )
+            SELECT f.problem, COALESCE(c.strike_totals, '[]') strike_totals,
+                f.order_ids, f.ordered_at, f.judged_calls, f.send_backs,
+                json_group_array(json(r.actor)) FILTER (WHERE r.actor IS NOT NULL) release_actors
+            FROM facts f LEFT JOIN counts c ON c.problem=f.problem
+            LEFT JOIN releases r ON r.problem=f.problem GROUP BY f.problem
+        """)
+        return {**{problem: StoryFacts(problem) for problem in problems},
+                **{fact.problem: fact for fact in StoryFacts.read(db.execute(query, problems))}}
+
+
+class TodoHistory:
+    """Shared history queries; a board snapshot overrides only its aggregate lookup."""
+
+    @contextmanager
+    def snapshot(self) -> Iterator[sqlite3.Connection]:
+        raise TodoError("Order history requires a Todo loaded from its store.")
+        yield
+
+    def facts_for(self, problem: str) -> StoryFacts:
+        with self.snapshot() as db:
+            return StoredOrderStory.facts_for(db, (problem,))[problem]
+
+    def events[Event: TodoCommand | CheckedProblemOrder](
+        self, problem: str, member: type[Event], *, limit: int = -1, descending: bool = False,
+    ) -> tuple[Event, ...]:
+        with self.snapshot() as db:
+            return StoredOrderStory.events_as(db, problem, member, limit=limit, descending=descending)
+
+    def judged_calls(self, problem: str) -> tuple[str, ...]:
+        return self.facts_for(problem).judged_calls
+
+    def order_ids(self, problem: str) -> tuple[str, ...]:
+        return self.facts_for(problem).order_ids
+
+    def first_ordered_at(self, problem: str, current: float) -> float:
+        return min((current, *self.facts_for(problem).ordered_at))
+
+    def struck_since(self, problem: str, unit: str, since: float) -> bool:
+        return any(count.owner == unit and count.latest >= since
+                   for count in self.facts_for(problem).strike_totals)
+
+    def strike_count(self, problem: str, unit: str | None = None) -> int:
+        return self.facts_for(problem).strike_count(unit)
+
+    def live_strikes(self, problem: str, unit: str | None = None) -> tuple[StrikeTodo, ...]:
+        with self.snapshot() as db:
+            return StoredOrderStory.live_strikes(db, problem, unit)
+
+
+@dataclass(frozen=True)
+class TransactionTodoHistory(TodoHistory):
+    """Use the caller's snapshot: no nested connection or premature commit."""
+
+    db: sqlite3.Connection
+
+    @contextmanager
+    def snapshot(self) -> Iterator[sqlite3.Connection]:
+        yield self.db
+
+
 class OwnerRequestStore(DurableStore):
     """Request lifetime and serving-work queries share the store's transaction."""
 
@@ -4411,21 +4682,22 @@ class OwnerRequestStore(DurableStore):
 
     @staticmethod
     def _serving(db: sqlite3.Connection, request: OwnerRequestId) -> tuple[Todo, ...]:
-        return tuple(Todo.select(db, request=request, where=Todo.serving_request))
+        return tuple(replace(todo, history=TransactionTodoHistory(db))
+                     for todo in Todo.select(db, request=request, where=Todo.serving_request))
 
     def serving_orders(self, request: OwnerRequestId) -> tuple[Todo, ...]:
         """Pending work and unaccepted claims, through the request's partial index."""
         with self.snapshot() as db:
-            return self._serving(db, request)
+            return tuple(replace(todo, history=self) for todo in self._serving(db, request))
 
     def for_request(self, request: OwnerRequestId) -> tuple[Todo, ...]:
         """Every order that served this independent request, open or done."""
         with self.snapshot() as db:
-            return tuple(Todo.select(db, request=request))
+            return tuple(replace(todo, history=self) for todo in Todo.select(db, request=request))
 
 
 @dataclass(frozen=True, slots=True)
-class TodoStore(OwnerRequestStore):
+class TodoStore(OwnerRequestStore, TodoHistory):
     """One SQLite row owns both todo state and its exclusive assignment.
 
     Assignment identity and revision deduplicate known operations. An uncertain
@@ -4523,17 +4795,15 @@ class TodoStore(OwnerRequestStore):
                     DroppedProblemOrder, replacing_message=newer.latest_message.message_id
                 ),
                 assignment=None,
-                released=(
-                    *current.released,
-                    ReleaseTodo(
-                        current.revision, commander, current.held(),
-                        StrikeReason(f'Order {problem} replaced by newer {by} without a strike.'),
-                    ),
-                ),
                 revision=current.revision + 1,
             )
+            StoredOrderStory.insert_values(db, problem=current.id, event=ReleaseTodo(
+                current.revision, commander, current.held(),
+                StrikeReason(f'Order {problem} replaced by newer {by} without a strike.'),
+            ))
+            StoredOrderStory.archive(db, current, result.order)
             result.upsert(db)
-            return result
+            return replace(result, history=self)
 
     def fold(self, commander: ThreadIncarnation, problem: str, into: str, why: str) -> None:
         with self.writing() as db:
@@ -4558,10 +4828,14 @@ class TodoStore(OwnerRequestStore):
             if target.holder not in (None, unit):
                 raise TodoError(f'{problem} is already held by {target.holder}')
             linked = target.order.linked(source.order)
+            StoredOrderStory.archive(db, target, linked)
+            for declaration in source.prior_orders:
+                StoredOrderStory.insert_values(db, problem=target.id, event=declaration)
+            for message in source.messages:
+                StoredOrderStory.insert_values(db, problem=target.id, event=message)
             replace(target, order=linked,
-                    prior_orders=target.orders_before(linked, source.prior_orders),
                     assignment=source.held(), request=source.request, review_at=source.review_at,
-                    messages=source.messages, revision=target.revision + 1).upsert(db)
+                    revision=target.revision + 1).upsert(db)
 
     @staticmethod
     def _open(db: sqlite3.Connection, where: str, parameters: tuple,
@@ -4586,7 +4860,10 @@ class TodoStore(OwnerRequestStore):
         if not self.path.exists():
             return ()
         with self.snapshot() as db:
-            return reader(db, where, parameters)
+            rows = reader(db, where, parameters)
+            history = BoardTodoHistory(self.root, MappingProxyType(StoredOrderStory.facts_for(
+                db, tuple(todo.id for todo in rows))))
+            return tuple(replace(todo, history=history) for todo in rows)
 
     @classmethod
     def _one(cls, rows: tuple[Todo, ...], todo_id: str) -> Todo:
@@ -4612,8 +4889,10 @@ class TodoStore(OwnerRequestStore):
         return self._select(
             f'EXISTS (SELECT 1 FROM json_tree("order") AS declaration '
             f"WHERE declaration.key='id' AND declaration.value IN ({slots})) "
-            f'OR EXISTS (SELECT 1 FROM json_each(prior_orders) AS declaration '
-            f"WHERE json_extract(declaration.value,'$.id') IN ({slots}))",
+            f'OR EXISTS (SELECT 1 FROM {StoredOrderStory.declared_name} AS declaration '
+            f'WHERE declaration.problem={Todo.declared_name}.id '
+            f'AND declaration.kind IN {CheckedProblemOrder.sql_choices()} '
+            f"AND json_extract(declaration.event,'$.id') IN ({slots}))",
             (*identities, *identities))
 
     def get(self, todo_id: str) -> Todo:
@@ -4693,7 +4972,7 @@ class TodoStore(OwnerRequestStore):
         problems, by birth, so a renamed holder stays one unit."""
         return frozenset(
             assignment.owner_identity for todo in self.history_for_commander(commander)
-            for assignment in (*todo.holder_state.current_assignments(),
+            for assignment in (*todo.current_holder.current_assignments(),
                                *(release.previous for release in todo.released)))
 
     def create(
@@ -4726,7 +5005,7 @@ class TodoStore(OwnerRequestStore):
             current.require_same_creation(proposed)
             current.require_assignment(proposed.assignment)
             ProblemAllocation.delete(db, number=number.number)
-            return current
+            return replace(current, history=self)
 
     def record_head(self, record: HeadReviewRecord) -> None:
         with self.writing() as db:
@@ -4753,7 +5032,7 @@ class TodoStore(OwnerRequestStore):
         with self.writing() as db:
             current = self._current(db, todo_id)
             command.write(db, current, self)
-            return self._current(db, todo_id)
+            return replace(self._current(db, todo_id), history=self)
 
     def correct(
         self, unit: ThreadIncarnation, message_id: MessageId, text: str,
@@ -4763,11 +5042,9 @@ class TodoStore(OwnerRequestStore):
             return ()
         with self.writing() as db:
             held = self.held_in(db, '1', (), unit=unit)
-            corrected = tuple(WordingCorrection(todo.revision, message_id, words).apply(todo)
+            corrected = tuple(WordingCorrection(todo.revision, message_id, words).write(db, todo, self)
                               for todo in held)
-            for todo in corrected:
-                todo.upsert(db)
-            return corrected
+            return tuple(replace(todo, history=self) for todo in corrected)
 
     def fire(
         self, unit: ThreadIncarnation, actor: ThreadIncarnation, reason: StrikeReason,
@@ -4781,11 +5058,9 @@ class TodoStore(OwnerRequestStore):
                 (commander.name, commander.wire_birth), unit=unit))
             if not held:
                 raise TodoError(f"{unit} holds no open problem.")
-            released = tuple(ReleaseTodo(todo.revision, actor, assignment, reason).apply(todo)
+            released = tuple(ReleaseTodo(todo.revision, actor, assignment, reason).write(db, todo, self)
                              for todo, assignment in held)
-            for todo in released:
-                todo.upsert(db)
-            return released
+            return tuple(replace(todo, history=self) for todo in released)
 
     def assign(
         self,
@@ -4802,3 +5077,13 @@ class TodoStore(OwnerRequestStore):
     ) -> Todo:
         return self.apply(todo_id, AssignTodo.by(assigner, expected_revision, _thread(owner),
                                                 generation, review_at, order, request, traced))
+
+
+@dataclass(frozen=True, slots=True)
+class BoardTodoHistory(TodoStore):
+    """One read's immutable aggregates; explicit story requests still use the store."""
+
+    facts: Mapping[str, StoryFacts]
+
+    def facts_for(self, problem: str) -> StoryFacts:
+        return self.facts[problem]

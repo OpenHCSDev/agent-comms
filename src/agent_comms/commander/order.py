@@ -109,7 +109,7 @@ def refuse(text, *families):
 
 def struck(todo, unit):
     """Strikes count per unit and task, across every order of that task the unit held."""
-    return len(todo.live_strikes(unit))
+    return todo.history.strike_count(todo.id, unit)
 
 
 # Eliminate forwarding with inheritance and multiple parents; decompose the hierarchy if it is not sound.
@@ -521,7 +521,7 @@ class ListedProblems(OrderedProblems):
                   listed: Mapping[str, Todo]) -> bool:
         return bool(group) and all(
             pid in listed and any(assignment.owner_identity == unit for assignment
-                                  in listed[pid].holder_state.current_assignments())
+                                  in listed[pid].current_holder.current_assignments())
             for pid in group)
 
     def record(self, context: CommanderContext, order: PendingProblemOrder, unit: str,
