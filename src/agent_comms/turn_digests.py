@@ -16,6 +16,7 @@ from .errors import ToolRefusedError
 from .external_transcript import ExternalTranscript, StoreRead
 from .held_orders import HeldOrders, LiveHold
 from .order_work import OrderWork
+from .storage_rules import StorageRule
 from .thread_execution import ConversationPreparation
 from .thread_identity import ThreadIncarnation
 from .tool_declaration import EditCall
@@ -190,41 +191,77 @@ class OrderRead[Result](TranscriptRead[Result]):
     bound: TurnsSince
     todo: Todo
 
+
+@dataclass(frozen=True)
+class OrderEditRead[Result](OrderRead[Result]):
+    """A held order's edits: the ones its workplaces own that no verdict names."""
+    workplaces: EditWorkplaces
+
     @classmethod
     def for_commander(cls, comms: Comms, commander: str) -> Iterator[Self]:
         yield from cls.for_orders(comms.root, HeldOrders.read(comms, commander).live)
 
     @classmethod
     def for_orders(cls, root: Path, holds: Iterable[LiveHold]) -> Iterator[Self]:
-        """Read each live hold's transcript from its canonical review cut."""
+        """Read each live hold's transcript from its canonical review cut; each edit is
+        read under the one order its workplace names."""
         store = TodoStore(root)
+        rule = StorageRule.load(root)
+        holds = tuple(holds)
         for hold in holds:
             yield cls(
-                root, hold.holder, TurnsSince(store.unjudged_since(hold.todo)), hold.todo
+                root, hold.holder, TurnsSince(store.unjudged_since(hold.todo)), hold.todo,
+                EditWorkplaces.of(rule, hold.holder, tuple(
+                    other.todo for other in holds if other.holder.name == hold.holder.name)),
             )
 
-    def edits_from_turns(self, turns: tuple[TurnDigest, ...]) -> tuple[EditCall, ...]:
+    def owned(self, edits: Iterable[EditCall]) -> tuple[EditCall, ...]:
         judged = frozenset(self.todo.judged_calls)
+        return tuple(edit for edit in edits if edit.id not in judged
+                     and self.workplaces.order_of(edit.path) == self.todo.id)
+
+    def edits_from_turns(self, turns: tuple[TurnDigest, ...]) -> tuple[EditCall, ...]:
         since = self.bound.at
         edits = {edit.id: edit for turn in reversed(turns)
                  for event in turn.events
-                 for edit in event.edit_calls(self.thread.name, self.todo.id, since)
-                 if edit.id not in judged}
-        return tuple(reversed(edits.values()))
+                 for edit in event.edit_calls(self.thread.name, self.todo.id, since)}
+        return self.owned(reversed(edits.values()))
 
 
-class OrderEditsRead(OrderRead[tuple[EditCall, ...]]):
+@dataclass(frozen=True)
+class EditWorkplaces:
+    """Which of one unit's held orders an edit belongs to. An edit inside a problem checkout
+    belongs to that problem's order; any other path (scratch, a shared checkout) belongs to
+    the order the unit was given last. Each edit is read under exactly one order."""
+
+    checkouts: dict[str, tuple[Path, ...]]
+    latest: str
+
+    @classmethod
+    def of(cls, rule: StorageRule, holder: Thread, todos: tuple[Todo, ...]) -> Self:
+        roots = rule.roots_of(holder)
+        return cls({todo.id: rule.problem_checkouts(roots, todo.id) for todo in todos},
+                   max(todos, key=lambda todo: todo.order.at.recorded_at("An order")).id)
+
+    def order_of(self, path: str) -> str:
+        edited = Path(path)
+        return next((problem for problem, checkouts in self.checkouts.items()
+                     if any(edited.is_relative_to(checkout) for checkout in checkouts)),
+                    self.latest)
+
+
+class OrderEditsRead(OrderEditRead[tuple[EditCall, ...]]):
     """Original unjudged calls; external events are selected before decoding."""
 
     def from_turns(self, turns: tuple[TurnDigest, ...]) -> tuple[EditCall, ...]:
         return self.edits_from_turns(turns)
 
     def from_external(self, source: StoreRead) -> tuple[EditCall, ...]:
-        return tuple(source.unjudged(self.todo, self.bound.at))
+        return self.owned(source.unjudged(self.todo, self.bound.at))
 
 
-class OrderEditCountRead(OrderRead[int]):
-    """Load needs a count, never external event bodies or edit hunks."""
+class OrderEditCountRead(OrderEditRead[int]):
+    """Load counts the edits each order owns; ownership reads each edit's path."""
 
     @classmethod
     def count(cls, comms: Comms, commander: str) -> int:
@@ -234,7 +271,7 @@ class OrderEditCountRead(OrderRead[int]):
         return len(self.edits_from_turns(turns))
 
     def from_external(self, source: StoreRead) -> int:
-        return source.unjudged_count(self.todo, self.bound.at)
+        return len(self.owned(source.unjudged(self.todo, self.bound.at)))
 
 
 @dataclass(frozen=True)
