@@ -24,7 +24,9 @@ class GitHubFixture:
         data = json.loads(self.path.read_text()) if self.path.exists() else {}
         for repository in repositories:
             data.setdefault(repository.to_wire(), {
-                "open_kind": UnmergedListedPullRequest.declared_name, "requests": {},
+                "open_kinds": [kind.declared_name for kind in
+                               UnmergedListedPullRequest.members_with(UnmergedListedPullRequest)],
+                "requests": {},
             })
         self.path.write_text(json.dumps(data))
         return self
