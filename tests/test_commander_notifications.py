@@ -9,7 +9,10 @@ import pytest
 
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.commander_heartbeat import CommanderHeartbeat, CommanderObservation
-from agent_comms.commander_hud import CommanderFrame, CommanderHud, CodexUsage, UnreadableUsage
+from agent_comms.commander_hud import (
+    BoardRow, CommanderFrame, CommanderHud, CommanderUnit, CodexUsage, QuietUnits, UnreadableUsage,
+)
+from agent_comms.commander.vibe_check import OverloadDegradation
 from agent_comms.task_attachments.commander_pings import CommanderDecisions, CommanderNotice, CommanderUpdate, RulePing
 from agent_comms.errors import OverdueHeadRefusalError, UnregisteredThreadError
 from agent_comms.field_codec import MessageId
@@ -25,7 +28,11 @@ from agent_comms.todos import ProgressRead
 from agent_comms.ui_model.observation import CommanderHudObserved, ObserveCommanderHud
 from agent_comms.standing_rules import OrderlessUnreviewedHead, ServicePassFailing, StandingRule, UndatedStandingRule
 from agent_comms.text_digest import TextDigest
-from agent_comms.ui_model.unit_state import AwaitingCommander, UnitState
+from agent_comms.ui_model.unit_state import (
+    AwaitingApplicationRun, AwaitingCommander, NoPendingClock, PendingClock, Stuck, UnitState,
+)
+from agent_comms.thread_identity import RecordedThreadIncarnation
+from agent_comms_hooks.board import BoardLine
 from agent_comms.wake_policy import PassiveWake
 from test_holder_standing_rules import state_cards
 
@@ -87,6 +94,35 @@ def test_frame_puts_hands_first_and_folds_finished_phases_per_plan(notification_
         "forks: worker",
         "commander_native: 2 phases done",
     )
+
+
+def test_frame_keeps_committed_board_order_and_folds_units_needing_no_hand():
+    now = time.time()
+    awaiting = CommanderUnit(
+        RecordedThreadIncarnation("waiting-run", 1.0), AwaitingApplicationRun,
+        NoPendingClock(), (), 0, (), (),
+    )
+    stuck = replace(
+        awaiting, unit=RecordedThreadIncarnation("stuck-worker", 2.0),
+        state=Stuck, clock=PendingClock(now - 3600, now - 3600),
+    )
+    board = (
+        BoardLine("BLOCKED waiting-run", now - 120, now + 3600, urgent=True),
+        BoardLine("JUDGE #1", now - 240, now + 3600),
+    )
+    hud = CommanderHud(
+        RecordedThreadIncarnation("lead", 3.0), (awaiting, stuck), (),
+        OverloadDegradation.from_orders((), 0, 0), (),
+        CodexUsage(UnreadableUsage(reason="not requested")), board,
+    )
+
+    rows = hud.rows()
+    assert rows[:4] == (
+        BoardRow(board[0]), BoardRow(board[1]), stuck, QuietUnits((awaiting,)),
+    )
+    assert rows[2].line().startswith(f"{Stuck.verb} {stuck.unit.name}:")
+    assert rows[3].line() == "1 units need no hand: waiting-run"
+    assert all("AwaitingApplicationRun" not in line for line in hud.frame)
 
 
 def test_a_registered_commander_fork_is_on_the_hud(notification_bus):
