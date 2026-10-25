@@ -44,7 +44,7 @@ class NoPiSessionId(NullMember, NativeSessionSelection):
     """The original native input has not selected a saved session."""
 
 
-class SessionRetention(PresentMember, ABC):
+class SessionRetention(ABC):
     """Only an attested saved identity can return a child to its session owner."""
 
     @classmethod
@@ -62,7 +62,7 @@ class NoSessionRetention(NullMember, SessionRetention):
 
 
 @dataclass(frozen=True)
-class NativeSessionIdentity(SessionRetention):
+class NativeSessionIdentity(PresentMember, SessionRetention):
     """SessionManager's observed saved-session identity."""
 
     session_id: Annotated[PiSessionId, WireName("sessionId")]

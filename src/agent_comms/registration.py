@@ -343,7 +343,7 @@ class Registration:
         with self.store.editing() as edit:
             owner = RegistryOwner.capture_local(edit.original.snapshot, expected.name)
             owner.require_claim(expected, generation)
-            leased, _ = edit.lease_turn(owner.thread, turn_id, None)
+            leased, _ = edit.lease_turn(owner.thread, turn_id, NoTurnRouting())
             edit.commit()
             return leased, generation
 

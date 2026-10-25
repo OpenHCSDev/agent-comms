@@ -25,7 +25,7 @@ from .ordinary_turn_rules import (
     UnconsumedDependencyRule,
 )
 from .reservation_rules import ReservationViolationError
-from .routing import TurnRouting
+from .routing import NoTurnRouting, TurnRouting
 from .send_outcome import DeferredSend, GrantedSend, RefusedSend, SendOutcome
 from .started_input import StartedInput
 
@@ -189,7 +189,7 @@ class TurnInputSource(StartedInput, ABC):
             sent_text=sent_text,
             routing=TurnRouting(
                 tuple(origin.reference for origin in self.origins), None
-            ) if self.origins else None,
+            ) if self.origins else NoTurnRouting(),
         )
         return GrantedSend()
 
