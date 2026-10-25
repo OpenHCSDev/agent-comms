@@ -6,7 +6,6 @@ from collections.abc import Sequence
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from .active_route import guard_original_root_write
 from .bus_publication import AgentOrigin, HumanOrigin, InitialOrigin
 from .change_report import NoChangeReport, ReportEvidence
 from .channel_targets import CommandTarget, IncarnationThreadTarget, NamedTarget
@@ -72,28 +71,27 @@ class Messaging:
     ) -> SendResult:
         """Return the committed envelope and its separate wording-correction outcome."""
         type.require_sendable()
-        with guard_original_root_write(self.root):
-            if sender not in self.registry:
-                raise UnregisteredThreadError(f"Sender {sender!r} is not registered.")
-            owner = self.registry.require(sender)
-            owner.role.require_executable(RelationViolationError(
-                "Human messages require the explicit user-message operation."
-            ))
-            todos = TodoStore(self.root)
-            with todos.snapshot():
-                pass  # The store validates its schema before any envelope is committed.
-            self.bus.bus.messages_for_references(answers)
-            message = Message(
-                sender=owner.name,
-                target=target,
-                body=body,
-                type=type,
-                role=role,
-                task=task,
-                report=report,
-                answers=tuple(dict.fromkeys((*answers, *self._answered_by(owner, target)))),
-            )
-            committed = self._publish(message, origin, destination=CommandTarget.named(target))
+        if sender not in self.registry:
+            raise UnregisteredThreadError(f"Sender {sender!r} is not registered.")
+        owner = self.registry.require(sender)
+        owner.role.require_executable(RelationViolationError(
+            "Human messages require the explicit user-message operation."
+        ))
+        todos = TodoStore(self.root)
+        with todos.snapshot():
+            pass  # The store validates its schema before any envelope is committed.
+        self.bus.bus.messages_for_references(answers)
+        message = Message(
+            sender=owner.name,
+            target=target,
+            body=body,
+            type=type,
+            role=role,
+            task=task,
+            report=report,
+            answers=tuple(dict.fromkeys((*answers, *self._answered_by(owner, target)))),
+        )
+        committed = self._publish(message, origin, destination=CommandTarget.named(target))
         correction: CorrectionResult
         try:
             todos.correct(owner.incarnation, committed.message_id, body)
@@ -119,17 +117,14 @@ class Messaging:
             return thread
         # The registry owns namespace allocation. Recheck under its canonical
         # writer lock; an existing sender needs only the ordinary registry read.
-        with guard_original_root_write(self.root), self.registry.store.locked():
+        with self.registry.store.locked():
             return self.registry.user_thread().or_create(lambda: self._register_user(worktree))
 
     def send_user_message(self, target: NamedTarget, body: str, *, worktree: str,
                           task: TaskAttachment = NoTaskAttachment()) -> Message:
         """Cooperative local UI send, not cryptographic same-UID authentication."""
-        # The historical root write fence precedes identity creation and
-        # remains held through the actual bus publication on an old root.
-        with guard_original_root_write(self.root):
-            user = self.user_identity(worktree)
-            return self._publish_user(user, target, body, task)
+        user = self.user_identity(worktree)
+        return self._publish_user(user, target, body, task)
 
     def pin_user_constraint(self, recipient: str, subject: MessageReference, *, worktree: str,
                             scope: TaskScopeSelection = CurrentTaskScopeSelection(),
@@ -154,16 +149,15 @@ class Messaging:
 
     def _pin_constraint(self, recipient, subject, declaration, *, worktree, scope, change,
                         **declaration_options) -> Message:
-        with guard_original_root_write(self.root):
-            user = self.user_identity(worktree)
-            owner = self.registry.require(recipient)
-            task = declaration(scope=scope.select_human(owner), subject=subject,
-                               source_user=user.incarnation, recipient=owner.incarnation,
-                               change=change, **declaration_options)
-            return self._publish_user(
-                user, IncarnationThreadTarget(owner.incarnation),
-                "Pinned constraint from its original source",
-                task, role=NoticeRole())
+        user = self.user_identity(worktree)
+        owner = self.registry.require(recipient)
+        task = declaration(scope=scope.select_human(owner), subject=subject,
+                           source_user=user.incarnation, recipient=owner.incarnation,
+                           change=change, **declaration_options)
+        return self._publish_user(
+            user, IncarnationThreadTarget(owner.incarnation),
+            "Pinned constraint from its original source",
+            task, role=NoticeRole())
 
     def _publish_user(self, user: Thread, target: NamedTarget, body: str,
                       task: TaskAttachment, *, role: MessageRole = ConversationRole()) -> Message:

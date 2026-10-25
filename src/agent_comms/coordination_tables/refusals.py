@@ -8,7 +8,6 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Annotated
 
-from agent_comms.active_route import guard_original_root_write
 from agent_comms.coordination_database import CoordinationStore
 from agent_comms.coordination_schema import CoordinatorRow
 from agent_comms.coordination_session import CoordinationSession
@@ -45,7 +44,6 @@ class SendRefusal(CoordinatorRow):
     @classmethod
     def record(cls, root: Path, sender: str, target: str, error: ToolRefusedError) -> None:
         with (
-            guard_original_root_write(root),
             MaintenanceBarrier(RegistryFile.path_in(root)).allow_input(),
             CoordinationSession(str(CoordinationStore.path_in(root))) as store,
             store.writing() as db,
