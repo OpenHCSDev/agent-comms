@@ -216,7 +216,7 @@ class EditReview(ReviewSubject):
 
     def run(self, options: VerdictVerb, ctx: order.Commander) -> None:
         unjudged = Edit.unjudged(ctx.comms, ctx.commander)
-        record(ctx, options.declared_name, self.verdicts(options, ctx, unjudged), len(unjudged))
+        record(ctx, options, self.verdicts(options, ctx, unjudged), len(unjudged))
 
     def verdicts(self, options: VerdictVerb, ctx: order.Commander,
                  unjudged: list[Edit]) -> tuple[JudgedCall, ...]:
@@ -241,10 +241,10 @@ class EditReview(ReviewSubject):
                      for i in ids)
 
 
-def record(ctx: order.Commander, name: str, verdicts: tuple[JudgedCall, ...], unjudged: int) -> None:
+def record(ctx: order.Commander, verb: JudgeVerb, verdicts: tuple[JudgedCall, ...], unjudged: int) -> None:
     """Core checks every verdict before writing any; the count left derives from the one read."""
     ctx.call(CommsVerdictsTool(verdicts=verdicts))
-    print(f'{name}: {len(verdicts)} edits; {unjudged - len(verdicts)} still unjudged')
+    print(f'{verb.declared_name}: {len(verdicts)} edits; {unjudged - len(verdicts)} still unjudged')
 
 
 @dataclass(frozen=True)
@@ -520,7 +520,7 @@ class BatchVerb(JudgeVerb):
             refusals.append(f'edits judged twice in this batch: {twice}')
         if refusals:
             sys.exit('\n'.join(refusals))
-        record(ctx, self.declared_name, tuple(verdicts), len(unjudged))
+        record(ctx, self, tuple(verdicts), len(unjudged))
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -550,7 +550,7 @@ class RewrittenVerb(ReasonedVerb):
                 continue
             verdicts.append(JudgedCall(edit.problem, verdict))
         if verdicts:
-            record(ctx, self.declared_name, tuple(verdicts), len(unjudged))
+            record(ctx, self, tuple(verdicts), len(unjudged))
         for reason in dict.fromkeys(live.values()):
             print(f'{reason}: ' + ' '.join(i for i, why in live.items() if why == reason))
         print(f'{len(live)} edits of {self.unit} stay for ok or back: ' + ' '.join(live))
