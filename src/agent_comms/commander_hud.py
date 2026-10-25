@@ -2,12 +2,17 @@
 
 from __future__ import annotations
 
+import asyncio
 import time
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from aiohttp import ClientError
+
+from agent_comms.cli_bridges.codex import CodexAppServer
+from agent_comms.cli_bridges.codex_protocol import RateLimitReading
 from agent_comms.commander.vibe_check import OverloadDegradation
 from agent_comms.commander_frame_file import CommanderFrameFile
 from agent_comms.commander_service import CommanderService
@@ -121,6 +126,34 @@ class FinishedPhases(HudRow):
         return f"{self.plan.declared_name}: {len(self.phases)} phases done"
 
 
+class UnreadableUsage(RateLimitReading):
+    reason: str
+
+    def line(self) -> str:
+        return f'usage unreadable: {self.reason}'
+
+    def needs_hand(self) -> bool:
+        return True
+
+
+@dataclass(frozen=True)
+class CodexUsage(HudRow):
+    reading: RateLimitReading
+
+    @classmethod
+    def read(cls) -> CodexUsage:
+        try:
+            return cls(asyncio.run(CodexAppServer.rate_limits()))
+        except (OSError, ClientError) as error:
+            return cls(UnreadableUsage(reason=f'{type(error).__name__}: {error}'))
+
+    def line(self) -> str:
+        return self.reading.line()
+
+    def needs_hand(self) -> bool:
+        return self.reading.needs_hand()
+
+
 @dataclass(frozen=True)
 class CommanderForks(HudRow):
     """The commander's forks Core registered and still hears; a fork never registered, such as
@@ -147,6 +180,7 @@ class CommanderHud(ToolResult):
     phases: tuple[CommanderPhase, ...]
     load: OverloadDegradation
     forks: tuple[ThreadIncarnation, ...]
+    usage: CodexUsage
 
     @classmethod
     def read(cls, comms: Comms, commander: str) -> CommanderHud:
@@ -184,7 +218,7 @@ class CommanderHud(ToolResult):
                     tuple(at for due, at in timers if due.id == todo.id),
                     todo.strike_count, edits[todo.id],
                 ) for todo in orders),
-                sum(len(todo.live_strikes(unit.name)) for todo in history),
+                sum(todo.strikes_against(unit) for todo in history),
                 tuple(ready for request in requests.values() for ready in request.as_ready()),
                 tuple(draft for request in requests.values() for draft in request.as_draft()),
             ))
@@ -196,7 +230,7 @@ class CommanderHud(ToolResult):
                       if snapshot.status(fork.name).receiving)
         return cls(owner, tuple(units), phases,
                    OverloadDegradation.from_orders(held, len(timers), sum(edits.values())),
-                   forks)
+                   forks, CodexUsage.read())
 
     def rows(self) -> tuple[HudRow, ...]:
         """The rows under the load line: every row needing the commander's hand, in the
@@ -207,6 +241,7 @@ class CommanderHud(ToolResult):
         return (
             *(row for row in live if row.needs_hand()),
             *(row for row in live if not row.needs_hand()),
+            self.usage,
             CommanderForks(self.forks),
             *(FinishedPhases(plan, phases) for plan in Plan.members_with(Plan)
               for phases in (tuple(phase for phase in finished if phase.plan is plan),)

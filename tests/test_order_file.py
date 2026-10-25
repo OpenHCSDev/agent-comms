@@ -91,18 +91,18 @@ def test_problem_and_send_share_field_refusals_and_record_only_valid_documents(p
         if command == 'problem':
             main(['problem', str(path), '--to', 'worker', '--where', planned.owner.to_wire()], ctx)
             created, = ctx.todos()
-            assert created.holder == 'worker' and not created.strikes
+            assert created.holder == 'worker' and created.strike_count == 0
             document = replace(document, problems=(created.id,))
-            original_message = created.messages[-1]
+            original_message = created.latest_message
         else:
             main(['send', 'worker', str(path), '--clean'], ctx)
             resent, = ctx.todos()
-            assert resent.holder == 'worker' and not resent.strikes
-            assert resent.messages[-1] != original_message
+            assert resent.holder == 'worker' and resent.strike_count == 0
+            assert resent.latest_message != original_message
             main(['send', 'worker', str(path), '--reassign',
                   'The old attempt failed before recording the required source change'], ctx)
-            assert not ctx.comms.goals.todos.get(created.id).strikes
+            assert ctx.comms.goals.todos.get(created.id).strike_count == 0
             main(['send', 'worker', str(path)], ctx)
-            assert len(ctx.comms.goals.todos.get(created.id).strikes) == 1
+            assert ctx.comms.goals.todos.get(created.id).strike_count == 1
             main(['send', 'worker', str(path)], ctx)
-            assert len(ctx.comms.goals.todos.get(created.id).strikes) == 1
+            assert ctx.comms.goals.todos.get(created.id).strike_count == 1

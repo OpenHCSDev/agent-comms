@@ -13,7 +13,7 @@ from agent_comms.installer.runtime_resolution import RuntimeResolution
 from agent_comms.locked_store import DocumentChange, DurableFile, LockedStore
 from agent_comms.repo import Repo
 from agent_comms.root_runtime import RootRuntimeStore
-from agent_comms.store_files import DependentStateTier
+from agent_comms.store_files import DependentStateTier, SingleFileStore
 
 STEPS = Path("tools/cutover")
 
@@ -116,7 +116,7 @@ class FinishedCarries:
 
 
 @dataclass(frozen=True, slots=True)
-class FinishedCarryStore(DurableFile, LockedStore[FinishedCarries], DependentStateTier):
+class FinishedCarryStore(SingleFileStore, DurableFile, LockedStore[FinishedCarries], DependentStateTier):
     """The bus owns which carries it has run; installs read it instead of dry-running them."""
 
     filename: ClassVar[str] = "finished_carries.json"

@@ -25,7 +25,6 @@ from .field_codec import (
     RecordMember,
     ResourcePathText,
     RootId,
-    Sha256Text,
     SubclassUnion,
     ThreadLookup,
     TurnId,
@@ -254,10 +253,7 @@ class WakeClaim(RecordMember, RecordedScope):
                 "Wake claim_scope version or revision is invalid."
             ) from error
         try:
-            assignment = self.wake_assignment_id
-            if not assignment.startswith("cohort-v1:"):
-                raise ValueError("Unknown wake claim codec")
-            Sha256Text.from_text(assignment.removeprefix("cohort-v1:"))
+            self.wake_assignment_id.require_cohort()
         except ValueError as error:
             raise ClaimTransitionError("Wake claim ID is invalid.") from error
 

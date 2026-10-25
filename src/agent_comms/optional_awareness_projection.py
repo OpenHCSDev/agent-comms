@@ -51,7 +51,7 @@ from .message_reference import MessageReference
 from .native_input_owner import RegistryOwner
 from .private_registry_guard import RegistryPrivacy
 from .registration import Registration
-from .store_files import StoreBusy, StoreLockContention, _store_lock
+from .store_files import StoreBusy
 from .threads import Thread
 from .turn_context import ContextSegment, InstructionFile, ResourceProvenance, WireProvenance
 from .typed_table import TypedRow
@@ -187,7 +187,7 @@ class OptionalAwarenessProjection:
             raise ProjectionUnavailableError("selected source is outside the captured window")
         # Each selected row must now carry immutable same-transaction owner
         # generation provenance. An incomplete join omits the whole read.
-        with _store_lock(self.registry.store.path, contention=StoreLockContention(0)):
+        with self.registry.store.read_now():
             privacy = self.registry.store.private_guard_unlocked()
             root_id = privacy.namespace
         lookup = assignment.recipient_lookup
@@ -266,7 +266,7 @@ class OptionalAwarenessProjection:
         self, path: os.PathLike[str], lookup: ThreadLookup, owner: Thread
     ) -> None:
         registry = self.registry
-        with _store_lock(registry.store.path, contention=StoreLockContention(0)):
+        with registry.store.read_now():
             snapshot = registry.store.read_snapshot_unlocked()
             RegistryOwner(
                 thread=owner,

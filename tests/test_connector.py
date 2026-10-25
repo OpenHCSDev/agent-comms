@@ -51,7 +51,7 @@ from agent_comms.maintenance_barrier import (
     InstallingPhase, MaintenanceBarrier, MaintenanceHeldError, MaintenanceOperator, PausedPhase,
     ReadyPhase,
 )
-from agent_comms.store_files import _store_lock
+from agent_comms.store_files import ExclusiveLock, UNBOUNDED_CONTENTION, _store_lock
 from agent_comms.tools import CommsChannelsTool, invoke_tool
 from agent_comms.tool_request import ReadTool, ToolRequest
 from agent_comms.threads import Thread
@@ -589,7 +589,7 @@ async def test_maintenance_refuses_before_locked_stores_on_a_copied_bus(
         held = barrier.begin(MaintenanceOperator.current())
         for phase in phases:
             held = barrier.advance(held, phase)
-        with _store_lock(copied_bus.path), _store_lock(barrier.registry_path):
+        with _store_lock(copied_bus.path, ExclusiveLock(), UNBOUNDED_CONTENTION), _store_lock(barrier.registry_path, ExclusiveLock(), UNBOUNDED_CONTENTION):
             started = time.monotonic()
             response = await reader.post("/mcp", headers=headers, timeout=2, json={
                 "jsonrpc": "2.0", "id": 1, "method": "tools/call",

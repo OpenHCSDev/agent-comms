@@ -7,7 +7,6 @@ pure digest, caller-supplied DTO, or unbound singleton claim is not bus proof.
 
 from __future__ import annotations
 
-import hashlib
 import logging
 import sqlite3
 from dataclasses import dataclass
@@ -22,6 +21,8 @@ from agent_comms.cohort_schema import (
     ClaimBatchMembers,
     CohortDeliveries,
     CohortTable,
+    NoDeliveryClaim,
+    SelectedClaim,
     assert_optional_awareness_schema,
 )
 from agent_comms.coordination_contracts import POLICY_VERSION, RESOLVER_VERSION
@@ -87,18 +88,17 @@ class AcceptedCohort:
                 recipient_lookup=assignment.recipient_lookup,
             ).insert(db)
         selected = {
-            assignment.recipient_lookup: assignment.assignment_id for assignment in expected
+            assignment.recipient_lookup: SelectedClaim(assignment.assignment_id)
+            for assignment in expected
         }
         for ordinal, recipient in enumerate(initial.recipients):
-            assignment_id = selected.get(recipient.recipient_lookup)
             CohortDeliveries(
                 wire_root_id=privacy.namespace,
                 wire_seq=initial.message.seq,
                 ordinal=ordinal,
                 recipient_lookup=recipient.recipient_lookup,
                 canonical_thread=recipient.canonical_thread,
-                kind="selected" if assignment_id is not None else "unmentioned_observer",
-                claim_id=assignment_id,
+                claim_id=selected.get(recipient.recipient_lookup, NoDeliveryClaim()),
             ).insert(db)
         _record_optional_owner_generations(db, expected, privacy.namespace, initial.message.seq)
         ClaimBatchAcknowledgements.update(
@@ -112,7 +112,7 @@ class AcceptedCohort:
 
 def _assignment_id(root: str, seq: int, lookup: ThreadLookup) -> AssignmentId:
     identity = f"agent-comms:cohort-claim:v1\0{root}:{seq}:{lookup}".encode()
-    return AssignmentId("cohort-v1:" + hashlib.sha256(identity).hexdigest())
+    return AssignmentId.cohort(identity)
 
 
 def _expected_assignments(
@@ -172,7 +172,10 @@ def _claim_record(
         parameters=(namespace, message.seq),
         order_by=("ordinal",),
     )
-    selected = {assignment.recipient_lookup: assignment.assignment_id for assignment in expected}
+    selected = {
+        assignment.recipient_lookup: SelectedClaim(assignment.assignment_id)
+        for assignment in expected
+    }
     if deliveries != [
         CohortDeliveries(
             wire_root_id=namespace,
@@ -180,8 +183,7 @@ def _claim_record(
             ordinal=ordinal,
             recipient_lookup=recipient.recipient_lookup,
             canonical_thread=recipient.canonical_thread,
-            kind="selected" if recipient.recipient_lookup in selected else "unmentioned_observer",
-            claim_id=selected.get(recipient.recipient_lookup),
+            claim_id=selected.get(recipient.recipient_lookup, NoDeliveryClaim()),
         )
         for ordinal, recipient in enumerate(initial.recipients)
     ]:
@@ -304,7 +306,7 @@ def sealed_cohort_assignments(
                     "JOIN claim_batch_receipts r ON r.wire_root_id=m.wire_root_id "
                     "AND r.wire_seq=m.wire_seq AND r.sealed=1 "
                     "JOIN cohort_delivery_receipts d ON d.wire_root_id=m.wire_root_id "
-                    "AND d.wire_seq=m.wire_seq AND d.claim_id=c.assignment_id AND d.kind='selected' "
+                    "AND d.wire_seq=m.wire_seq AND d.claim_id=c.assignment_id "
                     "WHERE c.recipient_lookup=? AND c.wire_seq>? "
                     f"AND {selected_states} "
                     "ORDER BY c.wire_seq,c.assignment_id LIMIT ?",

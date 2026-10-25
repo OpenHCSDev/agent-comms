@@ -37,7 +37,13 @@ from .owner_restart import OwnerRestartRequest, StoppedOwnerFailure
 from .private_path import PrivateDirectoryRole
 from .restart_refusals import RestartRefusal
 from .restart_scope import OwnersNamed
-from .store_files import AtomicFile, ClaimHeldError, ProcessSingleton, StoreLockFile, _store_lock
+from .store_files import (
+    AtomicFile,
+    ClaimHeldError,
+    ProcessSingleton,
+    StoreLockFile,
+    StoreGuard,
+)
 from .thread_identity import RecordedThreadIncarnation
 from .tool_result import ToolResult
 from .watched import ChangeSignal, DirectorySource, FileSource
@@ -158,7 +164,7 @@ class RestartTarget:
 
     @property
     def is_current_watcher(self) -> bool:
-        return self.launch_runtime == LaunchRuntime.running()
+        return self.launch_runtime.runs_this_process
 
     def require_watcher(self, comms: Comms) -> None:
         self.require_available(comms)
@@ -211,7 +217,7 @@ class RestartQueueLayoutError(RelationViolationError):
 
 
 @dataclass(frozen=True)
-class RestartQueue:
+class RestartQueue(StoreGuard):
     """One active record per recorded owner; settled records never enter that set."""
 
     directory: Path
@@ -236,7 +242,7 @@ class RestartQueue:
 
     @contextmanager
     def locked(self):
-        with _store_lock(self.lock_path):
+        with self.write_guard(self.lock_path):
             if next(self.directory.glob('*.json'), None) is not None:
                 raise RestartQueueLayoutError(
                     'Restart queue uses a retired layout; existing records require explicit conversion'

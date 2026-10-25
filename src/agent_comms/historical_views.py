@@ -462,7 +462,7 @@ class HistoryArchive(DurableFile, LockedFile, SourceTier):
         source_root = source_root.resolve()
         if source_root == self.bus_path.parent.resolve():
             raise ValueError("The live bus cannot be its own history source")
-        with self.locked():
+        with self.guarded_write():
             sources = self.sources()
             existing = next((s for s in sources if s.original_root == str(source_root)), None)
             if existing is not None:

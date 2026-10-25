@@ -19,7 +19,9 @@ from agent_comms.commander_service import CommanderService
 from agent_comms.comms import Comms
 from agent_comms.declared_family import DeclaredFamily
 from agent_comms.goal_actions import ReissuedOrderGoalAction
+from agent_comms.head_review import PullRequestHead
 from agent_comms.heartbeat_frame import HeartbeatFrame
+from agent_comms.heartbeat_subjects import HeadSubject, HeartbeatSubject
 from agent_comms.held_orders import HeldOrders
 from agent_comms.installer import launch as installer_launch
 from agent_comms.installer.interpreter_operation import LauncherPhase
@@ -48,7 +50,6 @@ from agent_comms.thread_identity import ThreadIncarnation
 from agent_comms.threads import Thread
 from agent_comms.todos import (
     Assignment,
-    OrderClaim,
     OwnerRequest,
     PullRequests,
     RestoreHolderTodo,
@@ -147,21 +148,28 @@ class PendingInstallDue(InstallDue):
         self.logs.record(run.unit.logs, self.repo, self.main)
 
 
-class LaunchedInstallDue(InstallDue):
+@dataclass(frozen=True)
+class RunInstallDue(InstallDue, declared_name=None):
+    """A merge whose launched run selected this member; the run rides along so its
+    rendering reads the unit that selected it, not a second look at the logs."""
+
+    unit: installer_launch.InstallUnit = field(compare=False, kw_only=True)
+
+
+class LaunchedInstallDue(RunInstallDue):
     @property
     def action(self) -> str:
         return "an install for this merge was already launched"
 
 
-class DiedInstallDue(InstallDue):
+class DiedInstallDue(RunInstallDue):
     """Its unit ended without a result; nothing relaunches it until main moves."""
 
     headline = "INSTALL DIED"
 
     @property
     def action(self) -> str:
-        run = self.logs.launched(self.repo, self.main)[0]
-        return f"target {self.target[:12]}; {run.errors}: {run.last_error()}"
+        return f"target {self.target[:12]}; {self.unit.errors}: {self.unit.last_error()}"
 
 
 @dataclass(frozen=True)
@@ -322,18 +330,19 @@ class DeliveryAwaitingJudgement(UnitOwedAnswer, UndatedStandingRule):
     """A holder's delivery needs a verdict or a replacement order, never a chat reply."""
 
     problem: str
+    request: PullRequestHead
 
     @classmethod
     def read_open(cls, source: BusReader, snapshot: RegistrySnapshot,
                   held: Mapping[ThreadIncarnation, Sequence[Todo]], commander: str,
                   requests: Sequence[OwnerRequest]) -> tuple[Self, ...]:
-        originals = OrderClaim.originals(
-            source,
-            {(owner, todo.id): todo.order.owed_claims()
-             for owner, todos in held.items() for todo in todos},
-        )
-        return tuple(cls(message, owner.name, problem)
-                     for (owner, problem), messages in originals.items() for message in messages)
+        return tuple(cls(claim.original(source), owner.name, todo.id, claim.request())
+                     for owner, todos in held.items() for todo in todos
+                     for claim in todo.order.owed_claims())
+
+    def subjects(self) -> tuple[HeartbeatSubject, ...]:
+        """A verdict on the delivered head acts on the delivery; a chat reply does not."""
+        return (HeadSubject(self.request),)
 
     def clearing_action(self) -> str:
         """The verbs that declare they clear this debt render their own command lines."""
@@ -449,7 +458,7 @@ class UnownedWheelSpin(IndependentStandingRule, UndatedStandingRule):
         found = []
         for todo in (todo for todo in rows if todo.id not in protected):
             for unit in idle:
-                if not todo.live_strikes(unit.name):
+                if not todo.strikes_against(unit.incarnation):
                     idle.remove(unit)
                     found.append(ReassignedWheelSpin(todo, ReusedWorkDispatch.for_unit(
                         ReissuedOrderGoalAction.for_todo(todo, commander), unit)))

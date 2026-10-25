@@ -66,7 +66,7 @@ from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.repo import Repo
 from agent_comms.registry_document import RegisteredCommanderProject
 from agent_comms.commander_pings import CommanderUpdate
-from agent_comms.heartbeat_subjects import HeartbeatSubject, UnitSubject
+from agent_comms.heartbeat_subjects import AnswerSubject, HeartbeatSubject, UnitSubject
 from agent_comms.standing_rules import HuntDue, OwedAnswer
 from agent_comms.ui_model.unit_state import AwaitingCommander
 from agent_comms.thread_identity import ThreadIncarnation
@@ -110,11 +110,6 @@ def refuse(text, *families):
     """Core's text families decide what the commander may write; nothing is recorded when one refuses."""
     if refused := [r for family in families if (r := family.refused(text))]:
         sys.exit('REFUSED, nothing recorded: ' + ' '.join(refused))
-
-
-def struck(todo, unit):
-    """Strikes count per unit and task, across every order of that task the unit held."""
-    return len(todo.live_strikes(unit))
 
 
 # Eliminate forwarding with inheritance and multiple parents; decompose the hierarchy if it is not sound.
@@ -535,7 +530,7 @@ class ListedProblems(OrderedProblems):
                   listed: Mapping[str, Todo]) -> bool:
         return bool(group) and all(
             pid in listed and any(assignment.owner_identity == unit for assignment
-                                  in listed[pid].holder_state.current_assignments())
+                                  in listed[pid].current_holder.current_assignments())
             for pid in group)
 
     def carried(self, order: PendingProblemOrder, group: Sequence[str],
@@ -720,7 +715,7 @@ class Commander(CommanderContext):
     def posted(self, unit: str, todo: Todo, strike: StrikeTodo,
                answers: tuple[MessageReference, ...] = ()) -> None:
         """Publish a strike Core already recorded on the task's Todo to #comms."""
-        n = struck(todo, unit)
+        n = todo.strikes_against(self.comms.registry.require(unit).incarnation)
         taken = f", {todo.id} taken away" if todo.holder != unit else ""
         line = (f'{time.strftime("%Y-%m-%d")} {strike.at.clock()} {unit} (strike {n} on {todo.id}'
                 f'{taken}): {strike.reason}')
@@ -750,14 +745,14 @@ class Commander(CommanderContext):
         live = [s for s in todo.live_strikes() if at.selects(s)]
         if not live:
             sys.exit(at.refusal(task))
-        voided = live[-1]
+        voided = live[0]
         # posted to #comms, so refused before Core records the void
         refuse(why, *DirectiveText.checks())
         self.call(CommsChangeProblemTool(problem=task, operation=VoidStrikeTodo(
             todo.revision, self.incarnation, voided, why)))
         unit = voided.previous.owner
         after = self.comms.goals.todos.get(task)
-        n = struck(after, unit)
+        n = after.strikes_against(self.comms.registry.require(unit).incarnation)
         line = (f'{time.strftime("%Y-%m-%d %H:%M")} {unit} (strike voided on {task}, '
                 f'recorded {voided.at.clock()}; {n} strike(s) remain; held by '
                 f'{after.holder or "nobody"}): {why}')
@@ -840,18 +835,21 @@ class CommanderVerb(DeclaredVerb, affix="Verb"):
 
 class HeartbeatGated(CommanderVerb, declared_name=None):
     """A writing verb is refused while a heartbeat line sits undisposed past the answer window,
-    unless the verb acts on one such line's subject; Core records that action, and the record
-    is what disposes of the line. Nothing the commander says about a line counts."""
+    unless the verb acts on the subject of a line on the board, fresh or stale: board work is
+    never off-board work, or a stale line no one can act on yet would refuse the verdict a
+    fresh line asks for. Core records that action, and the record is what disposes of the line.
+    Nothing the commander says about a line counts."""
 
     def gate(self, ctx: Commander) -> None:
         super().gate(ctx)
         now = time.time()
-        owed = CommanderUpdate.owed(ctx.comms, ctx.commander, now - AwaitingCommander.seconds)
+        board = CommanderUpdate.owed(ctx.comms, ctx.commander, now)
         acted = frozenset(self.acts_on(ctx))
-        if owed and not any(subject in acted for ping in owed for subject in ping.subjects):
+        if (any(ping.since.before(now - AwaitingCommander.seconds) for ping in board)
+                and not any(ping.acted_on(acted) for ping in board)):
             sys.exit(f'REFUSED, nothing recorded: heartbeat lines undisposed past '
-                     f'{AwaitingCommander.seconds // 60} min; act on one of them:\n'
-                     + '\n'.join(ping.render(now) for ping in owed))
+                     f'{AwaitingCommander.seconds // 60} min; act on any line on the board:\n'
+                     + '\n'.join(ping.render(now) for ping in board))
 
     @abstractmethod
     def acts_on(self, ctx: Commander) -> tuple[HeartbeatSubject, ...]:
@@ -934,8 +932,9 @@ class DirectiveVerb(HeartbeatGated):
         snapshot = ctx.comms.registry.snapshot()
         reached = (snapshot.canonical_name(name) for name in self.addressed)
         # A channel reaches no unit line; only registered threads are subjects.
-        return tuple(UnitSubject(snapshot.threads[name].incarnation)
-                     for name in reached if name in snapshot.threads)
+        return (*(UnitSubject(snapshot.threads[name].incarnation)
+                  for name in reached if name in snapshot.threads),
+                *(AnswerSubject(identity) for identity in self.answers))
 
     @abstractmethod
     def respond(self, ctx: Commander, references: tuple[MessageReference, ...]) -> None: ...

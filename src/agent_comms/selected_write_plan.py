@@ -174,7 +174,7 @@ class SelectedWritePlans(DurableFile, PatternFile):
         raw = contents.encode("utf-8")
         if not raw or len(raw) > _MAX_BYTES:
             raise IdentityConflict("Selected write requires 1..1048576 UTF-8 bytes")
-        with self.comms.registry.store.locked():
+        with self.comms.registry.store.guarded_write():
             self.comms.registry.store.private_guard_unlocked().require_root(
                 self.root_id, IdentityConflict("Selected write requires its original native namespace"),
             )

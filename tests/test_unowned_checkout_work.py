@@ -21,7 +21,7 @@ from agent_comms.commander_heartbeat import (
     CommanderObservation,
 )
 from agent_comms.commander_pings import CommanderUpdate, RulePing
-from agent_comms.commander_hud import CommanderHud
+from agent_comms.commander_hud import CommanderHud, CodexUsage, UnreadableUsage
 from agent_comms.commander.vibe_check import OverloadDegradation
 from agent_comms.comms import Comms, wire
 from agent_comms.field_codec import FieldCodec, GoalId
@@ -181,7 +181,8 @@ def struck_unowned_bus(checkout_bus: Comms) -> tuple[Comms, StrikeTodo]:
 
 def run_heartbeat_rules(c: Comms, rules: tuple[StandingRule, ...]) -> None:
     lead = c.registry.require('lead')
-    hud = CommanderHud(lead.incarnation, (), (), OverloadDegradation.from_orders((), 0, 0), ())
+    hud = CommanderHud(lead.incarnation, (), (), OverloadDegradation.from_orders((), 0, 0), (),
+                       CodexUsage(UnreadableUsage(reason='not requested')))
     CommanderHeartbeat().pass_body(c, (CommanderObservation(lead, (), rules, (), hud),))
 
 
@@ -200,7 +201,7 @@ def test_a_concurrent_unstrike_does_not_end_the_heartbeat_pass(struck_unowned_bu
         assigned = c.goals.todos.get('P1')
         assert assigned.holder == 'idle'
         assert assigned.revision == fresh.revision + 1
-        assert not assigned.live_strikes('worker')
+        assert not assigned.strikes_against(c.registry.require('worker').incarnation)
         assert stale.redecided(c, 'lead', assigned) == ()
         update = CommanderUpdate.latest(c, c.registry.require('lead').incarnation)
         assert update is not None and not update.not_applied

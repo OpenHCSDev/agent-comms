@@ -45,7 +45,6 @@ from .private_nk_entrypoint import (
 )
 from .private_path import PrivateFileRole
 from .private_runtime_schema import PrivateCoordinatorSchema, PrivateCoordinatorTable
-from .store_files import SharedLock
 from .thread_identity import ClaimedIdentity
 
 
@@ -132,7 +131,7 @@ class RegistryPrivacy(ABC):
         from .registry_store import RegistryStore
 
         registry = RegistryStore.at(root)
-        with registry.locked(mode=SharedLock()):
+        with registry.guarded_read():
             return registry.private_guard_unlocked()
 
     @abstractmethod
