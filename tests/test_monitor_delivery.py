@@ -218,6 +218,15 @@ def test_non_task_attachments_and_pending_queue_records_do_not_confirm():
     assert queued.updates(ClaudeSession())==()
 
 
+def test_remote_control_session_record_decodes_without_updates():
+    record = decoded_record({'type': 'bridge-session',
+        'sessionId': '00000000-0000-4000-8000-000000000001',
+        'bridgeSessionId': 'cse_000000000000000000000000', 'lastSequenceNum': 0,
+        'ownerAccountUuid': '00000000-0000-4000-8000-000000000002',
+        'ownerOrganizationUuid': '00000000-0000-4000-8000-000000000003'})
+    assert record.updates(ClaudeSession()) == ()
+
+
 @pytest.mark.asyncio
 async def test_wrong_complete_parts_stay_pending_without_claiming_delivery(bridge, emitted_delivery, capsys):
     delivery = emitted_delivery('original')
