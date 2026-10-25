@@ -62,7 +62,6 @@ class _SelectedDecision:
             ordinal=delivery.ordinal,
             recipient_lookup=assignment.recipient_lookup,
             canonical_thread=assignment.recipient,
-            kind="selected",
             claim_id=SelectedClaim(assignment.assignment_id),
         )
         if delivery != expected_delivery:

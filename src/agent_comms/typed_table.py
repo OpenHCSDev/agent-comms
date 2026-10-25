@@ -800,10 +800,10 @@ class SQLiteCatalogObject(TypedRow):
 
     @classmethod
     def release_guards(cls, db: sqlite3.Connection, row: builtins.type[TypedTable]) -> None:
-        """Inside the caller's write transaction, lift every stored guard on the row's table,
-        declared or not, so a carry can rewrite rows an older schema refused to change."""
+        """Lift guards on this table and related-table guards owned by its declaration."""
+        declared = row.schema_objects()
         for item in cls.stored(db):
-            if item.tbl_name == row.declared_name:
+            if item.tbl_name == row.declared_name or item.name in declared:
                 item.type.release(db, item)
 
     @classmethod
@@ -1990,19 +1990,19 @@ class TypedTable(
         cls._writable_fields(tuple(changed))
         fields = cls._writable_fields()
         stored = cls.stored_columns(db)
-        expressions = (
-            changed[item.name] if item.name in changed else item.rebuild_expression(stored)
+        selected = ", ".join(
+            f'{changed[item.name] if item.name in changed else item.rebuild_expression(stored)} AS {_identifier(item.wire_name)}'
             for item in fields
         )
-        selected = ", ".join(f'{expression} AS {_identifier(item.wire_name)}'
-                             for item, expression in zip(fields, expressions, strict=True))
         table = _identifier(cls.declared_name)
         temporary = _identifier(f"rebuild_{cls.declared_name}")
         db.execute(f"CREATE TEMP TABLE {temporary} AS SELECT {selected} FROM {table}")
+        SQLiteCatalogObject.release_guards(db, cls)
         cls.drop(db)
-        cls.create(db)
+        db.execute(cls._table_sql())
         columns = cls._column_list(tuple(item.name for item in fields))
         db.execute(f"INSERT INTO {table} ({columns}) SELECT {columns} FROM {temporary}")
+        cls.create(db, if_not_exists=True)
         db.execute(f"DROP TABLE {temporary}")
 
     @classmethod
