@@ -313,9 +313,8 @@ class StoreLockFile(StoreOwner, declared_name=None):
 
 
 class StoreGuard:
-    """Read/write lock behavior without a file-declaration or wire family."""
+    """Explicit-path lock behavior without a file-declaration or wire family."""
     __slots__ = ()
-    path: Path
     lock_type: ClassVar[type[StoreLock]] = StoreLock
 
     @classmethod
@@ -358,6 +357,13 @@ class StoreGuard:
                                      read_budget=read_budget, lock_type=cls.lock_type) as lock:
             yield lock
 
+
+class StoreLockOwner(StoreGuard, StoreLockFile, declared_name=None):
+    """File declarations whose guards use their instance path."""
+
+    __slots__ = ()
+    path: Path
+
     def guarded_read(
         self, *, read_budget: StoreReadBudget = UNBOUNDED_STORE_READ,
     ) -> AbstractContextManager[None]:
@@ -374,10 +380,6 @@ class StoreGuard:
     def read_now(self) -> AbstractContextManager[StoreLock]:
         return _store_lock(self.path, SharedLock(), StoreLockContention(0),
                            lock_type=self.lock_type)
-
-
-class StoreLockOwner(StoreGuard, StoreLockFile, declared_name=None):
-    __slots__ = ()
 
 
 class RankedStoreLock(StoreLockOwner, declared_name=None):

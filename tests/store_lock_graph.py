@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from agent_comms.pinned_audit import ParsedModule
-from agent_comms.store_files import RankedStoreLock, StoreGuard
+from agent_comms.store_files import RankedStoreLock, StoreGuard, StoreLockOwner
 
 
 @dataclass(frozen=True, order=True)
@@ -29,8 +29,8 @@ class StoreLockGraph:
 
     # Conservatively include lock-free reads: this may add edges, never hide a cycle.
     guard_names = frozenset(method.__name__ for method in (
-        StoreGuard.guarded_read, StoreGuard.guarded_write,
-        StoreGuard.guarded_write_async, StoreGuard.read_now,
+        StoreLockOwner.guarded_read, StoreLockOwner.guarded_write,
+        StoreLockOwner.guarded_write_async, StoreLockOwner.read_now,
         StoreGuard.read_guard, StoreGuard.write_guard,
         StoreGuard.read_guard_async, StoreGuard.write_guard_async,
     ))
