@@ -24,7 +24,6 @@ import hashlib
 import os
 import shutil
 import sys
-import tarfile
 import tempfile
 import time
 import tomllib
@@ -556,7 +555,7 @@ class Stack:
                 raise UpgradeRefused(f"Fetched {reported.strip()}; {declared.requirement} declared")
             os.replace(fetched, self.uv)
 
-    def require_runtime_wire(self, scratch: Path) -> None:
+    def require_runtime_wire(self) -> None:
         """Compare the target's wire with the source stamped into this installed wheel.
 
         Isolated Python ignores the target installer's PYTHONPATH: the old wheel, not
@@ -566,16 +565,14 @@ class Stack:
             self.python, "-I", "-c",
             "from agent_comms.package_stamp import STAMP; print(STAMP.commit())",
         ).strip()
-        with tempfile.TemporaryDirectory(dir=scratch, prefix="runtime-wire-") as directory:
-            tree = Path(directory)
-            archive = tree / "source.tar"
-            self.commands.git(self.checkout, "archive", "--format=tar",
-                              f"--output={archive}", commit, "src")
-            with tarfile.open(archive) as source:
-                source.extractall(tree, filter="data")
-            drift = CrossesRuntimes.drift(tree)
-            if drift:
-                raise RuntimeWireChanged(commit, drift)
+        paths = tuple(dict.fromkeys(member.path for member in CrossesRuntimes.declarations()))
+        present = self.commands.git(self.checkout, "ls-tree", "--name-only", "-r", commit,
+                                    "--", *paths).splitlines()
+        sources = {path: self.commands.git(self.checkout, "show", f"{commit}:{path}")
+                   for path in present}
+        drift = CrossesRuntimes.drift_sources(sources)
+        if drift:
+            raise RuntimeWireChanged(commit, drift)
 
     def resolve(self) -> None:
         """Refresh declared source packages while retaining the committed release pins."""
@@ -884,7 +881,7 @@ def upgrade(checkout: Path, root: Path, target: str, installer: InstallerChoice,
             installed.require_uv()
             if not installed.python.exists():
                 raise UpgradeRefused(f"No installed stack at {installed.python}")
-        installed.require_runtime_wire(spill_dir)
+        installed.require_runtime_wire()
         staged = Stack.build(ScratchCheckout(tree.path), commands)
         with StartingReportPublicationPhase().running(commands.clock):
             report.starting(mode.destination(member.initial_writer(root, installed)), target)

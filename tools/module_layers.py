@@ -37,8 +37,6 @@ from dataclasses import dataclass
 from functools import cached_property
 from pathlib import Path
 
-from agent_comms.installer import probes
-from agent_comms.cli_bridges import monitor
 from agent_comms.installer.runtime_wire import ClientImport, CrossesRuntimes
 
 from typing_names import TypingImports, TypingReference
@@ -348,7 +346,7 @@ class OutgoingWire(StackClient):
 
     @classmethod
     def at(cls) -> OutgoingWire:
-        return cls("outgoing wire", Path(inspect.getfile(probes)).parents[4])
+        return cls("outgoing wire", Path(inspect.getfile(CrossesRuntimes)).parents[3])
 
     @cached_property
     def imports(self) -> tuple[ClientImport, ...]:

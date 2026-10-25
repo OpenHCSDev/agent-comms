@@ -5,11 +5,13 @@ from __future__ import annotations
 import ast
 import inspect
 import textwrap
+from collections.abc import Mapping
 from dataclasses import dataclass
+from functools import cache
 from pathlib import Path
 from typing import ClassVar
 
-from agent_comms.declared_family import DeclaredFamily
+from metaclass_registry.discovery import discover_registry_classes_recursive
 
 
 @dataclass(frozen=True)
@@ -59,9 +61,13 @@ class WireClass(ClientImport):
         path = root / self.path
         if not path.is_file():
             return (f"{self.module}.{self.names[0]} is missing; sent fields ({', '.join(self.fields)})",)
+        return self.drift_source(path.read_text())
+
+    def drift_source(self, source: str) -> tuple[str, ...]:
+        """Compare either a checkout file or the installed commit's file, identically."""
         declarations = {
             node.name: self.declared(node)
-            for node in ast.parse(path.read_text(), str(path)).body
+            for node in ast.parse(source, self.path).body
             if isinstance(node, ast.ClassDef)
         }
         name, = self.names
@@ -87,15 +93,22 @@ class CrossesRuntimes:
     def outgoing_wire(cls) -> tuple[type[CrossesRuntimes], ...]:
         return (cls,)
 
+    @staticmethod
+    @cache
+    def _discover() -> None:
+        import agent_comms
+
+        discover_registry_classes_recursive(
+            agent_comms.__path__, agent_comms.__name__ + ".", CrossesRuntimes,
+        )
+
     @classmethod
     def declarations(cls) -> tuple[WireClass, ...]:
-        # Acquire declarations, never a second list of their names or capabilities.
-        from agent_comms.cli_bridges import monitor
-        from agent_comms.installer import probes
-
-        DeclaredFamily.discover_package(probes)
+        cls._discover()
         return tuple(WireClass.of(wire) for member in cls._members for wire in member.outgoing_wire())
 
     @classmethod
-    def drift(cls, root: Path) -> tuple[str, ...]:
-        return tuple(problem for declaration in cls.declarations() for problem in declaration.drift(root))
+    def drift_sources(cls, sources: Mapping[str, str]) -> tuple[str, ...]:
+        """A missing file supplies no declarations, so each missing class is reported."""
+        return tuple(problem for declaration in cls.declarations()
+                     for problem in declaration.drift_source(sources.get(declaration.path, "")))

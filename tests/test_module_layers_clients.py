@@ -1,5 +1,9 @@
 """A stack client's imports root reachability and fail on modules Core lacks."""
 
+import ast
+import os
+import subprocess
+import sys
 from pathlib import Path
 
 from module_layers import OutgoingWire, Package, StackClient
@@ -72,11 +76,11 @@ def wire_base(tmp_path: Path, wire: OutgoingWire) -> Path:
     write(base / "pyproject.toml", '[project.scripts]\nac = "agent_comms.cli:main"\n')
     write(base / "src/agent_comms/__init__.py")
     for entry in wire.imports:
-        write(base / "src" / entry.path, (wire.checkout / entry.path).read_text())
+        write(base / entry.path, (wire.checkout / entry.path).read_text())
     return base
 
 
-def test_outgoing_wire_matches_the_tree_that_declares_it(tmp_path: Path) -> None:
+def test_crosses_runtimes_matches_the_tree_that_declares_it(tmp_path: Path) -> None:
     wire = OutgoingWire.at()
 
     package = Package(wire_base(tmp_path, wire), (wire,))
@@ -84,21 +88,58 @@ def test_outgoing_wire_matches_the_tree_that_declares_it(tmp_path: Path) -> None
     assert (package.missing, package.missing_names, package.drifted) == ((), (), ())
 
 
-def test_outgoing_wire_fails_on_a_renamed_field_or_a_missing_probe(tmp_path: Path) -> None:
+def test_crosses_runtimes_fails_on_a_renamed_session_field(tmp_path: Path) -> None:
+    from agent_comms.cli_bridges.monitor import PauseSession
+
     wire = OutgoingWire.at()
     base = wire_base(tmp_path, wire)
-    owners = base / "src/agent_comms/installer/probes/owners.py"
-    owners.write_text(owners.read_text().replace(
-        "class RunningOwnersProbe(RuntimeProbe[list[str]]):\n    root:",
-        "class RunningOwnersProbe(RuntimeProbe[list[str]]):\n    bus_root:",
-    ))
-    publication = base / "src/agent_comms/installer/probes/publication.py"
-    publication.write_text(publication.read_text().replace("class PublicationProbe", "class Gone"))
+    session, = (entry for entry in wire.imports if entry.names == (PauseSession.__name__,))
+    path = base / session.path
+    tree = ast.parse(path.read_text())
+    declaration, = (node for node in tree.body
+                   if isinstance(node, ast.ClassDef) and node.name == PauseSession.__name__)
+    field, = (node for node in declaration.body if isinstance(node, ast.AnnAssign))
+    field.target = ast.Name(id="renamed_process", ctx=ast.Store())
+    path.write_text(ast.unparse(tree))
 
     package = Package(base, (wire,))
 
-    assert [name for _, name in package.missing_names] == ["PublicationProbe"]
+    assert (package.missing, package.missing_names) == ((), ())
     assert [drift for _, drift in package.drifted] == [
-        "RunningOwnersProbe declares (bus_root: Annotated[Path, PathText]), "
-        "sent as (root: Annotated[Path, PathText])"
+        "PauseSession declares (renamed_process: ProcessIdentity), sent as (process: ProcessIdentity)"
     ]
+
+
+def test_crosses_runtimes_discovers_sessions_without_importing_monitor(tmp_path: Path) -> None:
+    subprocess.run(
+        (sys.executable, "-c",
+         "import sys; from agent_comms.installer.runtime_wire import CrossesRuntimes; "
+         "assert 'agent_comms.cli_bridges.monitor' not in sys.modules; "
+         "assert any(entry.names == ('PauseSession',) for entry in CrossesRuntimes.declarations())"),
+        check=True, timeout=60,
+        env={**os.environ, "PYTHONPATH": str(OutgoingWire.at().checkout / "src")},
+    )
+
+
+def test_crosses_runtimes_discovers_a_new_session_member(tmp_path: Path) -> None:
+    write(tmp_path / "new_session.py", '''
+from dataclasses import dataclass
+from agent_comms.cli_bridges.monitor import SessionRequest, SessionReady
+from agent_comms.installer.runtime_wire import CrossesRuntimes
+
+@dataclass(frozen=True)
+class FreshSession(SessionRequest[SessionReady], declared_name="fresh"):
+    fresh_field: str
+
+    async def handle(self, service, peer):
+        return SessionReady()
+
+entry, = (entry for entry in CrossesRuntimes.declarations()
+          if entry.names == (FreshSession.__name__,))
+assert entry.fields == ("fresh_field: str",)
+''')
+    subprocess.run(
+        (sys.executable, str(tmp_path / "new_session.py")), check=True,
+        env={**os.environ, "PYTHONPATH": str(OutgoingWire.at().checkout / "src")},
+        timeout=60,
+    )
