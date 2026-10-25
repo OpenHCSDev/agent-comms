@@ -233,7 +233,7 @@ class RootFile:
         companions = {member for path, owner in owners.items()
                       for member in (*owner.files(path), *owner.transient_paths(path))
                       if member != path}
-        owners.update((path, RootFile)
+        owners.update((path, declarations.get(path, RootFile))
                       for path in selected - owners.keys() - companions)
         companions.update(member for path, owner in owners.items()
                           for member in (*owner.files(path), *owner.transient_paths(path))

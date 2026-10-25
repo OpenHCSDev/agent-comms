@@ -9,10 +9,11 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from agent_comms.field_codec import boundary_decoder
+from agent_comms.installer.files import InstallationFile, InstallationFiles
 from agent_comms.installer.refusals import UpgradeRefused
 from agent_comms.installer.declared_uv import DeclaredUv
 from agent_comms.launch_runtime import LaunchRuntime
-from agent_comms.locked_store import RegistryFile, RootFile
+from agent_comms.locked_store import RegistryFile
 from agent_comms.maintenance_barrier import MaintenanceBarrier
 from agent_comms.storage_rules import StorageRule
 
@@ -98,7 +99,11 @@ class PracticeCopy:
 
     root: Path
     path: Path
-    copied: dict[Path, Path] = field(default_factory=dict)
+    copied: dict[Path, InstallationFile] = field(default_factory=dict)
+
+    @property
+    def copied_names(self) -> tuple[Path, ...]:
+        return tuple(sorted(file.member_name(source) for source, file in self.copied.items()))
 
     def include(self, paths: tuple[Path, ...]) -> None:
         floor = StorageRule.load(self.root).floor_gib * 2**30
@@ -106,20 +111,21 @@ class PracticeCopy:
         if shutil.disk_usage(self.path.parent).free < floor:
             raise UpgradeRefused("Insufficient free space before building the practice copy")
         witnesses = set(MaintenanceBarrier(RegistryFile.path_in(self.root)).witness_paths)
-        for resource, owner in RootFile.owned_files(self.root, paths).items():
-            source = self.root / resource.path
+        for file in InstallationFiles(self.root).selected(paths):
+            source, owner = file.path, file.owner
             if source in self.copied or source in witnesses or not source.exists():
                 continue
-            target = self.path / resource.path
+            target = self.path / file.name
             target.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
-            self.copied.update((member, source) for member in owner.copy_group(source, target))
+            self.copied.update((member, file) for member in owner.copy_group(source, target))
 
     def retain(self, paths: tuple[Path, ...]) -> None:
         """Discard inputs used only to establish that an earlier carry was finished."""
-        selected = {self.root / resource.path for resource in RootFile.owned_files(self.root, paths)}
-        discarded = tuple(source for source, primary in self.copied.items() if primary not in selected)
+        selected = {file.path for file in InstallationFiles(self.root).selected(paths)}
+        discarded = tuple(source for source, file in self.copied.items() if file.path not in selected)
         for source in discarded:
-            (self.path / source.relative_to(self.root)).unlink(missing_ok=True)
+            file = self.copied[source]
+            (self.path / file.member_name(source)).unlink(missing_ok=True)
             del self.copied[source]
 
     @property

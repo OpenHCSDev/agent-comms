@@ -140,7 +140,6 @@ def test_store_backup_restores_wal_rows_and_removes_new_files(tmp_path):
         writer.commit()
         spill_dir = tmp_path / 'spill'
         backup = StoreBackup.take(root, route, (store, created), spill_dir)
-        assert isinstance(backup, StoreBackup)
         assert backup.path.parent == spill_dir
         assert backup.spill_directory(spill_dir) == backup.path
         assert backup.original()

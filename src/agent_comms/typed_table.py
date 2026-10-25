@@ -2299,9 +2299,8 @@ class WriterOwnedStore(DeclaredFamily, affix="Store"):
             entry.load()
 
     @classmethod
-    def practice_opening(cls, directory: Path) -> None:
+    def practice_opening(cls, path: Path, directory: Path) -> None:
         """The writer's own opening, run on a copy, so the stored file is never written."""
-        path = cls.path()
         if not path.is_file():
             return
         copy = SQLiteFile.copy_file(path, directory / path.name)
@@ -2314,11 +2313,17 @@ class WriterOwnedStore(DeclaredFamily, affix="Store"):
                 f"{path} cannot open on this runtime: {error}") from error
 
     @staticmethod
-    def practice_openings() -> None:
+    def practice_openings(excluding: tuple[type[WriterOwnedStore], ...] = ()) -> None:
         WriterOwnedStore.load_declarations()
+        stores = set(WriterOwnedStore.members_with(WriterOwnedStore)) - set(excluding)
         with TemporaryDirectory() as directory:
-            for store in WriterOwnedStore.members_with(WriterOwnedStore):
-                store.practice_opening(Path(directory))
+            for store in stores:
+                store.practice_opening(store.path(), Path(directory))
+
+    @classmethod
+    def member_named(cls, name: object) -> type[Self]:
+        cls.load_declarations()
+        return super().member_named(name)
 
 
 class CarriedWriter(HolderWrittenFile, StoreWriter):

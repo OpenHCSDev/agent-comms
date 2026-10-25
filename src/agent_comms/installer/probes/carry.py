@@ -6,7 +6,9 @@ import inspect
 import sqlite3
 from abc import abstractmethod
 from dataclasses import dataclass, field, replace
+from collections.abc import Iterable
 from pathlib import Path
+from tempfile import TemporaryDirectory
 from typing import Annotated, ClassVar
 
 from typing_extensions import TypeForm
@@ -14,6 +16,9 @@ from typing_extensions import TypeForm
 from agent_comms.declared_family import DeclaredFamily
 from agent_comms.errors import RelationViolationError
 from agent_comms.field_codec import PathText
+from agent_comms.installer.files import (
+    InstallationFiles, SelectedWriterOwnedFile, WriterOwnedInstallationFile,
+)
 from agent_comms.installer.interpreter_operation import (
     InstallClock,
     InterpreterOperation,
@@ -23,7 +28,7 @@ from agent_comms.installer.interpreter_operation import (
 )
 from agent_comms.locked_store import RootFile
 from agent_comms.store_files import is_store_lock
-from agent_comms.typed_table import TriggerKind, TypedTable, _Field
+from agent_comms.typed_table import TriggerKind, TypedTable, WriterOwnedStore, _Field
 
 
 @dataclass(frozen=True)
@@ -33,8 +38,14 @@ class Carried:
     changed: int
     detail: dict[str, int | bool] = field(default_factory=dict)
     rewritten: tuple[Annotated[Path, PathText], ...] = ()
-    """Inventory-tracked files under the bus root this run wrote or deleted.
+    """Bus-relative names or declared writer-owned paths this run wrote or deleted.
     Store locks are excluded from that inventory and cannot authorize a rewrite."""
+
+    def for_step(self, step: Carry) -> Carried:
+        files = tuple(file for path in self.rewritten for file in step.files.referenced(path))
+        for file in files:
+            step.require_confined(file.path)
+        return replace(self, rewritten=tuple(file.name for file in files))
 
     def __post_init__(self) -> None:
         for path in self.rewritten:
@@ -52,6 +63,27 @@ class Carry(DeclaredFamily, affix="", discovery_package="cutover"):
     original_root: Annotated[Path, PathText]
     spill_dir: Annotated[Path, PathText]
 
+    writer_owned: ClassVar[tuple[type[WriterOwnedStore], ...]] = ()
+    """External durable declarations this step is allowed to read and carry."""
+
+    @property
+    def files(self) -> InstallationFiles:
+        return InstallationFiles.for_carry(self.root, self.original_root)
+
+    def writer_file(self, store: type[WriterOwnedStore]) -> WriterOwnedInstallationFile:
+        """Only a named declaration can supply an external input, on this step's root."""
+        declared = {member: self.files.writer_file(member) for member in self.writer_owned}
+        try:
+            return declared[store]
+        except KeyError:
+            raise RelationViolationError(
+                f"{type(self).__name__} does not declare writer-owned input {store.declared_name}"
+            ) from None
+
+    @staticmethod
+    def writer_declarations(steps: Iterable[Carry | type[Carry]]) -> tuple[type[WriterOwnedStore], ...]:
+        return tuple(dict.fromkeys(store for step in steps for store in step.writer_owned))
+
     precedes: ClassVar[tuple[type[Carry], ...]] = ()
     """Steps whose decoders require this step's output, regardless of addition date."""
 
@@ -66,8 +98,9 @@ class Carry(DeclaredFamily, affix="", discovery_package="cutover"):
         for owner, directory in RootFile.declarations_in(self.root):
             if issubclass(owner, self.opened_files):
                 paths.update(owner.matching_in(directory))
+        paths.update(self.writer_file(store).path for store in self.writer_owned)
         for path in paths:
-            self.require_confined(self.root, path)
+            self.require_confined(path)
         return tuple(sorted(paths))
 
     @classmethod
@@ -87,7 +120,7 @@ class Carry(DeclaredFamily, affix="", discovery_package="cutover"):
         db: sqlite3.Connection,
         row: type[TypedTable],
         column: _Field,
-        updates: list[tuple[object, int]],
+        updates: Iterable[tuple[object, object]],
     ) -> None:
         """Inside the caller's write transaction, carry stored values of a guarded row:
         its declared mutation guards are lifted and recreated from the same declaration."""
@@ -102,10 +135,10 @@ class Carry(DeclaredFamily, affix="", discovery_package="cutover"):
         for sql in guards.values():
             db.execute(sql)
 
-    @staticmethod
-    def require_confined(root: Path, path: Path) -> None:
-        """A carry must never follow a copied path or alias into the source bus."""
-        if not path.is_relative_to(root) or path.resolve() != path:
+    def require_confined(self, path: Path) -> None:
+        """A carry reaches its bus and exactly its declared external files, never aliases."""
+        external = {self.writer_file(store).path for store in self.writer_owned}
+        if (not path.is_relative_to(self.root) and path not in external) or path.resolve() != path:
             raise RelationViolationError(f"Carry refuses an unconfined path: {path}")
 
 
@@ -120,7 +153,7 @@ class ArchivedInputs:
         for root in self.roots():
             paths.update(super(ArchivedInputs, replace(self, root=root)).input_files())
         for path in paths:
-            Carry.require_confined(self.root, path)
+            self.require_confined(path)
         return tuple(sorted(paths))
 
 
@@ -157,16 +190,24 @@ class CarryStepPhase(SubjectPhase):
         return self.step.declared_name
 
 
-@dataclass(frozen=True)
-class MigrateOperation(CarryOperation[Carried]):
-    apply: bool
+class CarriedOperation(CarryOperation[Carried]):
+    @abstractmethod
+    def answer(self, step: Carry) -> Carried: ...
 
     def run(self, steps: tuple[Carry, ...]) -> tuple[Carried, ...]:
         answers = []
         for step in steps:
             with CarryStepPhase(step=type(step)).running(InstallClock.current.get()):
-                answers.append(step.carry(apply=self.apply))
+                answers.append(self.answer(step).for_step(step))
         return tuple(answers)
+
+
+@dataclass(frozen=True)
+class MigrateOperation(CarriedOperation):
+    apply: bool
+
+    def answer(self, step: Carry) -> Carried:
+        return step.carry(apply=self.apply)
 
 
 @dataclass(frozen=True)
@@ -183,13 +224,24 @@ class FirstPendingOperation(CarryOperation[int]):
 
 
 @dataclass(frozen=True)
-class RetireInputsOperation(CarryOperation[Carried]):
-    def run(self, steps: tuple[Carry, ...]) -> tuple[Carried, ...]:
-        answers = []
-        for step in steps:
-            with CarryStepPhase(step=type(step)).running(InstallClock.current.get()):
-                answers.append(step.after_acceptance())
-        return tuple(answers)
+class RetireInputsOperation(CarriedOperation):
+    def answer(self, step: Carry) -> Carried:
+        return step.after_acceptance()
+
+
+@dataclass(frozen=True)
+class WriterOwnedOpeningProbe(TargetProbe, RuntimeProbe[tuple[Annotated[Path, PathText], ...]]):
+    """Validate carried external rows in the target, at the selected live or copied paths."""
+
+    files: tuple[SelectedWriterOwnedFile, ...]
+
+    def run(self) -> tuple[Annotated[Path, PathText], ...]:
+        paths = []
+        with TemporaryDirectory() as directory:
+            for file in self.files:
+                file.store.practice_opening(file.path, Path(directory))
+                paths.append(file.path)
+        return tuple(paths)
 
 
 @dataclass(frozen=True)

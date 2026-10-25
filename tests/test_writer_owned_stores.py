@@ -1,19 +1,29 @@
 """Install checks exercise the stored bytes through the declared row decoder."""
 
 from contextlib import closing
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
-from typing import Annotated
+from typing import Annotated, ClassVar
 
 import pytest
 
 from agent_comms.channel_targets import ChannelTarget, CommandTarget
+from agent_comms.cli import build_parser
+from agent_comms.cli_commands import PlannedReconcileCliCommand
+from agent_comms.field_codec import FieldCodec
 from agent_comms.errors import RelationViolationError
-from agent_comms.locked_store import SQLiteFile
+from agent_comms.installer.backup import StoreBackup
+from agent_comms.installer.files import SelectedWriterOwnedFile
+from agent_comms.installer.practice import PracticeCopy
+from agent_comms.installer.probes.carry import Carried, Carry, WriterOwnedOpeningProbe
+from agent_comms.locked_store import RootFile, SQLiteFile
 from agent_comms.typed_table import (
     Column, DurableTables, SharedFileTables, TableSchema, TypedTable,
     WithoutRowid, WriterOwnedFile, WriterOwnedStore,
 )
+
+
+BARE_TARGET = '{"name":"#comms"}'
 
 
 @pytest.fixture
@@ -52,10 +62,10 @@ def test_writer_owned_carry_refuses_an_undecodable_target_with_its_rowid(
     store, row = writer_owned_store
     with closing(SQLiteFile.writer(store.path())) as db, db:
         db.execute("PRAGMA ignore_check_constraints=ON")
-        db.execute('INSERT INTO open_tabs VALUES (?, ?)', ('{"name":"#comms"}', 0))
+        db.execute('INSERT INTO open_tabs VALUES (?, ?)', (BARE_TARGET, 0))
     original = store.path().read_bytes()
     with pytest.raises(RelationViolationError) as refused:
-        store.practice_opening(tmp_path)
+        store.practice_opening(store.path(), tmp_path)
     text = str(refused.value)
     assert str(store.path()) in text
     assert "open_tabs rowid 1 cannot decode" in text
@@ -70,7 +80,7 @@ def test_writer_owned_carry_opens_valid_targets_without_writing_the_source(
     with closing(SQLiteFile.writer(store.path())) as db, db:
         row(ChannelTarget("#comms"), 0).insert(db)
     original = store.path().read_bytes()
-    store.practice_opening(tmp_path)
+    store.practice_opening(store.path(), tmp_path)
     assert store.path().read_bytes() == original
 
 
@@ -100,6 +110,139 @@ def test_writer_owned_carry_validates_without_rowid_tables(tmp_path):
     directory = tmp_path / "copy"
     directory.mkdir()
     try:
-        KeyedStore.practice_opening(directory)
+        KeyedStore.practice_opening(KeyedStore.path(), directory)
     finally:
         stored.unlink(missing_ok=True)
+
+
+@pytest.fixture
+def writer_owned_step(writer_owned_store):
+    store, row = writer_owned_store
+
+    class SavedViewCarry(Carry):
+        opened_files: ClassVar[tuple[type[RootFile], ...]] = ()
+        writer_owned = (store,)
+
+        def carry(self, *, apply: bool) -> Carried:
+            file = self.writer_file(store)
+            self.require_confined(file.path)
+            with closing(SQLiteFile.read_snapshot(file.path)) as db:
+                (count,) = db.execute(
+                    "SELECT count(*) FROM open_tabs WHERE target = ?", (BARE_TARGET,),
+                ).fetchone()
+            if apply and count:
+                (column,) = row._fields_named(("target",))
+                with closing(SQLiteFile.writer(file.path)) as db, db:
+                    self.rewrite_stored(db, row, column, [
+                        (column.encode(ChannelTarget("#comms")), BARE_TARGET),
+                    ])
+            return Carried(count, rewritten=(file.name,) if apply and count else ())
+
+    return SavedViewCarry
+
+
+def test_writer_owned_carry_copies_migrates_and_restores_original_bytes(
+    writer_owned_store, writer_owned_step, tmp_path,
+):
+    store, row = writer_owned_store
+    with closing(SQLiteFile.writer(store.path())) as db, db:
+        db.execute("PRAGMA ignore_check_constraints=ON")
+        db.execute("INSERT INTO open_tabs VALUES (?, ?)", (BARE_TARGET, 0))
+    original = store.path().read_bytes()
+    root = tmp_path / "bus"
+    root.mkdir()
+    step = writer_owned_step(root, root, tmp_path / "spill")
+    assert step.input_files() == (store.path(),)
+    assert step.carry(apply=False).changed == 1
+    file = step.writer_file(store)
+    backup = StoreBackup.take(root, tmp_path / "route", step.input_files(), tmp_path / "backup")
+    assert backup.selected_files() == (file.name,)
+    assert file.name == Path("writer-owned") / store.declared_name
+    assert Carried(1, rewritten=(store.path(),)).for_step(step).rewritten == (file.name,)
+    assert Carried(1, rewritten=(file.name,)).for_step(step).rewritten == (file.name,)
+
+    copy = PracticeCopy(root, tmp_path / "practice")
+    copy.include(step.input_files())
+    copied_step = replace(step, root=copy.path)
+    copied_file = copied_step.writer_file(store)
+    assert Carried(1, rewritten=(copied_file.path,)).for_step(copied_step).rewritten == (file.name,)
+    with pytest.raises(RelationViolationError):
+        copied_step.require_confined(store.path())
+    assert copied_step.carry(apply=True).rewritten == (file.name,)
+    assert WriterOwnedOpeningProbe((SelectedWriterOwnedFile(
+        store, copied_file.path,
+    ),)).run() == (copied_file.path,)
+    with closing(SQLiteFile.read_snapshot(copied_file.path)) as db:
+        assert row.select(db)[0].target == ChannelTarget("#comms")
+    assert store.path().read_bytes() == original
+
+    assert step.carry(apply=True).changed == 1
+    assert not backup.stores_original()
+    backup.restore()
+    assert backup.stores_original()
+    assert store.path().read_bytes() == original
+
+
+def test_writer_owned_carry_refuses_an_undeclared_external_file(
+    writer_owned_step, tmp_path,
+):
+    root = tmp_path / "bus"
+    root.mkdir()
+    step = writer_owned_step(root, root, tmp_path / "spill")
+    outside = tmp_path / "unrelated.db"
+    outside.touch()
+    with pytest.raises(RelationViolationError):
+        step.require_confined(outside)
+    with pytest.raises(RelationViolationError):
+        StoreBackup.take(root, tmp_path / "route", (outside,), tmp_path / "backup")
+    alias = root / "alias"
+    alias.symlink_to(outside)
+    with pytest.raises(RelationViolationError):
+        step.require_confined(alias)
+
+
+def test_writer_owned_carry_preserves_its_declaration_across_cli_and_worker_boundaries(
+    writer_owned_store, tmp_path,
+):
+    store, row = writer_owned_store
+    parser = build_parser()
+    command = PlannedReconcileCliCommand.from_arguments(parser.parse_args([
+        "planned-reconcile", "--carrying", store.declared_name,
+    ]))
+    assert command.carrying == (store,)
+    empty = PlannedReconcileCliCommand.from_arguments(parser.parse_args([
+        "planned-reconcile", "--carrying",
+    ]))
+    assert empty.carrying == ()
+    probe = WriterOwnedOpeningProbe((SelectedWriterOwnedFile(store, store.path()),))
+    decoded = FieldCodec.decode(WriterOwnedOpeningProbe, FieldCodec.encode(probe))
+    assert decoded == probe
+    assert decoded.run() == (store.path(),)
+
+
+def test_writer_owned_backup_preserves_primary_and_committed_wal_bytes(
+    writer_owned_store, writer_owned_step, tmp_path,
+):
+    store, row = writer_owned_store
+    root = tmp_path / "bus"
+    root.mkdir()
+    step = writer_owned_step(root, root, tmp_path / "spill")
+    wal = SQLiteFile.wal_path(store.path())
+    with closing(SQLiteFile.writer(store.path())) as db:
+        db.execute("PRAGMA journal_mode=WAL")
+        db.execute("PRAGMA ignore_check_constraints=ON")
+        db.execute("INSERT INTO open_tabs VALUES (?, ?)", (BARE_TARGET, 0))
+        db.commit()
+        original = store.path().read_bytes()
+        committed_wal = wal.read_bytes()
+        backup = StoreBackup.take(root, tmp_path / "route", step.input_files(), tmp_path / "backup")
+        assert store.path().read_bytes() == original
+        assert wal.read_bytes() == committed_wal
+    # The writer is closed before any replacement: a bus hold alone does not stop it.
+    assert step.carry(apply=True).changed == 1
+    backup.restore()
+    assert backup.stores_original()
+    assert store.path().read_bytes() == original
+    assert wal.read_bytes() == committed_wal
+    with closing(SQLiteFile.read_snapshot(store.path())) as db:
+        assert db.execute("SELECT target FROM open_tabs").fetchall()[0][0] == BARE_TARGET

@@ -72,6 +72,9 @@ from agent_comms.installer.backup import (
 from agent_comms.installer.carry import STEPS, CarryChain
 from agent_comms.installer.commands import InstallCommands
 from agent_comms.installer.declared_uv import DeclaredUv
+from agent_comms.installer.files import (
+    InstallationFiles, SelectedWriterOwnedFile, WriterOwnedInstallationFile,
+)
 from agent_comms.installer.interpreter_operation import (
     AbortMaintenancePhase,
     AfterMigrationFileScanPhase,
@@ -125,6 +128,7 @@ from agent_comms.installer.probes.carry import (
     FirstPendingOperation,
     MigrateOperation,
     RetireInputsOperation,
+    WriterOwnedOpeningProbe,
 )
 from agent_comms.installer.probes.commands import (
     CliCommandProbe,
@@ -218,9 +222,10 @@ def carried(
     root: Path,
     before: dict[DeclaredFile | UndeclaredFile, dict[Path, SavedFile]],
     steps: tuple[StepRun, ...], expected: frozenset[Path],
+    external: tuple[WriterOwnedInstallationFile, ...] = (),
 ) -> RehearsalFiles:
     """Only the files a step names as rewritten may differ from ``before``."""
-    after = bus_files(root)
+    after = bus_files(root, external)
     physical = {key for key in before.keys() | after.keys()
                 if before.get(key) != after.get(key)}
     members = {member: resource.path for resource, snapshot in (*before.items(), *after.items())
@@ -827,7 +832,7 @@ class PracticeBus:
         with CopyPhase().running(self.clock):
             self.copy.include(paths)
             self.copy.retain(paths)
-        return tuple(sorted(path.relative_to(self.original_root) for path in self.copy.copied))
+        return self.copy.copied_names
 
 
 def upgrade(checkout: Path, root: Path, target: str, installer: InstallerChoice, mode: RunMode,
@@ -1056,7 +1061,10 @@ class ExistingBusInstall[Rehearsed: Rehearsal](Install[Rehearsed]):
         CarryChain.require_crossed(checkout, root, target)
         with PracticeBus.of(root, installer, spill_dir, staged.commands.clock) as practice:
             pending = practice.pending(chain, staged)
-            reconciled = staged.cli(root, PlannedReconcileCliCommand).rewritten
+            reconciled = staged.cli(
+                root, PlannedReconcileCliCommand, "--carrying",
+                *(store.declared_name for store in Carry.writer_declarations(pending)),
+            ).rewritten
             install = cls.of(checkout, root, current, target, chain, pending, reconciled,
                              installed, staged, tree, installer, spill_dir)
             if pending or reconciled:
@@ -1091,32 +1099,41 @@ class PreparedMigration(Extendable):
     hold: MaintenanceState
     before: dict[DeclaredFile | UndeclaredFile, dict[Path, SavedFile]]
     read: BusReadBack
+    writer_files: tuple[WriterOwnedInstallationFile, ...] = ()
 
     @property
     def root(self) -> Path:
         return Path(self.hold.root)
 
     @classmethod
-    def capture(cls, hold: MaintenanceState, outgoing: Stack) -> PreparedMigration:
+    def capture(cls, hold: MaintenanceState, outgoing: Stack,
+                steps: tuple[Carry, ...] = ()) -> PreparedMigration:
         """The maintenance barrier keeps every carried writer out until the caller's backup ends.
         Settling first moves committed WAL frames into their files, as the practice copy's
         backup did, so no later last close rewrites a file no step names."""
         root = Path(hold.root)
+        external = {file.name: file for step in steps for store in step.writer_owned
+                    for file in (step.writer_file(store),)}
+        writer_files = tuple(external.values())
         with BeforeMigrationFileScanPhase().running(outgoing.commands.clock):
-            settle_bus_files(root)
-            before = bus_files(root)
-        return cls(hold, before, outgoing.verify(root))
+            settle_bus_files(root, writer_files)
+            before = bus_files(root, writer_files)
+        return cls(hold, before, outgoing.verify(root), writer_files)
 
     def carry(self, pending: tuple[Carry, ...], staged: Stack) -> CarriedPass:
         """One migration sequence for rehearsal and the backed-up live bus."""
         steps = [StepRun(step.declared_name, carried) for step, carried in zip(
             pending, staged.call_steps(pending, MigrateOperation(apply=True)), strict=True)]
+        staged.probe(WriterOwnedOpeningProbe(tuple(
+            SelectedWriterOwnedFile(file.store, file.path) for file in self.writer_files
+        )))
         reconciled = staged.cli(self.root, ReconcileStoresCliCommand)
         steps.append(StepRun(ReconcileStoresCliCommand.declared_name, Carried(
             len(reconciled.rewritten), rewritten=reconciled.rewritten)))
         declared = tuple(steps)
         with AfterMigrationFileScanPhase().running(staged.commands.clock):
-            files = carried(self.root, self.before, declared, RehearsalFiles.declared(declared))
+            files = carried(self.root, self.before, declared,
+                            RehearsalFiles.declared(declared), self.writer_files)
         passed = CarriedPass(declared, files, staged.verify(self.root))
         passed.require_read(self.read)
         return passed
@@ -1136,7 +1153,7 @@ class ChangedInstall(ExistingBusInstall[RehearsedFiles]):
         maintenance = MaintenanceBarrier(RegistryStore.at(copied).path)
         hold = maintenance.retarget(maintenance.begin(MaintenanceOperator.current()), stack.runtime)
         with hold.holding():
-            migration = PreparedMigration.capture(hold, self.installed)
+            migration = PreparedMigration.capture(hold, self.installed, pending)
             passed = migration.carry(pending, stack)
             passed = passed.after_acceptance(pending, stack)
         maintenance.clear(hold)
@@ -1147,7 +1164,7 @@ class ChangedInstall(ExistingBusInstall[RehearsedFiles]):
 
     def live(self, rehearsal: RehearsedFiles, report: InstallReport) -> CarriedRun:
         expected = frozenset(rehearsal.files.names) | frozenset(rehearsal.inputs)
-        selected = tuple(self.root / name for name in sorted(expected))
+        selected = tuple(file.path for file in InstallationFiles(self.root).named(expected))
         with RestoreSpaceBackupPhase().running(self.staged.commands.clock):
             restore = RestoreSpace.measure(max(
                 rehearsal.files.restore_bytes,
@@ -1160,14 +1177,18 @@ class ChangedInstall(ExistingBusInstall[RehearsedFiles]):
             holder = ExitStack()
             try:
                 try:
-                    planned = self.staged.cli(self.root, PlannedReconcileCliCommand)
+                    planned = self.staged.cli(
+                        self.root, PlannedReconcileCliCommand, "--carrying",
+                        *(store.declared_name for store in Carry.writer_declarations(self.pending)),
+                    )
                     unrehearsed = sorted(
                         frozenset(planned.rewritten) - frozenset(rehearsal.files.names))
                     if unrehearsed:
                         raise UpgradeRefused(
                             f"Reconcile would rewrite files the rehearsal did not: {unrehearsed}")
                     migration = PreparedMigration.capture(
-                        maintenance.held_by(MaintenanceOperator.current()), self.installed)
+                        maintenance.held_by(MaintenanceOperator.current()), self.installed,
+                        self.pending)
                     backup, selected_route = self.backed_up(selected)
                 except BaseException as error:
                     with AbortMaintenancePhase().running(self.staged.commands.clock):
