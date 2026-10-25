@@ -79,13 +79,16 @@ class LaunchRuntime:
     @classmethod
     def running(cls) -> LaunchRuntime:
         """Keep ordinary launches on the calling process's installation."""
-        return cls.from_interpreter(sys.executable)
+        return RunningRuntime.from_interpreter(sys.executable)
+
+    @property
+    def runs_this_process(self) -> bool:
+        """Whichever member launches its children, this is the installation running here."""
+        return self.interpreter == LaunchRuntime.running().interpreter
 
     def child_environment(self, environment: Mapping[str, str]) -> dict[str, str]:
-        """A child of this process's own interpreter imports the source this process
-        imported; any other installation's child gets exactly the environment its launcher
-        built."""
-        return RunningSource.serving(self).environment(environment)
+        """Keep exactly the environment this installation's launcher built."""
+        return dict(environment)
 
     @staticmethod
     def state_directory(home: Path) -> Path:
@@ -97,7 +100,12 @@ class LaunchRuntime:
 
     @classmethod
     def installed(cls) -> LaunchRuntime:
-        return cls(cls.current_pointer().resolve(strict=True) / "bin/python")
+        return cls.at_prefix(cls.current_pointer().resolve(strict=True))
+
+    @classmethod
+    def at_prefix(cls, prefix: Path) -> Self:
+        """The interpreter layout shared by installed and newly built runtimes."""
+        return cls(prefix / "bin/python")
 
     @property
     def prefix(self) -> Path:
@@ -118,7 +126,7 @@ class LaunchRuntime:
         return str(self.interpreter.with_name("pi-comms-native"))
 
     def environment(self, source: Mapping[str, str]) -> dict[str, str]:
-        return LaunchRoot.environment(self._environment(source))
+        return LaunchRoot.environment(self.child_environment(self._environment(source)))
 
     def _environment(self, source: Mapping[str, str]) -> dict[str, str]:
         configuration = replace(
@@ -134,6 +142,13 @@ class LaunchRuntime:
             raise ValueError("Target interpreter is unavailable")
 
 
+class RunningRuntime(LaunchRuntime):
+    """This process's runtime: children inherit the source this process imported."""
+
+    def child_environment(self, environment: Mapping[str, str]) -> dict[str, str]:
+        return RunningSource.current().environment(environment)
+
+
 @dataclass(frozen=True)
 class RunningSource(ABC):
     """Where this process imported agent_comms from.
@@ -143,14 +158,6 @@ class RunningSource(ABC):
     """
 
     root: Path
-
-    @staticmethod
-    def serving(runtime: LaunchRuntime) -> RunningSource:
-        """The source a runtime's children import: this process's own when the runtime is this
-        process's interpreter, otherwise that installation's site-packages."""
-        if runtime.interpreter == Path(sys.executable):
-            return RunningSource.current()
-        return InstalledSource(runtime.prefix)
 
     @staticmethod
     def current() -> RunningSource:
@@ -182,9 +189,6 @@ class RestoredRuntime(LaunchRuntime):
 
     def _environment(self, source: Mapping[str, str]) -> dict[str, str]:
         return dict(source)
-
-    def child_environment(self, environment: Mapping[str, str]) -> dict[str, str]:
-        return dict(environment)
 
 
 class ImportPath(DeclaredFamily, JsonShapeFamily, affix="ImportPath"):

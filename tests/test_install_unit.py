@@ -104,11 +104,31 @@ def test_a_launched_unit_gone_without_a_result_died(tmp_path, systemd):
     run.errors.write_text("Traceback\nBrokenPipeError: [Errno 32]\n\n")
 
     assert logs.launched(repo, "b" * 40) == (run,)
-    assert logs.member(repo, "b" * 40) is standing.DiedInstallDue
+    assert logs.member(repo, "b" * 40).func is standing.DiedInstallDue
+    assert logs.member(repo, "b" * 40).keywords == {"unit": run}
     assert run.last_error() == "BrokenPipeError: [Errno 32]"
     run.result.write_text("{}")
-    assert logs.member(repo, "b" * 40) is standing.LaunchedInstallDue
+    assert logs.member(repo, "b" * 40).func is standing.LaunchedInstallDue
     assert logs.member(repo, "c" * 40) is standing.PendingInstallDue
+
+
+def test_a_died_run_renders_from_the_run_that_selected_it(tmp_path, systemd):
+    """The heartbeat crashed every 70 s at IndexError: the died member re-read the launched
+    runs to render, and the cause file was gone by then. The selecting run rides along."""
+    logs = InstallLogs(tmp_path / "bus")
+    repo = RepositoryName.from_wire("OpenHCSDev/agent-comms")
+    core = Repo(checkout=tmp_path / "checkout", github=repo)
+    run = logs.minted()
+    logs.record(run.logs, repo, "b" * 40)
+    run.result.write_text("")
+    run.errors.write_text("Traceback\nBrokenPipeError: [Errno 32]\n")
+    member = logs.member(repo, "b" * 40)
+    (run.logs / InstallLogs.cause_file).unlink()
+
+    due = member(repo, "b" * 40, "0" * 40, 1, 31, logs, core, "a" * 40)
+
+    assert logs.launched(repo, "b" * 40) == ()
+    assert due.action == f"target {'a' * 12}; {run.errors}: BrokenPipeError: [Errno 32]"
 
 
 def test_a_missing_systemd_run_refuses_at_once(tmp_path, monkeypatch, user_manager):
@@ -162,13 +182,13 @@ def test_every_merge_due_counts_the_running_install_of_its_target(tmp_path, syst
     logs.record(run.unit.logs, core.github, "a" * 40)
     running_only(monkeypatch, run.unit)
 
-    standing.PendingInstallDue(toad, "c" * 40, "0" * 40, 1, 31, logs, core, "a" * 40).enforce(
-        None, "commander")  # type: ignore[arg-type]
-    standing.PendingInstallDue(toad, "d" * 40, "0" * 40, 1, 31, logs, core, "e" * 40).enforce(
-        None, "commander")  # type: ignore[arg-type]
+    standing.PendingInstallDue(toad, "c" * 40, "0" * 40, (), (), logs, core, "a" * 40).launch(
+        None)  # type: ignore[arg-type]
+    standing.PendingInstallDue(toad, "d" * 40, "0" * 40, (), (), logs, core, "e" * 40).launch(
+        None)  # type: ignore[arg-type]
 
     assert logs.launched(toad, "c" * 40) == (run.unit,)
-    assert logs.member(toad, "c" * 40) is standing.LaunchedInstallDue
+    assert logs.member(toad, "c" * 40).func is standing.LaunchedInstallDue
     assert logs.launched(core.github, "a" * 40) == (run.unit,)
     assert logs.member(toad, "d" * 40) is standing.PendingInstallDue
     assert logs.units() == (run.unit,)

@@ -2,7 +2,7 @@
 
 from dataclasses import dataclass
 
-from agent_comms.field_codec import GoalId
+from agent_comms.field_codec import AttemptId, GoalId
 
 
 class FailureNotObserved(ValueError):
@@ -16,4 +16,4 @@ class FailureNotObserved(ValueError):
 class GoalAttemptIdentity:
     goal_id: GoalId
     generation: int
-    attempt_id: str
+    attempt_id: AttemptId

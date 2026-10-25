@@ -85,15 +85,25 @@ class Repo(GitLaunch, BaseModel, WireValue):
         return cls.model_validate_json(FieldCodec.compact(data))
 
     @classmethod
+    def selection_refusal(cls) -> str:
+        return "Select --repo when more than one repository is registered."
+
+    @classmethod
     def selected(cls, repositories: tuple[Repo, ...], name: str) -> Repo:
+        candidates = cls.candidates(repositories, name)
+        if len(candidates) != 1:
+            raise ValueError(cls.selection_refusal())
+        repository, = candidates
+        return repository
+
+    @classmethod
+    def candidates(cls, repositories: tuple[Repo, ...], name: str) -> tuple[Repo, ...]:
+        """No name leaves every registered repository a candidate; a name selects exactly one."""
         if not name:
-            if len(repositories) != 1:
-                raise ValueError("Select --repo when more than one repository is registered.")
-            repository, = repositories
-            return repository
+            return repositories
         for repository in repositories:
             if repository.named(name):
-                return repository
+                return (repository,)
         configured = ", ".join(
             f"{repository.github.to_wire()} ({repository.checkout})"
             for repository in repositories
@@ -118,6 +128,19 @@ class Repo(GitLaunch, BaseModel, WireValue):
 
     def holds(self, todo: Todo) -> bool:
         return self.github == todo.repo
+
+    def default_branch(self) -> str:
+        """The origin's declared default, never a guessed branch name."""
+        try:
+            reference = self.git(
+                self.checkout, "symbolic-ref", "--short", "refs/remotes/origin/HEAD",
+            ).strip()
+        except GitCommandError as error:
+            raise ValueError(
+                f"Origin's default branch is unset in {self.checkout}; "
+                "run git remote set-head origin --auto in that checkout."
+            ) from error
+        return reference.removeprefix("origin/")
 
     def contains(self, sha: str, revision: str = "HEAD") -> bool:
         """Prove ancestry in the requested fetched revision without moving the checkout.

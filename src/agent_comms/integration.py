@@ -12,12 +12,13 @@ import sys
 import tomllib
 from typing import ClassVar
 
-from .child_process import AgentsSlice, ResidentManager, SpawnedProcess
+from .child_process import STOP_GRACE_SECONDS, ResidentManager, SpawnedProcess
 from .field_codec import FieldCodec
 from .head_review import HeadReview, PullRequestHead
 from .launch_runtime import CheckoutSource, RestoredRuntime
 from .repo import Checkout, GitCommandError, Repo
 from .test_lease import LeaseStart, TestLease
+from .systemd_unit import AgentsSlice
 from .todos import PullRequests
 
 
@@ -118,21 +119,21 @@ class IntegrationCheckout(Checkout):
         combined = []
         for head in heads:
             current = head.current()
-            if not HeadReview.accepted(head.repo, current):
+            if not HeadReview.accepted(current.repo, current.head):
                 raise IntegrationFailed(f"#{head.pr} no longer has an accepted head review")
             Repo.git(self.path, "fetch", "origin", f"refs/pull/{head.pr}/head", timeout=300)
             fetched = Repo.git(self.path, "rev-parse", "FETCH_HEAD").strip()
-            if fetched != current:
+            if fetched != current.head:
                 raise IntegrationFailed(f"#{head.pr} moved while fetching; review its new head")
             try:
-                Repo.git(self.path, "merge", "--no-ff", "--no-edit", current, timeout=300)
+                Repo.git(self.path, "merge", "--no-ff", "--no-edit", current.head, timeout=300)
             except GitCommandError as error:
                 if Repo.answers(self.path, "rev-parse", "-q", "--verify", "MERGE_HEAD"):
                     Repo.git(self.path, "merge", "--abort")
-                print(f"MERGE REFUSED #{head.pr} {current}: {error}", flush=True)
+                print(f"MERGE REFUSED #{head.pr} {current.head}: {error}", flush=True)
             else:
-                combined.append(head)
-                print(f"COMBINED #{head.pr} {current}", flush=True)
+                combined.append(current)
+                print(f"COMBINED #{head.pr} {current.head}", flush=True)
         return tuple(combined)
 
     def test_files(self, base: str, heads: tuple[PullRequestHead, ...]) -> tuple[str, ...]:
@@ -214,7 +215,8 @@ class IntegrationRun:
             raise IntegrationFailed("The touched-test union is empty; no suite fallback was run")
         self.checkout.prepare()
         log = self.output / f"attempt-{attempt}.log"
-        command = (sys.executable, "-m", "pytest", *self.pytest_arguments,
+        command = ("timeout", "-s", "INT", str(self.timeout),
+                   sys.executable, "-m", "pytest", *self.pytest_arguments,
                    "-o", "faulthandler_timeout=60",
                    "--basetemp", str(self.output / f"pytest-{attempt}"),
                    *start.arguments(), *selected)
@@ -235,7 +237,7 @@ class IntegrationRun:
                 runtime=runtime,
             ) as child:
                 try:
-                    result = child.collect(timeout=self.timeout)
+                    result = child.collect(timeout=self.timeout + STOP_GRACE_SECONDS)
                 except subprocess.TimeoutExpired as error:
                     raise IntegrationFailed(f"Timed out: {log}; no automatic replay") from error
         answer = TestAttempt.from_process(result, log)

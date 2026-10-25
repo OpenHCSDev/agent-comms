@@ -21,8 +21,10 @@ if TYPE_CHECKING:
     from .presentation import MessageNotification
     from .registration import Registration
     from .registry_document import RegistrySnapshot
+    from .thread_status import ThreadStatus
 from .activity import (
     Activity,
+    ActivityCapture,
     ActivityState,
     ActivityStore,
     DrainDiagnostic,
@@ -35,7 +37,7 @@ from .coordinator import Coordination
 from .declared_family import DeclaredFamily
 from .errors import RelationViolationError
 from .field_codec import ThreadLookup, TurnId
-from .routing import TurnRouting
+from .routing import NoTurnRouting, Routing
 from .runtime_info import RuntimeInfo, RuntimeInfoStore
 from .thread_identity import OwnerIdentity, ThreadIncarnation
 from .threads import Thread
@@ -113,7 +115,7 @@ class LiveRecipientActivity(RecipientActivity):
 class AgentActivity:
     def __init__(self, root: Path, registry: Registration):
         self.registry = registry
-        self.activity = ActivityStore.at(root)
+        self.activity = ActivityStore(root)
         self.runtime_info = RuntimeInfoStore.at(root)
 
     def set_activity(self, thread: str, state: ActivityState, detail: str = "") -> None:
@@ -128,10 +130,16 @@ class AgentActivity:
 
     def is_live(self, incarnation: ThreadIncarnation, snapshot: RegistrySnapshot) -> bool:
         """The registered presence owns liveness for this exact incarnation."""
-        if not incarnation.current(snapshot):
-            return False
-        name = snapshot.canonical_name(incarnation.name)
-        return snapshot.status(name).running
+        return incarnation.current(snapshot) and self.presence(incarnation, snapshot).running
+
+    def answers_later(self, incarnation: ThreadIncarnation, snapshot: RegistrySnapshot) -> bool:
+        """Whether a wait on this exact incarnation is answered once it reads its inbox."""
+        return (incarnation.current(snapshot)
+                and self.presence(incarnation, snapshot).answers_later)
+
+    @staticmethod
+    def presence(incarnation: ThreadIncarnation, snapshot: RegistrySnapshot) -> ThreadStatus:
+        return snapshot.status(snapshot.canonical_name(incarnation.name))
 
     def is_working(self, incarnation: ThreadIncarnation, snapshot: RegistrySnapshot) -> bool:
         return self.is_live(incarnation, snapshot) and self.activity_of(
@@ -144,20 +152,24 @@ class AgentActivity:
         return participant.execution.project_activity(participant, activity)
 
     def all_activity(self, threads: Iterable[Thread], *, snapshot: RegistrySnapshot) -> Mapping[str, ObservedActivity]:
+        return self.captured(threads, snapshot=snapshot).activity
+
+    def captured(self, threads: Iterable[Thread], *,
+                 snapshot: RegistrySnapshot) -> ActivityCapture[ObservedActivity]:
         requested = {thread.name: thread for thread in threads}
         if not requested:
-            return {}
-        events = self.activity.current_for(
+            return ActivityCapture.empty()
+        events = self.activity.captured_for(
             requested,
             active=frozenset(name for name, thread in requested.items() if thread.executing),
         )
         claims = self.registry.storage_rule.room_ledger.claims(
             self.registry.store.path.parent, requested.values())
-        observed = {name: self._observed(thread, snapshot.owner_identity(name), events[name])
+        observed = {name: self._observed(thread, snapshot.owner_identity(name), events.activity[name])
                     for name, thread in requested.items()}
         for name, claim in claims.items():
             observed[name] = claim.phase.project(observed[name], claim.work)
-        return observed
+        return ActivityCapture(observed, events.expires_at)
 
     def observe_recipients(
         self, recipients: Iterable[tuple[Delivered, FrozenRecipient]], *,
@@ -255,7 +267,7 @@ class AgentActivity:
         return self._recover_drain(thread.name, owner, diagnostic)
 
     def begin_turn(
-        self, name: str, turn_id: TurnId, detail: str = "", routing: TurnRouting | None = None
+        self, name: str, turn_id: TurnId, detail: str = "", routing: Routing = NoTurnRouting()
     ) -> RegistryOwner:
         """Return the exact owner installed by this atomic begin, including its lease."""
         leased, _ = self.registry.lease_local_turn(name, turn_id, routing=routing)

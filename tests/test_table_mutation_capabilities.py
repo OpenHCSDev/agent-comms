@@ -10,6 +10,7 @@ from bus_record_fixture import OWNER_LOOKUP
 from conftest import maintenance_held
 
 from agent_comms.coordination_database import CoordinationStore
+from agent_comms.coordination_errors import SchemaVersionError
 from agent_comms.locked_store import SQLiteFile
 from agent_comms.coordination_schema import CoordinatorTable
 from agent_comms.coordination_tables.executions import ExecutionRecord
@@ -30,6 +31,7 @@ from agent_comms.typed_table import (
     FinalizedColumn,
     FinalizedLifecycle,
     FirstValueState,
+    HeldBusFile,
     FrozenColumn,
     Generated,
     GuardedAfterWrites,
@@ -352,7 +354,7 @@ def test_owner_counter_refuses_skipping_a_generation():
         OwnerGenerations.update(connection, where=f"owner_lookup='{OWNER_LOOKUP}'", generation=2)
 
 
-def test_normal_writer_replaces_old_guards_without_rewriting_rows(tmp_path):
+def test_the_carry_replaces_old_guards_without_rewriting_rows(tmp_path):
     path = tmp_path / CoordinationStore.filename
     with closing(CoordinationStore(path)) as store:
         connection = store._connection
@@ -367,7 +369,12 @@ def test_normal_writer_replaces_old_guards_without_rewriting_rows(tmp_path):
             "BEGIN SELECT RAISE(ABORT, 'frozen'); END"
         )
         assert CoordinatorTable.schema_differs(connection)
-    with maintenance_held(tmp_path), closing(CoordinationStore(path)) as store:
+    with maintenance_held(tmp_path), pytest.raises(SchemaVersionError,
+                                                   match=HeldBusFile.carry_verb):
+        CoordinationStore(path)
+    with maintenance_held(tmp_path):
+        assert CoordinationStore.reconcile_at(path)
+    with closing(CoordinationStore(path)) as store:
         connection = store._connection
         CoordinatorTable.require_installed(connection)
         assert Participants.select(connection) == before

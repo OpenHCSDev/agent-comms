@@ -6,15 +6,17 @@ import sqlite3
 import subprocess
 from contextlib import closing
 from dataclasses import replace
+from functools import partial
 from pathlib import Path
 
 import pytest
 from debt_ratchet import UncarriedRecordFormat, git
 
+from agent_comms.locked_store import LiveFilesRequest
 from agent_comms.cli_commands import StopCliCommand, TargetBatchResult
 from agent_comms.goal_attempts import GoalAttemptStore
 from agent_comms.installer.backup import StoreBackup, bus_files
-from agent_comms.installer.refusals import UpgradeRefused
+from agent_comms.installer.refusals import InterpreterWorkerDied, UpgradeRefused
 from agent_comms.installer.runtime_resolution import RuntimeResolution
 from agent_comms.installer.carry import STEPS, CarryChain, FinishedCarryStore
 from agent_comms.installer.probes.carry import Carried, Carry, MigrateOperation
@@ -24,14 +26,20 @@ from agent_comms.installer.interpreter_operation import InstallClock, TargetProg
 from agent_comms.installer.practice import PracticeCopy
 from agent_comms.installer.upgrade import (
     ExistingBusInstall,
+    HeldOwnersStopped,
     PracticeBus,
     PreparedMigration,
     RehearsalFiles,
     Stack,
     StepRun,
+    TargetStack,
     TargetTree,
+    UnchangedInstall,
+    UnchangedRehearsal,
     carried,
 )
+from agent_comms.installer.launch import InstallReport
+from agent_comms.cli_bridges.shared import SessionBridgeResumes
 from agent_comms.launch_runtime import LaunchRuntime, RestoredRuntime
 from agent_comms.maintenance_barrier import (
     DrainingPhase,
@@ -127,17 +135,17 @@ def test_a_store_compares_by_its_rows_and_not_by_its_companion_files(tmp_path):
         db.execute("CREATE TABLE todo (id)")
         db.execute("INSERT INTO todo VALUES (1)")
         db.commit()
-    before = bus_files(tmp_path)
+    before = bus_files(LiveFilesRequest(tmp_path))
     with closing(sqlite3.connect(store, autocommit=True)) as opened:
         opened.execute("BEGIN IMMEDIATE")
         opened.execute("ROLLBACK")
         assert {"todos.sqlite3-wal", "todos.sqlite3-shm"} <= {path.name for path in tmp_path.iterdir()}
         steps = (StepRun("carry_nothing", Carried(0)),)
-        assert carried(tmp_path, before, steps, RehearsalFiles.declared(steps)) == (
+        assert carried(LiveFilesRequest(tmp_path), before, steps, RehearsalFiles.declared(steps)) == (
             RehearsalFiles(1, 0, (), 0))
         opened.execute("UPDATE todo SET id = 2")
         with pytest.raises(UpgradeRefused):
-            carried(tmp_path, before, steps, RehearsalFiles.declared(steps))
+            carried(LiveFilesRequest(tmp_path), before, steps, RehearsalFiles.declared(steps))
 
 
 @pytest.fixture
@@ -188,7 +196,7 @@ def noisy_step(tmp_path_factory):
 def staged(stack, noisy_step):
     """The runtime built from the noisy tree takes its carry steps from that tree."""
     tree, _ = noisy_step
-    return replace(stack, program=TargetProgram(tree.steps_package))
+    return stack.extended(TargetStack, program=TargetProgram(tree.steps_package))
 
 
 def test_step_answers_are_separate_from_diagnostics_and_keep_their_types(
@@ -197,7 +205,7 @@ def test_step_answers_are_separate_from_diagnostics_and_keep_their_types(
     _, step = noisy_step
     root = tmp_path / "bus"
     root.mkdir()
-    request = step(root, root, tmp_path / "spill")
+    request = step(LiveFilesRequest(root), tmp_path / "spill")
     assert staged.call_steps((request,), MigrateOperation(False)) == (
         Carried(1, {"applied": False}, (Path("saved"),)),)
     assert not (root / "saved").exists()
@@ -233,13 +241,111 @@ def test_a_backup_undoes_a_real_worker_failure(comms, staged, noisy_step):
     with hold.holding():
         backup = StoreBackup.take(
             comms.root, comms.root / "no-route", (saved,), comms.root.parent / "spill")
-        migration = PreparedMigration.capture(hold, staged)
+        migration = PreparedMigration.capture(hold, staged, LiveFilesRequest(comms.root))
         with pytest.raises(UpgradeRefused, match="failed after changing the saved file"):
-            migration.carry((step(comms.root, comms.root, comms.root.parent / "spill"),), staged)
+            migration.carry((step(LiveFilesRequest(comms.root), comms.root.parent / "spill"),), staged)
         assert saved.read_text() == "migrated"
-        backup.undo()
+        hold = backup.restore(partial(staged.restore_stores, hold))
         assert saved.read_text() == "original"
-        assert staged.verify(comms.root) == migration.read
+        with hold.holding():
+            assert staged.verify(comms.root) == migration.read
+    maintenance.clear(hold)
+
+
+def held_owners(maintenance: MaintenanceBarrier, hold, started: list[str]) -> HeldOwnersStopped:
+    """Owners stopped under ``hold``: their release clears it and their exit starts them."""
+    owners = HeldOwnersStopped()
+    owners.give_back.callback(started.append, "owners")
+    owners.hold.callback(maintenance.clear, hold)
+    return owners
+
+
+def test_a_rollback_holds_the_root_until_every_store_opens_under_its_runtime(
+        comms, staged, noisy_step):
+    """A failed carry undone by its backup opens under the outgoing runtime; a store left in
+    another shape (install 13's short ledger) is named, keeps the hold and starts no owner."""
+    _, step = noisy_step
+    saved = comms.root / "saved"
+    saved.write_text("original")
+    (comms.root / "fail").touch()
+    maintenance = MaintenanceBarrier(RegistryStore.at(comms.root).path)
+    hold = maintenance.begin(MaintenanceOperator.current())
+    started: list[str] = []
+    owners = held_owners(maintenance, hold, started)
+    with hold.holding():
+        backup = StoreBackup.take(
+            comms.root, comms.root / "no-route", (saved,), comms.root.parent / "spill")
+        migration = PreparedMigration.capture(hold, staged, LiveFilesRequest(comms.root))
+        with pytest.raises(UpgradeRefused):
+            migration.carry((step(LiveFilesRequest(comms.root), comms.root.parent / "spill"),), staged)
+        with owners.held_on_failure():
+            hold = backup.restore(partial(staged.restore_stores, hold))
+            with hold.holding():
+                staged.require_opens(comms.root)
+        with hold.holding():
+            ledger_one_failure_short(comms.root)
+            with pytest.raises(UpgradeRefused, match="goal_attempts.sqlite3"):
+                with owners.held_on_failure():
+                    staged.require_opens(comms.root)
+    owners.release()
+    owners.give_back.close()
+    assert started == []
+    assert maintenance.read().phase is DrainingPhase
+    maintenance.clear(hold)
+
+
+def test_an_unchanged_install_opens_the_bus_before_its_bridges_resume(comms, staged):
+    """A resumed bridge serves its socket only once the bus opens (MessageBus.when_open),
+    so every exit of the live step clears the hold before bridges.confirm waits on it:
+    install 66c36dea republished 513d7f794 and sat 604 s on a socket its own hold forbade.
+    The editable stack refuses to publish, the exit this run takes."""
+    maintenance = MaintenanceBarrier(RegistryStore.at(comms.root).path)
+    started: list[str] = []
+    hold = maintenance.retarget(maintenance.begin(MaintenanceOperator.current()), staged.runtime)
+    report = InstallReport()
+    report.owners = held_owners(maintenance, hold, started)
+    report.owners.hold.enter_context(hold.holding())
+    install = UnchangedInstall(
+        comms.root, comms.root, "a" * 40, "a" * 40, None, (), staged, staged, None, None,
+        comms.root.parent / "spill")
+    with pytest.raises(InterpreterWorkerDied, match="Editable Core cannot publish"):
+        install.install(UnchangedRehearsal(), SessionBridgeResumes(), report)
+    assert not maintenance.read().turn_pending
+    report.owners.give_back.close()
+    assert started == ["owners"]
+
+
+def test_a_restore_that_fails_midway_keeps_the_hold(comms, staged, noisy_step):
+    """An undo that raises after restoring some stores never reaches the opening check;
+    the hold stays draining and no owner starts on the half-restored root."""
+    _, step = noisy_step
+    first, second = comms.root / "a-saved", comms.root / "saved"
+    for path in (first, second):
+        path.write_text("original")
+    (comms.root / "fail").touch()
+    maintenance = MaintenanceBarrier(RegistryStore.at(comms.root).path)
+    hold = maintenance.begin(MaintenanceOperator.current())
+    started: list[str] = []
+    owners = held_owners(maintenance, hold, started)
+    with hold.holding():
+        backup = StoreBackup.take(
+            comms.root, comms.root / "no-route", (first, second), comms.root.parent / "spill")
+        migration = PreparedMigration.capture(hold, staged, LiveFilesRequest(comms.root))
+        with pytest.raises(UpgradeRefused):
+            migration.carry((step(LiveFilesRequest(comms.root), comms.root.parent / "spill"),), staged)
+        first.write_text("carried")
+        (backup.data_root / second.name).unlink()
+        with pytest.raises(FileNotFoundError):
+            with owners.held_on_failure():
+                hold = backup.restore(partial(staged.restore_stores, hold))
+                with hold.holding():
+                    staged.require_opens(comms.root)
+    assert first.read_text() == "original"
+    assert second.read_text() == "migrated"
+    owners.release()
+    owners.give_back.close()
+    assert started == []
+    assert maintenance.read().phase is DrainingPhase
     maintenance.clear(hold)
 
 
@@ -273,11 +379,9 @@ def test_owner_stop_batch_reports_refusal_after_stopping_available_owners(comms,
     assert all(saved.status(name).stopped for name in names[1:])
 
 
-def test_the_install_start_stops_owners_on_a_ledger_the_outgoing_runtime_cannot_open(
-        comms, stack):
-    """Install 14: f23ca8968 refused this ledger at every opening, so its stop answered
-    nothing. The install's start holds the root, and the target stops the owners under
-    that hold, carrying the ledger, which stays held until the install releases it."""
+def test_the_install_start_stops_owners_under_its_hold(comms, stack):
+    """The install's start holds the root and the outgoing runtime stops the owners under
+    that hold; the hold stays draining until the install releases it."""
     from agent_comms.child_process import SpawnedProcess
 
     path = ledger_one_failure_short(comms.root)

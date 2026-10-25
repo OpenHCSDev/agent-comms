@@ -122,12 +122,12 @@ def test_plain_str_id_annotations_block_growth_per_file(source, expected):
 @pytest.mark.parametrize(
     ("source", "expected"),
     [
-        ("with store.locked(mode=SharedLock()):\n    pass", 1),
-        ("async with store.locked_async():\n    pass", 1),
-        ("with _store_lock(path), StoreLock.ordered(owners):\n    pass", 2),
+        ("with store.guarded_read():\n    pass", 0),
+        ("async with store.guarded_write_async():\n    pass", 0),
+        ("with _store_lock(path, mode, contention), StoreLock.ordered(guards):\n    pass", 1),
         ("fcntl.flock(descriptor, fcntl.LOCK_EX)", 1),
         ("def try_store_lock(descriptor):\n    is_store_lock(path)", 0),
-        ('"""with store.locked():"""\nnote = "fcntl.flock("', 0),
+        ('"""with store.guarded_write():"""\nnote = "fcntl.flock("', 0),
         ("ordered(owners)\nlocked = True", 0),
     ],
 )
@@ -143,11 +143,11 @@ def test_store_lock_calls_skip_the_store_owners():
 
 
 def test_a_new_store_lock_call_fails_on_its_own_file_with_its_line(repo):
-    base = repo.commit({"turns.py": "def save(store):\n    with store.locked():\n        pass\n",
-                        "other.py": "def read(store):\n    with store.locked():\n        pass\n"})
+    base = repo.commit({"turns.py": "def save(store):\n    with _store_lock(store.path, mode, contention):\n        pass\n",
+                        "other.py": "def read(store):\n    with _store_lock(store.path, mode, contention):\n        pass\n"})
     head = repo.commit({"turns.py": "def save(store):\n    pass\n",
-                        "other.py": "def read(store):\n    with store.locked():\n        pass\n"
-                                    "    with store.locked():\n        pass\n"})
+                        "other.py": "def read(store):\n    with _store_lock(store.path, mode, contention):\n        pass\n"
+                                    "    with _store_lock(store.path, mode, contention):\n        pass\n"})
     status, report = repo.compare(base, head, StoreLockCalls)
     assert status == 1
     grown = StoreLockCalls.at(f"{repo.root}/other.py").text
@@ -1205,6 +1205,18 @@ def test_changed_prose_fails_but_an_unchanged_disk_key_does_not(repo):
 def test_local_import_scope_counts_nested_functions_and_classes_once():
     source = b"""import top\nclass ModuleClass:\n    import top_class\ndef outer():\n    import one\n    class Local:\n        import two\n        def method(self):\n            from package import three\n    async def inner():\n        import four\n"""
     assert FunctionLocalImport.count(source, "imports.py") == 4
+
+
+def test_a_new_enum_fails_the_ratchet_and_folding_one_passes(repo):
+    plain = "class Family:\n    pass\n"
+    base = repo.commit({"kinds.py": plain})
+    grown = repo.commit({"kinds.py": plain + "import enum\nclass Kind(enum.StrEnum):\n    A = 'a'\n"})
+    status, report = repo.compare(base, grown, EnumDeclaration)
+    identity = EnumDeclaration.at(f"{repo.root}/kinds.py").text
+    assert status == 1
+    assert report["head"][identity] == 1
+    folded = repo.commit({"kinds.py": plain})
+    assert repo.compare(grown, folded, EnumDeclaration)[0] == 0
 
 
 def test_enum_declarations_count_every_stdlib_enum_base_and_nothing_else():

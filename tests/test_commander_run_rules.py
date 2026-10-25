@@ -50,7 +50,7 @@ def test_clean_transfers_keep_history_and_third_owner_requires_a_trace(tmp_path,
         owner=thread('second', tmp_path, 2), assigner=lead.incarnation, generation=two_goal_id,
             request=request,
         review_at=RecordedEventTime(1000), order=order(source_repository))
-    assert not second.strikes
+    assert second.strike_count == 0
     kwargs = dict(expected_revision=second.revision, owner=thread('third', tmp_path, 3),
         assigner=lead.incarnation, generation=three_goal_id, request=request,
             review_at=RecordedEventTime(1000), order=order(source_repository))

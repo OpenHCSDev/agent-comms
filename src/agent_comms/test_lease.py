@@ -13,7 +13,8 @@ from typing import ClassVar, TextIO
 
 from .child_process import ProcessIdentity
 from .launch_runtime import LaunchRuntime
-from .store_files import ClaimHeldError, ProcessSingleton, SourceTier
+from .process_claim import ClaimHeldError, ProcessSingleton
+from .store_files import SourceTier
 
 
 class TestLeaseBusy(RuntimeError):
@@ -58,18 +59,13 @@ class InheritedTestRun(LeaseStart):
         return owner.adopted(self.descriptor)
 
 
-@dataclass(frozen=True)
-class TestLease(SourceTier, declared_name=None):
+class TestLease(ProcessSingleton, SourceTier, declared_name=None):
     refusal: ClassVar[str] = "integration run already holds the test lease"
     runner_program: ClassVar[str] = ""
 
     @classmethod
     def in_home(cls, home: Path) -> TestLease:
         return cls(LaunchRuntime.state_directory(home) / "integration-tests.lock")
-
-    @property
-    def process_lock(self) -> ProcessSingleton:
-        return ProcessSingleton(self.path)
 
     @classmethod
     def for_runner_programs(cls, programs: tuple[Path, ...], home: Path) -> TestLease:
@@ -94,7 +90,7 @@ class TestLease(SourceTier, declared_name=None):
         self.path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
         with ExitStack() as lifetime:
             try:
-                held = lifetime.enter_context(start.claim(self.process_lock))
+                held = lifetime.enter_context(start.claim(self))
             except ClaimHeldError as error:
                 raise TestLeaseBusy(self.refusal) from error
             yield InheritedTestRun(held.fileno())

@@ -12,3 +12,4 @@ type: feedback
 - "Off the board" is not proof something is disposable: on 2026-10-18 a cleanup fork deleted e2e's p499-installed-burst (receipts of 101 sent DMs) on that criterion and no copy survived. Sent-input records are UNKNOWN-input evidence.
 - Never replay an UNKNOWN or failed input, never `git checkout` or reset the live checkout, and never edit another unit's worktree.
 - Before removing a worktree, check no running unit uses it and its commits are on the remote: on 2026-10-20 removing a running unit's worktree failed install 9 and rolled it back.
+- Bus upgrade backups (full copies of the root taken before each install) keep the newest two completed at all times, the one the current install just took included; retention code shows that rule in its diff before it merges. Tristan, 2026-10-20: "clear them just keep at least 2 at all times".

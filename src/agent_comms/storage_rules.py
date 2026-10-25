@@ -21,6 +21,8 @@ from agent_comms.errors import RelationViolationError, ToolRefusedError
 from agent_comms.field_codec import (
     FieldCodec,
     FieldRepresentation,
+    GoalId,
+    MalformedRecord,
     NullMember,
     PathText,
     RecordMember,
@@ -30,7 +32,7 @@ from agent_comms.locked_store import DurableFile
 from agent_comms.problem_number import ProblemNumber
 from agent_comms.repo import GitCommandError, Repo
 from agent_comms.repository_name import RepositoryName
-from agent_comms.standing_rules import UndatedStandingRule
+from agent_comms.standing_rules import FamilyScan, UndatedStandingRule
 from agent_comms.storage_room import (
     AllocationRoomWork,
     BuildRoomWork,
@@ -202,16 +204,14 @@ class OrderCheckoutAllocation(ProblemCheckoutAllocation):
         return path == rule.order_checkout(rule.roots_of(owner), self.problem)
 
 
-@dataclass(frozen=True)
-class RepositoryCheckoutAllocation(ProblemCheckoutAllocation):
-    verb: ClassVar[str] = 'repository-checkout'
-    problem: str
+class RepositoryAllocation(CheckoutAllocation):
+    """A repository-suffixed allocation reads its origin once to establish ownership."""
+
     suffix: str
 
-    @classmethod
-    def allocated(cls, problem: str, suffix: str) -> Iterator[CheckoutAllocation]:
-        if suffix:
-            yield cls(problem, suffix)
+    @abstractmethod
+    def owns_declared(self, rule: StorageRule, owner: Thread, path: Path,
+                      repository: RepositoryName) -> bool: ...
 
     def owns_present(self, rule: StorageRule, owner: Thread, path: Path) -> bool:
         try:
@@ -221,9 +221,42 @@ class RepositoryCheckoutAllocation(ProblemCheckoutAllocation):
                 f'Cannot read repository {self.suffix} of checkout {path}: {error}') from error
         return self.owns_declared(rule, owner, path, repository)
 
+
+@dataclass(frozen=True)
+class RepositoryCheckoutAllocation(ProblemCheckoutAllocation, RepositoryAllocation):
+    verb: ClassVar[str] = 'repository-checkout'
+    problem: str
+    suffix: str
+
+    @classmethod
+    def allocated(cls, problem: str, suffix: str) -> Iterator[CheckoutAllocation]:
+        if suffix:
+            yield cls(problem, suffix)
+
     def owns_declared(self, rule: StorageRule, owner: Thread, path: Path,
                       repository: RepositoryName) -> bool:
         return path == rule.repository_checkout(rule.roots_of(owner), self.problem, repository)
+
+
+@dataclass(frozen=True)
+class GoalCheckoutAllocation(RepositoryAllocation):
+    goal: GoalId
+    suffix: str
+
+    @classmethod
+    def read(cls, owner: Thread, path: Path, problem: str,
+             suffix: str) -> Iterator[CheckoutAllocation]:
+        if path == owner.project_path or not suffix:
+            return
+        try:
+            goal = FieldCodec.decode(GoalId, problem)
+        except MalformedRecord:
+            return  # Another allocation member owns names outside the goal-id spelling.
+        yield cls(goal, suffix)
+
+    def owns_declared(self, rule: StorageRule, owner: Thread, path: Path,
+                      repository: RepositoryName) -> bool:
+        return path == rule.repository_checkout(rule.roots_of(owner), self.goal, repository)
 
 
 @dataclass(frozen=True)
@@ -273,6 +306,14 @@ class StorageRule(RoomAllocation, DurableFile):
         checkout = self.order_checkout(roots, problem)
         return checkout.with_name(f'{checkout.name}--{repository.name}')
 
+    def checkout_problem(self, roots: StorageRoots, path: Path, other: str) -> str:
+        """The problem whose checkout holds path, read back from order_checkout's own name;
+        other for a path in no problem checkout."""
+        allocated = self.order_checkout(roots, '')
+        names = path.relative_to(allocated.parent).parts[:1] if path.is_relative_to(allocated.parent) else ()
+        return next((name.removeprefix(allocated.name).split('--')[0] for name in names
+                     if name.startswith(allocated.name)), other)
+
     def problem_checkouts(self, roots: StorageRoots, problem: str) -> tuple[Path, ...]:
         """Every checkout allocated to one problem: its check repository's, then each other's."""
         checkout = self.order_checkout(roots, problem)
@@ -317,8 +358,8 @@ class StorageRule(RoomAllocation, DurableFile):
                    for allocation in CheckoutAllocation.for_path(self, owner, path))
 
     def checkout_paths(self, owner: Thread) -> tuple[Path, ...]:
-        """Declared home and order locations; Git metadata supplies their branches."""
-        ordered = self.order_checkout(self.roots_of(owner), 'P*')
+        """Declared home and work allocations; Git metadata supplies their branches."""
+        ordered = self.order_checkout(self.roots_of(owner), '*')
         return tuple(path for path in (owner.project_path,
                                        *sorted(ordered.parent.glob(ordered.name)))
                      if path.is_dir() and self.owns_present_checkout(owner, path))
@@ -500,14 +541,10 @@ class UnitStorage:
 
 
 @dataclass(frozen=True)
-class StorageViolation(UndatedStandingRule, declared_name=None):
+class StorageViolation(UndatedStandingRule, FamilyScan, declared_name=None):
     """One family scan shares each held unit's storage snapshot between its violations."""
 
     storage: UnitStorage
-
-    @classmethod
-    def scan_owner(cls) -> type[StorageViolation]:
-        return __class__
 
     @classmethod
     def scan_observed(cls, comms: Comms, commander: str,
@@ -685,7 +722,12 @@ class ShellInvocation(ShellCommand):
 
     @classmethod
     def parse(cls, command: str, cwd: Path) -> Iterator[ShellInvocation]:
-        for decoded in ShellCommand.split(command):
+        try:
+            decoded_commands = tuple(ShellCommand.split(command))
+        except ValueError as error:
+            raise StorageDenied(f'StorageRule: the shell command cannot be decoded ({error}); '
+                                'no tool was started') from error
+        for decoded in decoded_commands:
             words = decoded.words
             if decoded.program == 'cd' and len(words) > 1:
                 target = words[2] if words[1] == '--' and len(words) > 2 else words[1]

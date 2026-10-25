@@ -31,11 +31,11 @@ from .mro_dispatch import MroDispatch, handles
 from .native_arguments import SelectedModel
 from .native_attestation import ObservedAttestation
 from .native_input_owner import ParticipantOwner, RegistryOwner
-from .notification_assignment import NotificationAssignment, NotificationAssignmentRead
+from .notification_assignment import NotificationAssignment
+from .notification_evidence import NotificationAssignmentRead, NotificationWindow
 from .participant_store import ParticipantSnapshot
 from .pi_events import TurnContextObserved
 from .presentation import MessageNotification, OwnerOutcomes, SentMessageOutcome
-from .store_files import SharedLock
 from .publisher import ParticipantPublisher
 from .selected_source_batch import SelectedSource, SelectedSourceBatch
 from .threads import Thread
@@ -223,7 +223,7 @@ class SelectedParticipant(MroDispatch):
         tuple[MessageNotification, ...],
     ]:
         """Capture detached registry, participant and optional context in one worker."""
-        with comms.registry.store.locked(mode=SharedLock()):
+        with comms.registry.store.guarded_read():
             privacy = comms.registry.store.private_guard_unlocked()
             privacy.require_root(
                 root_id, IdentityConflict("Selected claim namespace changed"))
@@ -236,7 +236,7 @@ class SelectedParticipant(MroDispatch):
         lookup = thread.incarnation.lookup
         sent_owner, sent_sources = MessageNotification.sent_sources(
             comms.root, comms.registry, comms.bus.bus, name,
-            limit=MessageNotification.window_limit,
+            limit=NotificationWindow.window_limit,
         )
         LiveResponseOwner(
             thread=thread, claimed_generation=generation
@@ -298,7 +298,7 @@ class SelectedParticipant(MroDispatch):
         def capture():
             # Historical public records have no delivery capability. Native identity
             # belongs to the original registry guard, not a second bus metadata file.
-            with bus._registry.store.locked(mode=SharedLock()):
+            with bus._registry.store.guarded_read():
                 bus._registry.store.private_guard_unlocked().require_root(
                     root_id, IdentityConflict("Selected source namespace changed"))
             with bus.bus.reading() as source:

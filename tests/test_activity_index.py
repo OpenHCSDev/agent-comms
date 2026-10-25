@@ -11,7 +11,7 @@ from agent_comms.activity import Activity, ActivityRow, ActivityState, ActivityS
 
 @pytest.fixture
 def activity_store(tmp_path):
-    return ActivityStore.at(tmp_path)
+    return ActivityStore(tmp_path)
 
 
 def test_emit_and_current_return_the_declared_activity_row(activity_store):
@@ -20,7 +20,7 @@ def test_emit_and_current_return_the_declared_activity_row(activity_store):
     assert activity_store.current("worker") == ActivityRow.of(first)
     latest = first.with_status(ActivityState.WORKING, "read source")
     activity_store.emit(latest)
-    assert ActivityStore.at(activity_store.root).current("worker") == ActivityRow.of(latest)
+    assert ActivityStore(activity_store.root).current("worker") == ActivityRow.of(latest)
     with activity_store.snapshot() as db:
         assert ActivityRow.count(db) == 1
 
@@ -53,7 +53,7 @@ def test_concurrent_update_applies_each_transition_once(activity_store):
             return current.with_status(ActivityState.WORKING, str(int(current.detail) + 1))
 
         start.wait(timeout=5)
-        assert ActivityStore.at(activity_store.root).update("worker", advance)
+        assert ActivityStore(activity_store.root).update("worker", advance)
         return observations
 
     with ThreadPoolExecutor(max_workers=2) as writers:

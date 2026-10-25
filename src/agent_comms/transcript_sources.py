@@ -489,7 +489,7 @@ class TranscriptSource:
     ) -> tuple[TranscriptEvent, ...]:
         entry = record.entry
         return tuple(project_events(TranscriptProjection(
-            routes.get(entry.id), routes.input_display(entry.input_id), position=record.start,
+            entry.routing_in(routes), routes.input_display(entry.input_id), position=record.start,
         )))
 
 
@@ -599,11 +599,11 @@ class AssignedTranscriptSource(TranscriptSource):
         references: tuple[MessageReference, ...],
     ) -> tuple[TranscriptEvent, ...]:
         entry = record.entry
-        routing = routes.get(entry.id)
+        routing = entry.routing_in(routes)
         events = super().native_events(record, routes, project_events, references)
         published = entry.final_reply and any(
             refs and self.sent_messages(refs).keys() >= set(refs)
-            for refs in (routing.publications if routing is not None else (), references)
+            for refs in (routing.publications, references)
         )
 
         return tuple(retained for event in events

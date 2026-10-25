@@ -26,11 +26,11 @@ from agent_comms.commander.standing import (
     UnitAskUnanswered,
 )
 from agent_comms.commander_heartbeat import CommanderHeartbeat
-from agent_comms.commander_pings import CommanderUpdate
+from agent_comms.task_attachments.commander_pings import CommanderUpdate
 from agent_comms.comms import wire
 from agent_comms.coordinator import Coordination
 from agent_comms.errors import CommittedMessageError, HumanSendRefusedError, RelationViolationError, TodoConflict
-from agent_comms.field_codec import FieldCodec, InputId, MessageId, TurnId
+from agent_comms.field_codec import FieldCodec, InputId, MessageId, OrderId, RecordProblems, TurnId
 from agent_comms.goal_actions import (
     CreateProblemGoalAction,
     ReissuedOrderGoalAction,
@@ -56,8 +56,8 @@ from agent_comms.read_basis import DMDisplayScope, RepliesDisplayScope
 from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.repository_name import RepositoryName
 from agent_comms.service_passes import ServicePassStore
-from agent_comms.standing_rules import StandingRule
-from agent_comms.store_files import StoreLockContention
+from agent_comms.standing_rules import OwedAnswer, StandingRule
+from agent_comms.store_files import ExclusiveLock, StoreLockContention, _store_lock
 from agent_comms.thread_identity import CoreWatcherIncarnation
 from agent_comms.thread_model import DeclaredModel
 from agent_comms.thread_status import StoppedThreadStatus
@@ -111,7 +111,7 @@ def held_bus(comms, tmp_path, source_repository, configured_repository):
             repo=RepositoryName.from_wire("OpenHCSDev/agent-comms"), text=f"Repair {problem}",
             review_at=RecordedEventTime(now + 3600),
             order=PendingProblemOrder(
-                id=f"order-{problem}", owner=scope.shape.parents[0], scope=scope, run=MechanicalOrderRun(),
+                owner=scope.shape.parents[0], scope=scope, run=MechanicalOrderRun(),
                 check=OrderCheck(source.checkout, "printf 0", CountCheckResult(1)),
                 edits=("Repair the existing owner",), banned=("No second store",),
                 report="Report the result", at=RecordedEventTime(now - 3600),
@@ -153,7 +153,7 @@ def claim_order(held_bus):
         worker = held_bus.registry.require("worker").incarnation
         original = held_bus.messaging.send("lead", "worker", todo.order.instructions(todo)).message
         todo = held_bus.goals.todos.apply(
-            todo.id, OrderMessage(todo.revision, lead, original.message_id))
+            todo.id, OrderMessage(todo.revision, lead, original.message_id, at=RecordedEventTime(time.time())))
         claimed = OrderClaim.for_order(todo, worker, 1, "a" * 40,
                                       "Review the published repair", original.reference,
                                       store=held_bus.goals.todos)
@@ -184,7 +184,7 @@ def test_order_claim_publishes_only_to_its_retained_commander_birth(
     worker = comms.registry.require("worker").incarnation
     original = comms.messaging.send("lead", "worker", todo.order.instructions(todo)).message
     todo = comms.goals.todos.apply(
-        todo.id, OrderMessage(todo.revision, lead, original.message_id))
+        todo.id, OrderMessage(todo.revision, lead, original.message_id, at=RecordedEventTime(time.time())))
     claim = OrderClaim.for_order(
         todo, worker, 1, "a" * 40, "Review this published repair with @outsider", original.reference,
         store=comms.goals.todos)
@@ -203,7 +203,7 @@ def test_order_claim_publishes_only_to_its_retained_commander_birth(
     if change in ("rename", "rename_holder"):
         def registry_cut_held():
             try:
-                with comms.registry.store.locked(contention=StoreLockContention(0)):
+                with _store_lock(comms.registry.store.path, ExclusiveLock(), StoreLockContention(0)):
                     return False
             except BlockingIOError:
                 return True
@@ -288,7 +288,7 @@ def test_holds_whose_holder_was_deleted_or_registered_again_are_reported_by_ever
         problem="P3", commander="lead", request=original.request,
         assigner=comms.registry.require("lead").incarnation, repo=original.repo,
         text="Repair P3", review_at=original.review_at,
-        order=replace(original.order, id="order-P3"),
+        order=replace(original.order, id=OrderId.mint()),
     ))
     merged = comms.goals.todos.get("P2")
     with comms.goals.todos.writing() as db:
@@ -314,7 +314,7 @@ def test_holds_whose_holder_was_deleted_or_registered_again_are_reported_by_ever
     assert set(named.split(", ")) == {"P1 worker", "P2 worker", "P3 outsider"}
     listed = FieldCodec.decode(TodoList, board_read(CommsTodoListTool, comms, NoThreadCaller()))
     assert {"P1", "P2", "P3"} <= {todo.id for todo in listed.todos} and listed.progress == {}
-    assert OrderEditCountRead.count(comms, "lead") == 0
+    assert tuple(OrderEditCountRead.for_commander(comms, "lead")) == ()
     with pytest.raises(ValueError, match="pass --artifact FILE"):
         comms.goals.todos.get("P2").order.closing_artifact()
 
@@ -533,8 +533,14 @@ def test_commander_say_answers_an_unanswered_unit_message(held_bus, target, body
     say = SayVerb(units="worker", body_file=str(reply), answers=(question.message_id,))
     say.apply(ctx)
     assert unanswered(held_bus) == ()
-    # A name that is not open needs no answer: it is dropped, never a refusal of the verb.
-    SayVerb(units="worker", body_file=str(reply), answers=("not-a-message",)).apply(ctx)
+    # A nonexistent identity refuses without publishing a reply that drops its answer.
+    unknown = MessageId("0" * 12)
+    revision = held_bus.bus.bus.revision()
+    with pytest.raises(RecordProblems, match=unknown):
+        SayVerb(units="worker", body_file=str(reply), answers=(unknown,)).apply(ctx)
+    assert held_bus.bus.bus.revision() == revision
+    # An already answered original exists, but opens no new ask.
+    SayVerb(units="worker", body_file=str(reply), answers=(question.message_id,)).apply(ctx)
     assert held_bus.bus.bus.lookup(held_bus.bus.bus.revision()).answers == ()
 
 
@@ -543,7 +549,7 @@ def test_an_unanswered_unit_message_gates_send_until_a_say_answers_it(held_bus, 
     ctx = Commander.read_root(held_bus.root)
     reply = tmp_path / "reply.txt"
     reply.write_text("Waiting on the merge queue, owner unit-goalblock")
-    with pytest.raises(SystemExit, match=question.message_id):
+    with pytest.raises(RecordProblems, match=question.message_id):
         SendVerb(unit="worker", body_file="unused").apply(ctx)
     # A reply to the asker answers its open asks without naming them.
     SayVerb(units="worker", body_file=str(reply)).apply(ctx)
@@ -554,19 +560,49 @@ def test_an_unanswered_unit_message_gates_send_until_a_say_answers_it(held_bus, 
     assert held_bus.bus.bus.lookup(held_bus.bus.bus.revision()).answers == ()
 
 
-def test_answering_one_owed_message_leaves_another_owed(held_bus, tmp_path):
+def test_answering_one_owed_message_leaves_another_owed(held_bus, tmp_path, capsys):
+    """An answer is never refused for the debts it leaves: they warn and stay owed."""
     first = publish(held_bus, "worker", "lead", time.time() - AwaitingCommander.seconds - 2)
     second = publish(held_bus, "worker", "lead", time.time() - AwaitingCommander.seconds - 1)
     ctx = Commander.read_root(held_bus.root)
     reply = tmp_path / "reply.txt"
     reply.write_text("Waiting on the merge queue, owner unit-goalblock")
-    with pytest.raises(SystemExit, match=second.message_id):
-        SayVerb(units="worker", body_file=str(reply), answers=(first.message_id,)).apply(ctx)
-    assert {owed.message.message_id for owed in unanswered(held_bus)} == {
-        first.message_id, second.message_id}
-    SayVerb(units="worker", body_file=str(reply),
-            answers=(first.message_id, second.message_id)).apply(ctx)
-    assert unanswered(held_bus) == ()
+    capsys.readouterr()
+    SayVerb(units="worker", body_file=str(reply), answers=(first.message_id,)).apply(ctx)
+    assert f"WARNING: UNANSWERED worker: message {second.seq}:{second.message_id}" in (
+        capsys.readouterr().out)
+    assert held_bus.bus.bus.lookup(held_bus.bus.bus.revision()).answers == (first.reference,)
+    assert [owed.message.message_id for owed in unanswered(held_bus)] == [second.message_id]
+    with pytest.raises(RecordProblems, match=second.message_id):
+        SendVerb(unit="worker", body_file=str(reply)).apply(ctx)
+
+
+def test_an_owed_answer_is_a_heartbeat_line_and_never_a_vibe_check(held_bus):
+    """The board already states an owed answer and locks the verbs on it; a vibe check saying it
+    again on a second channel restated one fact, so no degraded sign carries it."""
+    from agent_comms.commander.vibe_check import VibeCheck
+
+    ask = publish(held_bus, "worker", "lead", time.time() - AwaitingCommander.seconds - 1)
+    frame = HeartbeatFrame.read(held_bus, "lead", ProgressRead())
+    assert [rule.message.message_id for rule in OwedAnswer.scan_observed(
+        held_bus, "lead", (), frame)] == [ask.message_id]
+    assert VibeCheck.scan_observed(held_bus, "lead", (), frame) == ()
+
+
+def test_an_owed_vibe_check_refuses_only_verbs_that_answer_nothing(held_bus, tmp_path):
+    """The vibe check waits like any owed message: a reply naming a unit's ask still lands."""
+    from agent_comms.commander.vibe_check import VibeCheckSender
+
+    VibeCheckSender.register(held_bus.registry)
+    check = publish(held_bus, VibeCheckSender.sender, "lead", time.time() - 3600)
+    ask = publish(held_bus, "worker", "lead", time.time() - AwaitingCommander.seconds - 1)
+    ctx = Commander.read_root(held_bus.root)
+    reply = tmp_path / "reply.txt"
+    reply.write_text("Waiting on the merge queue, owner unit-goalblock")
+    with pytest.raises(RecordProblems, match=check.message_id):
+        SendVerb(unit="worker", body_file=str(reply)).apply(ctx)
+    SayVerb(units="worker", body_file=str(reply), answers=(ask.message_id,)).apply(ctx)
+    assert held_bus.bus.bus.lookup(held_bus.bus.bus.revision()).answers == (ask.reference,)
 
 
 def test_an_answer_sent_to_another_unit_is_refused_and_leaves_the_ask_owed(held_bus, tmp_path):
@@ -575,7 +611,7 @@ def test_an_answer_sent_to_another_unit_is_refused_and_leaves_the_ask_owed(held_
     reply = tmp_path / "reply.txt"
     reply.write_text("Waiting on the merge queue, owner unit-goalblock")
     revision = held_bus.bus.bus.revision()
-    with pytest.raises(SystemExit, match=(f"{question.message_id} was asked by worker; "
+    with pytest.raises(RecordProblems, match=(f"{question.message_id} was asked by worker; "
                                           "answer it in a message to worker")):
         SayVerb(units="outsider", body_file=str(reply), answers=(question.message_id,)).apply(ctx)
     assert held_bus.bus.bus.revision() == revision
@@ -594,7 +630,7 @@ def test_an_overdue_owner_directive_gates_until_answered(held_bus, tmp_path):
     ctx = Commander.read_root(held_bus.root)
     reply = tmp_path / "reply.txt"
     reply.write_text("Installing now")
-    with pytest.raises(SystemExit, match=f"DIRECTIVE UNACTED: owner directive {directive.seq}:{directive.message_id}"):
+    with pytest.raises(RecordProblems, match=f"DIRECTIVE UNACTED: owner directive {directive.seq}:{directive.message_id}"):
         SayVerb(units="#comms", body_file=str(reply)).apply(ctx)
     SayVerb(units="#comms", body_file=str(reply), answers=(directive.message_id,)).apply(ctx)
     SayVerb(units="#comms", body_file=str(reply)).apply(ctx)
@@ -632,7 +668,7 @@ def test_send_and_check_accept_a_deletion_check_on_fresh_main(
     worktrees = held_bus.registry.storage_rule.checkout_base
     original = held_bus.goals.todos.get('P1')
     check = OrderCheck(source.checkout, 'grep -c obsolete owner.py', CountCheckResult(0))
-    order = replace(original.order.checked(), id='delete-obsolete', check=check,
+    order = replace(original.order.checked(), id=OrderId.mint(), check=check,
                     banned=('optional guards', 'maybe.py'), report='Report optional examples')
     document = OrderFile(order, 'Four obsolete declarations remain after their reader was deleted.',
                          'This is stupid because dead declarations still occupy the source.',
@@ -651,9 +687,9 @@ def test_send_and_check_accept_a_deletion_check_on_fresh_main(
     # Problem creates the first order through Commander.send, including its message link.
     cli('problem', str(order_file), '--to', 'outsider', '--where', 'owner.py:2')
     first = held_bus.goals.todos.get('P3')
-    assert first.messages
+    assert first.latest_message.message_id
     document = replace(document, problems=('P3',),
-                       order=replace(document.order, id='replacement-deletion'))
+                       order=replace(document.order, id=OrderId.mint()))
     order_file.write_text(json.dumps(FieldCodec.encode(document)))
     cli('send', 'outsider', str(order_file), '--clean')
     sent = held_bus.goals.todos.get('P3')
@@ -663,7 +699,7 @@ def test_send_and_check_accept_a_deletion_check_on_fresh_main(
         'The original count also included comments rather than only declarations')
     current = held_bus.goals.todos.get('P3')
     assert current.order.id == sent.order.id
-    assert current.review_at == sent.review_at and current.strikes == sent.strikes
+    assert current.review_at == sent.review_at and current.strike_count == sent.strike_count
     assert current.order.check.command == corrected
     assert current.order.check.result == CountCheckResult(0)
     # Done's result rule remains the inverse: the delivered commit must meet the target.
@@ -837,7 +873,7 @@ def test_a_compliant_answer_resumes_a_held_unit_whose_attempt_was_interrupted(he
     with pytest.raises(ValueError, match="unresolved"):
         held_bus.goals.update_goal("worker", ActiveGoalAction(), actor=OwnerInvocable)
     held_bus.goals.update_goal(
-        "worker", CompliedGoalAction(witness="compliant-answer"), actor=OwnerInvocable)
+        "worker", CompliedGoalAction(witness=MessageId("c0ffee000001")), actor=OwnerInvocable)
     assert isinstance(held_bus.registry.require("worker").goal.require().state, ActiveGoal)
 
 
@@ -863,7 +899,7 @@ def test_a_compliant_answer_resumes_a_held_unit_whose_problems_closed_during_the
             "The requested repair already merged into main through another problem."))
     assert todos.for_goal(worker.incarnation, worker.goal.require().id) == ()
     held_bus.goals.update_goal(
-        "worker", CompliedGoalAction(witness="compliant-answer"), actor=OwnerInvocable)
+        "worker", CompliedGoalAction(witness=MessageId("c0ffee000001")), actor=OwnerInvocable)
     assert isinstance(held_bus.registry.require("worker").goal.require().state, ActiveGoal)
 
 

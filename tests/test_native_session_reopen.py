@@ -10,6 +10,7 @@ from pathlib import Path
 import pytest
 
 from agent_comms.native_session_reopen import NativeReopenError, NativeSessionIdentity
+from agent_comms.native_session_reopen import PiSessionId
 
 pytestmark = pytest.mark.skipif(
     sys.platform != "linux", reason="Disposable Linux canonical native fixture"
@@ -51,10 +52,10 @@ def test_saved_identity_preserves_bytes_and_strips_preload(saved, tmp_path, monk
     )
     monkeypatch.setenv("NODE_OPTIONS", f"--import={preload.as_uri()}")
     observed = NativeSessionIdentity.locate(str(file))
-    assert observed == NativeSessionIdentity(identity, str(file))
+    assert observed == NativeSessionIdentity(PiSessionId(identity), str(file))
     assert file.read_bytes() == before and not marker.exists()
     with pytest.raises(NativeReopenError):
-        observed.require_same_session(NativeSessionIdentity("wrong", str(file)))
+        observed.require_same_session(NativeSessionIdentity(PiSessionId("wrong"), str(file)))
 
 
 @pytest.mark.parametrize("mutation", ["legacy", "missing", "symlink"])
@@ -94,7 +95,9 @@ def test_native_loader_rejects_invalid_history_without_repair(saved, mutation):
         with pytest.raises(NativeReopenError):
             NativeSessionIdentity.locate(str(file))
     else:
-        assert NativeSessionIdentity.locate(str(file)) == NativeSessionIdentity(identity, str(file))
+        assert NativeSessionIdentity.locate(str(file)) == NativeSessionIdentity(
+            PiSessionId(identity), str(file)
+        )
     result = subprocess.run([
         "node", "--no-global-search-paths", "--import", str(package.path / "dist/agent-comms-import-fence.mjs"),
         "--input-type=module", "-e",

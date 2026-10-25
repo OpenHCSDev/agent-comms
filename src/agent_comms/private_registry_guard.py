@@ -36,7 +36,7 @@ from .coordination_tables.participants import Participants
 from .coordinator import Coordination
 from .errors import RelationViolationError
 from .field_codec import RootId, ThreadLookup
-from .locked_store import DurableFile, WireWakeFile
+from .locked_store import RollbackRetained, WireWakeFile
 from .native_input_owner import RegistryOwner
 from .native_runtime_input import NativeRuntimeInput, NativeRuntimeTable
 from .private_nk_entrypoint import (
@@ -45,15 +45,14 @@ from .private_nk_entrypoint import (
 )
 from .private_path import PrivateFileRole
 from .private_runtime_schema import PrivateCoordinatorSchema, PrivateCoordinatorTable
-from .store_files import SharedLock
 from .thread_identity import ClaimedIdentity
+from .notification_evidence import NotificationAssignmentRead
 
 
 if TYPE_CHECKING:
     from .acp_extension import CursorAdvancedUpdate, CursorScope
     from .bus_publication import Delivered
     from .cursor_publication import CursorPublication
-    from .notification_assignment import NotificationAssignmentRead
     from .private_nk_entrypoint import RootLaunch
     from .registry_document import RegistrySnapshot
     from .typed_table import TableSchema
@@ -132,7 +131,7 @@ class RegistryPrivacy(ABC):
         from .registry_store import RegistryStore
 
         registry = RegistryStore.at(root)
-        with registry.locked(mode=SharedLock()):
+        with registry.guarded_read():
             return registry.private_guard_unlocked()
 
     @abstractmethod
@@ -206,8 +205,6 @@ class PublicRegistry(RegistryPrivacy):
     def missing_notification_assignments(
         self, sources: Sequence[Delivered],
     ) -> NotificationAssignmentRead:
-        from .notification_assignment import NotificationAssignmentRead
-
         return NotificationAssignmentRead(tuple(sources), ())
 
     def cursor_scope(
@@ -252,7 +249,7 @@ class PublicRegistry(RegistryPrivacy):
         raise error
 
 
-class PrivateRegistryGuard(DurableFile, WireWakeFile, RegistryPrivacy):
+class PrivateRegistryGuard(RollbackRetained, WireWakeFile, RegistryPrivacy):
 
 
     filename = ".registry-owner-guard"

@@ -18,6 +18,7 @@ from pathlib import Path
 
 import pytest
 
+from agent_comms.field_codec import AssignmentId
 from agent_comms.thread_identity import RecordedThreadIncarnation
 from agent_comms.assignment_states import (
     DeferredAssignment,
@@ -98,9 +99,9 @@ def test_frozen_delivery_full_n_observer_and_public_history(tmp_path: Path) -> N
     assert len(sealed_cohort_assignments(coordinator, lookups["Alice"])) == 1
     assert sealed_cohort_assignments(coordinator, lookups["Bob"]) == ()
     delivery_rows = coordinator.session._connection.execute(
-        "SELECT kind,claim_id FROM cohort_delivery_receipts ORDER BY ordinal"
+        "SELECT claim_id FROM cohort_delivery_receipts ORDER BY ordinal"
     ).fetchall()
-    assert {row["kind"] for row in delivery_rows} == {"selected", "unmentioned_observer"}
+    assert len(delivery_rows) == 2
     assert sum(row["claim_id"] is None for row in delivery_rows) == 1
 
 
@@ -202,7 +203,7 @@ def test_legacy_preexisting_claim_blocks_entire_batch_and_rollback(tmp_path: Pat
     comms, store, root_id, lookups = _root(tmp_path)
     sent = publish_initial(comms, "sender", "#team", "Hello @Alice")
     legacy = WakeAssignment(
-        assignment_id="singleton-before-cohort",
+        assignment_id=AssignmentId("singleton-before-cohort"),
         recipient="Alice",
         recipient_lookup=lookups["Alice"],
         wire_seq=sent.seq,
@@ -234,7 +235,7 @@ def test_no_wake_observer_cannot_gain_legacy_claim_after_seal(tmp_path: Path) ->
     (selected,) = accept_initial(comms.bus, root_id, sent.seq, store)
     observer_claim = replace(
         selected,
-        assignment_id="legacy-observer",
+        assignment_id=AssignmentId("legacy-observer"),
         recipient="Bob",
         recipient_lookup=lookups["Bob"],
     )

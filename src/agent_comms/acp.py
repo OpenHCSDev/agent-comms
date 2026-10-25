@@ -23,8 +23,8 @@ import os
 import re
 import sys
 import time
-from collections.abc import Sequence
-from contextlib import AsyncExitStack
+from collections.abc import Iterator, Sequence
+from contextlib import AsyncExitStack, contextmanager
 from functools import partial
 from typing import TYPE_CHECKING
 
@@ -52,7 +52,7 @@ from acp.schema import (
 from acp.stdio import stdio_streams
 from pydantic import BaseModel, JsonValue, ValidationError
 
-from agent_comms.coordination_errors import IdentityConflict
+from agent_comms.coordination_errors import IdentityConflict, Refused
 from agent_comms.coordinator import Coordination
 
 from . import (
@@ -212,13 +212,25 @@ class CommsAgent(SessionEffects, InputEffects, TurnEffects):
 
     # ─── ACP methods ─────────────────────────────────────────────────────────
 
+    @staticmethod
+    @contextmanager
+    def refusals() -> Iterator[None]:
+        """Core exceptions acquire protocol form only when answering an ACP request."""
+        try:
+            yield
+        except Refused as error:
+            raise RequestError(error.code, error.message, error.data) from error
+        except NativeTurnError as error:
+            raise RequestError.internal_error(error.request.error_data()) from error.__cause__
+
     async def initialize(
         self,
         protocol_version: int,
         client_capabilities: ClientCapabilities | None = None,
         client_info: Implementation | None = None,
     ) -> InitializeResponse:
-        return await self.sessions.initialize(protocol_version, client_capabilities, client_info)
+        with self.refusals():
+            return await self.sessions.initialize(protocol_version, client_capabilities, client_info)
 
     @staticmethod
     def _sdk_request[Request: BaseModel](
@@ -248,7 +260,8 @@ class CommsAgent(SessionEffects, InputEffects, TurnEffects):
             mcp_servers=[] if mcp_servers is None else mcp_servers,
             **kwargs,
         )
-        return await self.sessions.new_session(request)
+        with self.refusals():
+            return await self.sessions.new_session(request)
 
     async def load_session(
         self,
@@ -264,7 +277,8 @@ class CommsAgent(SessionEffects, InputEffects, TurnEffects):
             mcp_servers=[] if mcp_servers is None else mcp_servers,
             **kwargs,
         )
-        return await self.sessions.load_session(request)
+        with self.refusals():
+            return await self.sessions.load_session(request)
 
     async def prompt(
         self, session_id: str, prompt: Sequence[BaseModel], **kwargs: JsonValue
@@ -282,10 +296,8 @@ class CommsAgent(SessionEffects, InputEffects, TurnEffects):
         if re.match(r"^/compact(?:\s|$)", text):
             self._require_compaction_text(request)
             command = CompactRequest(text[len("/compact") :].strip())
-        try:
+        with self.refusals():
             return await AcpRequestConsumer(self, request).run(command)
-        except NativeTurnError as error:
-            raise RequestError.internal_error(error.request.error_data()) from error.__cause__
 
     async def _compact_request(self, session_id: str, instructions: str | None) -> PromptResponse:
         # The owner process's bridge alone owns the turn lock.
@@ -353,7 +365,8 @@ class CommsAgent(SessionEffects, InputEffects, TurnEffects):
                 request=command,
                 images=images,
             )
-        async with self.turns.turn_locks.setdefault(session_id, asyncio.Lock()):
+        self.inputs.ensure_live_drain(session_id)
+        async with self.inputs.state(session_id).turn_lock:
             # A direct ACP prompt owns this one controller. Owner-socket prompts
             # already carry a private subscriber binding (including None when
             # absent); never fall back to a passive ACP client in that case.
@@ -406,15 +419,18 @@ class CommsAgent(SessionEffects, InputEffects, TurnEffects):
                 debug_log.write(f"[{time.time():.3f}] {message}\n")
 
     async def cancel(self, session_id: str, **kwargs: JsonValue) -> None:
-        return await self.turns.cancel(session_id, **kwargs)
+        with self.refusals():
+            return await self.turns.cancel(session_id, **kwargs)
 
     async def close_session(self, session_id: str, **kwargs: JsonValue):
-        return await self.sessions.close_session(session_id)
+        with self.refusals():
+            return await self.sessions.close_session(session_id)
 
     async def set_config_option(
         self, config_id: str, session_id: str, value: str | bool, **kwargs: JsonValue
     ) -> SetSessionConfigOptionResponse:
-        return await self.sessions.config.set_option(config_id, session_id, value)
+        with self.refusals():
+            return await self.sessions.config.set_option(config_id, session_id, value)
 
     async def authenticate(self, method_id: str, **kwargs: JsonValue) -> None:
         raise RequestError.auth_required({"reason": "agent-comms requires no authentication"})

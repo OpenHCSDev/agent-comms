@@ -8,6 +8,7 @@ from agent_comms.image_input import ImageInput
 from agent_comms.native_tool_call import OwnerToolConnection
 from agent_comms.pi_commands import PiCommand, Prompt
 from agent_comms.pi_payloads import AnonymousRequest, RequestId
+from agent_comms.turn_item import PiRequestKey
 
 
 def prompt(**options):
@@ -30,7 +31,10 @@ def test_images_use_the_declared_pi_tag_for_encoding_and_decoding():
         PiCommand.from_wire(missing)
 
 
-@pytest.mark.parametrize("identity,declared", [(None, AnonymousRequest()), ("opaque-id", RequestId("opaque-id"))])
+@pytest.mark.parametrize(
+    "identity,declared",
+    [(None, AnonymousRequest()), ("opaque-id", RequestId(PiRequestKey("opaque-id")))],
+)
 def test_unknown_command_reads_its_id_through_the_declared_field(identity, declared):
     raw = {"type": "future_command", "id": identity, "payload": "kept"}
     command = PiCommand.from_wire(raw)

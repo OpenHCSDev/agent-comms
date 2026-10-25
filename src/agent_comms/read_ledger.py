@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import json
 from abc import abstractmethod
-from collections.abc import Callable, Iterator, Sequence
+from collections.abc import Callable, Iterable, Iterator, Sequence
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -21,6 +21,7 @@ from .field_codec import FieldCodec, NullMember, SingleFieldValue, SubclassUnion
 from .locked_store import DocumentChange
 from .maintenance_barrier import CarriedDocument
 from .private_path import ObservedPath
+from .notification_evidence import NotificationReadMark
 from .read_basis import (
     AllConversation,
     ChannelConversation,
@@ -33,7 +34,7 @@ from .read_basis import (
 )
 from .recorded_bus import NoRecordedBus, RecordedBus, RecordedBusIdentity
 from .sealed import Sealed
-from .store_files import DependentStateTier, SharedLock
+from .store_files import DependentStateTier, SingleFileStore
 from .thread_identity import RecordedThreadIncarnation
 from .thread_owned_state import ThreadOwnedState
 
@@ -111,7 +112,7 @@ class ReadDocument:
         )
 
 
-class ReadLedger(Sealed, ThreadOwnedState, CarriedDocument[ReadDocument], DependentStateTier):
+class ReadLedger(SingleFileStore, Sealed, ThreadOwnedState, CarriedDocument[ReadDocument], DependentStateTier):
     filename = "read_ledger.json"
 
     record_type = ReadDocument
@@ -123,7 +124,7 @@ class ReadLedger(Sealed, ThreadOwnedState, CarriedDocument[ReadDocument], Depend
                           snapshot: RegistryProvenance) -> ReadDocument:
         owners = tuple(snapshot.threads[snapshot.canonical_name(viewer)].incarnation.recorded_names(snapshot))
         conversations = (AllConversation(), *conversation.recorded_keys(snapshot))
-        with self.locked(mode=SharedLock()):
+        with self.guarded_read():
             return self._read_using(lambda data: FieldCodec.decode_selected(ReadDocument, data,
                 {(ReadDocument, "messages"): owners, (ReadCursor, "conversations"): conversations},
                 fields=("messages", "bus_identity")))
@@ -207,6 +208,15 @@ class ReadLedger(Sealed, ThreadOwnedState, CarriedDocument[ReadDocument], Depend
         return snapshot.recipient(recipient, original).read_effect(
             self, original.message, snapshot, document=document
         )
+
+    def changed_notifications(
+        self, marks: Iterable[NotificationReadMark], snapshot: RegistrySnapshot,
+    ) -> tuple[NotificationReadMark, ...]:
+        """Compare only the source/recipient display facts a window actually used."""
+        document = self.read()
+        return tuple(mark for mark in marks if mark.displayed_to != self.displayed_recipient(
+            mark.source, mark.recipient, snapshot, document=document,
+        ))
 
     def historical_displayed_recipient(
         self, message, recipient, snapshot: RegistryProvenance, *, document=None

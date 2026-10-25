@@ -21,6 +21,7 @@ from agent_comms.bus import (
 )
 from agent_comms.activity_clocks import ChannelActivity
 from agent_comms.bus_activity_index import ActivityMaximum
+from agent_comms.bus_route_counts import BusRouteCounts
 from agent_comms.bus_publication import Delivered, HumanOrigin, KeyedPublication
 from agent_comms.bus_tables import AnsweredSource, BusSchema, MessageIdentitySource
 from agent_comms.messages import (
@@ -28,13 +29,17 @@ from agent_comms.messages import (
     BusRow,
     BusTables,
     Claimed,
+    ClaimHolders,
     ClaimHistoryKind,
+    ClaimNoticeKind,
     ConversationActivity,
+    HandoffKind,
     InfoKind,
     MembershipTransition,
     Message,
     MessageKind,
     MessageRoleWire,
+    MessageRoutes,
     NoticeRole,
 )
 from agent_comms.channel_targets import ThreadTarget
@@ -45,7 +50,7 @@ from agent_comms.errors import (
     RelationViolationError,
     UnclaimedError,
 )
-from agent_comms.field_codec import MessageId, TimestampText
+from agent_comms.field_codec import GitCommitText, MessageId, MessageIdText, TimestampText
 from agent_comms.message_reference import MessageReference
 from agent_comms.read_basis import RepliesDisplayScope
 from agent_comms.response_acknowledgement import (
@@ -131,22 +136,14 @@ def test_projection_digest_ignores_infrastructure_source(
     assert projection_source_digest(projection_source) == before
 
 
-def test_projection_digest_tracks_declared_column_spelling(projection_source: Path) -> None:
+@pytest.mark.parametrize("owner, changes", ((MessageIdText, True), (GitCommitText, False)))
+def test_projection_digest_tracks_declared_column_spelling(
+    projection_source: Path, owner: type, changes: bool
+) -> None:
     before = json.loads(projection_source_digest(projection_source))["message_identity_source"]
-    codec = projection_source / "field_codec.py"
-    original = codec.read_text()
-    related = "digits: ClassVar[int] = 12"
-    assert original.count(related) == 1
-    codec.write_text(original.replace(related, "digits: ClassVar[int] = 13"))
-    assert (
-        json.loads(projection_source_digest(projection_source))["message_identity_source"] != before
-    )
-    unrelated = 'spelling = re.compile("[0-9a-f]{7,40}")'
-    assert original.count(unrelated) == 1
-    codec.write_text(original.replace(unrelated, 'spelling = re.compile("[0-9a-f]{8,40}")'))
-    assert (
-        json.loads(projection_source_digest(projection_source))["message_identity_source"] == before
-    )
+    edit_inside(projection_source, owner)
+    after = json.loads(projection_source_digest(projection_source))["message_identity_source"]
+    assert (after != before) == changes
 
 
 def test_nominal_message_id_column_stores_plain_text() -> None:
@@ -173,6 +170,7 @@ def test_nominal_message_id_column_stores_plain_text() -> None:
         BusProjectionTables,
         BusRecord,
         Claimed,
+        ClaimHolders,
         ConversationActivity,
         MessageKind,
         ThreadTarget,
@@ -246,6 +244,18 @@ def test_install_refuses_existing_schema_changes_until_an_explicit_rebuild(bus):
         BusProjectionTables.reset_schema(db)
     Bus.install(bus.path)
     assert bus.page(3, 2) == (second, record)
+
+
+def test_producer_digest_reads_routing_not_send_checks():
+    """A send-time check produces no route row, so editing it rebuilds no history."""
+    members = dict(BusRouteCounts.producer_members())
+    assert MessageRoutes in BusRouteCounts.producer_owners()
+    assert MessageKind not in BusRouteCounts.producer_owners()
+    assert members[HandoffKind] == ()
+    assert {
+        name for member in members[ClaimNoticeKind]
+        for name in BusRouteCounts.bound_names(member)
+    } == {"conversation_message", "route_rows"}
 
 
 def test_projection_freshness_follows_its_producing_source(bus):
@@ -643,7 +653,8 @@ def test_human_refusal_rolls_back_the_header(tmp_path, bus):
 
 
 def test_notification_failure_carries_the_committed_message(tmp_path, bus):
-    bus.path.with_suffix(".changed").mkdir()
+    marker, = bus.source_paths(bus.path.parent)
+    marker.mkdir(parents=True)
     origin = HumanOrigin("author", 1, str(tmp_path))
     with pytest.raises(CommittedMessageError) as failed:
         origin.append(

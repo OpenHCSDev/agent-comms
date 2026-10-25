@@ -20,7 +20,7 @@ try {
   });
   const begun = performance.now();
   assert.deepEqual(
-    await requestOwnerTool(path, Buffer.from("request\n"), 4096, "unavailable"),
+    await requestOwnerTool(path, Buffer.from("request\n"), 4096),
     { ok: true },
   );
   assert.ok(performance.now() - begun >= 12_000);

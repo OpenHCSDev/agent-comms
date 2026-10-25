@@ -12,7 +12,8 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, ClassVar
 
 from agent_comms.declared_family import DeclaredFamily
-from agent_comms.store_files import ProcessSingleton, SqliteStore
+from agent_comms.process_claim import ProcessSingleton
+from agent_comms.store_files import SqliteStore
 from agent_comms.installer.probes.carry import Carry
 from agent_comms.pi_events import PiEvent
 from agent_comms.private_registry_guard import RegistryPrivacy
@@ -89,8 +90,11 @@ class OrderPhase(DeclaredFamily, affix="Phase"):
 class UnplannedPhase(OrderPhase):
     @classmethod
     def order_refusals(cls, reading: PlanReading, reason: str) -> tuple[str, ...]:
+        """A stated reason answers the refusal, so main is read only when it is missing."""
+        if len(reason.split()) >= 8:
+            return ()
         ready = tuple(phase for phase in PlanPhase.members_with(PlanPhase) if phase.ready(reading))
-        if ready and len(reason.split()) < 8:
+        if ready:
             return (
                 "Plan phases are ready: "
                 + ", ".join(phase.declared_name for phase in ready)
@@ -129,11 +133,7 @@ class PlanPhase(OrderPhase, declared_name=None):
     def ordered_since(cls, reading: PlanReading) -> float:
         """When the phase was first ordered to its current holders; a re-sent order keeps the
         time of the first, so re-sending never restarts the clock."""
-        return min(
-            order.at.recorded_at("A plan order")
-            for todo in cls.holding(reading)
-            for order in (*todo.prior_orders, todo.order.checked())
-        )
+        return min(todo.first_ordered_at for todo in cls.holding(reading))
 
     @classmethod
     def ready(cls, reading: PlanReading) -> bool:
@@ -559,7 +559,7 @@ class TurnIdsPhase(Id128NominalPhase):
 
 
 class GoalIdsPhase(Id128NominalPhase):
-    """6: goal ids are ``GoalId``, minted by it, never by a hand-written ``uuid4().hex``."""
+    """6: goal ids are ``GoalId``, minted by it, never minted by hand."""
 
     after = (NominalIdTypePhase,)
     evidence = Id128NominalPhase.plain("goal_id|original_goal_id")
@@ -941,9 +941,9 @@ class StoreGuardFamiliesPhase(StoreGuardsPhase):
     evidence = AllEvidence(
         (
             ClassDeclared(SqliteStore.__name__, ("src/agent_comms/store_files.py",)),
-            ClassDeclared(ProcessSingleton.__name__, ("src/agent_comms/store_files.py",)),
+            ClassDeclared(ProcessSingleton.__name__, ("src/agent_comms/process_claim.py",)),
             PatternAbsent(r"fcntl\.flock\(",
-                          ("src", ":!src/agent_comms/store_files.py", ":!src/agent_comms/skills/")),
+                          ("src", ":!src/agent_comms/process_claim.py", ":!src/agent_comms/skills/")),
             PatternAbsent(r"_store_lock\(", ("src/agent_comms/typed_table.py",)),
             PatternAbsent(r"_store_lock\(path\), closing", ("src/agent_comms/locked_store.py",)),
         )
@@ -960,7 +960,7 @@ class ReadWriteMembersPhase(StoreGuardsPhase):
             ClassDeclared("MultiFileStore", ("src/agent_comms/store_files.py",)),
             PatternAbsent(r"(\.locked|_store_lock|_async_store_lock|ordered)\([^)]*(mode|contention)=",
                           ("src", ":!src/agent_comms/skills/")),
-            PatternAbsent(r"\.locked\(", ("src", *StoreGuardsPhase.owners)),
+            PatternAbsent(r"def locked\(", ("src", *StoreGuardsPhase.owners)),
         )
     )
 

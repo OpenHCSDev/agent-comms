@@ -25,7 +25,7 @@ from .notification_progress import (
     SentProgress,
     ShownToModelProgress,
 )
-from .presentation import MessageNotification
+from .notification_evidence import NotificationAssignmentRead, NotificationWindow
 from .private_registry_guard import RegistryPrivacy
 from .typed_table import BooleanStorage, TypedRow
 
@@ -223,28 +223,26 @@ class UnrecordedNotificationSource(NotificationSource):
 
 
 @dataclass(frozen=True)
-class NotificationAssignmentRead:
-    """Assignment rows captured from one caller-owned coordination snapshot."""
-
-    sources: tuple[Delivered, ...]
-    rows: tuple[tuple[WakeAssignment, AssignmentActivityEvidence], ...]
-
-    def resolve(self, root: Path) -> tuple[NotificationAssignment, ...]:
-        resolved = tuple(
-            NotificationAssignment(
-                assignment, activity.resolve(pending_at_ms=assignment.updated_at_ms)
-            )
-            for assignment, activity in self.rows
-        )
-        return NotificationAssignment._recorded_conversation_responses(
-            root, self.sources, resolved
-        )
-
-
-@dataclass(frozen=True)
 class NotificationAssignment(NotificationSource):
     assignment: WakeAssignment
     activity: AssignmentActivity
+
+    @classmethod
+    def changed(cls, reads: Iterable[NotificationAssignmentRead], root: Path) -> tuple[NotificationAssignmentRead, ...]:
+        """Acquire fresh bounded rows once; retained reads own their equality."""
+        reads = tuple(reads)
+        sources = tuple({source.message.reference: source
+                         for read in reads for source in read.sources}.values())
+        fresh = {}
+        for sources_chunk in NotificationWindow.chunks(sources):
+            fresh.update(cls.read(root, sources_chunk).rows_by_source())
+        return tuple(read for read in reads if read.differs_from(fresh))
+
+    @classmethod
+    def resolve(cls, root: Path, read: NotificationAssignmentRead) -> tuple[NotificationAssignment, ...]:
+        resolved = tuple(cls(assignment, activity.resolve(pending_at_ms=assignment.updated_at_ms))
+                         for assignment, activity in read.rows)
+        return cls._recorded_conversation_responses(root, read.sources, resolved)
 
     @classmethod
     def for_deliveries(
@@ -305,15 +303,15 @@ class NotificationAssignment(NotificationSource):
         """Capture detached assignment evidence for one bounded window of originals
         from the caller's SQLite snapshot."""
         sources = tuple(sources)
-        if len(sources) > MessageNotification.window_limit:
+        if len(sources) > NotificationWindow.window_limit:
             raise ValueError("Notification reads require a bounded visible message window")
         if not sources:
             return NotificationAssignmentRead((), ())
         privacy.coordinator_schema().require_schema(connection)
         columns = ",".join(f"w.{name}" for name in WakeAssignment.columns())
         # The window's assignments and their native-input membership are each
-        # selected once; membership has no assignment index, so it is built
-        # for these assignments only, not once per row and per column.
+        # selected once, membership by its assignment index, not once per row
+        # and per column.
         rows = WakeAssignment.joined(
             connection.execute(
                 f"WITH w AS MATERIALIZED (SELECT * FROM {WakeAssignment.declared_name} "

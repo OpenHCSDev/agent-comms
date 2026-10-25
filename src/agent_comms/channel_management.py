@@ -185,7 +185,7 @@ class ChannelManagement:
 
     def _update_tags(self, name: str, choice: TagChoice) -> Thread:
         previous_channels = self.bus.channel_declarations()
-        with self.registry.store.locked(), self.catalog.editing() as document:
+        with self.registry.store.guarded_write(), self.catalog.editing() as document:
             thread = self.registry.require(name)
             updated = replace(thread, tags=choice.for_child(thread.tags))
             for tag in updated.tags - document.tags:
@@ -295,6 +295,6 @@ class ChannelManagement:
 
     def _apply_tag_change(self, name: str, replacement: str | None,
                              cohort: tuple[Thread, ...]) -> None:
-        with self.registry.store.locked(), self.catalog.editing() as document:
+        with self.registry.store.guarded_write(), self.catalog.editing() as document:
             document.change_tag(name, replacement)
             self.registry.change_tag(cohort, name, replacement)

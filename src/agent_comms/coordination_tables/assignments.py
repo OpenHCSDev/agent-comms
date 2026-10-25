@@ -22,7 +22,7 @@ from agent_comms.coordination_tables.executions import ExecutionRecord
 from agent_comms.coordination_tables.participants import Participants
 from agent_comms.coordination_tables.responses import ResponseObligation
 from agent_comms.envelope_claim_transitions import AssignmentBinding
-from agent_comms.field_codec import MessageId, SnapshotExclude, ThreadLookup, WireName, projected
+from agent_comms.field_codec import AssignmentId, MessageId, SnapshotExclude, ThreadLookup, WireName, projected
 from agent_comms.message_reference import MessageReference
 from agent_comms.typed_table import (
     Column,
@@ -137,13 +137,13 @@ class WakeAssignment(
         )
 
     assignment_id: Annotated[
-        str,
+        AssignmentId,
         WireName("claim_id"),
-        FrozenColumn(primary_key=True, check="length(assignment_id) BETWEEN 1 AND 256"),
+        FrozenColumn(primary_key=True),
     ]
     recipient: Annotated[str, FrozenColumn(check="length(recipient) BETWEEN 1 AND 256")]
     recipient_lookup: Annotated[ThreadLookup, FrozenColumn()]
-    wire_seq: Annotated[int, FrozenColumn(check="wire_seq > 0")]
+    wire_seq: Annotated[int, FrozenColumn(check="wire_seq > 0", index=True)]
     message_id: Annotated[MessageId, FrozenColumn(check="length(message_id) BETWEEN 1 AND 256")]
     audience: Annotated[MessageAudience, FrozenColumn()]
     lifecycle: Annotated[AssignmentState, SnapshotExclude()]
@@ -196,7 +196,6 @@ class WakeAssignment(
             raise ValueError("wire_seq and revision must be positive")
         if self.accepted_at_ms < 0 or self.updated_at_ms < self.accepted_at_ms:
             raise ValueError("claim timestamps are inconsistent")
-        object.__setattr__(self, "audience", MessageAudience(self.audience))
 
     exact_target: ClassVar[Generated] = Generated(
         str,
@@ -277,7 +276,7 @@ class ExecutionAssignmentLink(
         AND c.exact_target IS NOT NULL AND c.recipient_lookup = e.owner_lookup ))"""
 
     execution_id: Annotated[str, Column(primary_key=True)]
-    assignment_id: Annotated[str, WireName("claim_id"), Column(unique=True)]
+    assignment_id: Annotated[AssignmentId, WireName("claim_id"), Column(unique=True)]
     ordinal: Annotated[int, Column(primary_key=True, check="ordinal>=0")]
     unique = (("execution_id", "assignment_id"),)
 

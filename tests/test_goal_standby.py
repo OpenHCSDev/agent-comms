@@ -6,7 +6,7 @@ from dataclasses import replace
 import pytest
 
 from agent_comms.child_process import ProcessIdentity
-from agent_comms.field_codec import TurnId
+from agent_comms.field_codec import GoalWaitId, TurnId
 from agent_comms.goal_actions import (
     EditGoalAction,
     GoalPrecondition,
@@ -206,10 +206,10 @@ def test_liveness_check_releases_preexisting_closed_wait_group(tmp_path, pending
     # enforced. Both turns subsequently finish without any dependency reply.
     owner = comms.registry.require("bob")
     peer = comms.registry.require("alice")
-    GoalWaits(tmp_path / "goal_waits.sqlite3").record(
+    GoalWaits(tmp_path).record(
         RecordedGoalWait(
             bob.id,
-            "bob-wait",
+            GoalWaitId.mint(),
             bob.revision,
             0,
             (GoalWaitTarget(peer.incarnation.require_recorded()),),
@@ -251,10 +251,10 @@ def test_new_live_dependency_turn_keeps_old_wait_group_open(tmp_path, bound_old_
     )
     owner = comms.registry.require("bob")
     peer = comms.registry.require("alice")
-    GoalWaits(tmp_path / "goal_waits.sqlite3").record(
+    GoalWaits(tmp_path).record(
         RecordedGoalWait(
             bob.id,
-            "bob-wait",
+            GoalWaitId.mint(),
             bob.revision,
             0,
             (GoalWaitTarget(peer.incarnation.require_recorded()),),
@@ -294,3 +294,26 @@ def test_standby_refuses_canonical_reply_that_arrived_before_wait(tmp_path, ackn
     assert isinstance(comms.goals.goal_wait("parent"), NoGoalWait)
     assert comms.registry.require("parent").goal == goal
     assert not (tmp_path / "input_dispositions.sqlite3").exists()
+
+
+@pytest.mark.parametrize("bridge_alive", [True, False])
+def test_standby_on_a_paused_bridge_waits_only_while_its_process_lives(tmp_path, bridge_alive):
+    from agent_comms.thread_status import PausedBridgeThreadStatus
+
+    comms = canonical_goal_wire(tmp_path)
+    comms.registry.declare(Thread(
+        "unit", frozenset(), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid())))
+    commander = Thread("commander", frozenset(), str(tmp_path))
+    if bridge_alive:
+        commander = replace(commander, process_identity=ProcessIdentity.capture(os.getpid()))
+    comms.registry.register(commander, PausedBridgeThreadStatus())
+    goal = comms.goals.update_goal("unit", SetGoalAction(text="Wait for the commander's verdict"))
+    standby = StandbyGoalAction(
+        expect=GoalPrecondition(goal_id=OneGoal(goal.id)), wait_for=("commander",))
+    if bridge_alive:
+        comms.goals.update_goal("unit", standby)
+        assert comms.goals.recover_closed_goal_wait("unit") == ()
+        assert isinstance(comms.goals.goal_execution("unit"), StandbyExecution)
+    else:
+        with pytest.raises(ValueError, match="will answer"):
+            comms.goals.update_goal("unit", standby)

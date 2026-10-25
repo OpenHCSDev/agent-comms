@@ -18,14 +18,14 @@ from abc import ABC, abstractmethod
 from collections.abc import AsyncIterator, Iterator, Mapping
 from contextlib import aclosing, closing
 from dataclasses import dataclass, field, fields, replace
-from functools import partial
+from functools import cached_property, partial
 from inspect import iscoroutinefunction, signature
 from itertools import dropwhile, takewhile
 from pathlib import Path
 from types import get_original_bases
 from typing import Annotated, ClassVar, Literal, Self, TextIO, cast, get_args, get_origin
 
-from acp.exceptions import RequestError
+from .coordination_errors import Refused
 from pydantic import JsonValue
 
 from agent_comms.errors import ToolRefusedError
@@ -124,6 +124,8 @@ from .harness_install import Harness
 from agent_comms.installer.probes.harnesses import HarnessInstallation, InstallResult
 from .history_result import HistoryPageResult
 from .history_views import CallingThreadTarget, NamedThreadTarget, PollTarget
+from .goals import Goal
+from .lifecycle_capability import Complete
 from .importing import ImportedSessionMetadata, ImportLimits, ThreadImported
 from .input_disposition import InputDispositions
 from .input_origin import InputProvenance
@@ -203,7 +205,7 @@ from .turn_context import (
     Provenance,
     TurnContext,
 )
-from .typed_table import ReconciledFile, WriterOwnedStore
+from .typed_table import HeldBusFile, NoPractice, Practice, ReconciledFile, StoreRewrite, WriterOwnedStore
 from .working_memory_annotations import WorkingMemoryAnnotations
 from .working_memory_labels import ClassifierVersion, ModelLabel, QuestionVersion
 from .working_memory_questions import SpanAnswer
@@ -1875,6 +1877,21 @@ class ReconciledStoresResult(CliResult):
 
 
 @dataclass(frozen=True)
+class PlannedStoresResult(CliResult):
+    """Target-only rewrite plans; outgoing reconcile replies remain unchanged."""
+
+    rewrites: tuple[StoreRewrite, ...]
+
+    @property
+    def rewritten(self) -> tuple[Path, ...]:
+        return tuple(rewrite.path for rewrite in self.rewrites)
+
+    @property
+    def backup_files(self) -> tuple[Path, ...]:
+        return tuple(path for rewrite in self.rewrites for path in rewrite.backup_files())
+
+
+@dataclass(frozen=True)
 class BusReadBack(CliResult):
     """What a bus's registry holds that a carry must keep: its threads."""
 
@@ -1905,22 +1922,15 @@ class ReadBackCliCommand(CliCommand[BusReadBack], declared_name="read-back"):
 
 
 @dataclass(frozen=True, kw_only=True)
-class StoreReconcileCliCommand(CliCommand[ReconciledStoresResult]):
+class StoreReconcileCliCommand[Answer: CliResult](CliCommand[Answer]):
     """Every declared store whose schema differs from this runtime's declarations; each
     member says what it does with one."""
 
-    @staticmethod
     @abstractmethod
-    def changes(owner: type[ReconciledFile], path: Path) -> bool:
-        """Whether this member changes, or would change, the store at ``path``."""
+    def answer(self, root: Path) -> Answer:
+        """This operation's result from the files declared under the root."""
 
-    def answer(self, root: Path) -> ReconciledStoresResult:
-        return ReconciledStoresResult(tuple(
-            path.relative_to(root)
-            for path, owner in sorted(ReconciledFile.existing_in(root).items())
-            if self.changes(owner, path)))
-
-    def apply(self, ctx: Comms) -> ReconciledStoresResult:
+    def apply(self, ctx: Comms) -> Answer:
         return self.answer(ctx.root)
 
     def execute(self, route: CommsRoute, output: TextIO) -> int:
@@ -1929,39 +1939,86 @@ class StoreReconcileCliCommand(CliCommand[ReconciledStoresResult]):
 
 
 @dataclass(frozen=True, kw_only=True)
-class ReconcileStoresCliCommand(StoreReconcileCliCommand, declared_name="reconcile-stores"):
+class ReconcileStoresCliCommand(
+    StoreReconcileCliCommand[ReconciledStoresResult], declared_name=HeldBusFile.carry_verb,
+):
     help = ("Reconcile every declared store's schema onto this runtime's declarations; "
             "the installer runs it under maintenance after the outgoing owners stop")
 
-    @staticmethod
-    def changes(owner: type[ReconciledFile], path: Path) -> bool:
-        return owner.reconcile_at(path)
+    practice: Annotated[Practice, Argument(flags=("--practice-root",))] = NoPractice()
+
+    def answer(self, root: Path) -> ReconciledStoresResult:
+        return ReconciledStoresResult(tuple(
+            path.relative_to(root)
+            for path, owner in sorted(ReconciledFile.existing_in(root).items())
+            if owner.reconcile_at(path, self.practice)))
 
 
 @dataclass(frozen=True, kw_only=True)
-class PlannedReconcileCliCommand(StoreReconcileCliCommand, declared_name="planned-reconcile"):
+class PlannedReconcileCliCommand(
+    StoreReconcileCliCommand[PlannedStoresResult], declared_name="planned-reconcile",
+):
+    carrying: Annotated[tuple[type[WriterOwnedStore], ...], Argument(options={"nargs": "*"})] = ()
+    """These declarations are validated after their pending carries, not before them."""
     help = ("Name every store reconcile-stores would rewrite, reading each without writing; "
             "the installer backs them up and checks them against its rehearsal first")
 
-    @staticmethod
-    def changes(owner: type[ReconciledFile], path: Path) -> bool:
-        schema = owner.schema_at(path)
-        with closing(owner.read_snapshot(path)) as db:
-            return schema.reconcile_writes(db)
-
-    def answer(self, root: Path) -> ReconciledStoresResult:
+    def answer(self, root: Path) -> PlannedStoresResult:
         """A store outside the bus that the target's writer could not open refuses the plan."""
-        WriterOwnedStore.practice_openings()
-        return super().answer(root)
+        WriterOwnedStore.practice_openings(root, excluding=self.carrying)
+        rewrites: list[StoreRewrite] = []
+        for path, owner in sorted(ReconciledFile.existing_in(root).items()):
+            schema = owner.schema_at(path)
+            with closing(owner.read_snapshot(path)) as db:
+                rewrites.extend(schema.reconcile_plan(db, path.relative_to(root)))
+        return PlannedStoresResult(tuple(rewrites))
 
 @dataclass(frozen=True)
 class CheckoutResult(CliResult):
     checkout: Annotated[Path, PathText]
 
 
+@dataclass(frozen=True)
+class CheckoutGrant(DeclaredFamily, affix="CheckoutGrant"):
+    """The caller's existing work authority, not a synthetic problem order."""
+
+    thread: Thread
+
+    @abstractmethod
+    def require(self) -> None: ...
+
+    @abstractmethod
+    def source(self) -> Repo: ...
+
+
+@dataclass(frozen=True)
+class OrderCheckoutGrant(CheckoutGrant):
+    todo: Todo
+
+    def require(self) -> None:
+        self.todo.require_assignee(self.thread.incarnation, self.todo.held().generation)
+
+    def source(self) -> Repo:
+        return self.todo.repository
+
+
+@dataclass(frozen=True)
+class GoalCheckoutGrant(CheckoutGrant):
+    goal: Goal
+    repository: Repo
+
+    def require(self) -> None:
+        self.thread.goal.require().require_id(self.goal.id)
+        if self.goal.state.items_with(Complete, self.goal):
+            raise ValueError("A completed goal cannot allocate a checkout.")
+
+    def source(self) -> Repo:
+        return self.repository
+
+
 class CheckoutOperation(DeclaredFamily, affix="CheckoutOperation"):
-    """What a problem checkout command does to the caller's checkout of that problem. Each
-    member owns what it requires of the problem, its storage check and its Git work, so adding
+    """What a checkout command does to the caller's isolated repository. Each
+    member owns its required authority, storage check and Git work, so adding
     and retiring stay in the Checkout owner."""
 
     @classmethod
@@ -1971,24 +2028,25 @@ class CheckoutOperation(DeclaredFamily, affix="CheckoutOperation"):
 
 
 class AddCheckoutOperation(CheckoutOperation):
-    """Create the checkout from origin/main, or repair an existing one's pinned submodules;
-    only the holder of the problem's open order allocates one."""
+    """Create from origin's declared default or repair the checkout's pinned submodules;
+    the caller's order or goal grants the allocation."""
 
     @classmethod
     def apply(cls, command: PreparedCheckoutCliCommand, ctx: Comms, thread: Thread,
               destination: Path) -> None:
-        todo = ctx.goals.todos.get(command.problem)
-        todo.require_assignee(thread.incarnation, todo.held().generation)
-        repository = command.source(ctx, todo)
+        grant = command.grant(ctx, thread)
+        grant.require()
+        repository = command.source(ctx, grant)
         CheckoutStorageEffect(destination, repository.github).check(
             StorageProjection(ctx.registry.storage_rule, thread))
         if destination.exists():
             Checkout(destination).prepare()
         else:
-            Repo.git(repository.checkout, "fetch", "origin", "main")
+            branch = repository.default_branch()
+            Repo.git(repository.checkout, "fetch", "origin", branch)
             Checkout.add(
                 repository.checkout, destination,
-                CheckoutStart.of(repository.checkout, f"work/{destination.name}", "origin/main"),
+                CheckoutStart.of(repository.checkout, f"work/{destination.name}", f"origin/{branch}"),
             )
 
 
@@ -2008,13 +2066,15 @@ class RemoveCheckoutOperation(CheckoutOperation):
 @dataclass(frozen=True, kw_only=True)
 class PreparedCheckoutCliCommand(CliCommand):
     operation: Annotated[type[CheckoutOperation], Argument(flags=("operation",))]
-    problem: Annotated[str, Argument(flags=("problem",))]
 
     @abstractmethod
     def destination(self, rule: StorageRule, thread: Thread) -> Path: ...
 
     @abstractmethod
-    def source(self, ctx: Comms, todo: Todo) -> Repo: ...
+    def grant(self, ctx: Comms, thread: Thread) -> CheckoutGrant: ...
+
+    def source(self, ctx: Comms, grant: CheckoutGrant) -> Repo:
+        return grant.source()
 
     def apply(self, ctx: Comms) -> CliResult:
         thread = CallingThreadTarget().thread(ctx.registry)
@@ -2027,16 +2087,17 @@ class PreparedCheckoutCliCommand(CliCommand):
 class CheckoutCliCommand(PreparedCheckoutCliCommand,
                          declared_name=OrderCheckoutAllocation.verb):
     help = "Create, repair or remove an owned problem checkout with its pinned submodules"
+    problem: Annotated[str, Argument(flags=("problem",))]
+
+    def grant(self, ctx: Comms, thread: Thread) -> CheckoutGrant:
+        return OrderCheckoutGrant(thread, ctx.goals.todos.get(self.problem))
 
     def destination(self, rule: StorageRule, thread: Thread) -> Path:
         return rule.order_checkout(rule.roots_of(thread), self.problem)
 
-    def source(self, ctx: Comms, todo: Todo) -> Repo:
-        return todo.repository
-
 
 @dataclass(frozen=True, kw_only=True)
-class RepositoryCheckoutCliCommand(PreparedCheckoutCliCommand,
+class RepositoryCheckoutCliCommand(CheckoutCliCommand,
                                    declared_name=RepositoryCheckoutAllocation.verb):
     help = "Create, repair or remove an owned problem checkout of a registered OWNER/REPO"
     repository: Annotated[RepositoryName, Argument(flags=("repository",))]
@@ -2044,7 +2105,7 @@ class RepositoryCheckoutCliCommand(PreparedCheckoutCliCommand,
     def destination(self, rule: StorageRule, thread: Thread) -> Path:
         return rule.repository_checkout(rule.roots_of(thread), self.problem, self.repository)
 
-    def source(self, ctx: Comms, todo: Todo) -> Repo:
+    def source(self, ctx: Comms, grant: CheckoutGrant) -> Repo:
         repositories = ctx.registry.snapshot().commander_project.require().repos
         selected = [repository for repository in repositories
                     if repository.github == self.repository]
@@ -2052,6 +2113,24 @@ class RepositoryCheckoutCliCommand(PreparedCheckoutCliCommand,
             raise ValueError(f'{self.repository.to_wire()} is not a registered repository.')
         repository, = selected
         return repository
+
+
+@dataclass(frozen=True, kw_only=True)
+class GoalCheckoutCliCommand(PreparedCheckoutCliCommand, declared_name="goal-checkout"):
+    help = "Create, repair or remove an isolated repository checkout for your own goal"
+    repository: Annotated[Path, PathText, Argument(flags=("repository",))]
+
+    @cached_property
+    def selected_repository(self) -> Repo:
+        return Repo.of(self.repository.resolve())
+
+    def grant(self, ctx: Comms, thread: Thread) -> CheckoutGrant:
+        return GoalCheckoutGrant(thread, thread.goal.require(), self.selected_repository)
+
+    def destination(self, rule: StorageRule, thread: Thread) -> Path:
+        return rule.repository_checkout(
+            rule.roots_of(thread), thread.goal.require().id, self.selected_repository.github,
+        )
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -2386,7 +2465,7 @@ class ContextCliCommand(CliCommand):
                     payload = await connection.request("context")
                     native = FieldCodec.decode(NativeContextData, payload).require_session_file(
                         owner.runtime.path)
-                except RequestError as error:
+                except Refused as error:
                     return context, None, str(error)
                 return context, native, None
             finally:

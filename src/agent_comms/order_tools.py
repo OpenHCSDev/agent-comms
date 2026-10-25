@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from abc import abstractmethod
 from collections.abc import Mapping
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import Annotated, Literal
 
 from pydantic import JsonValue
@@ -29,13 +29,14 @@ from agent_comms.todos import (
     StrikeReason,
     Todo,
     TodoOperation,
+    JudgedCall,
     ToolCallVerdict,
 )
 from .commander.vibe_check import OverloadDegradation
 from .commander_hud import CommanderHud
 from .comms import Comms
 from .errors import ToolRefusedError
-from .field_codec import FieldCodec, MessageId, WireName
+from .field_codec import FieldCodec, MessageId, OrderId, WireName
 from .goal_actions import CreateProblemGoalAction, OrderGoalAction
 from .goals import Goal, OrderCheck
 from .heartbeat_frame import HeartbeatFrame
@@ -103,7 +104,7 @@ class ProblemClosed(ToolResult):
 class MessagePublished(ToolResult):
     """The Pi adapter decodes this reply as PublishedMessageToolDetails by its agentCommsKind."""
 
-    id: str
+    id: MessageId
     message: SentTranscript
     correction: CorrectionResult
     agent_comms_kind: Annotated[
@@ -148,16 +149,42 @@ class CommsChangeProblemTool(CommsTodoTool, declared_name="comms_todo"):
 
 
 @dataclass(frozen=True, kw_only=True)
-class CommsVerdictTool(CommsChangeProblemTool):
+class CommsVerdictTool(ThreadToolRequest):
+    """One verdict is a batch of one: Goals.judge_calls owns checking and recording."""
     label = "Judge order tool call"
     description = (
         "Record the commander's verdict on one tool call the holder made for its "
         "order: an accepted verdict quotes 4+ words of the order; a send-back strikes "
         "the holder and revises its Goal in the same write."
     )
+    problem: Annotated[str, *tool_field("Problem ID")]
     operation: Annotated[
         ToolCallVerdict, *tool_field("Accepted or send-back verdict on the judged tool call ID")
     ]
+
+    def apply(self, comms: Comms, caller: ThreadCaller) -> TodoChanged:
+        changed, = comms.goals.judge_calls(
+            (JudgedCall(self.problem, self.operation.authored_by(caller.identity(comms))),),
+            caller.commander(comms).name)
+        return TodoChanged(changed, changed.strike_count)
+
+
+@dataclass(frozen=True, kw_only=True)
+class CommsVerdictsTool(ThreadToolRequest):
+    label = "Judge many order tool calls"
+    description = (
+        "Record many verdicts in one call: each is checked against its order before any is "
+        "written and every refusal is listed together; accepted, superseded, rewritten and "
+        "dropped verdicts land in one transaction, and each send-back strikes with its Goal."
+    )
+    verdicts: Annotated[tuple[JudgedCall, ...], *tool_field("One verdict per judged tool call")]
+
+    def apply(self, comms: Comms, caller: ThreadCaller) -> TodoList:
+        actor = caller.identity(comms)
+        return TodoList(comms.goals.judge_calls(
+            tuple(replace(call, operation=call.operation.authored_by(actor))
+                  for call in self.verdicts),
+            caller.commander(comms).name))
 
 
 @dataclass(frozen=True)
@@ -371,7 +398,7 @@ class CommsOrderDeliverTool(PublishingToolRequest[ThreadCaller], ThreadToolReque
 class CommsOrderDoneTool(CommsTodoTool):
     label = "Check delivered order"
     description = "Verify and deliver an open order by its own ID; the unit's Goal is unchanged."
-    order_id: Annotated[str, *tool_field("Exact open order ID")]
+    order_id: Annotated[OrderId, *tool_field("Exact open order ID")]
     delivery: Annotated[
         OrderDelivery,
         *tool_field("A checked implementation delivery for fix, or a report for triage"),
@@ -495,11 +522,10 @@ class CommsOrderStoryTool(ReadTool, ToolRequest):
         "Send-back and its implied strike share one reason. "
         "Overwritten order bodies cannot be reconstructed."
     )
-    order_id: Annotated[str, *tool_field("Immutable order ID")]
+    order_id: Annotated[OrderId, *tool_field("Immutable order ID")]
 
     def apply(self, comms: Comms, caller: ToolCaller) -> OrderStory:
-        (story,) = OrderStory.collect(comms.goals.todos.for_order(self.order_id))
-        return story
+        return OrderStory.collect(self.order_id, comms.goals.todos.for_order(self.order_id))
 
 
 @dataclass(frozen=True, kw_only=True)

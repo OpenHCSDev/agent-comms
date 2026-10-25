@@ -65,7 +65,7 @@ def test_archived_duplicate_birth_keeps_names_without_selecting_an_arbitrary_own
 
 
 def test_activity_store_selects_only_requested_threads(tmp_path):
-    store = ActivityStore.at(tmp_path)
+    store = ActivityStore(tmp_path)
     for index in range(10):
         store.emit(Activity(f"peer-{index}", ActivityState.THINKING, "working"))
     assert set(store.current_for(("peer-7", "absent"))) == {"peer-7", "absent"}
@@ -89,4 +89,4 @@ def test_viewer_selects_the_outcomes_of_a_delivery_window(tmp_path, viewer_of, s
         comms.root, comms.registry, (original,),
         NotificationAssignment.read(comms.root, (original,)), viewer=viewer_of(lookups),
     )
-    assert {item.recipient for item in window[(sent.seq, sent.message_id)]} == seen
+    assert {item.recipient for item in window.outcomes[(sent.seq, sent.message_id)]} == seen

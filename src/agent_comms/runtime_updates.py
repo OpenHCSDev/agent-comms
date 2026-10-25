@@ -25,7 +25,7 @@ from .transcript_events import (
 from .thread_text import NoThreadText, ThreadText
 from .thread_identity import OfferedTools
 from .turn_phase import IdlePhase, ModelWaitPhase, TurnPhase
-from .turn_item import NativeTurnId, TurnItem
+from .turn_item import NativeItemId, NativeTurnId, TurnItem
 
 if TYPE_CHECKING:
     from .agent_events import RuntimeInfoObservation
@@ -53,7 +53,7 @@ class DraftAccumulator:
     def activity(self, update: ActiveItem) -> tuple[RuntimeUpdate, ...]:
         return (update,)
 
-    def snapshot(self, turn_id: NativeTurnId, item_id: str) -> tuple[DraftItem, ...]:
+    def snapshot(self, turn_id: NativeTurnId, item_id: NativeItemId) -> tuple[DraftItem, ...]:
         return ()
 
     def append(self, update: AppendDraftItem) -> tuple[RuntimeUpdate, ...]:
@@ -85,7 +85,7 @@ class PresentableDraft(DraftAccumulator, ABC):
     @abstractmethod
     def events(self) -> tuple[TranscriptEvent, ...]: ...
 
-    def snapshot(self, turn_id: NativeTurnId, item_id: str) -> tuple[DraftItem, ...]:
+    def snapshot(self, turn_id: NativeTurnId, item_id: NativeItemId) -> tuple[DraftItem, ...]:
         return (DraftItem(turn_id, item_id, self),)
 
 
@@ -97,7 +97,7 @@ class ToolDraft(PresentableDraft):
     def events(self) -> tuple[TranscriptEvent, ...]:
         return self.prefix
 
-    def snapshot(self, turn_id: NativeTurnId, item_id: str) -> tuple[DraftItem, ...]:
+    def snapshot(self, turn_id: NativeTurnId, item_id: NativeItemId) -> tuple[DraftItem, ...]:
         return super().snapshot(turn_id, item_id) if self.prefix else ()
 
 
@@ -105,7 +105,7 @@ class ToolDraft(PresentableDraft):
 class TextDraft(PresentableDraft):
     event_type: type[LiveTextTranscript]
     sections: dict[int, list[str]]
-    position: int | str
+    position: int | NativeItemId
     separator: ClassVar[str] = ""
 
     @classmethod
@@ -114,7 +114,7 @@ class TextDraft(PresentableDraft):
         event_type: type[LiveTextTranscript],
         parts: Iterable[str],
         started_at: EventTime,
-        position: int | str,
+        position: int | NativeItemId,
     ) -> Self:
         return cls(
             started_at, event_type, {index: [text] for index, text in enumerate(parts)}, position
@@ -322,7 +322,7 @@ class RuntimeUpdate(ABC):
         """Whether this update still needs publication before later updates."""
         return True
 
-    def page_record(self, turn_id: NativeTurnId, item_id: str) -> FinishedItem:
+    def page_record(self, turn_id: NativeTurnId, item_id: NativeItemId) -> FinishedItem:
         """Even an invisible item owns a source position and its page continuation."""
         return FinishedItem(turn_id, item_id, ())
 
@@ -423,7 +423,7 @@ class FinishedItem(TurnItem, RuntimeUpdate):
         later.add(self.key)
         return True
 
-    def page_record(self, turn_id: NativeTurnId, item_id: str) -> FinishedItem:
+    def page_record(self, turn_id: NativeTurnId, item_id: NativeItemId) -> FinishedItem:
         return self
 
     def add_to(self, history: ImportBuffer) -> None:

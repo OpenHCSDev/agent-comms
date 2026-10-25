@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, fields, replace
 from typing import TYPE_CHECKING, ClassVar, Self
 
 from agent_comms.coordination_errors import StaleRevision
@@ -12,6 +12,7 @@ from agent_comms.errors import RelationViolationError, RouteChangedError, Unregi
 from .declared_family import DeclaredFamily
 from .thread_identity import OwnerIdentity
 from .child_process import ProcessIdentity
+from .notification_evidence import NoNotificationWindow, NotificationWindow
 
 if TYPE_CHECKING:
     from .message_reference import MessageReference
@@ -186,23 +187,36 @@ class LiveThreadOwnerBinding(ThreadOwnerBinding):
 
 
 @dataclass(frozen=True, slots=True)
-class ThreadPresentation:
-    """A thread's acquired presentation, or its declared absence."""
+class ThreadStatusDisplay:
+    """The displayed status, independent of acquired notification history."""
 
     title: str
     marker: str
     summary: str
     status: ThreadPresentationStatus = IdleThreadPresentationStatus()
+    binding: ThreadOwnerBinding = field(default=UnavailableThreadOwnerBinding(), kw_only=True)
+
+    def status_display(self) -> ThreadStatusDisplay:
+        return ThreadStatusDisplay(**{
+            declared.name: getattr(self, declared.name)
+            for declared in fields(ThreadStatusDisplay)
+        })
+
+    def same_status(self, other: ThreadStatusDisplay) -> bool:
+        """Status equality never traverses acquired source history."""
+        return self.status_display() == other.status_display()
+
+
+@dataclass(frozen=True, slots=True)
+class ThreadPresentation(ThreadStatusDisplay):
+    """A thread's acquired presentation, or its declared absence."""
+
     notifications: tuple[MessageNotification, ...] = ()
     sent_notifications: tuple[MessageNotification, ...] = ()
-    binding: ThreadOwnerBinding = UnavailableThreadOwnerBinding()
     read_identity: TranscriptReadIdentity | None = None
     incoming_references: tuple[MessageReference, ...] = ()
     sent_references: tuple[MessageReference, ...] = ()
-
-    def notification_activity_names(self) -> frozenset[str]:
-        return frozenset(name for item in (*self.notifications, *self.sent_notifications)
-                         for name in item.activity_names())
+    notification_window: NotificationWindow = field(default_factory=NoNotificationWindow)
 
     def require(self, name: str) -> ThreadPresentation:
         """Require a presentation for a caller already bound to this thread."""
@@ -229,12 +243,6 @@ class ThreadPresentation:
             raise StaleRevision("Thread source incarnation changed during presentation")
         return self.with_sources(captured)
 
-    def same_status(self, other: ThreadPresentation) -> bool:
-        """Status changes do not require reacquiring an unchanged source window."""
-        return (self.title, self.marker, self.summary, self.status, self.binding) == (
-            other.title, other.marker, other.summary, other.status, other.binding,
-        )
-
     def same_observation(self, other: ThreadPresentation) -> bool:
         """Equal view and turn evidence, not merely equal global store revisions.
 
@@ -257,19 +265,20 @@ class ThreadPresentation:
         transcripts = window.read.owner
         sources = tuple({source.message.reference: source
                          for source in (*window.sources, *window.sent_sources)}.values())
+        notification_read = NotificationAssignment.read(transcripts.root, sources)
         projected = MessageNotification.delivery_window(
-            transcripts.root, transcripts.registry, sources,
-            NotificationAssignment.read(transcripts.root, sources),
+            transcripts.root, transcripts.registry, sources, notification_read,
             viewer=OwnerOutcomes.of(window.read.identity.thread),
         )
         incoming, sent = (
             tuple(replace(notification, message=source.message)
                   for source in selected
-                  for notification in projected[source.message.seq, source.message.message_id])
+                  for notification in projected.outcomes[source.message.seq, source.message.message_id])
             for selected in (window.sources, window.sent_sources)
         )
         return replace(
             self, notifications=incoming, sent_notifications=sent,
+            notification_window=projected,
             read_identity=window.read.identity,
             incoming_references=tuple(source.message.reference for source in window.sources),
             sent_references=tuple(source.message.reference for source in window.sent_sources),

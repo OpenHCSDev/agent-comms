@@ -26,7 +26,7 @@ from .channel_targets import NamedTarget
 from .channels import AllChannel
 from .controller import Controller
 from .coordinator import Coordination
-from .field_codec import InputId, TurnId, GoalId
+from .field_codec import GoalId, InputId, TurnId
 from .errors import RelationViolationError
 from .following_inputs import OwnerFollowingInputs
 from .goal_actions import (
@@ -48,7 +48,7 @@ from .pi_commands import (
 )
 from .pi_payloads import StateData
 from .queued_input import InitialInput
-from .routing import TurnRouting
+from .routing import NoTurnRouting, Routing
 from .runtime import (
     RuntimeServer,
     SubscriberClosed,
@@ -57,7 +57,7 @@ from .threads import Thread
 from .transcript_updates import TurnTranscriptUpdate
 from .turn_effects import TurnEffects
 from .turn_lease import TurnLeaseFence, TurnState
-from .turn_input_source import TurnAcceptance
+from .turn_input_source import InputDependency, NoInputDependency, TurnAcceptance
 from .turn_outcome import TurnOutcome
 from .turn_phase import CancellingPhase, TurnPhase
 from .turn_terminal import TurnInterruption
@@ -73,9 +73,6 @@ if TYPE_CHECKING:
 
 AGENT_PREFIX = "!agent "
 RELAY_PREFIX = "!relay "
-
-type TurnTask = asyncio.Task[TurnOutcome | PromptResponse | None]
-
 
 class CompactionObservation(MroDispatch):
     """All selected/native compaction callers update the existing turn owner."""
@@ -113,10 +110,8 @@ class TurnRunner:
         self.owner_stop = owner_stop
         self.agent_bin = agent_bin.configured()
         self.agent_args = agent_args.configured()
-        self.turn_tasks: dict[str, TurnTask] = {}
         # One backend per ACP session, of the bound thread's declared kind.
         self.persistent_backends: dict[str, AgentBackend] = {}
-        self.turn_locks: dict[str, asyncio.Lock] = {}
         self.goals = GoalScheduler(comms, effects)
 
     def bind(self, sessions: SessionLifecycle, inputs: InputDrain) -> None:
@@ -125,7 +120,7 @@ class TurnRunner:
         self.goals.bind(sessions, inputs)
 
     def session_busy(self, session_id: str) -> bool:
-        return session_id in self.turn_tasks or self.turn_state(session_id).active.phase.busy
+        return self.inputs.state(session_id).turn_task.busy or self.turn_state(session_id).active.phase.busy
 
     def turn_state(self, session_id: str) -> TurnState:
         name = self.sessions.bindings.get(session_id)
@@ -196,54 +191,48 @@ class TurnRunner:
         origin: InputOrigin = UnattributedInputOrigin(),
     ) -> PromptResponse:
         session_id = request.session_id
-        turn_task = asyncio.current_task()
-        assert turn_task is not None
-        self.turn_tasks[session_id] = turn_task
-        try:
-            thread_name = await self.sessions.sync_identity(session_id)
-            await Coordination.run_worker(partial(self.comms.registry.require, thread_name))
-            text = self.effects._prompt_text(request)
-            agent_task: str | None = None
-            relay_text: str | None = None
-            if text.startswith(AGENT_PREFIX):
-                agent_task = text[len(AGENT_PREFIX) :].strip()
-            elif text.startswith(RELAY_PREFIX):
-                relay_text = text[len(RELAY_PREFIX) :].strip()
-            elif NamedTarget.leads(text):
-                relay_text = text
-            else:
-                agent_task = text.strip()
-            if relay_text:
-                target, body = parse_target(relay_text)
-                sent = await Coordination.run_worker(partial(
-                    self.comms.messaging.send, thread_name, target, body,
-                ))
-                for notice in sent.notices:
-                    await AcpEventConsumer(self.effects, session_id, self.runtime).dispatch(
-                        events.Notice(text=notice)
-                    )
-            self.effects._debug_log(
-                f"prompt:start sender={thread_name} mode={'agent' if agent_task else 'relay'}"
-            )
-            if images or agent_task:
-                await InitialInput.run(self.inputs,
-                    session_id,
-                    thread_name,
-                    agent_task or "",
-                    images=images,
-                    display_text=display_text,
-                    input_id=input_id,
-                    origin=origin,
+        async with self.inputs.state(session_id).own_turn_task():
+            try:
+                thread_name = await self.sessions.sync_identity(session_id)
+                await Coordination.run_worker(partial(self.comms.registry.require, thread_name))
+                text = self.effects._prompt_text(request)
+                agent_task: str | None = None
+                relay_text: str | None = None
+                if text.startswith(AGENT_PREFIX):
+                    agent_task = text[len(AGENT_PREFIX) :].strip()
+                elif text.startswith(RELAY_PREFIX):
+                    relay_text = text[len(RELAY_PREFIX) :].strip()
+                elif NamedTarget.leads(text):
+                    relay_text = text
+                else:
+                    agent_task = text.strip()
+                if relay_text:
+                    target, body = parse_target(relay_text)
+                    sent = await Coordination.run_worker(partial(
+                        self.comms.messaging.send, thread_name, target, body,
+                    ))
+                    for notice in sent.notices:
+                        await AcpEventConsumer(self.effects, session_id, self.runtime).dispatch(
+                            events.Notice(text=notice)
+                        )
+                self.effects._debug_log(
+                    f"prompt:start sender={thread_name} mode={'agent' if agent_task else 'relay'}"
                 )
-            self.effects._debug_log("prompt:returning")
-            return PromptResponse(stop_reason="end_turn")
-        except asyncio.CancelledError:
-            self.effects._debug_log("prompt:cancelled")
-            return PromptResponse(stop_reason="cancelled")
-        finally:
-            if self.turn_tasks.get(session_id) is turn_task:
-                self.turn_tasks.pop(session_id, None)
-            self.inputs.ensure_live_drain(session_id)
+                if images or agent_task:
+                    await InitialInput.run(self.inputs,
+                        session_id,
+                        thread_name,
+                        agent_task or "",
+                        images=images,
+                        display_text=display_text,
+                        input_id=input_id,
+                        origin=origin,
+                    )
+                self.effects._debug_log("prompt:returning")
+                return PromptResponse(stop_reason="end_turn")
+            except asyncio.CancelledError:
+                self.effects._debug_log("prompt:cancelled")
+                return PromptResponse(stop_reason="cancelled")
 
     def pause_active_goal(self, thread: Thread) -> None:
         for goal in thread.goal.active():
@@ -260,16 +249,16 @@ class TurnRunner:
         thread = await Coordination.run_worker(partial(self.comms.registry.require, name)) if name else None
         if thread is not None:
             await Coordination.run_worker(partial(self.pause_active_goal, thread))
-        task = self.turn_tasks.get(session_id)
-        if task is not None:
+        async def cancelling() -> None:
             leases = ()
             if name:
                 current = await Coordination.run_worker(partial(self.comms.registry.require, name))
                 leases = current.turn_lease.held()
             for lease in leases:
                 await self.transition_turn(session_id, lease, CancellingPhase())
-            task.cancel()
-            await asyncio.gather(task, return_exceptions=True)
+        task = self.inputs.state(session_id).turn_task
+        await task.prepare_cancel(cancelling)
+        await task.stop()
         # Selected handling may be the original inbox task. Retire only that
         # cancelled turn, then let the same drain owner select independent work.
         # Neither cancellation nor unbound input proves the whole inbox handled.
@@ -311,8 +300,7 @@ class TurnRunner:
 
     def acquire_turn(
         self, resources: AsyncExitStack, session_id: str, thread_name: str,
-        turn_id: TurnId, detail: str, routing: TurnRouting | None = None, *,
-        task: TurnTask | None = None,
+        turn_id: TurnId, detail: str, routing: Routing = NoTurnRouting(),
     ) -> RegistryOwner:
         """Bind the exact installed lease to cleanup before worker delivery.
 
@@ -323,7 +311,6 @@ class TurnRunner:
         owner = self.comms.agents.begin_turn(thread_name, turn_id, detail, routing)
         resources.push_async_callback(
             self.settle_turn, session_id, owner.turn_lease,
-            task=task,
         )
         return owner
 
@@ -342,16 +329,12 @@ class TurnRunner:
         self,
         session_id: str,
         lease: TurnLeaseFence,
-        *,
-        task: TurnTask | None = None,
     ) -> None:
         """Settle after terminal publication, releasing waiters even if the UI fails.
 
         Native output completion is not lifecycle settlement. Keep the exact
         lease until Done, durable input retirement and relay publication finish.
         """
-        if task is not None and self.turn_tasks.get(session_id) is task:
-            self.turn_tasks.pop(session_id, None)
         async with AsyncExitStack() as resources:
             update = await Coordination.run_worker(partial(
                 self.finish_turn, resources, session_id, lease,
@@ -385,7 +368,7 @@ class TurnRunner:
         selection uses this same resource and refuses a busy owner. Neither
         consumer can close a child after a new turn acquired it.
         """
-        lock = self.turn_locks.setdefault(session_id, asyncio.Lock())
+        lock = self.inputs.state(session_id).turn_lock
         if lock.locked():
             yield None
             return
@@ -404,34 +387,30 @@ class TurnRunner:
         rows never create input, and selected failure/cancellation retires the
         inbox without pretending that its pending prompts reached the model.
         """
-        async with self.turn_locks.setdefault(session_id, asyncio.Lock()):
-            task = asyncio.current_task()
-            assert task is not None
-            owner = await Coordination.run_worker(partial(
-                self.comms.registry.require, execution.owner_name,
-            ))
-            following = OwnerFollowingInputs(
-                self.inputs, session_id, owner, self.inputs.bind_native_turn(session_id, owner),
-            )
-            self.turn_tasks[session_id] = task
-            try:
-                result = await execution.run(
-                    on_compaction=AcpEventConsumer(self.effects, session_id, self.runtime).dispatch,
-                    pi_session=self.backend_for(session_id, owner),
-                    following=following,
+        async with self.inputs.state(session_id).turn_lock:
+            async with self.inputs.state(session_id).own_turn_task():
+                owner = await Coordination.run_worker(partial(
+                    self.comms.registry.require, execution.owner_name,
+                ))
+                following = OwnerFollowingInputs(
+                    self.inputs, session_id, owner, self.inputs.bind_native_turn(session_id, owner),
                 )
-                return result
-            finally:
                 try:
-                    await self.inputs.finish_turn_inputs(following)
-                finally:
-                    if self.turn_tasks.get(session_id) is task:
-                        self.turn_tasks.pop(session_id, None)
-                    # SelectedParticipant closed the registry lease while unwinding
-                    # execution. Publish that canonical end on success and failure.
-                    await self.publish_turn_state(
-                        AcpEventConsumer(self.effects, session_id, self.runtime)
+                    result = await execution.run(
+                        on_compaction=AcpEventConsumer(self.effects, session_id, self.runtime).dispatch,
+                        pi_session=self.backend_for(session_id, owner),
+                        following=following,
                     )
+                    return result
+                finally:
+                    try:
+                        await self.inputs.finish_turn_inputs(following)
+                    finally:
+                        # SelectedParticipant closed the registry lease while unwinding
+                        # execution. Publish that canonical end on success and failure.
+                        await self.publish_turn_state(
+                            AcpEventConsumer(self.effects, session_id, self.runtime)
+                        )
 
     async def run_agent_turn(
         self,
@@ -447,7 +426,7 @@ class TurnRunner:
         original_owner_input: bool = False,
         original_goal_id: GoalId | None = None,
         acceptance: TurnAcceptance,
-        dependency_wait_id: str | None = None,
+        dependency: InputDependency = NoInputDependency(),
     ) -> None:
         await OwnedTurn(
             self,
@@ -462,19 +441,19 @@ class TurnRunner:
             original_owner_input=original_owner_input,
             original_goal_id=original_goal_id,
             acceptance=acceptance,
-            dependency_wait_id=dependency_wait_id,
+            dependency=dependency,
         ).run()
 
     async def close(self) -> None:
         """Cancel every turn; each settles from the runner's owner stop (finish_goals)."""
-        tasks = dict(self.turn_tasks)
-        self.turn_tasks.clear()
-        for task in tasks.values():
-            task.cancel()
-        await asyncio.gather(*tasks.values(), return_exceptions=True)
+        tasks = {
+            session_id: state.retire_turn_task()
+            for session_id, state in self.inputs.drained.items()
+        }
+        await asyncio.gather(*(task.stop() for task in tasks.values()))
         # A relay-only turn never created a backend, so it has no runtime work to stop.
         await asyncio.gather(
-            *(self.persistent_backends[session_id].abort(task)
+            *(task.abort(self.persistent_backends[session_id])
               for session_id, task in tasks.items() if session_id in self.persistent_backends),
             return_exceptions=True,
         )

@@ -6,12 +6,14 @@ consumers neither inspect JSON fields nor rediscover what kind of item it is.
 from __future__ import annotations
 
 import json
+import time
 from abc import ABC, abstractmethod
 from typing import TYPE_CHECKING, Annotated, ClassVar, Generic, Literal, TypeVar
 
 from pydantic import (
     Field,
     JsonValue,
+    PlainSerializer,
     ValidateAs,
     field_validator,
 )
@@ -20,8 +22,9 @@ from agent_comms.cli_protocol import Declared, TaggedWire, TextWire
 from agent_comms.declared_family import UnknownFamilyMember
 from agent_comms.external_transcript import EarlierPage, NoEarlierPage
 from agent_comms.field_codec import FieldCodec, MessageId, boundary_decoder
+from agent_comms.native_tool_call import ToolCallId
 from agent_comms.native_tools import FilePatchTool
-from agent_comms.recorded_time import EventTime, UnrecordedEventTime
+from agent_comms.recorded_time import EventTime, RecordedEventTime, UnrecordedEventTime
 from agent_comms.runtime_updates import (
     AppendDraftItem,
     CompletedItem,
@@ -50,7 +53,7 @@ from agent_comms.transcript_events import (
     TranscriptEvent,
     UserTranscript,
 )
-from agent_comms.turn_item import NativeTurnId
+from agent_comms.turn_item import NativeItemId, NativeTurnId
 from agent_comms.turn_phase import CompactionPhase, ModelWaitPhase, ToolRunningPhase, TurnPhase
 
 from ..wire_models import DeclaredWireFamily, WireModel
@@ -128,6 +131,45 @@ class MentionInput(UserInput, declared_name='mention'):
 
 class RequestParams(WireModel):
     method: ClassVar[str]
+
+
+class ReadRateLimits(RequestParams):
+    method = 'account/rateLimits/read'
+
+
+class RateWindow(WireModel):
+    used_percent: float = Field(alias='usedPercent')
+    window_minutes: int = Field(alias='windowDurationMins')
+    resets_at: Annotated[
+        RecordedEventTime, ValidateAs(float, RecordedEventTime),
+        PlainSerializer(lambda instant: instant.at, return_type=float),
+    ] = Field(alias='resetsAt')
+
+    def line(self) -> str:
+        period = 'weekly' if self.window_minutes == 7 * 24 * 60 else f'{self.window_minutes}-minute'
+        reset = time.strftime('%a %b %d %H:%M', time.localtime(self.resets_at.at))
+        return f'usage {self.used_percent:g}% {period}, resets {reset}'
+
+
+class RateLimitReading(DeclaredWireFamily, ABC, affix='RateLimitReading'):
+    """A usage reading supplies its own display and need for operator attention."""
+
+    @abstractmethod
+    def line(self) -> str: ...
+
+    def needs_hand(self) -> bool:
+        return False
+
+
+class RateLimits(RateLimitReading):
+    primary: RateWindow
+
+    def line(self) -> str:
+        return self.primary.line()
+
+
+class RateLimitsResponse(WireModel):
+    rate_limits: RateLimits = Field(alias='rateLimits')
 
 
 class TurnInput(RequestParams):
@@ -288,7 +330,7 @@ class Item(TaggedWire, ABC, affix=""):
     def tag(cls) -> str:
         return cls.wire_tag
 
-    id: str
+    id: NativeItemId
     # What the CLI is doing while it produces this item.
     doing: ClassVar[str] = ''
 
@@ -307,6 +349,13 @@ class Item(TaggedWire, ABC, affix=""):
     @property
     def phase(self) -> TurnPhase:
         return ModelWaitPhase(self.doing)
+
+
+class ToolCallItem(WireModel):
+    """An item whose wire id is also its tool call's identity, typed once at decode."""
+
+    call_id: ToolCallId = Field(validation_alias='id', exclude=True)
+
 
 class AccumulatedItem(Item):
     @abstractmethod
@@ -364,7 +413,7 @@ class UserItem(Item):
         return super().completed(turn_id, events)
 
 
-class ToolItem(Item, ABC):
+class ToolItem(ToolCallItem, Item, ABC):
     def accumulator(self, started_at: EventTime) -> ToolDraft:
         return ToolDraft(started_at, (self.call.started(self.id, started_at.recorded_at('Codex tool start')),))
 
@@ -386,15 +435,18 @@ class ToolItem(Item, ABC):
 
     @property
     def call(self) -> ToolCall:
-        shown = ToolCall(self.id, self.tool_name, self.arguments)
-        return ToolDeclaration.record(self.tool_name, self.arguments, call_id=self.id).recorded_call(shown)
+        shown = ToolCall(self.call_id, self.tool_name, self.arguments)
+        return ToolDeclaration.record(
+            self.tool_name, self.arguments, call_id=self.call_id
+        ).recorded_call(shown)
 
     def events(self, timestamp: float) -> tuple[TranscriptEvent, ...]:
         return self.call.finished(self.output, self.succeeded, self.id, timestamp)
 
     @property
     def phase(self) -> TurnPhase:
-        return ToolRunningPhase(tools=((self.id, self.call.title),))
+        call = self.call
+        return ToolRunningPhase(tools=((call.id, call.title),))
 
 
 class CommandItem(ToolItem):
@@ -530,13 +582,15 @@ class McpToolItem(ToolInput, ToolItem):
             self.result is None or self.result.succeeded)
 
 
-class FunctionOutputItem(Item):
+class FunctionOutputItem(ToolCallItem, Item):
     wire_tag = 'functionCallOutput'
     name: str
     output: str
 
     def events(self, timestamp: float) -> tuple[TranscriptEvent, ...]:
-        return (ToolEndTranscript(position=self.id, timestamp=timestamp, tool_call_id=self.id, tool_name=self.name, text=self.output),)
+        return (ToolEndTranscript(
+            position=self.id, timestamp=timestamp, tool_call_id=self.call_id,
+            tool_name=self.name, text=self.output),)
 
 
 class SendOutputItem(NoTranscript, FunctionOutputItem):
@@ -575,7 +629,7 @@ class ExitedReviewItem(ReviewBody, Item):
     wire_tag = 'exitedReviewMode'
 
 
-class SleepItem(Item):
+class SleepItem(ToolCallItem, Item):
     wire_tag = 'sleep'
     durationMs: int
 
@@ -584,7 +638,7 @@ class SleepItem(Item):
 
     @property
     def phase(self) -> TurnPhase:
-        return ToolRunningPhase(tools=((self.id, f'Waiting {self.durationMs} ms'),))
+        return ToolRunningPhase(tools=((self.call_id, f'Waiting {self.durationMs} ms'),))
 
 
 class ImageViewItem(Item):
@@ -606,7 +660,7 @@ class ImageGenerationItem(Item):
                                  (f' — {self.savedPath}' if self.savedPath else ''), position=self.id, timestamp=timestamp),)
 
 
-class WebSearchItem(Item):
+class WebSearchItem(ToolCallItem, Item):
     wire_tag = 'webSearch'
     query: str
     action: JsonValue = None
@@ -618,7 +672,7 @@ class WebSearchItem(Item):
 
     @property
     def phase(self) -> TurnPhase:
-        return ToolRunningPhase(tools=((self.id, f'Searching: {self.query}'),))
+        return ToolRunningPhase(tools=((self.call_id, f'Searching: {self.query}'),))
 
 
 class PatchChange(TaggedWire, ABC, affix=""):
@@ -655,17 +709,19 @@ class FileChange(WireModel):
     diff: str
     kind: Declared[PatchChange]
 
-    def call(self, call_id: str) -> DecodedToolCall:
+    def call(self, call_id: ToolCallId) -> DecodedToolCall:
         return ToolCall(call_id, 'edit', {'path': self.path}).recorded(
             FilePatchTool(path=self.path))
 
-    def events(self, call_id: str, ok: bool, timestamp: float) -> tuple[TranscriptEvent, ...]:
+    def events(
+        self, item_id: NativeItemId, call_id: ToolCallId, ok: bool, timestamp: float,
+    ) -> tuple[TranscriptEvent, ...]:
         call = self.call(call_id)
         diff = self.kind.patch(self.path, self.diff)
-        return diff.patch(call).finished('', ok, call_id, timestamp)
+        return diff.patch(call).finished('', ok, item_id, timestamp)
 
 
-class FileChangeItem(Item):
+class FileChangeItem(ToolCallItem, Item):
     wire_tag = 'fileChange'
     doing = 'Editing files'
     changes: list[FileChange]
@@ -674,14 +730,23 @@ class FileChangeItem(Item):
     def accumulator(self, started_at: EventTime) -> ToolDraft:
         timestamp = started_at.recorded_at('Codex file change start')
         return ToolDraft(started_at, tuple(
-            change.call(f'{self.id}:{index}').started(f'{self.id}:{index}', timestamp)
+            change.call(self.change_call(index)).started(self.change_item(index), timestamp)
             for index, change in enumerate(self.changes)))
 
     def events(self, timestamp: float) -> tuple[TranscriptEvent, ...]:
         if self.status == 'inProgress':
             raise ValueError('File change completion still says inProgress')
         return tuple(event for index, change in enumerate(self.changes)
-                     for event in change.events(f'{self.id}:{index}', self.status == 'completed', timestamp))
+                     for event in change.events(
+                         self.change_item(index), self.change_call(index),
+                         self.status == 'completed', timestamp))
+
+    # Codex reports one item for several changes; each change is its own item and call.
+    def change_item(self, index: int) -> NativeItemId:
+        return NativeItemId(f'{self.id}:{index}')
+
+    def change_call(self, index: int) -> ToolCallId:
+        return ToolCallId(f'{self.call_id}:{index}')
 
 
 class AgentState(WireModel):
@@ -828,13 +893,13 @@ class Completed(ItemNotification, declared_name='item/completed'):
 
 
 class TextDelta(ItemNotification, ABC, declared_name=None):
-    itemId: str
+    item_id: NativeItemId = Field(alias='itemId')
     delta: str
     def section(self) -> int:
         return 0
 
     def apply(self, stream: ItemStream) -> AppendDraftItem:
-        return AppendDraftItem(self.turn, self.itemId, self.delta, self.section())
+        return AppendDraftItem(self.turn, self.item_id, self.delta, self.section())
 
 
 class AssistantDelta(TextDelta, declared_name='item/agentMessage/delta'):

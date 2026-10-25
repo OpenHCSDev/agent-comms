@@ -1,7 +1,9 @@
 """Declaration families round-trip through real SQLite without a schema roster."""
 
 import sqlite3
+from contextlib import nullcontext
 from dataclasses import dataclass, field, replace
+from time import perf_counter
 from typing import Annotated, ClassVar, Type
 
 import pytest
@@ -10,7 +12,9 @@ from agent_comms.field_codec import FieldCodec, MalformedRecord, NullMember
 from agent_comms.messages import InfoKind, MessageKind
 from agent_comms.typed_table import (
     Column,
+    DurableTables,
     ExactStorage,
+    FULL_SCHEMA_REBUILD,
     ForeignKey,
     Generated,
     Index,
@@ -21,6 +25,7 @@ from agent_comms.typed_table import (
     TypedRow,
     TypedTable,
     RowNotFoundError,
+    WriterOwnedFile,
 )
 
 
@@ -131,6 +136,64 @@ def test_rebuild_converts_a_field_and_preserves_the_declared_rows_and_constraint
         db.execute(f'ALTER TABLE "{TableChildRow.declared_name}" DROP COLUMN weight')
         TableChildRow.rebuild(db)
         assert TableChildRow.select(db, order_by=('key',)) == [replace(row, weight=None) for row in rows]
+
+
+@pytest.mark.parametrize("changed", ({}, {"key": '"key" + 1'}),
+                         ids=("preserve-children", "reject-orphan"))
+def test_schema_carry_preserves_foreign_children_and_rolls_back_orphans(tmp_path, changed):
+    class CarrySchema(DurableTables):
+        @classmethod
+        def carry_schema(cls, db, sharing=(), *, rebuild=FULL_SCHEMA_REBUILD):
+            CarryParent.rebuild(db, changed)
+            cls.require_schema(db, sharing)
+
+    @dataclass(frozen=True)
+    class CarryParent(CarrySchema, TypedTable, declared_name=f"carry_parent_{len(changed)}"):
+        key: Annotated[int, Column(primary_key=True)]
+        checks = ("key >= 0",)
+
+    @dataclass(frozen=True)
+    class CarryChild(CarrySchema, TypedTable, declared_name=f"{CarryParent.declared_name}_child"):
+        key: Annotated[int, Column(primary_key=True)]
+        parent: int
+        cascade_parent: int
+
+        @classmethod
+        def references(cls):
+            return (
+                ForeignKey(target=CarryParent, target_columns=("key",), columns=("parent",)),
+                ForeignKey(target=CarryParent, target_columns=("key",),
+                           columns=("cascade_parent",), on_delete="CASCADE"),
+            )
+
+    parents = [CarryParent(key) for key in range(2000)]
+    children = [CarryChild(row.key, row.key, row.key) for row in parents]
+    with sqlite3.connect(tmp_path / "relations.sqlite3") as db:
+        db.execute("PRAGMA foreign_keys = ON")
+        previous = CarryParent.ddl()[0].replace("CHECK (key >= 0)", "CHECK (key > -1)")
+        assert previous != CarryParent.ddl()[0]
+        db.execute(previous)
+        CarryChild.create(db)
+        for row in (*parents, *children):
+            row.insert(db)
+        db.commit()
+        stored = CarrySchema.stored_schema(db)
+        outcome = pytest.raises(
+            CarrySchema.schema_error,
+            match=f"table={CarryChild.declared_name}, parent={CarryParent.declared_name}, fkid=0",
+        ) if changed else nullcontext()
+        started = perf_counter()
+        with outcome:
+            assert CarrySchema.reconcile_schema(db, WriterOwnedFile())
+        assert perf_counter() - started < 2
+        assert not db.in_transaction
+        assert db.execute("PRAGMA foreign_keys").fetchone() == (1,)
+        assert CarryChild.select(db, order_by=("key",)) == children
+        assert CarryParent.select(db, order_by=("key",)) == parents
+        if changed:
+            assert CarrySchema.stored_schema(db) == stored
+        else:
+            CarrySchema.require_schema(db)
 
 
 def test_writer_derives_missing_nullable_fields_but_refuses_unclaimed_data():

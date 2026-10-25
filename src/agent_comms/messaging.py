@@ -125,7 +125,7 @@ class Messaging:
             return thread
         # The registry owns namespace allocation. Recheck under its canonical
         # writer lock; an existing sender needs only the ordinary registry read.
-        with self.registry.store.locked():
+        with self.registry.store.guarded_write():
             return self.registry.user_thread().or_create(lambda: self._register_user(worktree))
 
     def send_user_message(self, target: NamedTarget, body: str, *, worktree: str,

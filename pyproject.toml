@@ -10,7 +10,7 @@ authors = [{ name = "Tristan Simas", email = "tristan.simas@mail.mcgill.ca" }]
 license = "MIT"
 license-files = ["LICENSE"]
 readme = "README.md"
-requires-python = ">=3.14,<3.15"
+requires-python = ">=3.14.8,<3.15"
 classifiers = [
     "Development Status :: 4 - Beta",
     "Intended Audience :: Developers",
@@ -68,6 +68,8 @@ agent-comms-commander-bounded-waits = "agent_comms_hooks.bounded_waits:main"
 agent-comms-queue-bypass-guard = "agent_comms_hooks.queue_bypass:main"
 agent-comms-claude-session-started = "agent_comms_hooks.session:started"
 agent-comms-claude-session-ended = "agent_comms_hooks.session:ended"
+agent-comms-claude-subagent-started = "agent_comms_hooks.forks:started"
+agent-comms-claude-subagent-stopped = "agent_comms_hooks.forks:stopped"
 agent-comms-connector = "agent_comms.connector:main"
 opencode-comms = "agent_comms.cli_bridges.opencode_launch:main"
 
@@ -136,6 +138,10 @@ extend-immutable-calls = ["agent_comms.store_files.ExclusiveLock", "agent_comms.
 warn_return_any = true
 warn_unused_configs = true
 disallow_untyped_defs = true
+
+[[tool.mypy.overrides]]
+module = ["xdist.*"]
+follow_untyped_imports = true
 
 [tool.uv.sources]
 metaclass-registry = { git = "https://github.com/OpenHCSDev/metaclass-registry", branch = "main" }

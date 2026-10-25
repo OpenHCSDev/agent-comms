@@ -2,11 +2,12 @@
 
 from __future__ import annotations
 
+import time
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 from agent_comms.commander_hud import CommanderFrame, CommanderHud
-from agent_comms.commander_pings import CommanderUpdate, RulePing, UnitPing
+from agent_comms.task_attachments.commander_pings import CommanderUpdate, RulePing, UnitPing
 from agent_comms.commander_service import CommanderService
 from agent_comms.heartbeat_frame import HeartbeatFrame
 from agent_comms.message_bus import WatchPass
@@ -14,7 +15,7 @@ from agent_comms.service_passes import ServicePassStore
 from agent_comms.standing_rules import StandingRule
 from agent_comms.threads import Thread
 from agent_comms.todos import ProgressRead
-from agent_comms.ui_model.unit_state import UnitState
+from agent_comms.ui_model.unit_state import AwaitingCommander, UnitState
 
 if TYPE_CHECKING:
     from agent_comms.comms import Comms
@@ -46,7 +47,7 @@ class CommanderObservation:
             closed
             for todo in comms.goals.todos.for_commander(thread.incarnation)
             if not any(held.owner_identity in unreadable
-                       for held in todo.holder_state.current_assignments())
+                       for held in todo.current_holder.current_assignments())
             for closed in todo.order.closed_by_merge(
                 todo, pulls, comms.registry.storage_rule.checkout_base)
         )
@@ -67,6 +68,7 @@ class CommanderHeartbeat(CommanderService, WatchPass[tuple[CommanderObservation,
         self.register(comms.registry)
         CommanderFrame.replace_all(comms.root, tuple(item.hud for item in observed))
         completed = []
+        now = time.time()
         try:
             for item in observed:
                 comms.goals.todos.record_merges(item.merged)
@@ -82,12 +84,15 @@ class CommanderHeartbeat(CommanderService, WatchPass[tuple[CommanderObservation,
                     item.thread.incarnation,
                     tuple(state for state in item.states if state not in rejected),
                     tuple(rule for rule in item.rules if rule not in rejected), previous,
-                    hud=item.hud.pings(),
+                    now=now,
+                    undisposed=(previous.undisposed(comms, item.thread.name,
+                                                    now - AwaitingCommander.seconds)
+                                if previous else ()),
                     not_applied=tuple(
                         rule.rejected_line(error) for rule, error in rejected.items()),
                 )
                 if update is not None:
-                    update.send(comms, previous)
+                    update.send(comms, now, item.hud)
                 completed.append(item.thread.incarnation)
         finally:
             # A later commander's failure does not erase passes already completed.

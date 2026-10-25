@@ -16,11 +16,11 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from sqlite3 import Connection
 from typing import TYPE_CHECKING, Annotated, ClassVar
-from uuid import uuid4
 
 from .declared_family import DeclaredFamily
-from .field_codec import FieldCodec, InputId, ThreadLookup
+from .field_codec import FieldCodec, InputId, PageRequestId, ThreadLookup
 from .locked_store import RegistryFile
+from .native_tool_call import ToolCallId
 from .native_runtime_input import NativeRuntimeInput
 from .native_tools import MutatingPathTool
 from .native_transcript import RecordsCut
@@ -34,7 +34,7 @@ from .transcript_events import (
     TurnDigest,
 )
 from .transcript_sources import TranscriptDraft, TranscriptRecord, TranscriptSource
-from .turn_item import NativeTurnId
+from .turn_item import NativeItemId, NativeTurnId
 from .typed_table import (
     Column,
     DurableStore,
@@ -92,14 +92,14 @@ class EarlierPage(ExternalPage):
         with transcript.writing() as connection:
             if transcript.oldest(connection) != row:
                 return True  # The read retries against the newly published prefix.
-            row.continue_with(connection, RequestedEarlierPage(self.cursor, uuid4().hex))
+            row.continue_with(connection, RequestedEarlierPage(self.cursor, PageRequestId.mint()))
         return True
 
 
 @dataclass(frozen=True)
 class RequestedEarlierPage(EarlierPage):
     """Demand is a transition of the stored continuation, not a second cursor store."""
-    request_id: str
+    request_id: PageRequestId
 
     def request_page(self, transcript, row) -> bool:
         return True  # A deferred read keeps the request without another write.
@@ -138,9 +138,9 @@ class NoItems:
 
 @dataclass(frozen=True)
 class ExternalPageRow(TypedRow):
-    thread: Annotated[str, Column(primary_key=True)]
+    thread: Annotated[ThreadLookup, Column(primary_key=True)]
     turn_id: Annotated[NativeTurnId, Column(primary_key=True)]
-    item_id: Annotated[str, Column(primary_key=True)]
+    item_id: Annotated[NativeItemId, Column(primary_key=True)]
     seq: int
     earlier: ExternalPage = field(default_factory=NoEarlierPage, kw_only=True)
 
@@ -193,7 +193,9 @@ class ExternalItemRow(ExternalTranscriptRows, ExternalPageRow, TypedTable):
         return ExternalRecord(self.seq, self.events_in(connection))
 
     @classmethod
-    def recent_turn_ids(cls, connection: Connection, thread: str) -> Generator[NativeTurnId]:
+    def recent_turn_ids(
+        cls, connection: Connection, thread: ThreadLookup
+    ) -> Generator[NativeTurnId]:
         """Yield turn starts newest first, using the existing per-turn position index.
 
         A later item in an older turn must not move that turn ahead of a newer start:
@@ -215,7 +217,7 @@ class ExternalItemRow(ExternalTranscriptRows, ExternalPageRow, TypedTable):
 class ExternalEventRow(ExternalTranscriptRows, TypedTable):
     """Each saved event exists once; SQL derives its query keys from that event."""
 
-    thread: Annotated[str, Column(primary_key=True)]
+    thread: Annotated[ThreadLookup, Column(primary_key=True)]
     seq: Annotated[int, Column(primary_key=True)]
     ordinal: Annotated[int, Column(primary_key=True)]
     event: TranscriptEvent
@@ -269,9 +271,9 @@ class ExternalEventRow(ExternalTranscriptRows, TypedTable):
 class DraftRow(ExternalTranscriptRows, TypedTable, TranscriptDraft, declared_name="external_draft"):
     """The assigned transcript's current message, shared by native and CLI writers."""
 
-    thread: Annotated[str, Column(primary_key=True)]
+    thread: Annotated[ThreadLookup, Column(primary_key=True)]
     turn_id: NativeTurnId
-    item_id: str
+    item_id: NativeItemId
     events: tuple[TranscriptEvent, ...]
 
     def external_row(self):
@@ -428,17 +430,12 @@ class StoreRead(TranscriptSource):
             f'FROM "{ExternalEventRow.declared_name}" e WHERE {where}) '
             'WHERE latest=1 ORDER BY seq DESC,ordinal DESC', parameters)) as rows:
             for timestamp, call_id, encoded in rows:
-                identity = FieldCodec.decode(str, call_id)
+                identity = FieldCodec.decode(ToolCallId, call_id)
                 tool = FieldCodec.decode_bound(ToolDeclaration, FieldCodec.parse(encoded),
                                                call_id=identity)
                 yield from tool.edit_calls(identity, GeneratedTimestamp.decode(timestamp),
                                            todo.held().owner, todo.id)
 
-    def unjudged_count(self, todo, since) -> int:
-        where, parameters = ExternalEventRow.unjudged_query(self.transcript.lookup, todo, since)
-        return self.connection.execute(
-            f'SELECT count(DISTINCT e.call_id) FROM "{ExternalEventRow.declared_name}" e WHERE {where}',
-            parameters).fetchone()[0]
 
 
 @dataclass(frozen=True, slots=True)
@@ -465,7 +462,7 @@ class ExternalTranscript(TranscriptSource, DurableStore):
             ).fetchone()[0]
         return GeneratedTimestamp.decode(timestamp)
 
-    def finish(self, *, turn_id: NativeTurnId, item_id: str,
+    def finish(self, *, turn_id: NativeTurnId, item_id: NativeItemId,
                events: tuple[TranscriptEvent, ...]) -> None:
         """Append a finished item once; an item with no presentation adds nothing."""
         with self.writing() as connection:
@@ -521,7 +518,7 @@ class ExternalTranscript(TranscriptSource, DurableStore):
                         emit(frame)
                 previous = current
 
-    def draft(self, *, turn_id: NativeTurnId, item_id: str,
+    def draft(self, *, turn_id: NativeTurnId, item_id: NativeItemId,
               events: tuple[TranscriptEvent, ...]) -> None:
         with self.writing() as connection:
             DraftRow(self.lookup, turn_id, item_id, events).upsert(connection)
@@ -577,7 +574,7 @@ class TurnDraftPublication(DraftPublication, StoreWriter):
             yield self.connection
 
     def begin_message(self, timestamp: float) -> None:
-        self.item_id = uuid4().hex
+        self.item_id = NativeItemId.fresh()
         self.timestamp = timestamp
 
     def publish(self, parts: Iterable[str]) -> None:

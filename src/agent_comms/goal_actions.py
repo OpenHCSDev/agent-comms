@@ -7,9 +7,8 @@ from abc import abstractmethod
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field, replace
 from typing import TYPE_CHECKING, Annotated, ClassVar, Self
-from uuid import uuid4
 
-from agent_comms.field_codec import GoalId
+from agent_comms.field_codec import GoalId, GoalWaitId, MessageId, RetryDecisionId
 from agent_comms import field_codec
 from agent_comms.goals import (
     Goal,
@@ -57,10 +56,13 @@ from .standing_rules import OrderRefusingStandingRule
 from .thread_identity import ThreadIncarnation
 from .threads import Thread
 from .reported_turn import ReportedTurnState
+from .attempt_resolution import ComplianceDecision, OrderDecision, RetryDecision
 
 if TYPE_CHECKING:
     from .goal_management import Goals
+    from .registry_document import CommanderProject
     from .goal_presentation import GoalSnapshot
+
 
 
 class ModelInvocable:
@@ -257,7 +259,7 @@ class CompliedGoalAction(TransitionGoalAction, OwnerInvocable):
     as a fresh order continues it (continue_work), where a status-only resume is refused.
     Only Core's release takes it; no model or control surface can name a witness."""
 
-    witness: str
+    witness: MessageId
 
     def require_order(self, goal: Goal, ctx: GoalActionContext) -> None:
         """Lifting the heartbeat's hold restores the goal it paused. Its problems may close
@@ -269,7 +271,7 @@ class CompliedGoalAction(TransitionGoalAction, OwnerInvocable):
     def before_transition(self, goal: Goal, ctx: GoalActionContext) -> None:
         store = ctx.goals.open_goal_store()
         generation = store.require_generation(goal.id)
-        generation.lifecycle.continue_work(store, generation, self.witness)
+        generation.lifecycle.continue_work(store, generation, ComplianceDecision(self.witness))
         resumed = store.require_generation(goal.id)
         resumed.lifecycle.resume_status(resumed, goal, ctx)
 
@@ -343,13 +345,13 @@ class PreparedStandbyGoalAction(StandbyGoalAction, declared_name=None):
             )
         snapshot = ctx.goals.registry.snapshot()
         if not any(
-            ctx.goals.agents.is_live(target.incarnation, snapshot)
+            ctx.goals.agents.answers_later(target.incarnation, snapshot)
             for target in wait_targets
         ):
             names = ", ".join(f"@{target.incarnation.name}" for target in wait_targets)
             raise ValueError(
-                f"No declared dependency is live ({names}). "
-                "Inspect its registered process before declaring standby."
+                f"No thread this wait names will answer ({names}): none has a live bridge or "
+                "process. Inspect its registered process before declaring standby."
             )
         closed = GoalWaits.closed_wait_group(
             thread.name,
@@ -379,7 +381,7 @@ class PreparedStandbyGoalAction(StandbyGoalAction, declared_name=None):
         ctx.goals.waits.record(
             RecordedGoalWait(
                 goal.id,
-                uuid4().hex,
+                GoalWaitId.mint(),
                 goal.revision,
                 review.through_seq,
                 wait_targets,
@@ -555,7 +557,7 @@ class ProblemOrderGoalAction(GoalAction[Goal], RuntimeInvocable):
         self.reserve(ctx, goal.id)
         store = ctx.goals.open_goal_store()
         generation = store.require_generation(goal.id)
-        generation.lifecycle.continue_work(store, generation, self.order.id)
+        generation.lifecycle.continue_work(store, generation, OrderDecision(self.order.id))
         revision = goal.revision + 1
         return replace(goal, order=ProblemGoalOrder(), text=ProblemGoalOrder.text, progress="",
                        revision=revision, mention_source=bind_goal_mentions(
@@ -573,15 +575,15 @@ class ProblemOrderGoalAction(GoalAction[Goal], RuntimeInvocable):
 
     def require_ready(self, ctx: GoalActionContext) -> None:
         """Recheck local request facts before goal reservation or allocating a child."""
-        self.require_sendable()
+        self.require_sendable(ctx.goals.registry.snapshot().commander_project)
         commander = ctx.goals.registry.require(self.commander)
         ctx.goals.todos.owner_request(self.request).require_open(commander.incarnation)
         self.review_at.require_recorded("A review time")
 
-    def require_sendable(self) -> None:
+    def require_sendable(self, project: CommanderProject) -> None:
         """A new order's wording and source references hold at its declared revision."""
         self.order.require_wording()
-        self.order.require_references()
+        self.order.require_references(project)
         self.order.check.require_directory()
 
     def create(self, ctx: GoalActionContext) -> Goal:
@@ -627,7 +629,7 @@ class ReissuedOrderGoalAction(OrderGoalAction):
             assigner=todo.acting_assigner,
             traced=order.owner)
 
-    def require_sendable(self) -> None:
+    def require_sendable(self, project: CommanderProject) -> None:
         pass
 
 
@@ -710,4 +712,4 @@ class RetryGoalAction(TransitionGoalAction, ModelInvocable, OwnerInvocable, Runt
     def require_transition(self, goal: Goal, state: GoalState, ctx: GoalActionContext) -> None:
         """A blocked goal leaves its state machine only through the attempt ledger's retry."""
         store = ctx.goals.open_goal_store()
-        store.authorize_current_retry(goal.id, uuid4().hex)
+        store.authorize_current_retry(goal.id, RetryDecision(RetryDecisionId.mint()))

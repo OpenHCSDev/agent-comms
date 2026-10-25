@@ -14,7 +14,7 @@ from functools import partial
 from typing import TYPE_CHECKING, Generic, Self, TypeVar
 
 
-from acp.exceptions import RequestError
+from .coordination_errors import Refused
 
 from .acp_extension import QueueItem
 
@@ -168,7 +168,7 @@ class QueuedInput:
     def require_capacity(cls, inputs: InputDrain, sources: tuple[TurnInputSource, ...]) -> None:
         """Follow-ups cannot exceed the original live awaiting-start allowance."""
         if cls.remaining_capacity(inputs, sources) <= 0:
-            raise RequestError.invalid_params(
+            raise Refused.invalid_params(
                 {"reason": "Too many follow-up inputs awaiting their own user start."}
             )
 
@@ -188,7 +188,7 @@ class QueuedInput:
                 sources = tuple(inputs.state(session_id).following.values())
 
                 def capture():
-                    with inputs.comms.registry.store.locked():
+                    with inputs.comms.registry.store.guarded_write():
                         cls.require_capacity(inputs, sources)
                         return cls.capture(
                             inputs, name, text=text, prompt=prompt, echo=echo,
@@ -345,7 +345,7 @@ class DeliveredInput(QueuedInput):
         so cancellation cannot lose a successfully paused but unplaced input.
         The worker opens/closes SQLite and never reads or mutates live queues.
         """
-        with inputs.comms.registry.store.locked():
+        with inputs.comms.registry.store.guarded_write():
             accepted = pending[:max(cls.remaining_capacity(inputs, sources), 0)]
             if not accepted:
                 return
@@ -435,7 +435,7 @@ class DeliveredInput(QueuedInput):
         if not any(row.key not in live_keys
                    for row in document.unbound_wire_inputs(root_id).values()):
             return 0
-        with comms.registry.store.locked():
+        with comms.registry.store.guarded_write():
             entry = comms.registry.entry(name).entry
             owner = entry.thread
             document = dispositions.unresolved(entry.names)

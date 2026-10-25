@@ -30,7 +30,7 @@ from agent_comms.installer.interpreter_operation import (
     WorkerClosePhase,
 )
 from agent_comms.installer.refusals import InterpreterWorkerDied, UpgradeRefused
-from agent_comms.launch_runtime import RestoredRuntime
+from agent_comms.launch_runtime import LaunchRuntime
 from agent_comms.maintenance_barrier import MaintenanceHolder
 from agent_comms.repo import GitCommandError, Repo
 
@@ -38,7 +38,7 @@ from agent_comms.repo import GitCommandError, Repo
 @dataclass(frozen=True)
 class InterpreterWorkerKey:
     python: Path
-    program: tuple[str, ...]
+    program: ProbeProgram
     cwd: Path
     environment: tuple[tuple[str, str], ...]
 
@@ -70,8 +70,9 @@ class InterpreterWorker:
             answers = owned.enter_context(os.fdopen(answer_read, "rb"))
             try:
                 child = SpawnedProcess.launch(
-                    (str(key.python), "-P", *key.program), cwd=key.cwd,
-                    env=dict(key.environment), runtime=RestoredRuntime(key.python),
+                    (str(key.python), "-P", *map(str, key.program.entry())), cwd=key.cwd,
+                    env=dict(key.environment), runtime=LaunchRuntime(key.python),
+                    pass_fds=key.program.descriptors,
                     stdin=request_read, output=answer_write, stderr=diagnostics,
                 )
             finally:
@@ -140,6 +141,11 @@ class InstallCommands:
                 for (key, _), outcome in zip(closing, outcomes, strict=True):
                     outcome.report_forced(key.print_forced)
 
+    def close_program(self, python: Path, program: ProbeProgram) -> None:
+        """Retire borrowers before the parent releases their inherited file locks."""
+        self.close_workers(tuple(key for key in self.workers
+                                 if key.python == python and key.program == program))
+
     def close_runtime(self, python: Path) -> None:
         with RuntimeWorkerClosePhase(python).running(self.clock):
             self.close_workers(tuple(key for key in self.workers if key.python == python))
@@ -183,7 +189,7 @@ class InstallCommands:
     def probe[Answer](self, probe: RuntimeProbe[Answer], python: Path, *,
                       cwd: Path = Path(), env: Mapping[str, str] = os.environ,
                       program: ProbeProgram = InstalledProgram()) -> Answer:
-        key = InterpreterWorkerKey(python, tuple(map(str, program.entry())), cwd.absolute(),
+        key = InterpreterWorkerKey(python, program, cwd.absolute(),
                                    tuple(sorted(MaintenanceHolder.outside(env).items())))
         with self.timing(probe.install_phase()) as measured:
             with self.worker_lock:

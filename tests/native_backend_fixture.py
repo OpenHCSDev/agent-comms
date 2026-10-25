@@ -131,8 +131,9 @@ manager.appendMessage({role:'assistant',content:[{type:'text',text:'Original sav
             session_id = await self.bind_saved_owner(agent, project=self.project, session=self.session)
             yield agent, session_id
         finally:
+            states = tuple(agent.inputs.drained.values())
             await agent.shutdown()
-            assert not agent.turns.turn_tasks and not any(state.turn_open() for state in agent.inputs.drained.values())
+            assert not any(state.turn_task.busy or state.turn_open() for state in states)
             assert not agent.turns.persistent_backends
 
     @asynccontextmanager

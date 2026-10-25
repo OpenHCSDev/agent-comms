@@ -19,15 +19,20 @@ from agent_comms.child_process import ProcessIdentity
 from agent_comms.cli_bridges.monitor import MonitorPeer, MonitorService
 from agent_comms.cli_bridges.claude_protocol import (
     ClaudeSession, ClaudeMonitorFrame, ForeignTaskNotification,
-    ForeignAttachment,
+    ForeignAttachment, KnownTurn,
 )
 from agent_comms.cli_bridges.shared import (
     Binding, DeliveryRow, ObservedPart, ReceivingMonitor, UnrecordedMonitor, MonitorPart,
     ForeignMonitorFrame, Options, ObservedMonitor, MismatchedMonitor, Watch, StoredBinding,
+    MonitorObservation,
     GivenBinding, MONITOR_FRAME,
 )
 from agent_comms.cli_protocol import UnconfirmedOutcome, EmittedOutcome, DeliveredOutcome
-from agent_comms.messages import InfoKind, Message
+from agent_comms.field_codec import FieldCodec, MalformedRecord
+from agent_comms.message_reference import BridgeStart, MessageReference
+from agent_comms.runtime_updates import HiddenItem
+from agent_comms.turn_item import NativeTurnId
+from agent_comms.messages import InfoKind, Message, TaskAttachment
 from agent_comms.read_basis import ExplicitWatchAcknowledgment
 from agent_comms.threads import Thread
 
@@ -122,6 +127,16 @@ def emitted_delivery(bridge):
     return emit
 
 
+def test_resume_cursor_reads_seq_and_id_without_decoding_an_old_payload(bridge):
+    message = bridge.comms.messaging.send('claude-code', 'viewer', 'older wire shape').message
+    retired = {**message.to_wire(), 'task': {TaskAttachment.family_discriminator: 'RetiredTask'}}
+    with pytest.raises(MalformedRecord):
+        Message.from_wire(retired)
+    with bridge.db:
+        DeliveryRow(message.message_id, json.dumps(retired), DeliveredOutcome).insert(bridge.db)
+    assert DeliveryRow.resume_after(bridge.db, bridge.binding) == BridgeStart(
+        MessageReference(message.seq, message.message_id))
+
 def decoded_record(data):
     return ClaudeJsonLines().decode_line(json.dumps(data).encode(), 0)
 
@@ -207,12 +222,21 @@ def test_foreign_task_notifications_are_named_and_malformed_matching_xml_fails()
     assert isinstance(ClaudeMonitorFrame.decode_line('"Comms in · old format...(truncated)'),ForeignMonitorFrame)
 
 
-def test_non_task_attachments_and_pending_queue_records_do_not_confirm():
-    record=decoded_record(dict(type='attachment', uuid='foreign-record',
+def queued_prompt(kind, prompt):
+    return decoded_record(dict(type='attachment', uuid='queued-record',
         timestamp='2026-10-16T16:40:05.123Z', attachment=dict(type='queued_command',
-        origin=dict(kind='peer'), prompt='Not a Monitor notification')))
-    assert isinstance(record.attachment, ForeignAttachment)
-    assert record.updates(ClaudeSession())==()
+        origin=dict(kind=kind), prompt=prompt)))
+
+
+def test_non_task_attachments_and_pending_queue_records_do_not_confirm():
+    session=ClaudeSession(turn=KnownTurn(FieldCodec.decode(NativeTurnId, 'turn')))
+    for kind in ('peer', 'human'):
+        updates=queued_prompt(kind, 'Not a Monitor notification').updates(session)
+        assert not any(isinstance(update, MonitorObservation) for update in updates)
+    hook=decoded_record(dict(type='attachment', uuid='foreign-record',
+        timestamp='2026-10-16T16:40:05.123Z', attachment=dict(type='hook_success')))
+    assert isinstance(hook.attachment, ForeignAttachment)
+    assert hook.updates(ClaudeSession())==()
     queued=decoded_record(dict(type='queue-operation', operation='enqueue',
         sessionId='session', content='<task-notification><event>not yet received</event></task-notification>'))
     assert queued.updates(ClaudeSession())==()
@@ -339,6 +363,21 @@ async def test_harness_outcome_lives_on_the_threads_claim_across_a_rehome(tmp_pa
     assert type(claim(confirmed)) is DeliveredAssignment
 
 
+def test_prompt_typed_during_a_turn_is_shown_and_an_agents_is_hidden():
+    session=ClaudeSession(turn=KnownTurn(FieldCodec.decode(NativeTurnId, 'turn')))
+    shown,=queued_prompt('human', 'typed while you worked').updates(session)
+    assert [event.text for event in shown.events]==['typed while you worked']
+    assert not isinstance(shown, HiddenItem)
+    hidden,=queued_prompt('peer', 'a fork reporting').updates(session)
+    assert isinstance(hidden, HiddenItem)
+
+
+def test_prompt_typed_with_an_image_during_a_turn_shows_its_text():
+    session=ClaudeSession(turn=KnownTurn(FieldCodec.decode(NativeTurnId, 'turn')))
+    image=dict(type='base64', media_type='image/png', data='AA==')
+    prompt=[dict(type='text', text='[Image #16] look'), dict(type='image', source=image)]
+    shown,=queued_prompt('human', prompt).updates(session)
+    assert [event.text for event in shown.events]==['[Image #16] look']
 
 @pytest.mark.asyncio
 async def test_a_bridge_waits_out_maintenance_and_then_records_its_delivery(tmp_path, monkeypatch):
@@ -409,7 +448,7 @@ def test_only_commanded_sessions_reply_to_their_delivered_senders(comms):
     from agent_comms.runtime_updates import FinishedItem, ReplyingThreadOutput
     from agent_comms.thread_execution import ExternalThreadExecution
     from agent_comms.transcript_events import AssistantTranscript
-    from agent_comms.turn_item import NativeTurnId
+    from agent_comms.turn_item import NativeItemId, NativeTurnId
 
     lead, unit = (comms.registry.declare(Thread(
         name, frozenset(), "/tmp", execution=ExternalThreadExecution)) for name in ("lead", "unit"))
@@ -418,8 +457,9 @@ def test_only_commanded_sessions_reply_to_their_delivered_senders(comms):
         output = ReplyingThreadOutput.for_comms(comms.transcripts.external(speaker.name), comms)
         output.delivered_targets((sender.name,))
         turn = NativeTurnId(f"{speaker.name}-turn")
-        output.publish_item(FinishedItem(turn, "a", (AssistantTranscript(
-            f"{speaker.name} answers", timestamp=1.0, position="a"),)))
+        item_id = NativeItemId("a")
+        output.publish_item(FinishedItem(turn, item_id, (AssistantTranscript(
+            f"{speaker.name} answers", timestamp=1.0, position=item_id),)))
         output.end_turn(turn)
     assert comms.bus.pending_count("unit") == 0
     assert comms.bus.pending_count("lead") == 1

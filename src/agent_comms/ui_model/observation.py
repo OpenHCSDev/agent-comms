@@ -16,7 +16,6 @@ rows, and no longer competes with that work for its interpreter lock.
 from __future__ import annotations
 
 import asyncio
-import copyreg
 import itertools
 import multiprocessing
 import signal
@@ -30,8 +29,6 @@ from dataclasses import dataclass, field, replace
 from functools import partial
 from pathlib import Path
 from typing import TYPE_CHECKING, ClassVar, Self, final
-
-from acp.exceptions import RequestError
 
 from agent_comms.acp_extension import (
     GoalSnapshotReply,
@@ -47,17 +44,18 @@ from agent_comms.coordination_errors import (
     CoordinationReadUnavailable,
     DeferredRead,
     ReloadRequired,
+    Refused,
     StaleRevision,
 )
 from agent_comms.errors import RelationViolationError, ToolRefusedError
 from agent_comms.field_codec import FieldCodec
 from agent_comms.historical_views import HistorySource
+from agent_comms.notification_evidence import NoNotificationWindow, NotificationWindow
 from agent_comms.presentation import NoRevision, ReadState, WireRevision
 from agent_comms.registry_document import RosterVisibility
 from agent_comms.registry_provenance import DeletedThread
 from agent_comms.revision_views import (
     CommanderFramesView,
-    NotificationsView,
     RegistrationsView,
     SidebarView,
     StoresView,
@@ -86,15 +84,6 @@ if TYPE_CHECKING:
     from agent_comms.thread_identity import ThreadIncarnation
     from agent_comms.thread_presentation import ThreadPresentation
     from agent_comms.transcripts import TranscriptCursor, TranscriptRead, TranscriptReadIdentity
-
-
-def reduce_request_error(error: RequestError) -> tuple[type[RequestError], tuple[object, ...]]:
-    """The SDK error hands Exception only its message; this pipe carries it whole. The
-    spawned observer imports this module to run serve(), so it registers before sending."""
-    return RequestError, (error.code, str(error), error.data)
-
-
-copyreg.pickle(RequestError, reduce_request_error)
 
 
 class ObservationRequest(ABC):
@@ -166,6 +155,7 @@ class LiveObservationInterest(ObservationInterest):
     def prepared(self, observation: SidebarReading, service: ObservationService) -> None:
         if self.observations.get(type(observation)) is observation:
             observation.sent = NoSidebarSent()
+            observation.invalidate()
             service.observe_again()
 
     async def observe(self, service: ObservationService, revision: WireRevision,
@@ -235,23 +225,28 @@ class ReadingObservation[InterestT: InterestRequest](Observation[InterestT]):
     def __init__(self, request: InterestT):
         super().__init__(request)
         self.steps: Generator[ObservationStep] = (_ for _ in ())
+        self.read_revision: ReadState = NoRevision()
 
     def close(self) -> None:
         self.steps.close()
 
+    def invalidate(self) -> None:
+        """A changed read stage or completed preparation needs a new read, not a new file."""
+        self.read_revision = NoRevision()
+
     def step(self, service: ObservationService, revision: WireRevision) -> None:
-        """Advance one yielded step, never drain an interest before its siblings."""
+        """Advance one yield; a completed current revision has no work to schedule."""
         try:
             result = next(self.steps)
         except StopIteration:
             self.after_read(service)
-            self.steps = self.read(service.comms, revision)
-            try:
-                result = next(self.steps)
-            except StopIteration:
-                return
-        result.publish(service)
-        service.observe_again()
+            if revision.changed_since_any(self.read_revision):
+                self.read_revision = revision
+                self.steps = self.read(service.comms, revision)
+                self.step(service, revision)
+        else:
+            result.publish(service)
+            service.observe_again()
 
     @abstractmethod
     def read(
@@ -428,7 +423,7 @@ class OwnerRead(AwaitedRead):
     def refusal_errors(self) -> tuple[type[Exception], ...]:
         return (
             *super().refusal_errors,
-            RequestError, CoordinationError, ToolRefusedError, ConnectionError, TimeoutError,
+            Refused, CoordinationError, ToolRefusedError, ConnectionError, TimeoutError,
         )
 
     def receive(self, service: ObservationService) -> None:
@@ -582,7 +577,7 @@ class ReadNotifications(ReadRequest):
 
     references: tuple[MessageReference, ...]
 
-    def read(self, comms: Comms) -> Mapping[tuple[int, str], tuple[MessageNotification, ...]]:
+    def read(self, comms: Comms) -> NotificationWindow:
         return comms.views.message_notifications_for_references(self.references)
 
     def changed_since(self, comms: Comms, revision: WireRevision,
@@ -596,7 +591,7 @@ class ReadRecordedNotifications(ReadNotifications):
 
     source: str
 
-    def read(self, comms: Comms) -> Mapping[tuple[int, str], tuple[MessageNotification, ...]]:
+    def read(self, comms: Comms) -> NotificationWindow:
         with comms.bus.history.read_sources() as sources:
             source = HistorySource.require(sources, self.source)
             return source.notification_references(sources, self.references)
@@ -614,25 +609,24 @@ class NotificationsRead:
 
     revision: WireRevision
     activity: Mapping[str, ObservedActivity | DeletedThread | None] = field(default_factory=dict)
+    notification_window: NotificationWindow = field(default_factory=NoNotificationWindow)
 
     @classmethod
     def of(cls, revision: WireRevision, comms: Comms,
            known: Mapping[str, ObservedActivity | DeletedThread],
-           outcomes: Mapping[tuple[int, str], tuple[MessageNotification, ...]],
+           window: NotificationWindow,
            ) -> NotificationsRead:
-        names = {name for items in outcomes.values()
-                 for item in items for name in item.activity_names()}
-        known = {**comms.registry.snapshot().observed_activity(comms.agents, names - known.keys()),
-                 **known}
-        return cls(revision, {name: known.get(name) for name in names})
+        names = window.activity_names()
+        known = {**comms.views.observed_activity(revision, names - known.keys()), **known}
+        return cls(revision, {name: known.get(name) for name in names}, window)
 
     def live_changed(self, comms: Comms, revision: WireRevision) -> bool:
-        """The whole window changed, or one of its participants' activity did."""
-        if revision.changed_since(NotificationsView(), self.revision):
+        """Read marks, participant activity or retained assignment evidence changed."""
+        if revision.registry != self.revision.registry:
             return True
-        current = (comms.registry.snapshot().observed_activity(comms.agents, self.activity)
-                   if self.activity else {})
-        return any(current.get(name) != seen for name, seen in self.activity.items())
+        current = comms.views.observed_activity(revision, self.activity) if self.activity else {}
+        return (any(current.get(name) != seen for name, seen in self.activity.items())
+                or self.notification_window.changed(comms, revision, self.revision))
 
 
 class UnreadableNotificationsRead(NotificationsRead):
@@ -702,6 +696,7 @@ class RosterSidebarRead(SidebarReadStage):
 
     def advance(self, reading: SidebarReading, snapshot: CoordinationSnapshot) -> None:
         reading.stage = SidebarReadStage()
+        reading.invalidate()
         if snapshot.has_indexing_unread():
             reading.sent = NoSidebarSent()
 
@@ -842,10 +837,9 @@ class NotificationReading(ReadingObservation[ObserveNotifications]):
 
     def notifications(self, request: ReadNotifications, comms: Comms, revision: WireRevision,
                       previous: NotificationsRead | None) -> ObservationStep:
-        known = comms.registry.snapshot().observed_activity(
-            comms.agents, () if previous is None else previous.activity)
+        known = comms.views.observed_activity(revision, () if previous is None else previous.activity)
 
-        def read() -> Mapping[tuple[int, str], tuple[MessageNotification, ...]]:
+        def read() -> NotificationWindow:
             request.require_root(comms)
             return request.read(comms)
 
@@ -853,8 +847,8 @@ class NotificationReading(ReadingObservation[ObserveNotifications]):
             self.read_states[request] = state
             return result
         return UnreadableHistory.outcome(read).answer(
-            lambda outcomes: settled(NotificationsObserved(revision, request, outcomes),
-                                     NotificationsRead.of(revision, comms, known, outcomes)),
+            lambda window: settled(NotificationsObserved(revision, request, window.outcomes),
+                                   NotificationsRead.of(revision, comms, known, window)),
             lambda error: ObservationPending(),  # Keep the interest until its source can be read.
             lambda error: settled(NotificationsUnreadable(revision, request, error),
                                   UnreadableNotificationsRead(revision)))
@@ -905,8 +899,8 @@ class ThreadReading(ReadingObservation[ObserveThreads]):
         readable, _ = previous.revision_inputs()
         names = self.located_threads.names
         watched = names | frozenset(actor for view in readable.values()
-                                    for actor in view.notification_activity_names())
-        activity = comms.registry.snapshot().observed_activity(comms.agents, watched)
+                                    for actor in view.notification_window.activity_names())
+        activity = comms.views.observed_activity(revision, watched)
         self.located_threads = replace(self.located_threads, activity=activity)
         names = (revision.changed_threads(previous, comms, activity) | names - previous.results.keys()) & names
         self.located_threads = replace(self.located_threads, names=names)

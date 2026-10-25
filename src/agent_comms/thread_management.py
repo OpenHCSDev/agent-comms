@@ -3,16 +3,13 @@
 from __future__ import annotations
 
 import asyncio
-import os
 import re
-import stat
 from abc import abstractmethod
 from collections.abc import Iterator, Sequence
 from contextlib import contextmanager
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import TYPE_CHECKING, Self
-from uuid import uuid4
 
 from agent_comms.coordination_errors import CoordinationError
 
@@ -20,6 +17,7 @@ from .child_process import NO_PROCESS, ProcessIdentity, ProcessState
 from .cli_result import CliResult
 from .goal_waits import GoalWaits
 from .native_entries import ImportedSessionWriter
+from .native_session_files import NativeSessionFiles
 from .registration import Registration
 from .relationships import RelationshipStore
 from .thread_execution import NativeThreadExecution
@@ -58,6 +56,7 @@ from .thread_model import DeclaredModel, ThreadModel, UndeclaredModel
 from .thread_owned_state import ThreadOwnedState
 from .thread_text import ForkedParent, GivenThreadText, NoThreadText, ThreadText
 from .threads import KeptModel, ModelChoice, NextTurnConfiguration, Thread
+from .native_session_reopen import PiSessionId
 from .tool_result import ToolResult
 
 
@@ -167,7 +166,7 @@ class NewThreadSpec:
         thread = self.declaration(str(project), threads.registry)
         threads.registry.require_declaration_available(thread)
         location = thread.runtime.new_location(threads.root, project)
-        with threads.registry.store.locked():
+        with threads.registry.store.guarded_write():
             saved = RegistrySessionLocation.from_path(location.read_key, threads.root)
             yield replace(thread, session_file=saved)
 
@@ -195,8 +194,8 @@ class ForkSpec(NewThreadSpec):
         # Copy saved history before locking the registry for its declaration.
         parent = self._parent(threads)
         threads.registry.require_declaration_available(self.child(parent, parent.runtime, threads))
-        location = asyncio.run(parent.backend.fork(parent, pi_bin, runtime))
-        with threads.registry.store.locked():
+        location = asyncio.run(parent.backend.fork(parent, pi_bin, runtime, threads.root))
+        with threads.registry.store.guarded_write():
             current = self._parent(threads)
             if current.incarnation != parent.incarnation or current.runtime != parent.runtime:
                 raise RelationViolationError(
@@ -249,7 +248,7 @@ class ThreadManagement:
         project = Path(directory).expanduser().resolve()
         if not project.is_dir():
             raise ValueError("The imported project does not exist locally; supply --worktree.")
-        session_path = ImportedSessionWriter.path_in(self.root, session_id=uuid4().hex)
+        session_path = ImportedSessionWriter.path_in(self.root, session_id=PiSessionId.fresh())
         thread = model.configured(Thread(
             name,
             tags,
@@ -257,7 +256,7 @@ class ThreadManagement:
             session_file=RegistrySessionLocation.from_path(session_path, self.root),
             title=snapshot.title,
         ))
-        with self.registry.store.locked():
+        with self.registry.store.guarded_write():
             if self.registry.snapshot().taken(name):
                 raise ValueError(f"Thread name {name!r} is already reserved.")
             self.registry.require_declaration_available(thread, StoppedThreadStatus())
@@ -282,8 +281,8 @@ class ThreadManagement:
         first, so one inbox never has two deliverers.
         """
         snapshot = history.imported(limits)
-        session_path = ImportedSessionWriter.path_in(self.root, session_id=uuid4().hex)
-        with self.registry.store.locked():
+        session_path = ImportedSessionWriter.path_in(self.root, session_id=PiSessionId.fresh())
+        with self.registry.store.guarded_write():
             current = self.registry.snapshot().require(name)
             current.execution.require_external()
             self._write_imported_session(session_path, snapshot, Path(current.worktree))
@@ -304,15 +303,7 @@ class ThreadManagement:
     def _write_imported_session(
         self, session_path: Path, snapshot: ImportedConversation, project: Path,
     ) -> None:
-        session_path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
-        # Session output must remain in an owner-controlled directory.
-        info = session_path.parent.lstat()
-        if (
-            not stat.S_ISDIR(info.st_mode)
-            or info.st_uid != os.geteuid()
-            or stat.S_IMODE(info.st_mode) != 0o700
-        ):
-            raise ValueError("Imported session directory is not owner-controlled.")
+        NativeSessionFiles.prepare_private_directory(session_path.parent)
         AtomicFile(session_path).write_bytes(snapshot.session_bytes(project))
 
     def claim_thread(
@@ -342,7 +333,7 @@ class ThreadManagement:
 
     def rename_self(self, new_name: str, *, caller: ThreadCaller) -> RenameThreadResult:
         """Rename the bound caller's own thread, retaining its old aliases."""
-        with self.registry.store.locked():
+        with self.registry.store.guarded_write():
             if self.registry.require(caller.name).auto_title_pending and (
                 len(new_name) > 48 or len(re.split(r"[-_]+", new_name)) > 6
             ):
@@ -355,7 +346,7 @@ class ThreadManagement:
         """Move one thread's project, preserving its owner and conversation."""
         if not path.strip():
             raise ValueError("Project path cannot be empty.")
-        with self.registry.store.locked():
+        with self.registry.store.guarded_write():
             thread = self.registry.require(name)
             target = Path(path).expanduser()
             if not target.is_absolute():
@@ -379,7 +370,7 @@ class ThreadManagement:
         self, name: str, display_name: str, *, owner: ProcessIdentity
     ) -> RenameThreadResult:
         """Rename a locally managed running thread after proving process ownership."""
-        with self.registry.store.locked():
+        with self.registry.store.guarded_write():
             thread = self.registry.require(name)
             if thread.process_identity != owner:
                 raise RelationViolationError(
@@ -392,7 +383,7 @@ class ThreadManagement:
         self, name: str, new_name: str, *, title: ThreadText = NoThreadText()
     ) -> RenameThreadResult:
         # Every rename checks and changes the same current registry declaration.
-        with self.registry.store.locked():
+        with self.registry.store.guarded_write():
             return self._rename_thread_unlocked(name, new_name, title=title)
 
     def _rename_thread_unlocked(
@@ -424,7 +415,7 @@ class ThreadManagement:
         or project invalidates the native settings result acquired by the caller.
         """
         Thread.require_declaration(original)
-        with self.registry.store.locked():
+        with self.registry.store.guarded_write():
             thread = self.registry.require(original.name)
             thread.require_original_model_configuration(original)
             thread.execution.require_native()
@@ -437,7 +428,7 @@ class ThreadManagement:
         self, name: str, *, model: ThreadModel, thinking_level: type[ThinkingChoice],
     ) -> Thread:
         """Persist one first-known producer observation through its declaration."""
-        with self.registry.store.locked():
+        with self.registry.store.guarded_write():
             thread = self.registry.require(name)
             updated = thread.initialized_native_configuration(
                 model=model, thinking_level=thinking_level,
@@ -466,7 +457,7 @@ class ThreadManagement:
         path = Path(source_path).expanduser().resolve()
         location = original.backend.location_type(str(path))
         saved_model = ThreadModel.from_choice(location.model_choice) if path.is_file() else UndeclaredModel()
-        with self.registry.store.locked():
+        with self.registry.store.guarded_write():
             current = self.registry.require(original.name)
             if current != original:
                 raise RelationViolationError("Original thread changed before native source publication")
@@ -482,7 +473,7 @@ class ThreadManagement:
 
     def archive(self, name: str) -> None:
         """Hide a stopped participant from presence while retaining messages."""
-        with self.registry.store.locked():
+        with self.registry.store.guarded_write():
             self._archive_unlocked((self.registry.require(name),))
 
     def _archive_unlocked(self, originals: Sequence[Thread]) -> None:
@@ -500,7 +491,7 @@ class ThreadManagement:
             self.owners.releases,
             self.bus.reads,
             transcript_read_state(self.bus.reads.path),
-            GoalWaits.at(self.root),
+            GoalWaits(self.root),
             RelationshipStore.at(self.root),
         )
         ThreadOwnedState.require_complete(states)
@@ -508,7 +499,7 @@ class ThreadManagement:
 
     def delete(self, name: str) -> ThreadDeleted:
         """Permanently delete one stopped or archived thread."""
-        with self.registry.store.locked():
+        with self.registry.store.guarded_write():
             return self._delete_unlocked((self.registry.require(name),))[0]
 
     def _delete_unlocked(self, originals: Sequence[Thread]) -> tuple[ThreadDeleted, ...]:

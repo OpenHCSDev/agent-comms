@@ -32,7 +32,7 @@ def test_original_read_contention_is_unavailable_then_same_receipts_return(tmp_p
     root, _root_id, comms, initial, _people = _root(tmp_path)
     database = root / "coordination.sqlite3"
     captured = NotificationAssignment.read(root, (initial,))
-    original = captured.resolve(root)
+    original = NotificationAssignment.resolve(root, captured)
     wire_before = comms.bus.bus.revision()
     assert original
     with Coordination(str(database)) as writer:
@@ -47,7 +47,7 @@ def test_original_read_contention_is_unavailable_then_same_receipts_return(tmp_p
                     pytest.fail("Busy acquisition reached the native schema decoder")
     reopened = NotificationAssignment.read(root, (initial,))
     assert reopened == captured
-    assert reopened.resolve(root) == original
+    assert NotificationAssignment.resolve(root, reopened) == original
     with TranscriptRead.publication_source(root) as native_read:
         assert native_read is not None
     assert comms.bus.bus.revision() == wire_before
@@ -94,7 +94,7 @@ def test_frozen_unhandled_delivery_projects_recovery_without_claiming(tmp_path):
     with Coordination(str(root/'coordination.sqlite3')) as store:
         before = WakeAssignment.select(store.session._connection)
     wire_before = comms.bus.bus.revision()
-    notices = comms.views.message_notifications_for_references((message.reference,))[message.seq,message.message_id]
+    notices = comms.views.message_notifications_for_references((message.reference,)).outcomes[message.seq,message.message_id]
     beta = next(notice for notice in notices if notice.recipient=='beta')
     assert beta.state == ContextualProgress(UnrecordedProgress())
     assert beta.state.detail == ''
@@ -106,7 +106,7 @@ def test_frozen_unhandled_delivery_projects_recovery_without_claiming(tmp_path):
     # The immutable source's recipient survives rename; current readiness must
     # join its original birth rather than manufacture a new membership/claim.
     comms.registry.rename('beta','renamed')
-    renamed = comms.views.message_notifications_for_references((message.reference,))[message.seq,message.message_id]
+    renamed = comms.views.message_notifications_for_references((message.reference,)).outcomes[message.seq,message.message_id]
     assert {item.recipient_identity for item in renamed}=={item.recipient_identity for item in notices}
 
 
@@ -126,7 +126,7 @@ def test_capture_page_window_names_zero_and_nonzero_sent_windows(tmp_path):  # n
 
 def test_notification_window_preserves_exact_receipts_and_rejects_duplicates(tmp_path):  # noqa: F811
     root, _root_id, comms, initial, _people = _root(tmp_path)
-    records = NotificationAssignment.read(root, (initial,)).resolve(root)
+    records = NotificationAssignment.resolve(root, NotificationAssignment.read(root, (initial,)))
     assert records
     projected = tuple(NotificationAssignment.for_deliveries((initial,), records))
     assert projected[0][0] is initial
@@ -152,6 +152,13 @@ def test_publication_intent_joins_original_sender_and_target_only(tmp_path):  # 
     intent = TurnRouting((initial.message.reference,), MessageRoute("beta", ("sender", "alpha")))
     # A later send can fail; this first committed subset stays a valid relation.
     intent.require_publications(original, lookup)
+    absent = TurnRouting()
+    assert not absent.outgoing
+    assert FieldCodec.encode(absent)["reply"] is None
+    assert TurnRouting.from_wire(absent.to_wire()) == absent
+    absent.require_publications((), lookup)
+    with pytest.raises(RelationViolationError):
+        absent.require_publications(original, lookup)
     reference_only = FieldCodec.encode(intent)["requests"]
     assert reference_only == [FieldCodec.encode(initial.message.reference)]
     assert TurnRouting.from_wire(intent.to_wire()) == intent

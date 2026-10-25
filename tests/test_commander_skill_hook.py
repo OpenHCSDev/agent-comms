@@ -5,21 +5,35 @@ import json
 import os
 import subprocess
 import sys
+import time
 from pathlib import Path
 
 import pytest
 
+from agent_comms.cli_bridges.claude import BoardLineRow
+from agent_comms.cli_bridges.shared import Binding
 from agent_comms.commander.package import CommanderPackage
 from agent_comms.commander.rule_file import RuleFile
 from agent_comms.comms import wire
 from agent_comms.pattern_sources import PostmortemFailure
+from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.registry_document import RegisteredCommanderProject
 from agent_comms.slop import Slop
+from agent_comms.task_attachments.commander_pings import (
+    CommanderDecisions,
+    CommanderNotice,
+    RulePing,
+    UnitPing,
+)
+from agent_comms.text_digest import TextDigest
+from agent_comms.thread_identity import RecordedThreadIncarnation
 from agent_comms.thread_model import DeclaredModel
 from agent_comms.threads import Thread
-from agent_comms_hooks.reread import SliceReminder
+from agent_comms.ui_model.unit_state import AwaitingApplicationRun, AwaitingCommander, DeliveredUnclosed
+from agent_comms_hooks.board import BoardLine
+from agent_comms_hooks.reread import BoardReminder, DeafReminder, SliceReminder
 from agent_comms_hooks.skill import CommanderStart
-from agent_comms_hooks.watch import WatchClaim, WatchRecord
+from agent_comms_hooks.watch import DeafWatch, WatchClaim, WatchRecord
 
 
 @pytest.mark.parametrize("source", ["startup", "resume", "compact"])
@@ -84,6 +98,42 @@ def test_a_slice_every_few_calls_rotating_and_dealt_again_at_compaction(tmp_path
     assert sum(map(len, taken)) == 3
     assert start.take()  # compaction deals the deck again from its start
     assert [hook.take() for _ in range(SliceReminder.every)][-1] == (slices[0],)
+
+
+def test_rearm_rides_every_tool_call_while_a_running_bridge_has_no_monitor(tmp_path, monkeypatch):
+    monkeypatch.setenv("HOME", str(tmp_path / "home"))
+    hook = DeafReminder.decode(hook_record(tmp_path / "session.jsonl"))
+    claim = WatchClaim(hook.session_id)
+    claim.path.parent.mkdir(parents=True)
+    assert hook.take() == ()  # no bridge was ever bound: nothing to re-arm
+    with claim.claim.claimed():
+        deaf = DeafWatch("now (no Monitor holds its reader claim)").line()
+        assert hook.take() == hook.take() == (deaf,)
+        with claim.reader_held():
+            assert hook.take() == ()
+
+
+def test_the_board_rides_every_tool_call_until_a_packet_clears_it(tmp_path, monkeypatch):
+    """The bridge records the packet in its delivery store; the hook prints the lines the
+    commander disposes of on every call, and a packet without them clears the board."""
+    monkeypatch.setenv("HOME", str(tmp_path / "home"))
+    hook = BoardReminder.decode(hook_record(tmp_path / "session.jsonl"))
+    claim = WatchClaim(hook.session_id)
+    record = WatchRecord("lead", str(tmp_path / "bus"), ("watch",), tmp_path / "inbox")
+    lead = RecordedThreadIncarnation("lead", 1.0)
+    # Past the answer window, and 30 s clear of the next minute so both calls render alike.
+    began = RecordedEventTime(time.time() - AwaitingCommander.seconds - 30)
+    stale = RulePing(DeliveredUnclosed, TextDigest.of("CLOSE"), text="CLOSE unit-a P1 -> close it", since=began)
+    waiting = UnitPing(RecordedThreadIncarnation("worker", 1.0), AwaitingApplicationRun, (), (),
+                       TextDigest.of("AWAIT"), text="AWAIT RUN worker", since=began)
+    with claim.held(record), claim.reader_held(), Binding.open(record.store.parent) as db:
+        assert hook.take() == ()  # the bridge has recorded no packet
+        BoardLineRow.record(db, CommanderDecisions(lead, (stale, waiting), (stale, waiting), ()))
+        line, = stale.board(BoardLine)
+        assert line.locks_at <= time.time()
+        assert hook.take() == hook.take() == (line.line(time.time()),)
+        BoardLineRow.record(db, CommanderNotice(lead, (waiting,)))
+        assert hook.take() == ()
 
 
 def test_the_deck_carries_the_voice_every_fourth_slice_every_drift_tell_and_every_failure():

@@ -15,7 +15,7 @@ from abc import ABC, abstractmethod
 from collections.abc import Iterator
 from contextlib import contextmanager
 from contextvars import ContextVar
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 from threading import Lock
 from typing import ClassVar, cast
@@ -28,6 +28,7 @@ from agent_comms.declared_family import DeclaredFamily
 from agent_comms.installer.runtime_wire import CrossesRuntimes
 from agent_comms.field_codec import FieldCodec, JsonValue
 from agent_comms.maintenance_barrier import HOLDER_NONCE
+from agent_comms.store_files import BorrowedStoreLock
 
 
 @dataclass(frozen=True)
@@ -407,6 +408,10 @@ class InterpreterOperation[Answer, *Arguments](ABC):
 class ProbeProgram(ABC):
     """Where an operation's declaration is executable by the selected interpreter."""
 
+    @property
+    def descriptors(self) -> tuple[int, ...]:
+        return ()
+
     @abstractmethod
     def entry(self) -> tuple[str | Path, ...]: ...
 
@@ -415,11 +420,12 @@ class ProbeProgram(ABC):
         return ()
 
 
+@dataclass(frozen=True)
 class InstalledProgram(ProbeProgram):
     """Each runtime answers from its own installed installer, so no installer source ever
     runs on another version's library."""
 
-    def entry(self) -> tuple[str, str]:
+    def entry(self) -> tuple[str, ...]:
         return "-c", f"from {__name__} import serve; serve()"
 
 
@@ -429,6 +435,14 @@ class TargetProgram(InstalledProgram):
     included; their steps ship in no runtime, so the tree's ``steps`` supply them."""
 
     steps: Path
+    inherited_locks: tuple[BorrowedStoreLock, ...] = ()
+
+    def borrowing(self, locks: tuple[BorrowedStoreLock, ...]) -> TargetProgram:
+        return replace(self, inherited_locks=locks)
+
+    @property
+    def descriptors(self) -> tuple[int, ...]:
+        return tuple(lock.descriptor for lock in self.inherited_locks)
 
     def import_roots(self) -> tuple[Path]:
         return (self.steps,)
@@ -489,13 +503,13 @@ def serve() -> None:
     closes. An operation that raises ends the worker: its traceback goes to stderr, and the
     caller reads the exit in place of an answer. The answers own stdout's descriptor; every
     other write, an operation's exit handlers included, lands on stderr."""
-    answers = os.fdopen(os.dup(sys.stdout.fileno()), "w")
-    os.dup2(sys.stderr.fileno(), sys.stdout.fileno())
-    for line in sys.stdin:
-        print(
-            FieldCodec.compact(
-                FieldCodec.encode(FieldCodec.decode(ProbeRequest, FieldCodec.parse(line)).answer())
-            ),
-            file=answers,
-            flush=True,
-        )
+    with os.fdopen(os.dup(sys.stdout.fileno()), "w") as answers:
+        os.dup2(sys.stderr.fileno(), sys.stdout.fileno())
+        for line in sys.stdin:
+            print(
+                FieldCodec.compact(
+                    FieldCodec.encode(FieldCodec.decode(ProbeRequest, FieldCodec.parse(line)).answer())
+                ),
+                file=answers,
+                flush=True,
+            )

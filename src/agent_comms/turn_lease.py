@@ -30,7 +30,7 @@ from .locked_store import DurableFile, JsonDocument, LockedFile, PatternFile
 from .message_reference import MessageReference
 from .read_basis import ChannelConversation, DMConversation
 from .reported_turn import NoReportedTurn, ReportedTurn, ReportedTurnState
-from .routing import TurnRouting
+from .routing import NoTurnRouting, Routing
 from .store_files import DependentStateTier, store_lock_path
 from .thread_identity import (
     NoObservedTurn,
@@ -235,7 +235,7 @@ class ActiveTurn(Executing, RecordMember, TurnDeclaration):
     id: TurnId
     owner: ProcessIdentity
     started_at: float = field(default_factory=time.time)
-    routing: TurnRouting | None = None
+    routing: Routing = NoTurnRouting()
     claimed_generation: TurnGeneration = UnrecordedGeneration()
     turn_generation: TurnGeneration = UnrecordedGeneration()
     phase: TurnPhase = field(default_factory=PreparingPhase)
@@ -725,21 +725,21 @@ class StoredTurnRecord(Executing, TurnFile, JsonDocument[ActiveTurn], StoredTurn
         return NamedTurn(self) if registry.holds_turn(self.identity) else RetiredTurn()
 
     def without_claim(self) -> None:
-        with self.writers.locked():
+        with self.writers.guarded_write():
             self._named_unlocked().without_claim()
 
     def retire(self) -> None:
         """Delete a superseded turn under its own lock; a phase change waiting on that lock
         then finds the registry no longer names it. The generation never recurs, so its
         lock file goes with it."""
-        with self.writers.locked():
+        with self.writers.guarded_write():
             self.path.unlink()
             store_lock_path(self.path).unlink(missing_ok=True)
 
     def _turn_effects(
         self, lease: TurnLeaseFence, observe: Callable[[TurnState], Iterable[TurnState]],
     ) -> tuple[TurnState, ...]:
-        with self.writers.locked():
+        with self.writers.guarded_write():
             return self._named_unlocked().effects(lease, observe)
 
     def transition(self, lease: TurnLeaseFence, phase: TurnPhase) -> tuple[TurnState, ...]:

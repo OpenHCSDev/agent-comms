@@ -19,8 +19,9 @@ from .context_segments.wake_values import NoWakeGoalContext, WakeGoalContext, Wa
 from .declared_family import DeclaredFamily
 from .errors import RejectedEnforcementError, RelationViolationError
 from .field_codec import (
-    GoalId,
     FieldCodec,
+    GoalId,
+    GoalWaitId,
     MalformedRecord,
     NullMember,
     PathText,
@@ -512,9 +513,7 @@ class ProblemGoalOrder(GoalOrder):
 
     def progress(self, goal: Goal, todos: Sequence[Todo]) -> str:
         """Each problem's order state and latest verdict, as Core records them on its Todo."""
-        return "\n".join(" · ".join((f"{todo.id}: {todo.order.line}",
-                                     *(verdict.line for verdict in todo.verdicts[-1:])))
-                         for todo in todos)
+        return "\n".join(todo.progress_line() for todo in todos)
 
     def require_model_block(self) -> None:
         raise ValueError("A problem goal is not blocked by text: ask the commander to block the "
@@ -631,7 +630,10 @@ class GoalDeclaration(GoalDisplay, SubclassUnion, RegistrationInheritance["GoalD
     def reported_id(self) -> GoalId | None: ...
 
     @abstractmethod
-    def clear_wait(self, waits: GoalWaits, *, wait_id: str | None = None) -> bool: ...
+    def clear_wait(self, waits: GoalWaits) -> bool: ...
+
+    def consume_wait(self, waits: GoalWaits, wait_id: GoalWaitId) -> bool:
+        return False
 
     def require_active(self) -> Goal:
         goal = self.require()
@@ -684,7 +686,7 @@ class NoGoal(NullMember, GoalDeclaration):
     def reported_id(self) -> None:
         return None
 
-    def clear_wait(self, waits: GoalWaits, *, wait_id: str | None = None) -> bool:
+    def clear_wait(self, waits: GoalWaits) -> bool:
         return False
 
     def wake_context(self, goals: Goals, owner: ThreadIncarnation) -> WakeGoalValue:
@@ -769,8 +771,11 @@ class Goal(RecordMember, GoalDeclaration):
     def reported_id(self) -> GoalId:
         return self.id
 
-    def clear_wait(self, waits: GoalWaits, *, wait_id: str | None = None) -> bool:
-        return waits.clear(self.id, wait_id=wait_id)
+    def clear_wait(self, waits: GoalWaits) -> bool:
+        return waits.clear(self.id)
+
+    def consume_wait(self, waits: GoalWaits, wait_id: GoalWaitId) -> bool:
+        return waits.consume(self.id, wait_id)
 
     def wake_context(self, goals: Goals, owner: ThreadIncarnation) -> WakeGoalValue:
         todos = self.order.todos(goals, owner, self.id)

@@ -22,7 +22,7 @@ from agent_comms.private_path import PrivateDirectoryRole, TrustedAncestorRole
 
 from .errors import RelationViolationError
 from .native_failures import NativePiUnavailable
-from .store_files import ProcessSingleton
+from .process_claim import ProcessSingleton
 from agent_comms.typed_table import ReconciledFile, TableSchema
 
 
@@ -285,6 +285,19 @@ class PrivateSession(DurableFile, BusTranscriptFile):
 
     __slots__ = ()
     filename = "sessions/enrolled-{session_id}.jsonl"
+
+
+class ForkedSession(DurableFile, BusTranscriptFile):
+    """A fork's copy of its parent's history; the native fork names it in this directory."""
+
+    __slots__ = ()
+    filename = "sessions/{stamp}_{session_id}.jsonl"
+
+    @classmethod
+    def prepared_directory(cls, root: Path) -> Path:
+        directory = (Path(root) / cls.pattern()).parent
+        NativeSessionFiles.prepare_private_directory(directory)
+        return directory
 
 
 class CheckSession(DurableFile, BusTranscriptFile):

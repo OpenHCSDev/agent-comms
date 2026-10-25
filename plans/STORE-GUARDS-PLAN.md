@@ -42,9 +42,9 @@ Each phase, its predecessors and its evidence on `origin/main` are declared in `
 
 | Phase | Done when, on main | Now | Done |
 |---|---|---|---|
-| 1 `StoreGuardFamiliesPhase` | `SqliteStore` and `ProcessSingleton` declared in `store_files.py`; `fcntl\.flock\(` outside `store_files.py`; `_store_lock\(` in `typed_table.py`; `_store_lock\(path\), closing` in `locked_store.py` | 17 | 0 |
-| 2 `ReadWriteMembersPhase` | `SingleFileStore`, `MultiFileStore` declared in `store_files.py`; `(\.locked\|_store_lock\|_async_store_lock\|ordered)\([^)]*(mode\|contention)=` | 24 | 0 |
-| | `\.locked\(` outside `store_files.py` and `locked_store.py` | 68 in 31 | 0 |
+| 1 `StoreGuardFamiliesPhase` | `SqliteStore` declared in `store_files.py`, `ProcessSingleton` in `process_claim.py`; `fcntl\.flock\(` outside `process_claim.py`; `_store_lock\(` in `typed_table.py`; `_store_lock\(path\), closing` in `locked_store.py` | 17 | 0 |
+| 2 `ReadWriteMembersPhase` | `SingleFileStore`, `MultiFileStore` declared in `store_files.py`; `(\.locked\|_store_lock\|_async_store_lock\|ordered)\([^)]*(mode\|contention)=` | 0 | 0 |
+| | `def locked\(` outside `store_files.py` and `locked_store.py` | 1 | 0 |
 | 3 `BoundedWaitPhase` | `UNBOUNDED_CONTENTION\|UnboundedContention` | 19 | 0 |
 | 4 `MaintenanceInWritePhase` | `assert_open_unlocked\(\)\|require_maintenance_open\((path)?\)` outside `store_files.py`, `locked_store.py`, `typed_table.py` and `maintenance_barrier.py` | 9 | 0 |
 | 5 `LockCensusPhase` | `^class StoreLockCalls\(` in `tools/debt_ratchet.py` | 0 | 1 |
@@ -56,11 +56,11 @@ Each phase, its predecessors and its evidence on `origin/main` are declared in `
 - `SingleFileStore`: one JSON or text file published by atomic rename (`JsonDocument._write_unlocked`). Its writers take its own lock; its reads take none, because a rename is atomic and `JsonDocument.read()` is already lock-free.
 - `SqliteStore`: the SQLite connection-boundary capability in `store_files.py`, inherited by `SQLiteFile`. `attached` holds the boundary lock across attachment and retirement, while SQLite's own transactions serialize SQL between them; `exclusive_writer` holds it for a writer's whole life during schema reconciliation or WAL truncation. `reconcile_at`, `settle` and `WalStore` open connections through that inherited behavior and name no lock.
 - `MultiFileStore`: a store whose state spans files, such as the registry with its turn files (`RegistryStore.cut_paths`, `registry_store.py:271`). Its one lock covers the set; its members declare that they follow it (`DependentStateTier`, `store_files.py:335`).
-- `ProcessSingleton`: one running process per path. It owns the lock path, open flags, try-or-wait, adoption across exec, observation and release; the flock flags live on `LockMode` (`attempt`, `wait`), so `Platform.try_store_lock` and `Platform.acquire_session_writer` are deleted. The 12 hand flocks become members: restart queue watcher, Pi durable session, private sidecar, installer launch, session writer and the hook watcher.
+- `ProcessSingleton`: one running process per path. It owns the lock path, open flags, try-or-wait, adoption across exec, observation and release; the flock flags live on `FlockMode` (`attempt`, `wait`), which `LockMode` inherits; all of it sits in `process_claim.py`, standard library only, because Claude Code hooks probe claims on every tool call, so `Platform.try_store_lock` and `Platform.acquire_session_writer` are deleted. The 12 hand flocks become members: restart queue watcher, Pi durable session, private sidecar, installer launch, session writer and the hook watcher.
 
 **Witnesses.** `store_files.py:275-305` (`StoreLockOwner.locked`), `typed_table.py:2246`, `:2335`, `:2340`, `locked_store.py:645`, and the 12 flock sites above.
 
-**Checks.** `git grep -cE 'fcntl\.flock\(' -- src ':!src/agent_comms/store_files.py' ':!src/agent_comms/skills/'` goes to 0. `SQLiteFile.exclusive_writer` and `ProcessSingleton` are declared. Behaviour: two processes writing one store still serialize, and a second process starting a singleton still refuses, each pinned by one test per family, not one per store.
+**Checks.** `git grep -cE 'fcntl\.flock\(' -- src ':!src/agent_comms/process_claim.py' ':!src/agent_comms/skills/'` goes to 0. `SQLiteFile.exclusive_writer` and `ProcessSingleton` are declared. Behaviour: two processes writing one store still serialize, and a second process starting a singleton still refuses, each pinned by one test per family, not one per store.
 
 **Deleted.** Four call-site SQLite locks, 13 hand flocks, their per-site lock path spellings, and the hand-written context-manager exit signature. Each singleton's owner declares its claim property once; callers acquire, adopt, observe and release through it.
 
@@ -98,7 +98,7 @@ Each phase, its predecessors and its evidence on `origin/main` are declared in `
 
 ### 5. A census of lock calls, ratcheted to zero
 
-**Target.** `tools/debt_ratchet.py` gains `StoreLockCalls`: it counts lock calls outside `store_files.py` and `locked_store.py` (the census pattern above) and refuses growth on any file.
+**Target.** `tools/debt_ratchet.py` gains `StoreLockCalls`: it counts lock calls outside `store_files.py`, `locked_store.py` and `process_claim.py` (the census pattern above) and refuses growth on any file.
 
 **Witnesses.** 99 calls in 42 modules at `389d0b22a` and at `8bc8f8fef`.
 

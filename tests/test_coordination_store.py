@@ -42,6 +42,7 @@ from agent_comms.coordination_errors import (
     StaleRevision,
 )
 from agent_comms.coordination_results import AlreadyApplied, Applied
+from agent_comms.coordination_schema import CoordinatorTable
 from agent_comms.coordination_snapshot import RecoverySnapshot
 from agent_comms.coordination_tables.assignments import WakeAssignment
 from agent_comms.coordination_tables.attempts import ReplayFact
@@ -65,7 +66,7 @@ from agent_comms.execution_states import (
     FailedExecution,
     PendingExecution,
 )
-from agent_comms.field_codec import FieldCodec, MessageId
+from agent_comms.field_codec import AssignmentId, FieldCodec, MessageId
 from agent_comms.messages import InfoKind, Message
 from agent_comms.owner_fence import OwnerFence, prepare_fence_token
 from agent_comms.reason_codes import GivenReasonCode, NoDetail
@@ -73,6 +74,7 @@ from agent_comms.recovery_states import FailedRecovery
 from agent_comms.response_acknowledgement import canonical_publication_key
 from agent_comms.selected_source_batch import SelectedSource
 from agent_comms.turn_failure import ProviderRetryExhausted
+from agent_comms.typed_table import SQLiteForeignKeys
 from agent_comms.wake_policy import (
     BoundedTriageWake,
     FullWake,
@@ -92,7 +94,7 @@ def store(path: Path) -> StandaloneCoordination:
     return StandaloneCoordination(str(path), clock_ms=lambda: 1_000)
 
 
-def wire_source(db: StandaloneCoordination, assignment_id: str, original: Message, mode: WakePolicy) -> SelectedSource:
+def wire_source(db: StandaloneCoordination, assignment_id: AssignmentId, original: Message, mode: WakePolicy) -> SelectedSource:
     from agent_comms.audience_manifest import FrozenRecipient, freeze_audience
     from agent_comms.bus import PrivateRecord
     from agent_comms.selected_source_batch import SelectedSource
@@ -117,7 +119,7 @@ def ready(
         original = Message("owner", "Owner", "Original request", InfoKind, timestamp=1.0, seq=1)
         db.assignments.accept(
             WakeAssignment(
-                assignment_id="claim",
+                assignment_id=AssignmentId.cohort(b"claim"),
                 recipient="Owner",
                 recipient_lookup=SENDER_LOOKUP,
                 wire_seq=1,
@@ -128,7 +130,7 @@ def ready(
                 lifecycle=FullPendingAssignment.load(FullWake(), None, None, None),
             )
         )
-        sources = (wire_source(db, "claim", original, FullWake()),)
+        sources = (wire_source(db, AssignmentId.cohort(b"claim"), original, FullWake()),)
     db.create(
         "exec",
         origin,
@@ -247,7 +249,7 @@ def test_claim_execution_idempotency_and_rollback(db_path: Path) -> None:
         WireOrigin,
         SENDER_LOOKUP,
         2,
-        sources=(wire_source(db, "claim", original, FullWake()),),
+        sources=(wire_source(db, AssignmentId.cohort(b"claim"), original, FullWake()),),
     )
     assert isinstance(replay, AlreadyApplied)
     different = Message("different", "Owner", "Original request", InfoKind,
@@ -258,7 +260,7 @@ def test_claim_execution_idempotency_and_rollback(db_path: Path) -> None:
             WireOrigin,
             SENDER_LOOKUP,
             2,
-            sources=(wire_source(db, "claim", different, FullWake()),),
+            sources=(wire_source(db, AssignmentId.cohort(b"claim"), different, FullWake()),),
         )
     db.close()
     with store(db_path) as reopened:
@@ -276,7 +278,7 @@ def test_claim_acceptance_requires_initial_mode_decision(db_path: Path) -> None:
             verdict: str | None = None,
         ) -> WakeAssignment:
             return WakeAssignment(
-                assignment_id=f"claim-{index}",
+                assignment_id=AssignmentId.cohort(f"claim-{index}".encode()),
                 recipient="Owner",
                 recipient_lookup=SENDER_LOOKUP,
                 wire_seq=index,
@@ -310,22 +312,22 @@ def test_claim_acceptance_requires_initial_mode_decision(db_path: Path) -> None:
             assert isinstance(db.assignments.accept(initial), Applied)
             assert db.assignments.get(initial.assignment_id).revision == 1
         ignored = db.assignments.transition_preengagement(
-            "claim-7",
+            AssignmentId.cohort(b"claim-7"),
             IgnoredAssignment,
             expected_revision=1,
         )
         deferred = db.assignments.transition_preengagement(
-            "claim-8", DeferredAssignment, expected_revision=1
+            AssignmentId.cohort(b"claim-8"), DeferredAssignment, expected_revision=1
         )
         failed = db.assignments.transition_preengagement(
-            "claim-9", FailedAssignment, expected_revision=1
+            AssignmentId.cohort(b"claim-9"), FailedAssignment, expected_revision=1
         )
         assert ignored.value.revision == deferred.value.revision == failed.value.revision == 2
         assert isinstance(
             db.assignments.accept(assignment(7, BoundedTriageWake(), TriagePendingAssignment)),
             AlreadyApplied,
         )
-        assert type(db.assignments.get("claim-7").lifecycle) is IgnoredAssignment
+        assert type(db.assignments.get(AssignmentId.cohort(b"claim-7")).lifecycle) is IgnoredAssignment
 
 
 def test_claim_preengagement_and_mixed_engagement_rollback(db_path: Path) -> None:
@@ -341,7 +343,7 @@ def test_claim_preengagement_and_mixed_engagement_rollback(db_path: Path) -> Non
                                timestamp=float(index), seq=index)
             db.assignments.accept(
                 WakeAssignment(
-                    assignment_id=str(index),
+                    assignment_id=AssignmentId.cohort(str(index).encode()),
                     recipient="Owner",
                     recipient_lookup=SENDER_LOOKUP,
                     wire_seq=index,
@@ -352,13 +354,13 @@ def test_claim_preengagement_and_mixed_engagement_rollback(db_path: Path) -> Non
                     lifecycle=disposition.load(mode, None, None, None),
                 )
             )
-            sources.append(wire_source(db, str(index), original, mode))
+            sources.append(wire_source(db, AssignmentId.cohort(str(index).encode()), original, mode))
         deferred = db.assignments.transition_preengagement(
-            "1", DeferredAssignment, expected_revision=1
+            AssignmentId.cohort(b"1"), DeferredAssignment, expected_revision=1
         )
         assert type(deferred.value.lifecycle) is DeferredAssignment
         with pytest.raises(StaleRevision):
-            db.assignments.transition_preengagement("1", FailedAssignment, expected_revision=1)
+            db.assignments.transition_preengagement(AssignmentId.cohort(b"1"), FailedAssignment, expected_revision=1)
         with pytest.raises((IdentityConflict, sqlite3.IntegrityError)):
             db.create(
                 "exec",
@@ -367,7 +369,7 @@ def test_claim_preengagement_and_mixed_engagement_rollback(db_path: Path) -> Non
                 2,
                 sources=tuple(sources),
             )
-        assert db.assignments.get("1").lifecycle.execution_id is None
+        assert db.assignments.get(AssignmentId.cohort(b"1")).lifecycle.execution_id is None
         assert db.session._connection.execute("SELECT count(*) FROM executions").fetchone()[0] == 0
         assert not db.session._connection.in_transaction
 
@@ -479,6 +481,18 @@ def test_token_digest_is_global_and_only_digest_persists(db_path: Path) -> None:
             db.session._connection.execute("SELECT owner_token_digest FROM attempts").fetchone()[0]
             == hashlib.sha256(token.encode()).hexdigest()
         )
+
+
+def test_coordinator_family_rebuild_preserves_declared_schema_and_execution(db_path: Path) -> None:
+    with ready(db_path, origin=AcpOrigin) as db:
+        original = db.get("exec")
+        with SQLiteForeignKeys.relations_suspended(db.session._connection):
+            with db.session.writing() as connection:
+                for row in CoordinatorTable.schema_rows():
+                    row.rebuild(connection)
+                CoordinatorTable.require_schema(connection)
+                assert connection.execute("PRAGMA foreign_key_check").fetchall() == []
+        assert db.get("exec") == original
 
 
 def test_settled_snapshot_encodes_recovery_kind_separately_from_table(db_path: Path) -> None:
@@ -872,7 +886,7 @@ def test_unstarted_failure_and_claim_requeue(db_path: Path) -> None:
         db.participants.register(SENDER_LOOKUP, committed=True)
         db.assignments.accept(
             WakeAssignment(
-                assignment_id="claim",
+                assignment_id=AssignmentId.cohort(b"claim"),
                 recipient="Owner",
                 recipient_lookup=SENDER_LOOKUP,
                 wire_seq=1,
@@ -884,11 +898,11 @@ def test_unstarted_failure_and_claim_requeue(db_path: Path) -> None:
             )
         )
         deferred = db.assignments.transition_preengagement(
-            "claim", DeferredAssignment, expected_revision=1
+            AssignmentId.cohort(b"claim"), DeferredAssignment, expected_revision=1
         )
         assert deferred.value.lifecycle.execution_id is None
         requeued = db.assignments.transition_preengagement(
-            "claim", FullPendingAssignment, expected_revision=2
+            AssignmentId.cohort(b"claim"), FullPendingAssignment, expected_revision=2
         )
         assert type(requeued.value.lifecycle) is FullPendingAssignment
 
@@ -913,8 +927,9 @@ def test_frozen_v2_pre_attempt_deferred_execution_cannot_resume(db_path: Path) -
             connection.execute(
                 (
                     "UPDATE wake_claims SET lifecycle=json_set(lifecycle,'$.kind','deferred'),rev"
-                    "ision=revision+1 WHERE assignment_id='claim'"
-                )
+                    "ision=revision+1 WHERE assignment_id=?"
+                ),
+                (FieldCodec.encode(AssignmentId.cohort(b"claim")),),
             )
         before = db.get("exec")
         assert type(before.execution.lifecycle) is DeferredExecution

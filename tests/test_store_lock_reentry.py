@@ -11,8 +11,14 @@ import pytest
 
 from agent_comms.errors import RelationViolationError
 from agent_comms.store_files import (
-    BoundedStoreReadBudget, SharedLock, StoreLockContention,
-    _async_store_lock, _store_lock, store_lock_path,
+    BoundedStoreReadBudget,
+    ExclusiveLock,
+    SharedLock,
+    StoreLockContention,
+    UNBOUNDED_CONTENTION,
+    _async_store_lock,
+    _store_lock,
+    store_lock_path,
 )
 
 
@@ -32,9 +38,9 @@ def probe(path, *, shared=True):
 
 def test_nested_reader_reuses_descriptor_without_downgrading_or_releasing(tmp_path):
     path = tmp_path / 'wire'
-    with _store_lock(path) as outer:
+    with _store_lock(path, ExclusiveLock(), UNBOUNDED_CONTENTION) as outer:
         with pytest.raises(ValueError):
-            with _store_lock(path, mode=SharedLock(), contention=StoreLockContention(0)) as inner:
+            with _store_lock(path, SharedLock(), StoreLockContention(0)) as inner:
                 assert inner.descriptor == outer.descriptor
                 links = []
                 for descriptor in Path('/proc/self/fd').iterdir():
@@ -51,23 +57,23 @@ def test_nested_reader_reuses_descriptor_without_downgrading_or_releasing(tmp_pa
 
 def test_shared_nesting_never_silently_upgrades(tmp_path):
     path = tmp_path / 'wire'
-    with _store_lock(path, mode=SharedLock()) as outer:
-        with _store_lock(path, mode=SharedLock()) as inner:
+    with _store_lock(path, SharedLock(), UNBOUNDED_CONTENTION) as outer:
+        with _store_lock(path, SharedLock(), UNBOUNDED_CONTENTION) as inner:
             assert inner.descriptor == outer.descriptor
             assert probe(path)
             assert not probe(path, shared=False)
         with pytest.raises(RelationViolationError):
-            with _store_lock(path):
+            with _store_lock(path, ExclusiveLock(), UNBOUNDED_CONTENTION):
                 pytest.fail('upgraded the enclosing read transaction')
     assert probe(path, shared=False)
 
 
 def test_ended_context_does_not_reuse_its_closed_descriptor(tmp_path):
     path = tmp_path / 'wire'
-    with _store_lock(path):
+    with _store_lock(path, ExclusiveLock(), UNBOUNDED_CONTENTION):
         retained = copy_context()
     def capture_again():
-        with _store_lock(path):
+        with _store_lock(path, ExclusiveLock(), UNBOUNDED_CONTENTION):
             assert not probe(path)
     retained.run(capture_again)
     assert probe(path, shared=False)
@@ -76,9 +82,9 @@ def test_ended_context_does_not_reuse_its_closed_descriptor(tmp_path):
 def test_nested_source_still_checks_each_borrows_budget(tmp_path):
     path = tmp_path / 'wire'
     path.write_bytes(b'not within the nested budget')
-    with _store_lock(path):
+    with _store_lock(path, ExclusiveLock(), UNBOUNDED_CONTENTION):
         with pytest.raises(RelationViolationError):
-            with _store_lock(path, mode=SharedLock(), read_budget=BoundedStoreReadBudget(1)):
+            with _store_lock(path, SharedLock(), UNBOUNDED_CONTENTION, read_budget=BoundedStoreReadBudget(1)):
                 pytest.fail('nested source skipped its read budget')
         assert not probe(path)
     assert probe(path, shared=False)
@@ -88,19 +94,17 @@ def test_async_and_sync_nest_but_independent_tasks_and_threads_do_not(tmp_path):
     path = tmp_path / 'wire'
     async def independent():
         with pytest.raises(BlockingIOError):
-            async with _async_store_lock(
-                path, mode=SharedLock(), contention=StoreLockContention(0)
-            ):
+            async with _async_store_lock(path, SharedLock(), StoreLockContention(0)):
                 pytest.fail('another task borrowed an exclusive transaction')
     def thread_reader():
         with pytest.raises(BlockingIOError):
-            with _store_lock(path, mode=SharedLock(), contention=StoreLockContention(0)):
+            with _store_lock(path, SharedLock(), StoreLockContention(0)):
                 pytest.fail('another thread borrowed an exclusive transaction')
     async def run():
-        async with _async_store_lock(path) as outer:
-            async with _async_store_lock(path, mode=SharedLock()) as inner:
+        async with _async_store_lock(path, ExclusiveLock(), UNBOUNDED_CONTENTION) as outer:
+            async with _async_store_lock(path, SharedLock(), UNBOUNDED_CONTENTION) as inner:
                 assert inner.descriptor == outer.descriptor
-                with _store_lock(path, mode=SharedLock()) as synchronous:
+                with _store_lock(path, SharedLock(), UNBOUNDED_CONTENTION) as synchronous:
                     assert synchronous.descriptor == outer.descriptor
                 assert not probe(path)
             await asyncio.create_task(independent())

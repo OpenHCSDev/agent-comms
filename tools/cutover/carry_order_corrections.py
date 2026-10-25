@@ -51,7 +51,7 @@ class OrderCorrections(Carry):
 
     def carry(self, *, apply: bool) -> Carried:
         path = TodoStore.path_in(self.root)
-        self.require_confined(self.root, path)
+        self.require_confined(path)
         if not path.exists():
             return Carried(0)
         if apply:
@@ -60,6 +60,8 @@ class OrderCorrections(Carry):
             )
         marker = json.dumps(RETIRED)
         with TodoStore.observing(path) as db:
+            if "prior_orders" not in Todo.stored_columns(db):
+                return Carried(0)
             rows = StoredOrders.read(
                 db.execute(
                     f'SELECT id,"order",prior_orders FROM "{Todo.declared_name}" '

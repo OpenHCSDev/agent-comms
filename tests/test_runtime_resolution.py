@@ -1,4 +1,5 @@
 import os
+from pathlib import Path
 
 import pytest
 
@@ -98,3 +99,18 @@ def test_missing_and_ambiguous_lock_evidence_refuses():
     ambiguous.package.append(ambiguous.package[0])
     with pytest.raises(ValueError):
         ambiguous.pins({"agent-comms": "1"}, "core")
+
+
+def test_the_stack_relocks_every_branch_tracking_package_and_refuses_a_unit_branch():
+    """resolve() upgraded only stack/pyproject.toml's sources, so transitive metaclass-registry
+    stayed at fb7c871 before MroDispatch; Toad pinned to work/unit-toad--P694 after its merge
+    relocked the same branch head while InstallDue saw main ahead."""
+    path = Path(__file__).resolve().parents[1] / "stack" / "uv.lock"
+    lock = ResolvedLock.read(path)
+    tracked = lock.tracked()
+    assert {"batrachian-toad", "metaclass-registry", "textual"} <= set(tracked)
+    assert "objectstate" not in tracked
+    toad = next(entry for entry in lock.package if entry.name == "batrachian-toad")
+    toad.source.git = toad.source.git.replace("branch=main", "branch=work/unit-toad--P694")
+    with pytest.raises(ValueError, match="batrachian-toad"):
+        lock.tracked()
