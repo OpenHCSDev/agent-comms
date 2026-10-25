@@ -15,7 +15,8 @@ from agent_comms.private_runtime_schema import PrivateCoordinatorTable
 
 from .audience_manifest import MAX_AUDIENCE_BYTES
 from .coordination_contracts import POLICY_VERSION, RESOLVER_VERSION
-from .field_codec import MalformedRecord, MessageId, RootId, ThreadLookup, WireName
+from .field_codec import AssignmentId, MalformedRecord, MessageId, RootId, SubclassUnion, ThreadLookup, WireName
+from .thread_text import AbsentText, GivenText, TextChoice
 from .response_acknowledgement import _canonical
 from .typed_table import (
     Column,
@@ -31,6 +32,7 @@ from .typed_table import (
     InitialOneWayColumn,
     NoDelete,
     SharedFileTables,
+    TextStorage,
     TypedTable,
     WithoutRowid,
 )
@@ -189,7 +191,7 @@ class ClaimBatchMembers(GuardedInserts, ImmutableRows, CohortTable, WithoutRowid
     wire_root_id: Annotated[RootId, Column(primary_key=True)]
     wire_seq: Annotated[int, Column(primary_key=True)]
     ordinal: Annotated[int, Column(primary_key=True, check="ordinal >= 0")]
-    claim_id: str
+    claim_id: AssignmentId
     recipient_lookup: ThreadLookup
     unique = (
         ("wire_root_id", "wire_seq", "claim_id"),
@@ -206,6 +208,23 @@ class ClaimBatchMembers(GuardedInserts, ImmutableRows, CohortTable, WithoutRowid
                 columns=("wire_root_id", "wire_seq"), target=ClaimBatchAcknowledgements, target_columns=("wire_root_id", "wire_seq")
             ),
         )
+
+class DeliveryClaim(SubclassUnion, TextChoice, affix="Claim"):
+    """A delivery's selected assignment, or no claim for an observer."""
+
+
+@dataclass(frozen=True, slots=True)
+class SelectedClaim(GivenText, DeliveryClaim):
+    text: AssignmentId
+
+    def __post_init__(self) -> None:
+        AssignmentId.spelled_by.from_text(self.text)
+
+
+@dataclass(frozen=True, slots=True)
+class NoDeliveryClaim(AbsentText, DeliveryClaim):
+    pass
+
 
 @dataclass(frozen=True, kw_only=True)
 class CohortDeliveries(
@@ -238,7 +257,7 @@ class CohortDeliveries(
         str, Column(check="length(canonical_thread) BETWEEN 1 AND 256")
     ]
     kind: Literal["selected", "unmentioned_observer"]
-    claim_id: str | None
+    claim_id: Annotated[DeliveryClaim, Column(storage=TextStorage, nullable=True)]
     checks = (
         (
             "(kind = 'selected' AND claim_id IS NOT NULL)\n"
@@ -342,7 +361,7 @@ class AwarenessClaimGenerations(
         AND c.message_id=r.message_id AND r.sealed=0
         AND g.generation=NEW.owner_generation))"""
 
-    claim_id: Annotated[str, Column(primary_key=True)]
+    claim_id: Annotated[AssignmentId, Column(primary_key=True)]
     wire_root_id: RootId
     wire_seq: Annotated[int, Column(check="wire_seq > 0")]
     owner_lookup: Annotated[ThreadLookup, WireName("recipient_lookup"), Column(record_key=True)]
