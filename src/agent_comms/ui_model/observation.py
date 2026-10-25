@@ -784,7 +784,13 @@ class CommanderHudReading(ReadingObservation[ObserveCommanderHud]):
     view = CommanderFramesView()
 
     def read(self, comms: Comms, revision: WireRevision) -> Generator[ObservationStep]:
-        yield CommanderHudObserved(revision, CommanderFrame.read_all(comms.root))
+        yield UnreadableHistory.outcome(
+            lambda: CommanderHudObserved(revision, CommanderFrame.read_all(comms.root)),
+        ).answer(
+            lambda observed: observed,
+            lambda error: ObservationPending(),  # Keep the interest until its source can be read.
+            lambda error: CommanderHudUnreadable(revision, error),
+        )
 
 
 @dataclass(frozen=True)
@@ -1153,6 +1159,13 @@ class CommanderHudObserved(Observed):
     """Every beating commander's newest frame, by commander name."""
 
     huds: tuple[CommanderHud, ...]
+
+
+@dataclass(frozen=True)
+class CommanderHudUnreadable(Observed):
+    """The newest commander frame cannot be read; retain the last good frame."""
+
+    error: UnreadableHistory
 
 
 @dataclass(frozen=True)
