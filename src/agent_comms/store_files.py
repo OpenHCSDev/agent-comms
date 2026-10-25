@@ -7,18 +7,20 @@ import errno
 import fcntl
 import math
 import os
+import sqlite3
 import stat
 import sys
 import tempfile
 import threading
 import time
 from abc import ABC, abstractmethod
-from collections.abc import AsyncIterator, Iterable, Iterator, Mapping
+from collections.abc import AsyncIterator, Callable, Iterable, Iterator, Mapping
 from contextlib import (
     AbstractAsyncContextManager,
     AbstractContextManager,
     ExitStack,
     asynccontextmanager,
+    closing,
     contextmanager,
 )
 from contextvars import Context, ContextVar
@@ -371,11 +373,49 @@ class DependentStateTier(StoreLockTier):
     __slots__ = ()
 
 
+class SqliteStore(ABC):
+    """A SQLite file serializes connection boundaries, not the SQL between them."""
+
+    __slots__ = ()
+
+    @classmethod
+    @abstractmethod
+    def writer(
+        cls, path: str | os.PathLike[str], *, isolation_level: None,
+    ) -> sqlite3.Connection:
+        """Open the file family's autocommit writer for its exclusive boundary."""
+
+    @classmethod
+    @contextmanager
+    def attached(
+        cls, path: Path, opening: Callable[[], AbstractContextManager[sqlite3.Connection]],
+        contention: StoreLockContention = UNBOUNDED_CONTENTION,
+    ) -> Iterator[sqlite3.Connection]:
+        """Serialize attachment and retirement, including cold WAL-index initialization.
+
+        Attachment spends the caller's lock budget; retirement always waits. SQLite's own
+        transactions retain parallel execution between those two boundaries.
+        """
+        with ExitStack() as lifetime:
+            retirement = lifetime.enter_context(ExitStack())
+            with _store_lock(path, contention=contention):
+                connection = lifetime.enter_context(opening())
+            lifetime.callback(retirement.enter_context, _store_lock(path))
+            yield connection
+
+    @classmethod
+    @contextmanager
+    def exclusive_writer(cls, path: Path) -> Iterator[sqlite3.Connection]:
+        """A schema reconcile or WAL truncation keeps other connection boundaries out."""
+        with _store_lock(path), closing(cls.writer(path, isolation_level=None)) as db:
+            yield db
+
+
 class ClaimHeldError(BlockingIOError):
-    """Another process holds the claim."""
+    """Another open description holds the claim, even within the same process."""
 
     def __init__(self, path: Path) -> None:
-        super().__init__(errno.EAGAIN, f"{path} is held by another process")
+        super().__init__(errno.EAGAIN, f"{path} is already held")
         self.path = path
 
 

@@ -11,13 +11,12 @@ import stat
 from abc import ABC, abstractmethod
 from collections import defaultdict
 from collections.abc import Callable, Collection, Iterator, Mapping
-from contextlib import AbstractContextManager, ExitStack, closing, contextmanager
+from contextlib import closing, contextmanager
 from dataclasses import dataclass
 from functools import cache
 from importlib import import_module
 from pathlib import Path
 from pkgutil import walk_packages
-from types import TracebackType
 from typing import TYPE_CHECKING, ClassVar, Generic, Self, TypeVar
 
 from pydantic import JsonValue
@@ -29,12 +28,12 @@ from .private_path import PrivateFileRole
 from .store_files import (
     AtomicFile,
     SharedLock,
+    SqliteStore,
     StoreLock,
     StoreLockContention,
     StoreLockFile,
     StoreLockOwner,
     StoreOwner,
-    UNBOUNDED_CONTENTION,
     _store_lock,
     is_store_lock,
     store_lock_path,
@@ -535,7 +534,7 @@ class StoreBusy(StoreContention):
 DEFAULT_STORE_CONTENTION = StoreWait()
 
 
-class SQLiteFile(RootFile):
+class SQLiteFile(RootFile, SqliteStore):
     """SQLite connections, snapshots, copies and companions share one file owner."""
 
     __slots__ = ()
@@ -657,42 +656,6 @@ class SQLiteFile(RootFile):
                 yield
             finally:
                 held.execute("ROLLBACK")
-
-    @classmethod
-    @contextmanager
-    def attached(
-        cls, path: Path, opening: Callable[[], AbstractContextManager[sqlite3.Connection]],
-        contention: StoreLockContention = UNBOUNDED_CONTENTION,
-    ) -> Iterator[sqlite3.Connection]:
-        """A connection whose attachment and retirement hold the file's boundary lock, and
-        whose SQL does not. Even a read-only cold attachment initializes the WAL index, and
-        another attachment or last-connection cleanup can make that initialization return BUSY
-        before any query competes with a data writer, which no SQLite transaction covers; the
-        file's physical owner serializes those boundaries, and readers and writers keep
-        SQLite's parallel WAL transactions between them.
-
-        Attachment spends the caller's lock budget, so a read that may defer raises
-        BlockingIOError when it runs out instead of waiting; retirement always runs."""
-        with ExitStack() as lifetime:
-            with _store_lock(path, contention=contention):
-                resource = opening()
-                connection = resource.__enter__()
-
-            def retire(kind: type[BaseException] | None, error: BaseException | None,
-                       trace: TracebackType | None) -> bool | None:
-                with _store_lock(path):
-                    return resource.__exit__(kind, error, trace)
-
-            lifetime.push(retire)
-            yield connection
-
-    @classmethod
-    @contextmanager
-    def exclusive_writer(cls, path: Path) -> Iterator[sqlite3.Connection]:
-        """An autocommit writer whose whole life is one boundary: no other connection attaches
-        or retires while it runs, so a schema reconcile or a WAL truncation sees only itself."""
-        with _store_lock(path), closing(cls.writer(path, isolation_level=None)) as db:
-            yield db
 
     @classmethod
     def settle(cls, path: Path) -> None:

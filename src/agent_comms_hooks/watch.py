@@ -103,38 +103,50 @@ class WatchClaim:
     def reader_path(self) -> Path:
         return self.path.with_suffix(".reader.lock")
 
+    @property
+    def claim(self) -> ProcessSingleton:
+        return ProcessSingleton(self.path)
+
+    @property
+    def reader_claim(self) -> ProcessSingleton:
+        return ProcessSingleton(self.reader_path)
+
+    @property
+    def launch_claim(self) -> ProcessSingleton:
+        return ProcessSingleton(self.path.with_suffix(".launch.lock"))
+
     @contextmanager
     def launching(self) -> Iterator[None]:
         self.path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
-        with ProcessSingleton(self.path.with_suffix(".launch.lock")).waited():
+        with self.launch_claim.waited():
             yield
 
     @contextmanager
     def held(self, record: WatchRecord) -> Iterator[HeldClaim]:
         """One watch per conversation, independent of --state and bus aliases."""
         self.path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
-        with ProcessSingleton(self.path).claimed() as lock:
+        with self.claim.claimed() as lock:
             yield HeldClaim(lock).record(record)
 
     @contextmanager
     def adopted(self, descriptor: int, record: WatchRecord) -> Iterator[HeldClaim]:
         """A replaced bridge's successor takes over the description its predecessor kept
         locked through exec, so the claim never reads as lapsed, and records its own command."""
-        with ProcessSingleton(self.path).adopted(descriptor) as lock:
+        with self.claim.adopted(descriptor) as lock:
             yield HeldClaim(lock).record(record)
 
     @contextmanager
     def reader_held(self) -> Iterator[None]:
-        with ProcessSingleton(self.reader_path).claimed():
+        with self.reader_claim.claimed():
             yield
 
     def has_reader(self) -> bool:
-        return ProcessSingleton(self.reader_path).held_elsewhere()
+        return self.reader_claim.held_elsewhere()
 
     def state(self) -> WatchState:
         if not self.path.exists():
             return UnclaimedWatch()
-        with ProcessSingleton(self.path).observed() as claim:
+        with self.claim.observed() as claim:
             if claim.held:
                 return LiveWatch(self, WatchRecord.decode(**json.load(claim.file)))
             text = claim.file.read()

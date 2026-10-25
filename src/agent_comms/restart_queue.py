@@ -231,6 +231,10 @@ class RestartQueue:
     def lock_path(self) -> Path:
         return RestartQueueLock.path_in(self.directory)
 
+    @property
+    def watcher_claim(self) -> ProcessSingleton:
+        return ProcessSingleton(self.directory / "watcher.lock")
+
     @contextmanager
     def locked(self):
         with _store_lock(self.lock_path):
@@ -403,10 +407,9 @@ async def run(comms: Comms) -> None:
         ValueError("Queued restarts require Linux inotify and /proc")
     )
     queue = RestartQueue(comms.root / DIRECTORY)
-    watcher = ProcessSingleton(queue.directory / "watcher.lock")
     with ExitStack() as claim:
         try:
-            held = claim.enter_context(watcher.claimed())
+            held = claim.enter_context(queue.watcher_claim.claimed())
         except ClaimHeldError:
             return
         def release_if_empty():
@@ -416,7 +419,7 @@ async def run(comms: Comms) -> None:
                                 for pending in record.state.items_with(Pending, record))
                 if any(record.target.is_current_watcher for record in pending):
                     return False
-                watcher.release(held)
+                queue.watcher_claim.release(held)
                 if pending:
                     _start_watcher(comms.root, pending[0].target)
                 return True

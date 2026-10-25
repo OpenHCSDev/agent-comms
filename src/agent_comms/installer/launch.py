@@ -239,13 +239,17 @@ class InstallLogs:
     def lock(self) -> Path:
         return self.root.parent / f".{self.root.name}.install.lock"
 
+    @property
+    def launch_claim(self) -> ProcessSingleton:
+        return ProcessSingleton(self.lock)
+
     @contextmanager
     def launching(self) -> Iterator[None]:
         """Held from the target checkout to the unit's start, and for a waiting launch to the
         unit's end; under it no other unit runs, so minting and retiring never race one."""
         with ExitStack() as held:
             try:
-                held.enter_context(ProcessSingleton(self.lock).claimed())
+                held.enter_context(self.launch_claim.claimed())
             except ClaimHeldError:
                 raise InstallRunning(self.lock, self.running()) from None
             if running := self.running():
