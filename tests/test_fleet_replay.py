@@ -44,6 +44,7 @@ from agent_comms.threads import Thread
 from agent_comms.todos import (
     ClaimOrder,
     DraftListedPullRequest,
+    OperationDelivery,
     OrderClaim,
     OrderMessage,
     PendingProblemOrder,
@@ -560,3 +561,19 @@ def test_a_stopped_unit_is_not_spinning(fleet):
     assert any(type(rule) is SpinningUnit for rule in built.observe().rules)
     built.comms.registry.unregister("spinning")
     assert not any(type(rule) is SpinningUnit for rule in built.observe().rules)
+
+
+def test_a_finished_order_has_no_branch_lines(fleet):
+    """2026-10-25: P729 merged, its branch deleted, and the heartbeat still said RESHAPE for the
+    run's 108 calls and MERGE MAIN for the branch 40 commits behind."""
+    built, _ = fleet
+    finished = {built.problems["spinning"], built.problems["behind"]}
+    lines = (SpinningUnit, BranchBehindMain)
+    assert {type(rule) for rule in built.observe().rules if type(rule) in lines} == set(lines)
+    todos = built.comms.goals.todos
+    with todos.writing() as db:
+        for problem in finished:
+            todo = todos.get(problem)
+            delivered = todo.order.delivered(OperationDelivery(at=RecordedEventTime(time.time())))
+            replace(todo, order=delivered, revision=todo.revision + 1).upsert(db)
+    assert not any(type(rule) in lines for rule in built.observe().rules)
