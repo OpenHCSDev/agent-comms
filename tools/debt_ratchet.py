@@ -2508,18 +2508,18 @@ def compare(repo: Path, base: str, head: str, root: str, workers: int,
             tuple(sorted(paths & python_paths(repo, base, root))),
         )]
         # Each measure combines as soon as its parts finish, while slower checkers still run.
-        measured = {}
+        combined = {}
         owners = {future: measure for measure, futures in parts.items() for future in futures}
         for measure in measures:
             if not parts[measure]:
-                measured[measure] = measure.combine([], repo, base, head, paths, root)
+                combined[measure] = measure.combine([], repo, base, head, paths, root)
         for future in as_completed(owners):
             measure = owners[future]
-            if measure not in measured and all(part.done() for part in parts[measure]):
-                measured[measure] = measure.combine([part.result() for part in parts[measure]],
+            if measure not in combined and all(part.done() for part in parts[measure]):
+                combined[measure] = measure.combine([part.result() for part in parts[measure]],
                                                     repo, base, head, paths, root)
         for measure in measures:
-            measured_base, measured_head = measured[measure]
+            measured_base, measured_head = combined[measure]
             before.update(measured_base)
             after.update(measured_head)
         for path_sites in sites:
