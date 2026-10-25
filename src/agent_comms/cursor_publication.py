@@ -32,7 +32,6 @@ from .native_entries import NativeEvidenceScope
 from .private_registry_guard import RegistryPrivacy
 from .publisher import ResponseWrites
 from .runtime import RuntimeServer
-from .store_files import SharedLock
 
 if TYPE_CHECKING:
     from .selected_participant import SelectedParticipant
@@ -110,7 +109,7 @@ class CursorPublication:
 
     def scope(self, thread_name: str, session_id: str) -> CursorScope:
         registry = self.comms.registry.store
-        with registry.locked(mode=SharedLock()):
+        with registry.guarded_read():
             privacy = registry.private_guard_unlocked()
             return privacy.cursor_scope(registry.read_snapshot_unlocked(), thread_name, session_id)
 

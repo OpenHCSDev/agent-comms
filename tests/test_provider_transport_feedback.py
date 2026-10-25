@@ -8,7 +8,7 @@ import pytest
 from acp import RequestError
 
 from agent_comms.acp_extension import RequestFailedUpdate, decode_updates, encode_updates
-from agent_comms.acp_failure import ACPFailure, ProviderConnectionFailure, RequestACPFailure
+from agent_comms.acp_failure import ACPFailure, RequestFailure, ProviderConnectionFailure, RequestACPFailure
 from agent_comms.input_attempt import StartedInput
 from agent_comms.pi_counts import PiCount
 from agent_comms.pi_events import MessageEnd
@@ -29,7 +29,7 @@ def observed():
 def test_observed_native_failure_preserves_stage_and_no_content_assumptions():
     event = PiRpcChannel.decode_record(FIXTURE.read_bytes(), strict=True)
     assert isinstance(event, MessageEnd)
-    assert event.message.content == ()
+    assert event.message.parts == ()
     assert event.message.stop_reason is ErrorStopReason
     assert event.message.usage.total_tokens == PiCount.from_wire(0)
     (diagnostic,) = event.message.diagnostics
@@ -52,20 +52,20 @@ def test_observed_native_failure_preserves_stage_and_no_content_assumptions():
 
 def test_structured_started_remains_started_and_no_text_changes_it():
     record = observed()["message"]
-    failure = ACPFailure.from_error(RequestError(
+    failure = RequestFailure.from_error(RequestError(
         -32603,
         record["errorMessage"],
         {
             "inputStatus": "started",
             "diagnostics": record["diagnostics"],
         },
-    ))
+    )).failure
     assert isinstance(failure, ProviderConnectionFailure)
     assert failure.input_state is StartedInput
     assert failure.input_disposition == "Started"
-    bare = ACPFailure.from_error(RequestError(
+    bare = RequestFailure.from_error(RequestError(
         -32603, "WebSocket closed1011 after start; original remains unbound"
-    ))
+    )).failure
     assert isinstance(bare, RequestACPFailure)
     assert bare.input_state is None
     assert bare.input_disposition == "Unconfirmed"
@@ -152,11 +152,11 @@ def test_native_1012_with_empty_thinking_reaches_provider_feedback():
     diagnostic["details"]["requestBytes"] = 1565058
     event = PiRpcChannel.decode_record((json.dumps(record) + "\n").encode(), strict=True)
     assert event.message.stop_reason is ErrorStopReason
-    failure = ACPFailure.from_error(
+    failure = RequestFailure.from_error(
         RequestError(-32603, event.message.error_message.value_or(""), {
             "inputStatus": "started", "diagnostics": message["diagnostics"],
         }),
-    )
+    ).failure
     assert isinstance(failure, ProviderConnectionFailure)
     assert failure.input_state is StartedInput
     assert "code 1012" in failure.description

@@ -17,6 +17,7 @@ from .context_store import UNREAD_CONTEXT, ContextPrior
 from .coordination_cohort import _claim_record, pending_sealed_assignments
 from .coordination_errors import IdentityConflict, StaleFence
 from .coordination_response import LiveResponseOwner, ResponseTable
+from .coordination_session import NativeBoundary
 from .coordination_snapshot import RecoverySnapshot
 from .coordination_tables.assignments import WakeAssignment
 from .coordination_tables.executions import WireOrigin
@@ -34,7 +35,6 @@ from .notification_assignment import NotificationAssignment, NotificationAssignm
 from .participant_store import ParticipantSnapshot
 from .pi_events import TurnContextObserved
 from .presentation import MessageNotification, OwnerOutcomes, SentMessageOutcome
-from .store_files import SharedLock
 from .publisher import ParticipantPublisher
 from .selected_source_batch import SelectedSource, SelectedSourceBatch
 from .threads import Thread
@@ -222,7 +222,7 @@ class SelectedParticipant(MroDispatch):
         tuple[MessageNotification, ...],
     ]:
         """Capture detached registry, participant and optional context in one worker."""
-        with comms.registry.store.locked(mode=SharedLock()):
+        with comms.registry.store.guarded_read():
             privacy = comms.registry.store.private_guard_unlocked()
             privacy.require_root(
                 root_id, IdentityConflict("Selected claim namespace changed"))
@@ -297,7 +297,7 @@ class SelectedParticipant(MroDispatch):
         def capture():
             # Historical public records have no delivery capability. Native identity
             # belongs to the original registry guard, not a second bus metadata file.
-            with bus._registry.store.locked(mode=SharedLock()):
+            with bus._registry.store.guarded_read():
                 bus._registry.store.private_guard_unlocked().require_root(
                     root_id, IdentityConflict("Selected source namespace changed"))
             with bus.bus.reading() as source:
@@ -309,8 +309,6 @@ class SelectedParticipant(MroDispatch):
         originals = await Coordination.run_worker(capture)
 
         def verify(resource: Coordination):
-            from .coordination_session import NativeBoundary
-
             with NativeBoundary(bus) as boundary, resource.session.read():
                 boundary.privacy.require_root(root_id, IdentityConflict("Selected source namespace changed"))
                 CohortTable.require_installed(resource.session._connection)

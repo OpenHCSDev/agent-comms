@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+from collections.abc import Callable
 from pathlib import Path
 
 from agent_comms.child_process import ProcessIdentity
@@ -28,7 +29,9 @@ def identities(path: Path) -> tuple[ProcessIdentity, ...]:
     return tuple(FieldCodec.decode(ProcessIdentity, row) for row in json.loads(path.read_text()))
 
 
-async def ready(path: Path) -> None:
-    async with asyncio.timeout(5):
-        while not path.exists():
-            await asyncio.sleep(0.01)
+async def ready(path: Path, alive: Callable[[], bool]) -> None:
+    """Until the tree announces itself at the path, failing the moment its writer exits;
+    pytest-timeout owns the budget."""
+    while not path.exists():
+        assert alive(), f"the writer of {path.name} exited before announcing"
+        await asyncio.sleep(0.01)

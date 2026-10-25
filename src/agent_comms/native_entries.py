@@ -12,40 +12,48 @@ from itertools import repeat
 from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import TYPE_CHECKING, Annotated, ClassVar, Literal, TextIO, cast
+from typing import TYPE_CHECKING, Annotated, ClassVar, Literal, Never, TextIO, cast
 
 from .locked_store import DurableFile
+from .native_pi import (
+    NativeEvidencePrefixChanged,
+    NativeInputUncommitted,
+    PrivateEvidenceRead,
+)
 from .native_session_files import BusTranscriptFile
 
 if TYPE_CHECKING:
     from .native_pi import NativeContextProof
-from uuid import uuid4
 
 from .declared_family import DeclaredFamily, UnknownFamilyMember
 from .field_codec import (
     FieldCodec,
     InputId,
     MalformedRecord,
+    NullMember,
     RecordedTimestamp,
+    Sha256Text,
     TimestampText,
     WireName,
     WireOmitDefault,
 )
 from .importing import ImportedSessionMetadata
 from .native_input_record import NativeInputLocation
-from .pi_payloads import Opaque, PiMessage, PiOmitted, PiPayload
+from .pi_payloads import Opaque, PiField, PiMessage, PiOmitted, PiPayload, ReportedText
 from .pi_vocabulary import PendingStopReason, ThinkingLevel
 from .recorded_time import GeneratedTimestamp
-from .routing import TurnRouting
+from .routing import NoTurnRouting, Routing
 from .transcript_events import ImportedMessage, NoticeTranscript, TranscriptEvent
-from .transcript_routes import InputDisplay
+from .transcript_routes import InputPresentation, NoInputDisplay, _SessionRoutes
+from .native_session_reopen import PiSessionId
+from .turn_item import FreshNativeId, NativeItemId
 
 
 @dataclass(frozen=True)
 class TranscriptProjection:
     position: int = field(kw_only=True)
-    routing: TurnRouting | None = None
-    input_display: InputDisplay | None = None
+    routing: Routing = NoTurnRouting()
+    input_display: InputPresentation = NoInputDisplay()
 
 
 @dataclass(frozen=True, slots=True)
@@ -53,11 +61,22 @@ class RootEntry(PiOmitted):
     """Pi writes a null parentId on a session's first entry."""
 
 
+@dataclass(frozen=True, slots=True)
+class NoEntryId(NullMember):
+    """A record without a native entry identity has no routing annotation."""
+
+    def routing_in(self, routes: _SessionRoutes) -> Routing:
+        return NoTurnRouting()
+
+    def require_present(self) -> Never:
+        raise MalformedRecord("Native publication requires an original entry ID")
+
+
 @dataclass(frozen=True, kw_only=True)
 class RecordedEntry(PiPayload):
     """Shared source identity and projection; each journal declares its own clock."""
 
-    id: str | None = None
+    id: str | NoEntryId = NoEntryId()
     parent_id: Annotated[str | RootEntry, WireName("parentId")] = RootEntry()
     is_message: ClassVar[bool] = False
     assistant_message: ClassVar[bool] = False
@@ -65,12 +84,19 @@ class RecordedEntry(PiPayload):
     final_reply: ClassVar[bool] = False
 
     @property
+    def annotation_id(self) -> FreshNativeId | NoEntryId:
+        return NoEntryId()
+
+    def routing_in(self, routes: _SessionRoutes) -> Routing:
+        return NoTurnRouting()
+
+    @property
     def child_parent(self) -> object:
         return self.require_entry_id()
 
     def imported_child(self, message: ImportedMessage, timestamp: datetime) -> dict[str, object]:
         return {
-            "type": "message", "id": uuid4().hex[:16], "parentId": self.child_parent,
+            "type": "message", "id": FieldCodec.encode(NativeItemId.fresh()), "parentId": self.child_parent,
             "timestamp": timestamp.isoformat(),
             "message": message.pi_message(int(timestamp.timestamp() * 1000)),
         }
@@ -103,7 +129,20 @@ class RecordedEntry(PiPayload):
 @dataclass(frozen=True, kw_only=True)
 class NativeEntry(RecordedEntry, DeclaredFamily, affix="Entry"):
     wire_tag = "type"
+    id: FreshNativeId | NoEntryId = NoEntryId()
+    parent_id: Annotated[FreshNativeId | RootEntry, WireName("parentId")] = RootEntry()
     timestamp: Annotated[RecordedTimestamp, TimestampText]
+
+    @property
+    def original_id(self) -> str:
+        return str(self.id.require_present())
+
+    @property
+    def annotation_id(self) -> FreshNativeId | NoEntryId:
+        return self.id if self.is_message else NoEntryId()
+
+    def routing_in(self, routes: _SessionRoutes) -> Routing:
+        return self.id.routing_in(routes)
 
     def events(self, context: TranscriptProjection) -> list[TranscriptEvent]:
         """Every part of a native record shares its original journal clock."""
@@ -231,7 +270,6 @@ class NativeEvidenceState(ABC):
 class UnreadNativeEvidence(NativeEvidenceState):
     def read(self, reader: NativeEvidenceRead) -> SessionEntry:
         header = SessionEntry.from_wire(reader.source.consume_header())
-        header.require_header()
         reader.entries = (header,)
         reader.state = HeaderNativeEvidence()
         return header
@@ -282,8 +320,6 @@ class NativeEvidenceRead:
     @contextmanager
     def open(cls, session_file):
         """One original descriptor and byte-verification lifetime for every read."""
-        from .native_pi import PrivateEvidenceRead
-
         with PrivateEvidenceRead.open(session_file) as source:
             evidence = cls(source)
             try:
@@ -323,8 +359,6 @@ class NativeEvidenceRead:
 
     def position(self, input_id: InputId) -> int:
         """Where the observed session committed this input; the one answer to whether it did."""
-        from .native_pi import NativeInputUncommitted
-
         try:
             return self.inputs[input_id]
         except KeyError as missing:
@@ -366,8 +400,6 @@ class NativeEvidenceRead:
         A later turn, a fork or a partial tool round cannot finish this input.
         This observes the native result; it grants no input or reply replay.
         """
-        from .native_pi import NativeInputUncommitted
-
         _header, entries = self.observe()
         try:
             start = self.position(input_id)
@@ -389,8 +421,6 @@ class NativeEvidenceRead:
         return acquired.reobserve(self)
 
     def _observe(self, *, reverified: bool) -> tuple[SessionEntry, tuple[NativeEntry, ...]]:
-        from .native_pi import NativeEvidencePrefixChanged
-
         try:
             header = self.header()
             appended = tuple(self.decode_rows(self.source.rows()))
@@ -488,29 +518,31 @@ class NativeEvidenceScope(ExitStack):
 
 @dataclass(frozen=True, kw_only=True)
 class SessionEntry(NativeEntry):
+    id: PiSessionId
+
+    def routing_in(self, routes: _SessionRoutes) -> Routing:
+        """A session header is not an entry and holds no turn annotation."""
+        return NoTurnRouting()
+
     @property
     def child_parent(self) -> object:
         return FieldCodec.encode(self.parent_id)
 
     version: int | None = None
-    cwd: Annotated[str | PiOmitted, WireOmitDefault()] = PiOmitted()
+    cwd: PiField[ReportedText | PiOmitted] = PiOmitted()
     parent_session: Annotated[
-        str | PiOmitted, WireName("parentSession"), WireOmitDefault()
+        PiSessionId | PiOmitted, WireName("parentSession"), WireOmitDefault()
     ] = PiOmitted()
 
     @classmethod
     def input_evidence(cls, raw: dict) -> tuple[NativeEntry, ...]:
         return (cls.from_evidence(raw),)
 
-    def require_header(self) -> None:
-        if not self.id:
-            raise MalformedRecord("Native Pi session header is invalid")
-
-    def require_reopen(self) -> None:
+    def require_reopen(self) -> PiSessionId:
         """Saved native execution supports v3; display may decode older headers."""
-        self.require_header()
         if self.version != 3:
             raise MalformedRecord("Strict native v3 session header required")
+        return self.id
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -520,14 +552,8 @@ class MessageEntry(NativeEntry):
         # Opaque display roles must not hide a tracked ID from proof readers.
         if message.get("inputId") is not None and not self.message.user:
             raise MalformedRecord("Tracked native input must belong to a user")
-        if self.message.user and isinstance(self.message.content, tuple):
-            # Continued STARTED text matching must retain extended native fields.
-            content = tuple(
-                part.preserve_evidence(raw_part)
-                for part, raw_part in zip(self.message.content, message["content"], strict=True)
-            )
-            return replace(self, message=replace(self.message, content=content))
-        return self
+        # The message and its content member preserve their own extension fields.
+        return replace(self, message=self.message.preserve_evidence(message))
 
     @classmethod
     def input_evidence(cls, raw: dict) -> tuple[NativeEntry, ...]:
@@ -562,11 +588,10 @@ class MessageEntry(NativeEntry):
 
     @property
     def tracked_user(self) -> MessageEntry | None:
-        from .field_codec import Sha256Text
-
         for input_id in self.message.input_id.present():
-            if not self.message.user or not self.message.input_digest.reported or not self.id:
+            if not self.message.user or not self.message.input_digest.reported:
                 raise MalformedRecord("Native Pi session has ambiguous tracked user input")
+            self.id.require_present()
             Sha256Text.from_text(self.message.input_digest.require())
             return self
         return None

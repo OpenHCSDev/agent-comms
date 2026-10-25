@@ -8,18 +8,7 @@ import pytest
 
 from agent_comms.relationships import RelationshipEdit
 from agent_comms.comms import wire
-from agent_comms.relationships import RelationshipDocument, RelationshipStore
-from agent_comms.store_files import SharedLock, StoreLockContention, _store_lock
-from test_locked_store import _hold_lock, assert_writer_excluded, event, process
 from test_relationships import setup_wire
-
-
-def _read_adopter(root, done):
-    service = wire(root).relationships
-    service.collaborations("owner")
-    service.contacts("owner")
-    service.snapshot("owner")
-    done.set()
 
 
 @pytest.mark.parametrize("text", ["{", "[]", '{"version": 2}'])
@@ -31,31 +20,6 @@ def test_relationship_corruption_stays_strict(tmp_path, text):
     with pytest.raises(ValueError):
         comms.relationships.edit("owner", RelationshipEdit.member_named("add"), "peer")
     assert comms.relationships.store.path.read_text() == text
-
-
-@pytest.mark.skipif(os.name != "posix", reason="POSIX lock contention")
-def test_actual_adopter_reads_share_document_lock(tmp_path):
-    comms = setup_wire(tmp_path)
-    path = comms.relationships.store.path
-    ready, release, done = event(), event(), event()
-    with process(_hold_lock, path, SharedLock(), ready, release):
-        try:
-            assert ready.wait(5)
-            with process(_read_adopter, comms.root, done):
-                assert done.wait(5), "adopter read requested an exclusive document lock"
-            with pytest.raises(BlockingIOError), _store_lock(path, contention=StoreLockContention(0)):
-                pass
-        finally:
-            release.set()
-
-
-def test_shared_read_scope_holds_lock_until_exit(tmp_path):
-    store = RelationshipStore(tmp_path / "r")
-    with store.reading() as document:
-        assert document == RelationshipDocument()
-        assert_writer_excluded(store.path)
-    with _store_lock(store.path, contention=StoreLockContention(0)):
-        pass
 
 
 @pytest.mark.parametrize("stage", ["file_sync", "replace", "directory_sync"])

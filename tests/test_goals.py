@@ -23,6 +23,7 @@ from agent_comms.tool_caller import ThreadCaller
 from agent_comms.tool_request import ToolRequest
 from agent_comms.thread_model import DeclaredModel
 from agent_comms.reported_turn import NoReportedTurn, ReportedTurn, ReportedTurnState
+from agent_comms.goal_scope import OneGoal
 
 
 def test_reported_turn_states_preserve_existing_wire_values():
@@ -72,7 +73,7 @@ def test_goal_survives_rename_and_reregistration(tmp_path, monkeypatch):
     replacement = comms.goals.update_goal("worker", SetGoalAction(text="New objective"))
     with pytest.raises(ValueError):
         comms.goals.update_goal(
-            "worker", CompletedGoalAction(expect=GoalPrecondition(goal_id=goal.id))
+            "worker", CompletedGoalAction(expect=GoalPrecondition(goal_id=OneGoal(goal.id)))
         )
     assert comms.registry.require("worker").goal == replacement
     comms.goals.update_goal("worker", ClearGoalAction())

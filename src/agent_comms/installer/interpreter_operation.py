@@ -1,12 +1,11 @@
 """Declared operations sent to an interpreter, with answers separate from diagnostics.
 
-Runtime probes execute this file by path with ``python -P``. The selected runtime
-supplies its own imports even when it predates this file.
+Each runtime's worker serves from its own installed copy of this module; only the
+``ProbeRequest`` wire crosses between versions.
 """
 
 from __future__ import annotations
 
-import base64
 import inspect
 import os
 import shlex
@@ -16,19 +15,19 @@ from abc import ABC, abstractmethod
 from collections.abc import Iterator
 from contextlib import contextmanager
 from contextvars import ContextVar
-from dataclasses import dataclass, field
-from io import BytesIO
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 from threading import Lock
 from typing import ClassVar, cast
-from zipfile import ZIP_DEFLATED, ZipFile
 
 from typing_extensions import TypeForm
 
 from agent_comms.child_process import Platform
 from agent_comms.declared_family import DeclaredFamily
+from agent_comms.installer.runtime_wire import CrossesRuntimes
 from agent_comms.field_codec import FieldCodec, JsonValue
 from agent_comms.maintenance_barrier import HOLDER_NONCE
+from agent_comms.store_files import BorrowedStoreLock
 
 
 @dataclass(frozen=True)
@@ -408,6 +407,10 @@ class InterpreterOperation[Answer, *Arguments](ABC):
 class ProbeProgram(ABC):
     """Where an operation's declaration is executable by the selected interpreter."""
 
+    @property
+    def descriptors(self) -> tuple[int, ...]:
+        return ()
+
     @abstractmethod
     def entry(self) -> tuple[str | Path, ...]: ...
 
@@ -416,17 +419,12 @@ class ProbeProgram(ABC):
         return ()
 
 
-class SourceProgram(ProbeProgram):
-    """The target's file can run against a predecessor that does not declare it yet."""
-
-    def entry(self) -> tuple[str, str]:
-        return RetainedProgram.current().entry()
-
-
+@dataclass(frozen=True)
 class InstalledProgram(ProbeProgram):
-    """A published runtime owns its declaration after the target tree is retired."""
+    """Each runtime answers from its own installed installer, so no installer source ever
+    runs on another version's library."""
 
-    def entry(self) -> tuple[str, str]:
+    def entry(self) -> tuple[str, ...]:
         return "-c", f"from {__name__} import serve; serve()"
 
 
@@ -436,47 +434,22 @@ class TargetProgram(InstalledProgram):
     included; their steps ship in no runtime, so the tree's ``steps`` supply them."""
 
     steps: Path
+    inherited_locks: tuple[BorrowedStoreLock, ...] = ()
+
+    def borrowing(self, locks: tuple[BorrowedStoreLock, ...]) -> TargetProgram:
+        return replace(self, inherited_locks=locks)
+
+    @property
+    def descriptors(self) -> tuple[int, ...]:
+        return tuple(lock.descriptor for lock in self.inherited_locks)
 
     def import_roots(self) -> tuple[Path]:
         return (self.steps,)
 
 
 @dataclass(frozen=True)
-class RetainedProgram(ProbeProgram):
-    """Worker declarations that survive retirement of their source checkout."""
-
-    source: str
-
-    @classmethod
-    def current(cls) -> RetainedProgram:
-        """The snapshot owns the whole installer package; the selected runtime owns the rest of Core."""
-        directory = Path(inspect.getfile(RuntimeProbe)).parent
-        output = BytesIO()
-        with ZipFile(output, "w", compression=ZIP_DEFLATED) as archive:
-            for path in sorted(directory.rglob("*.py")):
-                archive.write(path, str(path.relative_to(directory.parent.parent)))
-        payload = base64.b85encode(output.getvalue()).decode("ascii")
-        return cls(
-            "import base64\n"
-            "from pathlib import Path\n"
-            "from tempfile import TemporaryDirectory\n"
-            "import agent_comms.installer\n"
-            "cache = Path.home() / '.cache'\n"
-            "cache.mkdir(parents=True, exist_ok=True)\n"
-            "with TemporaryDirectory(prefix='agent-comms-probes-', dir=cache) as retained:\n"
-            "    archive = Path(retained) / 'installer.zip'\n"
-            f"    archive.write_bytes(base64.b85decode({payload!r}))\n"
-            "    agent_comms.installer.__path__ = [str(archive) + '/agent_comms/installer']\n"
-            "    from agent_comms.installer.interpreter_operation import serve\n"
-            "    serve()\n"
-        )
-
-    def entry(self) -> tuple[str, str]:
-        return "-c", self.source
-
-
-@dataclass(frozen=True)
 class RuntimeProbe[Answer](
+    CrossesRuntimes,
     InterpreterOperation[Answer],
     DeclaredFamily,
     affix="Probe",
@@ -486,6 +459,15 @@ class RuntimeProbe[Answer](
 
     def install_phase(self) -> InstallPhase:
         return ProbePhase(probe=type(self))
+
+
+class TargetProbe:
+    """A probe only a runtime built from the target tree answers; no older runtime
+    decodes it."""
+
+    @classmethod
+    def outgoing_wire(cls) -> tuple[type[CrossesRuntimes], ...]:
+        return ()
 
 
 @dataclass(frozen=True)
@@ -520,13 +502,13 @@ def serve() -> None:
     closes. An operation that raises ends the worker: its traceback goes to stderr, and the
     caller reads the exit in place of an answer. The answers own stdout's descriptor; every
     other write, an operation's exit handlers included, lands on stderr."""
-    answers = os.fdopen(os.dup(sys.stdout.fileno()), "w")
-    os.dup2(sys.stderr.fileno(), sys.stdout.fileno())
-    for line in sys.stdin:
-        print(
-            FieldCodec.compact(
-                FieldCodec.encode(FieldCodec.decode(ProbeRequest, FieldCodec.parse(line)).answer())
-            ),
-            file=answers,
-            flush=True,
-        )
+    with os.fdopen(os.dup(sys.stdout.fileno()), "w") as answers:
+        os.dup2(sys.stderr.fileno(), sys.stdout.fileno())
+        for line in sys.stdin:
+            print(
+                FieldCodec.compact(
+                    FieldCodec.encode(FieldCodec.decode(ProbeRequest, FieldCodec.parse(line)).answer())
+                ),
+                file=answers,
+                flush=True,
+            )

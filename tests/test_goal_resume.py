@@ -2,13 +2,14 @@
 
 
 import os
+from functools import partial
 
 import pytest
 
+from agent_comms.turn_failure import FailedTurnResolution
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.comms import wire
-from agent_comms.lifecycle_capability import Active
-from agent_comms.field_codec import FieldCodec, TurnId, GoalId
+from agent_comms.field_codec import FieldCodec, GoalId, TurnId
 from agent_comms.goal_actions import (
     ActiveGoalAction,
     BlockedGoalAction,
@@ -22,11 +23,13 @@ from agent_comms.goal_actions import (
 from agent_comms.goal_attempts import GoalAttemptStore
 from agent_comms.goal_generation import BlockedGeneration, CancelledGeneration, CompletedGeneration
 from agent_comms.goals import Goal, NoGoal
+from agent_comms.lifecycle_capability import Active
 from agent_comms.reported_turn import ReportedTurn
-from agent_comms.tools import invoke_tool
-from agent_comms.tool_caller import ThreadCaller
-from functools import partial
 from agent_comms.threads import Thread
+from agent_comms.goal_scope import OneGoal
+from agent_comms.tool_caller import ThreadCaller
+from agent_comms.tools import invoke_tool
+from agent_comms.turn_failure import BackendFailed
 
 # Every case in this module exercises the explicitly declared owner.
 invoke_tool = partial(invoke_tool, caller=ThreadCaller("owner"))
@@ -43,7 +46,7 @@ def test_same_id_resume_from_paused(comms, monkeypatch):
     started_goal_id = FieldCodec.decode(GoalId, started["id"])
     comms.goals.update_goal(
         "owner",
-        PausedGoalAction(expect=GoalPrecondition(goal_id=started_goal_id), progress="previous"),
+        PausedGoalAction(expect=GoalPrecondition(goal_id=OneGoal(started_goal_id)), progress="previous"),
     )
 
     result = invoke_tool(
@@ -104,7 +107,7 @@ def test_replacing_or_clearing_goal_cannot_reset_turn_report_guard(comms, monkey
         )
 
     comms.goals.update_goal(
-        "owner", ClearGoalAction(expect=GoalPrecondition(goal_id=replacement_goal_id))
+        "owner", ClearGoalAction(expect=GoalPrecondition(goal_id=OneGoal(replacement_goal_id)))
     )
     after_clear = invoke_tool(comms, "comms_set_goal", {"text": "after clear"})["goal"]
     reopened = wire(comms.root)
@@ -128,10 +131,10 @@ def test_clearing_goal_releases_its_reserved_attempt(comms, monkeypatch):
     store = comms.goals.open_goal_store()
     reservation = store.reserve(goal_goal_id, 1)
 
-    comms.goals.update_goal("owner", ClearGoalAction(expect=GoalPrecondition(goal_id=goal_goal_id)))
+    comms.goals.update_goal("owner", ClearGoalAction(expect=GoalPrecondition(goal_id=OneGoal(goal_goal_id))))
 
     assert comms.registry.require("owner").goal == NoGoal()
-    assert GoalAttemptStore(private).snapshot(goal_goal_id).lifecycle == CancelledGeneration()
+    assert GoalAttemptStore.at(private).snapshot(goal_goal_id).lifecycle == CancelledGeneration()
     assert store.snapshot(goal_goal_id).attempt_id == reservation.attempt_id
 
 
@@ -140,7 +143,7 @@ def test_model_tool_cannot_resume_blocked_uncertain_goal(comms, monkeypatch):
     started_goal_id = FieldCodec.decode(GoalId, started["id"])
     blocked = comms.goals.update_goal(
         "owner",
-        BlockedGoalAction(expect=GoalPrecondition(goal_id=started_goal_id), progress="uncertain"),
+        BlockedGoalAction(expect=GoalPrecondition(goal_id=OneGoal(started_goal_id)), progress="uncertain"),
     )
     with pytest.raises(ValueError):
         invoke_tool(comms, "comms_resume_goal", {"goal_id": started["id"], "progress": "retry"})
@@ -151,7 +154,7 @@ def test_resume_refuses_completed_or_replaced_goal(comms, monkeypatch):
     started = _goal(comms, monkeypatch)
     started_goal_id = FieldCodec.decode(GoalId, started["id"])
     comms.goals.update_goal(
-        "owner", CompletedGoalAction(expect=GoalPrecondition(goal_id=started_goal_id))
+        "owner", CompletedGoalAction(expect=GoalPrecondition(goal_id=OneGoal(started_goal_id)))
     )
     with pytest.raises(ValueError):
         invoke_tool(comms, "comms_resume_goal", {"goal_id": started["id"], "progress": "no"})
@@ -165,11 +168,11 @@ def test_completed_goal_cannot_be_reactivated_by_ui_registry_action(comms, monke
     started = _goal(comms, monkeypatch)
     started_goal_id = FieldCodec.decode(GoalId, started["id"])
     completed = comms.goals.update_goal(
-        "owner", CompletedGoalAction(expect=GoalPrecondition(goal_id=started_goal_id))
+        "owner", CompletedGoalAction(expect=GoalPrecondition(goal_id=OneGoal(started_goal_id)))
     )
     with pytest.raises(ValueError):
         comms.goals.update_goal(
-            "owner", ActiveGoalAction(expect=GoalPrecondition(goal_id=started_goal_id))
+            "owner", ActiveGoalAction(expect=GoalPrecondition(goal_id=OneGoal(started_goal_id)))
         )
     assert comms.registry.require("owner").goal == completed
 
@@ -182,24 +185,24 @@ def test_terminal_goal_cannot_reactivate_through_pause(comms, monkeypatch, termi
     store = comms.goals.open_goal_store()
     reservation = store.reserve(started_goal_id, 1)
     if terminal == "blocked":
-        reservation.fail(store, "uncertain turn")
+        reservation.fail(store, FailedTurnResolution(BackendFailed))
     else:
         store.claim_launch(reservation).record_verified_completion(store, "finished")
     terminal_goal = comms.goals.update_goal(
         "owner",
         (
             BlockedGoalAction(
-                expect=GoalPrecondition(goal_id=started_goal_id),
+                expect=GoalPrecondition(goal_id=OneGoal(started_goal_id)),
                 block_reason="Uncertain turn requires review",
             )
             if terminal == "blocked"
-            else CompletedGoalAction(expect=GoalPrecondition(goal_id=started_goal_id))
+            else CompletedGoalAction(expect=GoalPrecondition(goal_id=OneGoal(started_goal_id)))
         ),
     )
 
     with pytest.raises(ValueError):
         comms.goals.update_goal(
-            "owner", PausedGoalAction(expect=GoalPrecondition(goal_id=started_goal_id))
+            "owner", PausedGoalAction(expect=GoalPrecondition(goal_id=OneGoal(started_goal_id)))
         )
 
     assert comms.registry.require("owner").goal == terminal_goal
@@ -215,12 +218,12 @@ def test_same_value_goal_transition_bumps_durable_revision(comms, monkeypatch):
     assert original is not None and started["revision"] == original.revision
     first = comms.goals.update_goal(
         "owner", BlockedGoalAction(
-            expect=GoalPrecondition(goal_id=started_goal_id), progress="same")
+            expect=GoalPrecondition(goal_id=OneGoal(started_goal_id)), progress="same")
     )
     assert first is not None
     second = wire(comms.root).goals.update_goal(
         "owner", BlockedGoalAction(
-            expect=GoalPrecondition(goal_id=started_goal_id), progress="same")
+            expect=GoalPrecondition(goal_id=OneGoal(started_goal_id)), progress="same")
     )
     assert second is not None and second.revision == first.revision + 1
     assert wire(comms.root).registry.require("owner").goal == second
@@ -236,7 +239,7 @@ def test_exhausted_goal_revision_refuses_transition_without_write(comms):
     with pytest.raises(ValueError):
         comms.goals.update_goal(
             "owner",
-            BlockedGoalAction(expect=GoalPrecondition(goal_id=goal_id), progress="do not write"),
+            BlockedGoalAction(expect=GoalPrecondition(goal_id=OneGoal(goal_id)), progress="do not write"),
         )
     assert (comms.root / "registry.json").read_bytes() == before
 
@@ -247,29 +250,29 @@ def test_a_blocked_goal_is_retried_by_its_unit_or_commander_and_authorize_retry_
     goal_id = FieldCodec.decode(GoalId, _goal(comms, monkeypatch)["id"])
     store = comms.goals.open_goal_store()
 
-    def failed_turn(diagnostic):
+    def failed_turn():
         generation = store.require_generation(goal_id)
-        store.reserve(goal_id, generation.number).fail(store, diagnostic)
+        store.reserve(goal_id, generation.number).fail(store, FailedTurnResolution(BackendFailed))
         assert isinstance(comms.registry.require("owner").goal.state, Active)
 
-    failed_turn("Backend outcome uncertain.")
+    failed_turn()
     retried = invoke_tool(comms, "comms_goal",
                           {"goal_id": goal_id, "status": "retry", "progress": "cause fixed"})
     goal = comms.registry.require("owner").goal
     goal.require_active()
     assert retried['goal']['state'] == {'kind': 'active'} and goal.progress == 'cause fixed'
 
-    failed_turn("Provider failed again.")
+    failed_turn()
     commander_retry = comms.goals.update_goal(
-        "owner", RetryGoalAction(expect=GoalPrecondition(goal_id=goal_id)))
+        "owner", RetryGoalAction(expect=GoalPrecondition(goal_id=OneGoal(goal_id))))
     commander_retry.require_active()
     assert comms.registry.require('owner').goal == commander_retry
 
-    failed_turn("Provider failed a third time.")
-    comms.goals.update_goal("owner", RetryGoalAction(expect=GoalPrecondition(goal_id=goal_id)))
+    failed_turn()
+    comms.goals.update_goal("owner", RetryGoalAction(expect=GoalPrecondition(goal_id=OneGoal(goal_id))))
     store.reserve(goal_id, store.require_generation(goal_id).number)
     with pytest.raises(ValueError):
-        comms.goals.update_goal("owner", RetryGoalAction(expect=GoalPrecondition(goal_id=goal_id)))
+        comms.goals.update_goal("owner", RetryGoalAction(expect=GoalPrecondition(goal_id=OneGoal(goal_id))))
     assert isinstance(comms.registry.require("owner").goal.state, Active)
 
     replaced = comms.goals.update_goal("owner", SetGoalAction(text="a fresh objective"))

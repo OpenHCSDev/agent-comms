@@ -13,6 +13,7 @@ from agent_comms.goal_presentation import GoalWaitTarget
 from goal_owner_fixture import canonical_goal_wire
 from agent_comms.goal_waits import NoGoalWait
 from agent_comms.threads import Thread
+from agent_comms.goal_scope import OneGoal
 
 
 def register(comms, name):
@@ -71,7 +72,7 @@ def test_original_reply_is_not_reassigned_to_same_name_replacement(tmp_path):
     lease = comms.agents.begin_turn("peer", TurnId('6f42e257badc3c5ab4a67e743d8ab487')).turn_lease
     goal = comms.goals.update_goal("owner", SetGoalAction(text="Wait for original peer"))
     comms.goals.update_goal(
-        "owner", StandbyGoalAction(expect=GoalPrecondition(goal_id=goal.id), wait_for=("peer",))
+        "owner", StandbyGoalAction(expect=GoalPrecondition(goal_id=OneGoal(goal.id)), wait_for=("peer",))
     )
     wait = comms.goals.goal_wait("owner")
     reply = comms.messaging.send("peer", "owner", "Original dependency reply").message
@@ -106,7 +107,7 @@ def test_original_recipient_and_direct_reply_semantics_cannot_be_replaced(tmp_pa
     comms.agents.begin_turn("peer", TurnId('6f42e257badc3c5ab4a67e743d8ab487'))
     goal = comms.goals.update_goal("owner", SetGoalAction(text="Wait for original owner reply"))
     comms.goals.update_goal(
-        "owner", StandbyGoalAction(expect=GoalPrecondition(goal_id=goal.id), wait_for=("peer",))
+        "owner", StandbyGoalAction(expect=GoalPrecondition(goal_id=OneGoal(goal.id)), wait_for=("peer",))
     )
     wait = comms.goals.goal_wait("owner")
     wrong = comms.messaging.send("peer", "other", "Different addressed recipient").message

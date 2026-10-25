@@ -7,6 +7,8 @@ uses ThreadIncarnation; process and turn generations do not alter provenance.
 
 from __future__ import annotations
 
+from .bus_tables import AwaitingAnswerSource
+
 from .class_fact import ClassFact
 import asyncio
 import json
@@ -31,7 +33,6 @@ from .message_reference import MessageReference
 from .private_path import FileObservation, MissingFile
 from .projection_source import ProducedRow, ProjectionSource
 from .recorded_bus import RecordedBus, RecordedBusIdentity
-from .store_files import SharedLock
 from .thread_identity import RecordedThreadIncarnation, ThreadIncarnation
 
 
@@ -732,7 +733,7 @@ class DMDisplayBasis:
             displayed=displayed,
             fetched_through=page.newest_seq or 0,
         )
-        with registry.store.locked(mode=SharedLock()):
+        with registry.store.guarded_read():
             basis.validate_identity(
                 registry.store.read_snapshot_unlocked(),
                 RecordedBusIdentity.capture(bus.bus.path), registry.user_thread())
@@ -774,7 +775,7 @@ class DMDisplayBasis:
         if type(through) is not int:
             raise ValueError("Painted DM read requires a typed page basis and integer bound.")
         user = registry.user_thread()
-        with registry.store.locked():
+        with registry.store.guarded_write():
             snapshot = registry.store.read_snapshot_unlocked()
             self.validate_for(
                 root, worktree, peer, through, snapshot,
@@ -854,26 +855,25 @@ class MessageDisplayScope(DeclaredFamily, ABC, ProjectionSource, affix="DisplayS
                                   descending=descending, limit=limit, kinds=kinds)
 
     def history(self, source: BusReader, *, limit: int) -> tuple[Message, ...]:
-        """A bounded recent selection closed over its answers, without crossing this scope."""
+        """A bounded recent selection closed over its answers, without crossing this scope.
+
+        A copied message keeps only the answers this scope discloses: a reference to a message
+        outside it would name that message, and its original stays on the source bus."""
         selected: dict[int, Message] = {}
         with source.reading() as reader:
             for message in self.records(reader, descending=True, limit=limit):
                 added: dict[int, Message] = {}
                 pending = [message]
                 while pending and len(selected) + len(added) <= limit:
-                    original = pending.pop()
-                    if original.seq in selected or original.seq in added:
+                    answer = pending.pop()
+                    if answer.seq in selected or answer.seq in added:
                         continue
-                    if not self.includes(original):
-                        raise RelationViolationError(
-                            f"History answer {original.seq} is outside the selected scope"
-                        )
-                    added[original.seq] = original
-                    references = tuple(dict.fromkeys(
-                        reference for reference in original.answers
-                        if reference.seq not in selected and reference.seq not in added
-                    ))
-                    pending.extend(reader.messages_for_references(references))
+                    disclosed = tuple(original for original in
+                                      reader.messages_for_references(answer.answers)
+                                      if self.includes(original))
+                    added[answer.seq] = replace(
+                        answer, answers=tuple(original.reference for original in disclosed))
+                    pending.extend(disclosed)
                 if len(selected) + len(added) > limit:
                     if not selected:
                         raise RelationViolationError(
@@ -990,7 +990,6 @@ class RepliesDisplayScope(AnyTargetDisplayScope, DMDisplayScope):
 
     @ClassFact
     def writes(cls) -> tuple[type[ProducedRow], ...]:
-        from .bus_tables import AwaitingAnswerSource
         return (AwaitingAnswerSource,)
 
 
@@ -1143,6 +1142,16 @@ class MemberActivityDisplayScope(AllTargetsDisplayScope):
 
 
 @dataclass(frozen=True, slots=True)
+class DisplayUnreadSelection:
+    """The complete captured inputs that determine an unread count."""
+
+    seen: ReadCursor
+    scopes: tuple[ChannelDisplayScope, ...]
+    viewer_names: tuple[str, ...]
+    registry: RegistryProvenance
+
+
+@dataclass(frozen=True, slots=True)
 class CapturedSelection:
     """One captured registry/catalog/read basis for local human presentation."""
 
@@ -1156,6 +1165,10 @@ class CapturedSelection:
     def seen(self, source: BusSnapshot) -> ReadCursor:
         return self.viewer.cursor(self.reads, self.registry, self.document, source)
 
+    def unread_selection(self, source: BusSnapshot) -> DisplayUnreadSelection:
+        return DisplayUnreadSelection(
+            self.seen(source), self.scopes, tuple(sorted(self.viewer_names)), self.registry,
+        )
     @classmethod
     def capture(
         cls, snapshot: RegistrySnapshot, catalog: CatalogDocument,

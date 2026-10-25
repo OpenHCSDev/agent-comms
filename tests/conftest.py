@@ -76,10 +76,11 @@ class TranscriptRecords:
         encoded = FieldCodec.decode(dict[str, JsonValue], entry.to_wire())
         return {**encoded, "message": payload}
 
-    def session(self, **coordinates: JsonValue) -> SessionEntry:
+    def session(self, id: str, **coordinates: JsonValue) -> SessionEntry:
         from agent_comms.native_entries import SessionEntry
+        from agent_comms.native_session_reopen import PiSessionId
 
-        return self.entry(SessionEntry, **coordinates)
+        return self.entry(SessionEntry, id=FieldCodec.decode(PiSessionId, id), **coordinates)
 
 
 transcript_records = TranscriptRecords()
@@ -160,9 +161,42 @@ def publish_initial(
         destination=CommandTarget.named(target), origin=AgentOrigin(),
     )
 
+
+def accept_initial(bus: MessageBus, root_id: str, seq: int, store) -> tuple:
+    """Accept one initial the way its recipient's owner does, then read its sealed claims.
+
+    The live path is the owner's visible-delivery scan (cohort_foreground); it seals
+    the whole cohort of every original it finds, so one recipient's scan is enough.
+    """
+    from concurrent.futures import ThreadPoolExecutor
+
+    from agent_comms.cohort_foreground import _accept_visible_deliveries
+    from agent_comms.coordination_cohort import sealed_cohort_assignments
+
+    recipients = bus.bus.delivery(seq).recipients
+    if recipients:
+        owner = recipients[0]
+        with ThreadPoolExecutor(1) as pool:
+            pool.submit(asyncio.run, _accept_visible_deliveries(
+                bus, root_id, Path(store.session.path), owner.recipient_lookup,
+                owner_name=owner.canonical_thread,
+            )).result()
+    return tuple(
+        assignment for recipient in recipients
+        for assignment in sealed_cohort_assignments(
+            store, recipient.recipient_lookup, after_seq=seq - 1, limit=1)
+        if assignment.wire_seq == seq
+    )
+
 def pytest_sessionstart(session: pytest.Session) -> None:
     """The controller populates this checkout's pinned submodules before any worker runs,
-    as every tree of ours is (Checkout). Collection loads declarations only."""
+    as every tree of ours is (Checkout). Collection loads declarations only.
+
+    Child processes import this checkout's sources, the ``pythonpath`` pyproject declares:
+    a relative or missing PYTHONPATH sends them to whatever tree the venv's editable
+    install names, which on 2026-10-24 was a stale checkout one TurnFailure short."""
+    os.environ["PYTHONPATH"] = os.pathsep.join(
+        str(path) for path in session.config.getini("pythonpath"))
     if session.config.option.collectonly or "PYTEST_XDIST_WORKER" in os.environ:
         return
     from agent_comms.repo import Checkout
@@ -179,6 +213,16 @@ async def tool_listener() -> AsyncIterator[Callable[[Path, str], ToolListener]]:
             resources.push_async_callback(listener.close)
             return listener
         yield create
+
+
+@pytest.fixture
+def user_manager(monkeypatch: pytest.MonkeyPatch) -> type:
+    """A test that stands in for systemd's own commands names the manager it plays; every
+    other test home has no user manager (``ResidentManager.current``)."""
+    from agent_comms.child_process import ResidentManager, SystemdUserManager
+
+    monkeypatch.setattr(ResidentManager, "current", staticmethod(lambda: SystemdUserManager))
+    return SystemdUserManager
 
 
 @pytest.fixture
@@ -329,10 +373,14 @@ def private_comms(private_directory: Path) -> Iterator[Comms]:
 
     root = private_directory / "wire"
     comms = prepare_native_comms(wire(root))
+    from agent_comms.installer.launch import InstallLogs
     from agent_comms.launch_root import LaunchRoot
 
-    with LaunchRoot.from_path(root).selected():
-        yield comms
+    try:
+        with LaunchRoot.from_path(root).selected():
+            yield comms
+    finally:
+        InstallLogs(root).stop_running()
 
 
 @pytest.fixture
@@ -409,6 +457,29 @@ def declare_test_bus(
     for thread in threads:
         comms.registry.declare(thread)
     return comms
+
+
+def ledger_one_failure_short(root: Path) -> Path:
+    """Install 13's ledger: its failure CHECK one TurnFailure member short, the schema an
+    install must carry before any opening accepts it."""
+    from contextlib import closing
+
+    from agent_comms.goal_attempts import GoalAttemptStore
+    from agent_comms.goal_failure_observation import FailedTurnEvidence
+    from agent_comms.turn_failure import TurnFailure
+    from agent_comms.typed_table import sql_literal
+
+    directory = root / GoalAttemptStore.root_directory
+    directory.mkdir(mode=0o700)
+    path = GoalAttemptStore.initialize(directory).path
+    newest = sql_literal(TurnFailure.names()[-1])
+    with closing(sqlite3.connect(path)) as db:
+        (table,) = db.execute("SELECT sql FROM sqlite_master WHERE name=?",
+                              (FailedTurnEvidence.declared_name,)).fetchone()
+        db.execute(f'DROP TABLE "{FailedTurnEvidence.declared_name}"')
+        db.execute(table.replace(f", {newest}", ""))
+        db.commit()
+    return path
 
 
 def installed_comms(root: Path) -> Comms:

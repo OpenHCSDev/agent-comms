@@ -4,8 +4,13 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
+from typing import TYPE_CHECKING, Self
 
-from .field_codec import NominalSpelling, NominalText
+from .field_codec import Id128, NominalSpelling, NominalText
+
+if TYPE_CHECKING:
+    from .routing import Routing
+    from .transcript_routes import _SessionRoutes
 
 
 class NativeTurnId(NominalText):
@@ -18,10 +23,49 @@ class NativeTurnIdText(NominalSpelling[NativeTurnId]):
     spelling = re.compile(r"\S{1,4096}")
 
 
+class FreshNativeId(NominalText):
+    """An opaque harness key Core may mint, with the harness's free text spelling."""
+
+    @classmethod
+    def fresh(cls) -> Self:
+        return cls(Id128.mint())
+
+    def routing_in(self, routes: _SessionRoutes) -> Routing:
+        return routes[self]
+
+
+class FreshNativeIdText(NominalSpelling[FreshNativeId]):
+    spelling = NativeTurnIdText.spelling
+
+
+class PiRequestKey(FreshNativeId):
+    """A Pi command's request correlation key."""
+
+
+class NativeItemId(FreshNativeId):
+    """One item within a harness's turn."""
+
+
+class UsageChargeId(NominalText):
+    """A billing entry within a goal attempt."""
+
+
+class UsageChargeIdText(NominalSpelling[UsageChargeId]):
+    spelling = NativeTurnIdText.spelling
+
+
+class ProviderResponseId(UsageChargeId):
+    """The provider's original response identity, decoded from Pi."""
+
+
+class CompactionChargeId(UsageChargeId, FreshNativeId):
+    """A locally minted billing entry for a compaction without a response id."""
+
+
 @dataclass(frozen=True)
 class TurnItem:
     turn_id: NativeTurnId
-    item_id: str
+    item_id: NativeItemId
 
     @property
     def key(self) -> TurnItem:

@@ -28,6 +28,7 @@ from .goal_actions import (
     SetGoalAction,
 )
 from .goal_presentation import GoalPublicationSnapshot, UnpublishedGoalSnapshot
+from .goal_scope import OneGoal
 from .goals import Goal, GoalDeclaration, GoalRevision
 from .reservation_rules import ReservationViolationError
 from .routing import ScheduledTurn
@@ -104,7 +105,7 @@ class GoalScheduler:
 
     def prepare_goal(self, session_id: str) -> ScheduledTurn | None:
         """Read/recover the original READY grant in its joined storage worker."""
-        with self.comms.registry.store.locked():
+        with self.comms.registry.store.guarded_write():
             snapshot = self.comms.registry.snapshot()
             thread = snapshot.require(self.sessions.require(session_id))
             try:
@@ -130,7 +131,7 @@ class GoalScheduler:
         generation = store.require_generation(goal.id)
         generation.lifecycle.require_ready()
         self.comms.goals.ready_goal_grant_locked(thread, snapshot.claim_generation(thread.name), generation)
-        return (ScheduledTurn(GOAL_CONTINUE_PROMPT, goal_id=goal.id),)
+        return (ScheduledTurn(GOAL_CONTINUE_PROMPT, goal_id=OneGoal(goal.id)),)
 
     async def set_goal(self, session_id: str, text: str) -> Goal:
         """Commit a UI goal through its executing owner and private launch ledger."""
@@ -159,7 +160,7 @@ class GoalScheduler:
             EditGoalAction(
                 text=text,
                 expect=GoalPrecondition(
-                    goal_id=goal_id,
+                    goal_id=OneGoal(goal_id),
                     expected_goal=goal,
                     expected_owner=ProcessIdentity.capture(os.getpid()),
                 ),
@@ -183,7 +184,7 @@ class GoalScheduler:
                 name,
                 action(
                     expect=GoalPrecondition(
-                        goal_id=goal_id,
+                        goal_id=OneGoal(goal_id),
                         expected_goal=goal,
                         expected_owner=ProcessIdentity.capture(os.getpid()),
                     )
@@ -209,7 +210,7 @@ class GoalScheduler:
             name,
             RetryGoalAction(
                 expect=GoalPrecondition(
-                    goal_id=goal_id,
+                    goal_id=OneGoal(goal_id),
                     expected_goal=goal,
                     expected_owner=ProcessIdentity.capture(os.getpid()),
                 )

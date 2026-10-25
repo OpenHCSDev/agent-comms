@@ -103,6 +103,9 @@ class InputAttempt(LifecycleCapability, DeclaredFamily, affix="Input"):
     @abstractmethod
     def public_status(self) -> str: ...
 
+    def source_text_or(self, fallback: str) -> str:
+        return fallback
+
     def matches_owner(self, source_owner: ThreadIncarnation) -> bool:
         return False
 
@@ -249,6 +252,9 @@ class StoredInput(InputAttempt):
     """The recorded owner name and input generation, without inventing a thread identity."""
 
     exists = True
+
+    def source_text_or(self, fallback: str) -> str:
+        return self.source_text
 
     def context_provenance(self) -> InputProvenance:
         return InputProvenance(self.key, self.origin)

@@ -2,8 +2,8 @@
 
 A degraded signal is a fact Core already reads: answers owed past their window, a held plan
 phase main still lacks, a load past the ceiling. The heartbeat names them, the vibe-check
-sender puts the indictment in front of the commander, and every answering verb is refused
-until the commander answers that message (the OwedAnswer gate)."""
+sender puts the indictment in front of the commander, and every verb that answers nothing is
+refused until the commander answers that message (the OwedAnswer gate)."""
 
 from __future__ import annotations
 
@@ -143,8 +143,10 @@ class PlanStalledDegradation(Degradation):
 @dataclass(frozen=True)
 class OverloadDegradation(Degradation, BlocksRelease, ToolResult):
     """More owed orders, expired timers and unjudged edits than one commander keeps up with.
-    Forks relieve it by judging and ordering, which lowers the debt; load moves every beat, so
-    it stops the commander once per round while it stays over."""
+    Every edit a verdict can still clear is a point, so one unit running unwatched trips it
+    alone; edits under a merged order are nobody's review and count nothing. Forks relieve it
+    by judging and ordering, which lowers the debt; load moves every beat, so it stops the
+    commander once per round while it stays over."""
 
     ceiling: ClassVar[float] = 100.0
     round_seconds: ClassVar[int] = 30 * 60
@@ -162,7 +164,8 @@ class OverloadDegradation(Degradation, BlocksRelease, ToolResult):
         return cls.from_orders(
             frame.todos,
             len(tuple(ReviewTimerUp.conditions(comms, frame))),
-            OrderEditCountRead.count(comms, commander),
+            sum(read.read() for read in OrderEditCountRead.judgeable(
+                comms.root, frame.live, frame.pulls.progress(frame.todos, comms.registry))),
         )
 
     @classmethod
@@ -172,7 +175,7 @@ class OverloadDegradation(Degradation, BlocksRelease, ToolResult):
 
     @projected(view="wire")
     def total(self) -> float:
-        return self.owed + 2 * self.timers_up + self.unjudged / 10
+        return self.owed + 2 * self.timers_up + self.unjudged
 
     @projected(view="wire")
     def overloaded(self) -> bool:
@@ -222,13 +225,13 @@ class VibeCheck(UndatedStandingRule):
             " describes, this hour.",
             "Answer this burst once, naming any one of its messages with --answers: which failure"
             " in the indictment is you right now, why, and the one structural change you make"
-            " this turn. Every answering verb is refused until you do. Ignore this and the fleet"
-            " stops.",
+            " this turn. Every verb that answers nothing is refused until you do. Ignore this and"
+            " the fleet stops.",
         )
 
     def line(self) -> str:
-        return (f"VIBE CHECK ({self.sign.signal.declared_name}) "
-                f"-> answer the {VibeCheckSender.sender} messages now")
+        return (f"ANSWER the {VibeCheckSender.sender} messages now"
+                f" (vibe check: {self.sign.signal.declared_name})")
 
 
 @dataclass(frozen=True)
@@ -249,7 +252,7 @@ class VibeCheckUnanswered(Escalation, OwedAnswer, UndatedStandingRule):
 
     def line(self) -> str:
         age = max(0, int((time.time() - self.message.timestamp) // 60))
-        return f"VIBE CHECK UNANSWERED: message {self.cited}, {age} min old -> answer it"
+        return f"ANSWER vibe check {self.cited} ({age} min old)"
 
 
 class Indictment:
@@ -344,7 +347,7 @@ class ChokeholdUnanswered(Escalation, OwedAnswer, UndatedStandingRule):
                      ChokeholdSender.unanswered(source, snapshot, commander, time.time()))
 
     def line(self) -> str:
-        return f"CHOKEHOLD UNANSWERED: message {self.cited} -> answer it by the protocol"
+        return f"ANSWER chokehold {self.cited} by the protocol"
 
 
 @dataclass(frozen=True)

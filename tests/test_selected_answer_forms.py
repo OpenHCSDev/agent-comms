@@ -23,7 +23,8 @@ import pytest
 
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.comms import wire
-from agent_comms.coordination_cohort import accept_delivery_cohort, sealed_cohort_assignments
+from conftest import accept_initial
+from agent_comms.coordination_cohort import sealed_cohort_assignments
 from agent_comms.coordinator import Coordination
 from agent_comms.field_codec import FieldCodec
 from agent_comms.messages import InfoKind, Message
@@ -54,7 +55,7 @@ def alice_batch(*sent: tuple[str, str]):
                     recipient.recipient_lookup, committed=True,
                 )
             for message in messages:
-                accept_delivery_cohort(comms.bus, root_id, message.seq, store)
+                accept_initial(comms.bus, root_id, message.seq, store)
             lookup = comms.registry.require("Alice").incarnation.lookup
             assignments = sealed_cohort_assignments(store, lookup)
             yield SelectedSourceBatch.first_route(tuple(

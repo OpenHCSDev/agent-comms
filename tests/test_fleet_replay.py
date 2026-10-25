@@ -19,10 +19,12 @@ import pytest
 from agent_comms.commander.publication_rules import EmptyPullRequest, UnpushedBranch
 from agent_comms.commander.spinning import SpinningUnit
 from agent_comms.commander_heartbeat import CommanderObservation
+from agent_comms.standing_rules import BranchBehindMain
 from agent_comms.comms import Comms
 from agent_comms.external_transcript import ExternalTranscript
 from agent_comms.goal_actions import CreateProblemGoalAction
 from agent_comms.goals import CountCheckResult, OrderCheck
+from agent_comms.native_tool_call import ToolCallId
 from agent_comms.order_runs import MechanicalOrderRun
 from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.repo import Checkout
@@ -41,6 +43,7 @@ from agent_comms.thread_text import ForkedParent
 from agent_comms.threads import Thread
 from agent_comms.todos import (
     ClaimOrder,
+    DraftListedPullRequest,
     OrderClaim,
     OrderMessage,
     PendingProblemOrder,
@@ -51,12 +54,12 @@ from agent_comms.todos import (
     UnmergedListedPullRequest,
 )
 from agent_comms.transcript_events import ToolStartTranscript
-from agent_comms.turn_item import NativeTurnId
+from agent_comms.turn_item import NativeItemId, NativeTurnId
 from agent_comms.work_branches import BranchDifference, SourceGrowth, UnpushedHead
 from conftest import declare_test_bus
 from fixture_git import IDENTITY
-from source_revision_fixture import SourceRepository
 from github_fixture import GitHubFixture
+from source_revision_fixture import SourceRepository
 
 pytest_plugins = ("github_fixture",)
 
@@ -152,7 +155,6 @@ class Fleet:
                 text=f"Repair {name}",
                 review_at=RecordedEventTime(time.time() + 3600),
                 order=PendingProblemOrder(
-                    id=f"order-{name}",
                     owner=scope.shape.parents[0],
                     scope=scope,
                     run=MechanicalOrderRun(),
@@ -175,7 +177,7 @@ class Fleet:
             self.commander, unit.name, todo.order.instructions(todo)
         ).message
         todo = self.comms.goals.todos.apply(
-            todo.id, OrderMessage(todo.revision, lead, original.message_id)
+            todo.id, OrderMessage(todo.revision, lead, original.message_id, at=RecordedEventTime(time.time()))
         )
         claimed = OrderClaim.for_order(
             todo,
@@ -192,9 +194,10 @@ class Fleet:
         )
         return claimed
 
-    def pull_request(self, number: int, branch: str, head: str) -> None:
+    def pull_request(self, number: int, branch: str, head: str, *,
+                     kind: type[UnmergedListedPullRequest] = UnmergedListedPullRequest) -> None:
         stamp = datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
-        self.github.put(self.repository, UnmergedListedPullRequest(
+        self.github.put(self.repository, kind(
             number, branch, head, stamp, "main", reviewable_times=(stamp,),
         ))
 
@@ -345,28 +348,26 @@ class SpinningUnitSeed(IncidentSeed):
     @classmethod
     def seed(cls, fleet: Fleet) -> StandingRule:
         spinning_turn_id = NativeTurnId('spinning')
-        moved = time.time() - (SpinningUnit.minutes + 10) * 60
+        moved = time.time() - 30 * 60
         worktree = fleet.worktree("spinning", base=fleet.main, at=moved)
-        head = fleet.commit(worktree, "spinning.py", "spinning = 1\n", at=moved)
+        fleet.commit(worktree, "spinning.py", "spinning = 1\n", at=moved)
         fleet.push(worktree)
         todo = fleet.unit("spinning", worktree, at=moved - 60)
         transcript = ExternalTranscript(fleet.comms.root, todo.held().owner_identity)
         for call in range(SpinningUnit.calls):
             transcript.finish(
                 turn_id=spinning_turn_id,
-                item_id=f"call-{call}",
+                item_id=NativeItemId(f"call-{call}"),
                 events=(
                     ToolStartTranscript(
                         position=0,
-                        tool_call_id=f"call-{call}",
+                        tool_call_id=ToolCallId(f"call-{call}"),
                         tool_name="bash",
                         timestamp=moved + 60 + call,
                     ),
                 ),
             )
-        return SpinningUnit(
-            todo.id, todo.held().owner_identity, SpinningUnit.calls, SpinningUnit.minutes, head
-        )
+        return SpinningUnit(todo.id, todo.held().owner_identity, SpinningUnit.calls)
 
 
 class LostToolsSeed(IncidentSeed):
@@ -442,13 +443,14 @@ def test_branch_rules_read_the_order_checkout_instead_of_the_behind_home(fleet):
     todo = built.unit('order-worker', home)
     rule = built.comms.registry.storage_rule
     checkout = rule.order_checkout(rule.initial_roots('order-worker'), todo.id)
-    behind_line = f'BRANCH BEHIND MAIN: {todo.id} '
     built.git(built.source.checkout, 'worktree', 'remove', str(checkout))
-    assert not any(rule.line().startswith(behind_line) for rule in built.observe().rules)
+    assert not any(isinstance(rule, BranchBehindMain) and rule.problem == todo.id
+                   for rule in built.observe().rules)
 
     built.git(built.source.checkout, 'worktree', 'add', '-q', '-b', 'current-order',
               str(checkout), built.main)
-    assert not any(rule.line().startswith(behind_line) for rule in built.observe().rules)
+    assert not any(isinstance(rule, BranchBehindMain) and rule.problem == todo.id
+                   for rule in built.observe().rules)
     growth = SourceGrowth.limit + 1
     built.commit(checkout, 'src/agent_comms/order_growth.py',
                  ''.join(f'order_value_{index} = {index}\n' for index in range(growth)))
@@ -509,6 +511,29 @@ def test_replay_raises_each_incident_once(fleet):
     assert {rule.observation_key() for rule in first.rules} == {
         rule.observation_key() for rule in second.rules
     }
+
+
+def test_an_empty_draft_is_the_first_commit_not_an_empty_pr(fleet):
+    built, _ = fleet
+    worktree = built.worktree("draft", base=built.main)
+    built.push(worktree)
+    todo = built.unit("draft", worktree)
+    built.pull_request(21, "draft", built.main, kind=DraftListedPullRequest)
+    built.claim(todo, 21, built.main, at=time.time())
+    assert not any(isinstance(rule, EmptyPullRequest) and rule.problem == todo.id
+                   for rule in built.observe().rules)
+
+
+def test_an_empty_commit_does_not_reset_spinning_and_a_src_change_ends_it(fleet):
+    """2026-10-25: unit-signal made 92 calls on P681 behind its empty draft commit, unflagged.
+    A non-Python file under src is a source change too."""
+    built, _ = fleet
+    storage = built.comms.registry.storage_rule
+    worktree = storage.order_checkout(storage.initial_roots("spinning"), built.problems["spinning"])
+    built.commit(worktree, "notes.txt", "moved HEAD, changed nothing\n")
+    assert any(type(rule) is SpinningUnit for rule in built.observe().rules)
+    built.commit(worktree, "src/stack/owner.mjs", "export const owner = 1;\n")
+    assert not any(type(rule) is SpinningUnit for rule in built.observe().rules)
 
 
 def test_a_stopped_unit_is_not_spinning(fleet):

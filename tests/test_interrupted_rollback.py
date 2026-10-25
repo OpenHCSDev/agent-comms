@@ -17,7 +17,7 @@ from agent_comms.installer.backup import StoreBackup
 from agent_comms.installer.probes.carry import Carried, Carry
 from agent_comms.installer.launch import InstallReport
 from agent_comms.installer.upgrade import upgrade
-from agent_comms.locked_store import RegistryFile
+from agent_comms.locked_store import LiveFilesRequest, RegistryFile
 from agent_comms.installer.refusals import UpgradeRefused
 from agent_comms.registry_store import RegistryStore
 from agent_comms.thread_text import GivenThreadText
@@ -55,7 +55,7 @@ def killed_publication(source, target, **directories):
 os.replace = killed_publication
 hold = MaintenanceBarrier(registry.path).begin(MaintenanceOperator.current())
 with hold.holding():
-    StoreBackup(root, route, path).restore()
+    StoreBackup(root, route, path).restore(lambda: None)
 raise AssertionError("The selected registry publication was never restored")
 """
 
@@ -75,7 +75,7 @@ def test_next_install_completes_a_killed_registry_restore(tmp_path, installed_ru
     # must come from the registry declaration, not from this manifest's ordering.
     backup = StoreBackup.take(comms.root, route, tuple(reversed(registry.written)), spill)
     expected = {path: RegistryStore.digest(path) for path in registry.written}
-    RegistryTitleCarry(comms.root, comms.root, spill).carry(apply=True)
+    RegistryTitleCarry(LiveFilesRequest(comms.root), spill).carry(apply=True)
     killed = subprocess.run(
         [sys.executable, "-c", KILLED_RESTORE, str(comms.root), str(route), str(backup.path), str(publication)],
         capture_output=True, text=True, timeout=30,
@@ -103,7 +103,7 @@ def test_next_install_leaves_a_completed_installs_backup_alone(tmp_path, install
     route.parent.mkdir(mode=0o700, parents=True)
     spill = tmp_path / "backups"
     backup = StoreBackup.take(comms.root, route, registry.written, spill)
-    RegistryTitleCarry(comms.root, comms.root, spill).carry(apply=True)
+    RegistryTitleCarry(LiveFilesRequest(comms.root), spill).carry(apply=True)
     carried = {path: RegistryStore.digest(path) for path in registry.written}
     assert not backup.original()
     with pytest.raises(UpgradeRefused, match="missing-checkout"):

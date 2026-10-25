@@ -10,6 +10,7 @@ from typing import TYPE_CHECKING, ClassVar, Literal
 
 from .assignment_states import FailedAssignment, IgnoredAssignment, TriagePendingAssignment
 from .coordination_tables.assignments import WakeAssignment
+from .coordination_tables.executions import WireOrigin
 from .coordinator import Coordination
 from .declared_family import DeclaredFamily
 from .field_codec import (
@@ -20,6 +21,7 @@ from .field_codec import (
     MalformedRecord,
     TextRepresentation,
 )
+from .selected_result import CoordinatedTurn
 from .typed_table import TextStorage
 
 if TYPE_CHECKING:
@@ -113,8 +115,6 @@ class IgnoreSelectedTriage(SelectedTriage, declared_name="IGNORE"):
         self, participant: SelectedParticipant, session: SelectedSession, input_id: InputId,
         execution: SelectedExecution, settled: tuple[WakeAssignment, ...],
     ) -> CoordinatedTurn:
-        from .selected_result import CoordinatedTurn
-
         await Coordination.run_worker(participant.consume_reply_wait)
         return await CoordinatedTurn.capture(participant, input_id, IgnoredAssignment)
 
@@ -133,8 +133,6 @@ class FullSelectedTriage(SelectedTriage, declared_name="FULL"):
         self, participant: SelectedParticipant, session: SelectedSession, input_id: InputId,
         execution: SelectedExecution, settled: tuple[WakeAssignment, ...],
     ) -> CoordinatedTurn:
-        from .coordination_tables.executions import WireOrigin
-
         await participant.require_current()
         created = participant.store.create_after_triage(
             participant.batch.execution_id, WireOrigin,

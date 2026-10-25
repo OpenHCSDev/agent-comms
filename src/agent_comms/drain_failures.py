@@ -9,8 +9,6 @@ from functools import partial
 from typing import TYPE_CHECKING
 
 
-from acp.exceptions import RequestError
-
 from .activity import (
     DrainDiagnostic,
     NativeInputDrainDiagnostic,
@@ -22,7 +20,7 @@ from .coordinator import Coordination
 from .native_failures import NativeRequestFailure
 
 # Failures raised outside our hierarchy, which cannot inherit the drain capabilities.
-EXTERNAL_UNAVAILABLE_ERRORS = (OSError, sqlite3.Error, RequestError)
+EXTERNAL_UNAVAILABLE_ERRORS = (OSError, sqlite3.Error)
 UNAVAILABLE_DRAIN_ERRORS = (DrainUnavailable, *EXTERNAL_UNAVAILABLE_ERRORS)
 DEFERRED_DRAIN_ERRORS = (DrainDeferred, *EXTERNAL_UNAVAILABLE_ERRORS)
 

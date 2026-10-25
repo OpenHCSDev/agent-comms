@@ -7,7 +7,6 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 
-from acp.exceptions import RequestError
 
 from .coordinator import Coordination
 from .declared_family import DeclaredFamily
@@ -143,11 +142,7 @@ class WakeScheduleCheck(SchedulesWake, BackgroundWake, SessionScheduleCheck):
                         acceptance=NoTurnAcceptance(),
                         origins=tuple(origin for turn in pending for origin in turn.origin.messages()),
                         autonomous_goal=len(pending) == 1 and pending[0].autonomous_goal,
-                        dependency_wait_id=pending[0].goal_wait_id,
                     )
-                except RequestError as error:
-                    pending[0].require_dependency_wake(error)
-                    await inputs.effects.turns.goals.sync_goal_execution(session_id, owner.name)
                 finally:
                     inputs.effects.turns.turn_tasks.pop(session_id, None)
         return WakeDue()
@@ -158,7 +153,7 @@ class WakeScheduleCheck(SchedulesWake, BackgroundWake, SessionScheduleCheck):
         active_ids = frozenset(current.id for current in goal)
         pending[:] = [
             turn for turn in pending
-            if not turn.autonomous_goal or turn.goal_id in active_ids
+            if not turn.autonomous_goal or turn.goal_id.retained_by(active_ids)
         ]
 
 

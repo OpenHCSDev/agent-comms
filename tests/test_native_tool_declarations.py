@@ -26,6 +26,7 @@ from agent_comms.tool_declaration import (
     ToolDeclaration,
     UndeclaredTool,
 )
+from agent_comms.turn_item import NativeItemId
 from conftest import transcript_records
 from delivery_owner_fixture import canonical_agent
 
@@ -126,7 +127,7 @@ def test_foreign_protocol_owners_decode_canonical_preview_arguments():
     from agent_comms.transcript_events import TranscriptEvent
 
     start, end = FileChange(path="codex.txt", diff="@@ -1 +1 @@\\n-old\\n+new\\n",
-                            kind=UpdatedFile()).events("codex", True, transcript_records.timestamp.at.timestamp())
+                            kind=UpdatedFile()).events(NativeItemId("codex"), ToolCallId("codex"), True, transcript_records.timestamp.at.timestamp())
     assert start.title == "Edit codex.txt" and start.raw_input == {"path": "codex.txt"}
     assert start.tool == FilePatchTool(path="codex.txt")
     assert end.title == "Edit" and end.diff is not None

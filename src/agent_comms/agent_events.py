@@ -21,11 +21,14 @@ from .acp_failure import (
     UnresolvedNativeTurnOutcome,
 )
 from .child_process import ProcessIdentity
+from .coordinator import Coordination
 from .declared_family import DeclaredFamily
 from .field_codec import InputId, NullMember, TurnId
 from .input_attempt import InputAttempt
 from .mro_dispatch import MroDispatch, handles
 from .native_failures import NativePiUnavailable
+from .native_tool_call import ToolCallId
+from .turn_item import UsageChargeId
 from .pi_counts import PiCount, UnreportedCount
 from .pi_payloads import McpLiveAcknowledgement, PiDiagnostic, PiRequestId, PiUsage
 from .pi_vocabulary import (
@@ -54,6 +57,7 @@ if TYPE_CHECKING:
     from .transcript_events import SentTranscript
     from .turn_input_source import OriginalTurnInput
     from .turn_phase import TurnPhase
+    from .turn_progress import TurnProgress
 
 
 class AgentEvent(ABC):
@@ -192,7 +196,7 @@ class ThinkingChanged(SettingChangeResult):
 
 @dataclass(frozen=True)
 class ToolEvent(AgentEvent):
-    id: str
+    id: ToolCallId
     name: str
 
 
@@ -203,7 +207,7 @@ class ToolStart(ToolEvent):
     kind: type[ToolAction] = OtherAction
 
     @classmethod
-    def from_call(cls, call_id: str, name: str, arguments: object) -> ToolStart:
+    def from_call(cls, call_id: ToolCallId, name: str, arguments: object) -> ToolStart:
         declaration = ToolDeclaration.for_name(name)
         title = ToolDeclaration.caption(name, ToolDeclaration.record(name, arguments, call_id=call_id))
         return cls(call_id, name, title, arguments, declaration.declared_action())
@@ -315,10 +319,12 @@ class Done(AgentEvent, FailedGoalTurn):
     def require_reported(self) -> Done:
         return self
 
-    async def prepare_publication(self, progress) -> Done:
+    async def prepare_publication(self, progress: TurnProgress) -> Done:
         return self
 
-    async def report_failure(self, progress, error):
+    async def report_failure(
+        self, progress: TurnProgress, error: Exception, kind: type[TurnFailure]
+    ) -> NativeTurnOutcome:
         return self.outcome
 
 
@@ -365,8 +371,6 @@ class RuntimeInfoObservation(AgentEvent):
         return current
 
     async def record_in(self, consumer: AgentEventConsumer) -> None:
-        from .coordinator import Coordination
-
         await Coordination.run_worker(partial(
             consumer.comms.agents.observe_runtime_info, consumer.thread_name, self,
         ))
@@ -432,7 +436,7 @@ class AgentInfo(NativeMetadataObservation, ContextSizeObservation):
 
 @dataclass(frozen=True)
 class ProviderUsage(AgentEvent):
-    response_id: str
+    response_id: UsageChargeId
     usage: PiUsage
 
 

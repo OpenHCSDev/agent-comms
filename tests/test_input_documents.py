@@ -481,7 +481,7 @@ def test_input_key_members_keep_the_stored_and_public_text_forms(tmp_path):
 
     input_id = InputId("a" * 32)
     cases = (
-        (AcpInputKey(input_id), None, f"acp:{input_id}", input_id),
+        (AcpInputKey(input_id), None, f"acp:{input_id}", "a" * 32),
         (BusInputKey(7), 7, "bus:7", "bus:7"),
         (OwnedBusInputKey(7, 1.0), 7, "bus:7:owner:0x1.0000000000000p+0",
          "bus:7:owner:0x1.0000000000000p+0"),

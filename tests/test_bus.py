@@ -1,3 +1,4 @@
+import ast
 import json
 import os
 import shutil
@@ -18,6 +19,8 @@ from agent_comms.bus import (
     PrivateRecord,
     PublicRecord,
 )
+from agent_comms.activity_clocks import ChannelActivity
+from agent_comms.bus_activity_index import ActivityMaximum
 from agent_comms.bus_publication import Delivered, HumanOrigin, KeyedPublication
 from agent_comms.bus_tables import AnsweredSource, BusSchema, MessageIdentitySource
 from agent_comms.messages import (
@@ -25,13 +28,17 @@ from agent_comms.messages import (
     BusRow,
     BusTables,
     Claimed,
+    ClaimHolders,
     ClaimHistoryKind,
+    ConversationActivity,
     InfoKind,
     MembershipTransition,
     Message,
+    MessageKind,
     MessageRoleWire,
     NoticeRole,
 )
+from agent_comms.channel_targets import ThreadTarget
 from agent_comms.coordination_tables.publications import PublicationIntents
 from agent_comms.errors import (
     CommittedMessageError,
@@ -39,7 +46,7 @@ from agent_comms.errors import (
     RelationViolationError,
     UnclaimedError,
 )
-from agent_comms.field_codec import MessageId
+from agent_comms.field_codec import GitCommitText, MessageId, MessageIdText, TimestampText
 from agent_comms.message_reference import MessageReference
 from agent_comms.read_basis import RepliesDisplayScope
 from agent_comms.response_acknowledgement import (
@@ -103,51 +110,36 @@ def projection_source_digest(source: Path) -> str:
     ).stdout.strip()
 
 
-@pytest.mark.parametrize(
-    ("module", "old", "new"),
-    (
-        (
-            "typed_table.py",
-            "Durable files compare their stored DDL text",
-            "An unrelated infrastructure docstring: durable files compare their stored DDL text",
-        ),
-        (
-            "field_codec.py",
-            "class TimestampText(",
-            "def unrelated_projection_probe():\n    return 17\n\n\nclass TimestampText(",
-        ),
-    ),
-)
+def edit_inside(source: Path, owner: type) -> None:
+    """Insert a line inside the class's own declaration, so no test copies our source."""
+    path = source.joinpath(*owner.__module__.split(".")[1:]).with_suffix(".py")
+    lines = path.read_text().splitlines(keepends=True)
+    declaration = next(
+        node for node in ast.walk(ast.parse("".join(lines)))
+        if isinstance(node, ast.ClassDef) and node.name == owner.__name__
+    )
+    first = declaration.body[0]
+    lines.insert(first.lineno - 1, " " * first.col_offset + "# an edit inside the class\n")
+    path.write_text("".join(lines))
+
+
+@pytest.mark.parametrize("owner", (TypedTable, TimestampText))
 def test_projection_digest_ignores_infrastructure_source(
-    projection_source: Path,
-    module: str,
-    old: str,
-    new: str,
+    projection_source: Path, owner: type
 ) -> None:
     before = projection_source_digest(projection_source)
-    path = projection_source / module
-    original = path.read_text()
-    assert original.count(old) == 1
-    path.write_text(original.replace(old, new))
+    edit_inside(projection_source, owner)
     assert projection_source_digest(projection_source) == before
 
 
-def test_projection_digest_tracks_declared_column_spelling(projection_source: Path) -> None:
+@pytest.mark.parametrize("owner, changes", ((MessageIdText, True), (GitCommitText, False)))
+def test_projection_digest_tracks_declared_column_spelling(
+    projection_source: Path, owner: type, changes: bool
+) -> None:
     before = json.loads(projection_source_digest(projection_source))["message_identity_source"]
-    codec = projection_source / "field_codec.py"
-    original = codec.read_text()
-    related = "digits: ClassVar[int] = 12"
-    assert original.count(related) == 1
-    codec.write_text(original.replace(related, "digits: ClassVar[int] = 13"))
-    assert (
-        json.loads(projection_source_digest(projection_source))["message_identity_source"] != before
-    )
-    unrelated = 'spelling = re.compile("[0-9a-f]{7,40}")'
-    assert original.count(unrelated) == 1
-    codec.write_text(original.replace(unrelated, 'spelling = re.compile("[0-9a-f]{8,40}")'))
-    assert (
-        json.loads(projection_source_digest(projection_source))["message_identity_source"] == before
-    )
+    edit_inside(projection_source, owner)
+    after = json.loads(projection_source_digest(projection_source))["message_identity_source"]
+    assert (after != before) == changes
 
 
 def test_nominal_message_id_column_stores_plain_text() -> None:
@@ -167,62 +159,24 @@ def test_nominal_message_id_column_stores_plain_text() -> None:
 
 
 @pytest.mark.parametrize(
-    ("module", "old", "new"),
+    "owner",
     (
-        (
-            "bus_publication.py",
-            "yield SentSource(self.sender_lookup, self.seq)",
-            "yield SentSource(self.sender_lookup, self.seq + 1)",
-        ),
-        ("bus_activity_index.py", '=max("{name}",excluded.', '=min("{name}",excluded.'),
-        (
-            "messages.py",
-            "for record in BusCapability.history(db, kinds):",
-            "for record in reversed(tuple(BusCapability.history(db, kinds))):",
-        ),
-        (
-            "messages.py",
-            "yield MessageIdentitySource(self.seq, self.message_id, self.sender)",
-            "yield MessageIdentitySource(self.seq, self.message_id, self.target)",
-        ),
-        (
-            "messages.py",
-            "holders.apply(db, self.claim_transition, projected)",
-            "holders.apply(db, self.claim_transition, projected)\n        del projected",
-        ),
-        (
-            "messages.py",
-            "return (SentActivity(message.sender, message.timestamp),)",
-            "return (SentActivity(message.target, message.timestamp),)",
-        ),
-        (
-            "messages.py",
-            "return (BusRouteCounts.from_message(message),)",
-            "return (BusRouteCounts.from_message(message), BusRouteCounts.from_message(message))",
-        ),
-        (
-            "channel_targets.py",
-            "    def direct_names(self) -> tuple[str, ...]:\n        return self.names\n",
-            "    def direct_names(self) -> tuple[str, ...]:\n        return self.names[:1]\n",
-        ),
-        (
-            "activity_clocks.py",
-            "message.sender_role.last_user_input(0.0, message.timestamp),",
-            "message.sender_role.last_user_input(1.0, message.timestamp),",
-        ),
+        Delivered,
+        ActivityMaximum,
+        BusProjectionTables,
+        BusRecord,
+        Claimed,
+        ClaimHolders,
+        ConversationActivity,
+        MessageKind,
+        ThreadTarget,
+        ChannelActivity,
     ),
 )
-def test_projection_digest_tracks_producing_source(
-    projection_source: Path,
-    module: str,
-    old: str,
-    new: str,
-) -> None:
+def test_projection_digest_tracks_producing_source(projection_source: Path, owner: type) -> None:
+    """An edit inside a producing class changes the digest."""
     before = projection_source_digest(projection_source)
-    path = projection_source / module
-    original = path.read_text()
-    assert original.count(old) == 1
-    path.write_text(original.replace(old, new))
+    edit_inside(projection_source, owner)
     assert projection_source_digest(projection_source) != before
 
 
@@ -361,7 +315,7 @@ def test_real_message_record_round_trip(bus, declaration, role):
 
 
 @pytest.mark.parametrize("declaration", BusRecord.members_with(BusRecord))
-def test_record_family_rebuild_and_public_history_install_preserve_scope(bus, declaration, tmp_path):
+def test_record_family_rebuild_and_history_install_preserve_scope(bus, declaration, tmp_path):
     original = bus.append(lambda seq, db: PublicRecord.from_message(
         Message("author", "worker", "original", InfoKind, seq=seq),
     ))
@@ -384,13 +338,14 @@ def test_record_family_rebuild_and_public_history_install_preserve_scope(bus, de
     copied = Bus.install(
         Bus.path_in(tmp_path / "selected-history"), history=scope.history(bus, limit=2),
     )
-    public = copied.lookup(record.seq)
-    assert type(public) is PublicRecord
-    assert public.publication_snapshot == record.history_snapshot.publication_snapshot
-    assert copied.lookup_message(record.message_id) == public
-    assert copied.received("b" * 32) == ()
-    assert copied.page(record.seq + 1, 10) == (public, copied.lookup(original.seq))
-    assert copied.replies((original.reference,)) == (public,)
+    kept = copied.lookup(record.seq)
+    assert kept == record.history_record
+    assert kept.publication_snapshot == record.history_snapshot.publication_snapshot
+    assert copied.lookup_message(record.message_id) == kept
+    # A delivered record keeps its frozen audience, so its recipient still received it.
+    assert copied.received("b" * 32) == record.deliveries()
+    assert copied.page(record.seq + 1, 10) == (kept, copied.lookup(original.seq))
+    assert copied.replies((original.reference,)) == (kept,)
 
 
 @pytest.mark.parametrize("declaration", BusRecord.members_with(Claimed))
@@ -682,7 +637,8 @@ def test_human_refusal_rolls_back_the_header(tmp_path, bus):
 
 
 def test_notification_failure_carries_the_committed_message(tmp_path, bus):
-    bus.path.with_suffix(".changed").mkdir()
+    marker, = bus.source_paths(bus.path.parent)
+    marker.mkdir(parents=True)
     origin = HumanOrigin("author", 1, str(tmp_path))
     with pytest.raises(CommittedMessageError) as failed:
         origin.append(

@@ -21,7 +21,7 @@ from agent_comms.envelope_claim_transitions import (
     WakeClaim,
     WakeClaims,
 )
-from agent_comms.field_codec import ClaimId, FieldCodec, InputId, MalformedRecord, MessageId, TurnId
+from agent_comms.field_codec import AssignmentId, ClaimId, FieldCodec, InputId, MalformedRecord, MessageId, TurnId
 from agent_comms.messages import ClaimMessage, ClaimNoticeKind, Message
 
 G1 = ClaimId("a" * 32)
@@ -83,7 +83,7 @@ def test_selected_wake_binding_survives_claim_projection(tmp_path):
         wire_root_id=ROOT_ID,
         source_seq=7,
         source_message_id=MessageId.mint("source-7"),
-        wake_assignment_id="cohort-v1:" + "d" * 64,
+        wake_assignment_id=AssignmentId.cohort(b"selected-wake-7"),
         wake_revision=3,
         recipient_lookup=RECIPIENT_LOOKUP,
         execution_id="execution-7",

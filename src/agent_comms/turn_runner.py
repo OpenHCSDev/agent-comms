@@ -16,14 +16,17 @@ from pydantic import JsonValue
 
 from .input_key import InputKey
 
-from . import agent_events as events
+from . import (
+    agent_events as events,
+    pi_events as pi,
+)
 from .agent_backend import AgentBackend
 from .agent_event_updates import AcpEventConsumer, TurnEventConsumer
 from .channel_targets import NamedTarget
 from .channels import AllChannel
 from .controller import Controller
 from .coordinator import Coordination
-from .field_codec import InputId, TurnId, GoalId
+from .field_codec import GoalId, InputId, TurnId
 from .errors import RelationViolationError
 from .following_inputs import OwnerFollowingInputs
 from .goal_actions import (
@@ -38,9 +41,14 @@ from .messages import Message
 from .mro_dispatch import MroDispatch, handles
 from .native_arguments import LaunchArguments, LaunchBinary
 from .native_input_owner import RegistryOwner
+from .owned_turn import OwnedTurn
+from .pi_commands import (
+    AgentCommsInspectContext,
+    AgentCommsInspectContextSegment,
+)
 from .pi_payloads import StateData
 from .queued_input import InitialInput
-from .routing import TurnRouting
+from .routing import NoTurnRouting, Routing
 from .runtime import (
     RuntimeServer,
     SubscriberClosed,
@@ -49,10 +57,11 @@ from .threads import Thread
 from .transcript_updates import TurnTranscriptUpdate
 from .turn_effects import TurnEffects
 from .turn_lease import TurnLeaseFence, TurnState
-from .turn_input_source import TurnAcceptance
+from .turn_input_source import InputDependency, NoInputDependency, TurnAcceptance
 from .turn_outcome import TurnOutcome
 from .turn_phase import CancellingPhase, TurnPhase
 from .turn_terminal import TurnInterruption
+from .goal_scope import OneGoal
 
 if TYPE_CHECKING:
     from . import pi_events as pi
@@ -166,13 +175,9 @@ class TurnRunner:
         await AcpEventConsumer(self.effects, session_id, self.runtime).dispatch(info)
 
     async def inspect_context(self, session_id, thread):
-        from .pi_commands import AgentCommsInspectContext
-
         return await self.inspect_native_request(session_id, thread, AgentCommsInspectContext())
 
     async def inspect_context_segment(self, session_id, thread, manifest):
-        from .pi_commands import AgentCommsInspectContextSegment
-
         request = AgentCommsInspectContextSegment.for_manifest(manifest)
         context = await self.inspect_native_request(session_id, thread, request)
         return context.recorded_public_text(manifest)
@@ -243,7 +248,7 @@ class TurnRunner:
     def pause_active_goal(self, thread: Thread) -> None:
         for goal in thread.goal.active():
             self.comms.goals.update_goal(
-                thread.name, PausedGoalAction(expect=GoalPrecondition(goal_id=goal.id)),
+                thread.name, PausedGoalAction(expect=GoalPrecondition(goal_id=OneGoal(goal.id))),
                 actor=OwnerInvocable,
             )
 
@@ -282,8 +287,6 @@ class TurnRunner:
         No ACP response updates package configuration, launch trust or call grants.
         The backend revalidates this result before replying to the same Pi child.
         """
-        from . import pi_events as pi
-
         if controller is None or not await Coordination.run_worker(partial(self.owns_turn, session_id, turn_id)):
             return pi.CancelledUiChoice()
         permission = request.permission(turn_id)
@@ -308,7 +311,7 @@ class TurnRunner:
 
     def acquire_turn(
         self, resources: AsyncExitStack, session_id: str, thread_name: str,
-        turn_id: TurnId, detail: str, routing: TurnRouting | None = None, *,
+        turn_id: TurnId, detail: str, routing: Routing = NoTurnRouting(), *,
         task: TurnTask | None = None,
     ) -> RegistryOwner:
         """Bind the exact installed lease to cleanup before worker delivery.
@@ -444,10 +447,8 @@ class TurnRunner:
         original_owner_input: bool = False,
         original_goal_id: GoalId | None = None,
         acceptance: TurnAcceptance,
-        dependency_wait_id: str | None = None,
+        dependency: InputDependency = NoInputDependency(),
     ) -> None:
-        from .owned_turn import OwnedTurn
-
         await OwnedTurn(
             self,
             session_id=session_id,
@@ -461,7 +462,7 @@ class TurnRunner:
             original_owner_input=original_owner_input,
             original_goal_id=original_goal_id,
             acceptance=acceptance,
-            dependency_wait_id=dependency_wait_id,
+            dependency=dependency,
         ).run()
 
     async def close(self) -> None:

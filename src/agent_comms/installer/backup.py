@@ -7,13 +7,11 @@ import re
 import shutil
 import stat
 import sys
-import tempfile
 import time
-from abc import ABC, abstractmethod
-from collections.abc import Collection, Iterable
+from collections.abc import Callable, Collection, Iterable
 from dataclasses import dataclass, field
 from datetime import datetime
-from functools import cache
+from functools import cache, partial
 from pathlib import Path
 from string import Formatter
 from typing import Annotated, ClassVar, Iterator, Self
@@ -32,15 +30,19 @@ from agent_comms.field_codec import FieldCodec, MalformedRecord, PathText
 from agent_comms.installer.refusals import UpgradeRefused
 from agent_comms.locked_store import (
     DeclaredFile,
+    FilesRequest,
+    LiveFilesRequest,
     LockedStore,
     RootFile,
+    RollbackRetained,
     RuntimeFile,
     UndeclaredFile,
 )
-from agent_comms.maintenance_barrier import MaintenanceBarrier, MaintenanceOperator
+from agent_comms.maintenance_barrier import MaintenanceBarrier, MaintenanceOperator, MaintenanceState
 from agent_comms.private_path import FileObservation, FileRevision, MissingFile
 from agent_comms.registry_store import RegistryStore
 from agent_comms.store_files import AtomicFile
+from agent_comms.typed_table import WriterOwnedStore
 
 
 @dataclass(frozen=True)
@@ -55,35 +57,40 @@ class SavedFile:
         return cls(observed.st_size, observed.st_mtime_ns, observed.st_ino)
 
 
-def observed_files(root: Path) -> dict[Path, os.stat_result]:
-    """Every regular file an installation carries, with its metadata."""
+def bus_paths(files: FilesRequest, external: tuple[type[WriterOwnedStore], ...]) -> tuple[Path, ...]:
+    """One inventory of bus content and the selected writer-owned stores."""
+    root = files.root
     excluded = RuntimeFile.paths_in(root)
-    observed: dict[Path, os.stat_result] = {}
+    observed: list[Path] = []
     for path in root.rglob("*"):
         if path in excluded:
             continue
         info = path.lstat()
         if stat.S_ISREG(info.st_mode):
-            observed[path] = info
-    return observed
+            observed.append(path)
+    return (*observed, *(files.writer_path(store) for store in external))
 
 
-def settle_bus_files(root: Path) -> None:
-    """Give the held live bus the practice copy's physical cut before its snapshot."""
-    for resource, owner in RootFile.owned_files(root, observed_files(root)).items():
-        owner.settle(root / resource.path)
+def settle_bus_files(files: FilesRequest, external: tuple[type[WriterOwnedStore], ...] = ()) -> None:
+    """Each selected declaration owns whether settling is valid for its file."""
+    paths = bus_paths(files, external)
+    for resource in RootFile.owned_files(files, paths):
+        resource.owner.settle(files.location(resource))
 
 
-def bus_files(root: Path) -> dict[DeclaredFile | UndeclaredFile, dict[Path, SavedFile]]:
-    """Record owner identities and their content members' physical metadata."""
-    observed = observed_files(root)
-    return {
-        resource: {
-            member.relative_to(root): SavedFile(
-                observed[member].st_size, observed[member].st_mtime_ns, observed[member].st_ino,
-            ) for member in owner.snapshot_members(root / resource.path, observed)
-        } for resource, owner in RootFile.owned_files(root, observed).items()
-    }
+def bus_files(files: FilesRequest, external: tuple[type[WriterOwnedStore], ...] = ()
+              ) -> dict[DeclaredFile | UndeclaredFile, dict[Path, SavedFile]]:
+    """One declaration-derived inventory for bus and writer-owned resources."""
+    paths = bus_paths(files, external)
+    saved = {}
+    for resource in RootFile.owned_files(files, paths):
+        source = files.location(resource)
+        observed = {member: member.stat() for member in resource.owner.files(source) if member.is_file()}
+        saved[resource] = {
+            resource.owner.relocated(source, resource.path, member): SavedFile.at(member)
+            for member in resource.owner.snapshot_members(source, observed) if member in observed
+        }
+    return saved
 
 
 @dataclass(frozen=True)
@@ -148,32 +155,8 @@ class BackupName:
                 yield cls(name)
 
 
-class ResourceBackup(ABC):
-    """The installation's rollback and retention behavior, with or without a snapshot."""
-
-    @property
-    @abstractmethod
-    def description(self) -> str: ...
-
-    @abstractmethod
-    def report(self) -> BackupReport: ...
-
-    @abstractmethod
-    def original(self) -> bool: ...
-
-    @abstractmethod
-    def restore(self) -> None: ...
-
-    @abstractmethod
-    def retain(self, spill_dir: Path) -> tuple[Path, ...]: ...
-
-    @abstractmethod
-    def spill_directory(self, configured: Path) -> Path:
-        """Carry originals share the snapshot's retention; no snapshot creates nothing."""
-
-
 @dataclass
-class StoreBackup(ResourceBackup):
+class StoreBackup:
     """Snapshot selected stores and the route, including its original absence."""
     root: Path
     route: Path
@@ -207,7 +190,10 @@ class StoreBackup(ResourceBackup):
         return tuple(backup for backup in backups if backup.restoring.exists())
 
     @classmethod
-    def complete_interrupted(cls, root: Path, spill_dir: Path) -> tuple[Path, ...]:
+    def complete_interrupted(
+        cls, root: Path, spill_dir: Path,
+        rebuild: Callable[[MaintenanceState], MaintenanceState],
+    ) -> tuple[Path, ...]:
         """Finish every restore a killed install left unfinished, before anything reads
         the bus: take its abandoned maintenance hold, restore, release, then retire the
         backup so the next install never meets it again."""
@@ -216,7 +202,7 @@ class StoreBackup(ResourceBackup):
             maintenance = MaintenanceBarrier(RegistryStore.at(root).path)
             hold = maintenance.begin(MaintenanceOperator.current())
             with hold.holding():
-                backup.restore()
+                hold = backup.restore(partial(rebuild, hold))
             maintenance.clear(hold)
             retired.append(backup.retire())
         return tuple(retired)
@@ -289,14 +275,11 @@ class StoreBackup(ResourceBackup):
 
     @classmethod
     def take(cls, root: Path, route: Path, files: tuple[Path, ...], spill_dir: Path) -> StoreBackup:
-        registry = RegistryStore.at(root).written
-        if any(path in files for path in registry):
-            files = tuple(dict.fromkeys((*files, *registry)))
+        files = tuple(dict.fromkeys((*files, *RollbackRetained.retained_in(root))))
         path = spill_dir / BackupName.now(root).value
         backup = cls(root, route, path)
-        owners = {root / resource.path: owner
-                  for resource, owner in RootFile.owned_files(root, files).items()}
-        selected = tuple(sorted(path.relative_to(root) for path in owners))
+        resources = RootFile.owned_files(LiveFilesRequest(root), files)
+        selected = tuple(sorted(resource.path for resource in resources))
         if path.exists():
             if backup.selected_files() != selected:
                 raise UpgradeRefused('Existing backup belongs to different resources')
@@ -309,7 +292,7 @@ class StoreBackup(ResourceBackup):
         path.mkdir(mode=0o700, parents=True)
         AtomicFile(path / 'selected.json').write_text(json.dumps(FieldCodec.encode(
             selected, tuple[Annotated[Path, PathText], ...])))
-        contents = backup.capture(owners)
+        contents = backup.capture(resources)
         with route_directory(route):
             if route.exists():
                 shutil.copy2(route, path / RouteFile.filename)
@@ -347,8 +330,8 @@ class StoreBackup(ResourceBackup):
 
         paths = tuple(path for path in source.rglob("*")
                       if path.is_file() and not path.is_symlink())
-        owners = {source / resource.path: owner
-                  for resource, owner in RootFile.owned_files(source, paths).items()}
+        owners = {resource.live(source): resource.owner
+                  for resource in RootFile.owned_files(LiveFilesRequest(source), paths)}
         omitted = set(paths) - owners.keys() | set(excluded)
         omitted.update(member for path, owner in owners.items()
                        for member in owner.files(path) if member != path)
@@ -368,36 +351,10 @@ class StoreBackup(ResourceBackup):
 
         shutil.copytree(source, target, symlinks=True, ignore=transient, copy_function=copy_file)
 
-    def capture(self, owners: dict[Path, type[RootFile]]) -> dict[Path, str]:
-        contents: dict[Path, str] = {}
-        for source, owner in owners.items():
-            if not source.exists():
-                continue
-            name = source.relative_to(self.root)
-            target = self.data_root / name
-            target.parent.mkdir(parents=True, exist_ok=True)
-            with owner.writers_drained(source):
-                owner.copy_file(source, target)
-            Platform.current().sync_file(target)
-            contents[name] = owner.digest(target)
-            Platform.current().sync_directory(target.parent)
-        return contents
-
-    def resource_owners(self, selected: tuple[Path, ...], saved: Iterable[Path]
-                        ) -> dict[Path, type[RootFile]]:
-        """Resolve the live declarations and the retained originals once per operation."""
-        owners = {resource.path: owner for resource, owner in RootFile.owned_files(
-            self.root, tuple(self.root / name for name in selected)).items()}
-        owners.update((resource.path, owner) for resource, owner in RootFile.owned_files(
-            self.data_root, tuple(self.data_root / name for name in saved)).items())
-        return owners
-
-    def file_original(self, name: Path, saved: dict[Path, str], owner: type[RootFile]) -> bool:
-        """An unchanged selected file keeps its identity as well as its contents."""
-        target = self.root / name
-        if name not in saved:
-            return not target.exists()
-        return target.exists() and owner.digest(target) == saved[name]
+    def capture(self, resources: Collection[DeclaredFile | UndeclaredFile]) -> dict[Path, str]:
+        return {name: digest for resource in resources
+                for name, digest in resource.owner.capture_file(
+                    resource.live(self.root), resource.path, self.data_root).items()}
 
     def original(self) -> bool:
         return self.route_original() and self.stores_original()
@@ -406,23 +363,15 @@ class StoreBackup(ResourceBackup):
         if not (self.path / 'files.json').exists():
             return False
         saved = self.files()
-        selected = self.selected_files()
-        owners = self.resource_owners(selected, saved)
-        return all(self.file_original(name, saved, owners[name]) for name in selected)
+        return all(resource.owner.file_matches(resource.live(self.root), resource.path, saved)
+                   for resource in RootFile.named_files(
+                       LiveFilesRequest(self.root), self.selected_files()))
 
-    def restore_parents(self, target: Path) -> None:
-        """A carry may delete the directory that held a saved file (install 24 met
-        imported_sessions/selected-tool-ledger gone); restoring the file restores it."""
-        missing = [parent for parent in target.relative_to(self.root).parents
-                   if not (self.root / parent).exists()]
-        for parent in reversed(missing):
-            (self.root / parent).mkdir(mode=0o700)
-            Platform.current().sync_directory((self.root / parent).parent)
-
-    def restore(self) -> None:
+    def restore[Restored](self, rebuild: Callable[[], Restored]) -> Restored:
+        """Restore selected bytes, then rebuild omitted projections before marking complete."""
         saved = self.files()
-        selected = self.selected_files()
-        owners = self.resource_owners(selected, saved)
+        selected = {resource.path: resource for resource in RootFile.named_files(
+            LiveFilesRequest(self.root), self.selected_files())}
         registry = tuple(path.relative_to(self.root) for path in RegistryStore.at(self.root).written)
         # The registry owns this ordering: restore its snapshot before publishing
         # the matching guard, after every unrelated selected file.
@@ -432,27 +381,15 @@ class StoreBackup(ResourceBackup):
         )
         AtomicFile(self.restoring).write_text('')
         for name in ordered:
-            if self.file_original(name, saved, owners[name]):
-                continue
-            target = self.root / name
-            owner = owners[name]
-            if name in saved:
-                self.restore_parents(target)
-                descriptor, temporary = tempfile.mkstemp(prefix='.restore-', dir=target.parent)
-                os.close(descriptor)
-                stage = Path(temporary)
-                try:
-                    shutil.copy2(self.data_root / name, stage)
-                    AtomicFile(target).replace(stage)
-                finally:
-                    stage.unlink(missing_ok=True)
-            else:
-                target.unlink(missing_ok=True)
-            for companion in set(owner.files(target)) - {target}:
-                companion.unlink(missing_ok=True)
+            resource = selected[name]
+            source = resource.live(self.root)
+            if not resource.owner.file_matches(source, name, saved):
+                resource.owner.restore_file(source, name, self.data_root, saved)
         Platform.current().sync_directory(self.root)
         self.restore_route()
         if not self.stores_original():
             raise UpgradeRefused('Selected stores differ after backup restoration')
+        restored = rebuild()
         self.restoring.unlink()
         Platform.current().sync_directory(self.path)
+        return restored

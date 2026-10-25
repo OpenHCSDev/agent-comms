@@ -24,7 +24,7 @@ from contextlib import ExitStack, contextmanager
 from dataclasses import dataclass
 from functools import partial
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, ClassVar
 
 from agent_comms.locked_store import SQLiteFile
 from agent_comms.coordination_errors import IdentityConflict
@@ -35,7 +35,7 @@ if TYPE_CHECKING:
     from .agent_backend import StreamingInputPolicy
 
 from .private_path import ObservedPath, PrivateFileRole, TrustedAncestorRole
-from .store_files import StoreOwner
+from .store_files import ExclusiveLock, StoreOwner
 from .typed_table import (
     AllObjectsTables,
     ImmutableRows,
@@ -115,8 +115,6 @@ class _PinnedDirectory:
 
 @contextmanager
 def _locked_directory(path: Path) -> Iterator[_PinnedDirectory]:
-    import fcntl
-
     path = path.absolute()
     if ".." in path.parts or not path.name:
         raise IdentityConflict("Private sidecar path must be lexical.")
@@ -142,8 +140,8 @@ def _locked_directory(path: Path) -> Iterator[_PinnedDirectory]:
         )
         stack.callback(os.close, lock)
         PrivateFileRole.require(os.fstat(lock), UnprivateSidecarFile())
-        fcntl.flock(lock, fcntl.LOCK_EX)
-        stack.callback(fcntl.flock, lock, fcntl.LOCK_UN)
+        # Closing the description, already on the stack, gives the hold back.
+        ExclusiveLock().wait(lock)
         directory.unchanged(lock_name, os.fstat(lock))
         directory.lock_name = lock_name
         directory.lock_identity = _identity(os.fstat(lock))
@@ -239,6 +237,72 @@ def _verify_schema(connection: sqlite3.Connection, row_type: type[TypedTable]) -
         raise IdentityConflict("Sidecar snapshot integrity failed.")
 
 
+@dataclass(frozen=True)
+class SnapshotIdentity:
+    st_dev: int
+    st_ino: int
+    st_size: int
+    st_mtime_ns: int
+    st_ctime_ns: int
+
+    @classmethod
+    def of(cls, info: os.stat_result) -> SnapshotIdentity:
+        return cls(info.st_dev, info.st_ino, info.st_size, info.st_mtime_ns, info.st_ctime_ns)
+
+
+class VerifiedSnapshots:
+    """Last verified file identity per sidecar and row type in this process.
+
+    The pinned-directory protocol checks replacement and mutation independently.
+    Unchanged snapshots reuse their pass; changed identities require verification.
+    Authorized writes preserve the schema and record their published identity.
+    """
+
+    passed: ClassVar[dict[tuple[Path, type[TypedTable]], SnapshotIdentity]] = {}
+
+    @classmethod
+    def verify(cls, connection: sqlite3.Connection, row_type: type[TypedTable],
+               path: Path, info: os.stat_result) -> None:
+        identity = SnapshotIdentity.of(info)
+        if cls.passed.get((path, row_type)) != identity:
+            _verify_schema(connection, row_type)
+            cls.published(path, row_type, info)
+
+    @classmethod
+    def published(cls, path: Path, row_type: type[TypedTable], info: os.stat_result) -> None:
+        cls.passed[path, row_type] = SnapshotIdentity.of(info)
+
+
+_DENIED_SIDECAR_ACTIONS = frozenset({
+    sqlite3.SQLITE_CREATE_INDEX,
+    sqlite3.SQLITE_CREATE_TABLE,
+    sqlite3.SQLITE_CREATE_TEMP_INDEX,
+    sqlite3.SQLITE_CREATE_TEMP_TABLE,
+    sqlite3.SQLITE_CREATE_TEMP_TRIGGER,
+    sqlite3.SQLITE_CREATE_TEMP_VIEW,
+    sqlite3.SQLITE_CREATE_TRIGGER,
+    sqlite3.SQLITE_CREATE_VIEW,
+    sqlite3.SQLITE_CREATE_VTABLE,
+    sqlite3.SQLITE_DROP_INDEX,
+    sqlite3.SQLITE_DROP_TABLE,
+    sqlite3.SQLITE_DROP_TEMP_INDEX,
+    sqlite3.SQLITE_DROP_TEMP_TABLE,
+    sqlite3.SQLITE_DROP_TEMP_TRIGGER,
+    sqlite3.SQLITE_DROP_TEMP_VIEW,
+    sqlite3.SQLITE_DROP_TRIGGER,
+    sqlite3.SQLITE_DROP_VIEW,
+    sqlite3.SQLITE_DROP_VTABLE,
+    sqlite3.SQLITE_ALTER_TABLE,
+    sqlite3.SQLITE_ATTACH,
+    sqlite3.SQLITE_DETACH,
+    sqlite3.SQLITE_PRAGMA,
+})
+
+
+def _authorize_sidecar(action: int, *_: object) -> int:
+    return sqlite3.SQLITE_DENY if action in _DENIED_SIDECAR_ACTIONS else sqlite3.SQLITE_OK
+
+
 def _write_all(fd: int, data: bytes) -> None:
     view = memoryview(data)
     while view:
@@ -250,7 +314,7 @@ def _write_all(fd: int, data: bytes) -> None:
 
 def _publish(
     directory: _PinnedDirectory, name: str, expected: os.stat_result | None, raw: bytes
-) -> None:
+) -> os.stat_result:
     if not 100 <= len(raw) <= _MAX_SIDECAR_BYTES:
         raise IdentityConflict("Private sidecar snapshot exceeds its bounded capacity.")
     directory.unchanged(name, expected)
@@ -287,6 +351,7 @@ def _publish(
         PrivateFileRole.require(actual, UnprivateSidecarFile())
         os.unlink(intent, dir_fd=directory.fd)
         os.fsync(directory.fd)
+        return actual
     except BaseException as error:
         if begun:
             raise SidecarCommitUnknown(
@@ -303,7 +368,7 @@ def create_sidecar_file(path: Path, row_type: type[TypedTable]) -> None:
             raw, identity = snapshot
             connection = _connect(raw)
             try:
-                _verify_schema(connection, row_type)
+                VerifiedSnapshots.verify(connection, row_type, path, identity)
                 directory.unchanged(path.name, identity)
             finally:
                 connection.close()
@@ -337,17 +402,17 @@ def sidecar_connection(
         raw, identity = snapshot
         connection = _connect(raw)
         try:
-            _verify_schema(connection, row_type)
+            VerifiedSnapshots.verify(connection, row_type, path, identity)
             changes = connection.total_changes
             connection.execute(f"PRAGMA query_only={int(read_only)}")
+            connection.set_authorizer(_authorize_sidecar)
             yield connection
             if connection.in_transaction:
                 raise IdentityConflict("Sidecar scope left an unfinished transaction.")
-            if not read_only:
-                _verify_schema(connection, row_type)
             directory.unchanged(path.name, identity)
             if connection.total_changes != changes:
-                _publish(directory, path.name, identity, connection.serialize())
+                published = _publish(directory, path.name, identity, connection.serialize())
+                VerifiedSnapshots.published(path, row_type, published)
         finally:
             connection.close()
 

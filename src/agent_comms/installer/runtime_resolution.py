@@ -6,7 +6,7 @@ import sys
 import tomllib
 from dataclasses import dataclass
 from pathlib import Path
-from typing import TYPE_CHECKING, ClassVar
+from typing import TYPE_CHECKING, ClassVar, Literal
 from urllib.parse import urlsplit
 
 from packaging.markers import Marker
@@ -111,8 +111,12 @@ class LocalPackage(LockedPackage):
 
 
 class ProjectGitSource(BaseModel):
+    """Our sibling packages track main, the ref InstallDue measures them against; a unit
+    branch here pins the stack to a head main already merged, and every install relocks it
+    unchanged (f39412d88 held Toad on work/unit-toad--P694 after #1239 merged, 2026-10-25)."""
+
     git: str
-    branch: str
+    branch: Literal["main"]
 
 
 class ProjectPathSource(BaseModel):

@@ -11,6 +11,8 @@ implementation modules (``backend``, ``pi_commands``, ``pi_events``,
 
 from __future__ import annotations
 
+from .coordinator import Coordination
+
 from .native_failures import NativePiUnavailable
 
 import asyncio
@@ -36,11 +38,22 @@ from .agent_backend import (
 )
 from .fresh_private_session import create_fresh_private_session
 from .native_arguments import NativeArguments
+from .native_fork import (
+    RuntimeForkHelper,
+    RuntimeForkRequest,
+)
 from .native_pi import NativePiRpcLaunch
-from agent_comms.native_session_files import NativeSessionLocks
+from agent_comms.native_session_files import ForkedSession, NativeSessionFiles, NativeSessionLocks
 from .native_session_reopen import NativeSessionIdentity
 from .native_transcript import NativeTranscript
+from .pi_commands import Compact
 from .selected_session import SavedSelectedSession
+from .session_revision import (
+    SessionObservation,
+    SessionRevision,
+    SessionRevisionUnavailable,
+)
+
 
 if TYPE_CHECKING:
     from .agent_events import AgentEvent, AgentInfo
@@ -102,6 +115,11 @@ class PiSessionFile(RuntimeLocation):
     def storage_files(self):
         return (NativeSessionLocks(Path(self.path)),)
 
+    def session_observation(self, root: Path, thread: Thread) -> SessionObservation:
+        return SessionRevision.observe(NativeSessionFiles.for_identity(
+            NativeSessionIdentity.locate(self.path),
+            root=root, owner=thread.incarnation.require_recorded()))
+
     @property
     def model_choice(self):
         for entry in NativeTranscript(Path(self.path)).tail():
@@ -148,7 +166,6 @@ class PersistentPiSession:
 
     def retain(self, child: PiSessionChild, identity: NativeSessionIdentity) -> bool:
         from .native_child import RetainedNative
-        from .session_revision import SessionRevision, SessionRevisionUnavailable
 
         if not child.proc.alive():
             return False
@@ -223,7 +240,6 @@ class PiNativeBackend(
 
     async def prepare(self, thread: Thread, *, open_native=None) -> StateData:
         """Launch (or reuse) and attest the idle child for ``thread``'s saved session."""
-        from .coordinator import Coordination
         from .native_session_prepare import NativeSessionPreparation
 
         if open_native is None:
@@ -294,8 +310,6 @@ class PiNativeBackend(
 
     async def compact(self, thread: Thread, instructions: str | None) -> CompactionOutcome:
         """Ask Pi's own engine to compact through its ``compact`` RPC."""
-        from .pi_commands import Compact
-
         try:
             command = Compact(custom_instructions=PiOmitted.from_input(instructions))
             data = await self.inspect(thread, command)
@@ -312,17 +326,17 @@ class PiNativeBackend(
     # -- Forks ------------------------------------------------------------
 
     @classmethod
-    async def fork(cls, parent: Thread, launcher: str, runtime: LaunchRuntime) -> PiSessionFile:
+    async def fork(
+        cls, parent: Thread, launcher: str, runtime: LaunchRuntime, root: Path,
+    ) -> PiSessionFile:
         """Copy the parent's whole saved history with Pi's own session manager."""
-        from .coordinator import Coordination
-        from .native_fork import RuntimeForkHelper, RuntimeForkRequest
-
         package = await Coordination.run_worker(partial(
             NativePiRpcLaunch.package_for_command, launcher, runtime,
         ))
+        directory = await Coordination.run_worker(partial(ForkedSession.prepared_directory, root))
         identity = await RuntimeForkHelper.run(
             RuntimeForkRequest(str(package.path), parent.runtime.path, parent.worktree,
-                               runtime=runtime), cwd=Path(parent.worktree),
+                               str(directory), runtime=runtime), cwd=Path(parent.worktree),
         )
         return PiSessionFile(identity.session_file)
 

@@ -1,6 +1,11 @@
 """Root attachment and publication use one persisted runtime owner."""
 
 
+import os
+import subprocess
+from pathlib import Path
+
+import agent_comms
 import pytest
 
 from agent_comms.comms import wire
@@ -53,6 +58,20 @@ def test_root_runtime_attachment_family(tmp_path):
     RootRuntime.require_attachable(root, target)
     with pytest.raises(ForeignRuntimeError):
         RootRuntime.require_attachable(root, owner)
+
+
+def test_recorded_runtime_launches_its_own_source_without_borrowing_a_runtime(tmp_path):
+    runtime = RootRuntime(LaunchRuntime.running().prefix).runtime()
+    completed = subprocess.run(
+        (runtime.interpreter, "-c", "import agent_comms; print(agent_comms.__file__)"),
+        cwd=tmp_path, env=runtime.environment(os.environ),
+        capture_output=True, text=True, check=True,
+    )
+    assert Path(completed.stdout.strip()).resolve() == Path(agent_comms.__file__).resolve()
+    alternate = LaunchRuntime(runtime.interpreter.with_name("python3"))
+    assert alternate.environment(os.environ) == runtime.environment(os.environ)
+    foreign = LaunchRuntime.at_prefix(tmp_path / "foreign")
+    assert "PYTHONPATH" not in foreign.environment({"PYTHONPATH": "foreign-source"})
 
 
 def test_comms_creates_a_private_root_and_refuses_foreign_stores(tmp_path):

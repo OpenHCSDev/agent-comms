@@ -2,6 +2,13 @@
 
 from __future__ import annotations
 
+from .bus_tables import (
+    AwaitingAnswerSource,
+    MessageIdentitySource,
+    ReceivedSource,
+    SentSource,
+)
+
 from .class_fact import ClassFact
 from .projection_source import ProducedRow
 import json
@@ -38,7 +45,6 @@ class Delivered(BusRecord, AudiencedMessage, declared_name=None):
 
     @ClassFact
     def writes(cls) -> tuple[type[ProducedRow], ...]:
-        from .bus_tables import SentSource, ReceivedSource, AwaitingAnswerSource
         return (SentSource, ReceivedSource, AwaitingAnswerSource)
 
     decisions: tuple[RecipientDecision, ...]
@@ -59,6 +65,11 @@ class Delivered(BusRecord, AudiencedMessage, declared_name=None):
                     recipient.recipient_lookup, self.seq, recipient.canonical_thread,
                     self.role.response_policy(self).starts_direct_turn,
                 )
+
+    @property
+    def history_record(self) -> Self:
+        """A copied delivery keeps its frozen audience: its recipients received it there too."""
+        return self
 
     def deliveries(self) -> tuple[Self, ...]:
         return (self,)
@@ -193,8 +204,6 @@ class HumanOrigin(OwnerVoiceOrigin):
             raise RelationViolationError("Local USER origin differs from registered identity.")
 
     def require_source(self, source: BusReader, sender: str, message_id: MessageId) -> None:
-        from .bus_tables import MessageIdentitySource
-
         with source.observing() as db:
             if MessageIdentitySource.exists(db, sender=sender, message_id=message_id):
                 raise HumanSendRefusedError(RelationViolationError(

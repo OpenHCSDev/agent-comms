@@ -72,8 +72,8 @@ class TestOrderCompletion:
         assert corrected.order.check_base(repo.checkout) == f"origin/{WorkBranches.main}"
         assert corrected.order.check.command == 'printf 1'
         assert (corrected.order.id, corrected.assignment,
-                corrected.review_at, corrected.strikes) == (
-                    original.order.id, original.assignment, original.review_at, original.strikes)
+                corrected.review_at, corrected.strike_count) == (
+                    original.order.id, original.assignment, original.review_at, original.strike_count)
 
     def test_triage_done_reads_the_report_without_a_sha(self, held_commander):
         ctx = held_commander

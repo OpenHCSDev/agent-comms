@@ -16,7 +16,7 @@ from agent_comms.commander.order import CommanderContext, OrderFile
 from agent_comms.commander.standing import Unjudged
 from agent_comms.comms import wire
 from agent_comms.external_transcript import ExternalTranscript
-from agent_comms.field_codec import FieldCodec, GoalId
+from agent_comms.field_codec import FieldCodec, GoalId, OrderId
 from agent_comms.goal_actions import SetGoalAction
 from agent_comms.goals import CountCheckResult, OrderCheck
 from agent_comms.installer.backup import StoreBackup
@@ -25,6 +25,7 @@ from agent_comms.maintenance_barrier import (
     MaintenanceNotHeldError,
     MaintenanceOperator,
 )
+from agent_comms.native_tool_call import ToolCallId
 from agent_comms.order_runs import MechanicalOrderRun
 from agent_comms.order_tools import CommsCommanderLoadTool, CommsHudTool, CommsTodoListTool
 from agent_comms.problem_number import ProblemNumber
@@ -34,6 +35,7 @@ from agent_comms.thread_execution import ExternalThreadExecution
 from agent_comms.thread_identity import RecordedThreadIncarnation
 from agent_comms.thread_model import DeclaredModel
 from agent_comms.threads import Thread
+from agent_comms.errors import TodoError
 from agent_comms.todos import (
     PendingProblemOrder,
     ProblemAllocation,
@@ -41,12 +43,11 @@ from agent_comms.todos import (
     StrikeReason,
     SupersededVerdict,
     Todo,
-    TodoError,
 )
 from agent_comms.tool_caller import CommanderForkCaller
 from agent_comms.tool_declaration import ToolDeclaration
 from agent_comms.transcript_events import ToolStartTranscript
-from agent_comms.turn_item import NativeTurnId
+from agent_comms.turn_item import NativeItemId, NativeTurnId
 from cli_command import commander
 from source_revision_fixture import SourceRepository
 
@@ -85,7 +86,6 @@ def fork_bus(tmp_path, configured_repository):
     configured_repository(comms, source)
     now = time.time()
     order = PendingProblemOrder(
-        id="first-order",
         owner=source.scope().shape.parents[0],
         scope=source.scope(),
         run=MechanicalOrderRun(),
@@ -106,7 +106,7 @@ def fork_bus(tmp_path, configured_repository):
         assigner=lead.incarnation,
         generation=retained_goal_id,
         review_at=RecordedEventTime(now + 600),
-        order=replace(order, id="retained-order"),
+        order=replace(order, id=OrderId.mint()),
         request=request.id,
     )
     copied = tmp_path / "copied-bus"
@@ -189,7 +189,7 @@ def test_registered_fork_sends_parent_problem_with_fork_actor(fork_bus, tmp_path
     assert saved.creator_identity == parent.incarnation
     assert store.owner_request(saved.request.require()).commander == parent.incarnation
     assert saved.held().parent_identity == fork.incarnation
-    assert saved.messages[-1].actor == fork.incarnation
+    assert saved.latest_message.actor == fork.incarnation
     assert fork.parent.named(parent.name)
     assert fork.goal.require().id != parent.goal.require().id
     # Core's reissue acts as the fork that assigned the unit, under the fork's commander.
@@ -238,11 +238,11 @@ def record_edits(comms, source, count):
     actor = comms.registry.require("retained").incarnation
     ExternalTranscript(comms.root, actor).finish(
         turn_id=NativeTurnId("parent-work"),
-        item_id="parent-edit",
+        item_id=NativeItemId("parent-edit"),
         events=tuple(
             ToolStartTranscript(
                 position=position,
-                tool_call_id=f"parent-edit-{position}",
+                tool_call_id=ToolCallId(f"parent-edit-{position}"),
                 tool_name="edit",
                 timestamp=time.time(),
                 tool=ToolDeclaration.record(
@@ -251,7 +251,7 @@ def record_edits(comms, source, count):
                         "path": str(source.checkout / "owner.py"),
                         "edits": [{"oldText": "", "newText": f"class ReviewedOwner{position}: pass"}],
                     },
-                    call_id=f"parent-edit-{position}",
+                    call_id=ToolCallId(f"parent-edit-{position}"),
                 ),
             )
             for position in range(count)
@@ -279,6 +279,22 @@ def test_unjudged_reminder_names_each_order_with_edits(fork_bus):
         f"retained P40 {Unjudged.limit + 1}")
 
 
+def test_edits_under_a_merged_order_are_nobodys_review(fork_bus):
+    """Overload, the HUD and the judge read one judgeable owner: a merged head gates nothing."""
+    from agent_comms.held_orders import HeldOrders
+    from agent_comms.todos import MergedProgress, NoCommitProgress
+    from agent_comms.turn_digests import OrderEditCountRead
+
+    comms, source, _ = fork_bus
+    record_edits(comms, source, 3)
+    holds = HeldOrders.read(comms, "lead").live
+    open_order = {hold.todo.id: NoCommitProgress() for hold in holds}
+    merged = {hold.todo.id: MergedProgress("a" * 40) for hold in holds}
+    assert [read.read() for read in OrderEditCountRead.judgeable(
+        comms.root, holds, open_order)] == [3]
+    assert tuple(OrderEditCountRead.judgeable(comms.root, holds, merged)) == ()
+
+
 def test_open_unit_consumers_agree_on_one_assignment(fork_bus):
     comms, source, order = fork_bus
     store = comms.goals.todos
@@ -302,12 +318,36 @@ def test_open_unit_consumers_agree_on_one_assignment(fork_bus):
         print("Shared open-unit query plan:", [tuple(row) for row in plan])
 
 
+def test_a_sibling_fork_assigns_a_unit_whose_order_waits_on_install(fork_bus):
+    """Merged work waits only on its run, so its holder is free for any assigner."""
+    comms, source, order = fork_bus
+    store = comms.goals.todos
+    todo = store.get("P40")
+    owner = todo.held().owner_identity
+    sibling = comms.registry.require("other").incarnation
+    with store.snapshot() as db, pytest.raises(TodoError, match="finish or release"):
+        store.require_unit_in(db, owner, sibling)
+    with store.writing() as db:
+        replace(todo, order=todo.order.merged("0" * 40), revision=todo.revision + 1).upsert(db)
+    assert not store.get("P40").order.occupies_holder()
+    with store.snapshot() as db:
+        store.require_unit_in(db, owner, sibling)
+
+
+def test_a_value_error_refusal_prints_instead_of_a_traceback(fork_bus):
+    """The commander CLI fails on the comms CLI's one failure set."""
+    comms, _, _ = fork_bus
+    refused = command(comms, "order", "done", "retained", "P40")
+    assert refused.returncode == 1
+    assert refused.stderr.startswith("Refused: P40 has no merged pull request"), refused.stderr
+
+
 def test_two_commanders_allocate_distinct_global_problem_ids(fork_bus, tmp_path):
     comms, source, order = fork_bus
 
     def assign(pair):
         name, unit = pair
-        body = document(tmp_path / f"{name}.json", replace(order, id=name))
+        body = document(tmp_path / f"{name}.json", replace(order, id=OrderId.mint()))
         return process_command(
             comms, "order", "problem", body, "--to", unit, "--where", "owner.py:2", "--fork", name
         )
@@ -330,7 +370,7 @@ def test_two_commanders_cannot_assign_the_same_unit_concurrently(fork_bus, tmp_p
     comms, source, order = fork_bus
 
     def assign(name):
-        body = document(tmp_path / f"{name}.json", replace(order, id=name))
+        body = document(tmp_path / f"{name}.json", replace(order, id=OrderId.mint()))
         return process_command(
             comms,
             "order",
@@ -355,6 +395,7 @@ def test_two_commanders_cannot_assign_the_same_unit_concurrently(fork_bus, tmp_p
     assert len(held) == 1 and held[0].holder == "worker"
     refused = next(result for result in results if result.returncode)
     assert f"is assigned by {held[0].held().parent}" in refused.stderr
+    assert "Traceback" not in refused.stderr, refused.stderr
     print(refused.stderr.strip())
 
 
@@ -426,7 +467,7 @@ def test_created_ids_live_only_on_todos_and_allocation_uses_numeric_index(fork_b
         generation=direct_goal_id,
         request=retained.request.require(),
         review_at=retained.review_at,
-        order=replace(order, id="direct-order"),
+        order=replace(order, id=OrderId.mint()),
     )
     assert store.allocate_problem() == "P121"
     with store.snapshot() as db:
@@ -467,7 +508,7 @@ def test_fork_superseded_verdict_reads_its_commanders_orders(fork_bus):
         assigner=lead.incarnation,
         generation=worker_goal_id,
         review_at=RecordedEventTime(time.time() + 600),
-        order=replace(order, id="replacing-order"),
+        order=replace(order, id=OrderId.mint()),
         request=store.get("P40").request.require(),
     )
     comms.registry.register_commander_child("fork-one", "lead", comms.goals)
@@ -477,7 +518,7 @@ def test_fork_superseded_verdict_reads_its_commanders_orders(fork_bus):
         expected_revision=current.revision,
         actor=actor,
         previous=current.held(),
-        tool_call_id="retained-edit",
+        tool_call_id=ToolCallId("retained-edit"),
         replacement="P41",
         reason="The replacing order moved this edit to another unit.",
     )

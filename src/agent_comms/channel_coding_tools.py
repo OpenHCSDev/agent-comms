@@ -25,6 +25,7 @@ from .envelope_claim_transitions import (
 from .field_codec import ClaimId, FieldCodec, InputId, MalformedRecord
 from .lifecycle_capability import Executing
 from .native_arguments import NativeArguments
+from .native_runtime_input import NativeRuntimeInput
 from .native_tool_call import CodingCall, NativeToolMode, ToolNotExecuting
 from .native_tool_transport import ToolListener, ToolTransport, UnboundToolTransport
 from .native_tools import NativeToolDeclaration
@@ -113,8 +114,6 @@ class SelectedCodingToolOwner(CodingToolOwner):
 
     def for_original(self, assignment: WakeAssignment, operation_id: ClaimId) -> CodingToolOwner:
         """Project the same native grant onto an actually included original."""
-        from .native_runtime_input import NativeRuntimeInput
-
         with self.store.session.read():
             native = NativeRuntimeInput.one(self.store.session._connection, input_id=self.input_id)
             if native is None or assignment.assignment_id not in native.execution.source_assignment_ids(

@@ -6,7 +6,7 @@ from dataclasses import replace
 import pytest
 
 from agent_comms.child_process import ProcessIdentity
-from agent_comms.field_codec import TurnId
+from agent_comms.field_codec import GoalWaitId, TurnId
 from agent_comms.goal_actions import (
     EditGoalAction,
     GoalPrecondition,
@@ -20,6 +20,7 @@ from agent_comms.goal_waits import GoalWaits
 from goal_owner_fixture import canonical_goal_wire
 from agent_comms.goal_waits import RecordedGoalWait, NoGoalWait
 from agent_comms.threads import Thread
+from agent_comms.goal_scope import OneGoal
 
 
 def test_edit_preserves_owner_pause_and_standby_requires_declared_targets(tmp_path):
@@ -28,7 +29,7 @@ def test_edit_preserves_owner_pause_and_standby_requires_declared_targets(tmp_pa
     goal = comms.goals.update_goal("parent", SetGoalAction(text="Goal with @mention"))
     with pytest.raises(ValueError):
         comms.goals.update_goal(
-            "parent", StandbyGoalAction(expect=GoalPrecondition(goal_id=goal.id))
+            "parent", StandbyGoalAction(expect=GoalPrecondition(goal_id=OneGoal(goal.id)))
         )
     comms.goals.update_goal("parent", PausedGoalAction(), actor=OwnerInvocable)
     comms.goals.update_goal("parent", EditGoalAction(text="Edited @mention"))
@@ -47,7 +48,7 @@ def test_standby_rejects_closed_wait_cycle_while_both_turns_are_active(tmp_path)
     assert alice is not None and bob is not None
 
     comms.goals.update_goal(
-        "alice", StandbyGoalAction(expect=GoalPrecondition(goal_id=alice.id), wait_for=("bob",))
+        "alice", StandbyGoalAction(expect=GoalPrecondition(goal_id=OneGoal(alice.id)), wait_for=("bob",))
     )
     alice_wait = comms.goals.goal_wait("alice")
     assert alice_wait is not None
@@ -55,7 +56,7 @@ def test_standby_rejects_closed_wait_cycle_while_both_turns_are_active(tmp_path)
     assert alice_wait.report_turn_generation == comms.registry.require("alice").turn_generation
     with pytest.raises(ValueError):
         comms.goals.update_goal(
-            "bob", StandbyGoalAction(expect=GoalPrecondition(goal_id=bob.id), wait_for=("alice",))
+            "bob", StandbyGoalAction(expect=GoalPrecondition(goal_id=OneGoal(bob.id)), wait_for=("alice",))
         )
 
     assert isinstance(comms.goals.goal_wait("alice"), RecordedGoalWait)
@@ -76,10 +77,10 @@ def test_standby_allows_independent_alternative_to_wait_cycle(tmp_path):
 
     comms.goals.update_goal(
         "alice",
-        StandbyGoalAction(expect=GoalPrecondition(goal_id=alice.id), wait_for=("bob", "carol")),
+        StandbyGoalAction(expect=GoalPrecondition(goal_id=OneGoal(alice.id)), wait_for=("bob", "carol")),
     )
     comms.goals.update_goal(
-        "bob", StandbyGoalAction(expect=GoalPrecondition(goal_id=bob.id), wait_for=("alice",))
+        "bob", StandbyGoalAction(expect=GoalPrecondition(goal_id=OneGoal(bob.id)), wait_for=("alice",))
     )
 
     assert isinstance(comms.goals.goal_wait("alice"), RecordedGoalWait)
@@ -101,10 +102,10 @@ def test_idle_live_alternative_keeps_wait_cycle_open(tmp_path):
 
     comms.goals.update_goal(
         "alice",
-        StandbyGoalAction(expect=GoalPrecondition(goal_id=alice.id), wait_for=("bob", "carol")),
+        StandbyGoalAction(expect=GoalPrecondition(goal_id=OneGoal(alice.id)), wait_for=("bob", "carol")),
     )
     comms.goals.update_goal(
-        "bob", StandbyGoalAction(expect=GoalPrecondition(goal_id=bob.id), wait_for=("alice",))
+        "bob", StandbyGoalAction(expect=GoalPrecondition(goal_id=OneGoal(bob.id)), wait_for=("alice",))
     )
 
     assert isinstance(comms.goals.goal_wait("bob"), RecordedGoalWait)
@@ -140,11 +141,11 @@ def test_dead_active_turn_does_not_make_wait_cycle_runnable(tmp_path):
 
     comms.goals.update_goal(
         "alice",
-        StandbyGoalAction(expect=GoalPrecondition(goal_id=alice.id), wait_for=("bob", "carol")),
+        StandbyGoalAction(expect=GoalPrecondition(goal_id=OneGoal(alice.id)), wait_for=("bob", "carol")),
     )
     with pytest.raises(ValueError):
         comms.goals.update_goal(
-            "bob", StandbyGoalAction(expect=GoalPrecondition(goal_id=bob.id), wait_for=("alice",))
+            "bob", StandbyGoalAction(expect=GoalPrecondition(goal_id=OneGoal(bob.id)), wait_for=("alice",))
         )
 
 
@@ -158,7 +159,7 @@ def test_standby_entry_accepts_idle_live_dependency(tmp_path):
     assert not comms.agents.is_working(
         comms.registry.require("bob").incarnation, comms.registry.snapshot())
     comms.goals.update_goal("alice", StandbyGoalAction(
-        expect=GoalPrecondition(goal_id=alice.id), wait_for=("bob",)))
+        expect=GoalPrecondition(goal_id=OneGoal(alice.id)), wait_for=("bob",)))
     assert isinstance(comms.goals.goal_wait("alice"), RecordedGoalWait)
     assert comms.goals.recover_closed_goal_wait("alice") == ()
     assert isinstance(comms.goals.goal_execution("alice"), StandbyExecution)
@@ -174,7 +175,7 @@ def test_idle_live_dependency_keeps_wait_group_open(tmp_path):
     alice = comms.goals.update_goal("alice", SetGoalAction(text="Wait for Bob"))
     comms.goals.update_goal("bob", SetGoalAction(text="Finish work and answer later"))
     comms.goals.update_goal("alice", StandbyGoalAction(
-        expect=GoalPrecondition(goal_id=alice.id), wait_for=("bob",)))
+        expect=GoalPrecondition(goal_id=OneGoal(alice.id)), wait_for=("bob",)))
     comms.agents.finish_turn(comms.registry.require("alice").turn_lease)
     comms.agents.finish_turn(comms.registry.require("bob").turn_lease)
 
@@ -198,17 +199,17 @@ def test_liveness_check_releases_preexisting_closed_wait_group(tmp_path, pending
     bob = comms.goals.update_goal("bob", SetGoalAction(text="Wait for Alice"))
     assert alice is not None and bob is not None
     comms.goals.update_goal(
-        "alice", StandbyGoalAction(expect=GoalPrecondition(goal_id=alice.id), wait_for=("bob",))
+        "alice", StandbyGoalAction(expect=GoalPrecondition(goal_id=OneGoal(alice.id)), wait_for=("bob",))
     )
 
     # Represent a wait recorded by an older owner before cycle claim_scope was
     # enforced. Both turns subsequently finish without any dependency reply.
     owner = comms.registry.require("bob")
     peer = comms.registry.require("alice")
-    GoalWaits(tmp_path / "goal_waits.sqlite3").record(
+    GoalWaits(tmp_path).record(
         RecordedGoalWait(
             bob.id,
-            "bob-wait",
+            GoalWaitId.mint(),
             bob.revision,
             0,
             (GoalWaitTarget(peer.incarnation.require_recorded()),),
@@ -246,14 +247,14 @@ def test_new_live_dependency_turn_keeps_old_wait_group_open(tmp_path, bound_old_
     bob = comms.goals.update_goal("bob", SetGoalAction(text="Wait for Alice"))
     assert alice is not None and bob is not None
     comms.goals.update_goal(
-        "alice", StandbyGoalAction(expect=GoalPrecondition(goal_id=alice.id), wait_for=("bob",))
+        "alice", StandbyGoalAction(expect=GoalPrecondition(goal_id=OneGoal(alice.id)), wait_for=("bob",))
     )
     owner = comms.registry.require("bob")
     peer = comms.registry.require("alice")
-    GoalWaits(tmp_path / "goal_waits.sqlite3").record(
+    GoalWaits(tmp_path).record(
         RecordedGoalWait(
             bob.id,
-            "bob-wait",
+            GoalWaitId.mint(),
             bob.revision,
             0,
             (GoalWaitTarget(peer.incarnation.require_recorded()),),
@@ -288,7 +289,7 @@ def test_standby_refuses_canonical_reply_that_arrived_before_wait(tmp_path, ackn
     with pytest.raises(ValueError):
         comms.goals.update_goal(
             "parent",
-            StandbyGoalAction(expect=GoalPrecondition(goal_id=goal.id), wait_for=("child",)),
+            StandbyGoalAction(expect=GoalPrecondition(goal_id=OneGoal(goal.id)), wait_for=("child",)),
         )
     assert isinstance(comms.goals.goal_wait("parent"), NoGoalWait)
     assert comms.registry.require("parent").goal == goal

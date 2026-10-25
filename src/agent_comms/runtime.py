@@ -7,6 +7,11 @@ or changes the registry PID. The socket is scoped to the wire and owner PID.
 from __future__ import annotations
 
 from functools import partial
+
+from .acp_extension import (
+    decode_updates,
+    encode_updates,
+)
 from .coordinator import Coordination
 
 import asyncio
@@ -24,7 +29,7 @@ from typing import TYPE_CHECKING, Any, ClassVar, Self
 
 from pydantic import BaseModel
 
-from acp.exceptions import RequestError
+from .coordination_errors import Refused
 from acp.schema import (
     DeniedOutcome,
     PermissionOption,
@@ -348,7 +353,7 @@ class RuntimeServer(SessionUpdateSink):
             pass
         except asyncio.CancelledError:
             pass
-        except RequestError as error:
+        except Refused as error:
             # Reply to this requester, then propagate the original failure to the server task.
             with suppress(SubscriberClosed):
                 await client.send(OwnerFailure.refused(error))
@@ -376,8 +381,6 @@ class RuntimeServer(SessionUpdateSink):
 
 def present_session(metadata: dict[str, object], session_id: str) -> dict[str, object]:
     """Rebind presentation coordinates through their declared owners."""
-    from .acp_extension import decode_updates, encode_updates
-
     return {
         **metadata,
         **encode_updates(*(fact.for_session(session_id) for fact in decode_updates(metadata))),
@@ -538,7 +541,7 @@ class RuntimeProxy(RuntimeConnection):
                     await OwnerLine.read(line).deliver(self)
             except ConnectionResetError:
                 pass  # The transport reports the closed subscription, not a decoder defect.
-            except (ValueError, RuntimeError, RequestError):
+            except (ValueError, RuntimeError, Refused):
                 # The owner is our component: an undecodable or unexpected line,
                 # or the owner's failure line, is a defect, not an end of stream.
                 # Record it before this subscription dies.

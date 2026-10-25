@@ -60,7 +60,8 @@ from .field_codec import (
     GoalId,
 )
 from .goal_actions import ActiveGoalAction, EditGoalAction, GoalAction, GoalPrecondition, ModelInvocable, SetGoalAction, TransitionGoalAction
-from .goal_history import RecordedGoalRevision
+from .goal_history import RecordedGoalHistory
+from .goal_scope import AllGoals, OneGoal
 from .goal_presentation import GoalExecution, GoalSnapshot
 from .goal_waits import NoStandbyReview, StandbyReview
 from .goals import GoalDeclaration
@@ -191,8 +192,8 @@ class GoalUpdated(OwnGoalPublication):
 
 
 @dataclass(frozen=True)
-class GoalHistory(ToolResult):
-    history: tuple[RecordedGoalRevision, ...]
+class GoalHistory(ToolResult, RecordedGoalHistory):
+    pass
 
 
 
@@ -608,7 +609,7 @@ class CommsResumeGoalTool(ThreadToolRequest):
             ActiveGoalAction(
                 expect=GoalPrecondition(
                     expected_goal=current,
-                    goal_id=goal_id,
+                    goal_id=OneGoal(goal_id),
                 ),
                 progress=progress,
             ),
@@ -636,7 +637,7 @@ class CommsEditGoalTool(ThreadToolRequest):
         goal = comms.goals.update_goal(
             name,
             EditGoalAction(
-                expect=GoalPrecondition(expected_goal=current, goal_id=goal_id), text=self.text
+                expect=GoalPrecondition(expected_goal=current, goal_id=OneGoal(goal_id)), text=self.text
             ),
         )
         return GoalUpdated(goal)
@@ -647,12 +648,11 @@ class CommsGoalHistoryTool(ThreadReadTool):
     label = "Goal history"
     description = "Read recorded goal revisions and recorded provenance and observation gaps."
     goal_id: Annotated[
-        GoalId | None, *tool_field("Optional goal ID; omit for this thread's full history")
-    ] = None
+        OneGoal | AllGoals, *tool_field("Optional goal ID; omit for this thread's full history")
+    ] = AllGoals()
 
     def apply(self, comms: Comms, caller: ToolCaller) -> GoalHistory:
-        entries = comms.goals.goal_history(caller.subject(self.thread), goal_id=self.goal_id)
-        return GoalHistory(tuple(entry.recorded() for entry in entries))
+        return comms.goals.recorded_history(GoalHistory, caller.subject(self.thread), self.goal_id)
 
 
 

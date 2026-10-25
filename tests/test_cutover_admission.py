@@ -27,7 +27,7 @@ def test_archived_snapshot_preserves_rows_and_refuses_new_publication(tmp_path):
         snapshot.registry.rename("alice", "changed-history")
     with pytest.raises(RelationViolationError):
         snapshot.registry.prepare_native_root()
-    with snapshot.registry.store.locked():
+    with snapshot.registry.store.guarded_write():
         document = snapshot.registry.store.read_revision_unlocked().document.copy()
         document.purpose = source.registry.snapshot().purpose
         with pytest.raises(RelationViolationError):

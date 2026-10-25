@@ -29,10 +29,13 @@ from .field_codec import InputId
 from .pi_counts import PiCount
 from .pi_vocabulary import CompactionReason, ThinkingLevelField
 from .send_outcome import SendBoundary
+from .session_revision import NoSessionObservation, SessionObservation
 from .tool_result import DeclaredReply
 from .turn_outcome import TurnOutcome
 
 if TYPE_CHECKING:
+    from pathlib import Path
+
     from .agent_events import AgentEvent
     from .image_input import ImageInput
     from .launch_runtime import LaunchRuntime
@@ -100,6 +103,9 @@ class RuntimeLocation(DeclaredFamily, affix="Runtime"):
 
     @abstractmethod
     def storage_files(self): ...
+
+    def session_observation(self, root: Path, thread: Thread) -> SessionObservation:
+        return NoSessionObservation()
 
     @property
     def model_choice(self):
@@ -371,8 +377,10 @@ class Forks(ABC):
 
     @classmethod
     @abstractmethod
-    async def fork(cls, parent: Thread, launcher: str, runtime: LaunchRuntime) -> RuntimeLocation:
-        """Copy ``parent``'s history into a new location for a child thread.
+    async def fork(
+        cls, parent: Thread, launcher: str, runtime: LaunchRuntime, root: Path,
+    ) -> RuntimeLocation:
+        """Copy ``parent``'s history into a new location for a child thread under ``root``.
 
         ``runtime`` is the same selected installation that will start the child.
         """

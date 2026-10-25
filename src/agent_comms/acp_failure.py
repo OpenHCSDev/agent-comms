@@ -21,6 +21,7 @@ if TYPE_CHECKING:
     from .turn_failure import TurnFailure
     from .turn_input_source import OriginalTurnInput
 
+from .coordination_errors import Refused
 from .declared_family import DeclaredFamily, UnknownFamilyMember
 from .delivery_presentation import DeliveryPresentation
 from .field_codec import (
@@ -71,7 +72,7 @@ class NativeMessageFailureSource(FailureSource):
             return self
         # Retain native provenance without exporting private response content.
         return replace(
-            self, message=replace(self.message, content=(), diagnostics=(), error_message=text)
+            self, message=replace(self.message, content=ReportedParts(()), diagnostics=(), error_message=text)
         )
 
 
@@ -216,10 +217,6 @@ class ACPFailure(DeliveryFailure):
         """Display classification only; input state comes from structured facts."""
 
     @classmethod
-    def from_error(cls, error: RequestError) -> ACPFailure:
-        return RequestFailure.from_error(error).failure
-
-    @classmethod
     def from_detail(cls, code, detail, *, diagnostics=()):
         detail = detail or "ACP request failed"
         owner = next(
@@ -266,7 +263,7 @@ class NativeTurnOutcome(ABC):
 
     def raise_fault(self, cause: Exception) -> NoReturn:
         """Report a transport fault without rewriting the completed native outcome."""
-        failure = ACPFailure.from_detail(-32603, f"{type(cause).__name__}: {cause}")
+        failure = ACPFailure.from_detail(Refused.INTERNAL_ERROR, f"{type(cause).__name__}: {cause}")
         raise NativeTurnError(RequestFailure(failure, False)) from cause
 
 
@@ -300,7 +297,7 @@ class FailedNativeTurnOutcome(NativeTurnOutcome):
         document: InputDocument, original: OriginalTurnInput,
     ) -> FailedNativeTurnOutcome:
         failure = replace(
-            ACPFailure.from_detail(-32603, terminal.text or "Backend failed",
+            ACPFailure.from_detail(Refused.INTERNAL_ERROR, terminal.text or "Backend failed",
                                   diagnostics=error.diagnostics if error is not None else ()),
             input_state=original.failure_state(document),
             retry_result=ProviderRetryResult.from_optional(terminal.retry_result),
@@ -324,7 +321,7 @@ class FailedNativeTurnOutcome(NativeTurnOutcome):
                 session_update="agent_message_chunk",
                 content=TextContentBlock(type="text", text=""),
                 field_meta=encode_updates(
-                    TextRouteUpdate(None), RequestFailedUpdate(failure, self.source),
+                    TextRouteUpdate(), RequestFailedUpdate(failure, self.source),
                     *((InputFailedUpdate(self.failed_input_text, failure),)
                       if self.failed_input_text else ()),
                 ),
@@ -617,4 +614,4 @@ class PublishedErrorValue(ErrorValue):
 # Payload conversions import Core observations, which refer to these failure
 # declarations. Both sides are eager; complete the declarations before binding
 # the payload types used by their annotations and conversion methods.
-from .pi_payloads import AssistantMessage, PiDiagnostic  # noqa: E402
+from .pi_payloads import AssistantMessage, PiDiagnostic, ReportedParts  # noqa: E402

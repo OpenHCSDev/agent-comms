@@ -65,7 +65,7 @@ from agent_comms.execution_states import (
     FailedExecution,
     PendingExecution,
 )
-from agent_comms.field_codec import FieldCodec, MessageId
+from agent_comms.field_codec import AssignmentId, FieldCodec, MessageId
 from agent_comms.messages import InfoKind, Message
 from agent_comms.owner_fence import OwnerFence, prepare_fence_token
 from agent_comms.reason_codes import GivenReasonCode, NoDetail
@@ -92,7 +92,7 @@ def store(path: Path) -> StandaloneCoordination:
     return StandaloneCoordination(str(path), clock_ms=lambda: 1_000)
 
 
-def wire_source(db: StandaloneCoordination, assignment_id: str, original: Message, mode: WakePolicy) -> SelectedSource:
+def wire_source(db: StandaloneCoordination, assignment_id: AssignmentId, original: Message, mode: WakePolicy) -> SelectedSource:
     from agent_comms.audience_manifest import FrozenRecipient, freeze_audience
     from agent_comms.bus import PrivateRecord
     from agent_comms.selected_source_batch import SelectedSource
@@ -117,7 +117,7 @@ def ready(
         original = Message("owner", "Owner", "Original request", InfoKind, timestamp=1.0, seq=1)
         db.assignments.accept(
             WakeAssignment(
-                assignment_id="claim",
+                assignment_id=AssignmentId.cohort(b"claim"),
                 recipient="Owner",
                 recipient_lookup=SENDER_LOOKUP,
                 wire_seq=1,
@@ -128,7 +128,7 @@ def ready(
                 lifecycle=FullPendingAssignment.load(FullWake(), None, None, None),
             )
         )
-        sources = (wire_source(db, "claim", original, FullWake()),)
+        sources = (wire_source(db, AssignmentId.cohort(b"claim"), original, FullWake()),)
     db.create(
         "exec",
         origin,
@@ -247,7 +247,7 @@ def test_claim_execution_idempotency_and_rollback(db_path: Path) -> None:
         WireOrigin,
         SENDER_LOOKUP,
         2,
-        sources=(wire_source(db, "claim", original, FullWake()),),
+        sources=(wire_source(db, AssignmentId.cohort(b"claim"), original, FullWake()),),
     )
     assert isinstance(replay, AlreadyApplied)
     different = Message("different", "Owner", "Original request", InfoKind,
@@ -258,7 +258,7 @@ def test_claim_execution_idempotency_and_rollback(db_path: Path) -> None:
             WireOrigin,
             SENDER_LOOKUP,
             2,
-            sources=(wire_source(db, "claim", different, FullWake()),),
+            sources=(wire_source(db, AssignmentId.cohort(b"claim"), different, FullWake()),),
         )
     db.close()
     with store(db_path) as reopened:
@@ -276,7 +276,7 @@ def test_claim_acceptance_requires_initial_mode_decision(db_path: Path) -> None:
             verdict: str | None = None,
         ) -> WakeAssignment:
             return WakeAssignment(
-                assignment_id=f"claim-{index}",
+                assignment_id=AssignmentId.cohort(f"claim-{index}".encode()),
                 recipient="Owner",
                 recipient_lookup=SENDER_LOOKUP,
                 wire_seq=index,
@@ -310,22 +310,22 @@ def test_claim_acceptance_requires_initial_mode_decision(db_path: Path) -> None:
             assert isinstance(db.assignments.accept(initial), Applied)
             assert db.assignments.get(initial.assignment_id).revision == 1
         ignored = db.assignments.transition_preengagement(
-            "claim-7",
+            AssignmentId.cohort(b"claim-7"),
             IgnoredAssignment,
             expected_revision=1,
         )
         deferred = db.assignments.transition_preengagement(
-            "claim-8", DeferredAssignment, expected_revision=1
+            AssignmentId.cohort(b"claim-8"), DeferredAssignment, expected_revision=1
         )
         failed = db.assignments.transition_preengagement(
-            "claim-9", FailedAssignment, expected_revision=1
+            AssignmentId.cohort(b"claim-9"), FailedAssignment, expected_revision=1
         )
         assert ignored.value.revision == deferred.value.revision == failed.value.revision == 2
         assert isinstance(
             db.assignments.accept(assignment(7, BoundedTriageWake(), TriagePendingAssignment)),
             AlreadyApplied,
         )
-        assert type(db.assignments.get("claim-7").lifecycle) is IgnoredAssignment
+        assert type(db.assignments.get(AssignmentId.cohort(b"claim-7")).lifecycle) is IgnoredAssignment
 
 
 def test_claim_preengagement_and_mixed_engagement_rollback(db_path: Path) -> None:
@@ -341,7 +341,7 @@ def test_claim_preengagement_and_mixed_engagement_rollback(db_path: Path) -> Non
                                timestamp=float(index), seq=index)
             db.assignments.accept(
                 WakeAssignment(
-                    assignment_id=str(index),
+                    assignment_id=AssignmentId.cohort(str(index).encode()),
                     recipient="Owner",
                     recipient_lookup=SENDER_LOOKUP,
                     wire_seq=index,
@@ -352,13 +352,13 @@ def test_claim_preengagement_and_mixed_engagement_rollback(db_path: Path) -> Non
                     lifecycle=disposition.load(mode, None, None, None),
                 )
             )
-            sources.append(wire_source(db, str(index), original, mode))
+            sources.append(wire_source(db, AssignmentId.cohort(str(index).encode()), original, mode))
         deferred = db.assignments.transition_preengagement(
-            "1", DeferredAssignment, expected_revision=1
+            AssignmentId.cohort(b"1"), DeferredAssignment, expected_revision=1
         )
         assert type(deferred.value.lifecycle) is DeferredAssignment
         with pytest.raises(StaleRevision):
-            db.assignments.transition_preengagement("1", FailedAssignment, expected_revision=1)
+            db.assignments.transition_preengagement(AssignmentId.cohort(b"1"), FailedAssignment, expected_revision=1)
         with pytest.raises((IdentityConflict, sqlite3.IntegrityError)):
             db.create(
                 "exec",
@@ -367,7 +367,7 @@ def test_claim_preengagement_and_mixed_engagement_rollback(db_path: Path) -> Non
                 2,
                 sources=tuple(sources),
             )
-        assert db.assignments.get("1").lifecycle.execution_id is None
+        assert db.assignments.get(AssignmentId.cohort(b"1")).lifecycle.execution_id is None
         assert db.session._connection.execute("SELECT count(*) FROM executions").fetchone()[0] == 0
         assert not db.session._connection.in_transaction
 
@@ -414,12 +414,6 @@ def test_token_prepared_before_transaction_and_loss_replay_ignores_mutable(db_pa
         progressed = db.advance(
             first.value.fence, PromptAcceptedAttempt, expected_pointer_revision=1
         )
-        renewed = db.renew_lease(
-            progressed.value.fence, expected_pointer_revision=1, duration_ms=120_000
-        )
-        assert renewed.value.snapshot.attempt is not None
-        assert isinstance(renewed.value.snapshot.attempt.lifecycle, LiveAttempt)
-        assert renewed.value.snapshot.attempt.lifecycle.lease_expires_at_ms >= 121_000
         duplicate = db.start(
             AttemptStart(
                 "exec",
@@ -432,7 +426,7 @@ def test_token_prepared_before_transaction_and_loss_replay_ignores_mutable(db_pa
             )
         )
         assert isinstance(duplicate, AlreadyApplied)
-        assert duplicate.value.snapshot.attempt == renewed.value.snapshot.attempt
+        assert duplicate.value.snapshot.attempt == progressed.value.snapshot.attempt
         with pytest.raises(IdentityConflict):
             db.start(
                 AttemptStart(
@@ -537,14 +531,8 @@ def test_nonpublication_claimless_atomic_settlement(db_path: Path) -> None:
 def test_retry_partition_and_generation_fence(db_path: Path) -> None:
     with ready(db_path) as db:
         token, fence = started(db)
-        db.observe_replay(
-            fence,
-            expected_pointer_revision=1,
-            expected_replay_revision=None,
-            facts=ReplayFact.NONE,
-            replay_safe=True,
-            side_effects_possible=False,
-        )
+        with db.session.writing() as connection:
+            ReplayAssessments.authorize_if_unobserved(connection, "exec")
         fence = final_evidence(db, fence)
         outcome = db.settle_nonpublication(
             fence,
@@ -643,16 +631,7 @@ def test_final_backend_fact_blocks_later_phase_progress_and_dead_lease(
             with pytest.raises(RecoveryBlocked):
                 db.advance(fence, phase, expected_pointer_revision=1, progress=progress)
             assert db.get("exec") == before
-        if first_fact == "process_dead":
-            with pytest.raises(RecoveryBlocked):
-                db.renew_lease(fence, expected_pointer_revision=1, duration_ms=1_000)
-            assert db.get("exec") == before
-            second_fact = "backend_done"
-        else:
-            # A done-but-live child may still be waiting for verified exit.
-            renewed = db.renew_lease(fence, expected_pointer_revision=1, duration_ms=1_000)
-            fence = renewed.value.fence
-            second_fact = "process_dead"
+        second_fact = "backend_done" if first_fact == "process_dead" else "process_dead"
         final = db.advance(
             fence,
             PromptStartingAttempt,
@@ -839,14 +818,8 @@ def test_retry_start_rollback_restores_prior_replay_authorization(db_path: Path)
 def test_ambiguity_forces_failed_partition(db_path: Path) -> None:
     with ready(db_path) as db:
         _, fence = started(db)
-        db.observe_replay(
-            fence,
-            expected_pointer_revision=1,
-            expected_replay_revision=None,
-            facts=ReplayFact.TOOL_EXECUTED,
-            replay_safe=False,
-            side_effects_possible=True,
-        )
+        with db.session.writing() as connection:
+            ReplayAssessments.accumulate(connection, "exec", ReplayFact.TOOL_EXECUTED)
         fence = final_evidence(db, fence)
         settled = db.settle_nonpublication(
             fence, expected_pointer_revision=1, outcome=AttemptFailedAttempt()
@@ -858,24 +831,15 @@ def test_ambiguity_forces_failed_partition(db_path: Path) -> None:
 
 def test_replay_facts_cannot_be_erased(db_path: Path) -> None:
     with ready(db_path) as db:
-        _, fence = started(db)
-        db.observe_replay(
-            fence,
-            expected_pointer_revision=1,
-            expected_replay_revision=None,
-            facts=ReplayFact.TOOL_EXECUTED,
-            replay_safe=False,
-            side_effects_possible=True,
-        )
-        with pytest.raises(IdentityConflict):
-            db.observe_replay(
-                fence,
-                expected_pointer_revision=1,
-                expected_replay_revision=1,
-                facts=ReplayFact.NONE,
-                replay_safe=True,
-                side_effects_possible=False,
-            )
+        started(db)
+        with db.session.writing() as connection:
+            ReplayAssessments.accumulate(connection, "exec", ReplayFact.TOOL_EXECUTED)
+            recorded = ReplayAssessments.for_execution(connection, "exec")
+            with pytest.raises(IdentityConflict):
+                recorded.observe(
+                    connection, "exec", facts=ReplayFact.NONE,
+                    replay_safe=True, side_effects_possible=False,
+                )
         assert db.get("exec").replay.require_assessment().facts == ReplayFact.TOOL_EXECUTED
 
 
@@ -908,7 +872,7 @@ def test_unstarted_failure_and_claim_requeue(db_path: Path) -> None:
         db.participants.register(SENDER_LOOKUP, committed=True)
         db.assignments.accept(
             WakeAssignment(
-                assignment_id="claim",
+                assignment_id=AssignmentId.cohort(b"claim"),
                 recipient="Owner",
                 recipient_lookup=SENDER_LOOKUP,
                 wire_seq=1,
@@ -920,11 +884,11 @@ def test_unstarted_failure_and_claim_requeue(db_path: Path) -> None:
             )
         )
         deferred = db.assignments.transition_preengagement(
-            "claim", DeferredAssignment, expected_revision=1
+            AssignmentId.cohort(b"claim"), DeferredAssignment, expected_revision=1
         )
         assert deferred.value.lifecycle.execution_id is None
         requeued = db.assignments.transition_preengagement(
-            "claim", FullPendingAssignment, expected_revision=2
+            AssignmentId.cohort(b"claim"), FullPendingAssignment, expected_revision=2
         )
         assert type(requeued.value.lifecycle) is FullPendingAssignment
 
@@ -949,8 +913,9 @@ def test_frozen_v2_pre_attempt_deferred_execution_cannot_resume(db_path: Path) -
             connection.execute(
                 (
                     "UPDATE wake_claims SET lifecycle=json_set(lifecycle,'$.kind','deferred'),rev"
-                    "ision=revision+1 WHERE assignment_id='claim'"
-                )
+                    "ision=revision+1 WHERE assignment_id=?"
+                ),
+                (FieldCodec.encode(AssignmentId.cohort(b"claim")),),
             )
         before = db.get("exec")
         assert type(before.execution.lifecycle) is DeferredExecution

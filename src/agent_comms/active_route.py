@@ -9,7 +9,6 @@ from __future__ import annotations
 import json
 import os
 import time
-import uuid
 from abc import ABC
 from collections.abc import Iterator
 from contextlib import contextmanager
@@ -17,21 +16,33 @@ from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import TYPE_CHECKING, Annotated, ClassVar
 
+from .bus import Bus
 from .child_process import Platform
 from .declared_family import DeclaredFamily
 from .errors import RelationViolationError
-from .field_codec import FieldCodec, MalformedRecord, PathText
+from .field_codec import FieldCodec, MalformedRecord, PathText, ScratchName
 from .launch_root import LaunchRoot
 from .private_nk_entrypoint import PrivateNkLaunch, RootLaunch
 from .private_path import ObservedPath, OwnedDirectoryRole, PrivateDirectoryRole, PrivateFileRole
 from .recorded_bus import RecordedBusIdentity
-from .store_files import StoreLockContention, _store_lock
+from .store_files import DependentStateTier, SingleFileStore, StoreLockContention
 
 if TYPE_CHECKING:
     from .installer.reporting import RootWriter
 
 # Publishers exclude only each other: a second one waits out the first install's route step.
 ROUTE_PUBLICATION_WAIT_SECONDS = 30.0
+
+
+@dataclass(frozen=True, slots=True)
+class ActiveRouteFile(SingleFileStore, DependentStateTier):
+    """One route publication; competing installers spend a fresh bounded wait."""
+
+    path: Path
+
+    @classmethod
+    def contention(cls) -> StoreLockContention:
+        return StoreLockContention(ROUTE_PUBLICATION_WAIT_SECONDS)
 
 
 @dataclass(frozen=True, slots=True)
@@ -117,8 +128,6 @@ class ActiveRoute(CommsRoute):
     def rebound(self) -> ActiveRoute:
         """This route naming the bus its root holds now. A restore that copies the bus
         back gives it a new file identity, so the restored route names that one."""
-        from .bus import Bus
-
         return replace(self, bus_identity=RecordedBusIdentity.capture(Bus.path_in(self.root)))
 
     @classmethod
@@ -142,8 +151,6 @@ class ActiveRoute(CommsRoute):
 
     def selects_its_root(self) -> bool:
         """A route selects the database observed when it was published."""
-        from .bus import Bus
-
         return self.root.is_dir() and self.bus_identity.matches(
             ObservedPath.at(Bus.path_in(self.root)))
 
@@ -271,7 +278,7 @@ class RouteFile(ABC):
     def replace(self, route: ActiveRoute, path: Path, directory: int) -> Path:
         name = Path(self.filename)
         backup = path.with_name(
-            f"{name.stem}.{time.strftime('%Y%m%dT%H%M%S')}-{uuid.uuid4().hex}.bak{name.suffix}")
+            f"{name.stem}.{time.strftime('%Y%m%dT%H%M%S')}-{ScratchName.mint()}.bak{name.suffix}")
         _publish_active_route_locked(route, path, directory, backup=backup)
         return backup
 
@@ -334,7 +341,7 @@ def route_directory(path: Path) -> Iterator[int]:
     route has left behind is refused by its store, under that store's write lock."""
     path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
     refusal = ValueError("active comms route directory changed or is not owned")
-    with _store_lock(path, contention=StoreLockContention(ROUTE_PUBLICATION_WAIT_SECONDS)):
+    with ActiveRouteFile(path).guarded_write():
         directory = OwnedDirectoryRole.read(path.parent, refusal)
         try:
             OwnedDirectoryRole.held(directory, path.parent, refusal)
@@ -362,7 +369,7 @@ def _publish_active_route_locked(
         if backup is None and read_active_route(path) is not None:
             raise ValueError("active comms route is already installed")
         payload = route.encoded()
-        temporary = f".active-route-{uuid.uuid4().hex}.tmp"
+        temporary = f".active-route-{ScratchName.mint()}.tmp"
         fd = PrivateFileRole.create(
             temporary, RouteFileNotPrivate(),
             dir_fd=directory)

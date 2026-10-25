@@ -1,16 +1,17 @@
-"""A bounded, portable conversation snapshot of any harness session, written as a Pi session."""
+"""What an import writes as a thread's Pi session: a bounded, portable snapshot of any harness
+session, or a native Pi session kept byte for byte."""
 
 from __future__ import annotations
 
 import asyncio
 import json
+from abc import ABC, abstractmethod
 from collections import deque
 from collections.abc import Iterable
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from io import StringIO
 from typing import Annotated, TYPE_CHECKING
-from uuid import uuid4
 
 
 from .cli_result import CliResult
@@ -19,6 +20,8 @@ from .harness_install import Harness
 from .thread_text import NoThreadText, ThreadText
 from .transcript_events import ImportedInput, ImportedMessage, NoRetainedRequest
 from .turn_context import CodexRolloutProvenance, ContextSourceText
+from .turn_item import NativeItemId
+from .native_session_reopen import PiSessionId
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -68,19 +71,47 @@ class ImportedSessionMetadata:
         return ContextSourceText(source.public_description(), source.public_text(comms))
 
 
-@dataclass(frozen=True, slots=True)
-class ImportSnapshot:
+@dataclass(frozen=True, slots=True, kw_only=True)
+class ImportedConversation(ABC):
+    """A session imported as a stopped thread: where it ran and the Pi session it becomes."""
+
     harness: type[Harness]
     source_id: str
     project: str
-    title: ThreadText
+    messages_seen: int
+    title: ThreadText = NoThreadText()
+    truncated_messages: int = 0
+    notices: tuple[str, ...] = ()
+    historical_instructions: tuple[CodexRolloutProvenance, ...] = ()
+
+    @property
+    @abstractmethod
+    def imported_messages(self) -> int: ...
+
+    @abstractmethod
+    def session_bytes(self, project: Path) -> bytes:
+        """The thread's Pi session file, for a thread working in ``project``."""
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class KeptPiSession(ImportedConversation):
+    """A native Pi session is already what a thread runs: its file is the session, unchanged."""
+
+    source: Path
+
+    @property
+    def imported_messages(self) -> int:
+        return self.messages_seen
+
+    def session_bytes(self, project: Path) -> bytes:
+        return self.source.read_bytes()
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class ImportSnapshot(ImportedConversation):
     messages: tuple[ImportedMessage, ...]
     summary: str
-    messages_seen: int
-    truncated_messages: int
-    notices: tuple[str, ...]
     latest_request: str = ""
-    historical_instructions: tuple[CodexRolloutProvenance, ...] = ()
 
     @classmethod
     def read(cls, history: History, limits: ImportLimits) -> ImportSnapshot:
@@ -92,6 +123,13 @@ class ImportSnapshot:
 
         return asyncio.run(collect()).snapshot(history.harness)
 
+    @property
+    def imported_messages(self) -> int:
+        return len(self.messages)
+
+    def session_bytes(self, project: Path) -> bytes:
+        return self.pi_session(project).encode()
+
     def pi_session(self, project: Path) -> str:
         """A valid Pi v3 tree, using text-only portable historical context."""
         from .native_entries import ImportedSessionWriter, NativeEntry
@@ -99,9 +137,9 @@ class ImportSnapshot:
         timestamp = datetime.now(UTC)
         iso = timestamp.isoformat()
         records: list[dict[str, object]] = [
-            {"type": "session", "version": 3, "id": str(uuid4()), "timestamp": iso, "cwd": str(project)}
+            {"type": "session", "version": 3, "id": FieldCodec.encode(PiSessionId.fresh()), "timestamp": iso, "cwd": str(project)}
         ]
-        parent = uuid4().hex[:16]
+        parent = FieldCodec.encode(NativeItemId.fresh())
         records.append({"type": "custom", "id": parent, "parentId": None, "timestamp": iso,
             "customType": "agent-comms-import",
             "data": FieldCodec.encode(ImportedSessionMetadata(
@@ -185,9 +223,12 @@ class ImportBuffer:
         if self.instructions:
             self.notices.add("Historical developer/system sources are retained as references, not current instructions.")
         return ImportSnapshot(
-            harness, self.source_id, self.project, self.title, tuple(self.messages), self.summary,
-            self.seen, self.truncated, tuple(sorted(self.notices)), self.latest_request,
-            tuple(sorted(self.instructions, key=lambda value: (value.offset, value.instruction))),
+            harness=harness, source_id=self.source_id, project=self.project, title=self.title,
+            messages=tuple(self.messages), summary=self.summary, messages_seen=self.seen,
+            truncated_messages=self.truncated, notices=tuple(sorted(self.notices)),
+            latest_request=self.latest_request,
+            historical_instructions=tuple(
+                sorted(self.instructions, key=lambda value: (value.offset, value.instruction))),
         )
 
 
@@ -204,10 +245,10 @@ class ThreadImported(CliResult):
     historical_instructions: tuple[CodexRolloutProvenance, ...] = ()
 
     @classmethod
-    def of(cls, thread: str, session_file: Path, snapshot: ImportSnapshot) -> ThreadImported:
+    def of(cls, thread: str, session_file: Path, snapshot: ImportedConversation) -> ThreadImported:
         return cls(
             thread, str(session_file), snapshot.harness, snapshot.source_id,
-            len(snapshot.messages), snapshot.messages_seen - len(snapshot.messages),
+            snapshot.imported_messages, snapshot.messages_seen - snapshot.imported_messages,
             snapshot.truncated_messages, snapshot.notices, snapshot.historical_instructions,
         )
 

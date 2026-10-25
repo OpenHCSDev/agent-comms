@@ -12,6 +12,7 @@ import pytest
 from agent_comms.child_process import Platform
 from agent_comms.comms import Comms, wire
 from conftest import installed_comms
+from test_locked_store import _hold_lock, event, process
 from agent_comms.goal_actions import (
     ClearGoalAction,
     CompletedGoalAction,
@@ -26,7 +27,9 @@ from agent_comms.goal_history import (
     ObservedGapRevision,
     TransitionRevision,
 )
+from agent_comms.goal_scope import OneGoal
 from agent_comms.goals import NoGoal
+from agent_comms.store_files import ExclusiveLock
 from agent_comms.goal_states import ActiveGoal
 from agent_comms.tool_request import ToolRequest
 from agent_comms.tool_caller import ThreadCaller
@@ -51,7 +54,7 @@ def test_goal_history_records_transitions_replacement_clear_and_rename(tmp_path,
     comms = _wire(tmp_path)
     first = comms.goals.update_goal("worker", SetGoalAction(text="Ask @reviewer about the release"))
     paused = comms.goals.update_goal(
-        "worker", PausedGoalAction(expect=GoalPrecondition(goal_id=first.id), progress="Waiting")
+        "worker", PausedGoalAction(expect=GoalPrecondition(goal_id=OneGoal(first.id)), progress="Waiting")
     )
     # ACP and other callers also write the declaration directly.
     thread = comms.registry.require("worker")
@@ -60,10 +63,10 @@ def test_goal_history_records_transitions_replacement_clear_and_rename(tmp_path,
     monkeypatch.setenv("AGENT_COMMS_THREAD", "worker")
     comms.threads.rename_self("reviewer", caller=ThreadCaller("worker"))
     completed = comms.goals.update_goal(
-        "reviewer", CompletedGoalAction(expect=GoalPrecondition(goal_id=first.id))
+        "reviewer", CompletedGoalAction(expect=GoalPrecondition(goal_id=OneGoal(first.id)))
     )
     second = comms.goals.update_goal("reviewer", SetGoalAction(text="Start a new objective"))
-    comms.goals.update_goal("reviewer", ClearGoalAction(expect=GoalPrecondition(goal_id=second.id)))
+    comms.goals.update_goal("reviewer", ClearGoalAction(expect=GoalPrecondition(goal_id=OneGoal(second.id))))
 
     reopened = wire(comms.root)
     entries = reopened.goals.goal_history("worker")
@@ -73,8 +76,8 @@ def test_goal_history_records_transitions_replacement_clear_and_rename(tmp_path,
     assert entries[0].after.text == "Ask @reviewer about the release"
     assert entries[4].before == completed
     assert entries[5].before == second
-    assert reopened.goals.goal_history("reviewer", goal_id=first.id) == entries[:5]
-    assert reopened.goals.goal_history("reviewer", goal_id=second.id) == entries[4:]
+    assert reopened.goals.goal_history("reviewer", OneGoal(first.id)) == entries[:5]
+    assert reopened.goals.goal_history("reviewer", OneGoal(second.id)) == entries[4:]
 
     history_tool = next(
         tool
@@ -105,7 +108,7 @@ def test_existing_goal_seeds_only_current_observed_baseline(tmp_path):
     assert baseline[0].before == NoGoal() and baseline[0].after == current
     assert wire(comms.root).goals.goal_history("worker") == baseline
     paused = reopened.goals.update_goal(
-        "worker", PausedGoalAction(expect=GoalPrecondition(goal_id=current.id))
+        "worker", PausedGoalAction(expect=GoalPrecondition(goal_id=OneGoal(current.id)))
     )
     entries = wire(comms.root).goals.goal_history("worker")
     assert len(entries) == 2
@@ -128,7 +131,7 @@ def test_crash_before_registry_write_does_not_expose_history_intent(tmp_path, mo
         patch.setattr(os, "replace", failed_registry_write)
         with pytest.raises(OSError):
             comms.goals.update_goal(
-                "worker", PausedGoalAction(expect=GoalPrecondition(goal_id=current.id))
+                "worker", PausedGoalAction(expect=GoalPrecondition(goal_id=OneGoal(current.id)))
             )
 
     reopened = wire(comms.root)
@@ -160,7 +163,7 @@ def test_crash_after_registry_write_reconciles_pending_history(tmp_path, monkeyp
         expected = OSError if failure == "before_history_commit" else GoalHistoryError
         with pytest.raises(expected):
             comms.goals.update_goal(
-                "worker", PausedGoalAction(expect=GoalPrecondition(goal_id=current.id))
+                "worker", PausedGoalAction(expect=GoalPrecondition(goal_id=OneGoal(current.id)))
             )
 
     reopened = wire(comms.root)
@@ -189,3 +192,29 @@ def test_unjournaled_current_registry_change_is_labeled_observed_gap(tmp_path):
     assert entries[-1].before == current
     assert entries[-1].after.text == "Unjournaled change"
     assert len(wire(comms.root).goals.goal_history("worker")) == 2
+
+
+def test_goal_history_reads_while_another_process_writes_the_registry(tmp_path):
+    comms = _wire(tmp_path)
+    goal = comms.goals.update_goal("worker", SetGoalAction(text="Ask @reviewer about the release"))
+    ready, release = event(), event()
+    with process(_hold_lock, comms.registry.store.path, ExclusiveLock(), ready, release):
+        try:
+            assert ready.wait(5)
+            entries = comms.goals.goal_history("worker")
+        finally:
+            release.set()
+    assert [entry.after for entry in entries][-1:] == [goal]
+
+
+def test_a_lock_free_read_leaves_an_in_flight_intent_to_its_writer(tmp_path):
+    comms = _wire(tmp_path)
+    first = comms.goals.update_goal("worker", SetGoalAction(text="Ask @reviewer about the release"))
+    thread = comms.registry.require("worker")
+    history = GoalHistoryStore(comms.registry.store.path)
+    # A writer between its intent and its registry save: the registry still shows ``first``.
+    intent = history.begin(thread.incarnation.wire_birth, first, NoGoal())
+    assert comms.goals.goal_history("worker")[-1].after == first
+    history.commit(intent)
+    assert (TransitionRevision, first, NoGoal()) in [
+        (entry.kind, entry.before, entry.after) for entry in comms.goals.goal_history("worker")]

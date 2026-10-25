@@ -8,13 +8,11 @@ review. No credentials or owner environment are written to the queue.
 from __future__ import annotations
 
 import asyncio
-import fcntl
 import json
 import os
 import sys
-import uuid
 from collections.abc import Iterator, Mapping
-from contextlib import contextmanager
+from contextlib import ExitStack, contextmanager
 from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import TYPE_CHECKING, Annotated, ClassVar
@@ -27,7 +25,7 @@ from .coordination_errors import CoordinationError
 from .coordinator import Coordination
 from .declared_family import DeclaredFamily
 from .errors import RelationViolationError
-from .field_codec import FieldCodec, WireOmitDefault
+from .field_codec import FieldCodec, RestartId, WireOmitDefault
 from .launch_runtime import LaunchRuntime, RestartEnvironment
 from .lifecycle_capability import Active, LifecycleCapability, Pending
 from .locked_store import DurableFile, PatternFile, RuntimeFile
@@ -39,7 +37,13 @@ from .owner_restart import OwnerRestartRequest, StoppedOwnerFailure
 from .private_path import PrivateDirectoryRole
 from .restart_refusals import RestartRefusal
 from .restart_scope import OwnersNamed
-from .store_files import AtomicFile, StoreLockFile, _store_lock
+from .store_files import (
+    AtomicFile,
+    ClaimHeldError,
+    ProcessSingleton,
+    StoreLockFile,
+    StoreGuard,
+)
 from .thread_identity import RecordedThreadIncarnation
 from .tool_result import ToolResult
 from .watched import ChangeSignal, DirectorySource, FileSource
@@ -160,7 +164,7 @@ class RestartTarget:
 
     @property
     def is_current_watcher(self) -> bool:
-        return self.launch_runtime == LaunchRuntime.running()
+        return self.launch_runtime.runs_this_process
 
     def require_watcher(self, comms: Comms) -> None:
         self.require_available(comms)
@@ -180,7 +184,7 @@ class QueuedRestart(DurableFile, PatternFile):
     def matching_in(cls, root: Path) -> frozenset[Path]:
         return frozenset(path for path in root.rglob(str(cls.pattern())) if path.is_file())
 
-    id: str
+    id: RestartId
     selection: OwnerRestartSelection
     target: RestartTarget
     state: RestartState
@@ -213,7 +217,7 @@ class RestartQueueLayoutError(RelationViolationError):
 
 
 @dataclass(frozen=True)
-class RestartQueue:
+class RestartQueue(StoreGuard):
     """One active record per recorded owner; settled records never enter that set."""
 
     directory: Path
@@ -232,9 +236,13 @@ class RestartQueue:
     def lock_path(self) -> Path:
         return RestartQueueLock.path_in(self.directory)
 
+    @property
+    def watcher_claim(self) -> ProcessSingleton:
+        return ProcessSingleton(self.directory / "watcher.lock")
+
     @contextmanager
     def locked(self):
-        with _store_lock(self.lock_path):
+        with self.write_guard(self.lock_path):
             if next(self.directory.glob('*.json'), None) is not None:
                 raise RestartQueueLayoutError(
                     'Restart queue uses a retired layout; existing records require explicit conversion'
@@ -250,7 +258,7 @@ class RestartQueue:
         directory.mkdir(mode=0o700, exist_ok=True)
         PrivateDirectoryRole.require(
             directory.lstat(), RelationViolationError("Settled restart directory must be private"))
-        return directory / f'{uuid.UUID(record.id).hex}.json'
+        return directory / f'{record.id}.json'
 
     def read(self, path: Path) -> QueuedRestart:
         if path.is_symlink():
@@ -322,7 +330,7 @@ def enqueue(comms: Comms, selection: OwnerRestartSelection, *,
             queue.save(result)
         else:
             result = QueuedRestart(
-                uuid.uuid4().hex, selection, target, PendingRestart()
+                RestartId.mint(), selection, target, PendingRestart()
             )
             queue.save(result)
     # A new watcher can safely race an existing watcher: flock permits one runner.
@@ -404,11 +412,10 @@ async def run(comms: Comms) -> None:
         ValueError("Queued restarts require Linux inotify and /proc")
     )
     queue = RestartQueue(comms.root / DIRECTORY)
-    lock = os.open(queue.directory / "watcher.lock", os.O_CREAT | os.O_RDWR, 0o600)
-    try:
+    with ExitStack() as claim:
         try:
-            fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
-        except BlockingIOError:
+            held = claim.enter_context(queue.watcher_claim.claimed())
+        except ClaimHeldError:
             return
         def release_if_empty():
             # Enqueue and release share this lock, so no request is orphaned.
@@ -417,7 +424,7 @@ async def run(comms: Comms) -> None:
                                 for pending in record.state.items_with(Pending, record))
                 if any(record.target.is_current_watcher for record in pending):
                     return False
-                fcntl.flock(lock, fcntl.LOCK_UN)
+                queue.watcher_claim.release(held)
                 if pending:
                     _start_watcher(comms.root, pending[0].target)
                 return True
@@ -431,8 +438,6 @@ async def run(comms: Comms) -> None:
                 if await Coordination.run_worker(release_if_empty):
                     return
                 await changes.wait()
-    finally:
-        os.close(lock)
 
 
 def main() -> None:

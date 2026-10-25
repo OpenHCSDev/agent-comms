@@ -30,6 +30,7 @@ from agent_comms.recorded_time import UnrecordedTimeError
 from agent_comms.session_file import RegistrySessionLocation
 from agent_comms.threads import Thread
 from agent_comms.tool_declaration import ReadAction
+from agent_comms.turn_item import PiRequestKey
 
 
 def decode(wire):
@@ -82,7 +83,7 @@ def test_missing_delta_and_unknown_result_fields_fail_at_ingress():
 def test_result_kind_is_bound_to_its_pending_command():
     async def journey():
         channel = PiRpcChannel(asyncio.StreamReader(), event_type=DurablePiEvent)
-        command = CompactDurable(id=RequestId('9'))
+        command = CompactDurable(id=RequestId(PiRequestKey('9')))
         future = channel.track(command)
         with pytest.raises((TypeError, ValueError)):
             decode({'type': 'response', 'command': 'compact_durable', 'id': '9',

@@ -14,7 +14,8 @@ from typing import TYPE_CHECKING, Literal, Annotated, Self
 from pydantic import JsonValue
 
 
-from .child_process import NoProcess, ProcessIdentity
+from .activity import ActivityCapture
+from .child_process import ProcessIdentity
 from .declared_family import DeclaredFamily
 from .errors import RelationViolationError, UnregisteredThreadError
 from .field_codec import (
@@ -46,6 +47,7 @@ from .restart_refusals import (
     OwnerChangedBeforeFenceRefusal,
     OwnerGenerationChangedRefusal,
 )
+from .thread_creation import CreationTime
 from .thread_identity import (
     ClaimedIdentity,
     GenerationCounter,
@@ -279,7 +281,8 @@ class ThreadRows(ExternalJsonShape, WireValue, MutableMapping[str, Thread]):
     """A revision's thread rows, decoded and bound only when read."""
 
     def __init__(self) -> None:
-        self._raw: dict[str, JsonValue] = {}
+        # checked_rows proved each stored row an object, so the type keeps that proof.
+        self._raw: dict[str, dict[str, JsonValue]] = {}
         self._decoded: dict[str, Thread] = {}
         self._binding: Callable[[Thread], Thread] = self.unbound
 
@@ -293,9 +296,10 @@ class ThreadRows(ExternalJsonShape, WireValue, MutableMapping[str, Thread]):
 
     def __eq__(self, other: object) -> bool:
         """Rows still stored on both sides compare as their JSON; only rows that differ there,
-        or that either side wrote, are decoded, so a one-row edit never decodes the registry."""
+        or that either side wrote, are decoded, so a one-row edit never decodes the registry.
+        Rows equal only rows: a plain mapping is a different value."""
         if not isinstance(other, ThreadRows):
-            return super().__eq__(other)
+            return NotImplemented
         return self.keys() == other.keys() and all(
             (name in self._raw and name in other._raw and self._raw[name] == other._raw[name])
             or self[name] == other[name]
@@ -344,13 +348,25 @@ class ThreadRows(ExternalJsonShape, WireValue, MutableMapping[str, Thread]):
         return {"type": "object", "additionalProperties": FieldCodec.record_schema(Thread)}
 
     @classmethod
-    def checked_rows(cls, raw: object) -> dict[str, JsonValue]:
+    def checked_rows(cls, raw: object) -> dict[str, dict[str, JsonValue]]:
         if not isinstance(raw, dict):
             raise MalformedRecord("registry threads must be an object")
         for name, row in raw.items():
             if not isinstance(name, str) or not isinstance(row, dict) or row.get("name") != name:
                 raise MalformedRecord("thread name differs from its declaration")
         return dict(raw)
+
+    def require_distinct_births(self) -> None:
+        """Rows decode late, so a read of one thread never sees two sharing a creation lookup;
+        a stored row's birth is read alone, without decoding the rest of its thread."""
+        births: set[float] = set()
+        for name in self:
+            try:
+                birth = (self._decoded[name].created_at if name in self._decoded
+                         else CreationTime.from_wire(self._raw[name].get("created_at")))
+            except ValueError as error:
+                raise InvalidRegistryDocument(error) from error
+            births.add(birth.distinct_from(births))
 
     @classmethod
     def from_wire(cls, raw: object) -> Self:
@@ -515,7 +531,7 @@ class CommanderProject(DeclaredFamily, affix="CommanderProject"):
     def commanders(self, snapshot: RegistrySnapshot) -> tuple[Thread, ...]: ...
 
     @abstractmethod
-    def repository_names(self) -> tuple[RepositoryName, ...]: ...
+    def repository_names(self, name: str = "") -> tuple[RepositoryName, ...]: ...
 
     @abstractmethod
     def require(self) -> RegisteredCommanderProject: ...
@@ -527,12 +543,18 @@ class CommanderProject(DeclaredFamily, affix="CommanderProject"):
     @abstractmethod
     def reconfigured(self, repositories: RepositorySelection) -> CommanderProject: ...
 
+    def session_output[Output](self, incarnation: ThreadIncarnation, *,
+                               commander: Output, commanded: Output) -> Output:
+        """A commanded session's last item replies to the senders delivered in its turn; the
+        commander answers its owner in its own transcript and messages units only by tool."""
+        return commanded
+
 
 class NoCommanderProject(CommanderProject):
     def commanders(self, snapshot: RegistrySnapshot) -> tuple[Thread, ...]:
         return ()
 
-    def repository_names(self) -> tuple[RepositoryName, ...]:
+    def repository_names(self, name: str = "") -> tuple[RepositoryName, ...]:
         return ()
 
     def require(self) -> RegisteredCommanderProject:
@@ -558,8 +580,9 @@ class RegisteredCommanderProject(CommanderProject):
             raise RelationViolationError("The registered commander thread no longer exists.")
         return selected
 
-    def repository_names(self) -> tuple[RepositoryName, ...]:
-        return tuple(repo.github for repo in self.repos)
+    def repository_names(self, name: str = "") -> tuple[RepositoryName, ...]:
+        """Each selected GitHub repository once, however many checkouts point at it."""
+        return tuple(dict.fromkeys(repo.github for repo in Repo.candidates(self.repos, name)))
 
     def require(self) -> RegisteredCommanderProject:
         return self
@@ -570,6 +593,10 @@ class RegisteredCommanderProject(CommanderProject):
 
     def reconfigured(self, repositories: RepositorySelection) -> CommanderProject:
         return replace(self, repos=repositories.applied(self.repos))
+
+    def session_output[Output](self, incarnation: ThreadIncarnation, *,
+                               commander: Output, commanded: Output) -> Output:
+        return commander if incarnation == self.commander else commanded
 
 
 @ThreadSlice.required
@@ -785,6 +812,11 @@ class RegistryDocument(RegistryPresence[dict[str, ThreadStatus]]):
         change = InitialRegistration(thread=thread, status=status)
         return change.restarted() if new_owner else change
 
+    def retire_processes(self) -> None:
+        """A copied registry's processes belong to the root it was copied from, never to the copy."""
+        for name, thread in tuple(self.threads.items()):
+            self.threads[name] = thread.without_process()
+
     def restore_stopped(self, source: RegistrySnapshot, names: Sequence[str]) -> tuple[str, ...]:
         """Restore selected missing identities without importing execution authority.
 
@@ -807,7 +839,7 @@ class RegistryDocument(RegistryPresence[dict[str, ThreadStatus]]):
             if name in self.aliases or thread.created_at in identities:
                 raise RelationViolationError(f"Restoration identity conflicts for {name!r}")
             identities[thread.created_at] = name
-            additions.append(replace(thread.without_turn(), process_identity=NoProcess()))
+            additions.append(thread.without_process())
         restored = {thread.name: thread for thread in additions}
         available = ChainMap(restored, self.threads)
         aliases = source.restorable_aliases(available, self.aliases)
@@ -1034,18 +1066,14 @@ class RegistrySnapshot(RegistryPresence[Mapping[str, ThreadStatus]], RegistryPro
                 object.__setattr__(
                     self, plan.name, SnapshotValue.of(plan).freeze(getattr(self, plan.name)),
                 )
-        # ThreadRows validates names when rows enter; aliases belong to this cut.
+        # ThreadRows validates names when rows enter; aliases and births belong to this cut.
         self.require_alias_names()
+        self.threads.require_distinct_births()
 
     @cached_property
     def by_lookup(self) -> Mapping[str, Thread]:
-        indexed: dict[str, Thread] = {}
-        for thread in self.threads.values():
-            lookup = thread.incarnation.require_recorded().lookup
-            if lookup in indexed:
-                raise RelationViolationError("Registry creation identities collide.")
-            indexed[lookup] = thread
-        return MappingProxyType(indexed)
+        return MappingProxyType({thread.incarnation.require_recorded().lookup: thread
+                                 for thread in self.threads.values()})
 
     def __reduce__(self) -> tuple[type[Self], tuple[object, ...]]:
         """Worker restoration preserves scalar policy and re-enters the constructor."""
@@ -1108,18 +1136,18 @@ class RegistrySnapshot(RegistryPresence[Mapping[str, ThreadStatus]], RegistryPro
 
     def observed_activity(
         self, agents: AgentActivity, names: Iterable[str],
-    ) -> dict[str, ObservedActivity | DeletedThread]:
+    ) -> ActivityCapture[ObservedActivity | DeletedThread]:
         """Observe retained view names; absent declarations have no execution authority."""
         selected = {name: self.canonical_name(name) for name in names}
-        captured = agents.all_activity(
+        captured = agents.captured(
             self.visible_threads(DEFAULT_ROSTER, names=selected), snapshot=self)
         observed: dict[str, ObservedActivity | DeletedThread] = {}
         for name, canonical in selected.items():
-            if canonical in captured:
-                observed[name] = captured[canonical]
+            if canonical in captured.activity:
+                observed[name] = captured.activity[canonical]
             elif canonical not in self.threads:
                 observed[name] = DeletedThread(canonical)
-        return observed
+        return ActivityCapture(observed, captured.expires_at)
 
     def unread_since(
         self, actor: str, since: float | None, recorded_delivery: bool,

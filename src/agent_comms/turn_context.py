@@ -18,6 +18,7 @@ from pydantic import JsonValue
 from .annotation_disclosure import PublicInstructionAnnotations, WithheldAnnotations
 from .cli_result import CliResult
 from .declared_family import DeclaredFamily
+from .errors import RelationViolationError
 from .field_codec import (
     FieldCodec,
     IdentityExclude,
@@ -34,6 +35,9 @@ from .native_session_reopen import NativeSessionIdentity
 from .peer_relevance import AlwaysListed, GoalShown, PeerRelevance
 from .thread_identity import ThreadIncarnation, TurnIdentity
 from .tool_result import DeclaredReply
+from .turn_item import NativeItemId, PiRequestKey
+from .wake_policy import WakePolicy
+
 
 if TYPE_CHECKING:
     from .context_store import RecordedContextState
@@ -78,8 +82,6 @@ class Provenance(DeclaredFamily, affix="Provenance"):
         return ()
 
     def require_human_input(self):
-        from .errors import RelationViolationError
-
         raise RelationViolationError("Source is not an original human input")
 
 
@@ -137,6 +139,17 @@ class OwnerProvenance(Provenance):
 
     def public_description(self) -> str:
         return f"Owner {self.owner.name} · born {self.owner.created_at} · revision {self.revision}"
+
+
+@dataclass(frozen=True)
+class TurnProvenance(Provenance):
+    """The owner's recorded turn itself, never a digest standing in for it."""
+
+    owner: ThreadIncarnation
+    turn: TurnId
+
+    def public_description(self) -> str:
+        return f"Owner {self.owner.name} · born {self.owner.created_at} · turn {self.turn}"
 
 
 @dataclass(frozen=True)
@@ -387,14 +400,14 @@ class ContextEntryReference:
     """One native journal entry whose manifest is recorded independently."""
 
     identity: NativeSessionIdentity
-    entry_id: str
+    entry_id: NativeItemId
 
     @classmethod
     def from_sources(cls, sources: ContextSources) -> ContextEntryReference:
         entries = sources.journal_entries()
         if len(entries) != 1:
             raise ValueError("A context entry manifest must name exactly one journal entry")
-        return cls(sources.native_identity(), entries[0])
+        return cls(sources.native_identity(), NativeItemId(entries[0]))
 
 
 @dataclass(frozen=True)
@@ -1106,8 +1119,6 @@ class CoordinationSegment(InstructionSegment):
     def capture(
         cls, owner: Thread, views: tuple[ThreadView, ...], relations: tuple[PeerRelation, ...], goals
     ) -> CoordinationSegment:
-        from .wake_policy import WakePolicy
-
         response_instruction = WakePolicy.relevance_instruction()
         viewed = {view.thread.incarnation: view for view in views}
         peers = tuple(PeerState.from_view(viewed[r.peer], r, goals)
@@ -1175,7 +1186,7 @@ class RenderedInput:
 @dataclass(frozen=True)
 class ContextTurn(DeclaredFamily, affix="ContextTurn"):
     @abstractmethod
-    def source_revision(self, owner: Thread) -> str: ...
+    def provenance(self, owner: Thread) -> Provenance: ...
 
     def require_recorded(self) -> RecordedContextTurn:
         raise ValueError("A next-context preview cannot be published as a recorded turn")
@@ -1202,8 +1213,8 @@ class RecordedContextTurn(ContextTurn):
         if self.occurrence.generation < 1:
             raise ValueError("Context requires the original authorized turn generation")
 
-    def source_revision(self, owner: Thread) -> str:
-        return self.identity
+    def provenance(self, owner: Thread) -> Provenance:
+        return TurnProvenance(owner.incarnation, self.identity)
 
     def require_recorded(self) -> RecordedContextTurn:
         return self
@@ -1213,8 +1224,11 @@ class RecordedContextTurn(ContextTurn):
 
 
 class NextContextTurn(ContextTurn):
-    def source_revision(self, owner: Thread) -> str:
-        return hashlib.sha256(json.dumps(owner.to_wire(), sort_keys=True).encode()).hexdigest()
+    def provenance(self, owner: Thread) -> Provenance:
+        return OwnerProvenance(
+            owner.incarnation,
+            hashlib.sha256(json.dumps(owner.to_wire(), sort_keys=True).encode()).hexdigest(),
+        )
 
 
 class DispatchRequest(SubclassUnion, affix="DispatchRequest"):
@@ -1224,31 +1238,31 @@ class DispatchRequest(SubclassUnion, affix="DispatchRequest"):
     """
 
     @abstractmethod
-    def names(self, request_id: str) -> bool: ...
+    def names(self, request_id: PiRequestKey) -> bool: ...
 
     @abstractmethod
-    def require_id(self) -> str: ...
+    def require_id(self) -> PiRequestKey: ...
 
 
 @dataclass(frozen=True)
 class UnobservedDispatchRequest(NullMember, DispatchRequest):
     """Previews and captures that never observed dispatch."""
 
-    def names(self, request_id: str) -> bool:
+    def names(self, request_id: PiRequestKey) -> bool:
         return False
 
-    def require_id(self) -> str:
+    def require_id(self) -> PiRequestKey:
         raise ValueError("Original request ID was not captured by this historical context")
 
 
 @dataclass(frozen=True)
 class ObservedDispatchRequest(SingleFieldValue, DispatchRequest):
-    request_id: str
+    request_id: PiRequestKey
 
-    def names(self, request_id: str) -> bool:
+    def names(self, request_id: PiRequestKey) -> bool:
         return self.request_id == request_id
 
-    def require_id(self) -> str:
+    def require_id(self) -> PiRequestKey:
         return self.request_id
 
 
@@ -1278,7 +1292,9 @@ class ContextManifest:
         raise ValueError("Source is outside the original recorded context")
 
     @classmethod
-    def for_request(cls, history, turn: RecordedContextTurn, request_id: str) -> ContextManifest:
+    def for_request(
+        cls, history, turn: RecordedContextTurn, request_id: PiRequestKey
+    ) -> ContextManifest:
         """Select the original indexed publication, never today's preview."""
         selected = tuple(record for record in history
                          if record.turn == turn and record.request_id.names(request_id))
@@ -1442,9 +1458,7 @@ class TurnContext(DeclaredReply):
         origins: tuple[MessageReference, ...] = (),
         inputs: tuple[StoredInput, ...] = (),
     ) -> TurnContext:
-        source = tuple(WireProvenance(ref) for ref in origins) or (
-            OwnerProvenance(owner.incarnation, turn.source_revision(owner)),
-        )
+        source = tuple(WireProvenance(ref) for ref in origins) or (turn.provenance(owner),)
         source += tuple(row.context_provenance() for row in inputs)
         return cls(
             owner.incarnation,

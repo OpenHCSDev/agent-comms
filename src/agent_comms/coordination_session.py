@@ -14,8 +14,12 @@ from agent_comms.coordination_errors import (
     CoordinationReadUnavailable,
     IntegrityViolationError,
 )
-from agent_comms.locked_store import DEFAULT_STORE_CONTENTION, RegistryFile, StoreContention
-from agent_comms.store_files import UNBOUNDED_CONTENTION, StoreLockContention
+from agent_comms.diagnostics import PublicationMeasurements
+from agent_comms.locked_store import RegistryFile
+from agent_comms.store_files import (
+    DEFAULT_STORE_CONTENTION, UNBOUNDED_CONTENTION, RegistryLocking,
+    StoreContention, StoreLockContention,
+)
 
 if TYPE_CHECKING:
     from .message_bus import MessageBus
@@ -81,22 +85,17 @@ class NativeBoundary(ExitStack):
         self, bus: MessageBus, *, contention: StoreLockContention = UNBOUNDED_CONTENTION,
     ) -> None:
         super().__init__()
-        from agent_comms.diagnostics import PublicationMeasurements
 
-        # One budget for every lock the boundary takes, the activity cut included.
+        # The activity boundary spends this operation's contention budget.
         self.bus = bus
         self.contention = contention
         self.measurements = PublicationMeasurements()
 
     def __enter__(self):
-        from .store_files import SharedLock, _store_lock
-
         try:
             self.activity = self.enter_context(self.bus.opened_activity(self.contention))
             with self.measurements.operation("file_exclusion"):
-                self.enter_context(_store_lock(
-                    self.bus._registry.store.path, mode=SharedLock(),
-                    contention=self.contention))
+                self.enter_context(RegistryLocking.read_guard(self.bus._registry.store.path))
             with self.measurements.operation("registry_snapshot"):
                 self.privacy = self.bus._registry.store.private_guard_unlocked()
                 self.registry = self.bus._registry.store.read_snapshot_unlocked()
@@ -151,14 +150,14 @@ class ReadNativeCoordinationSession(NativeCoordinationSession):
         self, path: str, *, clock_ms: Callable[[], int] = system_clock,
         contention: StoreContention = DEFAULT_STORE_CONTENTION,
     ) -> None:
-        self.contention = contention
+        self.read_budget = contention
         super().__init__(path, clock_ms=clock_ms, contention=contention)
 
     def boundary_contention(self) -> StoreLockContention:
         """A read's boundary spends the read's own budget on every lock it takes, so
         contention the read cannot wait out raises BlockingIOError for its caller to
         defer, instead of a wait with no end."""
-        return self.contention.lock_budget()
+        return self.read_budget.lock_budget()
 
     def _prepare_private_file(self) -> None:
         self._private_file()

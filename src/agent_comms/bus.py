@@ -6,7 +6,7 @@ from agent_comms.activity_clocks import ActivityClocks, ChannelActivity
 import json
 import sqlite3
 from abc import ABC, abstractmethod
-from collections.abc import Callable, Generator, Iterable, Iterator
+from collections.abc import Callable, Generator, Iterable, Iterator, Mapping
 from contextlib import AbstractContextManager, ExitStack, closing, contextmanager
 from dataclasses import dataclass, replace
 from heapq import nlargest
@@ -37,7 +37,7 @@ from agent_comms.messages import (
     ClaimMessage,
     Message,
     MessageKind,
-    PublicSender,
+    PublicRecord,
 )
 from agent_comms.envelope_claim_transitions import (
     ClaimOwner,
@@ -48,24 +48,23 @@ from agent_comms.envelope_claim_transitions import (
 )
 from agent_comms.errors import CommittedMessageError, RelationViolationError, UnclaimedError
 from agent_comms.field_codec import ClaimId, FieldCodec, MessageId, ThreadLookup
-from agent_comms.locked_store import BusFile, SQLiteFile, StoreCommittedError
+from agent_comms.locked_store import BusFile, FileStore, SQLiteFile, StoreCommittedError
 from agent_comms.message_reference import MessageReference
 from agent_comms.private_path import FileIdentity, PresentPath
 from agent_comms.read_basis import (
-    ChannelDisplayScope, MessageDisplayScope, ReadCursor, RepliesDisplayScope,
+    DisplayUnreadSelection, MessageDisplayScope, ReadCursor, RepliesDisplayScope,
 )
 from agent_comms.store_files import UNBOUNDED_CONTENTION, StoreLockContention
-from agent_comms.typed_table import CarriedWriter, ReconciledFile, SQLiteDatabase, WalStore
+from agent_comms.typed_table import (
+    CarriedWriter, PracticeRebuild, ReconciledFile, SchemaRebuild,
+    SQLiteDatabase, WalStore,
+)
 from agent_comms.watched import Watched
 
 if TYPE_CHECKING:
     from agent_comms.registry_document import RegistrySnapshot
     from agent_comms.registry_provenance import RegistryProvenance
     from agent_comms.thread_identity import RecordedThreadIncarnation
-
-
-class PublicRecord(BusRecord):
-    sender_lookup: ClassVar[PublicSender] = PublicSender()
 
 
 class ClaimRecord(PublicRecord, ClaimMessage):
@@ -113,6 +112,36 @@ class AddressedRow(Addressed, BusRow, declared_name=None):
         ))
         headers = (BusRow.require(db, seq=seq) for seq in positions)
         return tuple(header.kind.read_from(db, header.seq) for header in headers)
+
+
+class DisplayUnread:
+    """Before the first count, acquire the complete unread selection."""
+
+    def advanced(self, source: BusReader, selection: DisplayUnreadSelection) -> CountedDisplayUnread:
+        return source.display_unread(selection, through=source.revision())
+
+
+@dataclass(frozen=True)
+class CountedDisplayUnread(DisplayUnread):
+    """A counted selection advances only the newly appended interval."""
+
+    through: int
+    selection: DisplayUnreadSelection
+    counts: Mapping[str, int]
+
+    def advanced(self, source: BusReader, selection: DisplayUnreadSelection) -> CountedDisplayUnread:
+        if self.selection != selection:
+            return super().advanced(source, selection)
+        through = source.revision()
+        if through == self.through:
+            return self
+        counted = source.display_unread(
+            selection, through=through, after=self.through,
+        )
+        return replace(counted, counts={
+            channel: self.counts[channel] + count
+            for channel, count in counted.counts.items()
+        })
 
 
 class BusReader(RouteCounts, ABC):
@@ -404,24 +433,26 @@ class BusReader(RouteCounts, ABC):
             ))
 
     def display_unread(
-        self, scopes: Iterable[ChannelDisplayScope], viewer_names: Iterable[str],
-        seen: ReadCursor, snapshot: RegistryProvenance,
-    ) -> dict[str, int]:
+        self, selection: DisplayUnreadSelection, *, through: int, after: int = -1,
+    ) -> CountedDisplayUnread:
+        """Count one explicit sequence interval with the captured cursor predicate."""
         counts = {}
         with self.observing() as db:
-            for scope in scopes:
-                bindings = ReadCursor.sql_bindings(snapshot, {"viewer": seen.counted(scope, snapshot)})
+            for scope in selection.scopes:
+                bindings = ReadCursor.sql_bindings(selection.registry, {
+                    "viewer": selection.seen.counted(scope, selection.registry),
+                })
                 predicate, parameters = scope.index_predicate
                 counts[scope.channel] = FieldCodec.decode(int, db.execute(
                     f'WITH {ReadCursor.sql("?")}, requests AS ('
                     f'SELECT \'viewer\' AS actor,* FROM "{Addressed.table.declared_name}" '
-                    f'JOIN "{Message.table.declared_name}" USING(seq) WHERE seq > ? '
+                    f'JOIN "{Message.table.declared_name}" USING(seq) WHERE seq > ? AND seq <= ? '
                     f'AND ({predicate}) AND sender NOT IN (SELECT value FROM json_each(?))), '
                     f'{ReadCursor.joined_sql} SELECT count(*) FROM cursors WHERE {ReadCursor.unread_sql}',
-                    (*bindings.values(), seen.lower_bound(scope, snapshot), *parameters,
-                     json.dumps(tuple(viewer_names))),
+                    (*bindings.values(), max(after, selection.seen.lower_bound(scope, selection.registry)),
+                     through, *parameters, json.dumps(selection.viewer_names)),
                 ).fetchone()[0])
-        return counts
+        return CountedDisplayUnread(through, selection, counts)
 
     def delivered_unanswered(
         self, recipient: RecordedThreadIncarnation, scope: MessageDisplayScope,
@@ -457,13 +488,17 @@ class BusReader(RouteCounts, ABC):
             )
 
 
-class Bus(BusReader, ReconciledFile, WalStore, CarriedWriter, BusFile, Watched):
+class Bus(FileStore, BusReader, ReconciledFile, WalStore, CarriedWriter, BusFile, Watched):
     """One SQLite transaction owns the sequence and all of a record's fields."""
 
     filename = "bus.sqlite3"
 
-    def __init__(self, path: Path):
-        super().__init__(path)
+    def unreceived(self, lookup: ThreadLookup,
+                   references: Iterable[MessageReference]) -> tuple[MessageReference, ...]:
+        """The references outside this participant's frozen delivery audiences."""
+        with self.observing() as db:
+            return tuple(reference for reference in references if not ReceivedSource.exists(
+                db, where="{seq} = ?", parameters=(reference.seq,), lookup=lookup))
 
     def received_after(self, lookup: ThreadLookup, after: int) -> bool:
         """Whether this recipient has a newer candidate; read one indexed metadata row."""
@@ -471,10 +506,10 @@ class Bus(BusReader, ReconciledFile, WalStore, CarriedWriter, BusFile, Watched):
             return ReceivedSource.exists(db, where="{seq} > ?", parameters=(after,), lookup=lookup)
 
     @classmethod
-    def install(cls, path: Path, *, history: Iterable[Message] = ()) -> Self:
-        """Install declared schemas and commit optional display-only history atomically.
+    def install(cls, path: Path, *, history: Iterable[BusRecord] = ()) -> Self:
+        """Install declared schemas and commit optional copied history atomically.
 
-        Original sequences survive; frozen deliveries and resource claims do not.
+        Original sequences and frozen deliveries survive; resource claims do not.
         Existing-file migrations still belong to declared carries and their backups.
         """
         bus = cls(path)
@@ -483,12 +518,16 @@ class Bus(BusReader, ReconciledFile, WalStore, CarriedWriter, BusFile, Watched):
             with bus.write_transaction(db):
                 BusSchema.require_installed(db)
                 for message in history:
-                    PublicRecord.from_message(message.history_snapshot).append_to(db, message.seq)
+                    message.history_record.append_to(db, message.seq)
         return bus
 
     @classmethod
     def table_schema(cls) -> type[BusSchema]:
         return BusSchema
+
+    @classmethod
+    def practice_rebuild(cls, path: Path, practice_root: Path) -> SchemaRebuild:
+        return PracticeRebuild(practice_root / path.relative_to(cls.bus_root(path)))
 
     @contextmanager
     def observing(
@@ -496,7 +535,8 @@ class Bus(BusReader, ReconciledFile, WalStore, CarriedWriter, BusFile, Watched):
     ) -> Iterator[sqlite3.Connection]:
         """Borrow one read-only snapshot, including for an archived bus. Root adoption
         creates the bus, so an absent file is a deleted bus and fails to open."""
-        with self._attached(lambda: SQLiteFile.observing(self.path), contention) as db:
+        with self.attached(
+                self.path, lambda: SQLiteFile.observing(self.path), contention) as db:
             yield db
 
     def backup(self, destination: Path) -> None:

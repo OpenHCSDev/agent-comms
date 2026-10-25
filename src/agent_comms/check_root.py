@@ -14,7 +14,6 @@ from typing import ClassVar
 
 from .attempt_recovery import RecoveryMonitorCapability
 from .bus import Bus
-from .child_process import NoProcess
 from .cli_result import CliResult
 from .comms import Comms, wire
 from .fresh_private_session import create_fresh_private_session
@@ -29,8 +28,8 @@ from .storage_rules import StorageRoots
 from .thread_text import NoThreadText
 from .session_file import RegistrySessionLocation
 from .threads import Thread
-from .transcript_routes import TranscriptRoutes
 from .turn_lease import NoTurnRecord
+from .transcript_routes import TranscriptRoutes
 
 
 @dataclass(frozen=True)
@@ -106,17 +105,17 @@ class CheckRoot:
             project.mkdir(parents=True, mode=0o700)
             session = self._session(original, copied.root, slot, project)
             declarations[name] = replace(
-                original,
-                turn_record=NoTurnRecord(),
+                original.without_process(),
                 worktree=str(project),
                 parent=original.parent.kept_in(selected),
                 task=NoThreadText(),
                 goal=NoGoal(),
-                process_identity=NoProcess(),
                 session_file=RegistrySessionLocation.from_path(session, copied.root),
                 earlier_projects=(),
                 project_resume_due=False,
                 storage_roots=StorageRoots(copied.root / "scratch" / slot),
+                # A fresh turn history: a finished turn refuses generation 0.
+                turn_record=NoTurnRecord(),
                 turn_generation=0,
             )
         with copied.registry.store.editing() as edit:

@@ -10,7 +10,7 @@ from agent_comms.transcript_events import AssistantTranscript, NoticeTranscript
 from agent_comms.transcripts import TranscriptReadIdentity, UnreadTranscriptCursor
 from agent_comms.turn_digests import LastTurns
 from agent_comms.threads import Thread
-from agent_comms.turn_item import NativeTurnId
+from agent_comms.turn_item import NativeItemId, NativeTurnId
 
 
 @pytest.fixture(autouse=True)
@@ -24,35 +24,40 @@ def test_finished_cli_items_append_once_and_page(tmp_path):
     comms = wire(tmp_path / "wire")
     comms.registry.declare(Thread('codex', frozenset(), str(tmp_path)))
     transcript = comms.transcripts.external("codex")
-    transcript.finish(turn_id=t1_turn_id, item_id="compaction",
-                      events=(NoticeTranscript("Compacting context…", timestamp=2.0, position='compaction'),))
+    transcript.finish(
+        turn_id=t1_turn_id,
+        item_id=NativeItemId("compaction"),
+        events=(
+            NoticeTranscript(
+                "Compacting context…", timestamp=2.0, position=NativeItemId("compaction")
+            ),
+        ),
+    )
     read = comms.transcripts.capture_page_read("codex")
     assert read.content_current()
     # The identity crosses the ACP and observation wires.
     wired = FieldCodec.decode(TranscriptReadIdentity, FieldCodec.encode(read.identity))
     assert wired == read.identity
-    assert [event.text for event in comms.transcripts.thread_transcript_page("codex").events] \
+    assert [event.text for event in comms.transcripts.capture_page_read("codex").read().events] \
         == ["Compacting context…"]
 
     # Finishing appends after what the read captured; the read stays current.
-    transcript.finish(turn_id=t1_turn_id, item_id="reply",
-                      events=(AssistantTranscript("Hello", timestamp=1.0, position='reply'),))
+    transcript.finish(
+        turn_id=t1_turn_id,
+        item_id=NativeItemId("reply"),
+        events=(AssistantTranscript("Hello", timestamp=1.0, position=NativeItemId("reply")),),
+    )
     # A watch that starts again republishes what Codex already finished.
-    transcript.finish(turn_id=t1_turn_id, item_id="reply",
-                      events=(AssistantTranscript("Hello", timestamp=1.0, position='reply'),))
-    transcript.finish(turn_id=t1_turn_id, item_id="hook", events=())
+    transcript.finish(
+        turn_id=t1_turn_id,
+        item_id=NativeItemId("reply"),
+        events=(AssistantTranscript("Hello", timestamp=1.0, position=NativeItemId("reply")),),
+    )
+    transcript.finish(turn_id=t1_turn_id, item_id=NativeItemId("hook"), events=())
     assert read.content_current()
-    page = comms.transcripts.thread_transcript_page("codex")
+    page = comms.transcripts.capture_page_read("codex").read()
     assert [event.text for event in page.events] == ["Compacting context…", "Hello"]
-
-    newest = comms.transcripts.thread_transcript_page("codex", max_messages=1)
-    assert [event.text for event in newest.events] == ["Hello"]
-    older = comms.transcripts.thread_transcript_page("codex", before=newest.before,
-                                                     max_messages=1)
-    assert [event.text for event in older.events] == ["Compacting context…"]
-    assert newest.has_older and not older.has_older
-    later = comms.transcripts.thread_transcript_page("codex", after=older.after)
-    assert [event.text for event in later.events] == ["Hello"]
+    assert not page.has_older
 
 
 def test_absent_store_reads_stay_empty_without_creating_storage(tmp_path):
@@ -77,12 +82,18 @@ def test_captured_draft_cannot_delete_a_later_turns_draft(tmp_path):
     comms = wire(tmp_path / "wire")
     comms.registry.declare(Thread("cli", frozenset(), str(tmp_path)))
     transcript = comms.transcripts.external("cli")
-    transcript.draft(turn_id=old_turn_id, item_id="draft", events=(AssistantTranscript("old",
-        timestamp=1.0, position='draft'),))
+    transcript.draft(
+        turn_id=old_turn_id,
+        item_id=NativeItemId("draft"),
+        events=(AssistantTranscript("old", timestamp=1.0, position=NativeItemId("draft")),),
+    )
     with transcript.reading() as records:
         old = records.current_draft(transcript.root, transcript.incarnation)
-    transcript.draft(turn_id=new_turn_id, item_id="draft", events=(AssistantTranscript("new",
-        timestamp=1.0, position='draft'),))
+    transcript.draft(
+        turn_id=new_turn_id,
+        item_id=NativeItemId("draft"),
+        events=(AssistantTranscript("new", timestamp=1.0, position=NativeItemId("draft")),),
+    )
     old.end_turn(transcript)
     with transcript.reading() as records:
         assert records.current_draft(transcript.root, transcript.incarnation).turn_id == "new"
@@ -112,6 +123,35 @@ async def test_turn_owned_draft_commit_reaches_a_watching_reader(tmp_path):
             publication.retire_message()
 
 
+def test_turn_owned_draft_refuses_maintenance_without_changing_the_saved_draft(tmp_path):
+    from agent_comms.errors import RelationViolationError
+    from agent_comms.external_transcript import TurnDraftPublication
+    from agent_comms.maintenance_barrier import MaintenanceBarrier, MaintenanceOperator
+
+    comms = wire(tmp_path / 'wire')
+    comms.registry.declare(Thread('cli', frozenset(), str(tmp_path)))
+    transcript = comms.transcripts.external('cli')
+    with transcript.writer_connection() as connection:
+        publication = TurnDraftPublication(transcript, connection, NativeTurnId('turn'))
+        publication.begin_message(1.0)
+        publication.publish(('before',))
+        barrier = MaintenanceBarrier(comms.registry.store.path)
+        hold = barrier.begin(MaintenanceOperator.current())
+        try:
+            with pytest.raises(RelationViolationError):
+                publication.publish(('held',))
+            with pytest.raises(RelationViolationError):
+                publication.retire_message()
+            with transcript.reading() as reader:
+                draft = reader.current_draft(transcript.root, transcript.incarnation)
+                assert draft.events[0].text == 'before'
+        finally:
+            barrier.clear(hold)
+        publication.publish(('after',))
+        with transcript.reading() as reader:
+            assert reader.current_draft(transcript.root, transcript.incarnation).events[0].text == 'after'
+
+
 @pytest.mark.asyncio
 async def test_earlier_page_requests_reach_initial_and_committed_watch_observations(tmp_path):
     turn_turn_id = NativeTurnId('turn')
@@ -122,7 +162,9 @@ async def test_earlier_page_requests_reach_initial_and_committed_watch_observati
     comms = wire(tmp_path / "wire")
     comms.registry.declare(Thread("cli", frozenset(), str(tmp_path)))
     transcript = comms.transcripts.external("cli")
-    transcript.publish_page((FinishedItem(turn_turn_id, "newest", ()),), EarlierPage("first"))
+    transcript.publish_page(
+        (FinishedItem(turn_turn_id, NativeItemId("newest"), ()),), EarlierPage("first")
+    )
     emitted = asyncio.Queue()
     watching = asyncio.create_task(transcript.watch_requests(emitted.put_nowait))
     try:
@@ -130,8 +172,10 @@ async def test_earlier_page_requests_reach_initial_and_committed_watch_observati
             assert records.request_earlier(0)
         first = await asyncio.wait_for(emitted.get(), 2)
         assert first.earlier.cursor == "first"
-        transcript.prepend(EarlierItems.from_row(first),
-                           (FinishedItem(turn_turn_id, "older", ()),), EarlierPage("second"))
+        transcript.prepend(
+            EarlierItems.from_row(first),
+            (FinishedItem(turn_turn_id, NativeItemId("older"), ()),), EarlierPage("second")
+        )
         with transcript.reading() as records:
             assert records.request_earlier(-1)
         second = await asyncio.wait_for(emitted.get(), 2)
@@ -157,15 +201,24 @@ def test_draft_is_current_state_and_finishes_atomically(tmp_path):
     comms = wire(tmp_path / "wire")
     comms.registry.declare(Thread('codex', frozenset(), str(tmp_path)))
     transcript = comms.transcripts.external("codex")
-    transcript.draft(turn_id=t_turn_id, item_id="a", events=(AssistantTranscript("Hel",
-        timestamp=1.0, position='a'),))
+    transcript.draft(
+        turn_id=t_turn_id,
+        item_id=NativeItemId("a"),
+        events=(AssistantTranscript("Hel", timestamp=1.0, position=NativeItemId("a")),),
+    )
     with transcript.reading() as records:
         assert records.current_draft(transcript.root, transcript.incarnation).events[0].text == "Hel"
         assert records.cut().offset == 0
-    transcript.draft(turn_id=t_turn_id, item_id="a", events=(AssistantTranscript("Hello",
-        timestamp=1.0, position='a'),))
-    transcript.finish(turn_id=t_turn_id, item_id="other", events=(NoticeTranscript("Tool",
-        timestamp=1.0, position='other'),))
+    transcript.draft(
+        turn_id=t_turn_id,
+        item_id=NativeItemId("a"),
+        events=(AssistantTranscript("Hello", timestamp=1.0, position=NativeItemId("a")),),
+    )
+    transcript.finish(
+        turn_id=t_turn_id,
+        item_id=NativeItemId("other"),
+        events=(NoticeTranscript("Tool", timestamp=1.0, position=NativeItemId("other")),),
+    )
     with transcript.reading() as records:
         assert records.current_draft(transcript.root, transcript.incarnation).item_id == "a"
     read = comms.transcripts.capture_page_read("codex")
@@ -173,15 +226,24 @@ def test_draft_is_current_state_and_finishes_atomically(tmp_path):
     assert snapshot.draft.events[0].text == "Hello"
     assert [e.text for e in snapshot.page.events] == ["Tool"]
     assert decode_updates(encode_updates(snapshot)) == (snapshot,)
-    transcript.finish(turn_id=t_turn_id, item_id="a", events=(AssistantTranscript("Hello!",
-        timestamp=1.0, position='a'),))
+    transcript.finish(
+        turn_id=t_turn_id,
+        item_id=NativeItemId("a"),
+        events=(AssistantTranscript("Hello!", timestamp=1.0, position=NativeItemId("a")),),
+    )
     with pytest.raises(StaleRevision):
         read.current_draft()
     with transcript.reading() as records:
         assert records.current_draft(transcript.root, transcript.incarnation).external_row() is None
-    assert [e.text for e in comms.transcripts.thread_transcript_page("codex").events] == ["Tool", "Hello!"]
-    transcript.draft(turn_id=t2_turn_id, item_id="b", events=(AssistantTranscript("Interrupted",
-        timestamp=1.0, position='b'),))
+    assert [e.text for e in comms.transcripts.capture_page_read("codex").read().events] == [
+        "Tool",
+        "Hello!",
+    ]
+    transcript.draft(
+        turn_id=t2_turn_id,
+        item_id=NativeItemId("b"),
+        events=(AssistantTranscript("Interrupted", timestamp=1.0, position=NativeItemId("b")),),
+    )
     transcript.end_turn()
     with transcript.reading() as records:
         assert records.current_draft(transcript.root, transcript.incarnation).external_row() is None
@@ -192,12 +254,18 @@ def test_a_thread_with_nothing_read_pages_older_and_newer_from_its_cursor(tmp_pa
     comms = wire(tmp_path / "wire")
     comms.registry.declare(Thread('codex', frozenset(), str(tmp_path)))
     transcript = comms.transcripts.external("codex")
-    for index, text in enumerate(("first", "second", "third")):
-        transcript.finish(turn_id=t1_turn_id, item_id=text,
-                          events=(AssistantTranscript(text, timestamp=float(index), position=text),))
+    for index, text in enumerate(f"item {number}" for number in range(21)):
+        item_id = NativeItemId.fresh()
+        transcript.finish(
+            turn_id=t1_turn_id,
+            item_id=item_id,
+            events=(
+                AssistantTranscript(text, timestamp=float(index), position=item_id),
+            ),
+        )
 
     async def loader(**bounds):
-        return comms.transcripts.thread_transcript_page("codex", max_messages=1, **bounds)
+        return comms.transcripts.capture_page_read("codex", **bounds).read()
 
     unread = UnreadTranscriptCursor()
     newest = asyncio.run(unread.read_page(loader))
@@ -207,6 +275,6 @@ def test_a_thread_with_nothing_read_pages_older_and_newer_from_its_cursor(tmp_pa
     # read still gets the newest page instead of a refused source.
     assert asyncio.run(unread.read_page(loader, before=unread)).events == newest.events
     assert asyncio.run(newest.after.read_page(loader, before=unread)).events == newest.events
-    assert [event.text for event in newest.events] == ["third"]
-    assert [event.text for event in older.events] == ["second"]
-    assert [event.text for event in later.events] == ["third"]
+    assert [event.text for event in newest.events] == [f"item {number}" for number in range(1, 21)]
+    assert [event.text for event in older.events] == ["item 0"]
+    assert later.events == newest.events
