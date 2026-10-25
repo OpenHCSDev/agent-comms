@@ -12,6 +12,7 @@ from agent_comms.errors import RelationViolationError, RouteChangedError, Unregi
 from .declared_family import DeclaredFamily
 from .thread_identity import OwnerIdentity
 from .child_process import ProcessIdentity
+from .notification_evidence import NoNotificationWindow, NotificationWindow
 
 if TYPE_CHECKING:
     from .message_reference import MessageReference
@@ -215,10 +216,7 @@ class ThreadPresentation(ThreadStatusDisplay):
     read_identity: TranscriptReadIdentity | None = None
     incoming_references: tuple[MessageReference, ...] = ()
     sent_references: tuple[MessageReference, ...] = ()
-
-    def notification_activity_names(self) -> frozenset[str]:
-        return frozenset(name for item in (*self.notifications, *self.sent_notifications)
-                         for name in item.activity_names())
+    notification_window: NotificationWindow = field(default_factory=NoNotificationWindow)
 
     def require(self, name: str) -> ThreadPresentation:
         """Require a presentation for a caller already bound to this thread."""
@@ -267,19 +265,20 @@ class ThreadPresentation(ThreadStatusDisplay):
         transcripts = window.read.owner
         sources = tuple({source.message.reference: source
                          for source in (*window.sources, *window.sent_sources)}.values())
+        notification_read = NotificationAssignment.read(transcripts.root, sources)
         projected = MessageNotification.delivery_window(
-            transcripts.root, transcripts.registry, sources,
-            NotificationAssignment.read(transcripts.root, sources),
+            transcripts.root, transcripts.registry, sources, notification_read,
             viewer=OwnerOutcomes.of(window.read.identity.thread),
         )
         incoming, sent = (
             tuple(replace(notification, message=source.message)
                   for source in selected
-                  for notification in projected[source.message.seq, source.message.message_id])
+                  for notification in projected.outcomes[source.message.seq, source.message.message_id])
             for selected in (window.sources, window.sent_sources)
         )
         return replace(
             self, notifications=incoming, sent_notifications=sent,
+            notification_window=projected,
             read_identity=window.read.identity,
             incoming_references=tuple(source.message.reference for source in window.sources),
             sent_references=tuple(source.message.reference for source in window.sent_sources),

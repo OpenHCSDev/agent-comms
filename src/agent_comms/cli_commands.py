@@ -18,7 +18,7 @@ from abc import ABC, abstractmethod
 from collections.abc import AsyncIterator, Iterator, Mapping
 from contextlib import aclosing, closing
 from dataclasses import dataclass, field, fields, replace
-from functools import partial
+from functools import cached_property, partial
 from inspect import iscoroutinefunction, signature
 from itertools import dropwhile, takewhile
 from pathlib import Path
@@ -124,6 +124,8 @@ from .harness_install import Harness
 from agent_comms.installer.probes.harnesses import HarnessInstallation, InstallResult
 from .history_result import HistoryPageResult
 from .history_views import CallingThreadTarget, NamedThreadTarget, PollTarget
+from .goals import Goal
+from .lifecycle_capability import Complete
 from .importing import ImportedSessionMetadata, ImportLimits, ThreadImported
 from .input_disposition import InputDispositions
 from .input_origin import InputProvenance
@@ -1976,9 +1978,47 @@ class CheckoutResult(CliResult):
     checkout: Annotated[Path, PathText]
 
 
+@dataclass(frozen=True)
+class CheckoutGrant(DeclaredFamily, affix="CheckoutGrant"):
+    """The caller's existing work authority, not a synthetic problem order."""
+
+    thread: Thread
+
+    @abstractmethod
+    def require(self) -> None: ...
+
+    @abstractmethod
+    def source(self) -> Repo: ...
+
+
+@dataclass(frozen=True)
+class OrderCheckoutGrant(CheckoutGrant):
+    todo: Todo
+
+    def require(self) -> None:
+        self.todo.require_assignee(self.thread.incarnation, self.todo.held().generation)
+
+    def source(self) -> Repo:
+        return self.todo.repository
+
+
+@dataclass(frozen=True)
+class GoalCheckoutGrant(CheckoutGrant):
+    goal: Goal
+    repository: Repo
+
+    def require(self) -> None:
+        self.thread.goal.require().require_id(self.goal.id)
+        if self.goal.state.items_with(Complete, self.goal):
+            raise ValueError("A completed goal cannot allocate a checkout.")
+
+    def source(self) -> Repo:
+        return self.repository
+
+
 class CheckoutOperation(DeclaredFamily, affix="CheckoutOperation"):
-    """What a problem checkout command does to the caller's checkout of that problem. Each
-    member owns what it requires of the problem, its storage check and its Git work, so adding
+    """What a checkout command does to the caller's isolated repository. Each
+    member owns its required authority, storage check and Git work, so adding
     and retiring stay in the Checkout owner."""
 
     @classmethod
@@ -1988,24 +2028,25 @@ class CheckoutOperation(DeclaredFamily, affix="CheckoutOperation"):
 
 
 class AddCheckoutOperation(CheckoutOperation):
-    """Create the checkout from origin/main, or repair an existing one's pinned submodules;
-    only the holder of the problem's open order allocates one."""
+    """Create from origin's declared default or repair the checkout's pinned submodules;
+    the caller's order or goal grants the allocation."""
 
     @classmethod
     def apply(cls, command: PreparedCheckoutCliCommand, ctx: Comms, thread: Thread,
               destination: Path) -> None:
-        todo = ctx.goals.todos.get(command.problem)
-        todo.require_assignee(thread.incarnation, todo.held().generation)
-        repository = command.source(ctx, todo)
+        grant = command.grant(ctx, thread)
+        grant.require()
+        repository = command.source(ctx, grant)
         CheckoutStorageEffect(destination, repository.github).check(
             StorageProjection(ctx.registry.storage_rule, thread))
         if destination.exists():
             Checkout(destination).prepare()
         else:
-            Repo.git(repository.checkout, "fetch", "origin", "main")
+            branch = repository.default_branch()
+            Repo.git(repository.checkout, "fetch", "origin", branch)
             Checkout.add(
                 repository.checkout, destination,
-                CheckoutStart.of(repository.checkout, f"work/{destination.name}", "origin/main"),
+                CheckoutStart.of(repository.checkout, f"work/{destination.name}", f"origin/{branch}"),
             )
 
 
@@ -2025,13 +2066,15 @@ class RemoveCheckoutOperation(CheckoutOperation):
 @dataclass(frozen=True, kw_only=True)
 class PreparedCheckoutCliCommand(CliCommand):
     operation: Annotated[type[CheckoutOperation], Argument(flags=("operation",))]
-    problem: Annotated[str, Argument(flags=("problem",))]
 
     @abstractmethod
     def destination(self, rule: StorageRule, thread: Thread) -> Path: ...
 
     @abstractmethod
-    def source(self, ctx: Comms, todo: Todo) -> Repo: ...
+    def grant(self, ctx: Comms, thread: Thread) -> CheckoutGrant: ...
+
+    def source(self, ctx: Comms, grant: CheckoutGrant) -> Repo:
+        return grant.source()
 
     def apply(self, ctx: Comms) -> CliResult:
         thread = CallingThreadTarget().thread(ctx.registry)
@@ -2044,16 +2087,17 @@ class PreparedCheckoutCliCommand(CliCommand):
 class CheckoutCliCommand(PreparedCheckoutCliCommand,
                          declared_name=OrderCheckoutAllocation.verb):
     help = "Create, repair or remove an owned problem checkout with its pinned submodules"
+    problem: Annotated[str, Argument(flags=("problem",))]
+
+    def grant(self, ctx: Comms, thread: Thread) -> CheckoutGrant:
+        return OrderCheckoutGrant(thread, ctx.goals.todos.get(self.problem))
 
     def destination(self, rule: StorageRule, thread: Thread) -> Path:
         return rule.order_checkout(rule.roots_of(thread), self.problem)
 
-    def source(self, ctx: Comms, todo: Todo) -> Repo:
-        return todo.repository
-
 
 @dataclass(frozen=True, kw_only=True)
-class RepositoryCheckoutCliCommand(PreparedCheckoutCliCommand,
+class RepositoryCheckoutCliCommand(CheckoutCliCommand,
                                    declared_name=RepositoryCheckoutAllocation.verb):
     help = "Create, repair or remove an owned problem checkout of a registered OWNER/REPO"
     repository: Annotated[RepositoryName, Argument(flags=("repository",))]
@@ -2061,7 +2105,7 @@ class RepositoryCheckoutCliCommand(PreparedCheckoutCliCommand,
     def destination(self, rule: StorageRule, thread: Thread) -> Path:
         return rule.repository_checkout(rule.roots_of(thread), self.problem, self.repository)
 
-    def source(self, ctx: Comms, todo: Todo) -> Repo:
+    def source(self, ctx: Comms, grant: CheckoutGrant) -> Repo:
         repositories = ctx.registry.snapshot().commander_project.require().repos
         selected = [repository for repository in repositories
                     if repository.github == self.repository]
@@ -2069,6 +2113,24 @@ class RepositoryCheckoutCliCommand(PreparedCheckoutCliCommand,
             raise ValueError(f'{self.repository.to_wire()} is not a registered repository.')
         repository, = selected
         return repository
+
+
+@dataclass(frozen=True, kw_only=True)
+class GoalCheckoutCliCommand(PreparedCheckoutCliCommand, declared_name="goal-checkout"):
+    help = "Create, repair or remove an isolated repository checkout for your own goal"
+    repository: Annotated[Path, PathText, Argument(flags=("repository",))]
+
+    @cached_property
+    def selected_repository(self) -> Repo:
+        return Repo.of(self.repository.resolve())
+
+    def grant(self, ctx: Comms, thread: Thread) -> CheckoutGrant:
+        return GoalCheckoutGrant(thread, thread.goal.require(), self.selected_repository)
+
+    def destination(self, rule: StorageRule, thread: Thread) -> Path:
+        return rule.repository_checkout(
+            rule.roots_of(thread), thread.goal.require().id, self.selected_repository.github,
+        )
 
 
 @dataclass(frozen=True, kw_only=True)
