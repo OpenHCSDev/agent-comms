@@ -7,13 +7,19 @@ from __future__ import annotations
 
 from abc import abstractmethod
 from dataclasses import dataclass, field
-from typing import Annotated, ClassVar
+from typing import TYPE_CHECKING, Annotated, ClassVar
+from collections.abc import Sequence
 
 from .declared_family import DeclaredFamily
 from .errors import ToolRefusedError
 from .field_codec import FieldCodec, GitCommitText, MalformedRecord, RecordProblems
 from .repo import Repo
 from .repository_name import RepositoryName
+
+if TYPE_CHECKING:
+    from .goal_management import Goals
+    from .thread_identity import ThreadIncarnation
+    from .todos import HeadReviewRecord, HeadVerdict, Todo
 
 
 @dataclass(frozen=True)
@@ -83,6 +89,31 @@ class ReadPullRequestHead(PullRequestHead):
     """The head as GitHub reported it, with the base branch the same read named."""
 
     base: str = field(kw_only=True)
+
+
+class HeadReviewRelation(DeclaredFamily):
+    """Order relationships share one declaration family and compose their capabilities."""
+
+
+class HeadReviewOrder(HeadReviewRelation, declared_name=None):
+    """The input that authorizes a head review's optional order change."""
+
+    @staticmethod
+    def holding(todos: Sequence[Todo], request: PullRequestHead) -> tuple[Todo, ...]:
+        """The open orders whose current declaration holds this head, held or released."""
+        return tuple(todo for todo in todos if todo.repo == request.repo
+                     and todo.order.holds_head(request))
+
+    @abstractmethod
+    def require_reviewer(self, goals: Goals, request: PullRequestHead,
+                         actor: ThreadIncarnation) -> None: ...
+
+    def director_identity(self, goals: Goals, actor: ThreadIncarnation) -> ThreadIncarnation:
+        return actor
+
+    @abstractmethod
+    def record_review(self, goals: Goals, request: PullRequestHead, verdict: HeadVerdict,
+                      actor: ThreadIncarnation) -> HeadReviewRecord: ...
 
 
 class HeadReview(DeclaredFamily, affix="HeadReview"):
