@@ -2,6 +2,7 @@
 
 import os
 import pickle
+import time
 from dataclasses import replace
 
 import pytest
@@ -98,15 +99,16 @@ def test_quiet_completion_is_per_commander_even_when_a_later_recipient_fails(not
     comms = notification_bus
     lead = comms.registry.require("lead")
     missing = replace(comms.registry.require("worker"), name="unregistered-recipient")
-    frames = tuple(CommanderObservation(thread, (), (), (), hud=lead_hud(comms))
+    failing = ServicePassFailing("following-rule", time.time(), "independent source")
+    frames = tuple(CommanderObservation(thread, (), (failing,), (), hud=lead_hud(comms))
                    for thread in (lead, missing))
     with pytest.raises(UnregisteredThreadError):
         CommanderHeartbeat().pass_body(comms, frames)
     completed = ServicePassStore.at(comms.root).read().commander_completed
     assert set(completed) == {lead.incarnation}
     assert missing.incarnation not in completed
-    # A quiet pass still completes after its original notice was committed.
-    beat(comms)
+    # A quiet pass, its line unchanged, still completes after its original notice was committed.
+    beat(comms, (failing,))
     assert len(notifications(comms)) == 1
     # A pass that misses a still-registered commander retires nothing but its frame.
     CommanderHeartbeat().pass_body(comms, ())
@@ -120,15 +122,20 @@ def test_quiet_completion_is_per_commander_even_when_a_later_recipient_fails(not
 
 
 def test_recreated_watcher_reads_original_committed_unit_observation(notification_bus):
+    """Quiet unit cards are not heartbeat lines; a fresh watcher reads the committed packet
+    and restates nothing it already carries."""
     comms = notification_bus
     states = state_cards(comms, UnitState)
-    beat(comms, states=states)
+    assert states and not any(state.attention() for state in states)
+    failing = ServicePassFailing("following-rule", time.time(), "independent source")
+    beat(comms, (failing,), states=states)
     first, = notifications(comms)
-    assert all(state.line() in first.body for state in states)
+    assert failing.line() in first.body
+    assert not any(state.line() in first.body for state in states)
     header = replace(lead_hud(comms, states), units=()).frame
     assert first.body.splitlines()[:len(header)] == list(header)
     assert CommanderUpdate.latest(comms, comms.registry.require("lead").incarnation) == first.task
-    beat(comms, states=state_cards(comms, UnitState))
+    beat(comms, (failing,), states=state_cards(comms, UnitState))
     unchanged, = notifications(comms)
     assert unchanged.reference == first.reference
 
