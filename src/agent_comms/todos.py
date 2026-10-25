@@ -1871,6 +1871,10 @@ class ProblemOrder(LifecycleCapability, DeclaredFamily, StorySource, affix="Prob
     def line(self) -> str:
         return "No order"
 
+    def installed_line(self, installed: RecordedBuildIdentity) -> str:
+        """The board's line, read against the build its one read resolved."""
+        return self.line
+
     def check_base(self, repo: Path) -> str:
         raise TodoError("This problem has no active checked order.")
 
@@ -2425,8 +2429,12 @@ class MergedProblemOrder(AwaitingInstallationProblemOrder):
 
     @property
     def line(self) -> str:
+        return self.run.merged_line(f"at {self.sha[:9]}")
+
+    def installed_line(self, installed: RecordedBuildIdentity) -> str:
         """The installed build, not the merge, says whether the install is still owed."""
-        return self.run.merged_line(self.installation())
+        return self.run.merged_line(
+            installed.containing(self.installation_commits, self.check.directory).merged_state)
 
     def closed_in(self, todo: Todo) -> Todo:
         return DoneTodoState.closed(todo, self)

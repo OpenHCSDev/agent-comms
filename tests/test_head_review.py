@@ -12,8 +12,10 @@ from agent_comms.goal_actions import CreateProblemGoalAction
 from agent_comms.head_review import PullRequestHead
 from agent_comms.heartbeat_subjects import HeadSubject, UnitSubject
 from agent_comms.recorded_time import RecordedEventTime
-from agent_comms.standing_rules import IdlePullRequest, OrderRefusingStandingRule, StuckMerge
-from agent_comms.errors import RelationViolationError, ToolRefusedError
+from agent_comms.standing_rules import (
+    IdlePullRequest, OrderlessUnreviewedHead, OrderRefusingStandingRule, StuckMerge,
+)
+from agent_comms.errors import ToolRefusedError
 from agent_comms.tool_caller import ThreadCaller
 from agent_comms.work_branches import SourceGrowth
 from agent_comms.order_tools import CommsHeadVerdictTool
@@ -125,23 +127,24 @@ def test_moved_head_posts_and_records_nothing(head_bus):
     assert not any("statuses/" in call[1] for call in github.calls())
 
 
-def test_ready_orderless_review_refuses_backend_orders_until_a_recorded_decision(head_bus):
+def test_only_a_head_linked_to_the_callers_held_order_refuses_its_orders(head_bus):
+    """2026-10-25: dqdock's orders froze on claude-code's orderless #3311."""
     comms, _, request = head_bus
     todo = comms.goals.todos.get("P2")
-    assert OrderRefusingStandingRule.refusals(comms.goals, "lead")
     action = CreateProblemGoalAction(
         problem="P3", commander="lead", request=todo.request,
         assigner=comms.registry.require("lead").incarnation,
         repo=todo.repo, text="Repair the next owner", order=todo.order.checked(),
         review_at=RecordedEventTime(time.time() + 3600),
     )
-    with pytest.raises(RelationViolationError):
-        comms.goals.update_goal("outsider", action)
-    assert all(current.id != "P3" for current in comms.goals.todos.list(request.repo))
-    invoke(comms, request, RejectedHeadVerdict(REASON))
     assert not OrderRefusingStandingRule.refusals(comms.goals, "lead")
+    assert [rule.request for rule in OrderlessUnreviewedHead.scan_reviews(
+        comms.goals, "lead", ProgressRead(()))] == [request]
     comms.goals.update_goal("outsider", action)
-    assert comms.goals.todos.get("P3").holder == "outsider"
+    held = todo.held()
+    RecordPullRequest(todo.revision, held.owner_identity,
+                      PullRequestLink(request.repo, request.pr), held.generation).record(comms.goals, todo.id)
+    assert OrderRefusingStandingRule.refusals(comms.goals, "lead")
 
 
 def test_linked_head_rejection_strikes_revises_and_notifies_its_holder(head_bus):

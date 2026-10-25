@@ -54,6 +54,13 @@ class InstalledCommitInstallation(CommitInstallation):
 
 
 @dataclass(frozen=True)
+class UninstalledRepositoryCommitInstallation(InstalledCommitInstallation):
+    """A repository the runtime never carries: its merge owes no install."""
+    repository: RepositoryName
+    merged_state = "no runtime install"
+
+
+@dataclass(frozen=True)
 class MissingCommitInstallation(CommitInstallation):
     commit: str
     installed: RecordedBuildIdentity
@@ -128,6 +135,17 @@ class RecordedBuildIdentity(BuildIdentity):
                 f"Repository {repository.github.to_wire()} at {repository.checkout} is not in installed {self}."
             ) from error
 
+    def containing(self, commits: tuple[str, ...], directory: Path) -> CommitInstallation:
+        """The first commit this build lacks, read against the checkout's installed revision."""
+        repository = Repo.of(directory).github
+        return next(
+            (next((MissingCommitInstallation(commit, self) for commit in commits
+                   if not Repo.descends(directory, commit, record.commit)),
+                  InstalledCommitInstallation())
+             for record in self.commits if record.repository == repository),
+            UninstalledRepositoryCommitInstallation(repository),
+        )
+
     def contains(self, commit: str, directory: Path) -> bool:
         """Prove ancestry against this checkout's installed repository, not its current head."""
         recorded = self.for_repository(Repo.of(directory))
@@ -139,11 +157,4 @@ class RecordedBuildIdentity(BuildIdentity):
             raise ProofBuildMismatchError(
                 f"Proof build {self} differs from installed {installed}; run the proof again."
             )
-        return next(
-            (
-                MissingCommitInstallation(commit, installed)
-                for commit in commits
-                if not installed.contains(commit, directory)
-            ),
-            InstalledCommitInstallation(),
-        )
+        return installed.containing(commits, directory)

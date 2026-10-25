@@ -41,6 +41,7 @@ if TYPE_CHECKING:
     from agent_comms.storage_rules import MemoryUse, StorageRule
     from agent_comms.todos import (
         MergeBlock, OrderClaim, OwnerRequest, PresentCheckout, ProgressRead, PullRequest, Todo,
+        UnmergedListedPullRequest,
     )
     from agent_comms.goal_management import Goals
     from agent_comms.ui_model.unit_state import UnitObservation, UnitState
@@ -638,11 +639,16 @@ class DeliveredHeadReview(HolderLine, DatedStandingRule):
 
 
 @dataclass(frozen=True)
-class UnreviewedHead(HeadLine, OrderRefusingStandingRule, DatedStandingRule):
-    """One ready head, including an orderless PR, waiting too long for a recorded verdict."""
+class UnreviewedHead(HeadLine, DatedStandingRule, declared_name=None):
+    """One ready head waiting too long for a recorded verdict."""
     request: PullRequestHead
     due_at: float
     seconds: ClassVar[int] = 10 * 60
+
+    @classmethod
+    def scan_observed(cls, comms: Comms, commander: str,
+                      observed: Sequence[UnitState], frame: HeartbeatFrame) -> tuple[Self, ...]:
+        return cls.scan_reviews(comms.goals, commander, frame.pulls)
 
     @classmethod
     def scan_reviews(cls, goals: Goals, commander: str, pulls: ProgressRead) -> tuple[Self, ...]:
@@ -650,11 +656,16 @@ class UnreviewedHead(HeadLine, OrderRefusingStandingRule, DatedStandingRule):
         return tuple(
             cls(request, due)
             for repo in goals.registry.snapshot().commander_project.repository_names()
-            for row in pulls.open(repo)
+            for row in cls.reviewed(pulls, repo)
             for due in row.review_due(now, cls.seconds)
             for request in (PullRequestHead(repo, row.number, row.head),)
             if not goals.todos.head_reviews(request)
         )
+
+    @classmethod
+    @abstractmethod
+    def reviewed(cls, pulls: ProgressRead,
+                 repo: RepositoryName) -> tuple[UnmergedListedPullRequest, ...]: ...
 
     def began(self) -> float:
         return self.due_at
@@ -662,6 +673,29 @@ class UnreviewedHead(HeadLine, OrderRefusingStandingRule, DatedStandingRule):
     def line(self) -> str:
         return (f"JUDGE {self.request.repo.to_wire()}#{self.request.pr} {self.request.head[:9]}"
                 f" -> judge ok/back --pr {self.request.pr} --head {self.request.head}")
+
+
+@dataclass(frozen=True)
+class LinkedUnreviewedHead(UnreviewedHead, OrderRefusingStandingRule):
+    """A head linked to the caller's held order: the reader is registered with exactly the
+    caller's holds, so another commander's heads never freeze its orders."""
+
+    @classmethod
+    def reviewed(cls, pulls: ProgressRead,
+                 repo: RepositoryName) -> tuple[UnmergedListedPullRequest, ...]:
+        linked = pulls.linked(repo)
+        return tuple(row for row in pulls.open(repo) if row.number in linked)
+
+
+@dataclass(frozen=True)
+class OrderlessUnreviewedHead(UnreviewedHead):
+    """A head no held order links: a board line that refuses nobody's orders."""
+
+    @classmethod
+    def reviewed(cls, pulls: ProgressRead,
+                 repo: RepositoryName) -> tuple[UnmergedListedPullRequest, ...]:
+        linked = pulls.linked(repo)
+        return tuple(row for row in pulls.open(repo) if row.number not in linked)
 
 
 @dataclass(frozen=True)

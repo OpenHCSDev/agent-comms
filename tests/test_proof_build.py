@@ -148,7 +148,8 @@ def test_merge_in_head_cannot_close_until_the_recorded_build_contains_it(
     )
     with pytest.raises(DeliveredCommitNotInstalledError):
         merged.require_installation()
-    assert merged.line.startswith("Merged, waiting on install")
+    assert merged.installed_line(RecordedBuildIdentity.installed()).startswith(
+        "Merged, waiting on install")
     observed = run.after_merge(todo, merged)
     assert observed == todo  # Waiting again does not manufacture a revision.
     assert observed.state is OpenTodoState
@@ -168,7 +169,8 @@ def test_merge_in_head_cannot_close_until_the_recorded_build_contains_it(
     accepted = run.after_merge(todo, merged)
     assert accepted.state is after_install
     # P553: bf328ceb5 sat in the installed build under "Merged, waiting on install".
-    assert merged.line.startswith("Merged, installed")
+    assert merged.installed_line(RecordedBuildIdentity.installed()).startswith(
+        "Merged, installed")
     assert merged.waiting_on_install(todo, {}) == (todo,)
     ThreadCaller("lead").invoke(CommsProblemCloseTool(
         problem=todo.id, works=works, artifact=str(artifact),
