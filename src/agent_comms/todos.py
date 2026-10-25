@@ -80,6 +80,7 @@ from agent_comms.field_codec import (
 from agent_comms.goals import CheckedCommit, OrderCheck, ProblemGoalOrder
 from agent_comms.repo import GitCommandError
 from agent_comms.head_review import PullRequestHead
+from agent_comms.launch_runtime import LaunchRuntime
 from agent_comms.lifecycle_capability import LifecycleCapability, Pending
 from agent_comms.message_reference import MessageReference
 from agent_comms.messages import InfoKind, Message
@@ -2538,7 +2539,8 @@ class PendingProblemOrder(Pending, DeliverableProblemOrder):
         replacement = '\nThis replaces my earlier order on it; drop that one.' if replacing else ''
         storage = context.comms.registry.storage_rule.order_text(
             context.comms.registry.require(unit),
-            [f'{repo.checkout}/.venv/bin/python' for repo in context.repos])
+            [str(LaunchRuntime.at_prefix(repo.checkout / '.venv').interpreter)
+             for repo in context.repos])
         return (instructions + replacement + reassign.note() + '\n' + storage
                 + '\nIf two lines of this order conflict, take the narrower reading, '
                 'say which one you took, and proceed; do not stop to ask.'

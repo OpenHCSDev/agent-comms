@@ -36,7 +36,7 @@ from .coordination_tables.participants import Participants
 from .coordinator import Coordination
 from .errors import RelationViolationError
 from .field_codec import RootId, ThreadLookup
-from .locked_store import DurableFile, WireWakeFile
+from .locked_store import RollbackRetained, WireWakeFile
 from .native_input_owner import RegistryOwner
 from .native_runtime_input import NativeRuntimeInput, NativeRuntimeTable
 from .private_nk_entrypoint import (
@@ -252,7 +252,7 @@ class PublicRegistry(RegistryPrivacy):
         raise error
 
 
-class PrivateRegistryGuard(DurableFile, WireWakeFile, RegistryPrivacy):
+class PrivateRegistryGuard(RollbackRetained, WireWakeFile, RegistryPrivacy):
 
 
     filename = ".registry-owner-guard"
