@@ -154,8 +154,8 @@ def test_a_private_home_cannot_change_the_users_units(reachable_manager, tmp_pat
 def test_a_private_home_does_not_discover_or_reload_the_real_user_service(
         reachable_manager, tmp_path, monkeypatch):
     monkeypatch.setenv("HOME", str(tmp_path))
-    CodexInboxService.install(home=tmp_path)
-    SystemdConnectorService.install(home=tmp_path)
+    ResidentManager.current().install(CodexInboxService, home=tmp_path)
+    ResidentManager.current().install(SystemdConnectorService, home=tmp_path)
     (tmp_path / ".config/systemd/user/default.target.wants").mkdir()
     (tmp_path / ".config/systemd/user/default.target.wants" / SystemdConnectorService.unit).touch()
     HostService.start_enabled()
@@ -190,7 +190,7 @@ def test_codex_inbox_template_publication_reloads_each_rewrite(tmp_path, monkeyp
     assert "NotifyAccess=main" not in loaded[0]
 
     runtime = tmp_path / "new-runtime"
-    CodexInboxService.install(home=home)
+    ResidentManager.current().install(CodexInboxService, home=home)
     assert len(loaded) == 2
     assert str(runtime / "bin/agent-comms-codex-bridge") in loaded[1]
     assert "old-runtime" not in loaded[1]
