@@ -658,6 +658,36 @@ class PullRequestCommit:
 
 
 @dataclass(frozen=True)
+class MergeBlock(DeclaredFamily, affix="MergeBlock"):
+    """Why GitHub will not merge a head, decoded once from the forge row."""
+    at: str
+
+    @cached_property
+    def since(self) -> float:
+        return _github_time(self.at)
+
+    @abstractmethod
+    def what(self) -> str: ...
+
+
+@dataclass(frozen=True)
+class FailedCheckMergeBlock(MergeBlock):
+    """A required check concluded red on the head."""
+    name: str
+
+    def what(self) -> str:
+        return f"required check {self.name} failed"
+
+
+@dataclass(frozen=True)
+class ConflictMergeBlock(MergeBlock):
+    """The head conflicts with its base; no check can turn it green."""
+
+    def what(self) -> str:
+        return "conflicts with its base"
+
+
+@dataclass(frozen=True)
 class ListedPullRequest(DeclaredFamily, affix="ListedPullRequest"):
     """The external query row; conversion lives here, never in its consumers."""
     number: int
@@ -667,9 +697,15 @@ class ListedPullRequest(DeclaredFamily, affix="ListedPullRequest"):
     base: str
     reviewable_times: tuple[str, ...] = field(kw_only=True)
     status_contexts: tuple[str, ...] = field(default=(), kw_only=True)
+    armed_times: tuple[str, ...] = field(default=(), kw_only=True)
+    merge_blocks: tuple[MergeBlock, ...] = field(default=(), kw_only=True)
 
     def as_unmerged(self) -> tuple[UnmergedListedPullRequest, ...]:
         return ()
+
+    def stuck(self) -> tuple[MergeBlock, ...]:
+        """Blocks on a head whose auto-merge is armed: queued, and going nowhere."""
+        return tuple(block for _ in self.armed_times for block in self.merge_blocks)
 
     def as_merged(self) -> tuple[MergedListedPullRequest, ...]:
         return ()
@@ -827,7 +863,12 @@ class PullRequests:
             'merged: mergedAt updated: updatedAt created: createdAt '
             'ready_events: timelineItems(itemTypes: [READY_FOR_REVIEW_EVENT], last: 1) '
             '{ nodes { ... on ReadyForReviewEvent { createdAt } } } '
-            'head_statuses: commits(last: 1) { nodes { commit { committedDate status { contexts { context } } } } } }'
+            'auto: autoMergeRequest { enabledAt } merge_state: mergeStateStatus '
+            'head_statuses: commits(last: 1) { nodes { commit { committedDate status { contexts { context } } '
+            'statusCheckRollup { contexts(first: 100) { nodes { '
+            f'... on CheckRun {{ name conclusion completedAt isRequired(pullRequestNumber: {number}) }} '
+            f'... on StatusContext {{ context state createdAt isRequired(pullRequestNumber: {number}) }} '
+            '} } } } } } }'
             for number in numbers]
         query = (f'query {{ repository(owner: {json.dumps(repo.owner)}, '
                  f'name: {json.dumps(repo.name)}) {{ {" ".join(selections)} }} }}')
@@ -842,8 +883,17 @@ class PullRequests:
             f'. + {{kind: "{MergedListedPullRequest.declared_name}"}} end) '
             '| . + {status_contexts: [.head_statuses.nodes[].commit.status.contexts[]?.context], '
             'reviewable_times: [.created, .head_statuses.nodes[].commit.committedDate, '
-            '.ready_events.nodes[].createdAt]} '
-            '| del(.draft,.closed,.created,.head_statuses,.ready_events))')
+            '.ready_events.nodes[].createdAt], '
+            'armed_times: [.auto.enabledAt? // empty], '
+            'merge_blocks: ([.head_statuses.nodes[].commit.statusCheckRollup.contexts.nodes[]? '
+            '| select(.isRequired) | select((.conclusion // .state) as $c '
+            '| ["FAILURE","TIMED_OUT","CANCELLED","ACTION_REQUIRED","STARTUP_FAILURE","ERROR"] '
+            '| index($c)) '
+            f'| {{kind: "{FailedCheckMergeBlock.declared_name}", name: (.name // .context), '
+            'at: (.completedAt // .createdAt)}] '
+            f'+ [select(.merge_state == "DIRTY") | {{kind: "{ConflictMergeBlock.declared_name}", '
+            'at: .updated}])} '
+            '| del(.draft,.closed,.created,.head_statuses,.ready_events,.auto,.merge_state))')
         if listed.returncode:
             raise WorkBranchError(
                 listed.stderr.strip() or f"GitHub order lookup in {repo.to_wire()} failed.")
