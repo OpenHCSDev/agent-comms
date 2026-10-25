@@ -208,6 +208,7 @@ class ThreadStatusDisplay:
 
 
 def empty_notification_read() -> NotificationAssignmentRead:
+    # Notification progress imports this module's status family.
     from .notification_assignment import NotificationAssignmentRead
 
     return NotificationAssignmentRead.empty()

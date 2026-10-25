@@ -274,7 +274,7 @@ class MessageNotification:
 
     @classmethod
     def recorded_delivery_window(cls, root: Path, namespace: RegistryProvenance,
-                                 sources: Sequence[Delivered]):
+                                 sources: Sequence[Delivered]) -> NotificationWindow:
         from .notification_assignment import NotificationAssignment
 
         observations = {

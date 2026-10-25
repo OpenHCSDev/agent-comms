@@ -70,8 +70,9 @@ def test_assignment_row_changes_attribute_only_their_view_without_projection(
     from agent_comms.coordinator import Coordination
     from agent_comms.presentation import MessageNotification
     from agent_comms.threads import Thread
+    from agent_comms.ui_model.observation import NotificationsRead, ReadNotifications
 
-    root, root_id, comms, _initial, _people = _root(private_directory, direct=True)
+    root, root_id, comms, initial, _people = _root(private_directory, direct=True)
     for name in ('gamma', 'outside'):
         comms.registry.declare(Thread(name, frozenset(), str(private_directory)))
     for name in ('alpha', 'gamma', 'outside'):
@@ -85,6 +86,8 @@ def test_assignment_row_changes_attribute_only_their_view_without_projection(
     revision = comms.views.revision()
     activity = comms.views.observed_activity(revision, names)
     previous = ThreadsObserved(revision, results, names, activity)
+    notification_window = ReadNotifications(root_id, (initial.message.reference,)).read(comms)
+    notification_read = NotificationsRead.of(revision, comms, activity, notification_window)
     with Coordination(str(root / 'coordination.sqlite3')) as store:
         assignment, = sealed_cohort_assignments(
             store, comms.registry.require(changed_name).incarnation.lookup,
@@ -106,7 +109,9 @@ def test_assignment_row_changes_attribute_only_their_view_without_projection(
     sys.setprofile(count_projection)
     try:
         changed = later.changed_threads(previous, comms, activity)
+        notification_changed = notification_read.live_changed(comms, later)
     finally:
         sys.setprofile(profiling)
     assert changed == expected
+    assert notification_changed == bool(expected)
     assert calls == 0
