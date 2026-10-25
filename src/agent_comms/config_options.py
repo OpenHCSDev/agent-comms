@@ -43,8 +43,13 @@ class InvalidConfigChoice(ValueError):
 class CatalogSelection(ABC):
     """A draft or running selection owns the project its catalog is discovered in."""
 
-    model: ThreadModel
-    thinking_level: type[ThinkingChoice]
+    @property
+    @abstractmethod
+    def model(self) -> ThreadModel: ...
+
+    @property
+    @abstractmethod
+    def thinking_level(self) -> type[ThinkingChoice]: ...
 
     @abstractmethod
     def project_directory(self) -> Path: ...
