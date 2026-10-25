@@ -308,9 +308,10 @@ class InstallRun:
     phases: list[LaunchedPhaseTiming] = field(default_factory=list)
 
     @classmethod
-    def start(cls, command: InstallCliCommand, root: Path) -> InstallRun:
+    def start(cls, command: InstallCliCommand, root: Path,
+              launcher: LauncherPhase) -> InstallRun:
         checkout = command.checkout
-        with InstallCommands() as commands, LauncherPhase().running(commands.clock):
+        with InstallCommands() as commands, launcher.running(commands.clock):
             commands.git(checkout, "fetch", "-q", "origin")
             target = commands.git(checkout, "rev-parse", "--verify",
                                   f"{command.to}^{{commit}}").strip()
