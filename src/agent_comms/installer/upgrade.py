@@ -1237,9 +1237,8 @@ class ChangedInstall(ExistingBusInstall[RehearsedFiles]):
 
     def live(self, rehearsal: RehearsedFiles, report: InstallReport) -> CarriedRun:
         expected = frozenset(rehearsal.files.names) | frozenset(rehearsal.inputs)
-        selected = tuple(owner.source_path(self.root, self.root, resource.path)
-                         for resource, owner in RootFile.named_files(
-                             self.root, expected, self.root).items())
+        selected = tuple(resource.live(self.root)
+                         for resource in RootFile.named_files(self.root, expected, self.root))
         with RestoreSpaceBackupPhase().running(self.staged.commands.clock):
             restore = RestoreSpace.measure(max(
                 rehearsal.files.restore_bytes,

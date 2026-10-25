@@ -103,7 +103,7 @@ class PracticeCopy:
     @property
     def copied_names(self) -> tuple[Path, ...]:
         return tuple(sorted(resource.owner.relocated(
-            resource.owner.source_path(self.root, self.root, resource.path), resource.path, source,
+            resource.live(self.root), resource.path, source,
         ) for source, resource in self.copied.items()))
 
     def include(self, paths: tuple[Path, ...]) -> None:
@@ -112,13 +112,13 @@ class PracticeCopy:
         if shutil.disk_usage(self.path.parent).free < floor:
             raise UpgradeRefused("Insufficient free space before building the practice copy")
         witnesses = set(MaintenanceBarrier(RegistryFile.path_in(self.root)).witness_paths)
-        for resource, owner in RootFile.owned_files(self.root, paths, self.root).items():
-            source = owner.source_path(self.root, self.root, resource.path)
+        for resource in RootFile.owned_files(self.root, paths, self.root):
+            source = resource.live(self.root)
             if source in self.copied or source in witnesses or not source.exists():
                 continue
             target = self.path / resource.path
             target.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
-            self.copied.update((member, resource) for member in owner.copy_group(source, target))
+            self.copied.update((member, resource) for member in resource.owner.copy_group(source, target))
 
     def retain(self, paths: tuple[Path, ...]) -> None:
         """Discard inputs used only to establish that an earlier carry was finished."""
@@ -126,7 +126,7 @@ class PracticeCopy:
         discarded = tuple(source for source, resource in self.copied.items() if resource not in selected)
         for source in discarded:
             resource = self.copied[source]
-            primary = resource.owner.source_path(self.root, self.root, resource.path)
+            primary = resource.live(self.root)
             (self.path / resource.owner.relocated(primary, resource.path, source)).unlink(missing_ok=True)
             del self.copied[source]
 

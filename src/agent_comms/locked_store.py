@@ -13,7 +13,7 @@ from abc import ABC, abstractmethod
 from collections import defaultdict
 from collections.abc import Callable, Collection, Iterator, Mapping
 from contextlib import closing, contextmanager
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from functools import cache
 from importlib import import_module
 from pathlib import Path
@@ -316,14 +316,14 @@ class RootFile:
 
     @classmethod
     def referenced_files(cls, root: Path, original_root: Path, path: Path
-                         ) -> dict[DeclaredFile | UndeclaredFile, type[RootFile]]:
+                         ) -> tuple[DeclaredFile | UndeclaredFile, ...]:
         if path.is_absolute():
             return cls.owned_files(root, (path,), original_root)
         return cls.named_files(root, (path,), original_root)
 
     @classmethod
     def named_files(cls, root: Path, names: Collection[Path], original_root: Path
-                    ) -> dict[DeclaredFile | UndeclaredFile, type[RootFile]]:
+                    ) -> tuple[DeclaredFile | UndeclaredFile, ...]:
         declarations = cls.installation_declarations(root, original_root)
         known = {owner.retained_name(root, path): path for path, owner in declarations.items()}
         for name in names:
@@ -337,7 +337,7 @@ class RootFile:
     @classmethod
     def owned_files(
         cls, root: Path, paths: Collection[Path], original_root: Path,
-    ) -> dict[DeclaredFile | UndeclaredFile, type[RootFile]]:
+    ) -> tuple[DeclaredFile | UndeclaredFile, ...]:
         """Resolve primaries once; companions belong to their primary's declaration.
 
         Missing selected files still identify an absent resource to restore. An
@@ -362,7 +362,7 @@ class RootFile:
                           if member != path)
         # A lock is never content, even after a carry deletes the store it locked.
         companions.update(path for path in selected if is_store_lock(path))
-        resources = {}
+        resources: list[DeclaredFile | UndeclaredFile] = []
         names: set[Path] = set()
         for path, owner in owners.items():
             if path in companions:
@@ -377,8 +377,8 @@ class RootFile:
             if name in names:
                 raise RelationViolationError(f"Installation file names collide: {name}")
             names.add(name)
-            resources[resource] = owner
-        return resources
+            resources.append(resource)
+        return tuple(resources)
 
     @classmethod
     def paths_in(cls, root: Path) -> frozenset[Path]:
@@ -473,8 +473,21 @@ class JsonDocument(RootFile, ABC, Generic[T]):
 
 
 
+class FileResource(RootFile):
+    """A retained resource owns its declaration and resolves its own location."""
+
+    owner: type[RootFile]
+    path: Path
+
+    def located(self, root: Path, original_root: Path) -> Path:
+        return self.owner.source_path(root, original_root, self.path)
+
+    def live(self, root: Path) -> Path:
+        return self.located(root, root)
+
+
 @dataclass(frozen=True)
-class DeclaredFile(RootFile):
+class DeclaredFile(FileResource):
     """A declared store and one retained file path identify a resource."""
 
     owner: type[RootFile]
@@ -483,10 +496,10 @@ class DeclaredFile(RootFile):
 
 
 @dataclass(frozen=True)
-class UndeclaredFile(RootFile):
+class UndeclaredFile(FileResource):
     """A physical file without a stored declaration, still identified by its path."""
 
-    owner: ClassVar[type[RootFile]] = RootFile
+    owner: type[RootFile] = field(default=RootFile, init=False)
     path: Path
     declared: ClassVar[bool] = False
     """No declaration answers whether its writers take a lock, so a lock beside it is unknown."""

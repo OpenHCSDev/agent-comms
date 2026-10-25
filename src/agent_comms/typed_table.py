@@ -1617,8 +1617,42 @@ class DeclaredSchemaFacts:
         return frozenset(cls.schema_objects())
 
 
+class StoredRowDecoding(TypedRow):
+    """Stream a table's stored records through its decoder with diagnostic identities."""
+
+    declared_name: ClassVar[str]
+    row_reference_label: ClassVar[str] = "rowid"
+
+    @classmethod
+    def row_reference(cls) -> str:
+        """The stored row's diagnostic identity, independent of its decoded value."""
+        return cls.row_reference_label
+
+    @classmethod
+    @abstractmethod
+    def _select_list(cls, table: type[StoredRowDecoding]) -> str:
+        """Each stored-row declaration supplies its SQL projection."""
+
+    @classmethod
+    def require_decodable_rows(cls, db: sqlite3.Connection) -> None:
+        """Decode every row without keeping history-sized results in memory."""
+        with closing(db.execute(
+            f'SELECT {cls.row_reference()} AS "__stored_reference", '
+            f'{cls._select_list(cls)} FROM {_identifier(cls.declared_name)}'
+        )) as cursor:
+            positions = cls._positions(cursor, {"stored_reference": "__stored_reference"})
+            for stored in cursor:
+                try:
+                    cls._decode_row(stored, positions)
+                except (ValueError, TypeError) as error:
+                    raise RelationViolationError(
+                        f"{cls.declared_name} {cls.row_reference_label} {stored[0]} "
+                        f"cannot decode: {error}"
+                    ) from error
+
+
 class TypedTable(
-    FrozenColumns, TypedRow, DeclaredFamily, DeclaredSchemaFacts,
+    FrozenColumns, StoredRowDecoding, DeclaredFamily, DeclaredSchemaFacts,
     affix="Row", discovery_package="agent_comms",
 ):
     """The row declaration owns its table; no separate table/schema registry.
@@ -1637,30 +1671,6 @@ class TypedTable(
     renamed_from: ClassVar[tuple[str, ...]] = ()
     """Table names this row's rows were stored under before; the writer renames the one it
     finds, so a renamed declaration needs no hand-written step."""
-
-    row_reference_label: ClassVar[str] = "rowid"
-
-    @classmethod
-    def row_reference(cls) -> str:
-        """The stored row's diagnostic identity, independent of its decoded value."""
-        return cls.row_reference_label
-
-    @classmethod
-    def require_decodable_rows(cls, db: sqlite3.Connection) -> None:
-        """Decode every row without keeping history-sized results in memory."""
-        with closing(db.execute(
-            f'SELECT {cls.row_reference()} AS "__stored_reference", '
-            f'{cls._select_list(cls)} FROM {_identifier(cls.declared_name)}'
-        )) as cursor:
-            positions = cls._positions(cursor, {"stored_reference": "__stored_reference"})
-            for stored in cursor:
-                try:
-                    cls._decode_row(stored, positions)
-                except (ValueError, TypeError) as error:
-                    raise RelationViolationError(
-                        f"{cls.declared_name} {cls.row_reference_label} {stored[0]} "
-                        f"cannot decode: {error}"
-                    ) from error
 
     @classmethod
     def _member_declarations(cls) -> tuple[type[DeclaredFamily], ...]:
@@ -1697,7 +1707,7 @@ class TypedTable(
         return ", ".join(_identifier(item.wire_name) for item in cls._fields_named(names))
 
     @classmethod
-    def _select_list(cls, table: type[TypedTable]) -> str:
+    def _select_list(cls, table: type[StoredRowDecoding]) -> str:
         return cls._column_list(tuple(cls.column_projection()))
 
     @classmethod

@@ -42,10 +42,10 @@ class Carried:
     def for_step(self, step: Carry) -> Carried:
         resources = tuple(item for path in self.rewritten
                           for item in RootFile.referenced_files(
-                              step.root, step.original_root, path).items())
-        for resource, owner in resources:
-            step.require_confined(owner.source_path(step.root, step.original_root, resource.path))
-        return replace(self, rewritten=tuple(resource.path for resource, owner in resources))
+                              step.root, step.original_root, path))
+        for resource in resources:
+            step.require_confined(resource.located(step.root, step.original_root))
+        return replace(self, rewritten=tuple(resource.path for resource in resources))
 
     def __post_init__(self) -> None:
         for path in self.rewritten:
