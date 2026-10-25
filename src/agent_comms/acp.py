@@ -365,7 +365,7 @@ class CommsAgent(SessionEffects, InputEffects, TurnEffects):
                 request=command,
                 images=images,
             )
-        async with self.turns.turn_locks.setdefault(session_id, asyncio.Lock()):
+        async with self.inputs.ensure_live_drain(session_id).turn_lock:
             # A direct ACP prompt owns this one controller. Owner-socket prompts
             # already carry a private subscriber binding (including None when
             # absent); never fall back to a passive ACP client in that case.

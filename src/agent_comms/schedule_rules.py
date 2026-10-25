@@ -1,6 +1,5 @@
 """Independent owner-local scheduling barriers, using the shared rule family."""
 
-import asyncio
 from abc import abstractmethod
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -110,7 +109,7 @@ class WakeScheduleCheck(SchedulesWake, BackgroundWake, SessionScheduleCheck):
         while inputs.state(session_id).pending_turns:
             if ClosingScheduleRule().violated(self):
                 return WakeDue()
-            async with inputs.effects.turns.turn_locks.setdefault(session_id, asyncio.Lock()):
+            async with inputs.ensure_live_drain(session_id).turn_lock:
                 # The bus may accept a channel post while an operator drains the
                 # fleet. Keep its existing queued origin; do not start a native
                 # turn or consume it until this root's typed phase is READY.
@@ -133,7 +132,7 @@ class WakeScheduleCheck(SchedulesWake, BackgroundWake, SessionScheduleCheck):
                 pending, remaining = ScheduledTurn.take_batch(pending)
                 if remaining:
                     state.pending_turns = remaining
-                with inputs.effects.turns.own_turn_task(session_id):
+                async with inputs.state(session_id).own_turn_task():
                     await inputs.effects.turns.run_agent_turn(
                         session_id,
                         inputs.sessions.require(session_id),
@@ -215,7 +214,7 @@ class OccupiedOwnerTurnRule(ReservationRule):
     explanation = "The session still owns a running turn."
 
     def violated(self, check):
-        return check.session_id in check.turns.turn_tasks
+        return check.turns.inputs.state(check.session_id).turn_task.busy
 
 
 class NativeInboxOwnerTurnRule(ReservationRule):

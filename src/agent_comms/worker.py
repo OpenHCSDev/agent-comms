@@ -58,8 +58,8 @@ async def run_owner(comms: Comms) -> None:
 
 async def run_startup_input(agent: CommsAgent, name: str, key: InputKey) -> None:
     """Consume this launch's explicitly authorized input, never scan for retries."""
-    async with agent.turns.turn_locks.setdefault(name, asyncio.Lock()):
-        with agent.turns.own_turn_task(name):
+    async with agent.inputs.ensure_live_drain(name).turn_lock:
+        async with agent.inputs.state(name).own_turn_task():
             def capture():
                 snapshot = agent._comms.registry.snapshot()
                 owner = snapshot.threads[name]

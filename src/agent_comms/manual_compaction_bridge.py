@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import asyncio
 from contextlib import AsyncExitStack
 from functools import partial
 from typing import TYPE_CHECKING
@@ -71,7 +70,7 @@ async def compact_context(
     if instructions is not None and not isinstance(instructions, str):
         return FailedCompaction("Compaction instructions are invalid.")
     thread_name = await runner.sessions.sync_identity(session_id)
-    lock = runner.turn_locks.setdefault(session_id, asyncio.Lock())
+    lock = runner.inputs.ensure_live_drain(session_id).turn_lock
     if lock.locked() or await Coordination.run_worker(partial(runner.session_busy, session_id)):
         return FailedCompaction("Wait for the current response before compacting.")
     async with lock:
@@ -85,7 +84,7 @@ async def compact_context(
 
 async def _compact_started(runner, session_id, thread_name, instructions):
     async with AsyncExitStack() as resources:
-        resources.enter_context(runner.own_turn_task(session_id))
+        await resources.enter_async_context(runner.inputs.state(session_id).own_turn_task())
         owner = await Coordination.run_worker(partial(
             runner.acquire_turn, resources, session_id, thread_name,
             TurnId.mint(), "Compacting context",
