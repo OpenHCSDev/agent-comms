@@ -571,9 +571,9 @@ Layers in order: `wire`, `registry`, `coordination`, `context`, `turns`, `runtim
 | `src/agent_comms/cli.py:20` | `agent_comms.launch_root` | cli | commander |
 | `src/agent_comms/cli_bridges/claude.py:12` | `agent_comms.bus` | runtime | commander |
 | `src/agent_comms/cli_bridges/claude.py:16` | `agent_comms.watched` | runtime | commander |
-| `src/agent_comms/cli_bridges/claude_protocol.py:18` | `agent_comms.cli_protocol` | runtime | cli |
-| `src/agent_comms/cli_bridges/claude_protocol.py:39` | `agent_comms.tool_calls` | runtime | cli |
-| `src/agent_comms/cli_bridges/claude_protocol.py:40` | `agent_comms.transcript_events` | runtime | commander |
+| `src/agent_comms/cli_bridges/claude_protocol.py:19` | `agent_comms.cli_protocol` | runtime | cli |
+| `src/agent_comms/cli_bridges/claude_protocol.py:43` | `agent_comms.tool_calls` | runtime | cli |
+| `src/agent_comms/cli_bridges/claude_protocol.py:44` | `agent_comms.transcript_events` | runtime | commander |
 | `src/agent_comms/cli_bridges/codex.py:17` | `agent_comms.child_process` | runtime | commander |
 | `src/agent_comms/cli_bridges/codex.py:18` | `agent_comms.messages` | runtime | commander |
 | `src/agent_comms/cli_bridges/codex.py:19` | `agent_comms.send_result` | runtime | commander |
@@ -1088,7 +1088,7 @@ Layers in order: `wire`, `registry`, `coordination`, `context`, `turns`, `runtim
 | `src/agent_comms/owner_restart.py:238` | `agent_comms.attempt_recovery` | registry | coordination |
 | `src/agent_comms/pi_commands.py:52` | `agent_comms.backend` | runtime | commander |
 | `src/agent_comms/pi_commands.py:262` | `agent_comms.child_process` | runtime | commander |
-| `src/agent_comms/pi_counts.py:22` | `agent_comms.backend` | runtime | commander |
+| `src/agent_comms/pi_counts.py:24` | `agent_comms.backend` | runtime | commander |
 | `src/agent_comms/pi_durable_backend.py:24` | `agent_comms.locked_store` | runtime | commander |
 | `src/agent_comms/pi_durable_backend.py:25` | `agent_comms.external_transcript` | runtime | commander |
 | `src/agent_comms/pi_durable_backend.py:39` | `agent_comms.transcript_sources` | runtime | commander |
@@ -1298,9 +1298,9 @@ Layers in order: `wire`, `registry`, `coordination`, `context`, `turns`, `runtim
 | `src/agent_comms/runtime_updates.py:17` | `agent_comms.cli_protocol` | runtime | cli |
 | `src/agent_comms/runtime_updates.py:18` | `agent_comms.external_transcript` | runtime | commander |
 | `src/agent_comms/runtime_updates.py:20` | `agent_comms.transcript_events` | runtime | commander |
-| `src/agent_comms/runtime_updates.py:32` | `agent_comms.importing` | runtime | commander |
-| `src/agent_comms/runtime_updates.py:33` | `agent_comms.comms` | runtime | commander |
-| `src/agent_comms/runtime_updates.py:34` | `agent_comms.messaging` | runtime | commander |
+| `src/agent_comms/runtime_updates.py:33` | `agent_comms.importing` | runtime | commander |
+| `src/agent_comms/runtime_updates.py:34` | `agent_comms.comms` | runtime | commander |
+| `src/agent_comms/runtime_updates.py:35` | `agent_comms.messaging` | runtime | commander |
 | `src/agent_comms/schema_report.py:9` | `agent_comms.cli_result` | commander | cli |
 | `src/agent_comms/selected_actions.py:11` | `agent_comms.envelope_claim_transitions` | turns | commander |
 | `src/agent_comms/selected_actions.py:13` | `agent_comms.native_tool_call` | turns | runtime |
