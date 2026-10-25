@@ -1928,6 +1928,13 @@ class CheckedProblemOrder(ProblemOrder, declared_name=None):
     def linked_requests(self) -> tuple[PullRequestLink, ...]:
         return (*self.pull_requests, *(claim.pull_request for claim in self.commander_claims()))
 
+    def require_linkable(self) -> None:
+        """An order still taking work accepts another pull request."""
+
+    def linked_to(self, link: PullRequestLink) -> Self:
+        self.require_linkable()
+        return replace(self, pull_requests=(*self.pull_requests, link))
+
     @property
     def installation_commits(self) -> tuple[str, ...]:
         return ()
@@ -2125,6 +2132,7 @@ class CheckedProblemOrder(ProblemOrder, declared_name=None):
                           store: TodoStore, actor: ThreadIncarnation) -> str:
         """Create once; record the returned identity on this order, not in its prose."""
         todo.require_actor(actor, todo.held().generation)
+        self.require_linkable()
         created = subprocess.run(
             ("gh", "pr", "create", "--draft", "-R", todo.repo.to_wire(),
              "--title", title, "--body-file", "-"),
@@ -2219,6 +2227,10 @@ class MergedProblemOrder(AwaitingInstallationProblemOrder):
 
     def closed_in(self, todo: Todo) -> Todo:
         return DoneTodoState.closed(todo, self)
+
+    def require_linkable(self) -> None:
+        raise TodoError(f"Order {self.id} merged as {self.sha[:9]}; its pull requests are closed. "
+                         "Ask the commander for a send-back before opening or linking another PR.")
 
     def waiting_in(self, todo: Todo) -> Todo:
         return (todo if todo.order == self
@@ -3835,8 +3847,7 @@ class RecordPullRequest(TodoCommand):
         order = current.order.checked()
         if self.link in order.pull_requests:
             return current
-        return replace(current, revision=current.revision + 1,
-                       order=replace(order, pull_requests=(*order.pull_requests, self.link)))
+        return replace(current, revision=current.revision + 1, order=order.linked_to(self.link))
 
 
 @dataclass(frozen=True)
