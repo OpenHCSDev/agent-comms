@@ -217,6 +217,12 @@ class TurnInputSource(StartedInput, ABC):
 
 
 class InputDependency(ABC):
+    def authorizes(self, wait: GoalWait, owner_input: bool) -> bool:
+        return self.current(wait)
+
+    def original_type(self) -> type[OriginalTurnInput]:
+        return DependencyOriginalInput
+
     @abstractmethod
     def current(self, wait: GoalWait) -> bool: ...
 
@@ -229,6 +235,12 @@ class InputDependency(ABC):
 
 
 class NoInputDependency(InputDependency):
+    def authorizes(self, wait: GoalWait, owner_input: bool) -> bool:
+        return owner_input or wait.allows_routed_input()
+
+    def original_type(self) -> type[OriginalTurnInput]:
+        return RoutedOriginalInput
+
     def current(self, wait: GoalWait) -> bool:
         return True
 

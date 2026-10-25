@@ -19,7 +19,7 @@ from agent_comms.goals import Goal
 from agent_comms.thread_identity import RecordedThreadIncarnation, TurnIdentity
 from agent_comms.turn_lease import FinishedTurn, StoredTurnRecord, TurnLeaseFence
 from agent_comms.threads import Thread
-from agent_comms.attempt_resolution import FailedTurnResolution
+from agent_comms.turn_failure import FailedTurnResolution
 
 
 @pytest.fixture

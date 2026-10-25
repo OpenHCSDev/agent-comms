@@ -22,6 +22,7 @@ from typing import (
     Annotated,
     ClassVar,
     Literal,
+    Never,
     Protocol,
     Self,
     TypeGuard,
@@ -1360,12 +1361,24 @@ class PresentMember:
     def present(self) -> tuple[Self]:
         return (self,)
 
+    def require_present(self) -> Self:
+        return self
+
+    def require_absent(self) -> None:
+        raise ValueError("A value was supplied where absence is required.")
+
 
 class NullMember(ExternalField, AcceptsNull, WireValue):
     """One declared empty member owns the JSON null representation."""
 
     def present(self) -> tuple[()]:
         return ()
+
+    def require_present(self) -> Never:
+        raise ValueError("A required value is absent.")
+
+    def require_absent(self) -> None:
+        pass
 
     @classmethod
     def wire_structure(cls, structural: DecoderPlan) -> DecoderPlan:
@@ -1635,7 +1648,7 @@ class SpelledText(TextRepresentation[str], ValidatedScalar):
         return {"type": "string", "pattern": cls.anchored()}
 
 
-class NominalText(str):
+class NominalText(PresentMember, str):
     """Text whose declared class carries its identity."""
 
     __slots__ = ()
@@ -1831,6 +1844,11 @@ class GoalWaitId(Id128):
 
 class AttemptId(Id128):
     """One reserved execution attempt of a goal generation."""
+
+
+@dataclass(frozen=True)
+class NoAttemptId(NullMember):
+    """A ready goal generation has not reserved an attempt."""
 
 
 class AttemptToken(Id128):

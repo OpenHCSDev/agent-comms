@@ -17,7 +17,7 @@ from pathlib import Path
 import pytest
 
 from agent_comms import native_package
-from agent_comms.attempt_resolution import FailedTurnResolution
+from agent_comms.turn_failure import FailedTurnResolution
 from agent_comms.child_process import ObservedProcess, SpawnedProcess
 from agent_comms.comms import wire
 from agent_comms.config_options import ThinkingLevelConfigOption

@@ -37,6 +37,7 @@ from .field_codec import (
     FieldCodec,
     GoalId,
     MalformedRecord,
+    NoAttemptId,
 )
 from .goal_attempt_identity import FailureNotObserved, GoalAttemptIdentity
 from .goal_attempt_phase import (
@@ -74,6 +75,7 @@ from .attempt_resolution import (
     AttemptResolution,
     DecidedResolution,
     GoalCleared,
+    NoResolution,
     OperatorStopped,
     OriginFailed,
     UnverifiedLaunchRetired,
@@ -121,7 +123,7 @@ class Generation(GoalLedgerTable, TypedTable):
     goal_id: Annotated[GoalId, Column(primary_key=True)]
     number: Annotated[int, Column(check="number>0")]
     lifecycle: GenerationState
-    attempt_id: AttemptId | None
+    attempt_id: AttemptId | NoAttemptId
     ready_digest: str = field(default="", compare=False, repr=False)
     checks = (
         f"(json_extract(lifecycle,'$.kind')='{ReadyGeneration.declared_name}' "
@@ -133,8 +135,7 @@ class Generation(GoalLedgerTable, TypedTable):
 
     @property
     def attempt_identity(self) -> GoalAttemptIdentity:
-        assert self.attempt_id is not None
-        return GoalAttemptIdentity(self.goal_id, self.number, self.attempt_id)
+        return GoalAttemptIdentity(self.goal_id, self.number, self.attempt_id.require_present())
 
     def failure_identity(self) -> GoalAttemptIdentity:
         self.lifecycle.require(Failed, FailureNotObserved())
@@ -273,7 +274,7 @@ class AttemptRecord(GoalLedgerTable, TypedTable):
     reservation: Annotated[Reservation, Column(primary_key=True)]
     phase: GoalAttemptPhase
     progress_witness: str | None
-    resolution: AttemptResolution | None
+    resolution: AttemptResolution
 
     attempt_id: ClassVar[Generated] = Generated(
         AttemptId,
@@ -312,7 +313,7 @@ class AttemptRecord(GoalLedgerTable, TypedTable):
         phase: GoalAttemptPhase,
         *,
         progress_witness: str | None = None,
-        resolution: AttemptResolution | None = None,
+        resolution: AttemptResolution = NoResolution(),
     ) -> None:
         if not self.phase.may_become(phase):
             raise errors.StaleAttemptError("Attempt transition is no longer permitted.")
@@ -559,7 +560,7 @@ class LaunchPermit(GoalTurnPermit):
                     reservation.goal_id,
                     reservation.generation + 1,
                     ReadyGeneration(),
-                    None,
+                    NoAttemptId(),
                 ),
                 digest=digest,
             )
@@ -859,7 +860,7 @@ class GoalAttemptStore(DrainSettledFile, StoreWriter, ReconciledFile, WireWakeFi
 
         def write(conn: sqlite3.Connection, digest: str) -> Generation:
             current = Generation.read_in(conn, goal_id)
-            if current != Generation(goal_id, expected_generation, ReadyGeneration(), None):
+            if current != Generation(goal_id, expected_generation, ReadyGeneration(), NoAttemptId()):
                 raise ReservationConflictError(
                     "Only an unreserved READY generation can be recovered."
                 )
@@ -875,7 +876,7 @@ class GoalAttemptStore(DrainSettledFile, StoreWriter, ReconciledFile, WireWakeFi
         def write(conn: sqlite3.Connection, digest: str) -> Generation:
             if Generation.one(conn, goal_id=goal_id) is not None:
                 raise ReservationConflictError("Goal ID already has a ledger.")
-            row = Generation(goal_id, 1, ReadyGeneration(), None, ready_digest=digest)
+            row = Generation(goal_id, 1, ReadyGeneration(), NoAttemptId(), ready_digest=digest)
             row.insert(conn)
             return row
 
@@ -910,11 +911,11 @@ class GoalAttemptStore(DrainSettledFile, StoreWriter, ReconciledFile, WireWakeFi
 
         def write(conn: sqlite3.Connection) -> Reservation:
             current = Generation.read_in(conn, goal_id)
-            if current != Generation(goal_id, expected_generation, ReadyGeneration(), None):
+            if current != Generation(goal_id, expected_generation, ReadyGeneration(), NoAttemptId()):
                 raise ReservationConflictError("Goal generation is not ready or already reserved.")
             if not hmac.compare_digest(current.ready_digest, digest):
                 raise errors.UnresolvedAttemptError("Ready grant is stale or was never acknowledged.")
-            AttemptRecord(attempt, ReservedAttempt(), None, None).insert(conn)
+            AttemptRecord(attempt, ReservedAttempt(), None, NoResolution()).insert(conn)
             current.advance(
                 conn,
                 Generation(
@@ -972,7 +973,7 @@ class GoalAttemptStore(DrainSettledFile, StoreWriter, ReconciledFile, WireWakeFi
         current = self.snapshot(goal_id)
         if current is None or current.number != expected_generation:
             raise errors.StaleAttemptError("Goal generation changed before resume.")
-        if not current.lifecycle.ready or current.attempt_id is not None:
+        if not current.lifecycle.ready:
             raise errors.UnresolvedAttemptError("Explicit attempt resolution is required before resume.")
         self.ready_grant(goal_id, expected_generation)
         return current
@@ -989,7 +990,7 @@ class GoalAttemptStore(DrainSettledFile, StoreWriter, ReconciledFile, WireWakeFi
         """
         def write(conn: sqlite3.Connection, digest: str) -> Generation:
             current = Generation.read_in(conn, goal_id)
-            if current != Generation(goal_id, expected_generation, ReadyGeneration(), None):
+            if current != Generation(goal_id, expected_generation, ReadyGeneration(), NoAttemptId()):
                 raise errors.UnresolvedAttemptError(
                     "Goal is not ready; an attempt may already be unresolved."
                 )
@@ -1000,7 +1001,7 @@ class GoalAttemptStore(DrainSettledFile, StoreWriter, ReconciledFile, WireWakeFi
                     goal_id,
                     expected_generation + 1,
                     ReadyGeneration(),
-                    None,
+                    NoAttemptId(),
                 ),
                 digest=digest,
             )
@@ -1040,7 +1041,7 @@ class GoalAttemptStore(DrainSettledFile, StoreWriter, ReconciledFile, WireWakeFi
                     goal_id,
                     expected_generation + 1,
                     ReadyGeneration(),
-                    None,
+                    NoAttemptId(),
                 ),
                 digest=digest,
             )
@@ -1048,7 +1049,7 @@ class GoalAttemptStore(DrainSettledFile, StoreWriter, ReconciledFile, WireWakeFi
         return self._ready_change(goal_id, expected_generation + 1, write)
 
     def retire_goal(
-        self, goal_id: GoalId, *, expected_generation: int, attempt_id: AttemptId | None
+        self, goal_id: GoalId, *, expected_generation: int, attempt_id: AttemptId | NoAttemptId
     ) -> Generation:
         """Revoke READY or an unresolved attempt before clearing the registry goal."""
 
@@ -1060,7 +1061,10 @@ class GoalAttemptStore(DrainSettledFile, StoreWriter, ReconciledFile, WireWakeFi
                 or current.attempt_id != attempt_id
             ):
                 raise errors.StaleAttemptError("Goal generation or attempt changed before retirement.")
-            attempt = NoAttempt() if attempt_id is None else AttemptRecord.read_in(conn, attempt_id)
+            attempt = next(
+                (AttemptRecord.read_in(conn, identity) for identity in attempt_id.present()),
+                NoAttempt(),
+            )
             attempt.retire(conn, current.lifecycle, goal_id, expected_generation)
             return current.advance(
                 conn,
@@ -1077,14 +1081,14 @@ class GoalAttemptStore(DrainSettledFile, StoreWriter, ReconciledFile, WireWakeFi
             lambda value: (
                 self._is_generation(value)
                 and (
-                    attempt_id is None
-                    or AttemptRecord.matches_resolution(
-                        self, attempt_id, ResolvedAttempt(), GoalCleared()
+                    all(
+                        AttemptRecord.matches_resolution(self, identity, ResolvedAttempt(), GoalCleared())
+                        for identity in attempt_id.present()
                     )
                 )
             ),
         )
         self._ready_grants.pop((goal_id, expected_generation), None)
-        if attempt_id is not None:
-            self._owned.discard(attempt_id)
+        for identity in attempt_id.present():
+            self._owned.discard(identity)
         return result

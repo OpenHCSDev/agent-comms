@@ -24,7 +24,7 @@ from .agent_backend import InputContent, TurnDelivery
 from .channel_input_batch import InputBatch
 from .coordination_errors import CoordinationError
 from .coordinator import Coordination
-from .field_codec import GoalId, GoalWaitId, TurnId
+from .field_codec import GoalId, TurnId
 from .goals import Goal
 from .image_input import ImageInput
 from .input_attempt import ReservedInput
@@ -40,11 +40,9 @@ from .turn_goal_permission import (
     TurnGoalPermission,
 )
 from .turn_input_source import (
-    CapturedInputDependency,
-    DependencyOriginalInput,
+    InputDependency,
     NoInputDependency,
     OwnerOriginalInput,
-    RoutedOriginalInput,
     ScheduledOriginalInput,
     TurnAcceptance,
 )
@@ -98,7 +96,7 @@ class OwnedTurn:
         original_owner_input: bool = False,
         original_goal_id: GoalId | None = None,
         acceptance: TurnAcceptance,
-        dependency_wait_id: GoalWaitId | None = None,
+        dependency: InputDependency = NoInputDependency(),
     ) -> None:
         self.runner = runner
         self.session_id = session_id
@@ -112,7 +110,7 @@ class OwnedTurn:
         self.original_owner_input = original_owner_input
         self.original_goal_id = original_goal_id
         self.acceptance = acceptance
-        self.dependency_wait_id = dependency_wait_id
+        self.dependency = dependency
         self.terminal: TurnTerminal = EndedWithoutResult()
 
     def authorize(self):
@@ -125,10 +123,7 @@ class OwnedTurn:
         self.thread_name = self.thread.name
         wait = self.runner.comms.goals.goal_wait(self.thread_name)
         active_goal = self.thread.goal.active()
-        if self.dependency_wait_id is not None:
-            if not wait.matches_id(self.dependency_wait_id):
-                return
-        elif not wait.allows_routed_input() and not self.original_owner_input:
+        if not self.dependency.authorizes(wait, self.original_owner_input):
             return
         if self.original_owner_input and self.original_goal_id != (
             active_goal.reported_id()
@@ -255,21 +250,15 @@ class OwnedTurn:
             source_type = OwnerOriginalInput
         elif not self.origins:
             source_type = ScheduledOriginalInput
-        elif self.dependency_wait_id is not None:
-            source_type = DependencyOriginalInput
         else:
-            source_type = RoutedOriginalInput
+            source_type = self.dependency.original_type()
         original = source_type(
             acceptance=self.acceptance,
             goal_permission=TurnGoalPermission(permission),
             prompt=self.context.render().text,
             original_display=self.original_display,
             origins=self.origins,
-            dependency=(
-                CapturedInputDependency(self.dependency_wait_id)
-                if self.dependency_wait_id is not None
-                else NoInputDependency()
-            ),
+            dependency=self.dependency,
             batch=batch,
         )
         with ExitStack() as reservation:

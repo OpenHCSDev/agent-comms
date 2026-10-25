@@ -12,7 +12,6 @@ from agent_comms.attempt_resolution import (
     AttemptResolution,
     ComplianceDecision,
     DecidedResolution,
-    FailedTurnResolution,
     OperatorStopped,
     OrderDecision,
     RetryDecision,
@@ -26,7 +25,7 @@ from agent_comms.goal_attempts import AttemptRecord, GoalAttemptStore, GoalWorkD
 from agent_comms.installer.probes.carry import Carried, Carry
 from agent_comms.locked_store import RootFile
 from agent_comms.todos import Todo, TodoStore
-from agent_comms.turn_failure import BackendFailed
+from agent_comms.turn_failure import BackendFailed, FailedTurnResolution
 from agent_comms.typed_table import TypedRow
 
 

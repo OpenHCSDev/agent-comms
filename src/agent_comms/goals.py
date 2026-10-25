@@ -647,7 +647,10 @@ class GoalDeclaration(GoalDisplay, SubclassUnion, RegistrationInheritance["GoalD
     def reported_id(self) -> GoalId | None: ...
 
     @abstractmethod
-    def clear_wait(self, waits: GoalWaits, *, wait_id: GoalWaitId | None = None) -> bool: ...
+    def clear_wait(self, waits: GoalWaits) -> bool: ...
+
+    def consume_wait(self, waits: GoalWaits, wait_id: GoalWaitId) -> bool:
+        return False
 
     def require_active(self) -> Goal:
         goal = self.require()
@@ -700,7 +703,7 @@ class NoGoal(NullMember, GoalDeclaration):
     def reported_id(self) -> None:
         return None
 
-    def clear_wait(self, waits: GoalWaits, *, wait_id: GoalWaitId | None = None) -> bool:
+    def clear_wait(self, waits: GoalWaits) -> bool:
         return False
 
     def wake_context(self, goals: Goals, owner: ThreadIncarnation) -> WakeGoalValue:
@@ -785,8 +788,11 @@ class Goal(RecordMember, GoalDeclaration):
     def reported_id(self) -> GoalId:
         return self.id
 
-    def clear_wait(self, waits: GoalWaits, *, wait_id: GoalWaitId | None = None) -> bool:
-        return waits.clear(self.id, wait_id=wait_id)
+    def clear_wait(self, waits: GoalWaits) -> bool:
+        return waits.clear(self.id)
+
+    def consume_wait(self, waits: GoalWaits, wait_id: GoalWaitId) -> bool:
+        return waits.consume(self.id, wait_id)
 
     def wake_context(self, goals: Goals, owner: ThreadIncarnation) -> WakeGoalValue:
         todos = self.order.todos(goals, owner, self.id)

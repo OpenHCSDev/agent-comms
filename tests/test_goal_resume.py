@@ -6,7 +6,7 @@ from functools import partial
 
 import pytest
 
-from agent_comms.attempt_resolution import FailedTurnResolution
+from agent_comms.turn_failure import FailedTurnResolution
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.comms import wire
 from agent_comms.field_codec import FieldCodec, GoalId, TurnId

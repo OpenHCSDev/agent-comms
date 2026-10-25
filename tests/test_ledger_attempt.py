@@ -13,7 +13,7 @@ import pytest
 
 from agent_comms.attempt_resolution import GoalCleared
 from agent_comms.errors import StaleAttemptError
-from agent_comms.field_codec import AttemptId, GoalId
+from agent_comms.field_codec import AttemptId, GoalId, NoAttemptId
 from agent_comms.goal_attempt_identity import GoalAttemptIdentity
 from agent_comms.goal_attempt_phase import ReservedAttempt, ResolvedAttempt
 from agent_comms.goal_attempts import (
@@ -83,5 +83,5 @@ def test_no_attempt_retires_a_ready_goal_and_refuses_a_reserved_one(store):
         NoAttempt().retire(conn, ReservedGeneration(), goal_id, 1)
     with closing(store._connect()) as conn:
         NoAttempt().retire(conn, ReadyGeneration(), goal_id, 1)
-    retired = store.retire_goal(goal_id, expected_generation=1, attempt_id=None)
+    retired = store.retire_goal(goal_id, expected_generation=1, attempt_id=NoAttemptId())
     assert retired.lifecycle == CancelledGeneration()

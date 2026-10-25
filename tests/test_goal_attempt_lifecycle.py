@@ -6,11 +6,12 @@ import pytest
 
 from agent_comms.turn_failure import BackendFailed
 
-from agent_comms.field_codec import GoalId, RetryDecisionId
+from agent_comms.field_codec import GoalId, NoAttemptId, RetryDecisionId
 from agent_comms.goal_attempts import AttemptRecord, GoalAttemptStore, GoalWorkDecision
 from agent_comms.errors import UnresolvedAttemptError
 from agent_comms.goal_generation import BlockedGeneration, CancelledGeneration, ReadyGeneration
-from agent_comms.attempt_resolution import DecidedResolution, FailedTurnResolution, RetryDecision
+from agent_comms.attempt_resolution import DecidedResolution, RetryDecision
+from agent_comms.turn_failure import FailedTurnResolution
 
 
 @pytest.fixture
@@ -38,7 +39,7 @@ def test_current_saved_failure_and_history_survive_retry_and_retirement(store):
         decision=_decision_0,
     )
     assert successor.lifecycle == ReadyGeneration()
-    reopened.retire_goal(goal_id, expected_generation=2, attempt_id=None)
+    reopened.retire_goal(goal_id, expected_generation=2, attempt_id=NoAttemptId())
     final = GoalAttemptStore.at(store.root)
     assert final.snapshot(goal_id).lifecycle == CancelledGeneration()
     with sqlite3.connect(store.path) as conn:

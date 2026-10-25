@@ -5,8 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from .declared_family import DeclaredFamily
-from .field_codec import MessageId, RetryDecisionId, TurnId
-from .turn_failure import TurnFailure
+from .field_codec import MessageId, NullMember, RetryDecisionId, TurnId
 
 
 class WorkDecision(DeclaredFamily, affix="Decision"):
@@ -38,6 +37,11 @@ class AttemptResolution(DeclaredFamily, affix="Resolution"):
 
 
 @dataclass(frozen=True)
+class NoResolution(NullMember, AttemptResolution):
+    """The attempt has not recorded an outcome."""
+
+
+@dataclass(frozen=True)
 class DecidedResolution(AttemptResolution):
     decision: WorkDecision
 
@@ -60,8 +64,3 @@ class OriginFailed(AttemptResolution):
 @dataclass(frozen=True)
 class UnverifiedLaunchRetired(AttemptResolution):
     pass
-
-
-@dataclass(frozen=True)
-class FailedTurnResolution(AttemptResolution):
-    failure: type[TurnFailure]

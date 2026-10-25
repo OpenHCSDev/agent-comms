@@ -41,7 +41,8 @@ from agent_comms.pi_counts import PiCount, UnreportedCount
 from agent_comms.pi_payloads import PiUsage
 from agent_comms.threads import Thread
 from agent_comms.thread_creation import RecordedCreationTime
-from agent_comms.attempt_resolution import FailedTurnResolution, OperatorStopped, RetryDecision
+from agent_comms.attempt_resolution import OperatorStopped, RetryDecision
+from agent_comms.turn_failure import FailedTurnResolution
 
 pytestmark = pytest.mark.skipif(
     os.name != "posix", reason="POSIX fork and directory fsync crash instrumentation."
@@ -476,7 +477,7 @@ def test_stop_preserves_already_verified_goal_progress(comms, claimed_owner):
     store = comms.goals.open_goal_store()
     goal_id = claimed_owner.goal.require().id
     before = store.require_generation(goal_id)
-    assert before.attempt_id is not None
+    assert before.attempt_id.present() == (before.attempt_id,)
     permit = store.stopped_permit(goal_id).claims[0]
     successor = permit.record_verified_progress(store, "completed-native-turn")
 

@@ -156,7 +156,7 @@ class RecordedGoalWait(GoalWait):
         return comms.goals.consume_goal_wait(canonical, self.wait_id)
 
     def clear(self, waits: GoalWaits) -> bool:
-        return waits.clear(self.goal_id, wait_id=self.wait_id)
+        return waits.consume(self.goal_id, self.wait_id)
 
     def execution(self, source: GoalExecutionSource) -> GoalExecution:
         targets = tuple(
@@ -462,13 +462,19 @@ class GoalWaits(ThreadOwnedState, DurableStore, WireWakeFile):
                 if row.wait.owner.lookup in owners:
                     StoredGoalWaitRow.delete(db, goal_id=row.goal_id)
 
-    def clear(self, goal_id: GoalId, *, wait_id: GoalWaitId | None = None) -> bool:
+    def clear(self, goal_id: GoalId) -> bool:
+        if not self.path.exists():
+            return False
+        with self.writing() as db:
+            return StoredGoalWaitRow.delete(db, goal_id=goal_id).rowcount > 0
+
+    def consume(self, goal_id: GoalId, wait_id: GoalWaitId) -> bool:
         if not self.path.exists():
             return False
         with self.writing() as db:
             return StoredGoalWaitRow.delete(
-                db, where="goal_id=? AND (? IS NULL OR json_extract(wait, '$.wait_id')=?)",
-                parameters=(goal_id, wait_id, wait_id),
+                db, where="goal_id=? AND json_extract(wait, '$.wait_id')=?",
+                parameters=(goal_id, wait_id),
             ).rowcount > 0
 
     def resolve(self, goal: GoalDeclaration) -> GoalWait:
