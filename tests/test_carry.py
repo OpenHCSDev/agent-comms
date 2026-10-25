@@ -244,32 +244,72 @@ def test_a_backup_undoes_a_real_worker_failure(comms, staged, noisy_step):
     maintenance.clear(hold)
 
 
+def held_owners(maintenance: MaintenanceBarrier, hold, started: list[str]) -> HeldOwnersStopped:
+    """Owners stopped under ``hold``: their release clears it and their exit starts them."""
+    owners = HeldOwnersStopped()
+    owners.give_back.callback(started.append, "owners")
+    owners.hold.callback(maintenance.clear, hold)
+    return owners
+
+
 def test_a_rollback_holds_the_root_until_every_store_opens_under_its_runtime(
         comms, staged, noisy_step):
-    """A failed carry undone by its backup opens under the outgoing runtime and releases;
-    a store the backup left in another shape (install 13's short ledger) is named, keeps
-    the hold and starts no owner."""
+    """A failed carry undone by its backup opens under the outgoing runtime; a store left in
+    another shape (install 13's short ledger) is named, keeps the hold and starts no owner."""
     _, step = noisy_step
     saved = comms.root / "saved"
     saved.write_text("original")
     (comms.root / "fail").touch()
     maintenance = MaintenanceBarrier(RegistryStore.at(comms.root).path)
     hold = maintenance.begin(MaintenanceOperator.current())
-    owners = HeldOwnersStopped()
     started: list[str] = []
-    owners.give_back.callback(started.append, "owners")
-    owners.hold.callback(maintenance.clear, hold)
+    owners = held_owners(maintenance, hold, started)
     with hold.holding():
         backup = StoreBackup.take(
             comms.root, comms.root / "no-route", (saved,), comms.root.parent / "spill")
         migration = PreparedMigration.capture(hold, staged)
         with pytest.raises(UpgradeRefused):
             migration.carry((step(comms.root, comms.root, comms.root.parent / "spill"),), staged)
-        backup.undo()
-        staged.require_opens(comms.root, owners)
+        with owners.held_on_failure():
+            backup.undo()
+            staged.require_opens(comms.root)
         ledger_one_failure_short(comms.root)
         with pytest.raises(UpgradeRefused, match="goal_attempts.sqlite3"):
-            staged.require_opens(comms.root, owners)
+            with owners.held_on_failure():
+                staged.require_opens(comms.root)
+    owners.release()
+    owners.give_back.close()
+    assert started == []
+    assert maintenance.read().phase is DrainingPhase
+    maintenance.clear(hold)
+
+
+def test_a_restore_that_fails_midway_keeps_the_hold(comms, staged, noisy_step):
+    """An undo that raises after restoring some stores never reaches the opening check;
+    the hold stays draining and no owner starts on the half-restored root."""
+    _, step = noisy_step
+    first, second = comms.root / "a-saved", comms.root / "saved"
+    for path in (first, second):
+        path.write_text("original")
+    (comms.root / "fail").touch()
+    maintenance = MaintenanceBarrier(RegistryStore.at(comms.root).path)
+    hold = maintenance.begin(MaintenanceOperator.current())
+    started: list[str] = []
+    owners = held_owners(maintenance, hold, started)
+    with hold.holding():
+        backup = StoreBackup.take(
+            comms.root, comms.root / "no-route", (first, second), comms.root.parent / "spill")
+        migration = PreparedMigration.capture(hold, staged)
+        with pytest.raises(UpgradeRefused):
+            migration.carry((step(comms.root, comms.root, comms.root.parent / "spill"),), staged)
+        first.write_text("carried")
+        (backup.data_root / second.name).unlink()
+        with pytest.raises(FileNotFoundError):
+            with owners.held_on_failure():
+                backup.undo()
+                staged.require_opens(comms.root)
+    assert first.read_text() == "original"
+    assert second.read_text() == "migrated"
     owners.release()
     owners.give_back.close()
     assert started == []
