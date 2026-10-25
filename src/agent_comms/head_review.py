@@ -64,10 +64,9 @@ class PullRequestHead:
     def holds(self, commit: str) -> bool:
         return self.head.startswith(commit)
 
-    def same_head(self, other: PullRequestHead) -> bool:
-        """One pull request head, whichever side spells it abbreviated."""
-        return (self.repo == other.repo and self.pr == other.pr
-                and (self.holds(other.head) or other.holds(self.head)))
+    def same_pull_request(self, other: PullRequestHead) -> bool:
+        """One pull request, whichever head each side read."""
+        return self.repo == other.repo and self.pr == other.pr
 
     def current(self) -> ReadPullRequestHead:
         """GitHub's read of the PR, refused unless the reviewed head is still its head."""
