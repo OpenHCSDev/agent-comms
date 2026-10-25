@@ -27,7 +27,8 @@ from typing import (
 from agent_comms.response_policy import InformationalPolicy, ResponseEligibility, ResponsePolicy
 from agent_comms.typed_table import (
     AppendOnlyTables, Column, DerivedTables, DurableTables, ForeignKey, Index,
-    ProducedTable, SharedFileTables, TableReference, TypedRow, TypedTable,
+    AttachedPracticeRebuild, ProducedTable, ProjectionProducer, SharedFileTables,
+    TableReference, TypedRow, TypedTable,
 )
 
 from .change_report import FileLine, NoChangeReport, ReportEvidence
@@ -92,13 +93,28 @@ class BusProjectionTables(ProducedTable, SharedFileTables, DerivedTables, declar
         """Create/rebuild rows from history using the append projection owner."""
         selected = cls.schema_rows() if rows is None else rows
         super().create_schema(db, selected)
-        projections = tuple(row for row in cls.projection_rows() if row in selected)
-        writers = {writer for row in projections for writer in ProjectionSource.writers_for(row)}
-        kinds = tuple(kind for kind in BusRecord.members_with(BusRecord) if kind in writers)
-        holders = ReplayedHolders(tables=frozenset(selected))
-        for record in BusCapability.history(db, kinds):
-            record.project_into(db, holders)
-        holders.flush(db)
+        ReplayedHolders(tables=frozenset(selected)).replay(db)
+
+    @classmethod
+    def require_practice(
+        cls, db: sqlite3.Connection, rows: tuple[type[TypedTable], ...],
+        source: sqlite3.Connection,
+    ) -> None:
+        projections = tuple(row for row in cls.projection_rows() if row in rows)
+        if not ProjectionProducer.matches(source, projections):
+            raise RelationViolationError("Practice projection producers differ from this runtime")
+        through = BusRow.last_seq(source)
+        for row in cls.projection_rows():
+            row.require_prefix_identity(db, source, through)
+
+    @classmethod
+    def create_from_practice(
+        cls, db: sqlite3.Connection, rows: tuple[type[TypedTable], ...],
+        rebuild: AttachedPracticeRebuild,
+    ) -> None:
+        super().create_schema(db, rows)
+        rebuild.copy_rows(db, rows)
+        StoredHolders(tables=frozenset(rows)).replay(db, after=BusRow.last_seq(rebuild.source))
 
 
 @dataclass(frozen=True)
@@ -223,6 +239,15 @@ class ProjectionPass(ABC, ProjectionSource):
 
     def flush(self, db: sqlite3.Connection) -> None:
         """Rows written at once leave nothing to flush."""
+
+    def replay(self, db: sqlite3.Connection, *, after: int = 0) -> None:
+        projections = tuple(row for row in BusProjectionTables.projection_rows()
+                            if row in self.tables)
+        writers = {writer for row in projections for writer in ProjectionSource.writers_for(row)}
+        kinds = tuple(kind for kind in BusRecord.members_with(BusRecord) if kind in writers)
+        for record in BusCapability.history(db, kinds, after=after):
+            record.project_into(db, self)
+        self.flush(db)
 
 
 class ClaimHolders(ProjectionPass):
@@ -392,14 +417,15 @@ class BusCapability(TypedRow, ProjectionSource):
     @staticmethod
     def history(
         db: sqlite3.Connection, kinds: tuple[type[BusRecord], ...] | None = None,
+        *, after: int = 0,
     ) -> Iterator[BusCapability]:
-        """Every record in sequence order from one joined cursor, each stored row decoded once."""
+        """Records after one sequence, using the same joined cursor for full and tail replay."""
         tables = TypedTable.members_with(CapabilityRow)
         offsets = dict(zip(tables, accumulate(
             (len(BusRow.columns()), *(len(table.columns()) for table in tables)))))
         header = BusRow.qualified("seq")
         predicate, parameters = ("", ()) if kinds is None else (
-            f' WHERE {BusRow.qualified("kind")} IN ({", ".join("?" for _ in kinds)})',
+            f' AND {BusRow.qualified("kind")} IN ({", ".join("?" for _ in kinds)})',
             tuple(BusRow._fields_named(("kind",))[0].encode(kind) for kind in kinds),
         )
         with closing(db.execute(
@@ -407,7 +433,8 @@ class BusCapability(TypedRow, ProjectionSource):
             f'FROM "{BusRow.declared_name}" '
             + " ".join(f'LEFT JOIN "{table.declared_name}" ON {table.qualified("seq")} = {header}'
                        for table in tables)
-            + predicate + f" ORDER BY {header}", parameters,
+            + f" WHERE {header}>?" + predicate + f" ORDER BY {header}",
+            (after, *parameters),
         )) as cursor:
             for stored in cursor:
                 kind = BusRow.decode_at(stored, 0).kind

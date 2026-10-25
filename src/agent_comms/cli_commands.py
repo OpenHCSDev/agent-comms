@@ -1908,9 +1908,8 @@ class StoreReconcileCliCommand(CliCommand[ReconciledStoresResult]):
     """Every declared store whose schema differs from this runtime's declarations; each
     member says what it does with one."""
 
-    @staticmethod
     @abstractmethod
-    def changes(owner: type[ReconciledFile], path: Path) -> bool:
+    def changes(self, owner: type[ReconciledFile], path: Path) -> bool:
         """Whether this member changes, or would change, the store at ``path``."""
 
     def answer(self, root: Path) -> ReconciledStoresResult:
@@ -1932,9 +1931,12 @@ class ReconcileStoresCliCommand(StoreReconcileCliCommand, declared_name="reconci
     help = ("Reconcile every declared store's schema onto this runtime's declarations; "
             "the installer runs it under maintenance after the outgoing owners stop")
 
-    @staticmethod
-    def changes(owner: type[ReconciledFile], path: Path) -> bool:
-        return owner.reconcile_at(path)
+    practice_root: Annotated[
+        Path | None, PathText, Argument(flags=("--practice-root",)),
+    ] = None
+
+    def changes(self, owner: type[ReconciledFile], path: Path) -> bool:
+        return owner.reconcile_at(path, self.practice_root)
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -1942,8 +1944,7 @@ class PlannedReconcileCliCommand(StoreReconcileCliCommand, declared_name="planne
     help = ("Name every store reconcile-stores would rewrite, reading each without writing; "
             "the installer backs them up and checks them against its rehearsal first")
 
-    @staticmethod
-    def changes(owner: type[ReconciledFile], path: Path) -> bool:
+    def changes(self, owner: type[ReconciledFile], path: Path) -> bool:
         schema = owner.schema_at(path)
         with closing(owner.read_snapshot(path)) as db:
             return schema.reconcile_writes(db)

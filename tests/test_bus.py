@@ -177,8 +177,9 @@ def test_nominal_message_id_column_stores_plain_text() -> None:
         ("bus_activity_index.py", '=max("{name}",excluded.', '=min("{name}",excluded.'),
         (
             "messages.py",
-            "for record in BusCapability.history(db, kinds):",
-            "for record in reversed(tuple(BusCapability.history(db, kinds))):",
+            "for record in BusCapability.history(db, kinds, after=after):",
+            "for record in reversed(tuple("
+            "BusCapability.history(db, kinds, after=after))):",
         ),
         (
             "messages.py",

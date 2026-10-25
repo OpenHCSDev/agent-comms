@@ -761,6 +761,69 @@ class SQLiteCatalogObject(TypedRow):
                 db.execute(sql)
 
 
+class SchemaRebuild:
+    """A full rebuild creates derived rows through their schema's normal history pass."""
+
+    @contextmanager
+    def attached(self, db: sqlite3.Connection) -> Iterator[SchemaRebuild]:
+        yield self
+
+    def require(
+        self, schema: type[DerivedTables], db: sqlite3.Connection,
+        rows: tuple[type[TypedTable], ...],
+    ) -> None:
+        """History itself needs no practice-prefix proof."""
+
+    def create(
+        self, schema: type[DerivedTables], db: sqlite3.Connection,
+        rows: tuple[type[TypedTable], ...],
+    ) -> None:
+        schema.create_schema(db, rows)
+
+
+FULL_SCHEMA_REBUILD = SchemaRebuild()
+
+
+@dataclass(frozen=True)
+class PracticeRebuild(SchemaRebuild):
+    """The practice file stays read-only through the live reconcile's transaction."""
+
+    path: Path
+    database: ClassVar[str] = __qualname__
+
+    @contextmanager
+    def attached(self, db: sqlite3.Connection) -> Iterator[SchemaRebuild]:
+        with closing(SQLiteFile.read_snapshot(self.path)) as source:
+            db.execute(f'ATTACH DATABASE ? AS "{self.database}"',
+                       (self.path.resolve().as_uri() + "?mode=ro",))
+            try:
+                yield AttachedPracticeRebuild(source)
+            finally:
+                db.execute(f'DETACH DATABASE "{self.database}"')
+
+
+@dataclass(frozen=True)
+class AttachedPracticeRebuild(SchemaRebuild):
+    source: sqlite3.Connection
+
+    def require(
+        self, schema: type[DerivedTables], db: sqlite3.Connection,
+        rows: tuple[type[TypedTable], ...],
+    ) -> None:
+        schema.require_practice(db, rows, self.source)
+
+    def create(
+        self, schema: type[DerivedTables], db: sqlite3.Connection,
+        rows: tuple[type[TypedTable], ...],
+    ) -> None:
+        schema.create_from_practice(db, rows, self)
+
+    def copy_rows(self, db: sqlite3.Connection, rows: tuple[type[TypedTable], ...]) -> None:
+        for row in rows:
+            db.execute(f'INSERT INTO "{row.declared_name}" '
+                       f'SELECT * FROM "{PracticeRebuild.database}"."{row.declared_name}"')
+
+
 class SchemaChange(ABC):
     """Who may change a stored schema: the reconcile asks before it writes."""
 
@@ -898,15 +961,18 @@ class TableSchema(ABC):
         cls.require_schema(db, sharing)
 
     @classmethod
-    def reconcile_schema(cls, db: sqlite3.Connection, change: SchemaChange) -> bool:
+    def reconcile_schema(
+        cls, db: sqlite3.Connection, change: SchemaChange,
+        *, rebuild: SchemaRebuild = FULL_SCHEMA_REBUILD,
+    ) -> bool:
         """The writer's answer to a stored schema that differs from the declaration, in a
         write transaction of its own and only where ``change`` allows; whether it changed
         the file."""
         if not cls.schema_differs(db):
             return False
         change.require()
-        with SQLiteFile.write_transaction(db):
-            cls.carry_schema(db)
+        with rebuild.attached(db) as attached, SQLiteFile.write_transaction(db):
+            cls.carry_schema(db, rebuild=attached)
         return True
 
     @classmethod
@@ -924,6 +990,7 @@ class TableSchema(ABC):
     @abstractmethod
     def carry_schema(
         cls, db: sqlite3.Connection, sharing: tuple[type[TypedTable], ...] = (),
+        *, rebuild: SchemaRebuild = FULL_SCHEMA_REBUILD,
     ) -> None:
         """Inside the reconcile's transaction: this kind of file's way onto its declaration."""
 
@@ -959,11 +1026,12 @@ class ComposedSchemas:
     @classmethod
     def carry_schema(
         cls, db: sqlite3.Connection, sharing: tuple[type[TypedTable], ...] = (),
+        *, rebuild: SchemaRebuild = FULL_SCHEMA_REBUILD,
     ) -> None:
         rows = (*cls.schema_rows(), *sharing)
         for family in cls.schema_families():
             if family.schema_differs(db, rows):
-                family.carry_schema(db, rows)
+                family.carry_schema(db, rows, rebuild=rebuild)
 
 
 class RowMutation(Enum):
@@ -1457,11 +1525,14 @@ class DerivedTables(TableSchema):
             producer.upsert(db)
 
     @classmethod
-    def reset_schema(cls, db: sqlite3.Connection) -> None:
+    def reset_schema(
+        cls, db: sqlite3.Connection, *, rebuild: SchemaRebuild = FULL_SCHEMA_REBUILD,
+    ) -> None:
         """Inside the caller's transaction: rebuild only this schema's derived tables."""
         changed = cls.changed_rows(db)
         if not changed:
             return
+        rebuild.require(cls, db, changed)
         # Unchanged children may reference a rebuilt parent: check after its rows return.
         db.execute("PRAGMA defer_foreign_keys=ON")
         for row in changed:
@@ -1470,13 +1541,29 @@ class DerivedTables(TableSchema):
         for stored in cls.stored_tables(db):
             if stored.name in names:
                 stored.drop(db)
-        cls.create_schema(db, changed)
+        rebuild.create(cls, db, changed)
+
+    @classmethod
+    def require_practice(
+        cls, db: sqlite3.Connection, rows: tuple[type[TypedTable], ...],
+        source: sqlite3.Connection,
+    ) -> None:
+        """Only a schema that consumes practice rows needs a prefix proof."""
+
+    @classmethod
+    def create_from_practice(
+        cls, db: sqlite3.Connection, rows: tuple[type[TypedTable], ...],
+        rebuild: AttachedPracticeRebuild,
+    ) -> None:
+        """Other derived schemas retain their existing full rebuild."""
+        cls.create_schema(db, rows)
 
     @classmethod
     def carry_schema(
         cls, db: sqlite3.Connection, sharing: tuple[type[TypedTable], ...] = (),
+        *, rebuild: SchemaRebuild = FULL_SCHEMA_REBUILD,
     ) -> None:
-        cls.reset_schema(db)
+        cls.reset_schema(db, rebuild=rebuild)
 
 
 class DurableTables(TableSchema):
@@ -1489,6 +1576,7 @@ class DurableTables(TableSchema):
     @classmethod
     def carry_schema(
         cls, db: sqlite3.Connection, sharing: tuple[type[TypedTable], ...] = (),
+        *, rebuild: SchemaRebuild = FULL_SCHEMA_REBUILD,
     ) -> None:
         cls.derive_schema(db, sharing)
 
@@ -2063,6 +2151,12 @@ class ProducedTable(ProducedRow, TypedTable, ProjectionSource, declared_name=Non
     """A table derives its producers from the writers that declare it as an output."""
 
     @classmethod
+    def require_prefix_identity(
+        cls, db: sqlite3.Connection, source: sqlite3.Connection, through: int,
+    ) -> None:
+        """The row that owns bus identities proves the prefix; other outputs add no check."""
+
+    @classmethod
     def writer_declarations(cls) -> tuple[type[ProjectionSource], ...]:
         """A row contributes itself; extra writes belong to the class declaring them."""
         return (cls,) if "writes" in vars(cls) else ()
@@ -2202,11 +2296,13 @@ class ReconciledFile(SQLiteFile, StoreLockFile):
         return HeldBusFile(cls, path)
 
     @classmethod
-    def reconcile_at(cls, path: Path) -> bool:
-        """Whether reconciling the file at ``path`` changed it."""
+    def reconcile_at(cls, path: Path, practice_root: Path | None = None) -> bool:
+        """Whether reconciling the file changed it, optionally using a retained practice file."""
         schema = cls.schema_at(path)
-        with _store_lock(path), closing(cls.writer(path, isolation_level=None)) as db:
-            return schema.reconcile_schema(db, cls.schema_change(path))
+        rebuild = (FULL_SCHEMA_REBUILD if practice_root is None else
+                   PracticeRebuild(practice_root / path.relative_to(cls.bus_root(path))))
+        with _store_lock(path), closing(cls.writer(path, isolation_level=None, uri=True)) as db:
+            return schema.reconcile_schema(db, cls.schema_change(path), rebuild=rebuild)
 
 
 class CarriedWriter(StoreWriter, DurableFile):

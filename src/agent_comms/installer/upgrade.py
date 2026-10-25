@@ -300,10 +300,17 @@ class RehearsedFiles(Rehearsal, declared_name=None):
     files: RehearsalFiles
     inputs: tuple[Annotated[Path, PathText], ...]
 
+    def reconcile_arguments(self) -> tuple[str, ...]:
+        return ()
+
 
 @dataclass(frozen=True)
 class CarriedRehearsal(CarriedPass, RehearsedFiles):
     copy: PracticeMeasurement
+    practice_root: Annotated[Path, PathText]
+
+    def reconcile_arguments(self) -> tuple[str, ...]:
+        return ("--practice-root", str(self.practice_root))
 
 
 @dataclass(frozen=True)
@@ -789,7 +796,12 @@ def upgrade(checkout: Path, root: Path, target: str, installer: InstallerChoice,
     commands = InstallCommands()
     tree = TargetTree(checkout, scratch, target)
     bridges = report.bridges
-    with InstallRunPhase().running(commands.clock), commands, report.running(tree, commands.clock):
+    with (
+        InstallRunPhase().running(commands.clock),
+        ExitStack() as practice_lifetime,
+        commands,
+        report.running(tree, commands.clock),
+    ):
         with PreparePhase().running(commands.clock):
             StoreBackup.complete_interrupted(root, spill_dir)
             current = commands.git(checkout, "rev-parse", "HEAD").strip()
@@ -816,7 +828,8 @@ def upgrade(checkout: Path, root: Path, target: str, installer: InstallerChoice,
             report.starting(mode.destination(member.initial_writer(root, installed)), target)
         with PracticePhase().running(commands.clock):
             install, rehearsal = member.rehearsed(checkout, root, current, target, chain,
-                                                  installed, staged, tree, installer, spill_dir)
+                                                  installed, staged, tree, installer, spill_dir,
+                                                  lifetime=practice_lifetime)
         result = report.complete(mode.finish(install, rehearsal, bridges, harnesses, report))
     bridges.require_resumed()
     return result
@@ -881,7 +894,8 @@ class Install[Rehearsed: Rehearsal](ABC):
     @abstractmethod
     def rehearsed(cls, checkout: Path, root: Path, current: str, target: str,
                   chain: CarryChain, installed: Stack, staged: Stack, tree: TargetTree,
-                  installer: InstallerChoice, spill_dir: Path) -> tuple[Install, Rehearsal]:
+                  installer: InstallerChoice, spill_dir: Path,
+                  *, lifetime: ExitStack) -> tuple[Install, Rehearsal]:
         """This member's install, with what is pending, and its rehearsal."""
 
     def reported(self, rehearsal: Rehearsed) -> RehearsedUpgrade:
@@ -945,16 +959,18 @@ class ExistingBusInstall[Rehearsed: Rehearsal](Install[Rehearsed]):
     @classmethod
     def rehearsed(cls, checkout: Path, root: Path, current: str, target: str,
                   chain: CarryChain, installed: Stack, staged: Stack, tree: TargetTree,
-                  installer: InstallerChoice, spill_dir: Path) -> tuple[Install, Rehearsal]:
+                  installer: InstallerChoice, spill_dir: Path,
+                  *, lifetime: ExitStack) -> tuple[Install, Rehearsal]:
         CarryChain.require_crossed(checkout, current, target)
-        with PracticeBus.of(root, installer, spill_dir, staged.commands.clock) as practice:
-            pending = practice.pending(chain, staged)
-            reconciled = staged.cli(root, PlannedReconcileCliCommand).rewritten
-            install = cls.of(checkout, root, current, target, chain, pending, reconciled,
-                             installed, staged, tree, installer, spill_dir)
-            if pending or reconciled:
-                return install, install.rehearsal(practice, reconciled)
-            return install, install.uncopied()
+        practice = lifetime.enter_context(
+            PracticeBus.of(root, installer, spill_dir, staged.commands.clock))
+        pending = practice.pending(chain, staged)
+        reconciled = staged.cli(root, PlannedReconcileCliCommand).rewritten
+        install = cls.of(checkout, root, current, target, chain, pending, reconciled,
+                         installed, staged, tree, installer, spill_dir)
+        if pending or reconciled:
+            return install, install.rehearsal(practice, reconciled)
+        return install, install.uncopied()
 
     @classmethod
     def of(cls, checkout: Path, root: Path, current: str, target: str, chain: CarryChain,
@@ -1000,11 +1016,14 @@ class PreparedMigration(Extendable):
             before = bus_files(root)
         return cls(hold, before, outgoing.verify(root))
 
-    def carry(self, pending: tuple[Carry, ...], staged: Stack) -> CarriedPass:
+    def carry(
+        self, pending: tuple[Carry, ...], staged: Stack,
+        reconcile_arguments: tuple[str, ...] = (),
+    ) -> CarriedPass:
         """One migration sequence for rehearsal and the backed-up live bus."""
         steps = [StepRun(step.declared_name, carried) for step, carried in zip(
             pending, staged.call_steps(pending, MigrateOperation(apply=True)), strict=True)]
-        reconciled = staged.cli(self.root, ReconcileStoresCliCommand)
+        reconciled = staged.cli(self.root, ReconcileStoresCliCommand, *reconcile_arguments)
         steps.append(StepRun(ReconcileStoresCliCommand.declared_name, Carried(
             len(reconciled.rewritten), rewritten=reconciled.rewritten)))
         declared = tuple(steps)
@@ -1044,7 +1063,8 @@ class ChangedInstall(ExistingBusInstall[RehearsedFiles]):
             passed = migration.carry(pending, stack)
             passed = passed.after_acceptance(pending, stack)
         maintenance.clear(hold)
-        return passed.extended(CarriedRehearsal, copy=practice.copy.measurement, inputs=inputs)
+        return passed.extended(CarriedRehearsal, copy=practice.copy.measurement, inputs=inputs,
+                               practice_root=copied)
 
     def uncopied(self) -> UncopiedRehearsal:
         return UncopiedRehearsal()
@@ -1098,7 +1118,8 @@ class ChangedInstall(ExistingBusInstall[RehearsedFiles]):
                     raise
                 try:
                     self.checkout_target()
-                    passed = migration.carry(self.pending, self.staged)
+                    passed = migration.carry(
+                        self.pending, self.staged, rehearsal.reconcile_arguments())
                     passed.files.require_rehearsal(rehearsal.files)
                     self.publish(migration.backup, selected_route)
                     with ClearMaintenancePhase().running(self.staged.commands.clock):
@@ -1184,7 +1205,8 @@ class FreshInstall(Install[FreshRehearsal]):
     @classmethod
     def rehearsed(cls, checkout: Path, root: Path, current: str, target: str,
                   chain: CarryChain, installed: Stack, staged: Stack, tree: TargetTree,
-                  installer: InstallerChoice, spill_dir: Path) -> tuple[Install, Rehearsal]:
+                  installer: InstallerChoice, spill_dir: Path,
+                  *, lifetime: ExitStack) -> tuple[Install, Rehearsal]:
         """Nothing at the root to copy, so nothing is pending."""
         install = cls(checkout, root, current, target, chain, (), installed, staged,
                       tree, installer, spill_dir)
