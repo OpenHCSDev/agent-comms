@@ -125,8 +125,8 @@ class TargetRuntime(LaunchRuntime, RecordMember, MaintenanceTarget):
 
     def require_drained_writes_open_to(self, state: MaintenanceState,
                                        holder: MaintenanceHolder) -> None:
-        """Retargeted after the outgoing owners stopped: the install has captured the bus,
-        so only its holder writes until the hold ends."""
+        """Retargeted so the target stops the outgoing owners: from then on only the
+        install's holder writes, the target's stop settling their turns among them."""
         state.require_open_to(holder)
 
 
@@ -578,7 +578,7 @@ class MaintenanceBarrier(MaintenanceIngress):
             return hold
 
     def retarget(self, expected: MaintenanceState, runtime: LaunchRuntime) -> MaintenanceState:
-        """Transfer a drained hold after its outgoing readers have stopped."""
+        """Transfer a drained hold to the runtime that stops its outgoing readers."""
         with _store_lock(self.registry_path):
             self.require_draining_unlocked(expected)
             hold = expected.advanced(ClaimId.mint(), target=TargetRuntime(runtime.interpreter))

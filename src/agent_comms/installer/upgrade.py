@@ -1060,13 +1060,20 @@ class ChangedInstall(ExistingBusInstall[RehearsedFiles]):
                         held = maintenance.retarget(held, self.staged.runtime)
                         holder.close()
                         holder.enter_context(held.holding())
+                    # The target stops the owners under the retargeted hold, before the
+                    # backup, so nothing writes while it is taken: stopping settles their
+                    # turns in stores this install carries, which the outgoing runtime may
+                    # be unable to open (install 14, 2026-10-24: a ledger install 13 left
+                    # uncarried refused f23ca8968's every opening, so its stop answered nothing).
+                    self.staged.owners(self.root, StopCliCommand, running).require_success(
+                        UpgradeRefused)
                     planned = self.staged.cli(self.root, PlannedReconcileCliCommand)
                     unrehearsed = sorted(
                         frozenset(planned.rewritten) - frozenset(rehearsal.files.names))
                     if unrehearsed:
                         raise UpgradeRefused(
                             f"Reconcile would rewrite files the rehearsal did not: {unrehearsed}")
-                    settle_bus_files(self.root)
+                    migration = PreparedMigration.capture(held, self.installed)
                     backup, selected_route = self.backed_up(selected)
                 except BaseException as error:
                     with AbortMaintenancePhase().running(self.staged.commands.clock):
@@ -1078,13 +1085,6 @@ class ChangedInstall(ExistingBusInstall[RehearsedFiles]):
                         f"maintenance cleared; owners: {started}", file=sys.stderr)
                     raise
                 try:
-                    # The target stops the owners, after the backup: stopping settles their
-                    # turns in stores this install carries, which the outgoing runtime may be
-                    # unable to open (install 14, 2026-10-24: a ledger install 13 left
-                    # uncarried refused f23ca8968's every opening, so its stop answered nothing).
-                    self.staged.owners(self.root, StopCliCommand, running).require_success(
-                        UpgradeRefused)
-                    migration = PreparedMigration.capture(held, self.installed)
                     self.checkout_target()
                     passed = migration.carry(self.pending, self.staged)
                     passed.files.require_rehearsal(rehearsal.files)

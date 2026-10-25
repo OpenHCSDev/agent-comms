@@ -12,6 +12,7 @@ import pytest
 from tools.debt_ratchet import UncarriedRecordFormat, git
 
 from agent_comms.cli_commands import StopCliCommand, TargetBatchResult
+from agent_comms.goal_attempts import GoalAttemptStore
 from agent_comms.installer.backup import StoreBackup, bus_files
 from agent_comms.installer.refusals import UpgradeRefused
 from agent_comms.installer.carry import STEPS, CarryChain, FinishedCarryStore
@@ -35,6 +36,7 @@ from agent_comms.registry_store import RegistryStore
 from agent_comms.thread_execution import ExternalThreadExecution
 from agent_comms.thread_status import RunningThreadStatus
 from agent_comms.threads import Thread
+from conftest import ledger_one_failure_short, maintenance_held
 from fixture_git import IDENTITY
 
 REPO = Path(__file__).resolve().parents[1]
@@ -260,6 +262,17 @@ def test_owner_stop_batch_reports_refusal_after_stopping_available_owners(comms,
         stack.owners(comms.root, StopCliCommand, names).require_success(UpgradeRefused)
     saved = comms.registry.snapshot()
     assert all(saved.status(name).stopped for name in names[1:])
+
+
+def test_the_target_stops_owners_on_a_ledger_the_outgoing_runtime_cannot_open(comms, stack):
+    """Install 14: f23ca8968 refused this ledger at every opening, so its stop answered
+    nothing. The target stops them under the install's hold and carries the ledger."""
+    path = ledger_one_failure_short(comms.root)
+    comms.registry.declare(Thread("unit", frozenset(), str(comms.root)), RunningThreadStatus())
+    with maintenance_held(comms.root):
+        stack.owners(comms.root, StopCliCommand, ["unit"]).require_success(UpgradeRefused)
+    assert comms.registry.snapshot().status("unit").stopped
+    GoalAttemptStore(path.parent)
 
 
 def test_a_command_line_that_dies_before_answering_refuses_with_its_own_error():
