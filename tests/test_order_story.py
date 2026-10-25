@@ -67,7 +67,7 @@ def test_order_story_copied_bus_strike_and_send_back_once(comms, tmp_path):
     published = comms.bus.bus.lookup(before_send_back + 1)
     assert published.target == "#comms" and published.body.count(reason) == 1
     assert published.includes_lookup(comms.registry.require("worker").incarnation.lookup)
-    with pytest.raises(TodoError, match="bad-call: Todo P1 changed"):
+    with pytest.raises(TodoError, match="bad-call: Tool call bad-call already has a verdict on P1"):
         caller.invoke(CommsVerdictTool(problem="P1", operation=sent_back), comms)
     assert comms.bus.bus.revision() == before_send_back + 1
     todo = comms.goals.todos.get("P1")
