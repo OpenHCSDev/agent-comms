@@ -7,7 +7,7 @@ from pathlib import Path
 from cutover.carry_triage_member_rows import TriageMemberRows
 
 from agent_comms.coordination_database import CoordinationStore
-from agent_comms.field_codec import InputId
+from agent_comms.field_codec import AssignmentId, InputId
 from agent_comms.native_runtime_input import NativeRuntimeInput
 from agent_comms.triage_native_sources import TriageNativeSource
 
@@ -39,9 +39,9 @@ def test_carry_splits_membership_into_rows_once(tmp_path):
     assert step.carry(apply=True).rewritten == (path.relative_to(root),)
     with closing(sqlite3.connect(path)) as db:
         assert sorted(TriageNativeSource.select(db), key=lambda row: row.assignment_id) == [
-            TriageNativeSource(FIRST, 0, "claim-1"),
-            TriageNativeSource(FIRST, 1, "claim-2"),
-            TriageNativeSource(SECOND, 0, "claim-3"),
+            TriageNativeSource(FIRST, 0, AssignmentId("claim-1")),
+            TriageNativeSource(FIRST, 1, AssignmentId("claim-2")),
+            TriageNativeSource(SECOND, 0, AssignmentId("claim-3")),
         ]
         stored = {name for (name,) in db.execute(
             "SELECT name FROM sqlite_master WHERE tbl_name=? AND sql IS NOT NULL",

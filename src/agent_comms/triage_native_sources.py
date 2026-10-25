@@ -8,7 +8,7 @@ ordered like ``ExecutionAssignmentLink``. It contains no handling state.
 from dataclasses import dataclass
 from typing import Annotated
 
-from .field_codec import InputId
+from .field_codec import AssignmentId, InputId
 from .native_runtime_input import NativeRuntimeInput, NativeRuntimeTable
 from .typed_table import (
     Column,
@@ -42,4 +42,4 @@ class TriageNativeSource(
     ordinal: Annotated[int, Column(primary_key=True, check="ordinal>=0")]
     # An original source joins at most one triage input; the uniqueness also indexes the
     # notification reads that select membership by assignment.
-    assignment_id: Annotated[str, Column(unique=True)]
+    assignment_id: Annotated[AssignmentId, Column(unique=True)]
