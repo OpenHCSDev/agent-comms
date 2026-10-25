@@ -27,6 +27,8 @@ if TYPE_CHECKING:
     from typing import Self
 
     from .bus import BusReader
+    from .cli_bridges.shared import CliBridge
+    from .cli_protocol import Outcome
     from .task_attachments.commander_pings import CommanderUpdate
     from .goal_management import Goals
     from .input_attempt import StoredInput
@@ -225,6 +227,10 @@ class TaskAttachment(
     def commander_update(self, commander: ThreadIncarnation) -> CommanderUpdate | None:
         """The commander observations this attachment carries for that commander."""
         return None
+
+    async def delivered_by(self, bridge: CliBridge, message: Message) -> type[Outcome]:
+        """How a harness bridge hands the message carrying this attachment to its session."""
+        return await bridge.deliver(message)
 
     def annotation_rules(self, message: Message, facts: RetainedTaskFacts) -> tuple[str, ...]:
         return ()
