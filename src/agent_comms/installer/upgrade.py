@@ -26,7 +26,6 @@ import shutil
 import sys
 import tempfile
 import time
-import tomllib
 from abc import ABC, abstractmethod
 from collections.abc import Callable, Iterator
 from contextlib import AbstractContextManager, ExitStack, contextmanager
@@ -146,7 +145,7 @@ from agent_comms.installer.reporting import (
     RuntimeWriter,
     UnpostedWriter,
 )
-from agent_comms.installer.runtime_resolution import RuntimeResolution, StackProject
+from agent_comms.installer.runtime_resolution import ResolvedLock, RuntimeResolution
 from agent_comms.installer.runtime_wire import CrossesRuntimes
 from agent_comms.installer.refusals import RuntimeWireChanged
 from agent_comms.launch_runtime import LaunchRuntime, RestartEnvironment
@@ -607,10 +606,9 @@ class Stack(Extendable):
             raise RuntimeWireChanged(commit, drift)
 
     def resolve(self) -> None:
-        """Refresh declared source packages while retaining the committed release pins."""
-        with self.lock.with_name("pyproject.toml").open("rb") as definition:
-            project = StackProject.model_validate(tomllib.load(definition))
-        upgrades = tuple(argument for name in project.tool.uv.sources
+        """Refresh every package the lock records as tracking a branch, transitive ones
+        included, while retaining the committed release and revision pins."""
+        upgrades = tuple(argument for name in ResolvedLock.read(self.lock).tracked()
                          for argument in ("--upgrade-package", name))
         self.commands.run(self.uv, "lock", "--project", "stack", *upgrades,
                           cwd=self.checkout)
