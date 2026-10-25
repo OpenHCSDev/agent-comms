@@ -1258,6 +1258,13 @@ class CheckoutReads:
         """This read's one reader of the checkout at path."""
         return self._checkouts.setdefault(path, PresentCheckout(path))
 
+    def progress_checkout(self, path: Path) -> ProgressCheckout:
+        """The checkout at path, or a retired one that holds no history: this read alone
+        turns the filesystem's answer into the progress family."""
+        if Checkout.present(path):
+            return self.checkout(path)
+        return MissingCheckout(path)
+
 
     def branch_difference(self, path: Path) -> BranchDifference:
         """All consumers share each branch read and one main commit per repository."""
@@ -1320,8 +1327,7 @@ class ProgressSource(PullRequestSource):
         owned = storage.checkout_paths(owner)
         candidates = (todo.order.checked().check.directory, *owned)
         path = next(iter(Checkout.present(*candidates)), next(iter(owned), candidates[0]))
-        checkout: ProgressCheckout = next(
-            (pulls.checkout(present) for present in Checkout.present(path)), MissingCheckout(path))
+        checkout = pulls.progress_checkout(path)
         try:
             references = checkout.references(storage, owner)
         except (OSError, GitCommandError, WorkBranchError, subprocess.TimeoutExpired) as failure:
