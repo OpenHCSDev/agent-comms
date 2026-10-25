@@ -17,6 +17,10 @@ from pathlib import Path
 from typing import ClassVar
 
 
+class UnexpectedBoardReply(ValueError):
+    """The bridge answered with a different declared reply, preserving its refusal."""
+
+
 class SessionWire:
     """The session socket's records: one JSON line each, its family member named by the key."""
 
@@ -54,10 +58,15 @@ class SessionBoard(SessionWire):
         """Each change once, then exactly one summary of the current unchanged lines."""
         lines = tuple(entry.line(now) for entry in due)
         if unchanged:
-            oldest = min(unchanged, key=lambda entry: entry.since)
-            lines += (f"BOARD: {len(unchanged)} unchanged (oldest: {oldest.text[:60]}, "
-                      f"seen {int((now - oldest.since) // 60)} min)",)
+            lines += (cls.summary(unchanged, now),)
         return cls(lines)
+
+    @classmethod
+    def summary(cls, entries: Sequence[BoardEntry], now: float, description: str = "unchanged") -> str:
+        """One count/oldest presentation; callers supply their reason for showing it."""
+        oldest = min(entries, key=lambda entry: entry.since)
+        return (f"BOARD: {len(entries)} {description} (oldest: {oldest.text[:60]}, "
+                f"seen {int((now - oldest.since) // 60)} min)")
 
     @classmethod
     def asked(cls, endpoint: Path) -> SessionBoard:
@@ -69,10 +78,12 @@ class SessionBoard(SessionWire):
                 return cls.replied(**json.loads(stream.readline()))
 
     @classmethod
-    def replied(cls, lines: Sequence[str], **family: str) -> SessionBoard:
-        """The reply's discriminator names this member; its one field is the lines. A reply of
-        any other shape, an older bridge's refusal included, raises TypeError here."""
-        return cls(tuple(lines))
+    def replied(cls, **reply: Sequence[str]) -> SessionBoard:
+        """Decode the declared member first; a refusal is not a constructor error."""
+        member = reply.pop(cls.family_discriminator)
+        if member != cls.request:
+            raise UnexpectedBoardReply(f"{member}: {reply!r}")
+        return cls(tuple(reply["lines"]))
 
 
 @dataclass(frozen=True)

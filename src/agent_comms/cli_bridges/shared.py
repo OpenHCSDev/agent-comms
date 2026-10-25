@@ -138,12 +138,12 @@ class DeliveredBoardContent(BridgeStateTable, TypedTable, declared_name="board_d
         with db:
             db.execute("BEGIN IMMEDIATE")
             current = {entry.content for entry in entries}
-            for receipt in cls.select(db):
-                if receipt.content not in current:
-                    cls.delete(db, content=receipt.content)
+            for delivered in cls.select(db):
+                if delivered.content not in current:
+                    cls.delete(db, content=delivered.content)
             for entry in entries:
-                receipts = cls.select(db, content=entry.content, since=entry.since)
-                if all(receipt.alarm_due(entry, now) for receipt in receipts):
+                prior = cls.select(db, content=entry.content, since=entry.since)
+                if all(delivered.alarm_due(entry, now) for delivered in prior):
                     cls(entry.content, entry.since, now).upsert(db)
                     due.append(entry)
                 else:

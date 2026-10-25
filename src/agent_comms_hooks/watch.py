@@ -18,7 +18,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, TextIO
 
 from agent_comms.process_claim import ProcessSingleton
-from agent_comms_hooks.board import SessionBoard, UnreadableBoard
+from agent_comms_hooks.board import SessionBoard, UnexpectedBoardReply, UnreadableBoard
 
 if TYPE_CHECKING:
     from agent_comms.cli_bridges.monitor import SessionRequest
@@ -253,7 +253,7 @@ class LiveWatch(RecordedWatch):
         bridge older than the request, or no answer at all, prints as unreadable."""
         try:
             return SessionBoard.asked(self.claim.socket_path).lines
-        except (OSError, ValueError, TypeError) as error:
+        except (OSError, UnexpectedBoardReply) as error:
             return UnreadableBoard(error).lines
 
     def reconnect(self, serve: Serve, request: SessionRequest) -> None:
