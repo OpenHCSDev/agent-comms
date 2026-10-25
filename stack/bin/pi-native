@@ -2,7 +2,7 @@
 # Launch the pinned, local Pi input-ID build without changing the installed Pi.
 set -euo pipefail
 
-source "${BASH_SOURCE[0]%/*}/native-source"
+source "${BASH_SOURCE[0]%/*}/../native/native-source"
 # agent_comms and the patch scripts run under the stack environment `uv sync
 # --project stack` installs, never an ambient python3 lacking its dependencies.
 if [[ ! -x "$python" ]]; then

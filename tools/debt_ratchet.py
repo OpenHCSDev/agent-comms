@@ -263,7 +263,7 @@ class InventoryMeasure[Reading](Measure):
     def parts(cls, repo: Path, base: str, head: str, changed: set[str],
               root: str) -> tuple[Callable[[], object], ...]:
         before, after = cls.inventory(repo, base, root), cls.inventory(repo, head, root)
-        shared = sorted((before & after) - touched_paths(repo, base, head))
+        shared = sorted((before & after) - ChangedPaths.of(repo, base, head).touched)
         shards = os.process_cpu_count() or 1
         return (partial(cls.read, repo, base, sorted(before.difference(shared))),
                 partial(cls.read, repo, head, sorted(after.difference(shared))),
@@ -1430,7 +1430,7 @@ class StringIdentity(InventoryMeasure[ModuleDeclarations]):
     def measured(cls, repo: Path, ref: str, base: str, head: str,
                  readings: dict[str, ModuleDeclarations], root: str) -> dict[str, int]:
         spellings = DeclaredSpellings.read(readings)
-        selected = readings.keys() & touched_paths(repo, base, head)
+        selected = readings.keys() & ChangedPaths.of(repo, base, head).touched
         return {cls.key(path): len(spellings.sites(source, path))
                 for path, source in GitMeasure.sources(repo, ref, selected)}
 
@@ -1819,7 +1819,7 @@ class OwnTypeTest(InventoryMeasure[ModuleDeclarations]):
         # A script outside every package, such as one in tools, is imported by its stem.
         ours = frozenset((dotted or Path(path).stem).partition(".")[0]
                          for path, dotted in DeclaredSpellings.import_names(readings).items())
-        selected = {path for path in readings.keys() & touched_paths(repo, base, head)
+        selected = {path for path in readings.keys() & ChangedPaths.of(repo, base, head).touched
                     if path.startswith(root)}
         return {cls.key(path): sum(name in declared
                                    for _, name in OwnTypeTests.of(source, path, ours))
@@ -2415,14 +2415,44 @@ def python_paths(repo: Path, ref: str, root: str) -> frozenset[str]:
     )
 
 
-@cache
-def touched_paths(repo: Path, base: str, head: str) -> frozenset[str]:
-    # Disable rename detection: both sides of a move enter the union, including
-    # moves into/out of the declared production source boundary.
-    return frozenset(
-        path.decode()
-        for path in git(repo, "diff", "--no-renames", "--name-only", "-z", base, head, "--").split(b"\0")
-    )
+@dataclass(frozen=True)
+class ChangedPaths:
+    """The paths a change touches, and the moves Git pairs among them.
+
+    Both sides of a move are touched, including moves into or out of the declared production
+    source boundary, so each revision measures the path it has. A moved path's per-file counts
+    then compare at its head path, so moving a file adds nothing it did not already hold."""
+
+    touched: frozenset[str]
+    moved: tuple[tuple[str, str], ...]
+
+    @staticmethod
+    @cache
+    def of(repo: Path, base: str, head: str) -> ChangedPaths:
+        # -z name-status: "M\0path\0", or "R096\0old\0new\0" for a move Git detected.
+        fields = iter(git(repo, "diff", "--find-renames", "--name-status", "-z", base, head,
+                          "--").split(b"\0")[:-1])
+        touched: set[str] = set()
+        moved: list[tuple[str, str]] = []
+        for status in fields:
+            paths = [next(fields).decode()]
+            if status.startswith(b"R"):
+                paths.append(next(fields).decode())
+                moved.append((paths[0], paths[1]))
+            touched.update(paths)
+        return ChangedPaths(frozenset(touched), tuple(moved))
+
+    def paired(self, counts: dict[str, int]) -> dict[str, int]:
+        """Per-file counts ("Measure:path" or "Measure:path::member") keyed by head path."""
+        moved = dict(self.moved)
+        result: dict[str, int] = {}
+        for identity, count in counts.items():
+            measure, _, rest = identity.partition(":")
+            path, separator, member = rest.partition("::")
+            if path in moved:
+                identity = f"{measure}:{moved[path]}{separator}{member}"
+            result[identity] = result.get(identity, 0) + count
+        return result
 
 
 @dataclass(frozen=True)
@@ -2453,7 +2483,8 @@ def compare(repo: Path, base: str, head: str, root: str, workers: int,
         raise ValueError("--root must be a repository-relative source directory")
     root = source_root.as_posix().rstrip("/") + "/"
     base, head = revision(repo, base), revision(repo, head)
-    touched = touched_paths(repo, base, head)
+    changed = ChangedPaths.of(repo, base, head)
+    touched = changed.touched
     paths = set(touched & (python_paths(repo, base, root) | python_paths(repo, head, root)))
     before: dict[str, int] = {}
     after: dict[str, int] = {}
@@ -2496,8 +2527,8 @@ def compare(repo: Path, base: str, head: str, root: str, workers: int,
                 introduced[identity] = len(found)
                 if found:
                     introduced_lines[identity] = sorted(found)
-    return Comparison(root, base, head, tuple(sorted(paths)), before, after,
-                      introduced, introduced_lines)
+    return Comparison(root, base, head, tuple(sorted(paths)), changed.paired(before),
+                      changed.paired(after), introduced, introduced_lines)
 
 
 def main() -> int:

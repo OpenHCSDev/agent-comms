@@ -26,6 +26,7 @@ from agent_comms.goal_presentation import (
     RunningExecution,
 )
 from agent_comms.goal_states import ActiveGoal
+from agent_comms.maintenance_barrier import MaintenanceOperator
 from agent_comms.owned_turn import OwnedTurn
 from agent_comms.threads import Thread
 from agent_comms.turn_input_source import NoTurnAcceptance
@@ -60,7 +61,7 @@ def test_execution_identity_survives_wire_and_change_detection(execution_bus, ex
 
 @asynccontextmanager
 async def turn_on(comms, *, original_owner_input=False):
-    agent = CommsAgent(comms, auto_wake=False, owner_stop=OwnerStop())
+    agent = CommsAgent(comms, auto_wake=False, owner_stop=OwnerStop(comms.owners.maintenance))
     owner = comms.registry.require("worker")
     session = "goal-execution-session"
     await agent.sessions.bind_owned(owner, session)
@@ -132,6 +133,19 @@ async def test_owner_stop_beats_backend_failure_and_next_turn_runs_without_retry
         await next_turn.progress.done(events.Done("Continued without Retry", True))
     assert isinstance(relaunched.goals.goal_execution("worker"), RunnableExecution)
     assert failure_count(relaunched) == 0
+
+
+@pytest.mark.asyncio
+async def test_turn_failing_under_install_hold_is_stopped_not_blocked(execution_bus):
+    """An install holds maintenance before it signals owners; the hold is the stop."""
+    comms = execution_bus
+    async with turn_on(comms) as turn:
+        await turn.progress.done(events.Done("tool claim refused under maintenance", False))
+        held = comms.owners.maintenance.begin(MaintenanceOperator.current())
+        turn.finish_goals()
+        comms.owners.maintenance.clear(held)
+    assert isinstance(comms.goals.goal_execution("worker"), RunnableExecution)
+    assert failure_count(comms) == 0
 
 
 @pytest.mark.asyncio

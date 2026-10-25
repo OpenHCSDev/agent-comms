@@ -69,6 +69,10 @@ class HeldSends:
     def require_open():
         raise MaintenanceHeldError("Maintenance holds ingress: the bus is under maintenance")
 
+    @staticmethod
+    def selected[T](held: T, granted: T) -> T:
+        return held
+
 
 class GrantedSends:
     @staticmethod
@@ -86,6 +90,10 @@ class GrantedSends:
     @staticmethod
     def require_open():
         pass
+
+    @staticmethod
+    def selected[T](held: T, granted: T) -> T:
+        return granted
 
 
 class MaintenanceTarget(SubclassUnion):
@@ -290,6 +298,10 @@ class MaintenanceStatus:
 
     def require_open(self) -> None:
         self.phase.new_sends.require_open()
+
+    def selected[T](self, *, held: T, granted: T) -> T:
+        """The caller's answer for this phase's ingress; the barrier names no caller's facts."""
+        return self.phase.new_sends.selected(held, granted)
 
     def require_open_to(self, holder: MaintenanceHolder) -> None:
         """Open, or held by ``holder``: the operation holding maintenance still runs its own reads."""

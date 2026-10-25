@@ -708,6 +708,21 @@ def test_per_file_increase_cannot_be_offset_or_moved(
     )
 
 
+def test_a_renamed_file_compares_with_its_old_path(repo: Repository) -> None:
+    kept = "".join(f"def keep{i}(value: int) -> int:\n    return value\n" for i in range(8))
+    source = kept + "def read(value): ...\n"
+    base = repo.commit({"old.py": source})
+    moved = repo.commit({"old.py": None, "nested/new.py": source})
+    status, report = repo.compare(base, moved, UnannotatedParameter)
+    assert status == 0
+    assert report["delta"][UnannotatedParameter.key(f"{repo.root}/nested/new.py")] == 0
+    assert UnannotatedParameter.key(f"{repo.root}/old.py") not in report["delta"]
+    grown = repo.commit({"nested/new.py": source + "def write(value): ...\n"})
+    status, report = repo.compare(base, grown, UnannotatedParameter)
+    assert status == 1
+    assert report["delta"][UnannotatedParameter.key(f"{repo.root}/nested/new.py")] == 1
+
+
 def test_both_revisions_are_checked_under_the_head_configuration(repo: Repository) -> None:
     source = "import sys\nimport os\n\nvalue: int = 'text'\nused = (os, sys)\n"
     (repo.path / "pyproject.toml").write_text(

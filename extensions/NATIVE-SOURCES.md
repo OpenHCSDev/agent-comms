@@ -1,6 +1,6 @@
 # Automatic global extensions in the native deployment
 
-`stack/native-import-manifest.json` declares each native ESM entry and its exact
+`stack/native/native-import-manifest.json` declares each native ESM entry and its exact
 external source inputs. `snapshot` points to the canonical repository source;
 there is no separate authored native adapter. The Comms adapter includes the
 currently installed global model/thinking-level validation. Project-sync,

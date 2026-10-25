@@ -41,7 +41,7 @@ from typing import TYPE_CHECKING, Any, BinaryIO, ClassVar, NoReturn, TextIO
 
 from .declared_family import DeclaredFamily
 from .errors import RelationViolationError
-from .field_codec import FieldCodec, NullMember, RecordMember, SubclassUnion
+from .field_codec import FieldCodec, Id128, NullMember, RecordMember, SubclassUnion
 from .launch_runtime import INHERITED_ENVIRONMENT, LaunchRuntime
 from .sealed import Sealed
 
@@ -820,10 +820,48 @@ class DarwinPlatform(Platform):
                 return
 
 
+class ResidentManager(DeclaredFamily, affix="Manager"):
+    """What owns a handed-off resident once its launcher is gone: a host fact, decoded once.
+
+    Leaving the launcher's process tree is not enough when the launcher is itself a systemd
+    unit: ending that unit signals its whole cgroup, setsid and the reparent to init included.
+    """
+
+    @staticmethod
+    def current() -> type[ResidentManager]:
+        runtime = os.environ.get("XDG_RUNTIME_DIR")
+        if runtime and Path(runtime, "systemd", "private").is_socket():
+            return SystemdUserManager
+        return NoResidentManager
+
+    @classmethod
+    def command(cls, command: tuple[str, ...]) -> tuple[str, ...]:
+        """A host with no manager owns the resident only through its process tree."""
+        return command
+
+
+class NoResidentManager(ResidentManager): ...
+
+
+class SystemdUserManager(ResidentManager):
+    """The user manager owns each resident in its own transient scope; ``systemd-run
+    --scope`` execs in place, so the gate's handed-off PID is the resident's."""
+
+    @classmethod
+    def command(cls, command: tuple[str, ...]) -> tuple[str, ...]:
+        return ("systemd-run", "--user", "--scope", "--quiet", "--collect",
+                f"--unit=agent-comms-resident-{Id128.mint()}", "--", *command)
+
+
 class ChildLifetime(DeclaredFamily, affix="Lifetime"):
     """Whether a launched child may outlive the process that launched it."""
 
     handoff: ClassVar[bool] = False
+
+    @classmethod
+    def command(cls, command: tuple[str, ...]) -> tuple[str, ...]:
+        """The command the exec gate executes; a child bound to its launcher runs it as given."""
+        return command
 
     @classmethod
     def spawned(cls, process: subprocess.Popen[bytes], descriptor: int,
@@ -857,6 +895,10 @@ class OutlivesLauncherLifetime(ChildLifetime):
     """A resident the launcher hands off, such as a worker, a watcher or a bridge."""
 
     handoff: ClassVar[bool] = True
+
+    @classmethod
+    def command(cls, command: tuple[str, ...]) -> tuple[str, ...]:
+        return ResidentManager.current().command(command)
 
     @staticmethod
     def resident(descriptor: int) -> ProcessIdentity:
@@ -950,7 +992,7 @@ class ChildLaunch:
             str(self.lifetime.launcher(self.platform)),
             str(int(self.lifetime.handoff)),
             str(self.identity_writer.fileno()),
-            *self.command,
+            *self.lifetime.command(self.command),
         )
 
     @property
