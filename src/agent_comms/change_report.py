@@ -380,7 +380,7 @@ class FileLine(WireValue, SourceReference):
     @classmethod
     def cites(cls, text: str) -> bool:
         """Whether a message body names any file:line, whichever repository it is in."""
-        return cls._line_token.search(text) is not None
+        return bool(cls._line_token.search(text))
 
     @classmethod
     def scan(cls, text: str, project: CommanderProject) -> tuple[FileLine, ...]:
