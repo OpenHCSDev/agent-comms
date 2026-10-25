@@ -27,6 +27,10 @@ class NativeClaimEpoch(DeclaredFamily, JsonShapeFamily, affix="NativeClaim"):
     def matches(self, claimed_generation: int) -> bool: ...
 
     @abstractmethod
+    def sent_by_lineage(self, claimed_generation: int) -> bool:
+        """This thread sent the input under this claim or an earlier, fenced one."""
+
+    @abstractmethod
     def reservation_violation(self) -> bool: ...
 
     def record(self, row, db, claimed_generation: int, session: NativeSessionIdentity) -> None:
@@ -46,6 +50,9 @@ class UnrecordedNativeClaim(NativeClaimEpoch, JsonShapeMember):
     value: None = None
 
     def matches(self, claimed_generation: int) -> bool:
+        return False
+
+    def sent_by_lineage(self, claimed_generation: int) -> bool:
         return False
 
     def reservation_violation(self) -> bool:
@@ -82,6 +89,10 @@ class RecordedNativeClaim(NativeClaimEpoch, JsonShapeMember):
 
     def matches(self, claimed_generation: int) -> bool:
         return self.value == claimed_generation
+
+    def sent_by_lineage(self, claimed_generation: int) -> bool:
+        # Claims only grow per name; a later one is a newer writer, never ours.
+        return self.value <= claimed_generation
 
     def reservation_violation(self) -> bool:
         return True
