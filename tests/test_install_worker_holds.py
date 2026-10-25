@@ -1,6 +1,7 @@
 import io
 import os
 from dataclasses import dataclass
+from functools import partial
 from pathlib import Path
 
 import pytest
@@ -14,7 +15,9 @@ from agent_comms.installer.interpreter_operation import (
     RuntimeProbe,
     serve,
 )
-from agent_comms.installer.owner_starts import RefusedOwner, StartedOwner
+from agent_comms.installer.owner_starts import OwnerStart, RefusedOwner, StartedOwner
+from agent_comms.installer.probes.commands import CliCommandProbe, CliOutput
+from agent_comms.installer.probes.owners import OwnerActionsProbe
 from agent_comms.installer.probes.packages import DistributionVersionsProbe, InstalledPackagesProbe
 from agent_comms.installer.refusals import InterpreterWorkerDied, UpgradeRefused
 from agent_comms.installer.upgrade import Stack
@@ -38,6 +41,17 @@ def test_owner_actions_decode_in_the_selected_worker(comms, command):
     assert outcomes[0].name == "missing-owner"
     with pytest.raises(UpgradeRefused):
         outcomes[0].require_success(UpgradeRefused)
+
+
+@pytest.mark.parametrize("probe_type", [CliCommandProbe, OwnerActionsProbe])
+def test_cli_reply_preserves_declared_failure_from_each_entry(comms, probe_type):
+    runtime = LaunchRuntime.running()
+    with InstallCommands() as commands:
+        stack = Stack(Path(__file__).resolve().parents[1], commands, runtime=runtime)
+        probe = probe_type(("--root", str(comms.root), "not-a-command"))
+        with pytest.raises(UpgradeRefused, match="invalid choice") as refused:
+            stack.cli_reply(probe, partial(CliOutput.decoded, result=tuple[OwnerStart, ...]))
+    assert "undecodable answer" not in str(refused.value)
 
 
 def test_owner_reports_own_their_refusal():
