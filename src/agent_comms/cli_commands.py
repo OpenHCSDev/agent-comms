@@ -13,6 +13,7 @@ import json
 import os
 import re
 import shlex
+import subprocess
 import time
 from abc import ABC, abstractmethod
 from collections.abc import AsyncIterator, Iterator, Mapping
@@ -34,6 +35,9 @@ from agent_comms.installer.owner_starts import OwnerStart, RefusedOwner, Started
 from agent_comms.launch_root import LaunchRoot
 from agent_comms.lifecycle_capability import LifecycleCapability, Successful
 from agent_comms.message_bus import HeldBusWrite
+from agent_comms_hooks.queue_bypass import GH, QueueBypass
+from agent_comms_hooks.shell import ShellCommand
+from agent_comms_hooks.watch import WatchClaim
 
 from .active_route import (
     ActiveRoute,
@@ -191,7 +195,8 @@ from .thread_model import ThreadModel
 from .thread_status import ThreadStatus
 from .thread_text import NoParent, NoThreadText, ThreadParent, ThreadText
 from .threads import KeptModel, ModelChoice, NextTurnConfiguration, Thread
-from .todos import Todo
+from .todos import Todo, TodoStore
+from .head_review import PullRequestHead, PullRequestView
 from .tool_result import ToolResult
 from .turn_context import (
     CodexRolloutProvenance,
@@ -642,6 +647,11 @@ class AcknowledgedResult(CliResult):
 
 
 @dataclass(frozen=True)
+class MergeReviewResult(CliResult):
+    heads: tuple[PullRequestHead, ...]
+
+
+@dataclass(frozen=True)
 class WhoResult(CliResult):
     who: tuple[Annotated[ThreadView, WireForm], ...]
 
@@ -1051,6 +1061,45 @@ class CliCommand[Answer: CliResult = CliResult](
         return target.run(cls, comms, arguments, confirmed=confirmed, channel=channel,
                              project=os.getcwd() if project is None else project,
                              snapshot=snapshot, catalog=catalog)
+
+
+@dataclass(frozen=True, kw_only=True)
+class MergeReviewCliCommand(CliCommand[MergeReviewResult], declared_name="merge-review"):
+    """Read the existing exact-head verdict for a commander session's merge command."""
+
+    help = "Require recorded ok verdicts for the current heads an admin/API command merges"
+    session: Annotated[str, Argument(flags=("--session",))]
+    command: Annotated[str, Argument(flags=("--command",))]
+
+    def apply(self, ctx: Comms) -> MergeReviewResult:
+        bindings = WatchClaim(self.session).state().bindings()
+        if not bindings:
+            raise ToolRefusedError("The commander session has no recorded bus binding; no verdict can be read.")
+        stores = []
+        for binding in bindings:
+            root = Path(binding.root)
+            snapshot = RegistryStore.at(root).read_snapshot_unlocked()
+            subject = snapshot.require(binding.bus)
+            if not any(subject.incarnation == commander.incarnation
+                       for commander in snapshot.commander_project.commanders(snapshot)):
+                raise ToolRefusedError("Only a bound commander session may use a reviewed merge bypass.")
+            stores.append(TodoStore(root))
+        heads = []
+        for simple in ShellCommand.split(self.command):
+            for bypass in QueueBypass.matching(simple):
+                read = subprocess.run((GH.name, *bypass.view_arguments()),
+                                      capture_output=True, text=True, timeout=60)
+                if read.returncode:
+                    raise ToolRefusedError(read.stderr.strip() or "The merge's current PR head could not be read.")
+                request = FieldCodec.decode(PullRequestView, FieldCodec.parse(read.stdout)).request()
+                for store in stores:
+                    reviews = store.head_reviews(request)
+                    if not reviews:
+                        raise ToolRefusedError(
+                            f"{request.repo.to_wire()}#{request.pr} at {request.head}: missing recorded commander ok verdict.")
+                    reviews[0].verdict.require_merge(request)
+                heads.append(request)
+        return MergeReviewResult(tuple(heads))
 
 
 @dataclass(frozen=True, kw_only=True)

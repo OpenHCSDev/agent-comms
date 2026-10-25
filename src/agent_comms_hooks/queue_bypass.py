@@ -1,82 +1,123 @@
-"""Only claude-ai and the commander land work around the merge queue.
+"""Required checks and the commander's head verdict protect merges.
 
-Every agent acts as the same GitHub account, and that account may bypass the merge-queue
-ruleset so claude-ai or the commander can land an already diagnosed fix without waiting in the
-queue, such as when the commander's own verdict tool is what the fix repairs. Every other
-session on the fleet's machine is refused here, and its work lands through the queue with its
-checks and the commander's verdict on the head.
+The owner's admin bypass stays. A commander-session admin or API merge needs
+Core's recorded ok verdict on the current head. Other hook sessions cannot
+bypass the checks. claude-ai's separate owner path is unchanged.
+
+Ordinary Bash calls stay standard-library-only; only a merge invokes Core's reader.
 """
 
 from __future__ import annotations
 
+import getopt
 import re
+import subprocess
+import sys
 from abc import ABC, abstractmethod
+from dataclasses import dataclass
 from typing import ClassVar
 
 from agent_comms.shell_commands import Program, ShellCommand
-from agent_comms_hooks import BashRefusal, ClaudeToolHook
+from agent_comms_hooks import Bash, BashRefusal, ClaudeToolHook
 
 GH = Program("gh")
 
 
+@dataclass(frozen=True)
 class QueueBypass(ABC):
-    """One way a `gh` command merges a pull request around the merge queue."""
+    """One external merge command and the GitHub read that identifies its current head."""
 
+    command: ShellCommand
     reason: ClassVar[str]
 
     @classmethod
     @abstractmethod
     def merges(cls, args: list[str]) -> bool: ...
 
+    @abstractmethod
+    def subject(self) -> tuple[str, ...]: ...
+
+    def view_arguments(self) -> tuple[str, ...]:
+        return ("pr", "view", *self.subject(), "--json", "headRefOid,number,url")
+
     @classmethod
-    def found(cls, command: ShellCommand) -> tuple[str, ...]:
+    def matching(cls, command: ShellCommand) -> tuple[QueueBypass, ...]:
         if not GH.runs(command):
             return ()
-        return tuple(
-            member.reason for member in cls.__subclasses__() if member.merges(command.args)
-        )
+        return tuple(member(command) for member in cls.__subclasses__()
+                     if member.merges(command.args))
+
+    @classmethod
+    def found(cls, command: ShellCommand) -> tuple[str, ...]:
+        return tuple(member.reason for member in cls.matching(command))
 
 
 class AdminMerge(QueueBypass):
-    """`gh pr merge --admin` merges past the queue and its required checks."""
+    """The external gh merge options select the PR, never its verdict."""
 
-    reason = "`gh pr merge --admin` merges past the queue and its required checks."
+    reason = "`gh pr merge --admin` bypasses required checks."
+    # gh's external option contract: values must not become a PR selector.
+    short_options: ClassVar[str] = "R:b:F:dmrst:"
+    long_options: ClassVar[tuple[str, ...]] = (
+        "repo=", "body=", "body-file=", "delete-branch", "merge", "rebase", "squash",
+        "subject=", "admin", "auto", "disable-auto", "author-email=", "match-head-commit=",
+    )
 
     @classmethod
     def merges(cls, args: list[str]) -> bool:
         return args[:2] == ["pr", "merge"] and "--admin" in args
 
+    def subject(self) -> tuple[str, ...]:
+        options, selectors = getopt.gnu_getopt(
+            self.command.args[2:], self.short_options, self.long_options)
+        if len(selectors) > 1:
+            raise ValueError("An admin merge must identify one pull request.")
+        return (*selectors, *(word for flag, value in options if flag in ("-R", "--repo")
+                              for word in ("--repo", value)))
+
 
 class ApiMerge(QueueBypass):
-    """`gh api .../pulls/N/merge` merges directly, outside the queue."""
+    """The merge API's external path already identifies the PR and repository."""
 
-    reason = "`gh api .../pulls/N/merge` merges directly, outside the queue."
-
-    path: ClassVar[re.Pattern[str]] = re.compile(r"/?repos/[^/\s]+/[^/\s]+/pulls/\d+/merge")
+    reason = "`gh api .../pulls/N/merge` bypasses required checks."
+    path: ClassVar[re.Pattern[str]] = re.compile(
+        r"/?repos/(?P<repository>[^/\s]+/[^/\s]+)/pulls/(?P<number>\d+)/merge")
 
     @classmethod
     def merges(cls, args: list[str]) -> bool:
         return args[:1] == ["api"] and any(map(cls.path.fullmatch, args))
 
+    def subject(self) -> tuple[str, ...]:
+        matched = next(match for arg in self.command.args if (match := self.path.fullmatch(arg)))
+        return (matched["number"], "--repo", matched["repository"])
+
 
 class QueueBypassGuard(BashRefusal):
-    headline = "Merge around the queue refused"
+    headline = "Merge bypass refused"
     advice = (
-        ". Only claude-ai and the commander land work past the queue. Enqueue it with"
-        " `gh pr merge N --auto --merge`; the queue runs its checks and the"
-        " commander's head verdict."
+        ". Use `gh pr merge N --auto --merge` for required checks and the commander's head verdict."
     )
 
     @classmethod
-    def binds(cls, hook: ClaudeToolHook) -> bool:
-        """The commander's session, the one that holds its sources, may merge past the queue."""
-        return not hook.parts.exists()
+    def reasons(cls, command: str) -> tuple[str, ...]:
+        return tuple(reason for simple in ShellCommand.split(command)
+                     for reason in QueueBypass.found(simple))
 
     @classmethod
-    def reasons(cls, command: str) -> tuple[str, ...]:
-        return tuple(
-            reason for simple in ShellCommand.split(command) for reason in QueueBypass.found(simple)
-        )
+    def reasons_for(cls, hook: ClaudeToolHook) -> tuple[str, ...]:
+        command = Bash.decode(hook.tool_input).command
+        reasons = cls.reasons(command)
+        if not reasons or not hook.parts.exists():
+            return reasons
+        try:
+            checked = subprocess.run(
+                (sys.executable, "-m", "agent_comms.cli", "merge-review",
+                 "--session", hook.session_id, "--command", command),
+                capture_output=True, text=True, timeout=60,
+            )
+        except (OSError, subprocess.TimeoutExpired) as error:
+            return (f"Core's merge-verdict reader failed: {error}",)
+        return (checked.stderr.strip() or checked.stdout.strip(),) if checked.returncode else ()
 
 
 main = QueueBypassGuard.main
