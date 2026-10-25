@@ -83,6 +83,7 @@ from agent_comms.todos import (
     DeliveryEvidence,
     DeliverySource,
     DirectiveText,
+    HeadVerdict,
     LocatedProblemFinding,
     NoSuccessor,
     OperationDelivery,
@@ -419,7 +420,7 @@ class CommanderContext(BaseModel):
         A publish alone is only queued."""
         outcomes = MessageNotification.references(
             self.comms.root, self.comms.registry, self.comms.bus.bus, (reference,))
-        return MessageNotification.summary(outcomes.get((reference.seq, reference.message_id), ()))
+        return MessageNotification.summary(outcomes.outcomes.get((reference.seq, reference.message_id), ()))
 
     def call(self, tool):
         return self.actor.as_thread(self.commander).invoke(tool, self.comms)
@@ -542,7 +543,7 @@ class ListedProblems(OrderedProblems):
                 listed: Mapping[str, Todo]) -> PendingProblemOrder:
         """A replacement order keeps the problem's pull requests: a restore cites their heads."""
         return order.carrying(link for pid in group if pid in listed
-                              for link in listed[pid].order.linked_requests)
+                              for link in listed[pid].order.pull_requests)
 
     def record(self, context: CommanderContext, order: PendingProblemOrder, unit: str,
                group: Sequence[str], traced: FileLine | NoSourceReference, request: OwnerRequestId,
@@ -825,6 +826,11 @@ class CommanderVerb(DeclaredVerb, affix="Verb"):
     def gate(self, ctx: Commander) -> None:
         ctx.comms.registry.require(self.who(ctx)).require_commander()
 
+    @classmethod
+    def review_allowed(cls, verdicts: tuple[type[HeadVerdict], ...]) -> bool:
+        """Ordinary verbs do not select a head verdict."""
+        return True
+
     def resolves_claim(self, unit: str, problem: str) -> bool:
         """Ordinary messages and actions do not judge a delivery claim."""
         return False
@@ -833,11 +839,25 @@ class CommanderVerb(DeclaredVerb, affix="Verb"):
     def run(self, ctx: Commander) -> None: ...
 
     @classmethod
-    def usage(cls) -> str:
-        """This verb's command line, rendered by the parser its options declare."""
+    def commands(cls, values: Mapping[str, str]) -> tuple[str, ...]:
+        """The commands its parser exposes, filled from this line's observed arguments.
+
+        A parameter variant with no parser contributes no second command. Required review
+        prose remains the reviewer's, not something the board can manufacture.
+        """
         verbs = argparse.ArgumentParser(prog=cls.tool()).add_subparsers()
         cls.add_parser(verbs)
-        return ' '.join(next(iter(verbs.choices.values())).format_usage().split()[1:])
+        commands = []
+        for parser in verbs.choices.values():
+            placeholder = parser._get_formatter()._format_args
+            words = [cls.tool(), cls.declared_name]
+            for action in parser._actions:
+                if action.dest in values:
+                    words += [*action.option_strings[:1], values[action.dest]]
+                elif action.required and not action.option_strings:
+                    words.append(placeholder(action, action.dest))
+            commands.append(' '.join(words))
+        return tuple(commands)
 
 
 class HeartbeatGated(CommanderVerb, declared_name=None):
@@ -882,8 +902,9 @@ class DirectiveVerb(HeartbeatGated):
 
         Closed names answer nothing; unknown identities refuse instead of recording a reply
         that silently drops its references. A wrong addressee leaves its real debt uncovered.
-        A refusal lists every misaddressed name and every blocking debt together, with the
-        replies that answer all of them at once, so one round trip clears the gate.
+        A refusal lists every misaddressed name and every blocking debt together, debts still
+        inside their answer window included since they fall due before the retry lands, with
+        the replies that answer all of them at once, so one round trip clears the gate.
         """
         now = time.time()
         opened = OwedAnswer.opened(ctx.comms, self.who(ctx))
@@ -902,14 +923,15 @@ class DirectiveVerb(HeartbeatGated):
         answered = tuple(rule for rule in opened if rule.answered_by(named))
         problems |= {rule.cited: reason for rule in opened
                      if (reason := rule.misaddressed(named, reached))}
-        owed = tuple(rule for rule in opened if rule.due(now) and not rule.answered_by(named))
-        for rule in owed:
-            if rule.blocks(reached, self, answered):
-                problems[rule.cited] = (f'{rule.line()}: {rule.message.body[:80]}\n'
-                                        f'{rule.clearing_action()}')
-            else:
+        unanswered = tuple(rule for rule in opened if not rule.answered_by(named))
+        blocking = tuple(rule for rule in unanswered if rule.blocks(reached, self, answered))
+        for rule in unanswered:
+            if rule.due(now) and rule not in blocking:
                 print(f'WARNING: {rule.line()}')
-        if problems:
+        if problems or any(rule.due(now) for rule in blocking):
+            problems |= {rule.cited: f'{rule.line()}: {rule.message.body[:80]}\n'
+                                     f'{rule.clearing_action()}'
+                         for rule in blocking}
             raise RecordProblems(problems | self.replies_clearing(
                 tuple(rule for rule in opened if rule.cited in problems)))
         self.respond(ctx, tuple(dict.fromkeys(message.reference for message in named)))
@@ -1146,7 +1168,7 @@ class DoneVerb(OrderVerb):
         ctx.call(CommsOrderDoneTool(
             problem=todo.id, order_id=order.id, delivery=delivery,
             claims=delivery.done_claims(order)))
-        print(f'{todo.held().owner}: order {order.id} delivered as {delivery.work}')
+        print(f'{todo.holder_state.previous_assignment().owner}: order {order.id} delivered as {delivery.work}')
 
 
 @dataclass(frozen=True)

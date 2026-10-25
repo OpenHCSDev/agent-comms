@@ -14,13 +14,14 @@ from agent_comms.commander.order import OrderFile
 from cli_command import core
 from agent_comms.field_codec import FieldCodec, MalformedRecord
 from agent_comms.goal_actions import CreateProblemGoalAction
+from agent_comms.held_orders import HeldOrders
 from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.repository_name import RepositoryName
 from agent_comms.tool_caller import ThreadCaller
 from agent_comms.order_tools import CommsOrderDoneTool, CommsTodoCreateTool
 from agent_comms.todos import (
     CommitDelivery, DoneTodoState, FixShape, OrderScope,
-    PendingProblemOrder, ReportDelivery, ReportedProblemOrder, TriageScope,
+    PendingProblemOrder, ReportDelivery, ReportedProblemOrder, TodoStore, TriageScope,
 )
 from agent_comms.threads import Thread
 
@@ -53,24 +54,38 @@ def test_shape_references_are_class_lines_not_names_or_decorators(tmp_path):
             replace(shape, parents=(location,)).require_references(source.roots, revision)
 
 
-def assigned(comms, scope, source, problem='P1'):
+def assigned(comms, scope, source, problem='P1', edits=('Fix the problem',)):
     for name in ('lead', 'worker'):
         comms.registry.declare(Thread(name, frozenset(), str(comms.root)))
-    return requested(comms, scope, source, problem)
+    return requested(comms, scope, source, problem, edits)
 
 
-def requested(comms, scope, source, problem='P1'):
+def requested(comms, scope, source, problem='P1', edits=('Fix the problem',)):
     request = comms.goals.todos.add_request(comms.registry.require('lead').incarnation,
         'Classify the failing source or fix its declared parent').id
     caller = ThreadCaller('lead')
     CommsTodoCreateTool(owner='worker', order=CreateProblemGoalAction(
-        problem=problem, order=replace(order(source), scope=scope), request=request,
+        problem=problem, order=replace(order(source), scope=scope, edits=edits), request=request,
         review_at=RecordedEventTime(1000), commander='lead',
         assigner=comms.registry.require('lead').incarnation,
         repo=RepositoryName.from_wire('OpenHCSDev/agent-comms'),
         text='Classify the source without changing it',
     )).apply(comms, caller)
     return caller, comms.goals.todos.get(problem)
+
+
+def test_held_orders_recall_holder_problem_scope_and_last_edit_from_the_store(
+    private_comms, source_repository,
+):
+    assigned(private_comms, FIX_SCOPE, source_repository, 'P1',
+             ('Reproduce the bounce first', 'Then stop and report; no src edit before it'))
+    requested(private_comms, TriageScope(), source_repository, 'P2',
+              ('Classify the failing source',))
+    held = HeldOrders.of(TodoStore(private_comms.root), private_comms.registry.snapshot(), 'lead')
+    assert sorted(hold.recalled() for hold in held.live) == [
+        'worker P1 fix: Then stop and report; no src edit before it',
+        'worker P2 triage: Classify the failing source',
+    ]
 
 
 def test_triage_returns_its_report_without_fictitious_installation(comms, source_repository):

@@ -2666,7 +2666,8 @@ class DonePhaseBroken(Measure):
             PhaseSiteCount(cls, phase, site): 1
             for phase in PlanPhase.members_with(PlanPhase)
             if phase.__name__ in after - before
-            for site in phase.evidence.sites(reading) or (reading.describe(phase.evidence),)
+            for site in phase.phase_evidence().sites(reading)
+            or (reading.describe(phase.phase_evidence()),)
         }
         return dict.fromkeys(broken, 0), broken
 

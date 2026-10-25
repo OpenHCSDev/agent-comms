@@ -19,7 +19,7 @@ def test_membership_changes_keep_canonical_notification_and_history(tmp_path):  
     # The initial agent-authored ordinary message addresses both channel peers.
     receipts = comms.views.message_notifications_for_references((original.message.reference,))
     assert {
-        row.recipient for row in receipts[(original.message.seq, original.message.message_id)]
+        row.recipient for row in receipts.outcomes[(original.message.seq, original.message.message_id)]
     } == {"alpha", "beta"}
     comms.channels.update_tags("alpha", remove=frozenset({"team"}))
     comms.registry.declare(
@@ -32,7 +32,7 @@ def test_membership_changes_keep_canonical_notification_and_history(tmp_path):  
     with Coordination(str(root / "coordination.sqlite3")) as store:
         accepted = accept_initial(comms.bus, root_id, message.seq, store)
     assert [assignment.recipient for assignment in accepted] == ["beta"]
-    current = comms.views.message_notifications_for_references((message.reference,))[(message.seq, message.message_id)]
+    current = comms.views.message_notifications_for_references((message.reference,)).outcomes[(message.seq, message.message_id)]
     assert [(row.recipient, type(row.state)) for row in current] == [("beta", SentProgress)]
     assert not comms.registry.require("beta").executing
     assert original.message in read_history(comms, "#team")

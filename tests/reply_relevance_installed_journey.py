@@ -156,7 +156,7 @@ async def run(stage, package):
                             )
                             assert len(history) == 2 and all(row.expected_prompt_equality_established for row in history)
                             handling = service.views.message_notifications_for_references(
-                                (original.reference,))[(original.seq, original.message_id)]
+                                (original.reference,)).outcomes[(original.seq, original.message_id)]
                             notification, = handling
                             assert notification.label == 'Responded'
                             acknowledgement['proof'] = {'assignment': FieldCodec.encode(claims[0]),

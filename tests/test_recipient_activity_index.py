@@ -89,4 +89,4 @@ def test_viewer_selects_the_outcomes_of_a_delivery_window(tmp_path, viewer_of, s
         comms.root, comms.registry, (original,),
         NotificationAssignment.read(comms.root, (original,)), viewer=viewer_of(lookups),
     )
-    assert {item.recipient for item in window[(sent.seq, sent.message_id)]} == seen
+    assert {item.recipient for item in window.outcomes[(sent.seq, sent.message_id)]} == seen

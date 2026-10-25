@@ -43,7 +43,7 @@ def test_missing_presentation_owns_source_absence_and_retired_status(comms):
     presentations = comms.views.thread_presentations(("missing",))
     absent = presentations.read("missing")
     assert absent == presentations.view("missing") == NoThreadPresentation()
-    assert not absent.notification_activity_names()
+    assert not absent.notification_window.activity_names()
     assert absent.label == ""
     painted = ThreadStatusModel.known("missing", absent)
     retired = ThreadStatusModel.retired("missing")

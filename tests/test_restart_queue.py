@@ -55,6 +55,56 @@ def test_dead_owner_restart_settles_before_selection_checks(private_comms, dead_
         )]
 
 
+def test_cancel_settles_dead_pending_owner_without_a_watcher(
+    private_comms, dead_owner_restart,
+):
+    store = queue.RestartQueue(private_comms.root / queue.DIRECTORY)
+    owner = dead_owner_restart.selection.identity.incarnation.require_recorded()
+    with store.guarded_write():
+        store.save(dead_owner_restart)
+    queue.cancel(private_comms, 'worker')
+    with store.guarded_read():
+        assert not store.active_path(owner).exists()
+        assert list(store.history(owner)) == [replace(
+            dead_owner_restart, state=queue.StaleRestart(reason='Owner process exited'),
+        )]
+
+
+async def test_restore_owner_keeps_blocked_goal_unchanged(
+    private_comms, tmp_path, source_programs, native_runtime_package,
+):
+    from agent_comms.cli_commands import RestoreOwnerCliCommand, TargetActionCliCommand, TargetBatchResult
+    from agent_comms.goal_actions import SetGoalAction, BlockedGoalAction
+    from agent_comms.runtime import socket_path
+
+    source_programs.bind(tmp_path)
+    comms = private_comms
+    comms.registry.declare(Thread('worker', frozenset(), str(tmp_path)))
+    comms.goals.update_goal('worker', SetGoalAction(text='Preserve this blocked task'))
+    blocked = comms.goals.update_goal(
+        'worker', BlockedGoalAction(block_reason='Await an explicit owner retry'))
+    command = TargetActionCliCommand(
+        operation=RestoreOwnerCliCommand.declared_name, target=('worker',))
+    result = await asyncio.to_thread(command.apply, comms)
+    decoded = FieldCodec.decode(TargetBatchResult, FieldCodec.encode(result))
+    assert decoded.exit_code() == 0
+    assert decoded.reconnect_targets() == ('worker',)
+    pid = comms.registry.require('worker').require_process().pid
+    try:
+        async with asyncio.timeout(20):
+            while not socket_path(comms.root, pid).exists():
+                assert comms.registry.require('worker').process_alive
+                await asyncio.sleep(0.02)
+        assert comms.registry.require('worker').goal == blocked
+        repeated = await asyncio.to_thread(command.apply, comms)
+        assert repeated.exit_code() == 0
+        assert not repeated.reconnect_targets()
+        assert comms.registry.require('worker').require_process().pid == pid
+        assert comms.registry.require('worker').goal == blocked
+    finally:
+        await asyncio.to_thread(comms.owners.stop, 'worker')
+
+
 def test_history_keeps_interrupted_terminal_visible_until_step_settles_it(
     private_comms, dead_owner_restart,
 ):

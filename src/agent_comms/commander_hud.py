@@ -27,6 +27,8 @@ from agent_comms.todos import OrderProgress, ProgressRead, PullRequest
 from agent_comms.tool_result import ToolResult
 from agent_comms.turn_digests import OrderEditCountRead
 from agent_comms.ui_model.unit_state import UnitClock, UnitState
+from agent_comms.task_attachments.commander_pings import CommanderUpdate
+from agent_comms_hooks.board import BoardLine
 
 if TYPE_CHECKING:
     from agent_comms.comms import Comms
@@ -78,7 +80,7 @@ class CommanderUnit(HudRow):
             f"{order.problem}: {order.state}; {order.progress.line}" for order in self.orders
         )
         return (
-            f"{self.state.__name__} {self.unit.name}: orders={orders} "
+            f"{self.state.verb} {self.unit.name}: orders={orders} "
             f"review timers={sum(len(order.review_timers_up) for order in self.orders)} "
             f"strikes={self.strikes} edits={sum(order.unjudged_edits for order in self.orders)} "
             f"ready={','.join(str(pr.number) for pr in self.ready_prs)} "
@@ -87,7 +89,9 @@ class CommanderUnit(HudRow):
 
     def needs_hand(self) -> bool:
         """Its UnitState asks for the commander, or a review timer on one of its orders is up."""
-        return self.state.attention() or any(order.review_timers_up for order in self.orders)
+        return (self.state.attention() and self.state.commander_disposes) or any(
+            order.review_timers_up for order in self.orders
+        )
 
 
 @dataclass(frozen=True)
@@ -113,6 +117,31 @@ class CommanderPhase(HudRow):
             f"{self.phase.plan.declared_name}/{self.phase.declared_name} "
             f"done={self.done} ready={self.ready} "
             f"holders={','.join(unit.name for unit in self.holders)}"
+        )
+
+
+@dataclass(frozen=True)
+class BoardRow(HudRow):
+    """A committed board line, without another interpretation or ordering."""
+
+    entry: BoardLine
+
+    def needs_hand(self) -> bool:
+        return True
+
+    def line(self) -> str:
+        return self.entry.aged(time.time())
+
+
+@dataclass(frozen=True)
+class QuietUnits(HudRow):
+    """Units with no commander action share one roll call."""
+
+    units: tuple[CommanderUnit, ...]
+
+    def line(self) -> str:
+        return f"{len(self.units)} units need no hand: " + ", ".join(
+            unit.unit.name for unit in self.units
         )
 
 
@@ -172,7 +201,7 @@ class CommanderHud(ToolResult):
     TodoStore owns orders, review timers and strikes; OrderEditCountRead owns edit counts;
     PullRequests owns ready/draft facts; PlanPhase owns phase state; OverloadDegradation
     owns the load formula and decision; ThreadExecution owns which threads are forks. Nothing
-    here writes or retains a board.
+    here makes independent board decisions; its lines come from the committed packet.
     """
 
     commander: ThreadIncarnation
@@ -181,6 +210,7 @@ class CommanderHud(ToolResult):
     load: OverloadDegradation
     forks: tuple[ThreadIncarnation, ...]
     usage: CodexUsage
+    board: tuple[BoardLine, ...] = ()
 
     @classmethod
     def read(cls, comms: Comms, commander: str) -> CommanderHud:
@@ -230,19 +260,22 @@ class CommanderHud(ToolResult):
         ) for phase in PlanPhase.members_with(PlanPhase))
         forks = tuple(fork.incarnation for fork in CommanderService.forks(snapshot, commander)
                       if snapshot.status(fork.name).receiving)
+        packet = CommanderUpdate.latest(comms, owner)
         return cls(owner, tuple(units), phases,
                    OverloadDegradation.from_orders(held, len(timers), sum(edits.values())),
-                   forks, CodexUsage.read())
+                   forks, CodexUsage.read(), packet.board(BoardLine) if packet else ())
 
     def rows(self) -> tuple[HudRow, ...]:
-        """The rows under the load line: every row needing the commander's hand, in the
-        UnitState family's order and then the plans' order, then the work that is moving, the
-        forks, and one count per plan for its finished phases."""
-        live = (*self.units, *(phase for phase in self.phases if not phase.finished))
+        """Committed board order, actionable cards, live phases, then folded quiet units."""
+        live_phases = tuple(phase for phase in self.phases if not phase.finished)
+        live = (*self.units, *live_phases)
+        quiet = tuple(unit for unit in self.units if not unit.needs_hand())
         finished = tuple(phase.phase for phase in self.phases if phase.finished)
         return (
+            *(BoardRow(line) for line in self.board),
             *(row for row in live if row.needs_hand()),
-            *(row for row in live if not row.needs_hand()),
+            *(phase for phase in live_phases if not phase.needs_hand()),
+            *((QuietUnits(quiet),) if quiet else ()),
             self.usage,
             CommanderForks(self.forks),
             *(FinishedPhases(plan, phases) for plan in Plan.members_with(Plan)

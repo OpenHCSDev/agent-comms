@@ -129,6 +129,19 @@ class Repo(BaseModel, WireValue):
     def holds(self, todo: Todo) -> bool:
         return self.github == todo.repo
 
+    def default_branch(self) -> str:
+        """The origin's declared default, never a guessed branch name."""
+        try:
+            reference = self.git(
+                self.checkout, "symbolic-ref", "--short", "refs/remotes/origin/HEAD",
+            ).strip()
+        except GitCommandError as error:
+            raise ValueError(
+                f"Origin's default branch is unset in {self.checkout}; "
+                "run git remote set-head origin --auto in that checkout."
+            ) from error
+        return reference.removeprefix("origin/")
+
     def contains(self, sha: str, revision: str = "HEAD") -> bool:
         """Prove ancestry in the requested fetched revision without moving the checkout.
 
@@ -338,6 +351,13 @@ class Checkout:
     and retired here and nowhere else."""
 
     path: Path
+
+    @classmethod
+    def present(cls, *paths: Path) -> tuple[Path, ...]:
+        """The given paths that are Git working trees, decided as Git decides: a `.git` file
+        links a worktree, a `.git` folder holds HEAD. A plain or empty-`.git` folder is none."""
+        return tuple(path for path in paths
+                     if (path / ".git").is_file() or (path / ".git" / "HEAD").is_file())
 
     @classmethod
     def add(cls, repository: Path | str, path: Path | str, start: CheckoutStart) -> Self:

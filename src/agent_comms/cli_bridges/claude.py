@@ -98,6 +98,8 @@ class RunningClaude(ClaudeJsonLines, ClaudeHistory, OnlineHistory):
 class BoardLineRow(BoardLine, BridgeStateTable, TypedTable, declared_name=BoardLine.table):
     """The newest heartbeat packet's lines, which the session's tool-call hook prints."""
 
+    dropped_fields = ("locks_at",)
+
     @classmethod
     def record(cls, db: sqlite3.Connection, update: CommanderUpdate) -> None:
         """The packet replaces the board whole: a line it no longer carries is cleared."""

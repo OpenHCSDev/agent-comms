@@ -24,6 +24,7 @@ sys.path.insert(0, str(args.toad_tests))
 from runtime_fixture import ToadApp, wait_channel_roster
 from agent_comms.comms import wire
 from agent_comms.presentation import MessageNotification
+from agent_comms.notification_evidence import NotificationWindow
 from agent_comms.registry_document import RosterVisibility
 from agent_comms.threads import Thread
 from toad.widgets.comms_sidebar import ChannelGroup
@@ -56,9 +57,9 @@ async def main():
     assert comms.bus.pending_count('stopped', CommandTarget.named('#team')) == 1
     assert comms.views.viewer_snapshot(str(root)) == human
     original = comms.views.message_notifications_for_references((message.reference,))
-    assert original[message.seq, message.message_id]
+    assert original.outcomes[message.seq, message.message_id]
     assert comms.views.message_notifications_for_references(
-        (message.reference,) * (MessageNotification.window_limit + 1)) == original
+        (message.reference,) * (NotificationWindow.window_limit + 1)).outcomes == original.outcomes
     page = comms.views.channel_display_page('#team', viewer=NamedViewer(comms.messaging.user_identity(str(root)).name))
     comms.views.mark_page_read(page, worktree=str(root))
     assert comms.views.viewer_snapshot(str(root)).channel_unread['#team'].count == 0

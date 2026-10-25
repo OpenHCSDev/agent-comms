@@ -1,5 +1,6 @@
 """Committed notifications survive a new watcher and use the real publisher/readers."""
 
+import json
 import os
 import pickle
 import time
@@ -9,7 +10,10 @@ import pytest
 
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.commander_heartbeat import CommanderHeartbeat, CommanderObservation
-from agent_comms.commander_hud import CommanderFrame, CommanderHud, CodexUsage, UnreadableUsage
+from agent_comms.commander_hud import (
+    BoardRow, CommanderFrame, CommanderHud, CommanderUnit, CodexUsage, QuietUnits, UnreadableUsage,
+)
+from agent_comms.commander.vibe_check import OverloadDegradation
 from agent_comms.task_attachments.commander_pings import CommanderDecisions, CommanderNotice, CommanderUpdate, RulePing
 from agent_comms.errors import OverdueHeadRefusalError, UnregisteredThreadError
 from agent_comms.field_codec import MessageId
@@ -22,10 +26,15 @@ from agent_comms.read_basis import DMDisplayScope
 from agent_comms.repository_name import RepositoryName
 from agent_comms.service_passes import ServicePassStore
 from agent_comms.todos import ProgressRead
+from agent_comms.ui_model import observation
 from agent_comms.ui_model.observation import CommanderHudObserved, ObserveCommanderHud
 from agent_comms.standing_rules import OrderlessUnreviewedHead, ServicePassFailing, StandingRule, UndatedStandingRule
 from agent_comms.text_digest import TextDigest
-from agent_comms.ui_model.unit_state import AwaitingCommander, UnitState
+from agent_comms.ui_model.unit_state import (
+    AwaitingApplicationRun, AwaitingCommander, NoPendingClock, PendingClock, Stuck, UnitState,
+)
+from agent_comms.thread_identity import RecordedThreadIncarnation
+from agent_comms_hooks.board import BoardLine
 from agent_comms.wake_policy import PassiveWake
 from test_holder_standing_rules import state_cards
 
@@ -61,7 +70,6 @@ def beat(comms, rules=(), *, states=()):
 
 def test_frame_puts_hands_first_and_folds_finished_phases_per_plan(notification_bus):
     """Ready and done-but-held phases lead; finished phases are one count per plan."""
-    from agent_comms.commander.vibe_check import OverloadDegradation
     from agent_comms.commander_hud import CommanderPhase
     from agent_comms.plan_phases import (
         DesignReconciledPhase, OneOrderOwnerPhase, RecordPlanePhase, RetainedStorePhase,
@@ -87,6 +95,38 @@ def test_frame_puts_hands_first_and_folds_finished_phases_per_plan(notification_
         "forks: worker",
         "commander_native: 2 phases done",
     )
+
+
+def test_frame_keeps_committed_board_order_and_folds_units_needing_no_hand(tmp_path):
+    now = time.time()
+    awaiting = CommanderUnit(
+        RecordedThreadIncarnation("waiting-run", 1.0), AwaitingApplicationRun,
+        NoPendingClock(), (), 0, (), (),
+    )
+    stuck = replace(
+        awaiting, unit=RecordedThreadIncarnation("stuck-worker", 2.0),
+        state=Stuck, clock=PendingClock(now - 3600, now - 3600),
+    )
+    board = (
+        BoardLine("BLOCKED waiting-run", now - 120, now + 3600, urgent=True),
+        BoardLine("JUDGE #1", now - 240, now + 3600),
+    )
+    hud = CommanderHud(
+        RecordedThreadIncarnation("lead", 3.0), (awaiting, stuck), (),
+        OverloadDegradation.from_orders((), 0, 0), (),
+        CodexUsage(UnreadableUsage(reason="not requested")), board,
+    )
+
+    CommanderFrame.replace_all(tmp_path, (hud,))
+    restored, = CommanderFrame.read_all(tmp_path)
+    assert restored == hud
+    rows = restored.rows()
+    assert rows[:4] == (
+        BoardRow(board[0]), BoardRow(board[1]), stuck, QuietUnits((awaiting,)),
+    )
+    assert rows[2].line().startswith(f"{Stuck.verb} {stuck.unit.name}:")
+    assert awaiting.unit.name in rows[3].line()
+    assert all("AwaitingApplicationRun" not in line for line in restored.frame)
 
 
 def test_a_registered_commander_fork_is_on_the_hud(notification_bus):
@@ -132,7 +172,7 @@ def test_recreated_watcher_reads_original_committed_unit_observation(notificatio
     first, = notifications(comms)
     assert failing.line() in first.body
     assert not any(state.line() in first.body for state in states)
-    header = replace(lead_hud(comms, states), units=()).frame
+    header = replace(lead_hud(comms, states), units=(), board=()).frame
     assert first.body.splitlines()[0] == CommanderUpdate.header
     assert first.body.splitlines()[-len(header):] == list(header)
     assert CommanderUpdate.latest(comms, comms.registry.require("lead").incarnation) == first.task
@@ -178,8 +218,8 @@ def test_rule_packets_list_every_new_line_and_never_restate_one(notification_bus
     assert set(first.task.decisions) == set(first.task.handled) == {
         RulePing.capture(rule) for rule in rules}
     assert first.body.splitlines() == [CommanderUpdate.header,
-                                       *(f"{rule.line()} (0 min)" for rule in rules),
-                                       *lead_hud(comms).frame]
+                                       *first.task.lines(first.timestamp),
+                                       *replace(lead_hud(comms), board=()).frame]
     beat(comms, rules)
     assert len(notifications(comms)) == 1
     # Changed diagnostic wording is not another failed occurrence.
@@ -198,7 +238,7 @@ def test_resolution_is_passive_and_same_rule_can_recur(notification_bus):
     beat(comms, ServicePassFailing.violations(comms, "lead"))
     _, quiet = notifications(comms)
     assert isinstance(quiet.task, CommanderNotice)
-    frame = lead_hud(comms).frame
+    frame = replace(lead_hud(comms), board=()).frame
     assert quiet.body.splitlines()[-len(frame):] == list(frame)
     assert all(isinstance(decision.wake_mode, PassiveWake) for decision in quiet.decisions)
     # Nothing new and nothing cleared sends nothing.
@@ -263,6 +303,25 @@ def test_commander_page_reads_each_beats_frame_and_nothing_between(notification_
     assert not list(reading.read(comms, comms.views.revision()))
     beat(comms, states=states)
     assert isinstance(next(reading.read(comms, comms.views.revision())), CommanderHudObserved)
+
+
+def test_a_frame_this_reader_cannot_decode_reaches_the_page_not_the_observer(notification_bus):
+    """An installed newer heartbeat writes a field an older Toad does not declare; the page
+    shows the unreadable frame and the observer process, and Toad, keep running."""
+    comms = notification_bus
+    reading = ObserveCommanderHud().observation()
+    beat(comms, states=state_cards(comms, UnitState))
+    frame, = CommanderFrame.matching_in(comms.root)
+    written = json.loads(frame.read_text())
+    frame.write_text(json.dumps({**written, "field_from_a_newer_build": []}))
+    unreadable, = reading.read(comms, comms.views.revision())
+    # The result crosses the observation process boundary by pickle.
+    unreadable = pickle.loads(pickle.dumps(unreadable))
+    assert isinstance(unreadable, observation.CommanderHudUnreadable)
+    assert "field_from_a_newer_build" in str(unreadable.error)
+    beat(comms, states=state_cards(comms, UnitState))
+    recovered, = reading.read(comms, comms.views.revision())
+    assert pickle.loads(pickle.dumps(recovered)).huds == CommanderFrame.read_all(comms.root)
 
 
 def test_a_verdict_on_the_full_head_or_an_answer_acts_on_its_board_line():

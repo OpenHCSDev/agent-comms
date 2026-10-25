@@ -55,8 +55,8 @@ def test_recorded_display_is_sparse_and_exact_incarnation(archived_notification)
     HistoricalDisplay(source, basis.select((messages[1].seq,))).acknowledge(live.bus.history, live.registry)
     with live.bus.history.read_sources() as sources:
         results = source.notification_references(sources, tuple(message.reference for message in messages[1:]))
-    painted, = results[messages[1].seq, messages[1].message_id]
-    unpainted, = results[messages[2].seq, messages[2].message_id]
+    painted, = results.outcomes[messages[1].seq, messages[1].message_id]
+    unpainted, = results.outcomes[messages[2].seq, messages[2].message_id]
     assert painted.displayed_to == (source.provenance.require("reader").incarnation,)
     assert unpainted.displayed_to == ()
     assert live.bus.reads.cursor("reader", live.registry.snapshot()) == ReadCursor()
@@ -259,7 +259,7 @@ def test_delivered_assignment_uses_its_recorded_conversation_response(archived_n
     unrelated = old.messaging.send("agent", "sender", "unrelated later message").message
     notification, = old.views.message_notifications_for_references(
         (original.reference,)
-    )[original.seq, original.message_id]
+    ).outcomes[original.seq, original.message_id]
     assert unrelated.answers == ()
     assert notification.label.startswith("Read ")
     assert notification.answer is None
@@ -306,7 +306,7 @@ def test_delivered_assignment_uses_its_recorded_conversation_response(archived_n
 
     notification, = old.views.message_notifications_for_references(
         (original.reference,)
-    )[original.seq, original.message_id]
+    ).outcomes[original.seq, original.message_id]
 
     assert response.answers == (original.reference,)
     assert notification.label.startswith("Answered ")
@@ -349,7 +349,7 @@ def test_recorded_response_resolution_keeps_other_collective_lifecycles(
 
     notifications = old.views.message_notifications_for_references(
         (original.reference,)
-    )[original.seq, original.message_id]
+    ).outcomes[original.seq, original.message_id]
 
     assert {notification.recipient for notification in notifications} == {
         "agent",
@@ -368,12 +368,12 @@ def test_live_cli_ack_does_not_become_archived_ack(archived_notification):
     assert old.bus.mark_delivered(
         "agent", tuple(message.reference for message in unread)
     ) == 1
-    current, = old.views.message_notifications_for_references((messages[0].reference,))[
+    current, = old.views.message_notifications_for_references((messages[0].reference,)).outcomes[
         messages[0].seq, messages[0].message_id
     ]
     assert current.label == "Read" and not current.displayed_to
     with live.bus.history.read_sources() as sources:
-        archived, = source.notification_references(sources, (messages[0].reference,))[
+        archived, = source.notification_references(sources, (messages[0].reference,)).outcomes[
             messages[0].seq, messages[0].message_id
         ]
     assert archived.label == "Sent" and not archived.displayed_to

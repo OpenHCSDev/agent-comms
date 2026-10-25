@@ -44,7 +44,7 @@ from agent_comms.field_codec import (
     SelectingArgumentDefault,
 )
 from agent_comms.declared_family import DeclaredFamily
-from agent_comms.head_review import PullRequestHead
+from agent_comms.head_review import HeadReviewOrder, PullRequestHead
 from agent_comms.heartbeat_subjects import HeadSubject, HeartbeatSubject, UnitSubject
 from agent_comms.recorded_time import EventTime
 from agent_comms.errors import TodoError
@@ -61,7 +61,7 @@ from agent_comms.todos import (
     ReviewedHeadVerdict,
     RejectedHeadVerdict,
     HeadVerdict,
-    HeadReviewOrder,
+    OrderHeadReview,
     JudgedCall,
     LinkedHeadReview,
     OrderLink,
@@ -81,7 +81,7 @@ from agent_comms.tool_caller import ThreadCaller
 from agent_comms.tool_declaration import EditCall, ReplacementEdit
 from agent_comms.commander import order
 from agent_comms.commander.order import CommanderVerb
-from agent_comms.commander.standing import DeliveryAwaitingJudgement
+from agent_comms.standing_rules import HeadReviewRule
 
 EDIT_LINE = "required with edit IDs: an exact diff line each edit contains; repeat for each"
 BRANCH = re.compile(r"\bisinstance\(|\bhasattr\(|^\s*(if|elif|match|case)\b|\bif\b.*\belse\b")
@@ -185,18 +185,36 @@ class AlarmVerb(JudgeVerb):
 class ReviewSubject(DeclaredFamily):
     """Decode the CLI's mutually exclusive selectors once, then keep the selected subject."""
 
+    selector: ClassVar[str]
+
+    @classmethod
+    def matching(cls, options: HeadVerdictVerb) -> tuple[type[ReviewSubject], ...]:
+        return tuple(member for member in cls.members_with(cls) if member.selected(options))
+
+    @classmethod
+    def selection_problems(cls, options: HeadVerdictVerb) -> dict[str, str]:
+        """A selection naming no member or several, beside what each named member refuses."""
+        matches = cls.matching(options)
+        problems = {} if len(matches) == 1 else MalformedRecord(
+            'select one of ' + ' or '.join(member.selector for member in cls.members_with(cls))
+        ).located('subject', 'supply exactly one of them')
+        for member in matches:
+            problems |= member.option_problems(options)
+        return problems
+
     @classmethod
     def from_options(cls, options: HeadVerdictVerb, ctx: order.Commander) -> ReviewSubject:
-        matches = tuple(member for member in cls.members_with(cls) if member.selected(options))
-        if len(matches) != 1:
-            raise RecordProblems(MalformedRecord('select either edit IDs or --pr').located(
-                'subject', 'supply edit IDs or --pr, not both'))
-        member, = matches
+        """The verb reported every selection problem before this decode."""
+        member, = cls.matching(options)
         return member.decode_options(options, ctx)
 
     @classmethod
     @abstractmethod
     def selected(cls, options: HeadVerdictVerb) -> bool: ...
+
+    @classmethod
+    @abstractmethod
+    def option_problems(cls, options: HeadVerdictVerb) -> dict[str, str]: ...
 
     @classmethod
     @abstractmethod
@@ -217,16 +235,18 @@ class ReviewSubject(DeclaredFamily):
 @dataclass(frozen=True)
 class EditReview(ReviewSubject):
     ids: tuple[str, ...]
+    selector = "edit IDs"
 
     @classmethod
     def selected(cls, options: HeadVerdictVerb) -> bool:
         return bool(options.ids)
 
     @classmethod
+    def option_problems(cls, options: HeadVerdictVerb) -> dict[str, str]:
+        return options.edit_problems()
+
+    @classmethod
     def decode_options(cls, options: HeadVerdictVerb, ctx: order.Commander) -> EditReview:
-        if options.head or options.repo:
-            raise RecordProblems(MalformedRecord('--head and --repo belong to --pr, not edit IDs').located(
-                '--pr', 'review a PR with --pr, or omit --head and --repo'))
         return cls(options.ids)
 
     def run(self, options: VerdictVerb, ctx: order.Commander) -> None:
@@ -236,9 +256,6 @@ class EditReview(ReviewSubject):
     def verdicts(self, options: VerdictVerb, ctx: order.Commander,
                  unjudged: list[Edit]) -> tuple[JudgedCall, ...]:
         """The verdicts these IDs carry; a refusal exits before anything is written."""
-        if not self.ids:
-            raise RecordProblems(MalformedRecord('select at least one edit ID:CODE').located(
-                'ids', 'read judge show and supply an edit ID:CODE'))
         orders = {todo.id: todo for todo in ctx.held_orders()}
         edits = {edit.id: edit for edit in unjudged if edit.problem in orders}
         ids = [token.split(':')[0] for token in self.ids]
@@ -277,10 +294,16 @@ def record(ctx: order.Commander, verb: JudgeVerb, verdicts: tuple[JudgedCall, ..
 @dataclass(frozen=True)
 class PullRequestReview(ReviewSubject):
     request: PullRequestHead
+    selector = "--pr"
 
     @classmethod
     def selected(cls, options: HeadVerdictVerb) -> bool:
         return bool(options.pr)
+
+    @classmethod
+    def option_problems(cls, options: HeadVerdictVerb) -> dict[str, str]:
+        """Whether --serves is owed depends on the order holding the head, which Core reads."""
+        return {}
 
     @classmethod
     def decode_options(cls, options: HeadVerdictVerb, ctx: order.Commander) -> PullRequestReview:
@@ -291,12 +314,12 @@ class PullRequestReview(ReviewSubject):
     def acts_on(self, ctx: order.Commander) -> tuple[HeartbeatSubject, ...]:
         """The head, and the unit holding it: a verdict reaches that unit's own lines."""
         return (HeadSubject(self.request),
-                *(UnitSubject(todo.held().owner_identity)
-                  for todo in HeadReviewOrder.holding(ctx.held_orders(), self.request)))
+                *(UnitSubject(todo.holder_state.previous_assignment().owner_identity)
+                  for todo in HeadReviewOrder.holding(ctx.todos(), self.request)))
 
     def run(self, options: HeadVerdictVerb, ctx: order.Commander) -> None:
         options.check_edits([])
-        linked = HeadReviewOrder.for_request(ctx.held_orders(), self.request, options.order_link,
+        linked = OrderHeadReview.for_request(ctx.todos(), self.request, options.order_link,
                                             options.problem)
         ctx.call(CommsHeadVerdictTool(request=self.request,
                                     operation=options.head_operation(), order=linked))
@@ -392,7 +415,25 @@ class VerdictVerb(JudgeVerb):
     @abstractmethod
     def check_edits(self, edits: list[Edit]) -> None: ...
 
+    def selection_problems(self) -> dict[str, str]:
+        """This verdict selects edits by ID alone."""
+        if self.ids:
+            return {}
+        return MalformedRecord('select at least one edit ID:CODE').located(
+            'ids', 'read judge show and supply an edit ID:CODE')
+
+    def argument_problems(self) -> dict[str, str]:
+        """Every refusal this verdict's own arguments earn, before anything is read or written;
+        each member adds its own to its parents'."""
+        return self.selection_problems()
+
     def subject(self, ctx: order.Commander) -> ReviewSubject:
+        """One refusal lists every argument problem, so one run fixes them all."""
+        if problems := self.argument_problems():
+            raise RecordProblems(problems)
+        return self.selected_subject(ctx)
+
+    def selected_subject(self, ctx: order.Commander) -> ReviewSubject:
         return EditReview(self.ids)
 
     def run(self, ctx: order.Commander) -> None:
@@ -401,12 +442,29 @@ class VerdictVerb(JudgeVerb):
 
 @dataclass(frozen=True, kw_only=True)
 class HeadVerdictVerb(VerdictVerb, order.HeartbeatGated, declared_name=None):
+    clears = (HeadReviewRule,)
+    verdict: ClassVar[type[HeadVerdict]]
+
+    @classmethod
+    def review_allowed(cls, verdicts: tuple[type[HeadVerdict], ...]) -> bool:
+        return issubclass(cls.verdict, verdicts)
+
     pr: Annotated[int, Argument(options={"help": "review this PR instead of individual edits"})] = 0
     head: Annotated[str, Argument(options={"help": "the exact reviewed SHA; required with --pr"})] = ""
     repo: Annotated[str, Argument(options={
         "help": "registered repository name; without it, the one whose --pr is at --head"})] = ""
 
-    def subject(self, ctx: order.Commander) -> ReviewSubject:
+    def selection_problems(self) -> dict[str, str]:
+        return ReviewSubject.selection_problems(self)
+
+    def edit_problems(self) -> dict[str, str]:
+        """What selecting edit IDs refuses among this verdict's other arguments."""
+        if self.head or self.repo:
+            return MalformedRecord('--head and --repo belong to --pr, not edit IDs').located(
+                '--pr', 'review a PR with --pr, or omit --head and --repo')
+        return {}
+
+    def selected_subject(self, ctx: order.Commander) -> ReviewSubject:
         return ReviewSubject.from_options(self, ctx)
 
     def order_link(self, todo: Todo) -> OrderLink:
@@ -434,15 +492,21 @@ class QuotingVerb(HeadVerdictVerb, declared_name=None):
     def order_link(self, todo: Todo) -> OrderLink:
         return LinkedHeadReview.of(todo, self.serves, self.head_evidence())
 
+    def edit_problems(self) -> dict[str, str]:
+        """An accepted edit always quotes its order."""
+        return super().edit_problems() | {
+            '--serves': refused for refused in OrderQuote(self.serves).word_refusal()}
+
 
 @dataclass(frozen=True, kw_only=True)
 class OkVerb(ReasonedVerb, QuotingVerb):
+    verdict = ReviewedHeadVerdict
     help = "the edit or exact PR head is accepted"
 
     def head_operation(self) -> HeadVerdict:
         reason = VerdictReason(self.why)
         return (GrownHeadVerdict(reason, GrowthReason.every(self.growth)) if self.growth
-                else ReviewedHeadVerdict(reason))
+                else self.verdict(reason))
     growth: Annotated[
         tuple[str, ...],
         Argument(options={"action": "append", "metavar": "REASON",
@@ -471,6 +535,12 @@ class OkVerb(ReasonedVerb, QuotingVerb):
             )
         return AcceptedVerdict(todo.revision, actor, todo.held(), edit.id, quote=self.serves)
 
+    def argument_problems(self) -> dict[str, str]:
+        return super().argument_problems() | {
+            f'--growth {number}': refused
+            for number, text in enumerate(self.growth, 1)
+            for refused in GrowthReason.wording_refusal(text)}
+
     def check_edits(self, edits: list[Edit]) -> None:
         for edit in edits:
             path = edit.path
@@ -484,22 +554,22 @@ class OkVerb(ReasonedVerb, QuotingVerb):
 @dataclass(frozen=True, kw_only=True)
 class ReviewingVerb(HeadVerdictVerb):
     help = "a fork is reading this exact PR head; its delivery is not owed until ok or back"
-    clears = (DeliveryAwaitingJudgement,)
+    verdict = UnderReviewHeadVerdict
 
     def head_operation(self) -> HeadVerdict:
-        return UnderReviewHeadVerdict()
+        return self.verdict()
 
-    def edit_refusal(self) -> RecordProblems:
-        return RecordProblems(MalformedRecord(
+    def edit_problems(self) -> dict[str, str]:
+        return super().edit_problems() | MalformedRecord(
             'judge reviewing takes --pr and --head, never edit ids.').located(
-                'ids', 'supply --pr and --head instead of edit IDs'))
+                'ids', 'supply --pr and --head instead of edit IDs')
 
     def operation(self, ctx: order.Commander, todo: Todo, edit: Edit) -> ToolCallVerdict:
-        raise self.edit_refusal()
+        """Unreachable: selecting edits is refused among this verb's argument problems."""
+        raise RecordProblems(self.edit_problems())
 
     def check_edits(self, edits: list[Edit]) -> None:
-        if edits:
-            raise self.edit_refusal()
+        pass
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -535,6 +605,7 @@ class DroppedVerb(VerdictVerb):
 @dataclass(frozen=True, kw_only=True)
 class BackVerb(ReasonedVerb, HeadVerdictVerb):
     """A correctness send-back: the head is broken at a line, whether or not it restates a fact."""
+    verdict = RejectedHeadVerdict
     help = ("reject the edit or exact PR head; Core records its reason once. With --slop and its "
             "statement it is a slop send-back, without them a correctness one")
     roast: Annotated[
@@ -570,21 +641,35 @@ class BackVerb(ReasonedVerb, HeadVerdictVerb):
     def defect(self) -> str:
         return f"The failing path is {self.at}."
 
+    def argument_problems(self) -> dict[str, str]:
+        refusals = {
+            '--roast': BluntText.wording_refusal(self.roast),
+            '--why --roast --fix': DirectiveText.refused(' '.join((self.why, self.roast, self.fix))),
+        }
+        return super().argument_problems() | self.reason_problems() | {
+            name: ' '.join(refused) for name, refused in refusals.items() if refused}
+
+    def reason_problems(self) -> dict[str, str]:
+        """The recorded reason composes every argument and is held to its own wording."""
+        return {'reason': refused for refused in StrikeReason.wording_refusal(self.rejection_text)}
+
     @cached_property
-    def rejection_reason(self) -> StrikeReason:
-        order.refuse(self.roast, BluntText)
-        order.refuse(' '.join((self.why, self.roast, self.fix)), *DirectiveText.checks())
-        return StrikeReason("\n".join((
+    def rejection_text(self) -> str:
+        return "\n".join((
             self.why, self.roast,
             *(f"    {line.strip()}" for line in self.lines),
             self.defect(), f"What replaces it: {self.fix}",
-        )))
+        ))
+
+    @cached_property
+    def rejection_reason(self) -> StrikeReason:
+        return StrikeReason(self.rejection_text)
 
     def head_evidence(self) -> tuple[FileLine, ...]:
         return (FileLine.from_wire(self.at),)
 
     def head_operation(self) -> HeadVerdict:
-        return RejectedHeadVerdict(self.rejection_reason)
+        return self.verdict(self.rejection_reason)
 
     @cached_property
     def judged_at(self) -> EventTime:
@@ -622,6 +707,15 @@ class SlopBackVerb(BackVerb):
     def slop(self) -> Slop:
         return FieldCodec.decode(Slop, dict(pattern=self.pattern, fact=self.fact,
                                            at=self.at, derive=self.derive, by=self.by))
+
+    def reason_problems(self) -> dict[str, str]:
+        """The reason renders the slop statement, so a statement that does not decode is the
+        reason's refusal, reported beside the other arguments'."""
+        try:
+            self.slop.render()
+        except MalformedRecord as refused:
+            return refused.located('--slop', 'fix this slop field')
+        return super().reason_problems()
 
     def defect(self) -> str:
         return self.slop.render()
