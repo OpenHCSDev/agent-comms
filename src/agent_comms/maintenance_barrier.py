@@ -119,7 +119,7 @@ class NoMaintenanceTarget(NullMember, MaintenanceTarget):
         """Draining owners still settle their own turns."""
 
 
-@dataclass(frozen=True, eq=False)
+@dataclass(frozen=True)
 class TargetRuntime(LaunchRuntime, RecordMember, MaintenanceTarget):
     def allows_runtime(self, runtime: LaunchRuntime) -> bool:
         return self.prefix == runtime.prefix

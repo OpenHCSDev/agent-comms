@@ -158,7 +158,7 @@ class RestartTarget:
 
     @property
     def is_current_watcher(self) -> bool:
-        return self.launch_runtime == LaunchRuntime.running()
+        return self.launch_runtime.runs_this_process
 
     def require_watcher(self, comms: Comms) -> None:
         self.require_available(comms)

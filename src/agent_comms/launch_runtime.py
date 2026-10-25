@@ -61,7 +61,7 @@ class InheritedEnvironment(Mapping[str, str]):
 INHERITED_ENVIRONMENT = InheritedEnvironment()
 
 
-@dataclass(frozen=True, eq=False)
+@dataclass(frozen=True)
 class LaunchRuntime:
     """One selected installation for a worker and its native executable.
 
@@ -70,14 +70,6 @@ class LaunchRuntime:
     """
 
     interpreter: Annotated[Path, PathText]
-
-    def __eq__(self, other: object) -> bool:
-        if not isinstance(other, LaunchRuntime):
-            return NotImplemented
-        return self.interpreter == other.interpreter
-
-    def __hash__(self) -> int:
-        return hash(self.interpreter)
 
     @classmethod
     def from_interpreter(cls, interpreter: str | Path) -> Self:
@@ -88,6 +80,11 @@ class LaunchRuntime:
     def running(cls) -> LaunchRuntime:
         """Keep ordinary launches on the calling process's installation."""
         return RunningRuntime.from_interpreter(sys.executable)
+
+    @property
+    def runs_this_process(self) -> bool:
+        """Whichever member launches its children, this is the installation running here."""
+        return self.interpreter == LaunchRuntime.running().interpreter
 
     def child_environment(self, environment: Mapping[str, str]) -> dict[str, str]:
         """Keep exactly the environment this installation's launcher built."""

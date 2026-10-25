@@ -13,15 +13,12 @@ from agent_comms.launch_runtime import LaunchRuntime, RestoredRuntime, RunningRu
 from agent_comms.maintenance_barrier import TargetRuntime
 
 
-def test_runtime_family_shares_interpreter_identity():
+def test_runtime_family_recognizes_this_process():
     interpreter = LaunchRuntime.running().interpreter
     members = [member(interpreter) for member in
                (LaunchRuntime, RunningRuntime, RestoredRuntime, TargetRuntime)]
-    assert all(left == right for left in members for right in members)
-    assert len(set(members)) == 1
-    assert members[0].__eq__(object()) is NotImplemented
-    assert members[0] != object()
-    assert members[0] != LaunchRuntime(interpreter.with_name("another-python"))
+    assert all(member.runs_this_process for member in members)
+    assert not LaunchRuntime(interpreter.with_name("another-python")).runs_this_process
 
 
 def test_only_running_runtime_passes_this_process_source_to_children():
