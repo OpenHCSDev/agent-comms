@@ -804,9 +804,9 @@ class CommanderVerb(DeclaredVerb, affix="Verb"):
     ] = NoThreadCaller()
     clears: ClassVar[tuple[type[OwedAnswer], ...]] = ()
 
-    def __init_subclass__(cls, **options) -> None:
+    def __init_subclass__(cls, **options: object) -> None:
         """A verb names the owed answers it clears; each rule's hint is rendered from them."""
-        super().__init_subclass__(**options)
+        super().__init_subclass__()
         for rule in vars(cls).get("clears", ()):
             rule.cleared_by(cls)
 
