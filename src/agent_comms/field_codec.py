@@ -1651,8 +1651,12 @@ class SpelledText(TextRepresentation[str], ValidatedScalar):
     spelling: ClassVar[re.Pattern[str]]
 
     @classmethod
+    def spells(cls, value: str) -> bool:
+        return bool(cls.spelling.fullmatch(value))
+
+    @classmethod
     def from_text(cls, value: str) -> str:
-        if cls.spelling.fullmatch(value) is None:
+        if not cls.spells(value):
             raise MalformedRecord(f"{cls.__name__} is spelled {cls.spelling.pattern}")
         return value
 
