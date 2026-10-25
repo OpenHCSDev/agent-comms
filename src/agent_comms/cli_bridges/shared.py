@@ -1140,11 +1140,6 @@ class CliBridge(ExternalRuntime, DeliversInput, Generic[BridgeOptions]):
         return Path.home() / cls.state_directory
 
     @classmethod
-    def reading_declarations(cls) -> tuple[type[Self], ...]:
-        """A following bridge is not another standalone history reader."""
-        return ()
-
-    @classmethod
     def state_directories(cls) -> tuple[Path, ...]:
         """Relative state directories declared by the loaded bridge members."""
         return tuple(bridge.state_directory for bridge in History.members_with(CliBridge))
