@@ -31,8 +31,26 @@ if TYPE_CHECKING:
     from .todos import PullRequestLink
 
 
+class SourceText(ABC):
+    """Where cited source lines are read: a fetched git revision or a checkout's files."""
+
+    @abstractmethod
+    def lines(self, repository: Path, file: str) -> tuple[str, ...]: ...
+
+
 @dataclass(frozen=True)
-class SourceRevision(ABC):
+class WorkingTree(SourceText):
+    """The files on disk in a checkout, where an edit not yet committed lives."""
+
+    def lines(self, repository: Path, file: str) -> tuple[str, ...]:
+        path = repository / file
+        if not path.resolve().is_relative_to(repository.resolve()) or not path.is_file():
+            raise MissingSourceLine(f'Source file {file} does not exist in {repository}.')
+        return tuple(path.read_text(errors='replace').splitlines())
+
+
+@dataclass(frozen=True)
+class SourceRevision(SourceText):
     """One validation call captures each repository's successfully fetched commit once."""
 
     _commits: dict[Path, str] = field(
@@ -154,7 +172,7 @@ class FileLine(WireValue, SourceReference):
     def same_file(self, other: FileLine, root: Path) -> bool:
         return (root / self.file).resolve() == (root / other.file).resolve()
 
-    def require_exists(self, repository: Path, revision: SourceRevision) -> None:
+    def require_exists(self, repository: Path, revision: SourceText) -> None:
         if self.line > len(revision.lines(repository, self.file)):
             raise MissingSourceLine(
                 f"Source owner {self.to_wire()} does not exist at the cited revision."
