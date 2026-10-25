@@ -26,7 +26,7 @@ class SystemdUnit(ABC):
 
 
 class AgentsSlice(SystemdUnit):
-    """Keep agent processes off the desktop's reserved CPUs."""
+    """Cap aggregate agent CPU time, leaving a desktop CPU-time budget."""
 
     unit = "agents.slice"
     reserved: ClassVar[int] = 2
@@ -34,7 +34,7 @@ class AgentsSlice(SystemdUnit):
     @classmethod
     def unit_text(cls, arguments: tuple[str, ...] = ()) -> str:
         count = multiprocessing.cpu_count()
-        return f"[Slice]\nAllowedCPUs={cls.reserved}-{count - 1}\nCPUWeight=50\n"
+        return f"[Slice]\nCPUQuota={(count - cls.reserved) * 100}%\nCPUWeight=50\n"
 
     @classmethod
     def run_prefix(cls) -> tuple[str, ...]:
