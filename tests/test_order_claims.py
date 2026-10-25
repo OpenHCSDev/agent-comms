@@ -11,7 +11,7 @@ from agent_comms.commander.order import OrderFile, main
 from agent_comms.field_codec import FieldCodec, GoalId
 from agent_comms.goal_actions import SetGoalAction
 from agent_comms.commander.package import CommanderPackage
-from agent_comms.errors import ToolRefusedError
+from agent_comms.errors import TodoConflict, TodoError, ToolRefusedError
 from agent_comms.goals import OrderCheck, ProblemGoalOrder
 from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.todos import (
@@ -27,8 +27,6 @@ from agent_comms.todos import (
     SendBackVerdict,
     StrikeReason,
     StrikeTodo,
-    TodoConflict,
-    TodoError,
     Todo,
 )
 from agent_comms.tool_caller import ThreadCaller

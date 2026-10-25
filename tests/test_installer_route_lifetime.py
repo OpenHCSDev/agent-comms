@@ -21,6 +21,7 @@ from agent_comms.active_route import (
     route_directory,
 )
 from agent_comms.bus import Bus
+from agent_comms.child_process import SpawnedProcess
 from agent_comms.comms import Comms, wire
 from agent_comms.installer.backup import StoreBackup
 from agent_comms.installer.refusals import UpgradeRefused
@@ -262,24 +263,15 @@ time.sleep(60)
 """
 
 
-def route_holder(directory, program):
-    directory.mkdir(mode=0o700)
-    holder = subprocess.Popen(
-        (sys.executable, "-c", ROUTE_HOLDER, str(directory), program),
-        stdout=subprocess.PIPE, text=True)
-    assert holder.stdout.readline() == "held\n"
-    return holder
-
-
 def test_route_publication_neither_waits_for_nor_ends_an_old_toad_holding_the_directory(
     tmp_path,
 ):
     """An old runtime's Toad still flocks the route directory; publishers no longer do."""
-    holder = route_holder(tmp_path / "state", "toad")
-    try:
-        with route_directory(tmp_path / "state" / "active-route.json"):
+    directory = tmp_path / "state"
+    directory.mkdir(mode=0o700)
+    with SpawnedProcess.launch((sys.executable, "-c", ROUTE_HOLDER, str(directory), "toad"),
+                               output=subprocess.PIPE) as holder:
+        assert holder.process.stdout.readline() == b"held\n"
+        with route_directory(directory / "active-route.json"):
             pass
-        assert holder.poll() is None
-    finally:
-        holder.kill()
-        holder.wait()
+        assert holder.process.poll() is None
