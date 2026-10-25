@@ -21,7 +21,7 @@ from agent_comms.errors import RejectedEnforcementError, TodoConflict
 from agent_comms.text_digest import TextDigest
 from agent_comms.recorded_time import EventTime, RecordedEventTime
 from agent_comms.repository_name import RepositoryName
-from agent_comms.head_review import PullRequestHead
+from agent_comms.head_review import HeadReviewOrder, PullRequestHead
 from agent_comms.heartbeat_subjects import (
     AnswerSubject, HeadSubject, HeartbeatSubject, UnitSubject,
 )
@@ -41,7 +41,6 @@ if TYPE_CHECKING:
     from agent_comms.storage_rules import MemoryUse, StorageRule
     from agent_comms.todos import (
         MergeBlock, OrderClaim, OwnerRequest, PresentCheckout, ProgressRead, PullRequest, Todo,
-        UnmergedListedPullRequest,
     )
     from agent_comms.goal_management import Goals
     from agent_comms.ui_model.unit_state import UnitObservation, UnitState
@@ -126,16 +125,24 @@ class StandingRule(DeclaredFamily, affix="StandingRule", discovery_package="agen
     @classmethod
     def cleared_by(cls, verb: type[CommanderVerb]) -> None:
         """A verb declaring that it clears this rule joins the action its line prints."""
-        cls.clearing_verbs = (*cls.clearing_verbs, verb)
+        cls.clearing_verbs = (*vars(cls).get("clearing_verbs", ()), verb)
 
     def command_values(self) -> Mapping[str, str]:
         """The verb arguments this line knows, by argument name."""
         return {}
 
+    def review_allowed(self, verb: type[CommanderVerb]) -> bool:
+        """Ordinary lines retain every verb that declares it clears them."""
+        return True
+
     def clearing_commands(self) -> str:
-        """The verbs that clear this line, each with the arguments this line fills."""
+        """The applicable verbs, with arguments supplied by this line's observed owners."""
         values = self.command_values()
-        return " or ".join(f"`{verb.command(values)}`" for verb in self.clearing_verbs)
+        verbs = dict.fromkeys(member for parent in type(self).__mro__
+                              for family in vars(parent).get("clearing_verbs", ())
+                              for member in family.members_with(family))
+        return " or ".join(f"`{command}`" for verb in verbs if self.review_allowed(verb)
+                           for command in verb.commands(values))
 
     def attention(self) -> bool:
         return True
@@ -575,6 +582,34 @@ class HeldOrderDue(HolderLine, DatedStandingRule, declared_name=None):
         return self.since.recorded_at("An order alarm")
 
 
+class HeadReviewRule(StandingRule, declared_name=None):
+    """A head verdict can answer this rule's review request."""
+
+
+@dataclass(frozen=True)
+class HeadReviewCommands(HeadReviewRule, declared_name=None):
+    """A review head supplies the common arguments accepted by the judge."""
+
+    request: PullRequestHead
+
+    def command_values(self) -> Mapping[str, str]:
+        return {"repo": self.request.repo.to_wire(), "pr": str(self.request.pr),
+                "head": self.request.head}
+
+
+@dataclass(frozen=True)
+class OrderHeadReviewCommands(HeadReviewCommands, declared_name=None):
+    """A linked review carries exactly the order whose verdict permissions it prints."""
+
+    todo: Todo = field(kw_only=True, compare=False)
+
+    def review_allowed(self, verb: type[CommanderVerb]) -> bool:
+        return verb.review_allowed(self.todo.order.checked().review_verdicts())
+
+    def command_values(self) -> Mapping[str, str]:
+        return {**super().command_values(), "problem": self.todo.id}
+
+
 class ReviewTimerUp(HeldOrderDue):
     """Each round of a held order's review timer is its own condition, so the heartbeat wakes
     the commander once per round; the unit sees no timer and nothing is struck."""
@@ -585,9 +620,34 @@ class ReviewTimerUp(HeldOrderDue):
             frame.todos, time.time(), frame.pulls.progress(frame.todos, comms.registry),
         )
 
+    @classmethod
+    def scan_observed(cls, comms: Comms, commander: str,
+                      observed: Sequence[UnitState], frame: HeartbeatFrame) -> tuple[ReviewTimerUp, ...]:
+        rules: list[ReviewTimerUp] = []
+        for todo, due in cls.conditions(comms, frame):
+            for request in frame.pulls.open_for(todo)[:1]:
+                head = PullRequestHead(todo.repo, request.number, request.head)
+                if todo.order.holds_head(head):
+                    rules.append(HeadReviewTimerUp(
+                        todo.id, todo.held().owner_identity, todo.order.checked().id,
+                        due, head, todo=todo))
+                    break
+            else:
+                rules.append(cls(todo.id, todo.held().owner_identity,
+                                 todo.order.checked().id, due))
+        return tuple(rules)
+
     def line(self) -> str:
         return (f"READ {self.holder.name} {self.problem}: review timer up at {self.since.clock()},"
                 f" order {self.order} -> read its diff and judge it")
+
+
+@dataclass(frozen=True)
+class HeadReviewTimerUp(OrderHeadReviewCommands, ReviewTimerUp, declared_name=None):
+    """A timer with a current PR head offers only that order's accepted verdicts."""
+
+    def line(self) -> str:
+        return f"{super().line()} -> {self.clearing_commands()}"
 
 
 @dataclass(frozen=True)
@@ -640,9 +700,8 @@ class DeliveredHeadReview(HolderLine, DatedStandingRule):
 
 
 @dataclass(frozen=True)
-class UnreviewedHead(HeadLine, DatedStandingRule, declared_name=None):
+class UnreviewedHead(HeadLine, HeadReviewCommands, DatedStandingRule, declared_name=None):
     """One ready head waiting too long for a decision; a reviewing mark is not one."""
-    request: PullRequestHead
     due_at: float
     seconds: ClassVar[int] = 10 * 60
 
@@ -654,38 +713,38 @@ class UnreviewedHead(HeadLine, DatedStandingRule, declared_name=None):
     @classmethod
     def scan_reviews(cls, goals: Goals, commander: str, pulls: ProgressRead) -> tuple[Self, ...]:
         now = time.time()
+        snapshot = goals.registry.snapshot()
+        todos = goals.todos.for_commander(snapshot.require(commander).incarnation)
         return tuple(
-            cls(request, due)
-            for repo in goals.registry.snapshot().commander_project.repository_names()
-            for row in cls.reviewed(pulls, repo)
+            rule
+            for repo in snapshot.commander_project.repository_names()
+            for row in pulls.open(repo)
             for due in row.review_due(now, cls.seconds)
             for request in (PullRequestHead(repo, row.number, row.head),)
             if not any(review.verdict.decides() for review in goals.todos.head_reviews(request))
+            for rule in cls.for_head(request, due, todos)
         )
 
     @classmethod
-    @abstractmethod
-    def reviewed(cls, pulls: ProgressRead,
-                 repo: RepositoryName) -> tuple[UnmergedListedPullRequest, ...]: ...
+    def for_head(cls, request: PullRequestHead, due: float, todos: Sequence[Todo]) -> tuple[Self, ...]:
+        return (cls(request, due),)
 
     def began(self) -> float:
         return self.due_at
 
     def line(self) -> str:
         return (f"JUDGE {self.request.repo.to_wire()}#{self.request.pr} {self.request.head[:9]}"
-                f" -> judge ok/back --pr {self.request.pr} --head {self.request.head}")
+                f" -> {self.clearing_commands()}")
 
 
 @dataclass(frozen=True)
-class LinkedUnreviewedHead(UnreviewedHead, OrderRefusingStandingRule):
+class LinkedUnreviewedHead(OrderHeadReviewCommands, UnreviewedHead, OrderRefusingStandingRule):
     """A head linked to the caller's held order: the reader is registered with exactly the
     caller's holds, so another commander's heads never freeze its orders."""
 
     @classmethod
-    def reviewed(cls, pulls: ProgressRead,
-                 repo: RepositoryName) -> tuple[UnmergedListedPullRequest, ...]:
-        linked = pulls.linked(repo)
-        return tuple(row for row in pulls.open(repo) if row.number in linked)
+    def for_head(cls, request: PullRequestHead, due: float, todos: Sequence[Todo]) -> tuple[Self, ...]:
+        return tuple(cls(request, due, todo=todo) for todo in HeadReviewOrder.holding(todos, request))
 
 
 @dataclass(frozen=True)
@@ -693,10 +752,8 @@ class OrderlessUnreviewedHead(UnreviewedHead):
     """A head no held order links: a board line that refuses nobody's orders."""
 
     @classmethod
-    def reviewed(cls, pulls: ProgressRead,
-                 repo: RepositoryName) -> tuple[UnmergedListedPullRequest, ...]:
-        linked = pulls.linked(repo)
-        return tuple(row for row in pulls.open(repo) if row.number not in linked)
+    def for_head(cls, request: PullRequestHead, due: float, todos: Sequence[Todo]) -> tuple[Self, ...]:
+        return () if HeadReviewOrder.holding(todos, request) else super().for_head(request, due, todos)
 
 
 @dataclass(frozen=True)
