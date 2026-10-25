@@ -29,7 +29,6 @@ import hashlib
 import json
 import os
 import re
-import sys
 import time
 from typing import Annotated, ClassVar
 from abc import abstractmethod
@@ -188,7 +187,7 @@ class ReviewSubject(DeclaredFamily):
     def from_options(cls, options: HeadVerdictVerb, ctx: order.Commander) -> ReviewSubject:
         matches = tuple(member for member in cls.members_with(cls) if member.selected(options))
         if len(matches) != 1:
-            sys.exit('Refused: select either edit IDs or --pr')
+            raise RecordProblems({'subject': 'Refused: select either edit IDs or --pr'})
         member, = matches
         return member.decode_options(options, ctx)
 
@@ -219,7 +218,7 @@ class EditReview(ReviewSubject):
     @classmethod
     def decode_options(cls, options: HeadVerdictVerb, ctx: order.Commander) -> EditReview:
         if options.head or options.repo:
-            sys.exit('Refused: --head and --repo belong to --pr, not edit IDs')
+            raise RecordProblems({'--pr': 'Refused: --head and --repo belong to --pr, not edit IDs'})
         return cls(options.ids)
 
     def run(self, options: VerdictVerb, ctx: order.Commander) -> None:
@@ -230,7 +229,7 @@ class EditReview(ReviewSubject):
                  unjudged: list[Edit]) -> tuple[JudgedCall, ...]:
         """The verdicts these IDs carry; a refusal exits before anything is written."""
         if not self.ids:
-            sys.exit('Refused: select at least one edit ID:CODE')
+            raise RecordProblems({'ids': 'Refused: select at least one edit ID:CODE'})
         orders = {todo.id: todo for todo in ctx.held_orders()}
         edits = {edit.id: edit for edit in unjudged if edit.problem in orders}
         ids = [token.split(':')[0] for token in self.ids]
@@ -281,7 +280,7 @@ class PullRequestReview(ReviewSubject):
 
     def verdicts(self, options: VerdictVerb, ctx: order.Commander,
                  unjudged: list[Edit]) -> tuple[JudgedCall, ...]:
-        sys.exit('Refused: a batch judges edit IDs; review a PR head with its own call')
+        raise RecordProblems({'--pr': 'Refused: a batch judges edit IDs; review a PR head with its own call'})
 
 
 class WordedText(BoundedText):
@@ -369,10 +368,6 @@ class VerdictVerb(JudgeVerb):
     def run(self, ctx: order.Commander) -> None:
         self.subject(ctx).run(self, ctx)
 
-    def refused(self, number: int, code: object) -> str:
-        """One batch entry's refusal, named by its own verb."""
-        return f'entry {number} ({self.declared_name}): {code}'
-
 
 @dataclass(frozen=True, kw_only=True)
 class HeadVerdictVerb(VerdictVerb, declared_name=None):
@@ -445,7 +440,8 @@ class OkVerb(ReasonedVerb, QuotingVerb):
             path = edit.path
             after = [open(path).read()] if path.endswith('.py') and os.path.exists(path) else []
             if added := order.forwarders_added(edit.added(), after):
-                sys.exit(f'Refused: edit {edit.id} adds forwarders {added[:5]}; it goes back with judge back, never ok')
+                raise RecordProblems({edit.id: (
+                    f'Refused: edit {edit.id} adds forwarders {added[:5]}; it goes back with judge back, never ok')})
             AcceptedVerdict.require_branches(edit.branches_added(), self.no_owner)
 
 @dataclass(frozen=True, kw_only=True)
@@ -456,11 +452,11 @@ class ReviewingVerb(HeadVerdictVerb):
         return UnderReviewHeadVerdict()
 
     def operation(self, ctx: order.Commander, todo: Todo, edit: Edit) -> ToolCallVerdict:
-        sys.exit('Refused: judge reviewing takes --pr and --head, never edit ids.')
+        raise RecordProblems({'ids': 'Refused: judge reviewing takes --pr and --head, never edit ids.'})
 
     def check_edits(self, edits: list[Edit]) -> None:
         if edits:
-            sys.exit('Refused: judge reviewing takes --pr and --head, never edit ids.')
+            raise RecordProblems({'ids': 'Refused: judge reviewing takes --pr and --head, never edit ids.'})
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -598,19 +594,17 @@ class BatchVerb(JudgeVerb):
         entries = FieldCodec.decode(tuple[VerdictVerb, ...], FieldCodec.parse(self.file.read_bytes()))
         unjudged = Edit.unjudged(ctx.comms, ctx.commander)
         verdicts: list[JudgedCall] = []
-        refusals: list[str] = []
+        refusals: dict[str, str] = {}
         for number, entry in enumerate(entries, 1):
             try:
                 verdicts += entry.subject(ctx).verdicts(entry, ctx, unjudged)
-            except SystemExit as refused:
-                refusals.append(entry.refused(number, refused.code))
             except RecordProblems as refused:
-                refusals.append(entry.refused(number, refused))
+                refusals |= refused.located(f'entry {number} ({entry.declared_name})', '')
         judged = [call.operation.tool_call_id for call in verdicts]
         if twice := sorted({i for i in judged if judged.count(i) > 1}):
-            refusals.append(f'edits judged twice in this batch: {twice}')
+            refusals['ids'] = f'edits judged twice in this batch: {twice}'
         if refusals:
-            sys.exit('\n'.join(refusals))
+            raise RecordProblems(refusals)
         record(ctx, self, tuple(verdicts), len(unjudged))
 
 

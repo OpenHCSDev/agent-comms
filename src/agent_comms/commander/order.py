@@ -36,7 +36,7 @@ from pydantic import BaseModel, ConfigDict, Field, InstanceOf, PrivateAttr
 from agent_comms.change_report import FileLine, MainRevision, NoSourceReference
 from agent_comms.channel_targets import CommsTag
 from agent_comms.declared_verb import DeclaredVerb
-from agent_comms.commander.standing import UnitAskUnanswered, UnownedWheelSpin
+from agent_comms.commander.standing import UnownedWheelSpin
 from agent_comms.comms import Comms, wire
 from agent_comms.declared_family import DeclaredFamily
 from agent_comms.errors import RelationViolationError
@@ -67,6 +67,7 @@ from agent_comms.repo import Repo
 from agent_comms.registry_document import RegisteredCommanderProject
 from agent_comms.standing_rules import HuntDue, OwedAnswer
 from agent_comms.thread_identity import ThreadIncarnation
+from agent_comms.typed_table import RowNotFoundError
 from agent_comms.held_orders import HeldOrders
 from agent_comms.todos import (
     BluntText,
@@ -840,26 +841,28 @@ class DirectiveVerb(CommanderVerb):
     def run(self, ctx: Commander) -> None:
         """Resolve names and uncovered debt once, then pass the exact references to the action.
 
-        Closed or unknown names are dropped: a stale name must not livelock an otherwise
-        valid answer. A wrong name still leaves its real debt uncovered and refuses the action.
+        Closed names answer nothing; unknown identities refuse instead of recording a reply
+        that silently drops its references. A wrong addressee leaves its real debt uncovered.
         A refusal lists every misaddressed name and every blocking debt together, with the
         replies that answer all of them at once, so one round trip clears the gate.
         """
         now = time.time()
         opened = OwedAnswer.opened(ctx.comms, self.who(ctx))
         snapshot = ctx.comms.registry.snapshot()
-        known = {rule.message.message_id for rule in opened}
+        problems: dict[str, str] = {}
         with ctx.comms.bus.bus.reading() as source:
-            opened += UnitAskUnanswered.explicitly_named(
-                source, snapshot, self.who(ctx),
-                tuple(identity for identity in self.answers if identity not in known))
+            for identity in self.answers:
+                try:
+                    source.message_reference(identity)
+                except RowNotFoundError:
+                    problems[f'--answers {identity}'] = 'unknown message id'
         reached = frozenset(snapshot.canonical_name(name) for name in self.addressed)
         named = (tuple(rule.message for rule in opened
                        if rule.message.message_id in self.answers)
                  if self.answers else self.unnamed_answers(opened, reached))
         answered = tuple(rule for rule in opened if rule.answered_by(named))
-        problems = {rule.cited: reason for rule in opened
-                    if (reason := rule.misaddressed(named, reached))}
+        problems |= {rule.cited: reason for rule in opened
+                     if (reason := rule.misaddressed(named, reached))}
         owed = tuple(rule for rule in opened if rule.due(now) and not rule.answered_by(named))
         for rule in owed:
             if rule.blocks(reached, self, answered):

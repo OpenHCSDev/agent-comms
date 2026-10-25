@@ -533,8 +533,14 @@ def test_commander_say_answers_an_unanswered_unit_message(held_bus, target, body
     say = SayVerb(units="worker", body_file=str(reply), answers=(question.message_id,))
     say.apply(ctx)
     assert unanswered(held_bus) == ()
-    # A name that is not open needs no answer: it is dropped, never a refusal of the verb.
-    SayVerb(units="worker", body_file=str(reply), answers=(MessageId("0" * 12),)).apply(ctx)
+    # A nonexistent identity refuses without publishing a reply that drops its answer.
+    unknown = MessageId("0" * 12)
+    revision = held_bus.bus.bus.revision()
+    with pytest.raises(RecordProblems, match=unknown):
+        SayVerb(units="worker", body_file=str(reply), answers=(unknown,)).apply(ctx)
+    assert held_bus.bus.bus.revision() == revision
+    # An already answered original exists, but opens no new ask.
+    SayVerb(units="worker", body_file=str(reply), answers=(question.message_id,)).apply(ctx)
     assert held_bus.bus.bus.lookup(held_bus.bus.bus.revision()).answers == ()
 
 

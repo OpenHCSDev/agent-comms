@@ -13,6 +13,7 @@ from agent_comms.goal_actions import SetGoalAction
 from agent_comms.commander.package import CommanderPackage
 from agent_comms.errors import TodoConflict, TodoError, ToolRefusedError
 from agent_comms.goals import OrderCheck, ProblemGoalOrder
+from agent_comms.messages import QuestionKind
 from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.todos import (
     ClaimOrder,
@@ -318,7 +319,9 @@ def test_two_delivery_claims_warn_without_deadlocking_other_orders(
         main(["say", "worker", str(reply), "--answers",
               claims[0].order.claim.message.message_id], ctx)
     assert store.get("P1") == claims[0]
-    ask = comms.messaging.send("worker", ctx.commander, "Which owner do I wait on?").message
+    ask = comms.messaging.send(
+        "worker", ctx.commander, "Which owner do I wait on?", type=QuestionKind,
+    ).message
     main(["say", "worker", str(reply), "--answers", ask.message_id], ctx)
     assert store.get("P1") == claims[0]
 
