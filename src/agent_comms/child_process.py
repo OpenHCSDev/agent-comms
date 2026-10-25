@@ -1191,7 +1191,7 @@ class ChildLaunch:
         self.identity_writer = os.fdopen(identity_w, "wb", buffering=0)
 
     def record(self, identity: ProcessIdentity, store: RuntimeChildrenStore) -> None:
-        """Atomically admit the gated child, or cancel before user code executes."""
+        """Record the gated child in the children store in one step, or cancel it before user code runs."""
         try:
             store.record(identity)
         except BaseException:
@@ -1199,7 +1199,7 @@ class ChildLaunch:
             raise
 
     async def record_async(self, identity: ProcessIdentity, store: RuntimeChildrenStore) -> None:
-        """Join durable admission before cancellation can retire the gated child."""
+        """Wait for the child's store record before cancellation can retire it."""
         pending = asyncio.get_running_loop().run_in_executor(None, self.record, identity, store)
         try:
             await join_retirement(pending)
