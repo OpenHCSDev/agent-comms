@@ -231,10 +231,9 @@ def test_compare_timeout_retires_pool_probe_and_defiant_grandchild(tmp_path: Pat
     observed = ()
     try:
         with repo.comparing(base, head) as child:
-            deadline = time.monotonic() + 30
+            # The probe announces itself or its ratchet dies; pytest-timeout owns the budget.
             while not announcement.exists():
                 assert child.alive(), child.process.communicate()
-                assert time.monotonic() < deadline, "stored-format probe did not become ready"
                 time.sleep(.01)
             observed = identities(announcement)
             assert all(member.alive() for member in observed)

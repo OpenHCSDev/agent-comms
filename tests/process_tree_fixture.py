@@ -29,6 +29,6 @@ def identities(path: Path) -> tuple[ProcessIdentity, ...]:
 
 
 async def ready(path: Path) -> None:
-    async with asyncio.timeout(5):
-        while not path.exists():
-            await asyncio.sleep(0.01)
+    """Until the tree announces itself; pytest-timeout owns the budget."""
+    while not path.exists():
+        await asyncio.sleep(0.01)
