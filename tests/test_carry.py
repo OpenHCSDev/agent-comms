@@ -293,7 +293,7 @@ def test_the_install_start_stops_owners_on_a_ledger_the_outgoing_runtime_cannot_
                 assert maintenance.read().phase is ReadyPhase
         finally:
             owner.kill()
-    GoalAttemptStore(path.parent)
+    GoalAttemptStore.at(path.parent)
 
 
 def test_a_command_line_that_dies_before_answering_refuses_with_its_own_error():
