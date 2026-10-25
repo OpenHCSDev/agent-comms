@@ -12,7 +12,7 @@ import subprocess
 from abc import abstractmethod
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
-from functools import cached_property
+from functools import cached_property, lru_cache
 from pathlib import Path
 from typing import TYPE_CHECKING, Annotated, ClassVar
 
@@ -84,6 +84,7 @@ class SourceGrowth:
 
     files: tuple[tuple[str, int], ...]
     limit: ClassVar[int] = 40
+    tree: ClassVar[str] = "src/"
 
     @property
     def total(self) -> int:
@@ -112,6 +113,11 @@ class BranchDifference:
     behind: int
     files: frozenset[str]
     growth: SourceGrowth
+
+    @property
+    def changes_source(self) -> bool:
+        """Any file under the source tree, not only the Python modules growth counts."""
+        return any(path.startswith(SourceGrowth.tree) for path in self.files)
 
 
 class ForgeAnswer(WireModel):
@@ -402,11 +408,16 @@ query($owner: String!, $name: String!, $after: String) {
         return frozenset(path for path in self._git(
             "diff", "--name-only", "-z", "--no-renames", base, head).split("\0") if path)
 
+    @lru_cache(maxsize=512)
     def source_growth(self, base: str, head: str, files: frozenset[str]) -> SourceGrowth:
-        """Git owns both trees; each changed src module is counted once on each side."""
+        """Git owns both trees; each changed src module is counted once on each side.
+
+        Both commits are immutable, so one pair is counted once per process: the
+        heartbeat asks again every pass and the answer cannot move until a SHA does.
+        """
         sources = tuple(
             (path, f"{commit}:{path}", weight)
-            for path in sorted(files) if path.startswith("src/") and path.endswith(".py")
+            for path in sorted(files) if path.startswith(SourceGrowth.tree) and path.endswith(".py")
             for commit, weight in ((base, -1), (head, 1))
         )
         batch = Repo.git_bytes(

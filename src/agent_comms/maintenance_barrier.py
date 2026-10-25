@@ -126,8 +126,8 @@ class TargetRuntime(LaunchRuntime, RecordMember, MaintenanceTarget):
 
     def require_drained_writes_open_to(self, state: MaintenanceState,
                                        holder: MaintenanceHolder) -> None:
-        """Retargeted so the target stops the outgoing owners: from then on only the
-        install's holder writes, the target's stop settling their turns among them."""
+        """Retargeted once the outgoing runtime has stopped its owners: from then on only
+        the install's holder writes."""
         state.require_open_to(holder)
 
 
