@@ -101,17 +101,20 @@ class Ping(DeclaredFamily, affix="Ping"):
 
 @dataclass(frozen=True)
 class RulePing(Ping):
+    rule: type[StandingRule]
     observation: TextDigest
-    commander_disposes: bool = field(default=True, compare=False, kw_only=True)
 
     @property
     def key(self) -> TextDigest:
         return self.observation
 
+    @property
+    def commander_disposes(self) -> bool:
+        return self.rule.commander_disposes
+
     @classmethod
     def capture(cls, rule: StandingRule) -> Self:
-        return cls(rule.observation_key(), text=rule.line(), subjects=rule.subjects(),
-                   commander_disposes=rule.commander_disposes)
+        return cls(type(rule), rule.observation_key(), text=rule.line(), subjects=rule.subjects())
 
 
 @dataclass(frozen=True)

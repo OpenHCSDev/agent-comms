@@ -23,9 +23,9 @@ from agent_comms.repository_name import RepositoryName
 from agent_comms.service_passes import ServicePassStore
 from agent_comms.todos import ProgressRead
 from agent_comms.ui_model.observation import CommanderHudObserved, ObserveCommanderHud
-from agent_comms.standing_rules import ServicePassFailing, StandingRule, UndatedStandingRule
+from agent_comms.standing_rules import OrderlessUnreviewedHead, ServicePassFailing, StandingRule, UndatedStandingRule
 from agent_comms.text_digest import TextDigest
-from agent_comms.ui_model.unit_state import UnitState
+from agent_comms.ui_model.unit_state import AwaitingCommander, UnitState
 from agent_comms.wake_policy import PassiveWake
 from test_holder_standing_rules import state_cards
 
@@ -270,9 +270,9 @@ def test_a_verdict_on_the_full_head_or_an_answer_acts_on_its_board_line():
     answer names its owed message. Either is board work the stale-line gate lets through."""
     repo = RepositoryName("OpenHCSDev", "agent-comms")
     owed = MessageId("cb055200351e")
-    delivery = RulePing(TextDigest.of("JUDGE"), text="JUDGE",
+    delivery = RulePing(OrderlessUnreviewedHead, TextDigest.of("JUDGE"), text="JUDGE",
                         subjects=(HeadSubject(PullRequestHead(repo, 3306, "89c687691")),))
-    chokehold = RulePing(TextDigest.of("ANSWER"), text="ANSWER", subjects=(AnswerSubject(owed),))
+    chokehold = RulePing(AwaitingCommander, TextDigest.of("ANSWER"), text="ANSWER", subjects=(AnswerSubject(owed),))
     verdict = frozenset((HeadSubject(PullRequestHead(repo, 3306, "89c6876910086167ca82653bcedac84d78fa4de9")),))
 
     assert delivery.acted_on(verdict)

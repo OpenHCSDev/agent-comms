@@ -743,8 +743,12 @@ class IdlePullRequest(HeadLine, DatedStandingRule):
                    held: Sequence[Todo], ordered: Sequence[Todo]) -> tuple[Self, ...]:
         """Holders are the live holds whose orders link the request, as the HUD cards read;
         the commander's orders' links own which requests are its fleet's."""
+        from agent_comms.todos import PullRequests
+
         now = time.time()
-        pulls.register(ordered)
+        fleet = PullRequests(ordered)
+        repos = goals.registry.snapshot().commander_project.repository_names()
+        linked = {repo: fleet.linked(repo) for repo in repos}
         holders: dict[tuple[RepositoryName, int], tuple[ThreadIncarnation, ...]] = {}
         for todo in held:
             for request in pulls.open_for(todo):
@@ -753,9 +757,8 @@ class IdlePullRequest(HeadLine, DatedStandingRule):
         found = (
             cls(PullRequestHead(repo, row.number, row.head), holders.get((repo, row.number), ()),
                 row.merge_blocks, row.reviewable_at)
-            for repo in goals.registry.snapshot().commander_project.repository_names()
-            for linked in (pulls.linked(repo),)
-            for row in pulls.open(repo) if row.number in linked and not row.armed_times
+            for repo in repos
+            for row in pulls.open(repo) if row.number in linked[repo] and not row.armed_times
         )
         return tuple(rule for rule in found if rule.began() <= now)
 
