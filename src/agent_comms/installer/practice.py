@@ -116,7 +116,7 @@ class PracticeCopy:
             source = resource.live(self.root)
             if source in self.copied or source in witnesses or not source.exists():
                 continue
-            target = self.path / resource.path
+            target = resource.retained(self.path)
             target.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
             self.copied.update((member, resource) for member in resource.owner.copy_group(source, target))
 
@@ -127,7 +127,7 @@ class PracticeCopy:
         for source in discarded:
             resource = self.copied[source]
             primary = resource.live(self.root)
-            (self.path / resource.owner.relocated(primary, resource.path, source)).unlink(missing_ok=True)
+            resource.owner.relocated(primary, resource.retained(self.path), source).unlink(missing_ok=True)
             del self.copied[source]
 
     @property

@@ -307,7 +307,7 @@ class StoreBackup(ResourceBackup):
         path = spill_dir / BackupName.now(root).value
         backup = cls(root, route, path)
         resources = RootFile.owned_files(LiveFilesRequest(root), files)
-        selected = tuple(resource.path for resource in resources)
+        selected = tuple(sorted(resource.path for resource in resources))
         if path.exists():
             if backup.selected_files() != selected:
                 raise UpgradeRefused('Existing backup belongs to different resources')

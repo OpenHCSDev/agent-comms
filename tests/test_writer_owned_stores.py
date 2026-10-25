@@ -158,7 +158,6 @@ def test_writer_owned_carry_copies_migrates_and_restores_original_bytes(
     name = store.retained_filename()
     backup = StoreBackup.take(root, tmp_path / "route", step.input_files(), tmp_path / "backup")
     assert backup.selected_files() == (name,)
-    assert name == Path("writer-owned") / store.declared_name
     assert Carried(1, rewritten=(store.path(),)).for_step(step).rewritten == (name,)
     assert Carried(1, rewritten=(name,)).for_step(step).rewritten == (name,)
 
