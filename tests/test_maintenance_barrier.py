@@ -440,6 +440,30 @@ def test_a_carried_store_write_is_refused_to_all_but_the_maintenance_holder(tmp_
     gate.clear(hold)
 
 
+def test_the_goal_ledger_refuses_other_writers_once_the_drained_hold_is_retargeted(
+        tmp_path: Path, monkeypatch) -> None:
+    """Install 11 rolled back on "Carries changed files no step names: goal_attempts.sqlite3":
+    the ledger committed for a non-holder after the install captured the bus. Draining owners
+    still settle their turns in it; once retargeted, only the holder commits."""
+    from agent_comms.field_codec import GoalId
+    from agent_comms.launch_runtime import LaunchRuntime
+    from agent_comms.maintenance_barrier import HOLDER_NONCE
+
+    comms = wire(tmp_path)
+    ledger = comms.goals.open_goal_store()
+    gate = MaintenanceBarrier(comms.registry.store.path)
+    monkeypatch.delenv(HOLDER_NONCE, raising=False)
+    draining = gate.begin(MaintenanceOperator.current())
+    ledger.create_goal(GoalId.mint())
+    held = gate.retarget(draining, LaunchRuntime(tmp_path / "target/bin/python"))
+    before = ledger.path.read_bytes()
+    with pytest.raises(RelationViolationError):
+        ledger.create_goal(GoalId.mint())
+    assert ledger.path.read_bytes() == before
+    monkeypatch.setenv(HOLDER_NONCE, held.nonce)
+    ledger.create_goal(GoalId.mint())
+
+
 def test_every_carried_json_document_writes_through_the_maintenance_gate() -> None:
     """A durable JSON document gets the gate from its kind, as the registry does."""
     from agent_comms.catalog_store import ChannelCatalog
