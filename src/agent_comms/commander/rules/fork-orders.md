@@ -10,7 +10,7 @@ type: feedback
 
 Every order starts with these steps, before its own:
 1. Before any work: branch from fresh main, make an empty commit, push, verify `git ls-remote` equals HEAD, open a draft PR. Every commit after that is pushed to it.
-2. Land through the merge queue: mark ready, `gh pr merge N --auto --merge` (gh refuses a bare `--auto` when it runs non-interactively). Never run the ratchets or the full suite locally.
+2. Land through the merge queue: mark ready, `gh pr merge N --auto --merge` (gh refuses a bare `--auto` when it runs non-interactively). Never run local ratchets. Test execution follows tests-and-commands.md; unit and review orders contain source checks, not pytest commands.
 3. Delete slop instead of rewriting it: tests that patch our own code, wording asserts, tests of deleted code, the superseded copy of any system. No compatibility shims or aliases.
 4. Stay on current main: fetch before every commit and merge origin/main the moment it moves; resolve every conflict yourself. Tristan, 2026-10-20: "remind units to continuously sync to main so they don't work on outdated checkouts".
 5. Never close a PR holding real work; land its good parts.

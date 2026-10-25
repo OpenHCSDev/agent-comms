@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from agent_comms.lifecycle_capability import Active
 
-import shlex
 import signal
 import subprocess
 import tempfile
@@ -35,6 +34,8 @@ from agent_comms.goal_turn_permit import GoalTurnPermit, NoLaunchPermit
 from .turn_goal_permission import ContinuationGoalPermission, GoalPermission, InactiveGoalPermission
 from .registration_inheritance import RegistrationInheritance
 from .repo import DetachedStart, GitCommandError, Repo, ScratchCheckout
+from .shell_commands import ShellCommand
+from .test_invocation import PYTEST
 from .thread_identity import RecordedThreadIncarnation, ThreadIncarnation
 from .text_digest import TextDigest
 from .reported_turn import NoReportedTurn, ReportedTurnState
@@ -310,29 +311,14 @@ class CheckCommand:
 
     def require_writable(self) -> None:
         """New checks cannot select revisions; saved checks remain readable for correction."""
-        if any(self.git_command(words) in self.REVISION_COMMANDS
-               for words in self.simple_commands(self.command)):
+        PYTEST.require_integrator(self.command)
+        if any(self.git_command(list(simple.words)) in self.REVISION_COMMANDS
+               for simple in ShellCommand.split(self.command)):
             raise ValueError("A check never checks out a revision: Core runs it at the "
                              "delivered commit and at each branch commit. Drop the checkout.")
 
     # The revision is the run's parameter; a check line that chooses one is refused.
     REVISION_COMMANDS: ClassVar[frozenset[str]] = frozenset({"checkout", "switch"})
-    SEPARATORS: ClassVar[frozenset[str]] = frozenset({"&&", "||", ";", "|", "&", "\n"})
-
-    @classmethod
-    def simple_commands(cls, command: str) -> list[list[str]]:
-        """The shell words of each simple command in ``command``."""
-        lexer = shlex.shlex(command, posix=True, punctuation_chars="();<>|&\n")
-        lexer.whitespace = " \t\r"
-        lexer.whitespace_split = True
-        commands: list[list[str]] = [[]]
-        for word in lexer:
-            if word in cls.SEPARATORS or not word.strip("\n"):
-                commands.append([])
-            else:
-                commands[-1].append(word)
-        return commands
-
     @staticmethod
     def git_command(words: Sequence[str]) -> str:
         """The git subcommand ``words`` run, or "" when they run no git."""
@@ -383,6 +369,7 @@ class OrderCheck(CheckCommand):
 
     async def run(self) -> ChildResult:
         """The check on its directory's live state."""
+        PYTEST.require_integrator(self.command)
         return await BoundedRun.run(("bash", "-c", self.command), cwd=self.directory,
                                     timeout=self.timeout)
 
@@ -410,6 +397,7 @@ class OrderCheck(CheckCommand):
 
     def run_at(self, revision: str, repository: Path, checkout_base: Path) -> ChildResult:
         """Run in a fresh detached tree, never in the configured checkout."""
+        PYTEST.require_integrator(self.command)
         checkout_base.mkdir(parents=True, exist_ok=True)
         with tempfile.TemporaryDirectory(prefix="order-check-", dir=checkout_base) as scratch:
             tree = str(Path(scratch) / "tree")

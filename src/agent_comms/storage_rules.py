@@ -39,7 +39,7 @@ from agent_comms.storage_room import (
 )
 from agent_comms.tool_denial import SelectedToolDenied
 from agent_comms.work_branches import WorkBranches
-from agent_comms_hooks.shell import ShellCommand
+from .shell_commands import ShellCommand
 
 if TYPE_CHECKING:
     from agent_comms.comms import Comms

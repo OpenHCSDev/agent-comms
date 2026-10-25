@@ -7,6 +7,7 @@ import pytest
 from agent_comms.commander.order import CheckRequest
 from agent_comms.field_codec import FieldCodec
 from agent_comms.goals import CountCheckResult, OrderCheck
+from agent_comms.shell_commands import ShellCommand
 from agent_comms.work_branches import WorkBranches
 
 
@@ -27,9 +28,24 @@ def test_multiline_checks_keep_quoted_newlines_and_command_boundaries():
     command = "printf 'first\\nsecond'\n\ngrep -c obsolete owner.py"
     check = CheckRequest.parse(f'. :: {command} -> 0')
     assert check is not None and check.command == command
-    assert [words for words in check.simple_commands(command) if words] == [
-        ['printf', 'first\\nsecond'], ['grep', '-c', 'obsolete', 'owner.py'],
+    assert [simple.words for simple in ShellCommand.split(command)] == [
+        ('printf', 'first\\nsecond'), ('grep', '-c', 'obsolete', 'owner.py'),
     ]
+
+
+@pytest.mark.parametrize('command', [
+    'pytest tests/test_todos.py',
+    'python -m pytest tests/test_todos.py',
+    'timeout 300 bash -c "python -m pytest tests/test_todos.py"',
+])
+def test_saved_pytest_checks_decode_but_cannot_run(command, tmp_path):
+    saved = OrderCheck(tmp_path, command)
+    assert FieldCodec.decode(OrderCheck, FieldCodec.encode(saved)) == saved
+    with pytest.raises(ValueError, match='integrator'):
+        saved.require_writable()
+    with pytest.raises(ValueError, match='integrator'):
+        saved.run_at('HEAD', tmp_path, tmp_path / 'checkouts')
+    assert not (tmp_path / 'checkouts').exists()
 
 
 @pytest.mark.parametrize('command,expected', [('grep -c . owner.py', 3), ('printf missing', 0)])
