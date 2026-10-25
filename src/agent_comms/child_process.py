@@ -20,6 +20,7 @@ import signal
 import stat
 import subprocess
 import sys
+import termios
 import threading
 import time
 from abc import ABC, abstractmethod
@@ -2035,9 +2036,6 @@ class ControllingTerminalCommand(ChildCommand):
     command: tuple[str, ...]
 
     def run(self) -> None:
-        import fcntl
-        import termios
-
         fcntl.ioctl(0, termios.TIOCSCTTY, 0)
         os.execvpe(self.command[0], self.command, os.environ)
 

@@ -18,6 +18,11 @@ from .launch_root import LaunchRoot
 from .launch_runtime import LaunchRuntime, RestartEnvironment
 from .native_arguments import ConfiguredBinary, InheritedArguments
 from .native_pi import NativePiRpcLaunch
+from .pi_commands import (
+    GetAvailableThinkingLevels,
+    SetModel,
+    SetThinkingLevel,
+)
 
 if TYPE_CHECKING:
     from .session_config_options import SessionConfigOptions
@@ -198,8 +203,6 @@ class ModelConfigOption(CatalogConfigOption):
     async def apply(
         self, owner: SessionConfigOptions, thread: Thread, value: str
     ) -> None:
-        from .pi_commands import SetModel
-
         provider, model = value.split("/", 1)
         await owner.configure_thread(
             thread, SetModel(provider=provider, model_id=model),
@@ -215,8 +218,6 @@ class ThinkingLevelConfigOption(CatalogConfigOption):
         return thread.thinking_level.wire_value()
 
     async def discover(self, thread: CatalogSelection) -> list[CatalogChoice]:
-        from .pi_commands import GetAvailableThinkingLevels
-
         data = await GetAvailableThinkingLevels().discover(
             self.agent_bin,
             thread.model.native(self.agent_args).argv,
@@ -229,8 +230,6 @@ class ThinkingLevelConfigOption(CatalogConfigOption):
     async def apply(
         self, owner: SessionConfigOptions, thread: Thread, value: str
     ) -> None:
-        from .pi_commands import SetThinkingLevel
-
         await owner.configure_thread(
             thread, SetThinkingLevel(level=value),
         )

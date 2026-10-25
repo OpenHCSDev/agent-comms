@@ -95,17 +95,22 @@ def decide(
 
 
 @pytest.mark.parametrize(
-    ("sender_role", "policy", "starts_turn"),
-    [(UserThreadRole, CollectivePolicy, True), (AgentThreadRole, InformationalPolicy, False)],
+    ("sender_role", "policy", "starts_turn", "addressed"),
+    [
+        # The owner's channel message addresses every member, so it joins running turns.
+        (UserThreadRole, CollectivePolicy, True, MessageAudience.MENTIONED),
+        (AgentThreadRole, InformationalPolicy, False, MessageAudience.COLLECTIVE),
+    ],
 )
 @pytest.mark.parametrize("type", [InfoKind, AckKind, HandoffKind])
 def test_ordinary_unmentioned_channel_reaches_all_members_without_full_turns(
-    sender_role: Type[ThreadRole], policy, starts_turn: bool, type: Type[MessageKind]
+    sender_role: Type[ThreadRole], policy, starts_turn: bool, addressed: MessageAudience,
+    type: Type[MessageKind],
 ) -> None:
     message = stored(sender_role=sender_role, type=type)
     decisions = [decide(message, member.recipient_lookup) for member in MEMBERS]
     assert decisions == [
-        WakeDecision(member.recipient_lookup, MessageAudience.COLLECTIVE, BoundedTriageWake())
+        WakeDecision(member.recipient_lookup, addressed, BoundedTriageWake())
         for member in MEMBERS
     ]
     assert decide(message, OWNER_LOOKUP) is None

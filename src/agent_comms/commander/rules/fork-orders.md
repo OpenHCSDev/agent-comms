@@ -1,15 +1,15 @@
 ---
 name: fork-orders
-description: "every fork or unit order carries the invariant steps up front: draft PR at the first commit, land through the merge queue, no local ratchets or full suites, delete slop instead of rewriting it, one version of each system"
+description: "every fork or unit order carries the invariant steps up front: draft PR before any work, land through the merge queue, no local ratchets or full suites, delete slop instead of rewriting it, one version of each system"
 drift: "No silent errors, no deferrals, no follow-up: done means the defect the problem names is gone."
 audience: fleet
 type: feedback
 ---
 
-**Why:** the commander writes orders from habit, and habit ends with "push, PR, merge"; on 2026-10-20 five forks held uncommitted work with no PR, a closed PR threw away two hours of good work, and orders said to run ratchets locally after the merge queue already ran them. Tristan: "branches should always have prs for them, if you don't it gets lost"; "don't have two versions of a system when one supersedes the other"; "no backwards compat".
+**Why:** the commander writes orders from habit, and habit ends with "push, PR, merge"; on 2026-10-20 five forks held uncommitted work with no PR, a closed PR threw away two hours of good work, and orders said to run ratchets locally after the merge queue already ran them. Tristan: "branches should always have prs for them, if you don't it gets lost"; 2026-10-24: "always make a pr before starting to no allow brnches to disappear"; "don't have two versions of a system when one supersedes the other"; "no backwards compat".
 
 Every order starts with these steps, before its own:
-1. At the first commit: push, verify `git ls-remote` equals HEAD, open a draft PR. Keep pushing to it.
+1. Before any work: branch from fresh main, make an empty commit, push, verify `git ls-remote` equals HEAD, open a draft PR. Every commit after that is pushed to it.
 2. Land through the merge queue: mark ready, `gh pr merge N --auto --merge` (gh refuses a bare `--auto` when it runs non-interactively). Never run the ratchets or the full suite locally.
 3. Delete slop instead of rewriting it: tests that patch our own code, wording asserts, tests of deleted code, the superseded copy of any system. No compatibility shims or aliases.
 4. Stay on current main: fetch before every commit and merge origin/main the moment it moves; resolve every conflict yourself. Tristan, 2026-10-20: "remind units to continuously sync to main so they don't work on outdated checkouts".

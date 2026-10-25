@@ -607,9 +607,12 @@ def test_chain_terms_catch_growth_hidden_by_unchanged_chain_count(repo: Reposito
         (StringDispatch, StringDispatchArms, "if value == {case!r}: return 1"),
         (StringDispatch, StringDispatchArms, "if value in ({case!r},): return 1"),
         (StringDispatch, StringDispatchArms, "match value:\n        case {case!r}: return 1"),
+        (StringDispatch, StringDispatchArms, "match value:\n        case {case!r} | {case!r}: return 1"),
+        (StringDispatch, StringDispatchArms, "match value:\n        case ({case!r} | {case!r}) as named: return 1"),
         (TypeSwitch, TypeSwitchArms, "if isinstance(value, Case{case}): return 1"),
         (TypeSwitch, TypeSwitchArms, "if type(value) is Case{case}: return 1"),
         (TypeSwitch, TypeSwitchArms, "match value:\n        case Case{case}(): return 1"),
+        (TypeSwitch, TypeSwitchArms, "match value:\n        case Case{case}() as named: return 1"),
         (TypeSwitch, TypeSwitchArms, "if issubclass(value, Case{case}): return 1"),
         (TypeSwitch, TypeSwitchArms, "if value is Case{case}: return 1"),
     ],
@@ -691,8 +694,6 @@ async def second(value):
         (AnyName, "from typing import Any\ndef read(value: Any) -> None: ...\n"),
         (AnyName, "from typing import Any\nvalue = Any\n"),
         (UnannotatedParameter, "def read(value): ...\n"),
-        (Unformatted, "value=1\n"),
-        (LintFindings, "import os\n"),
         (TypeErrors, 'value: int = "text"\n'),
     ],
 )
@@ -707,6 +708,21 @@ def test_per_file_increase_cannot_be_offset_or_moved(
     assert (
         sum(delta for key, delta in report["delta"].items() if measure.owns(key)) == 0
     )
+
+
+@pytest.mark.parametrize(
+    ("measure", "source"), [(Unformatted, "value=1\n"), (LintFindings, "import os\n")]
+)
+def test_advisory_growth_is_measured_and_warned_never_failed(
+    repo: Repository, measure: type[Measure], source: str
+) -> None:
+    base = repo.commit({"new.py": ""})
+    head = repo.commit({"new.py": source})
+    status, report = repo.compare(base, head, measure)
+    key = measure.key(f"{repo.root}/new.py")
+    assert status == 0
+    assert report["delta"][key] > 0
+    assert measure.grew(key, 1).startswith(f"::warning file={repo.root}/new.py::")
 
 
 def test_a_renamed_file_compares_with_its_old_path(repo: Repository) -> None:

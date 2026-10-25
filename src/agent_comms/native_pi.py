@@ -21,6 +21,11 @@ from pydantic import JsonValue
 
 from agent_comms.participant_identity import ParticipantIdentity
 
+from .active_route import (
+    ActiveRoute,
+    resolve_comms_route,
+)
+from .coordination_errors import IdentityConflict
 from .errors import RelationViolationError
 from .field_codec import (
     FieldCodec,
@@ -141,7 +146,6 @@ class NativePiOperationFailed(NativePiUnavailable):
 
 def main() -> int:
     """Run the active route's pinned Pi for ordinary ACP owner sessions."""
-    from .active_route import ActiveRoute, resolve_comms_route
     LaunchRoot.startup(sys.argv, ActiveRoute.published_launch)
     package = resolve_comms_route().launch().require_private().validate()
     environment = dict(os.environ)
@@ -382,8 +386,6 @@ class NativePiTerminalFailure(NativePiUnavailable):
 @dataclass(frozen=True, slots=True)
 class NativeTurnResult:
     def require_publishable(self) -> None:
-        from .coordination_errors import IdentityConflict
-
         if not self.text:
             raise IdentityConflict("successful model produced no publishable response")
 

@@ -34,8 +34,6 @@ from dataclasses import dataclass, field, fields, replace
 from pathlib import Path
 from typing import TYPE_CHECKING, Annotated, ClassVar, Self
 
-from pydantic import TypeAdapter
-
 from agent_comms.active_route import (
     ActiveRoute,
     RouteFile,
@@ -56,12 +54,11 @@ from agent_comms.cli_commands import (
     TargetActionCliCommand,
     TargetBatchResult,
 )
-from agent_comms.cli_protocol import CoreError
 from agent_comms.cli_result import CliResult
 from agent_comms.comms import wire
 from agent_comms.coordination_errors import CoordinationReadUnavailable
 from agent_comms.declared_family import DeclaredFamily
-from agent_comms.field_codec import FieldCodec, MalformedRecord, PathText
+from agent_comms.field_codec import PathText
 from agent_comms.host_services import HostService, RestartedService
 from agent_comms.install_choices import InstallerChoice, RunMode
 from agent_comms.installer.backup import (
@@ -129,7 +126,11 @@ from agent_comms.installer.probes.carry import (
     MigrateOperation,
     RetireInputsOperation,
 )
-from agent_comms.installer.probes.commands import CliCommandProbe
+from agent_comms.installer.probes.commands import (
+    CliCommandProbe,
+    CliRefusedError,
+    CliUndecodableError,
+)
 from agent_comms.installer.probes.harnesses import InstallResult
 from agent_comms.installer.probes.imports import ClientImportsProbe
 from agent_comms.installer.probes.native import PrepareNativeProbe, PrepareProducerDigestsProbe
@@ -166,7 +167,6 @@ if TYPE_CHECKING:
     from agent_comms.installer.launch import InstallReport
 
 HOME = Path.home()
-CORE_ERROR = TypeAdapter(CoreError.declared_union())
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -465,6 +465,56 @@ class ServicesStopped:
         return restarted
 
 
+@dataclass
+class OwnersStopped:
+    """The agent owners a live install stopped, from its start message on. Until a
+    published runtime takes them over, every exit starts the same owners again on the
+    installed runtime, and their start outcomes join the install's report."""
+
+    stopped: list[str] = field(default_factory=list)
+    started: tuple[OwnerStart, ...] = ()
+    give_back: ExitStack = field(default_factory=ExitStack)
+
+    def stop(self, stack: Stack, root: Path) -> None:
+        """Each owner is remembered once, before its batch, so a partly refused stop still
+        starts again every owner it stopped, and one restarted since is not started twice."""
+        running = stack.running_owners(root)
+        self.stopped.extend(name for name in running if name not in self.stopped)
+        stack.owners(root, StopCliCommand, running).require_success(UpgradeRefused)
+
+    def start_on(self, stack: Stack, root: Path) -> tuple[OwnerStart, ...]:
+        self.started = stack.start(root, self.stopped)
+        return self.started
+
+    def published_on(self, stack: Stack, root: Path) -> tuple[OwnerStart, ...]:
+        """The installed runtime is no longer published, so it never takes these owners
+        back, even when a start on ``stack`` fails."""
+        self.give_back.pop_all()
+        return self.start_on(stack, root)
+
+    def retired(self) -> None:
+        """The owners belong to a bus moved aside; nothing starts them again."""
+        self.give_back.pop_all()
+
+    def release(self) -> None:
+        """No hold was taken with these owners, so none is cleared."""
+
+    def lines(self) -> tuple[str, ...]:
+        return tuple(line for owner in self.started for line in owner.lines())
+
+
+@dataclass
+class HeldOwnersStopped(OwnersStopped):
+    """Owners the target stopped under the install's one maintenance hold, which lasts
+    to its release, before anything starts on the root again, or to the install's exit."""
+
+    hold: ExitStack = field(default_factory=ExitStack)
+
+    def release(self) -> None:
+        """Clears the hold once; a later call finds nothing left to clear."""
+        self.hold.close()
+
+
 @dataclass(frozen=True)
 class Stack:
     """One built installation and the source checkout containing its install tools."""
@@ -560,7 +610,7 @@ class Stack:
         scratch.mkdir(mode=0o700, parents=True, exist_ok=True)
         with tempfile.TemporaryDirectory(dir=scratch, prefix=f"tests-{core[:12]}-") as temporary:
             print(self.commands.run(
-                "timeout", "300", self.python, "-m", "pytest", "-q", "-s",
+                self.python, "-m", "pytest", "-q", "-s",
                 "-o", "pythonpath=. tools", "-o", "faulthandler_timeout=60",
                 "--basetemp", Path(temporary) / "pytest", "-p", "no:cacheprovider",
                 *pytest_arguments, cwd=self.checkout, env=self.environment()), end="")
@@ -621,24 +671,27 @@ class Stack:
     def cli[Answer: CliResult](self, root: Path, command: type[CliCommand[Answer]],
                                *arguments: str) -> Answer:
         """This bus's answer to ``command``, never the route's, decoded as the result the
-        command declares. A declared read-unavailable failure (the route index still
-        rebuilding, its writer busy) is waited out; every other failure refuses."""
-        invocation = command.invocation(*arguments)
+        command declares."""
+        return self.answer(root, command.invocation(*arguments), command.result_type())
+
+    def answer[Answer: CliResult](self, root: Path, invocation: tuple[str, ...],
+                                  result: type[Answer]) -> Answer:
+        """One command line's ``result`` on this bus. A declared read-unavailable failure
+        (the route index still rebuilding, its writer busy) is waited out; every other
+        failure refuses."""
         verb = f"agent-comms {' '.join(invocation)}"
         for _ in range(240):
-            completed = self.probe(CliCommandProbe(("--root", str(root), *invocation)))
             try:
-                if not completed.returncode:
-                    return FieldCodec.decode(command.result_type(),
-                                             FieldCodec.parse(completed.stdout))
-                failure = CORE_ERROR.validate_json(completed.stdout)
-            except (MalformedRecord, ValueError) as malformed:
-                raise UpgradeRefused(f"{verb}: undecodable answer: {malformed}; "
-                                     f"stdout: {completed.stdout.strip()}") from malformed
-            if not issubclass(failure.exception_type, CoordinationReadUnavailable):
-                raise UpgradeRefused(f"{verb}: {failure.error}")
+                return self.probe(CliCommandProbe(("--root", str(root), *invocation))).answer(
+                    result)
+            except CliUndecodableError as undecodable:
+                raise UpgradeRefused(f"{verb}: undecodable answer: {undecodable}") from undecodable
+            except CliRefusedError as refused:
+                if not issubclass(refused.failure.exception_type, CoordinationReadUnavailable):
+                    raise UpgradeRefused(f"{verb}: {refused}") from refused
+                waited = refused
             time.sleep(5)
-        raise UpgradeRefused(f"{verb}: still unavailable after 20 minutes: {failure.error}")
+        raise UpgradeRefused(f"{verb}: still unavailable after 20 minutes: {waited}")
 
     def call_steps[Answer](self, steps: tuple[Carry, ...],
                            operation: CarryOperation[Answer]) -> tuple[Answer, ...]:
@@ -659,10 +712,9 @@ class Stack:
         if not names:
             return TargetBatchResult(())
         with OwnersPhase(command=command).running(self.commands.clock):
-            invocation = TargetActionCliCommand.invocation(
-                "--operation", command.declared_name, "--targets", *names)
-            completed = self.probe(CliCommandProbe(("--root", str(root), *invocation)))
-            return FieldCodec.decode(TargetBatchResult, FieldCodec.parse(completed.stdout))
+            # A batch command answers every selection with its batch (MultipleTargets).
+            return self.answer(root, TargetActionCliCommand.invocation(
+                "--operation", command.declared_name, "--targets", *names), TargetBatchResult)
 
     def start(self, root: Path, names: list[str]) -> tuple[OwnerStart, ...]:
         """One start batch; keep each refusal in the installed or rollback report."""
@@ -825,11 +877,12 @@ def upgrade(checkout: Path, root: Path, target: str, installer: InstallerChoice,
         staged = Stack.build(ScratchCheckout(tree.path), commands)
         with StartingReportPublicationPhase().running(commands.clock):
             report.starting(mode.destination(member.initial_writer(root, installed)), target)
-        with PracticePhase().running(commands.clock):
-            install, rehearsal = member.rehearsed(checkout, root, current, target, chain,
-                                                  installed, staged, tree, installer, spill_dir,
-                                                  lifetime=practice_lifetime)
-        result = report.complete(mode.finish(install, rehearsal, bridges, harnesses, report))
+        with mode.owners_stopped(member, root, installed, staged) as report.owners:
+            with PracticePhase().running(commands.clock):
+                install, rehearsal = member.rehearsed(checkout, root, current, target, chain,
+                                                      installed, staged, tree, installer,
+                                                      spill_dir, lifetime=practice_lifetime)
+            result = report.complete(mode.finish(install, rehearsal, bridges, harnesses, report))
     bridges.require_resumed()
     return result
 
@@ -890,6 +943,18 @@ class Install[Rehearsed: Rehearsal](ABC):
         return ExistingBusInstall
 
     @classmethod
+    @contextmanager
+    def owners_kept(cls, root: Path, installed: Stack,
+                    staged: Stack) -> Iterator[OwnersStopped]:
+        """Every owner keeps running: none runs at the root, or the run touches only a copy."""
+        yield OwnersStopped()
+
+    @classmethod
+    def owners_stopped(cls, root: Path, installed: Stack,
+                       staged: Stack) -> AbstractContextManager[OwnersStopped]:
+        return cls.owners_kept(root, installed, staged)
+
+    @classmethod
     @abstractmethod
     def rehearsed(cls, checkout: Path, root: Path, current: str, target: str,
                   chain: CarryChain, installed: Stack, staged: Stack, tree: TargetTree,
@@ -929,7 +994,7 @@ class Install[Rehearsed: Rehearsal](ABC):
 
     def install(self, rehearsal: Rehearsed, bridges: SessionBridgeResumes,
                 report: InstallReport) -> LiveRun:
-        """Session bridges close their bus resources before units stop, then exec in place.
+        """Session bridges close their bus resources before the bus is held, then exec in place.
 
         Each serve retains its recorded owner's PID and start time after the hook exits.
         Its control connection survives until live() publishes or rolls back; the
@@ -950,10 +1015,54 @@ class Install[Rehearsed: Rehearsal](ABC):
     def live(self, rehearsal: Rehearsed, report: InstallReport) -> LiveRun: ...
 
 
+class StopsOwners:
+    """A bus whose agent owners run: they stop the moment the install announces its start,
+    not after the rehearsal, and start again on the installed runtime on any exit that
+    no published runtime took them over from."""
+
+    @classmethod
+    @contextmanager
+    def owners_stopped(cls, root: Path, installed: Stack,
+                       staged: Stack) -> Iterator[OwnersStopped]:
+        owners = OwnersStopped()
+        with owners.give_back:
+            owners.give_back.callback(owners.start_on, installed, root)
+            owners.stop(installed, root)
+            yield owners
+
+
 class ExistingBusInstall[Rehearsed: Rehearsal](Install[Rehearsed]):
     """A bus is already at the root. When a carry step exists or a store's schema differs
     from the target's, one practice copy of it answers what is pending and carries the
     rehearsal; otherwise nothing could change, and no copy is taken."""
+
+    @classmethod
+    @contextmanager
+    def owners_stopped(cls, root: Path, installed: Stack,
+                       staged: Stack) -> Iterator[OwnersStopped]:
+        """One hold, one retarget and one stop per install, all at its start. The target
+        stops the owners: stopping settles their turns in stores this install carries,
+        which the outgoing runtime may be unable to open (install 14, 2026-10-24: a ledger
+        install 13 left uncarried refused f23ca8968's every opening, so its stop answered
+        nothing). The hold refuses every other writer and every owner start from here to
+        its release, so nothing writes the root between this stop and the backup."""
+        clock = staged.commands.clock
+        with OutgoingRuntimeMaintenancePhase().running(clock):
+            RootRuntimeStore.at(root).adopt(installed.runtime)
+        maintenance = MaintenanceBarrier(RegistryStore.at(root).path)
+        owners = HeldOwnersStopped()
+        with owners.give_back:
+            owners.give_back.callback(owners.start_on, installed, root)
+            with owners.hold:
+                with BeginMaintenancePhase().running(clock):
+                    held = maintenance.begin(MaintenanceOperator.current())
+                owners.hold.callback(
+                    lambda: maintenance.clear(maintenance.held_by(MaintenanceOperator.current())))
+                with RetargetMaintenancePhase().running(clock):
+                    held = maintenance.retarget(held, staged.runtime)
+                owners.hold.enter_context(held.holding())
+                owners.stop(staged, root)
+                yield owners
 
     @classmethod
     def rehearsed(cls, checkout: Path, root: Path, current: str, target: str,
@@ -1033,17 +1142,6 @@ class PreparedMigration(Extendable):
         return passed
 
 
-@dataclass(frozen=True)
-class BackedUpMigration(PreparedMigration):
-    """A live migration carries the recovery data its failure path needs."""
-
-    backup: StoreBackup
-
-    def restore(self) -> None:
-        if not self.backup.original():
-            self.backup.restore()
-
-
 class ChangedInstall(ExistingBusInstall[RehearsedFiles]):
     def rehearsal(self, practice: PracticeBus, reconciled: tuple[Path, ...]) -> CarriedRehearsal:
         copied = practice.copy.path
@@ -1077,50 +1175,37 @@ class ChangedInstall(ExistingBusInstall[RehearsedFiles]):
                 sum(path.stat().st_size for path in selected if path.exists()),
             ), self.root.parent)
             restore.require()
-        with OutgoingRuntimeMaintenancePhase().running(self.staged.commands.clock):
-            RootRuntimeStore.at(self.root).adopt(self.installed.runtime)
-        running = self.installed.running_owners(self.root)
         with self.staged.services_stopped(self.installed) as stopped:
-            with BeginMaintenancePhase().running(self.staged.commands.clock):
-                maintenance = MaintenanceBarrier(RegistryStore.at(self.root).path)
-                held = maintenance.begin(MaintenanceOperator.current())
-                holder = ExitStack()
-                holder.enter_context(held.holding())  # this run's CLI calls read under its hold
+            # The install's start holds the root and stopped its owners (owners_stopped).
+            maintenance = MaintenanceBarrier(RegistryStore.at(self.root).path)
+            holder = ExitStack()
             try:
                 try:
-                    self.installed.owners(self.root, StopCliCommand, running).require_success(
-                        UpgradeRefused)
-                    with RetargetMaintenancePhase().running(self.staged.commands.clock):
-                        held = maintenance.retarget(held, self.staged.runtime)
-                        holder.close()
-                        holder.enter_context(held.holding())
                     planned = self.staged.cli(self.root, PlannedReconcileCliCommand)
                     unrehearsed = sorted(
                         frozenset(planned.rewritten) - frozenset(rehearsal.files.names))
                     if unrehearsed:
                         raise UpgradeRefused(
                             f"Reconcile would rewrite files the rehearsal did not: {unrehearsed}")
-                    original = PreparedMigration.capture(held, self.installed)
+                    migration = PreparedMigration.capture(
+                        maintenance.held_by(MaintenanceOperator.current()), self.installed)
                     backup, selected_route = self.backed_up(selected)
-                    migration = original.extended(BackedUpMigration, backup=backup)
                 except BaseException as error:
                     with AbortMaintenancePhase().running(self.staged.commands.clock):
-                        holder.close()
-                        maintenance.clear(held)
-                    started = self.installed.start(self.root, running)
+                        report.owners.release()
                     print(
                         f"install: aborted before the backup ({type(error).__name__}: {error}); "
-                        f"maintenance cleared; owners: {started}", file=sys.stderr)
+                        "maintenance cleared; owners start on the installed runtime",
+                        file=sys.stderr)
                     raise
                 try:
                     self.checkout_target()
                     passed = migration.carry(
                         self.pending, self.staged, rehearsal.reconcile_arguments())
                     passed.files.require_rehearsal(rehearsal.files)
-                    self.publish(migration.backup, selected_route)
+                    self.publish(backup, selected_route)
                     with ClearMaintenancePhase().running(self.staged.commands.clock):
-                        holder.close()
-                        maintenance.clear(held)
+                        report.owners.release()
                     restarted_services = stopped.start_on(self.staged)
                 except BaseException as error:
                     print(f"install: install failed ({type(error).__name__}: {error}); "
@@ -1128,18 +1213,15 @@ class ChangedInstall(ExistingBusInstall[RehearsedFiles]):
                     # Only the services this run stopped may write the root on its behalf.
                     HostService.stop_all(stopped.services)
 
-                    def rehold() -> MaintenanceState:
+                    def rehold() -> None:
                         """Hold the root again in whatever phase it is now in."""
-                        state = maintenance.read()
-                        hold = state.phase.hold_for(
-                            maintenance, state, MaintenanceOperator.current())
                         holder.close()
-                        holder.enter_context(hold.holding())
-                        return hold
+                        holder.enter_context(
+                            maintenance.held_by(MaintenanceOperator.current()).holding())
 
                     rehold()
-                    migration.restore()
-                    restored_hold = rehold()
+                    backup.undo()
+                    rehold()
                     head = self.installed.commands.git(
                         self.checkout, "rev-parse", "HEAD").strip()
                     if head != self.current:
@@ -1149,29 +1231,28 @@ class ChangedInstall(ExistingBusInstall[RehearsedFiles]):
                             Checkout(self.checkout).prepare()
                     self.installed.publish(self.root)
                     holder.close()
-                    maintenance.clear(restored_hold)
-                    started = self.installed.start(self.root, running)
+                    report.owners.release()
                     print(f"install: restored after failure ({type(error).__name__}: {error}); "
-                          f"original runtime selected; owners: {started}; "
-                          f"backup: {migration.backup.description}",
+                          "original runtime selected; owners start on it; "
+                          f"backup: {backup.description}",
                           file=sys.stderr)
                     raise InstallRolledBack(
-                        error, started, migration.backup.description,
+                        error, backup.description,
                         runtime=self.installed.runtime) from error
                 # Owner startup is reported per owner and never rolls the install back.
                 report.writer = RuntimeWriter(self.root, self.staged)
                 try:
                     retirement = tuple(replace(
-                        step, spill_dir=migration.backup.spill_directory(self.spill_dir),
+                        step, spill_dir=backup.spill_directory(self.spill_dir),
                     ) for step in self.pending)
                     passed = passed.after_acceptance(retirement, self.staged)
                 finally:
-                    started = self.staged.start(self.root, running)
+                    started = report.owners.published_on(self.staged, self.root)
                 with BackupRetirePhase().running(self.staged.commands.clock):
-                    retired_backups = migration.backup.retain(self.spill_dir)
+                    retired_backups = backup.retain(self.spill_dir)
                 return passed.extended(
-                    CarriedRun, stopped=tuple(running), services=restarted_services,
-                    started=started, restore_space=restore, backup=migration.backup.report(),
+                    CarriedRun, stopped=tuple(report.owners.stopped), services=restarted_services,
+                    started=started, restore_space=restore, backup=backup.report(),
                     retired_backups=retired_backups)
             finally:
                 holder.close()
@@ -1179,7 +1260,7 @@ class ChangedInstall(ExistingBusInstall[RehearsedFiles]):
 
 class UnchangedInstall(ExistingBusInstall[UnchangedRehearsal]):
     """The checkout already sits at the target and the relocked lock is the installed one:
-    nothing to rehearse, hold or restart."""
+    nothing to rehearse or carry; its owners start again when the install's hold clears."""
 
     def rehearsal(self, practice: PracticeBus, reconciled: tuple[Path, ...]) -> UnchangedRehearsal:
         return UnchangedRehearsal()
@@ -1236,7 +1317,7 @@ class FreshInstall(Install[FreshRehearsal]):
             return CreatedRun(services, route)
 
 
-class RetiringInstall(FreshInstall):
+class RetiringInstall(StopsOwners, FreshInstall):
     """The bus at the root is runtime state the target cannot carry: its owners stop, it
     moves aside intact, and a fresh bus takes its place."""
 
@@ -1244,9 +1325,8 @@ class RetiringInstall(FreshInstall):
         return RetiringRehearsal()
 
     def live(self, rehearsal: FreshRehearsal, report: InstallReport) -> RetiredRun:
-        running = self.installed.running_owners(self.root)
-        self.installed.owners(self.root, StopCliCommand, running).require_success(UpgradeRefused)
         retired = self.root.with_name(f"{self.root.name}.retired-{time.strftime('%Y%m%dT%H%M%S')}")
         self.root.rename(retired)
+        report.owners.retired()
         return super().live(rehearsal, report).extended(
-            RetiredRun, stopped=tuple(running), retired=retired)
+            RetiredRun, stopped=tuple(report.owners.stopped), retired=retired)

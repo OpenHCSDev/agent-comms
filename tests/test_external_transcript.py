@@ -31,7 +31,7 @@ def test_finished_cli_items_append_once_and_page(tmp_path):
     # The identity crosses the ACP and observation wires.
     wired = FieldCodec.decode(TranscriptReadIdentity, FieldCodec.encode(read.identity))
     assert wired == read.identity
-    assert [event.text for event in comms.transcripts.thread_transcript_page("codex").events] \
+    assert [event.text for event in comms.transcripts.capture_page_read("codex").read().events] \
         == ["Compacting context…"]
 
     # Finishing appends after what the read captured; the read stays current.
@@ -42,17 +42,9 @@ def test_finished_cli_items_append_once_and_page(tmp_path):
                       events=(AssistantTranscript("Hello", timestamp=1.0, position='reply'),))
     transcript.finish(turn_id=t1_turn_id, item_id="hook", events=())
     assert read.content_current()
-    page = comms.transcripts.thread_transcript_page("codex")
+    page = comms.transcripts.capture_page_read("codex").read()
     assert [event.text for event in page.events] == ["Compacting context…", "Hello"]
-
-    newest = comms.transcripts.thread_transcript_page("codex", max_messages=1)
-    assert [event.text for event in newest.events] == ["Hello"]
-    older = comms.transcripts.thread_transcript_page("codex", before=newest.before,
-                                                     max_messages=1)
-    assert [event.text for event in older.events] == ["Compacting context…"]
-    assert newest.has_older and not older.has_older
-    later = comms.transcripts.thread_transcript_page("codex", after=older.after)
-    assert [event.text for event in later.events] == ["Hello"]
+    assert not page.has_older
 
 
 def test_absent_store_reads_stay_empty_without_creating_storage(tmp_path):
@@ -179,7 +171,7 @@ def test_draft_is_current_state_and_finishes_atomically(tmp_path):
         read.current_draft()
     with transcript.reading() as records:
         assert records.current_draft(transcript.root, transcript.incarnation).external_row() is None
-    assert [e.text for e in comms.transcripts.thread_transcript_page("codex").events] == ["Tool", "Hello!"]
+    assert [e.text for e in comms.transcripts.capture_page_read("codex").read().events] == ["Tool", "Hello!"]
     transcript.draft(turn_id=t2_turn_id, item_id="b", events=(AssistantTranscript("Interrupted",
         timestamp=1.0, position='b'),))
     transcript.end_turn()
@@ -192,12 +184,12 @@ def test_a_thread_with_nothing_read_pages_older_and_newer_from_its_cursor(tmp_pa
     comms = wire(tmp_path / "wire")
     comms.registry.declare(Thread('codex', frozenset(), str(tmp_path)))
     transcript = comms.transcripts.external("codex")
-    for index, text in enumerate(("first", "second", "third")):
+    for index, text in enumerate(f"item {number}" for number in range(21)):
         transcript.finish(turn_id=t1_turn_id, item_id=text,
                           events=(AssistantTranscript(text, timestamp=float(index), position=text),))
 
     async def loader(**bounds):
-        return comms.transcripts.thread_transcript_page("codex", max_messages=1, **bounds)
+        return comms.transcripts.capture_page_read("codex", **bounds).read()
 
     unread = UnreadTranscriptCursor()
     newest = asyncio.run(unread.read_page(loader))
@@ -207,6 +199,6 @@ def test_a_thread_with_nothing_read_pages_older_and_newer_from_its_cursor(tmp_pa
     # read still gets the newest page instead of a refused source.
     assert asyncio.run(unread.read_page(loader, before=unread)).events == newest.events
     assert asyncio.run(newest.after.read_page(loader, before=unread)).events == newest.events
-    assert [event.text for event in newest.events] == ["third"]
-    assert [event.text for event in older.events] == ["second"]
-    assert [event.text for event in later.events] == ["third"]
+    assert [event.text for event in newest.events] == [f"item {number}" for number in range(1, 21)]
+    assert [event.text for event in older.events] == ["item 0"]
+    assert later.events == newest.events

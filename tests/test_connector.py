@@ -3,7 +3,6 @@
 
 import asyncio
 import base64
-import fcntl
 import hashlib
 import os
 import secrets
@@ -12,7 +11,7 @@ import logging
 import re
 import threading
 import time
-from contextlib import ExitStack, contextmanager, suppress
+from contextlib import contextmanager, suppress
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 from urllib.parse import parse_qs, urlsplit
@@ -23,7 +22,6 @@ from aiohttp.test_utils import TestClient, TestServer
 
 from connector_readiness import ConnectorReadiness
 
-from agent_comms.active_route import active_route_path
 from agent_comms.bus import Bus
 from agent_comms.comms import Comms, wire
 from agent_comms.connector import (
@@ -544,10 +542,7 @@ async def test_maintenance_refuses_before_locked_stores_on_a_copied_bus(
         held = barrier.begin(MaintenanceOperator.current())
         for phase in phases:
             held = barrier.advance(held, phase)
-        with _store_lock(copied_bus.path), _store_lock(barrier.registry_path), ExitStack() as locks:
-            directory = os.open(active_route_path().parent, os.O_RDONLY | os.O_DIRECTORY)
-            locks.callback(os.close, directory)
-            fcntl.flock(directory, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        with _store_lock(copied_bus.path), _store_lock(barrier.registry_path):
             started = time.monotonic()
             response = await reader.post("/mcp", headers=headers, timeout=2, json={
                 "jsonrpc": "2.0", "id": 1, "method": "tools/call",

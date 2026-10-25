@@ -65,7 +65,14 @@ from .maintenance_barrier import MaintenanceBarrier
 from .pi_counts import PiCount, UnreportedCount
 from .pi_payloads import PiUsage
 from .store_files import AtomicFile
-from .typed_table import Column, Generated, SQLiteJournalMode, TableReference, TypedTable
+from .typed_table import (
+    Column,
+    Generated,
+    ReconciledFile,
+    SQLiteJournalMode,
+    TableReference,
+    TypedTable,
+)
 
 if TYPE_CHECKING:
     from .goal_management import Goals
@@ -450,11 +457,6 @@ class GoalProviderUsage(GoalLedgerTable, TypedTable):
         return row.usage_json if row else None
 
 
-def assert_goal_attempt_schema(conn: sqlite3.Connection) -> None:
-    if GoalLedgerTable.schema_differs(conn):
-        raise StorageUncertainError("Unsupported goal attempt schema; one-shot migration required.")
-
-
 @dataclass(frozen=True, slots=True)
 class LaunchPermit(GoalTurnPermit):
     reservation: Reservation
@@ -640,7 +642,7 @@ class ProviderUsageTotal:
 _T = TypeVar("_T")
 
 
-class GoalAttemptStore(DurableFile, PublishedSQLiteFile, WireWakeFile):
+class GoalAttemptStore(DurableFile, ReconciledFile, PublishedSQLiteFile, WireWakeFile):
     """Owner-private SQLite authority; no synthetic model or context claims.
 
     The caller creates a private directory and explicitly initializes it in a
@@ -655,6 +657,10 @@ class GoalAttemptStore(DurableFile, PublishedSQLiteFile, WireWakeFile):
     filename = "goal_attempts.sqlite3"
     root_directory = "goal-private"
 
+    @classmethod
+    def table_schema(cls) -> type[GoalLedgerTable]:
+        return GoalLedgerTable
+
     def __init__(self, root: str | Path):
         self.root = Path(root)
         self.path = self.path_in(self.root)
@@ -667,7 +673,7 @@ class GoalAttemptStore(DurableFile, PublishedSQLiteFile, WireWakeFile):
         self._ready_grants: dict[tuple[str, int], str] = {}
         with closing(self._connect()) as conn:
             try:
-                assert_goal_attempt_schema(conn)
+                self.table_schema().reconcile_schema(conn, self.schema_change(self.path))
             except (sqlite3.Error, MalformedRecord) as error:
                 raise StorageUncertainError("Incomplete goal attempt schema.") from error
 
@@ -748,12 +754,14 @@ class GoalAttemptStore(DurableFile, PublishedSQLiteFile, WireWakeFile):
     def _change(
         self, operation: Callable[[sqlite3.Connection], _T], verify: Callable[[_T], bool]
     ) -> _T:
-        """A failed commit, sync, or readback is never a launch authorization."""
-        self.require_maintenance_open(self.path)
+        """A failed commit, sync, or readback is never a launch authorization. Maintenance
+        is asked under the write lock, so an installer's drain of it waits out every write
+        that passed and refuses every later one."""
         with closing(self._connect()) as conn:
             try:
                 with self.publishing_changes(conn, self.path):
                     with self.write_transaction(conn):
+                        self.require_maintenance_open(self.path)
                         result = operation(conn)
                     self._sync()
                     try:

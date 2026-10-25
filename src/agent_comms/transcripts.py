@@ -639,39 +639,6 @@ class Transcripts:
             )
         )
 
-    def thread_transcript_page(
-        self,
-        name: str,
-        *,
-        before: TranscriptCursor | None = None,
-        after: TranscriptCursor | None = None,
-        max_messages: int = 20,
-        max_bytes: int = 64 * 1024,
-        through: TranscriptCursor | None = None,
-        historical_source: str | None = None,
-    ) -> TranscriptPage:
-        """Read one adjacent page with exclusive, file-bound byte cursors."""
-        if before is not None and after is not None:
-            raise ValueError("Choose one transcript paging direction.")
-        if max_messages <= 0 or max_bytes <= 0:
-            raise ValueError("Transcript page budgets must be positive.")
-        # A mounted inherited window remains pinned to its ancestor and byte
-        # boundary when the child persists its own session. New unpinned reads
-        # select the child's file; existing scroll cursors keep working.
-        read = self.capture_page_read(
-            name, before=before, after=after, through=through,
-            historical_source=historical_source,
-        )
-        page, _ = self._thread_transcript_page(
-            read.source, identity=read.identity,
-            before=before, after=after,
-            max_messages=max_messages, max_bytes=max_bytes,
-            through=read.identity.page_bound,
-        )
-        if not read.content_current():
-            raise StaleRevision("Transcript read inputs changed during preparation")
-        return page
-
     def _thread_transcript_page(
         self,
         page: PageSource,

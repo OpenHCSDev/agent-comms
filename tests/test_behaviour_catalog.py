@@ -5,7 +5,8 @@ import subprocess
 import sys
 from pathlib import Path
 
-from agent_comms.behaviour_patterns import BehaviourPattern, PatternCheck, PatternSource
+from agent_comms.behaviour_patterns import BehaviourPattern, PatternCheck
+from agent_comms.pattern_sources import PatternSource
 
 ROOT = Path(__file__).resolve().parents[1]
 

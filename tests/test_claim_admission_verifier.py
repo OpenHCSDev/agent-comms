@@ -26,7 +26,8 @@ from agent_comms.selected_claim import (
     write_selected_claimed_file,
 )
 from agent_comms.comms import wire
-from agent_comms.coordination_cohort import accept_delivery_cohort, sealed_cohort_assignments
+from conftest import accept_initial
+from agent_comms.coordination_cohort import sealed_cohort_assignments
 from agent_comms.coordination_errors import IdentityConflict
 from agent_comms.coordination_tables.executions import WireOrigin
 from agent_comms.coordinator import Coordination
@@ -67,7 +68,7 @@ def test_selected_wake_verifier_refuses_no_wake_and_stale_authority(
                     recipient.recipient_lookup,
                     committed=True,
                 )
-            accept_delivery_cohort(comms.bus, root_id, message.seq, store)
+            accept_initial(comms.bus, root_id, message.seq, store)
             alice_lookup = comms.registry.require("Alice").incarnation.lookup
             bob_lookup = comms.registry.require("Bob").incarnation.lookup
             assert sealed_cohort_assignments(store, bob_lookup) == ()

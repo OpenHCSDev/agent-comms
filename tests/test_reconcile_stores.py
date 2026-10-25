@@ -27,6 +27,7 @@ from agent_comms.cli_commands import (
 )
 from agent_comms.coordination_database import CoordinationStore
 from agent_comms.errors import RelationViolationError
+from agent_comms.goal_attempts import GoalAttemptStore
 from agent_comms.coordination_session import CoordinationSession
 from agent_comms.coordinator import Coordination
 from agent_comms.installer.backup import bus_files
@@ -40,7 +41,7 @@ from agent_comms.typed_table import (
     WriterOwnedStore,
 )
 from bus_record_fixture import OWNER_LOOKUP
-from conftest import maintenance_held
+from conftest import ledger_one_failure_short, maintenance_held
 
 NO_MAINTENANCE_HOLDER = NoMaintenanceHolder()
 
@@ -250,3 +251,15 @@ def test_planned_reconcile_refuses_a_writer_owned_store_its_declaration_cannot_o
     finally:
         stored.unlink()
     assert PlannedReconcileCliCommand().answer(root).rewritten == ()
+
+
+def test_the_goal_ledger_carries_a_family_that_gained_a_member(private_comms):
+    """Install 13: the ledger kept a failure CHECK one member short, nothing carried it, and
+    every opening refused. Its owner is a reconciled file, so the install carries it."""
+    root = private_comms.root
+    path = ledger_one_failure_short(root)
+    with maintenance_held(root) as holder:
+        completed = reconcile(root, holder)
+    assert completed.returncode == 0, completed.stdout + completed.stderr
+    assert str(path.relative_to(root)) in json.loads(completed.stdout)["rewritten"]
+    GoalAttemptStore(path.parent)

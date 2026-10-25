@@ -46,6 +46,7 @@ from .private_nk_entrypoint import PrivateNkLaunch, RootLaunch
 from .registration import Registration
 from .registry_document import RegistrySnapshot
 from .restart_refusals import (
+    OwnerBusyRefusal,
     OwnerGenerationChangedRefusal,
     OwnerSelectionChangedRefusal,
 )
@@ -292,8 +293,6 @@ from .owner_cutover import OwnerCutover, PreserveOwnerRuntime
 class OwnerLifecycle:
     def require_restart_idle(self, thread: Thread) -> None:
         """Do not interrupt a live turn; an old attempt settles after owner release."""
-        from .restart_refusals import OwnerBusyRefusal
-
         try:
             thread.turn_record.read().require_idle()
         except RelationViolationError as error:

@@ -78,7 +78,7 @@ def test_reading_an_installed_store_writes_nothing(tmp_path, monkeypatch):
     reader = TranscriptRoutes(tmp_path)
     with reader.for_session("session") as routes:
         assert routes.get("a") == routing
-    assert set(reader.input_bindings()) == {INPUT_ID}
+        assert routes.input_display(INPUT_ID).matches("sent")
     written = [sql for sql in statements
                if sql.lstrip().split(None, 1)[0].upper()
                in {"CREATE", "ALTER", "DROP", "INSERT", "UPDATE", "DELETE", "REPLACE"}]
