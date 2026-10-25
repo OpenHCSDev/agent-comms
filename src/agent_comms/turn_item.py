@@ -4,9 +4,13 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
-from typing import Self
+from typing import TYPE_CHECKING, Self
 
 from .field_codec import Id128, NominalSpelling, NominalText
+
+if TYPE_CHECKING:
+    from .routing import Routing
+    from .transcript_routes import _SessionRoutes
 
 
 class NativeTurnId(NominalText):
@@ -25,6 +29,9 @@ class FreshNativeId(NominalText):
     @classmethod
     def fresh(cls) -> Self:
         return cls(Id128.mint())
+
+    def routing_in(self, routes: _SessionRoutes) -> Routing:
+        return routes[self]
 
 
 class FreshNativeIdText(NominalSpelling[FreshNativeId]):

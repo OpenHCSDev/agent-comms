@@ -16,11 +16,12 @@ from subprocess import TimeoutExpired
 from typing import TYPE_CHECKING, ClassVar, Self
 
 from agent_comms.declared_family import DeclaredFamily
-from agent_comms.field_codec import MalformedRecord, OrderId
+from agent_comms.field_codec import MalformedRecord
 from agent_comms.goal_presentation import GoalSnapshot
 from agent_comms.heartbeat_subjects import HeartbeatSubject, UnitSubject
 from agent_comms.messages import Message
 from agent_comms.native_failures import NativePiUnavailable
+from agent_comms.native_tool_call import ToolCallId
 from agent_comms.repo import GitCommandError
 from agent_comms.standing_rules import StandingRule, UndatedStandingRule
 from agent_comms.thread_identity import ThreadIncarnation
@@ -116,7 +117,7 @@ class UnitObservation:
 
     @cached_property
     def calls(self) -> tuple[OrderCall, ...]:
-        calls: dict[str, OrderCall] = {}
+        calls: dict[ToolCallId, OrderCall] = {}
         for turn in reversed(self.turns):
             for event in turn.events:
                 event.record_call(calls, self.since)
@@ -161,7 +162,7 @@ class UnitObservation:
             source.checkout.require_read()
 
     @property
-    def orders(self) -> tuple[OrderId, ...]:
+    def orders(self) -> tuple[str, ...]:
         return tuple(todo.id for todo in self.todos)
 
 
@@ -176,7 +177,7 @@ class NeedsCommanderAttention:
 @dataclass(frozen=True)
 class UnitState(UndatedStandingRule, declared_name=None):
     unit: ThreadIncarnation
-    orders: tuple[OrderId, ...]
+    orders: tuple[str, ...]
     presence: ThreadStatus
     source: UnitObservation = field(compare=False, repr=False)
     verb: ClassVar[str]

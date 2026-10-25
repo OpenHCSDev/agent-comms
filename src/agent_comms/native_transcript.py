@@ -25,6 +25,7 @@ from .declared_family import DeclaredFamily
 from .field_codec import MalformedRecord
 from .native_entries import (
     NativeEntry,
+    NoEntryId,
     RecordedEntry,
     RootEntry,
     SessionEntry,
@@ -180,9 +181,9 @@ class NativeRecord(TranscriptRecord):
         return self.end - self.start
 
     @property
-    def annotation_id(self) -> FreshNativeId | None:
+    def annotation_id(self) -> FreshNativeId | NoEntryId:
         entry = self.entry
-        return entry.id if entry is not None and entry.is_message else None
+        return entry.annotation_id if entry is not None else NoEntryId()
 
     @property
     def events(self):
@@ -309,7 +310,7 @@ class NativeTranscript(TranscriptSource):
 
     def annotation_ids(self, after: int, through: int) -> tuple[FreshNativeId, ...]:
         return tuple(identity for record in self.forward(after, through)
-                     if (identity := record.annotation_id) is not None)
+                     for identity in record.annotation_id.present())
 
     def require_publication_context(
         self, user: NativeEntry, *, session_entry_start: int, files: NativeSessionFiles,

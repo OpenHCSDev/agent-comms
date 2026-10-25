@@ -12,7 +12,7 @@ from itertools import repeat
 from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import TYPE_CHECKING, Annotated, ClassVar, Literal, TextIO, cast
+from typing import TYPE_CHECKING, Annotated, ClassVar, Literal, Never, TextIO, cast
 
 from .locked_store import DurableFile
 from .native_pi import (
@@ -30,6 +30,7 @@ from .field_codec import (
     FieldCodec,
     InputId,
     MalformedRecord,
+    NullMember,
     RecordedTimestamp,
     Sha256Text,
     TimestampText,
@@ -60,16 +61,34 @@ class RootEntry(PiOmitted):
     """Pi writes a null parentId on a session's first entry."""
 
 
+@dataclass(frozen=True, slots=True)
+class NoEntryId(NullMember):
+    """A record without a native entry identity has no routing annotation."""
+
+    def routing_in(self, routes: _SessionRoutes) -> Routing:
+        return NoTurnRouting()
+
+    def require_present(self) -> Never:
+        raise MalformedRecord("Native publication requires an original entry ID")
+
+
 @dataclass(frozen=True, kw_only=True)
 class RecordedEntry(PiPayload):
     """Shared source identity and projection; each journal declares its own clock."""
 
-    id: str | None = None
+    id: str | NoEntryId = NoEntryId()
     parent_id: Annotated[str | RootEntry, WireName("parentId")] = RootEntry()
     is_message: ClassVar[bool] = False
     assistant_message: ClassVar[bool] = False
     messages: ClassVar[tuple[PiMessage, ...]] = ()
     final_reply: ClassVar[bool] = False
+
+    @property
+    def annotation_id(self) -> FreshNativeId | NoEntryId:
+        return NoEntryId()
+
+    def routing_in(self, routes: _SessionRoutes) -> Routing:
+        return NoTurnRouting()
 
     @property
     def child_parent(self) -> object:
@@ -110,12 +129,20 @@ class RecordedEntry(PiPayload):
 @dataclass(frozen=True, kw_only=True)
 class NativeEntry(RecordedEntry, DeclaredFamily, affix="Entry"):
     wire_tag = "type"
-    id: FreshNativeId | None = None
+    id: FreshNativeId | NoEntryId = NoEntryId()
     parent_id: Annotated[FreshNativeId | RootEntry, WireName("parentId")] = RootEntry()
     timestamp: Annotated[RecordedTimestamp, TimestampText]
 
+    @property
+    def original_id(self) -> str:
+        return str(self.id.require_present())
+
+    @property
+    def annotation_id(self) -> FreshNativeId | NoEntryId:
+        return self.id if self.is_message else NoEntryId()
+
     def routing_in(self, routes: _SessionRoutes) -> Routing:
-        return routes.get(self.id)
+        return self.id.routing_in(routes)
 
     def events(self, context: TranscriptProjection) -> list[TranscriptEvent]:
         """Every part of a native record shares its original journal clock."""
@@ -562,8 +589,9 @@ class MessageEntry(NativeEntry):
     @property
     def tracked_user(self) -> MessageEntry | None:
         for input_id in self.message.input_id.present():
-            if not self.message.user or not self.message.input_digest.reported or not self.id:
+            if not self.message.user or not self.message.input_digest.reported:
                 raise MalformedRecord("Native Pi session has ambiguous tracked user input")
+            self.id.require_present()
             Sha256Text.from_text(self.message.input_digest.require())
             return self
         return None

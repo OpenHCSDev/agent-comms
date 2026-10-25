@@ -8,7 +8,7 @@ from functools import cached_property
 from typing import TYPE_CHECKING, ClassVar, Self
 
 from .declared_family import DeclaredFamily
-from .field_codec import NullMember, WireValue, GoalId, OrderId
+from .field_codec import NullMember, WireValue, GoalId
 from .goal_failure_observation import FailedTurnEvidence
 from .goal_states import PauseSource
 from .goals import Goal, GoalCheckpoint, GoalDeclaration
@@ -232,7 +232,7 @@ class BlockedExecution(WaitingExecution, declared_name=None):
     def unit_blocks(self) -> tuple[BlockedExecution, ...]:
         return (self,)
 
-    def unit_block_line(self, unit: str, orders: tuple[OrderId, ...]) -> str:
+    def unit_block_line(self, unit: str, orders: tuple[str, ...]) -> str:
         return (f"BLOCKED {unit}: orders {', '.join(orders)}; goal {self.goal_id}; "
                 f"{self.reason} -> inspect the failed work; never replay")
 
@@ -259,7 +259,7 @@ class AttemptUnresolvedExecution(BlockedExecution):
     def reason(self) -> str:
         return "inspect the unknown attempt; never replay"
 
-    def unit_block_line(self, unit: str, orders: tuple[OrderId, ...]) -> str:
+    def unit_block_line(self, unit: str, orders: tuple[str, ...]) -> str:
         return (f"UNRESOLVED BLOCK {unit}: orders {', '.join(orders)}; "
                 f"goal {self.goal_id} -> {self.reason}")
 

@@ -180,9 +180,7 @@ class _SessionRoutes:
         self._cache: dict[FreshNativeId, Routing] = {}
         self._input_cache: dict[InputId, InputPresentation] = {}
 
-    def get(self, entry_id: FreshNativeId | None) -> Routing:
-        if entry_id is None:
-            return NoTurnRouting()
+    def __getitem__(self, entry_id: FreshNativeId) -> Routing:
         if entry_id not in self._cache:
             self._cache[entry_id] = next(
                 (row.routing for row in TranscriptRoute.select(
