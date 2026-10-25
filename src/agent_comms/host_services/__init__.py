@@ -14,11 +14,10 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Annotated, ClassVar, Self
 
-from ..child_process import ProcessIdentity, ResidentManager
+from ..child_process import AgentsSlice, ProcessIdentity, ResidentManager, SystemdUnit
 from ..declared_family import DeclaredFamily
 from ..field_codec import PathText
 from ..launch_runtime import LaunchRuntime
-from ..systemd_units import AgentsSlice, SystemdUnit
 
 
 class ServiceNotServingError(RuntimeError):
@@ -125,7 +124,6 @@ class SystemdUserService(SystemdUnit, HostService, declared_name=None):
     """
 
     program: ClassVar[str]
-    unit: ClassVar[str]
     service_options: ClassVar[tuple[str, ...]] = ("Type=notify", "NotifyAccess=main")
 
     def unit_name(self) -> str:
@@ -156,10 +154,8 @@ class SystemdUserService(SystemdUnit, HostService, declared_name=None):
         return cls.render_unit(cls.command_line(arguments))
 
     @classmethod
-    def install(cls, arguments: tuple[str, ...] = (), *, home: Path) -> None:
-        AgentsSlice.write_unit(home=home)
-        cls.write_unit(arguments, home=home)
-        ResidentManager.current().reload()
+    def required_units(cls) -> tuple[type[SystemdUnit], ...]:
+        return (AgentsSlice,)
 
     def enable(self) -> None:
         ResidentManager.current().control("enable", self.unit_name())

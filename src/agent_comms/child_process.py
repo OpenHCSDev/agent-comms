@@ -46,7 +46,6 @@ from .errors import RelationViolationError
 from .field_codec import FieldCodec, Id128, NullMember, RecordMember, SubclassUnion
 from .launch_runtime import INHERITED_ENVIRONMENT, LaunchRuntime, RestoredRuntime
 from .sealed import Sealed
-from .systemd_units import AgentsSlice
 
 if TYPE_CHECKING:
     from .registration_change import RegistrationChange, UpdatedRegistration
@@ -874,6 +873,43 @@ class UnmanagedHomeError(RelationViolationError):
     """A home no user manager belongs to asked to change the manager's units."""
 
 
+class SystemdUnit(ABC):
+    """A user unit declares the definition the resident manager installs."""
+
+    unit: ClassVar[str]
+
+    @classmethod
+    def unit_file(cls, home: Path) -> Path:
+        return home / ".config/systemd/user" / cls.unit
+
+    @classmethod
+    def required_units(cls) -> tuple[type[SystemdUnit], ...]:
+        return ()
+
+    @classmethod
+    @abstractmethod
+    def unit_text(cls, arguments: tuple[str, ...] = ()) -> str: ...
+
+
+class AgentsSlice(SystemdUnit):
+    """Agent residents and their descendants leave two CPUs for the owner."""
+
+    unit = "agents.slice"
+    allowed_cpus: ClassVar[str] = "2-11"
+    cpu_weight: ClassVar[int] = 50
+
+    @classmethod
+    def launch_option(cls) -> str:
+        return f"--slice={cls.unit}"
+
+    @classmethod
+    def unit_text(cls, arguments: tuple[str, ...] = ()) -> str:
+        return (
+            "[Unit]\nDescription=Agent processes\n\n"
+            f"[Slice]\nAllowedCPUs={cls.allowed_cpus}\nCPUWeight={cls.cpu_weight}\n"
+        )
+
+
 class ResidentManager(DeclaredFamily, affix="Manager"):
     """What owns this home's units, and a handed-off resident once its launcher is gone: a
     host fact, decoded once, and the only caller of ``systemctl`` and ``systemd-run``.
@@ -921,6 +957,22 @@ class ResidentManager(DeclaredFamily, affix="Manager"):
     @classmethod
     def reload(cls) -> None:
         """Load this home's unit definitions; no manager reads a home it does not serve."""
+
+    @classmethod
+    def install(cls, unit: type[SystemdUnit], arguments: tuple[str, ...] = (), *,
+                home: Path) -> None:
+        """Publish a unit and its declared prerequisites, then load them together."""
+        cls.write_unit(unit, arguments, home=home)
+        cls.reload()
+
+    @classmethod
+    def write_unit(cls, unit: type[SystemdUnit], arguments: tuple[str, ...] = (), *,
+                   home: Path) -> None:
+        for required in unit.required_units():
+            cls.write_unit(required, home=home)
+        destination = unit.unit_file(home)
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        destination.write_text(unit.unit_text(arguments), encoding="utf-8")
 
     @classmethod
     def control(cls, *arguments: str) -> None:
