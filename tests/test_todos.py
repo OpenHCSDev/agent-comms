@@ -20,15 +20,16 @@ from pathlib import Path
 
 import pytest
 
-from agent_comms.child_process import ProcessIdentity
+from agent_comms.child_process import NoProcess, ProcessIdentity
 from agent_comms.commander.order import Commander, PullRequestVerb, SayVerb
 from agent_comms.standing_rules import OwedAnswer, StandingRule
 from agent_comms.ui_model.unit_state import AwaitingCommander
-from agent_comms.commander.standing import UnownedOrderWatch
+from agent_comms.commander.standing import RetainedHolderWheelSpin, UnownedOrderWatch, UnownedWheelSpin
 from agent_comms.commander_heartbeat import CommanderHeartbeat
 from agent_comms.comms import wire
 from agent_comms.field_codec import FieldCodec, GoalId
 from agent_comms.goal_actions import SetGoalAction
+from agent_comms.held_orders import HeldOrders
 from agent_comms.goals import OrderCheck
 from agent_comms.installer.practice import PracticeCopy
 from agent_comms.locked_store import RootFile
@@ -42,7 +43,10 @@ from agent_comms.registration import Registration
 from agent_comms.repository_name import RepositoryName
 from agent_comms.storage_rules import StorageRule
 from agent_comms.store_files import store_lock_path
+from agent_comms.thread_execution import ExternalThreadExecution
 from agent_comms.thread_identity import CoreWatcherIncarnation
+from agent_comms.transcript_events import AssistantTranscript
+from agent_comms.turn_item import NativeTurnId
 from agent_comms.threads import Thread
 from agent_comms.errors import TodoConflict, TodoError
 from agent_comms.todos import (
@@ -54,6 +58,7 @@ from agent_comms.todos import (
     OrderMessage,
     DeliverTodo,
     DoneTodoState,
+    DraftListedPullRequest,
     MergedListedPullRequest,
     MergedProgress,
     NotOrderCommander,
@@ -397,6 +402,87 @@ def github_body(ctx, number):
         capture_output=True, text=True, timeout=60, check=True).stdout
 
 
+@pytest.fixture
+def released_published_orders(pr_commander, github_cli):
+    """Real clean pushed trees and released rows; only the external forge is synthetic."""
+    ctx = pr_commander
+    c, source = ctx.comms, ctx.repos[0]
+    declared = {}
+    for name in ('pi-mi', 'unit-installer', 'unit-backend', 'aaa-idle'):
+        checkout = ctx.root / name
+        source.git(source.checkout, 'worktree', 'add', '-q', '-b', name, str(checkout))
+        source.git(checkout, 'commit', '-q', '--allow-empty', '-m', 'Published work')
+        source.git(checkout, 'push', '-q', '-u', 'origin', name)
+        declared[name] = c.registry.declare(Thread(
+            name, frozenset(), str(checkout), execution=ExternalThreadExecution,
+            process_identity=ProcessIdentity.capture(os.getpid())))
+        c.transcripts.external(name).finish(
+            turn_id=NativeTurnId(name), item_id='idle', events=(AssistantTranscript(
+                'Ready for work', position='idle', timestamp=time.time()),))
+        assert source.git(checkout, 'status', '--porcelain') == ''
+        assert source.git(checkout, 'rev-parse', 'HEAD') == source.git(checkout, 'rev-parse', '@{upstream}')
+    originals = {}
+    for problem, name, request_type in (
+        ('P615', 'pi-mi', UnmergedListedPullRequest),
+        ('P637', 'unit-installer', UnmergedListedPullRequest),
+        ('P667', 'unit-backend', DraftListedPullRequest),
+    ):
+        owner = declared[name]
+        row = pr_order(ctx, problem, owner=owner)
+        number = int(problem[1:])
+        now = time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime())
+        github_cli.put(source.github, request_type(
+            number=number, branch=name, head=source.git(Path(owner.worktree), 'rev-parse', 'HEAD').strip(),
+            updated=now, base='main', reviewable_times=(now,)))
+        row = c.goals.todos.apply(row.id, RecordPullRequest(
+            row.revision, owner.incarnation, PullRequestLink(source.github, number), row.held().generation))
+        originals[problem] = row
+        c.goals.todos.apply(row.id, ReleaseTodo(
+            row.revision, CoreWatcherIncarnation.watcher(), row.held(),
+            StrikeReason('The watcher released this active unit while its published work remains open.')))
+    return ctx, originals
+
+
+def test_released_open_work_restores_its_own_holder_never_swaps(released_published_orders):
+    ctx, originals = released_published_orders
+    c = ctx.comms
+    goals = {row.holder: c.registry.require(row.holder).goal for row in originals.values()}
+    with LaunchRoot.from_path(ctx.root).selected():
+        rules = UnownedWheelSpin.paired(
+            c, ctx.commander, c.goals.todos.reassignable(), HeldOrders.read(c, ctx.commander),
+            ProgressRead(tuple(c.goals.todos.get(pid) for pid in originals)))
+        assert {rule.todo.id for rule in rules} == set(originals)
+        assert all(isinstance(rule, RetainedHolderWheelSpin) for rule in rules)
+        assert StandingRule.enforce_all(c, ctx.commander, rules) == {}
+        for problem, before in originals.items():
+            after = c.goals.todos.get(problem)
+            assert after.held() == before.held()
+            assert (after.order, after.review_at) == (before.order, before.review_at)
+            assert c.registry.require(before.holder).goal == goals[before.holder]
+        assert UnownedWheelSpin.violations(c, ctx.commander) == ()
+
+
+@pytest.mark.parametrize('disposition', ('retired', 'closed'))
+def test_only_retired_holder_or_closed_pr_allows_cross_unit_dispatch(
+        released_published_orders, github_cli, disposition):
+    ctx, originals = released_published_orders
+    c, source = ctx.comms, ctx.repos[0]
+    if disposition == 'retired':
+        c.registry.register(replace(c.registry.require('pi-mi'), process_identity=NoProcess()))
+    else:
+        now = time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime())
+        github_cli.put(source.github, ClosedListedPullRequest(
+            number=615, branch='pi-mi', head=source.git(Path(c.registry.require('pi-mi').worktree),
+                                                      'rev-parse', 'HEAD').strip(),
+            updated=now, base='main', reviewable_times=(now,)))
+    with LaunchRoot.from_path(ctx.root).selected():
+        rules = UnownedWheelSpin.violations(c, ctx.commander)
+        by_problem = {rule.todo.id: rule for rule in rules}
+        assert by_problem['P615'].unit == 'aaa-idle'
+        assert all(isinstance(by_problem[pid], RetainedHolderWheelSpin) for pid in ('P637', 'P667'))
+        assert all(c.goals.todos.get(pid).holder is None for pid in originals)
+
+
 def test_recorded_closed_request_is_not_open_or_merged(pr_commander):
     ctx = pr_commander
     original = pr_order(ctx, "P1")
@@ -522,7 +608,7 @@ def test_watcher_git_and_github_reads_leave_wire_free(pr_commander, monkeypatch)
             report = root / "after-merge.txt"
             report.write_text("Merged; installation evidence is still pending")
             SayVerb(units="#comms", body_file=str(report)).apply(Commander.read_root(root))
-            assert copied.goals.todos.get(released.id).holder is None
+            assert copied.goals.todos.get(released.id).held() == released.held()
             assert any(line.startswith("gh ") for line in observed)
             assert any(line.startswith("git ") for line in observed)
             held = [line for line in observed if line.split()[1] != "free"]

@@ -2,26 +2,15 @@
 from __future__ import annotations
 
 import json
-import os
-import subprocess
-import sys
-from pathlib import Path
+
+from cli_command import core
 
 
-REPO = Path(__file__).resolve().parents[1]
-
-
-def test_install_from_non_git_directory_reports_one_json_refusal(tmp_path):
+def test_install_from_non_git_directory_reports_one_json_refusal(tmp_path, monkeypatch):
     outside = tmp_path / "non-git"
     outside.mkdir()
-    completed = subprocess.run(
-        [sys.executable, "-m", "agent_comms.cli", "--root", str(tmp_path / "bus"), "install"],
-        cwd=outside,
-        env={**os.environ, "PYTHONPATH": str(REPO / "src")},
-        capture_output=True,
-        text=True,
-        timeout=30,
-    )
+    monkeypatch.chdir(outside)
+    completed = core("--root", str(tmp_path / "bus"), "install")
     assert completed.returncode == 1, (completed.stdout, completed.stderr)
     lines = completed.stdout.splitlines()
     assert len(lines) == 1, (completed.stdout, completed.stderr)
