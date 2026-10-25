@@ -413,7 +413,7 @@ wheels = [
 [[package]]
 name = "metaclass-registry"
 version = "0.4.1"
-source = { git = "https://github.com/OpenHCSDev/metaclass-registry?branch=main#fb7c871a78c3087aa65c3a7199a1068cff858f33" }
+source = { git = "https://github.com/OpenHCSDev/metaclass-registry?branch=main#60138d533ef0758c5f093d9110ba9f5656f0934a" }
 
 [[package]]
 name = "multidict"
