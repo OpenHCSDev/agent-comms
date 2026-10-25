@@ -841,10 +841,10 @@ class CommanderVerb(DeclaredVerb, affix="Verb"):
 
 
 class HeartbeatGated(CommanderVerb, declared_name=None):
-    """A writing verb is refused while a heartbeat line sits undisposed past the answer window,
-    unless the verb acts on the subject of a line on the board, fresh or stale: board work is
-    never off-board work, or a stale line no one can act on yet would refuse the verdict a
-    fresh line asks for. Core records that action, and the record is what disposes of the line.
+    """A writing verb run while a heartbeat line sits undisposed past the answer window prints
+    the board beside its result instead of refusing: the board already reaches the commander
+    on every tool call, so a refusal only stopped unit answers, reviews and owner fixes that
+    touched no line. Core records each action, and the record is what disposes of a line.
     Nothing the commander says about a line counts."""
 
     @abstractmethod
@@ -859,9 +859,9 @@ class HeartbeatGated(CommanderVerb, declared_name=None):
         acted = frozenset(subjects)
         if (any(ping.waits_on_commander(now - AwaitingCommander.seconds) for ping in board)
                 and not any(ping.acted_on(acted) for ping in board)):
-            sys.exit(f'REFUSED, nothing recorded: heartbeat lines undisposed past '
-                     f'{AwaitingCommander.seconds // 60} min; act on any line on the board:\n'
-                     + '\n'.join(ping.render(now) for ping in board))
+            print(f'BOARD: heartbeat lines undisposed past '
+                  f'{AwaitingCommander.seconds // 60} min; act on them next:\n'
+                  + '\n'.join(ping.render(now) for ping in board), file=sys.stderr)
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -1012,6 +1012,14 @@ class SendVerb(RequestedOrderVerb):
     @property
     def addressed(self) -> tuple[str, ...]:
         return (self.unit,)
+
+    def acts_on(self, ctx: Commander) -> tuple[HeartbeatSubject, ...]:
+        """Taking held problems over acts on their holders too: reassigning a stopped unit's
+        order is the action its WAKE line asks for."""
+        named = frozenset(OrderFile.read(Path(self.body_file).read_text()).problems)
+        return (*super().acts_on(ctx),
+                *(UnitSubject(assignment.owner_identity) for todo in ctx.todos() if todo.id in named
+                  for assignment in todo.current_holder.current_assignments()))
 
     def resolves_claim(self, unit: str, problem: str) -> bool:
         return (self.unit == unit
@@ -1290,8 +1298,16 @@ class SayVerb(OrderVerb, DirectiveVerb):
 
 
 @dataclass(frozen=True, kw_only=True)
+class JoinVerb(OrderVerb):
+    help = "register a commander fork before its first record"
+
+    def run(self, ctx: Commander) -> None:
+        print(f'{ctx.actor_name} registered')
+
+
+@dataclass(frozen=True, kw_only=True)
 class RetireVerb(OrderVerb):
-    help = "stop a commander fork without discarding its open orders"
+    help = "stop and archive a commander fork without discarding its open orders"
 
     def run(self, ctx: Commander) -> None:
         ctx.actor.retire(ctx.comms)

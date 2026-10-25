@@ -68,6 +68,8 @@ agent-comms-queue-bypass-guard = "agent_comms_hooks.queue_bypass:main"
 agent-comms-test-ceremony-guard = "agent_comms_hooks.test_ceremony:main"
 agent-comms-claude-session-started = "agent_comms_hooks.session:started"
 agent-comms-claude-session-ended = "agent_comms_hooks.session:ended"
+agent-comms-claude-subagent-started = "agent_comms_hooks.forks:started"
+agent-comms-claude-subagent-stopped = "agent_comms_hooks.forks:stopped"
 agent-comms-connector = "agent_comms.connector:main"
 opencode-comms = "agent_comms.cli_bridges.opencode_launch:main"
 

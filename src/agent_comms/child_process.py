@@ -899,6 +899,11 @@ class ResidentManager(DeclaredFamily, affix="Manager"):
         return command
 
     @classmethod
+    def handoff_environment(cls, environment: Mapping[str, str]) -> dict[str, str]:
+        """Keep the environment required to reach the selected resident manager."""
+        return dict(environment)
+
+    @classmethod
     def activity(cls, unit: str) -> type[UnitActivity]:
         """No manager runs a unit for this home."""
         return InactiveUnit
@@ -994,6 +999,10 @@ class SystemdUserManager(ResidentManager):
                 f"--unit=agent-comms-resident-{Id128.mint()}", "--", *command)
 
     @classmethod
+    def handoff_environment(cls, environment: Mapping[str, str]) -> dict[str, str]:
+        return {**environment, "XDG_RUNTIME_DIR": os.environ["XDG_RUNTIME_DIR"]}
+
+    @classmethod
     def required_units(cls) -> tuple[type[SystemdUnit], ...]:
         return (AgentsSlice,)
 
@@ -1058,6 +1067,10 @@ class ChildLifetime(DeclaredFamily, affix="Lifetime"):
     handoff: ClassVar[bool] = False
 
     @classmethod
+    def environment(cls, environment: Mapping[str, str]) -> Mapping[str, str]:
+        return environment
+
+    @classmethod
     def command(cls, command: tuple[str, ...]) -> tuple[str, ...]:
         """The command the exec gate executes; a child bound to its launcher runs it as given."""
         return command
@@ -1094,6 +1107,10 @@ class OutlivesLauncherLifetime(ChildLifetime):
     """A resident the launcher hands off, such as a worker, a watcher or a bridge."""
 
     handoff: ClassVar[bool] = True
+
+    @classmethod
+    def environment(cls, environment: Mapping[str, str]) -> Mapping[str, str]:
+        return ResidentManager.current().handoff_environment(environment)
 
     @classmethod
     def command(cls, command: tuple[str, ...]) -> tuple[str, ...]:
@@ -1226,7 +1243,8 @@ class ChildLaunch:
         """Record the launch handle before the platform allows exec."""
         with self.children_store.launching(self.runtime) as reservation:
             process = subprocess.Popen(
-                self.argv, cwd=cwd, env=self.runtime.child_environment(env), stdin=stdin,
+                self.argv, cwd=cwd,
+                env=self.lifetime.environment(self.runtime.child_environment(env)), stdin=stdin,
                 stdout=stdout, stderr=stderr, **self.options,
             )
             child = self.spawned(process, reservation.store)
@@ -1241,7 +1259,8 @@ class ChildLaunch:
     async def spawn_async(self, *, cwd, env, stdio: ChildStdio) -> AttachedChild:
         async with self.children_store.launching_async(self.runtime) as reservation:
             process = await asyncio.create_subprocess_exec(
-                self.argv[0], *self.argv[1:], cwd=cwd, env=self.runtime.child_environment(env),
+                self.argv[0], *self.argv[1:], cwd=cwd,
+                env=self.lifetime.environment(self.runtime.child_environment(env)),
                 **stdio.options, **self.options,
             )
             child = await self.spawned_async(process, reservation.store)

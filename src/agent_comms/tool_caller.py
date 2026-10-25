@@ -186,4 +186,12 @@ class CommanderForkCaller(ThreadCaller):
         return fork.incarnation.require_recorded().acting_for(self.commander(comms).incarnation)
 
     def retire(self, comms: Comms) -> None:
+        """A fork stops only after the bus holds something it sent, since every commander verb
+        that records announces it there; its thread is then archived, and a resumed fork of
+        the same name redeclares onto it."""
+        if self.name not in comms.bus.bus.activity_clocks().sent:
+            raise ToolRefusedError(
+                f"{self.name} recorded nothing in Core: post what it found with"
+                f" `agent-comms-commander order say '#comms' FILE --fork {self.name}` before it stops.")
         comms.registry.unregister(self.name)
+        comms.threads.archive(self.name)
