@@ -21,7 +21,6 @@ from pathlib import Path
 from typing import ClassVar
 
 from agent_comms.coordination_database import CoordinationStore
-from agent_comms.locked_store import StoreBusy
 from agent_comms.coordination_errors import CoordinationError
 from agent_comms.coordination_tables.assignments import ExecutionAssignmentLink, WakeAssignment
 from agent_comms.coordination_tables.executions import ExecutionRecord
@@ -52,7 +51,7 @@ from .message_reference import MessageReference
 from .native_input_owner import RegistryOwner
 from .private_registry_guard import RegistryPrivacy
 from .registration import Registration
-from .store_files import StoreLockContention, _store_lock
+from .store_files import StoreBusy, StoreLockContention, _store_lock
 from .threads import Thread
 from .turn_context import ContextSegment, InstructionFile, ResourceProvenance, WireProvenance
 from .typed_table import TypedRow

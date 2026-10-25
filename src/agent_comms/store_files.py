@@ -30,6 +30,7 @@ from pathlib import Path
 from typing import BinaryIO, ClassVar, TextIO
 
 from .child_process import LockHolder, Platform
+from .coordination_errors import CoordinationReadUnavailable
 from .declared_family import DeclaredFamily
 from .errors import RelationViolationError
 from .private_path import FileIdentity, PrivateFileRole
@@ -373,6 +374,45 @@ class DependentStateTier(StoreLockTier):
     __slots__ = ()
 
 
+class StoreContention(ABC):
+    """Typed SQLite busy behavior shared by snapshots and writers."""
+
+    @property
+    @abstractmethod
+    def timeout(self) -> float: ...
+
+    def reader(self, uri: str) -> sqlite3.Connection:
+        return sqlite3.connect(uri, uri=True, isolation_level=None, timeout=self.timeout)
+
+    def writer(
+        self, path: str | os.PathLike[str], options: dict[str, object]
+    ) -> sqlite3.Connection:
+        return sqlite3.connect(path, timeout=self.timeout, **options)
+
+    def lock_budget(self) -> StoreLockContention:
+        """The same wait spent on the store's file locks: one fresh budget per operation."""
+        return StoreLockContention(self.timeout)
+
+
+@dataclass(frozen=True)
+class StoreWait(StoreContention):
+    timeout: ClassVar[float] = 5.0
+
+
+@dataclass(frozen=True)
+class StoreBusy(StoreContention):
+    """Do not wait when optional display or input work cannot acquire a SQLite lock."""
+
+    timeout: ClassVar[float] = 0.0
+
+    def reader(self, uri: str) -> sqlite3.Connection:
+        with CoordinationReadUnavailable.checking():
+            return super().reader(uri)
+
+
+DEFAULT_STORE_CONTENTION = StoreWait()
+
+
 class SqliteStore(ABC):
     """A SQLite file serializes connection boundaries, not the SQL between them."""
 
@@ -381,9 +421,10 @@ class SqliteStore(ABC):
     @classmethod
     @abstractmethod
     def writer(
-        cls, path: str | os.PathLike[str], *, isolation_level: None,
+        cls, path: str | os.PathLike[str], contention: StoreContention = DEFAULT_STORE_CONTENTION,
+        **options: object,
     ) -> sqlite3.Connection:
-        """Open the file family's autocommit writer for its exclusive boundary."""
+        """Open the file family's writer with its declared contention policy and options."""
 
     @classmethod
     @contextmanager

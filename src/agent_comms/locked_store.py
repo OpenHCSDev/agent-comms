@@ -27,8 +27,10 @@ from .field_codec import FieldCodec, MalformedRecord
 from .private_path import PrivateFileRole
 from .store_files import (
     AtomicFile,
+    DEFAULT_STORE_CONTENTION,
     SharedLock,
     SqliteStore,
+    StoreContention,
     StoreLock,
     StoreLockContention,
     StoreLockFile,
@@ -493,45 +495,6 @@ class RegistryFile(DurableFile, WireWakeFile):
         return copied
 
 
-
-
-class StoreContention(ABC):
-    """Typed SQLite busy behavior shared by snapshots and writers."""
-
-    @property
-    @abstractmethod
-    def timeout(self) -> float: ...
-
-    def reader(self, uri: str) -> sqlite3.Connection:
-        return sqlite3.connect(uri, uri=True, isolation_level=None, timeout=self.timeout)
-
-    def writer(
-        self, path: str | os.PathLike[str], options: dict[str, object]
-    ) -> sqlite3.Connection:
-        return sqlite3.connect(path, timeout=self.timeout, **options)
-
-    def lock_budget(self) -> StoreLockContention:
-        """The same wait spent on the store's file locks: one fresh budget per operation."""
-        return StoreLockContention(self.timeout)
-
-
-@dataclass(frozen=True)
-class StoreWait(StoreContention):
-    timeout: ClassVar[float] = 5.0
-
-
-@dataclass(frozen=True)
-class StoreBusy(StoreContention):
-    """Do not wait when optional display or input work cannot acquire a SQLite lock."""
-
-    timeout: ClassVar[float] = 0.0
-
-    def reader(self, uri: str) -> sqlite3.Connection:
-        with CoordinationReadUnavailable.checking():
-            return super().reader(uri)
-
-
-DEFAULT_STORE_CONTENTION = StoreWait()
 
 
 class SQLiteFile(RootFile, SqliteStore):

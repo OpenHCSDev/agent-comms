@@ -236,12 +236,8 @@ class InstallLogs:
     cause_file: ClassVar[str] = "cause.json"
 
     @property
-    def lock(self) -> Path:
-        return self.root.parent / f".{self.root.name}.install.lock"
-
-    @property
     def launch_claim(self) -> ProcessSingleton:
-        return ProcessSingleton(self.lock)
+        return ProcessSingleton(self.root.parent / f".{self.root.name}.install.lock")
 
     @contextmanager
     def launching(self) -> Iterator[None]:
@@ -251,9 +247,9 @@ class InstallLogs:
             try:
                 held.enter_context(self.launch_claim.claimed())
             except ClaimHeldError:
-                raise InstallRunning(self.lock, self.running()) from None
+                raise InstallRunning(self.launch_claim.path, self.running()) from None
             if running := self.running():
-                raise InstallRunning(self.lock, running)
+                raise InstallRunning(self.launch_claim.path, running)
             yield
 
     def units(self) -> tuple[InstallUnit, ...]:

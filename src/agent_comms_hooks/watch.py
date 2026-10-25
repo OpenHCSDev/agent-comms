@@ -100,16 +100,12 @@ class WatchClaim:
         return self.path.with_name(self.path.stem[:32] + ".sock")
 
     @property
-    def reader_path(self) -> Path:
-        return self.path.with_suffix(".reader.lock")
-
-    @property
     def claim(self) -> ProcessSingleton:
         return ProcessSingleton(self.path)
 
     @property
     def reader_claim(self) -> ProcessSingleton:
-        return ProcessSingleton(self.reader_path)
+        return ProcessSingleton(self.path.with_suffix(".reader.lock"))
 
     @property
     def launch_claim(self) -> ProcessSingleton:

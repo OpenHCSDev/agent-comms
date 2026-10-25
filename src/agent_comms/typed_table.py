@@ -65,7 +65,6 @@ from .locked_store import (
     RootFile,
     RuntimeFile,
     SQLiteFile,
-    StoreBusy,
     StoreCommittedError,
     WrittenFile,
 )
@@ -73,7 +72,7 @@ from .maintenance_barrier import HolderWrittenFile, MaintenanceBarrier, Maintena
 from .package_stamp import STAMP
 from .projection_source import ProducedRow, ProjectionSource
 from .store_files import (
-    UNBOUNDED_CONTENTION, StoreLockContention, StoreLockFile,
+    UNBOUNDED_CONTENTION, StoreBusy, StoreLockContention, StoreLockFile,
 )
 
 if TYPE_CHECKING:
