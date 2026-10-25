@@ -1094,7 +1094,7 @@ class TableSchema(ABC):
         if not cls.schema_differs(db):
             return False
         change.require()
-        with SQLiteFile.relations_suspended(db):
+        with SQLiteForeignKeys.relations_suspended(db):
             with rebuild.attached(db) as attached, SQLiteFile.write_transaction(db):
                 cls.carry_schema(db, rebuild=attached)
                 with closing(SQLiteForeignKeyViolation.iterate(
@@ -1725,6 +1725,19 @@ class ProjectionProducerTables(SharedFileTables, DerivedTables):
 @dataclass(frozen=True)
 class SQLiteForeignKeys(TypedRow):
     foreign_keys: bool
+
+    @classmethod
+    @contextmanager
+    def relations_suspended(cls, connection: sqlite3.Connection) -> Iterator[None]:
+        """Suspend relations around a transaction owner, restoring this typed setting."""
+        if connection.in_transaction:
+            raise sqlite3.ProgrammingError("Relations can only be suspended between transactions")
+        current, = cls.read(connection.execute("PRAGMA foreign_keys"))
+        connection.execute("PRAGMA foreign_keys = OFF")
+        try:
+            yield
+        finally:
+            connection.execute(f"PRAGMA foreign_keys = {int(current.foreign_keys)}")
 
 
 @dataclass(frozen=True)
