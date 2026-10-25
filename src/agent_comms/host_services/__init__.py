@@ -14,7 +14,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Annotated, ClassVar, Self
 
-from ..child_process import ProcessIdentity, ResidentManager
+from ..child_process import AgentsSlice, ProcessIdentity, ResidentManager, SystemdUnit
 from ..declared_family import DeclaredFamily
 from ..field_codec import PathText
 from ..launch_runtime import LaunchRuntime
@@ -116,7 +116,7 @@ class HostService(DeclaredFamily, affix="Service", discovery_package=__name__):
 
 
 @dataclass(frozen=True)
-class SystemdUserService(HostService, declared_name=None):
+class SystemdUserService(SystemdUnit, HostService, declared_name=None):
     """Systemd owns the unit's process; its definition starts that process again.
 
     Each member declares its readiness options. Systemd, not this configuration,
@@ -124,12 +124,7 @@ class SystemdUserService(HostService, declared_name=None):
     """
 
     program: ClassVar[str]
-    unit: ClassVar[str]
     service_options: ClassVar[tuple[str, ...]] = ("Type=notify", "NotifyAccess=main")
-
-    @classmethod
-    def unit_file(cls, home: Path) -> Path:
-        return home / ".config/systemd/user" / cls.unit
 
     def unit_name(self) -> str:
         return self.unit
@@ -149,7 +144,7 @@ class SystemdUserService(HostService, declared_name=None):
         options = "\n".join(cls.service_options)
         return (
             f"[Unit]\nDescription={cls.unit}\n\n"
-            f"[Service]\n{options}\n"
+            f"[Service]\nSlice={AgentsSlice.unit}\n{options}\n"
             f"ExecStart={command}\nRestart=on-failure\n\n"
             "[Install]\nWantedBy=default.target\n"
         )
@@ -159,11 +154,8 @@ class SystemdUserService(HostService, declared_name=None):
         return cls.render_unit(cls.command_line(arguments))
 
     @classmethod
-    def install(cls, arguments: tuple[str, ...] = (), *, home: Path) -> None:
-        unit = cls.unit_file(home)
-        unit.parent.mkdir(parents=True, exist_ok=True)
-        unit.write_text(cls.unit_text(arguments), encoding="utf-8")
-        ResidentManager.current().reload()
+    def required_units(cls) -> tuple[type[SystemdUnit], ...]:
+        return (AgentsSlice,)
 
     def enable(self) -> None:
         ResidentManager.current().control("enable", self.unit_name())
