@@ -658,6 +658,36 @@ class PullRequestCommit:
 
 
 @dataclass(frozen=True)
+class MergeBlock(DeclaredFamily, affix="MergeBlock"):
+    """Why GitHub will not merge a head, decoded once from the forge row."""
+    at: str
+
+    @cached_property
+    def since(self) -> float:
+        return _github_time(self.at)
+
+    @abstractmethod
+    def what(self) -> str: ...
+
+
+@dataclass(frozen=True)
+class FailedCheckMergeBlock(MergeBlock):
+    """A required check concluded red on the head."""
+    name: str
+
+    def what(self) -> str:
+        return f"required check {self.name} failed"
+
+
+@dataclass(frozen=True)
+class ConflictMergeBlock(MergeBlock):
+    """The head conflicts with its base; no check can turn it green."""
+
+    def what(self) -> str:
+        return "conflicts with its base"
+
+
+@dataclass(frozen=True)
 class ListedPullRequest(DeclaredFamily, affix="ListedPullRequest"):
     """The external query row; conversion lives here, never in its consumers."""
     number: int
@@ -667,6 +697,8 @@ class ListedPullRequest(DeclaredFamily, affix="ListedPullRequest"):
     base: str
     reviewable_times: tuple[str, ...] = field(kw_only=True)
     status_contexts: tuple[str, ...] = field(default=(), kw_only=True)
+    armed_times: tuple[str, ...] = field(default=(), kw_only=True)
+    merge_blocks: tuple[MergeBlock, ...] = field(default=(), kw_only=True)
 
     def retained_assignments(self, assignment: Assignment) -> tuple[Assignment, ...]:
         """Open work and merged work awaiting acceptance stay with their recorded holder."""
@@ -674,6 +706,10 @@ class ListedPullRequest(DeclaredFamily, affix="ListedPullRequest"):
 
     def as_unmerged(self) -> tuple[UnmergedListedPullRequest, ...]:
         return ()
+
+    def stuck(self) -> tuple[MergeBlock, ...]:
+        """Blocks on a head whose auto-merge is armed: queued, and going nowhere."""
+        return tuple(block for _ in self.armed_times for block in self.merge_blocks)
 
     def as_merged(self) -> tuple[MergedListedPullRequest, ...]:
         return ()
@@ -845,7 +881,12 @@ class PullRequests:
             'merged: mergedAt updated: updatedAt created: createdAt '
             'ready_events: timelineItems(itemTypes: [READY_FOR_REVIEW_EVENT], last: 1) '
             '{ nodes { ... on ReadyForReviewEvent { createdAt } } } '
-            'head_statuses: commits(last: 1) { nodes { commit { committedDate status { contexts { context } } } } } }'
+            'auto: autoMergeRequest { enabledAt } merge_state: mergeStateStatus '
+            'head_statuses: commits(last: 1) { nodes { commit { committedDate status { contexts { context } } '
+            'statusCheckRollup { contexts(first: 100) { nodes { '
+            f'... on CheckRun {{ name conclusion completedAt isRequired(pullRequestNumber: {number}) }} '
+            f'... on StatusContext {{ context state createdAt isRequired(pullRequestNumber: {number}) }} '
+            '} } } } } } }'
             for number in numbers]
         query = (f'query {{ repository(owner: {json.dumps(repo.owner)}, '
                  f'name: {json.dumps(repo.name)}) {{ {" ".join(selections)} }} }}')
@@ -860,8 +901,17 @@ class PullRequests:
             f'. + {{kind: "{MergedListedPullRequest.declared_name}"}} end) '
             '| . + {status_contexts: [.head_statuses.nodes[].commit.status.contexts[]?.context], '
             'reviewable_times: [.created, .head_statuses.nodes[].commit.committedDate, '
-            '.ready_events.nodes[].createdAt]} '
-            '| del(.draft,.closed,.created,.head_statuses,.ready_events))')
+            '.ready_events.nodes[].createdAt], '
+            'armed_times: [.auto.enabledAt? // empty], '
+            'merge_blocks: ([.head_statuses.nodes[].commit.statusCheckRollup.contexts.nodes[]? '
+            '| select(.isRequired) | select((.conclusion // .state) as $c '
+            '| ["FAILURE","TIMED_OUT","CANCELLED","ACTION_REQUIRED","STARTUP_FAILURE","ERROR"] '
+            '| index($c)) '
+            f'| {{kind: "{FailedCheckMergeBlock.declared_name}", name: (.name // .context), '
+            'at: (.completedAt // .createdAt)}] '
+            f'+ [select(.merge_state == "DIRTY") | {{kind: "{ConflictMergeBlock.declared_name}", '
+            'at: .updated}])} '
+            '| del(.draft,.closed,.created,.head_statuses,.ready_events,.auto,.merge_state))')
         if listed.returncode:
             raise WorkBranchError(
                 listed.stderr.strip() or f"GitHub order lookup in {repo.to_wire()} failed.")
@@ -1462,7 +1512,7 @@ class OrderWords(WireValue):
     text: str
 
     def __post_init__(self) -> None:
-        if refused := self.refused(self.text):
+        for refused in self.wording_refusal(self.text):
             raise ToolRefusedError(refused)
 
     def to_wire(self) -> str:
@@ -1481,14 +1531,25 @@ class OrderWords(WireValue):
 
     @classmethod
     def refused(cls, text: str) -> str | None:
+        """The writer's check: it may print a note, which a decoded record never does."""
+        cls.flag(text)
+        return next(iter(cls.wording_refusal(text)), None)
+
+    @classmethod
+    def wording_refusal(cls, text: str) -> tuple[str, ...]:
+        """The refusal this text earns, or none: what a decoded record checks, silently."""
         found = cls.found(text)
         if len(text.split()) < cls.least_words or cls.refuses(found):
-            return cls.refusal.format(cls.least_words, found)
-        return None
+            return (cls.refusal.format(cls.least_words, found),)
+        return ()
 
     @staticmethod
     def refuses(found: list[str]) -> bool:
         return bool(found)
+
+    @classmethod
+    def flag(cls, text: str) -> None:
+        """A family that refuses has no note to print; one that only flags overrides this."""
 
     @classmethod
     def found(cls, text: str) -> list[str]:
@@ -1508,9 +1569,13 @@ class PlainText(DirectiveWords):
     @staticmethod
     def refuses(found: list[str]) -> bool:
         """Flags, never blocks: a wording slip costs a note, not a resend."""
-        if found:
-            print(f"Flag: jargon {', '.join(found)} hides what happened; say it plainly.", file=sys.stderr)
         return False
+
+    @classmethod
+    def flag(cls, text: str) -> None:
+        """The note goes to whoever writes the text, at the write; decoding a record never prints it."""
+        if found := cls.found(text):
+            print(f"Flag: jargon {', '.join(found)} hides what happened; say it plainly.", file=sys.stderr)
 
 
 class VerdictReason(PlainText):
@@ -1555,11 +1620,11 @@ class StrikeReason(VerdictReason):
     least_words = 10
 
     @classmethod
-    def refused(cls, text: str) -> str | None:
+    def wording_refusal(cls, text: str) -> tuple[str, ...]:
         cited = [span.group(0).strip('`"“” ') for span in cls.CITED.finditer(text)]
         if cited and all(PlainText.found(span) for span in cited):
-            return f"{cited} is the unit's wording; send it a correction, not a strike."
-        return super().refused(text)
+            return (f"{cited} is the unit's wording; send it a correction, not a strike.",)
+        return super().wording_refusal(text)
 
 
 class OrderText(OrderWords):
@@ -3439,11 +3504,12 @@ class ToolCallVerdict(OrderVerdict, TodoOperation, declared_name=None):
 @dataclass(frozen=True)
 class OrderQuote:
     quote: str
+    rule: ClassVar[str] = "Quote 4+ words of the order this verdict carries out."
 
     def require_quote(self, text: str) -> None:
         quoted = " ".join(self.quote.split())
         if len(quoted.split()) < 4 or quoted not in " ".join(text.split()):
-            raise TodoError("Quote 4+ words of the order this verdict carries out.")
+            raise TodoError(self.rule)
 
 
 @dataclass(frozen=True)
@@ -3460,6 +3526,8 @@ class QuotedVerdict(OrderQuote, OrderVerdict, declared_name=None):
 class AcceptedVerdict(QuotedVerdict, ToolCallVerdict):
     """The tool call carries out the order clause it quotes."""
     line = "Accepted"
+    branch_rule: ClassVar[str] = (
+        "Added branches need --no-owner: 12+ words with because and an absolute file:line.")
 
     @classmethod
     def require_branches(cls, added: int, no_owner: str | None) -> None:
@@ -3467,8 +3535,7 @@ class AcceptedVerdict(QuotedVerdict, ToolCallVerdict):
             return
         if not (no_owner and len(no_owner.split()) >= 12 and re.search(r'\bbecause\b', no_owner)
                 and re.search(r'/\S+:\d+', no_owner)):
-            raise TodoError(
-                'Added branches need --no-owner: 12+ words with because and an absolute file:line.')
+            raise TodoError(cls.branch_rule)
 
 
 @dataclass(frozen=True)
