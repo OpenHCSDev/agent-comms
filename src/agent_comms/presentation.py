@@ -71,6 +71,7 @@ from .notification_read import CapturedNotificationWindow
 from .recorded_bus import NoRecordedBus, RecordedBusIdentity
 from .registry_document import DEFAULT_ROSTER, RosterVisibility
 from .revision_views import (
+    ActivityView,
     BusSourceView,
     CommanderFramesView,
     ExternalTranscriptsView,
@@ -818,7 +819,7 @@ class WireRevision(ReadState):
             lambda views: (views.registry.store.path,),
             *StatusSourced.views(),
             RegistrationsView,
-            NotificationsView,
+            ActivityView,
         ),
     ]
     catalog: Annotated[
@@ -845,16 +846,18 @@ class WireRevision(ReadState):
     activity: Annotated[
         tuple[FileRevision, ...],
         *revision_source(
-            lambda views: views.agents.activity.source_paths(views.root), *StatusSourced.views(),
+            lambda views: views.agents.activity.source_paths(views.root),
+            *StatusSourced.views(), ActivityView,
         ),
     ]
     runtime_info: Annotated[
         tuple[FileRevision, ...],
-        *revision_source(lambda views: (views.agents.runtime_info.path,), *StatusSourced.views()),
+        *revision_source(lambda views: (views.agents.runtime_info.path,),
+                         *StatusSourced.views(), ActivityView),
     ]
     work_room: Annotated[
         tuple[FileRevision, ...],
-        *revision_source(room_ledger_paths, *StatusSourced.views()),
+        *revision_source(room_ledger_paths, *StatusSourced.views(), ActivityView),
     ]
     reads: Annotated[
         tuple[FileRevision, ...],
@@ -890,10 +893,10 @@ class WireRevision(ReadState):
         tuple[FileRevision, ...],
         *revision_source(commander_frame_paths, CommanderFramesView),
     ]
-    # Notifications change once per expiry period, not per tick.
+    # Activity-derived views change once per expiry period, not per tick.
     expiry_tick: Annotated[
         int,
-        WatchViews((NotificationsView,)),
+        WatchViews((ActivityView,)),
         Differs(expiry_period_changed),
     ]
 
@@ -976,11 +979,6 @@ class WireRevision(ReadState):
 
     def changed_since(self, view: RevisionView, earlier: ReadState) -> bool:
         return earlier.changed_before(view, self)
-
-    def changed_since_any(self, earlier: ReadState) -> bool:
-        """All declared views, using their source comparisons, including timed expiry."""
-        return any(self.changed_since(view(), earlier)
-                   for view in RevisionView.members_with(RevisionView))
 
     def changed_before(self, view: RevisionView, later: WireRevision) -> bool:
         """Whether any source feeding `view` differs, by the view's comparison."""
