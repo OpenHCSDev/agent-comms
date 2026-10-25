@@ -61,8 +61,9 @@ class Ping(DeclaredFamily, affix="Ping"):
     def key(self) -> object: ...
 
     def undisposed(self, comms: Comms, actors: frozenset[str], cut: float) -> bool:
-        """Began before ``cut`` and no subject has a recorded action since it began."""
-        return (self.since.before(cut) and bool(self.subjects)
+        """The commander's to dispose of, began before ``cut``, and no subject has a recorded
+        action since it began. Only such a line is restated as waiting and locks the verbs."""
+        return (self.commander_disposes and self.since.before(cut) and bool(self.subjects)
                 and not any(subject.disposed(comms, actors, self.since.recorded_at("A line"))
                             for subject in self.subjects))
 
@@ -73,10 +74,6 @@ class Ping(DeclaredFamily, affix="Ping"):
     def commander_disposes(self) -> bool:
         """Whether a commander verb disposes of this line; only such a line locks the verbs."""
         return True
-
-    def locks(self, cut: float) -> bool:
-        """Undisposed past ``cut`` and the commander's to dispose of."""
-        return self.commander_disposes and self.since.before(cut)
 
     def render(self, now: float) -> str:
         minutes = int((now - self.since.recorded_at("A heartbeat line")) // 60)
