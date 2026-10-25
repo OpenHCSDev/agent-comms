@@ -31,7 +31,6 @@ from pydantic import JsonValue
 from agent_comms.errors import ToolRefusedError
 from agent_comms.installer.interpreter_operation import ProcessLauncherPhase
 from agent_comms.installer.owner_starts import OwnerStart, RefusedOwner, StartedOwner
-from agent_comms.installer.store_rewrites import PlannedStoresResult, StoreRewrite
 from agent_comms.launch_root import LaunchRoot
 from agent_comms.lifecycle_capability import LifecycleCapability, Successful
 from agent_comms.message_bus import HeldBusWrite
@@ -204,7 +203,7 @@ from .turn_context import (
     Provenance,
     TurnContext,
 )
-from .typed_table import ReconciledFile, WriterOwnedStore
+from .typed_table import ReconciledFile, StoreRewrite, WriterOwnedStore
 from .working_memory_annotations import WorkingMemoryAnnotations
 from .working_memory_labels import ClassifierVersion, ModelLabel, QuestionVersion
 from .working_memory_questions import SpanAnswer
@@ -1873,6 +1872,21 @@ class ReconciledStoresResult(CliResult):
     """The bus files whose schema the reconcile changed, relative to the bus root."""
 
     rewritten: tuple[Annotated[Path, PathText], ...]
+
+
+@dataclass(frozen=True)
+class PlannedStoresResult(CliResult):
+    """Target-only rewrite plans; outgoing reconcile replies remain unchanged."""
+
+    rewrites: tuple[StoreRewrite, ...]
+
+    @property
+    def rewritten(self) -> tuple[Path, ...]:
+        return tuple(rewrite.path for rewrite in self.rewrites)
+
+    @property
+    def backup_files(self) -> tuple[Path, ...]:
+        return tuple(path for rewrite in self.rewrites for path in rewrite.backup_files())
 
 
 @dataclass(frozen=True)

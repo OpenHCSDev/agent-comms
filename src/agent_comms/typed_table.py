@@ -51,13 +51,13 @@ from .field_codec import (
     MalformedRecord,
     NominalText,
     NullMember,
+    PathText,
     TextRepresentation,
     ValueDecoder,
     WireName,
     WireValue,
     compile_decoder,
 )
-from .installer.store_rewrites import DerivedStoreRewrite, DurableStoreRewrite, StoreRewrite
 from .lifecycle import LifecycleState
 from .locked_store import (
     FileStore,
@@ -794,6 +794,27 @@ class SQLiteCatalogObject(TypedRow):
         for name, sql in declared.items():
             if name not in present:
                 db.execute(sql)
+
+
+@dataclass(frozen=True)
+class StoreRewrite(DeclaredFamily, affix="StoreRewrite"):
+    """One planned rewrite, with the original rows its rollback must retain."""
+
+    path: Annotated[Path, PathText]
+
+    def backup_files(self) -> tuple[Path, ...]:
+        return (self.path,)
+
+
+class DurableStoreRewrite(StoreRewrite):
+    """At least one changing family owns original rows."""
+
+
+class DerivedStoreRewrite(StoreRewrite):
+    """Every changing family can regenerate its rows from retained originals."""
+
+    def backup_files(self) -> tuple[Path, ...]:
+        return ()
 
 
 class SchemaRebuild:

@@ -22,6 +22,7 @@ from agent_comms.bus import Bus
 from agent_comms.cli_commands import (
     CliCommand,
     PlannedReconcileCliCommand,
+    PlannedStoresResult,
     ReadBackCliCommand,
     ReconcileStoresCliCommand,
 )
@@ -32,7 +33,6 @@ from agent_comms.goal_attempts import GoalAttemptStore
 from agent_comms.coordination_session import CoordinationSession
 from agent_comms.coordinator import Coordination
 from agent_comms.installer.backup import bus_files
-from agent_comms.installer.store_rewrites import PlannedStoresResult
 from agent_comms.locked_store import SQLiteFile
 from agent_comms.maintenance_barrier import MaintenanceHolder, NoMaintenanceHolder
 from agent_comms.native_runtime_input import NativeRuntimeInput
