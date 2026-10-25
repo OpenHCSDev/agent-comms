@@ -7,6 +7,7 @@ import argparse
 import ast
 import dataclasses
 import enum
+import fcntl
 import hashlib
 import importlib
 import importlib.metadata
@@ -2098,12 +2099,16 @@ class StoreLockCalls(PerFileOccurrenceMeasure):
     which lock guards which write; the count only falls, file by file, to zero."""
 
     owners: typing.ClassVar[tuple[str, ...]] = tuple(
-        Path(module.__file__).relative_to(Path(agent_comms.__file__).parents[1]).as_posix()
+        Path(inspect.getfile(module)).relative_to(Path(inspect.getfile(agent_comms)).parents[1]).as_posix()
         for module in (store_files, locked_store))
-    attributes: typing.ClassVar[frozenset[str]] = frozenset({"locked", "locked_async"})
-    functions: typing.ClassVar[frozenset[str]] = frozenset({"_store_lock", "_async_store_lock"})
+    attributes: typing.ClassVar[frozenset[str]] = frozenset(
+        method.__name__ for method in (store_files.StoreLockOwner.locked,
+                                       store_files.StoreLockOwner.locked_async))
+    functions: typing.ClassVar[frozenset[str]] = frozenset(
+        function.__name__ for function in (store_files._store_lock, store_files._async_store_lock))
     qualified: typing.ClassVar[frozenset[tuple[str, str]]] = frozenset(
-        {("StoreLock", "ordered"), ("fcntl", "flock")})
+        {(store_files.StoreLock.__name__, store_files.StoreLock.ordered.__name__),
+         (fcntl.__name__, fcntl.flock.__name__)})
 
     @classmethod
     def lines(cls, source: bytes, filename: str) -> list[int]:
