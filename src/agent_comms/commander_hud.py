@@ -12,7 +12,7 @@ from typing import TYPE_CHECKING
 from aiohttp import ClientError
 
 from agent_comms.cli_bridges.codex import CodexAppServer
-from agent_comms.cli_bridges.codex_protocol import RateLimitReading, RateLimits
+from agent_comms.cli_bridges.codex_protocol import RateLimitReading
 from agent_comms.commander.vibe_check import OverloadDegradation
 from agent_comms.commander_frame_file import CommanderFrameFile
 from agent_comms.commander_service import CommanderService
@@ -126,7 +126,6 @@ class FinishedPhases(HudRow):
         return f"{self.plan.declared_name}: {len(self.phases)} phases done"
 
 
-@dataclass(frozen=True)
 class UnreadableUsage(RateLimitReading):
     reason: str
 
@@ -139,14 +138,14 @@ class UnreadableUsage(RateLimitReading):
 
 @dataclass(frozen=True)
 class CodexUsage(HudRow):
-    reading: RateLimits | UnreadableUsage
+    reading: RateLimitReading
 
     @classmethod
     def read(cls) -> CodexUsage:
         try:
             return cls(asyncio.run(CodexAppServer.rate_limits()))
-        except (OSError, ValueError, ClientError, RuntimeError) as error:
-            return cls(UnreadableUsage(f'{type(error).__name__}: {error}'))
+        except (OSError, ClientError) as error:
+            return cls(UnreadableUsage(reason=f'{type(error).__name__}: {error}'))
 
     def line(self) -> str:
         return self.reading.line()

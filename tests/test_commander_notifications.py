@@ -71,7 +71,7 @@ def test_frame_puts_hands_first_and_folds_finished_phases_per_plan(notification_
         CommanderPhase(DesignReconciledPhase, False, False, (worker,)),
         CommanderPhase(RecordPlanePhase, False, True, ()),
         CommanderPhase(ReviewQueuePhase, True, False, (worker,)),
-    ), OverloadDegradation.from_orders((), 0, 0), (worker,), CodexUsage(UnreadableUsage('not requested')))
+    ), OverloadDegradation.from_orders((), 0, 0), (worker,), CodexUsage(UnreadableUsage(reason='not requested')))
     assert hud.frame == (
         str(hud.load),
         "commander_native/record_plane done=False ready=True holders=",
@@ -242,7 +242,7 @@ def test_codex_usage_decodes_window_and_keeps_refusal_visible():
     assert usage.line() == f'usage 37% weekly, resets {reset}'
     assert not usage.needs_hand()
     assert FieldCodec.decode(CodexUsage, FieldCodec.encode(usage)) == usage
-    refused = CodexUsage(UnreadableUsage('Codex: account unavailable'))
+    refused = CodexUsage(UnreadableUsage(reason='Codex: account unavailable'))
     assert refused.line() == 'usage unreadable: Codex: account unavailable'
     assert refused.needs_hand()
     assert FieldCodec.decode(CodexUsage, FieldCodec.encode(refused)) == refused

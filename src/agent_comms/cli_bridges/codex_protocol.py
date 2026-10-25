@@ -151,7 +151,7 @@ class RateWindow(WireModel):
         return f'usage {self.used_percent:g}% {period}, resets {reset}'
 
 
-class RateLimitReading(ABC):
+class RateLimitReading(DeclaredWireFamily, ABC, affix='RateLimitReading'):
     """A usage reading supplies its own display and need for operator attention."""
 
     @abstractmethod
@@ -161,7 +161,7 @@ class RateLimitReading(ABC):
         return False
 
 
-class RateLimits(WireModel, RateLimitReading):
+class RateLimits(RateLimitReading):
     primary: RateWindow
 
     def line(self) -> str:
