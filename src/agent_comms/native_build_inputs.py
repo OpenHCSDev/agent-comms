@@ -79,7 +79,7 @@ class GitLaunch:
 
     @classmethod
     def command(cls, checkout: Path | str, *args: str) -> tuple[str, ...]:
-        return cls.program, "-C", str(checkout), *args
+        return cls.program, cls.chdir_option, str(checkout), *args
 
     @staticmethod
     @cache

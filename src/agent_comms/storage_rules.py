@@ -617,19 +617,15 @@ class ShellProgram:
     programs: ClassVar[dict[str, type[ShellProgram]]] = {}
     versioned = False
 
-    @classmethod
-    def name_set(cls) -> frozenset[str]:
-        return cls.names
-
     def __init_subclass__(cls):
         super().__init_subclass__()
-        for name in cls.name_set():
+        for name in cls.__dict__.get('names', ()):
             ShellProgram.programs[name] = cls
 
     @classmethod
     def named(cls, name):
         kind = cls.programs.get(name if name in cls.programs else re.sub(r'\d+(?:\.\d+)*$', '', name))
-        return (kind if kind and (kind.versioned or name in kind.name_set()) else cls)()
+        return (kind if kind and (kind.versioned or name in kind.names) else cls)()
 
     def matches(self, args, prefixes):
         return any(tuple(args[:len(prefix)]) == prefix for prefix in prefixes)
@@ -647,6 +643,9 @@ class StorageDenied(SelectedToolDenied, ToolRefusedError):  # noqa: N818 - exist
 class StorageEffect(ABC):
     """Preflight one actual operation and declare its measured work, if any."""
     work: ClassVar[tuple] = ()
+
+    def require_order_check(self) -> None:
+        """Ordinary storage effects remain valid in an order check."""
 
     @abstractmethod
     def check(self, projection: StorageProjection) -> None:
@@ -684,6 +683,12 @@ class BuildStorageEffect(AllocateStorageEffect):
 
 class TestGateStorageEffect(AllocateStorageEffect):
     work = (TestGateRoomWork,)
+
+    def require_order_check(self) -> None:
+        raise ValueError(
+            "Order checks never launch pytest; give the integrator the test paths "
+            "and the unresolved risk that requires the run."
+        )
 
 
 @dataclass(frozen=True)
@@ -773,7 +778,7 @@ class MeasuredCommands(ShellProgram):
             return ()
         return tuple(owner.effect() for owner in type(self).__mro__
                      if 'commands' in owner.__dict__ and any(
-                         self.matches((name, *args), owner.commands) for name in self.name_set()))
+                         self.matches((name, *args), owner.commands) for name in self.names))
 
 
 class BuildsOnCommands(MeasuredCommands):
@@ -806,9 +811,7 @@ class WritesWorkingTree(ShellProgram):
 
 
 class GitProgram(GitLaunch, ForbidsCommands, WritesWorkingTree):
-    @classmethod
-    def name_set(cls) -> frozenset[str]:
-        return frozenset({cls.program})
+    names = frozenset({GitLaunch.program})
 
     forbidden = (('clone',), ('worktree', 'add'), ('worktree', 'move'), ('worktree', 'remove'))
     reason = ('git clone and git worktree add, move and remove are forbidden; run agent-comms '

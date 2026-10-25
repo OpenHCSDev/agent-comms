@@ -10,7 +10,6 @@ from agent_comms import integration
 from agent_comms.head_review import PullRequestHead
 from agent_comms.repository_name import RepositoryName
 from agent_comms.repo import Repo
-from agent_comms.test_lease import NewTestRun
 from agent_comms.todos import (
     DraftListedPullRequest, ReviewedHeadVerdict, UnmergedListedPullRequest, VerdictReason,
 )
@@ -54,7 +53,7 @@ def test_only_accepted_ready_members_are_selected(github_cli, tmp_path: Path):
     run = integration.IntegrationRun(integration.IntegrationCheckout(source.checkout),
                                      tmp_path / "output", "ready-head selection")
     assert run.accepted_heads() == ()
-    ReviewedHeadVerdict(VerdictReason("The declaration owns this behavior")).post(
+    ReviewedHeadVerdict(VerdictReason("The declared class owns the reviewed behavior")).post(
         source.github, source.branch_commit, "lead", "integration",
     )
     assert run.accepted_heads() == (PullRequestHead(source.github, 7, source.branch_commit),)
@@ -110,7 +109,7 @@ def test_success_finishes_without_entering_retry(heads, tmp_path: Path):
     answer = integration.TestAttempt.from_process(
         subprocess.CompletedProcess(("pytest",), 0), tmp_path / "passed.log",
     )
-    assert answer.finish(run, "a" * 40, heads, NewTestRun()) == 0
+    assert answer.finish(run, "a" * 40, heads) == 0
     assert not run.output.exists()
     failed = integration.TestAttempt.from_process(
         subprocess.CompletedProcess(("pytest",), 1), tmp_path / "failed.log",
@@ -121,4 +120,4 @@ def test_success_finishes_without_entering_retry(heads, tmp_path: Path):
         tmp_path / "timed-out.log",
     )
     with pytest.raises(integration.IntegrationFailed, match="no automatic replay"):
-        timed_out.finish(run, "a" * 40, heads, NewTestRun())
+        timed_out.finish(run, "a" * 40, heads)

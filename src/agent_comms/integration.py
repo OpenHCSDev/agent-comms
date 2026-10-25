@@ -180,7 +180,7 @@ class TestAttempt:
         return 0
 
     def finish(
-        self, run: IntegrationRun, base: str, heads: tuple[PullRequestHead, ...], start: LeaseStart
+        self, run: IntegrationRun, base: str, heads: tuple[PullRequestHead, ...]
     ) -> int:
         return self.code
 
@@ -198,9 +198,9 @@ class FailedTestAttempt(TestAttempt):
         return self.returncode
 
     def finish(
-        self, run: IntegrationRun, base: str, heads: tuple[PullRequestHead, ...], start: LeaseStart
+        self, run: IntegrationRun, base: str, heads: tuple[PullRequestHead, ...]
     ) -> int:
-        return run.retry(self, base, heads, start)
+        return run.retry(self, base, heads)
 
 
 class TimedOutTestAttempt(TestAttempt):
@@ -211,7 +211,7 @@ class TimedOutTestAttempt(TestAttempt):
         return self.exit_code
 
     def finish(
-        self, run: IntegrationRun, base: str, heads: tuple[PullRequestHead, ...], start: LeaseStart
+        self, run: IntegrationRun, base: str, heads: tuple[PullRequestHead, ...]
     ) -> int:
         raise IntegrationFailed(f"Timed out: {self.log}; no automatic replay")
 
@@ -303,30 +303,31 @@ class IntegrationRun:
         failed: FailedTestAttempt,
         base: str,
         heads: tuple[PullRequestHead, ...],
-        start: LeaseStart,
     ) -> int:
         remaining = self.failure.remaining(heads, failed.log)
         combined = self.checkout.combine(base, remaining)
         if not combined:
             raise IntegrationFailed("No remainder combined; no tests run")
-        return self.test(base, combined, start, 2).code
+        with TestLease.current().held() as start:
+            return self.test(base, combined, start, 2).code
 
     def execute(self) -> int:
         self.checkout.require_editable()
         AgentsSlice.require_current()
         os.nice(max(0, self.niceness - os.getpriority(os.PRIO_PROCESS, 0)))
+        heads = self.accepted_heads()
+        if not heads:
+            print("No accepted ready heads; no tests run", flush=True)
+            return 0
+        self.failure.require_heads(heads)
+        self.output.mkdir(parents=True, exist_ok=False)
+        base = self.checkout.fresh_main()
+        combined = self.checkout.combine(base, heads)
+        if not combined:
+            raise IntegrationFailed("No heads combined; no tests run")
         with TestLease.current().held() as start:
-            heads = self.accepted_heads()
-            if not heads:
-                print("No accepted ready heads; no tests run", flush=True)
-                return 0
-            self.failure.require_heads(heads)
-            self.output.mkdir(parents=True, exist_ok=False)
-            base = self.checkout.fresh_main()
-            combined = self.checkout.combine(base, heads)
-            if not combined:
-                raise IntegrationFailed("No heads combined; no tests run")
-            return self.test(base, combined, start, 1).finish(self, base, combined, start)
+            answer = self.test(base, combined, start, 1)
+        return answer.finish(self, base, combined)
 
 
 def main() -> None:

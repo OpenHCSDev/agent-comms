@@ -45,7 +45,6 @@ from .registration_inheritance import RegistrationInheritance
 from .repo import DetachedStart, GitCommandError, Repo, ScratchCheckout
 from .reported_turn import NoReportedTurn, ReportedTurnState
 from .shell_commands import ShellCommand
-from .test_invocation import PYTEST
 from .text_digest import TextDigest
 from .thread_identity import RecordedThreadIncarnation, ThreadIncarnation
 from .turn_goal_permission import ContinuationGoalPermission, GoalPermission, InactiveGoalPermission
@@ -321,11 +320,17 @@ class CheckCommand:
 
     def require_writable(self) -> None:
         """New checks cannot select revisions; saved checks remain readable for correction."""
-        PYTEST.require_integrator(self.command)
+        self.require_order_effects(Path.cwd())
         if any(self.git_command(list(simple.words)) in self.REVISION_COMMANDS
                for simple in ShellCommand.split(self.command)):
             raise ValueError("A check never checks out a revision: Core runs it at the "
                              "delivered commit and at each branch commit. Drop the checkout.")
+
+    def require_order_effects(self, cwd: Path) -> None:
+        from .storage_rules import shell_storage_effects
+
+        for effect in shell_storage_effects(self.command, cwd):
+            effect.require_order_check()
 
     # The revision is the run's parameter; a check line that chooses one is refused.
     REVISION_COMMANDS: ClassVar[frozenset[str]] = frozenset({"checkout", "switch"})
@@ -377,7 +382,7 @@ class OrderCheck(CheckCommand):
 
     async def run(self) -> ChildResult:
         """The check on its directory's live state."""
-        PYTEST.require_integrator(self.command)
+        self.require_order_effects(self.directory)
         return await BoundedRun.run(("bash", "-c", self.command), cwd=self.directory,
                                     timeout=self.timeout)
 
@@ -405,7 +410,7 @@ class OrderCheck(CheckCommand):
 
     def run_at(self, revision: str, repository: Path, checkout_base: Path) -> ChildResult:
         """Run in a fresh detached tree, never in the configured checkout."""
-        PYTEST.require_integrator(self.command)
+        self.require_order_effects(repository)
         checkout_base.mkdir(parents=True, exist_ok=True)
         with tempfile.TemporaryDirectory(prefix="order-check-", dir=checkout_base) as scratch:
             tree = str(Path(scratch) / "tree")
