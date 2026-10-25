@@ -11,7 +11,7 @@ from typing import TYPE_CHECKING
 
 from aiohttp import ClientError
 
-from agent_comms.build_identity import RecordedBuildIdentity
+from agent_comms.build_identity import InstalledBuild
 from agent_comms.cli_bridges.codex import CodexAppServer
 from agent_comms.cli_bridges.codex_protocol import RateLimitReading
 from agent_comms.commander.vibe_check import OverloadDegradation
@@ -200,7 +200,7 @@ class CommanderHud(ToolResult):
         held = frame.todos
         progress = pulls.progress(held, comms.registry)
         timers = store.timers_up_in(held, now, progress)
-        installed = RecordedBuildIdentity.installed()
+        installed = InstalledBuild.read()
         edits = dict.fromkeys((todo.id for todo in held), 0) | {
             read.todo.id: read.read()
             for read in OrderEditCountRead.judgeable(comms.root, frame.live, progress)

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from abc import abstractmethod
+from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Annotated, ClassVar
@@ -84,6 +84,38 @@ class MissingCommitInstallation(CommitInstallation):
 
 
 @dataclass(frozen=True)
+class NoRuntimeCommitInstallation(CommitInstallation):
+    """No runtime is installed on this home, so it contains no delivered commit."""
+    merged_state = "no runtime installed"
+
+    def require(self) -> None:
+        raise DeliveredCommitNotInstalledError("No agent-comms runtime is installed on this home.")
+
+    def after_merge(self, todo: Todo, merged: MergedProblemOrder) -> Todo:
+        return merged.waiting_in(todo)
+
+
+class InstalledBuild(ABC):
+    """The build this home runs, which the board reads merged orders against."""
+
+    @abstractmethod
+    def containing(self, commits: tuple[str, ...], directory: Path) -> CommitInstallation: ...
+
+    @classmethod
+    def read(cls) -> InstalledBuild:
+        """The current runtime pointer is the boundary: absent, nothing is installed."""
+        if not LaunchRuntime.current_pointer().exists():
+            return NoInstalledBuild()
+        return RecordedBuildIdentity.installed()
+
+
+@dataclass(frozen=True)
+class NoInstalledBuild(InstalledBuild):
+    def containing(self, commits: tuple[str, ...], directory: Path) -> CommitInstallation:
+        return NoRuntimeCommitInstallation()
+
+
+@dataclass(frozen=True)
 class RepositoryCommit:
     repository: RepositoryName
     commit: Annotated[str, GitCommitText]
@@ -110,7 +142,7 @@ class UnrecordedBuildIdentity(BuildIdentity):
 
 
 @dataclass(frozen=True)
-class RecordedBuildIdentity(BuildIdentity):
+class RecordedBuildIdentity(BuildIdentity, InstalledBuild):
     """Declared runtime source revisions, each identified by its repository."""
 
     commits: tuple[RepositoryCommit, ...]

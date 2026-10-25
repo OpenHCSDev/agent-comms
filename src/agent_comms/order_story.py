@@ -7,7 +7,7 @@ from collections.abc import Iterable
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Self
 
-from .build_identity import RecordedBuildIdentity
+from .build_identity import InstalledBuild
 from .field_codec import OrderId
 from .recorded_time import EventTime
 from .tool_result import ToolResult
@@ -89,7 +89,7 @@ class FleetStory(ToolResult):
 
     @classmethod
     def collect(cls, held: HeldOrders) -> Self:
-        installed = RecordedBuildIdentity.installed()
+        installed = InstalledBuild.read()
         lines = [f"{hold.todo.id} {hold.holder.name}: {hold.todo.order.installed_line(installed)}"
                  for hold in held.live]
         if held.orphaned:
