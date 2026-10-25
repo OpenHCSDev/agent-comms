@@ -510,7 +510,7 @@ wheels = [
 [[package]]
 name = "nominal-refactor-advisor"
 version = "0.1.0"
-source = { git = "https://github.com/OpenHCSDev/NominalRefactorAdvisor?rev=main#3fc2f0848bb91981bd8e2a015cf381cd2c51e1dc" }
+source = { git = "https://github.com/OpenHCSDev/NominalRefactorAdvisor?rev=main#a25f0a77e5ec59dc7ce7537928f7a547057eef51" }
 dependencies = [
     { name = "metaclass-registry" },
     { name = "tree-sitter" },
