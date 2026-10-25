@@ -52,7 +52,9 @@ def recorded_wait(watched_bus):
 def test_sqlite_wake_owners_resolve_the_commit_source_through_mro(watched_bus):
     bus, comms = watched_bus
     for owner in (Bus, GoalWaits):
-        assert owner.source_paths(comms.root) == (owner.path_in(comms.root).with_suffix(".changed"),), owner.__mro__
+        marker, = owner.source_paths(comms.root)
+        assert marker.parent != owner.path_in(comms.root).parent
+        assert marker in owner.transient_paths(owner.path_in(comms.root))
     assert RegistryFile.source_paths(comms.root) == (RegistryFile.path_in(comms.root),)
 
 

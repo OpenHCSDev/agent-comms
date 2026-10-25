@@ -878,7 +878,7 @@ class PublishedSQLiteFile(SQLiteFile):
 
     @staticmethod
     def _source_paths(path: Path) -> tuple[Path, ...]:
-        return (path.with_suffix(".changed"),)
+        return (path.parent / "changed" / path.with_suffix(".changed").name,)
 
     @classmethod
     def source_paths(cls, root: Path) -> tuple[Path, ...]:
@@ -907,7 +907,11 @@ class PublishedSQLiteFile(SQLiteFile):
         """Announce a completed mutation or replacement of this owner's store."""
         marker, = cls._source_paths(path)
         try:
-            marker.write_bytes(b"")
+            try:
+                marker.write_bytes(b"")
+            except FileNotFoundError:
+                marker.parent.mkdir(mode=0o700, exist_ok=True)
+                marker.write_bytes(b"")
         except OSError as error:
             raise StoreCommittedError(
                 f"Committed {path}, but change notification failed: {error}"

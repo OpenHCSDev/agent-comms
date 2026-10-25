@@ -230,8 +230,8 @@ class VibeCheck(UndatedStandingRule):
         )
 
     def line(self) -> str:
-        return (f"VIBE CHECK ({self.sign.signal.declared_name}) "
-                f"-> answer the {VibeCheckSender.sender} messages now")
+        return (f"ANSWER the {VibeCheckSender.sender} messages now"
+                f" (vibe check: {self.sign.signal.declared_name})")
 
 
 @dataclass(frozen=True)
@@ -252,7 +252,7 @@ class VibeCheckUnanswered(Escalation, OwedAnswer, UndatedStandingRule):
 
     def line(self) -> str:
         age = max(0, int((time.time() - self.message.timestamp) // 60))
-        return f"VIBE CHECK UNANSWERED: message {self.cited}, {age} min old -> answer it"
+        return f"ANSWER vibe check {self.cited} ({age} min old)"
 
 
 class Indictment:
@@ -347,7 +347,7 @@ class ChokeholdUnanswered(Escalation, OwedAnswer, UndatedStandingRule):
                      ChokeholdSender.unanswered(source, snapshot, commander, time.time()))
 
     def line(self) -> str:
-        return f"CHOKEHOLD UNANSWERED: message {self.cited} -> answer it by the protocol"
+        return f"ANSWER chokehold {self.cited} by the protocol"
 
 
 @dataclass(frozen=True)
