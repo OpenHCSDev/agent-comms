@@ -2370,7 +2370,7 @@ class PendingProblemOrder(Pending, DeliverableProblemOrder):
         problems.extend(reassign.refusals(holders))
         if problems:
             sys.exit('Refused order:\n  ' + '\n  '.join(problems))
-        fired = tuple(listed[pid] for pid in group if pid in listed and listed[pid].struck_out(unit))
+        fired = tuple(listed[pid] for pid in group if pid in listed and listed[pid].struck_out(context.comms.registry.require(unit).incarnation))
         self.run.require_assignment(context.comms.registry.require(unit).incarnation,
                                     fired, ProblemGoalOrder.StrikeLimit)
 
@@ -2405,7 +2405,7 @@ class PendingProblemOrder(Pending, DeliverableProblemOrder):
         replacing = target.replacing(holder, group, listed)
         self.require_send(context, document, unit, group, listed, target,
                           reassign, holders, clean, traced)
-        struck_already = replacing and listed[group[0]].struck_on_order(unit)
+        struck_already = replacing and listed[group[0]].struck_on_order(context.comms.registry.require(unit).incarnation)
         measured = MeasuredReview.read(context.comms.goals.todos)
         review_at = measured.review_at(self)
         message = self.message(context, document, unit, group, replacing, reassign)
@@ -2829,6 +2829,9 @@ class TodoHolder(ABC):
     @abstractmethod
     def previous_assignment(self) -> Assignment: ...
 
+    def strike_count(self, facts: StoryFacts) -> int:
+        return sum(count.total for count in facts.strike_totals)
+
     def owned_by(self, actor: ThreadIncarnation, generation: GoalId) -> bool:
         return False
 
@@ -2911,6 +2914,9 @@ class Assignment(TodoHolder):
 
     def last_known(self, history: TodoHistory, problem: str) -> TodoHolder:
         return self
+
+    def strike_count(self, facts: StoryFacts) -> int:
+        return facts.strike_count(self.owner_identity)
 
     def owned_by(self, actor: ThreadIncarnation, generation: GoalId) -> bool:
         return (self.owner_identity, self.generation) == (actor, generation)
@@ -3166,7 +3172,7 @@ class StrikeTodo(CitedStrike, StoryEvent):
         """The strike that reaches StrikeLimit takes the task away in the same write, through
         the release `order fire` records. The release states its own reason, the limit; the
         strike already carries what the unit did."""
-        if not struck.struck_out(self.previous.owner):
+        if not struck.struck_out(self.previous.owner_identity):
             return struck
         limit = StrikeReason(f"{self.previous.owner} took {ProblemGoalOrder.StrikeLimit} strikes "
                              f"on {struck.id}, so the task goes to another unit.")
@@ -3221,7 +3227,7 @@ class FailedCheckStrike(StrikeTodo):
     def after_record(self, goals: Goals, changed: Todo) -> None:
         if changed.revision == self.expected_revision:
             return
-        count = changed.history.facts_for(changed.id).strike_count(self.previous.owner)
+        count = changed.history.facts_for(changed.id).strike_count(self.previous.owner_identity)
         line = (f"Core strike {count} on {changed.id} order {self.order_id}: "
                 f"{self.previous.owner} {self.reason}"
                 + (f"; {changed.id} taken away" if not changed.holder else ""))
@@ -4299,20 +4305,20 @@ class Todo(TodoStoreRows, TypedTable):
 
     @property
     def strike_count(self) -> int:
-        return self.history.facts_for(self.id).strike_count(self.holder)
+        return self.current_holder.strike_count(self.history.facts_for(self.id))
 
     def live_strikes(self, unit: str | None = None) -> tuple[StrikeTodo, ...]:
         """The strikes still counting on this task, against ``unit`` on any order of it."""
         return self.history.live_strikes(self.id, unit)
 
-    def struck_on_order(self, unit: str) -> bool:
+    def struck_on_order(self, unit: ThreadIncarnation) -> bool:
         """A live strike on ``unit`` recorded since the current order was sent; a send-back that
         replaces this order is that same miss, so it counts no second strike."""
         since = self.order.at.recorded_at("An order")
-        return any(count.owner == unit and count.latest >= since
+        return any(count.owner_identity == unit and count.latest >= since
                    for count in self.history.facts_for(self.id).strike_totals)
 
-    def struck_out(self, unit: str) -> bool:
+    def struck_out(self, unit: ThreadIncarnation) -> bool:
         """The unit has taken its problem goal's StrikeLimit live strikes here; only mechanical
         orders reach it."""
         return self.history.facts_for(self.id).strike_count(unit) >= ProblemGoalOrder.StrikeLimit
@@ -4451,9 +4457,8 @@ class ProblemAllocation(TodoStoreRows, TypedTable):
         return cls.issue(db, ProblemNumber(number))
 
 
-@dataclass(frozen=True)
-class StrikeTotal:
-    owner: str
+@dataclass(frozen=True, kw_only=True)
+class StrikeTotal(Assignment):
     total: int
     latest: float
 
@@ -4470,8 +4475,8 @@ class StoryFacts(TypedRow):
     send_backs: tuple[float, ...] = ()
     release_actors: tuple[ThreadIncarnation, ...] = ()
 
-    def strike_count(self, unit: str | None) -> int:
-        return sum(count.total for count in self.strike_totals if unit in (None, count.owner))
+    def strike_count(self, unit: ThreadIncarnation) -> int:
+        return sum(count.total for count in self.strike_totals if count.owner_identity == unit)
 
 
 @dataclass(frozen=True)
@@ -4495,6 +4500,11 @@ class StoredOrderStory(TodoStoreRows, NoUpdate, NoDelete, TypedTable):
     strike_owner: ClassVar[Generated] = Generated(str, Column(nullable=True, generated=
         f"json_extract({{event}}, '$.{FieldCodec.record_key(StrikeTodo, 'previous')}"
         f".{FieldCodec.record_key(Assignment, 'owner')}')"))
+    strike_created: ClassVar[Generated] = Generated(float, Column(nullable=True, generated=
+        f"json_extract({{event}}, '$.{FieldCodec.record_key(StrikeTodo, 'previous')}"
+        f".{FieldCodec.record_key(Assignment, 'owner_created')}')"))
+    strike_assignment: ClassVar[Generated] = Generated(Assignment, Column(nullable=True, generated=
+        f"json_extract({{event}}, '$.{FieldCodec.record_key(StrikeTodo, 'previous')}')"))
     actor: ClassVar[Generated] = Generated(ThreadIncarnation, Column(nullable=True, generated=
         f"json_extract({{event}}, '$.{FieldCodec.record_key(ReleaseTodo, 'actor')}')"))
     indexes = (Index(("problem", "kind", "seq")),)
@@ -4547,21 +4557,21 @@ class StoredOrderStory(TodoStoreRows, NoUpdate, NoDelete, TypedTable):
         if not problems:
             return {}
         slots = ','.join('?' for _ in problems)
-        owner = FieldCodec.record_key(StrikeTotal, "owner")
         total = FieldCodec.record_key(StrikeTotal, "total")
         latest = FieldCodec.record_key(StrikeTotal, "latest")
         query = cls._sql(f"""
             WITH selected AS (
-                SELECT problem, seq, kind, call_id, order_id, event_at, strike_owner, actor
+                SELECT problem, seq, kind, call_id, order_id, event_at, strike_owner,
+                    strike_created, strike_assignment, actor
                 FROM {cls.declared_name} WHERE {{problem}} IN ({slots})
             ), live AS (
-                SELECT s.problem, s.strike_owner, count(*) total, max(s.event_at) latest
+                SELECT s.problem, s.strike_assignment, count(*) total, max(s.event_at) latest
                 FROM selected s LEFT JOIN {cls.declared_name} v ON v.voids=s.seq
                 WHERE s.kind IN {StrikeTodo.sql_choices()} AND v.seq IS NULL
-                GROUP BY s.problem, s.strike_owner
+                GROUP BY s.problem, s.strike_owner, s.strike_created
             ), counts AS (
-                SELECT problem, json_group_array(json_object(
-                    '{owner}', strike_owner, '{total}', total, '{latest}', latest)) strike_totals
+                SELECT problem, json_group_array(json_patch(json(strike_assignment), json_object(
+                    '{total}', total, '{latest}', latest))) strike_totals
                 FROM live GROUP BY problem
             ), releases AS (
                 SELECT problem, actor, max(seq) FROM selected

@@ -107,11 +107,6 @@ def refuse(text, *families):
         sys.exit('REFUSED, nothing recorded: ' + ' '.join(refused))
 
 
-def struck(todo, unit):
-    """Strikes count per unit and task, across every order of that task the unit held."""
-    return todo.history.facts_for(todo.id).strike_count(unit)
-
-
 # Eliminate forwarding with inheritance and multiple parents; decompose the hierarchy if it is not sound.
 # A forwarder restates an implementation pair (OOPSLA paper, Fig. 3: fields + forwarding leave routes to maintain), so
 # nothing the commander approves, delivers or orders may add or keep one. The cure is the hierarchy, never a
@@ -700,7 +695,7 @@ class Commander(CommanderContext):
     def posted(self, unit: str, todo: Todo, strike: StrikeTodo,
                answers: tuple[MessageReference, ...] = ()) -> None:
         """Publish a strike Core already recorded on the task's Todo to #comms."""
-        n = struck(todo, unit)
+        n = todo.history.facts_for(todo.id).strike_count(self.comms.registry.require(unit).incarnation)
         taken = f", {todo.id} taken away" if todo.holder != unit else ""
         line = (f'{time.strftime("%Y-%m-%d")} {strike.at.clock()} {unit} (strike {n} on {todo.id}'
                 f'{taken}): {strike.reason}')
@@ -736,7 +731,8 @@ class Commander(CommanderContext):
         self.call(CommsChangeProblemTool(problem=task, operation=VoidStrikeTodo(
             todo.revision, self.incarnation, voided, why)))
         unit = voided.previous.owner
-        n = struck(self.comms.goals.todos.get(task), unit)
+        todo = self.comms.goals.todos.get(task)
+        n = todo.history.facts_for(todo.id).strike_count(self.comms.registry.require(unit).incarnation)
         line = (f'{time.strftime("%Y-%m-%d %H:%M")} {unit} (strike voided on {task}, '
                 f'recorded {voided.at.clock()}; {n} strike(s) remain): {why}')
         self.on_record(line, 'Void', VerdictAudience.of(unit, todo))

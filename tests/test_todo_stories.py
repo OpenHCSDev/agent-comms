@@ -12,6 +12,7 @@ from agent_comms.order_story import StoryEvent
 from agent_comms.order_tools import CommsTodoListTool
 from agent_comms.recorded_time import RecordedEventTime, UnrecordedEventTime
 from agent_comms.registry_store import RegistryStore
+from agent_comms.thread_identity import RecordedThreadIncarnation
 from agent_comms.threads import Thread
 from agent_comms.todos import (
     AcceptedVerdict, Assignment, DroppedVerdict, FailedCheckStrike, OrderMessage,
@@ -101,6 +102,18 @@ def test_voided_strike_uses_its_stored_sequence_and_count_returns_to_zero(record
     with store.snapshot() as db:
         first, void = tuple(StoredOrderStory.select(db, problem=original.id, order_by=("seq",)))
         assert void.voids == first.seq
+
+
+def test_strike_count_distinguishes_a_reused_thread_name(recorded_problem):
+    comms = recorded_problem
+    store = comms.goals.todos
+    original = store.get("P1")
+    struck = store.apply(original.id, story_members(comms)[0])
+    worker = comms.registry.require("worker").incarnation
+    reused = RecordedThreadIncarnation(worker.name, worker.wire_birth + 1)
+    facts = struck.history.facts_for(struck.id)
+    assert facts.strike_count(worker) == 1
+    assert facts.strike_count(reused) == 0
 
 
 def test_wording_writer_records_its_actual_time(recorded_problem):
