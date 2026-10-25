@@ -25,12 +25,6 @@ from agent_comms.launch_runtime import LaunchRuntime
 from agent_comms.maintenance_barrier import HOLDER_NONCE, MaintenanceClaimHolder
 
 
-@dataclass(frozen=True)
-class HolderSeenProbe(RuntimeProbe[str]):
-    def run(self) -> str:
-        return os.environ.get(HOLDER_NONCE, "")
-
-
 @pytest.mark.parametrize("command", [StartCliCommand, StopCliCommand])
 def test_owner_actions_decode_in_the_selected_worker(comms, command):
     runtime = LaunchRuntime.running()
@@ -73,18 +67,30 @@ def test_probes_under_successive_holds_share_one_worker():
 
 
 def test_worker_answers_each_request_as_that_request_s_holder(monkeypatch, tmp_path):
-    holders = (ClaimId.mint(), ClaimId.mint(), "")
-    lines = "".join(FieldCodec.compact(FieldCodec.encode(ProbeRequest(HolderSeenProbe(), holder)))
-                    + "\n" for holder in holders)
-    # serve() takes over the descriptor of its stdout, so the answers need a real file.
-    answers = tmp_path / "answers"
-    monkeypatch.setattr("sys.stdin", io.StringIO(lines))
-    monkeypatch.setattr("sys.stdout", answers.open("w"))
-    monkeypatch.setenv(HOLDER_NONCE, ClaimId.mint())
-    serve()
-    assert [FieldCodec.decode(HolderSeenProbe().answer_type(),
-                              FieldCodec.decode(ProbeReply, FieldCodec.parse(line)).answer)
-            for line in answers.read_text().splitlines()] == list(holders)
+    # The probe is a family member only while this test runs, so later tests reading the
+    # installer's probes (OutgoingWire) never see it.
+    @dataclass(frozen=True)
+    class HolderSeenProbe(RuntimeProbe[str]):
+        def run(self) -> str:
+            return os.environ.get(HOLDER_NONCE, "")
+
+    try:
+        holders = (ClaimId.mint(), ClaimId.mint(), "")
+        lines = "".join(
+            FieldCodec.compact(FieldCodec.encode(ProbeRequest(HolderSeenProbe(), holder))) + "\n"
+            for holder in holders
+        )
+        # serve() takes over the descriptor of its stdout, so the answers need a real file.
+        answers = tmp_path / "answers"
+        monkeypatch.setattr("sys.stdin", io.StringIO(lines))
+        monkeypatch.setattr("sys.stdout", answers.open("w"))
+        monkeypatch.setenv(HOLDER_NONCE, ClaimId.mint())
+        serve()
+        assert [FieldCodec.decode(HolderSeenProbe().answer_type(),
+                                  FieldCodec.decode(ProbeReply, FieldCodec.parse(line)).answer)
+                for line in answers.read_text().splitlines()] == list(holders)
+    finally:
+        RuntimeProbe.__registry__.pop(HolderSeenProbe.declared_name)
 
 
 def test_a_raising_probe_ends_its_worker_and_refuses_with_its_traceback():
