@@ -1,11 +1,13 @@
 """Routing annotations keyed by durable Pi entry IDs, never reply text."""
 
+from __future__ import annotations
+
 import hashlib
 import os
 from contextlib import ExitStack, closing
 from dataclasses import dataclass, replace
 from pathlib import Path
-from typing import Annotated, ClassVar
+from typing import Annotated, ClassVar, TYPE_CHECKING
 
 from agent_comms.native_session_files import NativeSessionFiles
 from agent_comms.native_session_reopen import NativeSessionIdentity
@@ -16,8 +18,13 @@ from .input_disposition import InputDispositions
 from .private_path import FileObservation, FileRevision
 from .routing import NoTurnRouting, Routing, TurnRouting
 from .field_codec import NullMember
-from .transcript_events import ContextTranscript
+from .transcript_events import ContextTranscript, TranscriptEvent
 from .typed_table import Column, DurableStore, StoreRows, WithoutRowid
+
+
+if TYPE_CHECKING:
+    from .native_entries import TranscriptProjection
+    from .pi_payloads import UserMessage
 
 
 class TranscriptRoutesRows(StoreRows):
@@ -38,7 +45,9 @@ class TranscriptRoute(TranscriptRoutesRows, WithoutRowid):
 class InputPresentation:
     """A native input's display policy; the default preserves its original parts."""
 
-    def project_message(self, message, context, timestamp):
+    def project_message(
+        self, message: UserMessage, context: TranscriptProjection, timestamp: float,
+    ) -> list[TranscriptEvent]:
         return message.project_parts(message.parts, context, timestamp, context.routing)
 
 
@@ -63,14 +72,16 @@ class InputDisplay(TranscriptRoutesRows, WithoutRowid, InputPresentation):
             or self.sent_text_digest == hashlib.sha256(text.encode("utf-8")).hexdigest()
         )
 
-    def project_message(self, message, context, timestamp):
+    def project_message(
+        self, message: UserMessage, context: TranscriptProjection, timestamp: float,
+    ) -> list[TranscriptEvent]:
         routing = context.routing
         if self.sent_text_digest is not None:
             if not message.matches_display(self):
                 return message.project_parts(message.parts, context, timestamp, NoTurnRouting())
             routing = self.routing
         raw_text = message.original_text
-        events = []
+        events: list[TranscriptEvent] = []
         if raw_text and raw_text != self.text:
             events.append(ContextTranscript(raw_text, position=context.position, timestamp=timestamp))
         if self.text is not None:

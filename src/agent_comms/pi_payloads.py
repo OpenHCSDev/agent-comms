@@ -72,6 +72,7 @@ from .transcript_events import (
     ThinkingTranscript,
     ToolEndTranscript,
     ToolStartTranscript,
+    TranscriptEvent,
     UserTranscript,
 )
 from .turn_failure import (
@@ -84,9 +85,12 @@ from .native_session_reopen import PiSessionId
 if TYPE_CHECKING:
     from .agent_events import AgentEvent, ProviderUsage
     from .backend import TurnSession
+    from .native_entries import TranscriptProjection
     from .pending_requests import PendingRequests
     from .pi_commands import PiCommand
     from .pi_events import AutoRetryEnd, Response
+    from .routing import Routing
+    from .transcript_routes import InputDisplay
     from .turn_goal_permission import TurnGoalPermission
     from .turn_phase import TurnPhase
     from .turn_usage import UsageAccount
@@ -929,10 +933,10 @@ class UserMessage(PiMessage):
         # Preserve exact separators, including empty text blocks, for provenance.
         return "\n".join(text for part in self.parts for text in part.text_parts())
 
-    def matches_display(self, display) -> bool:
+    def matches_display(self, display: InputDisplay) -> bool:
         return self.content is not None and display.matches(self.original_text)
 
-    def display_parts(self, text: str):
+    def display_parts(self, text: str) -> tuple[PiContent, ...]:
         return (
             TextContent(text),
             *(retained for part in self.parts
@@ -942,7 +946,10 @@ class UserMessage(PiMessage):
     def transcript_events(self, context, timestamp: float):
         return context.input_display.project_message(self, context, timestamp)
 
-    def project_parts(self, parts, context, timestamp: float, routing):
+    def project_parts(
+        self, parts: tuple[PiContent, ...], context: TranscriptProjection,
+        timestamp: float, routing: Routing,
+    ) -> list[TranscriptEvent]:
         events = [event for part in parts for event in part.user_transcript(context.position, timestamp)]
         events = [replace(event, routing=routing) for event in events]
         for input_id in self.input_id.present():
