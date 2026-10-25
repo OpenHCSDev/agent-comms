@@ -1121,7 +1121,9 @@ class TableSchema(ABC):
         Other table differences are refused with the rows untouched."""
         for row in cls.schema_rows():
             row.take_previous_name(db)
-            row.carry_columns(row, db)
+            StoredColumnCarry.drop_declared_fields(row, db)
+            StoredColumnCarry.derive_missing_fields(row, db)
+            StoredColumnCarry.derive_relaxed_fields(row, db)
             if SQLiteColumnShape.only_constraints_differ(db, row):
                 row.rebuild(db)
         SQLiteCatalogObject.carry(db, cls.declared_schema(),
@@ -1936,12 +1938,6 @@ class StoredColumnCarry:
         for name in row.dropped_fields:
             if name in stored:
                 db.execute(f"ALTER TABLE {_identifier(row.declared_name)} DROP COLUMN {_identifier(name)}")
-
-    @classmethod
-    def carry_columns(cls, row: type[TypedTable], db: sqlite3.Connection) -> None:
-        cls.drop_declared_fields(row, db)
-        cls.derive_missing_fields(row, db)
-        cls.derive_relaxed_fields(row, db)
 
 
 class TypedTable(
