@@ -17,7 +17,6 @@ from abc import ABC, abstractmethod
 from collections import deque
 from collections.abc import Callable, Iterable, Iterator
 from contextlib import AbstractContextManager, ExitStack, closing, contextmanager, suppress
-import copy
 from dataclasses import dataclass, field, replace
 from datetime import datetime
 from functools import cached_property, partial
@@ -202,7 +201,7 @@ class GivenBinding(BindingRequest):
         if stored:
             supplied = {name: value for plan in FieldCodec.field_plans(BindingAddress)
                         for name, value in plan.decoded(self.given).items()}
-            return copy.replace(stored[0].address(), **supplied)
+            return replace(stored[0].address(), **supplied)
         root = self.given[FieldCodec.record_key(BindingAddress, 'root')]
         return FieldCodec.decode(BindingAddress, {
             'start': FieldCodec.encode(Binding.bus_head(root)),
