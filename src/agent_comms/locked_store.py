@@ -27,6 +27,7 @@ from .field_codec import FieldCodec, MalformedRecord
 from .private_path import PrivateFileRole
 from .store_files import (
     AtomicFile,
+    DEFAULT_ISOLATION,
     DEFAULT_STORE_CONTENTION,
     SharedLock,
     SqliteStore,
@@ -40,6 +41,9 @@ from .store_files import (
     is_store_lock,
     store_lock_path,
 )
+
+if TYPE_CHECKING:
+    from sqlite3 import _IsolationLevel
 
 T = TypeVar("T")
 
@@ -510,10 +514,13 @@ class SQLiteFile(RootFile, SqliteStore):
     @classmethod
     def writer(
         cls, path: str | os.PathLike[str], contention: StoreContention = DEFAULT_STORE_CONTENTION,
-        **options: object,
+        *, isolation_level: _IsolationLevel = DEFAULT_ISOLATION,
+        uri: bool = False, check_same_thread: bool = True,
     ) -> sqlite3.Connection:
         """Open a writer through the store family's typed busy behavior."""
-        return cls.identifiers_only(contention.writer(path, options))
+        return cls.identifiers_only(contention.writer(
+            path, isolation_level=isolation_level, uri=uri, check_same_thread=check_same_thread,
+        ))
 
     @staticmethod
     def identifiers_only(db: sqlite3.Connection) -> sqlite3.Connection:

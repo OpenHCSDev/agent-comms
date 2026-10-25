@@ -11,7 +11,7 @@ from pathlib import Path
 import pytest
 
 from agent_comms.locked_store import SQLiteFile
-from agent_comms.store_files import ClaimHeldError, ProcessSingleton, StoreLockContention
+from agent_comms.store_files import ClaimHeldError, ProcessSingleton, StoreBusy, StoreLockContention
 
 from test_locked_store import assert_writer_excluded, event, process
 
@@ -114,6 +114,10 @@ def test_sqlite_boundaries_serialize_and_retire_with_the_real_exception(tmp_path
     assert opened == [path]
     assert retired == [failure]
     with SQLiteFile.exclusive_writer(path) as connection:
+        assert connection.execute("SELECT 1").fetchone() == (1,)
+    with closing(SQLiteFile.writer(
+        path.as_uri() + "?mode=rw", StoreBusy(), isolation_level=None, uri=True,
+    )) as connection:
         assert connection.execute("SELECT 1").fetchone() == (1,)
 
 

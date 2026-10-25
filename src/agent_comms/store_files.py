@@ -27,13 +27,18 @@ from contextvars import Context, ContextVar
 from dataclasses import dataclass, field
 from fnmatch import fnmatchcase
 from pathlib import Path
-from typing import BinaryIO, ClassVar, TextIO, cast
+from typing import TYPE_CHECKING, BinaryIO, ClassVar, Final, TextIO
 
 from .child_process import LockHolder, Platform
 from .coordination_errors import CoordinationReadUnavailable
 from .declared_family import DeclaredFamily
 from .errors import RelationViolationError
 from .private_path import FileIdentity, PrivateFileRole
+
+if TYPE_CHECKING:
+    from sqlite3 import _IsolationLevel
+
+DEFAULT_ISOLATION: Final = "DEFERRED"
 
 
 class LockMode(ABC):
@@ -385,11 +390,14 @@ class StoreContention(ABC):
         return sqlite3.connect(uri, uri=True, isolation_level=None, timeout=self.timeout)
 
     def writer(
-        self, path: str | os.PathLike[str], options: dict[str, object]
+        self, path: str | os.PathLike[str], *,
+        isolation_level: _IsolationLevel = DEFAULT_ISOLATION,
+        uri: bool = False, check_same_thread: bool = True,
     ) -> sqlite3.Connection:
-        # SQLite validates its open-ended options; do not copy its keyword schema here.
-        return cast(Callable[..., sqlite3.Connection], sqlite3.connect)(
-            path, timeout=self.timeout, **options)
+        return sqlite3.connect(
+            path, timeout=self.timeout, isolation_level=isolation_level,
+            uri=uri, check_same_thread=check_same_thread,
+        )
 
     def lock_budget(self) -> StoreLockContention:
         """The same wait spent on the store's file locks: one fresh budget per operation."""
@@ -424,7 +432,8 @@ class SqliteStore(ABC):
     @abstractmethod
     def writer(
         cls, path: str | os.PathLike[str], contention: StoreContention = DEFAULT_STORE_CONTENTION,
-        **options: object,
+        *, isolation_level: _IsolationLevel = DEFAULT_ISOLATION,
+        uri: bool = False, check_same_thread: bool = True,
     ) -> sqlite3.Connection:
         """Open the file family's writer with its declared contention policy and options."""
 
