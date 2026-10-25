@@ -83,7 +83,7 @@ def practice_projections(claims: ClaimBus, tmp_path: Path) -> Path:
     resource = str(tmp_path / "owned.py")
     owner = claims.acquire("alice", resource, claims.scope("alice", ClaimId.mint()))
     seed = tmp_path / "seed"
-    Bus.copy_file(claims.bus.path, Bus.path_in(seed))
+    claims.bus.backup(Bus.path_in(seed))
     claims.release(owner)
     claims.acquire("bob", resource, claims.scope("bob", ClaimId.mint()))
     return seed
@@ -103,7 +103,7 @@ def test_practice_projections_seed_matches_full_after_claim_transition(
     claims: ClaimBus, practice_projections: Path, tmp_path: Path,
 ) -> None:
     full = tmp_path / "full"
-    Bus.copy_file(claims.bus.path, Bus.path_in(full))
+    claims.bus.backup(Bus.path_in(full))
     for database in (claims.bus.path, Bus.path_in(full)):
         with closing(sqlite3.connect(database)) as db:
             missing_claim_producer(db)
