@@ -852,7 +852,7 @@ class ThreadArgument:
 
 @dataclass(frozen=True, kw_only=True)
 class WorktreeArgument:
-    worktree: Annotated[str, Argument(flags=("--worktree",))]
+    worktree: Annotated[Checkout, Argument(flags=("--worktree",))]
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -2786,12 +2786,12 @@ class ReadTargetCliCommand(MultipleTargets, CliCommand, declared_name="read-targ
         str, TargetBound(), Argument(flags=("--target",))
     ]
     worktree: Annotated[
-        str, TargetBound(), Argument(flags=("--worktree",))
+        Checkout, TargetBound(), Argument(flags=("--worktree",))
     ]
 
     @classmethod
     def thread_bindings(cls, comms: Comms, thread: Thread, status: ThreadStatus, channel: str | None = None, *, catalog: CatalogDocument | None = None) -> tuple[Self, ...]:
-        return (cls(target=thread.name, worktree=str(thread.worktree)),)
+        return (cls(target=thread.name, worktree=thread.worktree),)
 
     @classmethod
     def channel_bindings(cls, comms: Comms, resolved: ResolvedChannel, *, project: Checkout, snapshot: RegistrySnapshot, catalog: CatalogDocument | None):
