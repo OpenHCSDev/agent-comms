@@ -14,7 +14,9 @@ from .errors import RelationViolationError
 from .field_codec import InputId, MalformedRecord
 from .input_disposition import InputDispositions
 from .private_path import FileObservation, FileRevision
-from .routing import TurnRouting
+from .routing import NoTurnRouting, Routing, TurnRouting
+from .field_codec import NullMember
+from .transcript_events import ContextTranscript
 from .typed_table import Column, DurableStore, StoreRows, WithoutRowid
 
 
@@ -33,13 +35,25 @@ class TranscriptRoute(TranscriptRoutesRows, WithoutRowid):
             raise RelationViolationError("Original native publication cannot be rebound")
 
 
+class InputPresentation:
+    """A native input's display policy; the default preserves its original parts."""
+
+    def project_message(self, message, context, timestamp):
+        return message.project_parts(message.parts, context, timestamp, context.routing)
+
+
 @dataclass(frozen=True)
-class InputDisplay(TranscriptRoutesRows, WithoutRowid):
+class NoInputDisplay(NullMember, InputPresentation):
+    """No owner-authored replacement or suppression was recorded."""
+
+
+@dataclass(frozen=True)
+class InputDisplay(TranscriptRoutesRows, WithoutRowid, InputPresentation):
     """Owner-authored presentation for one native input; None text means internal."""
 
     native_id: Annotated[InputId, Column(primary_key=True)]
     text: str | None
-    routing: TurnRouting | None = None
+    routing: Routing = NoTurnRouting()
     sent_text_digest: str | None = None
     checks = ("routing IS NULL OR sent_text_digest IS NOT NULL",)
 
@@ -49,6 +63,20 @@ class InputDisplay(TranscriptRoutesRows, WithoutRowid):
             or self.sent_text_digest == hashlib.sha256(text.encode("utf-8")).hexdigest()
         )
 
+    def project_message(self, message, context, timestamp):
+        routing = context.routing
+        if self.sent_text_digest is not None:
+            if not message.matches_display(self):
+                return message.project_parts(message.parts, context, timestamp, NoTurnRouting())
+            routing = self.routing
+        raw_text = message.original_text
+        events = []
+        if raw_text and raw_text != self.text:
+            events.append(ContextTranscript(raw_text, position=context.position, timestamp=timestamp))
+        if self.text is not None:
+            events.extend(message.project_parts(message.display_parts(self.text), context, timestamp, routing))
+        return events
+
 
 class _SessionRoutes:
     """One indexed read snapshot; decode only entries used by the page."""
@@ -57,24 +85,27 @@ class _SessionRoutes:
         self._lifetime = ExitStack()
         self._connection = self._lifetime.enter_context(store.snapshot())
         self._session_file = session_file
-        self._cache: dict[str, TurnRouting | None] = {}
-        self._input_cache: dict[str, InputDisplay | None] = {}
+        self._cache: dict[str, Routing] = {}
+        self._input_cache: dict[str, InputPresentation] = {}
 
-    def get(self, entry_id: str | None) -> TurnRouting | None:
+    def get(self, entry_id: str | None) -> Routing:
         if entry_id is None:
-            return None
+            return NoTurnRouting()
         if entry_id not in self._cache:
-            row = TranscriptRoute.one(
-                self._connection, session_file=self._session_file, entry_id=entry_id
+            self._cache[entry_id] = next(
+                (row.routing for row in TranscriptRoute.select(
+                    self._connection, session_file=self._session_file, entry_id=entry_id
+                )), NoTurnRouting(),
             )
-            self._cache[entry_id] = row.routing if row else None
         return self._cache[entry_id]
 
-    def input_display(self, native_id: InputId | None) -> InputDisplay | None:
+    def input_display(self, native_id: InputId | None) -> InputPresentation:
         if native_id is None:
-            return None
+            return NoInputDisplay()
         if native_id not in self._input_cache:
-            self._input_cache[native_id] = InputDisplay.one(self._connection, native_id=native_id)
+            self._input_cache[native_id] = next(
+                InputDisplay.select(self._connection, native_id=native_id), NoInputDisplay(),
+            )
         return self._input_cache[native_id]
 
     def close(self) -> None:
@@ -210,11 +241,10 @@ class TranscriptRoutes(DurableStore):
         display_text: str | None,
         *,
         sent_text: str | None = None,
-        routing: TurnRouting | None = None,
+        routing: Routing = NoTurnRouting(),
     ) -> None:
         """Persist before prompt write, including before Pi creates its session file."""
-        if routing is not None and (sent_text is None or routing.reply is not None):
-            raise ValueError("Input routing requires exact sent text and no outgoing reply claim.")
+        routing.validate_input(sent_text)
         digest = (
             hashlib.sha256(sent_text.encode("utf-8")).hexdigest() if sent_text is not None else None
         )

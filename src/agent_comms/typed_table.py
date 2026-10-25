@@ -103,7 +103,7 @@ def _base_type(annotation: object) -> tuple[object, bool]:
         members = get_args(annotation)
         if len(members) == 2 and sum(map(_absent, members)) == 1:
             return next(member for member in members if not _absent(member)), True
-    return annotation, False
+    return annotation, compile_decoder(annotation).accepts_null
 
 
 class SqlStorage(DeclaredFamily, affix="Storage"):

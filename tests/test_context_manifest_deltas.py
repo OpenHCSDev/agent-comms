@@ -19,7 +19,8 @@ from agent_comms.turn_context import (
     SegmentManifest, SystemLayerSegment, ToolCatalogSegment, TranscriptSegment,
 )
 from bus_record_fixture import context_comms
-from agent_comms.turn_item import PiRequestKey, PiSessionId
+from agent_comms.turn_item import PiRequestKey
+from agent_comms.native_session_reopen import PiSessionId
 
 
 def context(owner, path, count, turn):

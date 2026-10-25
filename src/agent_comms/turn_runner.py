@@ -48,7 +48,7 @@ from .pi_commands import (
 )
 from .pi_payloads import StateData
 from .queued_input import InitialInput
-from .routing import TurnRouting
+from .routing import NoTurnRouting, Routing
 from .runtime import (
     RuntimeServer,
     SubscriberClosed,
@@ -310,7 +310,7 @@ class TurnRunner:
 
     def acquire_turn(
         self, resources: AsyncExitStack, session_id: str, thread_name: str,
-        turn_id: TurnId, detail: str, routing: TurnRouting | None = None, *,
+        turn_id: TurnId, detail: str, routing: Routing = NoTurnRouting(), *,
         task: TurnTask | None = None,
     ) -> RegistryOwner:
         """Bind the exact installed lease to cleanup before worker delivery.

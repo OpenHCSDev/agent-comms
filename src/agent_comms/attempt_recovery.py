@@ -468,8 +468,7 @@ class RecoveryMonitorCapability:
             raise RecoveryBlocked("native attempt has no original input")
         terminal = PendingStopReason
         revision = MissingFile()
-        session = source.selected_session
-        if session is not None:
+        for session in source.selected_session.present():
             with expected_prompt_bindings(store, (source.input_id,)) as bindings:
                 binding = bindings.get(source.input_id)
                 if binding is None or binding.identity != source.identity:

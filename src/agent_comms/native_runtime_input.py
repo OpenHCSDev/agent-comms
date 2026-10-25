@@ -23,7 +23,7 @@ from .field_codec import (
     FieldCodec, InputId, MalformedRecord, NativeContext, RootId, SlotId, ThreadLookup,
 )
 from .native_pi import NativeContextRecord
-from .native_session_reopen import NativeSessionIdentity
+from .native_session_reopen import NativeSessionIdentity, NoPiSessionId, NoSessionRetention, PiSessionId
 from .native_tool_call import ToolCallId
 from .native_claim_epoch import NativeClaimEpoch, UnrecordedNativeClaim
 from .tool_denial import SelectedToolDenied
@@ -64,7 +64,6 @@ from .typed_table import (
     WriteOnceColumns,
     sql_literal,
 )
-from .turn_item import PiSessionId
 
 if TYPE_CHECKING:
     from .native_pi import NativeContextProof
@@ -131,17 +130,12 @@ class NativeRuntimeInput(
         self.execution
         # The selected identity and the later context acknowledgement are separate
         # acquisition phases of this ORIGINAL row, never two source selectors.
-        session = self.selected_session
-        if session is None:
-            from .field_codec import FieldCodec
-
-            FieldCodec.decode(type(None), self.session_file)
         self.reference
 
     @property
-    def selected_session(self) -> NativeSessionIdentity | None:
-        """Decode the optional original SQL session group at its owner."""
-        return None if self.session_id is None else self.require_session_identity()
+    def selected_session(self) -> NativeSessionIdentity | NoSessionRetention:
+        """The original SQL session group owns its selected and absent cases."""
+        return self.session_id.selected_session(self)
 
     @property
     def context_anchor(self) -> NativeColumn:
@@ -277,7 +271,7 @@ class NativeRuntimeInput(
             nullable=True,
         ),
     ] = field(default_factory=UnrecordedNativeClaim)
-    session_id: PiSessionId | None = None
+    session_id: PiSessionId | NoPiSessionId = NoPiSessionId()
     session_file: str | None = None
     session_entry_id: Annotated[NativeColumn, NativeContext(str), Column(storage=TextStorage, nullable=True)] = UnrecordedNativeColumn()
     session_entry_start: Annotated[

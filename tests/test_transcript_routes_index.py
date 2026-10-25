@@ -28,7 +28,7 @@ def test_current_annotations_reopen_and_replace_only_addressed_entry(tmp_path):
     path = tmp_path / "annotations"
     owner = TranscriptRoutes(path)
     with owner.for_session("session") as routes:
-        assert routes.get("a") is None
+        assert routes.get("a").present() == ()
     assert not path.exists()
     first = TurnRouting(reply=MessageRoute("worker", ("#first",)))
     replacement = TurnRouting(reply=MessageRoute("worker", ("#replacement",)))
@@ -37,7 +37,7 @@ def test_current_annotations_reopen_and_replace_only_addressed_entry(tmp_path):
     with TranscriptRoutes(path).for_session("session") as routes:
         assert routes.get("a") == replacement
         assert routes.get("b") == first
-        assert routes.get("absent") is None
+        assert routes.get("absent").present() == ()
 
 
 def test_binding_preserves_first_display_and_rejects_different_input(tmp_path):

@@ -852,6 +852,10 @@ class DecoderPlan(ABC):
 
     target: object
 
+    @property
+    def accepts_null(self) -> bool:
+        return False
+
     def fits_wire(self, data: object) -> bool:
         """Check outer wire shape without decoding nested values.
 
@@ -1027,6 +1031,10 @@ class _RepresentedDecoder[T](ValueDecoder[T]):
     @property
     def wire_structure(self) -> DecoderPlan:
         return self.representation.wire_structure(self.structural)
+
+    @property
+    def accepts_null(self) -> bool:
+        return self.wire_structure.accepts_null
 
     @boundary_decoder
     def fits_wire(self, data: object) -> bool:
@@ -2407,6 +2415,10 @@ class _ScalarDecoder[T, Target = object](ValueDecoder[T]):
 
     target: Target
 
+    @property
+    def accepts_null(self) -> bool:
+        return self.accepts(None)
+
     def decode(self, data: object) -> T:
         if self.accepts(data):
             return data
@@ -2653,6 +2665,10 @@ class _LiteralDecoder[T](_ChoiceDecoder[T]):
 class UnionDecoder[T](_ContextDecoder[T]):
     origins = (Union, types.UnionType)
     alternatives: tuple[ValueDecoder[T], ...]
+
+    @property
+    def accepts_null(self) -> bool:
+        return any(alternative.accepts_null for alternative in self.alternatives)
 
     def fits_wire(self, data: object) -> bool:
         return any(alternative.fits_wire(data) for alternative in self.alternatives)

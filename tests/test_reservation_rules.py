@@ -12,7 +12,7 @@ from agent_comms.native_session_reopen import NativeSessionIdentity
 from agent_comms.session_revision import SessionRevision
 from agent_comms.thread_identity import RecordedThreadIncarnation
 from stored_inputs import stored_inputs
-from agent_comms.turn_item import PiSessionId
+from agent_comms.native_session_reopen import PiSessionId
 
 
 FIRST_KEY = AcpInputKey(InputId.mint())

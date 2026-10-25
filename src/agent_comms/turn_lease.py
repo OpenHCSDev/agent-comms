@@ -30,7 +30,7 @@ from .locked_store import DurableFile, JsonDocument, PatternFile
 from .message_reference import MessageReference
 from .read_basis import ChannelConversation, DMConversation
 from .reported_turn import NoReportedTurn, ReportedTurn, ReportedTurnState
-from .routing import TurnRouting
+from .routing import NoTurnRouting, Routing
 from .store_files import SharedLock, _store_lock
 from .thread_identity import (
     NoObservedTurn,
@@ -235,7 +235,7 @@ class ActiveTurn(Executing, RecordMember, TurnDeclaration):
     id: TurnId
     owner: ProcessIdentity
     started_at: float = field(default_factory=time.time)
-    routing: TurnRouting | None = None
+    routing: Routing = NoTurnRouting()
     claimed_generation: TurnGeneration = UnrecordedGeneration()
     turn_generation: TurnGeneration = UnrecordedGeneration()
     phase: TurnPhase = field(default_factory=PreparingPhase)

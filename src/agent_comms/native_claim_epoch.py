@@ -102,5 +102,4 @@ class RecordedNativeClaim(NativeClaimEpoch, JsonShapeMember):
         # VerifiedOwnerLoss. New send grants atomically record the selected file;
         # keep its additional subprocess check whenever it exists. Neither
         # representation permits borrowing the replacement owner's selection.
-        session = row.selected_session
-        return () if session is None else (session.path,)
+        return tuple(session.path for session in row.selected_session.present())

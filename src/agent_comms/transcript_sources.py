@@ -603,7 +603,7 @@ class AssignedTranscriptSource(TranscriptSource):
         events = super().native_events(record, routes, project_events, references)
         published = entry.final_reply and any(
             refs and self.sent_messages(refs).keys() >= set(refs)
-            for refs in (routing.publications if routing is not None else (), references)
+            for refs in (routing.publications, references)
         )
 
         return tuple(retained for event in events

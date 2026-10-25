@@ -10,7 +10,7 @@ from pathlib import Path
 import pytest
 
 from agent_comms.native_session_reopen import NativeReopenError, NativeSessionIdentity
-from agent_comms.turn_item import PiSessionId
+from agent_comms.native_session_reopen import PiSessionId
 
 pytestmark = pytest.mark.skipif(
     sys.platform != "linux", reason="Disposable Linux canonical native fixture"

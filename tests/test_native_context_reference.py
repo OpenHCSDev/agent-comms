@@ -44,7 +44,7 @@ from agent_comms.selected_triage import (
     IgnoreSelectedTriage,
 )
 from agent_comms.threads import Thread
-from agent_comms.turn_item import PiSessionId
+from agent_comms.native_session_reopen import PiSessionId
 
 
 def cursor():

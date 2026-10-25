@@ -26,6 +26,9 @@ def test_current_saved_failure_and_history_survive_retry_and_retirement(store):
     goal_id = GoalId.mint()
     store.create_goal(goal_id)
     attempt = store.reserve(goal_id, 1)
+    with sqlite3.connect(store.path) as conn:
+        # Declaring absence must not change the retained SQL NULL representation.
+        assert conn.execute("SELECT resolution FROM attempt_record").fetchone() == (None,)
     store.claim_launch(attempt)
     attempt.fail(store, FailedTurnResolution(BackendFailed))
     reopened = GoalAttemptStore.at(store.root)

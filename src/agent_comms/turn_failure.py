@@ -8,7 +8,7 @@ from contextlib import suppress
 from dataclasses import dataclass, replace
 from typing import TYPE_CHECKING, ClassVar
 
-from .attempt_resolution import AttemptResolution
+from .attempt_resolution import RecordedResolution
 from .declared_family import DeclaredFamily
 from .errors import StaleAttemptError
 from .native_arguments import SelectedModel
@@ -65,7 +65,7 @@ class TurnFailure(DeclaredFamily):
 
 
 @dataclass(frozen=True)
-class FailedTurnResolution(AttemptResolution):
+class FailedTurnResolution(RecordedResolution):
     failure: type[TurnFailure]
 
 

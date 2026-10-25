@@ -42,17 +42,17 @@ from .native_input_record import NativeInputLocation
 from .pi_payloads import Opaque, PiField, PiMessage, PiOmitted, PiPayload, ReportedText
 from .pi_vocabulary import PendingStopReason, ThinkingLevel
 from .recorded_time import GeneratedTimestamp
-from .routing import TurnRouting
+from .routing import NoTurnRouting, Routing
 from .transcript_events import ImportedMessage, NoticeTranscript, TranscriptEvent
-from .transcript_routes import InputDisplay, _SessionRoutes
-from .turn_item import PiSessionId
+from .transcript_routes import InputPresentation, NoInputDisplay, _SessionRoutes
+from .native_session_reopen import PiSessionId
 
 
 @dataclass(frozen=True)
 class TranscriptProjection:
     position: int = field(kw_only=True)
-    routing: TurnRouting | None = None
-    input_display: InputDisplay | None = None
+    routing: Routing = NoTurnRouting()
+    input_display: InputPresentation = NoInputDisplay()
 
 
 @dataclass(frozen=True, slots=True)
@@ -89,7 +89,7 @@ class RecordedEntry(PiPayload):
     def require_entry_id(self) -> str:
         return self.source_coordinates.original_id
 
-    def routing_in(self, routes: _SessionRoutes) -> TurnRouting | None:
+    def routing_in(self, routes: _SessionRoutes) -> Routing:
         return routes.get(self.id)
 
     @property
@@ -491,9 +491,9 @@ class NativeEvidenceScope(ExitStack):
 class SessionEntry(NativeEntry):
     id: PiSessionId
 
-    def routing_in(self, routes: _SessionRoutes) -> TurnRouting | None:
+    def routing_in(self, routes: _SessionRoutes) -> Routing:
         """A session header is not an entry and holds no turn annotation."""
-        return None
+        return NoTurnRouting()
 
     @property
     def child_parent(self) -> object:

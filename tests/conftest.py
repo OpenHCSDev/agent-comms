@@ -78,7 +78,7 @@ class TranscriptRecords:
 
     def session(self, id: str, **coordinates: JsonValue) -> SessionEntry:
         from agent_comms.native_entries import SessionEntry
-        from agent_comms.turn_item import PiSessionId
+        from agent_comms.native_session_reopen import PiSessionId
 
         return self.entry(SessionEntry, id=FieldCodec.decode(PiSessionId, id), **coordinates)
 

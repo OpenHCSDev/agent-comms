@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from .declared_family import DeclaredFamily
-from .field_codec import MessageId, NullMember, RetryDecisionId, TurnId
+from .field_codec import MessageId, NullMember, RecordMember, RetryDecisionId, SubclassUnion, TurnId
 
 
 class WorkDecision(DeclaredFamily, affix="Decision"):
@@ -32,8 +32,16 @@ class OrderDecision(WorkDecision):
     order: str
 
 
-class AttemptResolution(DeclaredFamily, affix="Resolution"):
-    """Why an attempt ended, retained as the declared member."""
+class AttemptResolution(SubclassUnion, affix="Resolution"):
+    """Why an attempt ended; the absent member keeps the original null wire shape."""
+
+    @classmethod
+    def decodes_tagged_records(cls) -> bool:
+        return True
+
+
+class RecordedResolution(RecordMember, AttemptResolution, declared_name=None):
+    """A supplied outcome keeps its original tagged record representation."""
 
 
 @dataclass(frozen=True)
@@ -42,25 +50,25 @@ class NoResolution(NullMember, AttemptResolution):
 
 
 @dataclass(frozen=True)
-class DecidedResolution(AttemptResolution):
+class DecidedResolution(RecordedResolution):
     decision: WorkDecision
 
 
 @dataclass(frozen=True)
-class GoalCleared(AttemptResolution):
+class GoalCleared(RecordedResolution):
     pass
 
 
 @dataclass(frozen=True)
-class OperatorStopped(AttemptResolution):
+class OperatorStopped(RecordedResolution):
     pass
 
 
 @dataclass(frozen=True)
-class OriginFailed(AttemptResolution):
+class OriginFailed(RecordedResolution):
     pass
 
 
 @dataclass(frozen=True)
-class UnverifiedLaunchRetired(AttemptResolution):
+class UnverifiedLaunchRetired(RecordedResolution):
     pass

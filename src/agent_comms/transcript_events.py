@@ -18,7 +18,7 @@ from .message_reference import MessageReference
 from .messages import Message
 from .native_tool_call import ToolCallId
 from .recorded_time import EventTime, UnrecordedEventTime
-from .routing import MessageRoute, TurnRouting
+from .routing import MessageRoute, NoTurnRouting, Routing, TurnRouting
 from .tool_results import SENT_MESSAGE_MIME, NoSentMessage, NoToolDiff, ToolDiff, ToolText
 from .transcript_merge import EventMerge, StreamingMerge
 from .turn_item import NativeItemId, NativeTurnId
@@ -183,7 +183,7 @@ class TranscriptCoverage:
 
 @dataclass(frozen=True, kw_only=True)
 class RecordedTranscript(TranscriptEvent):
-    routing: TurnRouting | None = None
+    routing: Routing = NoTurnRouting()
     source: MessageReference | None = None
 
 
@@ -221,7 +221,7 @@ class OutgoingRoute:
 
     @property
     def routed(self) -> bool:
-        return self.routing is not None and self.routing.reply is not None
+        return self.routing.outgoing
 
 
 class AgentTextTranscript(OutgoingRoute, LiveTextTranscript):
@@ -300,7 +300,7 @@ class UserTranscript(NativeTextTranscript):
 
     @property
     def routed(self) -> bool:
-        return self.routing is not None and bool(self.routing.requests)
+        return self.routing.incoming
 
     def import_to(self, accept: Callable[[ImportedMessage], None]) -> None:
         ImportedRequest(self.text).import_to(accept)
@@ -316,7 +316,7 @@ class UserTranscript(NativeTextTranscript):
         remaining = tuple(reference for reference in requests if reference not in originals)
         if not remaining:
             return ()
-        return (replace(self, routing=TurnRouting(remaining, self.routing.reply)),)
+        return (replace(self, routing=self.routing.with_requests(remaining)),)
 
 
 class AssistantTranscript(AgentTextTranscript):
@@ -339,7 +339,7 @@ class AssistantTranscript(AgentTextTranscript):
         return replace(self, routing=TurnRouting(publications=publications))
 
     def for_external_source(self, source: TranscriptSource) -> tuple[TranscriptEvent, ...]:
-        references = self.routing.publications if self.routing is not None else ()
+        references = self.routing.publications
         published = bool(references) and source.sent_messages(references).keys() >= set(references)
         return self.for_assigned_source(source, published)
 

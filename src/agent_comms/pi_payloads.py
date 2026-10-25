@@ -67,7 +67,6 @@ from .tool_declaration import ToolDeclaration
 from .tool_results import NoSentMessage, NoToolDiff, ToolDiff
 from .transcript_events import (
     AssistantTranscript,
-    ContextTranscript,
     NoticeTranscript,
     SentTranscript,
     ThinkingTranscript,
@@ -79,7 +78,8 @@ from .turn_failure import (
     ModelRequestFailed,
     ProviderTransportFailed,
 )
-from .turn_item import PiRequestKey, PiSessionId
+from .turn_item import PiRequestKey
+from .native_session_reopen import PiSessionId
 
 if TYPE_CHECKING:
     from .agent_events import AgentEvent, ProviderUsage
@@ -908,7 +908,7 @@ class AssistantMessage(PublicInstructionAnnotations, PiMessage):
         for part in self.parts:
             for event in part.assistant_transcript(context.position, timestamp):
                 event.append_to(events)
-        return [replace(event, routing=context.routing if context else None) for event in events]
+        return [replace(event, routing=context.routing) for event in events]
 
 
 class UserMessage(PiMessage):
@@ -924,29 +924,26 @@ class UserMessage(PiMessage):
     def observe_start_abort(self, session, event):
         session.observe_input_during_abort(event)
 
-    def transcript_events(self, context, timestamp: float):
-        routing, display = context.routing, context.input_display
+    @property
+    def original_text(self) -> str:
         # Preserve exact separators, including empty text blocks, for provenance.
-        raw_text = "\n".join(text for part in self.parts for text in part.text_parts())
-        if display is not None and display.sent_text_digest is not None:
-            if self.content is not None and display.matches(raw_text):
-                routing = display.routing
-            else:
-                routing = display = None
-        parts = self.parts
-        events = []
-        if display is not None:
-            if raw_text and raw_text != display.text:
-                events.append(ContextTranscript(raw_text, position=context.position, timestamp=timestamp))
-            if display.text is None:
-                return events
-            parts = (
-                TextContent(display.text),
-                *(retained for part in parts
-                  for retained in part.with_display_text(display.text).present()),
-            )
-        for part in parts:
-            events.extend(part.user_transcript(context.position, timestamp))
+        return "\n".join(text for part in self.parts for text in part.text_parts())
+
+    def matches_display(self, display) -> bool:
+        return self.content is not None and display.matches(self.original_text)
+
+    def display_parts(self, text: str):
+        return (
+            TextContent(text),
+            *(retained for part in self.parts
+              for retained in part.with_display_text(text).present()),
+        )
+
+    def transcript_events(self, context, timestamp: float):
+        return context.input_display.project_message(self, context, timestamp)
+
+    def project_parts(self, parts, context, timestamp: float, routing):
+        events = [event for part in parts for event in part.user_transcript(context.position, timestamp)]
         events = [replace(event, routing=routing) for event in events]
         for input_id in self.input_id.present():
             events = [event.with_native_input(input_id) for event in events]

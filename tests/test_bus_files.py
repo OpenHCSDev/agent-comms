@@ -20,7 +20,7 @@ from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.repository_name import RepositoryName
 from agent_comms.threads import Thread
 from agent_comms.todos import TodoStore
-from agent_comms.turn_item import PiSessionId
+from agent_comms.native_session_reopen import PiSessionId
 from agent_comms.typed_table import ReconciledFile
 from bus_record_fixture import prepare_native_comms
 from test_todos import order

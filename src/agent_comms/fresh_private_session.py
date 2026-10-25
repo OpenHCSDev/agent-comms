@@ -15,7 +15,7 @@ from agent_comms.native_session_files import NativeSessionFiles
 from .native_session_files import PrivateSession, BusTranscriptFile
 from .native_session_reopen import NativeSessionIdentity
 from .private_path import PrivateFileRole
-from .turn_item import PiSessionId
+from .native_session_reopen import PiSessionId
 
 
 def create_fresh_private_session(

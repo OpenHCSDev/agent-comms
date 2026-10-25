@@ -8,12 +8,14 @@ from .input_key import InputKey
 
 from . import turn_origin
 from collections.abc import Callable, Iterator, Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Annotated, TYPE_CHECKING
 
 
 from .channel_targets import CommandTarget
-from .field_codec import ThreadLookup, FieldCodec, NullMember, WireOmitDefault, GoalId
+from .field_codec import (
+    ThreadLookup, FieldCodec, NullMember, RecordMember, SubclassUnion, WireOmitDefault, GoalId,
+)
 from .message_reference import MessageReference
 from .messages import PublicSender
 from .read_basis import DMDisplayScope, MessageDisplayScope
@@ -66,20 +68,59 @@ class MessageRoute:
         return FieldCodec.decode(cls, data)
 
 
+class Routing(SubclassUnion, affix="Routing"):
+    """A recorded route or its declared absence; readers ask the same owner."""
+
+    @property
+    def requests(self) -> tuple[MessageReference, ...]:
+        return ()
+
+    @property
+    def publications(self) -> tuple[MessageReference, ...]:
+        return ()
+
+    @property
+    def incoming(self) -> bool:
+        return False
+
+    @property
+    def outgoing(self) -> bool:
+        return False
+
+    def validate_input(self, sent_text: str | None) -> None:
+        pass
+
+    def with_requests(self, requests: tuple[MessageReference, ...]) -> Routing:
+        return self
+
+
 @dataclass(frozen=True, slots=True)
-class TurnRouting:
+class NoTurnRouting(NullMember, Routing):
+    """No route was recorded for this native item."""
+
+
+@dataclass(frozen=True, slots=True)
+class TurnRouting(RecordMember, Routing):
     requests: tuple[MessageReference, ...] = ()
     reply: MessageRoute | None = None
     publications: Annotated[
         tuple[MessageReference, ...], WireOmitDefault()
     ] = ()
 
-    def to_wire(self) -> dict[str, object]:
-        return FieldCodec.encode(self)
+    @property
+    def incoming(self) -> bool:
+        return bool(self.requests)
 
-    @classmethod
-    def from_wire(cls, data: Mapping) -> TurnRouting:
-        return FieldCodec.decode(cls, data)
+    @property
+    def outgoing(self) -> bool:
+        return self.reply is not None
+
+    def validate_input(self, sent_text: str | None) -> None:
+        if sent_text is None or self.outgoing:
+            raise ValueError("Input routing requires exact sent text and no outgoing reply claim.")
+
+    def with_requests(self, requests: tuple[MessageReference, ...]) -> TurnRouting:
+        return replace(self, requests=requests, publications=())
 
     def requires_annotation(self, published: tuple[MessageReference, ...]) -> bool:
         return bool(self.requests or published)

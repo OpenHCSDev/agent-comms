@@ -35,7 +35,7 @@ from .field_codec import (
     NativeContext,
     WireName,
 )
-from .turn_item import PiSessionId
+from .native_session_reopen import PiSessionId
 from .transcript_routes import InputDisplay
 from .typed_table import Column, IntegerStorage, SqlStorage, TextStorage
 

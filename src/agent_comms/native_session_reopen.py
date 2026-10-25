@@ -7,13 +7,14 @@ from .native_failures import NativePiUnavailable
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Annotated, TYPE_CHECKING
-from .field_codec import MalformedRecord, boundary_decoder, WireName
+from .field_codec import FieldCodec, MalformedRecord, NullMember, PresentMember, boundary_decoder, WireName
 from abc import ABC, abstractmethod
 from .private_path import FileRevision
-from .turn_item import PiSessionId
+from .turn_item import FreshNativeId
 
 if TYPE_CHECKING:
     from .native_child import PiSessionChild
+    from .native_runtime_input import NativeRuntimeInput
     from .native_entries import NativeEvidenceRead
     from agent_comms.native_pi import NativeContextProof
     from .pi_native_backend import PersistentPiSession
@@ -23,7 +24,27 @@ class NativeReopenError(ValueError):
     """Saved session cannot be safely reloaded; no provider input may start."""
 
 
-class SessionRetention(ABC):
+class NativeSessionSelection:
+    """The selected-id declaration owns the saved-session answer for an input."""
+
+    def selected_session(self, row: NativeRuntimeInput) -> NativeSessionIdentity | NoSessionRetention:
+        FieldCodec.decode(type(None), row.session_file)
+        return NoSessionRetention()
+
+
+class PiSessionId(FreshNativeId, NativeSessionSelection):
+    """The Pi session manager's saved session identity."""
+
+    def selected_session(self, row: NativeRuntimeInput) -> NativeSessionIdentity:
+        return row.require_session_identity()
+
+
+@dataclass(frozen=True)
+class NoPiSessionId(NullMember, NativeSessionSelection):
+    """The original native input has not selected a saved session."""
+
+
+class SessionRetention(PresentMember, ABC):
     """Only an attested saved identity can return a child to its session owner."""
 
     @classmethod
@@ -35,7 +56,7 @@ class SessionRetention(ABC):
     def retain(self, child: PiSessionChild, session: PersistentPiSession) -> bool: ...
 
 
-class NoSessionRetention(SessionRetention):
+class NoSessionRetention(NullMember, SessionRetention):
     def retain(self, child: PiSessionChild, session: PersistentPiSession) -> bool:
         return False
 

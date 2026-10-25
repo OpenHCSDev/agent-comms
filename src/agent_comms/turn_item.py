@@ -35,10 +35,6 @@ class PiRequestKey(FreshNativeId):
     """A Pi command's request correlation key."""
 
 
-class PiSessionId(FreshNativeId):
-    """The Pi session manager's saved session identity."""
-
-
 class NativeItemId(FreshNativeId):
     """One item within a harness's turn."""
 

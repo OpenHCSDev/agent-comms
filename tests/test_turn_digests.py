@@ -27,7 +27,8 @@ from agent_comms.transcript_events import AssistantTranscript, TurnDigest
 from agent_comms.turn_context import JournalProvenance, SegmentManifest, TranscriptSegment, WireProvenance
 from agent_comms.turn_digests import LastTurns, TurnBound, TurnsOlderThan, TurnsBefore, TurnsSince
 from agent_comms.bus import Bus
-from agent_comms.turn_item import NativeItemId, NativeTurnId, PiSessionId
+from agent_comms.turn_item import NativeItemId, NativeTurnId
+from agent_comms.native_session_reopen import PiSessionId
 from agent_comms.watched import FileSource
 from agent_comms.threads import Thread
 

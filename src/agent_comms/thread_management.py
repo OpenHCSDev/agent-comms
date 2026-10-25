@@ -57,7 +57,7 @@ from .thread_model import DeclaredModel, ThreadModel, UndeclaredModel
 from .thread_owned_state import ThreadOwnedState
 from .thread_text import ForkedParent, GivenThreadText, NoThreadText, ThreadText
 from .threads import KeptModel, ModelChoice, NextTurnConfiguration, Thread
-from .turn_item import PiSessionId
+from .native_session_reopen import PiSessionId
 from .tool_result import ToolResult
 
 

@@ -30,7 +30,8 @@ from .turn_context import (
 )
 
 from .typed_table import StoreRows, Column, DurableStore, Generated, Index, SingletonRow, TypedTable
-from .turn_item import NativeItemId, PiSessionId
+from .turn_item import NativeItemId
+from .native_session_reopen import PiSessionId
 
 
 @dataclass(frozen=True)

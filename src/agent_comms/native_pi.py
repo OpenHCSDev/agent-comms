@@ -65,7 +65,7 @@ if TYPE_CHECKING:
     from .native_entries import NativeEntry, NativeEvidenceRead, SessionEntry
     from .selected_session import SelectedSession
     from .turn_failure import TurnFailure
-    from .turn_item import PiSessionId
+    from .native_session_reopen import PiSessionId
 
 CAPABILITY = "pi-native-input-v1-live-only"
 
