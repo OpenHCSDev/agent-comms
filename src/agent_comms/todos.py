@@ -1399,7 +1399,7 @@ class OrderWords(WireValue):
     text: str
 
     def __post_init__(self) -> None:
-        if refused := self.refused(self.text):
+        if refused := self.wording_refusal(self.text):
             raise ToolRefusedError(refused)
 
     def to_wire(self) -> str:
@@ -1418,6 +1418,12 @@ class OrderWords(WireValue):
 
     @classmethod
     def refused(cls, text: str) -> str | None:
+        """The writer's check: it may print a note, which a decoded record never does."""
+        cls.flag(text)
+        return cls.wording_refusal(text)
+
+    @classmethod
+    def wording_refusal(cls, text: str) -> str | None:
         found = cls.found(text)
         if len(text.split()) < cls.least_words or cls.refuses(found):
             return cls.refusal.format(cls.least_words, found)
@@ -1426,6 +1432,10 @@ class OrderWords(WireValue):
     @staticmethod
     def refuses(found: list[str]) -> bool:
         return bool(found)
+
+    @classmethod
+    def flag(cls, text: str) -> None:
+        """A family that refuses has no note to print; one that only flags overrides this."""
 
     @classmethod
     def found(cls, text: str) -> list[str]:
@@ -1445,9 +1455,13 @@ class PlainText(DirectiveWords):
     @staticmethod
     def refuses(found: list[str]) -> bool:
         """Flags, never blocks: a wording slip costs a note, not a resend."""
-        if found:
-            print(f"Flag: jargon {', '.join(found)} hides what happened; say it plainly.", file=sys.stderr)
         return False
+
+    @classmethod
+    def flag(cls, text: str) -> None:
+        """The note goes to whoever writes the text, at the write; decoding a record never prints it."""
+        if found := cls.found(text):
+            print(f"Flag: jargon {', '.join(found)} hides what happened; say it plainly.", file=sys.stderr)
 
 
 class VerdictReason(PlainText):
@@ -1492,11 +1506,11 @@ class StrikeReason(VerdictReason):
     least_words = 10
 
     @classmethod
-    def refused(cls, text: str) -> str | None:
+    def wording_refusal(cls, text: str) -> str | None:
         cited = [span.group(0).strip('`"“” ') for span in cls.CITED.finditer(text)]
         if cited and all(PlainText.found(span) for span in cited):
             return f"{cited} is the unit's wording; send it a correction, not a strike."
-        return super().refused(text)
+        return super().wording_refusal(text)
 
 
 class OrderText(OrderWords):
@@ -3336,11 +3350,12 @@ class ToolCallVerdict(OrderVerdict, TodoOperation, declared_name=None):
 @dataclass(frozen=True)
 class OrderQuote:
     quote: str
+    rule: ClassVar[str] = "Quote 4+ words of the order this verdict carries out."
 
     def require_quote(self, text: str) -> None:
         quoted = " ".join(self.quote.split())
         if len(quoted.split()) < 4 or quoted not in " ".join(text.split()):
-            raise TodoError("Quote 4+ words of the order this verdict carries out.")
+            raise TodoError(self.rule)
 
 
 @dataclass(frozen=True)
@@ -3357,6 +3372,8 @@ class QuotedVerdict(OrderQuote, OrderVerdict, declared_name=None):
 class AcceptedVerdict(QuotedVerdict, ToolCallVerdict):
     """The tool call carries out the order clause it quotes."""
     line = "Accepted"
+    branch_rule: ClassVar[str] = (
+        "Added branches need --no-owner: 12+ words with because and an absolute file:line.")
 
     @classmethod
     def require_branches(cls, added: int, no_owner: str | None) -> None:
@@ -3364,8 +3381,7 @@ class AcceptedVerdict(QuotedVerdict, ToolCallVerdict):
             return
         if not (no_owner and len(no_owner.split()) >= 12 and re.search(r'\bbecause\b', no_owner)
                 and re.search(r'/\S+:\d+', no_owner)):
-            raise TodoError(
-                'Added branches need --no-owner: 12+ words with because and an absolute file:line.')
+            raise TodoError(cls.branch_rule)
 
 
 @dataclass(frozen=True)
