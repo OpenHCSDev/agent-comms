@@ -43,7 +43,9 @@ from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.repository_name import RepositoryName
 from agent_comms.storage_rules import StorageRule
 from agent_comms.service_passes import ServicePassStore
-from agent_comms.standing_rules import RepeatedTodoChange, ServicePassFailing, StandingRule
+from agent_comms.standing_rules import (
+    RepeatedTodoChange, ServicePassFailing, StaleTodoDecision, StandingRule,
+)
 from agent_comms.thread_execution import ExternalThreadExecution
 from agent_comms.thread_identity import CoreWatcherIncarnation
 from agent_comms.heartbeat_frame import HeartbeatFrame
@@ -211,6 +213,30 @@ def test_a_concurrent_unstrike_does_not_end_the_heartbeat_pass(struck_unowned_bu
         assert stale.redecided(c, 'lead', assigned) == ()
         update = CommanderUpdate.latest(c, c.registry.require('lead').incarnation)
         assert update is not None and not update.not_applied
+        assert RulePing.capture(following) in update.handled
+        assert c.registry.require('lead').incarnation in (
+            ServicePassStore.at(c.root).read().commander_completed)
+
+
+def test_a_non_refreshable_todo_conflict_does_not_end_the_heartbeat_pass(checkout_bus):
+    c = checkout_bus
+
+    @dataclass(frozen=True)
+    class ConflictingServicePass(ServicePassFailing, declared_name=None):
+        current: Todo
+
+        def enforce(self, comms: Comms, commander: str) -> None:
+            raise TodoConflict(self.current)
+
+    current = c.goals.todos.get('P1')
+    stale = ConflictingServicePass('stale-rule', time.time(), 'changed row', current)
+    following = ServicePassFailing('following-rule', time.time(), 'independent source')
+    with LaunchRoot.from_path(c.root).selected():
+        run_heartbeat_rules(c, (stale, following))
+        update = CommanderUpdate.latest(c, c.registry.require('lead').incarnation)
+        assert update is not None
+        assert update.not_applied == (stale.rejected_line(StaleTodoDecision(current)),)
+        assert RulePing.capture(stale) not in update.handled
         assert RulePing.capture(following) in update.handled
         assert c.registry.require('lead').incarnation in (
             ServicePassStore.at(c.root).read().commander_completed)

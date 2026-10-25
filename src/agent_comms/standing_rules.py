@@ -77,19 +77,31 @@ class BlocksRelease:
     the signal is gone: a quote is the answer, never the relief."""
 
 
-class RepeatedTodoChange(RejectedEnforcementError):
+class StaleTodoDecision(RejectedEnforcementError):
+    """A rule cannot refresh its decision after the row changes."""
+
+    reason: ClassVar[str] = "todo decision is stale"
+
+    def __init__(self, current: Todo) -> None:
+        self.current = current
+        super().__init__(self.explanation())
+
+    def explanation(self) -> str:
+        return f"{self.current.id}: decision is stale at revision {self.current.revision}"
+
+
+class RepeatedTodoChange(StaleTodoDecision):
     """The one refreshed decision also lost its observed revision."""
 
     reason: ClassVar[str] = "todo changed again"
 
     def __init__(self, previous: Todo, current: Todo) -> None:
         self.previous = previous
-        self.current = current
-        super().__init__(f"{previous.id}: revision {previous.revision} changed again "
-                         f"to revision {current.revision}")
+        super().__init__(current)
 
     def explanation(self) -> str:
-        return str(self)
+        return (f"{self.previous.id}: revision {self.previous.revision} changed again "
+                f"to revision {self.current.revision}")
 
 
 class StandingRule(DeclaredFamily, affix="StandingRule", discovery_package="agent_comms.commander"):
@@ -115,7 +127,7 @@ class StandingRule(DeclaredFamily, affix="StandingRule", discovery_package="agen
 
     def redecided(self, comms: Comms, commander: str, current: Todo) -> tuple[StandingRule, ...]:
         """Rules without a Todo decision cannot refresh one."""
-        raise TodoConflict(current)
+        raise StaleTodoDecision(current)
 
     @staticmethod
     def enforce_all(
