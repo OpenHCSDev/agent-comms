@@ -15,6 +15,7 @@ from conftest import installed_comms
 from agent_comms.native_entries import TranscriptProjection
 from agent_comms.pi_payloads import PiMessage
 from agent_comms.threads import Thread
+from agent_comms.transcript_routes import DisplayText, NoDisplayText
 from bus_record_fixture import FIRST_INPUT_ID, SECOND_INPUT_ID, THIRD_INPUT_ID
 
 GOAL_PROMPT = (
@@ -37,13 +38,13 @@ def test_saved_goal_prompt_hidden_but_followup_and_images_survive_reopen(tmp_pat
     comms = installed_comms(tmp_path / "wire")
     comms.registry.declare(Thread('worker', frozenset(), str(tmp_path)))
     # These annotations are committed before sending, before Pi creates its first file.
-    comms.transcripts.routes.record_input_display(FIRST_INPUT_ID, None)
+    comms.transcripts.routes.record_input_display(FIRST_INPUT_ID, NoDisplayText())
     comms.transcripts.routes.record_input_display(
-        SECOND_INPUT_ID, "Please inspect this image\nthen continue."
+        SECOND_INPUT_ID, DisplayText("Please inspect this image\nthen continue.")
     )
     # Send now checks the same already-bound ID again; it cannot change its display.
     comms.transcripts.routes.record_input_display(
-        SECOND_INPUT_ID, "User follow-up: private wrapper")
+        SECOND_INPUT_ID, DisplayText("User follow-up: private wrapper"))
     session = tmp_path / "session.jsonl"
     rows = [
         saved_row(FIRST_INPUT_ID, GOAL_PROMPT),
@@ -75,14 +76,14 @@ def test_saved_goal_prompt_hidden_but_followup_and_images_survive_reopen(tmp_pat
 
 def test_incomplete_durable_annotation_schema_is_not_repaired(tmp_path):
     comms = wire(tmp_path / "wire")
-    comms.transcripts.routes.record_input_display(FIRST_INPUT_ID, "first input")
+    comms.transcripts.routes.record_input_display(FIRST_INPUT_ID, DisplayText("first input"))
     path = comms.transcripts.routes.path
     with sqlite3.connect(path) as connection:
         connection.execute("DROP TABLE transcript_route")
     before = path.read_bytes()
     reopened = wire(comms.root)
     with pytest.raises(ValueError):
-        reopened.transcripts.routes.record_input_display(SECOND_INPUT_ID, None)
+        reopened.transcripts.routes.record_input_display(SECOND_INPUT_ID, NoDisplayText())
     with pytest.raises(ValueError), reopened.transcripts.routes.for_session("session") as routes:
         routes.input_display(FIRST_INPUT_ID)
     assert path.read_bytes() == before
@@ -103,8 +104,8 @@ async def test_acp_saved_transcript_replay_hides_only_owned_internal_input(tmp_p
         )
     )
     comms.registry.declare(Thread('worker', frozenset(), str(tmp_path), session_file=RegistrySessionLocation.from_path(str(session), comms.root)))
-    comms.transcripts.routes.record_input_display(FIRST_INPUT_ID, None)
-    comms.transcripts.routes.record_input_display(SECOND_INPUT_ID, "test2")
+    comms.transcripts.routes.record_input_display(FIRST_INPUT_ID, NoDisplayText())
+    comms.transcripts.routes.record_input_display(SECOND_INPUT_ID, DisplayText("test2"))
     agent = CommsAgent(wire(comms.root))
     updates = []
 

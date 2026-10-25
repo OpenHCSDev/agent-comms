@@ -28,6 +28,7 @@ if TYPE_CHECKING:
     from .input_disposition import InputDispositions
     from .messages import Message
     from .threads import Thread
+    from .transcript_routes import NoSentInputText, SentInputText
 
 
 class NoTurnOrigin(NullMember, turn_origin.TurnOrigin):
@@ -106,7 +107,7 @@ class Routing(SubclassUnion, affix="Routing"):
     def outgoing(self) -> bool:
         return False
 
-    def validate_input(self, sent_text: str | None) -> None:
+    def validate_input(self, sent_text: SentInputText | NoSentInputText) -> None:
         pass
 
     def with_requests(self, requests: tuple[MessageReference, ...]) -> Routing:
@@ -134,8 +135,9 @@ class TurnRouting(RecordMember, Routing):
     def outgoing(self) -> bool:
         return bool(self.reply.present())
 
-    def validate_input(self, sent_text: str | None) -> None:
-        if sent_text is None or self.outgoing:
+    def validate_input(self, sent_text: SentInputText | NoSentInputText) -> None:
+        sent_text.require_present()
+        if self.outgoing:
             raise ValueError("Input routing requires exact sent text and no outgoing reply claim.")
 
     def with_requests(self, requests: tuple[MessageReference, ...]) -> TurnRouting:

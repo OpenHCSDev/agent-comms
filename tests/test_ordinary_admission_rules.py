@@ -10,6 +10,7 @@ from agent_comms.field_codec import GoalId, GoalWaitId
 from agent_comms.reservation_rules import ReservationViolationError
 from agent_comms.goal_waits import NoGoalWait, RecordedGoalWait
 from agent_comms.threads import Thread
+from agent_comms.transcript_routes import DisplayText
 
 
 def test_routed_dependency_source_uses_existing_goal_and_wait_authorities(tmp_path):
@@ -50,7 +51,7 @@ def test_routed_dependency_source_uses_existing_goal_and_wait_authorities(tmp_pa
         acceptance=NoTurnAcceptance(),
         goal_permission=TurnGoalPermission(ContinuationGoalPermission(goal)),
         prompt="Result",
-        original_display="Result",
+        original_display=DisplayText("Result"),
         origins=(message,),
         batch=SingleInputBatch(()),
     )

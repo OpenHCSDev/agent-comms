@@ -34,6 +34,7 @@ from .native_failures import NativeRequestFailure
 from .native_input_owner import RegistryOwner
 from .owned_send import OwnedSend
 from .routing import MessageRoute, NoMessageRoute, ScheduledTurn, TurnRouting
+from .transcript_routes import DisplayText, NoDisplayText
 from .turn_goal_account import TurnGoalAccount
 from .turn_goal_permission import (
     OwnerGoalPermission,
@@ -115,7 +116,7 @@ class OwnedTurn:
 
     def authorize(self):
         self.original_display = (
-            None if self.autonomous_goal else (self.initial_display_text or self.task)
+            NoDisplayText() if self.autonomous_goal else DisplayText(self.initial_display_text or self.task)
         )
         self.registry_owner = RegistryOwner.capture_local(
             self.runner.comms.registry.snapshot(), self.thread_name

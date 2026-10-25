@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-import hashlib
 import os
+import re
 from contextlib import ExitStack, closing
 from dataclasses import dataclass, replace
 from pathlib import Path
@@ -13,16 +13,18 @@ from agent_comms.native_session_files import NativeSessionFiles
 from agent_comms.native_session_reopen import NativeSessionIdentity
 
 from .errors import RelationViolationError
-from .field_codec import InputId, MalformedRecord
+from .field_codec import InputId, MalformedRecord, NominalSpelling, NominalText, NullMember, Sha256Text
 from .input_disposition import InputDispositions
 from .private_path import FileObservation, FileRevision
 from .routing import NoTurnRouting, Routing, TurnRouting
-from .field_codec import NullMember
+from .text_digest import TextDigest
 from .transcript_events import ContextTranscript, TranscriptEvent
 from .typed_table import Column, DurableStore, StoreRows, WithoutRowid
 
 
 if TYPE_CHECKING:
+    from sqlite3 import Connection
+
     from .native_entries import TranscriptProjection
     from .pi_payloads import UserMessage
 
@@ -42,6 +44,99 @@ class TranscriptRoute(TranscriptRoutesRows, WithoutRowid):
             raise RelationViolationError("Original native publication cannot be rebound")
 
 
+class InputText(NominalText):
+    """Exact input text, including empty strings and embedded newlines."""
+
+
+class InputTextSpelling(NominalSpelling[InputText]):
+    spelling = re.compile(r"[\s\S]*")
+
+
+class DisplayText(InputText):
+    def prompt_or(self, fallback: str) -> str:
+        return self.spelled_by.encode(self) or fallback
+
+
+@dataclass(frozen=True)
+class NoDisplayText(NullMember):
+    """The input is internal and contributes no human display text."""
+
+    def prompt_or(self, fallback: str) -> str:
+        return fallback
+
+
+class SentTextDigest(NominalText):
+    """The exact sent text owns matching and an immutable route binding."""
+
+    @classmethod
+    def of(cls, text: str) -> SentTextDigest:
+        return cls(TextDigest.of(text).value)
+
+    def matches(self, text: str) -> bool:
+        return self == self.of(text)
+
+    def project_message(
+        self, message: UserMessage, display: InputDisplay,
+        context: TranscriptProjection, timestamp: float,
+    ) -> list[TranscriptEvent]:
+        if not message.matches_display(display):
+            return message.project_parts(message.parts, context, timestamp, NoTurnRouting())
+        return display.project_display(message, context, timestamp, display.routing)
+
+    def record(self, previous: InputDisplay, connection: Connection, routing: Routing) -> None:
+        previous.sent_text_digest.bind(self, previous, connection, routing)
+
+    def bind(
+        self, incoming: SentTextDigest, previous: InputDisplay,
+        connection: Connection, routing: Routing,
+    ) -> None:
+        if (self, previous.routing) != (incoming, routing):
+            raise RelationViolationError("Native input routing cannot be rebound.")
+
+
+class SentTextDigestSpelling(NominalSpelling[SentTextDigest]):
+    spelling = Sha256Text.spelling
+
+
+@dataclass(frozen=True)
+class NoSentTextDigest(NullMember):
+    """No exact sent text was bound; retain the surrounding route."""
+
+    def matches(self, text: str) -> bool:
+        return True
+
+    def project_message(
+        self, message: UserMessage, display: InputDisplay,
+        context: TranscriptProjection, timestamp: float,
+    ) -> list[TranscriptEvent]:
+        return display.project_display(message, context, timestamp, context.routing)
+
+    def record(self, previous: InputDisplay, connection: Connection, routing: Routing) -> None:
+        pass
+
+    def bind(
+        self, incoming: SentTextDigest, previous: InputDisplay,
+        connection: Connection, routing: Routing,
+    ) -> None:
+        InputDisplay.update(
+            connection, where="native_id=?", parameters=(previous.native_id,),
+            routing=routing, sent_text_digest=incoming,
+        )
+
+
+class SentInputText(InputText):
+    @property
+    def digest(self) -> SentTextDigest:
+        return SentTextDigest.of(self)
+
+
+@dataclass(frozen=True)
+class NoSentInputText(NullMember):
+    @property
+    def digest(self) -> NoSentTextDigest:
+        return NoSentTextDigest()
+
+
 class InputPresentation:
     """A native input's display policy; the default preserves its original parts."""
 
@@ -58,34 +153,34 @@ class NoInputDisplay(NullMember, InputPresentation):
 
 @dataclass(frozen=True)
 class InputDisplay(TranscriptRoutesRows, WithoutRowid, InputPresentation):
-    """Owner-authored presentation for one native input; None text means internal."""
+    """Owner-authored presentation for one native input."""
 
     native_id: Annotated[InputId, Column(primary_key=True)]
-    text: str | None
+    text: DisplayText | NoDisplayText
     routing: Routing = NoTurnRouting()
-    sent_text_digest: str | None = None
+    sent_text_digest: SentTextDigest | NoSentTextDigest = NoSentTextDigest()
     checks = ("routing IS NULL OR sent_text_digest IS NOT NULL",)
 
     def matches(self, text: str) -> bool:
-        return (
-            self.sent_text_digest is None
-            or self.sent_text_digest == hashlib.sha256(text.encode("utf-8")).hexdigest()
-        )
+        return self.sent_text_digest.matches(text)
 
     def project_message(
         self, message: UserMessage, context: TranscriptProjection, timestamp: float,
     ) -> list[TranscriptEvent]:
-        routing = context.routing
-        if self.sent_text_digest is not None:
-            if not message.matches_display(self):
-                return message.project_parts(message.parts, context, timestamp, NoTurnRouting())
-            routing = self.routing
+        return self.sent_text_digest.project_message(message, self, context, timestamp)
+
+    def project_display(
+        self, message: UserMessage, context: TranscriptProjection,
+        timestamp: float, routing: Routing,
+    ) -> list[TranscriptEvent]:
         raw_text = message.original_text
         events: list[TranscriptEvent] = []
         if raw_text and raw_text != self.text:
             events.append(ContextTranscript(raw_text, position=context.position, timestamp=timestamp))
-        if self.text is not None:
-            events.extend(message.project_parts(message.display_parts(self.text), context, timestamp, routing))
+        for text in self.text.present():
+            events.extend(message.project_parts(
+                message.display_parts(text.spelled_by.encode(text)), context, timestamp, routing,
+            ))
         return events
 
 
@@ -245,29 +340,17 @@ class TranscriptRoutes(DurableStore):
     def record_input_display(
         self,
         native_id: InputId,
-        display_text: str | None,
+        display_text: DisplayText | NoDisplayText,
         *,
-        sent_text: str | None = None,
+        sent_text: SentInputText | NoSentInputText = NoSentInputText(),
         routing: Routing = NoTurnRouting(),
     ) -> None:
         """Persist before prompt write, including before Pi creates its session file."""
         routing.validate_input(sent_text)
-        digest = (
-            hashlib.sha256(sent_text.encode("utf-8")).hexdigest() if sent_text is not None else None
-        )
+        digest = sent_text.digest
         with self.writing() as connection:
             previous = InputDisplay.one(connection, native_id=native_id)
             if previous is None:
                 InputDisplay(native_id, display_text, routing, digest).insert(connection)
-            elif digest is not None:
-                if previous.sent_text_digest is not None:
-                    if (previous.sent_text_digest, previous.routing) != (digest, routing):
-                        raise RelationViolationError("Native input routing cannot be rebound.")
-                else:
-                    InputDisplay.update(
-                        connection,
-                        where="native_id=?",
-                        parameters=(native_id,),
-                        routing=routing,
-                        sent_text_digest=digest,
-                    )
+            else:
+                digest.record(previous, connection, routing)

@@ -92,18 +92,14 @@ def _identifier(name: str) -> str:
     return f'"{name}"'
 
 
-def _absent(member: object) -> bool:
-    """SQL NULL stores this union member: None, or a declared null member."""
-    return member is types.NoneType or (isinstance(member, type) and issubclass(member, NullMember))
-
-
 def _base_type(annotation: object) -> tuple[object, bool]:
     if get_origin(annotation) is Annotated:
         annotation = get_args(annotation)[0]
     if get_origin(annotation) in (Union, types.UnionType):
         members = get_args(annotation)
-        if len(members) == 2 and sum(map(_absent, members)) == 1:
-            return next(member for member in members if not _absent(member)), True
+        present = tuple(member for member in members if not compile_decoder(member).accepts_null)
+        if len(members) == 2 and len(present) == 1:
+            return present[0], True
     return annotation, compile_decoder(annotation).accepts_null
 
 

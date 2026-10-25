@@ -6,6 +6,8 @@ import json
 from pathlib import Path
 
 from agent_comms.routing import MessageRoute, TurnRouting
+from agent_comms.text_digest import TextDigest
+from agent_comms.transcript_routes import DisplayText, InputDisplay, NoDisplayText, SentInputText, TranscriptRoutes
 
 
 def _session(path: Path, count: int) -> None:
@@ -47,15 +49,31 @@ def test_binding_preserves_first_display_and_rejects_different_input(tmp_path):
     from agent_comms.transcript_routes import TranscriptRoutes
 
     owner = TranscriptRoutes(tmp_path)
-    owner.record_input_display(INPUT_ID, "human display")
-    owner.record_input_display(INPUT_ID, "wrapped display", sent_text="exact sent text")
+    owner.record_input_display(INPUT_ID, DisplayText("human display"))
+    owner.record_input_display(INPUT_ID, DisplayText("wrapped display"), sent_text=SentInputText("exact sent text"))
     with pytest.raises(RelationViolationError):
-        owner.record_input_display(INPUT_ID, "overwrite", sent_text="different text")
+        owner.record_input_display(INPUT_ID, DisplayText("overwrite"), sent_text=SentInputText("different text"))
     with TranscriptRoutes(tmp_path).for_session("session") as routes:
         row = routes.input_display(INPUT_ID)
         assert row.text == "human display"
         assert row.matches("exact sent text")
         assert not row.matches("different text")
+    with owner.snapshot() as connection:
+        assert tuple(connection.execute(
+            f'SELECT text, routing, sent_text_digest FROM "{InputDisplay.declared_name}"'
+        ).fetchone()) == ("human display", None, TextDigest.of("exact sent text").value)
+
+
+def test_empty_display_is_present_and_internal_display_remains_absent(tmp_path):
+    owner = TranscriptRoutes(tmp_path)
+    owner.record_input_display(INPUT_ID, DisplayText(""), sent_text=SentInputText(""))
+    with owner.for_session("session") as routes:
+        assert routes.input_display(INPUT_ID).text.present() == (DisplayText(""),)
+        assert routes.input_display(INPUT_ID).matches("")
+    internal = TranscriptRoutes(tmp_path / "internal")
+    internal.record_input_display(INPUT_ID, NoDisplayText())
+    with internal.for_session("session") as routes:
+        assert routes.input_display(INPUT_ID).text.present() == ()
 
 
 def test_reading_an_installed_store_writes_nothing(tmp_path, monkeypatch):
@@ -65,7 +83,7 @@ def test_reading_an_installed_store_writes_nothing(tmp_path, monkeypatch):
 
     routing = TurnRouting(reply=MessageRoute("worker", ("#first",)))
     TranscriptRoutes(tmp_path).record("session", ("a",), routing)
-    TranscriptRoutes(tmp_path).record_input_display(INPUT_ID, "shown", sent_text="sent")
+    TranscriptRoutes(tmp_path).record_input_display(INPUT_ID, DisplayText("shown"), sent_text=SentInputText("sent"))
     statements: list[str] = []
     connect = sqlite3.connect
 
@@ -93,7 +111,7 @@ def test_reading_a_differing_schema_refuses_without_repair(tmp_path):
 
     from agent_comms.transcript_routes import TranscriptRoutes
 
-    TranscriptRoutes(tmp_path).record_input_display(INPUT_ID, "shown")
+    TranscriptRoutes(tmp_path).record_input_display(INPUT_ID, DisplayText("shown"))
     path = TranscriptRoutes(tmp_path).path
     with sqlite3.connect(path) as connection:
         connection.execute("DROP TABLE transcript_route")

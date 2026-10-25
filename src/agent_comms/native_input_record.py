@@ -36,7 +36,7 @@ from .field_codec import (
     WireName,
 )
 from .native_session_reopen import PiSessionId
-from .transcript_routes import InputDisplay
+from .transcript_routes import InputDisplay, NoDisplayText
 from .typed_table import Column, IntegerStorage, SqlStorage, TextStorage
 
 if TYPE_CHECKING:
@@ -192,7 +192,7 @@ class NativeInputExecution(DeclaredFamily, affix="NativeExecution"):
         """
 
         return entry.events(replace(
-            projection, input_display=InputDisplay(user.input_id, None)
+            projection, input_display=InputDisplay(user.input_id, NoDisplayText())
         ))
 
     def require_attempt(self) -> FullNativeExecution:

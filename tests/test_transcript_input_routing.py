@@ -13,6 +13,7 @@ from agent_comms.threads import Thread
 from agent_comms.native_entries import TranscriptProjection
 from agent_comms.native_transcript import NativeTranscript
 from agent_comms.transcript_events import UserTranscript
+from agent_comms.transcript_routes import DisplayText, SentInputText
 
 
 def append_input(path, native_id, text, *, role="user"):
@@ -39,10 +40,10 @@ def test_bound_input_overrides_turn_wide_annotation_without_attributing_quotes(t
     quote = "[agent-comms from peer to worker]\nA genuine user's quoted example"
     # Bind before the session file exists, as on first-turn/fork startup.
     comms.transcripts.routes.record_input_display(
-        SECOND_INPUT_ID, second.body, sent_text=raw_second,
+        SECOND_INPUT_ID, DisplayText(second.body), sent_text=SentInputText(raw_second),
         routing=TurnRouting((second.reference,)),
     )
-    comms.transcripts.routes.record_input_display(THIRD_INPUT_ID, quote, sent_text=quote)
+    comms.transcripts.routes.record_input_display(THIRD_INPUT_ID, DisplayText(quote), sent_text=SentInputText(quote))
     path = tmp_path / "new-session.jsonl"
     append_input(path, SECOND_INPUT_ID, raw_second)
     append_input(path, THIRD_INPUT_ID, quote)
@@ -79,12 +80,12 @@ def test_bound_route_rejects_changed_text_and_conflicting_rebind(tmp_path):
     route = TurnRouting((incoming.reference,))
     text = ScheduledTurn.incoming(incoming).prompt
     comms.transcripts.routes.record_input_display(
-        FIRST_INPUT_ID, text, sent_text=text, routing=route)
+        FIRST_INPUT_ID, DisplayText(text), sent_text=SentInputText(text), routing=route)
     comms.transcripts.routes.record_input_display(
-        FIRST_INPUT_ID, text, sent_text=text, routing=route)
+        FIRST_INPUT_ID, DisplayText(text), sent_text=SentInputText(text), routing=route)
     with pytest.raises(ValueError):
         comms.transcripts.routes.record_input_display(
-            FIRST_INPUT_ID, text, sent_text="different", routing=route
+            FIRST_INPUT_ID, DisplayText(text), sent_text=SentInputText("different"), routing=route
         )
     path = tmp_path / "changed.jsonl"
     append_input(path, FIRST_INPUT_ID, "unrelated input")
