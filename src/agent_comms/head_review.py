@@ -5,6 +5,7 @@ Every path that posts that status goes through here.
 
 from __future__ import annotations
 
+import subprocess
 from abc import abstractmethod
 from dataclasses import dataclass
 from typing import Annotated, ClassVar
@@ -28,9 +29,32 @@ class PullRequestHead:
             raise ValueError("A pull request number must be positive.")
         GitCommitText.decode(self.head)
 
+    @classmethod
+    def among(cls, repositories: tuple[RepositoryName, ...], pr: int, head: str) -> PullRequestHead:
+        """The one candidate repository whose pull request ``pr`` is at ``head``. A single
+        candidate is the answer; several are told apart by GitHub, and none or two holding
+        that head is refused with what each one answered."""
+        candidates = tuple(cls(repository, pr, head) for repository in repositories)
+        if len(candidates) == 1:
+            return candidates[0]
+        reads = tuple((candidate, candidate.read()) for candidate in candidates)
+        held = tuple(candidate for candidate, read in reads
+                     if not read.returncode and read.stdout.strip().startswith(head))
+        if len(held) != 1:
+            answered = "; ".join(
+                f"{candidate.repo.to_wire()}#{pr}: {(read.stdout.strip() or read.stderr.strip())[:60]}"
+                for candidate, read in reads)
+            raise ValueError(f"{len(held)} registered repositories have #{pr} at {head}; "
+                             f"select --repo. {answered}")
+        return held[0]
+
+    def read(self) -> subprocess.CompletedProcess[str]:
+        """GitHub's answer for this pull request's head commit."""
+        return self.repo.rest(f"pulls/{self.pr}", "--jq", ".head.sha")
+
     def current(self) -> str:
         """The PR's full head commit, refused unless the reviewed head is still it."""
-        read = self.repo.rest(f"pulls/{self.pr}", "--jq", ".head.sha")
+        read = self.read()
         if read.returncode:
             raise ToolRefusedError(read.stderr.strip() or f"#{self.pr} could not be read.")
         current = GitCommitText.decode(read.stdout.strip())

@@ -453,9 +453,15 @@ class OwedAnswer(IndependentStandingRule, declared_name=None):
         """Whether an action naming these open messages answers this one."""
         return any(message.message_id == self.message.message_id for message in named)
 
-    def blocks(self, reached: frozenset[str], action: CommanderVerb) -> bool:
+    def blocks(self, reached: frozenset[str], action: CommanderVerb,
+               answered: tuple[OwedAnswer, ...]) -> bool:
         """An unanswered question must be answered before unrelated work."""
         return True
+
+    def answered_in(self) -> tuple[str, ...]:
+        """The threads a reply must reach to answer this debt by naming it; none when a reply
+        cannot clear it."""
+        return ()
 
     def asked_by(self, reached: frozenset[str]) -> bool:
         """Whether one of these threads asked it, so a reply reaching them answers it unnamed."""
@@ -697,6 +703,9 @@ class DirectiveUnacted(OwedAnswer, DatedStandingRule):
             for request in requests
             for directive, original in request.directive_messages(source, snapshot.names_for(commander))
         )
+
+    def answered_in(self) -> tuple[str, ...]:
+        return (self.message.sender,)
 
     def clearing_action(self) -> str:
         return (f"Order its next step with --answers {self.message.message_id}, reply to "

@@ -97,9 +97,8 @@ def test_judge_reviewing_after_ok_withdraws_the_accepted_status_on_that_head(hea
     holds it out of the merge queue until a new ok."""
     comms, github, request = head_bus
     context = order.Commander.read_root(comms.root)
-    common = ["--repo", request.repo.to_wire(), "--pr", str(request.pr), "--head", request.head,
-              "--why", ACCEPTED.text]
-    judge.main(["ok", *common], context)
+    common = ["--pr", str(request.pr), "--head", request.head]
+    judge.main(["ok", *common, "--why", ACCEPTED.text], context)
     judge.main(["reviewing", *common], context)
     posts = tuple(call for call in github.calls() if f"statuses/{request.head}" in call[1])
     assert [next(part for part in post if part.startswith("state=")) for post in posts] == [
@@ -142,12 +141,12 @@ def test_linked_head_rejection_strikes_revises_and_notifies_its_holder(head_bus)
                       PullRequestLink(request.repo, request.pr), held.generation).record(comms.goals, todo.id)
     todo = comms.goals.todos.get(todo.id)
     scope = HeadReviewOrder.for_request(
-        (todo,), request, "Repair the existing owner", (todo.order.checked().owner,),
+        (todo,), request, lambda _: "Repair the existing owner", (todo.order.checked().owner,),
     )
     invoke(comms, request, ReviewedHeadVerdict(ACCEPTED), scope)
     todo = comms.goals.todos.get(todo.id)
     scope = HeadReviewOrder.for_request(
-        (todo,), request, "Repair the existing owner", (todo.order.checked().owner,),
+        (todo,), request, lambda _: "Repair the existing owner", (todo.order.checked().owner,),
     )
     before = comms.registry.require("worker").goal.require()
     invoke(comms, request, RejectedHeadVerdict(REASON), scope)

@@ -46,6 +46,7 @@ from agent_comms.field_codec import (
     FieldCodec,
     MalformedRecord,
     Normalize,
+    RecordProblems,
     NullMember,
     SingleFieldValue,
     SubclassUnion,
@@ -838,6 +839,8 @@ class DirectiveVerb(CommanderVerb):
 
         Closed or unknown names are dropped: a stale name must not livelock an otherwise
         valid answer. A wrong name still leaves its real debt uncovered and refuses the action.
+        A refusal lists every misaddressed name and every blocking debt together, with the
+        replies that answer all of them at once, so one round trip clears the gate.
         """
         now = time.time()
         opened = OwedAnswer.opened(ctx.comms, self.who(ctx))
@@ -846,25 +849,32 @@ class DirectiveVerb(CommanderVerb):
         named = (tuple(rule.message for rule in opened
                        if rule.message.message_id in self.answers)
                  if self.answers else self.unnamed_answers(opened, reached))
-        misaddressed = tuple(reason for rule in opened
-                             if (reason := rule.misaddressed(named, reached)))
-        if misaddressed:
-            sys.exit('REFUSED, nothing recorded: --answers names a message this action never'
-                     ' reaches:\n' + '\n'.join(misaddressed))
+        answered = tuple(rule for rule in opened if rule.answered_by(named))
+        problems = {rule.cited: reason for rule in opened
+                    if (reason := rule.misaddressed(named, reached))}
         owed = tuple(rule for rule in opened if rule.due(now) and not rule.answered_by(named))
-        blocked = []
         for rule in owed:
-            if rule.blocks(reached, self):
-                blocked.append(rule)
+            if rule.blocks(reached, self, answered):
+                problems[rule.cited] = (f'{rule.line()}: {rule.message.body[:80]}\n'
+                                        f'{rule.clearing_action()}')
             else:
                 print(f'WARNING: {rule.line()}')
-        if blocked:
-            lines = '\n'.join(
-                f'{rule.line()}: {rule.message.body[:80]}\n{rule.clearing_action()}'
-                for rule in blocked
-            )
-            sys.exit('REFUSED, nothing recorded: messages owed an answer:\n' + lines)
+        if problems:
+            raise RecordProblems(problems | self.replies_clearing(
+                tuple(rule for rule in opened if rule.cited in problems)))
         self.respond(ctx, tuple(dict.fromkeys(message.reference for message in named)))
+
+    @staticmethod
+    def replies_clearing(refused: tuple[OwedAnswer, ...]) -> dict[str, str]:
+        """One `order say` per asker, naming every refused debt a reply to that asker answers."""
+        askers: dict[str, list[str]] = {}
+        for rule in refused:
+            for asker in rule.answered_in():
+                askers.setdefault(asker, []).append(str(rule.message.message_id))
+        return {f'nothing recorded; one reply to {asker} answers all of them':
+                f'agent-comms-commander {SayVerb.tool()} {SayVerb.declared_name} {asker} BODYFILE'
+                f' --answers {" ".join(ids)}'
+                for asker, ids in askers.items()}
 
     def unnamed_answers(self, opened: tuple[OwedAnswer, ...],
                         reached: frozenset[str]) -> tuple[Message, ...]:

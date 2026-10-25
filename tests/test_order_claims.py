@@ -8,7 +8,7 @@ import time
 import pytest
 
 from agent_comms.commander.order import OrderFile, main
-from agent_comms.field_codec import FieldCodec, GoalId
+from agent_comms.field_codec import FieldCodec, GoalId, RecordProblems
 from agent_comms.goal_actions import SetGoalAction
 from agent_comms.commander.package import CommanderPackage
 from agent_comms.errors import TodoConflict, TodoError, ToolRefusedError
@@ -273,9 +273,12 @@ def test_two_delivery_claims_warn_without_deadlocking_other_orders(
     assert "WARNING: DELIVERY AWAITING JUDGEMENT other P2" in warning
     assert store.get("P1") == claims[0]
     assert store.get("P2") == claims[1]
-    with pytest.raises(SystemExit, match="DELIVERY AWAITING JUDGEMENT worker P1"):
+    with pytest.raises(RecordProblems, match="DELIVERY AWAITING JUDGEMENT worker P1"):
         main(["say", "worker", str(reply), "--answers",
               claims[0].order.claim.message.message_id], ctx)
+    assert store.get("P1") == claims[0]
+    ask = comms.messaging.send("worker", ctx.commander, "Which owner do I wait on?").message
+    main(["say", "worker", str(reply), "--answers", ask.message_id], ctx)
     assert store.get("P1") == claims[0]
 
     main(["send", "worker", corrected_order_file(ctx, cited_source), "--clean"], ctx)

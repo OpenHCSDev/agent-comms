@@ -294,6 +294,9 @@ class UnitAskUnanswered(UnitOwedAnswer, UndatedStandingRule):
     def asked_by(self, reached: frozenset[str]) -> bool:
         return self.unit in reached
 
+    def answered_in(self) -> tuple[str, ...]:
+        return (self.unit,)
+
     def misaddressed(self, named: tuple[Message, ...], reached: frozenset[str]) -> str:
         """A unit's ask is answered only by a message that reaches that unit."""
         if self.unit in reached or not self.answered_by(named):
@@ -328,14 +331,17 @@ class DeliveryAwaitingJudgement(UnitOwedAnswer, UndatedStandingRule):
     def clearing_action(self) -> str:
         return (f"order done {self.unit} {self.problem} (with --seen FILE for an application run)"
                 " or send the unit its replacement order"
-                " or `judge reviewing --pr N --head SHA --serves WORDS --fork NAME`"
-                " while a fork reads it.")
+                " or `judge reviewing --pr N --head SHA --fork NAME` while a fork reads it.")
 
     def answered_by(self, named: tuple[Message, ...]) -> bool:
         return False
 
-    def blocks(self, reached: frozenset[str], action: CommanderVerb) -> bool:
-        return self.unit in reached and not action.resolves_claim(self.unit, self.problem)
+    def blocks(self, reached: frozenset[str], action: CommanderVerb,
+               answered: tuple[OwedAnswer, ...]) -> bool:
+        """Work sent to the holder waits on this judgement; an answer to the holder's own ask
+        never does, or the gate would refuse the conversation the answer gate demands."""
+        return (self.unit in reached and not action.resolves_claim(self.unit, self.problem)
+                and not any(rule.asked_by(frozenset((self.unit,))) for rule in answered))
 
     def line(self) -> str:
         return (f"DELIVERY AWAITING JUDGEMENT {self.unit} {self.problem}: "

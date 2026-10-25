@@ -3406,9 +3406,14 @@ class OrderQuote:
     quote: str
 
     def require_quote(self, text: str) -> None:
+        """Whitespace-separated words, so a dotted or CamelCase name counts as one word."""
         quoted = " ".join(self.quote.split())
-        if len(quoted.split()) < 4 or quoted not in " ".join(text.split()):
-            raise TodoError("Quote 4+ words of the order this verdict carries out.")
+        if len(quoted.split()) < 4:
+            raise TodoError(f"--serves {quoted!r} is {len(quoted.split())} words; quote 4+ words"
+                            " of the order this verdict carries out, such as its problem line.")
+        if quoted not in " ".join(text.split()):
+            raise TodoError(f"--serves {quoted!r} is not in the text it quotes; copy 4+"
+                            " consecutive words of the order, such as its problem line.")
 
 
 @dataclass(frozen=True)
@@ -3556,8 +3561,10 @@ class HeadReviewOrder(HeadReviewRelation, declared_name=None):
     """The input that authorizes a head review's optional order change."""
 
     @classmethod
-    def for_request(cls, todos: Sequence[Todo], request: PullRequestHead, quote: str,
-                    evidence: tuple[FileLine, ...], problem: str = "") -> HeadReviewOrder:
+    def for_request(cls, todos: Sequence[Todo], request: PullRequestHead,
+                    quote: Callable[[Todo], str], evidence: tuple[FileLine, ...],
+                    problem: str = "") -> HeadReviewOrder:
+        """``quote`` gives the linked order's words this review carries out."""
         linked = tuple(todo for todo in todos if todo.repo == request.repo
                        and (not problem or todo.id == problem)
                        and todo.order.checked().holds_head(request))
@@ -3568,7 +3575,7 @@ class HeadReviewOrder(HeadReviewRelation, declared_name=None):
         if len(linked) != 1:
             raise TodoError("More than one order holds this pull request; select --problem.")
         todo, = linked
-        return OrderHeadReview(todo.revision, LinkedHeadReview.of(todo, quote, evidence))
+        return OrderHeadReview(todo.revision, LinkedHeadReview.of(todo, quote(todo), evidence))
 
     @abstractmethod
     def require_reviewer(self, goals: Goals, request: PullRequestHead,

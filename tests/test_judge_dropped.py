@@ -41,8 +41,7 @@ def unjudged(ctx) -> dict[str, Edit]:
 
 
 def judge_dropped(ctx, edit: Edit, line: str) -> None:
-    main(["dropped", f"{edit.id}:{edit.code()}", "--why",
-          "the unit reset this formatter branch on the corrected order", "--line", line], ctx)
+    main(["dropped", f"{edit.id}:{edit.code()}", "--line", line], ctx)
 
 
 @pytest.fixture
@@ -87,15 +86,14 @@ def batch_file(ctx, entries) -> str:
 
 
 def dropped_entry(edit: Edit, line: str) -> dict:
-    return {"kind": "dropped", "ids": [f"{edit.id}:{edit.code()}"], "lines": [line],
-            "why": "the unit reset this formatter branch on the corrected order"}
+    return {"kind": "dropped", "ids": [f"{edit.id}:{edit.code()}"], "lines": [line]}
 
 
 def test_batch_lists_every_refusal_and_writes_nothing(discarded_and_kept):
     ctx = discarded_and_kept
     edits = unjudged(ctx)
     before = ctx.comms.goals.todos.get("P1")
-    unread = {"kind": "dropped", "ids": ["dropped-call:0000"], "lines": [DROPPED], "why": "too short"}
+    unread = {"kind": "dropped", "ids": ["dropped-call:0000"], "lines": [DROPPED]}
     with pytest.raises(SystemExit) as refused:
         main(["batch", batch_file(ctx, [unread, dropped_entry(edits["kept-call"], "no such line")])], ctx)
     assert "entry 1 (dropped)" in str(refused.value.code) and "entry 2 (dropped)" in str(refused.value.code)

@@ -86,14 +86,20 @@ class Repo(BaseModel, WireValue):
 
     @classmethod
     def selected(cls, repositories: tuple[Repo, ...], name: str) -> Repo:
+        candidates = cls.candidates(repositories, name)
+        if len(candidates) != 1:
+            raise ValueError("Select --repo when more than one repository is registered.")
+        repository, = candidates
+        return repository
+
+    @classmethod
+    def candidates(cls, repositories: tuple[Repo, ...], name: str) -> tuple[Repo, ...]:
+        """No name leaves every registered repository a candidate; a name selects exactly one."""
         if not name:
-            if len(repositories) != 1:
-                raise ValueError("Select --repo when more than one repository is registered.")
-            repository, = repositories
-            return repository
+            return repositories
         for repository in repositories:
             if repository.named(name):
-                return repository
+                return (repository,)
         configured = ", ".join(
             f"{repository.github.to_wire()} ({repository.checkout})"
             for repository in repositories
