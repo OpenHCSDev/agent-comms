@@ -4,7 +4,6 @@
 import errno
 import json
 import os
-import signal
 import subprocess
 import sys
 from concurrent.futures import ThreadPoolExecutor
@@ -29,8 +28,10 @@ from agent_comms.installer.commands import InstallCommands
 from agent_comms.installer.probes.publication import SelectedRouteProbe
 from agent_comms.installer.interpreter_operation import InstalledProgram
 from agent_comms.launch_runtime import LaunchRuntime
+from agent_comms.maintenance_barrier import MaintenanceHeldError, MaintenanceOperator
 from agent_comms.recorded_bus import RecordedBusIdentity
-from agent_comms.store_files import StoreLockBusyError
+from agent_comms.thread_execution import ExternalThreadExecution
+from agent_comms.threads import Thread
 from bus_record_fixture import prepare_native_comms
 
 
@@ -206,40 +207,51 @@ def test_failure_after_backup_link_restores_a_single_private_route(tmp_path, rou
     assert path.stat().st_nlink == 1
 
 
-def test_route_publication_waits_for_a_client_call_but_not_an_idle_service(
+def test_a_client_call_never_holds_publication_and_the_bus_refuses_writes_held_by_install(
     tmp_path, route_bus, monkeypatch,
 ):
+    """Toad is a client: an open call no longer stalls the installer's route step, and the
+    store itself refuses writes once maintenance holds the root, under its write lock."""
     path = tmp_path / "state" / "active-route.json"
     route_new_bus(route_bus, path)
     monkeypatch.setattr("agent_comms.active_route.active_route_path", lambda: path)
-    entered, release, publishing, published = Event(), Event(), Event(), Event()
-
-    def write():
-        with Comms.client(route_bus) as comms:
-            entered.set()
-            assert release.wait(5)
-            comms.messaging.user_identity(str(tmp_path))
-
-    def publish():
-        publishing.set()
+    with Comms.client(route_bus) as comms:
+        for name in ("sender", "recipient"):
+            comms.registry.declare(Thread(
+                name, frozenset(), str(tmp_path), execution=ExternalThreadExecution))
         with route_directory(path):
-            published.set()
+            pass  # A publisher never waits on an open client call.
+        bus = comms.bus.bus
+        entered, release = Event(), Event()
 
-    with ThreadPoolExecutor(max_workers=2) as workers:
-        writing = workers.submit(write)
-        assert entered.wait(5)
-        publication = workers.submit(publish)
-        try:
-            assert publishing.wait(5)
-            assert not published.wait(0.1)
-        finally:
-            release.set()
-        writing.result(timeout=5)
-        publication.result(timeout=5)
+        def in_flight():
+            with bus.writing():
+                entered.set()
+                assert release.wait(5)
 
-    idle = Comms(route_bus)
-    with route_directory(path):
-        assert idle.root == route_bus.root
+        def drain():
+            with Bus.writers_drained(bus.path):
+                pass
+
+        gate = comms.owners.maintenance
+        with ThreadPoolExecutor(max_workers=2) as workers:
+            writing = workers.submit(in_flight)
+            assert entered.wait(5)
+            hold = gate.begin(MaintenanceOperator.current())
+            draining = workers.submit(drain)
+            try:
+                with pytest.raises(TimeoutError):
+                    draining.result(timeout=0.2)
+            finally:
+                release.set()
+            writing.result(timeout=5)
+            draining.result(timeout=5)
+        with pytest.raises(MaintenanceHeldError):
+            with bus.writing():
+                pytest.fail("A write began under the hold")
+        gate.clear(hold)
+        sent = comms.messaging.send("sender", "recipient", "after the hold").message
+    assert sent.body == "after the hold"
 
 
 ROUTE_HOLDER = """import ctypes, fcntl, os, sys, time
@@ -259,25 +271,14 @@ def route_holder(directory, program):
     return holder
 
 
-def test_route_publication_ends_a_toad_holder(tmp_path):
+def test_route_publication_neither_waits_for_nor_ends_an_old_toad_holding_the_directory(
+    tmp_path,
+):
+    """An old runtime's Toad still flocks the route directory; publishers no longer do."""
     holder = route_holder(tmp_path / "state", "toad")
-    with ThreadPoolExecutor(max_workers=1) as reaper:
-        # Toad's own shell reaps it; here the test is its parent.
-        ended = reaper.submit(holder.wait)
-        try:
-            with route_directory(tmp_path / "state" / "active-route.json"):
-                assert ended.result(timeout=5) == -signal.SIGTERM
-        finally:
-            holder.kill()
-
-
-def test_route_publication_refuses_another_holder_by_pid(tmp_path, monkeypatch):
-    monkeypatch.setattr("agent_comms.active_route.ROUTE_PUBLICATION_WAIT_SECONDS", 0.2)
-    holder = route_holder(tmp_path / "state", "agent-comms")
     try:
-        with pytest.raises(StoreLockBusyError, match=f"PID {holder.pid}: "):
-            with route_directory(tmp_path / "state" / "active-route.json"):
-                pass
+        with route_directory(tmp_path / "state" / "active-route.json"):
+            pass
         assert holder.poll() is None
     finally:
         holder.kill()

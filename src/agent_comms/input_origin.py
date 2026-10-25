@@ -126,9 +126,7 @@ class HumanInputOrigin(InputOrigin, ClaimScoped):
 
     @classmethod
     def capture(cls, comms: Comms, claim_scope: ClaimedIdentity) -> HumanInputOrigin:
-        from .active_route import guard_original_root_write
-
-        with guard_original_root_write(comms.root), comms.registry.store.locked():
+        with comms.registry.store.locked():
             snapshot = comms.registry.store.read_snapshot_unlocked()
             owner = snapshot.require_active(claim_scope.incarnation.name)
             if snapshot.claimed_identity(owner.name) != claim_scope:

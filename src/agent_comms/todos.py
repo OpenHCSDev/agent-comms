@@ -27,7 +27,6 @@ from types import get_original_bases
 from typing import TYPE_CHECKING, Annotated, ClassVar, Self, get_args, get_origin
 from uuid import uuid4
 
-from agent_comms.active_route import guard_original_root_write
 from agent_comms.build_identity import (
     BuildIdentity,
     CommitInstallation,
@@ -3862,7 +3861,7 @@ class ClaimOrder(TodoCommand):
 
     def record(self, goals: Goals, problem: str) -> Todo:
         """Retain the publication's actual address before saving its content identity."""
-        with guard_original_root_write(goals.root), NativeBoundary(goals.bus) as boundary:
+        with NativeBoundary(goals.bus) as boundary:
             current = goals.todos.get(problem)
             target = IncarnationThreadTarget(
                 goals.todos.owner_request(current.request.require()).commander)

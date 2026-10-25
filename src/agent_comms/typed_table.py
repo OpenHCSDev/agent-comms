@@ -2167,10 +2167,12 @@ class StoreWriter(PublishedSQLiteFile, FileStore):
 
     @contextmanager
     def transaction(self, connection: sqlite3.Connection) -> Iterator[sqlite3.Connection]:
-        """Publish through the physical store after its row transaction commits."""
-        self.require_maintenance_open()
+        """Publish through the physical store after its row transaction commits. Maintenance
+        is asked under the write lock, so a hold taken before this transaction refuses it and
+        an installer's drain of the write lock waits out every transaction that passed."""
         with self.publishing_changes(connection, self.store.path):
             with self.write_transaction(connection):
+                self.require_maintenance_open()
                 yield connection
 
     @abstractmethod
