@@ -703,7 +703,7 @@ class SQLiteColumnShape(TypedRow):
         declared = row.schema_objects()[row.declared_name]
         if stored in (None, declared):
             return False
-        with closing(sqlite3.connect(":memory:")) as scratch:
+        with closing(SQLiteFile.writer(":memory:")) as scratch:
             scratch.execute(declared)
             return cls.of(db, row.declared_name) == cls.of(scratch, row.declared_name)
 
@@ -2278,9 +2278,7 @@ class WriterOwnedStore(DeclaredFamily, affix="Store"):
         path = cls.path()
         if not path.is_file():
             return
-        copy = directory / path.name
-        with closing(sqlite3.connect(path)) as stored, closing(sqlite3.connect(copy)) as practice:
-            stored.backup(practice)
+        copy = SQLiteFile.copy_file(path, directory / path.name)
         try:
             with closing(SQLiteFile.writer(copy)) as db, db:
                 cls.table_schema().install_schema(db, WriterOwnedFile())
