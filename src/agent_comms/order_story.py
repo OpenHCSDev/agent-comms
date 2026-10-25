@@ -22,6 +22,9 @@ class StoryLine:
 
 
 class StorySource:
+    def implied_strikes(self) -> tuple[StrikeTodo, ...]:
+        return ()
+
     def strikes_voided(self) -> tuple[StrikeTodo, ...]:
         return ()
 

@@ -2049,7 +2049,7 @@ class CheckedProblemOrder(ProblemOrder, declared_name=None):
             DirectiveText.require(text)
 
     def story(self) -> tuple[StoryLine, ...]:
-        return (StoryLine(self.at, f"Ordered {self.id}: {'; '.join(self.edits)}"),)
+        return (StoryLine(self.at, f"Ordered {self.id}: {self.owner.to_wire()}"),)
 
     @property
     def declarations(self) -> tuple[CheckedProblemOrder, ...]:
@@ -3270,9 +3270,6 @@ class OrderVerdict(TodoCommand, StoryEvent, declared_name=None):
     def story_text(self) -> str:
         return f"{self.actor.name} judged {self.previous.owner}: {self.line}"
 
-    def implied_strikes(self) -> tuple[StrikeTodo, ...]:
-        return ()
-
     def judged_calls(self) -> tuple[str, ...]:
         """The holder's tool calls this verdict judges by identity."""
         return ()
@@ -4238,13 +4235,9 @@ class Todo(TodoStoreRows, TypedTable):
         return bool(self.order.items_with(Pending, self))
 
     def story_sources(self) -> tuple[StorySource, ...]:
-        implied = frozenset(strike for verdict in self.verdicts
-                            for strike in verdict.implied_strikes())
-        return (
-            *self.prior_orders, self.order,
-            *(strike for strike in self.strikes if strike not in implied),
-            *self.voided, *self.released, *self.verdicts, *self.corrections, *self.messages,
-        )
+        events = self.history.sources(self.id)
+        implied = frozenset(strike for event in events for strike in event.implied_strikes())
+        return (self.order, *(event for event in events if event not in implied))
 
     def story(self) -> ProblemStory:
         events = tuple(sorted(
@@ -4610,6 +4603,11 @@ class TodoHistory:
     ) -> tuple[Event, ...]:
         with self.snapshot() as db:
             return StoredOrderStory.events_as(db, problem, member, limit=limit, descending=descending)
+
+    def sources(self, problem: str) -> tuple[TodoCommand | CheckedProblemOrder, ...]:
+        with self.snapshot() as db:
+            return tuple(row.event for row in StoredOrderStory.select(
+                db, problem=problem, order_by=("seq",), descending=True))
 
     def live_strikes(self, problem: str, unit: str | None = None) -> tuple[StrikeTodo, ...]:
         with self.snapshot() as db:
