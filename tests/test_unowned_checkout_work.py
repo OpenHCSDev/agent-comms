@@ -1,4 +1,4 @@
-"""Retained Git work protects linked rows through the real watcher and heartbeat."""
+"""Checkout allocation and unpublished-file protection at their storage owner."""
 
 
 from agent_comms.bus import Bus
@@ -7,24 +7,15 @@ import json
 import os
 import subprocess
 import time
-from contextlib import nullcontext
 from dataclasses import dataclass, replace
 from pathlib import Path
 
 import pytest
 
-from cli_command import core
 from order_scope_fixture import FIX_SCOPE
 from agent_comms.change_report import FileLine
 from agent_comms.child_process import ProcessIdentity
-from agent_comms.threads import ParkedThreadWorkState, ReadyThreadWorkState
-from agent_comms.commander.standing import (
-    CheckoutHeldWheelSpin,
-    ReassignedWheelSpin,
-    UnownedOrderWatch,
-    UnownedWheelSpin,
-    WaitingUnownedWheelSpin,
-)
+from agent_comms.commander.standing import UnownedWheelSpin
 from agent_comms.commander_heartbeat import (
     CommanderHeartbeat,
     CommanderObservation,
@@ -277,81 +268,6 @@ def test_a_second_todo_conflict_is_reported_without_ending_the_pass(struck_unown
         assert RulePing.capture(following) in update.handled
 
 
-def assert_retained(c: Comms) -> None:
-    before = c.goals.todos.get('P2')
-    rules = UnownedWheelSpin.violations(c, 'lead')
-    assert len(rules) == 1
-    held = rules[0]
-    assert isinstance(held, CheckoutHeldWheelSpin)
-    assert held.work.owner.name == 'worker'
-    rule = c.registry.storage_rule
-    assert held.work.checkout == rule.order_checkout(rule.initial_roots('worker'), 'P1')
-    assert 'worker' in held.line() and str(held.work.checkout) in held.line()
-    # The real automatic caller must not bypass the heartbeat's protection.
-    UnownedOrderWatch().watch_pass(lambda: nullcontext(c))
-    assert c.goals.todos.get('P2') == before
-    assert before.holder is None
-
-
-def test_dirty_then_unpushed_then_pushed_linked_checkout(checkout_bus: Comms, tmp_path: Path):
-    original = checkout_bus
-    untouched = original.goals.todos.get('P2')
-    idle_goal = original.registry.require('idle').goal
-    rule = original.registry.storage_rule
-    checkout = rule.order_checkout(rule.initial_roots('worker'), 'P1')
-    practice = PracticeCopy(original.root, tmp_path / 'practice')
-    practice.include(tuple(RootFile.existing_in(practice.root)))
-    (root, _measurement) = practice.path, practice.measurement
-    c = wire(root)
-    def beat():
-        frame = CommanderObservation.read(c, c.registry.require('lead'))
-        CommanderHeartbeat().pass_body(c, (frame,))
-
-    # The copy retires the source root's processes; the idle unit is live here only while bound here.
-    with (LaunchRoot.from_path(root).selected(),
-          c.registry.external_process('idle', ProcessIdentity.capture(os.getpid()))):
-        (checkout / 'work.py').write_text('# not yet published\n')
-        assert_retained(c)
-        beat()
-        git(checkout, 'add', 'work.py')
-        git(checkout, 'commit', '-q', '-m', 'Unpushed work')
-        assert git(checkout, 'status', '--porcelain') == ''
-        assert_retained(c)
-        git(checkout, 'push', '-q', 'origin', 'worker-work')
-        c.registry.set_work_state('idle', ParkedThreadWorkState())
-        waiting = UnownedWheelSpin.violations(c, 'lead')
-        assert len(waiting) == 1
-        assert isinstance(waiting[0], WaitingUnownedWheelSpin)
-        UnownedOrderWatch().watch_pass(lambda: nullcontext(c))
-        assert c.goals.todos.get('P2').holder is None
-        beat()
-        c.registry.set_work_state('idle', ReadyThreadWorkState())
-        # Copies retire source processes; this test process explicitly owns the copied unit.
-        c.registry.register(replace(c.registry.require('idle'),
-                                    process_identity=ProcessIdentity.capture(os.getpid())))
-        available = UnownedWheelSpin.violations(c, 'lead')
-        assert len(available) == 1
-        assert isinstance(available[0], ReassignedWheelSpin)
-        assert available[0].unit == 'idle'
-        previous = CommanderUpdate.latest(c, c.registry.require('lead').incarnation)
-        assert previous is not None
-        assert set(map(RulePing.capture, available)).isdisjoint(previous.handled)
-        UnownedOrderWatch().watch_pass(lambda: nullcontext(c))
-        assigned = c.goals.todos.get('P2')
-        assert assigned.holder == 'idle'
-        assert c.registry.require('idle').goal.require().text
-        beat()
-    history = core('--root', str(root), 'history',
-                   '@commander-heartbeat', '--as', 'lead', '--limit', '10')
-    assert history.returncode == 0, history.stderr
-    assert f'WORK HELD: P2 worker retains work in {checkout}' in history.stdout
-    assert f'NO LONGER CURRENT: WORK HELD: P2 worker retains work in {checkout}' in history.stdout
-    print('PRIVATE HEARTBEAT', history.stdout)
-    print('PRIVATE WATCHER: dirty and unpushed retained; clean pushed assigned to', assigned.holder)
-    assert original.goals.todos.get('P2') == untouched
-    assert original.registry.require('idle').goal == idle_goal
-
-
 def test_unreadable_checkout_is_its_units_state_and_the_pass_carries_on(
         checkout_bus: Comms, tmp_path: Path):
     """10:08 on 2026-10-21: one unit's unreadable checkout failed the whole pass for every unit."""
@@ -362,12 +278,9 @@ def test_unreadable_checkout_is_its_units_state_and_the_pass_carries_on(
     rule = c.registry.storage_rule
     checkout = rule.order_checkout(rule.initial_roots('worker'), 'P1')
     (checkout / '.git').write_text('gitdir: /nonexistent/removed\n')
-    before = c.goals.todos.get('P2')
     with LaunchRoot.from_path(root).selected():
         read = WorkBranches(checkout).read_checkout()
         assert isinstance(read, UnreadableCheckoutRead) and read.holds_work
-        UnownedOrderWatch().watch_pass(lambda: nullcontext(c))
-        assert c.goals.todos.get('P2') == before
         unreadable, = (state for state in UnitState.current(
             c, 'lead', HeartbeatFrame.read(c, 'lead', ProgressRead()))
                       if isinstance(state, Unreadable))

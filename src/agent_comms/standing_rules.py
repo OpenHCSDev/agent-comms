@@ -37,7 +37,7 @@ if TYPE_CHECKING:
     from agent_comms.registry_document import RegistrySnapshot
     from agent_comms.storage_rules import MemoryUse, StorageRule
     from agent_comms.todos import (
-        OrderClaim, OwnerRequest, PresentCheckout, ProgressRead, PullRequest, Todo,
+        MergeBlock, OrderClaim, OwnerRequest, PresentCheckout, ProgressRead, PullRequest, Todo,
     )
     from agent_comms.goal_management import Goals
     from agent_comms.ui_model.unit_state import UnitObservation, UnitState
@@ -453,9 +453,11 @@ class OwedAnswer(IndependentStandingRule, declared_name=None):
         """Whether an action naming these open messages answers this one."""
         return any(message.message_id == self.message.message_id for message in named)
 
-    def blocks(self, reached: frozenset[str], action: CommanderVerb) -> bool:
-        """An unanswered question must be answered before unrelated work."""
-        return True
+    def blocks(self, reached: frozenset[str], action: CommanderVerb,
+               named: tuple[Message, ...]) -> bool:
+        """An owed message refuses only an action that answers nothing: an answer to any open
+        message is progress and is never refused, so the others it leaves owed only warn."""
+        return not named
 
     def asked_by(self, reached: frozenset[str]) -> bool:
         """Whether one of these threads asked it, so a reply reaching them answers it unnamed."""
@@ -616,6 +618,36 @@ class UnreviewedHead(OrderRefusingStandingRule, DatedStandingRule):
         return (f"UNREVIEWED HEAD: {self.request.repo.to_wire()}#{self.request.pr} "
                 f"head {self.request.head} -> judge ok/back --pr {self.request.pr} "
                 f"--head {self.request.head}")
+
+
+@dataclass(frozen=True)
+class StuckMerge(DatedStandingRule):
+    """An armed head GitHub will not merge: approved, queued and going nowhere."""
+    request: PullRequestHead
+    block: MergeBlock
+
+    @classmethod
+    def scan_observed(cls, comms: Comms, commander: str,
+                      observed: Sequence[UnitState], frame: HeartbeatFrame) -> tuple[Self, ...]:
+        return cls.scan_pulls(comms.goals, frame.pulls)
+
+    @classmethod
+    def scan_pulls(cls, goals: Goals, pulls: ProgressRead) -> tuple[Self, ...]:
+        return tuple(
+            cls(PullRequestHead(repo, row.number, row.head), block)
+            for repo in goals.registry.snapshot().commander_project.repository_names()
+            for row in pulls.open(repo)
+            for block in row.stuck()
+        )
+
+    def began(self) -> float:
+        return self.block.since
+
+    def line(self) -> str:
+        minutes = int((time.time() - self.block.since) // 60)
+        return (f"STUCK MERGE: {self.request.repo.to_wire()}#{self.request.pr} "
+                f"head {self.request.head} has auto-merge armed but {self.block.what()} "
+                f"{minutes} min ago -> fix the check at its owner or give it an owner now")
 
 
 @dataclass(frozen=True)
