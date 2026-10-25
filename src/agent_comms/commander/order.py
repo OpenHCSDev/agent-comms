@@ -426,7 +426,8 @@ class CommanderContext(BaseModel):
         return request.resolve(self.repos)
 
     def held_orders(self) -> tuple[Todo, ...]:
-        return tuple(todo for todo in self.todos() if todo.holder)
+        """The live holds Core lists unjudged edits under, so a verdict finds every edit shown."""
+        return HeldOrders.read(self.comms, self.commander).todos
 
     def held_by(self, unit: str) -> tuple[Todo, ...]:
         return self.comms.goals.todos.held_by(

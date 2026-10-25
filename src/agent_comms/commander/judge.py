@@ -66,6 +66,7 @@ from agent_comms.todos import (
     JudgedCall,
     LinkedHeadReview,
     OrderLink,
+    OrderQuote,
     SendBackVerdict,
     StrikeReason,
     SupersededVerdict,
@@ -82,6 +83,7 @@ from agent_comms.tool_declaration import EditCall, ReplacementEdit
 from agent_comms.commander import order
 from agent_comms.commander.order import CommanderVerb
 
+EDIT_LINE = "required with edit IDs: an exact diff line each edit contains; repeat for each"
 BRANCH = re.compile(r"\bisinstance\(|\bhasattr\(|^\s*(if|elif|match|case)\b|\bif\b.*\belse\b")
 
 
@@ -230,15 +232,17 @@ class EditReview(ReviewSubject):
         """The verdicts these IDs carry; a refusal exits before anything is written."""
         if not self.ids:
             sys.exit('Refused: select at least one edit ID:CODE')
-        orders = {todo.id: todo for todo in ctx.held_orders()
-                  if not options.problem or todo.id == options.problem}
+        orders = {todo.id: todo for todo in ctx.held_orders()}
         edits = {edit.id: edit for edit in unjudged if edit.problem in orders}
         ids = [token.split(':')[0] for token in self.ids]
         problems = {token: 'unknown edit id' for token, i in zip(self.ids, ids) if i not in edits}
         known = [(token, edits[i]) for token, i in zip(self.ids, ids) if i in edits]
+        problems |= {f'{token} --problem': f'its checkout files this edit under {edit.problem}'
+                     for token, edit in known if options.problem and edit.problem != options.problem}
         problems |= {f'{token} code': 'wrong or missing read code; read the edit to its "=== end" line'
                      for token, edit in known if token != f'{edit.id}:{edit.code()}'}
-        problems |= {f'{token} --line': 'none of your --line quotes is in this edit; judge it by its own text'
+        problems |= {f'{token} --line': ('none of your --line quotes is in this edit; judge it by its own text'
+                                         if options.lines else EDIT_LINE)
                      for token, edit in known if not any(line in edit.text() for line in options.lines)}
         if problems:
             raise RecordProblems(problems)
@@ -295,9 +299,14 @@ class WordedText(BoundedText):
         return value
 
 
-class ReasonText(WordedText):
-    words = 6
-    says = "state which intent the edit serves or violates, and why"
+class ReasonText(BoundedText):
+    """VerdictReason owns how many words a reason takes and which words it may not use."""
+
+    @classmethod
+    def from_text(cls, value: str) -> str:
+        if refused := VerdictReason.wording_refusal(super().from_text(value)):
+            raise MalformedRecord(" ".join(refused))
+        return value
 
 
 class RoastText(WordedText):
@@ -344,7 +353,7 @@ class VerdictVerb(JudgeVerb):
             options={
                 "action": "append",
                 "metavar": "LINE",
-                "help": "an exact diff line; repeat for each",
+                "help": EDIT_LINE,
             },
         ),
     ] = ()
@@ -390,7 +399,7 @@ class HeadVerdictVerb(VerdictVerb, declared_name=None):
 @dataclass(frozen=True, kw_only=True)
 class QuotingVerb(HeadVerdictVerb, declared_name=None):
     """A verb whose verdict stores the words of the order it carries out."""
-    serves: Annotated[str, Argument(options={"help": "exact words of the linked order"})] = ""
+    serves: Annotated[str, Argument(options={"help": OrderQuote.rule})] = ""
 
     def order_link(self, todo: Todo) -> OrderLink:
         return LinkedHeadReview.of(todo, self.serves, self.head_evidence())
@@ -412,7 +421,7 @@ class OkVerb(ReasonedVerb, QuotingVerb):
     no_owner: Annotated[
         str,
         Argument(
-            flags=("--no-owner",), options={"help": "12+ words with because and absolute file:line"}
+            flags=("--no-owner",), options={"help": AcceptedVerdict.branch_rule}
         ),
     ] = ""
     peer: Annotated[
