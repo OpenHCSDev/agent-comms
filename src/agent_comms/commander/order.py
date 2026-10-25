@@ -859,7 +859,8 @@ class HeartbeatGated(CommanderVerb, declared_name=None):
         now = time.time()
         board = CommanderUpdate.owed(ctx.comms, ctx.commander, now)
         acted = frozenset(subjects)
-        if board and not any(ping.acted_on(acted) for ping in board):
+        if (any(ping.waits_on_commander(now - AwaitingCommander.seconds) for ping in board)
+                and not any(ping.acted_on(acted) for ping in board)):
             sys.exit(f'REFUSED, nothing recorded: heartbeat lines undisposed past '
                      f'{AwaitingCommander.seconds // 60} min; act on any line on the board:\n'
                      + '\n'.join(ping.render(now) for ping in board))

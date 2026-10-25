@@ -30,6 +30,7 @@ def test_only_commander_disposable_stale_lines_are_undisposed(comms):
     assert unit_line(DeliveredUnclosed, 10.0).undisposed(comms, actors, cut)
     assert judge.undisposed(comms, actors, cut)
     assert not unit_line(DeliveredUnclosed, 2000.0).undisposed(comms, actors, cut)
+    assert not unit_line(DeliveredUnclosed, 2000.0).waits_on_commander(cut)
     assert not unit_line(AwaitingApplicationRun, 10.0).undisposed(comms, actors, cut)
 
 
