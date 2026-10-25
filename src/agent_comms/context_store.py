@@ -10,7 +10,7 @@ from collections.abc import Iterable, Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Annotated, ClassVar, Self, cast
+from typing import Annotated, ClassVar, Self
 
 from .errors import RelationViolationError, StoredHistoryUnreadable
 from .field_codec import (
@@ -35,7 +35,7 @@ from .turn_context import (
     UnrecordedSegment,
 )
 
-from .typed_table import StoreRows, Column, DurableStore, Generated, Index, SingletonRow, TypedTable
+from .typed_table import StoreRows, Column, DurableStore, Generated, Index, RowidSequenced, SingletonRow, TypedTable
 
 
 @dataclass(frozen=True)
@@ -181,7 +181,7 @@ class ContextEntry(ContextStoreRows, TypedTable):
 
 
 @dataclass(frozen=True)
-class ContextSegmentVersion(ContextStoreRows, TypedTable):
+class ContextSegmentVersion(ContextStoreRows, RowidSequenced):
     id: Annotated[int, Column(primary_key=True, auto_increment=True)]
     digest: str
     segment: RecordedSegmentManifest
@@ -196,11 +196,11 @@ class ContextSegmentVersion(ContextStoreRows, TypedTable):
             if existing.segment != segment:
                 raise RelationViolationError("Context segment version hash collision")
             return existing.id
-        return cast(int, cls.insert_values(db, digest=digest, segment=segment).lastrowid)
+        return cls.insert_sequence(db, digest=digest, segment=segment)
 
 
 @dataclass(frozen=True)
-class ContextRequest(ContextStoreRows, TypedTable):
+class ContextRequest(ContextStoreRows, RowidSequenced):
     id: Annotated[int, Column(primary_key=True, auto_increment=True)]
     identity: RecordedContextIdentity
     thread_birth: ClassVar[Generated] = Generated(
@@ -234,14 +234,11 @@ class ContextRequest(ContextStoreRows, TypedTable):
             RecordedContextIdentity, FieldCodec.project(record, "identity")
         )
         identity.thread.require_recorded()
-        return cast(
-            int,
-            cls.insert_values(
-                db,
-                identity=identity,
-                versions=versions,
-                size=len(json.dumps(FieldCodec.encode(record)).encode()),
-            ).lastrowid,
+        return cls.insert_sequence(
+            db,
+            identity=identity,
+            versions=versions,
+            size=len(json.dumps(FieldCodec.encode(record)).encode()),
         )
 
     def recorded(self, db: sqlite3.Connection) -> RecordedContextManifest:

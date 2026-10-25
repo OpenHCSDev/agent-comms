@@ -4459,12 +4459,15 @@ class TodoStore(OwnerRequestStore):
 
         Its commander outranks the fork that assigned it, so an order a fork left open,
         even one whose fork has ended, is the commander's to replace; sibling forks
-        stay refused, since a fork never created a problem itself."""
+        stay refused, since a fork never created a problem itself. An order whose work waits
+        only on install holds no unit, as ProblemOrder.occupies_holder answers."""
         for todo in cls.held_in(db,
                 f'NOT (({Assignment.sql_field("parent")}=? '
                 f'AND {Assignment.sql_field("parent_created")}=?) '
                 'OR (creator=? AND creator_created=?))',
                 (assigner.name, assigner.wire_birth) * 2, unit=unit):
+            if not todo.order.occupies_holder():
+                continue
             raise TodoError(
                 f"{unit.name} is assigned by {todo.held().parent} on open order "
                 f"{todo.order.checked().id} ({todo.id}); "

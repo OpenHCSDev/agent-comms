@@ -36,6 +36,7 @@ class MainTree:
     commit: str
     branch: ClassVar[str] = "main"
     source: ClassVar[str] = ".py"
+    parsed: ClassVar[dict[str, tuple[str, ParsedModule]]] = {}
 
     @classmethod
     def of(cls, repo: Repo) -> MainTree:
@@ -97,18 +98,25 @@ class MainTree:
                 yield self.module(path)
 
     def modules(self, paths: tuple[str, ...]) -> Iterator[ParsedModule]:
-        """Every Python module under ``paths``, read in one ``git cat-file --batch``."""
-        listed = Repo.git(self.repo.checkout, "ls-tree", "-r", "--name-only", self.commit, "--",
-                          *paths)
-        names = [name for name in listed.splitlines() if name.endswith(self.source)]
+        """Every Python module under ``paths``. Each path keeps its last parsed blob, so every
+        evidence reading one commit parses it once, and the rest are read in one
+        ``git cat-file --batch``."""
+        listed = Repo.git(self.repo.checkout, "ls-tree", "-r", self.commit, "--", *paths)
+        blobs = [(entry.split()[2], name) for entry, _, name in
+                 (line.partition("\t") for line in listed.splitlines())
+                 if name.endswith(self.source)]
+        fresh = [(blob, name) for blob, name in blobs
+                 if self.parsed.get(name, ("", None))[0] != blob]
         batch = Repo.git_bytes(self.repo.checkout, "cat-file", "--batch",
-                               input="".join(f"{self.commit}:{name}\n" for name in names))
-        for name in names:
+                               input="".join(f"{blob}\n" for blob, _ in fresh)) if fresh else b""
+        for blob, name in fresh:
             header, _, batch = batch.partition(b"\n")
             size = int(header.rsplit(b" ", 1)[1])
             source = batch[:size].decode()
-            yield ParsedModule(name, source, ast.parse(source, filename=name), name)
+            self.parsed[name] = blob, ParsedModule(name, source,
+                                                   ast.parse(source, filename=name), name)
             batch = batch[size + 1 :]
+        yield from (self.parsed[name][1] for _, name in blobs)
 
     def contains(self, sha: str) -> bool:
         return self.repo.contains(sha, self.commit)
@@ -186,6 +194,11 @@ class PhaseEvidence(ABC):
     @abstractmethod
     def describe(self) -> str: ...
 
+    def sites(self, reading: PlanReading) -> tuple[str, ...]:
+        """Each ``PATH:LINE`` that keeps this evidence from holding; evidence naming no line
+        has none, and its description says what is missing."""
+        return ()
+
 
 class MainEvidence(PhaseEvidence):
     """Evidence that reads only main: one answer per main commit."""
@@ -205,6 +218,12 @@ class MainEvidence(PhaseEvidence):
 
     @abstractmethod
     def read(self, main: MainTree) -> bool: ...
+
+    def sites(self, reading: PlanReading) -> tuple[str, ...]:
+        return self.located(reading.main)
+
+    def located(self, main: MainTree) -> tuple[str, ...]:
+        return ()
 
 
 @dataclass(frozen=True)
@@ -237,10 +256,14 @@ class PatternEvidence(MainEvidence):
     paths: tuple[str, ...] = ("src",)
 
     def read(self, main: MainTree) -> bool:
+        return self.satisfied(main.count(self.pattern, self.searched(main)))
+
+    def searched(self, main: MainTree) -> tuple[str, ...]:
+        """``paths`` without the phase declarations, which spell every pattern they ban."""
         from .plan_phases import PlanPhase
 
         declaration = main.repo.module_file(PlanPhase.__module__)
-        return self.satisfied(main.count(self.pattern, (*self.paths, f":!{declaration.as_posix()}")))
+        return (*self.paths, f":!{declaration.as_posix()}")
 
     @abstractmethod
     def satisfied(self, count: int) -> bool: ...
@@ -248,6 +271,10 @@ class PatternEvidence(MainEvidence):
 
 @dataclass(frozen=True)
 class PatternAbsent(PatternEvidence):
+    def located(self, main: MainTree) -> tuple[str, ...]:
+        return tuple(f"{path}:{line}" for path, line in
+                     sorted(main.matching_lines(self.pattern, self.searched(main))))
+
     def satisfied(self, count: int) -> bool:
         return count == 0
 
@@ -332,6 +359,10 @@ class AllEvidence(PhaseEvidence):
 
     def holds(self, reading: PlanReading) -> bool:
         return all(reading.holds(part) for part in self.parts)
+
+    def sites(self, reading: PlanReading) -> tuple[str, ...]:
+        return tuple(site for part in self.parts if not reading.holds(part)
+                     for site in part.sites(reading))
 
     def describe(self) -> str:
         return "; ".join(part.describe() for part in self.parts)
@@ -448,22 +479,12 @@ class NamedFunctions(ast.NodeVisitor):
         return functions.found
 
 
-class Classes(ast.NodeVisitor):
-    """Every class statement in the visited trees, nested ones included."""
+class Classes:
+    """Every class statement in the given trees, nested ones included."""
 
-    def __init__(self) -> None:
-        self.found: list[ast.ClassDef] = []
-
-    def visit_ClassDef(self, node: ast.ClassDef) -> None:
-        self.found.append(node)
-        self.generic_visit(node)
-
-    @classmethod
-    def of(cls, trees: Iterable[ast.AST]) -> list[ast.ClassDef]:
-        classes = cls()
-        for tree in trees:
-            classes.visit(tree)
-        return classes.found
+    @staticmethod
+    def of(trees: Iterable[ast.AST]) -> list[ast.ClassDef]:
+        return [node for tree in trees for node in ast.walk(tree) if isinstance(node, ast.ClassDef)]
 
 
 @dataclass(frozen=True)
@@ -654,7 +675,8 @@ class ClassChecks(ast.NodeVisitor):
 
     def __init__(self) -> None:
         self.declared: set[str] = set()
-        self.checked: set[str] = set()
+        self.path = ""
+        self.checked: list[tuple[str, int, frozenset[str]]] = []
         self._scopes: list[set[str]] = []
         self._methods: set[ast.FunctionDef | ast.AsyncFunctionDef] = set()
         self._comparison_guards: set[ast.Call] = set()
@@ -701,8 +723,12 @@ class ClassChecks(ast.NodeVisitor):
         match node:
             case ast.Call(func=ast.Name(id=isinstance.__name__), args=[_, target]) \
                     if node not in self._comparison_guards:
-                self.checked |= NamedClasses.of((target,))
+                self.checked.append((self.path, node.lineno, frozenset(NamedClasses.of((target,)))))
         self.generic_visit(node)
+
+    def owned(self) -> tuple[tuple[str, int], ...]:
+        """The path and line of each check naming a class the visited modules declare."""
+        return tuple((path, line) for path, line, named in self.checked if named & self.declared)
 
 
 @dataclass(frozen=True)
@@ -711,10 +737,18 @@ class OwnClassChecksAbsent(MainEvidence):
     typing and SDK types stay."""
 
     def read(self, main: MainTree) -> bool:
+        return not self.located(main)
+
+    def located(self, main: MainTree) -> tuple[str, ...]:
+        return tuple(f"{path}:{line}" for path, line in self.checks(main).owned())
+
+    @staticmethod
+    def checks(main: MainTree) -> ClassChecks:
         checks = ClassChecks()
         for module in main.modules(("src",)):
+            checks.path = module.path
             checks.visit(module.tree)
-        return not checks.declared & checks.checked
+        return checks
 
     def describe(self) -> str:
         return "no isinstance against a class declared in src on main"
@@ -1013,16 +1047,16 @@ class DecoratorNames(NamedClasses):
 
 
 class ClassAnswers(ast.NodeVisitor):
-    """Each member a class body declares by name, with its line and its whole declaration. A
-    field counts only on a dataclass, and a name ``type`` reads per class never counts."""
+    """Each member a class body declares by name, with its declaration. A field counts only on
+    a dataclass, and a name ``type`` reads per class never counts."""
 
     def __init__(self, declared: ast.ClassDef, per_class: frozenset[str]) -> None:
         self.fields = dataclass.__name__ in DecoratorNames.of(declared.decorator_list)
         self.per_class = per_class
-        self.found: dict[str, tuple[int, str]] = {}
+        self.found: dict[str, ast.stmt] = {}
 
     @classmethod
-    def of(cls, declared: ast.ClassDef, per_class: frozenset[str]) -> dict[str, tuple[int, str]]:
+    def of(cls, declared: ast.ClassDef, per_class: frozenset[str]) -> dict[str, ast.stmt]:
         answers = cls(declared, per_class)
         for member in declared.body:
             answers.visit(member)
@@ -1030,7 +1064,7 @@ class ClassAnswers(ast.NodeVisitor):
 
     def record(self, name: str, member: ast.stmt) -> None:
         if name not in self.per_class:
-            self.found[name] = (member.lineno, ast.dump(member))
+            self.found[name] = member
 
     def generic_visit(self, node: ast.AST) -> None:
         """Only the body's own statements declare members."""
@@ -1066,16 +1100,19 @@ class RestatedMembersAbsent(MainEvidence):
     def read(self, main: MainTree) -> bool:
         return not any(self.restatements(main))
 
+    def located(self, main: MainTree) -> tuple[str, ...]:
+        return tuple(self.restatements(main))
+
     def restatements(self, main: MainTree) -> Iterator[str]:
         """Each restated member, as ``PATH:LINE Class.member``."""
         scopes = DeclaredScopes.of(main, self.paths)
         for declared in scopes.classes.values():
             for parent in scopes.parents(declared):
                 inherited = ClassAnswers.of(parent.node, self.per_class)
-                for name, (line, answer) in ClassAnswers.of(declared.node, self.per_class).items():
-                    if name in inherited and inherited[name][1] == answer:
-                        member = QualifiedName((declared.node.name, name))
-                        yield f"{declared.path}:{line} {member}"
+                for name, member in ClassAnswers.of(declared.node, self.per_class).items():
+                    if name in inherited and ast.dump(inherited[name]) == ast.dump(member):
+                        restated = QualifiedName((declared.node.name, name))
+                        yield f"{declared.path}:{member.lineno} {restated}"
 
     def describe(self) -> str:
         return f"no member restating its base's in {' '.join(self.paths)} on main"
@@ -1094,6 +1131,9 @@ class ClassRostersAbsent(MainEvidence):
 
     def read(self, main: MainTree) -> bool:
         return not any(self.rosters(main))
+
+    def located(self, main: MainTree) -> tuple[str, ...]:
+        return tuple(self.rosters(main))
 
     def relations(self, scopes: DeclaredScopes) -> dict[DeclaredClass, frozenset[str]]:
         """Each family's declaration under the roots, found by its qualified name, with the class
