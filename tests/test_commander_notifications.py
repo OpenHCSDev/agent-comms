@@ -18,6 +18,8 @@ from agent_comms.read_basis import DMDisplayScope
 from agent_comms.service_passes import ServicePassStore
 from agent_comms.todos import ProgressRead
 from agent_comms.ui_model.observation import CommanderHudObserved, ObserveCommanderHud
+from agent_comms.change_report import FileLine
+from agent_comms.installer.launch import InstallReport
 from agent_comms.standing_rules import CrashedStandingRule, ServicePassFailing, StandingRule, UndatedStandingRule
 from agent_comms.ui_model.unit_state import UnitState
 from agent_comms.wake_policy import PassiveWake
@@ -239,13 +241,20 @@ def test_failed_rule_scan_keeps_every_other_rule_and_reports_its_traceback(
     crash, = (rule for rule in after if rule not in before)
     assert isinstance(crash, CrashedStandingRule)
     assert set(before) <= set(after)
-    assert crash.rule == FailedScan.__name__
-    assert crash.error == IndexError.__name__
+    assert crash.rule is FailedScan
+    assert crash.error is IndexError
     assert crash.place.file.endswith("standing_rules.py")
     assert crash.place.line > 0
     assert all(value in crash.line() for value in
                (FailedScan.__name__, IndexError.__name__, crash.place.to_wire()))
     assert caplog.records[-1].exc_info[0] is IndexError
+    source = frame.plan.main.repo.model_copy(update={"source": "python"})
+    error = caplog.records[-1].exc_info[1]
+    report = InstallReport()
+    report.source = source
+    place = FileLine.raised(error, source)
+    assert place.file == source.module_file(StandingRule.__module__).as_posix()
+    assert report.crashed(error)[1] == place.to_wire()
     assert CrashedStandingRule not in StandingRule.members_with(StandingRule)
     beat(comms, after)
     message, = notifications(comms)

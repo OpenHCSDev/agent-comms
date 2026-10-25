@@ -8,14 +8,12 @@ from __future__ import annotations
 
 import logging
 import time
-import traceback
 from abc import abstractmethod
 from collections import Counter
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass, field, fields
-from pathlib import Path
 from itertools import combinations
-from typing import TYPE_CHECKING, ClassVar, Self, cast
+from typing import TYPE_CHECKING, ClassVar, Self
 
 from agent_comms.change_report import FileLine
 from agent_comms.declared_family import DeclaredFamily
@@ -122,12 +120,8 @@ class StandingRule(DeclaredFamily, affix="StandingRule", discovery_package="agen
             return tuple(cls.scan_observed(comms, commander, observed, frame))
         except Exception as error:
             logging.exception("Standing rule %s crashed", cls.__name__)
-            package = Path(__file__).parent
-            place = next(location for location in reversed(traceback.extract_tb(error.__traceback__))
-                         if Path(location.filename).is_relative_to(package))
-            source = Path("src") / package.name / Path(place.filename).relative_to(package)
-            return (CrashedStandingRule(cls.__name__, type(error).__name__,
-                                        FileLine(str(source), cast(int, place.lineno))),)
+            return (CrashedStandingRule(cls, type(error),
+                                       FileLine.raised(error, frame.plan.main.repo)),)
 
     def belongs_to(self, family: type[StandingRule]) -> bool:
         return isinstance(self, family)
@@ -253,8 +247,8 @@ class UndatedStandingRule(StandingRule, declared_name=None):
 class CrashedStandingRule(UndatedStandingRule, declared_name=None):
     """One failed scan, reported without registering another owner to scan."""
 
-    rule: str
-    error: str
+    rule: type[StandingRule]
+    error: type[BaseException]
     place: FileLine
 
     @classmethod
@@ -266,7 +260,7 @@ class CrashedStandingRule(UndatedStandingRule, declared_name=None):
         return True
 
     def line(self) -> str:
-        return f"{self.rule}: crashed {self.error} {self.place.to_wire()}"
+        return f"{self.rule.__name__}: crashed {self.error.__name__} {self.place.to_wire()}"
 
 
 @dataclass(frozen=True)
