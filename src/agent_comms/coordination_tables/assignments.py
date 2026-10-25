@@ -139,7 +139,7 @@ class WakeAssignment(
     assignment_id: Annotated[
         AssignmentId,
         WireName("claim_id"),
-        FrozenColumn(primary_key=True, check="length(assignment_id) BETWEEN 1 AND 256"),
+        FrozenColumn(primary_key=True),
     ]
     recipient: Annotated[str, FrozenColumn(check="length(recipient) BETWEEN 1 AND 256")]
     recipient_lookup: Annotated[ThreadLookup, FrozenColumn()]

@@ -73,15 +73,18 @@ def test_clear_during_original_or_origin_turn_does_not_block_missing_goal(
 @pytest.mark.parametrize("clear_goal", [False, True])
 def test_provider_usage_follows_the_declared_goal(copied_goal_bus, original_goal, clear_goal):
     comms = copied_goal_bus
+    from agent_comms.turn_item import ProviderResponseId
+
+    response_id = ProviderResponseId("resp-a")
     usage = PiUsage.from_wire({"input": 3, "output": 2, "totalTokens": 5})
     with goal_turn(comms, original_goal) as account:
         goal = comms.registry.require("worker").goal.require()
         if clear_goal:
             comms.goals.update_goal("worker", ClearGoalAction())
-        account.provider_usage(events.ProviderUsage("response", usage))
+        account.provider_usage(events.ProviderUsage(response_id, usage))
         total = ProviderUsageTotal.for_goal(comms.goals.open_goal_store(), goal.id)
         assert total.responses == (0 if clear_goal else 1)
-        assert account.unattributed_usage == ([("response", usage)] if clear_goal else [])
+        assert account.unattributed_usage == ([(response_id, usage)] if clear_goal else [])
 
 
 def test_absent_goal_contains_no_actual_goals():

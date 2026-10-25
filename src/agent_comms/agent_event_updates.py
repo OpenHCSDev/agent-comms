@@ -45,7 +45,7 @@ from .transcript_updates import TranscriptUpdate
 
 if TYPE_CHECKING:
     from .controller import SessionUpdateSink
-    from .routing import MessageRoute
+    from .routing import MessageRoute, NoMessageRoute
     from .turn_effects import TurnEffects
 
 
@@ -244,7 +244,7 @@ class TurnEventConsumer(AcpEventConsumer):
 
 @dataclass(eq=False, repr=False)
 class Routed(AcpEventConsumer):
-    route: MessageRoute
+    route: MessageRoute | NoMessageRoute
 
     def text_update(self, text: str) -> AgentMessageChunk:
         update = super().text_update(text)

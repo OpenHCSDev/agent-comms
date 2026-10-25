@@ -3,11 +3,25 @@
 // connection owner ending the socket makes its outcome unavailable.
 import { createConnection } from "node:net";
 
+// Whether the request was written decides whether a retry is safe, so each
+// answer is its own class; callers never read it out of the message.
+class OwnerToolFailure extends Error {
+  get name() { return this.constructor.name; }
+}
+
+export class ToolNotStarted extends OwnerToolFailure {
+  constructor() { super("Tool owner is unavailable; no tool was started."); }
+}
+
+export class ToolOutcomeUnknown extends OwnerToolFailure {
+  constructor() { super("Tool claim outcome UNKNOWN; inspect before retrying."); }
+}
+
 class UnavailableOwnerToolConnection {
   same(other) { return other === this; }
 
   request() {
-    return Promise.reject(new Error("Tool owner is unavailable; no tool was started."));
+    return Promise.reject(new ToolNotStarted());
   }
 }
 
@@ -36,23 +50,29 @@ export class OwnerToolConnection {
     return other instanceof OwnerToolConnection && this.#path === other.#path && this.#token === other.#token;
   }
 
-  request(payload, maxRequest, maxResponse, unavailable) {
+  request(payload, maxRequest, maxResponse) {
     const request = Buffer.from(JSON.stringify({ ...payload, token: this.#token }) + "\n", "utf8");
     if (request.length > maxRequest) throw new Error("Native tool request exceeds bound");
-    return requestOwnerTool(this.#path, request, maxResponse, unavailable);
+    return requestOwnerTool(this.#path, request, maxResponse);
   }
 }
 
-export function requestOwnerTool(path, request, maxResponse, unavailable) {
+export function requestOwnerTool(path, request, maxResponse) {
   return new Promise((resolve, reject) => {
     const socket = createConnection(path);
     let received = Buffer.alloc(0);
+    // Until the request is written the owner cannot have claimed anything; only a
+    // failure after the write leaves the claim's outcome unknown.
+    let failure = ToolNotStarted;
     const fail = () => {
       socket.destroy();
-      reject(new Error(unavailable));
+      reject(new failure());
     };
     socket.once("error", fail);
-    socket.once("connect", () => socket.write(request));
+    socket.once("connect", () => {
+      failure = ToolOutcomeUnknown;
+      socket.write(request);
+    });
     socket.on("data", (part) => {
       received = Buffer.concat([received, part]);
       if (received.length > maxResponse) return fail();

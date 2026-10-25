@@ -28,9 +28,14 @@ from agent_comms.maintenance_barrier import (
     ReadyPhase,
 )
 from agent_comms.registration import Registration
-from agent_comms.store_files import _async_store_lock, _store_lock
+from agent_comms.store_files import (
+    ExclusiveLock,
+    UNBOUNDED_CONTENTION,
+    _async_store_lock,
+    _store_lock,
+)
 from agent_comms.threads import Thread
-from agent_comms.turn_item import NativeTurnId
+from agent_comms.turn_item import NativeItemId, NativeTurnId
 
 
 def test_nested_holds_restore_the_previous_authority_on_failure(tmp_path, monkeypatch):
@@ -100,7 +105,7 @@ def test_only_hold_bound_cutover_may_retire_during_draining(tmp_path: Path) -> N
     hold = comms.owners.maintenance.begin(MaintenanceOperator.current())
     cutover = ScratchCutover()
     cutover.maintenance_hold = hold
-    with comms.registry.store.locked():
+    with comms.registry.store.guarded_write():
         cutover.require_restart_phase(comms.owners)
         from agent_comms.restart_refusals import OwnerMaintenancePendingRefusal
 
@@ -110,7 +115,7 @@ def test_only_hold_bound_cutover_may_retire_during_draining(tmp_path: Path) -> N
 
         assert refused.value.queue_state().items_with(Pending, refused.value)  # Idle reload remains queued, not UNKNOWN.
     comms.owners.maintenance.clear(hold)
-    with comms.registry.store.locked():
+    with comms.registry.store.guarded_write():
         with pytest.raises(RelationViolationError):
             cutover.require_restart_phase(comms.owners)
 
@@ -288,7 +293,7 @@ async def test_native_ingress_waits_without_blocking_exclusive_owner(tmp_path: P
             with status.phase.send_running(None, None, "native", "original"):
                 entered.set()
 
-    async with _async_store_lock(root / "registry.json"):
+    async with _async_store_lock(root / 'registry.json', ExclusiveLock(), UNBOUNDED_CONTENTION):
         send = asyncio.create_task(native_write())
         try:
             # The original exclusive owner must resume on the same loop while
@@ -334,7 +339,7 @@ def test_phase_change_waits_for_final_native_write_lock(tmp_path: Path) -> None:
     sender.join(5)
     closer.join(5)
     assert changed.is_set()
-    with _store_lock(root / "registry.json"), pytest.raises(RelationViolationError):
+    with _store_lock(root / 'registry.json', ExclusiveLock(), UNBOUNDED_CONTENTION), pytest.raises(RelationViolationError):
         gate.assert_open_unlocked()
 
 
@@ -376,9 +381,17 @@ async def test_bus_waits_before_mutating_a_transcript_batch(tmp_path: Path) -> N
     comms = wire(tmp_path)
     comms.registry.declare(Thread('cli', frozenset(), str(tmp_path)))
     output = ThreadOutput(comms.transcripts.external('cli'), comms.agents)
-    updates = [StartedItem(turn_turn_id, 'item', ModelWaitPhase('Replying'),
-                          TextDraft.from_parts(AssistantTranscript, ('prefix',), RecordedEventTime(1.), 'item')),
-               AppendDraftItem(turn_turn_id, 'item', ' once')]
+    updates = [
+        StartedItem(
+            turn_turn_id,
+            NativeItemId("item"),
+            ModelWaitPhase("Replying"),
+            TextDraft.from_parts(
+                AssistantTranscript, ("prefix",), RecordedEventTime(1.0), NativeItemId("item")
+            ),
+        ),
+        AppendDraftItem(turn_turn_id, NativeItemId("item"), " once"),
+    ]
     barrier = MaintenanceBarrier(comms.registry.store.path)
     hold = barrier.begin(MaintenanceOperator.current())
     pending = asyncio.create_task(comms.bus.when_open(partial(output.publish_batch, updates)))
@@ -392,7 +405,11 @@ async def test_bus_waits_before_mutating_a_transcript_batch(tmp_path: Path) -> N
         barrier.clear(hold)
     await asyncio.wait_for(pending, 3)
     with output.transcript.reading() as source:
-        assert source.current_draft(output.transcript.root, output.transcript.incarnation).external_row().events == (AssistantTranscript('prefix once', timestamp=1., position='item'),)
+        assert source.current_draft(
+            output.transcript.root, output.transcript.incarnation
+        ).external_row().events == (
+            AssistantTranscript("prefix once", timestamp=1.0, position=NativeItemId("item")),
+        )
 
 
 def test_a_registry_write_is_refused_to_all_but_the_maintenance_holder(tmp_path: Path, monkeypatch) -> None:

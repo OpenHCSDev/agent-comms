@@ -11,12 +11,14 @@ import pytest
 
 from agent_comms.bus import Bus, ClaimRecord, KeyedPrivateRecord, PublicRecord, RecordBuilder
 from agent_comms.bus_publication import HumanOrigin
+from agent_comms.bus_tables import MessageIdentitySource
 from agent_comms.child_process import NoProcess, ProcessIdentity
 from agent_comms.coordination_errors import IdentityConflict
 from agent_comms.envelope_claim_transitions import (
     ClaimConflict,
     ClaimOwner,
     ClaimRelease,
+    ClaimTransition,
     NativeClaim,
     ReleasedClaims,
     UnclaimedResource,
@@ -26,6 +28,7 @@ from agent_comms.errors import CommittedMessageError
 from agent_comms.field_codec import ClaimId, InputId, TurnId
 from agent_comms.locked_store import RegistryFile, StoreCommittedError
 from agent_comms.messages import (
+    BusCapability,
     BusProjectionTables,
     BusRow,
     BusTables,
@@ -36,12 +39,13 @@ from agent_comms.messages import (
     InfoKind,
     Message,
     ReplayedHolders,
+    StoredHolders,
 )
 from agent_comms.registration import Registration
 from agent_comms.store_files import store_lock_path
 from agent_comms.thread_status import RunningThreadStatus, StoppedThreadStatus
 from agent_comms.threads import Thread
-from agent_comms.typed_table import TypedTable
+from agent_comms.typed_table import ProjectionProducer, TypedTable
 from bus_record_fixture import publication_processes, record_from
 
 
@@ -210,6 +214,49 @@ def test_expiry_and_rebuild_use_claimed_replay_not_a_checkpoint(claims: ClaimBus
         holders.flush(db)
     assert claims.bus.claim_projection() == before
     assert claims.counts() == counts
+
+
+@pytest.mark.parametrize("pass_type", (StoredHolders, ReplayedHolders))
+def test_practice_projections_replaying_twice_keeps_unchanged_rows(
+    claims: ClaimBus, tmp_path: Path, pass_type: type[StoredHolders | ReplayedHolders],
+):
+    resource = str(tmp_path / "owned.py")
+    owner = claims.acquire("alice", resource, claims.scope("alice", ClaimId.mint()))
+    claims.release(owner)
+    successor = claims.acquire("bob", resource, claims.scope("bob", ClaimId.mint()))
+    counts = claims.counts()
+    with claims.bus.writing() as db:
+        expected = MessageIdentitySource.select(db, order_by=("seq",))
+        for _ in range(2):
+            MessageIdentitySource.delete(db)
+            holders = pass_type(tables=frozenset((MessageIdentitySource,)))
+            for record in BusCapability.history(db):
+                record.project_into(db, holders)
+            holders.flush(db)
+            assert MessageIdentitySource.select(db, order_by=("seq",)) == expected
+    assert claims.counts() == counts
+    assert dict(claims.bus.claim_projection()) == {resource: successor}
+
+
+@pytest.mark.parametrize("stale", (HeldResources, ClaimOperations))
+def test_practice_projections_one_stale_claim_table_rebuilds_its_declared_pair(
+    claims: ClaimBus, tmp_path: Path, stale: type[HeldResources | ClaimOperations],
+):
+    resource = str(tmp_path / "owned.py")
+    owner = claims.acquire("alice", resource, claims.scope("alice", ClaimId.mint()))
+    claims.release(owner)
+    successor = claims.acquire("bob", resource, claims.scope("bob", ClaimId.mint()))
+    counts = claims.counts()
+    with claims.bus.writing() as db:
+        for _ in range(2):
+            ProjectionProducer.delete(
+                db, where="{projection}=?", parameters=(stale.declared_name,),
+            )
+            assert set(BusProjectionTables.changed_rows(db)) == set(ClaimTransition.writes)
+            BusProjectionTables.carry_schema(db)
+            assert not BusProjectionTables.changed_rows(db)
+    assert claims.counts() == counts
+    assert dict(claims.bus.claim_projection()) == {resource: successor}
 
 
 def test_failed_projection_rolls_back_original_operations_and_sequence(claims: ClaimBus, tmp_path: Path):

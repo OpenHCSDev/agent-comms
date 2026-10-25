@@ -30,7 +30,7 @@ from .channel_targets import NamedTarget
 from .channels import AllChannel
 from .controller import Controller
 from .coordinator import Coordination
-from .field_codec import InputId, TurnId, GoalId
+from .field_codec import GoalId, InputId, TurnId
 from .errors import RelationViolationError
 from .following_inputs import OwnerFollowingInputs
 from .goal_actions import (
@@ -51,7 +51,7 @@ from .pi_commands import (
 )
 from .pi_payloads import StateData
 from .queued_input import InitialInput
-from .routing import TurnRouting
+from .routing import NoTurnRouting, Routing
 from .runtime import (
     RuntimeServer,
     SubscriberClosed,
@@ -60,7 +60,7 @@ from .threads import Thread
 from .transcript_updates import TurnTranscriptUpdate
 from .turn_effects import TurnEffects
 from .turn_lease import TurnLeaseFence, TurnState
-from .turn_input_source import TurnAcceptance
+from .turn_input_source import InputDependency, NoInputDependency, TurnAcceptance
 from .turn_outcome import TurnOutcome
 from .turn_phase import CancellingPhase, TurnPhase
 from .turn_terminal import TurnInterruption
@@ -314,7 +314,7 @@ class TurnRunner:
 
     def acquire_turn(
         self, resources: AsyncExitStack, session_id: str, thread_name: str,
-        turn_id: TurnId, detail: str, routing: TurnRouting | None = None, *,
+        turn_id: TurnId, detail: str, routing: Routing = NoTurnRouting(), *,
         task: TurnTask | None = None,
     ) -> RegistryOwner:
         """Bind the exact installed lease to cleanup before worker delivery.
@@ -450,7 +450,7 @@ class TurnRunner:
         original_owner_input: bool = False,
         original_goal_id: GoalId | None = None,
         acceptance: TurnAcceptance,
-        dependency_wait_id: str | None = None,
+        dependency: InputDependency = NoInputDependency(),
     ) -> None:
         await OwnedTurn(
             self,
@@ -465,7 +465,7 @@ class TurnRunner:
             original_owner_input=original_owner_input,
             original_goal_id=original_goal_id,
             acceptance=acceptance,
-            dependency_wait_id=dependency_wait_id,
+            dependency=dependency,
         ).run()
 
     async def close(self) -> None:

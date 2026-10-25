@@ -14,6 +14,7 @@ from .declared_family import DeclaredFamily
 from .field_codec import FieldCodec, FieldPlan, TurnId, WireName, WireNullDefault, WireOmitDefault
 from .native_input_record import NativeInputCommit, NativeInputLocation
 from .native_pi import NativePiOperationFailed
+from .native_tool_call import ToolCallId
 from .native_turn_context import NativeContextManifestData
 from .pi_commands import ExtensionUiResponse, PiCommand, UnknownCommand
 from .pi_payloads import (
@@ -353,7 +354,7 @@ class CompactionEnd(ReasonedCompaction, ends=phases.CompactionPhase):
         session.watchdog.progress()
         completed = self.completed
         for result in completed:
-            for event in result.charge(session):
+            for event in result.charge():
                 yield event
             session.native.forget_context()
             session.watchdog.compacted(session.prompt_state.started)
@@ -806,8 +807,8 @@ class PiToolCallEvent:
         return self.tool_name.text_or("tool")
 
     @property
-    def tool_id(self) -> str:
-        return self.tool_call_id.text_or(self.tool_label)
+    def tool_id(self) -> ToolCallId:
+        return FieldCodec.decode(ToolCallId, self.tool_call_id.text_or(self.tool_label))
 
 
 @dataclass(frozen=True, kw_only=True)

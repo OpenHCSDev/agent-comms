@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import secrets
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
@@ -17,6 +16,7 @@ from .native_failures import NativePiUnavailable
 from .native_session_reopen import NativeSessionIdentity
 from .pi_events import PiEvent
 from .pi_payloads import StateData
+from .turn_item import PiRequestKey
 
 if TYPE_CHECKING:
     from .backend import TurnSession
@@ -81,7 +81,7 @@ class PendingAttestation(NativeAttestation):
     expected: NativeSessionIdentity | None = None
     request: commands.GetState = field(
         default_factory=lambda: commands.GetState(
-            id=RequestId(f"agent-comms-preflight-{secrets.token_hex(16)}")
+            id=RequestId(PiRequestKey.fresh())
         )
     )
 

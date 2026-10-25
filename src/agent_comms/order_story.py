@@ -7,6 +7,7 @@ from collections.abc import Iterable
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Self
 
+from .field_codec import OrderId
 from .recorded_time import EventTime
 from .tool_result import ToolResult
 
@@ -51,12 +52,12 @@ class ProblemStory:
 
 @dataclass(frozen=True)
 class OrderStory(ToolResult):
-    order_id: str
+    order_id: OrderId
     problems: tuple[ProblemStory, ...]
 
     @classmethod
     def collect(cls, todos: Iterable[Todo]) -> tuple[Self, ...]:
-        grouped: dict[str, list[ProblemStory]] = {}
+        grouped: dict[OrderId, list[ProblemStory]] = {}
         for todo in todos:
             grouped.setdefault(todo.order.checked().id, []).append(todo.story())
         return tuple(cls(order_id, tuple(problems)) for order_id, problems in grouped.items())

@@ -13,13 +13,12 @@ from .bus import BusReader
 from .bus_publication import Delivered
 from .declared_family import DeclaredFamily
 from .errors import UnregisteredThreadError
-from .field_codec import NullMember, GoalId, TurnId
+from .field_codec import GoalId, GoalWaitId, NullMember, ThreadLookup, TurnId
 from .goal_presentation import GoalExecution, GoalExecutionSource, GoalWaitTarget, StandbyExecution
 from .goals import Goal, GoalDeclaration
 from .input_key import InputKey, InputKeyText
 from .input_attempt import StoredInput, UnresolvedInput
 from .locked_store import WireWakeFile
-from .store_files import SharedLock
 from .thread_identity import RecordedThreadIncarnation
 from .thread_owned_state import ThreadOwnedState
 from .turn_lease import TurnLease
@@ -50,7 +49,7 @@ class GoalWait(ABC):
     @abstractmethod
     def allows_routed_input(self) -> bool: ...
 
-    def matches_id(self, wait_id: str) -> bool:
+    def matches_id(self, wait_id: GoalWaitId) -> bool:
         return False
 
     def owner_matches(self, owner: RecordedThreadIncarnation) -> bool:
@@ -63,9 +62,6 @@ class GoalWait(ABC):
         self, goal: Goal, owner: RecordedThreadIncarnation, targets: tuple[GoalWaitTarget, ...]
     ) -> int:
         return goal.published_seq
-
-    def consume_dependency(self, comms, canonical: str) -> bool:
-        return True
 
     def clear(self, waits: GoalWaits) -> bool:
         return False
@@ -102,7 +98,7 @@ class NoGoalWait(GoalWait):
 @dataclass(frozen=True, slots=True)
 class RecordedGoalWait(GoalWait):
     goal_id: GoalId
-    wait_id: str
+    wait_id: GoalWaitId
     revision: int
     after_seq: int
     targets: tuple[GoalWaitTarget, ...] = field()
@@ -146,17 +142,14 @@ class RecordedGoalWait(GoalWait):
     def allows_routed_input(self) -> bool:
         return False
 
-    def matches_id(self, wait_id: str) -> bool:
+    def matches_id(self, wait_id: GoalWaitId) -> bool:
         return self.wait_id == wait_id
 
     def owner_matches(self, owner: RecordedThreadIncarnation) -> bool:
         return self.owner == owner
 
-    def consume_dependency(self, comms, canonical: str) -> bool:
-        return comms.goals.consume_goal_wait(canonical, self.wait_id)
-
     def clear(self, waits: GoalWaits) -> bool:
-        return waits.clear(self.goal_id, wait_id=self.wait_id)
+        return waits.consume(self.goal_id, self.wait_id)
 
     def execution(self, source: GoalExecutionSource) -> GoalExecution:
         targets = tuple(
@@ -261,7 +254,7 @@ class GoalWaitReview:
 
     @staticmethod
     def capture(goals: Goals, incarnation: RecordedThreadIncarnation) -> GoalWaitReview:
-        with goals.registry.store.locked(mode=SharedLock()):
+        with goals.registry.store.guarded_read():
             snapshot = goals.registry.store.read_snapshot_unlocked()
             for owner in snapshot.threads_for(incarnation):
                 return GoalWaitReview(
@@ -313,7 +306,7 @@ class GoalWaitReview:
             if replied:
                 yield False
                 return
-            with goals.registry.store.locked():
+            with goals.registry.store.guarded_write():
                 if not review.current_for(goals):
                     try:
                         review = GoalWaitReview.capture(goals, owner)
@@ -402,7 +395,7 @@ class StoredGoalWaitRow(GoalWaitsRows, TypedTable):
 class GoalWaitTargetRow(GoalWaitsRows, TypedTable):
     goal_id: Annotated[GoalId, Column(primary_key=True)]
     position: Annotated[int, Column(primary_key=True)]
-    target_lookup: str
+    target_lookup: ThreadLookup
     indexes = (Index(("target_lookup", "goal_id")),)
 
     @classmethod
@@ -412,7 +405,7 @@ class GoalWaitTargetRow(GoalWaitsRows, TypedTable):
 
 @dataclass(frozen=True, slots=True)
 class GoalWaits(ThreadOwnedState, DurableStore, WireWakeFile):
-    path: Path = field()
+    root: Path
     filename: ClassVar[str] = "goal_waits.sqlite3"
     tables = GoalWaitsRows
 
@@ -462,13 +455,19 @@ class GoalWaits(ThreadOwnedState, DurableStore, WireWakeFile):
                 if row.wait.owner.lookup in owners:
                     StoredGoalWaitRow.delete(db, goal_id=row.goal_id)
 
-    def clear(self, goal_id: GoalId, *, wait_id: str | None = None) -> bool:
+    def clear(self, goal_id: GoalId) -> bool:
+        if not self.path.exists():
+            return False
+        with self.writing() as db:
+            return StoredGoalWaitRow.delete(db, goal_id=goal_id).rowcount > 0
+
+    def consume(self, goal_id: GoalId, wait_id: GoalWaitId) -> bool:
         if not self.path.exists():
             return False
         with self.writing() as db:
             return StoredGoalWaitRow.delete(
-                db, where="goal_id=? AND (? IS NULL OR json_extract(wait, '$.wait_id')=?)",
-                parameters=(goal_id, wait_id, wait_id),
+                db, where="goal_id=? AND json_extract(wait, '$.wait_id')=?",
+                parameters=(goal_id, wait_id),
             ).rowcount > 0
 
     def resolve(self, goal: GoalDeclaration) -> GoalWait:

@@ -46,6 +46,7 @@ from .errors import RelationViolationError
 from .field_codec import FieldCodec, Id128, NullMember, RecordMember, SubclassUnion
 from .launch_runtime import INHERITED_ENVIRONMENT, LaunchRuntime, RestoredRuntime
 from .sealed import Sealed
+from .systemd_unit import AgentsSlice, SystemdUnit
 
 if TYPE_CHECKING:
     from .registration_change import RegistrationChange, UpdatedRegistration
@@ -873,43 +874,6 @@ class UnmanagedHomeError(RelationViolationError):
     """A home no user manager belongs to asked to change the manager's units."""
 
 
-class SystemdUnit(ABC):
-    """A user unit declares the definition the resident manager installs."""
-
-    unit: ClassVar[str]
-
-    @classmethod
-    def unit_file(cls, home: Path) -> Path:
-        return home / ".config/systemd/user" / cls.unit
-
-    @classmethod
-    def required_units(cls) -> tuple[type[SystemdUnit], ...]:
-        return ()
-
-    @classmethod
-    @abstractmethod
-    def unit_text(cls, arguments: tuple[str, ...]) -> str: ...
-
-
-class AgentsSlice(SystemdUnit):
-    """Agent residents and their descendants leave two CPUs for the owner."""
-
-    unit = "agents.slice"
-    allowed_cpus: ClassVar[str] = "2-11"
-    cpu_weight: ClassVar[int] = 50
-
-    @classmethod
-    def launch_option(cls) -> str:
-        return f"--slice={cls.unit}"
-
-    @classmethod
-    def unit_text(cls, arguments: tuple[str, ...] = ()) -> str:
-        return (
-            "[Unit]\nDescription=Agent processes\n\n"
-            f"[Slice]\nAllowedCPUs={cls.allowed_cpus}\nCPUWeight={cls.cpu_weight}\n"
-        )
-
-
 class ResidentManager(DeclaredFamily, affix="Manager"):
     """What owns this home's units, and a handed-off resident once its launcher is gone: a
     host fact, decoded once, and the only caller of ``systemctl`` and ``systemd-run``.
@@ -962,17 +926,32 @@ class ResidentManager(DeclaredFamily, affix="Manager"):
     def install(cls, unit: type[SystemdUnit], arguments: tuple[str, ...] = (), *,
                 home: Path) -> None:
         """Publish a unit and its declared prerequisites, then load them together."""
-        cls.write_unit(unit, arguments, home=home)
-        cls.reload()
+        if cls.write_unit(unit, arguments, home=home):
+            cls.reload()
+
+    @classmethod
+    def required_units(cls) -> tuple[type[SystemdUnit], ...]:
+        return ()
+
+    @classmethod
+    def prepare_units(cls, *, home: Path) -> None:
+        """Install the manager's declared launch prerequisites before releasing a child."""
+        for required in cls.required_units():
+            cls.install(required, home=home)
 
     @classmethod
     def write_unit(cls, unit: type[SystemdUnit], arguments: tuple[str, ...] = (), *,
-                   home: Path) -> None:
+                   home: Path) -> bool:
+        changed = False
         for required in unit.required_units():
-            cls.write_unit(required, home=home)
+            changed |= cls.write_unit(required, home=home)
         destination = unit.unit_file(home)
-        destination.parent.mkdir(parents=True, exist_ok=True)
-        destination.write_text(unit.unit_text(arguments), encoding="utf-8")
+        definition = unit.unit_text(arguments)
+        if not destination.is_file() or destination.read_text(encoding="utf-8") != definition:
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            destination.write_text(definition, encoding="utf-8")
+            changed = True
+        return changed
 
     @classmethod
     def control(cls, *arguments: str) -> None:
@@ -1011,9 +990,12 @@ class SystemdUserManager(ResidentManager):
 
     @classmethod
     def command(cls, command: tuple[str, ...]) -> tuple[str, ...]:
-        return ("systemd-run", "--user", "--scope", "--quiet", "--collect",
-                AgentsSlice.launch_option(),
+        return (*AgentsSlice.run_prefix(), "--scope",
                 f"--unit=agent-comms-resident-{Id128.mint()}", "--", *command)
+
+    @classmethod
+    def required_units(cls) -> tuple[type[SystemdUnit], ...]:
+        return (AgentsSlice,)
 
     @staticmethod
     def shown(unit: str, name: str) -> str:
@@ -1057,9 +1039,10 @@ class SystemdUserManager(ResidentManager):
                   assigned: Mapping[str, str], wait: bool) -> None:
         """systemd-run copies each inherited value itself, so none is spelled on a command
         line."""
+        cls.prepare_units(home=Path.home())
         subprocess.run(
-            ("systemd-run", "--user", "--quiet", "--collect", *(("--wait",) if wait else ()),
-             AgentsSlice.launch_option(), f"--unit={unit}", f"--working-directory={cwd}",
+            (*AgentsSlice.run_prefix(), *(("--wait",) if wait else ()),
+             f"--unit={unit}", f"--working-directory={cwd}",
              f"--property=StandardInput=file:{stdin}",
              f"--property=StandardOutput=file:{stdout}",
              f"--property=StandardError=file:{stderr}",
@@ -1114,7 +1097,9 @@ class OutlivesLauncherLifetime(ChildLifetime):
 
     @classmethod
     def command(cls, command: tuple[str, ...]) -> tuple[str, ...]:
-        return ResidentManager.current().command(command)
+        manager = ResidentManager.current()
+        manager.prepare_units(home=Path.home())
+        return manager.command(command)
 
     @staticmethod
     def resident(descriptor: int) -> ProcessIdentity:

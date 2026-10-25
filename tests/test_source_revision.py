@@ -8,6 +8,7 @@ from source_revision_fixture import SourceRepository
 from test_todos import order
 from agent_comms.change_report import CitedRevisions, FileLine, MainRevision, PullRequestHeadRevision
 from agent_comms.errors import MissingSourceLine
+from agent_comms.field_codec import OwnerRequestKey
 from agent_comms.goal_actions import OrderGoalAction
 from agent_comms.repo import GitCommandError
 from agent_comms.owner_requests import OwnerRequestId
@@ -60,9 +61,15 @@ def test_order_derives_its_only_source_revision_from_its_pull_request(tmp_path):
     location = FileLine('branch.py', 2)
     declaration = replace(declaration, owner=location, finding=LocatedProblemFinding(location),
         scope=FixScope(FixShape(parents=(location,), members=())), pull_requests=(source.link,))
-    action = OrderGoalAction(problem='P1', order=declaration, request=OwnerRequestId('request'),
-        review_at=RecordedEventTime(1000), commander='lead', expected_revision=1,
-        assigner=RecordedThreadIncarnation('lead', 1.0))
+    action = OrderGoalAction(
+        problem="P1",
+        order=declaration,
+        request=OwnerRequestId(OwnerRequestKey.mint()),
+        review_at=RecordedEventTime(1000),
+        commander="lead",
+        expected_revision=1,
+        assigner=RecordedThreadIncarnation("lead", 1.0),
+    )
     action.require_sendable()
     with pytest.raises(MissingSourceLine):
         replace(action, order=replace(declaration, pull_requests=())).require_sendable()

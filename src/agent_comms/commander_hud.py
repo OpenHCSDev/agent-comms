@@ -10,10 +10,8 @@ from typing import TYPE_CHECKING
 
 from agent_comms.commander.vibe_check import OverloadDegradation
 from agent_comms.commander_frame_file import CommanderFrameFile
-from agent_comms.commander_pings import (
-    ForksRowPing, FinishedPhasesRowPing, HudPing, LoadPing, PhaseRowPing, Ping, UnitRowPing,
-)
-from agent_comms.field_codec import projected
+from agent_comms.commander_service import CommanderService
+from agent_comms.field_codec import OrderId, projected
 from agent_comms.heartbeat_frame import HeartbeatFrame
 from agent_comms.locked_store import JsonDocument
 from agent_comms.plan_phases import Plan, PlanPhase
@@ -34,7 +32,7 @@ class CommanderOrder:
 
     problem: str
     text: str
-    order: str
+    order: OrderId
     state: str
     progress: OrderProgress
     review_timers_up: tuple[RecordedEventTime, ...]
@@ -51,9 +49,6 @@ class HudRow(ABC):
 
     @abstractmethod
     def line(self) -> str: ...
-
-    @abstractmethod
-    def ping(self) -> HudPing: ...
 
 
 @dataclass(frozen=True)
@@ -83,9 +78,6 @@ class CommanderUnit(HudRow):
             f"ready={','.join(str(pr.number) for pr in self.ready_prs)} "
             f"draft={','.join(str(pr.number) for pr in self.draft_prs)}"
         )
-
-    def ping(self) -> UnitRowPing:
-        return UnitRowPing(self.unit, text=self.line())
 
     def needs_hand(self) -> bool:
         """Its UnitState asks for the commander, or a review timer on one of its orders is up."""
@@ -117,9 +109,6 @@ class CommanderPhase(HudRow):
             f"holders={','.join(unit.name for unit in self.holders)}"
         )
 
-    def ping(self) -> PhaseRowPing:
-        return PhaseRowPing(self.phase, text=self.line())
-
 
 @dataclass(frozen=True)
 class FinishedPhases(HudRow):
@@ -131,9 +120,6 @@ class FinishedPhases(HudRow):
     def line(self) -> str:
         return f"{self.plan.declared_name}: {len(self.phases)} phases done"
 
-    def ping(self) -> FinishedPhasesRowPing:
-        return FinishedPhasesRowPing(self.plan, text=self.line())
-
 
 @dataclass(frozen=True)
 class CommanderForks(HudRow):
@@ -144,9 +130,6 @@ class CommanderForks(HudRow):
 
     def line(self) -> str:
         return f"forks: {', '.join(fork.name for fork in self.forks) or 'none registered'}"
-
-    def ping(self) -> ForksRowPing:
-        return ForksRowPing(text=self.line())
 
 
 @dataclass(frozen=True)
@@ -209,12 +192,8 @@ class CommanderHud(ToolResult):
             phase, phase.done(reading), phase.ready(reading),
             tuple(dict.fromkeys(todo.held().owner_identity for todo in phase.holding(reading))),
         ) for phase in PlanPhase.members_with(PlanPhase))
-        forks = tuple(
-            fork.incarnation for thread in snapshot.threads.values()
-            if thread.parent.named(commander)
-            for fork in thread.execution.commander_forks(thread)
-            if snapshot.status(fork.name).receiving
-        )
+        forks = tuple(fork.incarnation for fork in CommanderService.forks(snapshot, commander)
+                      if snapshot.status(fork.name).receiving)
         return cls(owner, tuple(units), phases,
                    OverloadDegradation.from_orders(held, len(timers), sum(edits.values())),
                    forks)
@@ -224,24 +203,20 @@ class CommanderHud(ToolResult):
         UnitState family's order and then the plans' order, then the work that is moving, the
         forks, and one count per plan for its finished phases."""
         live = (*self.units, *(phase for phase in self.phases if not phase.finished))
-        finished: dict[type[Plan], list[type[PlanPhase]]] = {}
-        for phase in self.phases:
-            if phase.finished:
-                finished.setdefault(phase.phase.plan, []).append(phase.phase)
+        finished = tuple(phase.phase for phase in self.phases if phase.finished)
         return (
             *(row for row in live if row.needs_hand()),
             *(row for row in live if not row.needs_hand()),
             CommanderForks(self.forks),
-            *(FinishedPhases(plan, tuple(phases)) for plan, phases in finished.items()),
+            *(FinishedPhases(plan, phases) for plan in Plan.members_with(Plan)
+              for phases in (tuple(phase for phase in finished if phase.plan is plan),)
+              if phases),
         )
-
-    def pings(self) -> tuple[Ping, ...]:
-        return (LoadPing(text=str(self.load)), *(row.ping() for row in self.rows()))
 
     @projected(view="wire")
     def frame(self) -> tuple[str, ...]:
         """The load line, then one line per row in the order rows() declares."""
-        return tuple(ping.text for ping in self.pings())
+        return (str(self.load), *(row.line() for row in self.rows()))
 
 
 
@@ -251,7 +226,7 @@ class CommanderFrame(CommanderFrameFile, JsonDocument[CommanderHud]):
     """The newest CommanderHud of each beating commander, for views that only show it.
 
     One writer, the heartbeat, replaces every commander's file each beat from the same
-    CommanderHud its pings derive from, and keeps no history. It never reads a frame back,
+    CommanderHud the heartbeat reads, and keeps no history. It never reads a frame back,
     so a shape left by an older build cannot stop a beat; the next beat overwrites it.
     """
 

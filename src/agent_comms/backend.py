@@ -17,7 +17,6 @@ from __future__ import annotations
 
 import asyncio
 import json
-import secrets
 import unicodedata
 from abc import ABC, abstractmethod
 from collections.abc import (
@@ -68,6 +67,7 @@ from .send_outcome import NO_SEND_BOUNDARY, SendBoundary
 from .tool_denial import SelectedToolDenied
 from .turn_context import InputContributionCoordinates
 from .turn_inputs import InputForwarding
+from .turn_item import PiRequestKey
 from .turn_output import TurnOutput
 from .turn_phase import SettlingStatsPhase, TurnPhase
 from .turn_stats import StatsRequest
@@ -163,7 +163,7 @@ async def stream_agent_events(
                 TurnSession(
                     launch,
                     partial(commands.Prompt,
-                        id=RequestId(f"agent-comms-prompt-{secrets.token_hex(16)}"),
+                        id=RequestId(PiRequestKey.fresh()),
                         input_id=InputId.mint(), message=task, images=tuple(images),
                         context_contributions=context_contributions,
                     ),
@@ -261,8 +261,8 @@ class NativeSession(MroDispatch, ABC):
         self.started_during_abort: list[events.FollowingInputStarted] = []
         self.finished = self.skip = False
 
-    def accept_tool_round(self, message):
-        self.tool_socket.announce(message.content)
+    def accept_tool_round(self, message: AssistantMessage) -> None:
+        self.tool_socket.announce(message.parts)
 
     def accept_final_message(self, message: AssistantMessage) -> None:
         """A turn that only streams its output takes no answer from the final message."""
@@ -358,7 +358,7 @@ class NativeSession(MroDispatch, ABC):
         abort_deadline = self.loop.time() + max(0.0, self.rpc_abort_grace)
         try:
             remaining = max(0.0, abort_deadline - self.loop.time())
-            abort = commands.Abort(id=RequestId("agent-comms-watchdog"))
+            abort = commands.Abort(id=RequestId(PiRequestKey("agent-comms-watchdog")))
             self.native.send(abort)
             await asyncio.wait_for(self.native.drain(), timeout=remaining)
             while remaining := max(0.0, abort_deadline - self.loop.time()):

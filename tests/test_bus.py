@@ -28,6 +28,7 @@ from agent_comms.messages import (
     BusRow,
     BusTables,
     Claimed,
+    ClaimHolders,
     ClaimHistoryKind,
     ConversationActivity,
     InfoKind,
@@ -45,7 +46,7 @@ from agent_comms.errors import (
     RelationViolationError,
     UnclaimedError,
 )
-from agent_comms.field_codec import MessageId, TimestampText
+from agent_comms.field_codec import GitCommitText, MessageId, MessageIdText, TimestampText
 from agent_comms.message_reference import MessageReference
 from agent_comms.read_basis import RepliesDisplayScope
 from agent_comms.response_acknowledgement import (
@@ -131,22 +132,14 @@ def test_projection_digest_ignores_infrastructure_source(
     assert projection_source_digest(projection_source) == before
 
 
-def test_projection_digest_tracks_declared_column_spelling(projection_source: Path) -> None:
+@pytest.mark.parametrize("owner, changes", ((MessageIdText, True), (GitCommitText, False)))
+def test_projection_digest_tracks_declared_column_spelling(
+    projection_source: Path, owner: type, changes: bool
+) -> None:
     before = json.loads(projection_source_digest(projection_source))["message_identity_source"]
-    codec = projection_source / "field_codec.py"
-    original = codec.read_text()
-    related = "digits: ClassVar[int] = 12"
-    assert original.count(related) == 1
-    codec.write_text(original.replace(related, "digits: ClassVar[int] = 13"))
-    assert (
-        json.loads(projection_source_digest(projection_source))["message_identity_source"] != before
-    )
-    unrelated = 'spelling = re.compile("[0-9a-f]{7,40}")'
-    assert original.count(unrelated) == 1
-    codec.write_text(original.replace(unrelated, 'spelling = re.compile("[0-9a-f]{8,40}")'))
-    assert (
-        json.loads(projection_source_digest(projection_source))["message_identity_source"] == before
-    )
+    edit_inside(projection_source, owner)
+    after = json.loads(projection_source_digest(projection_source))["message_identity_source"]
+    assert (after != before) == changes
 
 
 def test_nominal_message_id_column_stores_plain_text() -> None:
@@ -173,6 +166,7 @@ def test_nominal_message_id_column_stores_plain_text() -> None:
         BusProjectionTables,
         BusRecord,
         Claimed,
+        ClaimHolders,
         ConversationActivity,
         MessageKind,
         ThreadTarget,
@@ -643,7 +637,8 @@ def test_human_refusal_rolls_back_the_header(tmp_path, bus):
 
 
 def test_notification_failure_carries_the_committed_message(tmp_path, bus):
-    bus.path.with_suffix(".changed").mkdir()
+    marker, = bus.source_paths(bus.path.parent)
+    marker.mkdir(parents=True)
     origin = HumanOrigin("author", 1, str(tmp_path))
     with pytest.raises(CommittedMessageError) as failed:
         origin.append(

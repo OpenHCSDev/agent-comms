@@ -425,17 +425,21 @@ class DeliveryRow(JournalMessage, BridgeStateTable, TypedTable):
     indexes = (ExpressionIndex((sequence_sql,)),)
 
     @classmethod
-    def latest(cls, db: sqlite3.Connection) -> tuple[JournalMessage, ...]:
-        """The sequence index selects the newest attempt, including uncertain emissions."""
-        return tuple(JournalMessage.read(db.execute(
-            f'SELECT {JournalMessage._select_list(cls)} FROM "{cls.declared_name}" '
-            f'ORDER BY {cls._sql(cls.sequence_sql)} DESC LIMIT 1')))
+    def latest_reference(cls, db: sqlite3.Connection) -> tuple[MessageReference, ...]:
+        """The sequence index selects the newest attempt, including uncertain emissions;
+        the cursor is its seq and id, so a payload in an older wire shape never decodes."""
+        sequence = cls._sql(cls.sequence_sql)
+        return tuple(
+            MessageReference(seq, FieldCodec.decode(MessageId, message_id))
+            for seq, message_id in db.execute(
+                f'SELECT {sequence}, {cls._sql("{id}")} FROM "{cls.declared_name}" '
+                f'ORDER BY {sequence} DESC LIMIT 1'))
 
     @classmethod
     def resume_after(cls, db: sqlite3.Connection, binding: Binding) -> InboxStart:
         """The binding and journal own progress, including uncertain emissions."""
-        latest = cls.latest(db)
-        return max((binding.start, *(BridgeStart(row.message.reference) for row in latest)),
+        return max((binding.start, *(BridgeStart(reference)
+                                     for reference in cls.latest_reference(db))),
                    key=lambda point: point.cursor())
 
     outcome: Annotated[type[Outcome], Column(index=True)]

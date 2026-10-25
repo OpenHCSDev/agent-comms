@@ -12,7 +12,6 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from io import StringIO
 from typing import Annotated, TYPE_CHECKING
-from uuid import uuid4
 
 
 from .cli_result import CliResult
@@ -21,6 +20,8 @@ from .harness_install import Harness
 from .thread_text import NoThreadText, ThreadText
 from .transcript_events import ImportedInput, ImportedMessage, NoRetainedRequest
 from .turn_context import CodexRolloutProvenance, ContextSourceText
+from .turn_item import NativeItemId
+from .native_session_reopen import PiSessionId
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -136,9 +137,9 @@ class ImportSnapshot(ImportedConversation):
         timestamp = datetime.now(UTC)
         iso = timestamp.isoformat()
         records: list[dict[str, object]] = [
-            {"type": "session", "version": 3, "id": str(uuid4()), "timestamp": iso, "cwd": str(project)}
+            {"type": "session", "version": 3, "id": FieldCodec.encode(PiSessionId.fresh()), "timestamp": iso, "cwd": str(project)}
         ]
-        parent = uuid4().hex[:16]
+        parent = FieldCodec.encode(NativeItemId.fresh())
         records.append({"type": "custom", "id": parent, "parentId": None, "timestamp": iso,
             "customType": "agent-comms-import",
             "data": FieldCodec.encode(ImportedSessionMetadata(

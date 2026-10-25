@@ -536,7 +536,7 @@ class TrackedTurnSession(TurnSession):
             return await Coordination.run_worker(lambda: _verify_context(
                 self.launch.session.files(self.launch.root),
                 self.command.input_id,
-                self.native.attestation.identity.session_id,
+                self.native.attestation.require_identity().session_id,
                 self.input_commit.require(),
                 self.context_commit.require(),
                 evidence=source_reads.for_source(self.active_session_file),

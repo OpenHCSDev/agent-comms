@@ -11,7 +11,6 @@ import asyncio
 import json
 import os
 import sys
-import uuid
 from collections.abc import Iterator, Mapping
 from contextlib import ExitStack, contextmanager
 from dataclasses import dataclass, replace
@@ -26,7 +25,7 @@ from .coordination_errors import CoordinationError
 from .coordinator import Coordination
 from .declared_family import DeclaredFamily
 from .errors import RelationViolationError
-from .field_codec import FieldCodec, WireOmitDefault
+from .field_codec import FieldCodec, RestartId, WireOmitDefault
 from .launch_runtime import LaunchRuntime, RestartEnvironment
 from .lifecycle_capability import Active, LifecycleCapability, Pending
 from .locked_store import DurableFile, PatternFile, RuntimeFile
@@ -38,7 +37,13 @@ from .owner_restart import OwnerRestartRequest, StoppedOwnerFailure
 from .private_path import PrivateDirectoryRole
 from .restart_refusals import RestartRefusal
 from .restart_scope import OwnersNamed
-from .store_files import AtomicFile, ClaimHeldError, ProcessSingleton, StoreLockFile, _store_lock
+from .store_files import (
+    AtomicFile,
+    ClaimHeldError,
+    ProcessSingleton,
+    StoreLockFile,
+    StoreGuard,
+)
 from .thread_identity import RecordedThreadIncarnation
 from .tool_result import ToolResult
 from .watched import ChangeSignal, DirectorySource, FileSource
@@ -159,7 +164,7 @@ class RestartTarget:
 
     @property
     def is_current_watcher(self) -> bool:
-        return self.launch_runtime == LaunchRuntime.running()
+        return self.launch_runtime.runs_this_process
 
     def require_watcher(self, comms: Comms) -> None:
         self.require_available(comms)
@@ -179,7 +184,7 @@ class QueuedRestart(DurableFile, PatternFile):
     def matching_in(cls, root: Path) -> frozenset[Path]:
         return frozenset(path for path in root.rglob(str(cls.pattern())) if path.is_file())
 
-    id: str
+    id: RestartId
     selection: OwnerRestartSelection
     target: RestartTarget
     state: RestartState
@@ -212,7 +217,7 @@ class RestartQueueLayoutError(RelationViolationError):
 
 
 @dataclass(frozen=True)
-class RestartQueue:
+class RestartQueue(StoreGuard):
     """One active record per recorded owner; settled records never enter that set."""
 
     directory: Path
@@ -237,7 +242,7 @@ class RestartQueue:
 
     @contextmanager
     def locked(self):
-        with _store_lock(self.lock_path):
+        with self.write_guard(self.lock_path):
             if next(self.directory.glob('*.json'), None) is not None:
                 raise RestartQueueLayoutError(
                     'Restart queue uses a retired layout; existing records require explicit conversion'
@@ -253,7 +258,7 @@ class RestartQueue:
         directory.mkdir(mode=0o700, exist_ok=True)
         PrivateDirectoryRole.require(
             directory.lstat(), RelationViolationError("Settled restart directory must be private"))
-        return directory / f'{uuid.UUID(record.id).hex}.json'
+        return directory / f'{record.id}.json'
 
     def read(self, path: Path) -> QueuedRestart:
         if path.is_symlink():
@@ -325,7 +330,7 @@ def enqueue(comms: Comms, selection: OwnerRestartSelection, *,
             queue.save(result)
         else:
             result = QueuedRestart(
-                uuid.uuid4().hex, selection, target, PendingRestart()
+                RestartId.mint(), selection, target, PendingRestart()
             )
             queue.save(result)
     # A new watcher can safely race an existing watcher: flock permits one runner.

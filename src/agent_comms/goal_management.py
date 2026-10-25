@@ -16,7 +16,7 @@ from functools import cached_property
 from pathlib import Path
 from typing import TYPE_CHECKING, TypeVar
 
-from agent_comms.field_codec import GoalId
+from agent_comms.field_codec import GoalId, GoalWaitId
 from .agent_activity import AgentActivity
 from .coordination_errors import StaleFence
 from .errors import RelationViolationError, UnregisteredThreadError
@@ -43,7 +43,6 @@ from .goal_waits import (
 from .native_input_owner import GoalLaunchOwner
 from .owner_requests import NewestOpenRequest, RequestDirective
 from .registration import Registration
-from .store_files import SharedLock
 
 if TYPE_CHECKING:
     from .agent_events import GoalChange
@@ -84,7 +83,7 @@ class Goals:
         self.registry = registry
         self.bus = bus
         self.agents = agents
-        self.waits = GoalWaits.at(root)
+        self.waits = GoalWaits(root)
         self.goal_store: GoalAttemptStore | None = None
 
     def fork_goal(self, parent: Thread, child: Thread) -> Goal:
@@ -453,14 +452,14 @@ class Goals:
             return GoalSnapshot(goal, source.execution())
         return GoalSnapshot(owner.goal, IdleGoalExecution())
 
-    def consume_goal_wait(self, name: str, wait_id: str) -> bool:
+    def consume_goal_wait(self, name: str, wait_id: GoalWaitId) -> bool:
         """Consume the exact wait after reserving its original attempt."""
         goal = self.registry.require(name).goal.active()
-        return goal.clear_wait(self.waits, wait_id=wait_id)
+        return goal.consume_wait(self.waits, wait_id)
 
     def consume_reply_wait(self, owner: RegistryOwner, reference: MessageReference) -> bool:
         """Read the exact completed delivery before checking its original owner fence."""
-        with self.registry.store.locked(mode=SharedLock()):
+        with self.registry.store.guarded_read():
             owner.require_registry(self.registry)
             review = GoalWaitReview.capture(self, owner.thread.incarnation.require_recorded())
         incarnation = review.owner.incarnation.require_recorded()
@@ -469,7 +468,7 @@ class Goals:
         original, = self.bus.bus.deliveries_for_references((reference,))
         if not review.wait.matches(original, incarnation):
             return False
-        with self.registry.store.locked():
+        with self.registry.store.guarded_write():
             owner.require_registry(self.registry)
             if not review.current_for(self):
                 return False
@@ -510,5 +509,5 @@ class Goals:
         """Run checks before locking, then recheck the original goal at publication."""
         action.require_actor(actor)
         action = action.prepare(self, name, actor)
-        with self.registry.store.locked():
+        with self.registry.store.guarded_write():
             yield action.apply(GoalActionContext(self, self.registry.require(name), actor))

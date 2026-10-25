@@ -13,10 +13,10 @@ import shutil
 import subprocess
 import sys
 import tempfile
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from contextlib import ExitStack, contextmanager
 from dataclasses import dataclass, field
-from functools import cached_property
+from functools import cached_property, partial
 from pathlib import Path
 from traceback import extract_tb
 from typing import Annotated, ClassVar, TextIO
@@ -201,11 +201,13 @@ class InstallUnit:
         """Systemd signals the install, which runs its abort, and returns once the unit ends."""
         ResidentManager.current().control("stop", self.unit)
 
-    def due(self) -> type[standing.InstallDue]:
-        """A run whose unit is gone without printing a result died; any other was launched."""
+    def due(self) -> Callable[..., standing.RunInstallDue]:
+        """A run whose unit is gone without printing a result died; any other was launched.
+        The run hands itself to the member it selects."""
         gone = ResidentManager.current().activity(self.unit).ended()
-        return (standing.DiedInstallDue if gone and not self.result.read_text()
-                else standing.LaunchedInstallDue)
+        member = (standing.DiedInstallDue if gone and not self.result.read_text()
+                  else standing.LaunchedInstallDue)
+        return partial(member, unit=self)
 
     def last_error(self) -> str:
         return next((line for line in reversed(self.errors.read_text().splitlines())
@@ -273,7 +275,7 @@ class InstallLogs:
                          for marker in unit.logs.glob("cause*.json"))
         )
 
-    def member(self, repo: RepositoryName, main: str) -> type[standing.InstallDue]:
+    def member(self, repo: RepositoryName, main: str) -> Callable[..., standing.InstallDue]:
         """The merge's launched run selects its standing-rule member; none is pending."""
         return next((run.due() for run in self.launched(repo, main)),
                     standing.PendingInstallDue)

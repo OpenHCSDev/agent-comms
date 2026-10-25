@@ -24,6 +24,7 @@ from .locked_store import RegistryFile
 from .maintenance_barrier import MaintenanceBarrier
 from .native_failures import NativePiUnavailable
 from .prompt_state import PreparedSession, UnwrittenPrompt
+from .turn_item import PiRequestKey
 
 if TYPE_CHECKING:
     from .backend import NativeSession, TurnSession
@@ -195,7 +196,7 @@ class InputForwarding(MroDispatch):
         native_id = InputId.mint()
         text = item.content.text
         command = commands.Prompt(
-            id=RequestId(public_id),
+            id=RequestId(PiRequestKey(public_id)),
             input_id=native_id,
             message=text,
             images=item.content.images,

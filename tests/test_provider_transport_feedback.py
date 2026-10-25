@@ -29,7 +29,7 @@ def observed():
 def test_observed_native_failure_preserves_stage_and_no_content_assumptions():
     event = PiRpcChannel.decode_record(FIXTURE.read_bytes(), strict=True)
     assert isinstance(event, MessageEnd)
-    assert event.message.content == ()
+    assert event.message.parts == ()
     assert event.message.stop_reason is ErrorStopReason
     assert event.message.usage.total_tokens == PiCount.from_wire(0)
     (diagnostic,) = event.message.diagnostics

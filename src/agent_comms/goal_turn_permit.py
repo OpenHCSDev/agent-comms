@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING, ClassVar
 from agent_comms.ordinary_turn_rules import OrdinaryGoalGrantCheck
 
 from .field_codec import TurnId, GoalId
+from .turn_item import UsageChargeId
 
 if TYPE_CHECKING:
     from agent_comms.goal_attempts import GoalAttemptStore, LaunchPermit
@@ -57,7 +58,7 @@ class GoalTurnPermit(ABC):
     def fail_origin(self, store: GoalAttemptStore, goal_id: GoalId) -> None: ...
 
     @abstractmethod
-    def charge_for(self, goal_id: GoalId, goals: Goals, response: str,
+    def charge_for(self, goal_id: GoalId, goals: Goals, response: UsageChargeId,
                    usage: PiUsage) -> bool: ...
 
     @abstractmethod
@@ -70,7 +71,7 @@ class NoLaunchPermit(GoalTurnPermit):
     def has_verified_progress(self, store: GoalAttemptStore) -> bool:
         return False
 
-    def charge_for(self, goal_id: GoalId, goals: Goals, response: str,
+    def charge_for(self, goal_id: GoalId, goals: Goals, response: UsageChargeId,
                    usage: PiUsage) -> bool:
         return False
 

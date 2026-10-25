@@ -18,6 +18,7 @@ from agent_comms.pi_commands import GetState
 from agent_comms.pi_payloads import AnonymousRequest, RequestId
 from agent_comms.turn_goal_permission import InactiveGoalPermission, TurnGoalPermission
 from agent_comms.turn_input_source import SelectedOriginalInput
+from agent_comms.turn_item import PiRequestKey
 
 
 def test_drain_lifecycle_keeps_inbox_and_original_in_one_owner():
@@ -144,4 +145,4 @@ def test_optional_rpc_id_is_refused_when_an_input_requires_correlation():
     assert "id" not in command.to_rpc()
     with pytest.raises(ValueError):
         command.require_id()
-    assert GetState(id=RequestId("correlated")).require_id() == "correlated"
+    assert GetState(id=RequestId(PiRequestKey("correlated"))).require_id() == "correlated"
