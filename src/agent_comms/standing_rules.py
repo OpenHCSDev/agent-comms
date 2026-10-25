@@ -308,7 +308,7 @@ class HeldBranchRule(HolderLine, UndatedStandingRule, declared_name=None):
         snapshot = comms.registry.snapshot()
         branches = []
         for state in observed:
-            merges = state.source.merges
+            merges = state.source.merges()
             writing = tuple(todo for todo in state.source.todos
                             if todo.order.writes_source(todo, merges))
             for unit in state.readable_units():

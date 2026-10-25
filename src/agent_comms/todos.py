@@ -79,7 +79,7 @@ from agent_comms.field_codec import (
 )
 from agent_comms.goals import CheckedCommit, OrderCheck, ProblemGoalOrder
 from agent_comms.repo import GitCommandError
-from agent_comms.head_review import PullRequestHead
+from agent_comms.head_review import PullRequestHead, ReadPullRequestHead
 from agent_comms.launch_runtime import LaunchRuntime
 from agent_comms.lifecycle_capability import LifecycleCapability, Pending
 from agent_comms.message_reference import MessageReference
@@ -3662,14 +3662,15 @@ class HeadVerdict(HeadReview, declared_name=None):
 
     def reviewed(self, goals: Goals, request: PullRequestHead, reviewer: ThreadIncarnation,
                  order: HeadReviewOrder) -> HeadReviewRecord:
-        request = replace(request, head=request.current())
-        subject = self.subject(goals, request)
+        current = request.current()
+        request = replace(request, head=current.head)
+        subject = self.subject(goals, current)
         recorded = order.record_review(goals, request, self, reviewer)
         self.after_record(goals, recorded)
         self.post(request.repo, request.head, reviewer.name, subject)
         return recorded
 
-    def subject(self, goals: Goals, request: PullRequestHead) -> str:
+    def subject(self, goals: Goals, request: ReadPullRequestHead) -> str:
         """What the published status names; acceptance also measures what the head grows."""
         return f"#{request.pr}"
 
@@ -3709,11 +3710,10 @@ class ReviewedHeadVerdict(DecidedHeadVerdict):
     state = "success"
     verb = "Accepted"
 
-    def subject(self, goals: Goals, request: PullRequestHead) -> str:
+    def subject(self, goals: Goals, request: ReadPullRequestHead) -> str:
         project = goals.registry.snapshot().commander_project.require()
-        row, = PullRequests().rows(request.repo, (request.pr,))
         growth = WorkBranches(Repo.selected(project.repos, request.repo.to_wire()).checkout
-                              ).reviewed_growth(request.pr, request.head, row.base)
+                              ).reviewed_growth(request.pr, request.head, request.base)
         self.require_growth(growth)
         return f"#{request.pr} (src {growth.total:+d})"
 

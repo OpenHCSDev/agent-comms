@@ -70,23 +70,23 @@ class UninstalledMerge:
     """One first-parent commit on main the installed build lacks, decoded from git's log once."""
 
     at: int
-    subject: str
+    request: str
     title: str
     format: ClassVar[str] = "%ct%x1f%s%x1f%b%x1e"
 
     @classmethod
     def read(cls, repo: Repo, installed: str, main: str) -> tuple[Self, ...]:
+        """GitHub's merge subject names the request; its body's first line is the title."""
         log = repo.git(repo.checkout, "log", "--first-parent", f"--format={cls.format}",
                        f"{installed}..{main}")
-        return tuple(cls(int(at), subject, body.strip().partition("\n")[0])
+        return tuple(cls(int(at), subject.removeprefix("Merge pull request ").partition(" from ")[0],
+                         body.strip().partition("\n")[0])
                      for record in log.split("\x1e")[:-1]
                      for at, subject, body in (record.lstrip("\n").split("\x1f"),))
 
     @property
     def line(self) -> str:
-        """GitHub's merge subject names the request; its body's first line is the title."""
-        request = self.subject.removeprefix("Merge pull request ").partition(" from ")[0]
-        return f"{request} {self.title}".strip()
+        return f"{self.request} {self.title}"
 
 
 @dataclass(frozen=True)
@@ -125,6 +125,7 @@ class InstallDue(UndatedStandingRule):
 
     @classmethod
     def due(cls, comms: Comms, pulls: PullRequests) -> tuple[InstallDue, ...]:
+        DeclaredFamily.discover_package(commander)  # The verbs that clear it, for its action.
         repos = comms.registry.snapshot().commander_project.require().repos
         installed = RecordedBuildIdentity.installed()
         logs = installer_launch.InstallLogs(comms.root)
@@ -135,12 +136,13 @@ class InstallDue(UndatedStandingRule):
         target = core.git(core.checkout, "rev-parse", "origin/main").strip()
         for repo in repos:
             main = repo.git(repo.checkout, "rev-parse", "origin/main").strip()
-            if installed.contains(main, repo.checkout):
-                continue
             recorded = installed.for_repository(repo)
+            # Main is in the build exactly when git logs no first-parent commit past it.
+            merges = UninstalledMerge.read(repo, recorded.commit, main)
+            if not merges:
+                continue
             member = logs.member(repo.github, main)
-            due.append(member(repo.github, main, recorded.commit,
-                              UninstalledMerge.read(repo, recorded.commit, main),
+            due.append(member(repo.github, main, recorded.commit, merges,
                               tuple(row for row in pulls.open(repo.github) if row.landing()),
                               logs, core, target))
         return tuple(due)
@@ -164,7 +166,6 @@ class InstallDue(UndatedStandingRule):
 class PendingInstallDue(InstallDue):
     @property
     def action(self) -> str:
-        DeclaredFamily.discover_package(commander)
         verbs = " or ".join(f"`{verb.usage()}`" for verb in self.clearing_verbs)
         return f"{verbs} installs Core main {self.target[:12]}; batch the landing requests first"
 
