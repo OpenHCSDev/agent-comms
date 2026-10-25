@@ -224,15 +224,14 @@ class CommanderHud(ToolResult):
         UnitState family's order and then the plans' order, then the work that is moving, the
         forks, and one count per plan for its finished phases."""
         live = (*self.units, *(phase for phase in self.phases if not phase.finished))
-        finished: dict[type[Plan], list[type[PlanPhase]]] = {}
-        for phase in self.phases:
-            if phase.finished:
-                finished.setdefault(phase.phase.plan, []).append(phase.phase)
+        finished = tuple(phase.phase for phase in self.phases if phase.finished)
         return (
             *(row for row in live if row.needs_hand()),
             *(row for row in live if not row.needs_hand()),
             CommanderForks(self.forks),
-            *(FinishedPhases(plan, tuple(phases)) for plan, phases in finished.items()),
+            *(FinishedPhases(plan, phases) for plan in Plan.members_with(Plan)
+              for phases in (tuple(phase for phase in finished if phase.plan is plan),)
+              if phases),
         )
 
     def pings(self) -> tuple[Ping, ...]:

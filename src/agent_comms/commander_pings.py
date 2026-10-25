@@ -96,6 +96,15 @@ class HudPing(Ping, declared_name=None):
 
 
 @dataclass(frozen=True)
+class SoleRowPing(HudPing, declared_name=None):
+    """A row with no member: its kind is its whole identity."""
+
+    @property
+    def key(self) -> tuple[type[Self]]:
+        return (type(self),)
+
+
+@dataclass(frozen=True)
 class UnitRowPing(HudPing):
     unit: ThreadIncarnation
 
@@ -123,17 +132,13 @@ class FinishedPhasesRowPing(HudPing):
 
 
 @dataclass(frozen=True)
-class ForksRowPing(HudPing):
-    @property
-    def key(self) -> tuple[type[ForksRowPing]]:
-        return (ForksRowPing,)
+class ForksRowPing(SoleRowPing):
+    pass
 
 
 @dataclass(frozen=True)
-class LoadPing(HudPing):
-    @property
-    def key(self) -> tuple[type[LoadPing]]:
-        return (LoadPing,)
+class LoadPing(SoleRowPing):
+    pass
 
 
 @dataclass(frozen=True)
