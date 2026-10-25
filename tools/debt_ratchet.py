@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import ast
+import atexit
 import dataclasses
 import enum
 import hashlib
@@ -19,6 +20,7 @@ import json
 import os
 import pickle
 import re
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -50,6 +52,7 @@ from agent_comms.child_process import ForkedProcessPool, SpawnedProcess
 from agent_comms.core_stamp import WheelStamp
 from agent_comms.declared_family import DeclaredFamily
 from agent_comms.installer.carry import STEPS
+from module_layers import PACKAGE, StackClient
 from stored_formats import StoredForm
 from agent_comms.field_codec import FieldCodec, boundary_decoder, projected
 from agent_comms.mro_dispatch import MroDispatch, handles
@@ -782,6 +785,86 @@ class TypeErrors(CheckedRevision):
     def environment(root: str, tree: Path) -> dict[str, str]:
         """Module names start at the source directory, as they do when the package is installed."""
         return {**os.environ, "MYPYPATH": os.pathsep.join(Measure.source_paths(root, tree))}
+
+
+class ClientTypeErrors(Measure):
+    """Mypy errors in each stack client file that imports agent_comms, checked against each
+    revision's package. Both sides read the same client commit, so the client's own errors cancel
+    and an error the head adds is a name or signature the client uses that the change took away:
+    #3110 deleted TurnState.settles as unused while Toad's conversation_turn.py:262 called it, and
+    only the running app found it."""
+
+    finding = TypeErrors.finding
+
+    @staticmethod
+    @cache
+    def clients(repo: Path, head: str) -> tuple[StackClient, ...]:
+        """The head's stack clients, cloned once per run and read by both sides."""
+        into = Path(tempfile.mkdtemp(prefix="debt-ratchet-clients-"))
+        atexit.register(shutil.rmtree, into, True)
+        (into / "stack").mkdir()
+        (into / "stack/pyproject.toml").write_bytes(git(repo, "show", f"{head}:stack/pyproject.toml"))
+        return StackClient.fetched(into / "stack", into)
+
+    @staticmethod
+    def selected(client: StackClient) -> list[str]:
+        return sorted({entry.path for entry in client.imports
+                       if entry.module.partition(".")[0] == PACKAGE})
+
+    @classmethod
+    def findings(cls, repo: Path, ref: str, client: StackClient, side: Side) -> tuple[Side, Counter[str]]:
+        commit = git(client.checkout, "rev-parse", "HEAD").decode().strip()
+        tree = git(repo, "rev-parse", f"{ref}:src").decode().strip()
+        return side, ContentCache.memo(partial(cls.checked, repo, ref, client, side),
+                                       cls.__name__, client.name, commit, tree)
+
+    @classmethod
+    def checked(cls, repo: Path, ref: str, client: StackClient, side: Side) -> Counter[str]:
+        selected = cls.selected(client)
+        cache = ContentCache.directory.with_name("debt-ratchet-mypy-clients") / client.name / side.value
+        with tempfile.TemporaryDirectory(prefix="debt-ratchet-client-") as scratch:
+            subprocess.run(["tar", "-x", "-C", scratch], input=git(repo, "archive", ref, "src"),
+                           check=True, timeout=60)
+            # The client checks under its own configuration, from its checkout.
+            result = SpawnedProcess.run(
+                (sys.executable, "-m", "mypy", "--explicit-package-bases", "--follow-imports=silent",
+                 "--ignore-missing-imports", "--no-error-summary", "--cache-dir", str(cache),
+                 *selected),
+                cwd=client.checkout, timeout=600,
+                env={**os.environ, "MYPYPATH": os.pathsep.join(
+                    (str(Path(scratch, "src")), str(client.checkout / "src")))},
+            )
+        if result.returncode not in (0, 1):
+            raise ValueError(f"{cls.__name__} could not check {client.name} at {ref}: {result.stderr}")
+        output = (result.stdout + result.stderr).decode()
+        return Counter(f"{client.name}/{match[1]}" for match in cls.finding.finditer(output)
+                       if match[1] in selected)
+
+    @classmethod
+    def parts(cls, repo: Path, base: str, head: str, changed: set[str],
+              root: str) -> tuple[Callable[[], object], ...]:
+        # Only a change to the package the clients import can change what they see.
+        if not any(path.startswith(f"src/{PACKAGE}/") for path in changed):
+            return ()
+        return tuple(partial(cls.findings, repo, ref, client, side)
+                     for client in cls.clients(repo, head)
+                     if cls.selected(client)
+                     for side, ref in zip(Side, (base, head), strict=True))
+
+    @classmethod
+    def combine(cls, results: list, repo: Path, base: str, head: str, changed: set[str],
+                root: str) -> tuple[dict[str, int], dict[str, int]]:
+        found: dict[Side, Counter[str]] = {side: Counter() for side in Side}
+        for side, counted in results:
+            found[side] += counted
+        paths = sorted(found[Side.BASE].keys() | found[Side.HEAD].keys())
+        before, after = ({cls.key(path): found[side][path] for path in paths} for side in Side)
+        return before, after
+
+    @classmethod
+    def grew(cls, key: str, grown: int) -> str:
+        return (f"grew {key} +{grown}: this change removes or changes an agent_comms name that "
+                "client file uses; run mypy on it to see which")
 
 
 @dataclass(frozen=True)
