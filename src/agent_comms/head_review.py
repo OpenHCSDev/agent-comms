@@ -11,7 +11,8 @@ from typing import Annotated, ClassVar
 
 from .declared_family import DeclaredFamily
 from .errors import ToolRefusedError
-from .field_codec import FieldCodec, GitCommitText
+from .field_codec import FieldCodec, GitCommitText, MalformedRecord, RecordProblems
+from .repo import Repo
 from .repository_name import RepositoryName
 
 
@@ -28,17 +29,48 @@ class PullRequestHead:
             raise ValueError("A pull request number must be positive.")
         GitCommitText.decode(self.head)
 
+    @classmethod
+    def among(cls, repositories: tuple[RepositoryName, ...], pr: int, head: str) -> PullRequestHead:
+        """The one candidate repository whose pull request ``pr`` is at ``head``. A single
+        candidate is the answer; several are told apart by GitHub, and none or two holding
+        that head refuses repository selection, including any failed GitHub reads."""
+        candidates = tuple(cls(repository, pr, head) for repository in repositories)
+        if len(candidates) == 1:
+            return candidates[0]
+        observed = []
+        problems: dict[str, str] = {}
+        for candidate in candidates:
+            try:
+                observed.append(cls.at(candidate.repo, pr))
+            except ToolRefusedError as refused:
+                problems |= MalformedRecord(str(refused)).located(
+                    f'--repo {candidate.repo.to_wire()}', 'check access to this repository and pull request')
+        held = tuple(candidate for candidate in observed if candidate.holds(head))
+        if len(held) != 1:
+            problems |= MalformedRecord(Repo.selection_refusal()).located(
+                '--repo', 'select one registered repository with --repo')
+            raise RecordProblems(problems)
+        return cls(held[0].repo, pr, head)
+
+    @classmethod
+    def at(cls, repo: RepositoryName, pr: int) -> PullRequestHead:
+        """Read GitHub's head and decode it through this declaration."""
+        read = repo.rest(f"pulls/{pr}", "--jq", ".head.sha")
+        if read.returncode:
+            raise ToolRefusedError(read.stderr.strip() or f"#{pr} could not be read.")
+        return cls(repo, pr, read.stdout.strip())
+
+    def holds(self, commit: str) -> bool:
+        return self.head.startswith(commit)
+
     def current(self) -> str:
         """The PR's full head commit, refused unless the reviewed head is still it."""
-        read = self.repo.rest(f"pulls/{self.pr}", "--jq", ".head.sha")
-        if read.returncode:
-            raise ToolRefusedError(read.stderr.strip() or f"#{self.pr} could not be read.")
-        current = GitCommitText.decode(read.stdout.strip())
-        if not current.startswith(self.head):
+        current = self.at(self.repo, self.pr)
+        if not current.holds(self.head):
             raise ToolRefusedError(
-                f"#{self.pr} moved to {current[:9]} since {self.head} was reviewed; review again."
+                f"#{self.pr} moved to {current.head[:9]} since {self.head} was reviewed; review again."
             )
-        return current
+        return current.head
 
 
 class HeadReview(DeclaredFamily, affix="HeadReview"):

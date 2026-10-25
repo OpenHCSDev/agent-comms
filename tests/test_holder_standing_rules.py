@@ -30,7 +30,7 @@ from agent_comms.commander_pings import CommanderUpdate
 from agent_comms.comms import wire
 from agent_comms.coordinator import Coordination
 from agent_comms.errors import CommittedMessageError, HumanSendRefusedError, RelationViolationError, TodoConflict
-from agent_comms.field_codec import FieldCodec, InputId, MessageId, TurnId
+from agent_comms.field_codec import FieldCodec, InputId, MessageId, RecordProblems, TurnId
 from agent_comms.goal_actions import (
     CreateProblemGoalAction,
     ReissuedOrderGoalAction,
@@ -314,7 +314,7 @@ def test_holds_whose_holder_was_deleted_or_registered_again_are_reported_by_ever
     assert set(named.split(", ")) == {"P1 worker", "P2 worker", "P3 outsider"}
     listed = FieldCodec.decode(TodoList, board_read(CommsTodoListTool, comms, NoThreadCaller()))
     assert {"P1", "P2", "P3"} <= {todo.id for todo in listed.todos} and listed.progress == {}
-    assert OrderEditCountRead.count(comms, "lead") == 0
+    assert tuple(OrderEditCountRead.for_commander(comms, "lead")) == ()
     with pytest.raises(ValueError, match="pass --artifact FILE"):
         comms.goals.todos.get("P2").order.closing_artifact()
 
@@ -533,8 +533,14 @@ def test_commander_say_answers_an_unanswered_unit_message(held_bus, target, body
     say = SayVerb(units="worker", body_file=str(reply), answers=(question.message_id,))
     say.apply(ctx)
     assert unanswered(held_bus) == ()
-    # A name that is not open needs no answer: it is dropped, never a refusal of the verb.
-    SayVerb(units="worker", body_file=str(reply), answers=("not-a-message",)).apply(ctx)
+    # A nonexistent identity refuses without publishing a reply that drops its answer.
+    unknown = MessageId("0" * 12)
+    revision = held_bus.bus.bus.revision()
+    with pytest.raises(RecordProblems, match=unknown):
+        SayVerb(units="worker", body_file=str(reply), answers=(unknown,)).apply(ctx)
+    assert held_bus.bus.bus.revision() == revision
+    # An already answered original exists, but opens no new ask.
+    SayVerb(units="worker", body_file=str(reply), answers=(question.message_id,)).apply(ctx)
     assert held_bus.bus.bus.lookup(held_bus.bus.bus.revision()).answers == ()
 
 
@@ -543,7 +549,7 @@ def test_an_unanswered_unit_message_gates_send_until_a_say_answers_it(held_bus, 
     ctx = Commander.read_root(held_bus.root)
     reply = tmp_path / "reply.txt"
     reply.write_text("Waiting on the merge queue, owner unit-goalblock")
-    with pytest.raises(SystemExit, match=question.message_id):
+    with pytest.raises(RecordProblems, match=question.message_id):
         SendVerb(unit="worker", body_file="unused").apply(ctx)
     # A reply to the asker answers its open asks without naming them.
     SayVerb(units="worker", body_file=str(reply)).apply(ctx)
@@ -567,7 +573,7 @@ def test_answering_one_owed_message_leaves_another_owed(held_bus, tmp_path, caps
         capsys.readouterr().out)
     assert held_bus.bus.bus.lookup(held_bus.bus.bus.revision()).answers == (first.reference,)
     assert [owed.message.message_id for owed in unanswered(held_bus)] == [second.message_id]
-    with pytest.raises(SystemExit, match=second.message_id):
+    with pytest.raises(RecordProblems, match=second.message_id):
         SendVerb(unit="worker", body_file=str(reply)).apply(ctx)
 
 
@@ -581,7 +587,7 @@ def test_an_owed_vibe_check_refuses_only_verbs_that_answer_nothing(held_bus, tmp
     ctx = Commander.read_root(held_bus.root)
     reply = tmp_path / "reply.txt"
     reply.write_text("Waiting on the merge queue, owner unit-goalblock")
-    with pytest.raises(SystemExit, match=check.message_id):
+    with pytest.raises(RecordProblems, match=check.message_id):
         SendVerb(unit="worker", body_file=str(reply)).apply(ctx)
     SayVerb(units="worker", body_file=str(reply), answers=(ask.message_id,)).apply(ctx)
     assert held_bus.bus.bus.lookup(held_bus.bus.bus.revision()).answers == (ask.reference,)
@@ -593,7 +599,7 @@ def test_an_answer_sent_to_another_unit_is_refused_and_leaves_the_ask_owed(held_
     reply = tmp_path / "reply.txt"
     reply.write_text("Waiting on the merge queue, owner unit-goalblock")
     revision = held_bus.bus.bus.revision()
-    with pytest.raises(SystemExit, match=(f"{question.message_id} was asked by worker; "
+    with pytest.raises(RecordProblems, match=(f"{question.message_id} was asked by worker; "
                                           "answer it in a message to worker")):
         SayVerb(units="outsider", body_file=str(reply), answers=(question.message_id,)).apply(ctx)
     assert held_bus.bus.bus.revision() == revision
@@ -612,7 +618,7 @@ def test_an_overdue_owner_directive_gates_until_answered(held_bus, tmp_path):
     ctx = Commander.read_root(held_bus.root)
     reply = tmp_path / "reply.txt"
     reply.write_text("Installing now")
-    with pytest.raises(SystemExit, match=f"DIRECTIVE UNACTED: owner directive {directive.seq}:{directive.message_id}"):
+    with pytest.raises(RecordProblems, match=f"DIRECTIVE UNACTED: owner directive {directive.seq}:{directive.message_id}"):
         SayVerb(units="#comms", body_file=str(reply)).apply(ctx)
     SayVerb(units="#comms", body_file=str(reply), answers=(directive.message_id,)).apply(ctx)
     SayVerb(units="#comms", body_file=str(reply)).apply(ctx)

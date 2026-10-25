@@ -312,8 +312,8 @@ class NotificationAssignment(NotificationSource):
         privacy.coordinator_schema().require_schema(connection)
         columns = ",".join(f"w.{name}" for name in WakeAssignment.columns())
         # The window's assignments and their native-input membership are each
-        # selected once; membership has no assignment index, so it is built
-        # for these assignments only, not once per row and per column.
+        # selected once, membership by its assignment index, not once per row
+        # and per column.
         rows = WakeAssignment.joined(
             connection.execute(
                 f"WITH w AS MATERIALIZED (SELECT * FROM {WakeAssignment.declared_name} "

@@ -4,7 +4,7 @@ from dataclasses import replace
 
 import pytest
 
-from agent_comms.field_codec import GoalId
+from agent_comms.field_codec import AssignmentId, GoalId
 from agent_comms.assignment_states import DeliveredAssignment, PendingDecision
 from agent_comms.bus import BusRecord, PublicRecord
 from agent_comms.coordination_tables.assignments import WakeAssignment
@@ -132,7 +132,7 @@ def test_read_prefix_preserves_unpainted_holes_and_compacts_exact_reads(bus):
 def test_notification_answers_require_frozen_delivery_not_a_public_answer_reference(bus, owner, peer):
     original = append_reply(bus, peer, owner)
     assignment = WakeAssignment(
-        assignment_id="shown", recipient=owner.name, recipient_lookup=owner.lookup,
+        assignment_id=AssignmentId("shown"), recipient=owner.name, recipient_lookup=owner.lookup,
         wire_seq=original.seq, message_id=original.message_id, audience=MessageAudience.DIRECT,
         lifecycle=DeliveredAssignment(PendingDecision(FullWake())),
         accepted_at_ms=1, updated_at_ms=1)

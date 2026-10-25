@@ -8,7 +8,7 @@ import subprocess
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from pathlib import Path
-from typing import TYPE_CHECKING, Annotated, ClassVar, Self
+from typing import TYPE_CHECKING, Annotated, Self
 
 from pydantic import BaseModel, ConfigDict, InstanceOf, PlainSerializer, PlainValidator
 
@@ -66,7 +66,6 @@ class Repo(BaseModel, WireValue):
     """A repository the fleet works on: its check checkout, its GitHub name and its source root."""
 
     model_config = ConfigDict(frozen=True)
-    ambiguous: ClassVar[str] = "Select --repo when more than one repository is registered."
 
     checkout: Path
     github: InstanceOf[
@@ -86,15 +85,25 @@ class Repo(BaseModel, WireValue):
         return cls.model_validate_json(FieldCodec.compact(data))
 
     @classmethod
+    def selection_refusal(cls) -> str:
+        return "Select --repo when more than one repository is registered."
+
+    @classmethod
     def selected(cls, repositories: tuple[Repo, ...], name: str) -> Repo:
+        candidates = cls.candidates(repositories, name)
+        if len(candidates) != 1:
+            raise ValueError(cls.selection_refusal())
+        repository, = candidates
+        return repository
+
+    @classmethod
+    def candidates(cls, repositories: tuple[Repo, ...], name: str) -> tuple[Repo, ...]:
+        """No name leaves every registered repository a candidate; a name selects exactly one."""
         if not name:
-            if len(repositories) != 1:
-                raise ValueError(cls.ambiguous)
-            repository, = repositories
-            return repository
+            return repositories
         for repository in repositories:
             if repository.named(name):
-                return repository
+                return (repository,)
         configured = ", ".join(
             f"{repository.github.to_wire()} ({repository.checkout})"
             for repository in repositories

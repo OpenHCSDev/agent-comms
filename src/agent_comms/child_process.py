@@ -891,25 +891,6 @@ class SystemdUnit(ABC):
     def unit_text(cls, arguments: tuple[str, ...]) -> str: ...
 
 
-class AgentsSlice(SystemdUnit):
-    """Agent residents and their descendants leave two CPUs for the owner."""
-
-    unit = "agents.slice"
-    allowed_cpus: ClassVar[str] = "2-11"
-    cpu_weight: ClassVar[int] = 50
-
-    @classmethod
-    def launch_option(cls) -> str:
-        return f"--slice={cls.unit}"
-
-    @classmethod
-    def unit_text(cls, arguments: tuple[str, ...] = ()) -> str:
-        return (
-            "[Unit]\nDescription=Agent processes\n\n"
-            f"[Slice]\nAllowedCPUs={cls.allowed_cpus}\nCPUWeight={cls.cpu_weight}\n"
-        )
-
-
 class ResidentManager(DeclaredFamily, affix="Manager"):
     """What owns this home's units, and a handed-off resident once its launcher is gone: a
     host fact, decoded once, and the only caller of ``systemctl`` and ``systemd-run``.
@@ -1012,7 +993,6 @@ class SystemdUserManager(ResidentManager):
     @classmethod
     def command(cls, command: tuple[str, ...]) -> tuple[str, ...]:
         return ("systemd-run", "--user", "--scope", "--quiet", "--collect",
-                AgentsSlice.launch_option(),
                 f"--unit=agent-comms-resident-{Id128.mint()}", "--", *command)
 
     @staticmethod
@@ -1059,7 +1039,7 @@ class SystemdUserManager(ResidentManager):
         line."""
         subprocess.run(
             ("systemd-run", "--user", "--quiet", "--collect", *(("--wait",) if wait else ()),
-             AgentsSlice.launch_option(), f"--unit={unit}", f"--working-directory={cwd}",
+             f"--unit={unit}", f"--working-directory={cwd}",
              f"--property=StandardInput=file:{stdin}",
              f"--property=StandardOutput=file:{stdout}",
              f"--property=StandardError=file:{stderr}",

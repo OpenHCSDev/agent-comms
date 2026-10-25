@@ -13,7 +13,7 @@ from abc import ABC, abstractmethod
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import TYPE_CHECKING, ClassVar
+from typing import TYPE_CHECKING, ClassVar, cast
 
 from pydantic import JsonValue
 
@@ -187,6 +187,17 @@ class NoSourceReference(NullMember, SourceReference):
 
 
 @dataclass(frozen=True, slots=True)
+class Declaration:
+    """The lines of the declaration enclosing one source line, parsed once."""
+
+    at: FileLine
+    lines: range
+
+    def holds(self, line: FileLine, root: Path) -> bool:
+        return line.same_file(self.at, root) and line.line in self.lines
+
+
+@dataclass(frozen=True, slots=True)
 class FileLine(WireValue, SourceReference):
     """One source reference spelled ``file.py:line`` on the wire."""
 
@@ -209,6 +220,18 @@ class FileLine(WireValue, SourceReference):
 
     def same_file(self, other: FileLine, root: Path) -> bool:
         return (root / self.file).resolve() == (root / other.file).resolve()
+
+    def declaration(self, root: Path) -> Declaration:
+        """The innermost class or def holding this line; its whole file at module level."""
+        text = (root / self.file).read_text()
+        spans = [range(1, text.count("\n") + 2)]
+        if self.file.endswith(".py"):
+            spans += (range(node.lineno, end + 1)
+                      for node in ast.walk(ast.parse(text, filename=self.file))
+                      if isinstance(node, (ast.ClassDef, ast.FunctionDef, ast.AsyncFunctionDef))
+                      for end in (cast(int, node.end_lineno),)
+                      if node.lineno <= self.line <= end)
+        return Declaration(self, min(spans, key=len))
 
     def require_exists(self, repository: Path, revision: SourceText) -> None:
         revision.require_any(lambda candidate: self.require_line(repository, candidate))

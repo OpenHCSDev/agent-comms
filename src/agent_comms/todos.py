@@ -37,6 +37,7 @@ from agent_comms.bus_publication import AgentOrigin
 from agent_comms.change_report import (
     CitedRevisions,
     CommitRevision,
+    Declaration,
     FileLine,
     MainRevision,
     NoSourceReference,
@@ -1237,11 +1238,15 @@ class ProgressRead(PullRequests, CheckoutReads):
     def __init__(self, todos: Sequence[Todo] = ()) -> None:
         CheckoutReads.__init__(self)
         PullRequests.__init__(self, todos)
+        self._progress: dict[str, OrderProgress] = {}
 
     def progress(self, held: Sequence[Todo], registry: Registration) -> dict[str, OrderProgress]:
-        """Each held order's progress, read through this frame's one reader."""
+        """Each held order's progress, read once per frame however many readers ask."""
         self.register(held)
-        return {todo.id: OrderProgress.read(todo, registry, self) for todo in held}
+        for todo in held:
+            if todo.id not in self._progress:
+                self._progress[todo.id] = OrderProgress.read(todo, registry, self)
+        return {todo.id: self._progress[todo.id] for todo in held}
 
 
 @dataclass(frozen=True)
@@ -1362,6 +1367,11 @@ class OrderProgress(DeclaredFamily, affix="Progress"):
         """The held order this progress leaves waiting on the fleet's install."""
         return ()
 
+    @property
+    def judgeable(self) -> bool:
+        """Whether a head verdict can still gate this order's work: until its PR merges."""
+        return True
+
     def missing_merges(self, source: ProgressSource) -> tuple[MergedProgress, ...]:
         """Linked merges this progress incorrectly reports as no commit."""
         return ()
@@ -1437,6 +1447,11 @@ class MergedProgress(FoundProgress):
 
     def waiting_on_install(self, todo: Todo) -> tuple[Todo, ...]:
         return (todo,)
+
+    @property
+    def judgeable(self) -> bool:
+        """A merged head has nothing left for a verdict to gate."""
+        return False
 
 
 @dataclass(frozen=True)
@@ -1641,9 +1656,10 @@ class OrderText(OrderWords):
 class BluntWords:
     """The words that name witnessed incompetence, and the refusal a text lacking them gets."""
 
-    REFUSED: ClassVar[re.Pattern] = re.compile(
-        r"\b(stupid|slop|bullshit|useless|wrong|lazy|garbage|nonsense|incompeten\w*|sloppy|theater|dumb|"
-        r"worthless|broke|broken|pointless|waste)\b", re.I)
+    WORDS: ClassVar[tuple[str, ...]] = (
+        "stupid", "slop", "bullshit", "useless", "wrong", "lazy", "garbage", "nonsense", "incompetent", "incompetently",
+        "incompetence", "sloppy", "theater", "dumb", "worthless", "broke", "broken", "pointless", "waste")
+    REFUSED: ClassVar[re.Pattern] = re.compile(rf"\b({'|'.join(WORDS)})\b", re.I)
     refusal: ClassVar[str] = "Not blunt: name what was stupid/slop/wrong and why, or pass --clean if nothing was."
 
 
@@ -1653,6 +1669,12 @@ class BluntText(BluntWords, OrderWords):
     @staticmethod
     def refuses(found: list[str]) -> bool:
         return not found
+
+    @classmethod
+    def wording_refusal(cls, text: str) -> tuple[str, ...]:
+        """The refusal names every word that passes, so the next try is the last."""
+        return tuple(f"{refusal} Any one of these words passes: {', '.join(cls.WORDS)}."
+                     for refusal in super().wording_refusal(text))
 
 
 class DeliveryReport(BluntText):
@@ -1759,7 +1781,7 @@ class ProblemFinding(DeclaredFamily, affix="ProblemFinding"):
     def require_references(self, root: Path, revision: SourceRevision) -> None:
         """An unlocated finding has no source reference to validate."""
 
-    def on_files(self, locations: tuple[FileLine, ...], root: Path) -> bool:
+    def in_declarations(self, declarations: tuple[Declaration, ...], root: Path) -> bool:
         return False
 
     def instructions(self) -> tuple[str, ...]:
@@ -1781,8 +1803,8 @@ class LocatedProblemFinding(ProblemFinding):
     def require_references(self, root: Path, revision: SourceRevision) -> None:
         self.where.require_exists(root, revision)
 
-    def on_files(self, locations: tuple[FileLine, ...], root: Path) -> bool:
-        return any(self.where.same_file(location, root) for location in locations)
+    def in_declarations(self, declarations: tuple[Declaration, ...], root: Path) -> bool:
+        return any(declaration.holds(self.where, root) for declaration in declarations)
 
     def instructions(self) -> tuple[str, ...]:
         return (f"Where: {self.place()}",)
@@ -2109,9 +2131,9 @@ class CheckedProblemOrder(ProblemOrder, declared_name=None):
     def sent_back(self, reason: StrikeReason) -> CheckedProblemOrder:
         return self
 
-    def on_files(self, locations: tuple[FileLine, ...], root: Path) -> bool:
-        return (any(self.owner.same_file(location, root) for location in locations)
-                or self.finding.on_files(locations, root))
+    def in_declarations(self, declarations: tuple[Declaration, ...], root: Path) -> bool:
+        return (any(declaration.holds(self.owner, root) for declaration in declarations)
+                or self.finding.in_declarations(declarations, root))
 
     def checked(self) -> CheckedProblemOrder:
         return self
@@ -3524,9 +3546,12 @@ class OrderQuote:
     rule: ClassVar[str] = "Quote 4+ words of the order this verdict carries out."
 
     def require_quote(self, text: str) -> None:
+        """Whitespace-separated words, so a dotted or CamelCase name counts as one word."""
         quoted = " ".join(self.quote.split())
-        if len(quoted.split()) < 4 or quoted not in " ".join(text.split()):
-            raise TodoError(self.rule)
+        if len(quoted.split()) < 4:
+            raise TodoError(f"--serves {quoted!r} is {len(quoted.split())} words. {self.rule}")
+        if quoted not in " ".join(text.split()):
+            raise TodoError(f"--serves {quoted!r} is not in the order. {self.rule} Copy consecutive words.")
 
 
 @dataclass(frozen=True)
@@ -3575,7 +3600,7 @@ class HeadVerdict(HeadReview, declared_name=None):
     def after_record(self, goals: Goals, record: HeadReviewRecord) -> None:
         """A rejection wakes its linked holder after the write; acceptance needs no directive."""
 
-    def prepare_order(self, current: Todo, link: LinkedHeadReview) -> None:
+    def prepare_order(self, current: Todo, link: OrderLink) -> None:
         """Acceptance needs the quoted order; rejection also needs source evidence."""
 
     def judge_order(self, current: Todo, record: OrderHeadReviewRecord) -> Todo:
@@ -3640,7 +3665,7 @@ class RejectedHeadVerdict(DecidedHeadVerdict):
     def after_record(self, goals: Goals, record: HeadReviewRecord) -> None:
         record.order.rejected(goals, record)
 
-    def prepare_order(self, current: Todo, link: LinkedHeadReview) -> None:
+    def prepare_order(self, current: Todo, link: OrderLink) -> None:
         link.require_evidence(current)
 
     def judge_order(self, current: Todo, record: OrderHeadReviewRecord) -> Todo:
@@ -3675,8 +3700,9 @@ class HeadReviewOrder(HeadReviewRelation, declared_name=None):
     """The input that authorizes a head review's optional order change."""
 
     @classmethod
-    def for_request(cls, todos: Sequence[Todo], request: PullRequestHead, quote: str,
-                    evidence: tuple[FileLine, ...], problem: str = "") -> HeadReviewOrder:
+    def for_request(cls, todos: Sequence[Todo], request: PullRequestHead,
+                    link: Callable[[Todo], OrderLink], problem: str = "") -> HeadReviewOrder:
+        """``link`` is the reviewing verb's own link to the order that holds the head."""
         linked = tuple(todo for todo in todos if todo.repo == request.repo
                        and (not problem or todo.id == problem)
                        and todo.order.checked().holds_head(request))
@@ -3687,7 +3713,7 @@ class HeadReviewOrder(HeadReviewRelation, declared_name=None):
         if len(linked) != 1:
             raise TodoError("More than one order holds this pull request; select --problem.")
         todo, = linked
-        return OrderHeadReview(todo.revision, LinkedHeadReview.of(todo, quote, evidence))
+        return OrderHeadReview(todo.revision, link(todo))
 
     @abstractmethod
     def require_reviewer(self, goals: Goals, request: PullRequestHead,
@@ -3721,8 +3747,8 @@ class NoHeadOrder(HeadReviewOrder, HeadOrderLink):
 
 
 @dataclass(frozen=True)
-class ProblemHeadReview(OrderQuote, CitedEvidence, HeadOrderLink):
-    """A problem association without an observed order ID remains an honest partial fact."""
+class ProblemLink(CitedEvidence, HeadOrderLink, declared_name=None):
+    """A head decision tied to the problem whose holder it reaches."""
     problem: str
     previous: Assignment
 
@@ -3733,8 +3759,35 @@ class ProblemHeadReview(OrderQuote, CitedEvidence, HeadOrderLink):
 
 
 @dataclass(frozen=True)
-class LinkedHeadReview(ProblemHeadReview):
+class ProblemHeadReview(OrderQuote, ProblemLink):
+    """A problem association without an observed order ID remains an honest partial fact."""
+
+
+@dataclass(frozen=True)
+class OrderLink(ProblemLink, declared_name=None):
+    """The exact order a head decision changes."""
     order_id: str
+
+    def require_current(self, current: Todo, actor: ThreadIncarnation) -> None:
+        current.require_commander(actor)
+        current.require_assignment(self.previous)
+        if current.id != self.problem or current.order.checked().id != self.order_id:
+            raise TodoConflict(current)
+
+
+@dataclass(frozen=True)
+class UnquotedHeadReview(OrderLink):
+    """Reading or rejecting a head carries out no clause of the order, so it quotes none."""
+
+    @classmethod
+    def of(cls, todo: Todo, evidence: tuple[FileLine, ...] = ()) -> Self:
+        return cls(problem=todo.id, order_id=todo.order.checked().id,
+                   previous=todo.held(), evidence=evidence)
+
+
+@dataclass(frozen=True)
+class LinkedHeadReview(OrderQuote, OrderLink):
+    """An accepted head quotes the clause of the order it carries out."""
 
     @classmethod
     def of(cls, todo: Todo, quote: str, evidence: tuple[FileLine, ...] = ()) -> Self:
@@ -3742,17 +3795,14 @@ class LinkedHeadReview(ProblemHeadReview):
                    previous=todo.held(), evidence=evidence)
 
     def require_current(self, current: Todo, actor: ThreadIncarnation) -> None:
-        current.require_commander(actor)
-        current.require_assignment(self.previous)
-        if current.id != self.problem or current.order.checked().id != self.order_id:
-            raise TodoConflict(current)
+        super().require_current(current, actor)
         self.require_quote(current.order.instructions(current))
 
 
 @dataclass(frozen=True)
 class OrderHeadReview(HeadReviewOrder):
     expected_revision: int
-    link: LinkedHeadReview
+    link: OrderLink
 
     def require_reviewer(self, goals: Goals, request: PullRequestHead,
                          actor: ThreadIncarnation) -> None:
@@ -3785,7 +3835,7 @@ class HeadReviewRecord:
 
 @dataclass(frozen=True)
 class OrderHeadReviewRecord(HeadReviewRecord):
-    order: LinkedHeadReview
+    order: OrderLink
 
 
 @dataclass(frozen=True)
@@ -3797,10 +3847,10 @@ class StoredHeadReview(TodoStoreRows, TypedTable):
         PullRequestHead, Column(generated=f"json_extract({{record}}, '$.{FieldCodec.record_key(HeadReviewRecord, 'request')}')"),
     )
     problem: ClassVar[Generated] = Generated(
-        str, Column(generated=f"json_extract({{record}}, '$.{FieldCodec.record_key(HeadReviewRecord, 'order')}.{FieldCodec.record_key(LinkedHeadReview, 'problem')}')", nullable=True),
+        str, Column(generated=f"json_extract({{record}}, '$.{FieldCodec.record_key(HeadReviewRecord, 'order')}.{FieldCodec.record_key(OrderLink, 'problem')}')", nullable=True),
     )
     order_id: ClassVar[Generated] = Generated(
-        str, Column(generated=f"json_extract({{record}}, '$.{FieldCodec.record_key(HeadReviewRecord, 'order')}.{FieldCodec.record_key(LinkedHeadReview, 'order_id')}')", nullable=True),
+        str, Column(generated=f"json_extract({{record}}, '$.{FieldCodec.record_key(HeadReviewRecord, 'order')}.{FieldCodec.record_key(OrderLink, 'order_id')}')", nullable=True),
     )
     indexes = (Index(("request", "seq")), Index(("problem", "order_id", "seq")))
 
@@ -4465,12 +4515,12 @@ class Todo(TodoStoreRows, TypedTable):
                       if order.id not in current}.values())
 
     def recurrence(
-        self, locations: tuple[FileLine, ...], root: Path, now: float,
+        self, declarations: tuple[Declaration, ...], root: Path, now: float,
     ) -> tuple[str, ...]:
         recent = tuple(order for order in self.order_history
                        if order.at.since(now - 7 * 86400)
                        and order.at.recorded_at("An earlier order") <= now
-                       and order.on_files(locations, root))
+                       and order.in_declarations(declarations, root))
         if not recent:
             return ()
         previous = max(recent, key=lambda order: order.at.chronology())
@@ -5008,13 +5058,14 @@ class TodoStore(OwnerRequestStore):
         self, order: CheckedProblemOrder, where: FileLine, root: Path,
         slop: tuple[Slop, ...], now: float,
     ) -> None:
+        declarations = (order.owner.declaration(root), where.declaration(root))
         previous = tuple(line for todo in self.list(Repo.of(root).github)
-                         for line in todo.recurrence((order.owner, where), root, now))
+                         for line in todo.recurrence(declarations, root, now))
         if previous and not any(
             item.derive.declaration_elsewhere(item.by.line, where, root) for item in slop
         ):
             raise TodoError('\n'.join((*previous,
-                'the same file broke again, name the fact written in more than one place '
+                'the same declaration broke again, name the fact written in more than one place '
                 'and the declaration that replaces the copies.')))
 
     def history_for_commander(self, commander: ThreadIncarnation) -> tuple[Todo, ...]:

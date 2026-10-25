@@ -35,7 +35,7 @@ from agent_comms.coordination_tables.assignments import WakeAssignment
 from agent_comms.coordination_tables.participants import OwnerGenerations, Participants
 from agent_comms.coordinator import Coordination
 
-from .field_codec import MalformedRecord, MessageId, WireName, RootId, ThreadLookup
+from .field_codec import AssignmentId, MalformedRecord, MessageId, WireName, RootId, ThreadLookup
 
 _LOG = logging.getLogger(__name__)
 
@@ -110,9 +110,9 @@ class AcceptedCohort:
         return Applied(_claim_record(db, initial, privacy))
 
 
-def _assignment_id(root: str, seq: int, lookup: ThreadLookup) -> str:
+def _assignment_id(root: str, seq: int, lookup: ThreadLookup) -> AssignmentId:
     identity = f"agent-comms:cohort-claim:v1\0{root}:{seq}:{lookup}".encode()
-    return "cohort-v1:" + hashlib.sha256(identity).hexdigest()
+    return AssignmentId("cohort-v1:" + hashlib.sha256(identity).hexdigest())
 
 
 def _expected_assignments(

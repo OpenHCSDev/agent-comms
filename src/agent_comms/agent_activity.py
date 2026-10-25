@@ -23,6 +23,7 @@ if TYPE_CHECKING:
     from .registry_document import RegistrySnapshot
 from .activity import (
     Activity,
+    ActivityCapture,
     ActivityState,
     ActivityStore,
     DrainDiagnostic,
@@ -144,20 +145,24 @@ class AgentActivity:
         return participant.execution.project_activity(participant, activity)
 
     def all_activity(self, threads: Iterable[Thread], *, snapshot: RegistrySnapshot) -> Mapping[str, ObservedActivity]:
+        return self.captured(threads, snapshot=snapshot).activity
+
+    def captured(self, threads: Iterable[Thread], *,
+                 snapshot: RegistrySnapshot) -> ActivityCapture[ObservedActivity]:
         requested = {thread.name: thread for thread in threads}
         if not requested:
-            return {}
-        events = self.activity.current_for(
+            return ActivityCapture.empty()
+        events = self.activity.captured_for(
             requested,
             active=frozenset(name for name, thread in requested.items() if thread.executing),
         )
         claims = self.registry.storage_rule.room_ledger.claims(
             self.registry.store.path.parent, requested.values())
-        observed = {name: self._observed(thread, snapshot.owner_identity(name), events[name])
+        observed = {name: self._observed(thread, snapshot.owner_identity(name), events.activity[name])
                     for name, thread in requested.items()}
         for name, claim in claims.items():
             observed[name] = claim.phase.project(observed[name], claim.work)
-        return observed
+        return ActivityCapture(observed, events.expires_at)
 
     def observe_recipients(
         self, recipients: Iterable[tuple[Delivered, FrozenRecipient]], *,

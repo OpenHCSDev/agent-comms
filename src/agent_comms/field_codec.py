@@ -351,6 +351,15 @@ class InferredArgumentDefault(ArgumentDefault):
 
 
 @dataclass(frozen=True)
+class SelectingArgumentDefault(ArgumentDefault):
+    """An option that chooses its command's member: absent, it stays absent, and the member
+    the given options chose reports every one of its own it still lacks."""
+
+    def options(self, plan: FieldPlan) -> Mapping[str, object]:
+        return {"default": argparse.SUPPRESS}
+
+
+@dataclass(frozen=True)
 class GivenArgumentDefault(ArgumentDefault):
     value: object
 
@@ -1805,6 +1814,14 @@ class Id128Text(NominalSpelling[Id128]):
     """A 128-bit identity: an input, turn, bus root, recipient lookup or claim generation."""
 
     spelling = re.compile("[0-9a-f]{32}")
+
+
+class AssignmentId(NominalText):
+    """One recipient's wake claim on one bus message."""
+
+
+class AssignmentIdText(NominalSpelling[AssignmentId]):
+    spelling = re.compile(".{1,256}")
 
 
 class MessageId(NominalText):

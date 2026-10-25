@@ -19,14 +19,18 @@ from agent_comms.child_process import ProcessIdentity
 from agent_comms.cli_bridges.monitor import MonitorPeer, MonitorService
 from agent_comms.cli_bridges.claude_protocol import (
     ClaudeSession, ClaudeMonitorFrame, ForeignTaskNotification,
-    ForeignAttachment,
+    ForeignAttachment, KnownTurn,
 )
 from agent_comms.cli_bridges.shared import (
     Binding, DeliveryRow, ObservedPart, ReceivingMonitor, UnrecordedMonitor, MonitorPart,
     ForeignMonitorFrame, Options, ObservedMonitor, MismatchedMonitor, Watch, StoredBinding,
+    MonitorObservation,
     GivenBinding, MONITOR_FRAME,
 )
 from agent_comms.cli_protocol import UnconfirmedOutcome, EmittedOutcome, DeliveredOutcome
+from agent_comms.field_codec import FieldCodec
+from agent_comms.runtime_updates import HiddenItem
+from agent_comms.turn_item import NativeTurnId
 from agent_comms.messages import InfoKind, Message
 from agent_comms.read_basis import ExplicitWatchAcknowledgment
 from agent_comms.threads import Thread
@@ -207,12 +211,21 @@ def test_foreign_task_notifications_are_named_and_malformed_matching_xml_fails()
     assert isinstance(ClaudeMonitorFrame.decode_line('"Comms in · old format...(truncated)'),ForeignMonitorFrame)
 
 
-def test_non_task_attachments_and_pending_queue_records_do_not_confirm():
-    record=decoded_record(dict(type='attachment', uuid='foreign-record',
+def queued_prompt(kind, prompt):
+    return decoded_record(dict(type='attachment', uuid='queued-record',
         timestamp='2026-10-16T16:40:05.123Z', attachment=dict(type='queued_command',
-        origin=dict(kind='peer'), prompt='Not a Monitor notification')))
-    assert isinstance(record.attachment, ForeignAttachment)
-    assert record.updates(ClaudeSession())==()
+        origin=dict(kind=kind), prompt=prompt)))
+
+
+def test_non_task_attachments_and_pending_queue_records_do_not_confirm():
+    session=ClaudeSession(turn=KnownTurn(FieldCodec.decode(NativeTurnId, 'turn')))
+    for kind in ('peer', 'human'):
+        updates=queued_prompt(kind, 'Not a Monitor notification').updates(session)
+        assert not any(isinstance(update, MonitorObservation) for update in updates)
+    hook=decoded_record(dict(type='attachment', uuid='foreign-record',
+        timestamp='2026-10-16T16:40:05.123Z', attachment=dict(type='hook_success')))
+    assert isinstance(hook.attachment, ForeignAttachment)
+    assert hook.updates(ClaudeSession())==()
     queued=decoded_record(dict(type='queue-operation', operation='enqueue',
         sessionId='session', content='<task-notification><event>not yet received</event></task-notification>'))
     assert queued.updates(ClaudeSession())==()
@@ -339,6 +352,21 @@ async def test_harness_outcome_lives_on_the_threads_claim_across_a_rehome(tmp_pa
     assert type(claim(confirmed)) is DeliveredAssignment
 
 
+def test_prompt_typed_during_a_turn_is_shown_and_an_agents_is_hidden():
+    session=ClaudeSession(turn=KnownTurn(FieldCodec.decode(NativeTurnId, 'turn')))
+    shown,=queued_prompt('human', 'typed while you worked').updates(session)
+    assert [event.text for event in shown.events]==['typed while you worked']
+    assert not isinstance(shown, HiddenItem)
+    hidden,=queued_prompt('peer', 'a fork reporting').updates(session)
+    assert isinstance(hidden, HiddenItem)
+
+
+def test_prompt_typed_with_an_image_during_a_turn_shows_its_text():
+    session=ClaudeSession(turn=KnownTurn(FieldCodec.decode(NativeTurnId, 'turn')))
+    image=dict(type='base64', media_type='image/png', data='AA==')
+    prompt=[dict(type='text', text='[Image #16] look'), dict(type='image', source=image)]
+    shown,=queued_prompt('human', prompt).updates(session)
+    assert [event.text for event in shown.events]==['[Image #16] look']
 
 @pytest.mark.asyncio
 async def test_a_bridge_waits_out_maintenance_and_then_records_its_delivery(tmp_path, monkeypatch):

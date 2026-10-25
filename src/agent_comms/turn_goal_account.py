@@ -6,7 +6,7 @@ owns only the live turn's permits and observations, never a reconstructed grant.
 
 from __future__ import annotations
 
-from acp.exceptions import RequestError
+from .coordination_errors import Refused
 
 from agent_comms.errors import GoalAttemptError
 from contextlib import ExitStack
@@ -107,7 +107,7 @@ class TurnGoalAccount:
         except GoalAttemptError as error:
             if autonomous:
                 return NoLaunchPermit()
-            raise RequestError.invalid_params(
+            raise Refused.invalid_params(
                 {
                     "reason": "goal_attempt_unavailable",
                     "details": "The goal has no launchable attempt. Inspect its state and use "

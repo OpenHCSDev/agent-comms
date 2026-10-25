@@ -8,7 +8,7 @@ import subprocess
 import sys
 from contextlib import AsyncExitStack
 
-from acp.exceptions import RequestError
+from agent_comms.coordination_errors import Refused
 import pytest
 from acp.schema import PromptRequest, TextContentBlock
 
@@ -80,9 +80,9 @@ async def test_cli_registration_refuses_unbound_then_uses_original_owned_session
             ),
             ("goal_history", {}),
         ):
-            with pytest.raises(RequestError) as caught:
+            with pytest.raises(Refused) as caught:
                 await proxy.request(action, **parameters)
-            assert caught.value.code == -32602
+            assert caught.value.code == Refused.INVALID_PARAMS
             assert caught.value.data["owner"] == "registered"
             assert "no loaded ACP session" in caught.value.data["reason"]
         assert not owner.sessions.bindings

@@ -49,7 +49,6 @@ from agent_comms.threads import Thread
 from agent_comms.todos import (
     Assignment,
     OrderClaim,
-    OrderQuote,
     OwnerRequest,
     PullRequests,
     RestoreHolderTodo,
@@ -177,7 +176,7 @@ class RequestStalled(IndependentStandingRule, UndatedStandingRule):
                      if not store.serving_orders(request.id))
 
     def line(self) -> str:
-        return (f"REQUEST STALLED: {self.request.id.value} {self.request.text}"
+        return (f"ADVANCE request {self.request.id.value} {self.request.text}"
                 " -> order its next step or mark it done")
 
 
@@ -232,8 +231,8 @@ class PlanIdle(PlanRule):
 
     def line(self) -> str:
         return (
-            f"PLAN IDLE: {self.phase.plan.declared_name} phase {self.phase.declared_name} ready"
-            f" ({self.phase.plan.document}), no open order; done when"
+            f"START {self.phase.plan.declared_name}/{self.phase.declared_name}"
+            f" ({self.phase.plan.document}): ready, no open order; done when"
             f" {self.reading.describe(self.phase.evidence)} -> {self.phase.task.instruction}"
         )
 
@@ -262,7 +261,7 @@ class PlanStalled(PlanRule):
     def line(self) -> str:
         hours = (time.time() - self.since) / 3600
         return (
-            f"PLAN STALLED: {self.phase.plan.declared_name} phase {self.phase.declared_name}"
+            f"UNSTALL {self.phase.plan.declared_name}/{self.phase.declared_name}:"
             f" held {hours:.1f}h and not on main ({self.phase.plan.document}) -> find what holds"
             " it still and change that this wake: integrate steps that only land together,"
             " take it over, or reassign it"
@@ -303,6 +302,9 @@ class UnitAskUnanswered(UnitOwedAnswer, UndatedStandingRule):
     def asked_by(self, reached: frozenset[str]) -> bool:
         return self.unit in reached
 
+    def answered_in(self) -> tuple[str, ...]:
+        return (self.unit,)
+
     def misaddressed(self, named: tuple[Message, ...], reached: frozenset[str]) -> str:
         """A unit's ask is answered only by a message that reaches that unit."""
         if self.unit in reached or not self.answered_by(named):
@@ -312,8 +314,7 @@ class UnitAskUnanswered(UnitOwedAnswer, UndatedStandingRule):
 
     def line(self) -> str:
         age = max(0, int((time.time() - self.message.timestamp) // 60))
-        return (f"UNANSWERED {self.unit}: message {self.cited}, "
-                f"{age} min old -> commander must answer")
+        return f"ANSWER {self.unit} message {self.cited}: {age} min old"
 
 
 @dataclass(frozen=True)
@@ -339,18 +340,21 @@ class DeliveryAwaitingJudgement(UnitOwedAnswer, UndatedStandingRule):
         DeclaredFamily.discover_package(commander)
         lines = " or ".join(f"`{verb.usage()}`" for verb in self.clearing_verbs)
         return (f"{lines} (UNIT {self.unit}, PROBLEM {self.problem})."
-                f" --serves: {OrderQuote.rule} --repo: {Repo.ambiguous}")
+                f" --repo: {Repo.selection_refusal()}")
 
     def answered_by(self, named: tuple[Message, ...]) -> bool:
         return False
 
     def blocks(self, reached: frozenset[str], action: CommanderVerb,
-               named: tuple[Message, ...]) -> bool:
-        return self.unit in reached and not action.resolves_claim(self.unit, self.problem)
+               answered: tuple[OwedAnswer, ...]) -> bool:
+        """Work sent to the holder waits on this judgement; an answer to the holder's own ask
+        never does, or the gate would refuse the conversation the answer gate demands."""
+        return (self.unit in reached and not action.resolves_claim(self.unit, self.problem)
+                and not any(rule.asked_by(frozenset((self.unit,))) for rule in answered))
 
     def line(self) -> str:
-        return (f"DELIVERY AWAITING JUDGEMENT {self.unit} {self.problem}: "
-                f"message {self.cited} -> {self.clearing_action()}")
+        return (f"JUDGE {self.unit} {self.problem} delivery {self.cited}"
+                f" -> {self.clearing_action()}")
 
 
 @dataclass(frozen=True)
@@ -375,8 +379,8 @@ class HolderGone(IndependentStandingRule, UndatedStandingRule):
 
     def line(self) -> str:
         held = self.todo.held()
-        return (f"HOLDER GONE: {self.todo.id} is held by {held.owner} born {held.owner_created}, "
-                f"no longer registered -> {self.todo.order.orphan_clearing(self.todo)}")
+        return (f"REHOME {self.todo.id}: holder {held.owner} born {held.owner_created} is no"
+                f" longer registered -> {self.todo.order.orphan_clearing(self.todo)}")
 
 
 @dataclass(frozen=True)
@@ -458,7 +462,7 @@ class UnownedWheelSpin(IndependentStandingRule, UndatedStandingRule):
         return type(self).paired(comms, commander, (current,), HeldOrders.read(comms, commander), PullRequests())
 
     def line(self) -> str:
-        return f"UNOWNED ROW: {self.todo.id} waits for a new unit"
+        return f"STAFF {self.todo.id}: unowned, waits for a new unit"
 
 
 @dataclass(frozen=True, eq=False)
@@ -475,7 +479,7 @@ class ReassignedWheelSpin(UnownedWheelSpin, declared_name=None):
             f"{self.line()}\n{self.dispatch.action.order.instructions(self.todo)}")
 
     def line(self) -> str:
-        return (f"WHEEL SPIN: {self.unit} holds no order while {self.todo.id} is unowned"
+        return (f"STAFF {self.todo.id} with {self.unit}: it holds no order while the row is unowned"
                 f" -> Core gives it to {self.unit}")
 
 
@@ -492,8 +496,8 @@ class RetainedHolderWheelSpin(UnownedWheelSpin, declared_name=None):
         ), commander)
 
     def line(self) -> str:
-        return (f"WORK HELD: {self.todo.id} {self.previous.owner} retains its recorded work"
-                " -> preserve its holder; do not hand the row away")
+        return (f"KEEP {self.todo.id} with {self.previous.owner}: Core restored its holder;"
+                " do not hand the row away")
 
 
 @dataclass(frozen=True)
@@ -564,7 +568,7 @@ class HeartbeatSilent(IndependentStandingRule, DatedStandingRule, declared_name=
 @dataclass(frozen=True)
 class MissedHeartbeat(HeartbeatSilent):
     def line(self) -> str:
-        return (f"HEARTBEAT SILENT: no completed pass since "
+        return (f"FIX THE HEARTBEAT: no completed pass since "
                 f"{RecordedEventTime(self.since - self.seconds).clock()}, silent past "
                 f"{RecordedEventTime(self.since).clock()}"
                 " -> read the connector journal for the failing pass and fix its owner")
@@ -575,7 +579,7 @@ class HeartbeatNotStarted(HeartbeatSilent):
     request: OwnerRequestId
 
     def line(self) -> str:
-        return (f"HEARTBEAT NOT STARTED: no beat for request {self.request.value}, overdue since "
+        return (f"START THE HEARTBEAT: no beat for request {self.request.value}, overdue since "
                 f"{RecordedEventTime(self.since).clock()}"
                 " -> start the connector heartbeat and fix its failing pass")
 
@@ -615,7 +619,7 @@ class CommanderDeaf(InboxUnavailable):
         return tuple(cls(paused + cls.seconds) for paused in pauses)
 
     def line(self) -> str:
-        return (f"COMMANDER DEAF: its bridge has no confirmed Monitor since "
+        return (f"RE-ARM the commander watch: its bridge has no confirmed Monitor since "
                 f"{RecordedEventTime(self.since - self.seconds).clock()}, so every Core line"
                 " to it waits unread -> re-arm its watch:"
                 " agent-comms-claude-bridge watch (bare, no pipe)")
@@ -643,7 +647,7 @@ class UnitDeaf(InboxUnavailable):
                      for paused in observed.readiness.unavailable_since())
 
     def line(self) -> str:
-        return (f"UNIT DEAF: {self.unit} has read none of its inbox since "
+        return (f"UNDEAFEN {self.unit}: it has read none of its inbox since "
                 f"{RecordedEventTime(self.since - self.seconds).clock()}, so every order to it"
                 " waits unread -> read its drain diagnostic and fix that owner")
 
