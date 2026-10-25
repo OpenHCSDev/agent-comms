@@ -944,9 +944,13 @@ class Install[Rehearsed: Rehearsal](ABC):
 
     @classmethod
     @contextmanager
-    def owners_stopped(cls, root: Path, installed: Stack) -> Iterator[OwnersStopped]:
-        """Nothing at the root runs an agent owner."""
+    def owners_kept(cls, root: Path, installed: Stack) -> Iterator[OwnersStopped]:
+        """Every owner keeps running: none runs at the root, or the run touches only a copy."""
         yield OwnersStopped()
+
+    @classmethod
+    def owners_stopped(cls, root: Path, installed: Stack) -> AbstractContextManager[OwnersStopped]:
+        return cls.owners_kept(root, installed)
 
     @classmethod
     @abstractmethod

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from abc import abstractmethod
-from contextlib import AbstractContextManager, nullcontext
+from contextlib import AbstractContextManager
 from dataclasses import dataclass
 from pathlib import Path
 from collections.abc import Callable
@@ -75,9 +75,7 @@ class RehearsalMode(SingleFieldValue, RunMode):
 
     def owners_stopped(self, member: type[Install], root: Path,
                        installed: Stack) -> AbstractContextManager[OwnersStopped]:
-        """A rehearsal touches only its copy, so every owner keeps running."""
-        from agent_comms.installer.upgrade import OwnersStopped
-        return nullcontext(OwnersStopped())
+        return member.owners_kept(root, installed)
 
     def finish[Rehearsed: Rehearsal](self, install: Install[Rehearsed], rehearsal: Rehearsed,
                bridges: SessionBridgeResumes, harnesses: Callable[[Stack], InstallResult],
