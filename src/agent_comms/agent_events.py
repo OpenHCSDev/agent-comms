@@ -319,7 +319,7 @@ class Done(AgentEvent, FailedGoalTurn):
     async def prepare_publication(self, progress) -> Done:
         return self
 
-    async def report_failure(self, progress, error):
+    async def report_failure(self, progress, error, kind):
         return self.outcome
 
 
