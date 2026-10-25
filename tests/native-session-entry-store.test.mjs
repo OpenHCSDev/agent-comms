@@ -3,7 +3,7 @@ import { after, test } from 'node:test';
 import { appendFileSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { DiskEntryStore, MemoryEntryStore } from '../stack/native-session-entry-store.mjs';
+import { DiskEntryStore, MemoryEntryStore } from '../stack/native/native-session-entry-store.mjs';
 
 const scratch = mkdtempSync(join(tmpdir(), 'native-session-entry-store-'));
 after(() => rmSync(scratch, {recursive:true, force:true}));

@@ -30,9 +30,7 @@ def test_every_spawn_has_its_own_process_group() -> None:
             for keyword in call.keywords
         )
     declarations = {node.name: node for node in tree.body if isinstance(node, ast.ClassDef)}
-    assert "start_new_session" in ast.unparse(declarations["PosixLaunch"])
-    assert "CREATE_NEW_PROCESS_GROUP" in ast.unparse(declarations["WindowsLaunch"])
-    assert "bind_and_resume" in ast.unparse(declarations["WindowsLaunch"])
+    assert "start_new_session" in ast.unparse(declarations["ChildLaunch"])
 
 
 def test_process_cleanup_has_no_bare_pid_or_optional_parent_api() -> None:

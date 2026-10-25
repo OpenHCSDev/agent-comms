@@ -128,7 +128,7 @@ src = ["src", "tests"]
 select = ["E", "F", "I", "N", "W", "UP", "B", "SIM"]
 
 [tool.ruff.lint.flake8-bugbear]
-extend-immutable-calls = ["agent_comms.store_files.ExclusiveLock"]
+extend-immutable-calls = ["agent_comms.store_files.ExclusiveLock", "agent_comms.importing.ImportLimits"]
 
 [tool.mypy]
 warn_return_any = true

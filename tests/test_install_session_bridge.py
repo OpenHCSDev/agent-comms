@@ -25,6 +25,7 @@ from agent_comms.cli_bridges.shared import (
 )
 from conftest import installed_comms
 from agent_comms.field_codec import FieldCodec
+from agent_comms.installer.refusals import UpgradeRefused
 from agent_comms.launch_runtime import LaunchRuntime
 from agent_comms.root_runtime import RootRuntime
 from agent_comms.thread_execution import ExternalThreadExecution
@@ -293,8 +294,14 @@ def test_install_swap_keeps_the_claim_and_resumes_the_same_process_on_the_new_ru
             assert child.poll() is None, log.read_text()
 
 
-def test_a_bridge_that_never_answers_pause_refuses_the_install_by_name(tmp_path, bridge_home):
+def test_a_bridge_that_never_answers_pause_refuses_the_install_by_name(
+        tmp_path, bridge_home, monkeypatch):
     claim = WatchClaim('silent-session', bridge_home)
+    current = bridge_home / LaunchRuntime.current_pointer().relative_to(Path.home())
+    current.parent.mkdir(parents=True)
+    (tmp_path / 'runtime').mkdir()
+    current.symlink_to(tmp_path / 'runtime', target_is_directory=True)
+    monkeypatch.setenv('HOME', str(bridge_home))
     claim.socket_path.parent.mkdir(parents=True, exist_ok=True)
     me = ProcessIdentity.capture(os.getpid())
     observed = SessionInformation(owner=me, process=me, runtime=LaunchRuntime.running(),
@@ -303,13 +310,22 @@ def test_a_bridge_that_never_answers_pause_refuses_the_install_by_name(tmp_path,
     with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as silent, ExitStack() as resources:
         silent.bind(str(claim.socket_path))
         silent.listen()
-        with pytest.raises(UnacknowledgedPause) as refused:
+        with pytest.raises(UpgradeRefused) as refused:
             bridges.pause(SessionBridge(claim, observed), resources)
-    bridges.release()
+        bridges.release()
+        # The late bridge finds its runtime waiting once it acknowledges.
+        accepted, _ = silent.accept()
+        with accepted, accepted.makefile('rb') as stream:
+            pause = FieldCodec.decode(PauseSession, FieldCodec.parse(stream.readline().decode()))
+            assert pause.process == me
+            assert FieldCodec.decode(LaunchRuntime, FieldCodec.parse(stream.readline().decode()))
     bridges.confirm()
-    assert str(refused.value) == (
-        f'Session bridge silent-session at {claim.socket_path} did not acknowledge pause within 30 s')
-    assert bridges.failures == (refused.value,)
+    unanswered = (f'Session bridge silent-session at {claim.socket_path} '
+                  'did not acknowledge pause within 30 s')
+    assert str(refused.value) == f'install: refused: {unanswered}'
+    (failure,) = bridges.failures
+    assert isinstance(failure, UnacknowledgedPause)
+    assert str(failure) == unanswered
 
 
 def test_a_successor_that_exits_before_serving_is_unobserved_without_a_deadline(

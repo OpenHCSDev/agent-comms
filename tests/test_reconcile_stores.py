@@ -11,7 +11,11 @@ import sqlite3
 import subprocess
 import sys
 from contextlib import closing
+from dataclasses import dataclass
 from pathlib import Path
+from typing import Annotated
+
+import pytest
 
 from agent_comms.activity import ActivityStore
 from agent_comms.bus import Bus
@@ -22,6 +26,9 @@ from agent_comms.cli_commands import (
     ReconcileStoresCliCommand,
 )
 from agent_comms.coordination_database import CoordinationStore
+from agent_comms.errors import RelationViolationError
+from agent_comms.goal_attempts import GoalAttemptStore
+from agent_comms.goal_failure_observation import FailedTurnEvidence
 from agent_comms.coordination_session import CoordinationSession
 from agent_comms.coordinator import Coordination
 from agent_comms.installer.backup import bus_files
@@ -30,7 +37,11 @@ from agent_comms.maintenance_barrier import MaintenanceHolder, NoMaintenanceHold
 from agent_comms.native_runtime_input import NativeRuntimeInput
 from agent_comms.private_runtime_schema import PrivateCoordinatorSchema
 from agent_comms.triage_native_sources import TriageNativeSources
-from agent_comms.typed_table import ReconciledFile
+from agent_comms.turn_failure import TurnFailure
+from agent_comms.typed_table import (
+    Column, DurableTables, ReconciledFile, SharedFileTables, TableSchema, TypedTable,
+    WriterOwnedStore, sql_literal,
+)
 from bus_record_fixture import OWNER_LOOKUP
 from conftest import maintenance_held
 
@@ -202,3 +213,64 @@ def test_public_reconcile_does_not_install_native_state(tmp_path):
         assert not db.execute(
             "SELECT name FROM sqlite_master WHERE name=?", (NativeRuntimeInput.declared_name,)
         ).fetchone()
+
+
+def test_planned_reconcile_refuses_a_writer_owned_store_its_declaration_cannot_open(tmp_path):
+    """Toad's laptop toad.db, 10-24: a pre-STRICT file the declaration refuses fails the
+    install's plan, naming the file, before any owner stops; the file itself is untouched."""
+    class LaunchTables(SharedFileTables, DurableTables):
+        """A view's own durable file, outside the bus."""
+
+    @dataclass(frozen=True)
+    class LaunchRow(LaunchTables, TypedTable, declared_name="launch_rows"):
+        key: Annotated[str, Column(primary_key=True)]
+        count: int
+
+    stored = tmp_path / "state" / "launch.db"
+    stored.parent.mkdir()
+
+    class LaunchStore(WriterOwnedStore):
+        @classmethod
+        def path(cls) -> Path:
+            return stored
+
+        @classmethod
+        def table_schema(cls) -> type[TableSchema]:
+            return LaunchTables
+
+    with closing(sqlite3.connect(stored)) as db:
+        db.execute("CREATE TABLE launch_rows (key TEXT NOT NULL, count TEXT DEFAULT '0', "
+                   "PRIMARY KEY (key))")
+        db.execute("INSERT INTO launch_rows VALUES ('first', '1')")
+        db.commit()
+    before = stored.read_bytes()
+    root = tmp_path / "bus"
+    root.mkdir()
+    try:
+        with pytest.raises(RelationViolationError, match=str(stored)):
+            PlannedReconcileCliCommand().answer(root)
+        assert stored.read_bytes() == before
+    finally:
+        stored.unlink()
+    assert PlannedReconcileCliCommand().answer(root).rewritten == ()
+
+
+def test_the_goal_ledger_carries_a_family_that_gained_a_member(private_comms):
+    """Install 13: the ledger kept a failure CHECK one member short, nothing carried it, and
+    every opening refused. Its owner is a reconciled file, so the install carries it."""
+    root = private_comms.root
+    directory = root / GoalAttemptStore.root_directory
+    directory.mkdir(mode=0o700)
+    path = GoalAttemptStore.initialize(directory).path
+    newest = sql_literal(TurnFailure.names()[-1])
+    with closing(sqlite3.connect(path)) as db:
+        (table,) = db.execute("SELECT sql FROM sqlite_master WHERE name=?",
+                              (FailedTurnEvidence.declared_name,)).fetchone()
+        db.execute(f'DROP TABLE "{FailedTurnEvidence.declared_name}"')
+        db.execute(table.replace(f", {newest}", ""))
+        db.commit()
+    with maintenance_held(root) as holder:
+        completed = reconcile(root, holder)
+    assert completed.returncode == 0, completed.stdout + completed.stderr
+    assert str(path.relative_to(root)) in json.loads(completed.stdout)["rewritten"]
+    GoalAttemptStore(directory)

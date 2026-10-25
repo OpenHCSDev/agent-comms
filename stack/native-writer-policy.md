@@ -1,7 +1,7 @@
 # Native session writer policy (PR48 blockers 3 & 4)
 
 Status: LOCAL-ONLY design record for the disposable prototype
-(`stack/patch-native-session-writer-prototype.py`, patched disposable SHA
+(the retired session-writer prototype, patched disposable SHA
 `d9f0e3b3e6ff8975a13d6a5f07cb88b13e399003d8725c409829edd4425afbe6`).
 Nothing here is wired into the installed Pi package, ACP, or PR48 runtime.
 

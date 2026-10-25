@@ -237,7 +237,6 @@ class FilesystemRole(DeclaredFamily, affix="Role"):
         cls, path: str | Path, flags: int, refusal: Exception, *,
         dir_fd: int | None = None, mode: int = 0o600,
     ) -> int:
-        Platform.current().require_pinned_paths(refusal)
         fd = os.open(path, flags | os.O_NOFOLLOW | cls.kind_flags(), mode, dir_fd=dir_fd)
         try:
             cls.require(os.fstat(fd), refusal)
