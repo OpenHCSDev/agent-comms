@@ -15,7 +15,7 @@ from collections.abc import AsyncIterator, Iterator, Mapping, MutableMapping
 from contextlib import AbstractAsyncContextManager, asynccontextmanager, contextmanager
 from dataclasses import dataclass, field, replace
 from pathlib import Path
-from typing import TYPE_CHECKING, Annotated, Literal, Self
+from typing import Annotated, Literal, Self
 
 from .child_process import ProcessIdentity
 from .private_path import PrivateFileRole
@@ -32,7 +32,7 @@ from .field_codec import (
 )
 from .launch_runtime import LaunchRuntime
 from .lifecycle import LifecycleState
-from .locked_store import DurableFile, LockedStore, RegistryFile
+from .locked_store import DurableFile, LockedStore, RegistryFile, WrittenFile
 from .send_outcome import GrantedSend, HeldSend
 from .store_files import (
     AtomicFile,
@@ -639,14 +639,11 @@ class MaintenanceBarrier(MaintenanceIngress):
             yield self._current_unlocked()
 
 
-class CarriedFile(DurableFile):
+class CarriedFile(DurableFile, WrittenFile):
     """A file every installation carries; its kind declares which writers maintenance refuses,
     so the install's carry check never charges another writer's change."""
 
     __slots__ = ()
-    if TYPE_CHECKING:
-        @property
-        def path(self) -> Path: ...
 
     @classmethod
     @abstractmethod

@@ -163,8 +163,8 @@ class Measure(DeclaredFamily, affix="Measure"):
 
     @classmethod
     def grew(cls, key: MeasureCount, grown: int) -> str:
-        """The line reporting one count's growth."""
-        return f"grew {key.text} +{grown}"
+        """The line reporting one count's growth; the count words it."""
+        return key.grew(grown)
 
     @classmethod
     def run_by(cls) -> type[Measure]:
@@ -226,6 +226,10 @@ class MeasureCount:
         """A check annotation for this count; a total annotates no file."""
         return f"::warning::{text}"
 
+    def grew(self, grown: int) -> str:
+        """The line saying this count grew."""
+        return f"grew {self.text} +{grown}"
+
 
 @dataclass(frozen=True)
 class FileCount(MeasureCount):
@@ -257,6 +261,21 @@ class MemberCount(FileCount):
     @property
     def text(self) -> str:
         return f"{super().text}::{self.name}"
+
+
+@dataclass(frozen=True)
+class PhaseSiteCount(MeasureCount):
+    """One site where a done plan phase's evidence fails."""
+
+    phase: type[PlanPhase]
+    site: str
+
+    @property
+    def text(self) -> str:
+        return f"{super().text}:{self.phase.__name__}::{self.site}"
+
+    def grew(self, grown: int) -> str:
+        return f"done plan phase {self.phase.__name__} no longer holds: {self.site}"
 
 
 # One revision's counts, each under the record of what it counts.
@@ -2604,31 +2623,26 @@ class DonePhaseBroken(Measure):
     @classmethod
     def parts(cls, repo: Path, base: str, head: str, changed: set[str],
               root: str) -> tuple[Callable[[], object], ...]:
-        declared = Path(sys.modules[PlanPhase.__module__].__file__ or "").resolve()
+        declared = Path(inspect.getfile(PlanPhase)).resolve()
         if root != f"{declared.relative_to(REPOSITORY).parts[0]}/":
             return ()
         return tuple(partial(cls.failing, repo, revision(repo, ref)) for ref in (base, head))
 
     @classmethod
     def combine(cls, results: list, repo: Path, base: str, head: str, changed: set[str],
-                root: str) -> tuple[dict[str, int], dict[str, int]]:
+                root: str) -> tuple[Counts, Counts]:
         """A failing pull request pays for reading its sites; a passing one never reads them."""
         if not results:
             return {}, {}
         before, after = results
         reading = PlanReading((), MainTree(Repo.of(repo), revision(repo, head)))
-        broken = {
-            cls.key(f"{phase.__name__}::{site}"): 1
+        broken: Counts = {
+            PhaseSiteCount(cls, phase, site): 1
             for phase in PlanPhase.members_with(PlanPhase)
             if phase.__name__ in after - before
             for site in phase.evidence.sites(reading) or (reading.describe(phase.evidence),)
         }
         return dict.fromkeys(broken, 0), broken
-
-    @classmethod
-    def grew(cls, key: str, grown: int) -> str:
-        phase, _, site = key.partition(":")[2].partition("::")
-        return f"done plan phase {phase} no longer holds: {site}"
 
     @classmethod
     def failing(cls, repo: Path, commit: str) -> frozenset[str]:
