@@ -1294,6 +1294,7 @@ class PullRequestSource:
 
     todo: Todo
     pulls: ProgressRead
+    verified_commits: tuple[str, ...] = field(default=(), kw_only=True)
 
     @property
     def since(self) -> float:
@@ -1476,9 +1477,12 @@ class MergedProgress(FoundProgress):
     @classmethod
     def found(cls, source: PullRequestSource) -> Iterator[Self]:
         """Merged only once every linked request has merged; one still open holds the order."""
-        merged = (() if source.requests(UnmergedListedPullRequest)
-                  else source.requests(MergedListedPullRequest))
-        return (cls(sha) for pr in merged for sha in pr.merged_commits(source.since))
+        commits = (() if source.requests(UnmergedListedPullRequest) else (
+            *source.verified_commits,
+            *(sha for pr in source.requests(MergedListedPullRequest)
+              for sha in pr.merged_commits(source.since)),
+        ))
+        return (cls(sha) for sha in commits)
 
     @property
     def state(self) -> str:
@@ -2524,7 +2528,9 @@ class DeliverableProblemOrder(FreshMainCheck, OpenProblemOrder, declared_name=No
         ran = self.check.at(main, self.check.directory, checkout_base)
         if not self.check.result.distance(ran).project(lambda away: away == 0, lambda _: False):
             return ()
-        return (self.run.after_merge(todo, self.merged(main)),)
+        source = PullRequestSource(todo, pulls, verified_commits=(main,))
+        return tuple(self.run.after_merge(todo, merged)
+                     for merged in self.observed_merges(todo.repository, source))
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -2833,9 +2839,9 @@ class DeliveredProblemOrder(AwaitingInstallationProblemOrder):
     def observed_merges(
         self, repo: Repo, source: PullRequestSource
     ) -> tuple[MergedProblemOrder, ...]:
-        commits = self.delivery.merged_commits(repo)
-        return (tuple(self.merged(commit) for commit in commits)
-                or super().observed_merges(repo, source))
+        return super().observed_merges(repo, replace(
+            source, verified_commits=(*source.verified_commits, *self.delivery.merged_commits(repo)),
+        ))
 
     def closing_artifact(self) -> str:
         return self.delivery.closing_artifact()
