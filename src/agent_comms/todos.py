@@ -16,7 +16,7 @@ import subprocess
 import sys
 import time
 from abc import ABC, abstractmethod
-from collections.abc import Callable, Iterator, Mapping, Sequence
+from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
 from contextlib import contextmanager
 from dataclasses import dataclass, field, fields, replace
 from functools import cached_property, partial
@@ -35,6 +35,7 @@ from agent_comms.build_identity import (
 )
 from agent_comms.bus_publication import AgentOrigin
 from agent_comms.change_report import (
+    CitedRevisions,
     CommitRevision,
     FileLine,
     MainRevision,
@@ -1705,6 +1706,11 @@ class ProblemOrder(LifecycleCapability, DeclaredFamily, StorySource, affix="Prob
     def declarations(self) -> tuple[CheckedProblemOrder, ...]:
         return ()
 
+    @property
+    def linked_requests(self) -> tuple[PullRequestLink, ...]:
+        """The pull requests this order's work holds; an unchecked order holds none."""
+        return ()
+
     def closed_by_merge(
         self, todo: Todo, pulls: ProgressRead, checkout_base: Path
     ) -> tuple[Todo, ...]:
@@ -1979,7 +1985,8 @@ class CheckedProblemOrder(ProblemOrder, declared_name=None):
 
     @cached_property
     def cited_revision(self) -> SourceRevision:
-        return (*map(PullRequestHeadRevision, self.linked_requests), MainRevision())[0]
+        heads = tuple(map(PullRequestHeadRevision, self.linked_requests))
+        return CitedRevisions((*heads, MainRevision())) if heads else MainRevision()
 
     def require_references(self) -> None:
         root, revision = self.check.directory, self.cited_revision
@@ -2395,6 +2402,21 @@ class PendingProblemOrder(Pending, DeliverableProblemOrder):
         """Validate the complete issuance before recording, then publish its owned effects."""
         group = target.group(document)
         listed = {todo.id: todo for todo in context.todos()}
+        target.carried(self, group, listed).issue(
+            context, document, unit, clean, reassign, target, traced, answers, request,
+            group, listed)
+
+    def carrying(self, links: Iterable[PullRequestLink]) -> Self:
+        """This order holding the problem's pull requests too, so its cites stand on their heads."""
+        carried = tuple(link for link in dict.fromkeys(links) if link not in self.pull_requests)
+        return replace(self, pull_requests=(*self.pull_requests, *carried)) if carried else self
+
+    def issue(
+        self, context: Commander, document: OrderFile, unit: str, clean: bool,
+        reassign: Reassignment, target: OrderedProblems,
+        traced: FileLine | NoSourceReference, answers: tuple[MessageReference, ...],
+        request: RequestSelection, group: Sequence[str], listed: Mapping[str, Todo],
+    ) -> None:
         holder = context.comms.registry.require(unit).incarnation
         holders = sorted({assignment.owner for pid in group if pid in listed
                           for assignment in listed[pid].holder_state.current_assignments()

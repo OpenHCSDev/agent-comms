@@ -472,6 +472,11 @@ class OrderedProblems(ABC):
                   listed: Mapping[str, Todo]) -> bool:
         """Whether this order replaces the unit's own earlier order on the same problems."""
 
+    def carried(self, order: PendingProblemOrder, group: Sequence[str],
+                listed: Mapping[str, Todo]) -> PendingProblemOrder:
+        """The order with the pull requests its problems already hold; a new problem holds none."""
+        return order
+
     @abstractmethod
     def record(self, context: CommanderContext, order: PendingProblemOrder, unit: str,
                group: Sequence[str], traced: FileLine | NoSourceReference, request: OwnerRequestId,
@@ -523,6 +528,12 @@ class ListedProblems(OrderedProblems):
             pid in listed and any(assignment.owner_identity == unit for assignment
                                   in listed[pid].holder_state.current_assignments())
             for pid in group)
+
+    def carried(self, order: PendingProblemOrder, group: Sequence[str],
+                listed: Mapping[str, Todo]) -> PendingProblemOrder:
+        """A replacement order keeps the problem's pull requests: a restore cites their heads."""
+        return order.carrying(link for pid in group if pid in listed
+                              for link in listed[pid].order.linked_requests)
 
     def record(self, context: CommanderContext, order: PendingProblemOrder, unit: str,
                group: Sequence[str], traced: FileLine | NoSourceReference, request: OwnerRequestId,
