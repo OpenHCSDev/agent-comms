@@ -47,6 +47,32 @@ class BoardEntry:
 
 
 @dataclass(frozen=True)
+class BoardSummary:
+    """One presentation of the current lines; no caller supplies a prose discriminator."""
+
+    entries: Sequence[BoardEntry]
+    now: float
+    description: ClassVar[str] = "unchanged"
+
+    def reason(self) -> str:
+        return self.description
+
+    def line(self) -> str:
+        oldest = min(self.entries, key=lambda entry: entry.since)
+        return (f"BOARD: {len(self.entries)} {self.reason()} (oldest: {oldest.text[:60]}, "
+                f"seen {oldest.minutes(self.now)} min)")
+
+
+@dataclass(frozen=True)
+class UndisposedBoardSummary(BoardSummary):
+    minutes: int
+    description: ClassVar[str] = "undisposed past"
+
+    def reason(self) -> str:
+        return f"{self.description} {self.minutes} min"
+
+
+@dataclass(frozen=True)
 class SessionBoard(SessionWire):
     """The board lines the bridge derived from Core at the moment of asking."""
 
@@ -61,15 +87,8 @@ class SessionBoard(SessionWire):
         """Each change once, then exactly one summary of the current unchanged lines."""
         lines = tuple(entry.line(now) for entry in due)
         if unchanged:
-            lines += (cls.summary(unchanged, now),)
+            lines += (BoardSummary(unchanged, now).line(),)
         return cls(lines)
-
-    @classmethod
-    def summary(cls, entries: Sequence[BoardEntry], now: float, description: str = "unchanged") -> str:
-        """One count/oldest presentation; callers supply their reason for showing it."""
-        oldest = min(entries, key=lambda entry: entry.since)
-        return (f"BOARD: {len(entries)} {description} (oldest: {oldest.text[:60]}, "
-                f"seen {oldest.minutes(now)} min)")
 
     @classmethod
     def asked(cls, endpoint: Path) -> SessionBoard:

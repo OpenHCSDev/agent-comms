@@ -70,7 +70,7 @@ from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.repo import Repo
 from agent_comms.registry_document import RegisteredCommanderProject
 from agent_comms.task_attachments.commander_pings import CommanderUpdate
-from agent_comms_hooks.board import SessionBoard
+from agent_comms_hooks.board import UndisposedBoardSummary
 from agent_comms.heartbeat_subjects import AnswerSubject, HeartbeatSubject, UnitSubject
 from agent_comms.standing_rules import HuntDue, OwedAnswer, StandingRule
 from agent_comms.ui_model.unit_state import AwaitingCommander
@@ -869,10 +869,10 @@ class HeartbeatGated(CommanderVerb, declared_name=None):
         board = CommanderUpdate.owed(ctx.comms, ctx.commander, now - AwaitingCommander.seconds)
         acted = frozenset(subjects)
         if board and not any(ping.acted_on(acted) for ping in board):
-            print(SessionBoard.summary(
+            print(UndisposedBoardSummary(
                 tuple(ping.board_entry() for ping in board), now,
-                f'undisposed past {AwaitingCommander.seconds // 60} min',
-            ), file=sys.stderr)
+                AwaitingCommander.seconds // 60,
+            ).line(), file=sys.stderr)
 
 
 @dataclass(frozen=True, kw_only=True)

@@ -581,7 +581,7 @@ def test_answering_one_owed_message_leaves_another_owed(held_bus, tmp_path, caps
     capsys.readouterr()
     SayVerb(units="worker", body_file=str(reply), answers=(first.message_id,)).apply(ctx)
     out = capsys.readouterr().out
-    assert f"WARNING: worker asked {second.seq}:{second.message_id}" in out
+    assert f"{second.seq}:{second.message_id}" in out
     assert f"{first.seq}:{first.message_id}" not in out
     assert held_bus.bus.bus.lookup(held_bus.bus.bus.revision()).answers == (first.reference,)
     assert [owed.message.message_id for owed in unanswered(held_bus)] == [second.message_id]
@@ -653,7 +653,7 @@ def test_an_overdue_owner_directive_gates_until_answered(held_bus, tmp_path):
     ctx = Commander.read_root(held_bus.root)
     reply = tmp_path / "reply.txt"
     reply.write_text("Installing now")
-    with pytest.raises(RecordProblems, match=f"owner directive {directive.seq}:{directive.message_id}"):
+    with pytest.raises(RecordProblems, match=directive.message_id):
         SayVerb(units="#comms", body_file=str(reply)).apply(ctx)
     SayVerb(units="#comms", body_file=str(reply), answers=(directive.message_id,)).apply(ctx)
     SayVerb(units="#comms", body_file=str(reply)).apply(ctx)

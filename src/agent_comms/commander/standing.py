@@ -49,7 +49,7 @@ from agent_comms.standing_rules import (
     FamilyScan,
     UndatedStandingRule,
 )
-from agent_comms.thread_identity import ThreadIncarnation
+from agent_comms.thread_identity import RecordedThreadIncarnation, ThreadIncarnation
 from agent_comms.threads import Thread
 from agent_comms.todos import (
     Assignment,
@@ -111,7 +111,7 @@ class InstallDue(UndatedStandingRule, FamilyScan):
     logs: installer_launch.InstallLogs = field(compare=False)
     core: Repo = field(compare=False)
     target: str = field(compare=False)
-    question: ClassVar[str] = "doing nothing for anyone. why isn't it installed?"
+    headline: ClassVar[str] = "INSTALL DUE"
 
     @property
     @abstractmethod
@@ -156,10 +156,10 @@ class InstallDue(UndatedStandingRule, FamilyScan):
     def line(self) -> str:
         oldest = int((time.time() - min(merge.at for merge in self.merges)) // 60)
         landing = ", ".join(f"#{row.number} {row.branch}" for row in self.landing) or "none"
-        return (f"{len(self.merges)} merges sitting on {self.repo.to_wire()} main {self.main[:12]},"
-                f" installed is {self.installed[:12]}, oldest {oldest} min"
-                f" ({'; '.join(merge.line for merge in self.merges)}; landing: {landing})."
-                f" {self.question} -> {self.action}")
+        return (f"{self.headline} ({self.repo.to_wire()}: main {self.main[:12]}, installed "
+                f"{self.installed[:12]}, {len(self.merges)} merges, oldest {oldest} min: "
+                f"{'; '.join(merge.line for merge in self.merges)}; landing: {landing}) "
+                f"-> {self.action}")
 
 
 class PendingInstallDue(InstallDue):
@@ -193,8 +193,6 @@ class RunInstallDue(InstallDue, declared_name=None):
 
 
 class LaunchedInstallDue(RunInstallDue):
-    question = "its install is already launched. is it moving, or did it hang?"
-
     @property
     def action(self) -> str:
         return "an install for this merge was already launched"
@@ -203,7 +201,7 @@ class LaunchedInstallDue(RunInstallDue):
 class DiedInstallDue(RunInstallDue):
     """Its unit ended without a result; nothing relaunches it until main moves."""
 
-    question = "and the install died. who's reading why?"
+    headline = "INSTALL DIED"
 
     @property
     def action(self) -> str:
@@ -222,8 +220,8 @@ class RequestStalled(IndependentStandingRule, UndatedStandingRule):
                      if not store.serving_orders(request.id))
 
     def line(self) -> str:
-        return (f"request {self.request.id.value} ({self.request.text}) has no order serving it."
-                " is anyone on it, or did we forget? -> order its next step or mark it done")
+        return (f"ADVANCE request {self.request.id.value} {self.request.text}"
+                " -> order its next step or mark it done")
 
 
 @dataclass(frozen=True)
@@ -292,10 +290,9 @@ class PlanIdle(PlanRule):
 
     def line(self) -> str:
         return (
-            f"{self.phase.plan.declared_name}/{self.phase.declared_name}"
-            f" ({self.phase.plan.document}) is ready and nobody holds it; done when"
-            f" {self.reading.describe(self.phase.phase_evidence())}. why is it sitting there?"
-            f" -> {self.phase.task.instruction}"
+            f"START {self.phase.plan.declared_name}/{self.phase.declared_name}"
+            f" ({self.phase.plan.document}): ready, no open order; done when"
+            f" {self.reading.describe(self.phase.phase_evidence())} -> {self.phase.task.instruction}"
         )
 
 
@@ -323,9 +320,9 @@ class PlanStalled(PlanRule):
     def line(self) -> str:
         hours = (time.time() - self.since) / 3600
         return (
-            f"{self.phase.plan.declared_name}/{self.phase.declared_name} held {hours:.1f}h"
-            f" and still not on main ({self.phase.plan.document}). what's actually holding it?"
-            " -> find it and change that this wake: integrate steps that only land together,"
+            f"UNSTALL {self.phase.plan.declared_name}/{self.phase.declared_name}:"
+            f" held {hours:.1f}h and not on main ({self.phase.plan.document}) -> find what holds"
+            " it still and change that this wake: integrate steps that only land together,"
             " take it over, or reassign it"
         )
 
@@ -376,8 +373,7 @@ class UnitAskUnanswered(UnitOwedAnswer, UndatedStandingRule):
 
     def line(self) -> str:
         age = max(0, int((time.time() - self.message.timestamp) // 60))
-        return (f"{self.unit} asked {self.cited} {age} min ago. why is it still waiting on you?"
-                f" -> {self.clearing_action()}")
+        return f"ANSWER {self.unit} message {self.cited}: {age} min old"
 
 
 @dataclass(frozen=True)
@@ -419,8 +415,7 @@ class DeliveryAwaitingJudgement(UnitOwedAnswer, UndatedStandingRule):
         return self.clearing_commands()
 
     def line(self) -> str:
-        return (f"{self.unit} delivered {self.problem} ({self.cited}). you judged it yet?"
-                f" -> {self.clearing_action()}")
+        return f"JUDGE {self.unit} {self.problem} delivery {self.cited} -> {self.clearing_action()}"
 
 
 @dataclass(frozen=True)
@@ -467,8 +462,8 @@ class HolderGone(IndependentStandingRule, UndatedStandingRule):
 
     def line(self) -> str:
         held = self.todo.held()
-        return (f"{self.todo.id}'s holder {held.owner} (born {held.owner_created}) isn't registered"
-                f" anymore. so who has it? -> {self.todo.order.orphan_clearing(self.todo)}")
+        return (f"REHOME {self.todo.id}: holder {held.owner} born {held.owner_created} is no"
+                f" longer registered -> {self.todo.order.orphan_clearing(self.todo)}")
 
 
 @dataclass(frozen=True)
@@ -553,7 +548,7 @@ class UnownedWheelSpin(IndependentStandingRule, UndatedStandingRule, FamilyScan)
         return type(self).paired(comms, commander, (current,), HeldOrders.read(comms, commander), PullRequests())
 
     def line(self) -> str:
-        return f"{self.todo.id} has no owner and waits for a new unit. who's taking it?"
+        return f"STAFF {self.todo.id}: unowned, waits for a new unit"
 
 
 @dataclass(frozen=True, eq=False)
@@ -570,7 +565,7 @@ class ReassignedWheelSpin(CoreActsStandingRule, UnownedWheelSpin):
             f"{self.line()}\n{self.dispatch.action.order.instructions(self.todo)}")
 
     def line(self) -> str:
-        return (f"{self.unit} holds no order while {self.todo.id} sits unowned. why were both idle?"
+        return (f"STAFF {self.todo.id} with {self.unit}: it holds no order while the row is unowned"
                 f" -> Core gives it to {self.unit}")
 
 
@@ -587,8 +582,8 @@ class RetainedHolderWheelSpin(CoreActsStandingRule, UnownedWheelSpin):
         ), commander)
 
     def line(self) -> str:
-        return (f"Core restored {self.previous.owner} as {self.todo.id}'s holder. why would you"
-                f" hand the row away? -> keep {self.todo.id} with {self.previous.owner}")
+        return (f"KEEP {self.todo.id} with {self.previous.owner}: Core restored its holder;"
+                " do not hand the row away")
 
 
 @dataclass(frozen=True)
@@ -632,7 +627,7 @@ class HeartbeatSilent(IndependentStandingRule, DatedStandingRule, FamilyScan, de
 
     seconds: ClassVar[int] = 180
     since: float
-    commander: ThreadIncarnation
+    commander: RecordedThreadIncarnation
 
     def subjects(self) -> tuple[HeartbeatSubject, ...]:
         return (PassSubject(self.commander),)
@@ -640,14 +635,16 @@ class HeartbeatSilent(IndependentStandingRule, DatedStandingRule, FamilyScan, de
     @classmethod
     def violations(cls, comms: Comms, commander: str) -> tuple[HeartbeatSilent, ...]:
         owner = comms.registry.require(commander)
-        completed = ServicePassStore.at(comms.root).read().commander_completed.get(owner.incarnation)
+        incarnation = owner.incarnation.require_recorded()
+        completed = ServicePassStore.at(comms.root).read().commander_completed.get(incarnation)
         now = time.time()
         found = []
+        rule: HeartbeatSilent
         for request in CommanderService.requested_by(owner, comms.goals):
             if completed is None or completed < request.created_at:
-                rule = HeartbeatNotStarted(request.created_at + cls.seconds, owner.incarnation, request.id)
+                rule = HeartbeatNotStarted(request.created_at + cls.seconds, incarnation, request.id)
             else:
-                rule = MissedHeartbeat(completed + cls.seconds, owner.incarnation)
+                rule = MissedHeartbeat(completed + cls.seconds, incarnation)
             if rule.since < now:
                 found.append(rule)
         return tuple(found)
@@ -659,9 +656,9 @@ class HeartbeatSilent(IndependentStandingRule, DatedStandingRule, FamilyScan, de
 @dataclass(frozen=True)
 class MissedHeartbeat(HeartbeatSilent):
     def line(self) -> str:
-        return (f"no completed heartbeat pass since "
+        return (f"FIX THE HEARTBEAT: no completed pass since "
                 f"{RecordedEventTime(self.since - self.seconds).clock()}, silent past "
-                f"{RecordedEventTime(self.since).clock()}. I have to tell you it's hung? why?"
+                f"{RecordedEventTime(self.since).clock()}"
                 " -> read the connector journal for the failing pass and fix its owner")
 
 
@@ -670,8 +667,8 @@ class HeartbeatNotStarted(HeartbeatSilent):
     request: OwnerRequestId
 
     def line(self) -> str:
-        return (f"request {self.request.value} has had no heartbeat, overdue since "
-                f"{RecordedEventTime(self.since).clock()}. why isn't it running?"
+        return (f"START THE HEARTBEAT: no beat for request {self.request.value}, overdue since "
+                f"{RecordedEventTime(self.since).clock()}"
                 " -> start the connector heartbeat and fix its failing pass")
 
 
@@ -735,17 +732,16 @@ class UnitDeaf(InboxUnavailable):
                      for paused in observed.readiness.unavailable_since())
 
     def line(self) -> str:
-        return (f"{self.unit} has read none of its inbox since "
+        return (f"UNDEAFEN {self.unit}: it has read none of its inbox since "
                 f"{RecordedEventTime(self.since - self.seconds).clock()}, so every order to it"
-                " sits unread. who's it supposed to hear? -> read its drain diagnostic and fix"
-                " that owner")
+                " waits undelivered -> read its drain diagnostic and fix that owner")
 
 
 @dataclass(frozen=True)
 class Unjudged(ReasonedStandingRule, UndatedStandingRule):
     limit: ClassVar[int] = 30
-    text = ("{why}, unjudged. who's reviewing this pile? -> judge ok --pr N --head SHA on each"
-            " reviewed head (one verdict judges every edit before it); fork judges for the rest")
+    text = ("UNJUDGED {why} -> accept each reviewed PR head with judge ok --pr N --head SHA"
+            " (one verdict judges every edit before it), or fork judges for the rest")
 
     @classmethod
     def reason(cls, comms: Comms, commander: str) -> str | None:
