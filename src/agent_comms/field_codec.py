@@ -1973,7 +1973,7 @@ class Sha256Text(Hex256Text):
 
 
 class AssignmentId(NominalText):
-    """One recipient's wake claim on one bus message, minted only by its sealed cohort."""
+    """One recipient's wake claim on one bus message."""
 
     cohort_codec: ClassVar[str] = "cohort-v1:"
 
@@ -1982,9 +1982,16 @@ class AssignmentId(NominalText):
         """The claim a sealed cohort mints for one member's identity."""
         return cls(cls.cohort_codec + hashlib.sha256(identity).hexdigest())
 
+    def require_cohort(self) -> Self:
+        """Only a cohort-minted claim binds a wake."""
+        if not self.startswith(self.cohort_codec):
+            raise MalformedRecord("AssignmentId is not cohort-minted")
+        Sha256Text.from_text(self.removeprefix(self.cohort_codec))
+        return self
+
 
 class AssignmentIdText(NominalSpelling[AssignmentId]):
-    spelling = re.compile(re.escape(AssignmentId.cohort_codec) + Sha256Text.spelling.pattern)
+    spelling = re.compile(".{1,256}")
 
 
 class Token256Text(Hex256Text):

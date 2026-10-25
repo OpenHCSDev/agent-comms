@@ -252,6 +252,10 @@ class WakeClaim(RecordMember, RecordedScope):
             raise ClaimTransitionError(
                 "Wake claim_scope version or revision is invalid."
             ) from error
+        try:
+            self.wake_assignment_id.require_cohort()
+        except ValueError as error:
+            raise ClaimTransitionError("Wake claim ID is invalid.") from error
 
 
 @dataclass(frozen=True, slots=True)
