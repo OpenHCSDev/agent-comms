@@ -217,6 +217,40 @@ def test_withdraw_retires_a_released_problem(tmp_path, source_repository):
     assert FieldCodec.decode(Todo, FieldCodec.encode(withdrawn)) == withdrawn
 
 
+def test_withdrawn_order_is_not_a_recurrence(tmp_path, source_repository):
+    store = TodoStore(tmp_path)
+    lead = thread("lead", tmp_path, 1.0)
+    request = store.add_request(lead.incarnation, "Replace an order sent in error").id
+    original = store.create(
+        "P1", source_repository.github, "Repair the declaration",
+        creator=lead, assigner=lead.incarnation, owner=lead, generation=GoalId.mint(),
+        request=request, review_at=RecordedEventTime(1000), order=order(source_repository),
+    )
+    store.apply(original.id, WithdrawTodo(
+        original.revision, lead.incarnation, original.held(),
+        "The commander sent this order in error before any repair.",
+    ))
+    replacement = replace(order(source_repository), id=OrderId.mint(), at=RecordedEventTime(30))
+    store.require_recurrence_declaration(
+        replacement, replacement.owner, source_repository.checkout, (), 40,
+    )
+    accepted = store.create(
+        "P2", source_repository.github, "Repair the declaration",
+        creator=lead, assigner=lead.incarnation, owner=lead, generation=GoalId.mint(),
+        request=request, review_at=RecordedEventTime(1000), order=replacement,
+    )
+    assert accepted.order == replacement
+    store.apply(accepted.id, DeliverTodo(
+        accepted.revision, lead.incarnation,
+        OperationDelivery(at=RecordedEventTime(50)), accepted.order.id,
+    ))
+    with pytest.raises(TodoError, match="the same declaration broke again"):
+        store.require_recurrence_declaration(
+            replace(replacement, id=OrderId.mint()), replacement.owner,
+            source_repository.checkout, (), 60,
+        )
+
+
 @pytest.mark.parametrize("released", (False, True))
 def test_withdraw_refuses_a_delivered_problem(tmp_path, released, source_repository):
     first_goal_id = GoalId.mint()

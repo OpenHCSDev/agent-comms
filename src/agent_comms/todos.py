@@ -2196,6 +2196,13 @@ class CheckedProblemOrder(ProblemOrder, declared_name=None):
         return (any(declaration.holds(self.owner, root) for declaration in declarations)
                 or self.finding.in_declarations(declarations, root))
 
+    def recurs_within(
+        self, declarations: tuple[Declaration, ...], root: Path, now: float,
+    ) -> bool:
+        return (self.at.since(now - 7 * 86400)
+                and self.at.recorded_at("An earlier order") <= now
+                and self.in_declarations(declarations, root))
+
     def checked(self) -> CheckedProblemOrder:
         return self
 
@@ -2968,6 +2975,11 @@ class WithdrawnProblemOrder(CheckedProblemOrder):
     why: str
     superseded_by: Annotated[Successor, WireOmitDefault()] = NoSuccessor()
     line: ClassVar[str] = "Withdrawn"
+
+    def recurs_within(
+        self, declarations: tuple[Declaration, ...], root: Path, now: float,
+    ) -> bool:
+        return False
 
     def require_close(self) -> None:
         """Retiring an erroneous order does not claim installed work."""
@@ -4659,9 +4671,7 @@ class Todo(TodoStoreRows, TypedTable):
         self, declarations: tuple[Declaration, ...], root: Path, now: float,
     ) -> tuple[str, ...]:
         recent = tuple(order for order in self.order_history
-                       if order.at.since(now - 7 * 86400)
-                       and order.at.recorded_at("An earlier order") <= now
-                       and order.in_declarations(declarations, root))
+                       if order.recurs_within(declarations, root, now))
         if not recent:
             return ()
         previous = max(recent, key=lambda order: order.at.chronology())
