@@ -1189,7 +1189,7 @@ class PresentCheckout(ProgressCheckout):
         owned = {f"refs/heads/{branch}"
                  for branch, paths in self.checked_out.items()
                  if any(storage.owns_present_checkout(owner, checkout)
-                        for checkout in (Path(path).resolve() for path in paths))}
+                        for checkout in map(Path, paths))}
         return (*(ref for ref in self.git_refs if ref in owned), *self.origin_refs)
 
     def commits(self, pattern: str, refs: tuple[str, ...],

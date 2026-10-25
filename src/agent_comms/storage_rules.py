@@ -283,6 +283,8 @@ class StorageRule(RoomAllocation, DurableFile):
             raise ValueError("Storage limits must be finite.")
         if min(*limits, self.max_checkouts) < 0:
             raise ValueError("Storage limits cannot be negative.")
+        # The declared root is canonical; allocation consumers never resolve it again.
+        self.checkout_base = self.checkout_base.expanduser().resolve()
 
     @classmethod
     def load(cls, root: Path) -> Self:
@@ -298,7 +300,7 @@ class StorageRule(RoomAllocation, DurableFile):
     def order_checkout(self, roots: StorageRoots, problem: str) -> Path:
         """Allocation path for a new problem checkout of its order's check repository; an
         existing source may be reused."""
-        return self.checkout_base.resolve() / f'{roots.allocation_name}--{problem}'
+        return self.checkout_base / f'{roots.allocation_name}--{problem}'
 
     def repository_checkout(self, roots: StorageRoots, problem: str,
                             repository: RepositoryName) -> Path:
@@ -457,7 +459,7 @@ class StorageRule(RoomAllocation, DurableFile):
     def require_path(self, thread: Thread, path: Path) -> None:
         """A write in a present checkout follows that checkout's allocation."""
         self.require_destination(thread, path)
-        base = self.checkout_base.resolve()
+        base = self.checkout_base
         if path.is_relative_to(base) and path != base:
             checkout = base / path.relative_to(base).parts[0]
             if not self.owns_present_checkout(thread, checkout):
