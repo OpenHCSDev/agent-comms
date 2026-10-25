@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import io
 import os
 import secrets
 import select
@@ -14,7 +15,7 @@ from contextlib import contextmanager
 from dataclasses import dataclass, field
 from pathlib import Path
 from types import get_original_bases
-from typing import TYPE_CHECKING, Annotated, ClassVar, NoReturn, get_args, get_origin
+from typing import TYPE_CHECKING, Annotated, BinaryIO, ClassVar, NoReturn, get_args, get_origin
 
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.cli_protocol import Outcome
@@ -286,12 +287,13 @@ class SessionRequest[Reply: SessionReply](DeclaredFamily, affix=""):
 
     def exchange(self, endpoint: Path) -> Reply:
         with self.connection(endpoint) as peer, peer.makefile("rb") as stream:
-            raw = stream.readline(4096)
-            if not raw:
-                raise ConnectionResetError('Session bridge closed before replying')
-            return self.decode_reply(raw)
+            return self.read_reply(stream)
 
-    def decode_reply(self, raw: bytes) -> Reply:
+    def read_reply(self, stream: BinaryIO) -> Reply:
+        """The bridge's one answer line; a socket closed before it is no answer at all."""
+        raw = stream.readline(4096)
+        if not raw:
+            raise ConnectionResetError('Session bridge closed before replying')
         reply = FieldCodec.decode(self.reply_class | SessionRefused, FieldCodec.parse(raw))
         reply.require()
         return reply
@@ -433,7 +435,7 @@ async def read_monitor(
                 try:
                     request = AttachMonitor()
                     await peer.write(FieldCodec.compact(FieldCodec.encode(request)))
-                    request.decode_reply(await reader.readline())
+                    request.read_reply(io.BytesIO(await reader.readline()))
                     announced = False
                     async for line in reader:
                         sys.stdout.write(line.decode())

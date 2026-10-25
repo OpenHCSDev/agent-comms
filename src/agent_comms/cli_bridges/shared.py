@@ -15,7 +15,7 @@ import time
 import traceback
 from abc import ABC, abstractmethod
 from collections import deque
-from collections.abc import Callable
+from collections.abc import Callable, Iterable, Iterator
 from contextlib import AbstractContextManager, ExitStack, closing, contextmanager, suppress
 from dataclasses import dataclass, field, replace
 from datetime import datetime
@@ -33,6 +33,7 @@ from agent_comms.change_report import NoChangeReport, ReportEvidence
 from agent_comms.child_process import (
     AttachedChild,
     OutlivesLauncherLifetime,
+    Platform,
     ProcessIdentity,
     SpawnedProcess,
     StreamingChildStdio,
@@ -897,9 +898,13 @@ class UnacknowledgedPause(UnresumedBridge):
 
 
 @dataclass(frozen=True)
-class OwnerExitedBridge(BridgeResume):
+class StoppedBridge(BridgeResume):
+    """Nothing is left serving the claim, which is all a pause asks: no failure."""
+
+    reason: str
+
     def lines(self) -> tuple[str, ...]:
-        return (f"Session bridge {self.name}: owner exited; left stopped",)
+        return (f"Session bridge {self.name}: {self.reason}; left stopped",)
 
 
 @dataclass(frozen=True)
@@ -932,18 +937,28 @@ class SessionBridge:
         if not self.observed.owner.alive():
             if self.observed.process.alive():
                 self.observed.process.signal(signal.SIGTERM)
-            return OwnerExitedBridge(self.claim.thread)
+            return StoppedBridge(self.claim.thread, 'owner exited')
         self.observed.owner.require_alive()
         request = PauseSession(owner=self.observed.owner, process=self.observed.process)
         peer = resources.enter_context(request.connection(self.claim.socket_path))
         stream = resources.enter_context(peer.makefile('rb'))
         paused = PausedSessionBridge(self, peer)
         try:
-            request.decode_reply(stream.readline(4096))
+            request.read_reply(stream)
         except TimeoutError:
             return UnacknowledgedPause(self.claim.thread, self.claim.socket_path,
                                        peer.gettimeout(), paused)
+        except ConnectionResetError:
+            return self.closed(paused, peer.gettimeout())
         return paused
+
+    def closed(self, paused: PausedSessionBridge, timeout: float) -> ResumableBridge:
+        """A socket closed unanswered: stopped once its own process has exited, otherwise the
+        live process may still hold bus resources and the pause stays unacknowledged."""
+        Platform.current().wait_any_exited((self.observed.process,), timeout)
+        if self.observed.process.alive():
+            return UnacknowledgedPause(self.claim.thread, self.claim.socket_path, timeout, paused)
+        return StoppedBridge(self.claim.thread, 'bridge exited during pause')
 
 
 @dataclass
@@ -955,9 +970,19 @@ class SessionBridgeResumes:
     released: deque[ConfirmableBridge] = field(default_factory=deque)
     outcomes: list[BridgeResume] = field(default_factory=list)
 
-    def pause(self, bridge: SessionBridge, resources: ExitStack) -> None:
-        self.paused.append(bridge.pause(resources))
-        self.paused[-1].require_paused()
+    @contextmanager
+    def holding(self, bridges: Iterable[SessionBridge]) -> Iterator[None]:
+        """Each paused peer keeps its socket until released. Every exit releases and confirms
+        what is still paused, so no bridge waits on a runtime that never comes."""
+        with ExitStack() as resources:
+            try:
+                for bridge in bridges:
+                    self.paused.append(bridge.pause(resources))
+                    self.paused[-1].require_paused()
+                yield
+            finally:
+                self.release()
+                self.confirm()
 
     def release(self) -> None:
         """Give every paused peer its selected runtime before waiting for any successor."""
@@ -994,7 +1019,7 @@ class PausedSessionBridge(ResumableBridge):
         observed = self.bridge.observed
         name = self.bridge.claim.thread
         if not observed.owner.alive():
-            return OwnerExitedBridge(name)
+            return StoppedBridge(name, 'owner exited')
         try:
             self.peer.sendall((json.dumps(FieldCodec.encode(runtime)) + '\n').encode())
         except OSError as error:
