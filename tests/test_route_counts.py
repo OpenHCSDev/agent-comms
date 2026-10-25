@@ -17,6 +17,12 @@ from agent_comms.threads import Thread
 from agent_comms.wake import OrdinaryControl, resolve_wake_cohort
 
 
+class LaterThreadRole(AgentThreadRole):
+    @classmethod
+    def unread_since(cls, since: float | None, recorded_delivery: bool) -> float | None:
+        return super().unread_since(40000.0, recorded_delivery)
+
+
 class NoPythonCallbacks(sqlite3.Connection):
     def create_function(
         self, name: str, narg: int, func: Callable[..., object] | None, *,
@@ -30,15 +36,16 @@ def test_pending_counts_need_no_python_callback(
 ) -> None:
     comms.channels.create_tag("comms")
     names = tuple(f"actor-{index}" for index in range(500))
-    human = names[0]
-    for index, name in enumerate(names):
+    human, later = names[:2]
+    roles = (UserThreadRole, LaterThreadRole) + (AgentThreadRole,) * (len(names) - 2)
+    for index, (name, role) in enumerate(zip(names, roles, strict=True)):
         comms.registry.declare(Thread(
             name, frozenset({"comms"}), str(tmp_path / name),
             created_at=10000.0 + index,
-            role=UserThreadRole if name == human else AgentThreadRole,
+            role=role,
         ))
-    comms.registry.declare(Thread("old-sender", frozenset(), str(tmp_path / "sender"),
-                                  created_at=20000.0))
+    comms.registry.declare(Thread("old-sender", frozenset({"comms"}), str(tmp_path / "sender"),
+                                  created_at=20000.0, role=UserThreadRole))
     with comms.registry.store.editing() as edit:
         edit.document.rename("old-sender", "sender")
         edit.commit()
@@ -62,7 +69,7 @@ def test_pending_counts_need_no_python_callback(
             )
             if current and recent:
                 expected[human] += 1
-                if recipient != human:
+                if recipient not in (human, later):
                     expected[recipient] += 1
             audience = freeze_audience(
                 message, (FrozenRecipient(recipients[recipient], recipient),), "c" * 64,
@@ -76,4 +83,4 @@ def test_pending_counts_need_no_python_callback(
     Bus.install(Bus.path_in(comms.root), history=history())
     assert comms.bus.bus.revision() == 20000
     monkeypatch.setattr(sqlite3, "connect", partial(sqlite3.connect, factory=NoPythonCallbacks))
-    assert comms.bus.pending_counts_all(names) == expected
+    assert comms.bus.pending_counts_all((*names, sender.name)) == {**expected, sender.name: 0}

@@ -246,6 +246,11 @@ class DeliveryScope(MessageDisplayScope):
         )
 
     @staticmethod
+    def delivers_sql(actor: str, sender: str, canonical_sender: str) -> str:
+        """Sender exclusion for SQL routes already selected by index_targets."""
+        return f"coalesce({canonical_sender},{sender})<>{actor}"
+
+    @staticmethod
     def sender_lookups(
         source: ThreadIncarnation, on_unrecorded: Callable[[], None]
     ) -> Iterator[ThreadLookup | PublicSender]:

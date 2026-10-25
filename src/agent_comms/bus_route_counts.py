@@ -11,6 +11,7 @@ from .field_codec import ThreadLookup
 from .messages import BusProjectionTables, BusRow, Message, PublicRecord, PublicSender
 from .projection_source import ProducedRow
 from .read_basis import ReadCursor
+from .routing import DeliveryScope
 from .typed_table import Column, Index, TypedRow
 
 if TYPE_CHECKING:
@@ -60,7 +61,7 @@ class RouteCounts:
 
     _requests = f'''arguments AS MATERIALIZED (
         SELECT ? AS targets,? AS recipients,? AS senders,? AS unrecorded,? AS through,? AS after,
-            ? AS births,? AS aliases,? AS unaddressed
+            ? AS births,? AS aliases,? AS unaddressed,? AS addressed
     ), births AS MATERIALIZED (
         SELECT member.key AS name,member.value AS since
         FROM arguments,json_each(arguments.births) AS member
@@ -70,6 +71,9 @@ class RouteCounts:
     ), unaddressed_since AS MATERIALIZED (
         SELECT member.key AS name,member.value AS since
         FROM arguments,json_each(arguments.unaddressed) AS member
+    ), addressed_since AS MATERIALIZED (
+        SELECT member.key AS name,member.value AS since
+        FROM arguments,json_each(arguments.addressed) AS member
     ), actor_targets AS MATERIALIZED (
         SELECT owner.key AS actor,target.value AS target
         FROM arguments,json_each(arguments.targets) AS owner,json_each(owner.value) AS target
@@ -103,12 +107,12 @@ class RouteCounts:
             max(route.since,viewer.since) AS addressed
         FROM actor_targets AS target
         JOIN route_keys AS route ON route.target=target.target
-        JOIN births AS viewer ON viewer.name=target.actor
+        JOIN addressed_since AS viewer ON viewer.name=target.actor
         CROSS JOIN arguments
         JOIN json_each(arguments.recipients) AS recipient ON recipient.key=target.actor
         LEFT JOIN aliases AS alias ON alias.name=route.sender
         LEFT JOIN unaddressed_since AS unaddressed ON unaddressed.name=target.actor
-        WHERE coalesce(alias.canonical,route.sender)<>target.actor
+        WHERE {DeliveryScope.delivers_sql("target.actor", "route.sender", "alias.canonical")}
     ), requests AS MATERIALIZED (
         SELECT route.actor,row.seq,row.target,row.sender
         FROM route_since AS route
@@ -146,6 +150,9 @@ class RouteCounts:
                 namespace.births, json.dumps(dict(registry.aliases)),
                 json.dumps({actor: registry.unread_since(
                     actor, registry.require(actor).incarnation.wire_birth, False,
+                ) for actor in deliveries}),
+                json.dumps({actor: registry.unread_since(
+                    actor, registry.require(actor).incarnation.wire_birth, True,
                 ) for actor in deliveries}),
                 *parameters,
             )

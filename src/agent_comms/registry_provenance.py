@@ -9,7 +9,6 @@ from collections.abc import Iterator, Mapping
 from dataclasses import dataclass, replace
 from functools import cached_property, partial
 from pathlib import Path
-from types import MappingProxyType
 from typing import TYPE_CHECKING, Generic, TypeVar
 
 from agent_comms.field_codec import FieldCodec, ThreadLookup
