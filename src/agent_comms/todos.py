@@ -83,7 +83,7 @@ from agent_comms.message_reference import MessageReference
 from agent_comms.messages import InfoKind, Message
 from agent_comms.tool_denial import SelectedToolDenied
 from agent_comms.order_runs import OrderRun
-from agent_comms.order_story import OrderStories, ProblemStory, StoryEvent, StoryLine, StorySource
+from agent_comms.order_story import ProblemStory, StoryEvent, StoryLine, StorySource
 from agent_comms.owner_requests import (
     OpenRequestState,
     OwnerRequestId,
@@ -5041,7 +5041,7 @@ class OwnerRequestStore(DurableStore):
 
 
 @dataclass(frozen=True, slots=True)
-class TodoStore(OwnerRequestStore, TodoHistory, OrderStories):
+class TodoStore(OwnerRequestStore, TodoHistory):
     """One SQLite row owns both todo state and its exclusive assignment.
 
     Assignment identity and revision deduplicate known operations. An uncertain
@@ -5199,6 +5199,29 @@ class TodoStore(OwnerRequestStore, TodoHistory, OrderStories):
     @classmethod
     def _current(cls, db: sqlite3.Connection, todo_id: str) -> Todo:
         return cls._one(Todo.rows(db, "id=?", (todo_id,)), todo_id)
+
+    def for_order(self, order_id: str) -> tuple[Todo, ...]:
+        """A sent order can cover several linked problems; its ID is not a Todo key."""
+        rows = self._for_orders((order_id,))
+        if not rows:
+            raise TodoError(f"Unknown saved order: {order_id!r}")
+        return rows
+
+    def related_problems(self, problem: Todo) -> tuple[Todo, ...]:
+        """Reissued orders retain the earlier declaration that linked their problem rows."""
+        return self._for_orders(problem.held_order_ids)
+
+    def _for_orders(self, identities: tuple[str, ...]) -> tuple[Todo, ...]:
+        """Find declarations in current orders and their stored history without decoding events."""
+        slots = ','.join('?' for _ in identities)
+        return self._select(
+            f'EXISTS (SELECT 1 FROM json_tree("order") AS declaration '
+            f"WHERE declaration.key='id' AND declaration.value IN ({slots})) "
+            f'OR EXISTS (SELECT 1 FROM {StoredOrderStory.declared_name} AS declaration '
+            f'WHERE declaration.problem={Todo.declared_name}.id '
+            f'AND declaration.kind IN {CheckedProblemOrder.sql_choices()} '
+            f"AND json_extract(declaration.event,'$.id') IN ({slots}))",
+            (*identities, *identities))
 
     def get(self, todo_id: str) -> Todo:
         _text(todo_id, "Todo ID", 128)
