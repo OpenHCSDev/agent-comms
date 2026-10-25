@@ -1032,7 +1032,6 @@ class BusRecord(CarriesEnvelope, Message, DeclaredFamily, affix="Record"):
     @property
     def history_record(self) -> BusRecord:
         """What a copied history appends: display facts, never another root's claims."""
-        from .bus import PublicRecord
         return PublicRecord.from_message(self.history_snapshot)
 
     def append_to(self, db: sqlite3.Connection, seq: int) -> int:
@@ -1059,6 +1058,10 @@ class BusRecord(CarriesEnvelope, Message, DeclaredFamily, affix="Record"):
         super().__init_subclass__()
         dataclass(cls, frozen=True, kw_only=True)
         cls.tables()
+
+
+class PublicRecord(BusRecord):
+    sender_lookup: ClassVar[PublicSender] = PublicSender()
 
 
 @dataclass(frozen=True, kw_only=True)

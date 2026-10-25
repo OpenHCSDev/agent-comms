@@ -37,7 +37,7 @@ from agent_comms.messages import (
     ClaimMessage,
     Message,
     MessageKind,
-    PublicSender,
+    PublicRecord,
 )
 from agent_comms.envelope_claim_transitions import (
     ClaimOwner,
@@ -62,10 +62,6 @@ if TYPE_CHECKING:
     from agent_comms.registry_document import RegistrySnapshot
     from agent_comms.registry_provenance import RegistryProvenance
     from agent_comms.thread_identity import RecordedThreadIncarnation
-
-
-class PublicRecord(BusRecord):
-    sender_lookup: ClassVar[PublicSender] = PublicSender()
 
 
 class ClaimRecord(PublicRecord, ClaimMessage):
