@@ -53,7 +53,7 @@ from .errors import RelationViolationError, ToolRefusedError, UnregisteredThread
 from .coordination_errors import CoordinationError, Refused
 from .field_codec import (
     Argument, FieldCodec, GitCommitText, MalformedRecord, PathText, WireName, WireOmitDefault,
-    boundary_decoder,
+    boundary_decoder, projected,
 )
 from agent_comms.channel_targets import NamedTarget
 from agent_comms.owner_requests import NewestOpenRequest, RequestSelection
@@ -269,7 +269,9 @@ class InvalidRequestError(McpError):
 
 @dataclass(frozen=True)
 class MethodNotFoundError(McpError):
-    code: int = Refused.METHOD_NOT_FOUND
+    @projected(view="wire")
+    def code(self) -> int:
+        return Refused.METHOD_NOT_FOUND
 
 
 @dataclass(frozen=True)
