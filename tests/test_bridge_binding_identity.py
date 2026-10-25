@@ -13,8 +13,9 @@ from agent_comms.cli_bridges.shared import (
     StoredBinding,
     Watch,
 )
-from agent_comms.threads import Thread
+from agent_comms.errors import UnregisteredThreadError
 from agent_comms_hooks.watch import WatchClaim
+from agent_comms.threads import Thread
 
 
 @pytest.mark.asyncio
@@ -29,36 +30,40 @@ async def test_enrol_register_rename_and_rebind_preserve_reader(comms, tmp_path,
                              start=Binding.bus_head(str(comms.root)))
     with Binding.open(state) as db:
         bridge = ClaudeBridge(Options(Enrol(), StoredBinding(), state, state.parent), address, db)
-        bridge.binding = await bridge.options.operation.prepare(bridge)
+        await bridge.options.operation.prepare(bridge)
         await bridge.options.operation.execute(bridge)
         assert WatchClaim('session').state().bindings()[0].bus == 'new-reader'
         assert not comms.registry.snapshot().taken('new-reader')
         assert Binding.select(db) == []
 
-        bridge.binding = await operation.prepare(bridge)
+        bridge = ClaudeBridge(Options(operation, StoredBinding(), state, state.parent), address, db)
+        await operation.prepare(bridge)
         original, = Binding.select(db)
         reader = comms.registry.require('new-reader')
         assert original.owner == reader.incarnation
         assert reader.tags == tags
 
         comms.registry.rename('new-reader', 'renamed-reader')
-        bridge.binding = await operation.prepare(bridge)
+        bridge = ClaudeBridge(bridge.options, StoredBinding().bind(db), db)
+        await operation.prepare(bridge)
         renamed, = Binding.select(db)
         assert renamed.bus == 'renamed-reader'
         assert renamed.owner == original.owner
         assert renamed.start == original.start
+        with pytest.raises(ValueError, match='another Core/CLI conversation'):
+            replace(renamed, root=str(tmp_path / 'different-root')).bind(db)
+        assert Binding.select(db) == [renamed]
 
         # A reused address is not the old reader, even in the same bus root.
         comms.registry.unregister('renamed-reader')
         comms.registry.remove('renamed-reader')
         comms.registry.declare(Thread('renamed-reader', frozenset(), str(tmp_path)))
         replacement = replace(address, bus='renamed-reader', thread='other-session')
-        bridge.binding = replacement
+        bridge = ClaudeBridge(bridge.options, replacement, db)
         with pytest.raises(ValueError, match='another Core/CLI conversation'):
             await operation.prepare(bridge)
         assert Binding.select(db) == [renamed]
-        bridge.binding = renamed
-        message = comms.messaging.send('commander', 'renamed-reader', 'new incarnation only').message
-        with pytest.raises(KeyError):
-            await operation.prepare(bridge)
+        comms.messaging.send('commander', 'renamed-reader', 'new incarnation only')
+        with pytest.raises(UnregisteredThreadError, match='lookup .* is not registered'):
+            renamed.recipient(comms)
         assert comms.bus.pending_count('renamed-reader') == 1

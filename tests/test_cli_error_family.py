@@ -126,7 +126,7 @@ print('opened', flush=True)
             assert pending.insert_if_absent(db).rowcount
     await open_together(fresh=False)
     with Binding.open(tmp_path) as db:
-        assert StoredBinding().bind(db) == binding
+        assert StoredBinding().bind(db) == binding.address()
         assert DeliveryRow.select(db) == [pending]
 
 
@@ -150,7 +150,8 @@ def test_concurrent_initial_binding_preserves_one_identity_and_pending_delivery(
     with Binding.open(tmp_path) as db:
         winner, = Binding.select(db)
         assert winner in (first, other)
-        assert StoredBinding().bind(db) == winner.bind(db) == winner
+        assert StoredBinding().bind(db) == winner.address()
+        assert winner.bind(db) == winner
         loser = other if winner == first else first
         with pytest.raises(ValueError):
             loser.bind(db)
@@ -169,7 +170,7 @@ def test_existing_binding_lookup_does_not_acquire_a_writer(tmp_path, bus):
         db.set_trace_callback(statements.append)
         with closing(SQLiteFile.writer(tmp_path / 'delivery.sqlite3')) as writer:
             writer.execute('BEGIN IMMEDIATE')
-            assert StoredBinding().bind(db) == binding
+            assert StoredBinding().bind(db) == binding.address()
             assert writer.in_transaction
         assert not any(sql.startswith(('BEGIN', 'COMMIT', 'ROLLBACK')) for sql in statements)
 

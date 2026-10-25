@@ -10,8 +10,8 @@ from typing import TYPE_CHECKING, Concatenate
 
 from .catalog_store import ChannelCatalog
 from .child_process import NoProcess, ProcessIdentity
-from .errors import RelationViolationError
-from .field_codec import GoalId, TurnId
+from .errors import RelationViolationError, UnregisteredThreadError
+from .field_codec import GoalId, ThreadLookup, TurnId
 from .goal_history import GoalHistoryEntry, GoalHistoryStore
 from .goal_scope import AllGoals, GoalScope
 from .native_input_owner import RegistryOwner
@@ -417,6 +417,15 @@ class Registration:
         Other threads' declarations are not decoded.
         """
         return self.store.read_entry(name)
+
+    def require_lookup(self, lookup: ThreadLookup) -> Thread:
+        """Resolve a recorded birth, refusing a missing reader by its lookup."""
+        with self.store.reading_snapshot() as snapshot:
+            try:
+                return snapshot.by_lookup[lookup]
+            except KeyError as error:
+                raise UnregisteredThreadError(
+                    f"Thread lookup {lookup!r} is not registered.") from error
 
     def snapshot(self) -> RegistrySnapshot:
         """Read related declarations and statuses from exactly one store revision."""

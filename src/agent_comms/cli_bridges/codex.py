@@ -21,7 +21,7 @@ from agent_comms.messages import Message
 from agent_comms.send_result import SendResult
 from agent_comms.cli_protocol import EarlierItems, Outcome, DeliveredOutcome
 from .history import CodexHistory, HarnessAddress, OnlineHistory
-from .shared import SessionBinding, IncomingFrame, TranscriptBridge, Options, run_bridge
+from .shared import BindingAddress, IncomingFrame, TranscriptBridge, Options, run_bridge
 from agent_comms.runtime_updates import (
     EarlierPublishedPage, OfferedToolsObserved, PublishedPage, RuntimeUpdate, SessionFacts, ThreadOutput,
 )
@@ -141,9 +141,9 @@ class CodexAppServer(CodexHistory, OnlineHistory):
 class CodexBridge(CodexAppServer, TranscriptBridge[CodexOptions], declared_name=None):
     state_directory = Path('.local/state/codex-comms-inbox')
 
-    def __init__(self, options: CodexOptions, binding: SessionBinding, db: sqlite3.Connection) -> None:
-        TranscriptBridge.__init__(self, options, binding, db)
-        CodexAppServer.__init__(self, binding.thread, options.socket)
+    def __init__(self, options: CodexOptions, address: BindingAddress, db: sqlite3.Connection) -> None:
+        TranscriptBridge.__init__(self, options, address, db)
+        CodexAppServer.__init__(self, address.thread, options.socket)
 
     @classmethod
     def add_arguments(cls, parser: argparse.ArgumentParser) -> None:

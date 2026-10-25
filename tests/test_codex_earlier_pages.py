@@ -7,7 +7,7 @@ import pytest
 from aiohttp import web
 
 from agent_comms.cli_bridges.codex import CodexBridge, CodexOptions
-from agent_comms.cli_bridges.shared import Binding, Watch
+from agent_comms.cli_bridges.shared import Binding, StoredBinding, Watch
 from agent_comms.cli_protocol import WATCH_LINE, EarlierItems
 from agent_comms.comms import wire
 from agent_comms.coordination_errors import CoordinationReadUnavailable
@@ -69,8 +69,9 @@ async def test_pager_requests_two_older_pages_through_the_bridges_real_socket(tm
                           thread='thread', start=Binding.bus_head(str(comms.root)))
         with Binding.open(tmp_path / 'bridge') as db:
             options = CodexOptions(
-                Watch(), binding, tmp_path / 'bridge', tmp_path, str(socket_path))
-            bridge = CodexBridge(options, binding, db)
+                Watch(), StoredBinding(), tmp_path / 'bridge', tmp_path, str(socket_path))
+            bridge = CodexBridge(options, binding.address(), db)
+            await options.operation.prepare(bridge)
             output = ThreadOutput(transcript, comms.agents)
             output.publish_batch([update async for update in bridge.history()])
             assert seen == [None]

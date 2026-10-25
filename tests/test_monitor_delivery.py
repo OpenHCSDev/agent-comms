@@ -1,5 +1,5 @@
 """Session-owned parts, not stdout writes, confirm monitor delivery."""
-from contextlib import suppress
+from contextlib import asynccontextmanager, suppress
 import asyncio
 import os
 import socket
@@ -49,7 +49,8 @@ async def test_empty_journal_starts_at_binding_and_ignores_user_reads(comms, tmp
             Binding.family_discriminator: Binding.declared_name,
             'root': str(comms.root), 'bus_thread': 'viewer', 'session': 'session',
         }).bind(db).registered(comms).bind(db)
-        selected = ClaudeBridge(Options(Watch(), StoredBinding(), state, state.parent), binding, db)
+        selected = ClaudeBridge(Options(Watch(), StoredBinding(), state, state.parent), binding.address(), db)
+        await selected.options.operation.prepare(selected)
         fresh = comms.messaging.send(
             'peer', 'viewer', 'after binding, already read in Toad').message
         comms.messaging.acknowledge('viewer', (fresh.reference,))
@@ -113,7 +114,9 @@ def bridge(comms, tmp_path):
                       thread='session', start=Binding.bus_head(str(root)))
     with Binding.open(state) as db:
         binding.bind(db)
-        yield ClaudeBridge(Options(Watch(), StoredBinding(), state, state.parent), binding, db)
+        selected = ClaudeBridge(Options(Watch(), StoredBinding(), state, state.parent), binding.address(), db)
+        asyncio.run(selected.options.operation.prepare(selected))
+        yield selected
 
 
 @pytest.fixture
@@ -162,9 +165,9 @@ async def test_renamed_reader_handoff_and_confirmation_share_the_prepared_owner(
         binding = Binding(root=str(comms.root), owner=original.incarnation,
                           thread='session', start=Binding.bus_head(str(comms.root)))
         binding.bind(db)
-        bridge = ClaudeBridge(Options(Watch(), StoredBinding(), state, state.parent), binding, db)
+        bridge = ClaudeBridge(Options(Watch(), StoredBinding(), state, state.parent), binding.address(), db)
         comms.registry.rename('viewer', 'renamed-viewer')
-        bridge.binding = await bridge.options.operation.prepare(bridge)
+        await bridge.options.operation.prepare(bridge)
         assert bridge.binding.bus == 'renamed-viewer'
         assert bridge.binding.owner == original.incarnation
         with Coordination(str(CoordinationStore.path_in(comms.root))) as store:
@@ -207,6 +210,27 @@ async def test_renamed_reader_handoff_and_confirmation_share_the_prepared_owner(
             await bridge_peer.close()
 
 
+@asynccontextmanager
+async def attached_monitor(bridge):
+    """A real monitor socket answers the bridge's preparation probe."""
+    bridge_socket, monitor_socket = socket.socketpair()
+    peer = MonitorPeer(*await asyncio.open_connection(sock=bridge_socket))
+    reader, writer = await asyncio.open_connection(sock=monitor_socket)
+    service = MonitorService(bridge, ProcessIdentity.capture(os.getpid()), lambda: None)
+    attachment = asyncio.create_task(bridge.reader.attach(service, peer))
+    try:
+        async with asyncio.timeout(15):
+            await reader.readline()
+            probe = MONITOR_FRAME.validate_json(await reader.readline())
+            await probe.confirm(bridge, ObservedMonitor('probe', 1.))
+            yield reader
+    finally:
+        writer.close()
+        await writer.wait_closed()
+        await attachment
+        await peer.close()
+
+
 def decoded_record(data):
     return ClaudeJsonLines().decode_line(json.dumps(data).encode(), 0)
 
@@ -244,7 +268,8 @@ async def test_parts_require_complete_exact_body_then_reopen(bridge, emitted_del
     assert DeliveryRow.select(bridge.db)[0].outcome is EmittedOutcome
     bridge.db.close()
     with Binding.open(state) as db:
-        reopened = ClaudeBridge(Options(Watch(), StoredBinding(), state, state.parent), binding, db)
+        reopened = ClaudeBridge(Options(Watch(), StoredBinding(), state, state.parent), binding.address(), db)
+        await reopened.options.operation.prepare(reopened)
         for number in (0, 4):
             for update in record_factory(lines[number], record_id=f'record-{number}').updates(ClaudeSession()):
                 await update.observed(reopened)
@@ -366,7 +391,7 @@ async def test_explicit_watch_does_not_mark_streamed_messages_read(wired):
 
 
 @pytest.mark.asyncio
-async def test_harness_outcome_lives_on_the_threads_claim_across_a_rehome(tmp_path, monkeypatch):
+async def test_harness_outcome_lives_on_the_threads_claim_across_a_rehome(tmp_path):
     from bus_record_fixture import prepare_native_comms
     from conftest import publish_initial
     from agent_comms.assignment_states import DeferredAssignment, DeliveredAssignment
@@ -405,26 +430,22 @@ async def test_harness_outcome_lives_on_the_threads_claim_across_a_rehome(tmp_pa
         with Coordination(str(CoordinationStore.path_in(comms.root))) as store:
             return tuple(row.wire_seq for row in pending_sealed_assignments(store, lookup, after_seq=0))
 
-    async def emitted(message):
-        return EmittedOutcome
-
-    async def attached():
-        pass
-
     state = tmp_path / 'bridge-state'
     with Binding.open(state) as db:
         binding = Binding(root=str(comms.root), owner=comms.registry.require('viewer').incarnation,
                           thread='session', start=Binding.bus_head(str(comms.root)))
         binding.bind(db)
-        bridge = ClaudeBridge(Options(Watch(), StoredBinding(), state, state.parent), binding, db)
-        monkeypatch.setattr(bridge, 'prepare_delivery', attached)
-        monkeypatch.setattr(bridge, 'deliver', emitted)
-        assert owed() == (taken.seq, confirmed.seq, waiting.seq)
-        await bridge.accept(taken)
-        await bridge.accept(confirmed)
-        row, = DeliveryRow.select(db, id=confirmed.message_id)
-        await row.finish(bridge, DeliveredOutcome)
-        await bridge.accept(taken)
+        bridge = ClaudeBridge(Options(Watch(), StoredBinding(), state, state.parent), binding.address(), db)
+        await bridge.options.operation.prepare(bridge)
+        async with attached_monitor(bridge) as reader:
+            assert owed() == (taken.seq, confirmed.seq, waiting.seq)
+            await bridge.accept(taken)
+            await reader.readline()
+            await bridge.accept(confirmed)
+            line = (await reader.readline()).decode().rstrip('\n')
+            for update in notification(line).updates(ClaudeSession()):
+                await update.observed(bridge)
+            await bridge.accept(taken)
 
     # Whatever execution owns the thread next reads this one record: only the
     # message no harness took is still owed, and the UNKNOWN one never replays.
@@ -451,7 +472,7 @@ def test_prompt_typed_with_an_image_during_a_turn_shows_its_text():
     assert [event.text for event in shown.events]==['[Image #16] look']
 
 @pytest.mark.asyncio
-async def test_a_bridge_waits_out_maintenance_and_then_records_its_delivery(tmp_path, monkeypatch):
+async def test_a_bridge_waits_out_maintenance_and_then_records_its_delivery(tmp_path):
     """An install holds the bus: the bridge's harness hand-off and delivery record wait
     for the hold to clear instead of dying on MaintenanceHeldError (install 18, 10-24)."""
     from bus_record_fixture import prepare_native_comms
@@ -484,14 +505,6 @@ async def test_a_bridge_waits_out_maintenance_and_then_records_its_delivery(tmp_
     barrier = MaintenanceBarrier(comms.registry.store.path)
     holds = []
 
-    async def delivered(message):
-        # The harness took it; the install's hold lands before the bus records that.
-        holds.append(barrier.begin(MaintenanceOperator.current()))
-        return DeliveredOutcome
-
-    async def attached():
-        pass
-
     async def waits_until_cleared(pending):
         with pytest.raises(TimeoutError):
             async with asyncio.timeout(.2):
@@ -503,14 +516,23 @@ async def test_a_bridge_waits_out_maintenance_and_then_records_its_delivery(tmp_
         binding = Binding(root=str(comms.root), owner=comms.registry.require('viewer').incarnation,
                           thread='session', start=Binding.bus_head(str(comms.root)))
         binding.bind(db)
-        bridge = ClaudeBridge(Options(Watch(), StoredBinding(), state, state.parent), binding, db)
-        monkeypatch.setattr(bridge, 'prepare_delivery', attached)
-        monkeypatch.setattr(bridge, 'deliver', delivered)
-        holds.append(barrier.begin(MaintenanceOperator.current()))
-        pending = asyncio.create_task(bridge.accept(message))
-        await waits_until_cleared(pending)  # the hand-off to the harness
-        await waits_until_cleared(pending)  # the delivery record
-        await asyncio.wait_for(pending, 5)
+        bridge = ClaudeBridge(Options(Watch(), StoredBinding(), state, state.parent), binding.address(), db)
+        await bridge.options.operation.prepare(bridge)
+        async with attached_monitor(bridge) as reader:
+            holds.append(barrier.begin(MaintenanceOperator.current()))
+            pending = asyncio.create_task(bridge.accept(message))
+            await waits_until_cleared(pending)  # the hand-off to the harness
+            await asyncio.wait_for(pending, 5)
+            line = (await reader.readline()).decode().rstrip('\n')
+            holds.append(barrier.begin(MaintenanceOperator.current()))
+
+            async def observed():
+                for update in notification(line).updates(ClaudeSession()):
+                    await update.observed(bridge)
+
+            pending = asyncio.create_task(observed())
+            await waits_until_cleared(pending)  # the confirmation record
+            await asyncio.wait_for(pending, 5)
     assert type(claim()) is DeliveredAssignment
 
 def test_only_commanded_sessions_reply_to_their_delivered_senders(comms):

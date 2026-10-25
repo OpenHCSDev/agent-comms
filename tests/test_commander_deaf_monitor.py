@@ -57,7 +57,8 @@ async def test_unconfirmed_monitor_reports_commander_deaf_once(
 
     with Binding.open(state) as db:
         binding.bind(db)
-        bridge = ClaudeBridge(Options(operation, StoredBinding(), state, state.parent), binding, db)
+        bridge = ClaudeBridge(Options(operation, StoredBinding(), state, state.parent), binding.address(), db)
+        await operation.prepare(bridge)
         service = MonitorService(bridge, owner, lambda: None)
         endpoint = WatchClaim(binding.thread).socket_path
         endpoint.parent.mkdir(parents=True, exist_ok=True)
