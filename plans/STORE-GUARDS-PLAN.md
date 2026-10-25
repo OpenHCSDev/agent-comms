@@ -48,6 +48,7 @@ Each phase, its predecessors and its evidence on `origin/main` are declared in `
 | 3 `BoundedWaitPhase` | `UNBOUNDED_CONTENTION\|UnboundedContention` | 19 | 0 |
 | 4 `MaintenanceInWritePhase` | `assert_open_unlocked\(\)\|require_maintenance_open\((path)?\)` outside `store_files.py`, `locked_store.py`, `typed_table.py` and `maintenance_barrier.py` | 9 | 0 |
 | 5 `LockCensusPhase` | `^class StoreLockCalls\(` in `tools/debt_ratchet.py` | 0 | 1 |
+| 6 `ScopedReadsPhase` | the lock-naming pattern in section 6, outside `store_files.py`, `locked_store.py` and `registry_store.py` | 111 | 0 |
 
 ### 1. Each store's guard is declared on its family
 
@@ -105,3 +106,22 @@ Each phase, its predecessors and its evidence on `origin/main` are declared in `
 **Checks.** The class exists; the census reads 0 once phases 1 to 4 land.
 
 **Deleted.** Nothing; this phase stops the next hand lock from being written.
+
+### 6. A lock is held for its copy or its change, never for the caller's work
+
+Tristan, 2026-10-25: "we shld not hold a lock forthsake of it, grab it for wahtyo uneed the nput it back and also, we shuhdl not do manual lock mangemtne it hsoudl be solved via inehritance and polymrphism".
+
+**Why this is slop today.** `LockedStore.reading` (`locked_store.py:939`) is a context manager that yields the decoded document while the store lock is still held, so every caller body runs under the lock: the lock's lifetime is decided by whoever wrote the `with` block, not by the store. 22 `with` bodies hold a store lock this way (by `git grep -nE 'with .*\.reading\('` at `541122982`, the bus, transcript and SQLite snapshot `reading()` members excluded because they hold a read transaction, not a flock): 11 copy a value and return it, 4 read several stores as one consistent snapshot, and 7 do work under the lock (`collaboration_ledger.py:16` writes the ledger, `presentation.py:385` marks a conversation displayed, `read_basis.py:1197` and `message_bus.py:123` yield the selection to their callers, `presentation.py:411` and `:447` validate and build a coordination snapshot, `transcript_routes.py:276` validates a native publication). Beside them, 111 lines in 39 modules name a lock or an unlocked read by hand (53 of them `guarded_write`).
+
+**The live holder.** Every heartbeat pass runs `StorageViolation.for_units` (`storage_rules.py:563`), which calls `registry.require` once per held unit. That is `Registration.reading` (`registration.py:363`), which takes the registry's shared lock and decodes all of registry.json under it (`registry_store.py:239`, `FieldCodec.parse`). py-spy of the connector on 2026-10-25 caught exactly that stack (`commander_heartbeat.py:42` -> `standing_rules.py:205` -> `storage_rules.py` -> `locked_store.py` -> `registry_store.py:240`); exclusive writers, the commander verbs among them, queue behind each decode.
+
+**Target.**
+
+- The lock is taken only inside the store family's own methods. `LockedStore.read()` captures under the member's declared read guard and returns an immutable value after releasing it; a store whose capture is raw bytes (`RegistryStore`) decodes after the release. `LockedStore.update(change)` holds the write guard for the change only.
+- Whether a read locks is the member's class, never a flag or a caller's choice: `SingleFileStore.read_guard` takes none (atomic rename), `MultiFileStore` shares the set's lock for the capture.
+- A read of several stores is one family method that takes the ranked guards, captures each, releases, and returns the tuple of snapshots.
+- `LockedStore.reading`, `RegistryStore.reading_snapshot` and `CapturedSelection.reading` are deleted; `read_snapshot_unlocked` and `_read_unlocked` are private to the members that define them.
+
+**Checks.** The pattern in `ScopedReadsPhase` (`plan_phases.py`) goes from 111 to 0. Behaviour: during a live heartbeat pass, a commander verb answers in under 5 s.
+
+**Deleted.** Every caller-held lock, the three yielding readers, and each caller's choice of read or write guard.
