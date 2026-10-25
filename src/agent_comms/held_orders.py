@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from textwrap import shorten
 from typing import TYPE_CHECKING, Self
 
 if TYPE_CHECKING:
@@ -12,7 +13,7 @@ if TYPE_CHECKING:
     from agent_comms.registry_document import RegistrySnapshot
     from agent_comms.thread_identity import ThreadIncarnation
     from agent_comms.threads import Thread
-    from agent_comms.todos import Todo
+    from agent_comms.todos import Todo, TodoStore
 
 
 @dataclass(frozen=True)
@@ -21,6 +22,12 @@ class LiveHold:
 
     todo: Todo
     holder: Thread
+
+    def recalled(self) -> str:
+        """The holder, problem, scope and last numbered edit, read from the stored order."""
+        order = self.todo.order.checked()
+        return (f"{self.holder.name} {self.todo.id} {order.scope.declared_name}: "
+                + shorten(" ".join(order.edits[-1:]), 160, placeholder="..."))
 
 
 @dataclass(frozen=True)
@@ -35,9 +42,13 @@ class HeldOrders:
     @classmethod
     def read(cls, comms: Comms, commander: str) -> Self:
         """The commander's held orders captured once; filtering never reopens the store."""
-        snapshot = comms.registry.snapshot()
-        held = comms.goals.todos.held_for_commander(snapshot.require(commander).incarnation)
-        return cls.split(held, snapshot)
+        return cls.of(comms.goals.todos, comms.registry.snapshot(), commander)
+
+    @classmethod
+    def of(cls, store: TodoStore, snapshot: RegistrySnapshot, commander: str) -> Self:
+        """The held orders in ``store`` for ``commander`` as ``snapshot`` registers them."""
+        return cls.split(store.held_for_commander(snapshot.require(commander).incarnation),
+                         snapshot)
 
     @classmethod
     def split(cls, todos: Sequence[Todo], snapshot: RegistrySnapshot) -> Self:
