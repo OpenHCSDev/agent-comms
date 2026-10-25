@@ -380,3 +380,21 @@ def test_an_answer_to_one_owed_ask_is_admitted_while_another_still_waits(held_co
     history = ThreadCaller(ctx.commander).invoke(CommsHistoryTool(peer="worker"), ctx.comms)
     assert [message.answers for message in history.messages
             if message.sender == ctx.commander][:1] == [(answered.reference,)]
+
+
+def test_a_send_to_a_thread_that_owes_nothing_passes_while_an_unrelated_ask_waits(
+        held_commander, capsys):
+    from test_holder_standing_rules import publish
+
+    ctx = held_commander
+    ctx.comms.registry.register(thread("unit-toad", ctx.root, 3.0))
+    reply = ctx.root / "answer.txt"
+    reply.write_text("Take the owner fix at the declaration and push it.")
+    waiting = publish(ctx.comms, "worker", ctx.commander, time.time() - 960)
+    capsys.readouterr()
+    main(["say", "unit-toad", str(reply)], ctx)
+    out = capsys.readouterr().out
+    assert f"WARNING: UNANSWERED worker: message {waiting.seq}:{waiting.message_id}" in out
+    history = ThreadCaller(ctx.commander).invoke(CommsHistoryTool(peer="unit-toad"), ctx.comms)
+    assert [message.body for message in history.messages
+            if message.sender == ctx.commander] == [reply.read_text()]

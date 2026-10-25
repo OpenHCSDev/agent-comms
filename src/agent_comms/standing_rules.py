@@ -455,9 +455,9 @@ class OwedAnswer(IndependentStandingRule, declared_name=None):
 
     def blocks(self, reached: frozenset[str], action: CommanderVerb,
                named: tuple[Message, ...]) -> bool:
-        """An unanswered question refuses only an action that answers nothing: an answer
-        to any open message is progress, so two debts never wait on each other."""
-        return not named
+        """An unanswered question refuses only an action that answers nothing and reaches its
+        asker; an answer to any open message is progress, and an unrelated send warns."""
+        return not named and self.asked_by(reached)
 
     def asked_by(self, reached: frozenset[str]) -> bool:
         """Whether one of these threads asked it, so a reply reaching them answers it unnamed."""
