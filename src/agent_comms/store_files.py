@@ -457,9 +457,11 @@ class SqliteStore(ABC):
 
     @classmethod
     @contextmanager
-    def exclusive_writer(cls, path: Path) -> Iterator[sqlite3.Connection]:
+    def exclusive_writer(
+        cls, path: Path, *, uri: bool = False,
+    ) -> Iterator[sqlite3.Connection]:
         """A schema reconcile or WAL truncation keeps other connection boundaries out."""
-        with _store_lock(path), closing(cls.writer(path, isolation_level=None)) as db:
+        with _store_lock(path), closing(cls.writer(path, isolation_level=None, uri=uri)) as db:
             yield db
 
 
