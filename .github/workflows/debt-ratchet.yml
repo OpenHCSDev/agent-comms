@@ -34,8 +34,26 @@ jobs:
       - run: true
         shell: bash
 
+  # The base every job measures from, drafts included. A pull request checks out its merge into
+  # current main, so the base is that merge's first parent; pull_request.base.sha is main when the
+  # PR was opened, and measuring from it charges the PR with everything main merged since.
+  base:
+    runs-on: ubuntu-latest
+    timeout-minutes: 1
+    outputs:
+      base: ${{ steps.base.outputs.base }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+      - id: base
+        shell: bash
+        env:
+          QUEUE_BASE: ${{ github.event.merge_group.base_sha }}
+        run: echo "base=${QUEUE_BASE:-$(git rev-parse HEAD^1)}" >> "$GITHUB_OUTPUT"
+
   smoke:
-    needs: ready
+    needs: [ready, base]
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -70,7 +88,7 @@ jobs:
       # this change merges onto must declare every one of them with the same fields.
       - name: Stack clients import only names Core has; the outgoing wire matches the base
         env:
-          BASE: ${{ github.event.merge_group.base_sha || github.event.pull_request.base.sha }}
+          BASE: ${{ needs.base.outputs.base }}
         run: python tools/module_layers.py --check --base "$BASE" --report "$GITHUB_STEP_SUMMARY"
 
   native-scripts:
@@ -99,7 +117,7 @@ jobs:
 
   install-rehearsal:
     name: install-rehearsal
-    needs: ready
+    needs: [ready, base]
     runs-on: ubuntu-latest
     timeout-minutes: 15
     env:
@@ -117,7 +135,7 @@ jobs:
       - name: Whether the change reaches the installed package or the rehearsals
         id: reach
         env:
-          BASE: ${{ github.event.merge_group.base_sha || github.event.pull_request.base.sha }}
+          BASE: ${{ needs.base.outputs.base }}
         run: |
           read -ra rehearsals <<< "$REHEARSALS"
           git diff --quiet "$BASE" HEAD -- src pyproject.toml uv.lock "${rehearsals[@]%%::*}" \
@@ -165,6 +183,7 @@ jobs:
 
   ratchet:
     name: debt-${{ matrix.kind }}
+    needs: base
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:
@@ -196,12 +215,12 @@ jobs:
       - uses: actions/cache/restore@v4
         with:
           path: ~/.cache/agent-comms
-          key: debt-ratchet-${{ matrix.kind }}-${{ github.event.merge_group.base_sha || github.event.pull_request.base.sha }}
+          key: debt-ratchet-${{ matrix.kind }}-${{ needs.base.outputs.base }}
           restore-keys: debt-ratchet-${{ matrix.kind }}-
 
       - name: No new structural debt against the base
         env:
-          BASE: ${{ github.event.merge_group.base_sha || github.event.pull_request.base.sha }}
+          BASE: ${{ needs.base.outputs.base }}
         run: |
           set -o pipefail
           PYTHONPATH=src:tools python tools/debt_ratchet.py \
