@@ -69,10 +69,8 @@ def test_installer_zip_imports_only_names_the_previous_core_defines(tmp_path):
     current = tmp_path / "current"
     write(
         current / "src/agent_comms/installer/probes/harnesses.py",
-        "from typing import TYPE_CHECKING\n"
         "from agent_comms.harness_install import Harness, InstalledHarness\n"
-        "from ..publication import Publication\n"
-        "if TYPE_CHECKING:\n    from agent_comms.threads import Thread\n",
+        "from agent_comms.installer.publication import Publication\n",
     )
     write(current / "src/agent_comms/installer/publication.py", "class Publication: ...\n")
 
@@ -80,7 +78,7 @@ def test_installer_zip_imports_only_names_the_previous_core_defines(tmp_path):
 
     assert [(str(entry), name) for entry, name in package.missing_names] == [
         (
-            "installer.zip:agent_comms/installer/probes/harnesses.py:2 "
+            "installer.zip:agent_comms/installer/probes/harnesses.py:1 "
             "imports agent_comms.harness_install",
             "InstalledHarness",
         )

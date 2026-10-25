@@ -148,31 +148,6 @@ class ClientImportNames(ModuleReferences):
                 self.record(node, module, tuple(alias.name for alias in node.names))
 
 
-class InstallerImportNames(ClientImportNames):
-    """A file of the installer package: relative imports resolve from its own package, and
-    imports under TYPE_CHECKING never run on the installed runtime."""
-
-    def __init__(self, client: str, path: str, package: str, found: list[ClientImport]) -> None:
-        super().__init__(client, path, found)
-        self.package = package
-
-    def visit_ImportFrom(self, node: ast.ImportFrom) -> None:
-        if not node.level:
-            return super().visit_ImportFrom(node)
-        parts = self.package.split(".")
-        base = ".".join(parts[: len(parts) - node.level + 1])
-        module = ".".join(part for part in (base, node.module or "") if part)
-        self.record(node, module, tuple(alias.name for alias in node.names))
-
-    def visit_If(self, node: ast.If) -> None:
-        match node.test:
-            case ast.Name(id="TYPE_CHECKING") | ast.Attribute(attr="TYPE_CHECKING"):
-                for statement in node.orelse:
-                    self.visit(statement)
-            case _:
-                self.generic_visit(node)
-
-
 class TopLevelNames(ast.NodeVisitor):
     """The names one module binds at its top level: definitions, assignments and imports,
     including those inside top-level if and try blocks."""
@@ -289,9 +264,6 @@ class InstallerZip(StackClient):
     @property
     def root(self) -> Path:
         return self.checkout.joinpath(*self.PACKAGE.split("."))
-
-    def reader(self, relative: Path, found: list[ClientImport]) -> ClientImportNames:
-        return InstallerImportNames(self.name, str(relative), ".".join(relative.parent.parts), found)
 
     def keeps(self, entry: ClientImport) -> bool:
         """The zip carries the installer's own modules; only the rest resolve in the runtime."""
