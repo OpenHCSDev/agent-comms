@@ -37,12 +37,12 @@ from .read_basis import (
     AnonymousViewer,
     ChannelDisplayIdentity,
     ChannelDisplayScope,
-    DMDisplayBasis,
-    DMDisplayIdentity,
-    DMDisplayScope,
     DisplayBasis,
     DisplayIdentity,
     DisplayViewer,
+    DMDisplayBasis,
+    DMDisplayIdentity,
+    DMDisplayScope,
     MessageDisplayScope,
     NamedViewer,
     NoDisplaySelection,
@@ -56,7 +56,6 @@ from .store_files import AtomicFile, SourceTier
 from .thread_identity import UnrecordedThreadIncarnation
 from .threads import ThreadProvenance
 from .transcript_routes import TranscriptRoutes
-
 
 if TYPE_CHECKING:
     from .catalog_document import CatalogDocument

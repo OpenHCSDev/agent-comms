@@ -30,7 +30,6 @@ from .obligation_states import (
     SilentResponse,
 )
 
-
 if TYPE_CHECKING:
     from .coordination_tables.attempts import ReplayFact
 

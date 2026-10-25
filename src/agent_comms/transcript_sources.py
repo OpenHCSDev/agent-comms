@@ -16,7 +16,6 @@ from typing import TYPE_CHECKING, Self
 
 from .native_entries import TranscriptProjection
 
-
 if TYPE_CHECKING:
     from .context_store import ContextStore
     from .external_transcript import ExternalPageRow

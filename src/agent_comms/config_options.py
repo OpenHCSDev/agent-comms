@@ -24,7 +24,6 @@ from .pi_commands import (
     SetThinkingLevel,
 )
 
-
 if TYPE_CHECKING:
     from .session_config_options import SessionConfigOptions
 

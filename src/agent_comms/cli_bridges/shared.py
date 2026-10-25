@@ -23,8 +23,6 @@ from functools import cached_property, partial
 from pathlib import Path
 from typing import Annotated, ClassVar, Generic, Literal, Self, TextIO, TypeVar
 
-from agent_comms.registration import Registration
-
 from pydantic import Field, InstanceOf, PlainSerializer, PlainValidator, model_validator
 
 from agent_comms import field_codec, messages
@@ -71,6 +69,7 @@ from agent_comms.message_reference import (
     MessageReference,
 )
 from agent_comms.read_basis import ExplicitWatchAcknowledgment
+from agent_comms.registration import Registration
 from agent_comms.runtime_updates import ReplyingThreadOutput, RuntimeUpdate, ThreadOutput
 from agent_comms.send_result import SendResult
 from agent_comms.thread_execution import ExternalThreadExecution

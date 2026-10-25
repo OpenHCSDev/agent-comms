@@ -10,7 +10,6 @@ from . import turn_failure as failures
 from .agent_backend import TurnInboxItem
 from .native_pi import NativePiInputNotSent
 
-
 if TYPE_CHECKING:
     from .backend import NativeSession, TurnSession
     from .pi_events import AgentSettled, InputCommitted, MessageStart, Response

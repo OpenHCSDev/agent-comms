@@ -72,7 +72,6 @@ from agent_comms.ui_model.status import OpenThreadStatus, ThreadStatusModel
 from agent_comms.view_unread import ReplyIndexResult
 from agent_comms.watched import FileSource
 
-
 if TYPE_CHECKING:
     from concurrent.futures import Future
     from multiprocessing.connection import Connection

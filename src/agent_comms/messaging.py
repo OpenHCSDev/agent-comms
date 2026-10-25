@@ -34,7 +34,6 @@ from .thread_identity import UserThreadRole
 from .threads import Thread
 from .working_memory_policy import AnnotationDisclosureGrant
 
-
 if TYPE_CHECKING:
     from .goal_management import Goals
 from .todos import TodoError, TodoStore

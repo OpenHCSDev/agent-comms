@@ -23,7 +23,6 @@ from .thread_identity import (
 from .turn_context import Provenance, WireProvenance
 from .working_memory_requests import AnnotationBudgetExhausted
 
-
 if TYPE_CHECKING:
     from typing import Self
 

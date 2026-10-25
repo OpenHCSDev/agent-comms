@@ -25,7 +25,6 @@ from .turn_lease import (
     NoFinishedTurn,
 )
 
-
 if TYPE_CHECKING:
     from .activity import ObservedActivity
     from .owner_lifecycle import OwnerLifecycle

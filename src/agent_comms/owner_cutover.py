@@ -11,7 +11,6 @@ from .errors import RelationViolationError
 from .launch_runtime import LaunchRuntime
 from .restart_refusals import OwnerMaintenancePendingRefusal
 
-
 if TYPE_CHECKING:
     from .maintenance_barrier import MaintenanceState
     from .owner_lifecycle import OwnerLifecycle, OwnerRestartResult, OwnerRestartSelection

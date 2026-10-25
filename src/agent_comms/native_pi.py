@@ -26,7 +26,6 @@ from .active_route import (
     resolve_comms_route,
 )
 from .coordination_errors import IdentityConflict
-
 from .errors import RelationViolationError
 from .field_codec import (
     FieldCodec,

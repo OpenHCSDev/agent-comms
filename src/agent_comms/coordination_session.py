@@ -23,7 +23,6 @@ from .store_files import (
     _store_lock,
 )
 
-
 if TYPE_CHECKING:
     from .message_bus import MessageBus
 

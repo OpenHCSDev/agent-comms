@@ -20,9 +20,9 @@ import signal
 import stat
 import subprocess
 import sys
+import termios
 import threading
 import time
-import termios
 from abc import ABC, abstractmethod
 from collections.abc import Callable, Generator, Iterator, Mapping
 from concurrent.futures import Future, ProcessPoolExecutor

@@ -18,7 +18,6 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Annotated, ClassVar
 
 from .bus import Bus
-
 from .child_process import Platform
 from .declared_family import DeclaredFamily
 from .errors import RelationViolationError

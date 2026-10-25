@@ -26,7 +26,6 @@ from .thread_execution import NativeThreadExecution
 from .thread_status import StoppedThreadStatus
 from .view_unread import transcript_read_state
 
-
 if TYPE_CHECKING:
     from .cli_bridges.history import History
     from .tool_caller import ThreadCaller
@@ -36,7 +35,14 @@ from .catalog_store import ChannelCatalog
 from .collaboration_ledger import CollaborationLedger
 from .config_options import RunningSelection
 from .errors import RelationViolationError
-from .field_codec import DeclaredWireType, FieldCodec, NullMember, RecordMember, SingleFieldValue, SubclassUnion
+from .field_codec import (
+    DeclaredWireType,
+    FieldCodec,
+    NullMember,
+    RecordMember,
+    SingleFieldValue,
+    SubclassUnion,
+)
 from .importing import ImportLimits, ImportSnapshot, ThreadImported
 from .launch_runtime import LaunchRuntime, TagListText
 from .message_bus import MessageBus
@@ -51,8 +57,8 @@ from .thread_identity import AgentThreadRole, ThreadRole
 from .thread_model import DeclaredModel, ThreadModel, UndeclaredModel
 from .thread_owned_state import ThreadOwnedState
 from .thread_text import ForkedParent, GivenThreadText, NoThreadText, ThreadText
-from .tool_result import ToolResult
 from .threads import KeptModel, ModelChoice, NextTurnConfiguration, Thread
+from .tool_result import ToolResult
 
 
 @dataclass(frozen=True, slots=True)

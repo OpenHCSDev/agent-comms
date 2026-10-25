@@ -14,7 +14,6 @@ from typing import TYPE_CHECKING, BinaryIO
 from .errors import RelationViolationError
 from .native_pi import NativeContextJournal
 
-
 if TYPE_CHECKING:
     from .native_pi import NativeContextProof
     from .read_ledger import ReadLedger

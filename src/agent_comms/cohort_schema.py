@@ -36,7 +36,6 @@ from .typed_table import (
 )
 from .wake_candidate_index import ProjectionUnavailableError
 
-
 if TYPE_CHECKING:
     from .bus_publication import Delivered
     from .private_registry_guard import RegistryPrivacy

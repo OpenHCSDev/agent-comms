@@ -13,7 +13,6 @@ from .errors import StaleAttemptError
 from .native_arguments import SelectedModel
 from .native_failures import NativePiUnavailable
 
-
 if TYPE_CHECKING:
     from .backend import TurnSession
     from .goal_attempts import GoalAttemptStore, LaunchPermit
