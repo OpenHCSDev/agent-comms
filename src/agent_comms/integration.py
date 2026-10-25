@@ -290,9 +290,10 @@ class IntegrationRun:
             ) as child:
                 try:
                     result = child.collect(timeout=self.timeout + STOP_GRACE_SECONDS)
-                except subprocess.TimeoutExpired as error:
-                    raise IntegrationFailed(f"Timed out: {log}; no automatic replay") from error
-        answer = TestAttempt.from_process(result, log)
+                except subprocess.TimeoutExpired:
+                    answer: TestAttempt = TimedOutTestAttempt(log)
+                else:
+                    answer = TestAttempt.from_process(result, log)
         for head in heads:
             print(f"COMBINED EXIT {answer.code}: #{head.pr} {head.head}; {log}", flush=True)
         return answer

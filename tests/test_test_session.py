@@ -1,4 +1,4 @@
-"""Early admission and xdist's later identity, using real pytest sessions and flock."""
+"""Controller setup and xdist identity, using real pytest sessions and flock."""
 
 from pathlib import Path
 
@@ -17,7 +17,7 @@ def controller_session(pytester: pytest.Pytester) -> pytest.Session:
     return pytest.Session.from_config(config)
 
 
-def test_controller_acquires_before_imports_and_confirmation_does_not_reacquire(
+def test_controller_prepares_once_and_confirmation_does_not_reacquire(
     tmp_path: Path, controller_session: pytest.Session,
 ):
     lease = HostTestLease.in_home(tmp_path)

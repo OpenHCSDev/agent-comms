@@ -51,7 +51,7 @@ from source_programs import SourcePrograms
 from source_revision_fixture import SourceRepository
 from agent_comms.threads import Thread
 
-pytest_plugins = (goal_owner_fixture.__name__, "github_fixture")
+pytest_plugins = (goal_owner_fixture.__name__, "github_fixture", "pytest_session")
 
 
 class TranscriptRecords:

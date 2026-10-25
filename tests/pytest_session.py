@@ -1,4 +1,4 @@
-"""One pytest controller lifetime, before imports and after xdist identifies a worker."""
+"""One pytest controller lifetime, configured before test setup or execution."""
 
 from __future__ import annotations
 
@@ -17,7 +17,7 @@ from agent_comms.test_lease import (
 
 
 class TestSession(ExitStack):
-    """The controller holds the resource before importing the application graph."""
+    """The controller holds the resource before test setup or execution."""
 
     def __init__(self, start: LeaseStart, lease: TestLease) -> None:
         super().__init__()
@@ -68,20 +68,16 @@ def pytest_addoption(parser: pytest.Parser) -> None:
 
 
 @pytest.hookimpl(tryfirst=True)
-def pytest_load_initial_conftests(
-    early_config: pytest.Config,
-    parser: pytest.Parser,
-    args: list[str],
-) -> None:
-    start: LeaseStart = parser.parse_known_args(args).integration_lease
+def pytest_configure(config: pytest.Config) -> None:
+    start: LeaseStart = config.getoption("integration_lease")
     owner = TestSession.from_worker_hint(
         os.environ.get("PYTEST_XDIST_WORKER", ""),
         start,
         TestLease.current(),
     )
+    config.stash[_SESSION] = owner
+    config.add_cleanup(owner.close)
     owner.prepare()
-    early_config.stash[_SESSION] = owner
-    early_config.add_cleanup(owner.close)
 
 
 @pytest.hookimpl(tryfirst=True)
