@@ -1,3 +1,4 @@
+import ast
 import json
 import os
 import shutil
@@ -18,6 +19,8 @@ from agent_comms.bus import (
     PrivateRecord,
     PublicRecord,
 )
+from agent_comms.activity_clocks import ChannelActivity
+from agent_comms.bus_activity_index import ActivityMaximum
 from agent_comms.bus_publication import Delivered, HumanOrigin, KeyedPublication
 from agent_comms.bus_tables import AnsweredSource, BusSchema, MessageIdentitySource
 from agent_comms.messages import (
@@ -25,13 +28,17 @@ from agent_comms.messages import (
     BusRow,
     BusTables,
     Claimed,
+    ClaimHolders,
     ClaimHistoryKind,
+    ConversationActivity,
     InfoKind,
     MembershipTransition,
     Message,
+    MessageKind,
     MessageRoleWire,
     NoticeRole,
 )
+from agent_comms.channel_targets import ThreadTarget
 from agent_comms.coordination_tables.publications import PublicationIntents
 from agent_comms.errors import (
     CommittedMessageError,
@@ -39,7 +46,7 @@ from agent_comms.errors import (
     RelationViolationError,
     UnclaimedError,
 )
-from agent_comms.field_codec import MessageId
+from agent_comms.field_codec import MessageId, TimestampText
 from agent_comms.message_reference import MessageReference
 from agent_comms.read_basis import RepliesDisplayScope
 from agent_comms.response_acknowledgement import (
@@ -103,32 +110,25 @@ def projection_source_digest(source: Path) -> str:
     ).stdout.strip()
 
 
-@pytest.mark.parametrize(
-    ("module", "old", "new"),
-    (
-        (
-            "typed_table.py",
-            "Durable files compare their stored DDL text",
-            "An unrelated infrastructure docstring: durable files compare their stored DDL text",
-        ),
-        (
-            "field_codec.py",
-            "class TimestampText(",
-            "def unrelated_projection_probe():\n    return 17\n\n\nclass TimestampText(",
-        ),
-    ),
-)
+def edit_inside(source: Path, owner: type) -> None:
+    """Insert a line inside the class's own declaration, so no test copies our source."""
+    path = source.joinpath(*owner.__module__.split(".")[1:]).with_suffix(".py")
+    lines = path.read_text().splitlines(keepends=True)
+    declaration = next(
+        node for node in ast.walk(ast.parse("".join(lines)))
+        if isinstance(node, ast.ClassDef) and node.name == owner.__name__
+    )
+    first = declaration.body[0]
+    lines.insert(first.lineno - 1, " " * first.col_offset + "# an edit inside the class\n")
+    path.write_text("".join(lines))
+
+
+@pytest.mark.parametrize("owner", (TypedTable, TimestampText))
 def test_projection_digest_ignores_infrastructure_source(
-    projection_source: Path,
-    module: str,
-    old: str,
-    new: str,
+    projection_source: Path, owner: type
 ) -> None:
     before = projection_source_digest(projection_source)
-    path = projection_source / module
-    original = path.read_text()
-    assert original.count(old) == 1
-    path.write_text(original.replace(old, new))
+    edit_inside(projection_source, owner)
     assert projection_source_digest(projection_source) == before
 
 
@@ -167,63 +167,24 @@ def test_nominal_message_id_column_stores_plain_text() -> None:
 
 
 @pytest.mark.parametrize(
-    ("module", "old", "new"),
+    "owner",
     (
-        (
-            "bus_publication.py",
-            "yield SentSource(self.sender_lookup, self.seq)",
-            "yield SentSource(self.sender_lookup, self.seq + 1)",
-        ),
-        ("bus_activity_index.py", '=max("{name}",excluded.', '=min("{name}",excluded.'),
-        (
-            "messages.py",
-            "for record in BusCapability.history(db, kinds, after=after):",
-            "for record in reversed(tuple("
-            "BusCapability.history(db, kinds, after=after))):",
-        ),
-        (
-            "messages.py",
-            "yield MessageIdentitySource(self.seq, self.message_id, self.sender)",
-            "yield MessageIdentitySource(self.seq, self.message_id, self.target)",
-        ),
-        (
-            "messages.py",
-            "self.apply(db, transition, projected)",
-            "self.apply(db, transition, projected)\n            del projected",
-        ),
-        (
-            "messages.py",
-            "return (SentActivity(message.sender, message.timestamp),)",
-            "return (SentActivity(message.target, message.timestamp),)",
-        ),
-        (
-            "messages.py",
-            "return (BusRouteCounts.from_message(message),)",
-            "return (BusRouteCounts.from_message(message), BusRouteCounts.from_message(message))",
-        ),
-        (
-            "channel_targets.py",
-            "    def direct_names(self) -> tuple[str, ...]:\n        return self.names\n",
-            "    def direct_names(self) -> tuple[str, ...]:\n        return self.names[:1]\n",
-        ),
-        (
-            "activity_clocks.py",
-            "message.sender_role.last_user_input(0.0, message.timestamp),",
-            "message.sender_role.last_user_input(1.0, message.timestamp),",
-        ),
+        Delivered,
+        ActivityMaximum,
+        BusProjectionTables,
+        BusRecord,
+        Claimed,
+        ClaimHolders,
+        ConversationActivity,
+        MessageKind,
+        ThreadTarget,
+        ChannelActivity,
     ),
 )
-def test_projection_digest_tracks_producing_source(
-    projection_source: Path,
-    module: str,
-    old: str,
-    new: str,
-) -> None:
+def test_projection_digest_tracks_producing_source(projection_source: Path, owner: type) -> None:
+    """An edit inside a producing class changes the digest."""
     before = projection_source_digest(projection_source)
-    path = projection_source / module
-    original = path.read_text()
-    assert original.count(old) == 1
-    path.write_text(original.replace(old, new))
+    edit_inside(projection_source, owner)
     assert projection_source_digest(projection_source) != before
 
 
