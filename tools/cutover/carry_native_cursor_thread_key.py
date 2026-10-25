@@ -9,7 +9,7 @@ from agent_comms.errors import RelationViolationError
 from agent_comms.installer.probes.carry import Carried, Carry
 from agent_comms.locked_store import RootFile
 from agent_comms.native_runtime_input import CurrentNativeCursor
-from agent_comms.typed_table import TriggerKind
+from agent_comms.typed_table import SQLiteCatalogObject, SQLiteColumnShape
 
 
 class NativeCursorThreadKey(Carry):
@@ -26,20 +26,12 @@ class NativeCursorThreadKey(Carry):
         if apply:
             for path, retired in folded.items():
                 with closing(CoordinationStore.writer(path)) as db, CoordinationStore.write_transaction(db):
-                    # The old guards refuse every delete; rebuild recreates the declared ones.
-                    for (name,) in db.execute(
-                        "SELECT name FROM sqlite_master WHERE type='trigger' AND tbl_name=?",
-                        (CurrentNativeCursor.declared_name,),
-                    ).fetchall():
-                        TriggerKind.drop(db, name)
-                    db.executemany(
-                        CurrentNativeCursor._sql(
-                            f'DELETE FROM "{CurrentNativeCursor.declared_name}" WHERE wire_root_id=? '
-                            "AND recipient_lookup=? AND owner_generation=? AND {owner_claimed_generation}=?"
-                        ),
-                        [(row.wire_root_id, row.recipient_lookup, row.owner_generation,
-                          row.owner_claimed_generation) for row in retired],
-                    )
+                    SQLiteCatalogObject.release_guards(db, CurrentNativeCursor.declared_name)
+                    for row in retired:
+                        CurrentNativeCursor.delete(
+                            db, wire_root_id=row.wire_root_id, recipient_lookup=row.recipient_lookup,
+                            owner_generation=row.owner_generation,
+                            owner_claimed_generation=row.owner_claimed_generation)
                     CurrentNativeCursor.rebuild(db)
         return Carried(
             len(folded),
@@ -49,8 +41,8 @@ class NativeCursorThreadKey(Carry):
 
     @classmethod
     def keyed_by_claim(cls, db) -> bool:
-        return any(name == cls.retired_key and pk for name, pk in db.execute(
-            "SELECT name, pk FROM pragma_table_info(?)", (CurrentNativeCursor.declared_name,)))
+        return any(column.name == cls.retired_key and column.pk
+                   for column in SQLiteColumnShape.of(db, CurrentNativeCursor.declared_name))
 
     @staticmethod
     def retired(rows: list[CurrentNativeCursor]) -> list[CurrentNativeCursor]:

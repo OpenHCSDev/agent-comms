@@ -741,6 +741,10 @@ class CatalogKind(DeclaredFamily, affix="Kind"):
         if declared.get(item.name) != item.sql:
             cls.drop(db, item.name)
 
+    @classmethod
+    def release(cls, db: sqlite3.Connection, item: SQLiteCatalogObject) -> None:
+        """An object that guards no row changes stays while a carry rewrites rows."""
+
 
 class TableKind(CatalogKind):
     @classmethod
@@ -755,7 +759,11 @@ class IndexKind(CatalogKind):
 
 
 class TriggerKind(CatalogKind):
-    pass
+    @classmethod
+    def release(cls, db: sqlite3.Connection, item: SQLiteCatalogObject) -> None:
+        """A stored trigger may refuse the rows a carry deletes; the carry's rebuild
+        recreates the declared ones."""
+        cls.drop(db, item.name)
 
 
 class ViewKind(CatalogKind):
@@ -779,6 +787,14 @@ class SQLiteCatalogObject(TypedRow):
         return tuple(cls.read(db.execute(
             "SELECT type,name,tbl_name,sql FROM sqlite_master "
             "WHERE sql IS NOT NULL AND name NOT LIKE 'sqlite_%' ORDER BY type,name")))
+
+    @classmethod
+    def release_guards(cls, db: sqlite3.Connection, table: str) -> None:
+        """Inside the caller's write transaction, lift every stored guard on ``table``,
+        declared or not, so a carry can rewrite rows an older schema refused to change."""
+        for item in cls.stored(db):
+            if item.tbl_name == table:
+                item.type.release(db, item)
 
     @classmethod
     def carry(cls, db: sqlite3.Connection, declared: Mapping[str, str],
