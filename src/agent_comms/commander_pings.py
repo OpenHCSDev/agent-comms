@@ -69,6 +69,15 @@ class Ping(DeclaredFamily, affix="Ping"):
     def acted_on(self, acted: frozenset[HeartbeatSubject]) -> bool:
         return any(subject.acted_on(acted) for subject in self.subjects)
 
+    @property
+    def commander_disposes(self) -> bool:
+        """Whether a commander verb disposes of this line; only such a line locks the verbs."""
+        return True
+
+    def locks(self, cut: float) -> bool:
+        """Undisposed past ``cut`` and the commander's to dispose of."""
+        return self.commander_disposes and self.since.before(cut)
+
     def render(self, now: float) -> str:
         minutes = int((now - self.since.recorded_at("A heartbeat line")) // 60)
         return f"{self.text} ({minutes} min)"
@@ -99,6 +108,10 @@ class UnitPing(Ping):
     @property
     def key(self) -> ThreadIncarnation:
         return self.unit
+
+    @property
+    def commander_disposes(self) -> bool:
+        return self.state.commander_disposes
 
     @classmethod
     def capture(cls, state: UnitState) -> Self:
