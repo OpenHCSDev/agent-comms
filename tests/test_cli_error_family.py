@@ -1,6 +1,7 @@
 """Core's error declaration controls encoding and read-watch recovery."""
 from __future__ import annotations
 
+from agent_comms.repo import Checkout
 import asyncio
 import json
 import sys
@@ -180,7 +181,7 @@ async def test_watched_record_crosses_the_watch_line_as_its_envelope(root):
 
     comms = canonical_goal_wire(root)
     for name in ("a", "b"):
-        comms.registry.declare(Thread(name=name, tags=frozenset(), worktree='/wt'))
+        comms.registry.declare(Thread(name=name, tags=frozenset(), worktree=Checkout.from_wire('/wt')))
     sent = comms.messaging.send("a", "b", "crosses").message
     async with aclosing(comms.watch("b", acknowledgment=ExplicitWatchAcknowledgment)) as watched:
         async with asyncio.timeout(5):

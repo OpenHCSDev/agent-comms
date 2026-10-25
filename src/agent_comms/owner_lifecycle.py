@@ -525,7 +525,7 @@ class OwnerLifecycle:
             (str(launch_runtime.interpreter), "-m", "agent_comms.worker",
              *LaunchRoot.from_path(self.launch_authority.child_root).arguments()),
             env=env,
-            cwd=thread.worktree,
+            cwd=thread.worktree.path,
             output=output,
             runtime=launch_runtime,
             lifetime=OutlivesLauncherLifetime,

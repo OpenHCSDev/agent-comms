@@ -154,7 +154,7 @@ from .read_basis import (
 from .recorded_bus import RecordedBusIdentity
 from .registry_document import CommanderProject, RegistrySnapshot
 from .registry_store import RegistryStore
-from .repo import Checkout, CheckoutStart, GitCommandError, Repo
+from .repo import Checkout, CheckoutStart, GitCommandError, LaunchCheckout, Repo
 from .repository_name import RepositoryName
 from .storage_rules import (
     CheckoutStorageEffect, OrderCheckoutAllocation, RemoveCheckoutStorageEffect,
@@ -1759,7 +1759,7 @@ class RegisterCliCommand(NameArgument, CliCommand):
         thread = Thread(
             name=self.name,
             tags=self.tags,
-            worktree=self.worktree,
+            worktree=Checkout.from_wire(self.worktree),
             parent=self.parent,
             task=self.task,
             process_identity=self.process,
@@ -2335,10 +2335,8 @@ class NewThreadCliCommand(NameArgument, CatalogSelection, CliCommand, declared_n
         Argument(flags=("--tags",)),
     ] = InheritedTags()
     project: Annotated[
-        str,
-        Argument(
-            flags=("--project",)
-        ),
+        LaunchCheckout,
+        Argument(flags=("--project",)),
     ]
     model: Annotated[
         ThreadModel, Catalog(ModelConfigOption), Argument(flags=("--model",)),
@@ -2352,11 +2350,11 @@ class NewThreadCliCommand(NameArgument, CatalogSelection, CliCommand, declared_n
     @classmethod
     def project_bindings(cls, comms: Comms, project: str) -> tuple[Self, ...]:
         defaults = NativeThreadDefaults()
-        return (cls(name='', project=project, model=defaults.model,
+        return (cls(name='', project=LaunchCheckout.checked(project), model=defaults.model,
                     thinking_level=defaults.thinking_level),)
 
     def project_directory(self) -> Path:
-        return Checkout.checked(self.project).path
+        return self.project.path
 
     def apply(self, ctx: Comms) -> ThreadCreatedResult:
         spec = self.spec_type.from_task(**{item.name: getattr(self, item.name)
@@ -2380,7 +2378,7 @@ class ForkCliCommand(NativeOwnerCommand, ThreadBoundCliCommand, NewThreadCliComm
 
     @classmethod
     def thread_binding(cls, thread: Thread) -> Self:
-        return cls(name='', parent=thread.name, tags=GivenTags(thread.tags), project=thread.worktree,
+        return cls(name='', parent=thread.name, tags=GivenTags(thread.tags), project=LaunchCheckout.checked(thread.worktree.path),
                    model=thread.model, thinking_level=thread.thinking_level)
 
 
@@ -2791,7 +2789,7 @@ class ReadTargetCliCommand(MultipleTargets, CliCommand, declared_name="read-targ
 
     @classmethod
     def thread_bindings(cls, comms: Comms, thread: Thread, status: ThreadStatus, channel: str | None = None, *, catalog: CatalogDocument | None = None) -> tuple[Self, ...]:
-        return (cls(target=thread.name, worktree=thread.worktree),)
+        return (cls(target=thread.name, worktree=str(thread.worktree)),)
 
     @classmethod
     def channel_bindings(cls, comms: Comms, resolved: ResolvedChannel, *, project: str, snapshot: RegistrySnapshot, catalog: CatalogDocument | None):

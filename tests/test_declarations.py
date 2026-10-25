@@ -1,5 +1,6 @@
 
 
+from agent_comms.repo import Checkout
 from bus_record_fixture import prepare_native_comms
 
 import json
@@ -90,7 +91,7 @@ class TestGoalRevision:
         path = tmp_path / "registry.json"
         registry = Registration(path)
         registry.register(
-            Thread(name='owner', tags=frozenset(), worktree='/wt', goal=Goal('work',
+            Thread(name='owner', tags=frozenset(), worktree=Checkout.from_wire('/wt'), goal=Goal('work',
                 old_goal_id, published_seq=0))
         )
         raw = json.loads(path.read_text())
@@ -102,33 +103,33 @@ class TestGoalRevision:
 
 class TestThreadDeclaration:
     def test_constructing_declares(self, *, thread_registration):
-        thread = Thread(name='a', tags=frozenset(), worktree='/wt')
+        thread = Thread(name='a', tags=frozenset(), worktree=Checkout.from_wire('/wt'))
         assert thread.name == "a"
         assert thread.is_fork is False
 
     def test_rejects_bad_name_characters(self, *, thread_registration):
         with pytest.raises(ValueError):
-            Thread(name='bad name!', tags=frozenset(), worktree='/wt')
+            Thread(name='bad name!', tags=frozenset(), worktree=Checkout.from_wire('/wt'))
 
     def test_rejects_empty_name(self, *, thread_registration):
         with pytest.raises(ValueError):
-            Thread(name='', tags=frozenset(), worktree='/wt')
+            Thread(name='', tags=frozenset(), worktree=Checkout.from_wire('/wt'))
 
     def test_rejects_empty_worktree(self, *, thread_registration):
         with pytest.raises(ValueError):
-            Thread(name='a', tags=frozenset(), worktree='')
+            Thread(name='a', tags=frozenset(), worktree=Checkout.from_wire(''))
 
     def test_rejects_self_parent(self, *, thread_registration):
         with pytest.raises(RelationViolationError):
-            Thread(name='a', tags=frozenset(), worktree='/wt', parent=ForkedParent('a'))
+            Thread(name='a', tags=frozenset(), worktree=Checkout.from_wire('/wt'), parent=ForkedParent('a'))
 
     def test_fork_provenance(self, *, thread_registration):
-        fork = Thread(name='b', tags=frozenset(), worktree='/wt', parent=ForkedParent('a'))
+        fork = Thread(name='b', tags=frozenset(), worktree=Checkout.from_wire('/wt'), parent=ForkedParent('a'))
         assert fork.is_fork is True
         assert fork.parent == ForkedParent("a")
 
     def test_frozen(self, *, thread_registration):
-        thread = Thread(name='a', tags=frozenset(), worktree='/wt')
+        thread = Thread(name='a', tags=frozenset(), worktree=Checkout.from_wire('/wt'))
         with pytest.raises(AttributeError):
             thread.name = "b"  # type: ignore[misc]
 
@@ -174,7 +175,7 @@ class TestMessageDeclaration:
 class TestRegistration:
     def test_register_and_require(self, tmp_path: Path):
         registry = Registration(tmp_path / "registry.json")
-        thread = Thread(name='a', tags=frozenset(), worktree='/wt')
+        thread = Thread(name='a', tags=frozenset(), worktree=Checkout.from_wire('/wt'))
         registry.register(thread)
         assert registry.require("a") is not None
         assert "a" in registry
@@ -186,7 +187,7 @@ class TestRegistration:
 
     def test_status_transitions(self, tmp_path: Path):
         registry = Registration(tmp_path / "registry.json")
-        registry.register(Thread(name='a', tags=frozenset(), worktree='/wt'))
+        registry.register(Thread(name='a', tags=frozenset(), worktree=Checkout.from_wire('/wt')))
         assert registry.status("a") == HeartbeatThreadStatus()
         registry.unregister("a")
         assert registry.status("a") == StoppedThreadStatus()
@@ -201,7 +202,7 @@ class TestRegistration:
         self, tmp_path: Path
     ) -> None:
         registry = Registration(tmp_path / "registry.json")
-        owner = Thread(name='a', tags=frozenset(), worktree='/wt', process_identity=ProcessIdentity.capture(os.getpid()))
+        owner = Thread(name='a', tags=frozenset(), worktree=Checkout.from_wire('/wt'), process_identity=ProcessIdentity.capture(os.getpid()))
         registry.register(owner)
         before = registry.snapshot().claim_generation("a")
         registry.register(replace(owner, session_file=RegistrySessionLocation.from_path(str(tmp_path / "session.jsonl"), tmp_path)))
@@ -213,7 +214,7 @@ class TestRegistration:
 
     def test_owner_claim_follows_same_owner_rename(self, tmp_path: Path) -> None:
         registry = Registration(tmp_path / "registry.json")
-        registry.register(Thread(name='a', tags=frozenset(), worktree='/wt', process_identity=ProcessIdentity.capture(os.getpid())))
+        registry.register(Thread(name='a', tags=frozenset(), worktree=Checkout.from_wire('/wt'), process_identity=ProcessIdentity.capture(os.getpid())))
         before = registry.snapshot().claim_generation("a")
         registry.rename("a", "renamed-a")
         snapshot = Registration(registry.store.path).snapshot()
@@ -226,13 +227,13 @@ class TestRegistration:
         registry = Registration(tmp_path / "registry.json")
         registry.register(
             Thread(
-                name='agent-comms-ux', tags=frozenset(), worktree='/wt',
+                name='agent-comms-ux', tags=frozenset(), worktree=Checkout.from_wire('/wt'),
                 process_identity=ProcessIdentity.capture(os.getpid()),
                 goal=Goal('Finish the goal', goal_1_goal_id, published_seq=0),
             )
         )
         registry.register(
-            Thread(name='child', tags=frozenset(), worktree='/wt', parent=ForkedParent('agent-comms-ux'))
+            Thread(name='child', tags=frozenset(), worktree=Checkout.from_wire('/wt'), parent=ForkedParent('agent-comms-ux'))
         )
         original = registry.require("agent-comms-ux")
         registry.rename("agent-comms-ux", "pr17")
@@ -254,7 +255,7 @@ class TestRegistration:
     def test_other_owner_writes_do_not_invalidate_private_generation(self, tmp_path: Path):
         registry = Registration(tmp_path / "registry.json")
         for name in ("a", "b"):
-            registry.register(Thread(name=name, tags=frozenset(), worktree='/wt', process_identity=ProcessIdentity.capture(os.getpid())))
+            registry.register(Thread(name=name, tags=frozenset(), worktree=Checkout.from_wire('/wt'), process_identity=ProcessIdentity.capture(os.getpid())))
         snapshot = registry.snapshot()
         owner = RegistryOwner.capture_local(snapshot, "a").thread
         claimed_generation = snapshot.owner_identity("a").generation
@@ -276,7 +277,7 @@ class TestRegistration:
         self, tmp_path: Path, revocation: str
     ) -> None:
         registry = Registration(tmp_path / "registry.json")
-        registry.register(Thread(name='a', tags=frozenset(), worktree='/wt', process_identity=ProcessIdentity.capture(os.getpid())))
+        registry.register(Thread(name='a', tags=frozenset(), worktree=Checkout.from_wire('/wt'), process_identity=ProcessIdentity.capture(os.getpid())))
         snapshot = registry.snapshot()
         owner = RegistryOwner.capture_local(snapshot, "a").thread
         leased, owner_generation = registry.lease_local_turn(owner.name, TurnId('d79d3458a58877cd8e48c18ebaf4c27b'))
@@ -300,7 +301,7 @@ class TestRegistration:
 
     def test_comms_begin_turn_cannot_revive_stopped_owner(self, tmp_path: Path) -> None:
         comms = wire(tmp_path / "wire")
-        comms.registry.declare(Thread(name='a', tags=frozenset(), worktree='/wt', process_identity=ProcessIdentity.capture(os.getpid())))
+        comms.registry.declare(Thread(name='a', tags=frozenset(), worktree=Checkout.from_wire('/wt'), process_identity=ProcessIdentity.capture(os.getpid())))
         comms.registry.unregister("a")
         with pytest.raises(RelationViolationError):
             comms.agents.begin_turn("a", TurnId('eb1c7f738bbe6d0fd106bf4a2fe97600'))
@@ -313,7 +314,7 @@ class TestRegistration:
         comms = wire(root)
         prepare_native_comms(comms)
         reopened = wire(root)
-        reopened.registry.declare(Thread(name='a', tags=frozenset(), worktree='/wt', process_identity=ProcessIdentity.capture(os.getpid())))
+        reopened.registry.declare(Thread(name='a', tags=frozenset(), worktree=Checkout.from_wire('/wt'), process_identity=ProcessIdentity.capture(os.getpid())))
         assert reopened.registry.snapshot().owner_identity("a").generation > 0
 
     @pytest.mark.skipif(os.name == "nt", reason="private POSIX ownership unavailable on Windows")
@@ -323,7 +324,7 @@ class TestRegistration:
         root = tmp_path / "private-wire"
         root.mkdir(mode=0o700)
         comms = wire(root)
-        comms.registry.declare(Thread(name='a', tags=frozenset(), worktree='/wt', process_identity=ProcessIdentity.capture(os.getpid())))
+        comms.registry.declare(Thread(name='a', tags=frozenset(), worktree=Checkout.from_wire('/wt'), process_identity=ProcessIdentity.capture(os.getpid())))
         prepare_native_comms(comms)
         registry_path = root / "registry.json"
         data = json.loads(registry_path.read_text())
@@ -333,7 +334,7 @@ class TestRegistration:
         with pytest.raises(RelationViolationError):
             comms.agents.begin_turn("a", TurnId('18e37571ddd8a9cd1f2b7ffa63493bb6'))
         with pytest.raises(RelationViolationError):
-            comms.registry.register(Thread(name='a', tags=frozenset(), worktree='/wt'))
+            comms.registry.register(Thread(name='a', tags=frozenset(), worktree=Checkout.from_wire('/wt')))
 
     @pytest.mark.skipif(sys.platform != "linux", reason="fault injection uses Linux /proc/self/fd")
     @pytest.mark.parametrize("stage", ["pending", "commit"])
@@ -342,7 +343,7 @@ class TestRegistration:
     ) -> None:
         root = tmp_path / "private"
         comms = wire(root)
-        comms.registry.declare(Thread(name='a', tags=frozenset(), worktree='/wt'))
+        comms.registry.declare(Thread(name='a', tags=frozenset(), worktree=Checkout.from_wire('/wt')))
         prepare_native_comms(comms)
         original_pwrite = os.pwrite
         guard_calls = 0
@@ -359,7 +360,7 @@ class TestRegistration:
 
         monkeypatch.setattr(os, "pwrite", pwrite)
         with pytest.raises(RelationViolationError):
-            comms.registry.register(Thread(name='b', tags=frozenset(), worktree='/wt'))
+            comms.registry.register(Thread(name='b', tags=frozenset(), worktree=Checkout.from_wire('/wt')))
         monkeypatch.undo()
         with pytest.raises(RelationViolationError):
             Registration(root / "registry.json").require("a")
@@ -372,7 +373,7 @@ class TestRegistration:
 
         root = tmp_path / "guarded"
         comms = wire(root)
-        comms.registry.declare(Thread(name='a', tags=frozenset(), worktree='/wt', process_identity=ProcessIdentity.capture(os.getpid())))
+        comms.registry.declare(Thread(name='a', tags=frozenset(), worktree=Checkout.from_wire('/wt'), process_identity=ProcessIdentity.capture(os.getpid())))
         prepare_native_comms(comms)
         # A native coordinator is retained evidence of private mode even if its guard vanishes.
         cold = Registration(root / "registry.json")
@@ -395,14 +396,14 @@ class TestRegistration:
         with pytest.raises(RelationViolationError):
             cold.require("a")
         with pytest.raises(RelationViolationError):
-            comms.registry.register(Thread(name='b', tags=frozenset(), worktree='/wt'))
+            comms.registry.register(Thread(name='b', tags=frozenset(), worktree=Checkout.from_wire('/wt')))
         # A refused read leaves no cached document; none may carry guard state.
         entry = comms.registry.store.cache.entry
         assert entry is None or "registry_guard" not in entry.document.threads["a"].to_wire()
 
     def test_release_turn_resolves_retained_alias_only_for_exact_lease(self, tmp_path: Path):
         registry = Registration(tmp_path / "registry.json")
-        registry.register(Thread(name='a', tags=frozenset(), worktree='/wt', process_identity=ProcessIdentity.capture(os.getpid())))
+        registry.register(Thread(name='a', tags=frozenset(), worktree=Checkout.from_wire('/wt'), process_identity=ProcessIdentity.capture(os.getpid())))
         registry.rename("a", "b")
         snapshot = registry.snapshot()
         owner = RegistryOwner.capture_local(snapshot, "a").thread
@@ -416,7 +417,7 @@ class TestRegistration:
 
     def test_deleting_thread_cannot_be_revived(self, tmp_path: Path):
         registry = Registration(tmp_path / "registry.json")
-        thread = Thread(name='a', tags=frozenset(), worktree='/wt')
+        thread = Thread(name='a', tags=frozenset(), worktree=Checkout.from_wire('/wt'))
         registry.register(thread)
         registry.unregister("a")
         registry.begin_delete("a")
@@ -428,15 +429,15 @@ class TestRegistration:
 
     def test_active_threads_excludes_stopped(self, tmp_path: Path):
         registry = Registration(tmp_path / "registry.json")
-        registry.register(Thread(name='a', tags=frozenset(), worktree='/wt'))
-        registry.register(Thread(name='b', tags=frozenset(), worktree='/wt'))
+        registry.register(Thread(name='a', tags=frozenset(), worktree=Checkout.from_wire('/wt')))
+        registry.register(Thread(name='b', tags=frozenset(), worktree=Checkout.from_wire('/wt')))
         registry.unregister("a")
         assert set(registry.active_threads()) == {"b"}
         assert set(registry.all_threads()) == {"a", "b"}
 
     def test_remove_drops_declaration_entirely(self, tmp_path: Path):
         registry = Registration(tmp_path / "registry.json")
-        registry.register(Thread(name='a', tags=frozenset(), worktree='/wt'))
+        registry.register(Thread(name='a', tags=frozenset(), worktree=Checkout.from_wire('/wt')))
         registry.remove("a")
         assert "a" not in registry
         with pytest.raises(UnregisteredThreadError):
@@ -449,7 +450,7 @@ class TestRegistration:
         path = tmp_path / "registry.json"
         registry = Registration(path)
         registry.register(
-            Thread(name='a', tags=frozenset({'x', 'y'}), worktree='/wt', parent=ForkedParent('p'), task=GivenThreadText('t'), process_identity=ProcessIdentity.capture(os.getpid()))
+            Thread(name='a', tags=frozenset({'x', 'y'}), worktree=Checkout.from_wire('/wt'), parent=ForkedParent('p'), task=GivenThreadText('t'), process_identity=ProcessIdentity.capture(os.getpid()))
         )
         registry.unregister("a")
         reloaded = Registration(path)
@@ -461,7 +462,7 @@ class TestRegistration:
     def test_peers_excludes_self(self, tmp_path: Path):
         registry = Registration(tmp_path / "registry.json")
         for name in ("a", "b", "c"):
-            registry.register(Thread(name=name, tags=frozenset(), worktree='/wt'))
+            registry.register(Thread(name=name, tags=frozenset(), worktree=Checkout.from_wire('/wt')))
         assert set(registry.peers("b")) == {"a", "c"}
 
 
@@ -498,7 +499,7 @@ class TestCurrentThread:
     ):
         registry = wire(tmp_path).registry
         launched = Thread(
-            "worker", frozenset({"a", "b"}), str(tmp_path / "project"), parent=ForkedParent("lead"), task=GivenThreadText("Ship it")
+            "worker", frozenset({"a", "b"}), Checkout.from_wire(str(tmp_path / "project")), parent=ForkedParent("lead"), task=GivenThreadText("Ship it")
         )
         for name, value in launched.launch().apply(dict(os.environ)).items():
             monkeypatch.setenv(name, value)

@@ -1,5 +1,6 @@
 """S8 extension experiments and canonical saved-data contracts."""
 
+from agent_comms.repo import Checkout
 import json
 from dataclasses import replace
 
@@ -32,7 +33,7 @@ from agent_comms.threads import Thread
 @pytest.fixture
 def owner(tmp_path):
     comms = installed_comms(tmp_path)
-    comms.registry.declare(Thread(name='worker', tags=frozenset(), worktree=str(tmp_path)))
+    comms.registry.declare(Thread(name='worker', tags=frozenset(), worktree=Checkout.from_wire(str(tmp_path))))
     goal = comms.goals.update_goal("worker", SetGoalAction(text="Keep the durable objective"))
     return comms, goal
 

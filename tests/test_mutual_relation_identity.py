@@ -1,14 +1,15 @@
 """Shared relation behavior extends without endpoint-comparison consumer edits."""
 
+from agent_comms.repo import Checkout
 from agent_comms.peer_relevance import GoalContactRelevance
 from agent_comms.relationships import MutualThreadRelation, RelationRecord
 from agent_comms.threads import Thread
 
 
 def test_new_relation_reuses_owned_incident_and_counterpart_behavior(*, thread_registration):
-    first = Thread('first', frozenset(), '/wt', created_at=1)
-    second = Thread('second', frozenset(), '/wt', created_at=2)
-    replacement = Thread('second', frozenset(), '/wt', created_at=3)
+    first = Thread('first', frozenset(), Checkout.from_wire('/wt'), created_at=1)
+    second = Thread('second', frozenset(), Checkout.from_wire('/wt'), created_at=2)
+    replacement = Thread('second', frozenset(), Checkout.from_wire('/wt'), created_at=3)
 
     class ReviewRelation(MutualThreadRelation):
         relevance = GoalContactRelevance

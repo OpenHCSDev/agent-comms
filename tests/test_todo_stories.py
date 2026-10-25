@@ -1,4 +1,5 @@
 """History is durable, append-only, and never decoded for a board read."""
+from agent_comms.repo import Checkout
 from dataclasses import replace
 import sqlite3
 import sys
@@ -31,7 +32,7 @@ from test_todos import order
 @pytest.fixture
 def recorded_problem(comms, source_repository, tmp_path):
     for name in ("lead", "worker"):
-        comms.registry.declare(Thread(name, frozenset({"comms"}), str(tmp_path / name)))
+        comms.registry.declare(Thread(name, frozenset({"comms"}), Checkout.from_wire(str(tmp_path / name))))
     actor = comms.registry.require("lead").incarnation
     worker = comms.registry.require("worker").incarnation
     store = comms.goals.todos

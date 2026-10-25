@@ -245,7 +245,7 @@ class PiNativeBackend(
         if open_native is None:
             open_native = NativeSessionPreparation.open
         environment = await Coordination.run_worker(lambda: thread.native_environment(
-            self.comms.root, self.comms.registry.snapshot(), thread.worktree,
+            self.comms.root, self.comms.registry.snapshot(), str(thread.worktree),
         ))
         package = self.comms.owners.require_private_launch().native_package
         return await open_native(
@@ -254,7 +254,7 @@ class PiNativeBackend(
             thread.native_launch_arguments(
                 NativeArguments.parse(self.arguments(thread)), package.path, self.comms.root),
             package=package,
-            worktree=thread.worktree,
+            worktree=thread.worktree.path,
             root=self.comms.root,
             owner=thread.incarnation.require_recorded(),
             session_directory=thread.native_session_directory(self.comms.root),
@@ -335,7 +335,7 @@ class PiNativeBackend(
         ))
         directory = await Coordination.run_worker(partial(ForkedSession.prepared_directory, root))
         identity = await RuntimeForkHelper.run(
-            RuntimeForkRequest(str(package.path), parent.runtime.path, parent.worktree,
+            RuntimeForkRequest(str(package.path), parent.runtime.path, str(parent.worktree),
                                str(directory), runtime=runtime), cwd=Path(parent.worktree),
         )
         return PiSessionFile(identity.session_file)

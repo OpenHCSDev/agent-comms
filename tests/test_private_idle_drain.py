@@ -1,5 +1,6 @@
 """Idle observations avoid repeated work without becoming delivery authority."""
 
+from agent_comms.repo import Checkout
 import asyncio
 import os
 import threading
@@ -120,7 +121,7 @@ async def test_turn_publication_joins_cancellation_before_lease_release(tmp_path
 
 def _covered_session(tmp_path):
     comms, agent, root_id = _session(tmp_path)
-    other = Thread('alpha', frozenset(), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid()))
+    other = Thread('alpha', frozenset(), Checkout.from_wire(str(tmp_path)), process_identity=ProcessIdentity.capture(os.getpid()))
     comms.registry.declare(other)
     with Coordination(comms.root / "coordination.sqlite3") as store:
         store.participants.register(

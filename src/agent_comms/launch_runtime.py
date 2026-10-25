@@ -429,7 +429,7 @@ class ThreadLaunch(EnvironmentRecord):
     def from_thread(cls, thread: Thread) -> ThreadLaunch:
         return cls(
             thread.name,
-            thread.worktree,
+            str(thread.worktree),
             frozenset(thread.tags),
             thread.parent,
             thread.task,

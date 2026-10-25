@@ -1,5 +1,6 @@
 """Actual process birth is the registration/claim_scope authority, never PID alone."""
 
+from agent_comms.repo import Checkout
 import os
 from dataclasses import replace
 
@@ -25,7 +26,7 @@ def test_bridge_cannot_write_the_registry_during_maintenance(tmp_path, phases):
     comms = wire(tmp_path)
     registry = comms.registry
     registry.declare(Thread(
-        'bridge', frozenset(), str(tmp_path), execution=ExternalThreadExecution,
+        'bridge', frozenset(), Checkout.from_wire(str(tmp_path)), execution=ExternalThreadExecution,
     ))
     gate = comms.owners.maintenance
     process = ProcessIdentity.capture(os.getpid())
@@ -51,7 +52,7 @@ def test_concurrent_starters_reserve_one_current_owner(tmp_path):
     from contextlib import ExitStack
 
     registry = wire(tmp_path).registry
-    original = registry.declare(Thread("owner", frozenset(), str(tmp_path)))
+    original = registry.declare(Thread("owner", frozenset(), Checkout.from_wire(str(tmp_path))))
     title = GivenThreadText("metadata changed during launch preparation")
     registry.register(replace(original, title=title))
     before = registry.snapshot()
@@ -113,7 +114,7 @@ def test_claim_attach_and_reload_preserve_the_captured_process(tmp_path):
 def test_same_pid_different_birth_advances_both_authority_domains(tmp_path):
     comms = wire(tmp_path)
     identity = ProcessIdentity.capture(os.getpid())
-    owner = Thread('owner', frozenset(), str(tmp_path), process_identity=identity)
+    owner = Thread('owner', frozenset(), Checkout.from_wire(str(tmp_path)), process_identity=identity)
     comms.registry.declare(owner)
     before = comms.registry.snapshot()
     stale = replace(identity, start_time=identity.start_time + 1)
@@ -133,7 +134,7 @@ def test_same_pid_different_birth_advances_both_authority_domains(tmp_path):
 
 def test_project_request_entry_retains_original_birth_across_rename(tmp_path):
     comms = wire(tmp_path)
-    owner = Thread('owner', frozenset(), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid()))
+    owner = Thread('owner', frozenset(), Checkout.from_wire(str(tmp_path)), process_identity=ProcessIdentity.capture(os.getpid()))
     comms.registry.declare(owner)
     request = ProjectRuntimeRequest.for_native(
         comms.registry.snapshot(), comms.registry.require("owner")
@@ -161,7 +162,7 @@ def test_active_executor_cannot_be_replaced_by_same_pid_different_birth(tmp_path
     with pytest.raises(RelationViolationError):
         comms.registry.declare(replace(owner, process_identity=stale))
     assert comms.registry.require(owner.name) == leased
-    comms.registry.declare(Thread('owner', frozenset(), str(tmp_path), title=GivenThreadText('metadata')))
+    comms.registry.declare(Thread('owner', frozenset(), Checkout.from_wire(str(tmp_path)), title=GivenThreadText('metadata')))
     current = comms.registry.require(owner.name)
     assert current.process_identity == identity and current.turn_record == leased.turn_record
     assert current.turn_record.read().id == 'e99af36cdfcffbc191cce98c5d771afb'

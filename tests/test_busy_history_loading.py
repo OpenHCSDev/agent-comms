@@ -1,5 +1,6 @@
 """Source contention retains a viewer read, never manufactures an input failure."""
 
+from agent_comms.repo import Checkout
 import asyncio
 import json
 import subprocess
@@ -27,7 +28,7 @@ def saved_history(tmp_path):
         {"type": "message", "id": "saved-answer", "parentId": None, "timestamp": timestamp,
          "message": {"role": "assistant", "content": [{"type": "text", "text": "Saved answer"}]}},
     )))
-    comms.registry.declare(Thread('saved', frozenset(), str(tmp_path), session_file=RegistrySessionLocation.from_path(str(session), comms.root)))
+    comms.registry.declare(Thread('saved', frozenset(), Checkout.from_wire(str(tmp_path)), session_file=RegistrySessionLocation.from_path(str(session), comms.root)))
     comms.registry.prepare_native_root()
     return comms, session
 

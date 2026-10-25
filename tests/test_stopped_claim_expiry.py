@@ -2,6 +2,7 @@
 
 
 
+from agent_comms.repo import Checkout
 import os
 from dataclasses import replace
 from functools import partial
@@ -20,7 +21,7 @@ def test_stopped_incarnation_claims_expire_on_next_transition(comms, tmp_path):
     turns = {}
     for name in ("old", "next"):
         turns[name] = TurnId.mint()
-        thread = Thread(name, frozenset(), str(tmp_path))
+        thread = Thread(name, frozenset(), Checkout.from_wire(str(tmp_path)))
         comms.registry.declare(
             replace(thread, process_identity=ProcessIdentity.capture(os.getpid())),
             RunningThreadStatus(),

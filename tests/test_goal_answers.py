@@ -1,5 +1,6 @@
 """Goal absence is dispatched before work; a clear never revives a turn's goal."""
 
+from agent_comms.repo import Checkout
 import os
 import pickle
 from contextlib import ExitStack, contextmanager
@@ -25,7 +26,7 @@ from agent_comms.threads import Thread
 @contextmanager
 def goal_turn(comms, original_goal):
     comms.registry.declare(Thread(
-        "worker", frozenset(), str(comms.root.parent),
+        "worker", frozenset(), Checkout.from_wire(str(comms.root.parent)),
         process_identity=ProcessIdentity.capture(os.getpid()),
     ))
     if original_goal:

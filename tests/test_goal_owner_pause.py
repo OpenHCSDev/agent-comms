@@ -1,6 +1,7 @@
 """Owner pause remains attributable and cannot be undone by a model tool."""
 
 
+from agent_comms.repo import Checkout
 import pytest
 
 from agent_comms.comms import wire
@@ -20,7 +21,7 @@ from agent_comms.goal_scope import OneGoal
 
 def test_owner_pause_survives_reopen_and_explains_stale_model_report(tmp_path, monkeypatch):
     comms = wire(tmp_path)
-    comms.registry.declare(Thread(name='worker', tags=frozenset(), worktree=str(tmp_path)))
+    comms.registry.declare(Thread(name='worker', tags=frozenset(), worktree=Checkout.from_wire(str(tmp_path))))
     goal = comms.goals.update_goal("worker", SetGoalAction(text="Read fifty files"))
     comms.goals.update_goal(
         "worker", PausedGoalAction(expect=GoalPrecondition(goal_id=OneGoal(goal.id))), actor=OwnerInvocable
@@ -54,7 +55,7 @@ def test_owner_pause_survives_reopen_and_explains_stale_model_report(tmp_path, m
 
 def test_model_cannot_pause(tmp_path, monkeypatch):
     comms = wire(tmp_path)
-    comms.registry.declare(Thread(name='worker', tags=frozenset(), worktree=str(tmp_path)))
+    comms.registry.declare(Thread(name='worker', tags=frozenset(), worktree=Checkout.from_wire(str(tmp_path))))
     goal = comms.goals.update_goal("worker", SetGoalAction(text="Read fifty files"))
     monkeypatch.setenv("AGENT_COMMS_THREAD", "worker")
     with pytest.raises(ValueError):

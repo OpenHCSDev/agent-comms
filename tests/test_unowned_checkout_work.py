@@ -1,6 +1,7 @@
 """Checkout allocation and unpublished-file protection at their storage owner."""
 
 
+from agent_comms.repo import Checkout
 from agent_comms.bus import Bus
 
 import json
@@ -118,9 +119,9 @@ def checkout_bus(tmp_path: Path, configured_repository, installed_runtime) -> Co
     git(home, 'worktree', 'add', '-q', '-b', 'idle-home', str(spare))
     for name in ('lead', 'worker'):
         c.registry.declare(Thread(
-            name, frozenset(), str(home), execution=ExternalThreadExecution))
+            name, frozenset(), Checkout.from_wire(str(home)), execution=ExternalThreadExecution))
     c.registry.declare(Thread(
-        'idle', frozenset(), str(spare), execution=ExternalThreadExecution,
+        'idle', frozenset(), Checkout.from_wire(str(spare)), execution=ExternalThreadExecution,
         process_identity=ProcessIdentity.capture(os.getpid())))
     request = c.goals.todos.add_request(
         c.registry.require('lead').incarnation, 'Keep changes with their author').id
@@ -313,7 +314,7 @@ def test_order_closed_after_the_frame_read_does_not_fail_the_merge_read(
 def test_a_renamed_unit_keeps_its_order_checkouts(tmp_path):
     rule = StorageRule(checkout_base=tmp_path / 'checkouts',
                        scratch_base=tmp_path / 'scratch', volume=tmp_path, floor_gib=0)
-    born = Thread('unit-mi', frozenset(), str(tmp_path / 'home'),
+    born = Thread('unit-mi', frozenset(), Checkout.from_wire(str(tmp_path / 'home')),
                   storage_roots=rule.initial_roots('unit-mi'))
     renamed = replace(born, name='codex-mi')
     checkout = rule.order_checkout(rule.roots_of(renamed), 'P1')

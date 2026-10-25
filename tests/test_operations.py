@@ -1,4 +1,5 @@
 
+from agent_comms.repo import Checkout, LaunchCheckout
 from conftest import transcript_records
 import json
 import os
@@ -183,7 +184,7 @@ class TestThreadOps:
         ]
         session_file.write_text("\n".join(json.dumps(record) for record in records) + "\n")
         wired.registry.declare(
-            Thread(name='transcript-thread', tags=frozenset(), worktree=str(tmp_path), session_file=RegistrySessionLocation.from_path(str(session_file), wired.root))
+            Thread(name='transcript-thread', tags=frozenset(), worktree=Checkout.from_wire(str(tmp_path)), session_file=RegistrySessionLocation.from_path(str(session_file), wired.root))
         )
 
         events = wired.transcripts.capture_page_read("transcript-thread").read().events
@@ -212,7 +213,7 @@ class TestThreadOps:
             + "\n"
         )
         wired.registry.declare(
-            Thread(name='compacted-thread', tags=frozenset(), worktree=str(tmp_path), session_file=RegistrySessionLocation.from_path(str(session_file), wired.root))
+            Thread(name='compacted-thread', tags=frozenset(), worktree=Checkout.from_wire(str(tmp_path)), session_file=RegistrySessionLocation.from_path(str(session_file), wired.root))
         )
 
         events = wired.transcripts.capture_page_read("compacted-thread").read().events
@@ -419,7 +420,7 @@ class TestThreadOps:
 
     def test_managed_rename_normalizes_title_and_proves_owner(self, wired: Comms) -> None:
         wired.registry.declare(
-            Thread(name='generated-7', tags=frozenset({'acp'}), worktree='/tmp/project', process_identity=ProcessIdentity.capture(os.getpid()))
+            Thread(name='generated-7', tags=frozenset({'acp'}), worktree=Checkout.from_wire('/tmp/project'), process_identity=ProcessIdentity.capture(os.getpid()))
         )
 
         result = wired.threads.rename_managed_thread(
@@ -434,10 +435,10 @@ class TestThreadOps:
 
     def test_managed_rename_disambiguates_duplicate_titles(self, wired: Comms) -> None:
         wired.registry.declare(
-            Thread(name='testing-123', tags=frozenset(), worktree='/tmp/other', process_identity=ProcessIdentity.capture(os.getppid()))
+            Thread(name='testing-123', tags=frozenset(), worktree=Checkout.from_wire('/tmp/other'), process_identity=ProcessIdentity.capture(os.getppid()))
         )
         wired.registry.declare(
-            Thread(name='generated-7', tags=frozenset({'acp'}), worktree='/tmp/project', process_identity=ProcessIdentity.capture(os.getpid()))
+            Thread(name='generated-7', tags=frozenset({'acp'}), worktree=Checkout.from_wire('/tmp/project'), process_identity=ProcessIdentity.capture(os.getpid()))
         )
 
         result = wired.threads.rename_managed_thread("generated-7", "testing 123", owner=ProcessIdentity.capture(os.getpid()))
@@ -446,7 +447,7 @@ class TestThreadOps:
 
     def test_managed_rename_reclaims_own_alias(self, wired: Comms) -> None:
         wired.registry.declare(
-            Thread(name='generated-7', tags=frozenset(), worktree='/tmp/project', process_identity=ProcessIdentity.capture(os.getpid()))
+            Thread(name='generated-7', tags=frozenset(), worktree=Checkout.from_wire('/tmp/project'), process_identity=ProcessIdentity.capture(os.getpid()))
         )
         assert wired.threads.rename_managed_thread(
             "generated-7", "chosen", owner=ProcessIdentity.capture(os.getpid())
@@ -460,7 +461,7 @@ class TestThreadOps:
         monkeypatch.setenv("AGENT_COMMS_THREAD", "fixer")
         wired.threads.rename_self("reviewer", caller=ThreadCaller("fixer"))
         with pytest.raises(RelationViolationError):
-            wired.registry.register(Thread(name='fixer', tags=frozenset(), worktree='/tmp/other'))
+            wired.registry.register(Thread(name='fixer', tags=frozenset(), worktree=Checkout.from_wire('/tmp/other')))
 
     @pytest.mark.skipif(not sys.platform.startswith("linux"), reason="uses /proc")
     def test_stop_terminates_real_process(self, wired: Comms) -> None:
@@ -475,7 +476,7 @@ class TestThreadOps:
             env=env,
         )
         wired.registry.declare(
-            Thread(name='live-process', tags=frozenset(), worktree='/tmp', process_identity=ProcessIdentity.capture(process.pid))
+            Thread(name='live-process', tags=frozenset(), worktree=Checkout.from_wire('/tmp'), process_identity=ProcessIdentity.capture(process.pid))
         )
         try:
             wired.owners.stop("live-process")
@@ -489,11 +490,11 @@ class TestThreadOps:
 class TestFork:
     def test_fork_requires_parent_session(self, wired: Comms, source_repository) -> None:
         with pytest.raises(ValueError):
-            wired.threads.create(ForkSpec.from_task(name="child", parent="PR111", project=str(source_repository.checkout), model=DeclaredModel('test/model'), thinking_level=HighThinkingLevel, task="t"))
+            wired.threads.create(ForkSpec.from_task(name="child", parent="PR111", project=LaunchCheckout.checked(source_repository.checkout), model=DeclaredModel('test/model'), thinking_level=HighThinkingLevel, task="t"))
 
     def test_fork_fail_closed_unknown_parent(self, wired: Comms, source_repository) -> None:
         with pytest.raises(UnregisteredThreadError):
-            wired.threads.create(ForkSpec.from_task(name="child", parent="ghost", project=str(source_repository.checkout), model=DeclaredModel('test/model'), thinking_level=HighThinkingLevel, task="t"))
+            wired.threads.create(ForkSpec.from_task(name="child", parent="ghost", project=LaunchCheckout.checked(source_repository.checkout), model=DeclaredModel('test/model'), thinking_level=HighThinkingLevel, task="t"))
 
 
 class TestLedgerOps:
@@ -529,7 +530,7 @@ class TestLedgerOps:
                     + "\n"
                 )
         wired.registry.declare(
-            Thread(name='large', tags=frozenset(), worktree=str(tmp_path), session_file=RegistrySessionLocation.from_path(str(path), wired.root))
+            Thread(name='large', tags=frozenset(), worktree=Checkout.from_wire(str(tmp_path)), session_file=RegistrySessionLocation.from_path(str(path), wired.root))
         )
         page = wired.transcripts.capture_page_read("large").read()
         assert page.has_older
@@ -574,7 +575,7 @@ class TestPollAndWire:
 
     def test_runtime_files_created_on_demand(self, tmp_path: Path) -> None:
         comms = wire(tmp_path / "fresh")
-        comms.registry.declare(Thread(name='a', tags=frozenset(), worktree='/wt'))
+        comms.registry.declare(Thread(name='a', tags=frozenset(), worktree=Checkout.from_wire('/wt')))
         assert (tmp_path / "fresh" / "registry.json").exists()
 
 
@@ -582,7 +583,7 @@ class TestCrossWireIsolation:
     def test_two_wires_do_not_leak(self, tmp_path: Path) -> None:
         a = wire(tmp_path / "a")
         b = wire(tmp_path / "b")
-        a.registry.declare(Thread(name='only-in-a', tags=frozenset(), worktree='/wt'))
+        a.registry.declare(Thread(name='only-in-a', tags=frozenset(), worktree=Checkout.from_wire('/wt')))
         assert "only-in-a" in a.registry
         with pytest.raises(UnregisteredThreadError):
             b.registry.require("only-in-a")
@@ -593,26 +594,26 @@ class TestReDeclarationPreservesProvenance:
     the tags its fork declared, or it silently loses channel access."""
 
     def test_empty_tags_inherit_previous(self, wired: Comms) -> None:
-        wired.registry.declare(Thread(name='fixer', tags=frozenset(), worktree='/tmp/wt1'))
+        wired.registry.declare(Thread(name='fixer', tags=frozenset(), worktree=Checkout.from_wire('/tmp/wt1')))
         assert wired.registry.require("fixer").tags == frozenset({"auth"})
 
     def test_explicit_tags_replace_previous(self, wired: Comms) -> None:
-        wired.registry.declare(Thread(name='fixer', tags=frozenset({'docs'}), worktree='/tmp/wt1'))
+        wired.registry.declare(Thread(name='fixer', tags=frozenset({'docs'}), worktree=Checkout.from_wire('/tmp/wt1')))
         assert wired.registry.require("fixer").tags == frozenset({"docs"})
 
     def test_missing_session_file_inherits_previous(self, wired: Comms, tmp_path: Path) -> None:
         wired.registry.declare(
-            Thread(name='PR111', tags=frozenset({'base'}), worktree='/tmp/wt1', session_file=RegistrySessionLocation.from_path(str(tmp_path / 's.json'), wired.root))
+            Thread(name='PR111', tags=frozenset({'base'}), worktree=Checkout.from_wire('/tmp/wt1'), session_file=RegistrySessionLocation.from_path(str(tmp_path / 's.json'), wired.root))
         )
-        wired.registry.declare(Thread(name='PR111', tags=frozenset({'base'}), worktree='/tmp/wt1'))
+        wired.registry.declare(Thread(name='PR111', tags=frozenset({'base'}), worktree=Checkout.from_wire('/tmp/wt1')))
         assert wired.registry.require("PR111").session_file == RegistrySessionLocation.from_path(str(tmp_path / "s.json"), wired.root)
 
     def test_fresh_declaration_is_unaffected(self, wired: Comms) -> None:
-        wired.registry.declare(Thread(name='fresh', tags=frozenset(), worktree='/wt'))
+        wired.registry.declare(Thread(name='fresh', tags=frozenset(), worktree=Checkout.from_wire('/wt')))
         assert wired.registry.require("fresh").tags == frozenset()
 
     def test_tagless_child_keeps_channel_after_reregister(self, wired: Comms) -> None:
-        wired.registry.declare(Thread(name='fixer', tags=frozenset(), worktree='/tmp/wt1'))
+        wired.registry.declare(Thread(name='fixer', tags=frozenset(), worktree=Checkout.from_wire('/tmp/wt1')))
         wired.messaging.send("PR111", "#auth", "only tagged fixer sees this").message.message_id
         assert wired.bus.pending_count("fixer") == 1
 

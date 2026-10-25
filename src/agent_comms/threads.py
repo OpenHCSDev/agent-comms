@@ -192,7 +192,7 @@ class ThreadProvenance:
 
     name: str = field(kw_only=False)
     tags: Annotated[frozenset[str], RegistrationPolicy(InheritEmpty)] = field(kw_only=False)
-    worktree: str = field(kw_only=False)
+    worktree: Checkout = field(kw_only=False)
     created_at: Annotated[CreationTime, CreationSeconds, WireRequired()]
     session_file: Annotated[SessionFile, RegistrationPolicy(InheritApplied)] = field(
         default_factory=NoSessionFile
@@ -228,8 +228,6 @@ class ThreadProvenance:
         object.__setattr__(self, "created_at", FieldCodec.decode(
             Annotated[CreationTime, CreationSeconds], self.created_at))
         self.require_name(self.incarnation.name)
-        if not self.worktree:
-            raise ValueError("Thread worktree cannot be empty.")
         for tag in self.tags:
             Tag.validate(tag)
 
@@ -262,12 +260,7 @@ class Thread(ThreadProvenance, CatalogSelection):
     """Declares one agent thread's identity and provenance."""
 
     def project_directory(self) -> Path:
-        from .repo import Checkout
-
-        try:
-            return Checkout.checked(self.worktree).path
-        except (OSError, ValueError) as error:
-            raise ValueError(f"Thread {self.name!r} has invalid project {self.worktree!r}: {error}") from error
+        return self.worktree.path
 
     parent: ThreadParent = field(default_factory=NoParent)
     work_state: Annotated[
@@ -367,7 +360,7 @@ class Thread(ThreadProvenance, CatalogSelection):
     @property
     def project_path(self) -> Path:
         """The physical current project declared by this thread."""
-        return Path(self.worktree).expanduser().resolve()
+        return self.worktree.path.expanduser().resolve()
 
     @property
     def home_checkouts(self) -> tuple[Path, ...]:
@@ -385,7 +378,7 @@ class Thread(ThreadProvenance, CatalogSelection):
         earlier = self.project_path
         current = Path(project).expanduser().resolve()
         return replace(
-            self, worktree=project,
+            self, worktree=Checkout.from_wire(project),
             earlier_projects=tuple(dict.fromkeys(
                 path for path in (*self.earlier_projects, earlier) if path != current
             )),
@@ -512,7 +505,7 @@ class Thread(ThreadProvenance, CatalogSelection):
 
     @property
     def task_scope(self) -> TaskScope:
-        return TaskScope.for_goal(self.worktree, self.goal)
+        return TaskScope.for_goal(str(self.worktree), self.goal)
 
     def wake_context(self, goals: Goals) -> WakeWorkContext:
         return WakeWorkContext.from_thread(self, goals)
@@ -654,7 +647,7 @@ def current_thread(registry) -> Thread:
     return Thread(
         name=launch.name,
         tags=launch.tags,
-        worktree=launch.worktree,
+        worktree=Checkout.from_wire(launch.worktree),
         parent=launch.parent,
         task=launch.task,
         process_identity=ProcessIdentity.capture(os.getpid()),

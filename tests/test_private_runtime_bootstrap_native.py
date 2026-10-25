@@ -1,6 +1,7 @@
 """Fresh production bootstrap wakes a real native owner before and after restart."""
 
 
+from agent_comms.repo import Checkout
 from bus_history import read_history
 from agent_comms.pi_vocabulary import OffThinkingLevel
 import json
@@ -107,7 +108,7 @@ def test_production_peer_wake_and_restart(tmp_path, monkeypatch, base_only_owner
     comms = wire(tmp_path / "wire")
     for name in ("sender", "recipient"):
         comms.registry.declare(
-            Thread(name, frozenset(), str(tmp_path), model=DeclaredModel('selected-offline/fixture'), thinking_level=OffThinkingLevel)
+            Thread(name, frozenset(), Checkout.from_wire(str(tmp_path)), model=DeclaredModel('selected-offline/fixture'), thinking_level=OffThinkingLevel)
         )
     # Ordinary publication must reach the same bootstrap as explicit protocol install.
     first = comms.messaging.send("sender", "recipient", "BOOTSTRAP_FIRST").message

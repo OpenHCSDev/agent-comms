@@ -1,5 +1,6 @@
 """A selection binds each exact process to its own observed interpreter."""
 
+from agent_comms.repo import Checkout
 import os
 import sys
 from contextlib import ExitStack
@@ -27,7 +28,7 @@ def test_mixed_interpreters_are_captured_per_owner_and_changes_refused(tmp_path,
                                            env=environment)
             children.callback(child.close)
             thread = Thread(
-                name, frozenset(), str(tmp_path), process_identity=child.identity)
+                name, frozenset(), Checkout.from_wire(str(tmp_path)), process_identity=child.identity)
             thread_registration.declare(thread)
             threads[name] = thread
         snapshot = thread_registration.snapshot()

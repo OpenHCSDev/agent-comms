@@ -1,3 +1,4 @@
+from agent_comms.repo import Checkout
 from bus_history import read_history
 import hashlib
 import json
@@ -45,7 +46,7 @@ def export_comms(comms: Comms, tmp_path) -> Comms:
     comms.channels.create_tag("team")
     for name in ("alice", "bob"):
         comms.registry.declare(Thread(
-            name, frozenset({"team"}), str(tmp_path)))
+            name, frozenset({"team"}), Checkout.from_wire(str(tmp_path))))
     return comms
 
 

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from agent_comms.repo import Checkout
 from agent_comms.errors import StaleAttemptError
 import multiprocessing
 import os
@@ -422,7 +423,7 @@ def claimed_owner(comms):
     )
     try:
         owner = Thread(
-            "stopped-goal", frozenset(), str(comms.root),
+            "stopped-goal", frozenset(), Checkout.from_wire(str(comms.root)),
             process_identity=ProcessIdentity.capture(child.pid),
         )
         comms.registry.declare(owner)

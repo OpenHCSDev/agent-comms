@@ -1,4 +1,5 @@
 """Order scope is decoded once and owns its allowed delivery all the way to storage."""
+from agent_comms.repo import Checkout
 from dataclasses import replace
 import json
 
@@ -56,7 +57,7 @@ def test_shape_references_are_class_lines_not_names_or_decorators(tmp_path):
 
 def assigned(comms, scope, source, problem='P1', edits=('Fix the problem',)):
     for name in ('lead', 'worker'):
-        comms.registry.declare(Thread(name, frozenset(), str(comms.root)))
+        comms.registry.declare(Thread(name, frozenset(), Checkout.from_wire(str(comms.root))))
     return requested(comms, scope, source, problem, edits)
 
 

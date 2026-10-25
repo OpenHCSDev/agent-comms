@@ -2,6 +2,7 @@
 
 
 
+from agent_comms.repo import Checkout
 import json
 import os
 import select
@@ -44,7 +45,7 @@ def session_bridge(tmp_path, home, program=SERVE_FROM_SOURCE, *, state_directory
     comms = installed_comms(tmp_path / 'bus')
     RootRuntime.publish(comms.root, runtime)
     comms.registry.declare(Thread(
-        'bridge-copy', frozenset(), str(tmp_path), execution=ExternalThreadExecution))
+        'bridge-copy', frozenset(), Checkout.from_wire(str(tmp_path)), execution=ExternalThreadExecution))
     transcript = tmp_path / 'copied-session.jsonl'
     transcript.write_text('')
     state = (home / '.local/state/agent-comms/claude-bridge-copy'

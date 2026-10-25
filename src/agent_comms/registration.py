@@ -30,6 +30,7 @@ from .thread_status import (
     ThreadStatus,
 )
 from .thread_text import ForkedParent
+from .repo import Checkout
 from .threads import Thread
 
 if TYPE_CHECKING:
@@ -122,7 +123,7 @@ class Registration:
             if edit.document.taken(name):
                 return self._declare_in(edit, edit.document.require(name), _DEFAULT_PRESENCE)
             child = edit.document.require(commander).commanded_child(Thread(
-                name, frozenset(), worktree,
+                name, frozenset(), Checkout.from_wire(worktree),
                 process_identity=process, execution=ExternalThreadExecution,
             ))
             return self._declare_in(edit, child, _DEFAULT_PRESENCE)
@@ -197,7 +198,7 @@ class Registration:
                 original.thread, session_file=original.thread.session_file.applied(current.session_file)))
             current = joined.require_source_snapshot(edit.original.snapshot)
             location = current.writable_runtime.new_location(
-                self.store.path.parent, original.thread.worktree)
+                self.store.path.parent, original.thread.worktree.path)
             participant.owner = self._attach_native_session(edit, joined, location.path)
             return participant.owner.thread.writable_runtime
 

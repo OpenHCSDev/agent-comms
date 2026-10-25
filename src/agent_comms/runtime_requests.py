@@ -223,7 +223,7 @@ class ProjectRuntimeRequest(ResultRuntimeRequest):
             ctx.server.agent._comms.registry.entry, ctx.name,
         ))).entry
         current = self.require_original(entry)
-        return ProjectReply(current.worktree)
+        return ProjectReply(str(current.worktree))
 
 
 @dataclass(frozen=True, kw_only=True)

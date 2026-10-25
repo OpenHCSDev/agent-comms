@@ -1129,7 +1129,7 @@ class CoordinationSegment(InstructionSegment):
             response_instruction=response_instruction,
             owner=owner.incarnation,
             parent=owner.parent.otherwise(None),
-            project=owner.worktree,
+            project=str(owner.worktree),
             peers=peers,
         )
 

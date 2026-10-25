@@ -32,6 +32,7 @@ from .task_sources import (
     TaskScopeSelection,
 )
 from .thread_identity import UserThreadRole
+from .repo import Checkout
 from .threads import Thread
 from .working_memory_policy import AnnotationDisclosureGrant
 
@@ -115,7 +116,7 @@ class Messaging:
 
     def _register_user(self, worktree: str) -> Thread:
         name = self.registry.snapshot().claim_name("user")
-        thread = Thread(name, frozenset(), worktree, role=UserThreadRole)
+        thread = Thread(name, frozenset(), Checkout.from_wire(worktree), role=UserThreadRole)
         self.registry.register(thread)
         return thread
 

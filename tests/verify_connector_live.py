@@ -6,6 +6,7 @@ The caller selects scratch; each subprocess run retires its temporary directory.
 from __future__ import annotations
 
 
+from agent_comms.repo import Checkout
 from agent_comms.bus import Bus
 
 import json
@@ -43,7 +44,7 @@ def main(scratch: Path):
         Bus.install(Bus.path_in(root))
         comms = wire(root)
         for name in ("claude-ai", "worker"):
-            comms.registry.declare(Thread(name, frozenset(), str(base)))
+            comms.registry.declare(Thread(name, frozenset(), Checkout.from_wire(str(base))))
         home = base / "home"
         store_root = home / ".local/state/agent-comms/connector"
         store_root.mkdir(mode=0o700, parents=True)

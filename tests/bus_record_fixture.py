@@ -1,6 +1,7 @@
 """Typed values and prepared crash-test workers share their existing owners."""
 
 
+from agent_comms.repo import Checkout
 import os
 from multiprocessing.context import ForkServerContext
 from pathlib import Path
@@ -53,7 +54,7 @@ def context_comms(directory: Path) -> Comms:
         ("outsider", {"else"}, 17004.0),
     ):
         comms.registry.declare(Thread(
-            name, frozenset(tags), str(directory), process_identity=process, created_at=stamp))
+            name, frozenset(tags), Checkout.from_wire(str(directory)), process_identity=process, created_at=stamp))
     return comms
 
 

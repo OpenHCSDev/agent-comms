@@ -1,4 +1,5 @@
 """A slop citation's owner is either a line on main or a line the order itself creates."""
+from agent_comms.repo import Checkout
 import asyncio
 import json
 from dataclasses import replace
@@ -71,8 +72,8 @@ def test_done_is_refused_until_the_delivered_tree_declares_the_created_line(
 
 
 def test_a_commander_fork_is_never_a_unit_that_could_take_an_order(tmp_path):
-    unit = Thread('unit-a', frozenset(), str(tmp_path))
-    fork = replace(Thread('shape-next', frozenset(), str(tmp_path)),
+    unit = Thread('unit-a', frozenset(), Checkout.from_wire(str(tmp_path)))
+    fork = replace(Thread('shape-next', frozenset(), Checkout.from_wire(str(tmp_path))),
                    execution=CommanderForkExecution)
     assert unit.execution.order_candidates(unit) == (unit,)
     assert fork.execution.order_candidates(fork) == ()

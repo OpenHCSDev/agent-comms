@@ -8,6 +8,7 @@ from __future__ import annotations
 
 
 
+from agent_comms.repo import Checkout
 from agent_comms.session_file import RegistrySessionLocation
 from agent_comms.pi_vocabulary import OffThinkingLevel
 import argparse
@@ -125,7 +126,7 @@ async def journey(package: Path, evidence: Path, installed: Path, *, repeat_load
     }))
     comms = wire(root)
     fresh = create_fresh_private_session(evidence / "sessions", worktree=project)
-    comms.registry.declare(Thread('error-native', frozenset(), str(project), session_file=RegistrySessionLocation.from_path(str(fresh.path), comms.root), model=DeclaredModel('error-local/error-fixture'), thinking_level=OffThinkingLevel))
+    comms.registry.declare(Thread('error-native', frozenset(), Checkout.from_wire(str(project)), session_file=RegistrySessionLocation.from_path(str(fresh.path), comms.root), model=DeclaredModel('error-local/error-fixture'), thinking_level=OffThinkingLevel))
     environment = {key: value for key, value in os.environ.items()
                    if not key.startswith(("PI_", "AGENT_COMMS_")) and key != "PYTHONPATH"}
     environment.update(

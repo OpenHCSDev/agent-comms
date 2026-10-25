@@ -1,6 +1,7 @@
 """Canonical original-bus batch capture and one-use native reservation."""
 
 
+from agent_comms.repo import Checkout
 from bus_record_fixture import prepare_native_comms
 from conftest import publish_initial
 
@@ -30,7 +31,7 @@ async def test_a_mixed_route_wave_turns_one_route_at_a_time(tmp_path, *, cursor_
     root.mkdir(mode=0o700)
     comms = prepare_native_comms(wire(root))
     for name in ("sender", "receiver"):
-        comms.registry.declare(Thread(name, frozenset({'team'}), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid()), model=DeclaredModel('openai-codex/gpt-6-sol')))
+        comms.registry.declare(Thread(name, frozenset({'team'}), Checkout.from_wire(str(tmp_path)), process_identity=ProcessIdentity.capture(os.getpid()), model=DeclaredModel('openai-codex/gpt-6-sol')))
     root_id = comms.registry.prepare_native_root().namespace
     lookup = comms.registry.require("receiver").incarnation.lookup
     with Coordination(str(root / "coordination.sqlite3")) as store:

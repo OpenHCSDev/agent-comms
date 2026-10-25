@@ -1,5 +1,6 @@
 """Real SQLite appends drive bounded wake scans and dependency reply reads."""
 
+from agent_comms.repo import Checkout
 from dataclasses import replace
 
 import pytest
@@ -101,7 +102,7 @@ def test_startup_observation_is_unconditional_even_without_messages(bus, owner):
 def test_settled_observation_filters_committed_recipient_suffix(bus, peer):
     registry = Registration(RegistryFile.path_in(bus.path.parent))
     thread = registry.declare(Thread(
-        "observed", frozenset(), str(bus.path.parent)))
+        "observed", frozenset(), Checkout.from_wire(str(bus.path.parent))))
     recipient = thread.incarnation.require_recorded()
     first = append_reply(bus, peer, recipient)
     with registry.store.reading() as document:

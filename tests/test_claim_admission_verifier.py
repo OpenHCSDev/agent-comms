@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 
+from agent_comms.repo import Checkout
 from bus_record_fixture import prepare_native_comms
 
 from conftest import publish_initial
@@ -57,7 +58,7 @@ def test_selected_wake_verifier_refuses_no_wake_and_stale_authority(
         comms.channels.create_tag("team")
         for name, created in (("sender", 17021.0), ("Alice", 17022.0), ("Bob", 17023.0)):
             comms.registry.declare(
-                Thread(name, frozenset({'team'}), str(worktree), process_identity=ProcessIdentity.capture(os.getpid()), created_at=created)
+                Thread(name, frozenset({'team'}), Checkout.from_wire(str(worktree)), process_identity=ProcessIdentity.capture(os.getpid()), created_at=created)
             )
         root_id = comms.registry.prepare_native_root().namespace
         message = publish_initial(comms, "sender", "#team", "@Alice investigate")

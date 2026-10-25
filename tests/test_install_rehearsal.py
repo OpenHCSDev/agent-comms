@@ -11,6 +11,7 @@ records a distinct incoming revision while retaining every declared carry depend
 from __future__ import annotations
 
 
+from agent_comms.repo import Checkout
 import json
 import os
 import sqlite3
@@ -181,7 +182,7 @@ def test_install_rehearses_without_changing_the_bus(installed_comms, installed_h
     """
     comms = installed_comms
     declare_test_bus(comms, channels=("comms",), threads=(
-        Thread(name="worker", tags=frozenset(), worktree=str(tmp_path)),))
+        Thread(name="worker", tags=frozenset(), worktree=Checkout.from_wire(str(tmp_path))),))
     publish_initial(comms, "worker", "#all", "One message before the install")
     rewritten = (drop_one_index(comms.root),) if drifted else ()
     checkout = install_checkout
@@ -233,7 +234,7 @@ def test_failed_live_migration_restores_data_checkout_and_runtime(
         installed_comms, installed_home, install_checkout, tmp_path):
     comms, checkout = installed_comms, install_checkout
     declare_test_bus(comms, channels=("comms",), threads=(
-        Thread(name="worker", tags=frozenset(), worktree=str(tmp_path)),))
+        Thread(name="worker", tags=frozenset(), worktree=Checkout.from_wire(str(tmp_path))),))
     publish_initial(comms, "worker", "#all", "Retained before migration")
     saved = comms.root / "saved"
     saved.write_text("original")

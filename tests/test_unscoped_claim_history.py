@@ -1,5 +1,6 @@
 """Bus history holds tool acquisitions written before claims recorded a scope."""
 
+from agent_comms.repo import Checkout
 import pytest
 
 from agent_comms.comms import wire
@@ -22,9 +23,9 @@ G1, G2 = ClaimId("a" * 32), ClaimId("b" * 32)
 
 def test_unscoped_history_row_decodes_projects_never_live_and_releases(tmp_path):
     comms = wire(tmp_path / "wire")
-    comms.registry.declare(Thread("owner", frozenset(), str(tmp_path)))
+    comms.registry.declare(Thread("owner", frozenset(), Checkout.from_wire(str(tmp_path))))
     comms.registry.register(comms.registry.require("owner"), RunningThreadStatus())
-    comms.registry.declare(Thread("peer", frozenset(), str(tmp_path)))
+    comms.registry.declare(Thread("peer", frozenset(), Checkout.from_wire(str(tmp_path))))
     owner = comms.registry.require("owner")
     resource = str(tmp_path / "held.py")
     message_id = MessageId.mint("msg-1")

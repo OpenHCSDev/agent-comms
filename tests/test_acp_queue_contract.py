@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from agent_comms.repo import Checkout
 import os
 from pathlib import Path
 
@@ -40,7 +41,7 @@ from stored_inputs import stored_inputs
 
 def _owner(tmp_path: Path) -> tuple[Comms, CommsAgent, RecordedThreadIncarnation, int]:
     comms = prepare_native_comms(wire(tmp_path / "wire"))
-    thread = Thread('beta', frozenset(), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid()))
+    thread = Thread('beta', frozenset(), Checkout.from_wire(str(tmp_path)), process_identity=ProcessIdentity.capture(os.getpid()))
     comms.registry.declare(thread)
     agent = CommsAgent(comms)
     agent.sessions.bindings["beta"] = "beta"

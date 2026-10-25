@@ -15,7 +15,7 @@ from pydantic import BaseModel, ConfigDict, InstanceOf, PlainSerializer, PlainVa
 from .coordination_errors import CommandFailure
 from .declared_family import DeclaredFamily
 from .errors import MissingSourceLine
-from .field_codec import FieldCodec, WireValue
+from .field_codec import FieldCodec, SingleFieldValue, WireValue
 from .repository_name import RepositoryName
 
 if TYPE_CHECKING:
@@ -343,14 +343,27 @@ class KeptBranchStart(CheckoutStart):
 
 
 @dataclass(frozen=True)
-class Checkout:
-    """A working tree of one of our repositories, ready to run.
+class Checkout(SingleFieldValue):
+    """A recorded working tree of one of our repositories.
 
     Its pinned submodules (the refactor-audit catalog) belong to the tree, and `git worktree
     add` leaves them empty even with submodule.recurse set, so every tree is added, prepared
     and retired here and nowhere else."""
 
     path: Path
+
+    @classmethod
+    def from_wire(cls, data: object) -> Self:
+        value = FieldCodec.decode(str, data)
+        if not value:
+            raise ValueError("Project path must not be empty")
+        return cls(Path(value))
+
+    def __fspath__(self) -> str:
+        return str(self.path)
+
+    def __str__(self) -> str:
+        return str(self.path)
 
     @classmethod
     def present(cls, *paths: Path) -> tuple[Path, ...]:
@@ -420,6 +433,14 @@ class Checkout:
             Repo.git(self.path, "rev-parse", "--path-format=absolute", "--git-common-dir").strip()
         )
         Repo.git(common.parent, "worktree", "remove", "--force", str(self.path))
+
+
+class LaunchCheckout(Checkout):
+    """A project qualified for a new launch, not a historical filesystem promise."""
+
+    @classmethod
+    def from_wire(cls, data: object) -> Self:
+        return cls.checked(FieldCodec.decode(str, data))
 
 
 class ScratchCheckout(Checkout):

@@ -1,6 +1,7 @@
 """Retained native execution, refusal, and canonical headless/runtime behavior."""
 
 
+from agent_comms.repo import Checkout
 import asyncio
 import os
 import sys
@@ -57,7 +58,7 @@ async def test_headless_uses_existing_owner_runtime_and_owner_project(tmp_path, 
         caller_project.mkdir()
         # Headless execution requires a private bus root (worker.py); its owner prepares one.
         comms = prepare_native_comms(wire(base / "wire"))
-        comms.registry.declare(Thread('headless', frozenset(), str(project)))
+        comms.registry.declare(Thread('headless', frozenset(), Checkout.from_wire(str(project))))
         env = dict(
             os.environ,
             AGENT_COMMS_ROOT=str(comms.root),
@@ -83,7 +84,7 @@ async def test_headless_uses_existing_owner_runtime_and_owner_project(tmp_path, 
                     await asyncio.sleep(0.05)
             registered = comms.registry.require("headless")
             assert registered.require_process() == child.identity
-            assert registered.worktree == str(project)
+            assert registered.worktree == Checkout(project)
             client = CommsClient(comms)
             try:
                 initialized = await client.initialize(protocol_version=1)

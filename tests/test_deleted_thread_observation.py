@@ -1,5 +1,6 @@
 """A stale open view is a registry-owned deletion result, not observer failure."""
 
+from agent_comms.repo import Checkout
 import asyncio
 import pickle
 from dataclasses import replace
@@ -23,7 +24,7 @@ from agent_comms.threads import Thread
 
 def declare(comms, *names):
     for name in names:
-        comms.registry.declare(Thread(name, frozenset(), str(comms.root.parent)))
+        comms.registry.declare(Thread(name, frozenset(), Checkout.from_wire(str(comms.root.parent))))
 
 
 def observe(reading, comms):
@@ -141,7 +142,7 @@ def test_a_busy_capture_ends_when_its_row_turns_stale_on_an_unchanged_revision(c
     external thread working forever. The capture now expires with its earliest busy row."""
     clock = [1_000_000.0]
     monkeypatch.setattr(activity, 'time', SimpleNamespace(time=lambda: clock[0]))
-    comms.registry.declare(Thread('cli', frozenset(), str(comms.root.parent),
+    comms.registry.declare(Thread('cli', frozenset(), Checkout.from_wire(str(comms.root.parent)),
                                   execution=ExternalThreadExecution))
     comms.agents.set_activity('cli', ActivityState.WORKING)
     revision = comms.views.revision()

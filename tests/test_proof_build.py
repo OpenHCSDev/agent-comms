@@ -1,6 +1,7 @@
 """Build-bound close uses real repositories and a retained-history bus copy."""
 
 
+from agent_comms.repo import Checkout
 import subprocess
 import sys
 import time
@@ -235,7 +236,7 @@ def test_installed_proof_closes_and_older_build_is_refused_on_copied_bus(
     for number, name in enumerate(("lead", "worker"), 1):
         source.registry.declare(
             Thread(
-                name, frozenset({"comms"}), str(tmp_path), created_at=float(number)
+                name, frozenset({"comms"}), Checkout.from_wire(str(tmp_path)), created_at=float(number)
             )
         )
     installed = RecordedBuildIdentity.installed()
@@ -350,7 +351,7 @@ def test_install_due_compares_fetched_main_to_installed_build(
     Repo.git(checkout, "update-ref", "refs/remotes/origin/main", graph.oldest)
     before = Repo.git(checkout, "rev-parse", "HEAD")
     bus = wire(tmp_path / "bus")
-    bus.registry.declare(Thread("lead", frozenset(), str(checkout)))
+    bus.registry.declare(Thread("lead", frozenset(), Checkout.from_wire(str(checkout))))
     Commander.on_root("lead", (graph.repository,), bus.root)
 
     github_cli.configure(graph.repository.github)
@@ -397,7 +398,7 @@ def test_a_one_minute_old_merge_is_due_and_names_its_request_without_launching(
     github_cli.put(graph.repository.github, UnmergedListedPullRequest(
         42, "fix/next", "b" * 40, stamp, "main", reviewable_times=(stamp,), armed_times=(stamp,)))
     bus = wire(tmp_path / "bus")
-    bus.registry.declare(Thread("lead", frozenset(), str(checkout)))
+    bus.registry.declare(Thread("lead", frozenset(), Checkout.from_wire(str(checkout))))
     Commander.on_root("lead", (graph.repository,), bus.root)
     merged = int(Repo.git(checkout, "log", "-1", "--format=%ct", merge))
     monkeypatch.setattr(time, "time", lambda: merged + 60)

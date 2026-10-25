@@ -1,4 +1,5 @@
 
+from agent_comms.repo import Checkout
 from agent_comms.comms import Comms
 from agent_comms.registration import Registration
 from agent_comms.thread_text import ThreadText
@@ -75,7 +76,7 @@ def bodies(snapshot: ImportSnapshot) -> list[str]:
     (GivenThreadText("Authored title"), "Authored title", "Authored title"),
 ])
 def test_thread_display_title_is_inherited_without_copying_the_name(tmp_path: Path, title: ThreadText, display: str, renamed_display: str, *, thread_registration: Registration) -> None:
-    thread = thread_registration.declare(Thread('original', frozenset(), str(tmp_path), title=title))
+    thread = thread_registration.declare(Thread('original', frozenset(), Checkout.from_wire(str(tmp_path)), title=title))
     captured = ThreadProvenance.capture(thread)
     assert thread.title == captured.title == title
     assert thread.display_title == captured.display_title == display
@@ -394,7 +395,7 @@ def test_rehome_moves_a_codex_unit_to_pi_on_its_own_birth(
     worktree = tmp_path / "unit-worktree"
     worktree.mkdir()
     before = comms.registry.declare(Thread(
-        "unit-x", frozenset({"units"}), str(worktree), execution=ExternalThreadExecution))
+        "unit-x", frozenset({"units"}), Checkout.from_wire(str(worktree)), execution=ExternalThreadExecution))
     source = codex_lines(tmp_path / "rollout.jsonl", [
         codex_meta("codex-session", tmp_path), codex_message("user", "Keep going")])
 

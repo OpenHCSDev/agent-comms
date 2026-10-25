@@ -3,6 +3,7 @@
 Real registry and coordination stores in temporary directories. The native
 test runs the real Pi child against a local provider.
 """
+from agent_comms.repo import Checkout
 import asyncio
 import json
 import os
@@ -24,7 +25,7 @@ def declared_owner(tmp_path):
     old.mkdir()
     new.mkdir()
     comms = wire(tmp_path / "wire")
-    comms.registry.declare(Thread('owner', frozenset(), str(old), process_identity=ProcessIdentity.capture(os.getpid())))
+    comms.registry.declare(Thread('owner', frozenset(), Checkout.from_wire(str(old)), process_identity=ProcessIdentity.capture(os.getpid())))
     return comms, old, new
 
 
@@ -42,12 +43,12 @@ def test_project_change_during_turn_is_recorded_until_the_next_turn_starts(tmp_p
     assert comms.agents.finish_turn(turn.turn_lease)
     # The turn ended and nothing ran afterwards: the registry still says so,
     # also for an owner that registers this thread again later.
-    comms.registry.declare(Thread('owner', frozenset(), str(new), process_identity=ProcessIdentity.capture(os.getpid())))
+    comms.registry.declare(Thread('owner', frozenset(), Checkout.from_wire(str(new)), process_identity=ProcessIdentity.capture(os.getpid())))
     current = comms.registry.require("owner")
-    assert current.project_resume_due and current.worktree == str(new)
+    assert current.project_resume_due and current.worktree == Checkout(new)
     assert json.loads(comms.registry.store.path.read_text())["threads"]["owner"]["project_resume_due"]
     following = comms.agents.begin_turn("owner", TurnId('bf5eb504b7221133c4f3cf2aa87008a3'))
-    assert following.thread.worktree == str(new)
+    assert following.thread.worktree == Checkout(new)
     assert not comms.registry.require("owner").project_resume_due
     assert comms.agents.finish_turn(following.turn_lease)
     assert "project_resume_due" not in json.loads(
@@ -61,7 +62,7 @@ def test_cancelled_turn_withdraws_the_recorded_resume(tmp_path):
     comms.agents.transition_turn(turn.turn_lease, CancellingPhase())
     assert comms.agents.finish_turn(turn.turn_lease)
     current = comms.registry.require("owner")
-    assert not current.project_resume_due and current.worktree == str(new)
+    assert not current.project_resume_due and current.worktree == Checkout(new)
 
 
 
@@ -111,7 +112,7 @@ async def test_message_after_project_change_starts_a_turn_in_the_new_project(tmp
                 native.provider.response_gate = None
             assert gate.changed.changed
             thread = comms.registry.require(session)
-            assert thread.worktree == str(second) and not thread.executing
+            assert thread.worktree == Checkout(second) and not thread.executing
             # The turn that changed project recorded its result: this owner's
             # coordination pointer is free, so later messages can start turns.
             with Coordination(str(comms.root / "coordination.sqlite3")) as store:

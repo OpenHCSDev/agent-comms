@@ -1,5 +1,6 @@
 """One request family journey through the real store and publication tools."""
 
+from agent_comms.repo import Checkout
 from dataclasses import replace
 from pathlib import Path
 
@@ -38,7 +39,7 @@ def test_independent_requests_orders_and_directives(comms: Comms, durable_home, 
     request_family_goal_id = GoalId.mint()
     repository = Repo(checkout=Path.cwd(), github=RepositoryName("OpenHCSDev", "agent-comms"))
     for name in ("claude-ai", "commander", "worker"):
-        thread = Thread(name, frozenset(), str(repository.checkout))
+        thread = Thread(name, frozenset(), Checkout.from_wire(str(repository.checkout)))
         comms.registry.declare(thread, StoppedThreadStatus())
     commander = comms.registry.require("commander")
     worker = comms.registry.require("worker")

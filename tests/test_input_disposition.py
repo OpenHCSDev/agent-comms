@@ -1,5 +1,6 @@
 """Direct input state survives a process exit without replaying an attempt."""
 
+from agent_comms.repo import Checkout
 import multiprocessing
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
@@ -105,7 +106,7 @@ def test_unresolved_projection_follows_rename_without_private_receipts(tmp_path:
 
     comms = wire(tmp_path)
     comms.registry.declare(
-        Thread(name='kid', tags=frozenset(), worktree=str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid()))
+        Thread(name='kid', tags=frozenset(), worktree=Checkout.from_wire(str(tmp_path)), process_identity=ProcessIdentity.capture(os.getpid()))
     )
     store = InputDispositions(comms.root)
     store.record(

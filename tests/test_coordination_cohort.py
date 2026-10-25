@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 
+from agent_comms.repo import Checkout
 from bus_record_fixture import prepare_native_comms
 
 
@@ -65,7 +66,7 @@ def _root(tmp_path: Path) -> tuple[Comms, Coordination, str, dict[str, str]]:
         "Charlie": (17004.0, {"other"}),
     }
     declare_test_bus(comms, channels=("team", "other"), threads=(
-        Thread(name=name, worktree=str(root), created_at=created_at, tags=frozenset(tags))
+        Thread(name=name, worktree=Checkout.from_wire(str(root)), created_at=created_at, tags=frozenset(tags))
         for name, (created_at, tags) in people.items()
     ))
     lookups = {
@@ -289,7 +290,7 @@ def test_all_channel_excludes_sender_and_nonexecutors(
 ) -> None:
     comms, store, root_id, lookups = _root(tmp_path)
     comms.registry.register(
-        Thread(name='human', tags=frozenset(), worktree=str(tmp_path), role=UserThreadRole, created_at=17005.0)
+        Thread(name='human', tags=frozenset(), worktree=Checkout.from_wire(str(tmp_path)), role=UserThreadRole, created_at=17005.0)
     )
     sent = publish_initial(comms, "sender", "#all", "ordinary")
     result = accept_initial(comms.bus, root_id, sent.seq, store)
@@ -351,7 +352,7 @@ def test_private_issuer_rejects_untrusted_ancestor_and_collision(tmp_path: Path)
     # acquire another participant's claim identity or appear in an audience.
     with pytest.raises(RelationViolationError):
         comms.registry.register(
-            Thread(name='duplicate', tags=frozenset({'other'}), worktree=str(tmp_path), created_at=17002.0)
+            Thread(name='duplicate', tags=frozenset({'other'}), worktree=Checkout.from_wire(str(tmp_path)), created_at=17002.0)
         )
     assert comms.bus.bus.revision() == 0
 

@@ -16,7 +16,7 @@ from agent_comms.goals import OrderCheck
 from agent_comms.order_runs import MechanicalOrderRun
 from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.registry_document import RegisteredCommanderProject
-from agent_comms.repo import Checkout, CheckoutHoldsWorkError, DetachedStart, Repo, ScratchCheckout
+from agent_comms.repo import Checkout, CheckoutHoldsWorkError, DetachedStart, LaunchCheckout, Repo, ScratchCheckout
 from agent_comms.repository_name import RepositoryName
 from agent_comms.storage_rules import StorageRule
 from agent_comms.thread_execution import ExternalThreadExecution
@@ -79,9 +79,9 @@ def checkout_command_bus(repository, tmp_path, monkeypatch, installed_runtime):
     Bus.install(Bus.path_in(root))
     comms = wire(root)
     lead = comms.registry.declare(Thread(
-        "lead", frozenset(), str(tmp_path / "lead"), execution=ExternalThreadExecution))
+        "lead", frozenset(), Checkout.from_wire(str(tmp_path / "lead")), execution=ExternalThreadExecution))
     worker = comms.registry.declare(Thread(
-        "worker", frozenset(), str(repository), execution=ExternalThreadExecution))
+        "worker", frozenset(), Checkout.from_wire(str(repository)), execution=ExternalThreadExecution))
     comms.registry.set_commander_project(RegisteredCommanderProject(
         lead.incarnation, (Repo(checkout=repository, github=identity),)))
     request = comms.goals.todos.add_request(lead.incarnation, "Prepare the pinned checkout").id
@@ -99,6 +99,32 @@ def checkout_command_bus(repository, tmp_path, monkeypatch, installed_runtime):
         review_at=RecordedEventTime(now + 3600), order=order)
     monkeypatch.setenv("AGENT_COMMS_THREAD", worker.name)
     return comms
+
+
+def test_retired_checkout_remains_readable_without_qualifying_a_new_launch(tmp_path):
+    project = tmp_path / 'retired'
+    project.mkdir()
+    git(project, 'init', '-q')
+    qualified = FieldCodec.decode(LaunchCheckout, str(project))
+    assert qualified.path == project
+    comms = wire(tmp_path / 'wire')
+    comms.registry.declare(Thread('retired', frozenset(), Checkout(qualified.path)))
+    before = comms.registry.store.path.read_bytes()
+    shutil.rmtree(project)
+    reopened = wire(comms.root).registry.require('retired')
+    assert reopened.worktree == Checkout(project)
+    assert reopened.project_directory() == project
+    assert FieldCodec.encode(reopened.worktree) == str(project)
+    assert comms.registry.store.path.read_bytes() == before
+    with pytest.raises(FileNotFoundError):
+        FieldCodec.decode(LaunchCheckout, str(project))
+
+
+@pytest.mark.parametrize('spelling', ('', '.'))
+def test_launch_checkout_refuses_empty_or_plain_project(tmp_path, monkeypatch, spelling):
+    monkeypatch.chdir(tmp_path)
+    with pytest.raises(ValueError):
+        FieldCodec.decode(LaunchCheckout, spelling)
 
 
 def test_checkout_add_prepares_the_order_repository_submodule(checkout_command_bus):

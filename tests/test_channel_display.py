@@ -1,5 +1,6 @@
 """The opt-in channel activity feed is a local display, never wire authority."""
 
+from agent_comms.repo import Checkout
 import json
 from dataclasses import replace
 from threading import Event
@@ -40,7 +41,7 @@ def populated(tmp_path):
         ("bob", {"ui"}),
         ("outsider", set()),
     ):
-        comms.registry.declare(Thread(name, frozenset(tags), str(tmp_path)))
+        comms.registry.declare(Thread(name, frozenset(tags), Checkout.from_wire(str(tmp_path))))
     return comms
 
 

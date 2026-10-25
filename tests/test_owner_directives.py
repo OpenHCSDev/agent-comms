@@ -1,6 +1,7 @@
 """The owner's own messages and claude-ai's are both directives on a thread holding owner
 requests, recorded once by the origin that speaks for the owner."""
 
+from agent_comms.repo import Checkout
 from agent_comms.channel_targets import CommandTarget
 
 import pytest
@@ -18,7 +19,7 @@ from agent_comms.threads import Thread
 def requesting_lead(tmp_path):
     comms = canonical_goal_wire(tmp_path)
     for name in ("lead", "claude-ai"):
-        comms.registry.declare(Thread(name, frozenset({"base"}), str(tmp_path)))
+        comms.registry.declare(Thread(name, frozenset({"base"}), Checkout.from_wire(str(tmp_path))))
     comms.goals.todos.add_request(
         comms.registry.require("lead").incarnation, "Tristan's plans, in order")
     return comms

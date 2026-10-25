@@ -1,6 +1,7 @@
 """Same-ID, explicitly requested goal resume through the public tool boundary."""
 
 
+from agent_comms.repo import Checkout
 import os
 from functools import partial
 
@@ -37,7 +38,7 @@ invoke_tool = partial(invoke_tool, caller=ThreadCaller("owner"))
 
 def _goal(comms, monkeypatch):
     monkeypatch.setenv("AGENT_COMMS_THREAD", "owner")
-    comms.registry.declare(Thread(name='owner', tags=frozenset(), worktree='/wt'))
+    comms.registry.declare(Thread(name='owner', tags=frozenset(), worktree=Checkout.from_wire('/wt')))
     return invoke_tool(comms, "comms_set_goal", {"text": "keep working"})["goal"]
 
 
@@ -63,7 +64,7 @@ def test_same_id_resume_from_paused(comms, monkeypatch):
 def test_second_goal_report_in_one_turn_is_rejected(comms, monkeypatch, tmp_path):
     monkeypatch.setenv("AGENT_COMMS_THREAD", "owner")
     comms.registry.declare(
-        Thread('owner', frozenset(), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid()))
+        Thread('owner', frozenset(), Checkout.from_wire(str(tmp_path)), process_identity=ProcessIdentity.capture(os.getpid()))
     )
     goal = invoke_tool(comms, "comms_set_goal", {"text": "finish this"})["goal"]
     comms.agents.begin_turn("owner", TurnId('d7f9429f60abc2787fc3e9717054ea41'))
@@ -86,7 +87,7 @@ def test_second_goal_report_in_one_turn_is_rejected(comms, monkeypatch, tmp_path
 def test_replacing_or_clearing_goal_cannot_reset_turn_report_guard(comms, monkeypatch, tmp_path):
     monkeypatch.setenv("AGENT_COMMS_THREAD", "owner")
     comms.registry.declare(
-        Thread('owner', frozenset(), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid()))
+        Thread('owner', frozenset(), Checkout.from_wire(str(tmp_path)), process_identity=ProcessIdentity.capture(os.getpid()))
     )
     first = invoke_tool(comms, "comms_set_goal", {"text": "first"})["goal"]
     turn = TurnId('d7f9429f60abc2787fc3e9717054ea41')
@@ -232,7 +233,7 @@ def test_same_value_goal_transition_bumps_durable_revision(comms, monkeypatch):
 def test_exhausted_goal_revision_refuses_transition_without_write(comms):
     goal_id = GoalId.mint()
     comms.registry.declare(
-        Thread(name='owner', tags=frozenset(), worktree='/wt', goal=Goal('work', goal_id,
+        Thread(name='owner', tags=frozenset(), worktree=Checkout.from_wire('/wt'), goal=Goal('work', goal_id,
             published_seq=0, revision=(1 << 63) - 1))
     )
     before = (comms.root / "registry.json").read_bytes()

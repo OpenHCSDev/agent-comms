@@ -1,3 +1,4 @@
+from agent_comms.repo import Checkout
 from agent_comms.field_codec import FieldCodec, GoalId
 
 """External contracts and adding commands without editing any consumer catalog."""
@@ -154,7 +155,7 @@ def test_normal_history_cli_keeps_migrated_content_and_source_identity(
     for comms in (old, live):
         for name in ("alice", "bob"):
             comms.registry.declare(
-                Thread(name, frozenset({"team"}), str(tmp_path))
+                Thread(name, frozenset({"team"}), Checkout.from_wire(str(tmp_path)))
             )
         comms.messaging.send("alice", "#team", f"{comms.root.name} channel").message.message_id
         comms.messaging.send("alice", "bob", f"{comms.root.name} direct").message.message_id

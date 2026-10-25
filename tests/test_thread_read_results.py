@@ -1,4 +1,5 @@
 """Thread read answers own comparison, retry and status projection."""
+from agent_comms.repo import Checkout
 from dataclasses import replace
 from itertools import product
 import sys
@@ -80,7 +81,7 @@ def test_assignment_row_changes_attribute_only_their_view_without_projection(
 
     root, root_id, comms, initial, _people = _root(private_directory, direct=True)
     for name in ('gamma', 'outside'):
-        comms.registry.declare(Thread(name, frozenset(), str(private_directory)))
+        comms.registry.declare(Thread(name, frozenset(), Checkout.from_wire(str(private_directory))))
     for name in ('alpha', 'gamma', 'outside'):
         message = publish_initial(comms, 'sender', name, f'Work for {name}')
         with Coordination(str(root / 'coordination.sqlite3')) as store:

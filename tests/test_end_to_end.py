@@ -11,6 +11,7 @@ from agent_comms.channel_targets import CommandTarget
 from agent_comms.child_process import BoundedRun
 from agent_comms.cli import main
 from agent_comms.comms import wire
+from agent_comms.repo import Checkout
 from agent_comms.runtime import socket_path
 from agent_comms.read_basis import NamedViewer
 from native_backend_fixture import native_backend_fixture
@@ -65,7 +66,7 @@ class TestEndToEndLifecycle:
                                 '--project', str(native.project),
                                 '--model', 'response-local/fixture', '--thinking-level', 'off')
             assert created['created'] == 'probe'
-            assert comms.registry.require('probe').worktree == str(native.project.resolve())
+            assert comms.registry.require('probe').worktree == Checkout(native.project.resolve())
         finally:
             for thread in comms.registry.snapshot().threads.values():
                 if thread.process_alive:

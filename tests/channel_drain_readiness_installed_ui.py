@@ -5,6 +5,7 @@ status is controlled; UI, registry, source, ACP and native processes remain real
 under Textual Pilot; external st/Linux entrypoint acceptance is a separate gate.
 """
 
+from agent_comms.repo import Checkout
 from agent_comms.lifecycle_capability import Deferred
 from bus_history import read_history
 from conftest import publish_initial
@@ -50,8 +51,8 @@ class InstalledApp(ToadApp):
     CSS_PATH = files('toad').joinpath('toad.tcss')
 
 async def prepare(comms, project, *_):
-    comms.registry.declare(Thread('history-sender', frozenset(), str(project)))
-    comms.registry.declare(Thread('history-recipient', frozenset(), str(project)))
+    comms.registry.declare(Thread('history-sender', frozenset(), Checkout.from_wire(str(project))))
+    comms.registry.declare(Thread('history-recipient', frozenset(), Checkout.from_wire(str(project))))
     for index in range(220):
         publish_initial(comms, 'history-sender', 'history-recipient',
             f'Original retained source {index}: ' + 'history '*250)

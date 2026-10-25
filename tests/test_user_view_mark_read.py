@@ -1,5 +1,6 @@
 """Explicit human Mark read never acknowledges a persistent agent's inbox."""
 
+from agent_comms.repo import Checkout
 from agent_comms.session_file import RegistrySessionLocation
 from agent_comms.channel_targets import CommandTarget
 from agent_comms.read_basis import NamedViewer
@@ -28,8 +29,8 @@ def test_mark_read_clears_thread_dm_and_channel_views_without_agent_delivery(tmp
     source = tmp_path / "sender.jsonl"
     source.touch()
     answer(source, "Saved reply")
-    comms.registry.declare(Thread('sender', frozenset({'ci'}), str(tmp_path), session_file=RegistrySessionLocation.from_path(str(source), comms.root)))
-    comms.registry.declare(Thread('receiver', frozenset({'ci'}), str(tmp_path)))
+    comms.registry.declare(Thread('sender', frozenset({'ci'}), Checkout.from_wire(str(tmp_path)), session_file=RegistrySessionLocation.from_path(str(source), comms.root)))
+    comms.registry.declare(Thread('receiver', frozenset({'ci'}), Checkout.from_wire(str(tmp_path))))
     viewer = comms.messaging.user_identity(str(tmp_path)).name
     comms.messaging.send("sender", "receiver", "Agent inbox remains unread").message.message_id
     comms.messaging.send("sender", viewer, "Human DM").message.message_id
@@ -74,7 +75,7 @@ def test_mark_read_clears_thread_dm_and_channel_views_without_agent_delivery(tmp
 def test_sessionless_cli_painted_tail_and_explicit_inbox_read_share_bus_marks(tmp_path):
     comms = installed_comms(tmp_path)
     comms.registry.declare(Thread(
-        'cli', frozenset(), str(tmp_path), execution=ExternalThreadExecution,
+        'cli', frozenset(), Checkout.from_wire(str(tmp_path)), execution=ExternalThreadExecution,
     ))
     viewer = comms.messaging.user_identity(str(tmp_path)).name
     comms.messaging.send('cli', viewer, 'Painted CLI reply').message.message_id
@@ -96,8 +97,8 @@ def bytes_read() -> int:
 
 def test_mark_read_reads_the_marked_messages_not_the_whole_log(tmp_path):
     comms = installed_comms(tmp_path)
-    comms.registry.declare(Thread('sender', frozenset({'ci'}), str(tmp_path)))
-    comms.registry.declare(Thread('archivist', frozenset({'bulk'}), str(tmp_path)))
+    comms.registry.declare(Thread('sender', frozenset({'ci'}), Checkout.from_wire(str(tmp_path))))
+    comms.registry.declare(Thread('archivist', frozenset({'bulk'}), Checkout.from_wire(str(tmp_path))))
     viewer = comms.messaging.user_identity(str(tmp_path)).name
     for _ in range(20):
         comms.messaging.send("archivist", "#bulk", "x" * 200_000).message.message_id

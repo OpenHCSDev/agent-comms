@@ -1,5 +1,6 @@
 """Measured admission, not estimates; the claim also owns displayed waiting."""
 
+from agent_comms.repo import Checkout
 import asyncio
 import os
 import shutil
@@ -22,7 +23,7 @@ from agent_comms.field_codec import RoomTicket
 def copied_root(tmp_path):
     original = wire(tmp_path / 'original')
     for name in ('gate-one', 'gate-two'):
-        original.registry.declare(Thread(name, frozenset(), str(tmp_path),
+        original.registry.declare(Thread(name, frozenset(), Checkout.from_wire(str(tmp_path)),
             process_identity=ProcessIdentity.capture(os.getpid())), RunningThreadStatus())
     root = tmp_path / 'copied'
     shutil.copytree(original.root, root)

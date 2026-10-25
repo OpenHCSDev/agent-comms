@@ -1,6 +1,7 @@
 """Incarnation creation prepares an audience that publication only addresses."""
 
 
+from agent_comms.repo import Checkout
 from bus_record_fixture import prepare_native_comms
 
 import pytest
@@ -19,7 +20,7 @@ async def test_channel_with_unstarted_and_stopped_subscribers_delivers_whole_coh
     comms = prepare_native_comms(wire(tmp_path / "wire"))
     root_id = comms.registry.prepare_native_root().namespace
     for name in ("sender", "receiver", "stopped-reviewer", "unstarted-reviewer"):
-        comms.registry.declare(Thread(name, frozenset({'team'}), str(tmp_path)))
+        comms.registry.declare(Thread(name, frozenset({'team'}), Checkout.from_wire(str(tmp_path))))
     stopped = comms.registry.require("stopped-reviewer")
     comms.registry.register(stopped, StoppedThreadStatus())
     receiver = comms.registry.require("receiver")

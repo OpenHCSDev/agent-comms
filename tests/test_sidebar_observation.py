@@ -1,5 +1,6 @@
 """Sidebar states answer the same questions before and after a real read."""
 
+from agent_comms.repo import Checkout
 import pickle
 from collections.abc import Mapping
 from dataclasses import fields, replace
@@ -47,7 +48,7 @@ def test_sidebar_apply_and_failure_publish_their_original_answers(comms):
 def declare_reference(comms):
     def declare(name="reference", status=StoppedThreadStatus()):
         return comms.registry.declare(Thread(
-            name=name, tags=frozenset(), worktree=str(comms.root.parent),
+            name=name, tags=frozenset(), worktree=Checkout.from_wire(str(comms.root.parent)),
         ), status=status)
     return declare
 

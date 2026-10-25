@@ -2,6 +2,7 @@
 
 
 
+from agent_comms.repo import Checkout
 from bus_history import read_history
 import asyncio
 import os
@@ -22,7 +23,7 @@ async def test_trusted_load_recovers_after_real_flock_contention(tmp_path, priva
     # Draining an owned inbox publishes native cursors, which only a private root may do.
     comms = private_comms
     owner = comms.registry.declare(
-        Thread('reader', frozenset(), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid()))
+        Thread('reader', frozenset(), Checkout.from_wire(str(tmp_path)), process_identity=ProcessIdentity.capture(os.getpid()))
     )
     with Coordination(str(comms.root / "coordination.sqlite3")) as store:
         store.participants.register(

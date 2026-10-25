@@ -9,6 +9,7 @@ and the answer was never delivered.
 from __future__ import annotations
 
 
+from agent_comms.repo import Checkout
 from bus_record_fixture import prepare_native_comms
 
 from conftest import publish_initial
@@ -45,7 +46,7 @@ def alice_batch(*sent: tuple[str, str]):
         root.mkdir(mode=0o700)
         comms = prepare_native_comms(wire(root))
         for name, created in (("sender", 17021.0), ("Alice", 17022.0)):
-            comms.registry.declare(Thread(name, frozenset({'team'}), dirname, process_identity=ProcessIdentity.capture(os.getpid()), created_at=created))
+            comms.registry.declare(Thread(name, frozenset({'team'}), Checkout.from_wire(dirname), process_identity=ProcessIdentity.capture(os.getpid()), created_at=created))
         root_id = comms.registry.prepare_native_root().namespace
         messages = [publish_initial(comms, "sender", target, text) for target, text in sent]
         with Coordination(str(root / "coordination.sqlite3")) as store:

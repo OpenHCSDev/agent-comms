@@ -1,5 +1,6 @@
 """Target families never disguise a broken binding as an unavailable command."""
 
+from agent_comms.repo import Checkout
 from dataclasses import dataclass, field
 
 import pytest
@@ -64,7 +65,7 @@ def test_each_selection_returns_its_own_result(comms, tmp_path, selection, targe
     from agent_comms.cli_commands import StopCliCommand, TargetBatchResult, TargetFailed
     from agent_comms.thread_status import RunningThreadStatus
 
-    comms.registry.declare(Thread("first", frozenset(), str(tmp_path)), RunningThreadStatus())
+    comms.registry.declare(Thread("first", frozenset(), Checkout.from_wire(str(tmp_path))), RunningThreadStatus())
     if selection is OneTarget and not resolvable:
         with pytest.raises(ValueError):
             StopCliCommand.execute_target(comms, selection(target), {}, project=str(tmp_path))
@@ -87,7 +88,7 @@ def test_batch_capability_owns_selection_catalog_and_execution(comms, tmp_path):
 
     names = ("first", "second")
     for name in names:
-        comms.registry.declare(Thread(name, frozenset(), str(tmp_path)),
+        comms.registry.declare(Thread(name, frozenset(), Checkout.from_wire(str(tmp_path))),
                                StoppedThreadStatus())
     selected = CliCommand.selected_targets(tuple(CommandTarget.named(name) for name in names))
     catalog = CliCommand.target_catalog(comms, selected, project=str(tmp_path))
@@ -112,7 +113,7 @@ def test_channel_pin_filters_hidden_thread_presence(comms, tmp_path, presence, a
     from agent_comms.thread_status import ThreadStatus
 
     comms.registry.declare(
-        Thread("first", frozenset({"team"}), str(tmp_path)),
+        Thread("first", frozenset({"team"}), Checkout.from_wire(str(tmp_path))),
         ThreadStatus.member_named(presence)(),
     )
     if allowed:

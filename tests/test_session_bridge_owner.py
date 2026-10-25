@@ -1,5 +1,6 @@
 """The real SessionStart program must leave an installable serve after hook exit."""
 
+from agent_comms.repo import Checkout
 import asyncio
 import json
 import os
@@ -32,7 +33,7 @@ def test_session_start_hook_exit_preserves_the_recorded_owner_for_install_pause(
     # The source programs run the hook's bridge, so their runtime owns the root it attaches to.
     RootRuntime.publish(comms.root, source_programs.runtime)
     comms.registry.declare(Thread(
-        'bridge-copy', frozenset(), str(tmp_path), execution=ExternalThreadExecution))
+        'bridge-copy', frozenset(), Checkout.from_wire(str(tmp_path)), execution=ExternalThreadExecution))
     transcript = tmp_path / f'{session}.jsonl'
     transcript.write_text('')
     base_state = WatchClaim.directory(home).parent / 'claude-bridge-owner'

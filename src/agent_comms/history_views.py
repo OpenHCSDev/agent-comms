@@ -130,11 +130,11 @@ class ThreadViewRead(ConversationPreparation):
         self.through.wire.require_source(AssignedSourceIdentity(str(self.views.root), self.thread.incarnation))
         page = DMDisplayBasis.fetch_page(
             self.views.bus, self.views.registry, self.views.root, self.viewer.name,
-            ThreadTarget(self.thread.name), worktree=self.viewer.worktree,
+            ThreadTarget(self.thread.name), worktree=str(self.viewer.worktree),
             bounds=PageBounds(LiveCursor(self.through.wire.sequence + 1).older()),
         )
         if page.messages:
-            self.views.mark_page_read(page, worktree=self.viewer.worktree)
+            self.views.mark_page_read(page, worktree=str(self.viewer.worktree))
 
 
 @dataclass(frozen=True)

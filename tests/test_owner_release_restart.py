@@ -1,5 +1,6 @@
 """Real release-before-exit: retirement keeps checking the exact owner fence."""
 
+from agent_comms.repo import Checkout
 from agent_comms.native_arguments import GivenArguments, GivenBinary
 from agent_comms.restart_scope import OwnersNamed
 from agent_comms.turn_lease import NoTurnLease
@@ -193,7 +194,7 @@ def test_stop_before_first_worker_keeps_the_exact_owner_fence(tmp_path):
     from agent_comms.child_process import NoProcess, ProcessIdentity
 
     comms = wire(tmp_path / "wire")
-    declared = comms.registry.declare(Thread('worker', frozenset(), str(tmp_path)))
+    declared = comms.registry.declare(Thread('worker', frozenset(), Checkout.from_wire(str(tmp_path))))
     generation = comms.registry.snapshot().claim_generation(declared.name)
     comms.owners.stop(declared.name)
     snapshot = comms.registry.snapshot()
@@ -201,7 +202,7 @@ def test_stop_before_first_worker_keeps_the_exact_owner_fence(tmp_path):
     assert snapshot.threads[declared.name].process_identity == NoProcess()
     assert comms.owners.releases.read_many((declared.name,))[declared.name].current(snapshot, declared, generation)
 
-    waiting = comms.registry.declare(Thread('waiting', frozenset(), str(tmp_path)))
+    waiting = comms.registry.declare(Thread('waiting', frozenset(), Checkout.from_wire(str(tmp_path))))
     before = comms.registry.snapshot().claim_generation(waiting.name)
     comms.registry.register(
         replace(waiting, process_identity=ProcessIdentity.capture(os.getpid())),

@@ -132,10 +132,10 @@ class HumanInputOrigin(InputOrigin, ClaimScoped):
             if snapshot.claimed_identity(owner.name) != claim_scope:
                 raise RelationViolationError("User input attachment changed before capture")
             root_id = comms.registry.store.private_guard_unlocked().namespace
-            user = comms.messaging.user_identity(owner.worktree)
+            user = comms.messaging.user_identity(str(owner.worktree))
             return cls(
                 root_id=root_id, author=HumanOrigin.of(user),
-                claimed_identity=claim_scope, project=owner.worktree, goal=owner.goal.captured,
+                claimed_identity=claim_scope, project=str(owner.worktree), goal=owner.goal.captured,
             )
 
     @property
@@ -154,7 +154,7 @@ class HumanInputOrigin(InputOrigin, ClaimScoped):
             raise RelationViolationError("User input origin attachment changed")
         self.author.require_registered(snapshot)
         owner = snapshot.require_active(claim_scope.incarnation.name)
-        if (self.project, self.goal) != (owner.worktree, owner.goal.captured):
+        if (self.project, self.goal) != (str(owner.worktree), owner.goal.captured):
             raise RelationViolationError("User input scope changed before reservation")
 
     def retained_fact(self, source):
@@ -167,7 +167,7 @@ class HumanInputOrigin(InputOrigin, ClaimScoped):
 
     def applies(self, owner: Thread, snapshot: RegistrySnapshot) -> bool:
         return (self.claimed_identity.incarnation.resolved(snapshot) == owner.incarnation
-                and (self.project, self.goal) == (owner.worktree, owner.goal.captured))
+                and (self.project, self.goal) == (str(owner.worktree), owner.goal.captured))
 
     def matches_owner(self, recorded_name, incarnation):
         """The captured original birth survives a rename, unlike a neutral name."""

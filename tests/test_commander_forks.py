@@ -1,5 +1,6 @@
 """Commander forks use registered identity and the original Todo assignment."""
 
+from agent_comms.repo import Checkout
 import io
 import json
 import os
@@ -75,7 +76,7 @@ def fork_bus(tmp_path, configured_repository):
             Thread(
                 name,
                 frozenset({"comms"}),
-                str(worktree),
+                Checkout.from_wire(str(worktree)),
                 model=DeclaredModel("anthropic/claude-opus-4-6"),
                 execution=ExternalThreadExecution,
             )

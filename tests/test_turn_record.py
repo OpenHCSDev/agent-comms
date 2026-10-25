@@ -1,5 +1,6 @@
 """Real registry/turn files and the public Comms phase entrypoint."""
 
+from agent_comms.repo import Checkout
 import json
 import os
 
@@ -19,7 +20,7 @@ def test_copied_registry_resolves_turn_from_its_new_location(tmp_path):
     copied = tmp_path / 'copied'
     comms = wire(source)
     comms.registry.declare(Thread(
-        'worker', frozenset(), str(source),
+        'worker', frozenset(), Checkout.from_wire(str(source)),
         process_identity=ProcessIdentity.capture(os.getpid()),
     ))
     original = comms.agents.begin_turn(

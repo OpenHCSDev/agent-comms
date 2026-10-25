@@ -1,5 +1,6 @@
 """Current goal/input boundaries through durable stores and the real owner socket."""
 
+from agent_comms.repo import Checkout
 import os
 import sqlite3
 from dataclasses import replace
@@ -34,7 +35,7 @@ from agent_comms.goal_scope import OneGoal
 
 def register(comms, name):
     comms.registry.declare(
-        Thread(name, frozenset(), str(comms.root), process_identity=ProcessIdentity.capture(os.getpid()))
+        Thread(name, frozenset(), Checkout.from_wire(str(comms.root)), process_identity=ProcessIdentity.capture(os.getpid()))
     )
 
 

@@ -1,5 +1,6 @@
 """A fresh carry generation says nothing about the old goal's execution."""
 
+from agent_comms.repo import Checkout
 from contextlib import closing
 from dataclasses import replace
 import os
@@ -35,7 +36,7 @@ def test_carried_blocked_goal_requires_explicit_retry_preserving_unknown(tmp_pat
     goal = Goal(published_seq=0, text='Historical objective; past execution is uncertain',
         id=goal_id,
                 state=BlockedGoal('Inspect uncertain original work before explicit Retry'))
-    thread = comms.registry.declare(Thread('legacy', frozenset({'test'}), str(tmp_path), goal=goal, process_identity=ProcessIdentity.capture(os.getpid())))
+    thread = comms.registry.declare(Thread('legacy', frozenset({'test'}), Checkout.from_wire(str(tmp_path)), goal=goal, process_identity=ProcessIdentity.capture(os.getpid())))
     inputs = InputDispositions(comms.root)
     inputs.record(UNKNOWN_ORIGINAL_KEY, seq=None, owner=thread.name,
                   claim_scope=comms.registry.snapshot().claim_generation(thread.name),

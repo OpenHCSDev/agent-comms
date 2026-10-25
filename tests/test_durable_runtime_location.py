@@ -1,4 +1,5 @@
 """P117 location behavior over a real, paused durable store; no provider inputs."""
+from agent_comms.repo import Checkout
 import asyncio
 import subprocess
 from dataclasses import replace
@@ -19,7 +20,7 @@ from agent_comms.unstarted_runtime import UnstartedRuntime
 @pytest.mark.parametrize('saved', [False, True])
 def test_durable_thread_roundtrip_and_worker_selection(tmp_path, saved, *, thread_registration):
     location = DurableDatabase(str(tmp_path / 'session.sqlite3'))
-    thread = thread_registration.declare(Thread('durable', frozenset(), str(tmp_path), backend=PiDurableBackend, session_file=RegistrySessionLocation.from_path(location.read_key, tmp_path) if saved else NoSessionFile()))
+    thread = thread_registration.declare(Thread('durable', frozenset(), Checkout.from_wire(str(tmp_path)), backend=PiDurableBackend, session_file=RegistrySessionLocation.from_path(location.read_key, tmp_path) if saved else NoSessionFile()))
     restored = FieldCodec.decode(Thread, FieldCodec.encode(thread))
     restored = replace(restored, session_file=restored.session_file.bound_to(tmp_path))
     assert restored.runtime == (location if saved else UnstartedRuntime(PiDurableBackend))
@@ -69,7 +70,7 @@ def test_real_durable_history_pages_while_writer_owns_database(tmp_path, thread_
     assert seeded.returncode == 0, seeded.stderr[-2000:]
     async def journey():
         backend = PiDurableBackend()
-        thread = Thread('history', frozenset(), str(tmp_path), backend=PiDurableBackend,
+        thread = Thread('history', frozenset(), Checkout.from_wire(str(tmp_path)), backend=PiDurableBackend,
                         session_file=RegistrySessionLocation.from_path(location.path, tmp_path))
         host = await backend.open(thread)
         try:

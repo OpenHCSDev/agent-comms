@@ -1,5 +1,6 @@
 """Declared extension decoding is strict and shares its owner with consumers."""
 
+from agent_comms.repo import Checkout
 import pytest
 
 from agent_comms.acp_extension import (
@@ -52,7 +53,7 @@ from agent_comms.turn_lease import ActiveTurn, FinishedTurn, TurnState
 def test_declared_family_roundtrip_and_strict_boundary(tmp_path):
     from conftest import installed_comms
     comms = installed_comms(tmp_path)
-    comms.registry.declare(Thread('pilot', frozenset(), str(tmp_path)))
+    comms.registry.declare(Thread('pilot', frozenset(), Checkout.from_wire(str(tmp_path))))
     read = comms.transcripts.capture_page_read("pilot")
     owner = ClaimedIdentity(RecordedThreadIncarnation("pilot", 1.0), 1)
     queue_scope = LiveQueueScope(

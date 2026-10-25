@@ -194,7 +194,7 @@ class HumanOrigin(OwnerVoiceOrigin):
 
     @classmethod
     def of(cls, user: Thread) -> HumanOrigin:
-        return cls(user.name, user.incarnation.wire_birth, user.worktree)
+        return cls(user.name, user.incarnation.wire_birth, str(user.worktree))
 
     def require_sender(
         self, message: Message, sender_thread: Thread, snapshot: RegistrySnapshot
@@ -227,6 +227,6 @@ class HumanOrigin(OwnerVoiceOrigin):
         user.role.require_user(
             RelationViolationError("A user correction requires the original human sender")
         )
-        registered = (user.name, user.created_at, user.worktree)
+        registered = (user.name, user.created_at, str(user.worktree))
         if registered != (self.sender, self.created_at, self.worktree):
             raise RelationViolationError("Local USER origin differs from registered identity")

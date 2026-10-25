@@ -1,5 +1,6 @@
 """Goal authority and Git's declared default drive the real checkout command."""
 
+from agent_comms.repo import Checkout
 from agent_comms.field_codec import FieldCodec
 from agent_comms.goal_actions import SetGoalAction
 from agent_comms.repository_name import RepositoryName
@@ -25,7 +26,7 @@ def test_goal_checkout_uses_origin_default_and_retires(
                        scratch_base=tmp_path / "scratch", floor_gib=0)
     StorageRule.path_in(comms.root).write_text(FieldCodec.compact(FieldCodec.encode(rule)))
     worker = comms.registry.declare(Thread(
-        "worker", frozenset(), str(repository.checkout), execution=ExternalThreadExecution,
+        "worker", frozenset(), Checkout.from_wire(str(repository.checkout)), execution=ExternalThreadExecution,
     ))
     goal = comms.goals.update_goal(worker.name, SetGoalAction(text="Work in OpenMFD"))
     monkeypatch.setenv("AGENT_COMMS_THREAD", worker.name)

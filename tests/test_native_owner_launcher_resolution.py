@@ -1,6 +1,7 @@
 """Native launcher identity, route and acquired package remain independent."""
 
 
+from agent_comms.repo import Checkout
 import shlex
 import sys
 from pathlib import Path
@@ -42,7 +43,7 @@ async def test_fork_runs_selected_python_before_copying_saved_history(
     parent = create_fresh_private_session(tmp_path / "sessions", worktree=tmp_path)
     original = parent.path.read_bytes()
     copied = await PiNativeBackend.fork(
-        Thread('parent', tags=frozenset(), worktree=str(tmp_path), session_file=RegistrySessionLocation.from_path(parent.session_file, comms.root)),
+        Thread('parent', tags=frozenset(), worktree=Checkout.from_wire(str(tmp_path)), session_file=RegistrySessionLocation.from_path(parent.session_file, comms.root)),
         str(package.cli), LaunchRuntime(interpreter), comms.root,
     )
     assert marker.read_text() == str(selected)

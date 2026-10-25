@@ -1,3 +1,4 @@
+from agent_comms.repo import Checkout
 from dataclasses import replace
 
 from agent_comms.channel_targets import CommandTarget
@@ -50,7 +51,7 @@ def setup_conversations(root):
     comms = installed_comms(root)
     for name in ("sender", "reader"):
         comms.registry.declare(Thread(
-            name, frozenset({"a", "b"}), str(root),
+            name, frozenset({"a", "b"}), Checkout.from_wire(str(root)),
         ))
     messages = [comms.messaging.send("sender", target, target).message
                 for target in ("#a", "#b", "#a", "#b")]

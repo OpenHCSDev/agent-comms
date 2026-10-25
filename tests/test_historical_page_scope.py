@@ -1,5 +1,6 @@
 """Source-owned history predicates and sound sequence-indexed membership."""
 
+from agent_comms.repo import Checkout
 from dataclasses import replace
 
 import pytest
@@ -18,9 +19,9 @@ from agent_comms.threads import Thread
 @pytest.fixture
 def history(tmp_path):
     old = wire(tmp_path / "old")
-    old.registry.declare(Thread('alice-old', frozenset({'api'}), str(old.root), created_at=10))
+    old.registry.declare(Thread('alice-old', frozenset({'api'}), Checkout.from_wire(str(old.root)), created_at=10))
     for created, name in enumerate(("bob", "carol"), start=11):
-        old.registry.declare(Thread(name, frozenset({'ops'}), str(old.root), created_at=created))
+        old.registry.declare(Thread(name, frozenset({'ops'}), Checkout.from_wire(str(old.root)), created_at=created))
     old.registry.rename("alice-old", "alice")
     rows = []
     for seq in range(1, 241):
@@ -49,8 +50,8 @@ def history(tmp_path):
         rows.append(Message.from_message(published))
     live = wire(tmp_path / "live")
     # Deliberately different membership: source scope must not use live tags.
-    live.registry.declare(Thread('alice', frozenset({'ops'}), str(live.root), created_at=500))
-    live.registry.declare(Thread('alice-old', frozenset({'api'}), str(live.root), created_at=501))
+    live.registry.declare(Thread('alice', frozenset({'ops'}), Checkout.from_wire(str(live.root)), created_at=500))
+    live.registry.declare(Thread('alice-old', frozenset({'api'}), Checkout.from_wire(str(live.root)), created_at=501))
     live.registry.rename("alice-old", "carol")
     source = live.views.attach_history(old.root)
     return live, source, rows

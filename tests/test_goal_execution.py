@@ -1,5 +1,6 @@
 """Real turn acquisition and terminal handling share the execution owner."""
 
+from agent_comms.repo import Checkout
 import os
 import signal
 import sqlite3
@@ -45,7 +46,7 @@ from agent_comms.turn_terminal import OwnerStop
 def execution_bus(copied_goal_bus):
     comms = copied_goal_bus
     comms.registry.declare(Thread(
-        "worker", frozenset(), str(comms.root.parent),
+        "worker", frozenset(), Checkout.from_wire(str(comms.root.parent)),
         process_identity=ProcessIdentity.capture(os.getpid()),
     ))
     comms.goals.update_goal("worker", SetGoalAction(text="Repair original work"))

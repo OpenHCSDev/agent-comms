@@ -1,5 +1,6 @@
 """A unit the chokehold paused is found again, so a quoting answer can resume it."""
 
+from agent_comms.repo import Checkout
 from functools import partial
 
 from agent_comms.commander.vibe_check import ChokeholdAnswer
@@ -11,7 +12,7 @@ from agent_comms.threads import Thread
 
 def _unit(comms, monkeypatch, name):
     monkeypatch.setenv("AGENT_COMMS_THREAD", name)
-    comms.registry.declare(Thread(name=name, tags=frozenset(), worktree="/wt"))
+    comms.registry.declare(Thread(name=name, tags=frozenset(), worktree=Checkout.from_wire("/wt")))
     partial(invoke_tool, caller=ThreadCaller(name))(comms, "comms_set_goal", {"text": "work"})
 
 

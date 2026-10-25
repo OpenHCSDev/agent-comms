@@ -1,5 +1,6 @@
 """Failure evidence is passive; only its fenced attempt owns terminal writes."""
 
+from agent_comms.repo import Checkout
 from agent_comms.errors import StaleAttemptError
 import json
 import os
@@ -30,7 +31,7 @@ def bound(tmp_path, *, thread_registration):
     goal_id = GoalId.mint()
     goal = Goal("private goal prose", goal_id, published_seq=0, revision=2)
     owner = Thread(
-        'owner', frozenset(), '/private-worktree',
+        'owner', frozenset(), Checkout.from_wire('/private-worktree'),
         process_identity=ProcessIdentity.capture(os.getpid()), created_at=10.0,
         goal=goal, turn_generation=7, turn_record=FinishedTurn(TurnId('a' * 32)),
     )

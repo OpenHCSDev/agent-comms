@@ -173,7 +173,7 @@ class PrivateSendClaim(PromptBoundary):
                 thinking_level=self.owner.thread.thinking_level,
                 environment=self.owner.thread.native_environment(
                     self.bus.bus.path.parent, registry,
-                    self.owner.thread.worktree,
+                    str(self.owner.thread.worktree),
                 ),
                 ingress=MaintenanceBarrier(self.bus._registry.store.path),
                 startup=NativeStartup(

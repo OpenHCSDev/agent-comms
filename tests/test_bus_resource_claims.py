@@ -1,5 +1,6 @@
 """Resource ownership, originals and derived rows share the actual Bus transaction."""
 
+from agent_comms.repo import Checkout
 import os
 import signal
 import sqlite3
@@ -104,7 +105,7 @@ def claims(tmp_path: Path) -> ClaimBus:
     for name in ("alice", "bob"):
         turns[name] = TurnId.mint()
         registry.declare(Thread(
-            name, frozenset(), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid()),
+            name, frozenset(), Checkout.from_wire(str(tmp_path)), process_identity=ProcessIdentity.capture(os.getpid()),
         ), RunningThreadStatus())
     bus = Bus.install(Bus.path_in(root))
     with bus.writing():

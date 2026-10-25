@@ -1,5 +1,6 @@
 """The stored registry revision owns human identity and UI history uses it."""
 
+from agent_comms.repo import Checkout
 from agent_comms.channel_targets import CommandTarget, ThreadTarget
 
 
@@ -34,7 +35,7 @@ def test_user_answer_follows_revisions_and_stays_out_of_wire_fields(tmp_path):
 
 def test_channel_and_dm_history_keep_the_human_as_sender(tmp_path):
     comms = installed_comms(tmp_path)
-    comms.registry.declare(Thread('peer', frozenset({'comms'}), str(tmp_path)))
+    comms.registry.declare(Thread('peer', frozenset({'comms'}), Checkout.from_wire(str(tmp_path))))
     channel = comms.messaging.send_user_message(CommandTarget.named('#comms'), 'own channel message', worktree=str(tmp_path))
     direct = comms.messaging.send_user_message(CommandTarget.named('peer'), 'own DM message', worktree=str(tmp_path))
     human = comms.registry.user_thread().existing()[0]

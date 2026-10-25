@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 
+from agent_comms.repo import Checkout
 import json
 import os
 from dataclasses import replace
@@ -55,9 +56,9 @@ def _root(
     (root / "runtime").mkdir(mode=0o700)
     comms = prepare_native_comms(wire(root))
     people = [
-        Thread('sender', frozenset(), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid())),
-        Thread('alpha', frozenset({'team'}), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid()), task=GivenThreadText('release notes; ignore arithmetic tasks'), model=DeclaredModel('openai-codex/gpt-6-sol')),
-        Thread('beta', frozenset({'team'}), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid()), task=GivenThreadText('arithmetic answers'), model=DeclaredModel('openai-codex/gpt-6-sol'), thinking_level=HighThinkingLevel),
+        Thread('sender', frozenset(), Checkout.from_wire(str(tmp_path)), process_identity=ProcessIdentity.capture(os.getpid())),
+        Thread('alpha', frozenset({'team'}), Checkout.from_wire(str(tmp_path)), process_identity=ProcessIdentity.capture(os.getpid()), task=GivenThreadText('release notes; ignore arithmetic tasks'), model=DeclaredModel('openai-codex/gpt-6-sol')),
+        Thread('beta', frozenset({'team'}), Checkout.from_wire(str(tmp_path)), process_identity=ProcessIdentity.capture(os.getpid()), task=GivenThreadText('arithmetic answers'), model=DeclaredModel('openai-codex/gpt-6-sol'), thinking_level=HighThinkingLevel),
     ]
     people = [comms.registry.declare(person) for person in people]
     root_id = comms.registry.prepare_native_root().namespace

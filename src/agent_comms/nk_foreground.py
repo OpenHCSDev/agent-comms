@@ -36,6 +36,7 @@ from agent_comms.native_session_files import NativeSessionFiles
 from .native_package import VerifiedNativePackage
 from .selected_result import CoordinatedTurn
 from .thread_text import GivenThreadText
+from .repo import Checkout
 from .threads import Thread
 
 _MAX_GO_WAIT_SECONDS = 120
@@ -101,7 +102,7 @@ def reserve_foreground_owner(
     NativeSessionFiles.require_private_directory(worktree)
     comms = wire(root)
     owner = Thread(
-        name, tags, str(worktree), process_identity=ProcessIdentity.capture(os.getpid()), task=GivenThreadText(task),
+        name, tags, Checkout(worktree), process_identity=ProcessIdentity.capture(os.getpid()), task=GivenThreadText(task),
     )
     # Foreground attempts must reserve a fresh name, never replace an owner
     # that may retain uncertain input. The registry owns that namespace check.

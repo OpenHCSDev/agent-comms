@@ -8,6 +8,7 @@ Retains request/response/timing/trace files under the supplied owned output path
 from __future__ import annotations
 
 
+from agent_comms.repo import Checkout
 from agent_comms.repository_name import RepositoryName
 
 import argparse
@@ -54,7 +55,7 @@ def seed(root: Path, project: Path) -> None:
     comms = wire(root)
     for name in ("claude-ai", "worker", "archivable"):
         comms.registry.declare(
-            Thread(name, frozenset({"probe"}), str(project)),
+            Thread(name, frozenset({"probe"}), Checkout.from_wire(str(project))),
             status=StoppedThreadStatus(),
         )
     comms.channels.set_saved_view(

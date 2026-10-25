@@ -1,6 +1,7 @@
 """Real install-style stop on a copied private bus with a controlled provider."""
 
 
+from agent_comms.repo import Checkout
 import asyncio
 import json
 from contextlib import closing
@@ -35,7 +36,7 @@ async def stopped_goal_journey(
         shutil.copytree(fixture.root, copied)
         comms = wire(copied)
         comms.registry.declare(Thread(
-            "stop-copy", frozenset(), str(fixture.project)))
+            "stop-copy", frozenset(), Checkout.from_wire(str(fixture.project))))
         comms.goals.update_goal("stop-copy", SetGoalAction(
             text="Continue the synthetic stopped-goal journey."))
         # The real lifecycle registers the private participant before launch.

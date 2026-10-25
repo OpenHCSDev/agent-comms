@@ -1,6 +1,7 @@
 """Standby liveness preserves goal authority and never replays an input."""
 
 
+from agent_comms.repo import Checkout
 from agent_comms.messages import ConversationRole, NoticeRole
 import os
 from dataclasses import replace
@@ -33,7 +34,7 @@ from agent_comms.goal_scope import OneGoal
 
 def _thread(comms, name, worktree):
     comms.registry.declare(
-        Thread(name, frozenset(), str(worktree), process_identity=ProcessIdentity.capture(os.getpid()))
+        Thread(name, frozenset(), Checkout.from_wire(str(worktree)), process_identity=ProcessIdentity.capture(os.getpid()))
     )
 
 

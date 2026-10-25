@@ -1,4 +1,5 @@
 
+from agent_comms.repo import Checkout
 from agent_comms.cli_bridges.codex_protocol import BusInput, ItemsPage
 from agent_comms.transcript_events import UserTranscript
 from agent_comms.threads import Thread
@@ -11,7 +12,7 @@ def _output(tmp_path):
     from agent_comms.thread_execution import ExternalThreadExecution
 
     comms = wire(tmp_path)
-    comms.registry.declare(Thread('cli', frozenset(), str(tmp_path), execution=ExternalThreadExecution))
+    comms.registry.declare(Thread('cli', frozenset(), Checkout.from_wire(str(tmp_path)), execution=ExternalThreadExecution))
     return ThreadOutput(comms.transcripts.external('cli'), comms.agents)
 
 

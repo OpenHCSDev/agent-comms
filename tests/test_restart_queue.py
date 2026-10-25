@@ -1,5 +1,6 @@
 """Queued owner handoff wakes for registry and allocated queue entries."""
 
+from agent_comms.repo import Checkout
 import asyncio
 import json
 import subprocess
@@ -22,7 +23,7 @@ from agent_comms.watched import DirectorySource, FileSource
 @pytest.fixture
 def dead_owner_restart(private_comms):
     comms = private_comms
-    comms.registry.declare(Thread('worker', frozenset(), str(comms.root)))
+    comms.registry.declare(Thread('worker', frozenset(), Checkout.from_wire(str(comms.root))))
     snapshot = comms.registry.snapshot()
     with subprocess.Popen(
         (sys.executable, '-c', 'import sys; sys.stdin.buffer.read(1)'), stdin=subprocess.PIPE,
@@ -79,7 +80,7 @@ async def test_restore_owner_keeps_blocked_goal_unchanged(
 
     source_programs.bind(tmp_path)
     comms = private_comms
-    comms.registry.declare(Thread('worker', frozenset(), str(tmp_path)))
+    comms.registry.declare(Thread('worker', frozenset(), Checkout.from_wire(str(tmp_path))))
     comms.goals.update_goal('worker', SetGoalAction(text='Preserve this blocked task'))
     blocked = comms.goals.update_goal(
         'worker', BlockedGoalAction(block_reason='Await an explicit owner retry'))

@@ -2,6 +2,7 @@
 The commander's review timer comes back every window until delivery, and the unit never sees it."""
 
 
+from agent_comms.repo import Checkout
 import json
 import os
 import subprocess
@@ -122,7 +123,7 @@ def held(tmp_path):
     (root / 'storage.json').write_text(json.dumps({'checkout_base': str(tmp_path / 'wt')}))
     comms = wire(root)
     for name in ('lead', 'worker'):
-        comms.registry.declare(Thread(name, frozenset(), str(tmp_path)))
+        comms.registry.declare(Thread(name, frozenset(), Checkout.from_wire(str(tmp_path))))
     request = comms.goals.todos.add_request(
         comms.registry.require('lead').incarnation, 'Repair the worker').id
     ThreadCaller('lead').invoke(CommsTodoCreateTool(owner='worker', order=CreateProblemGoalAction(

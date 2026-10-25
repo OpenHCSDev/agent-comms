@@ -1,5 +1,6 @@
 """Dependency replies retain original checked identities across registry changes."""
 
+from agent_comms.repo import Checkout
 from agent_comms.messages import NoticeRole
 import os
 from dataclasses import replace
@@ -18,7 +19,7 @@ from agent_comms.goal_scope import OneGoal
 
 def register(comms, name):
     comms.registry.declare(
-        Thread(name, frozenset(), str(comms.root), process_identity=ProcessIdentity.capture(os.getpid()))
+        Thread(name, frozenset(), Checkout.from_wire(str(comms.root)), process_identity=ProcessIdentity.capture(os.getpid()))
     )
     return comms.registry.require(name)
 

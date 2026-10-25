@@ -1,5 +1,6 @@
 """Ownership and protocol experiments for the Registration/A8 document boundary."""
 
+from agent_comms.repo import Checkout
 import json
 import os
 import subprocess
@@ -22,7 +23,7 @@ from agent_comms.thread_text import GivenThreadText
 
 
 def owner(path, registry):
-    return Thread("owner", frozenset(), str(path), process_identity=ProcessIdentity.capture(os.getpid()), created_at=10.0)
+    return Thread("owner", frozenset(), Checkout.from_wire(str(path)), process_identity=ProcessIdentity.capture(os.getpid()), created_at=10.0)
 
 
 def test_edit_owns_turn_and_document_owns_later_changes(tmp_path, *, thread_registration):
@@ -192,7 +193,7 @@ def test_thread_rows_compare_unread_rows_as_stored_and_decode_only_what_changed(
     assert ThreadRows.from_wire(stored) == ThreadRows.from_wire(stored)
     written = ThreadRows.from_wire(stored)
     written['unread'] = Thread(
-        'unread', frozenset(), str(tmp_path), execution=ExternalThreadExecution)
+        'unread', frozenset(), Checkout.from_wire(str(tmp_path)), execution=ExternalThreadExecution)
     other = ThreadRows.from_wire({})
     other['unread'] = written['unread']
     assert written == other

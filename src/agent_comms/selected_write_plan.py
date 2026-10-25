@@ -244,7 +244,7 @@ class SelectedWritePlans(DurableFile, PatternFile):
         )
         if row.binding != expected:
             raise IdentityConflict("Selected write intent is stale or uncertain")
-        return row.planned(owner.worktree)
+        return row.planned(str(owner.worktree))
 
     def applied(self, assignment: WakeAssignment, owner: Thread, operation_id: ClaimId) -> None:
         path = self.path_in(self.directory, source_seq=str(assignment.wire_seq),

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 
+from agent_comms.repo import Checkout
 from contextlib import aclosing
 from pathlib import Path
 
@@ -21,7 +22,7 @@ async def one_turn_events(agent_bin, agent_args, task, cwd, env_extra=None,
     session = PersistentPiSession()
     comms = wire(Path(cwd))
     owner = comms.registry.declare(Thread(
-        "independent-turn", frozenset(), cwd,
+        "independent-turn", frozenset(), Checkout.from_wire(cwd),
     )).incarnation.require_recorded()
     try:
         async with aclosing(

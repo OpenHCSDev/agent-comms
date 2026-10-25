@@ -1,5 +1,6 @@
 """Saved documents, independent snapshots, and disposable activity projection."""
 
+from agent_comms.repo import Checkout
 import json
 from unittest.mock import patch
 
@@ -40,7 +41,7 @@ def test_saved_runtime_dates_and_fields_survive_rename_and_reopen(tmp_path, *, t
     assert RuntimeInfoStore(store.path).read().observations["new"].timestamp == 456.25
     assert json.loads(store.path.read_text()) == {"new": {**saved["old"], "thread": "new"}}
     before = store.path.stat()
-    store.remove_threads((Thread('absent', frozenset(), str(tmp_path)),))
+    store.remove_threads((Thread('absent', frozenset(), Checkout.from_wire(str(tmp_path))),))
     assert store.path.stat() == before
 
 
@@ -71,10 +72,10 @@ def test_free_form_ledger_has_no_retained_mutable_mirror(tmp_path, *, thread_reg
     SharedLedger(store.path).merge({"other": [1, 2]}, "other")
     assert store.rename_thread("old", "new") == 2
     assert FieldCodec.encode(store.read())["nested"] == {"new": ["new", None, True, 9, {"free": "old is prose"}]}
-    store.remove_threads((Thread('new', frozenset(), str(tmp_path)),))
+    store.remove_threads((Thread('new', frozenset(), Checkout.from_wire(str(tmp_path))),))
     assert FieldCodec.encode(store.read()) == {**saved, "nested": {}, "other": [1, 2], "last_updated_by": "other"}
     unchanged = store.path.stat()
-    store.remove_threads((Thread('absent', frozenset(), str(tmp_path)),))
+    store.remove_threads((Thread('absent', frozenset(), Checkout.from_wire(str(tmp_path))),))
     assert store.path.stat() == unchanged
 
 

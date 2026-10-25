@@ -1,5 +1,6 @@
 """The change-report kind and its declared evidence, through the real send path."""
 
+from agent_comms.repo import Checkout
 import os
 from dataclasses import replace
 import subprocess
@@ -48,7 +49,7 @@ def reporter_repo(tmp_path):
 
 @pytest.fixture
 def reporter(wired, reporter_repo):
-    wired.registry.declare(Thread(name='reporter', tags=frozenset(), worktree=str(reporter_repo)))
+    wired.registry.declare(Thread(name='reporter', tags=frozenset(), worktree=Checkout.from_wire(str(reporter_repo))))
     return wired
 
 

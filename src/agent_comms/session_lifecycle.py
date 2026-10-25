@@ -50,6 +50,7 @@ from .thread_identity import AcpThreadRole
 from .thread_model import ThreadModel
 from .thread_status import ActiveThreadPresence
 from .thread_text import NoThreadText, ThreadText
+from .repo import Checkout
 from .threads import Thread
 from .transcript_updates import TranscriptReplay
 
@@ -77,7 +78,7 @@ class SessionLifecycle:
         self.client: SdkSessionConnection | None = None
         self.titles: dict[str, str] = {}
         self.display_titles: dict[str, ThreadText] = {}
-        self.worktrees: dict[str, str] = {}
+        self.worktrees: dict[str, Checkout] = {}
         self.proxies: dict[str, RuntimeProxy | IncompatibleOwner] = {}
         self._attachment_lock = asyncio.Lock()
         self._identity_lock = asyncio.Lock()

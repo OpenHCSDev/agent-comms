@@ -5,6 +5,7 @@ manifest whose declaration name is intentionally unavailable in this reader.
 """
 
 
+from agent_comms.repo import Checkout
 from agent_comms.context_store import UNREAD_CONTEXT
 import asyncio
 import pickle
@@ -58,7 +59,7 @@ class ReadRecordedContext(ReadRequest):
 
 
 def saved_row(comms):
-    owner = Thread('saved', frozenset(), str(comms.root.parent), created_at=17003.0)
+    owner = Thread('saved', frozenset(), Checkout.from_wire(str(comms.root.parent)), created_at=17003.0)
     comms.registry.declare(owner)
     comms.contexts.record_after(UNREAD_CONTEXT, manifest(owner))
     with comms.contexts.snapshot() as db:

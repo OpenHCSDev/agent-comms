@@ -5,6 +5,7 @@ Ordinary conversation sends no longer acquire or manually release files.
 """
 from __future__ import annotations
 
+from agent_comms.repo import Checkout
 import json
 import os
 import signal
@@ -40,7 +41,7 @@ def _participants(tmp_path: Path) -> tuple[Comms, Path]:
     (worktree / "b.py").write_text("two")
     comms = wire(tmp_path / "wire")
     for name in ("alice", "bob", "observer"):
-        owner = Thread(name, frozenset({'team'}), str(worktree))
+        owner = Thread(name, frozenset({'team'}), Checkout.from_wire(str(worktree)))
         comms.registry.declare(
             replace(owner, process_identity=ProcessIdentity.capture(os.getpid())),
             RunningThreadStatus(),
@@ -141,7 +142,7 @@ def test_same_tick_new_owner_cannot_share_live_claim_identity(tmp_path):
     alice = comms.registry.require("alice")
     with pytest.raises(RelationViolationError):
         comms.registry.declare(Thread(
-            'same-tick-peer', frozenset({'team'}), str(worktree), created_at=alice.created_at))
+            'same-tick-peer', frozenset({'team'}), Checkout.from_wire(str(worktree)), created_at=alice.created_at))
     assert "same-tick-peer" not in comms.registry
     assert read_history(comms) == [claimed]
     assert comms.bus.bus.claim_projection()[str(worktree / "a.py")].owner == "alice"

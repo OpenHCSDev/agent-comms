@@ -1,6 +1,7 @@
 """The UI side of the comms observer reports the observer's end once, with how it exited, and no later use of it raises a pipe error."""
 
 
+from agent_comms.repo import Checkout
 import asyncio
 import os
 import signal
@@ -76,7 +77,7 @@ async def test_an_invalid_notification_reference_does_not_kill_the_observer(comm
 async def test_unavailable_owner_reads_preserve_the_observer(
     comms, durable_home, read_type, declared, refusal,
 ):
-    owner = Thread("read-subject", frozenset(), str(comms.root.parent))
+    owner = Thread("read-subject", frozenset(), Checkout.from_wire(str(comms.root.parent)))
     if declared:
         comms.registry.declare(owner)
     with ObservationProcess.awaited(comms.route) as process:
@@ -90,7 +91,7 @@ async def test_unavailable_owner_reads_preserve_the_observer(
 @pytest.mark.parametrize("read_type", OwnerRead.__subclasses__())
 @pytest.mark.parametrize("other_root", [False, True])
 async def test_stale_owner_reads_preserve_the_observer(comms, durable_home, read_type, other_root):
-    owner = Thread("read-subject", frozenset(), str(comms.root.parent))
+    owner = Thread("read-subject", frozenset(), Checkout.from_wire(str(comms.root.parent)))
     comms.registry.declare(owner)
     root = str(comms.root.parent / "another-wire") if other_root else str(comms.root)
     identity = owner.incarnation if other_root else RecordedThreadIncarnation(owner.name, 1.0)

@@ -77,7 +77,7 @@ class RunningTurnRegistryCheck(RegistryClaimCheck):
         return super().worktree_matches() or (
             self.actual.project_resume_due
             and self.actual.turn_lease == self.expected.require_turn_lease()
-            and self.actual.ran_in(self.expected.worktree)
+            and self.actual.ran_in(str(self.expected.worktree))
         )
 
 

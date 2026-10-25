@@ -7,6 +7,7 @@ because the package is really missing.
 
 from __future__ import annotations
 
+from agent_comms.repo import Checkout
 import sys
 from pathlib import Path
 
@@ -16,7 +17,7 @@ from agent_comms.threads import Thread
 
 def main(root: Path, name: str) -> None:
     comms = wire(root)
-    comms.registry.declare(Thread(name, frozenset(), str(root)))
+    comms.registry.declare(Thread(name, frozenset(), Checkout.from_wire(str(root))))
     print(comms.owners.start(name).pid)
 
 

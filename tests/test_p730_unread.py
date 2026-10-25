@@ -1,5 +1,6 @@
 """Each sidebar count is either indexing or an exact value, never an absent zero."""
 
+from agent_comms.repo import Checkout
 from dataclasses import fields
 
 import pytest
@@ -15,7 +16,7 @@ from agent_comms.threads import Thread
 def test_indexing_roster_and_exact_count_share_required_maps(tmp_path):
     comms = installed_comms(tmp_path)
     comms.registry.declare(Thread(
-        "peer", frozenset(), str(tmp_path / "peer"), execution=ExternalThreadExecution,
+        "peer", frozenset(), Checkout.from_wire(str(tmp_path / "peer")), execution=ExternalThreadExecution,
     ))
     viewer = comms.messaging.user_identity(str(tmp_path)).name
     roster = comms.views.presentation.roster(viewer)

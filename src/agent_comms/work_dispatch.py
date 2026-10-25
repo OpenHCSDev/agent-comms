@@ -63,7 +63,7 @@ class WorkDispatch:
         candidate = Thread(
             name,
             frozenset(),
-            str(checkout),
+            Checkout(checkout),
             model=defaults.model,
             thinking_level=defaults.thinking_level,
         )

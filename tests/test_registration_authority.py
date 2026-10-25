@@ -1,5 +1,6 @@
 """Actual persisted claim boundaries distinguish declaration from claim_scope drift."""
 
+from agent_comms.repo import Checkout
 import os
 import threading
 import time
@@ -24,7 +25,7 @@ from agent_comms.threads import Thread
 def registered(root):
     g_goal_id = GoalId.mint()
     comms = wire(root)
-    comms.registry.register(Thread('owner', frozenset({'team'}), str(root),
+    comms.registry.register(Thread('owner', frozenset({'team'}), Checkout.from_wire(str(root)),
         process_identity=ProcessIdentity.capture(os.getpid()),
         goal=Goal('task', g_goal_id, published_seq=0)))
     return comms.registry

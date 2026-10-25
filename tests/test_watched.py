@@ -1,6 +1,7 @@
 """The declared bus watch uses real native commit and replacement notifications."""
 
 
+from agent_comms.repo import Checkout
 import asyncio
 import errno
 from contextlib import aclosing
@@ -33,7 +34,7 @@ def watched_bus(tmp_path):
     Bus.install(Bus.path_in(tmp_path / "bus"))
     comms = wire(tmp_path / "bus")
     for name in ("owner", "peer"):
-        comms.registry.declare(Thread(name, frozenset(), str(tmp_path)))
+        comms.registry.declare(Thread(name, frozenset(), Checkout.from_wire(str(tmp_path))))
     return Bus.at(comms.root), comms
 
 

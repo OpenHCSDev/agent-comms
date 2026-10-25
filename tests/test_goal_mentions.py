@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 
+from agent_comms.repo import Checkout
 import json
 from dataclasses import asdict
 from pathlib import Path
@@ -34,9 +35,9 @@ from agent_comms.goal_scope import OneGoal
 def _wire(tmp_path: Path) -> Comms:
     comms = installed_comms(tmp_path / "wire")
     for name, created in (("owner", 17001.0), ("peer", 17002.0), ("other", 17003.0)):
-        comms.registry.declare(Thread(name, frozenset(), str(tmp_path), created_at=created))
+        comms.registry.declare(Thread(name, frozenset(), Checkout.from_wire(str(tmp_path)), created_at=created))
     comms.registry.declare(
-        Thread('human', frozenset(), str(tmp_path), role=UserThreadRole, created_at=17004.0)
+        Thread('human', frozenset(), Checkout.from_wire(str(tmp_path)), role=UserThreadRole, created_at=17004.0)
     )
     return comms
 
@@ -150,7 +151,7 @@ def test_bound_renames_follow_only_the_same_incarnation_and_name_reuse_is_stale(
     assert _rows(comms, "reviewer")[0]["owner"].target == "owner"
     comms.owners.stop("reviewer")
     comms.registry.remove("reviewer")
-    comms.registry.declare(Thread('peer', frozenset(), str(tmp_path), created_at=18002.0))
+    comms.registry.declare(Thread('peer', frozenset(), Checkout.from_wire(str(tmp_path)), created_at=18002.0))
     # The old token must not grant a link to a new peer with the same spelling.
     assert _rows(comms, "owner")[0] == {}
     assert _rows(comms, "peer")[0] == {}
@@ -235,7 +236,7 @@ def test_reused_owner_incarnation_cannot_inherit_old_derived_contact(tmp_path: P
     comms.owners.stop("owner")
     comms.registry.remove("owner")
     comms.registry.declare(
-        Thread('owner', frozenset(), str(tmp_path), goal=goal, created_at=18001.0)
+        Thread('owner', frozenset(), Checkout.from_wire(str(tmp_path)), goal=goal, created_at=18001.0)
     )
     assert _rows(comms, "peer")[0] == {}
     assert _rows(comms, "owner")[0] == {}

@@ -76,6 +76,7 @@ from agent_comms.send_result import SendResult
 from agent_comms.thread_execution import ExternalThreadExecution
 from agent_comms.thread_status import ThreadStatus
 from agent_comms.thread_text import AbsentText, GivenText, TextChoice
+from agent_comms.repo import Checkout
 from agent_comms.threads import Thread
 from agent_comms.typed_table import (
     Column,
@@ -682,7 +683,7 @@ class Uncommanded(AbsentText, BindingCommander):
 
     async def register(self, bridge: TranscriptBridge) -> None:
         thread = Thread(
-            bridge.binding.bus, frozenset(), str(await bridge.session_worktree()),
+            bridge.binding.bus, frozenset(), Checkout(await bridge.session_worktree()),
             process_identity=bridge.session_process(), execution=ExternalThreadExecution,
         )
         await bridge.comms.bus.when_open(partial(bridge.comms.registry.declare, thread))

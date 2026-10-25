@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from agent_comms.repo import Checkout
 import array
 import asyncio
 import json
@@ -157,7 +158,7 @@ async def _same_loop_backpressure_case(directory: Path, case_name: str):
     case = PromptWriteCase.member_named(case_name)()
     comms = installed_comms(directory / "wire")
     comms.registry.declare(Thread(
-        "owner", frozenset(), str(directory),
+        "owner", frozenset(), Checkout.from_wire(str(directory)),
         process_identity=ProcessIdentity.capture(os.getpid()),
     ))
     # The external process owns a real non-reading pipe. It impersonates no Pi

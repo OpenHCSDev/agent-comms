@@ -1,5 +1,6 @@
 """Retained Bus snapshots preserve current-incarnation routing and displayed reads."""
 
+from agent_comms.repo import Checkout
 from collections import Counter
 
 import pytest
@@ -19,7 +20,7 @@ from agent_comms.threads import Thread
 def routed(comms, tmp_path):
     comms.channels.create_tag("team")
     for name in ("sender", "recipient"):
-        comms.registry.declare(Thread(name, frozenset({"team"}), str(tmp_path)))
+        comms.registry.declare(Thread(name, frozenset({"team"}), Checkout.from_wire(str(tmp_path))))
     return comms
 
 

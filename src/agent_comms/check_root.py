@@ -27,6 +27,7 @@ from .registry_document import RosterVisibility
 from .storage_rules import StorageRoots
 from .thread_text import NoThreadText
 from .session_file import RegistrySessionLocation
+from .repo import Checkout
 from .threads import Thread
 from .turn_lease import NoTurnRecord
 from .transcript_routes import TranscriptRoutes
@@ -106,7 +107,7 @@ class CheckRoot:
             session = self._session(original, copied.root, slot, project)
             declarations[name] = replace(
                 original.without_process(),
-                worktree=str(project),
+                worktree=Checkout(project),
                 parent=original.parent.kept_in(selected),
                 task=NoThreadText(),
                 goal=NoGoal(),

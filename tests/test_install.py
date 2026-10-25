@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 
+from agent_comms.repo import Checkout
 import json
 import os
 import sqlite3
@@ -38,7 +39,7 @@ def bus(directory: Path) -> tuple[Path, RecordedBusIdentity]:
     root = directory / "wire"
     comms = prepare_native_comms(wire(root))
     comms.channels.create_tag("team")
-    comms.registry.declare(Thread("worker", frozenset({"team"}), str(directory)))
+    comms.registry.declare(Thread("worker", frozenset({"team"}), Checkout.from_wire(str(directory))))
     comms.messaging.send("worker", "#team", "hello")
     return root, RecordedBusIdentity.capture(comms.bus.bus.path)
 
@@ -198,7 +199,7 @@ def test_an_install_refuses_flags_a_bus_without_a_commander_record_cannot_use(
     root.mkdir(mode=0o700)
     home = _harnessless_home(private_directory, monkeypatch)
     comms = wire(root)
-    comms.registry.declare(Thread("lead", frozenset(), str(private_directory)))
+    comms.registry.declare(Thread("lead", frozenset(), Checkout.from_wire(str(private_directory))))
     with pytest.raises(UpgradeRefused):
         InstallCliCommand(project=private_directory, **flags).apply(comms)
     assert not (root / "commander.json").exists() and not (home / ".config/agent-comms/commander.json").is_symlink()
@@ -212,9 +213,9 @@ def test_an_install_without_flags_keeps_native_commander_and_parked_state(
     root = (private_directory / "wire").resolve()
     root.mkdir(mode=0o700)
     comms = wire(root)
-    comms.registry.declare(Thread("lead", frozenset(), str(private_directory)))
+    comms.registry.declare(Thread("lead", frozenset(), Checkout.from_wire(str(private_directory))))
     comms.registry.declare(Thread(
-        "parked-unit", frozenset(), str(private_directory)))
+        "parked-unit", frozenset(), Checkout.from_wire(str(private_directory))))
     comms.registry.set_work_state("parked-unit", ParkedThreadWorkState())
     recorded = RegisteredCommanderProject(comms.registry.require("lead").incarnation, ())
     comms.registry.set_commander_project(recorded)
@@ -250,7 +251,7 @@ def test_practice_copy_takes_turn_files_but_no_live_process(private_directory):
     comms = wire(root)
     (root / "storage.json").write_text(json.dumps({"floor_gib": 0}))
     comms.registry.declare(Thread(
-        "owner", frozenset(), str(root), process_identity=ProcessIdentity.capture(os.getpid())))
+        "owner", frozenset(), Checkout.from_wire(str(root)), process_identity=ProcessIdentity.capture(os.getpid())))
     lease = comms.agents.begin_turn("owner", TurnId('9b473845f684444f80a26586ae298d2b')).turn_lease
     turn = comms.registry.require("owner").turn_record.path
     assert turn in comms.registry.store.cut_paths

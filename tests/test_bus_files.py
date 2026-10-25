@@ -1,6 +1,7 @@
 """The real bus publishes only files declared by their existing state owners."""
 
 
+from agent_comms.repo import Checkout
 import sqlite3
 from contextlib import closing
 from pathlib import Path
@@ -48,7 +49,7 @@ def test_published_change_signal_is_not_a_bus_resource(tmp_path: Path) -> None:
 def test_every_bus_file_is_a_declared_root_file(tmp_path: Path, source_repository, comms: Comms) -> None:
     declared_files_goal_id = GoalId.mint()
     for name in ("owner", "peer"):
-        comms.registry.declare(Thread(name, frozenset(), str(tmp_path)))
+        comms.registry.declare(Thread(name, frozenset(), Checkout.from_wire(str(tmp_path))))
     sent = comms.messaging.send("peer", "owner", "Declare the bus files").message
     resource = tmp_path / "owned.py"
     resource.write_text("owned\n")
