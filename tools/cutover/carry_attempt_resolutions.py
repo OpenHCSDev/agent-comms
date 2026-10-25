@@ -131,7 +131,7 @@ class AttemptResolutions(Carry):
                 todo_path = TodoStore.path_in(TodoStore.directory_in(root))
                 bus_path = Bus.path_in(Bus.directory_in(root))
                 for dependency in (todo_path, bus_path):
-                    self.require_confined(self.root, dependency)
+                    self.require_confined(dependency)
                 with (
                     closing(TodoStore.read_snapshot(todo_path)) as todos,
                     closing(Bus.read_snapshot(bus_path)) as bus,
