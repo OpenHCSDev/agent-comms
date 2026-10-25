@@ -25,10 +25,12 @@ import tempfile
 import tomllib
 import typing
 from abc import ABC, abstractmethod
-from collections.abc import Iterable
+from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
 from functools import cached_property
 from pathlib import Path
+
+from typing_names import TypingImports, TypingReference
 
 ROOT = Path(__file__).resolve().parent.parent
 PACKAGE = "agent_comms"
@@ -132,34 +134,43 @@ class ImportNames(ModuleReferences):
             if (target := self.package.resolve(name)) is not None:
                 self.found.append(self.runs(self.module, target, node.lineno))
 
-    def visit_within(self, runs: type[Import], nodes: list[ast.stmt] | list[ast.AST]) -> None:
+    def visit_within(self, runs: type[Import], nodes: Sequence[ast.AST]) -> None:
         outer, self.runs = self.runs, runs
         for node in nodes:
             self.visit(node)
         self.runs = outer
 
-    def visit_FunctionDef(self, node: ast.FunctionDef | ast.AsyncFunctionDef | ast.Lambda) -> None:
-        """Decorators, defaults and annotations run where the ``def`` runs; only the body
-        runs when the function is called. Wrapping the body in an Expression lets
-        iter_child_nodes yield a lambda's one expression and a def's statements alike."""
-        called = list(ast.iter_child_nodes(ast.Expression(body=node.body)))
+    def visit_scope(self, node: ast.AST, called: Sequence[ast.AST]) -> None:
+        """Decorators, defaults and annotations run where the definition runs; only the
+        body runs when the function is called."""
         self.visit_within(
             self.runs,
             [child for child in ast.iter_child_nodes(node) if all(child is not c for c in called)],
         )
         self.visit_within(self.runs.in_function(), called)
 
-    # NodeVisitor dispatches on these names; one method serves all three scopes.
-    visit_AsyncFunctionDef = visit_Lambda = visit_FunctionDef  # noqa: N815
+    def visit_FunctionDef(self, node: ast.FunctionDef | ast.AsyncFunctionDef) -> None:
+        self.visit_scope(node, node.body)
+
+    # NodeVisitor dispatches on the node's class name; a coroutine's scopes are a function's.
+    visit_AsyncFunctionDef = visit_FunctionDef  # noqa: N815
+
+    def visit_Lambda(self, node: ast.Lambda) -> None:
+        self.visit_scope(node, [node.body])
+
+    def visit_Module(self, node: ast.Module) -> None:
+        self.typing = TypingImports.of(node)
+        self.generic_visit(node)
 
     def visit_If(self, node: ast.If) -> None:
-        match node.test:
-            case ast.Name(id="TYPE_CHECKING") | ast.Attribute(attr="TYPE_CHECKING"):
-                self.visit(node.test)
-                self.visit_within(CheckerImport, node.body)
-                self.visit_within(self.runs, node.orelse)
-            case _:
-                self.generic_visit(node)
+        test = TypingReference(self.typing)
+        test.dispatch_sync(node.test)
+        if test.is_type_checking:
+            self.visit(node.test)
+            self.visit_within(CheckerImport, node.body)
+            self.visit_within(self.runs, node.orelse)
+        else:
+            self.generic_visit(node)
 
     def visit_Import(self, node: ast.Import) -> None:
         self.record(node, *(alias.name for alias in node.names))

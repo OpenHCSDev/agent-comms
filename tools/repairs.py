@@ -19,7 +19,9 @@ import subprocess
 import sys
 from abc import ABC, abstractmethod
 from collections import Counter
-from collections.abc import Iterable
+from collections.abc import Iterable, Iterator
+from dataclasses import dataclass, field, replace
+from functools import cached_property
 from pathlib import Path
 from typing import ClassVar
 
@@ -36,7 +38,24 @@ from nominal_refactor_advisor.codemod import (
 
 from agent_comms.declared_family import DeclaredFamily
 
-FUNCTIONS = (ast.FunctionDef, ast.AsyncFunctionDef)
+type FunctionNode = ast.FunctionDef | ast.AsyncFunctionDef
+type ImportNode = ast.Import | ast.ImportFrom
+type Operation = EnsureImportOperation | PatchTargetOperation
+
+
+def bound_names(statement: ImportNode) -> list[str]:
+    """The names one import statement binds in its scope."""
+    return [alias.asname or alias.name.split(".")[0] for alias in statement.names]
+
+
+class Kept(ABC):
+    """Why a repair leaves an occurrence of its measure in place; ``why`` reports it."""
+
+    why: ClassVar[str]
+
+
+class OutsidePackage(Kept):
+    why = "outside the agent_comms package"
 
 
 class Repair(DeclaredFamily, ABC):
@@ -46,12 +65,10 @@ class Repair(DeclaredFamily, ABC):
 
     def __init__(self, repo: Path, paths: Iterable[str]) -> None:
         self.repo, self.paths = repo, sorted(paths)
-        self.left: Counter[str] = Counter()
+        self.left: Counter[type[Kept]] = Counter()
 
     @abstractmethod
-    def file_operations(
-        self, path: str, source: str
-    ) -> list[EnsureImportOperation | PatchTargetOperation]:
+    def file_operations(self, path: str, source: str) -> list[Operation]:
         """The operations removing this file's occurrences; each one left is tallied in
         ``left`` under the reason it stays."""
 
@@ -64,10 +81,13 @@ class Repair(DeclaredFamily, ABC):
             )
         )
 
-    def target(self, path: str, qualname: str | None = None) -> SourceRewriteTarget:
+    def file_target(self, path: str) -> SourceRewriteTarget:
         """A file of this repair's tree, named absolutely: NRA resolves a relative path
         against the process directory, which need not be the tree."""
-        return SourceRewriteTarget(file_path=str(self.repo / path), qualname=qualname)
+        return SourceRewriteTarget(file_path=str(self.repo / path))
+
+    def function_target(self, path: str, qualname: str) -> SourceRewriteTarget:
+        return replace(self.file_target(path), qualname=qualname)
 
     @staticmethod
     def sources(sequence: CodemodPlanSequence) -> dict[str, str]:
@@ -123,127 +143,81 @@ class ImportHoist(Repair):
         for edge in self.package.imports:
             self.targets.setdefault((edge.source, edge.line), set()).add(edge.target)
 
-    def file_operations(
-        self, path: str, source: str
-    ) -> list[EnsureImportOperation | PatchTargetOperation]:
+    def file_operations(self, path: str, source: str) -> list[Operation]:
         if path not in self.modules:
-            self.left["outside the agent_comms package"] += FunctionLocalImport.count(
-                source.encode(), path
-            )
+            self.left[OutsidePackage] += FunctionLocalImport.count(source.encode(), path)
             return []
-        module, tree, lines = (
-            self.modules[path],
-            ast.parse(source),
-            source.splitlines(keepends=True),
-        )
-        bound = TopLevelNames.of(tree)
-        imported = {
+        hoisted = HoistedFile(self, path, self.modules[path], source)
+        for local in hoisted.local_imports(hoisted.tree, []):
+            HoistVerdict.of(local).take(local)
+        return hoisted.operations()
+
+
+@dataclass
+class HoistedFile:
+    """One file under the hoist: what its top level binds, and the imports moved so far."""
+
+    hoist: ImportHoist
+    path: str
+    module: str
+    source: str
+    hoisted: dict[str, str] = field(default_factory=dict)
+    """Each moved name, by the one import text that binds it at the top."""
+    moved: dict[str, tuple[FunctionNode, list[ImportNode]]] = field(default_factory=dict)
+    """Each function losing imports, by qualified name, with the imports it loses."""
+
+    @cached_property
+    def tree(self) -> ast.Module:
+        return ast.parse(self.source)
+
+    @cached_property
+    def lines(self) -> list[str]:
+        return self.source.splitlines(keepends=True)
+
+    @cached_property
+    def bound(self) -> frozenset[str]:
+        return TopLevelNames.of(self.tree)
+
+    @cached_property
+    def imported(self) -> dict[str, str]:
+        """Each name a top-level import binds, by that import's text."""
+        return {
             name: ast.unparse(statement)
-            for statement in tree.body
+            for statement in self.tree.body
             if isinstance(statement, (ast.Import, ast.ImportFrom))
-            for name in self.bound(statement)
+            for name in bound_names(statement)
         }
-        hoisted: dict[str, str] = {}
-        moved: dict[str, tuple[ast.FunctionDef | ast.AsyncFunctionDef, list[ast.stmt]]] = {}
-        for qualname, function, statement in self.local_imports(tree, []):
-            text, names = ast.unparse(statement), set(self.bound(statement))
-            inside = self.targets.get((module, statement.lineno), set())
-            reason = self.stays(
-                statement, function, text, names, inside, lines, bound, imported, hoisted, module
-            )
-            if reason:
-                self.left[reason] += 1
-                continue
-            self.graph.add(module, inside)
-            hoisted.update(dict.fromkeys(names, text))
-            moved.setdefault(qualname, (function, []))[1].append(statement)
-        operations: list[EnsureImportOperation | PatchTargetOperation] = [
-            EnsureImportOperation(target=self.target(path), import_source=text)
-            for text in dict.fromkeys(hoisted.values())
+
+    def local_imports(self, node: ast.AST, scope: list[str]) -> Iterator[LocalImport]:
+        """Each import that is a direct body statement of a function, at any nesting of
+        classes and functions."""
+        for child in ast.iter_child_nodes(node):
+            if isinstance(child, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+                inner = [*scope, child.name]
+                if isinstance(child, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                    for statement in child.body:
+                        if isinstance(statement, (ast.Import, ast.ImportFrom)):
+                            yield LocalImport(self, ".".join(inner), child, statement)
+                yield from self.local_imports(child, inner)
+
+    def operations(self) -> list[Operation]:
+        operations: list[Operation] = [
+            EnsureImportOperation(target=self.hoist.file_target(self.path), import_source=text)
+            for text in dict.fromkeys(self.hoisted.values())
         ]
         operations += [
             PatchTargetOperation(
-                target=self.target(path, qualname),
+                target=self.hoist.function_target(self.path, qualname),
                 replacements=tuple(
                     SourceTextReplacement(old_source=removed, new_source="")
-                    for removed in dict.fromkeys(self.removals(lines, function, statements))
+                    for removed in dict.fromkeys(self.removals(function, statements))
                 ),
             )
-            for qualname, (function, statements) in moved.items()
+            for qualname, (function, statements) in self.moved.items()
         ]
         return operations
 
-    def stays(
-        self,
-        statement: ast.Import | ast.ImportFrom,
-        function: ast.FunctionDef | ast.AsyncFunctionDef,
-        text: str,
-        names: set[str],
-        inside: set[str],
-        lines: list[str],
-        bound: frozenset[str],
-        imported: dict[str, str],
-        hoisted: dict[str, str],
-        module: str,
-    ) -> str:
-        """Why this import stays local, or the empty string when it moves."""
-        root = self.imported_module(statement)
-        if not inside and root not in sys.stdlib_module_names:
-            return "third-party"
-        if statement.lineno != statement.end_lineno or lines[statement.lineno - 1].strip() != text:
-            return "not one plain line"
-        if any(name in bound and imported.get(name) != text for name in names):
-            return "the module binds the name another way"
-        if any(hoisted.get(name, text) != text for name in names):
-            return "another moved import binds the name"
-        if self.rebinds(function, statement, names):
-            return "the function rebinds the name"
-        if len(function.body) == 1:
-            return "the import is the whole body"
-        if module in self.graph.reached(inside):
-            return "a module-level import cycle runs through it"
-        return ""
-
-    @staticmethod
-    def imported_module(statement: ast.Import | ast.ImportFrom) -> str:
-        match statement:
-            case ast.ImportFrom(level=0, module=str(name)):
-                return name.split(".")[0]
-            case ast.Import(names=[ast.alias(name=name), *_]):
-                return name.split(".")[0]
-        return ""
-
-    @staticmethod
-    def bound(statement: ast.Import | ast.ImportFrom) -> list[str]:
-        return [alias.asname or alias.name.split(".")[0] for alias in statement.names]
-
-    def local_imports(self, node: ast.AST, scope: list[str]):
-        """Each import that is a direct body statement of a function, with the function's
-        qualified name, at any nesting of classes and functions."""
-        for child in ast.iter_child_nodes(node):
-            if isinstance(child, (*FUNCTIONS, ast.ClassDef)):
-                inner = [*scope, child.name]
-                if isinstance(child, FUNCTIONS):
-                    for statement in child.body:
-                        if isinstance(statement, (ast.Import, ast.ImportFrom)):
-                            yield ".".join(inner), child, statement
-                yield from self.local_imports(child, inner)
-
-    def rebinds(self, function: ast.AST, statement: ast.stmt, names: set[str]) -> bool:
-        for node in ast.walk(function):
-            match node:
-                case ast.Name(id=name, ctx=ast.Store()) if name in names:
-                    return True
-                case ast.Import() | ast.ImportFrom() if (
-                    node is not statement and set(self.bound(node)) & names
-                ):
-                    return True
-        return False
-
-    @staticmethod
-    def removals(
-        lines: list[str], function: ast.FunctionDef | ast.AsyncFunctionDef, removed: list[ast.stmt]
-    ) -> list[str]:
+    def removals(self, function: FunctionNode, removed: list[ImportNode]) -> list[str]:
         """Each moved import's line; when the function's whole leading import block moves,
         the blank line that separated it from the code goes with the block's last line."""
         body = function.body
@@ -252,19 +226,177 @@ class ImportHoist(Repair):
                 start = 1
             case _:
                 start = 0
-        block: list[ast.stmt] = []
+        block: list[ImportNode] = []
         for statement in body[start:]:
             if not isinstance(statement, (ast.Import, ast.ImportFrom)):
                 break
             block.append(statement)
-        texts = [lines[statement.lineno - 1] for statement in removed]
+        texts = [self.lines[statement.lineno - 1] for statement in removed]
         if (
             block
             and all(statement in removed for statement in block)
-            and not lines[block[-1].lineno].strip()
+            and not self.lines[block[-1].lineno].strip()
         ):
-            texts[removed.index(block[-1])] += lines[block[-1].lineno]
+            texts[removed.index(block[-1])] += self.lines[block[-1].lineno]
         return texts
+
+
+@dataclass(frozen=True)
+class LocalImport:
+    """One import written as a direct body statement of a function in a hoisted file."""
+
+    file: HoistedFile
+    qualname: str
+    function: FunctionNode
+    statement: ImportNode
+
+    @cached_property
+    def text(self) -> str:
+        return ast.unparse(self.statement)
+
+    @cached_property
+    def names(self) -> set[str]:
+        return set(bound_names(self.statement))
+
+    @cached_property
+    def inside(self) -> set[str]:
+        """The agent_comms modules the statement imports."""
+        return self.file.hoist.targets.get((self.file.module, self.statement.lineno), set())
+
+    @cached_property
+    def root(self) -> str:
+        """The top-level package an absolute import names; empty for a relative one."""
+        match self.statement:
+            case ast.ImportFrom(level=0, module=str(name)) | ast.Import(
+                names=[ast.alias(name=name), *_]
+            ):
+                return name.split(".")[0]
+        return ""
+
+
+class HoistVerdict(DeclaredFamily, ABC):
+    """What the hoist does with one local import: the first member, in declaration order,
+    that holds for it decides."""
+
+    @classmethod
+    @abstractmethod
+    def holds(cls, local: LocalImport) -> bool: ...
+
+    @classmethod
+    @abstractmethod
+    def take(cls, local: LocalImport) -> None: ...
+
+    @classmethod
+    def of(cls, local: LocalImport) -> type[HoistVerdict]:
+        return next(verdict for verdict in cls.members_with(cls) if verdict.holds(local))
+
+
+class KeptImport(Kept, HoistVerdict, ABC):
+    """The import stays in its function, and the hoist tallies why."""
+
+    @classmethod
+    def take(cls, local: LocalImport) -> None:
+        local.file.hoist.left[cls] += 1
+
+
+class ThirdParty(KeptImport):
+    why = "third-party"
+
+    @classmethod
+    def holds(cls, local: LocalImport) -> bool:
+        return not local.inside and local.root not in sys.stdlib_module_names
+
+
+class NotOnePlainLine(KeptImport):
+    why = "not one plain line"
+
+    @classmethod
+    def holds(cls, local: LocalImport) -> bool:
+        statement = local.statement
+        return (
+            statement.lineno != statement.end_lineno
+            or local.file.lines[statement.lineno - 1].strip() != local.text
+        )
+
+
+class BoundOtherwise(KeptImport):
+    why = "the module binds the name another way"
+
+    @classmethod
+    def holds(cls, local: LocalImport) -> bool:
+        return any(
+            name in local.file.bound and local.file.imported.get(name) != local.text
+            for name in local.names
+        )
+
+
+class BoundByAnotherMove(KeptImport):
+    why = "another moved import binds the name"
+
+    @classmethod
+    def holds(cls, local: LocalImport) -> bool:
+        return any(local.file.hoisted.get(name, local.text) != local.text for name in local.names)
+
+
+class Rebound(KeptImport):
+    why = "the function rebinds the name"
+
+    @classmethod
+    def holds(cls, local: LocalImport) -> bool:
+        rebinding = Rebinding(local)
+        rebinding.visit(local.function)
+        return rebinding.found
+
+
+class WholeBody(KeptImport):
+    why = "the import is the whole body"
+
+    @classmethod
+    def holds(cls, local: LocalImport) -> bool:
+        return len(local.function.body) == 1
+
+
+class ImportCycle(KeptImport):
+    why = "a module-level import cycle runs through it"
+
+    @classmethod
+    def holds(cls, local: LocalImport) -> bool:
+        return local.file.module in local.file.hoist.graph.reached(local.inside)
+
+
+class Moves(HoistVerdict):
+    """Nothing keeps the import: it moves to the module top, and later imports are
+    judged with the move accepted."""
+
+    @classmethod
+    def holds(cls, local: LocalImport) -> bool:
+        return True
+
+    @classmethod
+    def take(cls, local: LocalImport) -> None:
+        local.file.hoist.graph.add(local.file.module, local.inside)
+        local.file.hoisted.update(dict.fromkeys(local.names, local.text))
+        local.file.moved.setdefault(local.qualname, (local.function, []))[1].append(local.statement)
+
+
+class Rebinding(ast.NodeVisitor):
+    """Whether a function binds one of a local import's names again, by assignment or by
+    another import."""
+
+    def __init__(self, local: LocalImport) -> None:
+        self.local, self.found = local, False
+
+    def visit_Name(self, node: ast.Name) -> None:
+        match node:
+            case ast.Name(id=name, ctx=ast.Store()) if name in self.local.names:
+                self.found = True
+
+    def visit_Import(self, node: ImportNode) -> None:
+        if node is not self.local.statement and set(bound_names(node)) & self.local.names:
+            self.found = True
+
+    # NodeVisitor dispatches on the node's class name; both import forms bind alike.
+    visit_ImportFrom = visit_Import  # noqa: N815
 
 
 def main() -> int:
@@ -318,7 +450,7 @@ def main() -> int:
             print(diff, end="")
             print(f"{repair.__name__}: {changed} files would change", file=sys.stderr)
         for reason, count in fixer.left.most_common():
-            print(f"{repair.__name__}: {count} left, {reason}", file=sys.stderr)
+            print(f"{repair.__name__}: {count} left, {reason.why}", file=sys.stderr)
     return 0
 
 

@@ -2,7 +2,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-from repairs import ImportHoist
+from repairs import ImportCycle, ImportHoist
 
 PACKAGE = {
     "__init__.py": "",
@@ -39,7 +39,7 @@ def test_a_local_import_moves_up_unless_a_load_time_import_leads_back(tmp_path: 
     assert "+from .leaf import VALUE" in diff
     assert "-    from .leaf import VALUE" in diff
     assert "-    from .loop import LOOPED" not in diff
-    assert hoist.left == {"a module-level import cycle runs through it": 1}
+    assert hoist.left == {ImportCycle: 1}
 
     assert ImportHoist(repo, ["src/agent_comms/user.py"]).apply() == ("src/agent_comms/user.py",)
     source = (repo / "src/agent_comms/user.py").read_text()
