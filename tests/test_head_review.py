@@ -167,3 +167,16 @@ def test_acceptance_over_the_growth_limit_needs_a_reason_naming_each_growing_fil
         "grown.py declares forty one values that the reviewed request needs as separate names")))
     posts = tuple(call for call in github.calls() if f"statuses/{head}" in call[1])
     assert len(posts) == 1 and any(f"(src +{grown})" in part for part in posts[0])
+
+
+def test_judge_ok_keeps_every_repeated_growth_reason():
+    reasons = [f"{name} adds the lines this reviewed request needs to answer one question"
+               for name in ("first.py", "second.py", "third.py")]
+    verb = judge.JudgeVerb.parse(["ok", "--pr", "8", "--head", "abc123def", "--why", ACCEPTED.text,
+                            *(part for reason in reasons for part in ("--growth", reason))])
+    growth = verb.head_operation().growth
+    assert all(growth.names(f"src/{name}") for name in ("first.py", "second.py", "third.py"))
+    assert not growth.names("src/fourth.py")
+    with pytest.raises(ToolRefusedError, match="12\\+ words"):
+        judge.JudgeVerb.parse(["ok", "--pr", "8", "--head", "abc123def", "--why", ACCEPTED.text,
+                         "--growth", reasons[0], "--growth", "short.py grows"]).head_operation()
