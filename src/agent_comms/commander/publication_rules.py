@@ -52,6 +52,10 @@ class EmptyPullRequest(HeldBranchRule):
             reader = held.repository.branches
             todo = held.todo
             for pull in held.source.pulls.listed(todo.repo, UnmergedListedPullRequest, todo):
+                # A draft with no change is the empty first commit every order starts with;
+                # only a ready request claims a change.
+                if pull.draft:
+                    continue
                 compared = reader.pull_request_diff(pull.base, pull.head)
                 if not compared.paths:
                     found.append(cls(held.problem, todo.order.checked().id, held.holder,

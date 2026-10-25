@@ -27,7 +27,11 @@ from .field_codec import FieldCodec, MalformedRecord
 from .private_path import PrivateFileRole
 from .store_files import (
     AtomicFile,
+    DEFAULT_ISOLATION,
+    DEFAULT_STORE_CONTENTION,
     SharedLock,
+    SqliteStore,
+    StoreContention,
     StoreLock,
     StoreLockContention,
     StoreLockFile,
@@ -37,6 +41,9 @@ from .store_files import (
     is_store_lock,
     store_lock_path,
 )
+
+if TYPE_CHECKING:
+    from sqlite3 import _IsolationLevel
 
 T = TypeVar("T")
 
@@ -497,46 +504,7 @@ class RegistryFile(DurableFile, WireWakeFile):
 
 
 
-class StoreContention(ABC):
-    """Typed SQLite busy behavior shared by snapshots and writers."""
-
-    @property
-    @abstractmethod
-    def timeout(self) -> float: ...
-
-    def reader(self, uri: str) -> sqlite3.Connection:
-        return sqlite3.connect(uri, uri=True, isolation_level=None, timeout=self.timeout)
-
-    def writer(
-        self, path: str | os.PathLike[str], options: dict[str, object]
-    ) -> sqlite3.Connection:
-        return sqlite3.connect(path, timeout=self.timeout, **options)
-
-    def lock_budget(self) -> StoreLockContention:
-        """The same wait spent on the store's file locks: one fresh budget per operation."""
-        return StoreLockContention(self.timeout)
-
-
-@dataclass(frozen=True)
-class StoreWait(StoreContention):
-    timeout: ClassVar[float] = 5.0
-
-
-@dataclass(frozen=True)
-class StoreBusy(StoreContention):
-    """Do not wait when optional display or input work cannot acquire a SQLite lock."""
-
-    timeout: ClassVar[float] = 0.0
-
-    def reader(self, uri: str) -> sqlite3.Connection:
-        with CoordinationReadUnavailable.checking():
-            return super().reader(uri)
-
-
-DEFAULT_STORE_CONTENTION = StoreWait()
-
-
-class SQLiteFile(RootFile):
+class SQLiteFile(RootFile, SqliteStore):
     """SQLite connections, snapshots, copies and companions share one file owner."""
 
     __slots__ = ()
@@ -546,10 +514,13 @@ class SQLiteFile(RootFile):
     @classmethod
     def writer(
         cls, path: str | os.PathLike[str], contention: StoreContention = DEFAULT_STORE_CONTENTION,
-        **options: object,
+        *, isolation_level: _IsolationLevel = DEFAULT_ISOLATION,
+        uri: bool = False, check_same_thread: bool = True,
     ) -> sqlite3.Connection:
         """Open a writer through the store family's typed busy behavior."""
-        return cls.identifiers_only(contention.writer(path, options))
+        return cls.identifiers_only(contention.writer(
+            path, isolation_level=isolation_level, uri=uri, check_same_thread=check_same_thread,
+        ))
 
     @staticmethod
     def identifiers_only(db: sqlite3.Connection) -> sqlite3.Connection:
@@ -666,7 +637,7 @@ class SQLiteFile(RootFile):
         wal = cls.wal_path(path)
         if not (wal.is_file() and wal.stat().st_size):
             return
-        with _store_lock(path), closing(cls.writer(path, isolation_level=None)) as db:
+        with cls.exclusive_writer(path) as db:
             busy, _, _ = db.execute("PRAGMA wal_checkpoint(TRUNCATE)").fetchone()
         if busy:
             raise sqlite3.OperationalError(f"Another connection holds the WAL of {path}")

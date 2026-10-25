@@ -5,8 +5,8 @@ from __future__ import annotations
 import inspect
 import sqlite3
 from abc import abstractmethod
-from dataclasses import dataclass, field, replace
 from collections.abc import Iterable
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from typing import Annotated, ClassVar
@@ -140,21 +140,6 @@ class Carry(DeclaredFamily, affix="", discovery_package="cutover"):
         external = {self.writer_file(store).path for store in self.writer_owned}
         if (not path.is_relative_to(self.root) and path not in external) or path.resolve() != path:
             raise RelationViolationError(f"Carry refuses an unconfined path: {path}")
-
-
-class ArchivedInputs:
-    """Apply one carry input declaration to its retained snapshot roots as well."""
-
-    @abstractmethod
-    def roots(self) -> tuple[Path, ...]: ...
-
-    def input_files(self) -> tuple[Path, ...]:
-        paths: set[Path] = set()
-        for root in self.roots():
-            paths.update(super(ArchivedInputs, replace(self, root=root)).input_files())
-        for path in paths:
-            self.require_confined(path)
-        return tuple(sorted(paths))
 
 
 class CarryOperation[Answer](

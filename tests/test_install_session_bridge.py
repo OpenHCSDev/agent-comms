@@ -245,9 +245,7 @@ def test_install_swap_keeps_the_claim_and_resumes_the_same_process_on_the_new_ru
         (bridge,) = Serve.running(home)
         bridges = SessionBridgeResumes()
         with ExitStack() as cleanup:
-            with ExitStack() as resources:
-                bridges.pause(bridge, resources)
-                resources.callback(bridges.release)
+            with bridges.holding((bridge,)):
                 assert not claim.socket_path.exists()
                 assert isinstance(claim.state(), LiveWatch)
                 hook = subprocess.run(
@@ -276,7 +274,6 @@ def test_install_swap_keeps_the_claim_and_resumes_the_same_process_on_the_new_ru
                     f'Waiting for the session bridge of {claim.thread}: '
                     'an install holds its claim and is replacing it.'
                 )
-            bridges.confirm()
             bridges.require_resumed()
             assert bridges.failures == ()
             resumed = InspectSession().information(claim.socket_path)
@@ -307,19 +304,18 @@ def test_a_bridge_that_never_answers_pause_refuses_the_install_by_name(
     observed = SessionInformation(owner=me, process=me, runtime=LaunchRuntime.running(),
                                   transcript=tmp_path / 'silent-session.jsonl')
     bridges = SessionBridgeResumes()
-    with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as silent, ExitStack() as resources:
+    with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as silent:
         silent.bind(str(claim.socket_path))
         silent.listen()
-        with pytest.raises(UpgradeRefused) as refused:
-            bridges.pause(SessionBridge(claim, observed), resources)
-        bridges.release()
+        with pytest.raises(UpgradeRefused) as refused, bridges.holding(
+                (SessionBridge(claim, observed),)):
+            pass
         # The late bridge finds its runtime waiting once it acknowledges.
         accepted, _ = silent.accept()
         with accepted, accepted.makefile('rb') as stream:
             pause = FieldCodec.decode(PauseSession, FieldCodec.parse(stream.readline().decode()))
             assert pause.process == me
             assert FieldCodec.decode(LaunchRuntime, FieldCodec.parse(stream.readline().decode()))
-    bridges.confirm()
     unanswered = (f'Session bridge silent-session at {claim.socket_path} '
                   'did not acknowledge pause within 30 s')
     assert str(refused.value) == f'install: refused: {unanswered}'
@@ -352,3 +348,32 @@ def test_a_bridge_whose_installer_left_before_ready_stays_stopped(tmp_path, caps
     record = WatchRecord('bridge-copy', str(tmp_path), ('watch',), tmp_path)
     ClaimedReplacement(peer, claim=-1).finish(operation, record)
     assert 'Session bridge installer gone before ready; left stopped' in capsys.readouterr().err
+
+
+def test_a_bridge_that_dies_during_pause_counts_as_stopped(tmp_path, bridge_home, monkeypatch):
+    """Installs 21, 22 and 23 (2026-10-25): the outgoing bridge died writing the registry
+    under the install's hold and closed its socket unanswered; the pause parsed the empty
+    line. Its exited process, checked by identity, is the stop the pause asked for."""
+    claim = WatchClaim('dying-session', bridge_home)
+    current = bridge_home / LaunchRuntime.current_pointer().relative_to(Path.home())
+    current.parent.mkdir(parents=True)
+    (tmp_path / 'runtime').mkdir()
+    current.symlink_to(tmp_path / 'runtime', target_is_directory=True)
+    monkeypatch.setenv('HOME', str(bridge_home))
+    claim.socket_path.parent.mkdir(parents=True, exist_ok=True)
+    dying = subprocess.Popen((sys.executable, '-c', (
+        'import socket, sys; s = socket.socket(socket.AF_UNIX); s.bind(sys.argv[1]); '
+        's.listen(); print(flush=True); peer, _ = s.accept(); peer.makefile("rb").readline()'),
+        str(claim.socket_path)), stdout=subprocess.PIPE)
+    dying.stdout.readline()
+    me = ProcessIdentity.capture(os.getpid())
+    observed = SessionInformation(owner=me, process=ProcessIdentity.capture(dying.pid),
+                                  runtime=LaunchRuntime.running(),
+                                  transcript=tmp_path / 'dying-session.jsonl')
+    bridges = SessionBridgeResumes()
+    with bridges.holding((SessionBridge(claim, observed),)):
+        pass
+    assert dying.wait(10) == 0
+    assert bridges.failures == ()
+    assert bridges.lines() == ('Session bridge dying-session: bridge exited during pause; '
+                               'left stopped',)
