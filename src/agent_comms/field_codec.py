@@ -605,13 +605,6 @@ class FieldPlan:
     ) -> None:
         out.update(self.decoded_bound(data, context))
 
-    def require_value(self, value: object) -> None:
-        if self.reject_null and value is None:
-            raise MalformedRecord(f"Null field {self.key}")
-        if self.choices is not None and value not in self.choices:
-            raise MalformedRecord(
-                f"Field {self.key} must be one of: {', '.join(self.choices)}")
-
     def decoded_external(self, data: dict[str, object]) -> dict[str, object]:
         return self.decoded_using(data, lambda raw: self.value.decode_external(raw, data))
 
@@ -623,7 +616,11 @@ class FieldPlan:
         if self.name not in captured:
             return {}
         value = captured[self.name]
-        self.require_value(value)
+        if self.reject_null and value is None:
+            raise MalformedRecord(f"Null field {self.key}")
+        if self.choices is not None and value not in self.choices:
+            raise MalformedRecord(
+                f"Field {self.key} must be one of: {', '.join(self.choices)}")
         return {self.name: decode(value)}
 
     def read(self, data: object) -> object:
@@ -3207,7 +3204,7 @@ class _RecordDecoder[T](_ContextDecoder[T]):
         if not isinstance(data, dict):
             raise MalformedRecord("Expected a record object; fix: supply a JSON object.")
         problems = self.problems(data)
-        values = {}
+        values: dict[str, object] = {}
         for entry in self.plan.bindings:
             try:
                 entry.decode_into(data, context, values)
