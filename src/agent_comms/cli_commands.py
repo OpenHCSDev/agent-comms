@@ -29,6 +29,7 @@ from acp.exceptions import RequestError
 from pydantic import JsonValue
 
 from agent_comms.errors import ToolRefusedError
+from agent_comms.installer.interpreter_operation import ProcessLauncherPhase
 from agent_comms.installer.owner_starts import OwnerStart, RefusedOwner, StartedOwner
 from agent_comms.launch_root import LaunchRoot
 from agent_comms.lifecycle_capability import LifecycleCapability, Successful
@@ -1820,11 +1821,11 @@ class InstallCliCommand(HarnessInstallation, CliCommand):
     def execute(self, route: CommsRoute, output: TextIO) -> int:
         """The bus may be unreadable by this runtime, or absent, until the target's own
         source has carried or created it, so nothing opens it here."""
-        from agent_comms.installer.interpreter_operation import ProcessLauncherPhase
         from agent_comms.installer.launch import InstallLogs, InstallRun
 
         with InstallLogs(route.root).launching():
-            return InstallRun.start(self, route.root, ProcessLauncherPhase()).launch(output)
+            run = InstallRun.start(self, route.root, ProcessLauncherPhase())
+            return run.launch(output)
 
 
 
