@@ -493,6 +493,8 @@ class OwnersStopped:
 
     def start_on(self, stack: Stack, root: Path) -> tuple[OwnerStart, ...]:
         self.started = stack.owners(root, StartCliCommand, self.stopped)
+        for outcome in self.started:
+            outcome.require_success(UpgradeRefused)
         return self.started
 
     def published_on(self, stack: Stack, root: Path) -> tuple[OwnerStart, ...]:

@@ -119,7 +119,7 @@ class OwnerRestartHandoff:
 
     def restore(self, lifecycle: OwnerLifecycle) -> tuple[OwnerRestartResult, ...]:
         """Restore EACH acquired launch unchanged under its authentic decoder."""
-        runtime = RestoredRuntime.running()
+        runtime = RestoredRuntime(LaunchRuntime.running().interpreter)
         if any(owner.launch.interpreter != str(runtime.interpreter) for owner in self.owners):
             raise RelationViolationError('Original restoration requires the acquired source interpreter')
 
