@@ -227,7 +227,7 @@ class ReadingObservation[InterestT: InterestRequest](Observation[InterestT]):
 
     view: ClassVar[RevisionView]
 
-    def __init_subclass__(cls, **kwargs):
+    def __init_subclass__(cls, **kwargs: object) -> None:
         super().__init_subclass__(**kwargs)
         try:
             cls.view
@@ -637,7 +637,7 @@ class NotificationsRead:
         if revision.registry != self.revision.registry:
             return True
         current = (comms.views.observed_activity(revision, self.activity)
-                   if self.activity and revision.changed_since(ActivityView(), self.revision)
+                   if revision.changed_since(ActivityView(), self.revision)
                    else self.activity)
         return (any(current.get(name) != seen for name, seen in self.activity.items())
                 or self.notification_window.changed(comms, revision, self.revision))

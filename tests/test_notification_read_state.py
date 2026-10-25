@@ -13,17 +13,17 @@ from agent_comms.ui_model.observation import (
 )
 
 
-def test_notification_read_states_use_the_request_revision_contract():
+def test_notification_read_states_use_the_request_revision_contract(comms):
     original = WireRevision.empty()
     later = replace(original, expiry_tick=original.expiry_tick + 60)
     live = ReadNotifications("root", ())
     recorded = ReadRecordedNotifications("root", (), "archive")
     settled = NotificationsRead(original, {})
-    assert not live.changed_since(None, original, settled)
-    assert not live.changed_since(None, later, settled)
-    assert not recorded.changed_since(None, later, settled)
-    assert live.changed_since(None, later, UnreadableNotificationsRead(original))
-    assert not live.changed_since(None, original, UnreadableNotificationsRead(original))
+    assert not live.changed_since(comms, original, settled)
+    assert not live.changed_since(comms, later, settled)
+    assert not recorded.changed_since(comms, later, settled)
+    assert live.changed_since(comms, later, UnreadableNotificationsRead(original))
+    assert not live.changed_since(comms, original, UnreadableNotificationsRead(original))
 
 
 def test_notification_read_only_acquires_activity_when_its_source_changed(comms, tmp_path):
