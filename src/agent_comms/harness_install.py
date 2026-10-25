@@ -20,7 +20,7 @@ from typing import ClassVar, Self
 
 from agent_comms_hooks import ClaudeHookProgram
 
-from .child_process import Platform
+from .child_process import Platform, ResidentManager
 from .declared_family import DeclaredFamily
 from .errors import RelationViolationError
 from .host_services import SystemdUserService
@@ -190,7 +190,7 @@ class CodexHarness(InstalledHarness):
     skills_dir: ClassVar[str] = ".codex/skills"
 
     def configure(self) -> tuple[Path, ...]:
-        CodexInboxService.install(home=self.home)
+        ResidentManager.current().install(CodexInboxService, home=self.home)
         return (CodexInboxService.unit_file(self.home),)
 
     @classmethod
