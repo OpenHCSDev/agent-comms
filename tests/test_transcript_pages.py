@@ -171,7 +171,7 @@ def test_never_started_native_child_keeps_no_native_cursor_and_no_read_mark(tmp_
         "parent", frozenset(), Checkout(tmp_path), session_file=RegistrySessionLocation.from_path(str(path), comms.root),
         execution=NativeThreadExecution,
     ))
-    RegisterCliCommand(name="child", worktree=str(tmp_path), parent=ForkedParent("parent"),
+    RegisterCliCommand(name="child", worktree=Checkout(tmp_path), parent=ForkedParent("parent"),
                        execution=NativeThreadExecution).apply(comms)
     checkpoint = comms.transcripts.transcript_checkpoint("child")
     inherited = comms.transcripts.capture_page_read("child").read().after

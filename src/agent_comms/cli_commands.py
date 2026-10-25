@@ -1731,7 +1731,7 @@ class ThreadCliCommand(NameArgument, CliCommand):
 @dataclass(frozen=True, kw_only=True)
 class RegisterCliCommand(NameArgument, CliCommand):
     help = "Register a thread"
-    worktree: Annotated[str, Argument(flags=("--worktree",))]
+    worktree: Annotated[Checkout, Argument(flags=("--worktree",))]
     tags: Annotated[
         frozenset[str],
         Normalize(_tags),
@@ -1759,7 +1759,7 @@ class RegisterCliCommand(NameArgument, CliCommand):
         thread = Thread(
             name=self.name,
             tags=self.tags,
-            worktree=Checkout(Path(self.worktree)),
+            worktree=self.worktree,
             parent=self.parent,
             task=self.task,
             process_identity=self.process,
