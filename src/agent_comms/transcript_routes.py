@@ -12,6 +12,7 @@ from agent_comms.native_session_reopen import NativeSessionIdentity
 
 from .errors import RelationViolationError
 from .field_codec import InputId, MalformedRecord
+from .input_disposition import InputDispositions
 from .private_path import FileObservation, FileRevision
 from .routing import TurnRouting
 from .typed_table import Column, DurableStore, StoreRows, WithoutRowid
@@ -132,7 +133,6 @@ class TranscriptRoutes(DurableStore):
         registry and input owners remain held until durable annotations commit.
         A partial successful send subset remains published if a later send fails.
         """
-        from .input_disposition import InputDispositions
         from .native_input_owner import RegistryOwner
         from .native_transcript import NativeTranscript
 

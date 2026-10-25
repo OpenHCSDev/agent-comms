@@ -12,6 +12,10 @@ from .envelope_claim_transitions import ExistingFileClaim
 from .field_codec import ClaimId
 from .native_tool_call import NativeToolMode
 from .native_tool_transport import ToolTransport
+from .selected_claim import (
+    publish_selected_resource_claim,
+    write_selected_claimed_file,
+)
 from .turn_context import InstructionFile
 
 if TYPE_CHECKING:
@@ -143,8 +147,6 @@ class SelectedExistingFileWrite(NoSelectedTools):
         return SelectedExistingFileWrite(ExistingFileClaim(Path(normalized)), self.contents)
 
     def apply(self, owner: CodingToolOwner) -> None:
-        from .selected_claim import publish_selected_resource_claim, write_selected_claimed_file
-
         claimed = publish_selected_resource_claim(
             owner.comms,
             owner.store,

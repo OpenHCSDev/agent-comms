@@ -32,6 +32,7 @@ from .task_sources import (
 )
 from .thread_identity import UserThreadRole
 from .threads import Thread
+from .working_memory_policy import AnnotationDisclosureGrant
 
 if TYPE_CHECKING:
     from .goal_management import Goals
@@ -141,8 +142,6 @@ class Messaging:
                                     worktree=worktree, scope=scope, change=change)
 
     def approve_annotations(self, recipient, subject, *, worktree, per_hour, segments):
-        from .working_memory_policy import AnnotationDisclosureGrant
-
         return self._pin_constraint(recipient, subject, AnnotationDisclosureGrant,
             worktree=worktree, scope=CurrentTaskScopeSelection(), change=OriginalTaskChange(),
             per_hour=per_hour, segments=segments)

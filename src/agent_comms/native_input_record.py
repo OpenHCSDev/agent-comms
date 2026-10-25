@@ -8,12 +8,23 @@ from __future__ import annotations
 
 import sqlite3
 from abc import ABC, abstractmethod
-from dataclasses import dataclass, field
+from dataclasses import (
+    dataclass,
+    field,
+    replace,
+)
 from typing import TYPE_CHECKING, Annotated, ClassVar, Literal
+
+from agent_comms.coordination_tables.executions import ExecutionRecord
 
 from .coordination_contracts import validate_execution_id
 from .coordination_errors import IdentityConflict, UnrecordedNativeContext
+from .coordination_tables.assignments import (
+    ExecutionAssignmentLink,
+    WakeAssignment,
+)
 from .coordination_tables.participants import OwnerGenerations, OwnerRecord
+from .coordination_tables.responses import ResponseObligation
 from .declared_family import DeclaredFamily
 from .field_codec import (
     FieldCodec,
@@ -24,6 +35,7 @@ from .field_codec import (
     NativeContext,
     WireName,
 )
+from .transcript_routes import InputDisplay
 from .typed_table import Column, IntegerStorage, SqlStorage, TextStorage
 
 if TYPE_CHECKING:
@@ -177,9 +189,6 @@ class NativeInputExecution(DeclaredFamily, affix="NativeExecution"):
         This display is derived inside the original read snapshot. It is not an
         annotation, native acknowledgement or another source-membership declaration.
         """
-        from dataclasses import replace
-
-        from .transcript_routes import InputDisplay
 
         return entry.events(replace(
             projection, input_display=InputDisplay(user.input_id, None)
@@ -208,8 +217,6 @@ class NativeInputExecution(DeclaredFamily, affix="NativeExecution"):
         """Select the assignments included in this stage's input."""
 
     def source_assignment_ids(self, db: Connection, input_id: InputId) -> tuple[str, ...]:
-        from .coordination_tables.assignments import WakeAssignment
-
         columns = ",".join(f"c.{column}" for column in WakeAssignment.columns())
         originals = WakeAssignment.read(db.execute(
             f"SELECT {columns} FROM {WakeAssignment.declared_name} c "
@@ -289,7 +296,6 @@ class FullNativeExecution(NativeInputExecution):
 
     @classmethod
     def source_membership_sql(cls) -> str:
-        from .coordination_tables.assignments import ExecutionAssignmentLink
         from .native_runtime_input import NativeRuntimeInput
 
         return (f"SELECT n.input_id, c.assignment_id, c.ordinal "
@@ -331,8 +337,6 @@ class FullNativeExecution(NativeInputExecution):
         )
 
     def _execution(self, db: sqlite3.Connection) -> ExecutionRecord:
-        from agent_comms.coordination_tables.executions import ExecutionRecord
-
         return ExecutionRecord.require(db, execution_id=self.execution_id)
 
     def retried_in(self, db: sqlite3.Connection) -> bool:
@@ -340,7 +344,6 @@ class FullNativeExecution(NativeInputExecution):
         return self._execution(db).lifecycle.current_attempt_ordinal != self.attempt_ordinal
 
     def published_replies(self, db: sqlite3.Connection, owner_lookup: str) -> tuple[MessageReference, ...]:
-        from .coordination_tables.responses import ResponseObligation
         execution = self._execution(db)
         if not self.matches_execution(execution, owner_lookup):
             return ()

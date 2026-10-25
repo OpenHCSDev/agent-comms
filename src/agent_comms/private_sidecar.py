@@ -19,6 +19,7 @@ import os
 import secrets
 import sqlite3
 import stat
+import fcntl
 from collections.abc import Iterator
 from contextlib import ExitStack, contextmanager
 from dataclasses import dataclass
@@ -115,8 +116,6 @@ class _PinnedDirectory:
 
 @contextmanager
 def _locked_directory(path: Path) -> Iterator[_PinnedDirectory]:
-    import fcntl
-
     path = path.absolute()
     if ".." in path.parts or not path.name:
         raise IdentityConflict("Private sidecar path must be lexical.")

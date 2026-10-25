@@ -49,6 +49,7 @@ from .field_codec import (
 )
 from .goals import GoalDeclaration
 from .lifecycle_capability import Successful
+from .native_failures import NativePiUnavailable
 from .native_file_artifact import NativeFileArtifact
 from .native_session_reopen import NativeSessionIdentity
 from .pi_counts import NonnegativePiCount, PiCount, TotalPiCount, UnreportedCount
@@ -64,8 +65,20 @@ from .send_result import CorrectionResult, CorrectionUnreported
 from .thread_model import ThreadModel, UndeclaredModel
 from .tool_declaration import ToolDeclaration
 from .tool_results import NoSentMessage, NoToolDiff, ToolDiff
-from .transcript_events import SentTranscript
-from .turn_failure import ProviderTransportFailed
+from .transcript_events import (
+    AssistantTranscript,
+    ContextTranscript,
+    NoticeTranscript,
+    SentTranscript,
+    ThinkingTranscript,
+    ToolEndTranscript,
+    ToolStartTranscript,
+    UserTranscript,
+)
+from .turn_failure import (
+    ModelRequestFailed,
+    ProviderTransportFailed,
+)
 
 if TYPE_CHECKING:
     from .agent_events import AgentEvent, ProviderUsage
@@ -369,8 +382,6 @@ class FailedProviderRetry(ProviderRetryOutcome, declared_name="failed"):
         return event.exhausted(session)
 
     def finish_request(self, session) -> None:
-        from .turn_failure import ModelRequestFailed
-
         session.output.request_exhausted(ModelRequestFailed(self.final_error))
         session.finish_request()
 
@@ -466,8 +477,6 @@ class PiContent(PresentMember, OpenPayload, affix="Content"):
 
     @property
     def final_text(self) -> str:
-        from .native_failures import NativePiUnavailable
-
         raise NativePiUnavailable("Native Pi assistant returned non-text content")
 
 
@@ -481,13 +490,9 @@ class TextContent(PiContent):
         return PiOmitted()
 
     def user_transcript(self, position: int, timestamp: float):
-        from .transcript_events import UserTranscript
-
         return [UserTranscript(self.text, position=position, timestamp=timestamp)]
 
     def assistant_transcript(self, position: int, timestamp: float):
-        from .transcript_events import AssistantTranscript
-
         return [AssistantTranscript(self.text, position=position, timestamp=timestamp)]
 
     text: str = field()
@@ -504,8 +509,6 @@ class TextContent(PiContent):
 @dataclass(frozen=True)
 class ThinkingContent(PiContent):
     def assistant_transcript(self, position: int, timestamp: float):
-        from .transcript_events import ThinkingTranscript
-
         return [ThinkingTranscript(self.thinking, position=position, timestamp=timestamp)]
 
     thinking: str = ""
@@ -525,8 +528,6 @@ class ToolCallContent(PiContent, declared_name="toolCall"):
         return (self,)
 
     def assistant_transcript(self, position: int, timestamp: float):
-        from .transcript_events import ToolStartTranscript
-
         return [
             ToolStartTranscript(position=position, timestamp=timestamp, tool_call_id=self.id, tool_name=self.name, raw_input=self.arguments,
                                 tool=ToolDeclaration.record(self.name, self.arguments, call_id=self.id))
@@ -541,8 +542,6 @@ class ToolCallContent(PiContent, declared_name="toolCall"):
 @dataclass(frozen=True)
 class ImageContent(PiContent):
     def user_transcript(self, position: int, timestamp: float):
-        from .transcript_events import UserTranscript
-
         return [UserTranscript(f"[Image attachment: {self.mime_type or 'image'}]", position=position, timestamp=timestamp)]
 
     data: str
@@ -902,8 +901,6 @@ class AssistantMessage(PublicInstructionAnnotations, PiMessage):
         return bool(self.text.strip() or self.error_notice)
 
     def transcript_events(self, context, timestamp: float):
-        from .transcript_events import NoticeTranscript
-
         if notice := self.error_notice:
             return [NoticeTranscript(f"[agent error] {notice}", position=context.position, timestamp=timestamp)]
         events = []
@@ -927,8 +924,6 @@ class UserMessage(PiMessage):
         session.observe_input_during_abort(event)
 
     def transcript_events(self, context, timestamp: float):
-        from .transcript_events import ContextTranscript
-
         routing, display = context.routing, context.input_display
         # Preserve exact separators, including empty text blocks, for provenance.
         raw_text = "\n".join(text for part in self.parts for text in part.text_parts())
@@ -970,9 +965,6 @@ class ToolResultMessage(PiMessage, declared_name="toolResult"):
         return tuple((self.tool_call_id, denial) for denial in self.details.storage_refusals())
 
     def transcript_events(self, context, timestamp: float):
-        from .tool_declaration import ToolDeclaration
-        from .transcript_events import ToolEndTranscript
-
         if not self.parts:
             return []
         output = "\n".join(text for part in self.parts for text in part.text_parts())

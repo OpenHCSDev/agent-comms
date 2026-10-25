@@ -10,7 +10,10 @@ from pathlib import Path
 from typing import TYPE_CHECKING, NoReturn
 
 from .audience_manifest import FrozenRecipient
+from .bus import Bus
+from .coordination_database import CoordinationStore
 from .coordination_tables.assignments import WakeAssignment
+from .coordination_tables.executions import CurrentExecutions
 from .coordination_tables.publications import PublicationEvidence
 from .declared_family import DeclaredFamily
 from .field_codec import FieldCodec, MalformedRecord, MessageId, ThreadLookup, boundary_decoder
@@ -22,6 +25,8 @@ from .notification_progress import (
     SentProgress,
     ShownToModelProgress,
 )
+from .presentation import MessageNotification
+from .private_registry_guard import RegistryPrivacy
 from .typed_table import BooleanStorage, TypedRow
 
 if TYPE_CHECKING:
@@ -270,7 +275,6 @@ class NotificationAssignment(NotificationSource):
         )
         if not eligible:
             return rows
-        from .bus import Bus
 
         originals = {original.message.reference: original for original in sources}
         captured = Bus(Bus.path_in(root)).replies(
@@ -300,14 +304,11 @@ class NotificationAssignment(NotificationSource):
     ) -> NotificationAssignmentRead:
         """Capture detached assignment evidence for one bounded window of originals
         from the caller's SQLite snapshot."""
-        from .presentation import MessageNotification
-
         sources = tuple(sources)
         if len(sources) > MessageNotification.window_limit:
             raise ValueError("Notification reads require a bounded visible message window")
         if not sources:
             return NotificationAssignmentRead((), ())
-        from .coordination_tables.executions import CurrentExecutions
         privacy.coordinator_schema().require_schema(connection)
         columns = ",".join(f"w.{name}" for name in WakeAssignment.columns())
         # The window's assignments and their native-input membership are each
@@ -340,9 +341,6 @@ class NotificationAssignment(NotificationSource):
         cls, root: Path, sources: Sequence[Delivered]
     ) -> NotificationAssignmentRead:
         """Capture assignment evidence through the single observing connection owner."""
-        from .coordination_database import CoordinationStore
-        from .private_registry_guard import RegistryPrivacy
-
         privacy = RegistryPrivacy.capture(root)
         with CoordinationStore.observed(CoordinationStore.path_in(root)).observing(
             cls, sources, privacy,
