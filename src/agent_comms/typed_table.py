@@ -65,7 +65,6 @@ from .locked_store import (
     RootFile,
     RuntimeFile,
     SQLiteFile,
-    StoreBusy,
     StoreCommittedError,
     WrittenFile,
 )
@@ -73,7 +72,7 @@ from .maintenance_barrier import HolderWrittenFile, MaintenanceBarrier, Maintena
 from .package_stamp import STAMP
 from .projection_source import ProducedRow, ProjectionSource
 from .store_files import (
-    UNBOUNDED_CONTENTION, StoreLockContention, StoreLockFile, _store_lock,
+    UNBOUNDED_CONTENTION, StoreBusy, StoreLockContention, StoreLockFile,
 )
 
 if TYPE_CHECKING:
@@ -2243,7 +2242,7 @@ class ReconciledFile(SQLiteFile, StoreLockFile):
     def reconcile_at(cls, path: Path) -> bool:
         """Whether reconciling the file at ``path`` changed it."""
         schema = cls.schema_at(path)
-        with _store_lock(path), closing(cls.writer(path, isolation_level=None)) as db:
+        with cls.exclusive_writer(path) as db:
             return schema.reconcile_schema(db, cls.schema_change(path))
 
 
@@ -2310,34 +2309,6 @@ class WalStore(StoreWriter, StoreLockFile):
     synchronous: ClassVar[str] = "FULL"
 
     @contextmanager
-    def _attached(
-        self, opening: Callable[[], AbstractContextManager[sqlite3.Connection]],
-        contention: StoreLockContention = UNBOUNDED_CONTENTION,
-    ) -> Iterator[sqlite3.Connection]:
-        """Serialize WAL attachment and retirement, not authorized SQL work.
-
-        Even a read-only cold attachment initializes the WAL index. Another
-        attachment or last-connection cleanup can make that initialization
-        return BUSY before any query competes with a data writer. The same
-        physical owner serializes these connection boundaries; readers and
-        writers retain SQLite's parallel WAL transactions between them.
-
-        Attachment spends the caller's lock budget, so a read that may defer raises
-        BlockingIOError when it runs out instead of waiting; retirement always runs.
-        """
-        with ExitStack() as lifetime:
-            with _store_lock(self.path, contention=contention):
-                resource = opening()
-                connection = resource.__enter__()
-
-            def retire(*error):
-                with _store_lock(self.path):
-                    return resource.__exit__(*error)
-
-            lifetime.push(retire)
-            yield connection
-
-    @contextmanager
     def committed_or_empty(
         self,
         schema: type[TableSchema],
@@ -2349,7 +2320,7 @@ class WalStore(StoreWriter, StoreLockFile):
         An absent file is established absence: a reader sees every declared table empty
         and creates no storage."""
         if self.path.exists():
-            with self._attached(opening, contention) as connection:
+            with self.attached(self.path, opening, contention) as connection:
                 yield connection
             return
         with closing(self.writer(":memory:", isolation_level=None)) as connection:
@@ -2386,7 +2357,7 @@ class WalStore(StoreWriter, StoreLockFile):
     def writer_connection(self, *, check_same_thread: bool = True) -> Iterator[sqlite3.Connection]:
         """Own attachment; joined workers may borrow one serialized connection."""
         self.path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
-        with self._attached(lambda: self._open_writer(
+        with self.attached(self.path, lambda: self._open_writer(
                 check_same_thread=check_same_thread)) as connection:
             yield connection
 

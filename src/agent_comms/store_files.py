@@ -7,30 +7,38 @@ import errno
 import fcntl
 import math
 import os
+import sqlite3
 import stat
 import sys
 import tempfile
 import threading
 import time
 from abc import ABC, abstractmethod
-from collections.abc import AsyncIterator, Iterable, Iterator, Mapping
+from collections.abc import AsyncIterator, Callable, Iterable, Iterator, Mapping
 from contextlib import (
     AbstractAsyncContextManager,
     AbstractContextManager,
     ExitStack,
     asynccontextmanager,
+    closing,
     contextmanager,
 )
 from contextvars import Context, ContextVar
 from dataclasses import dataclass, field
 from fnmatch import fnmatchcase
 from pathlib import Path
-from typing import BinaryIO, ClassVar
+from typing import TYPE_CHECKING, BinaryIO, ClassVar, Final, TextIO
 
 from .child_process import LockHolder, Platform
+from .coordination_errors import CoordinationReadUnavailable
 from .declared_family import DeclaredFamily
 from .errors import RelationViolationError
 from .private_path import FileIdentity, PrivateFileRole
+
+if TYPE_CHECKING:
+    from sqlite3 import _IsolationLevel
+
+DEFAULT_ISOLATION: Final = "DEFERRED"
 
 
 class LockMode(ABC):
@@ -46,6 +54,14 @@ class LockMode(ABC):
 
     def require_held(self, held: LockMode) -> None:
         pass
+
+    def attempt(self, descriptor: int) -> None:
+        """Hold this mode on the open description now, or raise BlockingIOError."""
+        fcntl.flock(descriptor, self.flock() | fcntl.LOCK_NB)
+
+    def wait(self, descriptor: int) -> None:
+        """Hold this mode on the open description, waiting in the kernel while it is held."""
+        fcntl.flock(descriptor, self.flock())
 
 
 class SharedLock(LockMode):
@@ -95,7 +111,7 @@ class StoreLockContention:
         while True:
             begun = time.monotonic()
             try:
-                platform.try_store_lock(descriptor, mode=mode)
+                mode.attempt(descriptor)
             except BlockingIOError as error:
                 self.remaining -= time.monotonic() - begun
                 if self.remaining <= 0:
@@ -361,6 +377,181 @@ class DependentStateTier(StoreLockTier):
     """Reads follow catalog; rename/delete state follows registry (thread_management.py:397)."""
 
     __slots__ = ()
+
+
+class StoreContention(ABC):
+    """Typed SQLite busy behavior shared by snapshots and writers."""
+
+    @property
+    @abstractmethod
+    def timeout(self) -> float: ...
+
+    def reader(self, uri: str) -> sqlite3.Connection:
+        return sqlite3.connect(uri, uri=True, isolation_level=None, timeout=self.timeout)
+
+    def writer(
+        self, path: str | os.PathLike[str], *,
+        isolation_level: _IsolationLevel = DEFAULT_ISOLATION,
+        uri: bool = False, check_same_thread: bool = True,
+    ) -> sqlite3.Connection:
+        return sqlite3.connect(
+            path, timeout=self.timeout, isolation_level=isolation_level,
+            uri=uri, check_same_thread=check_same_thread,
+        )
+
+    def lock_budget(self) -> StoreLockContention:
+        """The same wait spent on the store's file locks: one fresh budget per operation."""
+        return StoreLockContention(self.timeout)
+
+
+@dataclass(frozen=True)
+class StoreWait(StoreContention):
+    timeout: ClassVar[float] = 5.0
+
+
+@dataclass(frozen=True)
+class StoreBusy(StoreContention):
+    """Do not wait when optional display or input work cannot acquire a SQLite lock."""
+
+    timeout: ClassVar[float] = 0.0
+
+    def reader(self, uri: str) -> sqlite3.Connection:
+        with CoordinationReadUnavailable.checking():
+            return super().reader(uri)
+
+
+DEFAULT_STORE_CONTENTION = StoreWait()
+
+
+class SqliteStore(ABC):
+    """A SQLite file serializes connection boundaries, not the SQL between them."""
+
+    __slots__ = ()
+
+    @classmethod
+    @abstractmethod
+    def writer(
+        cls, path: str | os.PathLike[str], contention: StoreContention = DEFAULT_STORE_CONTENTION,
+        *, isolation_level: _IsolationLevel = DEFAULT_ISOLATION,
+        uri: bool = False, check_same_thread: bool = True,
+    ) -> sqlite3.Connection:
+        """Open the file family's writer with its declared contention policy and options."""
+
+    @classmethod
+    @contextmanager
+    def attached(
+        cls, path: Path, opening: Callable[[], AbstractContextManager[sqlite3.Connection]],
+        contention: StoreLockContention = UNBOUNDED_CONTENTION,
+    ) -> Iterator[sqlite3.Connection]:
+        """Serialize attachment and retirement, including cold WAL-index initialization.
+
+        Attachment spends the caller's lock budget; retirement always waits. SQLite's own
+        transactions retain parallel execution between those two boundaries.
+        """
+        with ExitStack() as lifetime:
+            retirement = lifetime.enter_context(ExitStack())
+            with _store_lock(path, contention=contention):
+                connection = lifetime.enter_context(opening())
+            lifetime.callback(retirement.enter_context, _store_lock(path))
+            yield connection
+
+    @classmethod
+    @contextmanager
+    def exclusive_writer(cls, path: Path) -> Iterator[sqlite3.Connection]:
+        """A schema reconcile or WAL truncation keeps other connection boundaries out."""
+        with _store_lock(path), closing(cls.writer(path, isolation_level=None)) as db:
+            yield db
+
+
+class ClaimHeldError(BlockingIOError):
+    """Another open description holds the claim, even within the same process."""
+
+    def __init__(self, path: Path) -> None:
+        super().__init__(errno.EAGAIN, f"{path} is already held")
+        self.path = path
+
+
+@dataclass(frozen=True)
+class ObservedClaim:
+    """A claim file read without taking the claim, and whether a live process holds it."""
+
+    file: TextIO
+    held: bool
+
+
+@dataclass(frozen=True)
+class ProcessSingleton:
+    """A claim file at most one process holds at a time. The holder's open description of the
+    file is the claim: the kernel releases it when the holder closes the file or exits, and a
+    descriptor passed through exec keeps it held. A claim's holder never opens, locks or
+    unlocks the file itself; it claims, waits for, adopts or observes it here."""
+
+    path: Path
+
+    def descriptor(self) -> int:
+        """A private open description of the claim file, created on first use."""
+        return os.open(self.path, os.O_CREAT | os.O_RDWR | os.O_APPEND | os.O_NOFOLLOW | os.O_CLOEXEC,
+                       0o600)
+
+    def claim(self, descriptor: int) -> None:
+        try:
+            ExclusiveLock().attempt(descriptor)
+        except BlockingIOError:
+            raise ClaimHeldError(self.path) from None
+
+    @staticmethod
+    def wait(descriptor: int) -> None:
+        """Hold the claim on an open description once its current holder lets it go; a caller
+        that must not block its loop runs this on a worker of its own."""
+        ExclusiveLock().wait(descriptor)
+
+    @contextmanager
+    def claimed(self) -> Iterator[TextIO]:
+        """Hold the claim, or raise ClaimHeldError at once."""
+        with open(self.descriptor(), "a+") as held:
+            self.claim(held.fileno())
+            yield held
+
+    @contextmanager
+    def waited(self) -> Iterator[TextIO]:
+        """Hold the claim once its current holder lets it go."""
+        with open(self.descriptor(), "a+") as held:
+            self.wait(held.fileno())
+            yield held
+
+    @contextmanager
+    def adopted(self, descriptor: int) -> Iterator[TextIO]:
+        """Take over the description a replaced holder kept through exec. The kernel already
+        counts that description as holding the claim, so this cannot wait. The replaced holder
+        may have opened it write-only, so it is adopted for appending only."""
+        if not os.path.samestat(os.fstat(descriptor), os.stat(self.path)):
+            raise ValueError(f"Inherited descriptor {descriptor} is not the claim {self.path}")
+        os.set_inheritable(descriptor, False)
+        with os.fdopen(descriptor, "a") as held:
+            self.claim(held.fileno())
+            yield held
+
+    @contextmanager
+    def observed(self) -> Iterator[ObservedClaim]:
+        """Read an existing claim file; ``held`` is whether a live process holds the claim."""
+        with self.path.open() as observed:
+            try:
+                SharedLock().attempt(observed.fileno())
+                held = False
+            except BlockingIOError:
+                held = True
+            yield ObservedClaim(observed, held)
+
+    @staticmethod
+    def release(held: TextIO) -> None:
+        """Let the claim go while its holder still has the file open."""
+        fcntl.flock(held.fileno(), fcntl.LOCK_UN)
+
+    def held_elsewhere(self) -> bool:
+        if not self.path.exists():
+            return False
+        with self.observed() as observed:
+            return observed.held
 
 
 def store_lock_path(store_path: Path) -> Path:
