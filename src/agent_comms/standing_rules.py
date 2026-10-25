@@ -562,10 +562,9 @@ class DeliveredHeadReview(DatedStandingRule):
         request: PullRequest, now: float,
     ) -> tuple[Self, ...]:
         due_at = claim.message.timestamp + cls.minutes * 60
-        if request.draft or request.has_head_review or now < due_at:
-            return ()
-        return (cls(problem, holder, order, claim.pull_request.repo,
-                    request.number, request.head, due_at),)
+        return tuple(cls(problem, holder, order, claim.pull_request.repo,
+                         request.number, request.head, due)
+                     for due in request.head_review_due(now, due_at))
 
     @classmethod
     def scan_observed(
