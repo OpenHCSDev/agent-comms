@@ -3056,6 +3056,10 @@ class ProblemCommand:
     problem: str
     operation: TodoCommand
 
+    def write(self, db: sqlite3.Connection, store: TodoStore) -> None:
+        """This command inside the caller's Todo transaction, on the problem's current row."""
+        self.operation.write(db, store._current(db, self.problem), store)
+
 
 @dataclass(frozen=True)
 class JudgedCall(ProblemCommand):
@@ -3077,7 +3081,10 @@ class TodoBatch:
         return (*self.together, *self.alone)
 
     def record(self, goals: Goals) -> tuple[Todo, ...]:
-        written = goals.todos.apply_all(self.together)
+        with goals.todos.writing() as db:
+            for call in self.together:
+                call.write(db, goals.todos)
+            written = tuple(goals.todos._current(db, call.problem) for call in self.together)
         for call, changed in zip(self.together, written):
             call.operation.after_record(goals, changed)
         return (*written, *(call.operation.record(goals, call.problem) for call in self.alone))
@@ -4886,14 +4893,10 @@ class TodoStore(OwnerRequestStore):
                              for row in reviews)))
 
     def apply(self, todo_id: str, command: TodoCommand) -> Todo:
-        return self.apply_all((ProblemCommand(todo_id, command),))[0]
-
-    def apply_all(self, changes: Sequence[ProblemCommand]) -> tuple[Todo, ...]:
-        """Every command in one write transaction: any refusal writes none of them."""
         with self.writing() as db:
-            for change in changes:
-                change.operation.write(db, self._current(db, change.problem), self)
-            return tuple(self._current(db, change.problem) for change in changes)
+            current = self._current(db, todo_id)
+            command.write(db, current, self)
+            return self._current(db, todo_id)
 
     def correct(
         self, unit: ThreadIncarnation, message_id: MessageId, text: str,
