@@ -45,7 +45,7 @@ from agent_comms.field_codec import (
 )
 from agent_comms.declared_family import DeclaredFamily
 from agent_comms.head_review import PullRequestHead
-from agent_comms.heartbeat_subjects import HeadSubject, HeartbeatSubject
+from agent_comms.heartbeat_subjects import HeadSubject, HeartbeatSubject, UnitSubject
 from agent_comms.recorded_time import EventTime
 from agent_comms.errors import TodoError
 from agent_comms.todos import (
@@ -205,7 +205,7 @@ class ReviewSubject(DeclaredFamily):
     @abstractmethod
     def run(self, options: VerdictVerb, ctx: order.Commander) -> None: ...
 
-    def acts_on(self) -> tuple[HeartbeatSubject, ...]:
+    def acts_on(self, ctx: order.Commander) -> tuple[HeartbeatSubject, ...]:
         """Edit verdicts touch no heartbeat subject; a PR verdict touches its head."""
         return ()
 
@@ -288,8 +288,11 @@ class PullRequestReview(ReviewSubject):
             ctx.project.repository_names(options.repo),
             options.pr, options.head))
 
-    def acts_on(self) -> tuple[HeartbeatSubject, ...]:
-        return (HeadSubject(self.request),)
+    def acts_on(self, ctx: order.Commander) -> tuple[HeartbeatSubject, ...]:
+        """The head, and the unit holding it: a verdict reaches that unit's own lines."""
+        return (HeadSubject(self.request),
+                *(UnitSubject(todo.held().owner_identity)
+                  for todo in HeadReviewOrder.holding(ctx.held_orders(), self.request)))
 
     def run(self, options: HeadVerdictVerb, ctx: order.Commander) -> None:
         options.check_edits([])
@@ -413,7 +416,7 @@ class HeadVerdictVerb(VerdictVerb, order.HeartbeatGated, declared_name=None):
     def act(self, ctx: order.Commander) -> None:
         """The gate and the verdict read one subject: selecting a PR reads GitHub."""
         subject = self.subject(ctx)
-        self.gate_on(ctx, subject.acts_on())
+        self.gate_on(ctx, subject.acts_on(ctx))
         subject.run(self, ctx)
 
     def head_evidence(self) -> tuple[FileLine, ...]:
