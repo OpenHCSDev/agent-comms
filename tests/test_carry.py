@@ -267,7 +267,8 @@ def test_owner_stop_batch_reports_refusal_after_stopping_available_owners(comms,
 
     # A missing target must not prevent the batch from stopping its available owners.
     with pytest.raises(UpgradeRefused, match="failed"):
-        stack.owners(comms.root, StopCliCommand, names).require_success(UpgradeRefused)
+        for outcome in stack.owners(comms.root, StopCliCommand, names):
+            outcome.require_success(UpgradeRefused)
     saved = comms.registry.snapshot()
     assert all(saved.status(name).stopped for name in names[1:])
 
