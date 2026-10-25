@@ -16,7 +16,7 @@ from agent_comms.field_codec import FieldCodec
 from agent_comms.pi_payloads import PiMessage
 from agent_comms.native_entries import SessionEntry
 from agent_comms.tool_declaration import ToolDeclaration, NoToolRecord
-from contextlib import AsyncExitStack, ExitStack, contextmanager
+from contextlib import AsyncExitStack, contextmanager
 from pathlib import Path
 
 import pytest
@@ -187,15 +187,6 @@ def accept_initial(bus: MessageBus, root_id: str, seq: int, store) -> tuple:
         if assignment.wire_seq == seq
     )
 
-def pytest_addoption(parser: pytest.Parser) -> None:
-    from agent_comms.test_lease import InheritedTestRun, NewTestRun
-
-    parser.addoption(
-        "--integration-lease", type=InheritedTestRun.argument, default=NewTestRun(),
-        help="adopt the integrator's kernel-held descriptor (not an exemption)",
-    )
-
-
 def pytest_sessionstart(session: pytest.Session) -> None:
     """The controller populates this checkout's pinned submodules before any worker runs,
     as every tree of ours is (Checkout). Collection loads declarations only.
@@ -204,17 +195,7 @@ def pytest_sessionstart(session: pytest.Session) -> None:
     a relative or missing PYTHONPATH sends them to whatever tree the venv's editable
     install names, which on 2026-10-24 was a stale checkout one TurnFailure short."""
     from xdist import is_xdist_worker
-    from agent_comms.test_lease import LeaseStart, TestLease, TestLeaseBusy
 
-    if not is_xdist_worker(session):
-        start: LeaseStart = session.config.getoption("integration_lease")
-        lifetime = ExitStack()
-        try:
-            lifetime.enter_context(TestLease.current().held(start))
-        except TestLeaseBusy as error:
-            lifetime.close()
-            raise pytest.UsageError(str(error)) from error
-        session.config.add_cleanup(lifetime.close)
     os.environ["PYTHONPATH"] = os.pathsep.join(
         str(path) for path in session.config.getini("pythonpath"))
     if session.config.option.collectonly or is_xdist_worker(session):

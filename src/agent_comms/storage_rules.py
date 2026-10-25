@@ -758,7 +758,7 @@ class WritesWorkingTree(ShellProgram):
 
 
 class GitProgram(ForbidsCommands, WritesWorkingTree):
-    names = frozenset({'git'})
+    names = frozenset({Repo.program})
     forbidden = (('clone',), ('worktree', 'add'), ('worktree', 'move'), ('worktree', 'remove'))
     reason = ('git clone and git worktree add, move and remove are forbidden; run agent-comms '
               'checkout add PROBLEM or checkout remove PROBLEM, which own the pinned submodules')

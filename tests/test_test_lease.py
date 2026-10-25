@@ -50,10 +50,11 @@ def test_second_process_refuses_without_waiting(tmp_path: Path) -> None:
 
 def test_child_adopts_the_same_claim_and_parent_keeps_it(tmp_path: Path) -> None:
     lease = leases.HostTestLease.in_home(tmp_path)
-    with lease.held() as descriptor:
+    with lease.held() as start:
         adopted = subprocess.run(
-            (sys.executable, "-c", _ADOPT, str(lease.path), str(descriptor)),
-            pass_fds=(descriptor,), capture_output=True, text=True, timeout=5,
+            (sys.executable, "-c", _ADOPT, str(lease.path),
+             *(str(descriptor) for descriptor in start.descriptors())),
+            pass_fds=start.descriptors(), capture_output=True, text=True, timeout=5,
         )
         assert adopted.returncode == 0, adopted.stderr
         assert adopted.stdout.strip() == "adopted"

@@ -6,6 +6,7 @@ Every path that posts that status goes through here.
 from __future__ import annotations
 
 from abc import abstractmethod
+import json
 from dataclasses import dataclass
 from typing import Annotated, ClassVar
 
@@ -47,6 +48,23 @@ class HeadReview(DeclaredFamily, affix="HeadReview"):
     state: ClassVar[str]
     # GitHub caps a status description at 140 characters.
     description_limit: ClassVar[int] = 140
+
+    @classmethod
+    def allows_integration(cls) -> bool:
+        return False
+
+    @classmethod
+    def accepted(cls, repo: RepositoryName, head: str) -> bool:
+        """Read the latest status in our declared context on this exact commit."""
+        read = repo.rest(
+            f"commits/{head}/status", "--jq",
+            f"[.statuses[] | select(.context == {json.dumps(cls.context)}) | .state]",
+        )
+        if read.returncode:
+            raise ToolRefusedError(read.stderr.strip() or f"Review status on {head} failed.")
+        states = FieldCodec.decode(tuple[str, ...], FieldCodec.parse(read.stdout))
+        return any(member.state in states and member.allows_integration()
+                   for member in cls.members_with(cls))
 
     @abstractmethod
     def description(self, reviewer: str, subject: str) -> str: ...

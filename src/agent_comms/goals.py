@@ -322,15 +322,12 @@ class CheckCommand:
     @staticmethod
     def git_command(words: Sequence[str]) -> str:
         """The git subcommand ``words`` run, or "" when they run no git."""
-        if words[:1] != ["git"]:
+        from .storage_rules import GitProgram
+
+        if not words or Path(words[0]).name not in GitProgram.names:
             return ""
-        rest = iter(words[1:])
-        for word in rest:
-            if word in ("-C", "-c"):
-                next(rest, "")
-            elif not word.startswith("-"):
-                return word
-        return ""
+        invocation = GitProgram.invocation(list(words[1:]), Path.cwd())
+        return next(iter(invocation.args), "")
 
 
 @dataclass(frozen=True)

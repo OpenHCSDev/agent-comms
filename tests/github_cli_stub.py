@@ -31,6 +31,20 @@ def main():
         elif parts[:1] == ["statuses"] and len(parts) == 2:
             assert arguments[arguments.index("--method") + 1] == "POST"
             print("{}")
+        elif len(parts) == 3 and parts[0] == "commits" and parts[2] == "status":
+            query = arguments[arguments.index("--jq") + 1]
+            selected = re.search(r'select\(\.context == ("(?:\\.|[^"\\])*")\)', query)
+            assert selected, query
+            context = json.loads(selected.group(1))
+            states = {}
+            endpoint = f"repos/{owner}/{name}/statuses/{parts[1]}"
+            for line in (directory / "calls.jsonl").read_text().splitlines():
+                posted = json.loads(line)
+                if posted[:2] == ["api", endpoint] and "--method" in posted:
+                    fields = dict(posted[index + 1].split("=", 1)
+                                  for index, word in enumerate(posted) if word == "-f")
+                    states[fields["context"]] = fields["state"]
+            print(json.dumps([states[context]] if context in states else []))
         else:
             raise AssertionError(f"Unexpected repository endpoint: {parts}")
     elif arguments[:2] == ["api", "graphql"]:

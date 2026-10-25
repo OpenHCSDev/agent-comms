@@ -23,6 +23,7 @@ from typing import ClassVar, cast
 from typing_extensions import TypeForm
 
 from agent_comms.child_process import Platform
+from agent_comms.native_build_inputs import GitLaunch
 from agent_comms.declared_family import DeclaredFamily
 from agent_comms.installer.runtime_wire import CrossesRuntimes
 from agent_comms.field_codec import FieldCodec, JsonValue
@@ -133,7 +134,7 @@ class GitPhase(SubjectPhase):
 
     @property
     def subject(self) -> str:
-        return shlex.join(("git", "-C", str(self.checkout), *self.arguments))
+        return shlex.join(GitLaunch.command(self.checkout, *self.arguments))
 
 
 @dataclass(frozen=True, kw_only=True)

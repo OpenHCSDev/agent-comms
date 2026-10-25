@@ -9,7 +9,7 @@ import pytest
 
 from agent_comms.commander import judge, order
 from agent_comms.goal_actions import CreateProblemGoalAction
-from agent_comms.head_review import PullRequestHead
+from agent_comms.head_review import HeadReview, PullRequestHead
 from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.standing_rules import OrderRefusingStandingRule
 from agent_comms.errors import RelationViolationError, ToolRefusedError
@@ -19,7 +19,7 @@ from agent_comms.order_tools import CommsHeadVerdictTool
 from agent_comms.todos import (
     GrownHeadVerdict, GrowthReason, HeadReviewOrder, NoHeadOrder, PullRequestLink,
     RecordPullRequest, RejectedHeadVerdict, ReviewedHeadVerdict, StoredHeadReview,
-    StrikeReason, UnmergedListedPullRequest, VerdictReason,
+    StrikeReason, UnderReviewHeadVerdict, UnmergedListedPullRequest, VerdictReason,
 )
 from source_revision_fixture import SourceRepository
 
@@ -54,6 +54,22 @@ def head_bus(held_bus, github_cli, reviewed_source):
 def invoke(comms, request, verdict, order=NoHeadOrder()):
     tool = CommsHeadVerdictTool(request=request, operation=verdict, order=order)
     return tool.invoke(comms, tool.arguments, caller=ThreadCaller("lead"))
+
+
+def test_integration_reads_latest_review_in_the_declared_context(github_cli, tmp_path):
+    source = SourceRepository.create(tmp_path / 'status-source')
+    github_cli.configure(source.github)
+    request = PullRequestHead(source.github, source.number, source.branch_commit)
+    assert not HeadReview.accepted(request.repo, request.head)
+    ReviewedHeadVerdict(ACCEPTED).post(request.repo, request.head, 'lead', 'integration')
+    assert HeadReview.accepted(request.repo, request.head)
+    UnderReviewHeadVerdict().post(request.repo, request.head, 'lead', 'integration')
+    assert not HeadReview.accepted(request.repo, request.head)
+    ReviewedHeadVerdict(ACCEPTED).post(request.repo, request.head, 'lead', 'integration')
+    assert HeadReview.accepted(request.repo, request.head)
+    RejectedHeadVerdict(REASON).post(request.repo, request.head, 'lead', 'integration')
+    assert not HeadReview.accepted(request.repo, request.head)
+    assert not HeadReview.accepted(request.repo, 'a' * 40)
 
 
 def test_orderless_head_family_persists_both_outcomes_and_posts_each_exact_head(head_bus):

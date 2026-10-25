@@ -60,6 +60,7 @@ agent-comms-claude-bridge = "agent_comms.cli_bridges.claude:main"
 agent-comms-codex-bridge = "agent_comms.cli_bridges.codex:main"
 agent-comms-opencode-bridge = "agent_comms.cli_bridges.opencode:main"
 agent-comms-commander = "agent_comms.commander.cli:main"
+agent-comms-integrate = "agent_comms.integration:main"
 agent-comms-commander-skill = "agent_comms_hooks.skill:main"
 agent-comms-commander-reread = "agent_comms_hooks.reread:main"
 agent-comms-commander-deferral-guard = "agent_comms_hooks.deferral:main"
@@ -98,6 +99,7 @@ path = "src/agent_comms/__init__.py"
 cache-keys = [{ file = "pyproject.toml" }, { git = { commit = true } }]
 
 [tool.pytest.ini_options]
+addopts = ["-p", "agent_comms.test_session"]
 testpaths = ["tests"]
 pythonpath = [".", "src", "tools"]
 python_files = ["test_*.py"]

@@ -903,6 +903,14 @@ class AgentsSlice(SystemdUnit):
         return f"--slice={cls.unit}"
 
     @classmethod
+    def require_current(cls) -> None:
+        """Admission uses the actual kernel placement, not a requested launch flag."""
+        paths = (Path(line.split(":", 2)[2])
+                 for line in Path("/proc/self/cgroup").read_text().splitlines())
+        if not any(cls.unit in path.parts for path in paths):
+            raise RuntimeError(f"Integration must run inside {cls.unit}")
+
+    @classmethod
     def unit_text(cls, arguments: tuple[str, ...] = ()) -> str:
         return (
             "[Unit]\nDescription=Agent processes\n\n"

@@ -21,6 +21,12 @@ class TestLeaseBusy(RuntimeError):
 
 
 class LeaseStart(ABC):
+    def arguments(self) -> tuple[str, ...]:
+        return ()
+
+    def descriptors(self) -> tuple[int, ...]:
+        return ()
+
     @abstractmethod
     def claim(self, owner: ProcessSingleton) -> AbstractContextManager[TextIO]: ...
 
@@ -34,6 +40,13 @@ class NewTestRun(LeaseStart):
 @dataclass(frozen=True)
 class InheritedTestRun(LeaseStart):
     descriptor: int
+    option: ClassVar[str] = "--integration-lease"
+
+    def arguments(self) -> tuple[str, ...]:
+        return self.option, str(self.descriptor)
+
+    def descriptors(self) -> tuple[int, ...]:
+        return (self.descriptor,)
 
     @classmethod
     def argument(cls, value: str) -> InheritedTestRun:
@@ -77,14 +90,14 @@ class TestLease(SourceTier, declared_name=None):
         return cls.for_runner_programs(tuple(programs), Path(account.pw_dir))
 
     @contextmanager
-    def held(self, start: LeaseStart = NewTestRun()) -> Iterator[int]:
+    def held(self, start: LeaseStart = NewTestRun()) -> Iterator[LeaseStart]:
         self.path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
         with ExitStack() as lifetime:
             try:
                 held = lifetime.enter_context(start.claim(self.process_lock))
             except ClaimHeldError as error:
                 raise TestLeaseBusy(self.refusal) from error
-            yield held.fileno()
+            yield InheritedTestRun(held.fileno())
 
 
 class HostTestLease(TestLease):
@@ -97,5 +110,5 @@ class GithubActionsTestLease(TestLease):
     runner_program = "Runner.Worker"
 
     @contextmanager
-    def held(self, start: LeaseStart = NewTestRun()) -> Iterator[int]:
-        yield -1
+    def held(self, start: LeaseStart = NewTestRun()) -> Iterator[LeaseStart]:
+        yield NewTestRun()
