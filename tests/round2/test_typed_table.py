@@ -8,7 +8,9 @@ from typing import Annotated, ClassVar, Type
 
 import pytest
 
-from agent_comms.field_codec import FieldCodec, MalformedRecord, NullMember
+from agent_comms.field_codec import (
+    AttemptId, BoundedText, FieldCodec, GoalId, Id128Text, MalformedRecord, NoAttemptId, NullMember,
+)
 from agent_comms.messages import InfoKind, MessageKind
 from agent_comms.typed_table import (
     Column,
@@ -50,6 +52,38 @@ class TableChildRow(TypedTable):
     @classmethod
     def references(cls):
         return (ForeignKey(columns=("parent", "parent_count"), target=TableParentRow, target_columns=("key", "count")),)
+
+
+def test_spelled_text_family_is_enforced_by_sqlite():
+    @dataclass(frozen=True)
+    class SpelledTextRow(TypedTable):
+        key: Annotated[str, Id128Text, Column(primary_key=True)]
+        label: Annotated[str, BoundedText]
+        plain: str
+        optional: GoalId | None = None
+        attempt: AttemptId | NoAttemptId = field(default_factory=NoAttemptId)
+
+    with sqlite3.connect(":memory:") as db:
+        SpelledTextRow.create(db)
+        statement = f'INSERT INTO "{SpelledTextRow.declared_name}" VALUES (?, ?, ?, ?, ?)'
+        key = "a" * Id128Text.digits
+        db.execute(statement, (key, "identity", "", None, None))
+        assert SpelledTextRow.select(db) == [SpelledTextRow(key, "identity", "")]
+        db.execute(f'DELETE FROM "{SpelledTextRow.declared_name}"')
+        for malformed in ("P5:0", key.upper(), key[:-1], key + "a", key + "\0not-hex"):
+            with pytest.raises(sqlite3.IntegrityError):
+                db.execute(statement, (malformed, "identity", "", None, None))
+            with pytest.raises(sqlite3.IntegrityError):
+                db.execute(statement, (key, "identity", "", malformed, None))
+            with pytest.raises(sqlite3.IntegrityError):
+                db.execute(statement, (key, "identity", "", None, malformed))
+        for malformed in ("", "x" * (BoundedText.max_length + 1),
+                          "\0" + "x" * BoundedText.max_length, "\0", "x\0y"):
+            with pytest.raises(sqlite3.IntegrityError):
+                db.execute(statement, (key, malformed, "", None, None))
+            with pytest.raises(MalformedRecord):
+                FieldCodec.decode(Annotated[str, BoundedText], malformed)
+        db.execute(statement, (key, "λ" * BoundedText.max_length, "", key, key))
 
 
 def test_required_row_distinguishes_absence_from_duplicate_results():

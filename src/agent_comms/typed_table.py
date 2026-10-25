@@ -149,18 +149,17 @@ class SqlStorage(DeclaredFamily, affix="Storage"):
     @classmethod
     def constraints(cls, column: str, annotation: object = None) -> tuple[str, ...]:
         family = cls.family_constraints(column, annotation)
-        if family:
-            return family
         declared, _ = _base_type(annotation)
-        if get_origin(declared) is Literal:
-            values = get_args(declared)
+        if family:
+            choices = family
+        elif get_origin(declared) is Literal:
+            choices = (cls._choice_constraint(column, get_args(declared)),)
         elif isinstance(declared, type) and issubclass(declared, Enum):
-            if issubclass(declared, IntFlag):
-                return ()  # Combinations belong to the flag declaration's mask constraint.
-            values = tuple(member.value for member in declared)
+            choices = (() if issubclass(declared, IntFlag) else
+                       (cls._choice_constraint(column, tuple(member.value for member in declared)),))
         else:
-            return ()
-        return (cls._choice_constraint(column, values),)
+            choices = ()
+        return (*choices, *compile_decoder(annotation).sql_checks(_identifier(column)))
 
     @classmethod
     def to_sql(cls, value: object) -> object:

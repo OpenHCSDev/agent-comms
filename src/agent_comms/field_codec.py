@@ -861,6 +861,9 @@ class DecoderPlan(ABC):
 
     target: object
 
+    def sql_checks(self, column: str) -> tuple[str, ...]:
+        return ()
+
     @property
     def accepts_null(self) -> bool:
         return False
@@ -1037,6 +1040,9 @@ class _RepresentedDecoder[T](ValueDecoder[T]):
     representation: type[FieldRepresentation[T]]
     structural: ValueDecoder[T]
 
+    def sql_checks(self, column: str) -> tuple[str, ...]:
+        return (*self.representation.sql_checks(column), *self.wire_structure.sql_checks(column))
+
     @property
     def wire_structure(self) -> DecoderPlan:
         return self.representation.wire_structure(self.structural)
@@ -1112,6 +1118,11 @@ class FieldRepresentation[T](MroDispatch, ABC, JsonSchemaOwner):
 
     field_plan: ClassVar[type[FieldPlan]] = DeclaredFieldPlan
     decoder: ClassVar[type[_RepresentedDecoder]] = _RepresentedDecoder
+
+    @classmethod
+    def sql_checks(cls, column: str) -> tuple[str, ...]:
+        """Constraints on a stored column, already quoted by its SQL owner."""
+        return ()
 
     @classmethod
     def for_value(cls, value: object) -> type[FieldRepresentation]:
@@ -1685,13 +1696,22 @@ class HexDigits(SpelledText):
     """Lowercase hexadecimal text; members declare their digit count."""
 
     digits: ClassVar[int]
+    minimum_digits: ClassVar[int]
 
     @classmethod
     def repetition(cls) -> str:
-        return str(cls.digits)
+        return (str(cls.digits) if cls.minimum_digits == cls.digits
+                else f"{cls.minimum_digits},{cls.digits}")
+
+    @classmethod
+    def sql_checks(cls, column: str) -> tuple[str, ...]:
+        return (f"length({column}) BETWEEN {cls.minimum_digits} AND {cls.digits}",
+                f"{column} NOT GLOB '*[^0-9a-f]*'",
+                f"instr({column}, char(0)) = 0")
 
     def __init_subclass__(cls, **options: object) -> None:
         super().__init_subclass__(**options)
+        cls.minimum_digits = cls.__dict__.get("minimum_digits", cls.digits)
         cls.spelling = re.compile(f"[0-9a-f]{{{cls.repetition()}}}")
 
 
@@ -1774,7 +1794,14 @@ class BoundedText(TextRepresentation[str], ValidatedScalar):
     max_length: ClassVar[int] = 4096
 
     @classmethod
+    def sql_checks(cls, column: str) -> tuple[str, ...]:
+        return (f"instr({column}, char(0)) = 0",
+                f"length({column}) BETWEEN 1 AND {cls.max_length}")
+
+    @classmethod
     def from_text(cls, value: str) -> str:
+        if "\0" in value:
+            raise MalformedRecord(f"{cls.__name__} cannot contain NUL")
         if not value or len(value) > cls.max_length:
             raise MalformedRecord(f"{cls.__name__} is nonempty and at most {cls.max_length} long")
         return value
@@ -2012,11 +2039,7 @@ class GitCommitText(HexDigits):
     """A git commit, abbreviated to no fewer than seven digits."""
 
     digits = 40
-    minimum_digits: ClassVar[int] = 7
-
-    @classmethod
-    def repetition(cls) -> str:
-        return f"{cls.minimum_digits},{cls.digits}"
+    minimum_digits = 7
 
 
 class Projected(property):
@@ -2552,6 +2575,9 @@ class _NullDecoder(_ExactScalarDecoder[None]):
     annotations = (type(None),)
     json_type = "null"
 
+    def sql_checks(self, column: str) -> tuple[str, ...]:
+        return (f"{column} IS NULL",)
+
 
 class _TextDecoder(_ExactScalarDecoder[str]):
     __slots__ = ()
@@ -2748,6 +2774,14 @@ class _LiteralDecoder[T](_ChoiceDecoder[T]):
 class UnionDecoder[T](_ContextDecoder[T]):
     origins = (Union, types.UnionType)
     alternatives: tuple[ValueDecoder[T], ...]
+
+    def sql_checks(self, column: str) -> tuple[str, ...]:
+        alternatives = tuple(alternative.sql_checks(column) for alternative in self.alternatives)
+        if not all(alternatives):
+            return ()
+        return (" OR ".join(
+            "(" + " AND ".join(f"({check})" for check in checks) + ")"
+            for checks in alternatives),)
 
     @property
     def accepts_null(self) -> bool:
