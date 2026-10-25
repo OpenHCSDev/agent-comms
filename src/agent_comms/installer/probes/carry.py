@@ -6,7 +6,7 @@ import inspect
 import sqlite3
 from abc import abstractmethod
 from collections.abc import Iterable
-from dataclasses import dataclass, field, replace
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Annotated, ClassVar
 
@@ -108,21 +108,6 @@ class Carry(DeclaredFamily, affix="", discovery_package="cutover"):
         """A carry must never follow a copied path or alias into the source bus."""
         if not path.is_relative_to(root) or path.resolve() != path:
             raise RelationViolationError(f"Carry refuses an unconfined path: {path}")
-
-
-class ArchivedInputs:
-    """Apply one carry input declaration to its retained snapshot roots as well."""
-
-    @abstractmethod
-    def roots(self) -> tuple[Path, ...]: ...
-
-    def input_files(self) -> tuple[Path, ...]:
-        paths: set[Path] = set()
-        for root in self.roots():
-            paths.update(super(ArchivedInputs, replace(self, root=root)).input_files())
-        for path in paths:
-            Carry.require_confined(self.root, path)
-        return tuple(sorted(paths))
 
 
 class CarryOperation[Answer](
