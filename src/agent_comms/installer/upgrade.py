@@ -777,7 +777,7 @@ class TargetStack(Stack):
         """Run the target's declared passes in order, in its own worker."""
         if not steps:
             return ()
-        return self.probe(CarryProbe(operation, steps))
+        return self.probe(CarryProbe(operation, steps, self.program.inherited_locks))
 
 
 @dataclass(frozen=True)

@@ -102,7 +102,7 @@ def test_planned_reconcile_names_the_same_stores_and_writes_nothing(private_comm
     dropped = drop_one_index_each(root)
     # A schema-named runtime projection is rebuilt by its runtime, never carried
     # or included in the installer's backup/reconcile set.
-    projection = ActivityStore(ActivityStore.path_in(root))
+    projection = ActivityStore(root)
     with projection.writing() as db:
         db.execute('CREATE TABLE retired_derived_shape (unused INTEGER)')
     with maintenance_held(root) as holder:

@@ -13,7 +13,7 @@ import sys
 import time
 from abc import ABC, abstractmethod
 from collections.abc import Iterator
-from contextlib import ExitStack, contextmanager
+from contextlib import contextmanager
 from contextvars import ContextVar
 from dataclasses import dataclass, field, replace
 from pathlib import Path
@@ -425,7 +425,7 @@ class InstalledProgram(ProbeProgram):
     runs on another version's library."""
 
     def entry(self) -> tuple[str, ...]:
-        return "-c", f"import sys; from {__name__} import serve; serve(*sys.argv[1:])"
+        return "-c", f"from {__name__} import serve; serve()"
 
 
 @dataclass(frozen=True)
@@ -442,10 +442,6 @@ class TargetProgram(InstalledProgram):
     @property
     def descriptors(self) -> tuple[int, ...]:
         return tuple(lock.descriptor for lock in self.inherited_locks)
-
-    def entry(self) -> tuple[str, ...]:
-        return (*super().entry(), FieldCodec.compact(FieldCodec.encode(
-            self.inherited_locks, tuple[BorrowedStoreLock, ...])))
 
     def import_roots(self) -> tuple[Path]:
         return (self.steps,)
@@ -501,16 +497,13 @@ class ProbeRequest:
         return ProbeReply(answer, clock.phases)
 
 
-def serve(encoded_locks: str = "[]") -> None:
+def serve() -> None:
     """Answer declared operations from stdin, one encoded answer per request line, until it
     closes. An operation that raises ends the worker: its traceback goes to stderr, and the
     caller reads the exit in place of an answer. The answers own stdout's descriptor; every
     other write, an operation's exit handlers included, lands on stderr."""
-    borrowed = FieldCodec.decode(tuple[BorrowedStoreLock, ...], FieldCodec.parse(encoded_locks))
-    with os.fdopen(os.dup(sys.stdout.fileno()), "w") as answers, ExitStack() as lifetime:
+    with os.fdopen(os.dup(sys.stdout.fileno()), "w") as answers:
         os.dup2(sys.stderr.fileno(), sys.stdout.fileno())
-        for lock in borrowed:
-            lifetime.enter_context(lock.joined())
         for line in sys.stdin:
             print(
                 FieldCodec.compact(

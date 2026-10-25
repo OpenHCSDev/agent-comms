@@ -359,8 +359,8 @@ class ActivityStore(ThreadOwnedState, DerivedStore):
 
     tables = ActivityStoreRows
 
-    def __init__(self, store_path: Path, stale_after: float = 120.0):
-        self.root = store_path.parent
+    def __init__(self, root: Path, stale_after: float = 120.0):
+        self.root = root
         self._stale_after = stale_after
 
     @staticmethod

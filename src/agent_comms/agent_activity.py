@@ -113,7 +113,7 @@ class LiveRecipientActivity(RecipientActivity):
 class AgentActivity:
     def __init__(self, root: Path, registry: Registration):
         self.registry = registry
-        self.activity = ActivityStore.at(root)
+        self.activity = ActivityStore(root)
         self.runtime_info = RuntimeInfoStore.at(root)
 
     def set_activity(self, thread: str, state: ActivityState, detail: str = "") -> None:

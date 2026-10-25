@@ -6,6 +6,7 @@ import inspect
 import sqlite3
 from abc import abstractmethod
 from collections.abc import Iterable
+from contextlib import ExitStack
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 from tempfile import TemporaryDirectory
@@ -24,7 +25,7 @@ from agent_comms.installer.interpreter_operation import (
     TargetProbe,
 )
 from agent_comms.locked_store import RootFile
-from agent_comms.store_files import is_store_lock
+from agent_comms.store_files import BorrowedStoreLock, is_store_lock
 from agent_comms.typed_table import TriggerKind, TypedTable, WriterOwnedStore, _Field
 
 
@@ -232,6 +233,7 @@ class CarryProbe[Answer](TargetProbe, RuntimeProbe[tuple[Answer, ...]]):
 
     operation: CarryOperation
     steps: tuple[Carry, ...]
+    inherited_locks: tuple[BorrowedStoreLock, ...] = ()
 
     def install_phase(self) -> CarryPhase:
         return CarryPhase(operation=type(self.operation))
@@ -240,4 +242,7 @@ class CarryProbe[Answer](TargetProbe, RuntimeProbe[tuple[Answer, ...]]):
         return self.operation.answer_type()
 
     def run(self) -> tuple[Answer, ...]:
-        return self.operation.run(self.steps)
+        with ExitStack() as lifetime:
+            for lock in self.inherited_locks:
+                lifetime.enter_context(lock.joined())
+            return self.operation.run(self.steps)

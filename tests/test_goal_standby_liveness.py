@@ -306,9 +306,9 @@ def test_terminal_fence_survives_rename_not_stop_or_metadata_edit(tmp_path):
 def test_unbound_wait_is_rejected_without_replacing_current_wait(tmp_path):
     comms, _goal = _waiting(tmp_path)
     wait = comms.goals.goal_wait("owner")
-    before = GoalWaits(comms.root / "goal_waits.sqlite3").path.read_bytes()
+    before = GoalWaits(comms.root).path.read_bytes()
     with pytest.raises(ValueError):
-        GoalWaits(comms.root / "goal_waits.sqlite3").record(replace(wait, target_turn_generations=()))
-    assert GoalWaits(comms.root / "goal_waits.sqlite3").path.read_bytes() == before
+        GoalWaits(comms.root).record(replace(wait, target_turn_generations=()))
+    assert GoalWaits(comms.root).path.read_bytes() == before
 
 

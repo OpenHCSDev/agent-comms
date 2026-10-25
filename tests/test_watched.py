@@ -72,7 +72,7 @@ async def test_bus_append_wakes_after_each_committed_message(watched_bus):
 
 async def test_goal_wait_record_wakes_after_each_commit(watched_bus, recorded_wait):
     bus, comms = watched_bus
-    waits = GoalWaits(GoalWaits.path_in(comms.root))
+    waits = GoalWaits(comms.root)
     async with aclosing(bus.watch()) as observations:
         await anext(observations)
         for revision in (0, 1):
@@ -83,7 +83,7 @@ async def test_goal_wait_record_wakes_after_each_commit(watched_bus, recorded_wa
 
 async def test_goal_wait_read_and_bus_database_alone_do_not_wake(watched_bus, recorded_wait):
     bus, comms = watched_bus
-    waits = GoalWaits(GoalWaits.path_in(comms.root))
+    waits = GoalWaits(comms.root)
     waits.record(recorded_wait)
     bus.append(lambda seq, db: PublicRecord.from_message(Message("peer", "owner", "seed", InfoKind, seq=seq)))
     async with aclosing(bus.watch()) as observations:
