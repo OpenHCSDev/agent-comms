@@ -52,6 +52,8 @@ from .field_codec import (
     NominalText,
     NullMember,
     PathText,
+    SingleFieldValue,
+    SubclassUnion,
     TextRepresentation,
     ValueDecoder,
     WireName,
@@ -829,7 +831,8 @@ class SchemaRebuild:
         rows: tuple[type[TypedTable], ...],
     ) -> None:
         schema.drop_rows(db, rows)
-        schema.create_schema(db, rows)
+        schema.create_tables(db, rows)
+        schema.rebuild_rows(db, rows)
 
 
 FULL_SCHEMA_REBUILD = SchemaRebuild()
@@ -872,6 +875,26 @@ class AttachedPracticeRebuild(SchemaRebuild):
             db.execute(f'INSERT INTO "{row.declared_name}" '
                        f'SELECT * FROM "{PracticeRebuild.database}"."{row.declared_name}"')
         schema.replay(db, rows, after=through)
+
+
+class Practice(SubclassUnion, affix=""):
+    """The CLI's decoded choice of a practice root for this reconciliation."""
+
+    def rebuild_for(self, owner: type[ReconciledFile], path: Path) -> SchemaRebuild:
+        return FULL_SCHEMA_REBUILD
+
+
+@dataclass(frozen=True)
+class NoPractice(NullMember, Practice):
+    """Rebuild from this file's own history."""
+
+
+@dataclass(frozen=True)
+class PracticeRoot(SingleFieldValue, Practice):
+    root: Annotated[Path, PathText]
+
+    def rebuild_for(self, owner: type[ReconciledFile], path: Path) -> SchemaRebuild:
+        return owner.practice_rebuild(path, self.root)
 
 
 class SchemaChange(ABC):
@@ -1005,10 +1028,8 @@ class TableSchema(ABC):
             raise cls.schema_error(f"{cls.__name__} foreign-key enforcement is disabled")
 
     @classmethod
-    def create_schema(
-        cls, db: sqlite3.Connection, rows: tuple[type[TypedTable], ...] | None = None,
-    ) -> None:
-        cls.create_tables(db, cls.schema_rows() if rows is None else rows)
+    def create_schema(cls, db: sqlite3.Connection) -> None:
+        cls.create_tables(db, cls.schema_rows())
 
     @classmethod
     def create_tables(cls, db: sqlite3.Connection, rows: tuple[type[TypedTable], ...]) -> None:
@@ -1099,12 +1120,9 @@ class ComposedSchemas:
             yield from family.changed_families(db, rows)
 
     @classmethod
-    def create_schema(
-        cls, db: sqlite3.Connection, rows: tuple[type[TypedTable], ...] | None = None,
-    ) -> None:
-        selected = cls.schema_rows() if rows is None else rows
+    def create_tables(cls, db: sqlite3.Connection, rows: tuple[type[TypedTable], ...]) -> None:
         for family in cls.schema_families():
-            family.create_schema(db, tuple(row for row in family.schema_rows() if row in selected))
+            family.create_tables(db, tuple(row for row in family.schema_rows() if row in rows))
 
     @classmethod
     def carry_schema(
@@ -1626,6 +1644,10 @@ class DerivedTables(TableSchema):
         for stored in cls.stored_tables(db):
             if stored.name in names:
                 stored.drop(db)
+
+    @classmethod
+    def rebuild_rows(cls, db: sqlite3.Connection, rows: tuple[type[TypedTable], ...]) -> None:
+        """Projection metadata has no original rows to rebuild."""
 
     @classmethod
     def replay(
@@ -2368,15 +2390,15 @@ class ReconciledFile(SQLiteFile, StoreLockFile):
         return HeldBusFile(cls, path)
 
     @classmethod
-    def schema_rebuild(cls, path: Path, practice_root: Path | None) -> SchemaRebuild:
+    def practice_rebuild(cls, path: Path, practice_root: Path) -> SchemaRebuild:
         """Files without a declared practice replay retain their normal rebuild."""
         return FULL_SCHEMA_REBUILD
 
     @classmethod
-    def reconcile_at(cls, path: Path, practice_root: Path | None = None) -> bool:
-        """Whether reconciling the file changed it, optionally using a retained practice file."""
+    def reconcile_at(cls, path: Path, practice: Practice = NoPractice()) -> bool:
+        """Whether reconciling the file changed it using the decoded practice choice."""
         schema = cls.schema_at(path)
-        rebuild = cls.schema_rebuild(path, practice_root)
+        rebuild = practice.rebuild_for(cls, path)
         with _store_lock(path), closing(cls.writer(path, isolation_level=None, uri=True)) as db:
             return schema.reconcile_schema(db, cls.schema_change(path), rebuild=rebuild)
 

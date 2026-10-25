@@ -86,13 +86,9 @@ class BusProjectionTables(ProducedTable, SharedFileTables, DerivedTables, declar
         return tuple(row for row in cls.schema_rows() if row in changed)
 
     @classmethod
-    def create_schema(
-        cls, db: sqlite3.Connection, rows: tuple[type[TypedTable], ...] | None = None,
-    ) -> None:
-        """Create/rebuild rows from history using the append projection owner."""
-        selected = cls.schema_rows() if rows is None else rows
-        super().create_schema(db, selected)
-        ReplayedHolders(tables=frozenset(selected)).replay(db)
+    def rebuild_rows(cls, db: sqlite3.Connection, rows: tuple[type[TypedTable], ...]) -> None:
+        """Rebuild from history after the schema creates the selected empty tables."""
+        ReplayedHolders(tables=frozenset(rows)).replay(db)
 
     @classmethod
     def replay(

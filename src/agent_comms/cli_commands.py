@@ -203,7 +203,7 @@ from .turn_context import (
     Provenance,
     TurnContext,
 )
-from .typed_table import ReconciledFile, StoreRewrite, WriterOwnedStore
+from .typed_table import NoPractice, Practice, ReconciledFile, StoreRewrite, WriterOwnedStore
 from .working_memory_annotations import WorkingMemoryAnnotations
 from .working_memory_labels import ClassifierVersion, ModelLabel, QuestionVersion
 from .working_memory_questions import SpanAnswer
@@ -1943,15 +1943,13 @@ class ReconcileStoresCliCommand(
     help = ("Reconcile every declared store's schema onto this runtime's declarations; "
             "the installer runs it under maintenance after the outgoing owners stop")
 
-    practice_root: Annotated[
-        Path | None, PathText, Argument(flags=("--practice-root",)),
-    ] = None
+    practice: Annotated[Practice, Argument(flags=("--practice-root",))] = NoPractice()
 
     def answer(self, root: Path) -> ReconciledStoresResult:
         return ReconciledStoresResult(tuple(
             path.relative_to(root)
             for path, owner in sorted(ReconciledFile.existing_in(root).items())
-            if owner.reconcile_at(path, self.practice_root)))
+            if owner.reconcile_at(path, self.practice)))
 
 
 @dataclass(frozen=True, kw_only=True)

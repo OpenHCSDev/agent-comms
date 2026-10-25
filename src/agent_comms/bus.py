@@ -56,7 +56,7 @@ from agent_comms.read_basis import (
 )
 from agent_comms.store_files import UNBOUNDED_CONTENTION, StoreLockContention
 from agent_comms.typed_table import (
-    FULL_SCHEMA_REBUILD, CarriedWriter, PracticeRebuild, ReconciledFile, SchemaRebuild,
+    CarriedWriter, PracticeRebuild, ReconciledFile, SchemaRebuild,
     SQLiteDatabase, WalStore,
 )
 from agent_comms.watched import Watched
@@ -501,9 +501,7 @@ class Bus(BusReader, ReconciledFile, WalStore, CarriedWriter, BusFile, Watched):
         return BusSchema
 
     @classmethod
-    def schema_rebuild(cls, path: Path, practice_root: Path | None) -> SchemaRebuild:
-        if practice_root is None:
-            return FULL_SCHEMA_REBUILD
+    def practice_rebuild(cls, path: Path, practice_root: Path) -> SchemaRebuild:
         return PracticeRebuild(practice_root / path.relative_to(cls.bus_root(path)))
 
     @contextmanager
