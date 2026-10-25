@@ -476,10 +476,15 @@ class OwedAnswer(IndependentStandingRule, declared_name=None):
         return any(message.message_id == self.message.message_id for message in named)
 
     def blocks(self, reached: frozenset[str], action: CommanderVerb,
-               named: tuple[Message, ...]) -> bool:
+               answered: tuple[OwedAnswer, ...]) -> bool:
         """An owed message refuses only an action that answers nothing: an answer to any open
         message is progress and is never refused, so the others it leaves owed only warn."""
-        return not named
+        return not answered
+
+    def answered_in(self) -> tuple[str, ...]:
+        """The threads a reply must reach to answer this debt by naming it; none when a reply
+        cannot clear it."""
+        return ()
 
     def asked_by(self, reached: frozenset[str]) -> bool:
         """Whether one of these threads asked it, so a reply reaching them answers it unnamed."""
@@ -750,6 +755,9 @@ class DirectiveUnacted(OwedAnswer, DatedStandingRule):
             for request in requests
             for directive, original in request.directive_messages(source, snapshot.names_for(commander))
         )
+
+    def answered_in(self) -> tuple[str, ...]:
+        return (self.message.sender,)
 
     def clearing_action(self) -> str:
         return (f"Order its next step with --answers {self.message.message_id}, reply to "

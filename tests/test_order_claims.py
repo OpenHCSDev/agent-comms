@@ -10,9 +10,10 @@ import pytest
 from agent_comms.commander.order import OrderFile, main
 from agent_comms.commander.package import CommanderPackage
 from agent_comms.errors import TodoConflict, TodoError, ToolRefusedError
-from agent_comms.field_codec import FieldCodec, GoalId, OrderId
+from agent_comms.field_codec import FieldCodec, GoalId, OrderId, RecordProblems
 from agent_comms.goal_actions import SetGoalAction
 from agent_comms.goals import OrderCheck, ProblemGoalOrder
+from agent_comms.messages import QuestionKind
 from agent_comms.native_tool_call import ToolCallId
 from agent_comms.order_tools import (
     CommsHudTool,
@@ -320,9 +321,14 @@ def test_two_delivery_claims_warn_without_deadlocking_other_orders(
     assert "WARNING: JUDGE other P2 delivery" in warning
     assert store.get("P1") == claims[0]
     assert store.get("P2") == claims[1]
-    with pytest.raises(SystemExit, match="JUDGE worker P1 delivery"):
+    with pytest.raises(RecordProblems, match="JUDGE worker P1 delivery"):
         main(["say", "worker", str(reply), "--answers",
               claims[0].order.claim.message.message_id], ctx)
+    assert store.get("P1") == claims[0]
+    ask = comms.messaging.send(
+        "worker", ctx.commander, "Which owner do I wait on?", type=QuestionKind,
+    ).message
+    main(["say", "worker", str(reply), "--answers", ask.message_id], ctx)
     assert store.get("P1") == claims[0]
 
     main(["send", "worker", corrected_order_file(ctx, cited_source), "--clean"], ctx)

@@ -353,6 +353,15 @@ class InferredArgumentDefault(ArgumentDefault):
 
 
 @dataclass(frozen=True)
+class SelectingArgumentDefault(ArgumentDefault):
+    """An option that chooses its command's member: absent, it stays absent, and the member
+    the given options chose reports every one of its own it still lacks."""
+
+    def options(self, plan: FieldPlan) -> Mapping[str, object]:
+        return {"default": argparse.SUPPRESS}
+
+
+@dataclass(frozen=True)
 class GivenArgumentDefault(ArgumentDefault):
     value: object
 
