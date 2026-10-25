@@ -19,7 +19,12 @@ from .lifecycle_capability import Failed, LifecycleCapability, Successful
 from .pi_counts import PiCount, UnreportedCount
 
 if TYPE_CHECKING:
+    import sqlite3
+
+    from .attempt_states import UnsuccessfulTerminal
     from .backend import TurnSession
+    from .coordination_tables.attempts import ReplayFact
+    from .coordination_tables.executions import ExecutionRecord
 
 
 class PiStopReason(LifecycleCapability, ExternalName, affix="StopReason"):
@@ -37,23 +42,19 @@ class PiStopReason(LifecycleCapability, ExternalName, affix="StopReason"):
         return total
 
     @classmethod
-    def recovery_outcome(cls):
+    def recovery_outcome(cls) -> UnsuccessfulTerminal:
         from .attempt_states import UnknownOutcomeAttempt
 
         return UnknownOutcomeAttempt()
 
     @classmethod
-    def recovery_facts(cls):
+    def recovery_facts(cls) -> ReplayFact:
         from .coordination_tables.attempts import ReplayFact
 
         return ReplayFact.NONE
 
     @classmethod
-    def unpublished_attempt(cls):
-        return cls.recovery_outcome(), cls.recovery_facts()
-
-    @classmethod
-    def assess_recovery_replay(cls, replay, db, execution_id: str) -> None:
+    def assess_recovery_replay(cls, db: sqlite3.Connection, execution: ExecutionRecord) -> None:
         """A terminal alone supplies no new permission to replay."""
 
     @classmethod
@@ -100,7 +101,7 @@ class FailedUnpublishedPiStop:
     """Recovery knows this attempt failed, independently of its output facts."""
 
     @classmethod
-    def recovery_outcome(cls):
+    def recovery_outcome(cls) -> UnsuccessfulTerminal:
         from .attempt_states import AttemptFailedAttempt
 
         return AttemptFailedAttempt()
@@ -110,15 +111,17 @@ class StoppedBeforeGrantStopReason(FailedUnpublishedPiStop, UnfinishedPiStop, Pi
     """The stopped owner never received permission to write this input."""
 
     @classmethod
-    def assess_recovery_replay(cls, replay, db, execution_id: str) -> None:
+    def assess_recovery_replay(cls, db: sqlite3.Connection, execution: ExecutionRecord) -> None:
+        from .coordination_tables.executions import ReplayAssessments
+
         # A grant was required before the writer could send any bytes. Existing
         # effects from earlier attempts still prevent authorization.
-        replay.authorize_retry(db, execution_id)
+        ReplayAssessments.authorize_if_unobserved(db, execution.execution_id)
 
 
 class FinishedPiStop(FailedUnpublishedPiStop):
     @classmethod
-    def recovery_facts(cls):
+    def recovery_facts(cls) -> ReplayFact:
         from .coordination_tables.attempts import ReplayFact
 
         # The native turn finished, but recovery cannot invent a delivered reply.
