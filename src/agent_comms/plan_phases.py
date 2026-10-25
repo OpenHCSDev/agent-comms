@@ -89,8 +89,11 @@ class OrderPhase(DeclaredFamily, affix="Phase"):
 class UnplannedPhase(OrderPhase):
     @classmethod
     def order_refusals(cls, reading: PlanReading, reason: str) -> tuple[str, ...]:
+        """A stated reason answers the refusal, so main is read only when it is missing."""
+        if len(reason.split()) >= 8:
+            return ()
         ready = tuple(phase for phase in PlanPhase.members_with(PlanPhase) if phase.ready(reading))
-        if ready and len(reason.split()) < 8:
+        if ready:
             return (
                 "Plan phases are ready: "
                 + ", ".join(phase.declared_name for phase in ready)
