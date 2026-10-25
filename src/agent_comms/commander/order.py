@@ -66,7 +66,7 @@ from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.repo import Repo
 from agent_comms.registry_document import RegisteredCommanderProject
 from agent_comms.commander_pings import CommanderUpdate
-from agent_comms.heartbeat_subjects import HeartbeatSubject, UnitSubject
+from agent_comms.heartbeat_subjects import AnswerSubject, HeartbeatSubject, UnitSubject
 from agent_comms.standing_rules import HuntDue, OwedAnswer
 from agent_comms.ui_model.unit_state import AwaitingCommander
 from agent_comms.thread_identity import ThreadIncarnation
@@ -835,18 +835,21 @@ class CommanderVerb(DeclaredVerb, affix="Verb"):
 
 class HeartbeatGated(CommanderVerb, declared_name=None):
     """A writing verb is refused while a heartbeat line sits undisposed past the answer window,
-    unless the verb acts on one such line's subject; Core records that action, and the record
-    is what disposes of the line. Nothing the commander says about a line counts."""
+    unless the verb acts on the subject of a line on the board, fresh or stale: board work is
+    never off-board work, or a stale line no one can act on yet would refuse the verdict a
+    fresh line asks for. Core records that action, and the record is what disposes of the line.
+    Nothing the commander says about a line counts."""
 
     def gate(self, ctx: Commander) -> None:
         super().gate(ctx)
         now = time.time()
-        owed = CommanderUpdate.owed(ctx.comms, ctx.commander, now - AwaitingCommander.seconds)
+        board = CommanderUpdate.owed(ctx.comms, ctx.commander, now)
         acted = frozenset(self.acts_on(ctx))
-        if owed and not any(subject in acted for ping in owed for subject in ping.subjects):
+        if (any(ping.since.before(now - AwaitingCommander.seconds) for ping in board)
+                and not any(ping.acted_on(acted) for ping in board)):
             sys.exit(f'REFUSED, nothing recorded: heartbeat lines undisposed past '
-                     f'{AwaitingCommander.seconds // 60} min; act on one of them:\n'
-                     + '\n'.join(ping.render(now) for ping in owed))
+                     f'{AwaitingCommander.seconds // 60} min; act on any line on the board:\n'
+                     + '\n'.join(ping.render(now) for ping in board))
 
     @abstractmethod
     def acts_on(self, ctx: Commander) -> tuple[HeartbeatSubject, ...]:
@@ -929,8 +932,9 @@ class DirectiveVerb(HeartbeatGated):
         snapshot = ctx.comms.registry.snapshot()
         reached = (snapshot.canonical_name(name) for name in self.addressed)
         # A channel reaches no unit line; only registered threads are subjects.
-        return tuple(UnitSubject(snapshot.threads[name].incarnation)
-                     for name in reached if name in snapshot.threads)
+        return (*(UnitSubject(snapshot.threads[name].incarnation)
+                  for name in reached if name in snapshot.threads),
+                *(AnswerSubject(identity) for identity in self.answers))
 
     @abstractmethod
     def respond(self, ctx: Commander, references: tuple[MessageReference, ...]) -> None: ...
