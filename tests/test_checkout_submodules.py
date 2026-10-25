@@ -70,6 +70,7 @@ def checkout_command_bus(repository, tmp_path, monkeypatch, installed_runtime):
     remote = SourceRepository.remote_for(tmp_path, identity)
     git(repository, "remote", "add", "origin", str(remote))
     git(repository, "push", "-q", "origin", "main")
+    git(repository, "remote", "set-head", "origin", "--auto")
     root = tmp_path / "wire"
     root.mkdir(mode=0o700)
     rule = StorageRule(checkout_base=tmp_path / "checkouts",

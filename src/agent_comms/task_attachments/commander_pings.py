@@ -60,6 +60,10 @@ class Ping(DeclaredFamily, affix="Ping"):
     since: EventTime = field(default_factory=UnrecordedEventTime, compare=False, kw_only=True)
 
     @property
+    def urgent(self) -> bool:
+        return False
+
+    @property
     @abstractmethod
     def key(self) -> object: ...
 
@@ -86,9 +90,9 @@ class Ping(DeclaredFamily, affix="Ping"):
         return any(subject.acted_on(acted) for subject in self.subjects)
 
     @property
+    @abstractmethod
     def commander_disposes(self) -> bool:
-        """Whether a commander verb disposes of this line; only such a line locks the verbs."""
-        return True
+        """Whether a commander verb disposes of this line; only such a line goes on the board."""
 
     def board_line(self, now: float, cut: float) -> str:
         """This line as the commander's tool calls print it: locked as the gate refuses on it,
@@ -103,15 +107,24 @@ class Ping(DeclaredFamily, affix="Ping"):
 
 @dataclass(frozen=True)
 class RulePing(Ping):
+    rule: type[StandingRule]
     observation: TextDigest
+
+    @property
+    def urgent(self) -> bool:
+        return self.rule.urgent
 
     @property
     def key(self) -> TextDigest:
         return self.observation
 
+    @property
+    def commander_disposes(self) -> bool:
+        return self.rule.commander_disposes
+
     @classmethod
     def capture(cls, rule: StandingRule) -> Self:
-        return cls(rule.observation_key(), text=rule.line(), subjects=rule.subjects())
+        return cls(type(rule), rule.observation_key(), text=rule.line(), subjects=rule.subjects())
 
 
 @dataclass(frozen=True)
@@ -226,10 +239,12 @@ class CommanderUpdate(TaskAttachment, declared_name=None):
         known = {ping.key: ping for ping in previous.handled} if previous else {}
         # Equality ignores the start, so an unchanged observation keeps the start it had.
         began = {ping: ping.since for ping in known.values()}
-        handled = tuple(replace(ping, since=began.get(ping, ping.since).continued_from(now))
-                        for ping in (
-            *(UnitPing.capture(state) for state in states if state.attention()),
-            *(RulePing.capture(rule) for rule in rules),
+        handled = tuple(sorted(
+            (replace(ping, since=began.get(ping, ping.since).continued_from(now))
+             for ping in (
+                 *(UnitPing.capture(state) for state in states if state.attention()),
+                 *(RulePing.capture(rule) for rule in rules),
+             )), key=lambda ping: not ping.urgent,
         ))
         new = tuple(ping for ping in handled if known.get(ping.key) != ping)
         if new:

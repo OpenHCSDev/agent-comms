@@ -19,6 +19,7 @@ from agent_comms.commander_service import CommanderService
 from agent_comms.comms import Comms
 from agent_comms.declared_family import DeclaredFamily
 from agent_comms.goal_actions import ReissuedOrderGoalAction
+from agent_comms.field_codec import GoalId
 from agent_comms.head_review import PullRequestHead
 from agent_comms.heartbeat_frame import HeartbeatFrame
 from agent_comms.heartbeat_subjects import HeadSubject, HeartbeatSubject, PassSubject
@@ -34,16 +35,18 @@ from agent_comms.phase_evidence import PlanReading
 from agent_comms.plan_phases import PlanPhase
 from agent_comms.read_basis import RepliesDisplayScope
 from agent_comms.recorded_time import RecordedEventTime
-from agent_comms.registry_document import RegistrySnapshot
+from agent_comms.registry_document import DEFAULT_ROSTER, RegistrySnapshot
 from agent_comms.repo import Repo
 from agent_comms.repository_name import RepositoryName
 from agent_comms.service_passes import ServicePassStore
 from agent_comms.standing_rules import (
+    CoreActsStandingRule,
     DatedStandingRule,
     IndependentStandingRule,
     OwedAnswer,
     ReasonedStandingRule,
     StandingRule,
+    FamilyScan,
     UndatedStandingRule,
 )
 from agent_comms.thread_identity import ThreadIncarnation
@@ -90,7 +93,7 @@ class UninstalledMerge:
 
 
 @dataclass(frozen=True)
-class InstallDue(UndatedStandingRule):
+class InstallDue(UndatedStandingRule, FamilyScan):
     """A configured main not contained in the installed build can use an install, from the
     pass it leaves the build: due is a disposition, never a launch.
 
@@ -113,10 +116,6 @@ class InstallDue(UndatedStandingRule):
     @property
     @abstractmethod
     def action(self) -> str: ...
-
-    @classmethod
-    def scan_owner(cls) -> type[StandingRule]:
-        return InstallDue
 
     @classmethod
     def scan_observed(cls, comms: Comms, commander: str,
@@ -166,8 +165,7 @@ class InstallDue(UndatedStandingRule):
 class PendingInstallDue(InstallDue):
     @property
     def action(self) -> str:
-        verbs = " or ".join(f"`{verb.usage()}`" for verb in self.clearing_verbs)
-        return f"batch the landing requests into one install of Core main {self.target[:12]}: {verbs}"
+        return f"{self.clearing_commands()} installs Core main {self.target[:12]}; batch the landing requests first"
 
     def launch(self, comms: Comms) -> str:
         """Every repository's merge installs the same Core target, so a run of that target
@@ -242,12 +240,8 @@ class AnswersTo(MessageReadRequest[tuple[Message, ...]]):
         )
 
 
-class PlanRule(UndatedStandingRule, declared_name=None):
+class PlanRule(UndatedStandingRule, FamilyScan, declared_name=None):
     """Rules read from the heartbeat's one look at the plans and the commander's orders."""
-
-    @classmethod
-    def scan_owner(cls) -> type[StandingRule]:
-        return PlanRule
 
     @classmethod
     def scan_observed(cls, comms: Comms, commander: str,
@@ -281,7 +275,7 @@ class PlanIdle(PlanRule):
         return (
             f"{self.phase.plan.declared_name}/{self.phase.declared_name}"
             f" ({self.phase.plan.document}) is ready and nobody holds it; done when"
-            f" {self.reading.describe(self.phase.evidence)}. why is it sitting there?"
+            f" {self.reading.describe(self.phase.phase_evidence())}. why is it sitting there?"
             f" -> {self.phase.task.instruction}"
         )
 
@@ -386,12 +380,10 @@ class DeliveryAwaitingJudgement(UnitOwedAnswer, UndatedStandingRule):
         """A verdict on the delivered head acts on the delivery; a chat reply does not."""
         return (HeadSubject(self.request),)
 
-    def clearing_action(self) -> str:
-        """The verbs that declare they clear this debt render their own command lines."""
-        DeclaredFamily.discover_package(commander)
-        lines = " or ".join(f"`{verb.usage()}`" for verb in self.clearing_verbs)
-        return (f"{lines} (UNIT {self.unit}, PROBLEM {self.problem})."
-                f" --repo: {Repo.selection_refusal()}")
+    def command_values(self) -> Mapping[str, str]:
+        return {"unit": self.unit, "problem": self.problem,
+                "repo": self.request.repo.to_wire(), "pr": str(self.request.pr),
+                "head": self.request.head}
 
     def answered_by(self, named: tuple[Message, ...]) -> bool:
         return False
@@ -403,9 +395,35 @@ class DeliveryAwaitingJudgement(UnitOwedAnswer, UndatedStandingRule):
         return (self.unit in reached and not action.resolves_claim(self.unit, self.problem)
                 and not any(rule.asked_by(frozenset((self.unit,))) for rule in answered))
 
+    def clearing_action(self) -> str:
+        DeclaredFamily.discover_package(commander)  # The verbs that clear it, for its action.
+        return self.clearing_commands()
+
     def line(self) -> str:
         return (f"{self.unit} delivered {self.problem} ({self.cited}). you judged it yet?"
                 f" -> {self.clearing_action()}")
+
+
+@dataclass(frozen=True)
+class GoalBlocked(IndependentStandingRule, UndatedStandingRule):
+    """A visible thread's own goal is blocked, with or without a commander order."""
+
+    thread: ThreadIncarnation
+    goal: GoalId
+    reason: str
+    urgent: ClassVar[bool] = True
+
+    @classmethod
+    def violations(cls, comms: Comms, commander: str) -> tuple[Self, ...]:
+        snapshot = comms.registry.snapshot()
+        return tuple(cls(thread.incarnation, goal.id, reason)
+                     for thread in snapshot.visible_threads(DEFAULT_ROSTER)
+                     for goal in thread.goal
+                     for reason in goal.state.blocked_reasons())
+
+    def line(self) -> str:
+        return (f"GOAL BLOCKED {self.thread.name}: {self.reason[:200]}"
+                " -> unblock it or tell Tristan, this wake")
 
 
 @dataclass(frozen=True)
@@ -435,7 +453,7 @@ class HolderGone(IndependentStandingRule, UndatedStandingRule):
 
 
 @dataclass(frozen=True)
-class UnownedWheelSpin(IndependentStandingRule, UndatedStandingRule):
+class UnownedWheelSpin(IndependentStandingRule, UndatedStandingRule, FamilyScan):
     """A unit holds no next order while the board has unowned rows; Core hands the row to it
     without a commander turn, restarting the row's review window at the handoff."""
 
@@ -496,9 +514,12 @@ class UnownedWheelSpin(IndependentStandingRule, UndatedStandingRule):
                          if assignment.running_holders(snapshot))
         protected = {rule.todo.id for rule in retained}
         owners = {rule.previous.owner_identity for rule in retained}
-        idle = [unit for unit in cls.idle(comms, commander, scan) if unit.incarnation not in owners]
+        unowned = tuple(todo for todo in rows if todo.id not in protected)
+        # Reading every candidate's recent turns is the expensive part; no unowned row, no read.
+        idle = [unit for unit in cls.idle(comms, commander, scan)
+                if unit.incarnation not in owners] if unowned else []
         found = []
-        for todo in (todo for todo in rows if todo.id not in protected):
+        for todo in unowned:
             for unit in idle:
                 if not todo.strikes_against(unit.incarnation):
                     idle.remove(unit)
@@ -517,7 +538,7 @@ class UnownedWheelSpin(IndependentStandingRule, UndatedStandingRule):
 
 
 @dataclass(frozen=True, eq=False)
-class ReassignedWheelSpin(UnownedWheelSpin, declared_name=None):
+class ReassignedWheelSpin(CoreActsStandingRule, UnownedWheelSpin):
     dispatch: WorkDispatch
 
     @property
@@ -535,7 +556,7 @@ class ReassignedWheelSpin(UnownedWheelSpin, declared_name=None):
 
 
 @dataclass(frozen=True, eq=False)
-class RetainedHolderWheelSpin(UnownedWheelSpin, declared_name=None):
+class RetainedHolderWheelSpin(CoreActsStandingRule, UnownedWheelSpin):
     previous: Assignment
 
     def comparison_values(self) -> tuple[object, ...]:
@@ -582,12 +603,12 @@ class UnownedOrderWatch(WatchPass[tuple[UnownedObservation, ...]]):
                 logging.info("%s", rule.rejected_line(error))
 
 
-class WaitingUnownedWheelSpin(UnownedWheelSpin, declared_name=None):
+class WaitingUnownedWheelSpin(UnownedWheelSpin):
     """A row needs a new unit; a proposed dispatch name is not an idle thread."""
 
 
 @dataclass(frozen=True)
-class HeartbeatSilent(IndependentStandingRule, DatedStandingRule, declared_name=None):
+class HeartbeatSilent(IndependentStandingRule, DatedStandingRule, FamilyScan, declared_name=None):
     """A missing or stale successful pass, independent of whether a DM needed sending."""
 
     seconds: ClassVar[int] = 180
@@ -641,7 +662,7 @@ class HeartbeatNotStarted(HeartbeatSilent):
 
 @dataclass(frozen=True)
 class InboxUnavailable(IndependentStandingRule, DatedStandingRule, declared_name=None):
-    """A thread nothing can reach: every message sent to it waits unread.
+    """A thread nothing can reach: every message sent to it waits undelivered.
 
     Each member owns how its inbox reports the pause; the window and the date are shared.
     """

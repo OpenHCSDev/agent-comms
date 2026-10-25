@@ -15,7 +15,7 @@ from collections.abc import Iterator, Mapping
 from contextlib import ExitStack
 from dataclasses import dataclass, replace
 from pathlib import Path
-from typing import TYPE_CHECKING, Annotated, ClassVar
+from typing import Annotated, ClassVar, Self
 
 
 from .cli_result import CliResult, ResultShower
@@ -47,9 +47,6 @@ from .thread_identity import RecordedThreadIncarnation
 from .tool_result import ToolResult
 from .watched import ChangeSignal, DirectorySource, FileSource
 
-if TYPE_CHECKING:
-    from .threads import Thread
-
 DIRECTORY = "owner-restart-queue"
 
 
@@ -62,11 +59,20 @@ class RestartState(LifecycleCapability, DeclaredFamily, affix="Restart"):
         # A terminal write interrupted before its move is still settled.
         return previous
 
-    def restart(self, comms: Comms, record: QueuedRestart, owner: Thread) -> Iterator[QueuedRestart]:
+    def restart(self, comms: Comms, record: QueuedRestart) -> Iterator[QueuedRestart]:
         return iter(())
+
+    def settle(self, record: QueuedRestart) -> QueuedRestart:
+        """Retain attempted and terminal answers without inventing a retry."""
+        return record
 
 
 class PendingRestart(Pending, Active, RestartState):
+
+    def settle(self, record: QueuedRestart) -> QueuedRestart:
+        if not Platform.current().matches(record.selection.process):
+            return record.transition(StaleRestart(reason="Owner process exited"))
+        return record
 
     def enqueue(self, previous: QueuedRestart, selection: OwnerRestartSelection,
                 target: RestartTarget) -> QueuedRestart:
@@ -82,10 +88,10 @@ class RestartAlreadyAttemptingError(RelationViolationError):
 
 
 class AttemptingRestart(Active, RestartState):
-    def restart(self, comms: Comms, record: QueuedRestart, owner: Thread) -> Iterator[QueuedRestart]:
+    def restart(self, comms: Comms, record: QueuedRestart) -> Iterator[QueuedRestart]:
         try:
             request = OwnerRestartRequest(
-                OwnersNamed((owner.name,)),
+                OwnersNamed((record.name,)),
                 expected=record.selection,
                 runtime=record.target.runtime,
                 agent_bin=GivenBinary(record.target.agent_bin),
@@ -192,7 +198,7 @@ class QueuedRestart(DurableFile, PatternFile):
     def name(self) -> str:
         return self.selection.name
 
-    def transition(self, state: RestartState):
+    def transition(self, state: RestartState) -> Self:
         return replace(self, state=state)
 
 
@@ -281,10 +287,13 @@ class RestartQueue(MultiFileStore):
         yield from record.state.items_with(Active, record)
 
     def settle_interrupted(self) -> None:
-        """Finish interrupted terminal moves while the caller holds the write guard."""
+        """Settle dead pending owners and interrupted moves under the write guard."""
         for path in self.active_directory.glob('*.json'):
             record = self.read_active(path)
-            if not record.state.items_with(Active, record):
+            settled = record.state.settle(record)
+            if settled != record:
+                self.save(settled)
+            elif not record.state.items_with(Active, record):
                 self.move(path, record)
 
     def active_for(self, owner: RecordedThreadIncarnation) -> Iterator[QueuedRestart]:
@@ -358,6 +367,7 @@ def cancel(comms: Comms, name: str) -> list[QueuedRestart]:
     queue = RestartQueue(comms.root / DIRECTORY)
     changed = []
     with queue.guarded_write():
+        queue.settle_interrupted()
         for record in queue.active_for(owner):
             for pending in record.state.items_with(Pending, record):
                 cancelled = pending.transition(CancelledRestart())
@@ -390,18 +400,15 @@ def step(comms: Comms) -> None:
                 # Idle is checked before persisting an attempt or signalling.
                 continue
             else:
-                if not owner.process_alive:
-                    record = record.transition(StaleRestart(reason="Owner process exited"))
+                try:
+                    record.target.require_watcher(comms)
+                except ValueError as error:
+                    record = record.transition(BlockedRestart(reason=str(error)))
                 else:
-                    try:
-                        record.target.require_watcher(comms)
-                    except ValueError as error:
-                        record = record.transition(BlockedRestart(reason=str(error)))
-                    else:
-                        # Persist before any side effect; crashes cannot authorize replay.
-                        record = record.transition(AttemptingRestart())
+                    # Persist before any side effect; crashes cannot authorize replay.
+                    record = record.transition(AttemptingRestart())
             queue.save(record)
-        for result in record.state.restart(comms, record, owner):
+        for result in record.state.restart(comms, record):
             with queue.guarded_write():
                 queue.save(result)
 

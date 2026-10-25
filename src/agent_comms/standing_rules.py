@@ -120,11 +120,22 @@ class StandingRule(DeclaredFamily, affix="StandingRule", discovery_package="agen
     def broke_after(self, after: float) -> bool: ...
 
     clearing_verbs: ClassVar[tuple[type[CommanderVerb], ...]] = ()
+    commander_disposes: ClassVar[bool] = True
+    urgent: ClassVar[bool] = False
 
     @classmethod
     def cleared_by(cls, verb: type[CommanderVerb]) -> None:
         """A verb declaring that it clears this rule joins the action its line prints."""
         cls.clearing_verbs = (*cls.clearing_verbs, verb)
+
+    def command_values(self) -> Mapping[str, str]:
+        """The verb arguments this line knows, by argument name."""
+        return {}
+
+    def clearing_commands(self) -> str:
+        """The verbs that clear this line, each with the arguments this line fills."""
+        values = self.command_values()
+        return " or ".join(f"`{verb.command(values)}`" for verb in self.clearing_verbs)
 
     def attention(self) -> bool:
         return True
@@ -181,8 +192,9 @@ class StandingRule(DeclaredFamily, affix="StandingRule", discovery_package="agen
 
     @classmethod
     def scan_owner(cls) -> type[StandingRule]:
-        """Ordinary rules scan independently; a family can own one shared scan."""
-        return cls
+        """The nearest class declaring FamilyScan owns the scan its members share; any other
+        rule scans independently."""
+        return next((owner for owner in cls.__mro__ if FamilyScan in owner.__bases__), cls)
 
     @classmethod
     def broken(cls, comms: Comms, commander: str, after: float = 0.0, *,
@@ -192,6 +204,11 @@ class StandingRule(DeclaredFamily, affix="StandingRule", discovery_package="agen
         return tuple(rule for owner in owners
                      for rule in owner.scan_observed(comms, commander, observed, frame)
                      if rule.attention() and rule.broke_after(after))
+
+
+class FamilyScan(StandingRule, declared_name=None):
+    """The class naming this among its bases owns one scan its members share: a member its
+    scan selects is never scanned a second time."""
 
 
 class OrderRefusingStandingRule(StandingRule, declared_name=None):
@@ -214,6 +231,12 @@ class OrderRefusingStandingRule(StandingRule, declared_name=None):
         owners = dict.fromkeys(member.scan_owner() for member in cls.members_with(cls))
         return tuple(rule.line() for owner in owners
                      for rule in owner.scan_reviews(goals, commander, pulls))
+
+
+class CoreActsStandingRule(StandingRule, declared_name=None):
+    """Core's own enforce acts on this line, so no commander verb disposes of it and it locks none."""
+
+    commander_disposes = False
 
 
 class IndependentStandingRule(StandingRule, declared_name=None):
@@ -293,12 +316,8 @@ class HeadLine(StandingRule, declared_name=None):
         return (HeadSubject(self.request),)
 
 
-class HeldBranchRule(HolderLine, UndatedStandingRule, declared_name=None):
+class HeldBranchRule(HolderLine, UndatedStandingRule, FamilyScan, declared_name=None):
     """Branch rules share the heartbeat's existing progress frame and one scan."""
-
-    @classmethod
-    def scan_owner(cls) -> type[StandingRule]:
-        return HeldBranchRule
 
     @classmethod
     def scan_observed(cls, comms: Comms, commander: str,
@@ -424,7 +443,7 @@ class DatedStandingRule(StandingRule, declared_name=None):
 
 
 @dataclass(frozen=True)
-class OwedAnswer(IndependentStandingRule, declared_name=None):
+class OwedAnswer(IndependentStandingRule, FamilyScan, declared_name=None):
     """A question or delivery awaiting the commander; each member owns what clears it
     and which actions it prevents while it waits."""
 
@@ -460,10 +479,6 @@ class OwedAnswer(IndependentStandingRule, declared_name=None):
     def violations(cls, comms: Comms, commander: str) -> tuple[Self, ...]:
         now = time.time()
         return tuple(rule for rule in cls.opened(comms, commander) if rule.due(now))
-
-    @classmethod
-    def scan_owner(cls) -> type[StandingRule]:
-        return OwedAnswer
 
     @classmethod
     def scan_observed(cls, comms: Comms, commander: str,
@@ -690,9 +705,10 @@ class OrderlessUnreviewedHead(UnreviewedHead):
 
 @dataclass(frozen=True)
 class StuckMerge(HeadLine, DatedStandingRule):
-    """An armed head GitHub will not merge: approved, queued and going nowhere."""
+    """An armed head GitHub will not merge: approved, queued and going nowhere. One line per
+    head, naming every block on it."""
     request: PullRequestHead
-    block: MergeBlock
+    blocks: tuple[MergeBlock, ...] = field(compare=False)
 
     @classmethod
     def scan_observed(cls, comms: Comms, commander: str,
@@ -702,26 +718,27 @@ class StuckMerge(HeadLine, DatedStandingRule):
     @classmethod
     def scan_pulls(cls, goals: Goals, pulls: ProgressRead) -> tuple[Self, ...]:
         return tuple(
-            cls(PullRequestHead(repo, row.number, row.head), block)
+            cls(PullRequestHead(repo, row.number, row.head), blocks)
             for repo in goals.registry.snapshot().commander_project.repository_names()
             for row in pulls.open(repo)
-            for block in row.stuck()
+            for blocks in (row.stuck(),) if blocks
         )
 
     def began(self) -> float:
-        return self.block.since
+        return min(block.since for block in self.blocks)
 
     def line(self) -> str:
         return (f"{self.request.repo.to_wire()}#{self.request.pr} {self.request.head[:9]} has"
-                f" auto-merge armed and {self.block.what()}. who's fixing it?"
-                " -> fix the check at its owner or give it an owner now")
+                f" auto-merge armed but {'; '.join(block.what() for block in self.blocks)}. who's fixing it?"
+                f" -> {'; '.join(block.remedy() for block in self.blocks)}")
 
 
 @dataclass(frozen=True)
 class IdlePullRequest(HeadLine, DatedStandingRule):
     """An open head, draft or ready, going nowhere outside the merge queue: unmoved for the
     idle window, or blocked by a conflict or a red required check. Armed heads are
-    StuckMerge's; every other open request on the configured repositories is a board item."""
+    StuckMerge's; every other open request linked to one of this commander's orders is a
+    board item. Another commander's requests share the repositories, never this board."""
     request: PullRequestHead
     holders: tuple[ThreadIncarnation, ...] = field(compare=False)
     blocks: tuple[MergeBlock, ...] = field(compare=False)
@@ -731,13 +748,17 @@ class IdlePullRequest(HeadLine, DatedStandingRule):
     @classmethod
     def scan_observed(cls, comms: Comms, commander: str,
                       observed: Sequence[UnitState], frame: HeartbeatFrame) -> tuple[Self, ...]:
-        return cls.scan_pulls(comms.goals, frame.pulls, frame.todos)
+        ordered = comms.goals.todos.for_commander(comms.registry.require(commander).incarnation)
+        return cls.scan_pulls(comms.goals, frame.pulls, frame.todos, ordered)
 
     @classmethod
     def scan_pulls(cls, goals: Goals, pulls: ProgressRead,
-                   held: Sequence[Todo]) -> tuple[Self, ...]:
-        """Holders are the live holds whose orders link the request, as the HUD cards read."""
+                   held: Sequence[Todo], ordered: Sequence[Todo]) -> tuple[Self, ...]:
+        """Holders are the live holds whose orders link the request, as the HUD cards read;
+        the commander's orders' links own which requests are its fleet's."""
         now = time.time()
+        repos = goals.registry.snapshot().commander_project.repository_names()
+        linked = {repo: pulls.linked_among(ordered, repo) for repo in repos}
         holders: dict[tuple[RepositoryName, int], tuple[ThreadIncarnation, ...]] = {}
         for todo in held:
             for request in pulls.open_for(todo):
@@ -746,8 +767,8 @@ class IdlePullRequest(HeadLine, DatedStandingRule):
         found = (
             cls(PullRequestHead(repo, row.number, row.head), holders.get((repo, row.number), ()),
                 row.merge_blocks, row.reviewable_at)
-            for repo in goals.registry.snapshot().commander_project.repository_names()
-            for row in pulls.open(repo) if not row.armed_times
+            for repo in repos
+            for row in pulls.open(repo) if row.number in linked[repo] and not row.armed_times
         )
         return tuple(rule for rule in found if rule.began() <= now)
 
@@ -770,7 +791,9 @@ class IdlePullRequest(HeadLine, DatedStandingRule):
 
 
 @dataclass(frozen=True)
-class HuntDue(ReasonedStandingRule, DatedStandingRule):
+class HuntDue(ReasonedStandingRule, DatedStandingRule, FamilyScan):
+    """Its scan picks the located member when a hot file is known; the members share it."""
+
     since: float
     seconds: ClassVar[int] = 900
 
@@ -825,7 +848,9 @@ class HuntDue(ReasonedStandingRule, DatedStandingRule):
 
 
 @dataclass(frozen=True)
-class LocatedHuntDue(HuntDue, declared_name=None):
+class LocatedHuntDue(HuntDue):
+    """The hunt line naming its hot file, selected by HuntDue's scan rather than a second one."""
+
     where: str
 
     def line(self) -> str:
@@ -871,7 +896,7 @@ class DirectiveUnacted(OwedAnswer, DatedStandingRule):
 
 
 @dataclass(frozen=True)
-class ServicePassFailing(IndependentStandingRule, DatedStandingRule):
+class ServicePassFailing(IndependentStandingRule, DatedStandingRule, FamilyScan):
     """A Core service watch whose newest pass failed; the connector's log reaches nobody."""
 
     watch: str
@@ -947,7 +972,7 @@ class MemoryLow(IndependentStandingRule, UndatedStandingRule):
 
 
 @dataclass(frozen=True)
-class DiskLow(IndependentStandingRule, UndatedStandingRule):
+class DiskLow(IndependentStandingRule, UndatedStandingRule, FamilyScan):
     """Under the cleanup threshold a cleanup owner is due; under the floor nothing allocates."""
 
     rule: StorageRule
@@ -972,7 +997,7 @@ class DiskLow(IndependentStandingRule, UndatedStandingRule):
 
 
 @dataclass(frozen=True)
-class DiskFloorLow(DiskLow, declared_name=None):
+class DiskFloorLow(DiskLow):
     """The allocation-floor warning, selected by DiskLow rather than a second rule scan."""
 
     def floor_warning(self) -> str:

@@ -1,7 +1,13 @@
 """Thread read answers own comparison, retry and status projection."""
+from dataclasses import replace
 from itertools import product
+import sys
 
+import pytest
+
+from agent_comms.notification_assignment import NotificationAssignment
 from agent_comms.presentation import WireRevision
+from agent_comms.read_ledger import ReadLedger
 from agent_comms.thread_presentation import NoThreadPresentation
 from agent_comms.ui_model.observation import (
     NotObserved, ObserveThreads, ThreadBusy, ThreadPresented, ThreadUnavailable, ThreadsObserved,
@@ -54,3 +60,87 @@ def test_changed_interest_retains_one_results_mapping_and_starts_empty():
     next_read = first.for_interest(ObserveThreads(frozenset({'one', 'two'})).observation())
     assert next_read.observed is first.observed
     assert next_read.initial == {'two'}
+
+
+@pytest.mark.parametrize('changed_name, expected', [
+    ('beta', {'beta'}), ('outside', set()), ('read', {'beta'}), ('unrelated_read', set()),
+    ('expiry', set()),
+])
+def test_assignment_row_changes_attribute_only_their_view_without_projection(
+    private_directory, changed_name, expected,
+):
+    from conftest import accept_initial, publish_initial
+    from test_coordinated_runtime import _root
+    from agent_comms.assignment_states import DeferredAssignment
+    from agent_comms.coordination_cohort import sealed_cohort_assignments
+    from agent_comms.coordinator import Coordination
+    from agent_comms.presentation import MessageNotification
+    from agent_comms.threads import Thread
+    from agent_comms.ui_model.observation import NotificationsRead, ReadNotifications
+
+    root, root_id, comms, initial, _people = _root(private_directory, direct=True)
+    for name in ('gamma', 'outside'):
+        comms.registry.declare(Thread(name, frozenset(), str(private_directory)))
+    for name in ('alpha', 'gamma', 'outside'):
+        message = publish_initial(comms, 'sender', name, f'Work for {name}')
+        with Coordination(str(root / 'coordination.sqlite3')) as store:
+            store.participants.register(comms.registry.require(name).incarnation.lookup, committed=True)
+            accept_initial(comms.bus, root_id, message.seq, store)
+    notification_source = initial.message
+    if changed_name in ('read', 'unrelated_read'):
+        human = comms.messaging.user_identity(str(private_directory))
+        read_source = publish_initial(comms, 'beta' if changed_name == 'read' else 'outside',
+                                      human.name, 'Human read receipt')
+        if changed_name == 'read':
+            notification_source = read_source
+    names = frozenset(('alpha', 'beta', 'gamma'))
+    batch = comms.views.thread_presentations(names)
+    results = {name: ThreadPresented(batch.require(name)) for name in names}
+    revision = comms.views.revision()
+    activity = comms.views.observed_activity(revision, names)
+    previous = ThreadsObserved(revision, results, names, activity)
+    notification_window = ReadNotifications(root_id, (notification_source.reference,)).read(comms)
+    notification_read = NotificationsRead.of(revision, comms, activity, notification_window)
+    if changed_name in ('read', 'unrelated_read'):
+        ledger = comms.bus.reads
+        basis = ledger.capture(human.name, (read_source,), comms.registry.snapshot(),
+                               comms.bus.bus, document=ledger.read())
+        ledger.mark_displayed(human.name, basis)
+    elif changed_name != 'expiry':
+        with Coordination(str(root / 'coordination.sqlite3')) as store:
+            assignment, = sealed_cohort_assignments(
+                store, comms.registry.require(changed_name).incarnation.lookup,
+            )
+            store.assignments.transition_preengagement(
+                assignment.assignment_id, DeferredAssignment, expected_revision=assignment.revision,
+            )
+    later = comms.views.revision()
+    if changed_name == 'expiry':
+        later = replace(later, expiry_tick=revision.expiry_tick + 60)
+    assert later != revision
+    calls = 0
+    evidence_calls = 0
+    evidence_codes = {NotificationAssignment.changed.__func__.__code__,
+                      ReadLedger.changed_notifications.__code__}
+    projection_code = MessageNotification.delivery_window.__func__.__code__
+
+    def count_projection(frame, event, argument):
+        nonlocal calls, evidence_calls
+        if event == 'call':
+            if frame.f_code is projection_code:
+                calls += 1
+            if frame.f_code in evidence_codes:
+                evidence_calls += 1
+
+    profiling = sys.getprofile()
+    sys.setprofile(count_projection)
+    try:
+        changed = later.changed_threads(previous, comms, activity)
+        notification_changed = notification_read.live_changed(comms, later)
+    finally:
+        sys.setprofile(profiling)
+    assert changed == expected
+    assert notification_changed == bool(expected)
+    assert calls == 0
+    if changed_name == 'expiry':
+        assert evidence_calls == 0

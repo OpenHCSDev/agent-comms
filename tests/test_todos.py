@@ -23,6 +23,8 @@ import pytest
 from agent_comms.child_process import NoProcess, ProcessIdentity
 from agent_comms.commander.order import Commander, PullRequestVerb, SayVerb
 from agent_comms.standing_rules import OwedAnswer, StandingRule
+from agent_comms.task_attachments.commander_pings import RulePing
+from agent_comms_hooks.board import BoardLine
 from agent_comms.ui_model.unit_state import AwaitingCommander
 from agent_comms.commander.standing import RetainedHolderWheelSpin, UnownedOrderWatch, UnownedWheelSpin
 from agent_comms.commander_heartbeat import CommanderHeartbeat
@@ -54,6 +56,7 @@ from agent_comms.todos import (
     ChangeTodoState,
     ClaimOrder,
     ClosedListedPullRequest,
+    CommitDelivery,
     OrderClaim,
     OrderMessage,
     DeliverTodo,
@@ -453,6 +456,8 @@ def test_released_open_work_restores_its_own_holder_never_swaps(released_publish
             ProgressRead(tuple(c.goals.todos.get(pid) for pid in originals)))
         assert {rule.todo.id for rule in rules} == set(originals)
         assert all(isinstance(rule, RetainedHolderWheelSpin) for rule in rules)
+        # 2026-10-25: Core restores the holder itself; KEEP lines locked the verbs for 169 min.
+        assert all(RulePing.capture(rule).board(BoardLine) == () for rule in rules)
         assert StandingRule.enforce_all(c, ctx.commander, rules) == {}
         for problem, before in originals.items():
             after = c.goals.todos.get(problem)
@@ -506,14 +511,44 @@ def test_order_is_merged_only_when_every_linked_request_merged(pr_commander, git
             **common))
     github_cli.put(source.github, UnmergedListedPullRequest(number=7, **common))
 
-    def found(pid, numbers):
-        todo = pr_order(ctx, pid)
+    def linked(pid, numbers):
+        todo = pr_order(ctx, pid, run=ApplicationOrderRun(
+            'The installed application shows the linked repair working correctly'))
         for number in numbers:
             todo = adopt_pr(ctx, todo.id, number)
+        return todo
+
+    def observed(todo):
         return tuple(MergedProgress.found(PullRequestSource(todo, ProgressRead((todo,)))))
 
-    assert found("P1", (5, 7)) == ()
-    assert found("P2", (5, 6)) == (MergedProgress(merged), MergedProgress(merged))
+    def deliveries(todo):
+        return (todo, replace(todo, order=todo.order.checked().delivered(CommitDelivery(
+            commit=merged, delivered_commit=merged, at=RecordedEventTime(time.time()),
+        ))))
+
+    def transitioned(todo):
+        return todo.order.closed_by_merge(
+            todo, ProgressRead((todo,)), ctx.comms.registry.storage_rule.checkout_base,
+        )
+
+    blocked = linked('P1', (5, 7))
+    assert observed(blocked) == ()
+    for todo in deliveries(blocked):
+        assert transitioned(todo) == ()
+
+    github_cli.put(source.github, MergedListedPullRequest(
+        number=7, merge=PullRequestCommit(merged), merged='2099-01-01T00:00:00Z', **common,
+    ))
+    for todo in deliveries(blocked):
+        closed = transitioned(todo)
+        assert closed
+        assert all(item.order.sha == merged for item in closed)
+
+    assert observed(linked('P2', (5, 6))) == (MergedProgress(merged), MergedProgress(merged))
+    for todo in deliveries(linked('P3', ())):
+        closed = transitioned(todo)
+        assert closed
+        assert all(item.order.sha == merged for item in closed)
 
 
 def test_watcher_git_and_github_reads_leave_wire_free(pr_commander, monkeypatch):

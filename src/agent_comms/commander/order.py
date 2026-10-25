@@ -419,7 +419,7 @@ class CommanderContext(BaseModel):
         A publish alone is only queued."""
         outcomes = MessageNotification.references(
             self.comms.root, self.comms.registry, self.comms.bus.bus, (reference,))
-        return MessageNotification.summary(outcomes.get((reference.seq, reference.message_id), ()))
+        return MessageNotification.summary(outcomes.outcomes.get((reference.seq, reference.message_id), ()))
 
     def call(self, tool):
         return self.actor.as_thread(self.commander).invoke(tool, self.comms)
@@ -833,18 +833,28 @@ class CommanderVerb(DeclaredVerb, affix="Verb"):
     def run(self, ctx: Commander) -> None: ...
 
     @classmethod
-    def usage(cls) -> str:
-        """This verb's command line, rendered by the parser its options declare."""
+    def command(cls, values: Mapping[str, str]) -> str:
+        """This verb's name and the arguments ``values`` fills, in the order its parser
+        declares them; a required positional left unfilled shows its placeholder, and every
+        other option is left out."""
         verbs = argparse.ArgumentParser(prog=cls.tool()).add_subparsers()
         cls.add_parser(verbs)
-        return ' '.join(next(iter(verbs.choices.values())).format_usage().split()[1:])
+        parser, = verbs.choices.values()
+        placeholder = parser._get_formatter()._format_args  # the usage line's own metavar text
+        words = [cls.tool(), cls.declared_name]
+        for action in parser._actions:
+            if action.dest in values:
+                words += [*action.option_strings[:1], values[action.dest]]
+            elif action.required and not action.option_strings:
+                words.append(placeholder(action, action.dest))
+        return ' '.join(words)
 
 
 class HeartbeatGated(CommanderVerb, declared_name=None):
-    """A writing verb is refused while a heartbeat line sits undisposed past the answer window,
-    unless the verb acts on the subject of a line on the board, fresh or stale: board work is
-    never off-board work, or a stale line no one can act on yet would refuse the verdict a
-    fresh line asks for. Core records that action, and the record is what disposes of the line.
+    """A writing verb run while a heartbeat line sits undisposed past the answer window prints
+    the board beside its result instead of refusing: the board already reaches the commander
+    on every tool call, so a refusal only stopped unit answers, reviews and owner fixes that
+    touched no line. Core records each action, and the record is what disposes of a line.
     Nothing the commander says about a line counts."""
 
     @abstractmethod
@@ -859,9 +869,9 @@ class HeartbeatGated(CommanderVerb, declared_name=None):
         acted = frozenset(subjects)
         if (any(ping.waits_on_commander(now - AwaitingCommander.seconds) for ping in board)
                 and not any(ping.acted_on(acted) for ping in board)):
-            sys.exit(f'REFUSED, nothing recorded: heartbeat lines undisposed past '
-                     f'{AwaitingCommander.seconds // 60} min; act on any line on the board:\n'
-                     + '\n'.join(ping.render(now) for ping in board))
+            print(f'BOARD: heartbeat lines undisposed past '
+                  f'{AwaitingCommander.seconds // 60} min; act on them next:\n'
+                  + '\n'.join(ping.render(now) for ping in board), file=sys.stderr)
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -882,8 +892,9 @@ class DirectiveVerb(HeartbeatGated):
 
         Closed names answer nothing; unknown identities refuse instead of recording a reply
         that silently drops its references. A wrong addressee leaves its real debt uncovered.
-        A refusal lists every misaddressed name and every blocking debt together, with the
-        replies that answer all of them at once, so one round trip clears the gate.
+        A refusal lists every misaddressed name and every blocking debt together, debts still
+        inside their answer window included since they fall due before the retry lands, with
+        the replies that answer all of them at once, so one round trip clears the gate.
         """
         now = time.time()
         opened = OwedAnswer.opened(ctx.comms, self.who(ctx))
@@ -902,14 +913,15 @@ class DirectiveVerb(HeartbeatGated):
         answered = tuple(rule for rule in opened if rule.answered_by(named))
         problems |= {rule.cited: reason for rule in opened
                      if (reason := rule.misaddressed(named, reached))}
-        owed = tuple(rule for rule in opened if rule.due(now) and not rule.answered_by(named))
-        for rule in owed:
-            if rule.blocks(reached, self, answered):
-                problems[rule.cited] = (f'{rule.line()}: {rule.message.body[:80]}\n'
-                                        f'{rule.clearing_action()}')
-            else:
+        unanswered = tuple(rule for rule in opened if not rule.answered_by(named))
+        blocking = tuple(rule for rule in unanswered if rule.blocks(reached, self, answered))
+        for rule in unanswered:
+            if rule.due(now) and rule not in blocking:
                 print(f'WARNING: {rule.line()}')
-        if problems:
+        if problems or any(rule.due(now) for rule in blocking):
+            problems |= {rule.cited: f'{rule.line()}: {rule.message.body[:80]}\n'
+                                     f'{rule.clearing_action()}'
+                         for rule in blocking}
             raise RecordProblems(problems | self.replies_clearing(
                 tuple(rule for rule in opened if rule.cited in problems)))
         self.respond(ctx, tuple(dict.fromkeys(message.reference for message in named)))
@@ -1012,6 +1024,14 @@ class SendVerb(RequestedOrderVerb):
     @property
     def addressed(self) -> tuple[str, ...]:
         return (self.unit,)
+
+    def acts_on(self, ctx: Commander) -> tuple[HeartbeatSubject, ...]:
+        """Taking held problems over acts on their holders too: reassigning a stopped unit's
+        order is the action its WAKE line asks for."""
+        named = frozenset(OrderFile.read(Path(self.body_file).read_text()).problems)
+        return (*super().acts_on(ctx),
+                *(UnitSubject(assignment.owner_identity) for todo in ctx.todos() if todo.id in named
+                  for assignment in todo.current_holder.current_assignments()))
 
     def resolves_claim(self, unit: str, problem: str) -> bool:
         return (self.unit == unit
@@ -1290,8 +1310,16 @@ class SayVerb(OrderVerb, DirectiveVerb):
 
 
 @dataclass(frozen=True, kw_only=True)
+class JoinVerb(OrderVerb):
+    help = "register a commander fork before its first record"
+
+    def run(self, ctx: Commander) -> None:
+        print(f'{ctx.actor_name} registered')
+
+
+@dataclass(frozen=True, kw_only=True)
 class RetireVerb(OrderVerb):
-    help = "stop a commander fork without discarding its open orders"
+    help = "stop and archive a commander fork without discarding its open orders"
 
     def run(self, ctx: Commander) -> None:
         ctx.actor.retire(ctx.comms)

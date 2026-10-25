@@ -91,6 +91,7 @@ class SourceRepository(Repo):
         branch = cls.git(repository, 'commit-tree', tree, '-p', main, '-m', 'PR declaration').strip()
         cls.git(repository, 'update-ref', 'refs/heads/feature', branch)
         cls.git(repository, 'push', 'origin', 'main', 'feature:refs/pull/7/head')
+        cls.git(repository, 'remote', 'set-head', 'origin', '--auto')
         cls.git(repository, 'reset', '--hard', 'main')
         created = cls.of(repository)
         assert isinstance(created, cls)

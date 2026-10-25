@@ -23,7 +23,7 @@ from agent_comms.messages import Message
 from agent_comms.native_failures import NativePiUnavailable
 from agent_comms.native_tool_call import ToolCallId
 from agent_comms.repo import GitCommandError
-from agent_comms.standing_rules import StandingRule, UndatedStandingRule
+from agent_comms.standing_rules import FamilyScan, StandingRule, UndatedStandingRule
 from agent_comms.thread_identity import ThreadIncarnation
 from agent_comms.thread_status import ThreadStatus
 from agent_comms.todos import (
@@ -155,7 +155,8 @@ class UnitObservation:
 
     def require_read(self) -> None:
         if self.todos:
-            self.pulls.branch_difference(self.thread.project_path)
+            for path in self.thread.home_checkouts:
+                self.pulls.branch_difference(path)
             for path in self.comms.registry.storage_rule.checkout_paths(self.thread):
                 self.pulls.checkout(path).require_read()
         for source in self.sources:
@@ -180,12 +181,11 @@ class NeedsCommanderAttention:
 
 
 @dataclass(frozen=True)
-class UnitState(UndatedStandingRule, declared_name=None):
+class UnitState(UndatedStandingRule, FamilyScan, declared_name=None):
     unit: ThreadIncarnation
     orders: tuple[str, ...]
     presence: ThreadStatus
     source: UnitObservation = field(compare=False, repr=False)
-    verb: ClassVar[str]
     action: ClassVar[str]
     # What the owner would ask on reading this card; the action answers it.
     question: ClassVar[str]
@@ -194,10 +194,6 @@ class UnitState(UndatedStandingRule, declared_name=None):
     @classmethod
     def worst_first(cls) -> tuple[type[UnitState], ...]:
         return UnitState.members_with(UnitState)
-
-    @classmethod
-    def scan_owner(cls) -> type[StandingRule]:
-        return UnitState
 
     @classmethod
     def scan_observed(
@@ -322,7 +318,6 @@ class PendingWorkState(ConditionalState, declared_name=None):
 @dataclass(frozen=True)
 class Unreadable(NeedsCommanderAttention, UnitState):
     reason: str
-    verb = "REPAIR"
     question = "its source doesn't even read, so how would we know it's idle?"
     action = "repair the unreadable source; do not infer that the unit is idle"
 
@@ -345,7 +340,6 @@ class Unreadable(NeedsCommanderAttention, UnitState):
 @dataclass(frozen=True)
 class Blocked(NeedsCommanderAttention, UnitState):
     goal: GoalSnapshot
-    verb = "UNBLOCK"
     action = "follow the blocked goal's declared response"
 
     @classmethod
@@ -370,30 +364,25 @@ class Blocked(NeedsCommanderAttention, UnitState):
 
 @dataclass(frozen=True)
 class Detached(NeedsCommanderAttention, UnitState):
-    unread: int = field(compare=False)
-    verb = "WAKE"
+    """A pending order whose holder's presence takes no delivery: an order sent now is not
+    read now. The registered status owns that fact; the inbox's read marker is the owner's,
+    marks what he opened, and says nothing about the unit."""
+
     question = "is anyone home, or are we yelling into an inbox?"
     action = "wake it or reassign the order"
 
     @classmethod
     def derive(cls, source: UnitObservation) -> Iterator[Self]:
         if source.pending and not source.presence.receiving:
-            yield cls(
-                source.thread.incarnation,
-                source.orders,
-                source.presence,
-                source,
-                source.comms.bus.pending_count(source.thread.name),
-            )
+            yield cls(source.thread.incarnation, source.orders, source.presence, source)
 
     def detail(self) -> str:
-        return f"{self.unread} unread; {super().detail()}"
+        return f"{self.presence.declared_name}, takes no delivery; {super().detail()}"
 
 
 @dataclass(frozen=True)
 class AwaitingCommander(NeedsCommanderAttention, UnitState):
     seconds: ClassVar[int] = 5 * 60
-    verb = "ANSWER"
     question = "it asked you. why is it still waiting?"
     action = "answer the original message"
 
@@ -410,7 +399,6 @@ class AwaitingCommander(NeedsCommanderAttention, UnitState):
 
 class Stuck(NeedsCommanderAttention, PendingWorkState, UnitState):
     seconds: ClassVar[int] = 20 * 60
-    verb = "READ"
     question = "is it doing work, or letting work accumulate?"
     action = "inspect its last turn and restart only known-safe work"
 
@@ -429,7 +417,6 @@ class Stuck(NeedsCommanderAttention, PendingWorkState, UnitState):
 
 
 class Spinning(NeedsCommanderAttention, PendingWorkState, UnitState):
-    verb = "RESHAPE"
     question = "same failure again. why would the next rerun be different?"
     action = "read the failed approach and change it before another rerun"
 
@@ -454,7 +441,6 @@ class Spinning(NeedsCommanderAttention, PendingWorkState, UnitState):
 
 
 class StalledOnNothing(NeedsCommanderAttention, PendingWorkState, UnitState):
-    verb = "RESUME"
     question = "its turn ended with nothing queued. stalled on what, exactly?"
     action = "resume its work or give it the missing next step"
 
@@ -468,7 +454,6 @@ class StalledOnNothing(NeedsCommanderAttention, PendingWorkState, UnitState):
 
 
 class DeliveredUnclosed(NeedsCommanderAttention, ConditionalState, UnitState):
-    verb = "CLOSE"
     question = "delivered and still open. why isn't it closed?"
     action = "install the merge or close with the working application evidence"
 
@@ -487,7 +472,6 @@ class AwaitingApplicationRun(NeedsCommanderAttention, UnitState):
     disposes of the line and it locks none. The line names only those orders; while the unit
     still writes source for another, that order's state is the unit's."""
 
-    verb = "AWAIT RUN"
     question = "installed. did its holder actually run it yet?"
     action = "its holder runs the application proof on the installed build; close it on its evidence"
     commander_disposes = False
@@ -503,7 +487,6 @@ class AwaitingApplicationRun(NeedsCommanderAttention, UnitState):
 
 
 class Moving(ConditionalState, UnitState):
-    verb = "WATCH"
     question = "it's moving. toward the order, or somewhere else?"
     action = "let it continue"
 
@@ -513,7 +496,6 @@ class Moving(ConditionalState, UnitState):
 
 
 class Idle(ConditionalState, UnitState):
-    verb = "ORDER"
     question = "nothing to do. why is it idle?"
     action = "give it the next useful order"
 

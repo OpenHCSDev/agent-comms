@@ -4,6 +4,7 @@
 import asyncio
 import json
 import os
+import re
 import time
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import replace
@@ -209,7 +210,7 @@ def test_order_claim_publishes_only_to_its_retained_commander_birth(
                 return True
 
         if notification_fails:
-            marker = comms.bus.bus.path.with_suffix(".changed")
+            marker, = comms.bus.bus.source_paths(comms.bus.bus.path.parent)
             marker.unlink()
             marker.mkdir()
         with ThreadPoolExecutor(max_workers=1) as pool:
@@ -317,6 +318,16 @@ def test_holds_whose_holder_was_deleted_or_registered_again_are_reported_by_ever
     assert tuple(OrderEditCountRead.for_commander(comms, "lead")) == ()
     with pytest.raises(ValueError, match="pass --artifact FILE"):
         comms.goals.todos.get("P2").order.closing_artifact()
+
+
+def order_file(comms, tmp_path):
+    """A well-formed order for the worker, so a send reaches the answer gate."""
+    order = replace(comms.goals.todos.get("P1").order.checked(), id=OrderId.mint())
+    document = OrderFile(order, "The worker's next step waits on the commander's answer.",
+                         "This is stupid because an owed answer stalls the worker.")
+    path = tmp_path / "order.json"
+    path.write_text(json.dumps(FieldCodec.encode(document)))
+    return str(path)
 
 
 def publish(comms, sender, target, timestamp, *, answers=()):
@@ -550,7 +561,7 @@ def test_an_unanswered_unit_message_gates_send_until_a_say_answers_it(held_bus, 
     reply = tmp_path / "reply.txt"
     reply.write_text("Waiting on the merge queue, owner unit-goalblock")
     with pytest.raises(RecordProblems, match=question.message_id):
-        SendVerb(unit="worker", body_file="unused").apply(ctx)
+        SendVerb(unit="worker", body_file=order_file(held_bus, tmp_path)).apply(ctx)
     # A reply to the asker answers its open asks without naming them.
     SayVerb(units="worker", body_file=str(reply)).apply(ctx)
     assert held_bus.bus.bus.lookup(held_bus.bus.bus.revision()).answers == (question.reference,)
@@ -575,7 +586,18 @@ def test_answering_one_owed_message_leaves_another_owed(held_bus, tmp_path, caps
     assert held_bus.bus.bus.lookup(held_bus.bus.bus.revision()).answers == (first.reference,)
     assert [owed.message.message_id for owed in unanswered(held_bus)] == [second.message_id]
     with pytest.raises(RecordProblems, match=second.message_id):
-        SendVerb(unit="worker", body_file=str(reply)).apply(ctx)
+        SendVerb(unit="worker", body_file=order_file(held_bus, tmp_path)).apply(ctx)
+
+
+def test_a_refusal_lists_the_asks_still_inside_their_answer_window(held_bus, tmp_path):
+    """A retry costs a call, so the refusal names the asks that fall due before it lands too."""
+    owed = publish(held_bus, "worker", "lead", time.time() - AwaitingCommander.seconds - 1)
+    ripening = publish(held_bus, "worker", "lead", time.time() - 60)
+    ctx = Commander.read_root(held_bus.root)
+    with pytest.raises(RecordProblems) as refused:
+        SendVerb(unit="worker", body_file=order_file(held_bus, tmp_path)).apply(ctx)
+    assert {owed.message_id, ripening.message_id} <= set(
+        re.search(r"order say worker BODYFILE --answers (.*)", str(refused.value)).group(1).split())
 
 
 def test_an_owed_answer_is_a_heartbeat_line_and_never_a_vibe_check(held_bus):
@@ -601,7 +623,7 @@ def test_an_owed_vibe_check_refuses_only_verbs_that_answer_nothing(held_bus, tmp
     reply = tmp_path / "reply.txt"
     reply.write_text("Waiting on the merge queue, owner unit-goalblock")
     with pytest.raises(RecordProblems, match=check.message_id):
-        SendVerb(unit="worker", body_file=str(reply)).apply(ctx)
+        SendVerb(unit="worker", body_file=order_file(held_bus, tmp_path)).apply(ctx)
     SayVerb(units="worker", body_file=str(reply), answers=(ask.message_id,)).apply(ctx)
     assert held_bus.bus.bus.lookup(held_bus.bus.bus.revision()).answers == (ask.reference,)
 
