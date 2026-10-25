@@ -2596,15 +2596,12 @@ class RestoreOwnerCliCommand(NativeOwnerCommand, OwnerLifecycleControl, ThreadLi
     help = "Restore owner process without changing its goal"
 
     def apply(self, ctx: Comms) -> OwnerStartResult:
-        return ctx.owners.relaunch(self.name)
+        return ctx.owners.start(self.name)
 
 
 @dataclass(frozen=True, kw_only=True)
 class StartCliCommand(StartOwnerControl, RestoreOwnerCliCommand):
     help = 'Start thread'
-
-    def apply(self, ctx: Comms) -> OwnerStartResult:
-        return ctx.owners.start(self.name)
 
 
 @dataclass(frozen=True, kw_only=True)
