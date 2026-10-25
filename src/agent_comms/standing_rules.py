@@ -415,6 +415,12 @@ class OwedAnswer(IndependentStandingRule, declared_name=None):
     and which actions it prevents while it waits."""
 
     message: Message
+    clearing_verbs: ClassVar[tuple[type[CommanderVerb], ...]] = ()
+
+    @classmethod
+    def cleared_by(cls, verb: type[CommanderVerb]) -> None:
+        """A verb declaring that it clears this debt joins the hint the refusal prints."""
+        cls.clearing_verbs = (*cls.clearing_verbs, verb)
 
     def questions_for(self, unit: ThreadIncarnation) -> tuple[Message, ...]:
         """Only a unit's question belongs on that unit's observation."""
