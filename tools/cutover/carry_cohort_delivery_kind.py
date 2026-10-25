@@ -10,7 +10,7 @@ from agent_comms.coordination_database import CoordinationStore
 from agent_comms.errors import RelationViolationError
 from agent_comms.installer.probes.carry import Carried, Carry
 from agent_comms.locked_store import RootFile
-from agent_comms.typed_table import SQLiteCatalogObject
+from agent_comms.typed_table import SQLiteCatalogObject, SQLiteForeignKeys
 
 
 class CohortDeliveryKind(Carry):
@@ -39,7 +39,7 @@ class CohortDeliveryKind(Carry):
         if apply:
             for path in pending:
                 with closing(CoordinationStore.writer(path)) as db:
-                    with CoordinationStore.relations_suspended(db), CoordinationStore.write_transaction(db):
+                    with SQLiteForeignKeys.relations_suspended(db), CoordinationStore.write_transaction(db):
                         self.require_consistent(db, path)
                         SQLiteCatalogObject.release_guards(db, ClaimBatchAcknowledgements)
                         CohortDeliveries.rebuild(db)

@@ -307,7 +307,7 @@ def sealed_cohort_assignments(
                     "JOIN claim_batch_receipts r ON r.wire_root_id=m.wire_root_id "
                     "AND r.wire_seq=m.wire_seq AND r.sealed=1 "
                     "JOIN cohort_delivery_receipts d ON d.wire_root_id=m.wire_root_id "
-                    "AND d.wire_seq=m.wire_seq AND d.claim_id=c.assignment_id AND d.claim_id IS NOT NULL "
+                    "AND d.wire_seq=m.wire_seq AND d.claim_id=c.assignment_id "
                     "WHERE c.recipient_lookup=? AND c.wire_seq>? "
                     f"AND {selected_states} "
                     "ORDER BY c.wire_seq,c.assignment_id LIMIT ?",
