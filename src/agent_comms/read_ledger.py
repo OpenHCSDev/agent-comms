@@ -33,7 +33,7 @@ from .read_basis import (
 )
 from .recorded_bus import NoRecordedBus, RecordedBus, RecordedBusIdentity
 from .sealed import Sealed
-from .store_files import DependentStateTier, SharedLock
+from .store_files import DependentStateTier
 from .thread_identity import RecordedThreadIncarnation
 from .thread_owned_state import ThreadOwnedState
 
@@ -123,7 +123,7 @@ class ReadLedger(Sealed, ThreadOwnedState, CarriedDocument[ReadDocument], Depend
                           snapshot: RegistryProvenance) -> ReadDocument:
         owners = tuple(snapshot.threads[snapshot.canonical_name(viewer)].incarnation.recorded_names(snapshot))
         conversations = (AllConversation(), *conversation.recorded_keys(snapshot))
-        with self.locked(mode=SharedLock()):
+        with self.guarded_read():
             return self._read_using(lambda data: FieldCodec.decode_selected(ReadDocument, data,
                 {(ReadDocument, "messages"): owners, (ReadCursor, "conversations"): conversations},
                 fields=("messages", "bus_identity")))

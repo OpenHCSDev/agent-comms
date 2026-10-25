@@ -38,7 +38,15 @@ from .owner_restart import OwnerRestartRequest, StoppedOwnerFailure
 from .private_path import PrivateDirectoryRole
 from .restart_refusals import RestartRefusal
 from .restart_scope import OwnersNamed
-from .store_files import AtomicFile, ClaimHeldError, ProcessSingleton, StoreLockFile, _store_lock
+from .store_files import (
+    AtomicFile,
+    ClaimHeldError,
+    ExclusiveLock,
+    ProcessSingleton,
+    StoreLockFile,
+    UNBOUNDED_CONTENTION,
+    _store_lock,
+)
 from .thread_identity import RecordedThreadIncarnation
 from .tool_result import ToolResult
 from .watched import ChangeSignal, DirectorySource, FileSource
@@ -237,7 +245,7 @@ class RestartQueue:
 
     @contextmanager
     def locked(self):
-        with _store_lock(self.lock_path):
+        with _store_lock(self.lock_path, ExclusiveLock(), UNBOUNDED_CONTENTION):
             if next(self.directory.glob('*.json'), None) is not None:
                 raise RestartQueueLayoutError(
                     'Restart queue uses a retired layout; existing records require explicit conversion'

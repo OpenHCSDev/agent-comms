@@ -167,7 +167,7 @@ class OwnedTurn:
         self.input_cleanup.push_async_callback(Coordination.run_worker, self.settle_unbound)
         self.bus_origins = tuple(origin for origin in self.origins if origin.seq > 0)
         if self.bus_origins:
-            with self.runner.comms.registry.store.locked():
+            with self.runner.comms.registry.store.guarded_write():
                 privacy = self.runner.comms.registry.store.private_guard_unlocked()
                 snapshot = self.runner.comms.registry.snapshot()
                 originals = tuple(

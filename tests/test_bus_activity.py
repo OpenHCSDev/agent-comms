@@ -1,4 +1,5 @@
 """Activity and viewer clocks are read-only projections of committed bus appends."""
+from agent_comms.store_files import ExclusiveLock, UNBOUNDED_CONTENTION
 from agent_comms.activity_clocks import ChannelActivity
 from dataclasses import replace
 
@@ -74,7 +75,7 @@ def test_read_boundary_defers_instead_of_waiting_on_a_held_bus(private_comms):
     held, release, outcome = threading.Event(), threading.Event(), []
 
     def hold():
-        with _store_lock(private_comms.bus.bus.path):
+        with _store_lock(private_comms.bus.bus.path, ExclusiveLock(), UNBOUNDED_CONTENTION):
             held.set()
             release.wait(10)
 

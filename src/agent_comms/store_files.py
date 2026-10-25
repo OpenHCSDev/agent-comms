@@ -14,7 +14,7 @@ import tempfile
 import threading
 import time
 from abc import ABC, abstractmethod
-from collections.abc import AsyncIterator, Callable, Iterable, Iterator, Mapping
+from collections.abc import AsyncIterator, Callable, Iterable, Iterator
 from contextlib import (
     AbstractAsyncContextManager,
     AbstractContextManager,
@@ -204,15 +204,13 @@ class StoreLock:
     @classmethod
     @contextmanager
     def ordered(
-        cls, requests: Mapping[StoreLockOwner, LockMode], *,
-        contention: StoreLockContention = UNBOUNDED_CONTENTION,
+        cls, *guards: AbstractContextManager[object],
     ):
-        """Acquire store owners by their declared rank, never their filenames."""
+        """Retain the supplied store guards in the caller's declared order."""
         with ExitStack() as resources:
-            yield {owner: resources.enter_context(owner.locked(
-                mode=requests[owner], contention=contention))
-                for owner in sorted(requests, key=lambda owner: (
-                    type(owner).lock_rank(), str(owner.path)))}
+            for guard in guards:
+                resources.enter_context(guard)
+            yield
 
     @classmethod
     def current_release(cls) -> StoreLockRelease:
@@ -339,14 +337,95 @@ class StoreLockOwner(StoreLockFile, declared_name=None):
         if StoreLockTier not in cls.__bases__:
             cls.lock_rank()
 
-    def locked(self, *, read_budget: StoreReadBudget = UNBOUNDED_STORE_READ,
-               mode: LockMode = ExclusiveLock(),
-               contention: StoreLockContention = UNBOUNDED_CONTENTION):
-        return _store_lock(self.path, read_budget=read_budget,
-                           mode=mode, contention=contention, lock_type=self.lock_type)
+    @classmethod
+    def rank_key(cls, owner: StoreLockOwner) -> tuple[int, str]:
+        return type(owner).lock_rank(), str(owner.path)
 
-    def locked_async(self) -> AbstractAsyncContextManager[StoreLock]:
-        return _async_store_lock(self.path, lock_type=self.lock_type)
+    @classmethod
+    def contention(cls) -> StoreLockContention:
+        return UNBOUNDED_CONTENTION
+
+    @classmethod
+    @contextmanager
+    def read_guard(
+        cls, path: Path, *, read_budget: StoreReadBudget = UNBOUNDED_STORE_READ,
+    ) -> Iterator[StoreLock | None]:
+        with _store_lock(path, SharedLock(), cls.contention(),
+                         read_budget=read_budget, lock_type=cls.lock_type) as lock:
+            yield lock
+
+    @classmethod
+    @contextmanager
+    def write_guard(
+        cls, path: Path, *, read_budget: StoreReadBudget = UNBOUNDED_STORE_READ,
+    ) -> Iterator[StoreLock]:
+        with _store_lock(path, ExclusiveLock(), cls.contention(),
+                         read_budget=read_budget, lock_type=cls.lock_type) as lock:
+            yield lock
+
+    @classmethod
+    @asynccontextmanager
+    async def read_guard_async(
+        cls, path: Path, *, read_budget: StoreReadBudget = UNBOUNDED_STORE_READ,
+    ) -> AsyncIterator[StoreLock | None]:
+        async with _async_store_lock(path, SharedLock(), cls.contention(),
+                                     read_budget=read_budget, lock_type=cls.lock_type) as lock:
+            yield lock
+
+    @classmethod
+    @asynccontextmanager
+    async def write_guard_async(
+        cls, path: Path, *, read_budget: StoreReadBudget = UNBOUNDED_STORE_READ,
+    ) -> AsyncIterator[StoreLock]:
+        async with _async_store_lock(path, ExclusiveLock(), cls.contention(),
+                                     read_budget=read_budget, lock_type=cls.lock_type) as lock:
+            yield lock
+
+    def guarded_read(
+        self, *, read_budget: StoreReadBudget = UNBOUNDED_STORE_READ,
+    ) -> AbstractContextManager[StoreLock | None]:
+        return type(self).read_guard(self.path, read_budget=read_budget)
+
+    def guarded_write(
+        self, *, read_budget: StoreReadBudget = UNBOUNDED_STORE_READ,
+    ) -> AbstractContextManager[StoreLock]:
+        return type(self).write_guard(self.path, read_budget=read_budget)
+
+    def guarded_write_async(self) -> AbstractAsyncContextManager[StoreLock]:
+        return type(self).write_guard_async(self.path)
+
+    def read_now(self) -> AbstractContextManager[StoreLock]:
+        return _store_lock(self.path, SharedLock(), StoreLockContention(0),
+                           lock_type=self.lock_type)
+
+
+class SingleFileStore(StoreLockOwner, declared_name=None):
+    """One file published by atomic rename: a read sees the old or new file whole, so it takes no lock."""
+
+    __slots__ = ()
+
+    @classmethod
+    @contextmanager
+    def read_guard(
+        cls, path: Path, *, read_budget: StoreReadBudget = UNBOUNDED_STORE_READ,
+    ) -> Iterator[None]:
+        read_budget.check(path)
+        yield
+
+    @classmethod
+    @asynccontextmanager
+    async def read_guard_async(
+        cls, path: Path, *, read_budget: StoreReadBudget = UNBOUNDED_STORE_READ,
+    ) -> AsyncIterator[None]:
+        read_budget.check(path)
+        yield
+
+
+class MultiFileStore(StoreLockOwner, declared_name=None):
+    """State spanning several files replaced together: one lock covers the set, and readers share it."""
+
+    read_guard = classmethod(StoreLockOwner.read_guard.__func__)
+    read_guard_async = classmethod(StoreLockOwner.read_guard_async.__func__)
 
 
 class StoreLockTier(StoreLockOwner, declared_name=None):
@@ -450,16 +529,18 @@ class SqliteStore(ABC):
         """
         with ExitStack() as lifetime:
             retirement = lifetime.enter_context(ExitStack())
-            with _store_lock(path, contention=contention):
+            with _store_lock(path, ExclusiveLock(), contention):
                 connection = lifetime.enter_context(opening())
-            lifetime.callback(retirement.enter_context, _store_lock(path))
+            lifetime.callback(retirement.enter_context,
+                              _store_lock(path, ExclusiveLock(), UNBOUNDED_CONTENTION))
             yield connection
 
     @classmethod
     @contextmanager
     def exclusive_writer(cls, path: Path) -> Iterator[sqlite3.Connection]:
         """A schema reconcile or WAL truncation keeps other connection boundaries out."""
-        with _store_lock(path), closing(cls.writer(path, isolation_level=None)) as db:
+        with (_store_lock(path, ExclusiveLock(), UNBOUNDED_CONTENTION),
+              closing(cls.writer(path, isolation_level=None)) as db):
             yield db
 
 
@@ -701,11 +782,9 @@ class StoreLockAcquisition:
 
 
 def _store_lock(
-    store_path: Path,
+    store_path: Path, mode: LockMode, contention: StoreLockContention,
     *,
     read_budget: StoreReadBudget = UNBOUNDED_STORE_READ,
-    mode: LockMode = ExclusiveLock(),
-    contention: StoreLockContention = UNBOUNDED_CONTENTION,
     lock_type: type[StoreLock] = StoreLock,
 ) -> AbstractContextManager[StoreLock]:
     return StoreLockAcquisition.current(store_path, mode).locked(
@@ -714,11 +793,9 @@ def _store_lock(
 
 
 def _async_store_lock(
-    store_path: Path,
+    store_path: Path, mode: LockMode, contention: StoreLockContention,
     *,
     read_budget: StoreReadBudget = UNBOUNDED_STORE_READ,
-    mode: LockMode = ExclusiveLock(),
-    contention: StoreLockContention = UNBOUNDED_CONTENTION,
     lock_type: type[StoreLock] = StoreLock,
 ) -> AbstractAsyncContextManager[StoreLock]:
     return StoreLockAcquisition.current(store_path, mode).locked_async(

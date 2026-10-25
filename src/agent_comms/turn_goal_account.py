@@ -41,7 +41,7 @@ class VerifiedGoalSettlement(MroDispatch):
     @classmethod
     def settle_current(cls, account: TurnGoalAccount) -> None:
         comms, owner = account.comms, account.owner
-        with comms.registry.store.locked():
+        with comms.registry.store.guarded_write():
             current = comms.registry.require(account.thread_name)
             if current.incarnation != owner.incarnation or current.worktree != owner.worktree:
                 return
@@ -98,7 +98,7 @@ class TurnGoalAccount:
     def reserve(*, owner: Thread, goal: Goal, comms: Comms, autonomous: bool) -> GoalTurnPermit:
         try:
             store = comms.goals.open_goal_store()
-            with comms.registry.store.locked():
+            with comms.registry.store.guarded_write():
                 claim_scope = comms.registry.snapshot().claim_generation(owner.name)
                 generation = store.require_generation(goal.id)
                 return generation.lifecycle.turn_permit(
@@ -131,7 +131,7 @@ class TurnGoalAccount:
         self.has_productive_tool |= bool(event.ok)
         if event.name != "comms_set_goal" or event.ok is not True:
             return
-        with self.comms.registry.store.locked():
+        with self.comms.registry.store.guarded_write():
             owner = self.comms.registry.snapshot().require(self.owner.name)
             claimed = tuple(permit for goal in owner.goal for permit in self._reserve_origin(owner, goal))
         for permit in claimed:

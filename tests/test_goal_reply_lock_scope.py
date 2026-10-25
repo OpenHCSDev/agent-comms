@@ -150,7 +150,7 @@ def test_reply_appended_between_review_and_publication_is_still_eligible(reviewi
     cut = reviewing.bus.bus.revision()
     prepared = standby(reviewing).prepare(reviewing.goals, "owner", RuntimeInvocable)
     reply = reviewing.messaging.send("child", "owner", "Arrived during review").message
-    with reviewing.registry.store.locked():
+    with reviewing.registry.store.guarded_write():
         prepared.apply(GoalActionContext(
             reviewing.goals, reviewing.registry.require("owner"), RuntimeInvocable,
         ))
@@ -220,7 +220,7 @@ def test_stale_review_never_writes_inputs_or_replaces_newer_wait(reviewing, chan
     before = inputs.read(prepared.reviewed_inputs)
     wait_before = reviewing.goals.goal_wait("owner")
     goal_before = reviewing.registry.require("owner").goal
-    with reviewing.registry.store.locked(), pytest.raises(ValueError):
+    with reviewing.registry.store.guarded_write(), pytest.raises(ValueError):
         prepared.apply(GoalActionContext(
             reviewing.goals, reviewing.registry.require("owner"), RuntimeInvocable,
         ))
@@ -303,7 +303,7 @@ def test_capture_keeps_incarnation_across_rename(reviewing):
 
 
 def test_probe_observes_actual_exclusive_lock(probed):
-    with probed.registry.store.locked():
+    with probed.registry.store.guarded_write():
         probed.bus.bus.probe(ReceivedSource.declared_name)
     assert probed.bus.bus.checks == [11]
 
@@ -315,7 +315,7 @@ def test_display_edit_during_standby_review_is_preserved(reviewing, rename):
     reviewing.registry.register(replace(reviewing.registry.require("owner"), title=title))
     if rename:
         reviewing.registry.rename("owner", "renamed-owner")
-    with reviewing.registry.store.locked():
+    with reviewing.registry.store.guarded_write():
         prepared.apply(GoalActionContext(
             reviewing.goals, reviewing.registry.require("owner"), RuntimeInvocable,
         ))

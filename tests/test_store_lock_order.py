@@ -62,7 +62,7 @@ from agent_comms.store_files import CatalogTier, RegistryTier
 class NewRegistry(RegistryTier):
     @contextmanager
     def invented_guard(self):
-        with self.locked():
+        with self.guarded_write():
             yield
 
     @staticmethod
@@ -76,7 +76,7 @@ class NewRegistry(RegistryTier):
 
 class NewCatalog(CatalogTier):
     def invert(self, registry: NewRegistry):
-        with self.locked():
+        with self.guarded_write():
             registry.run_action()
 """)
     graph = StoreLockGraph(tmp_path)

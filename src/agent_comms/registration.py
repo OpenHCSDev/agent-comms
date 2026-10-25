@@ -87,7 +87,7 @@ class Registration:
 
     def prepare_native_root(self) -> PrivateRegistryGuard:
         """Prepare native authority, then its complete runtime outside the registry lock."""
-        with self.store.locked():
+        with self.store.guarded_write():
             self.store.read_snapshot_unlocked().purpose.require_write()
             guard = self.store.private_guard_unlocked().prepare_native(self.store.path)
         guard.prepare_runtime()

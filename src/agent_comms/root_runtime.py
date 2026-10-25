@@ -107,7 +107,7 @@ class RootRuntimeStore(LockedStore[RootRuntime], DurableFile, DependentStateTier
 
         Adoption is where a directory becomes a root, so its bus is created here, empty:
         from then on an absent bus file means a deleted bus, never one not yet written."""
-        with self.locked():
+        with self.guarded_write():
             if not self.path.exists():
                 Bus.install(Bus.path_in(self.path.parent))
                 self._publish_unlocked(RootRuntime(runtime.prefix))

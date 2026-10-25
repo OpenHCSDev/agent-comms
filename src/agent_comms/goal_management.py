@@ -43,7 +43,6 @@ from .goal_waits import (
 from .native_input_owner import GoalLaunchOwner
 from .owner_requests import NewestOpenRequest, RequestDirective
 from .registration import Registration
-from .store_files import SharedLock
 
 if TYPE_CHECKING:
     from .agent_events import GoalChange
@@ -460,7 +459,7 @@ class Goals:
 
     def consume_reply_wait(self, owner: RegistryOwner, reference: MessageReference) -> bool:
         """Read the exact completed delivery before checking its original owner fence."""
-        with self.registry.store.locked(mode=SharedLock()):
+        with self.registry.store.guarded_read():
             owner.require_registry(self.registry)
             review = GoalWaitReview.capture(self, owner.thread.incarnation.require_recorded())
         incarnation = review.owner.incarnation.require_recorded()
@@ -469,7 +468,7 @@ class Goals:
         original, = self.bus.bus.deliveries_for_references((reference,))
         if not review.wait.matches(original, incarnation):
             return False
-        with self.registry.store.locked():
+        with self.registry.store.guarded_write():
             owner.require_registry(self.registry)
             if not review.current_for(self):
                 return False
@@ -510,5 +509,5 @@ class Goals:
         """Run checks before locking, then recheck the original goal at publication."""
         action.require_actor(actor)
         action = action.prepare(self, name, actor)
-        with self.registry.store.locked():
+        with self.registry.store.guarded_write():
             yield action.apply(GoalActionContext(self, self.registry.require(name), actor))

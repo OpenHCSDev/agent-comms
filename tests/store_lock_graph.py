@@ -27,6 +27,14 @@ class StoreLockGraph:
     original held acquisition, rather than its intervening catalog, is the lender.
     """
 
+    # Conservatively include lock-free reads: this may add edges, never hide a cycle.
+    guard_names = frozenset(method.__name__ for method in (
+        StoreLockOwner.guarded_read, StoreLockOwner.guarded_write,
+        StoreLockOwner.guarded_write_async, StoreLockOwner.read_now,
+        StoreLockOwner.read_guard, StoreLockOwner.write_guard,
+        StoreLockOwner.read_guard_async, StoreLockOwner.write_guard_async,
+    ))
+
     def __init__(self, root: Path):
         self.root = root
         self.modules = []
@@ -369,8 +377,7 @@ class StoreLockGraph:
         return any(
             isinstance(call, ast.Call)
             and isinstance(call.func, ast.Attribute)
-            and call.func.attr
-            in {StoreLockOwner.locked.__name__, StoreLockOwner.locked_async.__name__}
+            and call.func.attr in self.guard_names
             for call in ast.walk(node)
         )
 
@@ -380,7 +387,7 @@ class StoreLockGraph:
         owner = self.typeof(call.func.value, env)
         name = call.func.attr
         site = f"{module.path}:{call.lineno}"
-        if name in {StoreLockOwner.locked.__name__, StoreLockOwner.locked_async.__name__}:
+        if name in self.guard_names:
             self.all_sites.add((site, owner, ast.unparse(call)))
             if self.derives(owner, StoreLockOwner.__name__):
                 return (Acquisition(owner, site, site, ast.unparse(call.func.value)),)
@@ -449,7 +456,7 @@ class StoreLockGraph:
             return ()
         owner = self.typeof(call.func.value, env)
         name = call.func.attr
-        if name in {StoreLockOwner.locked.__name__, StoreLockOwner.locked_async.__name__}:
+        if name in self.guard_names:
             return self.locks(call, env, module, budget)
         found = self.method(owner, name)
         if not found:

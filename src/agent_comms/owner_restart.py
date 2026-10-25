@@ -227,7 +227,7 @@ class FencedOwnerBatch:
             if any(thread.process_alive for thread, _ in self.captured):
                 raise RelationViolationError('Owner survived retirement')
             self.lifecycle._finish_stopped_owners(self.captured)
-            with self.lifecycle.registry.store.locked():
+            with self.lifecycle.registry.store.guarded_write():
                 snapshot = self.lifecycle.registry.snapshot()
                 releases = self.lifecycle.releases.read_many(
                     tuple(thread.name for thread, _ in self.captured))
@@ -267,7 +267,7 @@ class ClaimedOwnerBatch:
     @classmethod
     def restart(cls, lifecycle: OwnerLifecycle, request: OwnerRestartRequest,
                 cutover: OwnerCutover) -> tuple[OwnerRestartResult, ...]:
-        with lifecycle.registry.store.locked():
+        with lifecycle.registry.store.guarded_write():
             cutover.require_restart_phase(lifecycle)
             snapshot = lifecycle.registry.snapshot()
             threads = request.scope.threads(snapshot)

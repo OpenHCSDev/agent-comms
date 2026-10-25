@@ -34,7 +34,7 @@ class ChannelCatalog(ThreadOwnedState, CarriedDocument[CatalogDocument], Catalog
     @contextmanager
     def editing(self) -> Iterator[CatalogDocument]:
         """Caller holds wire; publish all declarations/preferences in one replace."""
-        with self.locked():
+        with self.guarded_write():
             original = self._read_unlocked()
             document = deepcopy(original)
             yield document
