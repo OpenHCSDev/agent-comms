@@ -161,6 +161,29 @@ class CommsVerdictTool(CommsChangeProblemTool):
 
 
 @dataclass(frozen=True)
+class JudgedCall:
+    problem: Annotated[str, *tool_field("Problem ID that holds the judged tool call")]
+    operation: Annotated[ToolCallVerdict, *tool_field("Verdict on that tool call")]
+
+
+@dataclass(frozen=True, kw_only=True)
+class CommsVerdictsTool(ThreadToolRequest):
+    label = "Judge many order tool calls"
+    description = (
+        "Record many verdicts in one call: each is checked against its order before any is "
+        "written and every refusal is listed together; accepted, superseded, rewritten and "
+        "dropped verdicts land in one transaction, and each send-back strikes with its Goal."
+    )
+    verdicts: Annotated[tuple[JudgedCall, ...], *tool_field("One verdict per judged tool call")]
+
+    def apply(self, comms: Comms, caller: ThreadCaller) -> TodoList:
+        actor = caller.identity(comms)
+        return TodoList(comms.goals.judge_calls(
+            tuple((call.problem, call.operation.authored_by(actor)) for call in self.verdicts),
+            caller.commander(comms).name))
+
+
+@dataclass(frozen=True)
 class HeadReviewed(ToolResult):
     record: HeadReviewRecord
 

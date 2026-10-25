@@ -69,7 +69,7 @@ from .input_attempt import (
 from .input_disposition import DeliveryOverview, InputDispositions
 from .message_bus import MessageBus
 from .threads import Thread
-from .todos import SendBackVerdict, StrikeReason, Todo, TodoCommand, TodoError, TodoStore
+from .todos import SendBackVerdict, StrikeReason, Todo, TodoBatch, TodoCommand, TodoError, TodoStore, ToolCallVerdict
 from .turn_lease import TurnCompletion
 
 _LOG = logging.getLogger(__name__)
@@ -99,6 +99,38 @@ class Goals:
         current = self.todos.get(problem)
         current.require_commander(actor)
         return operation.prepare(self, current).record(self, problem)
+
+    def judge_calls(
+        self, verdicts: Sequence[tuple[str, ToolCallVerdict]], commander: str,
+    ) -> tuple[Todo, ...]:
+        """Check every verdict on its order's state as the earlier ones leave it, list every
+        refusal together, and write only when none is refused."""
+        actor = self.registry.require(commander).incarnation
+        staged, ready = TodoBatch(), TodoBatch()
+        for problem, verdict in verdicts:
+            verdict.staged(staged, problem)
+        states: dict[str, Todo] = {}
+        read_at: dict[str, int] = {}
+        refusals: list[str] = []
+        for problem, verdict in staged.ordered():
+            # Every verdict on a problem is built from the revision its judge read; the first
+            # checks that revision against the store and the rest follow the ones before them.
+            if problem not in states:
+                states[problem] = self.todos.get(problem)
+                read_at[problem] = verdict.expected_revision
+            elif verdict.expected_revision == read_at[problem]:
+                verdict = replace(verdict, expected_revision=states[problem].revision)
+            try:
+                states[problem].require_commander(actor)
+                prepared = verdict.prepare(self, states[problem])
+                states[problem] = prepared.apply(states[problem])
+            except TodoError as refused:
+                refusals.append(f"{verdict.tool_call_id}: {refused}")
+                continue
+            prepared.staged(ready, problem)
+        if refusals:
+            raise TodoError("; ".join(refusals))
+        return ready.record(self)
 
     def apply_problem(self, problem: str, operation: TodoCommand) -> Todo:
         return self.todos.apply(problem, operation)
