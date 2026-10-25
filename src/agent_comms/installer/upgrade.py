@@ -878,10 +878,10 @@ def upgrade(checkout: Path, root: Path, target: str, installer: InstallerChoice,
                 raise UpgradeRefused(str(error)) from None
             member = Install.member(root, retire)
             installed = Stack(tree.path, commands)
-            installed.require_uv()
             if not installed.python.exists():
                 raise UpgradeRefused(f"No installed stack at {installed.python}")
-        installed.require_runtime_wire()
+            installed.require_runtime_wire()
+            installed.require_uv()
         staged = Stack.build(ScratchCheckout(tree.path), commands)
         with StartingReportPublicationPhase().running(commands.clock):
             report.starting(mode.destination(member.initial_writer(root, installed)), target)

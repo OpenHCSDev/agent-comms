@@ -2,6 +2,7 @@
 
 import ast
 import os
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -122,10 +123,13 @@ def test_crosses_runtimes_discovers_sessions_without_importing_monitor(tmp_path:
 
 
 def test_crosses_runtimes_discovers_a_new_session_member(tmp_path: Path) -> None:
-    write(tmp_path / "new_session.py", '''
+    source = tmp_path / "src"
+    shutil.copytree(OutgoingWire.at().checkout / "src/agent_comms", source / "agent_comms",
+                    ignore=shutil.ignore_patterns("__pycache__", ".git"))
+    script = source / "agent_comms/new_session.py"
+    write(script, '''
 from dataclasses import dataclass
 from agent_comms.cli_bridges.monitor import SessionRequest, SessionReady
-from agent_comms.installer.runtime_wire import CrossesRuntimes
 
 @dataclass(frozen=True)
 class FreshSession(SessionRequest[SessionReady], declared_name="fresh"):
@@ -133,13 +137,12 @@ class FreshSession(SessionRequest[SessionReady], declared_name="fresh"):
 
     async def handle(self, service, peer):
         return SessionReady()
-
-entry, = (entry for entry in CrossesRuntimes.declarations()
-          if entry.names == (FreshSession.__name__,))
-assert entry.fields == ("fresh_field: str",)
 ''')
     subprocess.run(
-        (sys.executable, str(tmp_path / "new_session.py")), check=True,
-        env={**os.environ, "PYTHONPATH": str(OutgoingWire.at().checkout / "src")},
+        (sys.executable, "-c",
+         "from agent_comms.installer.runtime_wire import CrossesRuntimes; "
+         "entry, = (entry for entry in CrossesRuntimes.declarations() if entry.names == ('FreshSession',)); "
+         "assert entry.fields == ('fresh_field: str',)"), check=True,
+        env={**os.environ, "PYTHONPATH": str(source)},
         timeout=60,
     )

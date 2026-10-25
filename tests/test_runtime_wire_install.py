@@ -1,16 +1,24 @@
 """The install compares source contracts against the outgoing child's stamped revision."""
 
 import ast
+import json
+import os
 import shlex
 import subprocess
+import sys
 from pathlib import Path
 
 import pytest
 from module_layers import OutgoingWire
 
+from agent_comms.bus import Bus
 from agent_comms.cli_bridges.monitor import PauseSession
+from agent_comms.cli_commands import InstallCliCommand
+from agent_comms.field_codec import FieldCodec
 from agent_comms.installer.commands import InstallCommands
-from agent_comms.installer.refusals import RuntimeWireChanged
+from agent_comms.installer.launch import InstallRun
+from agent_comms.installer.upgrade import TargetTree
+from agent_comms.maintenance_barrier import MaintenanceBarrier
 from agent_comms.installer.upgrade import Stack
 from agent_comms.launch_runtime import LaunchRuntime
 
@@ -24,10 +32,13 @@ def outgoing_tree(tmp_path):
         path = checkout / entry.path
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text((wire.checkout / entry.path).read_text())
+    cutover = checkout / "tools/cutover"
+    cutover.mkdir(parents=True)
+    (cutover / "__init__.py").touch()
     subprocess.run(("git", "init", "-q", str(checkout)), check=True)
     subprocess.run(("git", "-C", str(checkout), "config", "user.name", "Wire test"), check=True)
     subprocess.run(("git", "-C", str(checkout), "config", "user.email", "wire@example.invalid"), check=True)
-    subprocess.run(("git", "-C", str(checkout), "add", "src"), check=True)
+    subprocess.run(("git", "-C", str(checkout), "add", "src", "tools"), check=True)
     subprocess.run(("git", "-C", str(checkout), "-c", "user.name=Wire test",
                     "-c", "user.email=wire@example.invalid", "commit", "-qm", "outgoing source"), check=True)
     return wire, checkout
@@ -40,7 +51,8 @@ def stamped_child(tmp_path, checkout):
     not be either HEAD or its parent.
     """
     commit = subprocess.check_output(("git", "-C", str(checkout), "rev-parse", "HEAD"), text=True).strip()
-    child = tmp_path / "outgoing-python"
+    child = tmp_path / "runtime" / "bin" / "python"
+    child.parent.mkdir(parents=True)
     child.write_text(f"#!/bin/sh\nprintf '%s\\n' {shlex.quote(commit)}\n")
     child.chmod(0o700)
     return LaunchRuntime(child)
@@ -62,14 +74,31 @@ def test_crosses_runtimes_installed_stamp_refuses_session_drift_before_maintenan
     path.write_text((wire.checkout / session.path).read_text())
     subprocess.run(("git", "-C", str(checkout), "-c", "user.name=Wire test",
                     "-c", "user.email=wire@example.invalid", "commit", "-qam", "new compatible HEAD"), check=True)
-    registry = tmp_path / "bus" / "registry.json"
-    with InstallCommands() as commands:
-        stack = Stack(checkout, commands, runtime=runtime)
-        with pytest.raises(RuntimeWireChanged) as refused:
-            stack.require_runtime_wire()
-    assert "PauseSession declares (old_process: ProcessIdentity), sent as (process: ProcessIdentity)" in str(refused.value)
-    assert not registry.exists()
-    assert not tuple(tmp_path.glob("runtime-wire-*"))
+    home = tmp_path / "home"
+    pointer = home / ".local/share/agent-comms/current"
+    pointer.parent.mkdir(parents=True)
+    pointer.symlink_to(runtime.prefix, target_is_directory=True)
+    root = tmp_path / "bus"
+    root.mkdir()
+    Bus.install(Bus.path_in(root))
+    barrier = MaintenanceBarrier(root / "registry.json")
+    target = subprocess.check_output(("git", "-C", str(checkout), "rev-parse", "HEAD"), text=True).strip()
+    scratch = tmp_path / "attempt"
+    scratch.mkdir()
+    target_tree = TargetTree(checkout, scratch, target)
+    target_tree.add()
+    request = InstallRun(InstallCliCommand(checkout=checkout, spill_dir=tmp_path), root, scratch, target)
+    result = subprocess.run(
+        (sys.executable, "-m", "agent_comms.installer"),
+        input=json.dumps(FieldCodec.encode(request)), text=True, capture_output=True,
+        env={**os.environ, "HOME": str(home),
+             "PYTHONPATH": os.pathsep.join(map(str, (wire.checkout / "src", target_tree.steps_package)))},
+        timeout=60,
+    )
+    assert result.returncode == 1, result.stderr
+    assert "PauseSession declares (old_process: ProcessIdentity), sent as (process: ProcessIdentity)" in result.stderr
+    assert not any(path.exists() for path in barrier.witness_paths)
+    assert not scratch.exists()
 
 
 def test_crosses_runtimes_accepts_matching_installed_source(outgoing_tree, tmp_path):

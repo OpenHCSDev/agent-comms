@@ -53,7 +53,7 @@ class WireClass(ClientImport):
         node, = ast.parse(textwrap.dedent("".join(lines))).body
         match node:
             case ast.ClassDef():
-                return cls("outgoing wire", str(Path("src", *member.__module__.split(".")).with_suffix(".py")),
+                return cls("outgoing wire", str(Path("src") / source.relative_to(Path(__file__).parents[2])),
                            line, member.__module__, (member.__name__,), cls.declared(node))
         raise ValueError(f"{source}:{line} does not declare {member.__qualname__}")
 
@@ -84,7 +84,7 @@ class CrossesRuntimes:
 
     _members: ClassVar[list[type[CrossesRuntimes]]] = []
 
-    def __init_subclass__(cls, **options) -> None:
+    def __init_subclass__(cls, **options: object) -> None:
         super().__init_subclass__(**options)
         if not inspect.isabstract(cls):
             CrossesRuntimes._members.append(cls)
