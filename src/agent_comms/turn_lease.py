@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import time
 from abc import ABC, abstractmethod
-from contextlib import contextmanager
 from collections.abc import Callable, Iterable, Iterator
 from dataclasses import dataclass, field, replace
 from pathlib import Path
@@ -716,20 +715,18 @@ class StoredTurnRecord(Executing, TurnFile, JsonDocument[ActiveTurn], StoredTurn
         active.validate_owner(process, generation)
         return active.lease(incarnation, self)
 
-    @contextmanager
-    def locked(self) -> Iterator[LockedTurn]:
-        """This generation under its writer lock, as its registry names it now. A registry
-        edit saves before it retires a superseded file, so a writer that waited out the
-        retirement finds the registry naming another generation."""
+    def _named_unlocked(self) -> LockedTurn:
+        """This generation as its registry names it now, read under the writer lock. A
+        registry edit saves before it retires a superseded file, so a writer that waited out
+        the retirement finds the registry naming another generation."""
         from .registry_store import RegistryStore
 
-        with self.writers.locked():
-            registry = RegistryStore(self.registry_path).read_snapshot_unlocked()
-            yield NamedTurn(self) if registry.holds_turn(self.identity) else RetiredTurn()
+        registry = RegistryStore(self.registry_path).read_snapshot_unlocked()
+        return NamedTurn(self) if registry.holds_turn(self.identity) else RetiredTurn()
 
     def without_claim(self) -> None:
-        with self.locked() as turn:
-            turn.without_claim()
+        with self.writers.locked():
+            self._named_unlocked().without_claim()
 
     def retire(self) -> None:
         """Delete a superseded turn under its own lock; a phase change waiting on that lock
@@ -742,8 +739,8 @@ class StoredTurnRecord(Executing, TurnFile, JsonDocument[ActiveTurn], StoredTurn
     def _turn_effects(
         self, lease: TurnLeaseFence, observe: Callable[[TurnState], Iterable[TurnState]],
     ) -> tuple[TurnState, ...]:
-        with self.locked() as turn:
-            return turn.effects(lease, observe)
+        with self.writers.locked():
+            return self._named_unlocked().effects(lease, observe)
 
     def transition(self, lease: TurnLeaseFence, phase: TurnPhase) -> tuple[TurnState, ...]:
         return self._turn_effects(lease, lambda state: state.phase_effects(phase))
