@@ -17,7 +17,7 @@ from agent_comms.field_codec import FieldCodec
 from fixture_git import IDENTITY
 from process_tree_fixture import TREE, identities
 
-from tools.debt_ratchet import (
+from debt_ratchet import (
     AUDIT_SCRIPTS,
     BannedVocabulary,
     BroadExceptDefault,
