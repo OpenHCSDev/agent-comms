@@ -296,6 +296,31 @@ class PinnedSubmodule:
         self.path.mkdir(parents=True)
 
 
+class GitTreeEntry(DeclaredFamily, affix="TreeEntry"):
+    """Decode the object kinds emitted by recursive ls-tree, once at Git's boundary."""
+
+    @classmethod
+    def bytes_from(cls, line: str) -> int:
+        _mode, kind, _object_id, size, _path = line.split(None, 4)
+        return cls.member_named(kind).payload_bytes(size)
+
+    @classmethod
+    @abstractmethod
+    def payload_bytes(cls, size: str) -> int: ...
+
+
+class BlobTreeEntry(GitTreeEntry):
+    @classmethod
+    def payload_bytes(cls, size: str) -> int:
+        return int(size)
+
+
+class CommitTreeEntry(GitTreeEntry):
+    @classmethod
+    def payload_bytes(cls, size: str) -> int:
+        return 0
+
+
 class CheckoutStart(DeclaredFamily, affix="CheckoutStart"):
     """The declared way a tree starts, selected before it is added and prepared."""
 
@@ -309,8 +334,7 @@ class CheckoutStart(DeclaredFamily, affix="CheckoutStart"):
     def tracked_gib(self, repository: Path) -> float:
         """Decode Git's tracked payload sizes before creating the working tree."""
         listing = Repo.git(repository, 'ls-tree', '-r', '-l', self.reference)
-        sizes = (line.split(None, 4)[3] for line in listing.splitlines())
-        return sum(int(size) for size in sizes if size != '-') / 2**30
+        return sum(map(GitTreeEntry.bytes_from, listing.splitlines())) / 2**30
 
     @classmethod
     def of(cls, repository: Path, branch: str, base: str) -> CheckoutStart:
