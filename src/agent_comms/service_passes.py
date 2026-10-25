@@ -28,7 +28,8 @@ class ServicePasses:
 
     def completed_since(self, commander: ThreadIncarnation, since: float) -> bool:
         """A pass for this commander completed at or after ``since``."""
-        return any(at >= since for owner, at in self.commander_completed.items() if owner == commander)
+        at = self.commander_completed.get(commander)
+        return at is not None and at >= since
 
 
 @dataclass(frozen=True, slots=True)

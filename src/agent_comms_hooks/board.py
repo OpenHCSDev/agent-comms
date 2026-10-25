@@ -93,13 +93,7 @@ class SessionBoard(SessionWire):
         """Decode this member's field only after its discriminator matched."""
         return cls(tuple(lines))
 
-
-@dataclass(frozen=True)
-class UnreadableBoard:
-    """A bridge that cannot answer says so on the board instead of printing it empty."""
-
-    error: Exception
-
-    @property
-    def lines(self) -> tuple[str, ...]:
-        return (f"BOARD UNREADABLE: the session bridge did not answer ({self.error!r})",)
+    @classmethod
+    def unreadable(cls, error: Exception) -> SessionBoard:
+        """A bridge that cannot answer says so instead of printing an empty board."""
+        return cls((f"BOARD UNREADABLE: the session bridge did not answer ({error!r})",))

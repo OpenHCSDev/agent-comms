@@ -18,7 +18,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, TextIO
 
 from agent_comms.process_claim import ProcessSingleton
-from agent_comms_hooks.board import SessionBoard, UnexpectedBoardReply, UnreadableBoard
+from agent_comms_hooks.board import SessionBoard, UnexpectedBoardReply
 
 if TYPE_CHECKING:
     from agent_comms.cli_bridges.monitor import SessionRequest
@@ -254,7 +254,7 @@ class LiveWatch(RecordedWatch):
         try:
             return SessionBoard.asked(self.claim.socket_path).lines
         except (OSError, UnexpectedBoardReply) as error:
-            return UnreadableBoard(error).lines
+            return SessionBoard.unreadable(error).lines
 
     def reconnect(self, serve: Serve, request: SessionRequest) -> None:
         raise RuntimeError(

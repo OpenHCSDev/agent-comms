@@ -33,7 +33,7 @@ from agent_comms.thread_model import DeclaredModel
 from agent_comms.threads import Thread
 from agent_comms.ui_model.unit_state import AwaitingCommander
 from agent_comms.todos import ProgressRead, ReviewedHeadVerdict
-from agent_comms_hooks.board import SessionBoard, UnexpectedBoardReply, UnreadableBoard
+from agent_comms_hooks.board import SessionBoard, UnexpectedBoardReply
 from agent_comms_hooks.reread import BoardReminder, DeafReminder, SliceReminder
 from agent_comms_hooks.skill import CommanderStart
 from agent_comms_hooks.watch import DeafWatch, WatchClaim, WatchRecord
@@ -171,7 +171,7 @@ def test_board_decoder_names_a_refusal_instead_of_a_constructor_error():
     reply = json.loads(FieldCodec.compact(FieldCodec.encode(refused)))
     with pytest.raises(UnexpectedBoardReply) as caught:
         SessionBoard.replied(**reply)
-    assert refused.error in UnreadableBoard(caught.value).lines[0]
+    assert refused.error in SessionBoard.unreadable(caught.value).lines[0]
 
 
 def test_the_board_prints_changes_once_then_an_unchanged_count(notification_bus, tmp_path, monkeypatch):
