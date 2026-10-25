@@ -617,7 +617,27 @@ class PlainStrIdAnnotation(PerFileOccurrenceMeasure):
         return 1
 
 
-class CheckedRevision(Measure):
+class SideCounts(Measure):
+    """Findings counted per subject on each side, summed over the measure's parts."""
+
+    @classmethod
+    def measured(cls, found: dict[Side, Counter[str]], changed: set[str]) -> list[str]:
+        """The subjects compared: every changed file, counting zero where a side has none."""
+        return sorted(changed)
+
+    @classmethod
+    def combine(cls, results: list, repo: Path, base: str, head: str, changed: set[str],
+                root: str) -> tuple[dict[str, int], dict[str, int]]:
+        found: dict[Side, Counter[str]] = {side: Counter() for side in Side}
+        for side, counted in results:
+            found[side] += counted
+        subjects = cls.measured(found, changed)
+        before, after = ({cls.key(subject): found[side][subject] for subject in subjects}
+                         for side in Side)
+        return before, after
+
+
+class CheckedRevision(SideCounts):
     """A checker's findings per changed file. Both revisions are checked under the head's
     configuration, so the difference is the code's alone. A path missing at one revision counts
     zero there, as in every per-file measure."""
@@ -690,16 +710,6 @@ class CheckedRevision(Measure):
                      for side, ref in zip(Side, (base, head), strict=True)
                      for batch in cls.batches(sorted(changed & python_paths(repo, ref, root)))
                      if batch)
-
-    @classmethod
-    def combine(cls, results: list, repo: Path, base: str, head: str, changed: set[str],
-                root: str) -> tuple[dict[str, int], dict[str, int]]:
-        found: dict[Side, Counter[str]] = {side: Counter() for side in Side}
-        for side, counted in results:
-            found[side] += counted
-        before, after = ({cls.key(path): found[side][path] for path in sorted(changed)}
-                         for side in Side)
-        return before, after
 
 
 class Advisory(Measure):
@@ -777,6 +787,12 @@ class TypeErrors(CheckedRevision):
     finding = re.compile(r"^(.+?\.py):\d+: error: ", re.MULTILINE)
 
     @staticmethod
+    def mypy(cache: Path, *arguments: str) -> list[str]:
+        """Mypy's arguments after `python -m`, keeping its analysis in the cache directory."""
+        return ["mypy", "--explicit-package-bases", "--cache-dir", str(cache), "--no-error-summary",
+                *arguments]
+
+    @staticmethod
     def command(tree: Path, selected: list[str], side: Side) -> list[str]:
         # Mypy reuses a cached module whose path, size and whole-second mtime match its file, and
         # hashes the file otherwise. Every extracted tree has a new path, so each module is checked
@@ -784,8 +800,7 @@ class TypeErrors(CheckedRevision):
         # keeps its own cache: the two revisions run at once, and a base usually matches the
         # previous run's base.
         cache = ContentCache.directory.with_name("debt-ratchet-mypy") / side.value
-        return ["mypy", "--explicit-package-bases", "--cache-dir", str(cache), "--no-error-summary",
-                *(str(tree / path) for path in selected)]
+        return TypeErrors.mypy(cache, *(str(tree / path) for path in selected))
 
     @staticmethod
     def environment(root: str, tree: Path) -> dict[str, str]:
@@ -793,7 +808,7 @@ class TypeErrors(CheckedRevision):
         return {**os.environ, "MYPYPATH": os.pathsep.join(Measure.source_paths(root, tree))}
 
 
-class ClientTypeErrors(Measure):
+class ClientTypeErrors(SideCounts):
     """Mypy errors in each stack client file that imports agent_comms, checked against each
     revision's package. Both sides read the same client commit, so the client's own errors cancel
     and an error the head adds is a name or signature the client uses that the change took away:
@@ -805,7 +820,10 @@ class ClientTypeErrors(Measure):
     @staticmethod
     @cache
     def clients(repo: Path, head: str) -> tuple[StackClient, ...]:
-        """The head's stack clients, cloned once per run and read by both sides."""
+        """The head's stack clients, cloned once per run and read by both sides; a revision
+        declaring no stack has none."""
+        if not git(repo, "ls-tree", "--name-only", head, "--", "stack/pyproject.toml"):
+            return ()
         into = Path(tempfile.mkdtemp(prefix="debt-ratchet-clients-"))
         atexit.register(shutil.rmtree, into, True)
         (into / "stack").mkdir()
@@ -833,9 +851,8 @@ class ClientTypeErrors(Measure):
                            check=True, timeout=60)
             # The client checks under its own configuration, from its checkout.
             result = SpawnedProcess.run(
-                (sys.executable, "-m", "mypy", "--explicit-package-bases", "--follow-imports=silent",
-                 "--ignore-missing-imports", "--no-error-summary", "--cache-dir", str(cache),
-                 *selected),
+                (sys.executable, "-m", *TypeErrors.mypy(
+                    cache, "--follow-imports=silent", "--ignore-missing-imports", *selected)),
                 cwd=client.checkout, timeout=600,
                 env={**os.environ, "MYPYPATH": os.pathsep.join(
                     (str(Path(scratch, "src")), str(client.checkout / "src")))},
@@ -856,14 +873,9 @@ class ClientTypeErrors(Measure):
                      for side, ref in zip(Side, (base, head), strict=True))
 
     @classmethod
-    def combine(cls, results: list, repo: Path, base: str, head: str, changed: set[str],
-                root: str) -> tuple[dict[str, int], dict[str, int]]:
-        found: dict[Side, Counter[str]] = {side: Counter() for side in Side}
-        for side, counted in results:
-            found[side] += counted
-        paths = sorted(found[Side.BASE].keys() | found[Side.HEAD].keys())
-        before, after = ({cls.key(path): found[side][path] for path in paths} for side in Side)
-        return before, after
+    def measured(cls, found: dict[Side, Counter[str]], changed: set[str]) -> list[str]:
+        """The client files with an error on either side; changed paths are the package's."""
+        return sorted(found[Side.BASE].keys() | found[Side.HEAD].keys())
 
     @classmethod
     def grew(cls, key: str, grown: int) -> str:
