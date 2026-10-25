@@ -44,6 +44,7 @@ from agent_comms.storage_rules import StorageRule
 from agent_comms.store_files import store_lock_path
 from agent_comms.thread_identity import CoreWatcherIncarnation
 from agent_comms.threads import Thread
+from agent_comms.errors import TodoConflict, TodoError
 from agent_comms.todos import (
     Assignment,
     ChangeTodoState,
@@ -68,8 +69,6 @@ from agent_comms.todos import (
     StrikeReason,
     Todo,
     TodoCommand,
-    TodoConflict,
-    TodoError,
     TodoState,
     TodoStore,
     UnmergedListedPullRequest,
@@ -482,11 +481,10 @@ def test_watcher_git_and_github_reads_leave_wire_free(pr_commander, monkeypatch)
         (root / 'storage.json').write_text(json.dumps(FieldCodec.encode(c.registry.storage_rule)))
         copied = wire(root)
         with LaunchRoot.from_path(root).selected():
-            # Copying retires source processes; this fixture's commander is this test process.
+            # A practice copy retires every process; this test's process holds the copied lead.
             copied.registry.register(replace(
                 copied.registry.require(ctx.commander),
-                process_identity=ProcessIdentity.capture(os.getpid()),
-            ))
+                process_identity=ProcessIdentity.capture(os.getpid())))
             with copied.bus.bus.writer_connection():
                 pass  # Create the writer lock through its owner before the child probes it.
             lock = shlex.quote(str(store_lock_path(copied.bus.bus.path)))

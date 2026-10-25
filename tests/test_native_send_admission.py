@@ -25,7 +25,6 @@ if sys.platform == "linux":
 from agent_comms.bus import Bus
 from agent_comms.child_process import AttachedChild, ProcessIdentity
 from agent_comms.comms import Comms
-from agent_comms.locked_store import StoreBusy
 from agent_comms.coordination_database import CoordinationStore
 from agent_comms.coordinator import Coordination
 from agent_comms.declared_family import DeclaredFamily
@@ -38,7 +37,7 @@ from agent_comms.native_prompt_send import (
     _write_fenced,
     send_fenced_prompt,
 )
-from agent_comms.store_files import store_lock_path
+from agent_comms.store_files import StoreBusy, store_lock_path
 from conftest import installed_comms
 from test_coordinated_runtime import tmp_path as private_root_fixture
 from agent_comms.threads import Thread

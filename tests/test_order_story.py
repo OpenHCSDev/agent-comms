@@ -13,9 +13,10 @@ from agent_comms.field_codec import FieldCodec, MessageId
 from agent_comms.goal_actions import CreateProblemGoalAction, OrderGoalAction
 from agent_comms.order_story import FleetStory, OrderStory
 from agent_comms.recorded_time import RecordedEventTime
+from agent_comms.errors import TodoConflict, TodoError
 from agent_comms.todos import (
     AcceptedVerdict, DoneTodoState, OrderMessage, OrderVerdict, ReleaseTodo, SendBackVerdict, StrikeReason,
-    StrikeTodo, TodoConflict, TodoError, UnorderedProblemOrder, WithdrawTodo,
+    StrikeTodo, UnorderedProblemOrder, WithdrawTodo,
 )
 from agent_comms.tool_caller import NoThreadCaller, ThreadCaller
 from agent_comms.order_tools import CommsChangeProblemTool, CommsFleetStoryTool, CommsOrderStoryTool, CommsTodoCreateTool, CommsOrderTool, CommsVerdictTool
