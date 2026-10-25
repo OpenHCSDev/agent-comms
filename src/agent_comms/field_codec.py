@@ -1991,7 +1991,9 @@ class AssignmentId(NominalText):
 
 
 class AssignmentIdText(NominalSpelling[AssignmentId]):
-    spelling = re.compile(".{1,256}")
+    """Any bounded text, so the wake claim's stored ``BoundedText`` form is unchanged."""
+
+    spelling = re.compile(rf"[\s\S]{{1,{BoundedText.max_length}}}")
 
 
 class Token256Text(Hex256Text):
