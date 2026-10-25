@@ -2591,12 +2591,17 @@ class TargetActionCliCommand(TargetArguments, declared_name="target-action"):
 
 
 @dataclass(frozen=True, kw_only=True)
-class StartCliCommand(NativeOwnerCommand, StartOwnerControl, ThreadLifecycleCliCommand,
-                      CliCommand[OwnerStartResult]):
-    help = 'Start thread'
+class RestoreOwnerCliCommand(NativeOwnerCommand, OwnerLifecycleControl, ThreadLifecycleCliCommand,
+                             CliCommand[OwnerStartResult], declared_name="restore-owner"):
+    help = "Restore owner process without changing its goal"
 
     def apply(self, ctx: Comms) -> OwnerStartResult:
         return ctx.owners.start(self.name)
+
+
+@dataclass(frozen=True, kw_only=True)
+class StartCliCommand(StartOwnerControl, RestoreOwnerCliCommand):
+    help = 'Start thread'
 
 
 @dataclass(frozen=True, kw_only=True)
