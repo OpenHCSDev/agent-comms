@@ -1,6 +1,7 @@
 """Systemd unit definitions and the resource slice shared by agent launches."""
 from __future__ import annotations
 
+import os
 from abc import ABC, abstractmethod
 from pathlib import Path
 from typing import ClassVar
@@ -25,13 +26,17 @@ class SystemdUnit(ABC):
 
 
 class AgentsSlice(SystemdUnit):
-    """Bound aggregate agent CPU time using the delegated CPU controller."""
+    """Keep agent processes off the desktop's reserved CPUs."""
 
     unit = "agents.slice"
+    reserved: ClassVar[int] = 2
 
     @classmethod
     def unit_text(cls, arguments: tuple[str, ...] = ()) -> str:
-        return "[Slice]\nCPUQuota=1000%\nCPUWeight=50\n"
+        count = os.cpu_count()
+        if count is None:
+            raise RuntimeError("Cannot reserve desktop CPUs: machine CPU count is unknown.")
+        return f"[Slice]\nAllowedCPUs={cls.reserved}-{count - 1}\nCPUWeight=50\n"
 
     @classmethod
     def run_prefix(cls) -> tuple[str, ...]:

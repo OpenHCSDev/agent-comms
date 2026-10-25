@@ -1,8 +1,25 @@
 """The declared slice is installed once and shared by agent launch commands."""
+import os
 from pathlib import Path
+
+import pytest
 
 from agent_comms.child_process import SystemdUserManager
 from agent_comms.systemd_unit import AgentsSlice
+
+
+@pytest.mark.parametrize(("cores", "allowed"), [(12, "2-11"), (8, "2-7")])
+def test_agent_slice_cpu_reservation(monkeypatch: pytest.MonkeyPatch, cores: int, allowed: str) -> None:
+    monkeypatch.setattr(os, "cpu_count", lambda: cores)
+    definition = AgentsSlice.unit_text()
+    assert definition == f"[Slice]\nAllowedCPUs={allowed}\nCPUWeight=50\n"
+    assert "CPUQuota=" not in definition
+
+
+def test_agent_slice_unknown_cpu_count(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(os, "cpu_count", lambda: None)
+    with pytest.raises(RuntimeError, match="CPU count is unknown"):
+        AgentsSlice.unit_text()
 
 
 def test_agent_slice_launch_and_unchanged_install(tmp_path: Path) -> None:
@@ -14,7 +31,7 @@ def test_agent_slice_launch_and_unchanged_install(tmp_path: Path) -> None:
             reloads.append(AgentsSlice.unit_file(tmp_path).read_text(encoding="utf-8"))
 
     definition = AgentsSlice.unit_text()
-    assert "CPUQuota=1000%" in definition
+    assert "CPUQuota=" not in definition
     command = SystemdUserManager.command(("/usr/bin/true",))
     assert f"--slice={AgentsSlice.unit}" in command
     assert command[:len(AgentsSlice.run_prefix())] == AgentsSlice.run_prefix()
