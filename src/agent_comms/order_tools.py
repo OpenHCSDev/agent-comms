@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from abc import abstractmethod
 from collections.abc import Mapping
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import Annotated, Literal
 
 from pydantic import JsonValue
@@ -29,6 +29,7 @@ from agent_comms.todos import (
     StrikeReason,
     Todo,
     TodoOperation,
+    JudgedCall,
     ToolCallVerdict,
 )
 from .commander.vibe_check import OverloadDegradation
@@ -160,12 +161,6 @@ class CommsVerdictTool(CommsChangeProblemTool):
     ]
 
 
-@dataclass(frozen=True)
-class JudgedCall:
-    problem: Annotated[str, *tool_field("Problem ID that holds the judged tool call")]
-    operation: Annotated[ToolCallVerdict, *tool_field("Verdict on that tool call")]
-
-
 @dataclass(frozen=True, kw_only=True)
 class CommsVerdictsTool(ThreadToolRequest):
     label = "Judge many order tool calls"
@@ -179,7 +174,8 @@ class CommsVerdictsTool(ThreadToolRequest):
     def apply(self, comms: Comms, caller: ThreadCaller) -> TodoList:
         actor = caller.identity(comms)
         return TodoList(comms.goals.judge_calls(
-            tuple((call.problem, call.operation.authored_by(actor)) for call in self.verdicts),
+            tuple(replace(call, operation=call.operation.authored_by(actor))
+                  for call in self.verdicts),
             caller.commander(comms).name))
 
 

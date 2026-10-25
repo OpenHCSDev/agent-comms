@@ -6,6 +6,7 @@ import pytest
 
 from agent_comms.commander.judge import Edit, main
 from agent_comms.external_transcript import ExternalTranscript
+from agent_comms.registry_document import RegisteredCommanderProject
 from agent_comms.todos import DroppedVerdict, RewrittenVerdict, TodoError
 from agent_comms.tool_declaration import ToolDeclaration
 from agent_comms.transcript_events import ToolStartTranscript
@@ -13,6 +14,7 @@ from agent_comms.turn_item import NativeTurnId
 from source_revision_fixture import SourceRepository
 pytest_plugins = ("test_held_problem_orders",)
 
+FOREIGN = "FOREIGN_MARKER_LINE = 'only in the second repository the unit edits'"
 LIVE = "LIVE_MARKER_LINE = 'kept on the checkout head'"
 DROPPED = "DROPPED_MARKER_LINE = 'only on the discarded formatter branch'"
 
@@ -46,7 +48,8 @@ def judge_dropped(ctx, edit: Edit, line: str) -> None:
 def discarded_and_kept(held_commander):
     ctx = held_commander
     repo = ctx.repos[0]
-    gone = ctx.root / "removed-unit-worktree"
+    rule = ctx.comms.registry.storage_rule
+    gone = rule.order_checkout(rule.roots_of(ctx.comms.registry.require("worker")), "P1")
     base = repo.git(repo.checkout, "rev-parse", "--abbrev-ref", "HEAD").strip()
     repo.git(repo.checkout, "checkout", "-q", "-b", "formatter")
     committed(repo, "dropped_module.py", DROPPED)
@@ -132,3 +135,25 @@ def test_rewritten_refuses_an_unpushed_commit(discarded_and_kept, capsys):
           "the later pushed commit replaced the formatter module entirely"], ctx)
     assert {"dropped-call", "kept-call"} <= set(unjudged(ctx))
 
+
+
+def test_rewritten_reads_the_repository_the_edit_was_made_in(discarded_and_kept, proof_build_checkouts):
+    """The order checks one repository; the edit was made in the holder's allocation of a second
+    one, and a commit pushed there rewrote it."""
+    ctx = discarded_and_kept
+    other = next(graph.repository for graph in proof_build_checkouts
+                 if graph.repository.github != ctx.repos[0].github)
+    lead = ctx.comms.registry.require(ctx.commander).incarnation
+    ctx.comms.registry.set_commander_project(RegisteredCommanderProject(lead, (*ctx.repos, other)))
+    rule = ctx.comms.registry.storage_rule
+    allocated = rule.repository_checkout(rule.roots_of(ctx.comms.registry.require("worker")),
+                                         "P1", other.github)
+    recorded_edit(ctx, "other-call", str(allocated / "other_module.py"), FOREIGN)
+    committed(other, "other_module.py", "REPLACED_MARKER_LINE = 'what the later commit wrote'")
+    other.git(other.checkout, "push", "-q", "origin", "HEAD:refs/heads/unit-rewrite")
+    head = other.git(other.checkout, "rev-parse", "HEAD").strip()
+    why = "the later pushed commit replaced the marker module entirely"
+    main(["rewritten", "worker", "--by", head, "--why", why], ctx)
+    assert "other-call" not in unjudged(ctx)
+    verdict = ctx.comms.goals.todos.get("P1").verdicts[-1]
+    assert isinstance(verdict, RewrittenVerdict) and verdict.reason == why

@@ -42,6 +42,7 @@ from agent_comms.change_report import FileLine
 from agent_comms.field_codec import Argument, FieldCodec, MessageId
 from agent_comms.declared_family import DeclaredFamily
 from agent_comms.head_review import PullRequestHead
+from agent_comms.recorded_time import EventTime
 from agent_comms.repo import Repo
 from agent_comms.todos import (
     AcceptedVerdict,
@@ -57,6 +58,7 @@ from agent_comms.todos import (
     RejectedHeadVerdict,
     HeadVerdict,
     HeadReviewOrder,
+    JudgedCall,
     SendBackVerdict,
     StrikeReason,
     SupersededVerdict,
@@ -67,7 +69,7 @@ from agent_comms.todos import (
     VerdictReason,
 )
 from agent_comms.slop import Derivation, Slop
-from agent_comms.order_tools import CommsHeadVerdictTool, CommsUnjudgedTool, CommsVerdictsTool, JudgedCall
+from agent_comms.order_tools import CommsHeadVerdictTool, CommsUnjudgedTool, CommsVerdictsTool
 from agent_comms.tool_caller import ThreadCaller
 from agent_comms.tool_declaration import EditCall, ReplacementEdit
 from agent_comms.commander import order
@@ -106,10 +108,6 @@ class Edit(EditCall):
 
     def text(self) -> str:
         return ''.join(hunk.old_text + hunk.new_text for hunk in self.hunks)
-
-    def checkout(self) -> str:
-        """The repository the edited file is in, which --at and --by name lines of."""
-        return Repo.git(Path(self.path).parent, 'rev-parse', '--show-toplevel').strip()
 
     def added_lines(self) -> tuple[str, ...]:
         return tuple(line for hunk in self.hunks for line in hunk.new_text.splitlines())
@@ -276,7 +274,17 @@ class PullRequestReview(ReviewSubject):
 
 
 @dataclass(frozen=True, kw_only=True)
-class VerdictVerb(JudgeVerb):
+class ReasonedVerb(JudgeVerb, declared_name=None):
+    """A verb whose verdict records why: what the edit serves, violates or was replaced by."""
+    why: str
+
+    def require_why(self) -> None:
+        if len(self.why.split()) < 6:
+            sys.exit('Refused: state which intent the edit serves or violates, and why (6+ words).')
+
+
+@dataclass(frozen=True, kw_only=True)
+class VerdictVerb(ReasonedVerb):
     """Every verdict, mine or a fork's, is made after reviewing the OOPSLA paper's
     correct-maintenance results. Each member's required options are the facts its verdict carries."""
 
@@ -284,7 +292,6 @@ class VerdictVerb(JudgeVerb):
         tuple[str, ...],
         Argument(flags=("ids",), options={"nargs": "*", "metavar": "ID:CODE"}),
     ] = ()
-    why: str
     problem: Annotated[
         str,
         Argument(options={"metavar": "PROBLEM", "help": "the held problem id from order board"}),
@@ -309,10 +316,6 @@ class VerdictVerb(JudgeVerb):
 
     def subject(self, ctx: order.Commander) -> ReviewSubject:
         return EditReview(self.ids)
-
-    def require_why(self) -> None:
-        if len(self.why.split()) < 6:
-            sys.exit('Refused: state which intent the edit serves or violates, and why (6+ words).')
 
     def run(self, ctx: order.Commander) -> None:
         self.require_why()
@@ -476,10 +479,17 @@ class BackVerb(HeadVerdictVerb):
     def head_operation(self) -> HeadVerdict:
         return RejectedHeadVerdict(self.rejection_reason)
 
+    @cached_property
+    def judged_at(self) -> EventTime:
+        """One back call is one send-back: every edit it judges shares this moment, and the
+        strike it records repeats only for verdicts of the same call."""
+        return EventTime.capture(time.time())
+
     def operation(self, ctx: order.Commander, todo: Todo, edit: Edit) -> SendBackVerdict:
         return EditSendBackVerdict(todo.revision, ctx.actor_identity,
                                    todo.held(), edit.id, reason=self.rejection_reason,
-                                   evidence=self.head_evidence(), checkout=edit.checkout())
+                                   evidence=self.head_evidence(), path=edit.path,
+                                   at=self.judged_at)
 
     def check_edits(self, edits: list[Edit]) -> None:
         _ = self.rejection_reason
@@ -510,18 +520,16 @@ class BatchVerb(JudgeVerb):
 
 
 @dataclass(frozen=True, kw_only=True)
-class RewrittenVerb(JudgeVerb):
+class RewrittenVerb(ReasonedVerb):
     help = ("settle every unjudged edit of UNIT that a later pushed commit rewrote: Core checks "
             "each against git, and edits with a surviving line stay for ok or back")
     unit: Annotated[str, Argument(flags=("unit",), options={"metavar": "UNIT"})]
     by: Annotated[
         str, Argument(flags=("--by",), options={"metavar": "COMMIT", "help": "the later pushed commit"})
     ]
-    why: str
 
     def run(self, ctx: order.Commander) -> None:
-        if len(self.why.split()) < 6:
-            sys.exit('Refused: say what the later commit replaced, and why (6+ words).')
+        self.require_why()
         orders = {todo.id: todo for todo in ctx.held_by(self.unit)}
         unjudged = Edit.unjudged(ctx.comms, ctx.commander)
         verdicts: list[JudgedCall] = []
@@ -529,7 +537,8 @@ class RewrittenVerb(JudgeVerb):
         for edit in (edit for edit in unjudged if edit.problem in orders):
             todo = orders[edit.problem]
             verdict = RewrittenVerdict(todo.revision, ctx.actor_identity, todo.held(), edit.id,
-                                       path=edit.path, added=edit.added_lines(), commit=self.by)
+                                       path=edit.path, added=edit.added_lines(), commit=self.by,
+                                       reason=self.why)
             try:
                 verdict.prepare(ctx.comms.goals, todo)
             except TodoError as refused:
