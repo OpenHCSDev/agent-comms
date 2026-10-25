@@ -25,10 +25,13 @@ from .launch_root import LaunchRoot
 from .private_nk_entrypoint import PrivateNkLaunch, RootLaunch
 from .private_path import ObservedPath, OwnedDirectoryRole, PrivateDirectoryRole, PrivateFileRole
 from .recorded_bus import RecordedBusIdentity
-from .store_files import UNBOUNDED_CONTENTION, ExclusiveLock, SharedLock, StoreLockContention
+from .store_files import StoreLockContention, _store_lock
 
 if TYPE_CHECKING:
     from .installer.reporting import RootWriter
+
+# Publishers exclude only each other: a second one waits out the first install's route step.
+ROUTE_PUBLICATION_WAIT_SECONDS = 30.0
 
 
 @dataclass(frozen=True, slots=True)
@@ -48,21 +51,6 @@ class CommsRoute(ABC):
     def launch(self) -> RootLaunch:
         """This root's launch, decoded from its marker and this installation's pin."""
         return RootLaunch.derive(self)
-
-    @contextmanager
-    def hold_client_route(self) -> Iterator[None]:
-        """Borrow the published route for one client call.
-
-        An explicit selection of the published root is still its borrower.
-        Independent private roots do not participate in default publication.
-        Refuse a publication in progress rather than park a half-open client.
-        """
-        current_root = RouteFile.read(active_route_path()).launch_root()
-        if self.root.resolve() == current_root.resolve():
-            with guard_default_route_write(self.root, StoreLockContention(0)):
-                yield
-        else:
-            yield
 
 
 
@@ -179,17 +167,6 @@ class RoutePublicationUnknownError(RelationViolationError):
     """The new route may be visible after a failed durability boundary."""
 
 
-@contextmanager
-def guard_original_root_write(root: Path) -> Iterator[None]:
-    """Fence a cooperating write through the historical root after migration."""
-    original_root = LocalRoute.default().root
-    if root.expanduser().resolve() == original_root.resolve():
-        with guard_default_route_write(original_root, UNBOUNDED_CONTENTION):
-            yield
-    else:
-        yield
-
-
 def active_route_path() -> Path:
     return Path.home() / ".local/state/agent-comms" / RouteFile.filename
 
@@ -232,39 +209,6 @@ def read_active_route(path: Path | None = None) -> ActiveRoute | None:
     except MalformedRecord as error:
         raise MalformedRecord("active comms route is invalid JSON") from error
     return ActiveRoute.from_record(value, path)
-
-
-@contextmanager
-def guard_default_route_write(
-    expected_root: Path, contention: StoreLockContention,
-) -> Iterator[None]:
-    """Keep a default-root write on its selected root through publication.
-
-    Callers must enter this guard before the mutating operation, including any
-    thread dispatch. Nested shared borrowers remain compatible and each owns
-    its descriptor; their lifetime is not inferred from thread-local state.
-    """
-    path = active_route_path()
-    path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
-    refusal = ValueError("active comms route directory changed or is not owned")
-    directory = OwnedDirectoryRole.read(path.parent, refusal)
-    try:
-        contention.acquire(directory, Platform.current(), mode=SharedLock())
-        OwnedDirectoryRole.held(directory, path.parent, refusal)
-        Platform.current().make_private_descriptor(directory, 0o700)
-        route = CommsRoute.current(path)
-        # Local roots may be created under this guard. ActiveRoute owns the
-        # stronger observation of an already published root and its identity.
-        if expected_root.expanduser().resolve() != route.observe_root():
-            raise ValueError("default comms route changed before write")
-        yield
-    finally:
-        os.close(directory)
-
-
-def acquire_exclusive_route_lock(directory: int) -> None:
-    """Wait for in-flight operations to finish before publishing the route."""
-    UNBOUNDED_CONTENTION.acquire(directory, Platform.current(), mode=ExclusiveLock())
 
 
 def route_new_bus(route: ActiveRoute, path: Path) -> str:
@@ -385,17 +329,19 @@ def _route_directory(route: ActiveRoute, path: Path | None) -> Iterator[tuple[Pa
 
 @contextmanager
 def route_directory(path: Path) -> Iterator[int]:
-    """Hold the existing publication lock for one route snapshot or mutation."""
+    """One publisher's route snapshot or mutation. Only publishers take the route file's
+    lock; clients never do, so a reader cannot hold an install. A write that a published
+    route has left behind is refused by its store, under that store's write lock."""
     path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
     refusal = ValueError("active comms route directory changed or is not owned")
-    directory = OwnedDirectoryRole.read(path.parent, refusal)
-    try:
-        acquire_exclusive_route_lock(directory)
-        OwnedDirectoryRole.held(directory, path.parent, refusal)
-        Platform.current().make_private_descriptor(directory, 0o700)
-        yield directory
-    finally:
-        os.close(directory)
+    with _store_lock(path, contention=StoreLockContention(ROUTE_PUBLICATION_WAIT_SECONDS)):
+        directory = OwnedDirectoryRole.read(path.parent, refusal)
+        try:
+            OwnedDirectoryRole.held(directory, path.parent, refusal)
+            Platform.current().make_private_descriptor(directory, 0o700)
+            yield directory
+        finally:
+            os.close(directory)
 
 
 def _publish_active_route_locked(

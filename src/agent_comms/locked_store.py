@@ -124,6 +124,12 @@ class RootFile:
         return frozenset((source,))
 
     @staticmethod
+    @contextmanager
+    def writers_drained(path: Path) -> Iterator[None]:
+        """A file no writer locks has no write in flight to wait out."""
+        yield
+
+    @staticmethod
     def settle(path: Path) -> None:
         """A plain file keeps no committed bytes beside it, so there is nothing to settle."""
 
@@ -360,6 +366,13 @@ class LockedFile(RootFile, StoreLockOwner, declared_name=None):
     def copy_group(cls, source: Path, target: Path) -> frozenset[Path]:
         with _store_lock(source, mode=SharedLock()):
             return super().copy_group(source, target)
+
+    @classmethod
+    @contextmanager
+    def writers_drained(cls, path: Path) -> Iterator[None]:
+        """Its writers ask maintenance under this lock, so holding it waits out the last."""
+        with _store_lock(path):
+            yield
 
 
 class FileStore(RootFile, ABC):
@@ -609,6 +622,18 @@ class SQLiteFile(RootFile):
         """SQLite's snapshot owns the whole cut without a file lock spanning the copy."""
         cls.copy_file(source, target)
         return frozenset((source,))
+
+    @classmethod
+    @contextmanager
+    def writers_drained(cls, path: Path) -> Iterator[None]:
+        """Hold the write lock: a transaction that passed maintenance commits first, and every
+        later one asks maintenance under this lock and is refused."""
+        with closing(cls.writer(path, isolation_level=None)) as held:
+            held.execute("BEGIN IMMEDIATE")
+            try:
+                yield
+            finally:
+                held.execute("ROLLBACK")
 
     @classmethod
     def settle(cls, path: Path) -> None:

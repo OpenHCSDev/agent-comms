@@ -29,6 +29,7 @@ from acp.exceptions import RequestError
 from pydantic import JsonValue
 
 from agent_comms.errors import ToolRefusedError
+from agent_comms.installer.interpreter_operation import ProcessLauncherPhase
 from agent_comms.installer.owner_starts import OwnerStart, RefusedOwner, StartedOwner
 from agent_comms.launch_root import LaunchRoot
 from agent_comms.lifecycle_capability import LifecycleCapability, Successful
@@ -196,7 +197,7 @@ from .turn_context import (
     Provenance,
     TurnContext,
 )
-from .typed_table import ReconciledFile
+from .typed_table import ReconciledFile, WriterOwnedStore
 from .working_memory_labels import ClassifierVersion, ModelLabel, QuestionVersion
 from .working_memory_questions import SpanAnswer
 
@@ -1823,7 +1824,8 @@ class InstallCliCommand(HarnessInstallation, CliCommand):
         from agent_comms.installer.launch import InstallLogs, InstallRun
 
         with InstallLogs(route.root).launching():
-            return InstallRun.start(self, route.root).launch(output)
+            run = InstallRun.start(self, route.root, ProcessLauncherPhase())
+            return run.launch(output)
 
 
 
@@ -1947,6 +1949,11 @@ class PlannedReconcileCliCommand(StoreReconcileCliCommand, declared_name="planne
         schema = owner.schema_at(path)
         with closing(owner.read_snapshot(path)) as db:
             return schema.reconcile_writes(db)
+
+    def answer(self, root: Path) -> ReconciledStoresResult:
+        """A store outside the bus that the target's writer could not open refuses the plan."""
+        WriterOwnedStore.practice_openings()
+        return super().answer(root)
 
 @dataclass(frozen=True)
 class CheckoutResult(CliResult):
