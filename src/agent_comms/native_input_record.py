@@ -262,17 +262,20 @@ class TriageNativeExecution(NativeInputExecution):
 
     @classmethod
     def source_membership_sql(cls) -> str:
-        from .triage_native_sources import TriageNativeSources
+        from .triage_native_sources import TriageNativeSource
 
-        return (f"SELECT s.input_id, member.value AS assignment_id, CAST(member.key AS INTEGER) AS ordinal "
-                f"FROM {TriageNativeSources.declared_name} s, json_each(s.assignment_ids) member")
+        return (f"SELECT s.input_id, s.assignment_id, s.ordinal "
+                f"FROM {TriageNativeSource.declared_name} s")
 
     def record_sources(
         self, db: Connection, input_id: InputId, assignments: tuple[WakeAssignment, ...],
     ) -> None:
-        from .triage_native_sources import TriageNativeSources
+        from .triage_native_sources import TriageNativeSource
 
-        TriageNativeSources(input_id, tuple(row.assignment_id for row in assignments)).insert(db)
+        if not assignments or len({row.assignment_id for row in assignments}) != len(assignments):
+            raise IdentityConflict("Native input membership must name distinct original sources")
+        for ordinal, row in enumerate(assignments):
+            TriageNativeSource(input_id, ordinal, row.assignment_id).insert(db)
 
     @classmethod
     def from_columns(cls, execution_id: NativeColumn, attempt_ordinal: NativeColumn) -> TriageNativeExecution:

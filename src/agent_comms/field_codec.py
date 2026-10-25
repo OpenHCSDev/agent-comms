@@ -1927,6 +1927,14 @@ class Id128Text(NominalSpelling[Id128], HexDigits):
     digits = 32
 
 
+class AssignmentId(NominalText):
+    """One recipient's wake claim on one bus message."""
+
+
+class AssignmentIdText(NominalSpelling[AssignmentId]):
+    spelling = re.compile(".{1,256}")
+
+
 class MessageId(NominalText):
     @classmethod
     def mint(cls, text: str) -> Self:

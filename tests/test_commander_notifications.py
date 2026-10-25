@@ -53,6 +53,41 @@ def beat(comms, rules=(), *, states=()):
     CommanderHeartbeat().pass_body(comms, (frame,))
 
 
+def test_frame_puts_hands_first_and_folds_finished_phases_per_plan(notification_bus):
+    """Ready and done-but-held phases lead; finished phases are one count per plan."""
+    from agent_comms.commander.vibe_check import OverloadDegradation
+    from agent_comms.commander_hud import CommanderPhase
+    from agent_comms.plan_phases import (
+        DesignReconciledPhase, OneOrderOwnerPhase, RecordPlanePhase, RetainedStorePhase,
+        ReviewQueuePhase,
+    )
+
+    comms = notification_bus
+    lead = comms.registry.require("lead").incarnation
+    worker = comms.registry.require("worker").incarnation
+    hud = CommanderHud(lead, (), (
+        CommanderPhase(RetainedStorePhase, True, False, ()),
+        CommanderPhase(OneOrderOwnerPhase, True, False, ()),
+        CommanderPhase(DesignReconciledPhase, False, False, (worker,)),
+        CommanderPhase(RecordPlanePhase, False, True, ()),
+        CommanderPhase(ReviewQueuePhase, True, False, (worker,)),
+    ), OverloadDegradation.from_orders((), 0, 0), (worker,))
+    assert hud.frame == (
+        str(hud.load),
+        "commander_native/record_plane done=False ready=True holders=",
+        "commander_native/review_queue done=True ready=False holders=worker",
+        "commander_native/design_reconciled done=False ready=False holders=worker",
+        "forks: worker",
+        "commander_native: 2 phases done",
+    )
+
+
+def test_a_registered_commander_fork_is_on_the_hud(notification_bus):
+    comms = notification_bus
+    fork = comms.registry.register_commander_child("judge-fork", "lead", comms.goals)
+    assert fork.incarnation in lead_hud(comms).forks
+
+
 def test_quiet_completion_is_per_commander_even_when_a_later_recipient_fails(notification_bus):
     comms = notification_bus
     lead = comms.registry.require("lead")

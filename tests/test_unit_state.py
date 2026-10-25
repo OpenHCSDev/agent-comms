@@ -223,18 +223,15 @@ def test_claim_is_a_commander_question_not_a_verified_delivery(held_bus, claim_o
         assert state_cards(comms, DeliveredUnclosed) == ()
 
 
-def test_stopped_child_without_lead_orders_remains_in_the_frame(held_bus):
+def test_a_stopped_child_holding_no_order_is_no_unit(held_bus):
+    """Being the commander's child makes nothing a unit: an order or a receiving executor does
+    (cl49, ready, drafts and fork-triage sat on the HUD as Idle units for five days)."""
     child = replace(held_bus.registry.require("outsider"), parent=ForkedParent("lead"))
     held_bus.registry.register(child, StoppedThreadStatus())
     with LaunchRoot.from_path(held_bus.root).selected():
-        (state,) = (
-            state
-            for state in UnitState.current(
-                held_bus, "lead", HeartbeatFrame.read(held_bus, "lead", ProgressRead()))
-            if state.unit == child.incarnation
-        )
-        assert isinstance(state, Idle)
-        assert state.presence == StoppedThreadStatus()
+        states = UnitState.current(
+            held_bus, "lead", HeartbeatFrame.read(held_bus, "lead", ProgressRead()))
+    assert child.incarnation not in {state.unit for state in states}
 
 
 def test_commander_fork_gets_no_unit_card(held_bus):

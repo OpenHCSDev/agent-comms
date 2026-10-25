@@ -34,7 +34,7 @@ from agent_comms.locked_store import SQLiteFile
 from agent_comms.maintenance_barrier import MaintenanceHolder, NoMaintenanceHolder
 from agent_comms.native_runtime_input import NativeRuntimeInput
 from agent_comms.private_runtime_schema import PrivateCoordinatorSchema
-from agent_comms.triage_native_sources import TriageNativeSources
+from agent_comms.triage_native_sources import TriageNativeSource
 from agent_comms.typed_table import (
     Column, DurableTables, ReconciledFile, SharedFileTables, TableSchema, TypedTable,
     WriterOwnedStore,
@@ -170,7 +170,7 @@ def test_private_carry_plans_and_restores_missing_native_tables(private_comms):
     with Coordination(database) as store:
         store.participants.register(OWNER_LOOKUP, committed=True)
         retained = store.participants.get(OWNER_LOOKUP)
-        store.session._connection.execute(f"DROP TABLE {TriageNativeSources.declared_name}")
+        store.session._connection.execute(f"DROP TABLE {TriageNativeSource.declared_name}")
 
     with maintenance_held(root) as holder:
         before = bus_files(root)
