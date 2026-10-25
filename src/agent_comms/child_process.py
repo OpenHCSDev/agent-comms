@@ -50,7 +50,7 @@ from .systemd_unit import AgentsSlice, SystemdUnit
 
 if TYPE_CHECKING:
     from .registration_change import RegistrationChange, UpdatedRegistration
-    from .runtime_children import RuntimeChildrenStore, RuntimeChildReservation
+    from .runtime_children import RuntimeChildrenStore
     from .thread_identity import ThreadIncarnation, ThreadRole
     from .thread_presentation import ThreadOwnerBinding, ThreadPresentation
     from .thread_status import ActiveThreadPresence, ThreadStatus
@@ -1190,11 +1190,20 @@ class ChildLaunch:
         self.identity_r, identity_w = os.pipe()
         self.identity_writer = os.fdopen(identity_w, "wb", buffering=0)
 
-    def record(self, identity: ProcessIdentity, reservation: RuntimeChildReservation) -> None:
-        """Persist the gated child, or cancel before user code executes."""
+    def record(self, identity: ProcessIdentity, store: RuntimeChildrenStore) -> None:
+        """Atomically admit the gated child, or cancel before user code executes."""
         try:
-            reservation.record(identity)
+            store.record(identity)
         except BaseException:
+            self.cancel_before_release(identity)
+            raise
+
+    async def record_async(self, identity: ProcessIdentity, store: RuntimeChildrenStore) -> None:
+        """Join durable admission before cancellation can retire the gated child."""
+        pending = asyncio.get_running_loop().run_in_executor(None, self.record, identity, store)
+        try:
+            await join_retirement(pending)
+        except asyncio.CancelledError:
             self.cancel_before_release(identity)
             raise
 
@@ -1241,36 +1250,38 @@ class ChildLaunch:
         stderr=subprocess.DEVNULL,
     ) -> SpawnedProcess:
         """Record the launch handle before the platform allows exec."""
-        with self.children_store.launching(self.runtime) as reservation:
-            process = subprocess.Popen(
-                self.argv, cwd=cwd,
-                env=self.lifetime.environment(self.runtime.child_environment(env)), stdin=stdin,
-                stdout=stdout, stderr=stderr, **self.options,
-            )
-            child = self.spawned(process, reservation.store)
-            try:
-                self.record(child.identity, reservation)
-            except BaseException:
-                child.reap()
-                child.close_streams()
-                raise
+        store = self.children_store.at(self.runtime.prefix)
+        store.read().require_open()
+        process = subprocess.Popen(
+            self.argv, cwd=cwd,
+            env=self.lifetime.environment(self.runtime.child_environment(env)), stdin=stdin,
+            stdout=stdout, stderr=stderr, **self.options,
+        )
+        child = self.spawned(process, store)
+        try:
+            self.record(child.identity, store)
+        except BaseException:
+            child.reap()
+            child.close_streams()
+            raise
         return child
 
     async def spawn_async(self, *, cwd, env, stdio: ChildStdio) -> AttachedChild:
-        async with self.children_store.launching_async(self.runtime) as reservation:
-            process = await asyncio.create_subprocess_exec(
-                self.argv[0], *self.argv[1:], cwd=cwd,
-                env=self.lifetime.environment(self.runtime.child_environment(env)),
-                **stdio.options, **self.options,
-            )
-            child = await self.spawned_async(process, reservation.store)
-            child._stderr_task = asyncio.create_task(child._drain_stderr())
-            try:
-                self.record(child.identity, reservation)
-            except BaseException:
-                await process.wait()
-                await child._stderr_task
-                raise
+        store = self.children_store.at(self.runtime.prefix)
+        store.read().require_open()
+        process = await asyncio.create_subprocess_exec(
+            self.argv[0], *self.argv[1:], cwd=cwd,
+            env=self.lifetime.environment(self.runtime.child_environment(env)),
+            **stdio.options, **self.options,
+        )
+        child = await self.spawned_async(process, store)
+        child._stderr_task = asyncio.create_task(child._drain_stderr())
+        try:
+            await self.record_async(child.identity, store)
+        except BaseException:
+            await process.wait()
+            await child._stderr_task
+            raise
         return child
 
     def release(self, identity: ProcessIdentity) -> None:
