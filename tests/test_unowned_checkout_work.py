@@ -47,7 +47,7 @@ from agent_comms.todos import (
     PendingProblemOrder, ProgressRead, ReleaseTodo, StrikeReason, TodoError,
 )
 from agent_comms.transcript_events import AssistantTranscript
-from agent_comms.turn_item import NativeTurnId
+from agent_comms.turn_item import NativeItemId, NativeTurnId
 from agent_comms.ui_model.unit_state import UnitState, Unreadable
 from agent_comms.work_branches import UnreadableCheckoutRead, WorkBranches
 from agent_comms.threads import Thread
@@ -158,8 +158,8 @@ def checkout_bus(tmp_path: Path, configured_repository, installed_runtime) -> Co
         row.revision, CoreWatcherIncarnation.watcher(), row.held(),
         StrikeReason('The unit stopped answering this order before its checked work was finished.')))
     c.transcripts.external('idle').finish(
-        turn_id=available_turn_id, item_id='answer', events=(AssistantTranscript(
-            'Ready for work', position='answer', timestamp=time.time()),))
+        turn_id=available_turn_id, item_id=NativeItemId('answer'), events=(AssistantTranscript(
+            'Ready for work', position=NativeItemId('answer'), timestamp=time.time()),))
     CommanderHeartbeat.register(c.registry)
     configured_repository(c)
     return c

@@ -25,6 +25,7 @@ from agent_comms.maintenance_barrier import (
     MaintenanceNotHeldError,
     MaintenanceOperator,
 )
+from agent_comms.native_tool_call import ToolCallId
 from agent_comms.order_runs import MechanicalOrderRun
 from agent_comms.order_tools import CommsCommanderLoadTool, CommsHudTool, CommsTodoListTool
 from agent_comms.problem_number import ProblemNumber
@@ -46,7 +47,7 @@ from agent_comms.todos import (
 from agent_comms.tool_caller import CommanderForkCaller
 from agent_comms.tool_declaration import ToolDeclaration
 from agent_comms.transcript_events import ToolStartTranscript
-from agent_comms.turn_item import NativeTurnId
+from agent_comms.turn_item import NativeItemId, NativeTurnId
 from cli_command import commander
 from source_revision_fixture import SourceRepository
 
@@ -238,11 +239,11 @@ def record_edits(comms, source, count):
     actor = comms.registry.require("retained").incarnation
     ExternalTranscript(comms.root, actor).finish(
         turn_id=NativeTurnId("parent-work"),
-        item_id="parent-edit",
+        item_id=NativeItemId("parent-edit"),
         events=tuple(
             ToolStartTranscript(
                 position=position,
-                tool_call_id=f"parent-edit-{position}",
+                tool_call_id=ToolCallId(f"parent-edit-{position}"),
                 tool_name="edit",
                 timestamp=time.time(),
                 tool=ToolDeclaration.record(
@@ -251,7 +252,7 @@ def record_edits(comms, source, count):
                         "path": str(source.checkout / "owner.py"),
                         "edits": [{"oldText": "", "newText": f"class ReviewedOwner{position}: pass"}],
                     },
-                    call_id=f"parent-edit-{position}",
+                    call_id=ToolCallId(f"parent-edit-{position}"),
                 ),
             )
             for position in range(count)
@@ -502,7 +503,7 @@ def test_fork_superseded_verdict_reads_its_commanders_orders(fork_bus):
         expected_revision=current.revision,
         actor=actor,
         previous=current.held(),
-        tool_call_id="retained-edit",
+        tool_call_id=ToolCallId("retained-edit"),
         replacement="P41",
         reason="The replacing order moved this edit to another unit.",
     )

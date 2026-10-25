@@ -14,7 +14,7 @@ from collections.abc import Callable, Iterable, Iterator, Mapping
 from dataclasses import MISSING, Field, dataclass, field, fields, is_dataclass
 from datetime import datetime
 from enum import Enum
-from functools import cache, cached_property, lru_cache, reduce
+from functools import cache, cached_property, lru_cache, partial, reduce
 from operator import or_
 from pathlib import Path
 from typing import (
@@ -22,6 +22,7 @@ from typing import (
     Annotated,
     ClassVar,
     Literal,
+    Never,
     Protocol,
     Self,
     TypeGuard,
@@ -36,7 +37,8 @@ from typing import (
 from uuid import uuid4
 from weakref import WeakKeyDictionary
 
-from pydantic import BaseModel, JsonValue
+from pydantic import BaseModel, GetCoreSchemaHandler, JsonValue
+from pydantic_core import core_schema
 from typing_extensions import TypeAliasType, TypeForm
 
 from .declared_family import DeclaredFamily
@@ -850,6 +852,10 @@ class DecoderPlan(ABC):
 
     target: object
 
+    @property
+    def accepts_null(self) -> bool:
+        return False
+
     def fits_wire(self, data: object) -> bool:
         """Check outer wire shape without decoding nested values.
 
@@ -1025,6 +1031,10 @@ class _RepresentedDecoder[T](ValueDecoder[T]):
     @property
     def wire_structure(self) -> DecoderPlan:
         return self.representation.wire_structure(self.structural)
+
+    @property
+    def accepts_null(self) -> bool:
+        return self.wire_structure.accepts_null
 
     @boundary_decoder
     def fits_wire(self, data: object) -> bool:
@@ -1359,12 +1369,24 @@ class PresentMember:
     def present(self) -> tuple[Self]:
         return (self,)
 
+    def require_present(self) -> Self:
+        return self
+
+    def require_absent(self, reason: str = "A value was supplied where absence is required.") -> None:
+        raise ValueError(reason)
+
 
 class NullMember(ExternalField, AcceptsNull, WireValue):
     """One declared empty member owns the JSON null representation."""
 
     def present(self) -> tuple[()]:
         return ()
+
+    def require_present(self) -> Never:
+        raise ValueError("A required value is absent.")
+
+    def require_absent(self, reason: str = "") -> None:
+        pass
 
     @classmethod
     def wire_structure(cls, structural: DecoderPlan) -> DecoderPlan:
@@ -1440,6 +1462,18 @@ class RecordMember(WireValue):
 
     def to_wire(self) -> dict[str, object]:
         return FieldCodec.encode_record(self)
+
+
+class TaggedRecordMember(RecordMember):
+    """A record member whose wire shape retains its declared family selector."""
+
+    @classmethod
+    def wire_structure(cls, structural: DecoderPlan) -> DecoderPlan:
+        return structural
+
+    @classmethod
+    def from_wire(cls, data: object) -> Self:
+        return cast(Self, _structural_decoder(cls).decode(data))
 
 
 class RepresentedProjection(MroDispatch):
@@ -1625,11 +1659,16 @@ class SpelledText(TextRepresentation[str], ValidatedScalar):
         return {"type": cls.command_line}
 
     @classmethod
+    def anchored(cls) -> str:
+        """The whole-value pattern every schema of this spelling declares."""
+        return f"^(?:{cls.spelling.pattern})$"
+
+    @classmethod
     def schema(cls) -> dict[str, object]:
-        return {"type": "string", "pattern": f"^(?:{cls.spelling.pattern})$"}
+        return {"type": "string", "pattern": cls.anchored()}
 
 
-class NominalText(str):
+class NominalText(PresentMember, str):
     """Text whose declared class carries its identity."""
 
     __slots__ = ()
@@ -1638,6 +1677,18 @@ class NominalText(str):
     @classmethod
     def representation(cls) -> type[FieldRepresentation]:
         return cls.spelled_by
+
+    @classmethod
+    def __get_pydantic_core_schema__(
+        cls, _source: object, _handler: GetCoreSchemaHandler
+    ) -> core_schema.CoreSchema:
+        return core_schema.no_info_plain_validator_function(
+            partial(FieldCodec.decode, cls),
+            json_schema_input_schema=core_schema.str_schema(
+                strict=True, pattern=cls.spelled_by.anchored()
+            ),
+            serialization=core_schema.plain_serializer_function_ser_schema(cls.spelled_by.encode),
+        )
 
 
 class NominalSpelling[V: NominalText](SpelledText):
@@ -1658,6 +1709,12 @@ class NominalSpelling[V: NominalText](SpelledText):
     @classmethod
     def from_text(cls, value: str) -> V:
         return cls.value_type(super().from_text(value))
+
+    @classmethod
+    def decode(cls, value: object) -> V:
+        if not isinstance(value, str):
+            raise MalformedRecord(f"Expected text for {cls.__name__}")
+        return cls.from_text(value)
 
     @classmethod
     def encode(cls, value: object) -> str:
@@ -1799,6 +1856,55 @@ class InputId(Id128):
 
 class SlotId(Id128):
     """The consumed tool slot, distinct from the input that produced it."""
+
+
+class GoalWaitId(Id128):
+    """One recorded dependency wait for a goal."""
+
+
+class AttemptId(Id128):
+    """One reserved execution attempt of a goal generation."""
+
+
+@dataclass(frozen=True)
+class NoAttemptId(NullMember):
+    """A ready goal generation has not reserved an attempt."""
+
+
+class AttemptToken(Id128):
+    """The authority held by the owner of a reserved attempt."""
+
+
+class RetryDecisionId(Id128):
+    """One explicit authorization to retry goal work."""
+
+
+class PageRequestId(Id128):
+    """One request for an earlier transcript page."""
+
+
+class RestartId(Id128):
+    """One queued owner restart."""
+
+
+class RoomTicket(Id128):
+    """One storage-room claim."""
+
+
+class HuntId(Id128):
+    """One recorded commander hunt."""
+
+
+class ContextStoreId(Id128):
+    """The original context store shared by its recorded turns."""
+
+
+class ScratchName(Id128):
+    """A unique suffix for a disposable file."""
+
+
+class OwnerRequestKey(Id128):
+    """One original owner directive and the work serving it."""
 
 
 class Id128Text(NominalSpelling[Id128]):
@@ -2321,6 +2427,10 @@ class _ScalarDecoder[T, Target = object](ValueDecoder[T]):
 
     target: Target
 
+    @property
+    def accepts_null(self) -> bool:
+        return self.accepts(None)
+
     def decode(self, data: object) -> T:
         if self.accepts(data):
             return data
@@ -2376,10 +2486,6 @@ class _TextDecoder(_ExactScalarDecoder[str]):
     __slots__ = ()
     annotations = (str,)
     json_type = "string"
-
-    def accepts(self, data: object) -> TypeGuard[str]:
-        # RedecodesDeletedPhase removes nominal values from plain str fields.
-        return super().accepts(data) or isinstance(data, NominalText)
 
     def encode(self, value: str) -> str:
         return str(super().encode(value))
@@ -2571,6 +2677,10 @@ class _LiteralDecoder[T](_ChoiceDecoder[T]):
 class UnionDecoder[T](_ContextDecoder[T]):
     origins = (Union, types.UnionType)
     alternatives: tuple[ValueDecoder[T], ...]
+
+    @property
+    def accepts_null(self) -> bool:
+        return any(alternative.accepts_null for alternative in self.alternatives)
 
     def fits_wire(self, data: object) -> bool:
         return any(alternative.fits_wire(data) for alternative in self.alternatives)

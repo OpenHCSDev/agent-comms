@@ -20,7 +20,6 @@ from contextlib import contextmanager
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import TYPE_CHECKING, Self
-from uuid import uuid4
 
 from agent_comms.reason_codes import GivenReasonCode, NoDetail
 from agent_comms.attempt_states import UnknownOutcomeAttempt, UnsuccessfulTerminal
@@ -60,7 +59,7 @@ from .private_path import (
 from .private_send_stage import TriageNativeSend
 from .lifecycle_capability import Deferred
 from agent_comms.typed_table import RowNotFoundError
-from .field_codec import MalformedRecord, ThreadLookup
+from .field_codec import MalformedRecord, ScratchName, ThreadLookup
 from .input_disposition import InputDispositions
 from .locked_store import RegistryFile
 from .registration import Registration
@@ -384,7 +383,7 @@ class RecoveryMonitorCapability:
             names = frozenset(Registration(RegistryFile.path_in(root)).snapshot().threads)
             uncertain = uncertain or bool(inputs.unresolved(names).rows)
         if uncertain:
-            destination = root.with_name(f"{root.name}.unknown-{uuid4().hex}")
+            destination = root.with_name(f"{root.name}.unknown-{ScratchName.mint()}")
             root.rename(destination)
             raise RecoveryBlocked(
                 f"Check directory removed; uncertain work kept at {destination}; do not replay"
@@ -469,8 +468,7 @@ class RecoveryMonitorCapability:
             raise RecoveryBlocked("native attempt has no original input")
         terminal = PendingStopReason
         revision = MissingFile()
-        session = source.selected_session
-        if session is not None:
+        for session in source.selected_session.present():
             with expected_prompt_bindings(store, (source.input_id,)) as bindings:
                 binding = bindings.get(source.input_id)
                 if binding is None or binding.identity != source.identity:

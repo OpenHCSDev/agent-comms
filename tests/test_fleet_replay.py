@@ -23,6 +23,7 @@ from agent_comms.comms import Comms
 from agent_comms.external_transcript import ExternalTranscript
 from agent_comms.goal_actions import CreateProblemGoalAction
 from agent_comms.goals import CountCheckResult, OrderCheck
+from agent_comms.native_tool_call import ToolCallId
 from agent_comms.order_runs import MechanicalOrderRun
 from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.repo import Checkout
@@ -51,12 +52,12 @@ from agent_comms.todos import (
     UnmergedListedPullRequest,
 )
 from agent_comms.transcript_events import ToolStartTranscript
-from agent_comms.turn_item import NativeTurnId
+from agent_comms.turn_item import NativeItemId, NativeTurnId
 from agent_comms.work_branches import BranchDifference, SourceGrowth, UnpushedHead
 from conftest import declare_test_bus
 from fixture_git import IDENTITY
-from source_revision_fixture import SourceRepository
 from github_fixture import GitHubFixture
+from source_revision_fixture import SourceRepository
 
 pytest_plugins = ("github_fixture",)
 
@@ -354,11 +355,11 @@ class SpinningUnitSeed(IncidentSeed):
         for call in range(SpinningUnit.calls):
             transcript.finish(
                 turn_id=spinning_turn_id,
-                item_id=f"call-{call}",
+                item_id=NativeItemId(f"call-{call}"),
                 events=(
                     ToolStartTranscript(
                         position=0,
-                        tool_call_id=f"call-{call}",
+                        tool_call_id=ToolCallId(f"call-{call}"),
                         tool_name="bash",
                         timestamp=moved + 60 + call,
                     ),

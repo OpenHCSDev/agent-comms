@@ -29,6 +29,7 @@ from agent_comms.read_basis import (
 )
 from agent_comms.read_ledger import ReadLedger
 from agent_comms.routing import MessageRoute, TurnRouting
+from agent_comms.transcript_routes import DisplayText
 from agent_comms.session_file import RegistrySessionLocation
 from agent_comms.threads import Thread
 
@@ -205,7 +206,7 @@ def test_duplicate_and_newer_incarnations_sessions(tmp_path):
         edit.commit()
     routing = TurnRouting(reply=MessageRoute("alice", ("#team",)))
     old.transcripts.routes.record(str(session), ("two",), routing)
-    old.transcripts.routes.record_input_display(native_id, "original owner question")
+    old.transcripts.routes.record_input_display(native_id, DisplayText("original owner question"))
     live = setup(tmp_path / "live", 0)
     newer = replace(live.registry.require("alice"), created_at=20.0)
     live.registry.unregister("alice")

@@ -8,7 +8,6 @@ from contextlib import ExitStack, contextmanager
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Annotated
-from uuid import uuid4
 
 from pydantic import JsonValue
 
@@ -218,7 +217,9 @@ class PiDurableBackend(AgentBackend, Compacts):
 
     @classmethod
     def new_location(cls, root, worktree):
-        return DurableDatabase(str(Path(root).absolute() / 'durable-sessions' / f'{uuid4().hex}.sqlite3'))
+        return DurableDatabase(str(
+            Path(root).absolute() / 'durable-sessions' / f'{field_codec.ScratchName.mint()}.sqlite3'
+        ))
 
     async def open(self, thread):
         async with self.lock:

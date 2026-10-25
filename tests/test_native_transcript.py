@@ -1,6 +1,5 @@
 """Saved Pi boundary, bounded readers and presentation roundtrips."""
 
-from conftest import transcript_records
 import json
 from dataclasses import fields
 
@@ -8,6 +7,7 @@ import pytest
 
 from agent_comms.field_codec import FieldCodec, MalformedRecord
 from agent_comms.native_entries import MessageEntry, NativeEntry, TranscriptProjection, UnknownEntry
+from agent_comms.native_tool_call import ToolCallId
 from agent_comms.native_transcript import NativeTranscript
 from agent_comms.pi_payloads import UserMessage
 from agent_comms.transcript_events import (
@@ -19,7 +19,8 @@ from agent_comms.transcript_events import (
     TranscriptEvent,
     UserTranscript,
 )
-
+from agent_comms.turn_item import NativeItemId
+from conftest import transcript_records
 
 STAMPED = 1790812800.0  # "2026-10-01T00:00:00.000Z", the time every fixture row records
 
@@ -100,9 +101,9 @@ def test_corrupt_complete_entries_raise_in_every_read_direction(tmp_path, raw, e
         # Codec data: a byte offset and a provider item ID are both recorded positions.
         transcript_records.event(AssistantTranscript, "answer", position=0),
         transcript_records.event(ThinkingTranscript, "reason", position=512),
-        transcript_records.event(NoticeTranscript, "compacted", position="item-1"),
-        transcript_records.event(ToolStartTranscript, position=1024, tool_call_id="a", tool_name="read", raw_input={"path": "x"}),
-        transcript_records.event(ToolEndTranscript, position=1024, tool_call_id="a", tool_name="read", text="contents", ok=False),
+        transcript_records.event(NoticeTranscript, "compacted", position=NativeItemId("item-1")),
+        transcript_records.event(ToolStartTranscript, position=1024, tool_call_id=ToolCallId("a"), tool_name="read", raw_input={"path": "x"}),
+        transcript_records.event(ToolEndTranscript, position=1024, tool_call_id=ToolCallId("a"), tool_name="read", text="contents", ok=False),
     ],
 )
 def test_snapshot_family_roundtrip_has_only_owned_fields(event):

@@ -16,6 +16,7 @@ from agent_comms.storage_room import (
 from agent_comms.storage_rules import StorageRule, shell_storage_effects
 from agent_comms.thread_status import RunningThreadStatus
 from agent_comms.threads import Thread
+from agent_comms.field_codec import RoomTicket
 
 
 def copied_root(tmp_path):
@@ -85,12 +86,13 @@ def test_waiting_sibling_wins_status_without_an_activity_copy(tmp_path):
     rule = comms.registry.storage_rule
     rule.room_ledger.root.mkdir(parents=True)
     thread = comms.registry.require('gate-one')
+    ticket = RoomTicket.mint()
     with rule.room_ledger.writing() as db:
-        RoomClaim('waiting', str(comms.root), thread.incarnation,
+        RoomClaim(ticket, str(comms.root), thread.incarnation,
             ProcessIdentity.capture(os.getpid()), (TestGateRoomWork,), WaitingRoomPhase(), 0).insert(db)
     original = comms.agents.activity.current(thread.name)
     observed = comms.agents.activity_of(thread.name, snapshot=comms.registry.snapshot())
     assert observed.state == ActivityState.WAITING_FOR_ROOM
     assert comms.agents.activity.current(thread.name) == original
-    rule.room_ledger.release('waiting')
+    rule.room_ledger.release(ticket)
     assert comms.agents.activity_of(thread.name, snapshot=comms.registry.snapshot()).state != observed.state

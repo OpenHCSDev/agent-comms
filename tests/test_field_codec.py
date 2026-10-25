@@ -9,6 +9,10 @@ from pydantic import JsonValue
 
 import pytest
 
+from agent_comms.native_tool_call import ToolCallId
+from agent_comms.transcript_events import ToolStartTranscript
+from agent_comms.turn_item import NativeItemId
+
 from agent_comms.declared_family import DeclaredFamily, UnknownFamilyMember
 from agent_comms.field_codec import (
     DeclaredWireType,
@@ -60,6 +64,17 @@ def test_construct_preserves_the_boundary_error_family(error, expected_type, exp
         FieldCodec.construct(Record, {})
     assert str(failure.value) == expected_text
     assert failure.value is error or failure.value.__cause__ is error
+
+
+def test_transcript_preserves_distinct_item_and_tool_call_identities() -> None:
+    event = ToolStartTranscript(
+        position=NativeItemId("item-1"), timestamp=1.0,
+        tool_call_id=ToolCallId("call-1"), tool_name="read",
+    )
+    decoded = FieldCodec.decode(ToolStartTranscript, FieldCodec.encode(event))
+    assert decoded == event
+    assert type(decoded.position) is NativeItemId
+    assert type(decoded.tool_call_id) is ToolCallId
 
 
 def test_registered_value_decoders_own_their_json_schema() -> None:
@@ -782,10 +797,10 @@ def test_saved_tool_start_decodes_its_own_tool_tag_and_nullable_arguments() -> N
     event = transcript_records.event(
         ToolStartTranscript,
         position=0,
-        tool_call_id="call-1",
+        tool_call_id=ToolCallId("call-1"),
         tool_name="comms_send",
         raw_input=arguments,
-        tool=ToolDeclaration.record("comms_send", arguments, call_id="case"),
+        tool=ToolDeclaration.record("comms_send", arguments, call_id=ToolCallId("case")),
     )
     encoded = FieldCodec.encode(event)
     assert isinstance(encoded, dict)
@@ -999,8 +1014,13 @@ class _NominalIdentityRow:
 
 def test_nominal_ids_roundtrip_preserves_wire_schema_and_refuses_wrong_kind() -> None:
     value = Id128.mint()
-    row = _NominalIdentityRow(value, value, value, TurnId(value))
-    wire = {"nominal": str(value), "annotated": str(value), "plain": str(value), "turn": str(value)}
+    row = _NominalIdentityRow(value, value, "plain text", TurnId(value))
+    wire = {
+        "nominal": str(value),
+        "annotated": str(value),
+        "plain": "plain text",
+        "turn": str(value),
+    }
     encoded = FieldCodec.encode(row)
     assert encoded == wire
     assert all(type(item) is str for item in encoded.values())
@@ -1028,7 +1048,7 @@ def test_nominal_ids_roundtrip_preserves_wire_schema_and_refuses_wrong_kind() ->
 
     assert FieldCodec.encode(SpecializedTurnId(value), TurnId) == str(value)
     with pytest.raises(MalformedRecord):
-        FieldCodec.encode(_NominalIdentityRow(value, value, value, InputId(value)))
+        FieldCodec.encode(_NominalIdentityRow(value, value, "plain text", InputId(value)))
     with pytest.raises(MalformedRecord):
         FieldCodec.encode("not-an-id", Annotated[str, Id128Text])
 

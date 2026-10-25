@@ -1,8 +1,6 @@
 """Native stories use one copied Todo record, including a resent send-back."""
 
 
-from agent_comms.repository_name import RepositoryName
-
 from dataclasses import replace
 
 import pytest
@@ -10,18 +8,36 @@ import pytest
 from agent_comms.comms import wire
 from agent_comms.field_codec import FieldCodec, MessageId
 from agent_comms.goal_actions import CreateProblemGoalAction, OrderGoalAction
+from agent_comms.installer.backup import StoreBackup
+from agent_comms.native_tool_call import ToolCallId
 from agent_comms.order_story import FleetStory, OrderStory
+from agent_comms.order_tools import (
+    CommsChangeProblemTool,
+    CommsFleetStoryTool,
+    CommsOrderStoryTool,
+    CommsOrderTool,
+    CommsTodoCreateTool,
+    CommsVerdictTool,
+)
 from agent_comms.recorded_time import RecordedEventTime
+from agent_comms.repository_name import RepositoryName
+from agent_comms.threads import Thread
 from agent_comms.todos import (
-    AcceptedVerdict, DoneTodoState, OrderMessage, ReleaseTodo, SendBackVerdict, StrikeReason,
-    StrikeTodo, TodoConflict, TodoError, UnorderedProblemOrder, WithdrawTodo,
+    AcceptedVerdict,
+    DoneTodoState,
+    OrderMessage,
+    ReleaseTodo,
+    SendBackVerdict,
+    StrikeReason,
+    StrikeTodo,
+    TodoConflict,
+    TodoError,
+    UnorderedProblemOrder,
+    WithdrawTodo,
 )
 from agent_comms.tool_caller import NoThreadCaller, ThreadCaller
-from agent_comms.order_tools import CommsChangeProblemTool, CommsFleetStoryTool, CommsOrderStoryTool, CommsTodoCreateTool, CommsOrderTool, CommsVerdictTool
-from agent_comms.installer.backup import StoreBackup
-from test_todos import order
 from source_revision_fixture import SourceRepository
-from agent_comms.threads import Thread
+from test_todos import order
 
 
 def board_read(tool, comms, caller, thread="lead"):
@@ -51,10 +67,10 @@ def test_order_story_copied_bus_strike_and_send_back_once(comms, tmp_path):
                                                 evidence=(todo.order.checked().owner,)))
     todo = comms.goals.todos.get("P1")
     caller.invoke(CommsVerdictTool(problem="P1", operation=AcceptedVerdict(
-        todo.revision, actor, todo.held(), "accepted-call", quote="Repair the existing record owner")), comms)
+        todo.revision, actor, todo.held(), ToolCallId("accepted-call"), quote="Repair the existing record owner")), comms)
     todo = comms.goals.todos.get("P1")
     sent_back = SendBackVerdict(
-        todo.revision, actor, todo.held(), "bad-call", StrikeReason(reason),
+        todo.revision, actor, todo.held(), ToolCallId("bad-call"), StrikeReason(reason),
         evidence=(todo.order.checked().owner,))
     before_send_back = comms.bus.bus.revision()
     caller.invoke(CommsVerdictTool(problem="P1", operation=sent_back), comms)
