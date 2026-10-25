@@ -6,8 +6,8 @@ FieldCodec into the PendingProblemOrder used by native tools; its other fields
 name the problems and explain the defect. No rendered instructions are parsed.
 Sending to the unit that already holds the problem replaces its order; without --clean that is a send-back strike.
 
-Incompetence is not tolerated: a unit is fired from a task, not berated about it.
-Two strikes on one task: the task is taken away and reassigned (`fire`). A strike recorded in
+Repeated misses call for diagnosis, not automatic reassignment.
+Strikes measure repeated misses and trigger scrutiny; they never release the task. A strike recorded in
 error is voided with `unstrike`, never deleted: it stays readable beside its void and stops
 counting. An order sent in error is retired with `withdraw`: its problem closes with no strike.
 Nothing here judges code; it refuses orders that leave a unit room to interpret. The unit never
@@ -722,11 +722,9 @@ class Commander(CommanderContext):
                answers: tuple[MessageReference, ...] = ()) -> None:
         """Publish a strike Core already recorded on the task's Todo to #comms."""
         n = todo.strikes_against(self.comms.registry.require(unit).incarnation)
-        taken = f", {todo.id} taken away" if todo.holder != unit else ""
-        line = (f'{time.strftime("%Y-%m-%d")} {strike.at.clock()} {unit} (strike {n} on {todo.id}'
-                f'{taken}): {strike.reason}')
+        line = f'{time.strftime("%Y-%m-%d")} {strike.at.clock()} {strike.notice(todo)}'
         self.on_record(line, 'Strike', VerdictAudience.of(unit, todo), answers)
-        print(f'{unit}: {n} strike(s) on {todo.id}{taken}')
+        print(f'{unit}: {n} strike(s) on {todo.id}')
 
     def hunt(self, where, why, sent):
         """Record the commander's source read, whether or not it became an order.

@@ -516,12 +516,10 @@ class UnownedWheelSpin(IndependentStandingRule, UndatedStandingRule, FamilyScan)
                 if unit.incarnation not in owners] if unowned else []
         found = []
         for todo in unowned:
-            for unit in idle:
-                if not todo.strikes_against(unit.incarnation):
-                    idle.remove(unit)
-                    found.append(ReassignedWheelSpin(todo, ReusedWorkDispatch.for_unit(
-                        ReissuedOrderGoalAction.for_todo(todo, commander), unit)))
-                    break
+            if idle:
+                unit = idle.pop(0)
+                found.append(ReassignedWheelSpin(todo, ReusedWorkDispatch.for_unit(
+                    ReissuedOrderGoalAction.for_todo(todo, commander), unit)))
         covered = {rule.todo.id for rule in (*retained, *found)}
         return (*retained, *found,
                 *(WaitingUnownedWheelSpin(todo) for todo in rows if todo.id not in covered))
@@ -711,6 +709,24 @@ class UnitDeaf(InboxUnavailable):
         return (f"UNDEAFEN {self.unit}: it has read none of its inbox since "
                 f"{RecordedEventTime(self.since - self.seconds).clock()}, so every order to it"
                 " waits undelivered -> read its drain diagnostic and fix that owner")
+
+
+@dataclass(frozen=True)
+class Scrutinize(ReasonedStandingRule, UndatedStandingRule):
+    text = ("Scrutinize {why} -> read the unit's trail and diff, name the cause, "
+            "and order the fix to the cause")
+
+    @classmethod
+    def reason(cls, comms: Comms, commander: str) -> str | None:
+        actor = comms.registry.require(commander).incarnation
+        named = ", ".join(
+            f"{held.owner} {todo.id} {count} strikes"
+            for todo in comms.goals.todos.held_for_commander(actor)
+            for held in todo.current_holder.current_assignments()
+            for count in (todo.strikes_against(held.owner_identity),)
+            if count >= 2
+        )
+        return named or None
 
 
 @dataclass(frozen=True)

@@ -2607,10 +2607,6 @@ class PendingProblemOrder(Pending, DeliverableProblemOrder):
         problems.extend(reassign.refusals(holders))
         if problems:
             sys.exit('Refused order:\n  ' + '\n  '.join(problems))
-        holder = context.comms.registry.require(unit).incarnation
-        fired = tuple(listed[pid] for pid in group if pid in listed and listed[pid].struck_out(holder))
-        self.run.require_assignment(context.comms.registry.require(unit).incarnation,
-                                    fired, ProblemGoalOrder.StrikeLimit)
 
     def message(self, context: CommanderContext, document: OrderFile, unit: str, group: Sequence[str],
                 replacing: bool, reassign: Reassignment) -> str:
@@ -3516,8 +3512,11 @@ class StrikeTodo(CitedStrike, StoryEvent):
     def recorded(self, struck: Todo) -> Todo:
         return struck
 
-    def after_write(self, db: sqlite3.Connection, result: Todo, store: TodoStore) -> Todo:
-        return result.current_holder.after_strike(db, result, store, self)
+    def notice(self, changed: Todo) -> str:
+        count = changed.strikes_against(self.previous.owner_identity)
+        return (f"Core strike {count} on {changed.id} order {changed.order.checked().id}: "
+                f"{self.previous.owner} {self.reason}; read {self.previous.owner}'s trail "
+                "and diff and diagnose why it keeps missing")
 
     def story_text(self) -> str:
         return f"{self.actor.name} struck {self.previous.owner}: {self.reason}"
@@ -3576,10 +3575,7 @@ class FailedCheckStrike(StrikeTodo):
     def after_record(self, goals: Goals, changed: Todo) -> None:
         if changed.revision == self.expected_revision:
             return
-        count = changed.strikes_against(self.previous.owner_identity)
-        line = (f"Core strike {count} on {changed.id} order {self.order_id}: "
-                f"{self.previous.owner} {self.reason}"
-                + (f"; {changed.id} taken away" if not changed.holder else ""))
+        line = self.notice(changed)
         goals.bus.publisher.publish_ordinary(
             Message(sender=changed.creator, target=CommsTag.channel(), body=line,
                     type=InfoKind),
@@ -4258,17 +4254,7 @@ class ReleaseTodo(TodoOperation, StoryEvent, TodoHolder):
 
     def restored(self, current: Todo) -> Todo:
         """Unstrike and the watcher restore this recorded assignment through the same write."""
-        if current.struck_out(self.previous.owner_identity):
-            return current
         return replace(current, assignment=self.previous)
-
-
-@dataclass(frozen=True)
-class LimitReleaseTodo(ReleaseTodo):
-    """The strike limit declares its release's meaning when it records it."""
-
-    def after_void(self, voided: Todo) -> Todo:
-        return self.restored(voided)
 
 
 @dataclass(frozen=True)
@@ -4774,11 +4760,6 @@ class Todo(TodoStoreRows, TypedTable):
     def strikes_against(self, unit: ThreadIncarnation) -> int:
         """The live strikes recorded against ``unit`` on this Todo."""
         return self.history.facts_for(self.id).strike_count(unit)
-
-    def struck_out(self, unit: ThreadIncarnation) -> bool:
-        """The unit has taken its problem goal's StrikeLimit live strikes here; only mechanical
-        orders reach it."""
-        return self.strikes_against(unit) >= ProblemGoalOrder.StrikeLimit
 
     def require_result(self, result: Todo) -> None:
         if self != result:
