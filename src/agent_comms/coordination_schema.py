@@ -38,9 +38,6 @@ class CoordinatorRow(CoordinatorTable, TypedTable, declared_name=None):
     """Coordinator rows apply their state families to the SQL they declare."""
 
     @classmethod
-    def schema_objects(cls, *, if_not_exists: bool = False) -> dict[str, str]:
-        context = CoordinatorVocabulary.schema_context()
-        return {
-            name: sql.format(**context)
-            for name, sql in super().schema_objects(if_not_exists=if_not_exists).items()
-        }
+    def _sql(cls, expression: str) -> str:
+        """Render state vocabulary wherever the row renders a SQL expression."""
+        return super()._sql(expression).format(**CoordinatorVocabulary.schema_context())

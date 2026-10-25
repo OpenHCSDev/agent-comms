@@ -42,6 +42,7 @@ from agent_comms.coordination_errors import (
     StaleRevision,
 )
 from agent_comms.coordination_results import AlreadyApplied, Applied
+from agent_comms.coordination_schema import CoordinatorTable
 from agent_comms.coordination_snapshot import RecoverySnapshot
 from agent_comms.coordination_tables.assignments import WakeAssignment
 from agent_comms.coordination_tables.attempts import ReplayFact
@@ -73,6 +74,7 @@ from agent_comms.recovery_states import FailedRecovery
 from agent_comms.response_acknowledgement import canonical_publication_key
 from agent_comms.selected_source_batch import SelectedSource
 from agent_comms.turn_failure import ProviderRetryExhausted
+from agent_comms.typed_table import SQLiteForeignKeys
 from agent_comms.wake_policy import (
     BoundedTriageWake,
     FullWake,
@@ -479,6 +481,18 @@ def test_token_digest_is_global_and_only_digest_persists(db_path: Path) -> None:
             db.session._connection.execute("SELECT owner_token_digest FROM attempts").fetchone()[0]
             == hashlib.sha256(token.encode()).hexdigest()
         )
+
+
+def test_coordinator_family_rebuild_preserves_declared_schema_and_execution(db_path: Path) -> None:
+    with ready(db_path, origin=AcpOrigin) as db:
+        original = db.get("exec")
+        with SQLiteForeignKeys.relations_suspended(db.session._connection):
+            with db.session.writing() as connection:
+                for row in CoordinatorTable.schema_rows():
+                    row.rebuild(connection)
+                CoordinatorTable.require_schema(connection)
+                assert connection.execute("PRAGMA foreign_key_check").fetchall() == []
+        assert db.get("exec") == original
 
 
 def test_settled_snapshot_encodes_recovery_kind_separately_from_table(db_path: Path) -> None:
