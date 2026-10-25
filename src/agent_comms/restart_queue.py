@@ -357,8 +357,7 @@ def _start_watcher(root: Path, target: RestartTarget) -> SpawnedProcess:
 def status(comms: Comms, name: str) -> list[QueuedRestart]:
     owner = comms.registry.require(name).incarnation.require_recorded()
     queue = RestartQueue(comms.root / DIRECTORY)
-    with queue.guarded_write():
-        queue.settle_interrupted()
+    with queue.guarded_read():
         return list(queue.history(owner))
 
 

@@ -55,15 +55,14 @@ def test_dead_owner_restart_settles_before_selection_checks(private_comms, dead_
         )]
 
 
-@pytest.mark.parametrize("command", (queue.status, queue.cancel))
-def test_queue_commands_settle_dead_pending_owner_without_a_watcher(
-    private_comms, dead_owner_restart, command,
+def test_cancel_settles_dead_pending_owner_without_a_watcher(
+    private_comms, dead_owner_restart,
 ):
     store = queue.RestartQueue(private_comms.root / queue.DIRECTORY)
     owner = dead_owner_restart.selection.identity.incarnation.require_recorded()
     with store.guarded_write():
         store.save(dead_owner_restart)
-    command(private_comms, 'worker')
+    queue.cancel(private_comms, 'worker')
     with store.guarded_read():
         assert not store.active_path(owner).exists()
         assert list(store.history(owner)) == [replace(
