@@ -17,7 +17,7 @@ runtime answers every RuntimeProbe but a TargetProbe with its own installer, so 
 reads Core at REV and --check fails when it lacks one of those probes or declares its
 fields differently.
 
-    python tools/module_layers.py > docs/layout/MODULE_LAYERS.md
+    python tools/module_layers.py
     python tools/module_layers.py --check [--base REV] [--report FILE]
 """
 
