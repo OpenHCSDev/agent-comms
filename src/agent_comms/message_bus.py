@@ -62,7 +62,8 @@ if TYPE_CHECKING:
 
 
 class HeldBusWrite:
-    """Maintenance delays an unattempted publication, never retries a write."""
+    """A CLI process's publication waits out maintenance on its own loop, never retrying a
+    write; a service's worker thread refuses instead (MessageBus.write_open)."""
 
     def write_when_open[Result](self, comms: Comms, operation: Callable[[], Result]) -> Result:
         return asyncio.run(comms.bus.when_open(operation))
