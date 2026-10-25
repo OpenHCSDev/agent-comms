@@ -14,6 +14,8 @@ from .native_arguments import SelectedModel
 
 if TYPE_CHECKING:
     from .backend import TurnSession
+    from .goal_attempts import GoalAttemptStore, LaunchPermit
+    from .goal_failure_observation import FailedTurnObservation
     from .turn_output import TurnOutput
 
 
@@ -51,7 +53,12 @@ class TurnFailure(DeclaredFamily):
         raise TypeError("Only a retryable provider failure has a retry delay")
 
     @classmethod
-    def settle_attempt(cls, permit, store, observation) -> None:
+    def settle_attempt(
+        cls,
+        permit: LaunchPermit,
+        store: GoalAttemptStore,
+        observation: FailedTurnObservation,
+    ) -> None:
         """A failed attempt blocks its goal until someone retries it."""
         with suppress(StaleAttemptError):
             permit.reservation.fail(store, cls.declared_name, observation=observation)
@@ -195,25 +202,20 @@ class NativeLaunchInvalid(BackendFailed):
     """The configured native launch could not be acquired."""
 
 
-class NativeChildSignaled(TerminalFailure):
+class NativeChildSignaled(TurnFailure):
     """A signal ended the native child: the stop an operator gives, never a backend failure.
 
     Declared last, so any failure the turn already recorded keeps precedence.
     """
 
-    default_text = "Pi RPC child was stopped by a signal."
-    # Pi's rpc-mode shutdown exits 128 + SIGTERM or 128 + SIGHUP; an unhandled signal is negative.
-    handled_exits: ClassVar[frozenset[int]] = frozenset(
-        {128 + signal.SIGTERM, 128 + signal.SIGHUP})
+    # Pi's rpc-mode shutdown exits 128 + SIGTERM or 128 + SIGHUP (rpc-mode.js:296).
+    stop_exits: ClassVar[frozenset[int]] = frozenset({128 + signal.SIGTERM, 128 + signal.SIGHUP})
 
     @classmethod
-    def ended_by(cls, returncode: int | None) -> bool:
-        return returncode is not None and (returncode < 0 or returncode in cls.handled_exits)
-
-    @classmethod
-    def detected(cls, session: TurnSession, transport_ok: bool) -> bool:
-        return cls.ended_by(session.native.proc.returncode)
-
-    @classmethod
-    def settle_attempt(cls, permit, store, observation) -> None:
+    def settle_attempt(
+        cls,
+        permit: LaunchPermit,
+        store: GoalAttemptStore,
+        observation: FailedTurnObservation,
+    ) -> None:
         permit.stop(store)

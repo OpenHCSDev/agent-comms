@@ -12,7 +12,7 @@ import pytest
 
 from agent_comms import agent_events as events
 from agent_comms.acp import CommsAgent
-from agent_comms.child_process import ProcessIdentity
+from agent_comms.child_process import ChildOutcome, ProcessIdentity
 from agent_comms.comms import wire
 from agent_comms.field_codec import FieldCodec
 from agent_comms.goal_actions import (
@@ -152,20 +152,22 @@ async def test_turn_failing_under_install_hold_is_stopped_not_blocked(execution_
     assert failure_count(comms) == 0
 
 
-def exit_of(script: str) -> int:
-    """The return code a real child process leaves behind."""
-    return subprocess.run([sys.executable, "-c", script], timeout=30).returncode
+def stopped_after(script: str) -> bool:
+    """Whether the outcome a real child process leaves behind reports a stop."""
+    code = subprocess.run([sys.executable, "-c", script], timeout=30).returncode
+    reports: list[None] = []
+    ChildOutcome.from_returncode(code).report_stopped(
+        lambda: reports.append(None), NativeChildSignaled.stop_exits)
+    return bool(reports)
 
 
-def test_only_a_signal_ends_the_native_child_as_signaled():
-    """A kill, and Pi's own SIGTERM/SIGHUP shutdown exits, are signals; a crash is not."""
-    killed = exit_of("import os, signal; os.kill(os.getpid(), signal.SIGKILL)")
-    pi_sigterm = exit_of(f"raise SystemExit({128 + signal.SIGTERM})")
-    assert killed == -signal.SIGKILL
-    assert NativeChildSignaled.ended_by(killed)
-    assert NativeChildSignaled.ended_by(pi_sigterm)
-    assert not NativeChildSignaled.ended_by(exit_of("raise SystemExit(1)"))
-    assert not NativeChildSignaled.ended_by(None)
+def test_only_a_signal_ends_the_native_child_as_stopped():
+    """A kill, and Pi's own SIGTERM/SIGHUP shutdown exits, are stops; a crash is not."""
+    assert stopped_after("import os, signal; os.kill(os.getpid(), signal.SIGKILL)")
+    assert stopped_after(f"raise SystemExit({128 + signal.SIGTERM})")
+    assert stopped_after(f"raise SystemExit({128 + signal.SIGHUP})")
+    assert not stopped_after("raise SystemExit(1)")
+    assert not stopped_after("raise SystemExit(0)")
 
 
 @pytest.mark.asyncio
