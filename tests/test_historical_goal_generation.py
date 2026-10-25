@@ -48,7 +48,7 @@ def test_carried_blocked_goal_requires_explicit_retry_preserving_unknown(tmp_pat
     # checks. This is a new unreserved generation, not evidence of no past run.
     store.create_goal(goal.id)
     assert (comms.root / 'registry.json').read_bytes() == original_registry
-    reopened = GoalAttemptStore(comms.root / 'goal-private')
+    reopened = GoalAttemptStore.at(comms.root / 'goal-private')
     assert reopened.require_generation(goal.id).lifecycle == ReadyGeneration()
     expect = GoalPrecondition(goal_id=goal.id, expected_goal=goal,
                               expected_owner=thread.process_identity)
