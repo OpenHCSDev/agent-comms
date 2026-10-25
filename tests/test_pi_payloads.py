@@ -104,7 +104,7 @@ def test_known_nested_payload_has_one_typed_authority():
     )
     assert isinstance(event, MessageEnd)
     assert isinstance(event.message, AssistantMessage)
-    assert event.message.content == (
+    assert event.message.parts == (
         TextContent(text="done"),
         ToolCallContent(id="call", name="read", arguments={"path": "a"}),
     )

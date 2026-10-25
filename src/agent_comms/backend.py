@@ -258,8 +258,8 @@ class NativeSession(MroDispatch, ABC):
         self.started_during_abort: list[events.FollowingInputStarted] = []
         self.finished = self.skip = False
 
-    def accept_tool_round(self, message):
-        self.tool_socket.announce(message.content)
+    def accept_tool_round(self, message: AssistantMessage) -> None:
+        self.tool_socket.announce(message.parts)
 
     def accept_final_message(self, message: AssistantMessage) -> None:
         """A turn that only streams its output takes no answer from the final message."""

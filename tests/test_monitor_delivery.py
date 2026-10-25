@@ -409,7 +409,7 @@ def test_only_commanded_sessions_reply_to_their_delivered_senders(comms):
     from agent_comms.runtime_updates import FinishedItem, ReplyingThreadOutput
     from agent_comms.thread_execution import ExternalThreadExecution
     from agent_comms.transcript_events import AssistantTranscript
-    from agent_comms.turn_item import NativeTurnId
+    from agent_comms.turn_item import NativeItemId, NativeTurnId
 
     lead, unit = (comms.registry.declare(Thread(
         name, frozenset(), "/tmp", execution=ExternalThreadExecution)) for name in ("lead", "unit"))
@@ -418,7 +418,7 @@ def test_only_commanded_sessions_reply_to_their_delivered_senders(comms):
         output = ReplyingThreadOutput.for_comms(comms.transcripts.external(speaker.name), comms)
         output.delivered_targets((sender.name,))
         turn = NativeTurnId(f"{speaker.name}-turn")
-        output.publish_item(FinishedItem(turn, "a", (AssistantTranscript(
+        output.publish_item(FinishedItem(turn, NativeItemId("a"), (AssistantTranscript(
             f"{speaker.name} answers", timestamp=1.0, position="a"),)))
         output.end_turn(turn)
     assert comms.bus.pending_count("unit") == 0

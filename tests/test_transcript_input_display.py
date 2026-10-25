@@ -13,9 +13,9 @@ from agent_comms.acp_extension import TranscriptSnapshotUpdate, decode_updates
 from agent_comms.comms import wire
 from conftest import installed_comms
 from agent_comms.native_entries import TranscriptProjection
-from agent_comms.pi_payloads import PiMessage
+from agent_comms.pi_payloads import PiMessage, UserMessage
 from agent_comms.threads import Thread
-from agent_comms.transcript_routes import DisplayText, NoDisplayText
+from agent_comms.transcript_routes import DisplayText, InputDisplay, NoDisplayText, SentInputText
 from bus_record_fixture import FIRST_INPUT_ID, SECOND_INPUT_ID, THIRD_INPUT_ID
 
 GOAL_PROMPT = (
@@ -131,6 +131,19 @@ async def test_acp_saved_transcript_replay_hides_only_owned_internal_input(tmp_p
         ]
     finally:
         await agent.shutdown()
+
+
+@pytest.mark.parametrize(("content", "expected"), [
+    ({}, False), ({"content": None}, False),
+    ({"content": ""}, True), ({"content": []}, True),
+])
+def test_empty_reported_content_is_not_omitted(content, expected):
+    message = UserMessage.from_wire({"role": "user", **content})
+    display = InputDisplay(
+        FIRST_INPUT_ID, NoDisplayText(), sent_text_digest=SentInputText("").digest,
+    )
+    assert message.matches_display(display) is expected
+    assert message.to_wire()["content"] == content.get("content")
 
 
 def test_adjacent_assistant_text_parts_preserve_one_markdown_message(tmp_path):
