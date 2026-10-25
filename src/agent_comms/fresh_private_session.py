@@ -9,6 +9,7 @@ from pathlib import Path
 from agent_comms.child_process import Platform
 from .field_codec import FieldCodec, RecordedTimestamp
 from .native_entries import SessionEntry
+from .pi_payloads import ReportedText
 from .native_failures import NativePiUnavailable
 from agent_comms.native_session_files import NativeSessionFiles
 from .native_session_files import PrivateSession, BusTranscriptFile
@@ -29,7 +30,7 @@ def create_fresh_private_session(
     session_dir = path.parent
     NativeSessionFiles.prepare_private_directory(session_dir)
     header = SessionEntry(
-        id=session_id, version=3, cwd=str(worktree),
+        id=session_id, version=3, cwd=ReportedText(str(worktree)),
         timestamp=RecordedTimestamp.written(datetime.now(UTC)),
     )
     encoded = FieldCodec.compact(header.to_wire(), allow_nan=False).encode() + b"\n"

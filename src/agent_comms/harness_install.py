@@ -51,7 +51,26 @@ def merge_json(path: Path, merge) -> None:
 
 @dataclass(frozen=True)
 class Harness(DeclaredFamily, affix="Harness"):
+    """A coding agent whose stored sessions a thread can be imported from."""
+
     home: Path
+
+    @classmethod
+    def retire_session(cls, session: str) -> SystemdUserService:
+        """Stop the bridge delivering to ``session`` before its thread moves to native Pi."""
+        raise RelationViolationError(
+            f"{cls.declared_name} sessions have no declared bridge to retire; re-home refused.")
+
+
+@dataclass(frozen=True)
+class PiHarness(Harness, declared_name="pi"):
+    """agent-comms' own native Pi: its sessions are already the format every thread runs, so an
+    import keeps one byte for byte. Install builds Pi as the native package, never as a harness."""
+
+
+@dataclass(frozen=True)
+class InstalledHarness(Harness):
+    """A harness install finds on this machine, links skills into and configures."""
 
     executable: ClassVar[str]
     skills_dir: ClassVar[str]
@@ -63,12 +82,6 @@ class Harness(DeclaredFamily, affix="Harness"):
         return tuple(
             member(home) for member in cls.members_with(cls) if shutil.which(member.executable)
         )
-
-    @classmethod
-    def retire_session(cls, session: str) -> SystemdUserService:
-        """Stop the bridge delivering to ``session`` before its thread moves to native Pi."""
-        raise RelationViolationError(
-            f"{cls.declared_name} sessions have no declared bridge to retire; re-home refused.")
 
     @staticmethod
     def bin(name: str) -> Path:
@@ -99,7 +112,7 @@ class Harness(DeclaredFamily, affix="Harness"):
         }
 
 
-class ConnectorClientHarness(Harness):
+class ConnectorClientHarness(InstalledHarness):
     """A harness whose MCP client can reach the connector as its bus threads."""
 
     @abstractmethod
@@ -154,7 +167,7 @@ class ClaudeCodeHarness(ConnectorClientHarness):
 
 
 @dataclass(frozen=True)
-class CodexHarness(Harness):
+class CodexHarness(InstalledHarness):
     """Codex is pushed to by a user service; the user starts it after binding a conversation."""
 
     executable: ClassVar[str] = "codex"
@@ -174,7 +187,7 @@ class CodexHarness(Harness):
 
 
 @dataclass(frozen=True)
-class OpenCodeHarness(Harness, declared_name="opencode"):
+class OpenCodeHarness(InstalledHarness, declared_name="opencode"):
     """OpenCode loads the TUI plugin, which attaches its session to the bus itself;
     run `opencode-comms`."""
 

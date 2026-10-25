@@ -61,7 +61,7 @@ def test_duplicate_callback_and_restart_preserve_failure_bytes(bound):
         store, FailedTurnResolution(BackendFailed), observation=observation
     )
     before = store.path.read_bytes()
-    for current in (store, GoalAttemptStore(store.root)):
+    for current in (store, GoalAttemptStore.at(store.root)):
         with pytest.raises(StaleAttemptError):
             observation.reservation.fail(
                 current, FailedTurnResolution(BackendFailed), observation=observation

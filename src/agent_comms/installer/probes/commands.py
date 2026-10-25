@@ -40,6 +40,16 @@ class CliOutput:
     def answer[Answer: CliResult](self, result: type[Answer]) -> Answer:
         """The declared result, whose own exit code agrees with the process's (a batch
         reports its failed targets with a nonzero exit), or Core's error raised."""
+        answer = self.decoded(result)
+        if answer.exit_code() != self.returncode:
+            raise CliUndecodableError(
+                f"exit {self.returncode} but its {result.__name__} "
+                f"answers exit {answer.exit_code()}: {self.stdout.strip()}"
+            )
+        return answer
+
+    def decoded[Answer](self, result: type[Answer]) -> Answer:
+        """Decode a selected-runtime report or raise its declared failure with stderr."""
         if self.returncode:
             try:
                 failure = CORE_ERROR.validate_json(self.stdout)
@@ -54,11 +64,6 @@ class CliOutput:
                 f"exit {self.returncode}, {malformed}; stdout: {self.stdout.strip()}; "
                 f"stderr: {self.stderr.strip()}"
             ) from malformed
-        if answer.exit_code() != self.returncode:
-            raise CliUndecodableError(
-                f"exit {self.returncode} but its {result.__name__} "
-                f"answers exit {answer.exit_code()}: {self.stdout.strip()}"
-            )
         return answer
 
 
@@ -76,10 +81,18 @@ class CliCommandProbe(RuntimeProbe[CliOutput]):
     def install_phase(self) -> CliProbePhase:
         return CliProbePhase(probe=type(self), arguments=self.arguments)
 
+    def entry(self) -> tuple[str, ...]:
+        return "-m", "agent_comms.cli"
+
+    def source(self) -> str:
+        """Ordinary CLI invocations supply no stdin; scripted probes override it."""
+        return ""
+
     def run(self) -> CliOutput:
         completed = subprocess.run(
-            (sys.executable, "-m", "agent_comms.cli", *self.arguments),
+            (sys.executable, *self.entry(), *self.arguments),
             capture_output=True,
+            input=self.source(),
             text=True,
             check=False,
         )

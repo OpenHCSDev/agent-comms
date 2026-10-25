@@ -167,7 +167,8 @@ class BlockedGeneration(Failed, GenerationState):
     def evidence(self, store: GoalAttemptStore, generation: Generation) -> GoalFailureEvidence:
         return generation.failure_evidence(store)
 
-    def idle_execution(self, source: GoalExecutionSource) -> GoalExecution:
+    def execution(self, source: GoalExecutionSource) -> GoalExecution:
+        """No permit launches a blocked attempt, so a running turn is never the goal's own."""
         return source.evidence.execution(source.goal.id)
 
     def continue_work(

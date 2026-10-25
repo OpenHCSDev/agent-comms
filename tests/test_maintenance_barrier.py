@@ -476,6 +476,28 @@ def test_the_goal_ledger_refuses_other_writers_once_the_drained_hold_is_retarget
     ledger.create_goal(GoalId.mint())
 
 
+def test_a_ledger_created_after_the_drain_is_refused_and_leaves_no_file(
+        tmp_path: Path, monkeypatch) -> None:
+    """Creation publishes the ledger by link before any store transaction exists, so it asks
+    the same drain-settled policy its writes inherit, and the carry check meets no new file."""
+    from agent_comms.goal_attempts import GoalAttemptStore
+    from agent_comms.launch_runtime import LaunchRuntime
+    from agent_comms.maintenance_barrier import HOLDER_NONCE
+
+    comms = wire(tmp_path)
+    directory = GoalAttemptStore.directory_in(comms.root)
+    directory.mkdir(mode=0o700)
+    gate = MaintenanceBarrier(comms.registry.store.path)
+    monkeypatch.delenv(HOLDER_NONCE, raising=False)
+    held = gate.retarget(gate.begin(MaintenanceOperator.current()),
+                         LaunchRuntime(tmp_path / "target/bin/python"))
+    with pytest.raises(RelationViolationError):
+        GoalAttemptStore.initialize(directory)
+    assert list(directory.iterdir()) == []
+    monkeypatch.setenv(HOLDER_NONCE, held.nonce)
+    assert GoalAttemptStore.initialize(directory).path.is_file()
+
+
 def test_every_carried_json_document_writes_through_the_maintenance_gate() -> None:
     """A durable JSON document gets the gate from its kind, as the registry does."""
     from agent_comms.catalog_store import ChannelCatalog
