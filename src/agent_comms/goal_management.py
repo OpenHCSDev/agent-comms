@@ -14,7 +14,7 @@ from contextlib import contextmanager
 from dataclasses import replace
 from functools import cached_property
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, TypeVar
 
 from agent_comms.field_codec import GoalId
 from .agent_activity import AgentActivity
@@ -30,7 +30,8 @@ from .goal_actions import (
 )
 from .goal_attempts import Generation, GoalAttemptStore
 from .errors import UnresolvedAttemptError
-from .goal_history import GoalHistoryEntry
+from .goal_history import GoalHistoryEntry, RecordedGoalHistory
+from .goal_scope import AllGoals, GoalScope, OneGoal
 from .goal_waits import (
     GoalInputReview,
     GoalWait,
@@ -73,6 +74,7 @@ from .todos import SendBackVerdict, StrikeReason, Todo, TodoBatch, TodoCommand, 
 from .turn_lease import TurnCompletion
 
 _LOG = logging.getLogger(__name__)
+HistoryReply = TypeVar("HistoryReply", bound=RecordedGoalHistory)
 
 
 class Goals:
@@ -139,7 +141,7 @@ class Goals:
         """The verdict and strike land on the Todo in the write that revises the holder's Goal."""
         holder = verdict.previous
         self.update_goal(holder.owner, SentBackOrderGoalAction(
-            expect=GoalPrecondition(goal_id=holder.generation), problem=problem, operation=verdict))
+            expect=GoalPrecondition(goal_id=OneGoal(holder.generation)), problem=problem, operation=verdict))
         sent_back: Todo = self.todos.get(problem)
         return sent_back
 
@@ -299,10 +301,20 @@ class Goals:
         )
 
     def goal_history(
-        self, name: str, *, goal_id: GoalId | None = None
+        self, name: str, scope: GoalScope = AllGoals()
     ) -> tuple[GoalHistoryEntry, ...]:
-        """Read durable revisions for one thread incarnation and optional goal ID."""
-        return self.registry.goal_history(name, goal_id=goal_id)
+        """Read durable revisions for one thread incarnation within ``scope``."""
+        return self.registry.goal_history(name, scope)
+
+    def recorded_history(
+        self, reply: type[HistoryReply], name: str, scope: GoalScope
+    ) -> HistoryReply:
+        """Revisions from goal history, execution failures from the attempt ledger."""
+        owner = self.registry.require(name).incarnation.wire_birth
+        return reply(
+            tuple(entry.recorded() for entry in self.goal_history(name, scope)),
+            self.open_goal_store().failures(owner, scope),
+        )
 
     def goal_wait(self, name: str) -> GoalWait:
         goal = self.registry.require(name).goal

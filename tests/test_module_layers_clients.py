@@ -12,11 +12,17 @@ def write(path: Path, text: str = "") -> None:
 
 def test_client_imports_root_reachability_and_name_missing_modules(tmp_path):
     core = tmp_path / "core"
-    write(core / "pyproject.toml", '[project.scripts]\nac = "agent_comms.cli:main"\n')
+    write(
+        core / "pyproject.toml",
+        '[project.scripts]\nac = "agent_comms.cli:main"\nguard = "agent_comms_hooks.guard:main"\n',
+    )
     write(core / "src/agent_comms/__init__.py")
     write(core / "src/agent_comms/cli.py")
     write(core / "src/agent_comms/ingress.py")
     write(core / "src/agent_comms/orphan.py")
+    write(core / "src/agent_comms/rules.py")
+    write(core / "src/agent_comms_hooks/guard.py", "from agent_comms_hooks import shared\n")
+    write(core / "src/agent_comms_hooks/shared.py", "from agent_comms.rules import Rule\n")
     client = tmp_path / "toad"
     write(
         client / "src/toad/session.py",
@@ -63,7 +69,7 @@ def test_client_names_must_be_defined_by_their_module(tmp_path):
 def wire_base(tmp_path: Path, wire: OutgoingWire) -> Path:
     """A base tree holding only the modules the outgoing wire names, copied from this tree."""
     base = tmp_path / "base"
-    write(base / "pyproject.toml")
+    write(base / "pyproject.toml", '[project.scripts]\nac = "agent_comms.cli:main"\n')
     write(base / "src/agent_comms/__init__.py")
     for entry in wire.imports:
         write(base / "src" / entry.path, (wire.checkout / entry.path).read_text())

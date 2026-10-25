@@ -35,7 +35,8 @@ from .declared_family import DeclaredFamily
 from .errors import RelationViolationError
 from .field_codec import FieldCodec, NullMember, WireName, WireValue, GoalId
 from .goal_actions import GoalAction
-from .goal_history import RecordedGoalRevision
+from .goal_history import RecordedGoalHistory
+from .goal_scope import AllGoals, OneGoal
 from .goals import Goal
 from .manual_compaction_bridge import compact_context
 from .owner_connection import OwnerConnection
@@ -142,8 +143,8 @@ class GoalReply(DeclaredReply):
 
 
 @dataclass(frozen=True)
-class GoalHistoryReply(DeclaredReply):
-    history: tuple[RecordedGoalRevision, ...]
+class GoalHistoryReply(RecordedGoalHistory):
+    pass
 
 
 @dataclass(frozen=True)
@@ -360,13 +361,13 @@ class DismissHistoricalInputsRuntimeRequest(ResultRuntimeRequest):
 
 @dataclass(frozen=True, kw_only=True)
 class GoalHistoryRuntimeRequest(ResultRuntimeRequest):
-    goal_id: GoalId | None = None
+    goal_id: OneGoal | AllGoals = AllGoals()
 
     async def result(self, ctx: RuntimeRequestContext) -> GoalHistoryReply:
-        history = await Coordination.run_worker(partial(
-            ctx.server.agent._comms.goals.goal_history, ctx.name, goal_id=self.goal_id,
+        return await Coordination.run_worker(partial(
+            ctx.server.agent._comms.goals.recorded_history,
+            GoalHistoryReply, ctx.name, self.goal_id,
         ))
-        return GoalHistoryReply(tuple(row.recorded() for row in history))
 
 
 class GoalSnapshotResultRuntimeRequest(ResultRuntimeRequest):

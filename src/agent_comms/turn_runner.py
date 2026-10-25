@@ -61,6 +61,7 @@ from .turn_input_source import TurnAcceptance
 from .turn_outcome import TurnOutcome
 from .turn_phase import CancellingPhase, TurnPhase
 from .turn_terminal import TurnInterruption
+from .goal_scope import OneGoal
 
 if TYPE_CHECKING:
     from . import pi_events as pi
@@ -247,7 +248,7 @@ class TurnRunner:
     def pause_active_goal(self, thread: Thread) -> None:
         for goal in thread.goal.active():
             self.comms.goals.update_goal(
-                thread.name, PausedGoalAction(expect=GoalPrecondition(goal_id=goal.id)),
+                thread.name, PausedGoalAction(expect=GoalPrecondition(goal_id=OneGoal(goal.id))),
                 actor=OwnerInvocable,
             )
 
