@@ -290,14 +290,17 @@ class PythonProgram(VersionedProgram, ForbidsCommands, BuildsOnCommands, TestsOn
     # The interpreter owns these flags. -m/-c begin its program, whose flags are not ours.
     interpreter_options: ClassVar[str] = 'bBdEhiIOPqRsuUvVW:xX:'
     long_options: ClassVar[tuple[str, ...]] = (
-        'help', 'help-env', 'help-xoptions', 'help-all', 'version', 'check-hash-based-pycs=',
+        '--help', '--help-env', '--help-xoptions', '--help-all', '--version', '--check-hash-based-pycs=',
     )
     execution_options: ClassVar[frozenset[str]] = frozenset({'-m', '-c'})
 
     def effects(self, args: list[str], cwd: Path) -> tuple[StorageEffect, ...]:
         end = next((index for index, word in enumerate(args) if word in self.execution_options), len(args))
         try:
-            _, arguments = getopt.getopt(args[:end], self.interpreter_options, self.long_options)
+            _, arguments = getopt.getopt(
+                args[:end], self.interpreter_options,
+                tuple(option.removeprefix('--') for option in self.long_options),
+            )
         except getopt.GetoptError as error:
             raise SelectedToolDenied(f'StorageRule: incomplete or unknown Python option: {error}') from error
         arguments += args[end:]
