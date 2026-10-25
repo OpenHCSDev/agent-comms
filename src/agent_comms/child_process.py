@@ -44,7 +44,7 @@ from typing import TYPE_CHECKING, Any, BinaryIO, ClassVar, NoReturn, TextIO
 from .declared_family import DeclaredFamily
 from .errors import RelationViolationError
 from .field_codec import FieldCodec, Id128, NullMember, RecordMember, SubclassUnion
-from .launch_runtime import INHERITED_ENVIRONMENT, LaunchRuntime
+from .launch_runtime import INHERITED_ENVIRONMENT, LaunchRuntime, RestoredRuntime
 from .sealed import Sealed
 
 if TYPE_CHECKING:
@@ -946,9 +946,11 @@ class ResidentManager(DeclaredFamily, affix="Manager"):
             raise UnmanagedHomeError(
                 f"{Path.home()} has no user manager to keep {unit} past its caller")
         environment = {name: os.environ[name] for name in inherited if name in os.environ}
+        # As under systemd-run, the unit gets exactly these variables, its import path included.
         with (stdin.open("rb") as given, stdout.open("wb") as answer, stderr.open("wb") as errors,
               SpawnedProcess.launch(command, cwd=cwd, env={**environment, **assigned},
-                                    stdin=given, output=answer, stderr=errors) as child):
+                                    stdin=given, output=answer, stderr=errors,
+                                    runtime=RestoredRuntime(Path(command[0]))) as child):
             returncode = child.process.wait()
         if returncode:
             raise subprocess.CalledProcessError(returncode, command)
