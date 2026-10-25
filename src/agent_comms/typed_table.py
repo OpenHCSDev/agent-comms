@@ -1990,12 +1990,10 @@ class TypedTable(
         cls._writable_fields(tuple(changed))
         fields = cls._writable_fields()
         stored = cls.stored_columns(db)
-        expressions = (
-            changed[item.name] if item.name in changed else item.rebuild_expression(stored)
+        selected = ", ".join(
+            f'{changed[item.name] if item.name in changed else item.rebuild_expression(stored)} AS {_identifier(item.wire_name)}'
             for item in fields
         )
-        selected = ", ".join(f'{expression} AS {_identifier(item.wire_name)}'
-                             for item, expression in zip(fields, expressions, strict=True))
         table = _identifier(cls.declared_name)
         temporary = _identifier(f"rebuild_{cls.declared_name}")
         db.execute(f"CREATE TEMP TABLE {temporary} AS SELECT {selected} FROM {table}")
