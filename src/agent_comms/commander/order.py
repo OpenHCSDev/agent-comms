@@ -83,6 +83,7 @@ from agent_comms.todos import (
     DeliveryEvidence,
     DeliverySource,
     DirectiveText,
+    HeadVerdict,
     LocatedProblemFinding,
     NoSuccessor,
     OperationDelivery,
@@ -824,6 +825,11 @@ class CommanderVerb(DeclaredVerb, affix="Verb"):
 
     def gate(self, ctx: Commander) -> None:
         ctx.comms.registry.require(self.who(ctx)).require_commander()
+
+    @classmethod
+    def review_allowed(cls, verdicts: tuple[type[HeadVerdict], ...]) -> bool:
+        """Ordinary verbs do not select a head verdict."""
+        return True
 
     def resolves_claim(self, unit: str, problem: str) -> bool:
         """Ordinary messages and actions do not judge a delivery claim."""

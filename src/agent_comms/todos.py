@@ -3066,6 +3066,11 @@ class TodoHolder(ABC):
                       operation: RecordOrderHeadVerdict) -> None:
         goals.todos.apply(current.id, operation.prepare(goals, current))
 
+    def after_strike(self, db: sqlite3.Connection, struck: Todo,
+                     store: TodoStore, strike: StrikeTodo) -> Todo:
+        """A released or absent holder has no work left to take away."""
+        return struck
+
     def held(self, current: Todo) -> Assignment:
         raise TodoError(f"{current.id} has no open order.")
 
@@ -3213,6 +3218,15 @@ class Assignment(TodoHolder):
             problem=current.id, operation=operation,
         ))
 
+    def after_strike(self, db: sqlite3.Connection, struck: Todo,
+                     store: TodoStore, strike: StrikeTodo) -> Todo:
+        if not struck.struck_out(self.owner_identity):
+            return struck
+        limit = StrikeReason(f"{self.owner} took {ProblemGoalOrder.StrikeLimit} strikes "
+                             f"on {struck.id}, so the task goes to another unit.")
+        return LimitReleaseTodo(struck.revision, strike.actor, self, limit, strike.at).write(
+            db, struck, store)
+
     def successor(self, proposed: Assignment, current: Todo) -> Assignment:
         if self.generation == proposed.generation and self.owner_identity != proposed.owner_identity:
             raise TodoConflict(current)
@@ -3337,7 +3351,7 @@ class TodoCommand(Command[CommandedTodo, CommandedTodo], DeclaredFamily, StorySo
 
     def after_write(self, db: sqlite3.Connection, result: Todo, store: TodoStore) -> Todo:
         for strike in self.implied_strikes():
-            result = strike.taken_away(db, result, store)
+            result = result.current_holder.after_strike(db, result, store, strike)
         return result
 
     def apply(self, current: Todo) -> Todo:
@@ -3489,7 +3503,8 @@ class StrikeTodo(CitedStrike, StoryEvent):
 
     def changed(self, current: Todo) -> Todo:
         self.actor.require_may_change(current)
-        current.require_assignment(self.previous)
+        if current.holder_state.previous_assignment() != self.previous:
+            raise TodoConflict(current)
         _text(self.reason, "Strike reason", 2000)
         StrikeReason(self.reason)
         if not self.history_events(current):
@@ -3503,18 +3518,7 @@ class StrikeTodo(CitedStrike, StoryEvent):
         return struck
 
     def after_write(self, db: sqlite3.Connection, result: Todo, store: TodoStore) -> Todo:
-        return self.taken_away(db, result, store)
-
-    def taken_away(self, db: sqlite3.Connection, struck: Todo, store: TodoStore) -> Todo:
-        """The strike that reaches StrikeLimit takes the task away in the same write, through
-        the release `order fire` records. The release states its own reason, the limit; the
-        strike already carries what the unit did."""
-        if not struck.struck_out(self.previous.owner_identity):
-            return struck
-        limit = StrikeReason(f"{self.previous.owner} took {ProblemGoalOrder.StrikeLimit} strikes "
-                             f"on {struck.id}, so the task goes to another unit.")
-        return LimitReleaseTodo(struck.revision, self.actor, self.previous, limit, self.at).write(
-            db, struck, store)
+        return result.current_holder.after_strike(db, result, store, self)
 
     def story_text(self) -> str:
         return f"{self.actor.name} struck {self.previous.owner}: {self.reason}"
@@ -3555,7 +3559,7 @@ class FailedCheckStrike(StrikeTodo):
 
     @classmethod
     def make(cls, todo: Todo, now: float, reason: str) -> Self:
-        return cls(todo.revision, CoreWatcherIncarnation.watcher(), todo.held(), reason,
+        return cls(todo.revision, CoreWatcherIncarnation.watcher(), todo.holder_state.previous_assignment(), reason,
                    RecordedEventTime(now), order_id=todo.order.checked().id,
                    evidence=(todo.order.checked().owner,))
 
@@ -4503,7 +4507,7 @@ class DeliverTodo(TodoOperation, declared_name=None):
     def prepare(self, goals, current):
         self.require_current(current)
         UnitStorage.read(
-            goals.registry.storage_rule, goals.registry.require(current.held().owner),
+            goals.registry.storage_rule, goals.registry.require(current.holder_state.previous_assignment().owner),
         ).require_retired(current.id)
         verified = self.delivery.verified(current, goals.registry, self.verified_claims)
         try:
