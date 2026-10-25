@@ -22,7 +22,6 @@ from agent_comms.goals import CountCheckResult, OrderCheck
 from agent_comms.installer.backup import StoreBackup
 from agent_comms.maintenance_barrier import (
     MaintenanceBarrier,
-    MaintenanceNotHeldError,
     MaintenanceOperator,
 )
 from agent_comms.native_tool_call import ToolCallId
@@ -35,7 +34,7 @@ from agent_comms.thread_execution import ExternalThreadExecution
 from agent_comms.thread_identity import RecordedThreadIncarnation
 from agent_comms.thread_model import DeclaredModel
 from agent_comms.threads import Thread
-from agent_comms.errors import TodoError
+from agent_comms.errors import RelationViolationError, TodoError
 from agent_comms.todos import (
     PendingProblemOrder,
     ProblemAllocation,
@@ -48,6 +47,7 @@ from agent_comms.tool_caller import CommanderForkCaller
 from agent_comms.tool_declaration import ToolDeclaration
 from agent_comms.transcript_events import ToolStartTranscript
 from agent_comms.turn_item import NativeItemId, NativeTurnId
+from agent_comms.typed_table import HeldBusFile
 from cli_command import commander
 from source_revision_fixture import SourceRepository
 
@@ -409,7 +409,7 @@ def test_retained_schema_is_carried_under_maintenance_before_runtime_writes(fork
         db.execute(f'DROP TABLE "{ProblemAllocation.declared_name}"')
         db.execute(f'DROP INDEX "{Todo.unit_index.name(Todo)}"')
         db.execute(f'DROP INDEX "{Todo.problem_index.name(Todo)}"')
-    with pytest.raises(MaintenanceNotHeldError):
+    with pytest.raises(RelationViolationError, match=HeldBusFile.carry_verb):
         store.allocate_problem()
     barrier = MaintenanceBarrier(comms.registry.store.path)
     hold = barrier.begin(MaintenanceOperator.current())
@@ -421,7 +421,7 @@ def test_retained_schema_is_carried_under_maintenance_before_runtime_writes(fork
     with store.writing() as db:
         db.execute(f'ALTER TABLE "{ProblemAllocation.declared_name}" RENAME TO problem_number')
         db.execute(f'DROP INDEX "{Todo.problem_index.name(Todo)}"')
-    with pytest.raises(MaintenanceNotHeldError):
+    with pytest.raises(RelationViolationError, match=HeldBusFile.carry_verb):
         store.allocate_problem()
     hold = barrier.begin(MaintenanceOperator.current())
     with hold.holding():

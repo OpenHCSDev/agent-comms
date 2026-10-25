@@ -83,8 +83,8 @@ def test_a_second_verdict_on_one_edit_is_refused(two_orders):
 def test_an_edit_in_a_released_problems_checkout_joins_no_held_order(two_orders):
     ctx, checkout = two_orders
     released = checkout["P1"].with_name(checkout["P1"].name.replace("--P1", "--P9"))
-    recorded_edit(ctx, "p9-call", str(released / "nine.py"), "NINE = 'released problem'")
-    recorded_edit(ctx, "p2-call", str(checkout["P2"] / "two.py"), "TWO = 'second problem'")
+    recorded_edit(ctx, ToolCallId("p9-call"), str(released / "nine.py"), "NINE = 'released problem'")
+    recorded_edit(ctx, ToolCallId("p2-call"), str(checkout["P2"] / "two.py"), "TWO = 'second problem'")
     assert [(edit.id, edit.problem) for edit in unjudged(ctx).values()] == [("p2-call", "P2")]
 
 

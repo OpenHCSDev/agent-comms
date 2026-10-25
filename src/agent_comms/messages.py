@@ -5,7 +5,7 @@ from __future__ import annotations
 from .input_key import InputKey
 
 from .class_fact import ClassFact
-from .projection_source import ProducedRow, ProjectionSource
+from .projection_source import ProducedRow, ProjectionOutputs, ProjectionSource
 from .turn_origin import TurnOrigin
 import builtins
 import re
@@ -425,20 +425,16 @@ class Addressed(BusCapability):
     indexes: ClassVar[tuple[Index, ...]] = (Index(("sender", "target", "seq")),)
 
 
-class MessageKind(DeclaredFamily, ProjectionSource, affix="Kind"):
-    """A declared message kind; each member owns the validation it requires.
+class MessageRoutes(ProjectionOutputs):
+    """The rows a message kind routes; send-time validation produces none."""
 
-    Members are the kind themselves, never instances: the wire carries the
-    plain declared name (``"type": "info"``), exactly as the previous enum
-    stored it. Publication-time checks run once, from the single commit path.
-    """
+    __slots__ = ()
 
     @ClassFact
     def writes(cls) -> tuple[type[ProducedRow], ...]:
         from .bus_route_counts import BusRouteCounts
         from .bus_tables import AwaitingAnswerSource
         return (BusRouteCounts, AwaitingAnswerSource)
-
 
     conversation_message: ClassVar[bool] = True
 
@@ -447,6 +443,15 @@ class MessageKind(DeclaredFamily, ProjectionSource, affix="Kind"):
         from .bus_route_counts import BusRouteCounts
 
         return (BusRouteCounts.from_message(message),)
+
+
+class MessageKind(DeclaredFamily, MessageRoutes, ProjectionSource, affix="Kind"):
+    """A declared message kind; each member owns the validation it requires.
+
+    Members are the kind themselves, never instances: the wire carries the
+    plain declared name (``"type": "info"``), exactly as the previous enum
+    stored it. Publication-time checks run once, from the single commit path.
+    """
 
     @classmethod
     def decode_message(cls, data: Mapping) -> Message:

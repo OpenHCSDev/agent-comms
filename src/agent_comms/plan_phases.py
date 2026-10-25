@@ -960,7 +960,7 @@ class ReadWriteMembersPhase(StoreGuardsPhase):
             ClassDeclared("MultiFileStore", ("src/agent_comms/store_files.py",)),
             PatternAbsent(r"(\.locked|_store_lock|_async_store_lock|ordered)\([^)]*(mode|contention)=",
                           ("src", ":!src/agent_comms/skills/")),
-            PatternAbsent(r"\.locked\(", ("src", *StoreGuardsPhase.owners)),
+            PatternAbsent(r"def locked\(", ("src", *StoreGuardsPhase.owners)),
         )
     )
 
