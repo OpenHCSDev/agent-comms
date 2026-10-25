@@ -1,12 +1,14 @@
 """Committed commander notifications own what the heartbeat has already handled.
 
-Quiet state changes are passive notices. Urgent packets lead with five decisions
-and publish every current observation; no process-local cache owns them.
+A packet carries only lines that need the commander. New lines wake it; unchanged lines are
+never restated; lines still undisposed past the answer window follow the new ones and refuse
+the commander's writing verbs until a recorded action on their subject disposes of them. No
+process-local cache owns any of it.
 """
 from __future__ import annotations
 
 from abc import abstractmethod
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import TYPE_CHECKING, ClassVar, Self
 
 from agent_comms.bus_publication import AgentOrigin
@@ -17,10 +19,11 @@ from agent_comms.commander_service import CommanderService
 from agent_comms.errors import RelationViolationError
 from agent_comms.field_codec import OrderId
 from agent_comms.message_reference import MessageReference
+from agent_comms.heartbeat_subjects import HeartbeatSubject
 from agent_comms.messages import (
     ConversationRole, InfoKind, Message, MessageRole, NoticeRole,
 )
-from agent_comms.plan_phases import Plan, PlanPhase
+from agent_comms.recorded_time import EventTime, UnrecordedEventTime
 from agent_comms.standing_rules import StandingRule
 from agent_comms.task_sources import TaskAttachment
 from agent_comms.text_digest import TextDigest
@@ -41,11 +44,30 @@ class OrderKey:
 
 @dataclass(frozen=True)
 class Ping(DeclaredFamily, affix="Ping"):
+    """One heartbeat line: the work it asks for, what disposes of it, and when it began.
+
+    ``since`` is carried from the previous packet while the observation is unchanged, so a
+    line keeps its age until its condition changes or a recorded action on a subject
+    disposes of it.
+    """
+
     text: str = field(compare=False, kw_only=True)
+    subjects: tuple[HeartbeatSubject, ...] = field(default=(), compare=False, kw_only=True)
+    since: EventTime = field(default_factory=UnrecordedEventTime, compare=False, kw_only=True)
 
     @property
     @abstractmethod
     def key(self) -> object: ...
+
+    def undisposed(self, comms: Comms, actors: frozenset[str], cut: float) -> bool:
+        """Began before ``cut`` and no subject has a recorded action since it began."""
+        return (self.since.before(cut) and bool(self.subjects)
+                and not any(subject.disposed(comms, actors, self.since.recorded_at("A line"))
+                            for subject in self.subjects))
+
+    def render(self, now: float) -> str:
+        minutes = int((now - self.since.recorded_at("A heartbeat line")) // 60)
+        return f"{self.text} ({minutes} min)"
 
 
 @dataclass(frozen=True)
@@ -58,7 +80,7 @@ class RulePing(Ping):
 
     @classmethod
     def capture(cls, rule: StandingRule) -> Self:
-        return cls(rule.observation_key(), text=rule.line())
+        return cls(rule.observation_key(), text=rule.line(), subjects=rule.subjects())
 
 
 @dataclass(frozen=True)
@@ -81,60 +103,8 @@ class UnitPing(Ping):
             tuple(OrderKey(todo.id, todo.order.checked().id)
                   for todo in state.source.todos if todo.id in state.orders),
             tuple(message.reference for message in state.owed),
-            state.observation_key(), text=state.line(),
+            state.observation_key(), text=state.line(), subjects=state.subjects(),
         )
-
-
-@dataclass(frozen=True)
-class HudPing(Ping, declared_name=None):
-    """A HUD row changes when its rendered line changes, even with the same identity.
-
-    The ping text is a change detector, not a carrier: it tells the commander a row moved.
-    Views read the row itself from CommanderFrame, written from the same CommanderHud.
-    """
-
-    text: str = field(compare=True, kw_only=True)
-
-
-@dataclass(frozen=True)
-class UnitRowPing(HudPing):
-    unit: ThreadIncarnation
-
-    @property
-    def key(self) -> tuple[type[Self], ThreadIncarnation]:
-        return type(self), self.unit
-
-
-@dataclass(frozen=True)
-class PhaseRowPing(HudPing):
-    phase: type[PlanPhase]
-
-    @property
-    def key(self) -> tuple[type[Self], type[PlanPhase]]:
-        return type(self), self.phase
-
-
-@dataclass(frozen=True)
-class FinishedPhasesRowPing(HudPing):
-    plan: type[Plan]
-
-    @property
-    def key(self) -> tuple[type[Self], type[Plan]]:
-        return type(self), self.plan
-
-
-@dataclass(frozen=True)
-class ForksRowPing(HudPing):
-    @property
-    def key(self) -> tuple[type[ForksRowPing]]:
-        return (ForksRowPing,)
-
-
-@dataclass(frozen=True)
-class LoadPing(HudPing):
-    @property
-    def key(self) -> tuple[type[LoadPing]]:
-        return (LoadPing,)
 
 
 @dataclass(frozen=True)
@@ -148,21 +118,12 @@ class CommanderUpdate(TaskAttachment, declared_name=None):
         return self if self.commander == commander else None
 
     @abstractmethod
-    def body(self, previous: CommanderUpdate | None) -> str: ...
+    def body(self, now: float) -> str: ...
 
-    def changed_pings(self, previous: CommanderUpdate | None,
-                      presented: tuple[Ping, ...] = ()) -> tuple[Ping, ...]:
-        known = frozenset(previous.handled) if previous else frozenset()
-        return tuple(ping for ping in self.handled if ping not in known and ping not in presented)
-
-    def changed_lines(self, previous: CommanderUpdate | None,
-                      presented: tuple[Ping, ...] = ()) -> tuple[str, ...]:
-        prior = previous.handled if previous else ()
-        current = frozenset(ping.key for ping in self.handled)
-        return (
-            *(ping.text for ping in self.changed_pings(previous, presented)),
-            *(f"NO LONGER CURRENT: {ping.text}" for ping in prior if ping.key not in current),
-        )
+    def undisposed(self, comms: Comms, commander: str, cut: float) -> tuple[Ping, ...]:
+        """Lines older than ``cut`` that no recorded action on their subjects has disposed of."""
+        actors = CommanderService.actors(comms.registry.snapshot(), commander)
+        return tuple(ping for ping in self.handled if ping.undisposed(comms, actors, cut))
 
     def require_publication(self, sender: str, registry: RegistrySnapshot,
                             original_source: BusReader) -> None:
@@ -185,30 +146,44 @@ class CommanderUpdate(TaskAttachment, declared_name=None):
         return message.task.commander_update(commander)
 
     @classmethod
+    def owed(cls, comms: Comms, commander: str, cut: float) -> tuple[Ping, ...]:
+        """The newest packet's lines still undisposed past ``cut``."""
+        latest = cls.latest(comms, comms.registry.require(commander).incarnation)
+        return latest.undisposed(comms, commander, cut) if latest else ()
+
+    @classmethod
     def derive(cls, commander: ThreadIncarnation, states: tuple[UnitState, ...],
                rules: tuple[StandingRule, ...],
-               previous: CommanderUpdate | None, *,
-               hud: tuple[Ping, ...],
+               previous: CommanderUpdate | None, *, now: float,
+               undisposed: tuple[Ping, ...] = (),
                not_applied: tuple[str, ...] = ()) -> CommanderUpdate | None:
+        """New lines wake the commander and unchanged lines are never restated. With nothing new,
+        cleared lines are committed by a passive notice so a recurrence is new again; with
+        nothing cleared either, nothing is sent."""
         known = {ping.key: ping for ping in previous.handled} if previous else {}
-        quiet = (*hud, *(UnitPing.capture(state) for state in states if not state.attention()))
-        urgent = (*(UnitPing.capture(state) for state in states if state.attention()),
-                  *(RulePing.capture(rule) for rule in rules))
-        decisions = tuple(ping for ping in urgent if known.get(ping.key) != ping)[:5]
-        handled = (*quiet, *urgent)
-        if decisions:
-            return CommanderDecisions(commander, handled, decisions, not_applied=not_applied)
-        if (previous is None or handled != previous.handled
-                or not_applied != previous.not_applied):
+        # Equality ignores the start, so an unchanged observation keeps the start it had.
+        began = {ping: ping.since for ping in known.values()}
+        handled = tuple(replace(ping, since=began.get(ping, ping.since).continued_from(now))
+                        for ping in (
+            *(UnitPing.capture(state) for state in states if state.attention()),
+            *(RulePing.capture(rule) for rule in rules),
+        ))
+        new = tuple(ping for ping in handled if known.get(ping.key) != ping)
+        if new:
+            return CommanderDecisions(
+                commander, handled, new,
+                tuple(ping for ping in undisposed if ping in handled), not_applied=not_applied,
+            )
+        if previous and (handled != previous.handled or not_applied != previous.not_applied):
             return CommanderNotice(commander, handled, not_applied=not_applied)
         return None
 
-    def send(self, comms: Comms, previous: CommanderUpdate | None) -> Message:
+    def send(self, comms: Comms, now: float) -> Message:
         from agent_comms.commander_heartbeat import CommanderHeartbeat
 
         message = Message(
             sender=CommanderHeartbeat.sender, target=self.commander.name,
-            body=self.body(previous), type=InfoKind, role=self.role, task=self,
+            body=self.body(now), type=InfoKind, role=self.role, task=self,
         )
         return comms.bus.publisher.publish_ordinary(
             message, origin=AgentOrigin(), destination=ThreadTarget(self.commander.name),
@@ -219,21 +194,21 @@ class CommanderUpdate(TaskAttachment, declared_name=None):
 class CommanderNotice(CommanderUpdate):
     role = NoticeRole()
 
-    def body(self, previous: CommanderUpdate | None) -> str:
-        return "\n".join(("Commander observations updated; no new decision.",
-                          *self.not_applied,
-                          *self.changed_lines(previous)))
+    def body(self, now: float) -> str:
+        return "\n".join((f"Lines cleared; {len(self.handled)} still current.", *self.not_applied))
 
 
 @dataclass(frozen=True)
 class CommanderDecisions(CommanderUpdate):
+    """The new lines first, then the lines still undisposed, oldest first."""
+
     decisions: tuple[Ping, ...]
+    waiting: tuple[Ping, ...]
     role = ConversationRole()
 
-    def body(self, previous: CommanderUpdate | None) -> str:
-        also_current = self.changed_pings(previous, self.decisions)
-        return "\n".join((*(ping.text for ping in self.decisions),
-                          *self.not_applied,
-                          *(("ALSO CURRENT:", *(ping.text for ping in also_current))
-                            if also_current else ()),
-                          *self.changed_lines(previous, self.handled)))
+    def body(self, now: float) -> str:
+        waiting = sorted(self.waiting, key=lambda ping: ping.since.chronology())
+        return "\n".join((
+            *(ping.render(now) for ping in self.decisions), *self.not_applied,
+            *(("UNDISPOSED:", *(ping.render(now) for ping in waiting)) if waiting else ()),
+        ))

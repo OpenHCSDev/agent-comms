@@ -19,6 +19,7 @@ import pytest
 from agent_comms.commander.publication_rules import EmptyPullRequest, UnpushedBranch
 from agent_comms.commander.spinning import SpinningUnit
 from agent_comms.commander_heartbeat import CommanderObservation
+from agent_comms.standing_rules import BranchBehindMain
 from agent_comms.comms import Comms
 from agent_comms.external_transcript import ExternalTranscript
 from agent_comms.goal_actions import CreateProblemGoalAction
@@ -442,13 +443,14 @@ def test_branch_rules_read_the_order_checkout_instead_of_the_behind_home(fleet):
     todo = built.unit('order-worker', home)
     rule = built.comms.registry.storage_rule
     checkout = rule.order_checkout(rule.initial_roots('order-worker'), todo.id)
-    behind_line = f'BRANCH BEHIND MAIN: {todo.id} '
     built.git(built.source.checkout, 'worktree', 'remove', str(checkout))
-    assert not any(rule.line().startswith(behind_line) for rule in built.observe().rules)
+    assert not any(isinstance(rule, BranchBehindMain) and rule.problem == todo.id
+                   for rule in built.observe().rules)
 
     built.git(built.source.checkout, 'worktree', 'add', '-q', '-b', 'current-order',
               str(checkout), built.main)
-    assert not any(rule.line().startswith(behind_line) for rule in built.observe().rules)
+    assert not any(isinstance(rule, BranchBehindMain) and rule.problem == todo.id
+                   for rule in built.observe().rules)
     growth = SourceGrowth.limit + 1
     built.commit(checkout, 'src/agent_comms/order_growth.py',
                  ''.join(f'order_value_{index} = {index}\n' for index in range(growth)))
