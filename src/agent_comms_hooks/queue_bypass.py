@@ -19,6 +19,7 @@ from typing import ClassVar
 
 from agent_comms.shell_commands import Program, ShellCommand
 from agent_comms_hooks import Bash, BashRefusal, ClaudeToolHook
+from agent_comms_hooks.watch import WatchClaim
 
 GH = Program("gh")
 
@@ -109,15 +110,21 @@ class QueueBypassGuard(BashRefusal):
         reasons = cls.reasons(command)
         if not reasons or not hook.parts.exists():
             return reasons
-        try:
-            checked = subprocess.run(
-                (sys.executable, "-m", "agent_comms.cli", "merge-review",
-                 "--session", hook.session_id, "--command", command),
-                capture_output=True, text=True, timeout=60,
-            )
-        except (OSError, subprocess.TimeoutExpired) as error:
-            return (f"Core's merge-verdict reader failed: {error}",)
-        return (checked.stderr.strip() or checked.stdout.strip(),) if checked.returncode else ()
+        bindings = WatchClaim(hook.session_id).state().bindings()
+        if not bindings:
+            return ("The commander session has no recorded bus binding; no verdict can be read.",)
+        for binding in bindings:
+            try:
+                checked = subprocess.run(
+                    (sys.executable, "-m", "agent_comms.cli", "--root", binding.root,
+                     "merge-review", "--session", hook.session_id, "--bash", command),
+                    capture_output=True, text=True, timeout=60,
+                )
+            except (OSError, subprocess.TimeoutExpired) as error:
+                return (f"Core's merge-verdict reader failed: {error}",)
+            if checked.returncode:
+                return (checked.stderr.strip() or checked.stdout.strip(),)
+        return ()
 
 
 main = QueueBypassGuard.main
