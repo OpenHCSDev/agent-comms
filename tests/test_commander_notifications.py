@@ -126,7 +126,8 @@ def test_recreated_watcher_reads_original_committed_unit_observation(notificatio
     first, = notifications(comms)
     assert all(state.line() in first.body for state in states)
     header = replace(lead_hud(comms, states), units=()).frame
-    assert first.body.splitlines()[:len(header)] == list(header)
+    assert first.body.splitlines()[0] == CommanderUpdate.header
+    assert first.body.splitlines()[-len(header):] == list(header)
     assert CommanderUpdate.latest(comms, comms.registry.require("lead").incarnation) == first.task
     beat(comms, states=state_cards(comms, UnitState))
     unchanged, = notifications(comms)
@@ -169,8 +170,9 @@ def test_rule_packets_list_every_new_line_and_never_restate_one(notification_bus
     assert isinstance(first.task, CommanderDecisions)
     assert set(first.task.decisions) == set(first.task.handled) == {
         RulePing.capture(rule) for rule in rules}
-    assert first.body.splitlines() == [*lead_hud(comms).frame,
-                                       *(f"{rule.line()} (0 min)" for rule in rules)]
+    assert first.body.splitlines() == [CommanderUpdate.header,
+                                       *(f"{rule.line()} (0 min)" for rule in rules),
+                                       *lead_hud(comms).frame]
     beat(comms, rules)
     assert len(notifications(comms)) == 1
     # Changed diagnostic wording is not another failed occurrence.
@@ -189,7 +191,8 @@ def test_resolution_is_passive_and_same_rule_can_recur(notification_bus):
     beat(comms, ServicePassFailing.violations(comms, "lead"))
     _, quiet = notifications(comms)
     assert isinstance(quiet.task, CommanderNotice)
-    assert quiet.body.splitlines()[:len(lead_hud(comms).frame)] == list(lead_hud(comms).frame)
+    frame = lead_hud(comms).frame
+    assert quiet.body.splitlines()[-len(frame):] == list(frame)
     assert all(isinstance(decision.wake_mode, PassiveWake) for decision in quiet.decisions)
     # Nothing new and nothing cleared sends nothing.
     beat(comms, ServicePassFailing.violations(comms, "lead"))
