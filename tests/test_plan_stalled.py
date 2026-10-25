@@ -88,3 +88,11 @@ def test_a_replacement_order_keeps_it_firing(stalled_reading, monkeypatch):
         SentOrder(RecordedEventTime(replaced)), prior_orders=(SentOrder(RecordedEventTime(FIRST)),),
     ))
     assert stalled_at(stalled_reading, monkeypatch, replaced + 60)
+
+
+def test_an_unplanned_reason_answers_without_reading_main():
+    """main=None: any phase evidence read would raise, so passing proves main was never read."""
+    from agent_comms.plan_phases import UnplannedPhase
+
+    reason = "This repair keeps the order tool usable before the planned work resumes."
+    assert UnplannedPhase.order_refusals(reading(), reason) == ()
