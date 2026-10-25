@@ -131,3 +131,4 @@ def test_rewritten_refuses_an_unpushed_commit(discarded_and_kept, capsys):
     main(["rewritten", "worker", "--by", head, "--why",
           "the later pushed commit replaced the formatter module entirely"], ctx)
     assert {"dropped-call", "kept-call"} <= set(unjudged(ctx))
+

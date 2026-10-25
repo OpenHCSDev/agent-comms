@@ -13,11 +13,14 @@ from agent_comms.goal_actions import CreateProblemGoalAction, OrderGoalAction
 from agent_comms.order_story import FleetStory, OrderStory
 from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.todos import (
-    AcceptedVerdict, DoneTodoState, OrderMessage, ReleaseTodo, SendBackVerdict, StrikeReason,
+    AcceptedVerdict, DoneTodoState, EditSendBackVerdict, OrderMessage, ReleaseTodo,
+    SendBackVerdict, StrikeReason,
     StrikeTodo, TodoConflict, TodoError, UnorderedProblemOrder, WithdrawTodo,
 )
 from agent_comms.tool_caller import NoThreadCaller, ThreadCaller
-from agent_comms.order_tools import CommsChangeProblemTool, CommsFleetStoryTool, CommsOrderStoryTool, CommsTodoCreateTool, CommsOrderTool, CommsVerdictTool
+from agent_comms.change_report import FileLine
+from agent_comms.errors import MissingSourceLine
+from agent_comms.order_tools import CommsChangeProblemTool, CommsFleetStoryTool, CommsOrderStoryTool, CommsTodoCreateTool, CommsOrderTool, CommsVerdictTool, CommsVerdictsTool, JudgedCall
 from agent_comms.installer.backup import StoreBackup
 from test_todos import order
 from source_revision_fixture import SourceRepository
@@ -123,3 +126,40 @@ def test_order_story_copied_bus_strike_and_send_back_once(comms, tmp_path):
         FleetStory, board_read(CommsFleetStoryTool, copied, caller)).lines == linked_fleet.lines[1:]
     with pytest.raises(TodoError):
         CommsOrderStoryTool.invoke(copied, {"order_id": "absent-order"}, caller=caller)
+
+
+def test_one_send_back_over_two_edits_cites_their_checkout_and_strikes_once(comms, tmp_path):
+    """The order's check repository holds no other_module.py: the cited line is read from the
+    checkout the edits were made in, and two edits sent back for one reason are one miss."""
+    source = SourceRepository.create(tmp_path / 'source')
+    for name in ("lead", "worker"):
+        comms.registry.declare(Thread(name, frozenset({"comms"}), str(tmp_path)))
+    request = comms.goals.todos.add_request(
+        comms.registry.require('lead').incarnation, 'Repair the worker').id
+    caller = ThreadCaller("lead")
+    caller.invoke(CommsTodoCreateTool(owner="worker", order=CreateProblemGoalAction(
+        problem="P1", order=replace(order(source), edits=("Repair the existing record owner",)),
+        request=request, review_at=RecordedEventTime(1000),
+        commander="lead", assigner=comms.registry.require('lead').incarnation,
+        repo=RepositoryName.from_wire("org/repo"), text="Repair the worker")), comms)
+    other = tmp_path / "second-repository"
+    other.mkdir()
+    (other / "other_module.py").write_text("first\nsecond\n")
+    todo = comms.goals.todos.get("P1")
+    actor = comms.registry.require("lead").incarnation
+    reason = StrikeReason("The worker wrote the same marker decision twice in one module.")
+    def sent_back(call: str, line: int) -> JudgedCall:
+        return JudgedCall("P1", EditSendBackVerdict(
+            todo.revision, actor, todo.held(), call, reason,
+            evidence=(FileLine("other_module.py", line),), checkout=str(other)))
+    with pytest.raises(MissingSourceLine, match="other_module.py:3 does not exist"):
+        caller.invoke(CommsVerdictsTool(verdicts=(sent_back("first-call", 3),)), comms)
+    with pytest.raises(MissingSourceLine, match="other_module.py does not exist at"):
+        caller.invoke(CommsVerdictTool(problem="P1", operation=SendBackVerdict(
+            todo.revision, actor, todo.held(), "first-call", reason,
+            evidence=(FileLine("other_module.py", 2),))), comms)
+    caller.invoke(CommsVerdictsTool(verdicts=(sent_back("first-call", 2),
+                                              sent_back("second-call", 2))), comms)
+    judged = comms.goals.todos.get("P1")
+    assert len(judged.live_strikes("worker")) == 1
+    assert {verdict.tool_call_id for verdict in judged.verdicts} >= {"first-call", "second-call"}

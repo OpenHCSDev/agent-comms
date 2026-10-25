@@ -48,6 +48,7 @@ from agent_comms.todos import (
     BluntText,
     DirectiveText,
     DroppedVerdict,
+    EditSendBackVerdict,
     PeerAcceptedVerdict,
     RewrittenVerdict,
     GrownHeadVerdict,
@@ -105,6 +106,10 @@ class Edit(EditCall):
 
     def text(self) -> str:
         return ''.join(hunk.old_text + hunk.new_text for hunk in self.hunks)
+
+    def checkout(self) -> str:
+        """The repository the edited file is in, which --at and --by name lines of."""
+        return Repo.git(Path(self.path).parent, 'rev-parse', '--show-toplevel').strip()
 
     def added_lines(self) -> tuple[str, ...]:
         return tuple(line for hunk in self.hunks for line in hunk.new_text.splitlines())
@@ -472,9 +477,9 @@ class BackVerb(HeadVerdictVerb):
         return RejectedHeadVerdict(self.rejection_reason)
 
     def operation(self, ctx: order.Commander, todo: Todo, edit: Edit) -> SendBackVerdict:
-        return SendBackVerdict(todo.revision, ctx.actor_identity,
-                               todo.held(), edit.id, reason=self.rejection_reason,
-                               evidence=self.head_evidence())
+        return EditSendBackVerdict(todo.revision, ctx.actor_identity,
+                                   todo.held(), edit.id, reason=self.rejection_reason,
+                                   evidence=self.head_evidence(), checkout=edit.checkout())
 
     def check_edits(self, edits: list[Edit]) -> None:
         _ = self.rejection_reason

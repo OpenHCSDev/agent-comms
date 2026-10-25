@@ -42,6 +42,8 @@ from agent_comms.change_report import (
     PullRequestHeadRevision,
     SourceReference,
     SourceRevision,
+    SourceText,
+    WorkingTree,
 )
 from agent_comms.channel_targets import CommandTarget, CommsTag, IncarnationThreadTarget, NamedTarget
 from agent_comms.child_process import (
@@ -3127,10 +3129,14 @@ class CitedEvidence:
     def require_evidence(self, current: Todo) -> None:
         if not self.evidence:
             raise TodoError("A strike needs a checkable file:line, not a board row or goal text.")
-        order = current.order.checked()
-        root, revision = order.check.directory, order.cited_revision
+        root, revision = self.evidence_source(current)
         for cited in self.evidence:
             cited.require_exists(root, revision)
+
+    def evidence_source(self, current: Todo) -> tuple[Path, SourceText]:
+        """Cited lines name the order's check repository at the order's cited revision."""
+        order = current.order.checked()
+        return order.check.directory, order.cited_revision
 
 
 @dataclass(frozen=True)
@@ -3159,8 +3165,11 @@ class StrikeTodo(CitedStrike, StoryEvent):
         StrikeReason(self.reason)
         if any(self.repeats(recorded) for recorded in self.prior_strikes(current)):
             return current
-        return self.taken_away(
+        return self.recorded(
             replace(current, strikes=(*current.strikes, self), revision=current.revision + 1))
+
+    def recorded(self, struck: Todo) -> Todo:
+        return self.taken_away(struck)
 
     def taken_away(self, struck: Todo) -> Todo:
         """The strike that reaches StrikeLimit takes the task away in the same write, through
@@ -3171,14 +3180,6 @@ class StrikeTodo(CitedStrike, StoryEvent):
         limit = StrikeReason(f"{self.previous.owner} took {ProblemGoalOrder.StrikeLimit} strikes "
                              f"on {struck.id}, so the task goes to another unit.")
         return ReleaseTodo(struck.revision, self.actor, self.previous, limit, self.at).apply(struck)
-
-    @classmethod
-    def send_back(cls, current: Todo, actor: ThreadIncarnation, previous: Assignment,
-                  reason: StrikeReason, at: EventTime, evidence: tuple[FileLine, ...]) -> Todo:
-        struck = cls(current.revision, actor, previous, reason.text, at,
-                     evidence=evidence).apply(current)
-        order = current.order.checked().sent_back(reason)
-        return replace(struck, order=order, prior_orders=current.orders_before(order))
 
     def story_text(self) -> str:
         return f"{self.actor.name} struck {self.previous.owner}: {self.reason}"
@@ -3191,6 +3192,19 @@ class StrikeTodo(CitedStrike, StoryEvent):
 
     def repeats(self, recorded: StrikeTodo) -> bool:
         return False
+
+
+@dataclass(frozen=True)
+class SendBackStrike(StrikeTodo):
+    """One send-back is one miss: every edit a verdict sends back for the same reason repeats
+    the strike the first one recorded, and the order is sent back once."""
+
+    def repeats(self, recorded: StrikeTodo) -> bool:
+        return recorded.previous.owner == self.previous.owner and recorded.reason == self.reason
+
+    def recorded(self, struck: Todo) -> Todo:
+        order = struck.order.checked().sent_back(StrikeReason(self.reason))
+        return replace(super().recorded(struck), order=order, prior_orders=struck.orders_before(order))
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -3427,8 +3441,9 @@ class RejectedHeadVerdict(DecidedHeadVerdict):
         link.require_evidence(current)
 
     def judge_order(self, current: Todo, record: OrderHeadReviewRecord) -> Todo:
-        return StrikeTodo.send_back(current, record.actor, record.order.previous,
-                                    self.reason, record.at, record.order.evidence)
+        return SendBackStrike(current.revision, record.actor, record.order.previous,
+                              self.reason.text, record.at,
+                              evidence=record.order.evidence).apply(current)
 
 
 @dataclass(frozen=True)
@@ -3734,15 +3749,17 @@ class SendBackVerdict(ToolCallVerdict, CitedStrike, StoryEvent):
         return f"Sent back: {self.reason.text}"
 
     def implied_strikes(self) -> tuple[StrikeTodo, ...]:
-        return (StrikeTodo(self.expected_revision, self.actor, self.previous, self.reason.text,
-                           self.at, evidence=self.evidence),)
+        return (self.strike(self.expected_revision),)
+
+    def strike(self, revision: int) -> SendBackStrike:
+        return SendBackStrike(revision, self.actor, self.previous, self.reason.text,
+                              self.at, evidence=self.evidence)
 
     def story_text(self) -> str:
         return f"{super().story_text()} (strike recorded)"
 
     def judged(self, current: Todo) -> Todo:
-        return StrikeTodo.send_back(current, self.actor, self.previous, self.reason,
-                                    self.at, self.evidence)
+        return self.strike(current.revision).apply(current)
 
     def staged(self, batch: TodoBatch, problem: str) -> None:
         """A send-back revises the holder's Goal and posts, so it records after the transaction."""
@@ -3754,6 +3771,16 @@ class SendBackVerdict(ToolCallVerdict, CitedStrike, StoryEvent):
             goals, self.actor, f"{changed.id}: {self.story_text()}",
         )
         return changed
+
+
+@dataclass(frozen=True)
+class EditSendBackVerdict(SendBackVerdict):
+    """A send-back of a file edit cites lines in the checkout the edit was made in, as it
+    stands on disk, whichever repository the order's check names."""
+    checkout: str
+
+    def evidence_source(self, current: Todo) -> tuple[Path, SourceText]:
+        return Path(self.checkout), WorkingTree()
 
 
 @dataclass(frozen=True)
