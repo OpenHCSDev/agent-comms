@@ -21,10 +21,10 @@ The audit classified the 88 store-lock sites by what each lock protects:
 
 The fact "which lock guards this write" is declared nowhere, so every caller restates it (IMPL-12; AGENT-7 for the 19 that protect nothing):
 
-- **101 lock calls in 43 modules outside `store_files.py` and `locked_store.py`** (`\.locked\(|_store_lock\(|_async_store_lock\(|locked_async\(|StoreLock\.ordered\(|fcntl\.flock\(`). Each picks its own lock, mode and wait.
+- **99 lock calls in 42 modules outside `store_files.py` and `locked_store.py`** (calls to `.locked`, `.locked_async`, `_store_lock`, `_async_store_lock`, `StoreLock.ordered`, `fcntl.flock`, the same at `389d0b22a` and `8bc8f8fef`; a grep finds 101 lines, two of them `def try_store_lock(` and `is_store_lock(`). Each picks its own lock, mode and wait.
 - **24 lock calls pass `mode=` or `contention=` by hand** (`(\.locked|_store_lock|_async_store_lock|ordered)\([^)]*(mode|contention)=`), and `StoreLockOwner.locked` (`store_files.py:301-305`) makes both caller parameters.
 - **Every wait is unbounded by default.** `UNBOUNDED_CONTENTION` (`store_files.py:129`) is the default at `store_files.py:167`, `:303`, `:492`, `:505`, `typed_table.py:2321`, `:2351`, `bus.py:123`, `:139`, `:495`, `:581`, `message_bus.py:100`, `coordination_session.py:87`, `:128` (19 occurrences). On 2026-10-24 the registry lock was held in 200 of 200 samples, and exclusive waiters starved at `store_files.py:112` behind it, among them `turn_lease.py:652` on every tool call (fixed in #3187) and `queued_input.py:438`.
-- **SQLite stores take a file lock SQLite already provides.** `typed_table.py:2246` (`reconcile_at`), `:2335` (attach) and `:2340` (retire) and `locked_store.py:645` (`settle`) flock the database file around connections whose own `BEGIN IMMEDIATE` (`locked_store.py:692`) already serializes writers.
+- **SQLite connection boundaries are serialized at four call sites by hand.** Opening or closing a connection initializes or cleans the WAL index and can answer BUSY to another attachment before any transaction exists (`typed_table.py:2325-2331`), which `BEGIN IMMEDIATE` (`locked_store.py:692`) does not cover. `typed_table.py:2246` (`reconcile_at`), `:2335` (attach), `:2340` (retire) and `locked_store.py:645` (`settle`) each take the file's lock around that boundary themselves.
 - **12 hand flocks bypass the store family entirely:** `restart_queue.py:410`, `:420`; `pi_durable_backend.py:230`; `private_sidecar.py:144`; `installer/launch.py:248`; `child_process.py:443` (`acquire_session_writer`, used by `native_session_files.py:121`); `agent_comms_hooks/watch.py:109`, `:117`, `:129`, `:135`, `:143`, `:153`. Each is a process-singleton or writer claim with its own lock path, open flags and release.
 - **Maintenance is checked by hand at 9 DUPLICATE sites** beside writers whose store kind already refuses (`StoreWriter.require_maintenance_open`, `typed_table.py:2213`; `CarriedDocument.require_maintenance_open`, `maintenance_barrier.py:646`): `registration.py:269`, `comms.py:91`, `message_bus.py:157`, `owner_lifecycle.py:314`, `:360`, `:378`, `:516`, `external_transcript.py:575`, `goal_attempts.py:690`. `typed_table.py:2209` and `goal_attempts.py:764` are the target shape already: the check inside the store's own write transaction.
 
@@ -54,7 +54,7 @@ Each phase, its predecessors and its evidence on `origin/main` are declared in `
 **Target.** Four guard families under `StoreLockOwner` (`store_files.py:275`), each owning how its store is locked:
 
 - `SingleFileStore`: one JSON or text file published by atomic rename (`JsonDocument._write_unlocked`). Its writers take its own lock; its reads take none, because a rename is atomic and `JsonDocument.read()` is already lock-free.
-- `SqliteStore`: a SQLite file. SQLite's own write transaction is the writer guard. Delete the flocks at `typed_table.py:2246`, `:2335`, `:2340` and `locked_store.py:645`, and keep only what SQLite cannot do itself: the WAL checkpoint in `settle` runs under `BEGIN IMMEDIATE`.
+- `SqliteStore`: a SQLite file. Its guard serializes connection attachment and retirement, and SQLite's own write transaction serializes writers between them. `reconcile_at` (`typed_table.py:2246`), `settle` (`locked_store.py:645`) and `WalStore._attached` (`:2335`, `:2340`) open their connections through it and name no lock.
 - `MultiFileStore`: a store whose state spans files, such as the registry with its turn files (`RegistryStore.cut_paths`, `registry_store.py:271`). Its one lock covers the set; its members declare that they follow it (`DependentStateTier`, `store_files.py:335`).
 - `ProcessSingleton`: one running process per path. It owns the lock path, open flags, try-or-wait and release. The 12 hand flocks become members: restart queue watcher, Pi durable session, private sidecar, installer launch, session writer and the hook watcher.
 
@@ -62,7 +62,7 @@ Each phase, its predecessors and its evidence on `origin/main` are declared in `
 
 **Checks.** `git grep -cE 'fcntl\.flock\(' -- src ':!src/agent_comms/child_process.py' ':!src/agent_comms/skills/'` goes from 11 to 0. The four classes are declared. Behaviour: two processes writing one store still serialize, and a second process starting a singleton still refuses, each pinned by one test per family, not one per store.
 
-**Deleted.** Four SQLite flocks, 12 hand flocks, and their per-site lock path spellings.
+**Deleted.** The four call-site SQLite flocks (moved into `SqliteStore`'s attachment), 12 hand flocks, and their per-site lock path spellings.
 
 ### 2. Read and Write members; `locked()` stops being public
 
@@ -100,7 +100,7 @@ Each phase, its predecessors and its evidence on `origin/main` are declared in `
 
 **Target.** `tools/debt_ratchet.py` gains `StoreLockCalls`: it counts lock calls outside `store_files.py` and `locked_store.py` (the census pattern above) and refuses growth on any file.
 
-**Witnesses.** 101 calls in 43 modules at `8bc8f8fef`.
+**Witnesses.** 99 calls in 42 modules at `389d0b22a` and at `8bc8f8fef`.
 
 **Checks.** The class exists; the census reads 0 once phases 1 to 4 land.
 

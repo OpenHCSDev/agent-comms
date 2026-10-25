@@ -939,8 +939,10 @@ class StoreGuardFamiliesPhase(StoreGuardsPhase):
 
     evidence = AllEvidence(
         (
-            *(ClassDeclared(name, ("src/agent_comms/store_files.py",))
-              for name in ("SingleFileStore", "SqliteStore", "MultiFileStore", "ProcessSingleton")),
+            ClassDeclared("SingleFileStore", ("src/agent_comms/store_files.py",)),
+            ClassDeclared("SqliteStore", ("src/agent_comms/store_files.py",)),
+            ClassDeclared("MultiFileStore", ("src/agent_comms/store_files.py",)),
+            ClassDeclared("ProcessSingleton", ("src/agent_comms/store_files.py",)),
             PatternAbsent(r"fcntl\.flock\(",
                           ("src", ":!src/agent_comms/child_process.py", ":!src/agent_comms/skills/")),
             PatternAbsent(r"_store_lock\(", ("src/agent_comms/typed_table.py",)),
