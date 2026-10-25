@@ -6,15 +6,59 @@ import hashlib
 import json
 import os
 import platform
+import shutil
 import subprocess
 import sys
 from collections.abc import Mapping
 from dataclasses import dataclass
+from functools import cache
 from pathlib import Path
-from typing import cast
+from typing import ClassVar, cast
 
 INPUTS_PREFIX = "# agent-comms-native-inputs-v1 "
 PREPARATION_SCHEME = "sealed-native-store-v1"
+
+
+class GitLaunch:
+    """One Git child boundary, also usable by the isolated stdlib bootstrap."""
+
+    program: ClassVar[str] = "git"
+
+    @classmethod
+    def command(cls, checkout: Path | str, *args: str) -> tuple[str, ...]:
+        return cls.program, "-C", str(checkout), *args
+
+    @staticmethod
+    @cache
+    def _local_environment(program: Path, modified_ns: int) -> frozenset[str]:
+        """Git declares local selectors; the binary's stamp keys this immutable answer."""
+        probe = subprocess.run(
+            (program, "rev-parse", "--local-env-vars"), capture_output=True, text=True,
+            timeout=10, check=True,
+            env={name: value for name, value in os.environ.items()
+                 if not name.startswith("GIT_")} | {"LC_ALL": "C"},
+        )
+        return frozenset(probe.stdout.splitlines())
+
+    @classmethod
+    def environment(cls, source: Mapping[str, str]) -> dict[str, str]:
+        """The checkout selects the repository; inherit auth and command configuration."""
+        executable = shutil.which(cls.program, path=source.get("PATH", os.defpath))
+        if executable is None:
+            raise FileNotFoundError(cls.program)
+        program = Path(executable)
+        local = cls._local_environment(program, program.stat().st_mtime_ns)
+        # GIT_CONFIG_* carries command configuration, including auth and fixture
+        # identity; GIT_CONFIG instead selects an alternate configuration file.
+        return {name: value for name, value in source.items()
+                if name not in local or name.startswith("GIT_CONFIG_")} | {"LC_ALL": "C"}
+
+    @classmethod
+    def _run(
+        cls, checkout: Path | str, *args: str, timeout: float = 60, input: bytes = b""
+    ) -> subprocess.CompletedProcess[bytes]:
+        return subprocess.run(cls.command(checkout, *args), capture_output=True,
+                              input=input, timeout=timeout, env=cls.environment(os.environ))
 
 
 def built_tree_pin(manifest: Path) -> str:
@@ -92,35 +136,20 @@ class NativeRepositoryInputs:
 
 
 @dataclass(frozen=True)
-class NativeBuildInputs:
+class NativeBuildInputs(GitLaunch):
     root: Path
 
     def paths(self) -> tuple[Path, ...]:
         """The files the recipe in stack/native reads: that directory and the
         repository inputs it declares.
         """
-        # A hook's or bisect's GIT_* variables would point git at another repository.
-        environment = {
-            name: value for name, value in os.environ.items() if not name.startswith("GIT_")
-        }
-        tracked = subprocess.run(
-            [
-                "git",
-                "-C",
-                str(self.root),
-                "ls-files",
-                "-z",
-                "--cached",
-                "--",
-                "stack/native",
-                *NativeRepositoryInputs.of(self.root).pathspecs(),
-            ],
-            env=environment,
-            check=True,
-            capture_output=True,
-            text=True,
-        ).stdout
-        return tuple(sorted(self.root / path for path in tracked.split("\0") if path))
+        tracked = self._run(
+            self.root, "ls-files", "-z", "--cached", "--", "stack/native",
+            *NativeRepositoryInputs.of(self.root).pathspecs(),
+        )
+        tracked.check_returncode()
+        paths = tracked.stdout.decode()
+        return tuple(sorted(self.root / path for path in paths.split("\0") if path))
 
     def digest(self, manifest: Path) -> str:
         digest = hashlib.sha256()

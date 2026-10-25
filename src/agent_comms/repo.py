@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import os
 import shutil
 import subprocess
 from abc import ABC, abstractmethod
@@ -17,6 +16,7 @@ from .declared_family import DeclaredFamily
 from .errors import MissingSourceLine
 from .field_codec import FieldCodec, WireValue
 from .repository_name import RepositoryName
+from .native_build_inputs import GitLaunch
 
 if TYPE_CHECKING:
     from .todos import Todo
@@ -62,7 +62,7 @@ class GitCommandError(RuntimeError, CommandFailure):
         )
 
 
-class Repo(BaseModel, WireValue):
+class Repo(GitLaunch, BaseModel, WireValue):
     """A repository the fleet works on: its check checkout, its GitHub name and its source root."""
 
     model_config = ConfigDict(frozen=True)
@@ -132,14 +132,6 @@ class Repo(BaseModel, WireValue):
 
     def has_commit(self, sha: str) -> bool:
         return self.answers(self.checkout, "rev-parse", "--verify", "--quiet", f"{sha}^{{commit}}")
-
-    @staticmethod
-    def _run(
-        checkout: Path | str, *args: str, timeout: float = 60, input: bytes = b""
-    ) -> subprocess.CompletedProcess[bytes]:
-        """The one Git subprocess: C-locale output, bytes in and out."""
-        return subprocess.run(("git", "-C", str(checkout), *args), capture_output=True,
-                              input=input, timeout=timeout, env=os.environ | {"LC_ALL": "C"})
 
     @classmethod
     def git_bytes(cls, checkout: Path | str, *args: str, timeout: float = 60,
