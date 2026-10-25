@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import errno
+import fcntl
 import math
 import os
 import stat
@@ -18,7 +19,6 @@ from contextlib import (
     ExitStack,
     asynccontextmanager,
     contextmanager,
-    suppress,
 )
 from contextvars import Context, ContextVar
 from dataclasses import dataclass, field
@@ -31,8 +31,6 @@ from .declared_family import DeclaredFamily
 from .errors import RelationViolationError
 from .private_path import FileIdentity, PrivateFileRole
 
-with suppress(ModuleNotFoundError):  # Windows; Win32Platform never asks a mode for its flock.
-    import fcntl
 
 class LockMode(ABC):
     """Whether a store lock lets other holders in, and what its holder may do."""
@@ -467,7 +465,6 @@ class StoreLockAcquisition:
         *, mode: LockMode, lock_type: type[StoreLock],
     ) -> Iterator[StoreLock]:
         with ExitStack() as resources:
-            resources.callback(platform.release_store_lock, file.fileno())
             acquisition = cls(file, mode, FileIdentity.from_stat(os.fstat(file.fileno())))
             yield resources.enter_context(acquisition.source(store_path, read_budget, lock_type))
 

@@ -1,4 +1,4 @@
-"""The install child: reads its ``InstallRun`` from stdin and prints the report."""
+"""The install unit: reads its ``InstallRun`` on standard input and prints the report."""
 from __future__ import annotations
 
 import json

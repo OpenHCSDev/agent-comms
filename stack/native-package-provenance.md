@@ -14,9 +14,10 @@ one `# agent-comms-native-stock-v1 <npm spec>` line. Its complete bytes still
 select the build directory, so changing the tree pin changes the build identity.
 The current commitment is that line in `pi-native.sha256`; no document repeats it.
 The manifest also pins the source inventory as `agent-comms-native-inputs-v1`.
-`NativeBuildInputs` owns that inventory and hashes source paths, executable modes,
-contents and the stock release. Test environments require this commitment before
-using a cache key derived from both those inputs and the complete manifest.
+The recipe directory `stack/native` and its `repository-inputs.json` declaration
+own that inventory. `NativeBuildInputs` hashes their tracked source paths,
+executable modes, contents and the stock release. Test environments require this
+commitment before using a cache key derived from those inputs and the manifest.
 Changing a patch without rebuilding with `prepare-pi-native --update-pins` refuses
 the environment, even when an older cached artifact is available.
 The update-check/all-package-spawn correction supersedes NON-CLEAN `8c6ce7`'s

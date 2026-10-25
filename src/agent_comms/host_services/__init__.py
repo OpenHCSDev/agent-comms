@@ -88,11 +88,14 @@ class HostService(DeclaredFamily, affix="Service", discovery_package=__name__):
         return tuple(instance for member in cls.members_with(cls) for instance in member.running())
 
     @classmethod
-    def stop_running(cls) -> tuple[HostService, ...]:
-        """Stop every running service, so nothing writes the root while it is restored."""
-        stopped = cls.instances()
-        cls.stop_all(stopped)
-        return stopped
+    def start_enabled(cls) -> None:
+        """Start every service this host enables, each by its own name, so one the install
+        found already dead serves again; a member nothing enables starts nothing."""
+        for member in cls.members_with(cls):
+            member.start_enabled_unit()
+
+    @classmethod
+    def start_enabled_unit(cls) -> None: ...
 
     def start_onto(self, installed: Path) -> RestartedService:
         self.start()
@@ -113,8 +116,63 @@ class HostService(DeclaredFamily, affix="Service", discovery_package=__name__):
         raise ServiceNotServingError(failure)
 
 
+class UnitActivity(DeclaredFamily, affix="Unit"):
+    """systemd's ActiveState of a unit, an external contract decoded once by its spelling."""
+
+    @classmethod
+    def ended(cls) -> bool:
+        """Whether the unit has stopped running, cleanly or not."""
+        return False
+
+
+class EndedUnit(UnitActivity, declared_name=None):
+    @classmethod
+    def ended(cls) -> bool:
+        return True
+
+
+class ActiveUnit(UnitActivity): ...
+
+
+class ReloadingUnit(UnitActivity): ...
+
+
+class RefreshingUnit(UnitActivity): ...
+
+
+class ActivatingUnit(UnitActivity): ...
+
+
+class DeactivatingUnit(UnitActivity): ...
+
+
+class MaintenanceUnit(UnitActivity): ...
+
+
+class InactiveUnit(EndedUnit): ...
+
+
+class FailedUnit(EndedUnit): ...
+
+
+class SystemdUnit:
+    """A unit of the user's systemd manager: systemd, never its caller, owns its processes,
+    so stopping the caller's own unit cannot reach them."""
+
+    @staticmethod
+    def shown(unit: str, name: str) -> str:
+        return subprocess.check_output(
+            ("systemctl", "--user", "show", "-p", name, "--value", unit),
+            text=True,
+        ).strip()
+
+    @classmethod
+    def activity(cls, unit: str) -> type[UnitActivity]:
+        return UnitActivity.member_named(cls.shown(unit, "ActiveState"))
+
+
 @dataclass(frozen=True)
-class SystemdUserService(HostService, declared_name=None):
+class SystemdUserService(SystemdUnit, HostService, declared_name=None):
     """Systemd owns the unit's process; its definition starts that process again.
 
     Each member declares its readiness options. Systemd, not this configuration,
@@ -175,27 +233,25 @@ class SystemdUserService(HostService, declared_name=None):
         subprocess.run(("systemctl", "--user", "enable", "--now", self.unit_name()), check=True)
 
     @classmethod
-    def _pid_for(cls, name: str) -> int:
+    def _owned(cls, name: str) -> bool:
         """Only the unit loaded from this home's owned definition belongs to it.
 
         The user manager belongs to the UID, not HOME; a private install must not
         discover or restart the real home's service through that shared manager.
         """
         unit = cls.unit_file(Path.home())
-        if not unit.is_file():
-            return 0
-        loaded = subprocess.check_output(
-            ("systemctl", "--user", "show", "-p", "FragmentPath", "--value", name),
-            text=True,
-        ).strip()
-        if Path(loaded).resolve() != unit.resolve():
-            return 0
-        return int(
-            subprocess.check_output(
-                ("systemctl", "--user", "show", "-p", "MainPID", "--value", name),
-                text=True,
-            )
-        )
+        return unit.is_file() and Path(cls.shown(name, "FragmentPath")).resolve() == unit.resolve()
+
+    @classmethod
+    def _pid_for(cls, name: str) -> int:
+        return int(cls.shown(name, "MainPID")) if cls._owned(name) else 0
+
+    @classmethod
+    def start_enabled_unit(cls) -> None:
+        """``render_unit`` installs into ``default.target``, so enabling links it there."""
+        enabled = cls.unit_file(Path.home()).parent / "default.target.wants" / cls.unit
+        if enabled.exists() and cls._owned(cls.unit):
+            subprocess.run(("systemctl", "--user", "start", cls.unit), check=True)
 
     def pid(self) -> int:
         return self._pid_for(self.unit_name())

@@ -1,9 +1,9 @@
 # Disposable native input-ID fork (not a live rollout)
 
-`stack/bin/prepare-pi-native` fetches the npm spec declared in `stack/pi-native.sha256` and installs its locked dependencies. It passes that spec and package directory to `prepare-copied-pi.sh`, which checks package identity, makes an independent private copy, applies `native-input.patch` with **zero fuzz**, checks six patched JS modules, and prints `PI_PACKAGE_DIR` and `PI_CLI`. The script has no default stock directory and no second release or per-file checksum list. It does **not** patch the installed binary or create an autoload extension. The patch also updates the corresponding `.d.ts` files. Package identity mismatch, patch rejection and tool failures keep their own diagnostics.
+`stack/native/prepare-pi-native` fetches the npm spec declared in `stack/pi-native.sha256` and installs its locked dependencies. It passes that spec and package directory to `prepare-copied-pi.sh`, which checks package identity, makes an independent private copy, applies `native-input.patch` with **zero fuzz**, checks six patched JS modules, and prints `PI_PACKAGE_DIR` and `PI_CLI`. The script has no default stock directory and no second release or per-file checksum list. It does **not** patch the installed binary or create an autoload extension. The patch also updates the corresponding `.d.ts` files. Package identity mismatch, patch rejection and tool failures keep their own diagnostics.
 
 ```sh
-stack/bin/prepare-pi-native --python /path/to/python
+stack/native/prepare-pi-native --python /path/to/python
 # Ask the prepared package owner for the path used by offline tests:
 PI_PACKAGE_DIR=$(PYTHONPATH=src /path/to/python -c 'from agent_comms.native_package import pinned_location; print(pinned_location())') \
   PI_OFFLINE=1 node --test \

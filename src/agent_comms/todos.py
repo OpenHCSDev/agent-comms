@@ -27,7 +27,6 @@ from types import get_original_bases
 from typing import TYPE_CHECKING, Annotated, ClassVar, Self, get_args, get_origin
 from uuid import uuid4
 
-from agent_comms.active_route import guard_original_root_write
 from agent_comms.build_identity import (
     BuildIdentity,
     CommitInstallation,
@@ -1465,11 +1464,11 @@ class GrowthReason(PlainText):
         return bool({path, Path(path).name} & words)
 
 
-class CheckCorrectionReason(PlainText):
-    """Why the recorded check was wrong, in enough words to stand on the record."""
+class OrderCorrectionReason(PlainText):
+    """Why the recorded check or run was wrong, in enough words to stand on the record."""
 
     refusal = (
-        "Say what was wrong with the recorded check in {}+ words; jargon {} hides what happened."
+        "Say what was wrong with the recorded order in {}+ words; jargon {} hides what happened."
     )
     least_words = 8
 
@@ -1685,8 +1684,8 @@ class ProblemOrder(LifecycleCapability, DeclaredFamily, StorySource, affix="Prob
     def check_base(self, repo: Path) -> str:
         raise TodoError("This problem has no active checked order.")
 
-    def corrected(self, correction: CorrectCheckTodo) -> ProblemOrder:
-        raise TodoError("Only an active checked order takes a check correction.")
+    def corrected(self, correction: CorrectOrderTodo) -> ProblemOrder:
+        raise TodoError("Only an active checked order takes a correction.")
 
     finding: Annotated[ProblemFinding, WireOmitDefault()] = field(
         default_factory=UnlocatedProblemFinding
@@ -1929,6 +1928,13 @@ class CheckedProblemOrder(ProblemOrder, declared_name=None):
     def linked_requests(self) -> tuple[PullRequestLink, ...]:
         return (*self.pull_requests, *(claim.pull_request for claim in self.commander_claims()))
 
+    def require_linkable(self) -> None:
+        """An order still taking work accepts another pull request."""
+
+    def linked_to(self, link: PullRequestLink) -> Self:
+        self.require_linkable()
+        return replace(self, pull_requests=(*self.pull_requests, link))
+
     @property
     def installation_commits(self) -> tuple[str, ...]:
         return ()
@@ -2006,8 +2012,6 @@ class CheckedProblemOrder(ProblemOrder, declared_name=None):
                 *traced.located(),
             ) if reference not in self.created
         ))
-        problems.extend(refusal for slop in document.slop
-                        for refusal in slop.by.unnamed_by(self.edits))
         deleted = {Path(module).stem for module in self.deletes.modules}
         if deleted and (unread := context.importers(deleted, check)):
             problems.append(f'the order deletes {sorted(deleted)}, which {unread} import; '
@@ -2048,9 +2052,7 @@ class CheckedProblemOrder(ProblemOrder, declared_name=None):
     report: str
     at: EventTime
     first_call_deadline: EventTime
-    check_corrections: Annotated[
-        tuple[CorrectCheckTodo, ...], WireOmitDefault()
-    ] = ()
+    corrections: Annotated[tuple[CorrectOrderTodo, ...], WireOmitDefault()] = ()
     run: OrderRun
     deletes: Annotated[OrderDeletion, WireOmitDefault()] = field(
         default_factory=NoOrderDeletion
@@ -2130,6 +2132,7 @@ class CheckedProblemOrder(ProblemOrder, declared_name=None):
                           store: TodoStore, actor: ThreadIncarnation) -> str:
         """Create once; record the returned identity on this order, not in its prose."""
         todo.require_actor(actor, todo.held().generation)
+        self.require_linkable()
         created = subprocess.run(
             ("gh", "pr", "create", "--draft", "-R", todo.repo.to_wire(),
              "--title", title, "--body-file", "-"),
@@ -2192,11 +2195,8 @@ class CheckedProblemOrder(ProblemOrder, declared_name=None):
 class OpenProblemOrder(CheckedProblemOrder, declared_name=None):
     """An active order keeps corrections and accepts its checked delivery by identity."""
 
-    def corrected(self, correction: CorrectCheckTodo) -> Self:
-        if correction.previous != self.check:
-            raise TodoError("The order's check changed since it was read; read it again.")
-        return replace(self, check=correction.check,
-                       check_corrections=(*self.check_corrections, correction))
+    def corrected(self, correction: CorrectOrderTodo) -> Self:
+        return correction.corrected(self)
 
     def require_delivery(self, order_id: str) -> None:
         if self.id != order_id:
@@ -2227,6 +2227,10 @@ class MergedProblemOrder(AwaitingInstallationProblemOrder):
 
     def closed_in(self, todo: Todo) -> Todo:
         return DoneTodoState.closed(todo, self)
+
+    def require_linkable(self) -> None:
+        raise TodoError(f"Order {self.id} merged as {self.sha[:9]}; its pull requests are closed. "
+                         "Ask the commander for a send-back before opening or linking another PR.")
 
     def waiting_in(self, todo: Todo) -> Todo:
         return (todo if todo.order == self
@@ -3738,30 +3742,71 @@ class ReleaseTodo(TodoOperation, StoryEvent, TodoHolder):
 
 
 @dataclass(frozen=True)
-class CorrectCheckTodo(TodoOperation):
-    """The commander replaces a wrong check of an open order.
+class CorrectOrderTodo(TodoOperation, declared_name=None):
+    """The commander replaces a wrong part of an open order.
 
     The order keeps its id, holder, review timer and strikes; a correction is not a resend."""
     actor: ThreadIncarnation
-    previous: OrderCheck
-    check: OrderCheck
     reason: str
-    at: EventTime = field(default_factory=lambda: EventTime.capture(time.time()))
+    previous: object
+    at: EventTime = field(default_factory=lambda: EventTime.capture(time.time()), kw_only=True)
 
     def prepare(self, goals: Goals, current: Todo) -> Self:
-        CheckCorrectionReason(self.reason)
-        self.check.require_directory()
-        current.order.checked().require_check_acceptance(
-            self.check, goals.registry.storage_rule.checkout_base
-        )
+        OrderCorrectionReason(self.reason)
         return self
 
     def changed(self, current: Todo) -> Todo:
         current.require_commander(self.actor)
         current.state.require_open(current)
-        _text(self.reason, "Check correction reason", 2000)
-        self.check.require_writable()
+        _text(self.reason, "Correction reason", 2000)
         return replace(current, order=current.order.corrected(self), revision=current.revision + 1)
+
+    def corrected[Order: OpenProblemOrder](self, order: Order) -> Order:
+        if self.previous != self.part(order):
+            raise TodoError("The corrected part changed since it was read; read it again.")
+        return replace(self.replaced(order), corrections=(*order.corrections, self))
+
+    @abstractmethod
+    def part(self, order: OpenProblemOrder) -> object:
+        """The order's current value of the part this correction replaces."""
+
+    @abstractmethod
+    def replaced[Order: OpenProblemOrder](self, order: Order) -> Order:
+        """The order with this correction's part replaced."""
+
+
+@dataclass(frozen=True)
+class CorrectCheckTodo(CorrectOrderTodo):
+    """The commander replaces a wrong check of an open order."""
+    previous: OrderCheck
+    check: OrderCheck
+
+    def prepare(self, goals: Goals, current: Todo) -> Self:
+        self.check.require_directory()
+        current.order.checked().require_check_acceptance(
+            self.check, goals.registry.storage_rule.checkout_base
+        )
+        return super().prepare(goals, current)
+
+    def part(self, order: OpenProblemOrder) -> OrderCheck:
+        return order.check
+
+    def replaced[Order: OpenProblemOrder](self, order: Order) -> Order:
+        self.check.require_writable()
+        return replace(order, check=self.check)
+
+
+@dataclass(frozen=True)
+class CorrectRunTodo(CorrectOrderTodo):
+    """The commander replaces the run that closes an open order, e.g. one naming deleted code."""
+    previous: OrderRun
+    run: OrderRun
+
+    def part(self, order: OpenProblemOrder) -> OrderRun:
+        return order.run
+
+    def replaced[Order: OpenProblemOrder](self, order: Order) -> Order:
+        return replace(order, run=self.run)
 
 
 @dataclass(frozen=True)
@@ -3802,8 +3847,7 @@ class RecordPullRequest(TodoCommand):
         order = current.order.checked()
         if self.link in order.pull_requests:
             return current
-        return replace(current, revision=current.revision + 1,
-                       order=replace(order, pull_requests=(*order.pull_requests, self.link)))
+        return replace(current, revision=current.revision + 1, order=order.linked_to(self.link))
 
 
 @dataclass(frozen=True)
@@ -3828,7 +3872,7 @@ class ClaimOrder(TodoCommand):
 
     def record(self, goals: Goals, problem: str) -> Todo:
         """Retain the publication's actual address before saving its content identity."""
-        with guard_original_root_write(goals.root), NativeBoundary(goals.bus) as boundary:
+        with NativeBoundary(goals.bus) as boundary:
             current = goals.todos.get(problem)
             target = IncarnationThreadTarget(
                 goals.todos.owner_request(current.request.require()).commander)
