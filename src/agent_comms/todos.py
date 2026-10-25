@@ -3339,7 +3339,8 @@ class TodoBatch:
         with goals.todos.writing() as db:
             for call in self.together:
                 call.write(db, goals.todos)
-            written = tuple(goals.todos._current(db, call.problem) for call in self.together)
+            written = goals.todos._snapshot_rows(
+                db, tuple(goals.todos._current(db, call.problem) for call in self.together))
         for call, changed in zip(self.together, written):
             call.operation.after_record(goals, changed)
         return (*written, *(call.operation.record(goals, call.problem) for call in self.alone))
@@ -5162,10 +5163,15 @@ class TodoStore(OwnerRequestStore, TodoHistory):
 
     @contextmanager
     def writing(self) -> Iterator[sqlite3.Connection]:
+        """Rows read in the transaction read history through its connection; a conflict
+        leaving it carries its row detached while that connection is still open."""
         try:
             with (RegistryStore.at(self.root).guarded_read(),
                   super(TodoStore, self).writing() as connection):
-                yield connection
+                try:
+                    yield connection
+                except TodoConflict as conflict:
+                    raise TodoConflict(self._snapshot_rows(connection, (conflict.current,))[0]) from conflict
         except sqlite3.Error as error:
             raise TodoStoreUnwritable(
                 f"{self.path}: {type(error).__name__}: {error}"
