@@ -19,6 +19,7 @@ from .agent_activity import (
     RecordedRecipientActivity,
 )
 from .audience_manifest import FrozenRecipient
+from .bus import DisplayUnread
 from .channel_targets import CommandTarget
 from .channels import Channel, ChannelMemberIndex, Channels
 from .cli_result import CliResult
@@ -436,6 +437,7 @@ class BusPresentation:
         self.agents = agents
         self.goals = goals
         self._path = bus.bus.path
+        self._display_unread = DisplayUnread()
 
     @contextmanager
     def snapshot(self, viewer: NamedViewer) -> Iterator[tuple[CapturedSelection, BusSnapshot]]:
@@ -493,10 +495,11 @@ class BusPresentation:
         membership. None is supplied independently by the metrics caller.
         Derived maxima are committed by the append, never prepared by this reader.
         """
-        seen = basis.seen(source)
-        activity = {scope.channel: scope.activity(source) for scope in basis.scopes}
-        unread = source.display_unread(basis.scopes, basis.viewer_names, seen, basis.registry)
-        return activity, unread
+        selection = basis.unread_selection(source)
+        activity = {scope.channel: scope.activity(source) for scope in selection.scopes}
+        counted = self._display_unread.advanced(source, selection)
+        self._display_unread = counted
+        return activity, counted.counts
 
 
 @dataclass(frozen=True, slots=True)

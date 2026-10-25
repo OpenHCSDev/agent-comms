@@ -1143,6 +1143,16 @@ class MemberActivityDisplayScope(AllTargetsDisplayScope):
 
 
 @dataclass(frozen=True, slots=True)
+class DisplayUnreadSelection:
+    """The complete captured inputs that determine an unread count."""
+
+    seen: ReadCursor
+    scopes: tuple[ChannelDisplayScope, ...]
+    viewer_names: tuple[str, ...]
+    registry: RegistryProvenance
+
+
+@dataclass(frozen=True, slots=True)
 class CapturedSelection:
     """One captured registry/catalog/read basis for local human presentation."""
 
@@ -1156,6 +1166,10 @@ class CapturedSelection:
     def seen(self, source: BusSnapshot) -> ReadCursor:
         return self.viewer.cursor(self.reads, self.registry, self.document, source)
 
+    def unread_selection(self, source: BusSnapshot) -> DisplayUnreadSelection:
+        return DisplayUnreadSelection(
+            self.seen(source), self.scopes, tuple(sorted(self.viewer_names)), self.registry,
+        )
     @classmethod
     def capture(
         cls, snapshot: RegistrySnapshot, catalog: CatalogDocument,
