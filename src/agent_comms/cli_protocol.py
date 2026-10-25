@@ -15,6 +15,7 @@ from typing import TYPE_CHECKING, Annotated, ClassVar, NoReturn, Self, Union
 
 from pydantic import (
     Discriminator,
+    GetCoreSchemaHandler,
     InstanceOf,
     PlainSerializer,
     PlainValidator,
@@ -23,6 +24,7 @@ from pydantic import (
     field_validator,
     model_validator,
 )
+from pydantic_core import CoreSchema
 from typing_extensions import TypeForm
 
 from .coordination_errors import CoordinationError, CoordinationReadUnavailable
@@ -117,6 +119,18 @@ class TaggedWire(DeclaredWireFamily, WireModel, ABC, affix="", declared_name=Non
             alternatives = Union[*reversed(tuple(hierarchy.static_order()))]
             variants.append(Annotated[alternatives, Tag(wire_tag)])
         return Annotated[Union[*variants], Discriminator(cls.tag_of)]
+
+
+class DeclaredMembers:
+    """Decodes the annotated family as the union of its declared members."""
+
+    def __get_pydantic_core_schema__(
+        self, family: type[TaggedWire], handler: GetCoreSchemaHandler
+    ) -> CoreSchema:
+        return handler(family.declared_union())
+
+
+type Declared[Family: TaggedWire] = Annotated[Family, DeclaredMembers()]
 
 
 class OpenWire(TaggedWire, ABC, declared_name=None):
