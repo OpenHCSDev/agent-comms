@@ -287,7 +287,7 @@ class MaintenanceClaimHolder(RecordMember, MaintenanceHolder):
         environment[HOLDER_NONCE] = self.request_text()
 
     def request_text(self) -> str:
-        return self.nonce
+        return str(self.nonce)
 
 
 class MaintenanceStatus:

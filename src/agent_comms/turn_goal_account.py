@@ -15,10 +15,12 @@ from typing import TYPE_CHECKING
 
 
 from .field_codec import GoalId, TurnId
+from .turn_item import UsageChargeId
 from agent_comms.goal_turn_permit import GoalTurnPermit, NoLaunchPermit
 from .goal_states import ActiveGoal, CompletedGoal, PausedGoal
 from .mro_dispatch import MroDispatch, handles
 from .reported_turn import ReportedTurn
+from .attempt_resolution import VerifiedTurnDecision
 
 if TYPE_CHECKING:
     from .goal_attempts import GoalAttemptStore, LaunchPermit
@@ -49,7 +51,7 @@ class VerifiedGoalSettlement(MroDispatch):
                 store = comms.goals.open_goal_store()
                 generation = store.require_generation(goal.id)
                 generation.lifecycle.continue_work(
-                    store, generation, f"verified-turn:{account.turn}"
+                    store, generation, VerifiedTurnDecision(account.turn)
                 )
 
     @property
@@ -91,7 +93,7 @@ class TurnGoalAccount:
     pending_origins: dict[str, GoalId]
     claims: ExitStack
     originated: dict[GoalId, GoalTurnPermit] = field(default_factory=dict, init=False)
-    unattributed_usage: list[tuple[str, PiUsage]] = field(default_factory=list, init=False)
+    unattributed_usage: list[tuple[UsageChargeId, PiUsage]] = field(default_factory=list, init=False)
     has_productive_tool: bool = field(default=False, init=False)
 
     @staticmethod
@@ -123,9 +125,9 @@ class TurnGoalAccount:
     def provider_usage(self, event: events.ProviderUsage) -> None:
         for goal in self.comms.registry.require(self.thread_name).goal:
             permit = self.originated.get(goal.id, self.permit)
-            if permit.charge_for(goal.id, self.comms.goals, str(event.response_id), event.usage):
+            if permit.charge_for(goal.id, self.comms.goals, event.response_id, event.usage):
                 return
-        self.unattributed_usage.append((str(event.response_id), event.usage))
+        self.unattributed_usage.append((event.response_id, event.usage))
 
     def tool_ended(self, event: events.ToolEnd) -> None:
         self.has_productive_tool |= bool(event.ok)

@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 from .sealed import Sealed
+from .turn_item import PiRequestKey
 
 if TYPE_CHECKING:
     from .pi_commands import PiCommand
@@ -22,10 +23,10 @@ class PendingRequests(Sealed):
     """One future per nominal result family and request identity."""
 
     def __init__(self) -> None:
-        self._pending: dict[tuple[type[PiCommand], str], PendingRequest] = {}
+        self._pending: dict[tuple[type[PiCommand], PiRequestKey], PendingRequest] = {}
 
     def add(
-        self, result_type: type[PiCommand], request_id: str, *, request: PiCommand
+        self, result_type: type[PiCommand], request_id: PiRequestKey, *, request: PiCommand
     ) -> asyncio.Future[Response]:
         key = (result_type, request_id)
         if key in self._pending:
@@ -34,11 +35,11 @@ class PendingRequests(Sealed):
         self._pending[key] = PendingRequest(future, request)
         return future
 
-    def discard(self, result_type: type[PiCommand], request_id: str) -> None:
+    def discard(self, result_type: type[PiCommand], request_id: PiRequestKey) -> None:
         self._pending.pop((result_type, request_id), None)
 
     def take(
-        self, result_type: type[PiCommand], request_id: str, value: Response,
+        self, result_type: type[PiCommand], request_id: PiRequestKey, value: Response,
     ) -> PiCommand | None:
         """Resolve a transport result and return its originating command, once."""
         pending = self._pending.pop((result_type, request_id), None)

@@ -562,7 +562,7 @@ class TurnIdsPhase(Id128NominalPhase):
 
 
 class GoalIdsPhase(Id128NominalPhase):
-    """6: goal ids are ``GoalId``, minted by it, never by a hand-written ``uuid4().hex``."""
+    """6: goal ids are ``GoalId``, minted by it, never minted by hand."""
 
     after = (NominalIdTypePhase,)
     evidence = Id128NominalPhase.plain("goal_id|original_goal_id")

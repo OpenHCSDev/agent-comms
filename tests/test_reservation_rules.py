@@ -12,6 +12,7 @@ from agent_comms.native_session_reopen import NativeSessionIdentity
 from agent_comms.session_revision import SessionRevision
 from agent_comms.thread_identity import RecordedThreadIncarnation
 from stored_inputs import stored_inputs
+from agent_comms.native_session_reopen import PiSessionId
 
 
 FIRST_KEY = AcpInputKey(InputId.mint())
@@ -30,7 +31,7 @@ def test_session_observation_preserves_source_and_distinguishes_unreadable_proof
     session = tmp_path / "session.jsonl"
     session.write_text("{}\n")
     files = NativeSessionFiles.for_identity(
-        NativeSessionIdentity("revision-test", str(session)),
+        NativeSessionIdentity(PiSessionId("revision-test"), str(session)),
         root=tmp_path / "bus", owner=RecordedThreadIncarnation("owner", 1.0),
     )
     absent = SessionRevision.observe(files).require_available()

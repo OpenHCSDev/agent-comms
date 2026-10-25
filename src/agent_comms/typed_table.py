@@ -99,19 +99,15 @@ def _identifier(name: str) -> str:
     return f'"{name}"'
 
 
-def _absent(member: object) -> bool:
-    """SQL NULL stores this union member: None, or a declared null member."""
-    return member is types.NoneType or (isinstance(member, type) and issubclass(member, NullMember))
-
-
 def _base_type(annotation: object) -> tuple[object, bool]:
     if get_origin(annotation) is Annotated:
         annotation = get_args(annotation)[0]
     if get_origin(annotation) in (Union, types.UnionType):
         members = get_args(annotation)
-        if len(members) == 2 and sum(map(_absent, members)) == 1:
-            return next(member for member in members if not _absent(member)), True
-    return annotation, False
+        present = tuple(member for member in members if not compile_decoder(member).accepts_null)
+        if len(members) == 2 and len(present) == 1:
+            return present[0], True
+    return annotation, compile_decoder(annotation).accepts_null
 
 
 class SqlStorage(DeclaredFamily, affix="Storage"):
@@ -1098,8 +1094,17 @@ class TableSchema(ABC):
         if not cls.schema_differs(db):
             return False
         change.require()
-        with rebuild.attached(db) as attached, SQLiteFile.write_transaction(db):
-            cls.carry_schema(db, rebuild=attached)
+        with SQLiteFile.relations_suspended(db):
+            with rebuild.attached(db) as attached, SQLiteFile.write_transaction(db):
+                cls.carry_schema(db, rebuild=attached)
+                with closing(SQLiteForeignKeyViolation.iterate(
+                    db.execute('SELECT "table", parent, fkid FROM pragma_foreign_key_check()'),
+                )) as violations:
+                    for violation in violations:
+                        raise cls.schema_error(
+                            f"{cls.__name__} foreign-key violation: table={violation.table}, "
+                            f"parent={violation.parent}, fkid={violation.fkid}"
+                        )
         return True
 
     @classmethod
@@ -1720,6 +1725,13 @@ class ProjectionProducerTables(SharedFileTables, DerivedTables):
 @dataclass(frozen=True)
 class SQLiteForeignKeys(TypedRow):
     foreign_keys: bool
+
+
+@dataclass(frozen=True)
+class SQLiteForeignKeyViolation(TypedRow):
+    table: str
+    parent: str
+    fkid: int
 
 
 @dataclass(frozen=True)

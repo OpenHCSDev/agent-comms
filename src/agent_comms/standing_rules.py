@@ -16,7 +16,7 @@ from itertools import combinations
 from typing import TYPE_CHECKING, ClassVar, Self
 
 from agent_comms.declared_family import DeclaredFamily
-from agent_comms.field_codec import FieldCodec
+from agent_comms.field_codec import FieldCodec, OrderId
 from agent_comms.errors import RejectedEnforcementError, TodoConflict
 from agent_comms.text_digest import TextDigest
 from agent_comms.recorded_time import EventTime, RecordedEventTime
@@ -543,7 +543,7 @@ class HeldOrderDue(HolderLine, DatedStandingRule, declared_name=None):
 
     problem: str
     holder: ThreadIncarnation
-    order: str
+    order: OrderId
     since: EventTime
 
     @classmethod
@@ -584,7 +584,7 @@ class DeliveredHeadReview(HolderLine, DatedStandingRule):
 
     problem: str
     holder: ThreadIncarnation
-    order: str
+    order: OrderId
     repo: RepositoryName
     pr: int
     head: str
@@ -593,7 +593,7 @@ class DeliveredHeadReview(HolderLine, DatedStandingRule):
 
     @classmethod
     def for_head(
-        cls, problem: str, holder: ThreadIncarnation, order: str, claim: OrderClaim,
+        cls, problem: str, holder: ThreadIncarnation, order: OrderId, claim: OrderClaim,
         request: PullRequest, now: float,
     ) -> tuple[Self, ...]:
         due_at = claim.message.timestamp + cls.minutes * 60
@@ -810,7 +810,7 @@ class BoardDisagrees(UndatedStandingRule):
     """An open order reads as no commit despite its linked pull request having merged."""
 
     problem: str
-    order: str
+    order: OrderId
     merge: str
 
     @classmethod

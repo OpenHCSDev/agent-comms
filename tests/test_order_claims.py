@@ -1,30 +1,37 @@
 """A holder claims through the real tool boundary on a copied bus."""
-from contextlib import chdir
-from dataclasses import replace
 import json
 import shlex
 import time
+from contextlib import chdir
+from dataclasses import replace
 
 import pytest
 
 from agent_comms.commander.order import OrderFile, main
-from agent_comms.field_codec import FieldCodec, GoalId, RecordProblems
-from agent_comms.goal_actions import SetGoalAction
 from agent_comms.commander.package import CommanderPackage
 from agent_comms.errors import TodoConflict, TodoError, ToolRefusedError
+from agent_comms.field_codec import FieldCodec, GoalId, OrderId, RecordProblems
+from agent_comms.goal_actions import SetGoalAction
 from agent_comms.goals import OrderCheck, ProblemGoalOrder
 from agent_comms.messages import QuestionKind
+from agent_comms.native_tool_call import ToolCallId
+from agent_comms.order_tools import (
+    CommsHudTool,
+    CommsOrderDeliverTool,
+    CommsVerdictTool,
+    TodoChanged,
+)
 from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.todos import (
-    ClaimOrder,
     ClaimedProblemOrder,
+    ClaimOrder,
     CorrectCheckTodo,
-    DoneTodoState,
-    FailedCheckStrike,
     DeliveredProblemOrder,
     DeliveryReport,
-    PendingProblemOrder,
+    DoneTodoState,
+    FailedCheckStrike,
     OrderClaim,
+    PendingProblemOrder,
     ReleaseTodo,
     SendBackVerdict,
     StrikeReason,
@@ -34,7 +41,6 @@ from agent_comms.todos import (
 from agent_comms.tool_caller import ThreadCaller
 from agent_comms.tools import CommsHistoryTool
 from agent_comms.order_runs import ApplicationOrderRun
-from agent_comms.order_tools import CommsHudTool, CommsOrderDeliverTool, CommsVerdictTool, TodoChanged
 from test_held_problem_orders import merge_two_commit_fix
 from test_todos import order, thread
 
@@ -93,7 +99,7 @@ def test_claim_verdict_family_on_retained_copy(held_commander):
     )
     ThreadCaller(ctx.commander).invoke(CommsVerdictTool(
         problem="P1", operation=SendBackVerdict(
-            claimed.revision, ctx.incarnation, claimed.held(), "fixture-call", why,
+            claimed.revision, ctx.incarnation, claimed.held(), ToolCallId("fixture-call"), why,
             evidence=(claimed.order.owner,),
         ),
     ), comms)
@@ -244,7 +250,7 @@ def corrected_order_file(ctx, source) -> str:
     marker.touch()
     now = time.time()
     document = OrderFile(
-        replace(order(source), id="corrected-order",
+        replace(order(source), id=OrderId.mint(),
                 check=OrderCheck(ctx.repos[0].checkout, f"test ! -e {shlex.quote(str(marker))}"),
                 at=RecordedEventTime(now), first_call_deadline=RecordedEventTime(now + 120)),
         "The claimed change keeps the duplicated decision the order told the unit to delete",
@@ -288,7 +294,7 @@ def test_two_delivery_claims_warn_without_deadlocking_other_orders(
         "P2", original.repo, "Repair the other held workflow", creator=lead,
         assigner=ctx.incarnation, owner=other, generation=other_order_goal_id,
         request=original.request.require(), review_at=RecordedEventTime(time.time() + 1000),
-        order=replace(original.order.checked(), id="other-order"),
+        order=replace(original.order.checked(), id=OrderId.mint()),
     )
     head = source.git(source.checkout, "rev-parse", "HEAD").strip()
     claims = []

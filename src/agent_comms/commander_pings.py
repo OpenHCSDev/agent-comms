@@ -17,6 +17,7 @@ from agent_comms.channel_targets import ThreadTarget
 from agent_comms.declared_family import DeclaredFamily
 from agent_comms.commander_service import CommanderService
 from agent_comms.errors import RelationViolationError
+from agent_comms.field_codec import OrderId
 from agent_comms.message_reference import MessageReference
 from agent_comms.heartbeat_subjects import HeartbeatSubject
 from agent_comms.messages import (
@@ -38,7 +39,7 @@ if TYPE_CHECKING:
 @dataclass(frozen=True)
 class OrderKey:
     problem: str
-    order: str
+    order: OrderId
 
 
 @dataclass(frozen=True)

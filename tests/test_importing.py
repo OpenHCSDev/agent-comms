@@ -49,6 +49,7 @@ from agent_comms.thread_text import GivenThreadText, NoThreadText
 from agent_comms.threads import Thread
 from agent_comms.child_process import NO_PROCESS
 from agent_comms.errors import RelationViolationError
+from agent_comms.native_failures import NativePiUnavailable
 from agent_comms.thread_execution import ExternalThreadExecution, NativeThreadExecution
 
 
@@ -422,8 +423,8 @@ def test_codex_uses_response_items_not_mirrored_events_and_keeps_recent_budget(t
     records += [
         {"type": "compacted", "payload": {"message": "Earlier context summary"}},
         {"type": "response_item", "payload": {"type": "reasoning", "encrypted_content": "opaque"}},
-        {"type": "response_item", "payload": {"type": "function_call", "name": "exec", "arguments": "{}"}},
-        {"type": "response_item", "payload": {"type": "function_call_output", "output": "x" * 400}},
+        {"type": "response_item", "payload": {"type": "function_call", "name": "exec", "call_id": "call-1", "arguments": "{}"}},
+        {"type": "response_item", "payload": {"type": "function_call_output", "call_id": "call-1", "output": "x" * 400}},
     ]
     source = codex_lines(tmp_path / "rollout.jsonl", records, tail='{"partial"')
     snapshot = read(CodexHarness, source, ImportLimits(4, 300, 100))
@@ -725,7 +726,7 @@ def test_import_refuses_redirected_session_directory(tmp_path: Path, comms: Comm
     outside = tmp_path / "outside"
     outside.mkdir(mode=0o755)
     (comms.root / "imported_sessions").symlink_to(outside, target_is_directory=True)
-    with pytest.raises(ValueError):
+    with pytest.raises(NativePiUnavailable):
         comms.threads.import_thread(OfflineHistory.of(OpenCodeHarness, source, AnySession()), name="imported")
     assert stat.S_IMODE(outside.stat().st_mode) == 0o755
     assert not list(outside.iterdir())

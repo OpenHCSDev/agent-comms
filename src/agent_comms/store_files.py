@@ -312,35 +312,11 @@ class StoreLockFile(StoreOwner, declared_name=None):
     __slots__ = ()
 
 
-class StoreLockOwner(StoreLockFile, declared_name=None):
+class StoreGuard:
+    """Read/write lock behavior without a file-declaration or wire family."""
     __slots__ = ()
     path: Path
     lock_type: ClassVar[type[StoreLock]] = StoreLock
-
-    @classmethod
-    def lock_tiers(cls) -> tuple[type[StoreLockOwner], ...]:
-        """Direct tier declarations, in this module's family-registration order."""
-        return tuple(owner for owner in StoreLockOwner.members_with(StoreLockTier)
-                     if StoreLockTier in owner.__bases__)
-
-    @classmethod
-    def lock_rank(cls) -> int:
-        tiers = StoreLockOwner.lock_tiers()
-        inherited = tuple(tier for tier in tiers if tier in cls.__mro__)
-        if len(inherited) != 1:
-            raise TypeError(f"{cls.__qualname__} must inherit exactly one store lock tier")
-        return tiers.index(inherited[0])
-
-    @classmethod
-    def validate_selection(cls, members: Iterable[type[DeclaredFamily]]) -> None:
-        # A tier registers before it can rank its concrete stores. Store declarations
-        # already see all tiers because this module finishes before theirs imports.
-        if StoreLockTier not in cls.__bases__:
-            cls.lock_rank()
-
-    @classmethod
-    def rank_key(cls, owner: StoreLockOwner) -> tuple[int, str]:
-        return type(owner).lock_rank(), str(owner.path)
 
     @classmethod
     def contention(cls) -> StoreLockContention:
@@ -400,6 +376,41 @@ class StoreLockOwner(StoreLockFile, declared_name=None):
                            lock_type=self.lock_type)
 
 
+class StoreLockOwner(StoreGuard, StoreLockFile, declared_name=None):
+    __slots__ = ()
+
+
+class RankedStoreLock(StoreLockOwner, declared_name=None):
+    """Guard owners that participate in ordered multi-store reads."""
+
+    __slots__ = ()
+
+    @classmethod
+    def lock_tiers(cls) -> tuple[type[RankedStoreLock], ...]:
+        """Direct tier declarations, in this module's family-registration order."""
+        return tuple(owner for owner in RankedStoreLock.members_with(StoreLockTier)
+                     if StoreLockTier in owner.__bases__)
+
+    @classmethod
+    def lock_rank(cls) -> int:
+        tiers = RankedStoreLock.lock_tiers()
+        inherited = tuple(tier for tier in tiers if tier in cls.__mro__)
+        if len(inherited) != 1:
+            raise TypeError(f"{cls.__qualname__} must inherit exactly one store lock tier")
+        return tiers.index(inherited[0])
+
+    @classmethod
+    def validate_selection(cls, members: Iterable[type[DeclaredFamily]]) -> None:
+        # A tier registers before it can rank its concrete stores. Store declarations
+        # already see all tiers because this module finishes before theirs imports.
+        if StoreLockTier not in cls.__bases__:
+            cls.lock_rank()
+
+    @classmethod
+    def rank_key(cls, owner: RankedStoreLock) -> tuple[int, str]:
+        return type(owner).lock_rank(), str(owner.path)
+
+
 class SingleFileStore(StoreLockOwner, declared_name=None):
     """One file published by atomic rename: a read sees the old or new file whole, so it takes no lock."""
 
@@ -426,7 +437,7 @@ class MultiFileStore(StoreLockOwner, declared_name=None):
     """State spanning several files replaced together: one lock covers the set, and readers share it."""
 
 
-class StoreLockTier(StoreLockOwner, declared_name=None):
+class StoreLockTier(RankedStoreLock, declared_name=None):
     """Rank capabilities in the existing owner family, without a file of their own."""
 
     __slots__ = ()
@@ -509,7 +520,7 @@ class StoreBusy(StoreContention):
 DEFAULT_STORE_CONTENTION = StoreWait()
 
 
-class SqliteStore(StoreLockOwner, ABC, declared_name=None):
+class SqliteStore(StoreGuard, ABC):
     """A SQLite file serializes connection boundaries, not the SQL between them."""
 
     __slots__ = ()
@@ -545,7 +556,7 @@ class SqliteStore(StoreLockOwner, ABC, declared_name=None):
     @contextmanager
     def retaining(cls, path: Path) -> Iterator[BorrowedStoreLock]:
         """Retain the existing store lock while a child borrows its open description."""
-        with StoreLockOwner.write_guard(path) as held:
+        with cls.write_guard(path) as held:
             yield BorrowedStoreLock(held.descriptor, path)
 
     @classmethod

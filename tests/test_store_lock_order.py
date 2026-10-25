@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from agent_comms.store_files import CatalogTier, RegistryTier, StoreLockOwner
+from agent_comms.store_files import CatalogTier, RankedStoreLock, RegistryTier, StoreGuard
 from store_lock_graph import StoreLockGraph
 
 
@@ -40,7 +40,7 @@ def test_source_acquisitions_follow_store_tiers():
     # Missing and conflicting tiers fail when a class registers, before it takes a lock.
     with pytest.raises(TypeError, match="MissingTier must inherit exactly one"):
 
-        class MissingTier(StoreLockOwner):
+        class MissingTier(RankedStoreLock):
             pass
 
     with pytest.raises(TypeError, match="ConflictingTiers must inherit exactly one"):
@@ -54,7 +54,7 @@ def test_source_acquisitions_follow_store_tiers():
 def test_new_lock_method_and_wrapper_are_discovered(tmp_path):
     source = tmp_path / "src"
     source.mkdir()
-    (source / "store_files.py").write_text(Path(getfile(StoreLockOwner)).read_text())
+    (source / "store_files.py").write_text(Path(getfile(StoreGuard)).read_text())
     (source / "new_methods.py").write_text("""
 from contextlib import contextmanager
 from agent_comms.store_files import CatalogTier, RegistryTier

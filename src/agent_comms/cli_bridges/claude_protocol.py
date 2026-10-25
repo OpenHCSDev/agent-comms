@@ -18,6 +18,7 @@ from pydantic import (
 from agent_comms.agent_events import TranscriptModelUsage
 from agent_comms.cli_protocol import Declared, OpenWire, TaggedWire, TextWire, TimestampedWire, WireHeader
 from agent_comms.field_codec import FieldCodec, MalformedRecord, MessageId
+from agent_comms.native_tool_call import ToolCallId
 from agent_comms.pi_counts import PiCount, PiCountWire
 from agent_comms.recorded_time import EventTime
 from agent_comms.runtime_updates import (
@@ -47,7 +48,7 @@ from agent_comms.transcript_events import (
     TranscriptEvent,
     UserTranscript,
 )
-from agent_comms.turn_item import NativeTurnId
+from agent_comms.turn_item import NativeItemId, NativeTurnId
 from agent_comms.turn_phase import ModelWaitPhase, ToolRunningPhase, TurnPhase
 
 from ..wire_models import WireModel
@@ -237,16 +238,16 @@ class KnownTurn(ClaudeTurn):
 
     def started(self, tool: ClaudeToolDraft,
                 phase: ClaudeReaderPhase) -> tuple[RuntimeUpdate, ...]:
-        return (StartedItem(self.id, tool.call.id,
+        return (StartedItem(self.id, NativeItemId(tool.call.id),
                             ToolRunningPhase(tools=((tool.call.id, tool.call.title),)), tool),)
 
     def finished(self, item: str, events: tuple[TranscriptEvent, ...],
                  phase: ClaudeReaderPhase) -> tuple[RuntimeUpdate, ...]:
-        return (FinishedItem(self.id, item, events),)
+        return (FinishedItem(self.id, NativeItemId(item), events),)
 
     def active(self, tool_id: str, phase: ClaudeReaderPhase,
                turn_phase: TurnPhase) -> tuple[RuntimeUpdate, ...]:
-        return (ActiveItem(self.id, tool_id, turn_phase),)
+        return (ActiveItem(self.id, NativeItemId(tool_id), turn_phase),)
 
 
 @dataclass
@@ -400,7 +401,7 @@ class NarrationBlock(RedactedThinking, declared_name='thinking'):
 
 
 class ToolUse(AssistantBlock, declared_name='tool_use'):
-    id: str
+    id: ToolCallId
     name: str
     input: dict[str, JsonValue]
 
@@ -641,7 +642,7 @@ class TaskMessage(ContentBlocks):
 
 
 class ToolResult(UserBlock, ContentBlocks, declared_name='tool_result'):
-    tool_use_id: str
+    tool_use_id: ToolCallId
     content: list[Declared[ResultPart]]
     is_error: bool = False
 

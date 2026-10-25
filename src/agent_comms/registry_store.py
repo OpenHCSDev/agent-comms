@@ -30,7 +30,7 @@ from .registry_document import (
     RegistryEntry,
     RegistrySnapshot,
 )
-from .routing import TurnRouting
+from .routing import Routing
 from .session_file import RegistrySessionLocation
 from .store_files import RegistryLocking
 from .thread_identity import TurnIdentity
@@ -168,7 +168,7 @@ class RegistryEdit:
         self,
         current: Thread,
         turn_id: TurnId,
-        routing: TurnRouting | None,
+        routing: Routing,
     ) -> tuple[Thread, int]:
         """Allocate the original record under this bound registry transaction."""
         if current.turn_generation >= (1 << 63) - 1:

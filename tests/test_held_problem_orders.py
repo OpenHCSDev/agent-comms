@@ -11,7 +11,7 @@ from test_todos import order, thread
 
 from agent_comms.commander.order import OrderFile, main
 from agent_comms.commander.request import RequestAddVerb
-from agent_comms.field_codec import FieldCodec, GoalId
+from agent_comms.field_codec import FieldCodec, GoalId, OrderId
 from agent_comms.installer.practice import PracticeCopy
 from agent_comms.locked_store import RootFile
 from agent_comms.goals import CountCheckResult, OrderCheck
@@ -111,7 +111,7 @@ def test_clean_resend_derives_the_existing_order_and_leaves_no_strike(held_comma
     marker.touch()
     now = time.time()
     replacement = replace(
-        order(cited_source), id="replacement-order",
+        order(cited_source), id=OrderId.mint(),
         check=OrderCheck(ctx.repos[0].checkout, f"test ! -e {shlex.quote(str(marker))}"),
         at=RecordedEventTime(now), first_call_deadline=RecordedEventTime(now + 120),
     )
@@ -140,7 +140,7 @@ def test_second_unplanned_order_is_refused_without_recording(held_commander, cit
     marker = ctx.root / "unfinished"
     marker.touch()
     document = OrderFile(
-        replace(order(cited_source), id="second-order",
+        replace(order(cited_source), id=OrderId.mint(),
                 check=OrderCheck(ctx.repos[0].checkout, f"test ! -e {shlex.quote(str(marker))}")),
         "The copied workflow still contains an unfinished decision that prevents completion",
         "This is stupid because assigning another order hides the already unfinished work",
@@ -183,7 +183,7 @@ def test_an_order_waiting_on_install_frees_its_holder_for_the_next_order(
     assert not ctx.comms.goals.todos.get("P1").order.occupies_holder()
     marker = ctx.root / "unfinished"
     marker.touch()
-    second = replace(order(cited_source), id="second-order",
+    second = replace(order(cited_source), id=OrderId.mint(),
                      check=OrderCheck(ctx.repos[0].checkout,
                                       f"test ! -e {shlex.quote(str(marker))}"))
     document = OrderFile(

@@ -4,7 +4,7 @@ from dataclasses import replace
 
 import pytest
 
-from agent_comms.field_codec import AssignmentId, GoalId
+from agent_comms.field_codec import AssignmentId, GoalId, GoalWaitId
 from agent_comms.assignment_states import DeliveredAssignment, PendingDecision
 from agent_comms.bus import BusRecord, PublicRecord
 from agent_comms.coordination_tables.assignments import WakeAssignment
@@ -155,7 +155,7 @@ def test_wait_finds_dependency_reply_after_its_recorded_sequence(bus, owner, pee
     goal_id = GoalId.mint()
     old = append_reply(bus, peer, owner, "before wait")
     wait = RecordedGoalWait(
-        goal_id=goal_id, wait_id="wait", revision=0, after_seq=old.seq,
+        goal_id=goal_id, wait_id=GoalWaitId.mint(), revision=0, after_seq=old.seq,
         targets=(GoalWaitTarget(peer),), owner=owner, target_turn_generations=(None,),
         report_turn_id=None, report_turn_generation=None)
     assert not wait.has_reply(bus, owner)

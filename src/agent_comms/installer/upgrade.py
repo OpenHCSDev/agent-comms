@@ -611,7 +611,7 @@ class Stack(Extendable):
         upgrades = tuple(argument for name in project.tool.uv.sources
                          for argument in ("--upgrade-package", name))
         self.commands.run(self.uv, "lock", "--project", "stack", *upgrades,
-                          "--python", "3.14", cwd=self.checkout)
+                          cwd=self.checkout)
 
     @staticmethod
     def build(checkout: Checkout, commands: InstallCommands, home: Path = HOME) -> TargetStack:
@@ -637,7 +637,7 @@ class Stack(Extendable):
             prefix.mkdir(mode=0o700)
             try:
                 commands.run(source.uv, "sync", "--project", "stack", "--locked",
-                             "--python", "3.14", "--no-editable", cwd=checkout.path,
+                             "--no-editable", cwd=checkout.path,
                              env={**built.environment(), "UV_PROJECT_ENVIRONMENT": str(prefix)})
                 built.install_native()
                 RuntimeResolution.capture(built, core).save(prefix)

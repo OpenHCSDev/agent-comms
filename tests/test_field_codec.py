@@ -9,6 +9,10 @@ from pydantic import JsonValue
 
 import pytest
 
+from agent_comms.native_tool_call import ToolCallId
+from agent_comms.transcript_events import ToolStartTranscript
+from agent_comms.turn_item import NativeItemId
+
 from agent_comms.declared_family import DeclaredFamily, UnknownFamilyMember
 from agent_comms.field_codec import (
     DeclaredWireType,
@@ -60,6 +64,17 @@ def test_construct_preserves_the_boundary_error_family(error, expected_type, exp
         FieldCodec.construct(Record, {})
     assert str(failure.value) == expected_text
     assert failure.value is error or failure.value.__cause__ is error
+
+
+def test_transcript_preserves_distinct_item_and_tool_call_identities() -> None:
+    event = ToolStartTranscript(
+        position=NativeItemId("item-1"), timestamp=1.0,
+        tool_call_id=ToolCallId("call-1"), tool_name="read",
+    )
+    decoded = FieldCodec.decode(ToolStartTranscript, FieldCodec.encode(event))
+    assert decoded == event
+    assert type(decoded.position) is NativeItemId
+    assert type(decoded.tool_call_id) is ToolCallId
 
 
 def test_registered_value_decoders_own_their_json_schema() -> None:
@@ -782,10 +797,10 @@ def test_saved_tool_start_decodes_its_own_tool_tag_and_nullable_arguments() -> N
     event = transcript_records.event(
         ToolStartTranscript,
         position=0,
-        tool_call_id="call-1",
+        tool_call_id=ToolCallId("call-1"),
         tool_name="comms_send",
         raw_input=arguments,
-        tool=ToolDeclaration.record("comms_send", arguments, call_id="case"),
+        tool=ToolDeclaration.record("comms_send", arguments, call_id=ToolCallId("case")),
     )
     encoded = FieldCodec.encode(event)
     assert isinstance(encoded, dict)
@@ -999,8 +1014,13 @@ class _NominalIdentityRow:
 
 def test_nominal_ids_roundtrip_preserves_wire_schema_and_refuses_wrong_kind() -> None:
     value = Id128.mint()
-    row = _NominalIdentityRow(value, value, value, TurnId(value))
-    wire = {"nominal": str(value), "annotated": str(value), "plain": str(value), "turn": str(value)}
+    row = _NominalIdentityRow(value, value, "plain text", TurnId(value))
+    wire = {
+        "nominal": str(value),
+        "annotated": str(value),
+        "plain": "plain text",
+        "turn": str(value),
+    }
     encoded = FieldCodec.encode(row)
     assert encoded == wire
     assert all(type(item) is str for item in encoded.values())
@@ -1028,7 +1048,7 @@ def test_nominal_ids_roundtrip_preserves_wire_schema_and_refuses_wrong_kind() ->
 
     assert FieldCodec.encode(SpecializedTurnId(value), TurnId) == str(value)
     with pytest.raises(MalformedRecord):
-        FieldCodec.encode(_NominalIdentityRow(value, value, value, InputId(value)))
+        FieldCodec.encode(_NominalIdentityRow(value, value, "plain text", InputId(value)))
     with pytest.raises(MalformedRecord):
         FieldCodec.encode("not-an-id", Annotated[str, Id128Text])
 
@@ -1042,6 +1062,51 @@ def test_nominal_ids_roundtrip_preserves_wire_schema_and_refuses_wrong_kind() ->
         assert type(message) is MessageId
         assert message == expected
         assert FieldCodec.encode(message, MessageId) == expected
+
+
+@pytest.mark.parametrize("count", (1, 9, 17))
+def test_hex_spelling_derives_new_lengths_from_the_declaration(count: int) -> None:
+    from agent_comms.field_codec import HexDigits
+
+    class DeclaredHex(HexDigits):
+        digits = count
+
+    value = "a" * count
+    annotation = Annotated[str, DeclaredHex]
+    assert FieldCodec.decode(annotation, value) == value
+    assert FieldCodec.encode(value, annotation) == value
+    for malformed in (value.upper(), value[:-1], value + "a", "g" * count):
+        with pytest.raises(MalformedRecord):
+            FieldCodec.decode(annotation, malformed)
+
+
+def test_hex_commit_spelling_keeps_its_bounded_length_contract() -> None:
+    from agent_comms.field_codec import GitCommitText
+
+    for count in (7, 12, 40):
+        assert GitCommitText.decode("a" * count) == "a" * count
+    for malformed in ("a" * 6, "a" * 41, "A" * 40, "g" * 7):
+        with pytest.raises(MalformedRecord):
+            GitCommitText.decode(malformed)
+
+
+def test_order_identity_owns_minting_and_wire_spelling() -> None:
+    from agent_comms.field_codec import OrderId, OrderIdText
+
+    order = OrderId.mint()
+    assert type(order) is OrderId
+    assert len(order) == OrderIdText.digits
+    assert FieldCodec.encode(order, OrderId) == str(order)
+    assert type(FieldCodec.decode(OrderId, str(order))) is OrderId
+    assert FieldCodec.decode(OrderId, str(order)) == order
+    assert FieldCodec.value_schema(OrderId) == {
+        "type": "string", "pattern": OrderIdText.anchored(),
+    }
+    for malformed in ("not-an-order", "a" * 32, 12):
+        with pytest.raises(MalformedRecord):
+            FieldCodec.decode(OrderId, malformed)
+    with pytest.raises(MalformedRecord):
+        FieldCodec.encode(MessageId.mint("not an order"), OrderId)
 
 
 @dataclass(frozen=True)

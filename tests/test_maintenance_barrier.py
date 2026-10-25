@@ -35,7 +35,7 @@ from agent_comms.store_files import (
     _store_lock,
 )
 from agent_comms.threads import Thread
-from agent_comms.turn_item import NativeTurnId
+from agent_comms.turn_item import NativeItemId, NativeTurnId
 
 
 def test_nested_holds_restore_the_previous_authority_on_failure(tmp_path, monkeypatch):
@@ -381,9 +381,17 @@ async def test_bus_waits_before_mutating_a_transcript_batch(tmp_path: Path) -> N
     comms = wire(tmp_path)
     comms.registry.declare(Thread('cli', frozenset(), str(tmp_path)))
     output = ThreadOutput(comms.transcripts.external('cli'), comms.agents)
-    updates = [StartedItem(turn_turn_id, 'item', ModelWaitPhase('Replying'),
-                          TextDraft.from_parts(AssistantTranscript, ('prefix',), RecordedEventTime(1.), 'item')),
-               AppendDraftItem(turn_turn_id, 'item', ' once')]
+    updates = [
+        StartedItem(
+            turn_turn_id,
+            NativeItemId("item"),
+            ModelWaitPhase("Replying"),
+            TextDraft.from_parts(
+                AssistantTranscript, ("prefix",), RecordedEventTime(1.0), NativeItemId("item")
+            ),
+        ),
+        AppendDraftItem(turn_turn_id, NativeItemId("item"), " once"),
+    ]
     barrier = MaintenanceBarrier(comms.registry.store.path)
     hold = barrier.begin(MaintenanceOperator.current())
     pending = asyncio.create_task(comms.bus.when_open(partial(output.publish_batch, updates)))
@@ -397,7 +405,11 @@ async def test_bus_waits_before_mutating_a_transcript_batch(tmp_path: Path) -> N
         barrier.clear(hold)
     await asyncio.wait_for(pending, 3)
     with output.transcript.reading() as source:
-        assert source.current_draft(output.transcript.root, output.transcript.incarnation).external_row().events == (AssistantTranscript('prefix once', timestamp=1., position='item'),)
+        assert source.current_draft(
+            output.transcript.root, output.transcript.incarnation
+        ).external_row().events == (
+            AssistantTranscript("prefix once", timestamp=1.0, position=NativeItemId("item")),
+        )
 
 
 def test_a_registry_write_is_refused_to_all_but_the_maintenance_holder(tmp_path: Path, monkeypatch) -> None:

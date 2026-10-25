@@ -19,7 +19,7 @@ from .private_registry_guard import PrivateRegistryGuard
 from .registration_change import RegistrationChange
 from .registry_document import RegistryDocument, RegistrySnapshot
 from .registry_store import RegistryEdit, RegistryEntryRevision, RegistryStore
-from .routing import TurnRouting
+from .routing import NoTurnRouting, Routing
 from .storage_rules import StorageRule
 from .thread_execution import CommanderForkExecution, ExternalThreadExecution
 from .thread_identity import GenerationCounter
@@ -341,12 +341,12 @@ class Registration:
         with self.store.editing() as edit:
             owner = RegistryOwner.capture_local(edit.original.snapshot, expected.name)
             owner.require_claim(expected, generation)
-            leased, _ = edit.lease_turn(owner.thread, turn_id, None)
+            leased, _ = edit.lease_turn(owner.thread, turn_id, NoTurnRouting())
             edit.commit()
             return leased, generation
 
     def lease_local_turn(
-        self, name: str, turn_id: TurnId, *, routing: TurnRouting | None = None
+        self, name: str, turn_id: TurnId, *, routing: Routing = NoTurnRouting()
     ) -> tuple[Thread, int]:
         """Atomic local begin-turn, never reviving a stopped or replaced owner."""
         with self.store.editing() as edit:

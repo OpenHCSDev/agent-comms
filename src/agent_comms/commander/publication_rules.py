@@ -6,7 +6,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Annotated, Self
 
-from agent_comms.field_codec import PathText
+from agent_comms.field_codec import OrderId, PathText
 from agent_comms.standing_rules import HeldBranch, HeldBranchRule
 from agent_comms.thread_identity import ThreadIncarnation
 from agent_comms.todos import PullRequestLink, UnmergedListedPullRequest
@@ -16,7 +16,7 @@ from agent_comms.work_branches import UnpushedHead
 @dataclass(frozen=True)
 class UnpushedBranch(HeldBranchRule):
     problem: str
-    order: str
+    order: OrderId
     holder: ThreadIncarnation
     worktree: Annotated[Path, PathText]
     # One decision per order branch: a new local commit moves the head, never the decision.
@@ -38,7 +38,7 @@ class UnpushedBranch(HeldBranchRule):
 @dataclass(frozen=True)
 class EmptyPullRequest(HeldBranchRule):
     problem: str
-    order: str
+    order: OrderId
     holder: ThreadIncarnation
     pull_request: PullRequestLink
     base: str = field(compare=False)
