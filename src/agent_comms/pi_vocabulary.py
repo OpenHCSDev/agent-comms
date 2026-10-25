@@ -107,18 +107,6 @@ class FailedUnpublishedPiStop:
         return AttemptFailedAttempt()
 
 
-class StoppedBeforeGrantStopReason(FailedUnpublishedPiStop, UnfinishedPiStop, PiStopReason):
-    """The stopped owner never received permission to write this input."""
-
-    @classmethod
-    def assess_recovery_replay(cls, db: sqlite3.Connection, execution: ExecutionRecord) -> None:
-        from .coordination_tables.executions import ReplayAssessments
-
-        # A grant was required before the writer could send any bytes. Existing
-        # effects from earlier attempts still prevent authorization.
-        ReplayAssessments.authorize_if_unobserved(db, execution.execution_id)
-
-
 class FinishedPiStop(FailedUnpublishedPiStop):
     @classmethod
     def recovery_facts(cls) -> ReplayFact:

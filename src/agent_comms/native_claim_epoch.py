@@ -14,14 +14,28 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from .coordination_errors import StaleFence
+from .coordination_tables.executions import ReplayAssessments
 from .declared_family import DeclaredFamily
 from .errors import RelationViolationError
 from .field_codec import JsonShapeFamily, JsonShapeMember
-from .pi_vocabulary import PendingStopReason, PiStopReason, StoppedBeforeGrantStopReason
+from .pi_vocabulary import FailedUnpublishedPiStop, PendingStopReason, PiStopReason, UnfinishedPiStop
 from .thread_identity import ClaimedIdentity, GenerationCounter
 
 if TYPE_CHECKING:
+    import sqlite3
+
+    from .coordination_tables.executions import ExecutionRecord
     from .native_session_reopen import NativeSessionIdentity
+
+
+class StoppedBeforeGrantStopReason(FailedUnpublishedPiStop, UnfinishedPiStop, PiStopReason):
+    """The stopped owner never received permission to write this input."""
+
+    @classmethod
+    def assess_recovery_replay(cls, db: sqlite3.Connection, execution: ExecutionRecord) -> None:
+        # A grant was required before the writer could send any bytes. Existing
+        # effects from earlier attempts still prevent authorization.
+        ReplayAssessments.authorize_if_unobserved(db, execution.execution_id)
 
 
 class NativeClaimEpoch(DeclaredFamily, JsonShapeFamily, affix="NativeClaim"):

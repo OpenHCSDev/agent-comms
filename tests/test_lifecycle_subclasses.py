@@ -30,7 +30,8 @@ from agent_comms.coordination_tables.attempts import AttemptRecord, ReplayFact
 from agent_comms.coordination_tables.executions import CurrentExecutions, ExecutionRecord, AcpOrigin, ReplayAssessments
 from agent_comms.execution_states import DeferredExecution, FailedExecution
 from agent_comms.owner_fence import prepare_fence_token
-from agent_comms.pi_vocabulary import PendingStopReason, StoppedBeforeGrantStopReason
+from agent_comms.native_claim_epoch import StoppedBeforeGrantStopReason
+from agent_comms.pi_vocabulary import PendingStopReason
 from test_coordination_store import final_evidence, ready, started
 
 
@@ -100,7 +101,7 @@ def test_monitor_evidence_records_its_owned_replay_proof(
     with ready(tmp_path / "coordination.sqlite3", origin=AcpOrigin) as store:
         with store.session.writing() as db:
             ReplayAssessments.accumulate(db, "exec", prior)
-            observed = evidence.record_replay(db, "exec")
+            observed = evidence.record_replay(db, store.get("exec").execution)
             assessment = ReplayAssessments.for_execution(db, "exec")
             assert type(observed) is outcome
             assert observed.replay_contribution == contribution
